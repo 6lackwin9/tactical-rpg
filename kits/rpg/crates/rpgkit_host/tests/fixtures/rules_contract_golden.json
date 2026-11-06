@@ -47,7 +47,6 @@
     "locked budget.rs::W_MITIGATION gear",
     "locked budget.rs::W_STAT_POINT gear",
     "locked budget.rs::W_BURDEN gear",
-    "locked budget.rs::W_EXTRA_BLOCK gear",
     "locked budget.rs::W_SKILL_POTENCY gear",
     "locked budget.rs::W_STATUS_POTENCY gear",
     "locked budget.rs::W_SPELL_REACH gear",

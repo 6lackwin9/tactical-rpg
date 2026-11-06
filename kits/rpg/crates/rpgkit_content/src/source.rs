@@ -688,7 +688,15 @@ const HAND_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
 const SLOT_TYPES: [&str; 2] = ["ARMOR", "ACCESSORY"];
 const GEAR_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
 const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
-const NUMBER_FIELDS: [(&str, &str, i64); 5] = [("power", "base_power", 0), ("range", "base_range", 1), ("block_cost", "block_cost", 1), ("burden", "burden", 0), ("mitigation", "mitigation", 0)];
+const NUMBER_FIELDS: [(&str, &str, i64); 4] = [("power", "base_power", 0), ("range", "base_range", 1), ("burden", "burden", 0), ("mitigation", "mitigation", 0)];
+/// U3.2-S1: number keys gear no longer has (gear `block_cost`: priced in the budget, never read by combat; the wind-up
+/// belongs to the skill). The loader ignores them in a family's base and band rows, its adjustable list, an item's adjust
+/// modifiers and a stored flat key; the writer stores the cleaned rows, so a resave drops them.
+pub const RETIRED_NUMBERS: [&str; 1] = ["block_cost"];
+
+fn is_retired_adjust(m: &Value) -> bool {
+    m.as_object().is_some_and(|m| sget(m, "kind", "") == "adjust" && RETIRED_NUMBERS.contains(&sget(m, "field", "").as_str()))
+}
 
 pub(crate) fn item_type_of(family: &Dict) -> String {
     sget(family, "item_type", "WEAPON")
@@ -747,6 +755,19 @@ pub(crate) fn derive_family(family: &Dict) -> Dict {
     if !SLOT_TYPES.contains(&t.as_str()) {
         out.insert("slots".into(), Value::Array(Vec::new()));
     }
+    // U3.2-S1: retired numbers leave the base and band rows and the adjustable list
+    for key in ["base", "bands"] {
+        if let Some(Value::Object(rows)) = out.get_mut(key) {
+            for row in rows.values_mut().filter_map(Value::as_object_mut) {
+                for k in RETIRED_NUMBERS {
+                    row.shift_remove(k);
+                }
+            }
+        }
+    }
+    if let Some(Value::Array(list)) = out.get_mut("adjustable") {
+        list.retain(|a| !a.as_str().is_some_and(|a| RETIRED_NUMBERS.contains(&a)));
+    }
     let cat = off_hand_category(&out);
     out.insert("off_hand_category".into(), Value::from(cat));
     let hand = default_hand(&out);
@@ -781,6 +802,13 @@ fn read_items(list: &[Value], at: &str, version: i64, families: &[Dict], errors:
 /// ItemModifiers.resolve: the flat row of a stored entry (normalized by the caller).
 pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     let mut row = entry.clone();
+    // U3.2-S1: a stored retired key and adjust modifiers on a retired number are ignored (and so not written back)
+    for k in RETIRED_NUMBERS {
+        row.shift_remove(k);
+    }
+    if let Some(Value::Array(list)) = row.get_mut("modifiers") {
+        list.retain(|m| !is_retired_adjust(m));
+    }
     let t = item_type_of(family);
     let family_id = sget(family, "id", "");
     row.insert("family".into(), Value::from(family_id.clone()));
@@ -876,7 +904,7 @@ pub(crate) fn legacy_tier(tier: &Dict) -> Dict {
 }
 
 /// ItemText.render: an item description template filled from the resolved row ({name}, {family}, {power}, {range},
-/// {hand}, {burden}, {mitigation}, {block_cost}, {req:STAT}, {bon:STAT}, {tier<n>.value}, {tier<n>.power}); a token not
+/// {hand}, {burden}, {mitigation}, {req:STAT}, {bon:STAT}, {tier<n>.value}, {tier<n>.power}); a token not
 /// valid for the item type renders as nothing; a description without tokens is returned as it is.
 pub fn render_item(template: &str, row: &Dict) -> String {
     if !template.contains('{') && !template.contains('}') {
@@ -918,7 +946,7 @@ pub fn render_item(template: &str, row: &Dict) -> String {
                 }
                 .to_string(),
             ),
-            "burden" | "mitigation" | "block_cost" if equip => number(token),
+            "burden" | "mitigation" if equip => number(token),
             "req" | "bon" if equip => {
                 let stats = json::dget(row, if token == "req" { "required_stats" } else { "stat_bonuses" });
                 Some(stats.get(suffix).map(|v| json::to_int(v).to_string()).unwrap_or_default())

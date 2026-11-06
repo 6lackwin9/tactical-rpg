@@ -189,10 +189,6 @@ impl Proficiency {
     pub fn burden_reduction(&self, gear: &str) -> i32 {
         (self.level_of(gear) - 1).max(0)
     }
-
-    pub fn block_cost_reduction(&self, gear: &str) -> i32 {
-        (self.level_of(gear) >= PROF_MAX_LEVEL) as i32
-    }
 }
 
 #[derive(Debug, Clone)]

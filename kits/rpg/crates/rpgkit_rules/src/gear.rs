@@ -49,7 +49,6 @@ pub struct Equipment {
 pub struct WieldPenalty {
     pub penalized: bool,
     pub ratio: f64,
-    pub extra_block_cost: i32,
     pub deficit: i32,
 }
 
@@ -113,7 +112,7 @@ impl Equipment {
                 deficit = deficit.max(req - eff);
             }
         }
-        WieldPenalty { penalized: true, ratio: (deficit as f64 * 0.15).min(0.60), extra_block_cost: (deficit >= 4) as i32, deficit }
+        WieldPenalty { penalized: true, ratio: (deficit as f64 * 0.15).min(0.60), deficit }
     }
 
     fn tier_when(tier: &Obj) -> (String, String, String, i32) {
@@ -185,14 +184,6 @@ impl Equipment {
             .map(|(i, t)| (i + 1, value::array(&Self::tier_bonus(t), "effects").to_vec()))
             .filter(|(_, fx)| !fx.is_empty())
             .collect()
-    }
-
-    pub fn effective_block_cost(&self, stats: &CharacterStats) -> i32 {
-        let mut cost = self.item.block_cost + self.wield_penalty(stats).extra_block_cost;
-        if !self.item.weapon_type.is_empty() {
-            cost -= stats.proficiency.block_cost_reduction(&self.item.weapon_type);
-        }
-        cost.max(1)
     }
 }
 

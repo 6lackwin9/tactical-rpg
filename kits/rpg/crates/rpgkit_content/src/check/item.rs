@@ -27,15 +27,15 @@ const BONUS_BAND: &str = "bonus_value";
 /// timeline's reach rule).
 const ENGINE_RULES: [&str; 5] = ["focus", "always_ranged", "shield", "spell_source", "reach"];
 /// ItemFamilies.NUMBER_FIELDS with their flat keys and schema ranges.
-const NUMBERS: [(&str, &str, i64, i64); 5] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("block_cost", "block_cost", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
+const NUMBERS: [(&str, &str, i64, i64); 4] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
 /// ItemModifiers.KINDS: (kind, params, unique param, min, max).
 const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delta"], "field", -100, 100), ("stat_bonus", &["stat", "value"], "stat", 1, 8), ("requirement", &["stat", "value"], "stat", 1, 30), ("effect", &["effect"], "effect", 0, 0)];
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
-const FLAT_MARKERS: [&str; 9] = ["base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
-const ENGINE_KEYS: [&str; 15] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
+const DERIVED_KEYS: [&str; 12] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
+const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
+const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const WHEN_STAT: &str = "stat_at_least";
 const WHEN_PROFICIENCY: &str = "proficiency_at_least";
 const WHEN_LEVEL: &str = "unit_level_at_least";
@@ -62,7 +62,7 @@ fn kind_names() -> String {
 fn number_fields_for(item_type: &str) -> Vec<&'static str> {
     match item_type {
         "WEAPON" => NUMBERS.iter().map(|n| n.0).collect(),
-        "SHIELD" | "ARMOR" | "ACCESSORY" => vec!["block_cost", "burden", "mitigation"],
+        "SHIELD" | "ARMOR" | "ACCESSORY" => vec!["burden", "mitigation"],
         _ => Vec::new(),
     }
 }
@@ -105,7 +105,7 @@ fn hand_key(family: &Dict, hand: &str) -> String {
     }
 }
 
-/// ItemFamilies.base_of: the five base numbers of `hand` (a missing one is the schema minimum).
+/// ItemFamilies.base_of: the four base numbers of `hand` (a missing one is the schema minimum).
 fn base_of(family: &Dict, hand: &str) -> Vec<(&'static str, i64)> {
     let row = json::dget(json::dget(family, "base"), &hand_key(family, hand));
     NUMBERS.iter().map(|(f, _, lo, _)| (*f, row.get(*f).map_or(*lo, |v| json::to_int_or(v, *lo)))).collect()
@@ -742,7 +742,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
 // ---- ItemText ----
 
 /// ItemText.TOKEN_TYPES: token -> the item types it is valid for (None = every type).
-const TEXT_TOKENS: [(&str, Option<&[&str]>); 12] = [
+const TEXT_TOKENS: [(&str, Option<&[&str]>); 11] = [
     ("name", None),
     ("family", None),
     ("power", Some(&["WEAPON"])),
@@ -750,14 +750,13 @@ const TEXT_TOKENS: [(&str, Option<&[&str]>); 12] = [
     ("hand", Some(&["WEAPON", "SHIELD"])),
     ("burden", Some(&EQUIP_TYPES)),
     ("mitigation", Some(&EQUIP_TYPES)),
-    ("block_cost", Some(&EQUIP_TYPES)),
     ("req", Some(&EQUIP_TYPES)),
     ("bon", Some(&EQUIP_TYPES)),
     ("tier.value", Some(&EQUIP_TYPES)),
     ("tier.power", Some(&["WEAPON"])),
 ];
 const STAT_TOKENS: [&str; 2] = ["req", "bon"];
-const NUMBER_TOKENS: [(&str, &str); 5] = [("power", "base_power"), ("range", "base_range"), ("burden", "burden"), ("mitigation", "mitigation"), ("block_cost", "block_cost")];
+const NUMBER_TOKENS: [(&str, &str); 4] = [("power", "base_power"), ("range", "base_range"), ("burden", "burden"), ("mitigation", "mitigation")];
 
 fn token_valid_for(token: &str, t: &str) -> bool {
     TEXT_TOKENS.iter().find(|(k, _)| *k == token).is_some_and(|(_, types)| types.is_none_or(|ts| ts.contains(&t)))

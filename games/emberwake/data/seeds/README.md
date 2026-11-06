@@ -52,6 +52,7 @@ effect is in the data. Restore one with `git show <hash>:games/emberwake/data/se
 | `sprite2.json` | SPRITE2 (art and palette keys: 4 named Horde elites drop their own art folder for the goblin body + own palette, gruk_smokecaller and 5 ash_* grunts get palettes, orsa_tallow gets art warrior/orsa_tallow) | full entries, as above |
 | `ruleset1a2.json` | RULESET1-A2 (tl_spiker SKIRMISHER; Guard active on every tl_ enemy: tl_brace_counter / tl_fade; tl_crushing_judgment power_mult 2.2 to 1.5; encounter tl_flank_elite) | full entries, as above |
 | `ruleset1a3.json` | RULESET1-A3 (tl_crushing_judgment power_mult 1.5 to 1.8; tl_footman, tl_footman_b, tl_crossbowman level 2 with CONS spend for about +20 % HP; tl_footman deck swaps Snap Jab for tl_hook_thrust; encounter tl_skirmish max_rounds 8 to 10; kit_culling gains a goblin_warlord) | full entries, as above |
+| `u32s1.json` | U3.2-S1 (gear `block_cost` retired: the 22 item families and 2 items that set it re-saved without it; no other field moves) | full entries, as above |
 
 ## Godot-era seeds
 

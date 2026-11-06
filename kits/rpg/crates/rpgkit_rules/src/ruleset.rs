@@ -813,12 +813,11 @@ const BOUND_WHY: &str = "a schema field's bound";
 
 /// What stays code, and why (BASERULES1 4.1). A test scans `src` and fails on a numeric `pub const` neither here nor in
 /// `PROMOTED`, so the table cannot go stale.
-pub const LOCKED: [Locked; 50] = [
+pub const LOCKED: [Locked; 49] = [
     locked("W_POWER", "budget.rs", "gear", BUDGET_WHY),
     locked("W_MITIGATION", "budget.rs", "gear", BUDGET_WHY),
     locked("W_STAT_POINT", "budget.rs", "gear", BUDGET_WHY),
     locked("W_BURDEN", "budget.rs", "gear", BUDGET_WHY),
-    locked("W_EXTRA_BLOCK", "budget.rs", "gear", BUDGET_WHY),
     locked("W_SKILL_POTENCY", "budget.rs", "gear", BUDGET_WHY),
     locked("W_STATUS_POTENCY", "budget.rs", "gear", BUDGET_WHY),
     locked("W_SPELL_REACH", "budget.rs", "gear", BUDGET_WHY),

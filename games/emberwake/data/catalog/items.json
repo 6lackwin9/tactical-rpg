@@ -723,11 +723,6 @@
 			"modifiers": [
 				{
 					"kind": "adjust",
-					"field": "block_cost",
-					"delta": 1
-				},
-				{
-					"kind": "adjust",
 					"field": "burden",
 					"delta": 1
 				},
@@ -851,11 +846,6 @@
 					"kind": "adjust",
 					"field": "power",
 					"delta": 15
-				},
-				{
-					"kind": "adjust",
-					"field": "block_cost",
-					"delta": 2
 				},
 				{
 					"kind": "requirement",
