@@ -1,8 +1,12 @@
 # Work order
 
-Decision "Order of work: engine and kit first" (user 2026-11-05). `docs/TASKS.md` stays the queue: this file says which phase each open row belongs to. The planner sorted the rows; the user moves any that sit wrong. Each system builds its own placeholder widgets and mockups and takes just enough Sunk Ward data to test on.
+Decision "Order of work: engine and kit first" (user 2026-11-05) and "Two-session split: Design and Build" (user 2026-11-07).
 
-Every system goes through these stages (decisions "System workflow" and "System workflow, refined"). Major logic builds hold until a system's design is done.
+- **Live Build Queue**: `docs/READY.md` is the single active queue the Build Session reads.
+- **Canonical Plan**: `docs/specs/MASTERPLAN1.md` (9 blocks, 25 sub-blocks, 28 connections, 8 shells = 186 fixed tasks) and `docs/specs/MASTERPLAN1_ROWS.md` (mapping of historical rows from `docs/TASKS.md`).
+- **Retired**: `BASERULES1-F` (`feel_flat`) is superseded by `U1_STATS.md` and `U2_CLASS.md` Static units.
+
+Every sub-block goes through six stages (`.1` design -> `.2` build or reuse -> `.3` iterate as data -> `.4` finalize -> `.5` limit test -> `.6` locked). Major logic builds hold until a sub-block's `.1` design is done and passes its `feasibility-check` in `docs/READY.md`.
 
 | Stage | Done when |
 | --- | --- |
@@ -19,15 +23,16 @@ The master plan comes first (decision "Master plan first; a task list that stops
 
 Design works bottom up from building blocks (decision "Bottom up from building blocks"). The first is the unit: stat, class, item and gear, affiliation, and placeholder lore behaviour such as background or race. Each behaviour in a design session is marked: built and tested, built and untested, or new; a new one needs a reason from gameplay, which is the guard against scope creep.
 
-Where each silo stands, 2026-11-05 (planner's reading):
+Where each block stands, 2026-11-07:
 
-| Silo | Stage | Next |
+| Block | Stage | Next |
 | --- | --- | --- |
-| Base rules | 1, spec written, 5 questions open | The user's answers |
-| Combat rules and input | 1, INTENT2 written and answered; much of it built under older rules | The rule option bundle, then K1 |
-| Exploration and maps | 2-3, built, options open (TURNFEEL1, EXPLOREVIEW1-R) | After combat closes |
-| Party, progression, economy, quests, story | 2, built, no ruleset named | Design pass per silo |
-| UI screens | Main menu finalized, the rest placeholder | After the gameplay silos |
+| `U1-U4` (Unit) | `U1.1` and `U2.1` design closed (`docs/sessions/`); in `feasibility-check` (`docs/READY.md`) | Close `U3.1` and `U4.1` design, then build `U1.2-U4.2` |
+| `S1-S2` (Status & Pools) | `1`, built code to reuse | Session 3 (`S1.1`, `S2.1`) after `U3.1`/`U4.1` |
+| `A1-A4` (Action) | `1-2`, `INTENT2` in `feasibility-check` (`IR21`) | `A1.1-A4.1` design pass; `A2.2` dynamic resolution |
+| `F1-F4`, `P1-P2`, `I1` (Fight, Space, AI) | `1-2`, built foundations | Design and tune on Static units (`U2`) |
+| `W1-W3`, `E1-E3`, `T1-T2` (World, Economy, Story) | `2-3`, built | Silo design pass and `WORLDFIGHT1` (`C18`) / `SERVICES1` (`C22`) seams |
+| `X1-X8` (Shells) | Standing tasks | Behaviour-neutral rows in `docs/READY.md`; readability UI with blocks; final screens last |
 
 | Phase | Goal | Rows |
 | --- | --- | --- |

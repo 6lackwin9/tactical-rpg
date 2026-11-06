@@ -5,31 +5,32 @@ description: The milestone and lane workflow run by the planner (desktop main se
 
 # Planner workflow (shared by both environments)
 
-Environment first: `$CLAUDE_CODE_REMOTE` empty = desktop, read `docs/workflow/desktop.md`; `true` = cloud, read `docs/workflow/cloud.md`. That file says how sessions, the front desk, alerts, branches, commits and merges work there; this skill holds what both share. On desktop you plan everything; in the cloud a standing area thread plans its area's tasks, one at a time with one branch each, landing on `develop` without a PR (a Merge & Release thread batches `develop` into `main`), and never opens a new thread without asking the user first (`docs/workflow/cloud.md` "Area threads").
+**Two-session split (since 2026-11-07, decision "Two-session split: Design and Build")**:
 
-You are the planner and orchestrator. Agents cannot message each other; everything flows through you, with files as handoffs: `docs/TASKS.md` (queue), `docs/specs/<id>.md` (contracts), `games/emberwake/docs/ROADMAP.md`, `docs/STRUCTURE.md`, the decisions files (per CLAUDE.md), `docs/HISTORY.md`, `games/emberwake/docs/BALANCE_REPORT.md`. Dispatch modes: skill `planner-ops`; front desk and alerts: the environment file.
+- **Design Session** is the sole writer of `docs/READY.md`, specs (`docs/sessions/*`, `docs/specs/*`), `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/decisions/*`, `games/emberwake/docs/decisions/*`, `docs/HISTORY.md`, `README.md`, `GAME_BRIEF.md`, and `STRUCTURE.md`.
+- **Build Session** (this planner skill when running builds) reads **only** `docs/READY.md` (and the specs it names), builds only items marked `ready-to-build`, runs read-only code checks on items marked `feasibility-check`, and writes status, feasibility findings, spec questions, and docs deltas **exclusively to `docs/FEEDBACK.md`** (plus crate-local READMEs where appropriate). Do not edit `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, or specs from the Build Session.
+
+Environment first: `$CLAUDE_CODE_REMOTE` empty = desktop, read `docs/workflow/desktop.md`; `true` = cloud, read `docs/workflow/cloud.md`.
 
 ## Lanes (segregation of duties)
 
 | Lane | Agent | Owns | Never touches |
 | --- | --- | --- | --- |
-| plan | planner (desktop main session; cloud: each area thread for its own tasks' rows) | the only writer of `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/decisions/*`, `docs/HISTORY.md`, README, GAME_BRIEF, STRUCTURE | builder lanes' files |
-| design | `design-brainstorm` | new or updated spec files under `docs/specs/` (and archive moves it is asked for); lists wanted TASKS/ROADMAP/decision rows in its report | TASKS, ROADMAP, decisions, code, data |
+| design-session | Design Session | `docs/READY.md`, specs, `docs/TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, shared READMEs, `GAME_BRIEF`, `STRUCTURE` | `docs/FEEDBACK.md`, builder lanes' code/data |
+| build-plan | Build Session planner | `docs/FEEDBACK.md` (status, feasibility notes, docs deltas), lane orchestration, commits & merges | `docs/READY.md`, specs, `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md` |
 | logic | `logic-builder` | `engine/crates/**` (rules, schema, loader and writer, validation, tests), `kits/rpg/crates/**` and `kits/rpg/schema.json` (the kit's genre rules), `games/emberwake/**`, `tools/**` | shipped `games/emberwake/data/**`, `legacy/**`, the golden fixtures (re-recorded only for an intended change) |
 | asset | `asset-builder` | `games/emberwake/data/**` through `aegis content` (upsert, remove, `games/emberwake/data/seeds/<task>.json` with `apply`) | engine code, tests, docs |
-| balance | `balance` | `games/emberwake/docs/BALANCE_REPORT.md`, sims on a clean `main` worktree | everything else |
+| balance | `balance` | `games/emberwake/docs/BALANCE_REPORT.md` (or findings in `docs/FEEDBACK.md`), sims | everything else |
 | review | `change-reviewer` | read-only | - |
 | cleanup | `housekeeper` | `docs/specs/CLEANUP.md` | TASKS, ROADMAP, HISTORY, code, data, tests, tools |
 
 Logic lane scope (decision "Logic lane scope", user 2026-10-27): dispatch `logic-builder` only for a new system or module, or a change across several crates or more than about five files, one slice per run; do smaller logic (fixes, review follow-ups, `tools/**` scripts, flag flips, single-crate changes) yourself in this session with the skills `engine-checklist`, `rust-conventions`, `patch-and-seed` and `known-issues`, in the task's worktree, and still run `change-reviewer` before the commit.
 
-Docs written in the main checkout by a design or cleanup agent are committed by the planner right after that run (before any merge), so `main` never carries another lane's half-finished edits. If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent; this is the only exception to the cloud rule that lane work uses the six repo agents (`docs/workflow/cloud.md` "Lanes inside an area thread").
+## 1. Plan (Build Session)
 
-## 1. Plan (no code changes)
-
-1. Read `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/STRUCTURE.md`, `docs/HISTORY.md` (do not propose deprecated concepts), the decisions files (per CLAUDE.md). Do not crawl code.
-2. Pick tasks the user marked `approved`. A task needs a spec in `docs/specs/`: if it has none, dispatch `design-brainstorm` in the background to write it (it also drafts specs for the NEXT tasks while builders work).
-3. Present the task list, lanes, dependencies and parallel plan to the user. **Make no changes until they confirm.** Design questions go to the user.
+1. Read `docs/READY.md` and `docs/STRUCTURE.md`. Do not crawl `docs/TASKS.md` or historical specs.
+2. For items marked `feasibility-check` in `docs/READY.md`, run a fast read-only code check against the target crates and log findings/cost/touchpoints as `FB-nn` items in `docs/FEEDBACK.md`.
+3. Pick items marked `ready-to-build` in `docs/READY.md` in order. Present the lanes, dependencies and parallel plan to the user. **Make no code changes until they confirm.** Design questions go into `docs/FEEDBACK.md` (and chat summary).
 
 ## 2. Dispatch (parallel lanes)
 
@@ -38,14 +39,14 @@ Docs written in the main checkout by a design or cleanup agent are committed by 
 3. Parallel limits: no hard cap on builders (logic + asset). Soft warning at more than 3 at once: tell the user how many would run, the merge/review load it creates (rebases, hub-file conflicts, planner serial merge time, usage limits, CPU contention) and whether to prioritise or slow down; tasks run in parallel only when their `Touches` (docs/TASKS.md) do not overlap, otherwise sequence them (merge the smaller or more foundational one first). Check overlap per the environment file (desktop: `tools/overlap.sh`; cloud: other areas' unmerged task branches). The shared hub files (`kits/rpg/crates/rpgkit_battle/src/{session,plan,command,ai}.rs`, `emberwake_world/src/{source,store,data}.rs`, `emberwake_data/src/lib.rs`, `emberwake_gui/src/battle.rs`, and the field tables in `kits/rpg/schema.json`) are the usual conflict points, so give two logic tasks that both need them a merge order up front.
 4. Keep agents busy: while builders run, `design-brainstorm` writes the next specs and the `balance` agent runs on frozen systems; reviewers run in the background on finished branches while the next task starts. Standing auto-dispatches (no user decision involved, docs only): a new balance report -> `design-brainstorm` options right away; a finished builder -> `change-reviewer` right away, while the planner drafts the docs delta in parallel.
 5. Before writing a brief, check it against the spec and the decisions files (a brief narrower than a recorded user decision cost a rerun in SKILL1-A). Briefs name the worktree or checkout, branch, slice, gate command and "do not commit" (builders never commit in either environment; on desktop the planner commits, in the cloud the area thread does). Pass `effort` (and `model` where named) per the active dispatch mode (`planner-ops`).
-6. Mark tasks `in-progress` in `docs/TASKS.md`. Move rows to `docs/archive/TASKS_DONE.md` once done (keeps the queue small; cloud: as a `Done:` line in the task commit, written by the Merge & Release thread).
+6. Update task status in `docs/FEEDBACK.md` section 1 (`Build Status`).
 
 ## 3. Review and ship
 
-Landing checklist: skill `task-landing` (which docs a change needs, with `docs_needed.py`; the task-row and commit formats; stage, flush, cleanup and docs-conflict rules).
+Landing checklist: skill `task-landing` (which docs a change needs, with `docs_needed.py`; the commit formats; stage, flush, cleanup and docs-conflict rules).
 
 1. Review each report; run `change-reviewer`, which runs the suites (don't run them a second time yourself unless you changed something after the review). If a builder failed the same thing twice, ask the user rather than retry. Review fixes go to the SAME builder via `SendMessage` while it is resumable (it keeps its context); spawn a fresh one only when it was stopped or failed, and point it at `.agent/progress.md` (in the cloud also at the last pushed commit). If the planner itself changes code or data after a builder's gate (flag flip, seed re-run), re-run the gate before the review.
-2. Apply the builders' "docs delta" (README, GAME_BRIEF, STRUCTURE, new decision rows go to the matching decisions file: `games/emberwake/docs/decisions/<system>.md`, or `docs/decisions/workflow.md` for process; HISTORY append-only), update `games/emberwake/docs/ROADMAP.md` and `docs/TASKS.md` statuses.
+2. Record the builders' "docs delta" (lines for README, GAME_BRIEF, STRUCTURE, decisions, or HISTORY) as a `docs-delta` item in `docs/FEEDBACK.md` for the Design Session to apply, and update `docs/FEEDBACK.md` `Build Status`.
 3. Update `docs/AGENT_MAP.md` (desktop: Active section on dispatch and finished agents into their milestone section, newest first; cloud: `AgentMap:` lines in the task commit, written by the Merge & Release thread) and append a row to the "Agent run log" in `docs/WORKFLOW.md` for milestones.
 4. Run `check_project.ps1 -Fast -Quiet` (it includes `tools/fc.sh docs --all`; a docs-only commit: `tools/fc.sh docs`; never pipe either into `tail` before `&& git commit`). If clean: commit with the attribution trailer from the session's system reminder and merge per the environment file (both environments: squash into `develop` when approved, no PR; desktop also removes the worktree; `main` moves only through the release PR, desktop.md "Release").
 5. If the system is now stable, ask the user whether to mark it `balance-ready`.

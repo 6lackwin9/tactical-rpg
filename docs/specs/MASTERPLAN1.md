@@ -1,6 +1,6 @@
 # MASTERPLAN1: the master plan of blocks, sub-blocks and their connections
 
-Status: draft for the user's markup (2026-11-06). Lane: design. Touches: this file and [MASTERPLAN1_ROWS.md](MASTERPLAN1_ROWS.md) (every open task row mapped to the plan task that owns it).
+Status: active (2026-11-06; section 5 questions closed 2026-11-07). Lane: design. Touches: this file and [MASTERPLAN1_ROWS.md](MASTERPLAN1_ROWS.md) (every open task row mapped to the plan task that owns it). Build queue: `docs/READY.md`.
 
 Decisions: "Master plan first; a task list that stops growing", "Link a change to its task; a block is a behaviour library", "Bottom up from building blocks", "System workflow, refined", "Behaviours fixed, stats as data; bugs after lock". Starting point: `docs/specs/SILOS1.md`; base rules: `BASERULES1.md` and companions; intents: `INTENT2.md`.
 
@@ -74,7 +74,7 @@ Size from SILOS1 where it has one, else **R**. All built unless marked **designe
 | C15 | A1 -> S2 -> S1 | Stagger spends poise; a break is the Staggered status | medium R | `poise.rs` |
 | C16 | fight -> I1 -> F3 | Units, statuses, intents; the AI plans through the same commands | medium R | `ai.rs`, `Host` |
 | C17 | F4 -> F1, I1, T1 | Units, board, objectives, phase effects, battle talk | medium R | `encounter.rs` |
-| C18 | E3, W -> battle | Party, ruleset, grants, wounds, upkeep AP, zone | hard | **designed**: WORLDFIGHT1 `begin_world` |
+| C18 | E3, W -> battle | Party, ruleset, grants, wounds, upkeep AP, zone, world stage for mob growth (`U2`) | hard | **designed**: WORLDFIGHT1 `begin_world` (passes world stage to `C05`) |
 | C19 | battle -> E3, E2 | Tally, party first, then rewards | medium | `settle_party`; **designed**: `finish_world` |
 | C20 | W3 <-> battle | Fight and days asks, `battle_mods`, retreat, run-over | hard | `campaign`, asked from `region`, `worldmap` |
 | C21 | W1, W2, battle -> W3 | A cause ticks the clock | easy | `tick(Cause)` |
@@ -86,7 +86,7 @@ Size from SILOS1 where it has one, else **R**. All built unless marked **designe
 | C27 | all -> X6 | `GameState` blocks, three save gates | easy, not trivial | `aegis_save`, `save.rs` |
 | C28 | battle -> X4 | Step events, screen id | easy | `fx.rs`, `music.rs` |
 
-**Pipeline plan.** Unit seams C01-C05 close with the Unit block. Combat seams C06-C17 are joined once A, S, F, P and I lock; until then combat runs on its own values (decision "Combat tunes on its own values"). World seams C18-C26 come after. C27 and C28 follow their ends. C08 is the one to watch: one effect class could serve all 5 status vocabularies (R).
+**Pipeline plan.** Unit seams C01-C05 close with the Unit block. `U1.2` owns standing derived stats (Pools + Ratings) and the 4-stage modifier schema; `A2.2` evaluates the 4-stage pipeline dynamically per hit/heal and triggers stat re-derivation on pool band crossings or status changes. Static units (`U2`) replace `BASERULES1-F` (`feel_flat`) as the flat-value combat model. World seams C18-C26 come after. C27 and C28 follow their ends. C08 is unified at `.1` design (one status/effect application schema across all vocabularies).
 
 ## 3. The fixed task list
 
@@ -112,11 +112,11 @@ By dependency, bottom up: **U1** (everything reads it), then **U3, U2, U4**; **S
 | 2 | U2, U3, U4 | Class shape (budget 62, growth 5, tiers); gear behaviours kept or dropped (`block_cost`, wield penalty, budget); the passive effect list; affiliation and background (Q2 below); OFFHAND1 and temperaments in or parked |
 | 3 | S1, S2 | The status class: behaviours and properties, each of the 17 as a pick, so STATUSROWS1 takes that shape; one resist stat or several; poise as a pool beside meters (POISE1); the Stand guard as a status (feeds A2) |
 
-## 5. Questions for the user
+## 5. Answered questions (closed 2026-11-07)
 
-1. **The block list, five changes to the planner's.** (a) Consumables move from Unit to Action (an item behaves as a thrown skill, INTENT2 section 6). (b) "Round and timing" becomes Fight flow and takes encounter rules. (c) Space drops line of sight (not built, not designed: parked) and merges hazards into terrain (same fields). (d) AI is one sub-block. (e) Dialogue and quests are one (SILOS1 Q1). **Recommend: accept all five**: 9 blocks, 25 sub-blocks.
-2. **Affiliation and background.** The planner's lean (named hooks, no behaviour) holds for background (text only) but not quite for affiliation, which already has two built hooks: faction `grants` (a passive source) and rep bands. **Recommend**: both live in U4, keep the two hooks, add no behaviour; temperament (ROSTER1-T) waits for session 2.
-3. **Poise.** **Recommend**: poise is a pool in S2 beside unit meters, not its own sub-block; its break stays a status (S1) and its max a derived stat (U1).
-4. **Shells.** **Recommend**: one standing task each, no stages; their 75 open rows are sub-tasks, and final screens wait for the blocks.
-5. **Builds during sessions 1-3.** **Recommend**: only behaviour-neutral builds run (BASERULES1-M, KITIDS1; goldens unchanged); WORLDFIGHT1 (C18) holds until its ends near lock, as no new fight rule lands meanwhile.
-6. **Approved but unbuilt rows** (KEEP1, DEEDS1, RESPEC1, OFFHAND1, ROSTER1-T). **Recommend**: each enters its sub-block's `.1` as a new behaviour that must show its gameplay case; "spec, later" rows stay parked.
+1. **The block list, five changes to the planner's.** **Answered: accept all five** (9 blocks, 25 sub-blocks): (a) Consumables in Action (`A1`/`A3`); (b) Fight flow (`F1-F4`) takes encounter rules; (c) Space parks line of sight and merges hazards into terrain (`P1`); (d) AI is one sub-block (`I1`); (e) Dialogue and quests are one (`T1`, SILOS1 Q1).
+2. **Affiliation and background.** **Answered: accept recommendation.** Both live in `U4`, keep faction `grants` and rep bands, background stays text-only; temperament (`ROSTER1-T`) enters `U4.1`.
+3. **Poise.** **Answered (session U1, 2026-11-06):** Poise is a unified Pool in `U1` (max and regen derived in `U1`), its dynamic meter/damage runs in combat (`S2`/`A2`), and its break at 0 is a status (`S1`).
+4. **Shells.** **Answered: accept recommendation.** One standing task each (`X1-X8`), no stages; readability sub-tasks tag the sub-block they unblock, and final screens wait for the blocks.
+5. **Builds during sessions 1-3.** **Answered: accept recommendation.** Only behaviour-neutral builds listed in `docs/READY.md` (`TESTCLEAN1`, `SKILLS1`, `KITIDS1`, `BASERULES1-M`) run while Block `U` design finishes; `WORLDFIGHT1` (`C18`) holds until its ends near lock.
+6. **Approved but unbuilt rows** (`KEEP1`, `DEEDS1`, `RESPEC1`, `OFFHAND1`, `ROSTER1-T`). **Answered: accept recommendation.** Each enters its sub-block's `.1` session as a candidate behaviour that must show its gameplay case; "spec, later" rows stay parked.

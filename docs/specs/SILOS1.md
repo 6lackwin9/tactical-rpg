@@ -1,6 +1,6 @@
 # SILOS1: audit of the built systems as silos
 
-Status: proposed
+Status: approved (questions closed 2026-11-07; tasks scheduled via `docs/READY.md` and `MASTERPLAN1.md`)
 Depends on: none (BASERULES1 covers the base rules silo; only its seams are named here)
 Lane: design (audit); the rows in section 6 go to logic, integration and planner
 Touches: this file only
@@ -164,8 +164,8 @@ Rows to add; none is a rewrite.
 
 Rewrites, traits or event buses for their own sake; an acyclic `rpgkit_world`; moving any screen now; base rules content.
 
-## Open questions
+## Answered questions (closed 2026-11-07)
 
-1. **Q1. Are dialogue and quests one silo?** They call each other and share conditions and effects. Recommendation: yes, one silo for testing, the code still in two files. If no, T6-scale work appears.
-2. **Q2. When do the genre screens move to the kit (KIT2-UI)?** (a) Spec at phase 4's start, move after LAYOUTDATA1 and LOOK1-M2 (the KQ4 answer); (b) move before phase 4, so screens convert once, stopping every UI row during the move. Recommendation: (a): the silo phases keep touching these screens, and the move is safest when they rest. (b) changes phase 4's order.
-3. **Q3. Should the sim fight world fights through `begin_world` after WORLDFIGHT1?** It shows upkeep and wounds in balance runs but can shift sim numbers. Recommendation: not by default; a new sim mode when CAMPAIGN1 balance starts; the sim golden stays.
+1. **Q1. Are dialogue and quests one silo?** **Answered: yes**, one silo (`T1`) for testing and design; the code stays in two files.
+2. **Q2. When do the genre screens move to the kit (KIT2-UI)?** **Answered: (a)** spec at phase 4's start, move after `LAYOUTDATA1` and `LOOK1-M2` when the screens rest.
+3. **Q3. Should the sim fight world fights through `begin_world` after WORLDFIGHT1?** **Answered: not by default**; add a separate sim mode when campaign balance starts so the existing battle sim golden stays stable.

@@ -1,6 +1,10 @@
 # BASERULES1: the base rules pass, before the battle work
 
-Status: proposed (2026-11-05); questions in section 8.
+Status: **partially superseded (2026-11-07)**.
+
+- **Active**: Sections 1-2 and 6 for `BASERULES1-M` (rule metadata register, `check/ruleset.rs`, `aegis rules --contract`, queued in `docs/READY.md`) and `BASERULES1_LIBRARY.md` as the candidate behaviour reference.
+- **Superseded**: Sections 3-5 and 7-8 (`BASERULES1-V`, `-P`, `-PP`, `-F`, `-G`, `-H`, `-D`, `-B`) are superseded by the bottom-up session specs `docs/sessions/U1_STATS.md` and `docs/sessions/U2_CLASS.md` (and upcoming `U3`/`U4`/`A2` sessions). `BASERULES1-F` (`feel_flat`) is retired in favour of `U2` Static units. **Do not build `BASERULES1-V/P/F/G/H` from this file.**
+
 Depends on: rows follow ATTACKLOCK1 where they touch the same files.
 Lane: logic, asset, balance (section 7).
 Touches: per row, section 7.
@@ -232,59 +236,16 @@ option cannot change an existing game; `rules_golden`, the timeline golden and a
 **One set, how many rows?** A game's manifest names one: `game.json` `ruleset` (the picked row) and `test_rulesets` (rows allowed in worlds and tools for testing). Several
 rows stay, as the Arena, Dojo and sim need them and each is a working template of the library. Q4.
 
-## 7. What to change now
+## 7. Active build slice (`BASERULES1-M`) and superseded rows
 
 | Id | Title | Layer | Lane | After | Size | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
 | BASERULES1-M | Register metadata, `check/ruleset.rs`, bundle tests, `aegis rules` with `LOCKED` and `--contract` | kit | logic | ATTACKLOCK1 | S | `ruleset.rs`, `check/ruleset.rs`, `rpgkit_host`, `tools/fc.sh`, tests |
-| BASERULES1-V | Values out of code into a `base_rules` row: bound file 1, tier 2. Defaults identical | kit | logic | M | S | `damage.rs`, `stats.rs`, `gear.rs`, `carry.rs`, `budget.rs`, `check/unit.rs`, schema |
-| BASERULES1-D | Stale rules: warn on stance fields with `stances` off; tokens blank there; warn on gear `block_cost` while unread; families carry `engine_rules` for ranged, focus, unarmed | kit | logic | M | S | `check/skill.rs`, `check/item.rs`, `gear.rs`, `damage.rs`, skill text |
-| BASERULES1-G | Guard term, `guard_model`, `guard_start` (section 3) | kit | logic | M, STATUSROWS1 if ready | M | `resolver.rs`, `command.rs`, `poise.rs`, `status.rs`, `ruleset.rs`, schema |
-| BASERULES1-F | `damage_model` flat, `flat_*`, sim key, row `feel_flat` | kit | logic | M | S | `damage.rs`, `command.rs`, `plan.rs`, `session.rs`, `args.rs`, schema |
-| BASERULES1-P | Stats as data: kind `stats`, roles, default pack, inputs `burden`, `carry_penalty`, schema `ref` | kit | logic | V | M | `rpgkit_data`, `stats.rs`, `damage.rs`, `carry.rs`, `derived.rs`, `check/*`, schema, `party.rs` help |
-| BASERULES1-PP | The proof: rename pack and 8-stat pack on a frozen catalog | kit | logic | P | S | tests only |
-| BASERULES1-H | `heal_model`, `item_value`, item `grant_status`; replaces K3's "Brimstone stat" | kit | logic | K3's start | S | `command.rs`, `rpgkit_data`, schema |
-| BASERULES1-B | Kind `value_bands`, warnings, Forge-free; report lists them | kit | logic | M | S | `check/skill.rs`, schema |
-| BASERULES1-A | Data: skill and item text free of stance words; timeline `ap_cost` on the 90 rows that read `level` (values from balance) | game | asset | D | S | `data/catalog/` |
-| BASERULES1-BN | Move rate and reference-hit bands, measured | game | balance | F, P or V | S | `BALANCE_REPORT.md` |
-| BASERULES1-U | User session: PERC, KNOW, stat jobs (Q1); a short one, with STATUSPASS1 or before it | kit + game | design | - | S | spec |
 
-**Changed by the user 2026-11-05 (decision "Combat tunes on its own values, not on base rules"):** combat is tuned on direct values and does not read base rules until integration, so `feel_flat` is combat's working model and must cover what combat reads from stats, not damage alone: HP, speed, move rate, poise, AP. The minimum before battle shrinks to M and that wider F; V, D, P and the audit BASERULES1-DOM continue inside the base silo. Where Stand's guard term goes follows from this: in combat's model first, its link to the formula at integration. The text below is the earlier order, kept for the sizes.
+Rows `BASERULES1-V`, `-D`, `-G`, `-F`, `-P`, `-PP`, `-H`, `-B`, `-A`, `-BN`, and `-U` are superseded by the bottom-up session specs (`docs/sessions/U1_STATS.md`, `docs/sessions/U2_CLASS.md`, and upcoming `U3`/`U4`/`S1`/`A2` sessions). `BASERULES1-DOM` (dominance audit) runs at `U1.5`.
 
-**Minimum foundation before battle: M, V, D, G, F.** About 4S + 1M, and each costs more later: M as every new option adds metadata; V and G as K1-K3 and
-POISE1 build on them; D as SKILLPASS1 needs honest text; F as INTENT2-B can then test timing without stats. **P and PP run in parallel with K1**, not gating it, as K1-K3 add no stat reads **[R]**; schema
-merges serially. **H goes with K3, B with SKILLPASS1.** Can wait: BN's numbers after POISE1, the rest of the audit's tier 3.
+## 8. Out of scope and evidence
 
-Order: M, V, D and F, then STATUSROWS1 (now its gap has arrived: a guard status) and G, then INTENT2-K1, K2, K3 with H, then INTENT2-AI. POISE1
-after G, as its guard factor moves. STATUSPASS1 after G, SKILLPASS1 after it with B, TACTIC2 after K1 as it was. ATTACKLOCK1 lands first, unchanged.
+Out of scope: tuning, status rules (`S1`), skill rows (`A1-A4`), the 8-stat pack as a design.
 
-**Goldens.** M, V, D, F, P, PP, H and B add no behaviour under existing rows: every golden stays byte-identical. The frozen catalog has no `stats`
-rows, so it reads the default pack: that is the test that the default reproduces today (`rules_golden` snapshots HP, speed, move, burden, power,
-armour, crit and resist). D may add warning lines to `checks_golden`; if so, re-record, named in the commit and a `HISTORY` row. G is off in frozen rows.
-Status resist needs care: `INT x 2.5` must stay a float, or `roundi(70 - 22.5)` = 48 becomes 47 against a rounded 23. Hence role rows take
-`round: "none"`.
-
-## 8. Questions for the user
-
-1. **What should PERC and KNOW do?** (a) Give each a job from forms that exist: PERC sets sight (foresight `range`, hidden hazards and stealth
-   seen), KNOW keeps heals and unlocks and gains status potency. (b) Fold PERC into DEX: a 5-stat pack. (c) Leave them for now. **Recommend (a)**
-   in a short session; a pack makes (b) cheap to try later.
-2. **Keep the formula evaluator, frozen, or restrict derived rows to weighted terms?** (a) Keep it, grammar frozen, no conditions. (b) Weighted
-   terms + floor + cap as a new shape: the default pack needs `max`, `floor` and `round` per term, so it grows a second small language. **Recommend (a)**.
-3. **Does a bomb go through the formula?** (a) Flat as today, ignoring armour and guard. (b) A value through the hit: armour and guard apply, no
-   stats, no crit. (c) Through the whole hit with a role. **Recommend (b)** for this game: a thrown skill's row (IR17) should meet the same guard as a
-   skill, and option `item_value` keeps (a) in the library.
-4. **Which worlds keep another ruleset?** (a) The test bed stays on `classic` as a `test_rulesets` row, and reference fights use the picked set in the
-   Arena. (b) Move it to the picked set, re-recording journey and PHASEFOLD. **Recommend (a)**: no gain from the churn now.
-5. **Build stats as data before battle, in parallel, or after?** (a) In parallel with K1. (b) Before K1. (c) After the slice. **Recommend (a)**: about
-   30 sites today, more after every system that names a stat, and it blocks no one.
-
-Defaults unless you object: gear `block_cost` stays dormant, not wired, with a warning; `drill_scaling` becomes a value at 1.25 for balance; levels and
-growth keep their shape.
-
-## 9. Out of scope and evidence
-
-Out of scope: tuning, status rules (STATUSPASS1), skill rows (SKILLPASS1), the 8-stat pack as a design, code.
-
-Verified: file and line references; the stat table by grep; row counts by script; dead fields by grep (no reader); goldens' sources from their headers; lane 1's
-`attack_lock` from its uncommitted diff, 2026-11-05. Reasoning: rankings, contract wording, `flat` as a feel test, sizes. Not run: nothing compiled or simulated.
+Verified: file and line references; the stat table by grep; row counts by script; dead fields by grep (no reader); goldens' sources from their headers.
