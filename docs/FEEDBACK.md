@@ -17,7 +17,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `KITIDS1` | building | `claude/kitids1`, lane 2 | |
 | `BASERULES1-M` | queued | - | Starts when a lane frees; see FB-01. |
 | `U1.2` (`U1_STATS`) | audited | - | Feasible as six slices, about 2S + 3M + 1L; FB-04 to FB-09. |
-| `U2.2` (`U2_CLASS`) | auditing | - | Read-only audit running; findings come as FB items. |
+| `U2.2` (`U2_CLASS`) | audited | - | Feasible as six slices, about 1S + 4M + 1L; FB-10 to FB-15. |
 | `A4.2` (`INTENT2`) | auditing | - | Read-only audit running; findings come as FB items. |
 
 ## 2. Feedback Items (Append-Only)
@@ -95,3 +95,51 @@ Each entry uses: `### FB-nn: <short title>` with fields `Spec`, `Kind` (`feasibi
 - **Status**: open
 - **Finding**: Formula inputs resolve in `derived.rs` (`Eval::input`, stats, level, gear mitigation, row constants, other derived rows). Adding `tier` is one branch, size S, but tier is a string (`unit.rs:174`: hero, minion, standard, elite, boss), so it needs a numeric mapping, plus the content check's allowlist.
 - **Recommendation**: Name tier's numeric form: a data table of factors per tier, read by formulas as `tier_hp`, `tier_power` and so on, or an ordinal.
+
+### FB-10: One share vector cannot reproduce today's classes; two can
+
+- **Spec**: `docs/sessions/U2_CLASS.md`, C1 and C2
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Checked by script over all 7 classes at levels 1-10. Base shares (base / 62) reproduce every class at level 1. One share vector for the whole curve (budget 62 + 5 per level) differs from today's stats at levels 2-10 for all 7 classes; for example a level 2 warrior gets KNOW 11 and DEX 8 where today it has 10 and 7, as its growth puts nothing in KNOW or DEX. Base shares plus growth shares (growth / 5), with largest-remainder rounding on the running total, reproduce every class at every level exactly, so `rules_golden` holds.
+- **Recommendation**: Two vectors per class: identity at level 1, and growth identity. A single vector changes 5 of 7 class curves visibly and moves every class-level golden row. Ties in largest-remainder break by largest fraction, then stat order, as `auto_spend` does.
+
+### FB-11: Tiers scale only HP and power today, and budget scaling cannot replace power_scale
+
+- **Spec**: `docs/sessions/U2_CLASS.md`, C7 tiers
+- **Kind**: cost
+- **Status**: open
+- **Finding**: `stats::tier_scales` (`stats.rs:35`) gives HP, power and an AI skill cap: minion 0.4 / 0.6 / 2, standard 0.7 / 0.8 / 0, hero 1 / 1 / 0, elite 1.25 / 1.0 / 0, boss 1.5 / 1.1 / 0. HP multiplies max HP (`unit.rs:407`), power multiplies attack power (`damage.rs:115`). Scaling the budget instead moves every stat together (HP, damage, armour, crit, initiative, resist), and boss power 1.1 or elite HP 1.25 have no budget equivalent. A minion budget of about 25 breaks the "every stat 6 to 18" rule. "Tier" also means the AI skill cap, XP `kill_weight`, morale, portrait tier, gear tiers and skill ranks. This is the costliest U2 slice (L): it moves `rules_golden` (28 class-by-tier rows and the non-hero units), the timeline, sim, PHASEFOLD and `checks_golden` HP lines.
+- **Recommendation**: Name what replaces `power_scale` (a tier modifier through the pipeline is the natural fit with U1); apply the 6-18 check to the class row, not the tier-scaled unit; keep the AI cap; rename the other meanings of "tier" in code; build this slice after U1's derived formulas exist, so the HP base's tier term goes in once.
+
+### FB-12: Static templates exist already as derived units; the builders are what fail the acceptance test
+
+- **Spec**: `docs/sessions/U2_CLASS.md`, unit types and acceptance test
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: All 47 units except `training_dummy` are already class, level and tier derived, and 38 world characters point at them through `base_unit`, so they read as static templates at a fixed level; no unit row needs rewriting. "Template plus overrides" also exists: `base_unit`, the character's `tuning` (5 keys, used by 1 of 38), `named_items` and passives. What fails "any unit fights with no unit-specific code" today: heroes build through `progression::build_as`, NPCs through `build_unit_in` plus `customize` plus `apply_character`; `apply_character` patches HP, power, armour, speed and AP after the build; the AI profile comes from the base row for heroes and from the entry for NPCs; the sim and Dojo call `build_unit` directly. Only `training_dummy` uses the classless fixed path, with a fallback to warrior stats (KITIDS1 removes the fallback).
+- **Recommendation**: Define a static unit as derived with a fixed level and budget, reuse `base_unit`, `tuning` and named items as the overrides rather than a second override system, retire or migrate the fixed-stat mode, and route every builder through one function.
+
+### FB-13: World stage needs a source in worlds with no campaign, and XP must follow it
+
+- **Spec**: `docs/sessions/U2_CLASS.md`, mob growth by world stage
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: Nothing passes world state into enemy creation today. The smallest seam is a `stage` on `WorldRoster`, computed by the battle screen from game state (act, or flags), applied when the roster builds each entry; `build_unit_in` needs no new parameter, and the host and sim pass 0. But `roster()` computes a foe's level and XP weight without game state, so XP would disagree with the level fought unless the stage reaches it too. A world with no campaign has act 0. No save change, as the stage is derived.
+- **Recommendation**: Say which flag or act defines the stage where there is no campaign, and that the XP weight follows the stage. Pass only the stage now, leaving WORLDFIGHT1's `begin_world` held.
+
+### FB-14: Proficiency levels exist but mean something else today
+
+- **Spec**: `docs/sessions/U2_CLASS.md`, C3
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Level 0 means absent, and the class check requires 1-3. The requirement discount is level x 2, so level 1 already lowers it by 2 and level 2 by 4. Crit and burden bonuses start at level 2, and a block-cost reduction at level 3 is hard-coded. Scaling exists per class and gear (`ProfEntry.scaling`, 1.0-2.0, default 1.5) as the unit-power multiplier (`damage.rs:91-112`), so "scaling as a class weight in the weapon power rating" depends on U1's weapon power rating.
+- **Recommendation**: Say which of today's level 2 and 3 bonuses (crit, burden, block cost) stay and which become the level 3 effect; whether level 1 keeps a requirement discount. Build this slice after U3 and U4, as it is the only one that changes hero combat numbers.
+
+### FB-15: Smaller U2 points
+
+- **Spec**: `docs/sessions/U2_CLASS.md`
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: (a) Loadout templates save little today: 34 of 48 unit rows carry gear, with 32 distinct loadouts; they mostly help future mob families. (b) `rpgkit_rules/src/budget.rs` is the gear budget (target 23), not the unit budget. (c) The party screen (`party.rs:1003`, `:1575`), the Forge (`forge.rs:180`) and the sim's `primary_stat` read `base_stats` and `growth` directly. (d) Saves store `spend`, XP and `base_unit`, never stats, so they are safe if the free pool is unchanged. (e) The frozen kit the goldens load (`timeline_kit.json`) still has `base_stats` and `growth`.
+- **Recommendation**: Loadout templates as an optional last piece; name the new module or term "unit budget"; keep `base_stats` and `growth` as a compatibility view (or a loader for the frozen kit), so readers and goldens hold while the rows move to shares.
