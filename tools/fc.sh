@@ -34,6 +34,16 @@ fi
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).
+# The lines worth reading from a cargo test run: results, failures and errors, and under each "panicked at" line the message
+# that follows it (up to the first blank line, at most 6 lines), so a failure can be read without a second raw run (SKILLS1).
+test_summary() {
+  awk '
+    msg > 0 { if ($0 == "" || /^(test |thread |failures:|---- )/) msg = 0; else { print "    " $0; msg--; next } }
+    /panicked at/ { print; msg = 6; next }
+    /^test result|FAILED|^error|checked|diverge|compared|os error|frames that changed/ { if ($0 !~ / 0 passed; 0 failed/) print }
+  '
+}
+
 cargo_test() {
   local out try
   for try in 1 2 3 4; do
@@ -45,7 +55,7 @@ cargo_test() {
     fi
     break
   done
-  echo "$out" | grep -E "^test result|FAILED|panicked|^error|checked|diverge|compared|os error|frames that changed" | grep -v " 0 passed; 0 failed"
+  echo "$out" | test_summary
   echo "$out" | grep -qE "test result: FAILED|^error|os error 4551" && status=1
 }
 
@@ -243,7 +253,7 @@ esac
 
 case "$1" in
   gate)  # on the desktop a full gate joins the planner's queue, one heavy run at a time (CPU1)
-    heavy="$HOME/.claude/projects/c--dev-tactical-rpg/heavy.sh"
+    heavy="tools/planner/heavy.sh"
     [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
     gate ;;
   build) build ;;
