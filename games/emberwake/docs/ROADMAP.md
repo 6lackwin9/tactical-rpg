@@ -1,5 +1,7 @@
 # Roadmap (agent-facing, high level)
 
+Silo Release Cadence (`R1–R4`, `2026-11-07`, `UN-03`): active RPG Kit and Emberwake delivery follows the 9-block Masterplan (`U`, `S`, `A`, `F`, `P`, `I`, `E`, `W`, `T`) in [MASTERPLAN1.md](../../../docs/specs/MASTERPLAN1.md) and the live build queue in [READY.md](../../../docs/READY.md), gated by four user-testable Silo Releases (`R1` Combat Feel & Core Resolver, `R2` Spatial & Tactical AI, `R3` Economy, World & Story Spine, `R4` Full Slice Polish & Golden Lock) in [MILESTONES.md](MILESTONES.md).
+
 Transition (2026-10-19): the game now runs on the Aegis engine (Rust, `engine/`); `done` systems were built in the Godot build and reached step-for-step parity in the engine (`engine/docs/PORT_NOTES.md`, exceptions in `games/emberwake/docs/SCREENS.md` "Known gaps" and the balance sim's unported modes). Engine milestones and the transition itself: `engine/docs/ENGINE_SPEC.md`.
 
 Single source of truth for scope and status. Detailed per-system checklists remain in README "Roadmap". Do not delete entries: change the status and add the reason (see `docs/HISTORY.md` for deprecated ideas). Decided brainstorm options, answered questions and done plans (2026-10-15 brainstorm pass, plan v2, R1) are archived verbatim in `docs/archive/ROADMAP_2026-10.md` (CLN-11).

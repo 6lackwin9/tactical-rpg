@@ -1,14 +1,17 @@
-# Milestones
+# Milestones and Silo Release Cadence (`R1-R4`)
 
-The slice's milestones (decision "Slice group (1.5)", Q-86, Q-88 in `decisions/lore.md`) and which tasks belong to each.
-The skill `milestone-status` reads this table to report progress per milestone; the planner keeps it current when it
-adds task rows. A task joins the first milestone whose pattern matches its id (an exact id beats a `*` pattern); rows
-whose status says "later than the slice" or "M2b" join M2b; tasks that match nothing count as outside the slice.
-Since 2026-10-29 (decision "Docs audit pass 2 answers" Q-A, Q-B; CLEANUP.md CLN-28) two milestones follow M2b: "Ashlands"
-holds the task rows of the Ashlands goals G1-G6 (`games/emberwake/docs/ROADMAP.md` "Goals", one tracking system), and
-"Later" is the backlog of the pre-slice Ashlands rows (approved or ideas, 2026-10-17 to 2026-10-22) that wait until after
-the slice. The art pipeline rows of 2026-10-26/27 (local generation, pixelize, founder and mob portraits, the region
-view test) joined M2; WAR2H1 (the gear look on battle tokens, a DIR4 input) joined M0. Process rows (`CLN-*`) stay outside.
+**Silo-Based Release Cadence (`UN-03`, user 2026-11-07)**: Main releases (`develop -> main`) follow the 4 Masterplan Silo gates below (`docs/specs/MASTERPLAN1.md` and `docs/READY.md`), replacing the legacy `M1..M4` release cadence:
+
+| Release | Silos / Blocks | Scope & Ship Gate |
+| --- | --- | --- |
+| **`R1`** | **Unit & Status Foundation** (`U1-U4`, `S1-S2`, `C01-C05`) | Unified 5-stage pipeline, Pool/Rating classes, `unit_budget` shares, `item_families` rules, 5 passive grant kinds, 18 data-driven statuses (`Option 1C` Guard), and 5-pip Poise threshold (`Option 2A`). |
+| **`R2`** | **Action & Combat Engine** (`A1-A4`, `F1-F4`, `P1-P2`, `I1`, `C06-C17`) | Consumables in pipeline, dynamic re-derivation triggers, `RING`/`ARC` shapes, `EffectSpec`, `IR21` intent derivation, `ATTACKLOCK1-O` on, data-driven terrain `walkable`, AI behaviour predicates + **consolidated user Arena/Dojo visual & feel review (`UN-02`)**. |
+| **`R3`** | **World, Economy & Story Loop** (`E1-E3`, `W1-W3`, `T1-T2`, `C18-C28`) | `PurseCaps` in `game.json`, stage-scaled enemy XP, `WORLDFIGHT1` (`begin_world`/`finish_world`), `SERVICES1`, and seeded dialogue stat rolls. |
+| **`R4`** | **Final Shells & Ship Gate** (`X1-X8`) | Reactive 1280x720 layouts (`LAYOUT720`, `LAYOUTDATA1`), stage/region grounds, portraits/FX, content checks, saves, sim/tools, and full scenario gate. |
+
+## Historical Slice Milestones (Reference Mapping)
+
+The table below preserves the pre-masterplan task prefix mapping used by legacy milestone scripts:
 
 | Milestone | Goal | Tasks |
 | --- | --- | --- |

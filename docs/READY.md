@@ -46,11 +46,18 @@ All 25 sub-blocks across all 9 blocks of `MASTERPLAN1` are `.1` Design Closed an
 | 5 | `P1.2 - P2.2`, `I1.2` | `docs/sessions/P_SPACE.md`, `I_AI.md` | Audited (`FB-51`, `FB-52`). Neutral slices queued in Section 1. | Audited & Answered |
 | 6 | `E`, `W`, `T` | `docs/sessions/{E_ECONOMY,W_WORLD,T_STORY}.md` | Audited (`FB-50`, `FB-53`, `FB-54`). Neutral slices queued in Section 1. | Audited & Answered |
 
-## 3. Held / Waiting on Design
+## 3. Held / Wave 2 Pre-Staged Queue (Promotes to Section 1 after Wave 1 Rows 7-20)
 
-- **`.1` Design Complete (25 / 25 sub-blocks closed)**: All 9 blocks of `MASTERPLAN1` have closed `.1` session specs in `docs/sessions/*.md`.
-- **`ATTACKLOCK1-O`**: Design closed (`F_FIGHT_FLOW.md`, `A3_SHAPES.md`). Switches on in its own named commit once `A3.2` lands.
-- **`WORLDFIGHT1` (`C18`)**: Design closed (`W_WORLD.md`). Holds execution until `U` and `F` seams settle (`MASTERPLAN1` Q5).
+All 25 sub-blocks of `MASTERPLAN1` are `.1` Design Closed (`docs/sessions/*.md`) and `.2` Audited (`FB-01..59`). Once the behaviour-neutral Wave 1 slices (rows `7-20` above) land, promote these **Wave 2 (golden-moving & dependent `.2`/`.3` slices)** into Section 1 in order—each golden-moving switch in its own named commit with a `docs/HISTORY.md` row:
+
+| Wave 2 Order | Task ID | Masterplan | Summary & Dependencies | Named Golden Re-record |
+| --- | --- | --- | --- | --- |
+| W2-1 | `U1.2-S2..S5` | `U1.2` | `PERC -> Crit`, `KNOW -> Potency`, `Speed -> Initiative + Move Rate` (`FB-07`), tier HP/power factors (`FB-09`, `FB-11`), `Composure` data row (`FB-08`), and 3-stat pack proof. | `rules_golden`, `timeline_golden`, `sim_golden` (1 commit per formula switch) |
+| W2-2 | `U3.2-S3..S5` & `U4.2-S3..S4` | `U3.2`, `U4.2`, `C01-C05` | Soft wield & `Proficiency 0` penalty (`FB-33`) + party-screen penalty display (`FB-34`), reversible item grants & `OFFHAND1` (`FB-35`), character `temperament` (`FB-29`), and `U4` evaluators on `U1` pipeline (`FB-30`). (**Closes Silo Release `R1` Unit half**) | `rules_golden`, `timeline_golden`, `checks_golden` |
+| W2-3 | `S1.2-S4` & `S2.2-S3..S4` | `S1.2`, `S2.2`, `C09-C10`, `C15` | Guard `Option 1C` on `HeldGuard` (`FB-48d`), flip timeline to Poise `pips` (`FB-49c`), and enable break-queues-`stagger` (`FB-49d`). (**Closes Silo Release `R1` Status half**) | `timeline_golden`, `sim_golden`, `rules_contract_golden` |
+| W2-4 | `A4.2-K1b`, `A3.2-K2`, `A1.2-K3` | `A1-A4`, `F3`, `C07-C08`, `C12` | `RoundIntent::Field` & row-aware planner (`K1b`), directional snap + `affects` + retire `SWEEP` (`K2`), `EffectSpec` across 5 vocabularies (`A4.2`), item pipeline/mitigation + stacks (`K3`), and `INTENT2-A` content seed (`brace` + 7 shapes). | `checks_golden`, `timeline_golden`, `sim_golden` |
+| W2-5 | `ATTACKLOCK1-O`, `I1.2-S2..S3`, `P1.2-S2` | `F1`, `I1`, `P1`, `C13-C17` | Flip `attack_lock = melee` on in timeline (`FB-58a`), add `Row Z` / `RING` / `Field` AI rows (`FB-52c`), and unify cell `EffectSpec` on terrain/hazards (`FB-51d`). (**Closes Silo Release `R2` -> triggers User Arena Visual/Feel Review `UN-02`**) | `timeline_golden`, `sim_golden`, `checks_golden` |
+| W2-6 | `W.2-S2..S3`, `E1.2-S1`, `T1.2-S2..S3` | `W`, `E`, `T`, `C18-C26` | `WORLDFIGHT1` `begin_world` + round-trip test (`FB-50b`), `stage` from `campaign.act` + stage-scaled XP (`FB-50c`, `FB-53c`), `SERVICES1`, and choice-time dialogue `roll` effect (`FB-54b,c`). (**Closes Silo Release `R3`**) | `journey_golden`, `checks_golden` |
 
 ## 4. Feedback Responses (Design answers to `docs/FEEDBACK.md`)
 

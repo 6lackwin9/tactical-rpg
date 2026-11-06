@@ -20,7 +20,7 @@ Table B: interplay and display.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Assault | none (IR9) | melee at distance 1 answered | hidden target: the whole command misses | hits flank (MV3); engaged, so it can be flanked | FU2 on the unit | a bomb on a foe | intent ring, target arrow, locked tile (ATTACKLOCK1) | row 5, as today |
 | Field | `affects` | a melee area hit is answered as today (`command.rs:494`) | hits hidden units | not engaged, cannot be flanked; its hits flank as today | same source, each family once, then Rest | a bomb on a tile | source and impact tiles from the first pick; enemy Field rounds marked too | new row Z |
-| Stand | none (IR9) | your own Riposte holds beside a ring or heal (IN6) | a ring does not end it | not engaged, so never flanked and Riposte always answers | Stand order; a guard only while a Defend runs | elixirs; a potion on yourself | ring preview on neighbours while hovered | rows 3 and brace; row 2 on itself; new ring row |
+| Stand | none (IR9) | your own Riposte holds beside a ring or heal (IN6) | a ring does not end it | not engaged, so never flanked and Riposte always answers | Stand order; a Guard skill holds from wind-up start through Block 6 (`S1.1` Option 1C) | elixirs; a potion on yourself | ring preview on neighbours while hovered | rows 3 and brace; row 2 on itself; new ring row |
 | Support | friends only | none | a hidden friend can still be helped | none | same friend (SP2) | a potion on an ally | arrow to the friend | row 2 on another |
 | Maneuver | none | a flank hit gets none (MV3) | no dash at a hidden target (GD5) | the point of it | MR6, decision "Auto-fill keeps a flank" | a mobility item (planned) | position plates (MR13) | row 4 |
 

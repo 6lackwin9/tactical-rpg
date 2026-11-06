@@ -1,31 +1,29 @@
 # INTENT2 skills: every skill and consumable under the proposed framework
 
-Status: revised to the answers of 2026-11-05. The id `guard` is the intent shown as Stand. Field bonuses: 9 `reach`, 5 `lingering`, 6 `area`, 3 `power` (IR20). Generated 2026-11-05 by a read-only script from the `skills.json` and `items.json`
-catalogs. The framework and the rules named in flags are in [INTENT2.md](../../../../docs/specs/INTENT2.md). Input to
-SKILLPASS1, not a replacement for it. The proposed intent is the test applied to today's fields.
+Status: revised to `IR21` (`2026-11-07`, `FB-17`, `FB-19`). The id `guard` is the intent shown as Stand. Derived Field bonuses (`IR21`): 11 `reach`, 5 `lingering`, 7 `area`, 0 `power` (`power` is reserved as the future default). Generated from `skills.json` and `items.json` catalogs. The framework and the rules named in flags are in [INTENT2.md](../../../../docs/specs/INTENT2.md). Input to SKILLPASS1, not a replacement for it.
 
 ## Summary
 
 Skills checked: 129 (the catalog holds 129). Consumables checked: 6 (every item whose family has `item_type` CONSUMABLE; 84 items in all).
 
-| Intent | Today | Proposed |
+| Intent | Today | Derived (`IR21`) |
 | --- | --- | --- |
-| assault | 88 | 62 |
+| assault | 88 | 59 |
 | field | 0 | 23 |
 | guard | 11 | 16 |
 | support | 14 | 12 |
-| maneuver | 11 | 11 |
+| maneuver | 11 | 14 |
 | neutral | 5 | 5 |
 
-Skills that change intent: 28: assault to field 23, assault to guard 3, support to guard 2.
+Skills that change primary intent: 31 (`lunge`, `pounce`, and `charge_in` move from `assault` to `maneuver` via `dash_tiles` in `IR21`, `FB-17`).
 
-Allowed intents (IR14-IR16): 12 skills list two: 8 SUPPORT with `target_mode` ALLY_OR_SELF (support, guard) and 4 thrown area skills (field, assault); the other 117 list one. Allowed lists the primary first; the row a skill is picked from sets its behaviour.
+Allowed intents (`IR21` derived): 19 skills list two: 8 `SUPPORT` with `target_mode` `ALLY_OR_SELF` (`support, guard`) and 11 thrown area skills (`field, assault`, including `volley` and 6 enemy bursts); the other 110 list one. Allowed lists the primary first; the row a skill is picked from sets its behaviour.
 
 Flags: 31 `rule` (fits with a named rule), 9 `feel` (fits, but would feel wrong or needs tuning), 10 `unclear` (the test gives no one clear answer). A row with no flag fits cleanly.
 
 Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` lands only on you; `ring` around you, no direction; `arc` away from you, across the source; `friend` a chosen friend; `place` the point is where you end up; `none` a system command.
 
-## Proposed assault (62)
+## Proposed assault (59)
 
 | Id | Kind | Now | Shape | Primary | Allowed | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -42,14 +40,11 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 | `haymaker` | ATTACK | assault | - | assault | assault | foe |  |
 | `body_blow` | ATTACK | assault | - | assault | assault | foe |  |
 | `quick_stab` | ATTACK | assault | - | assault | assault | foe |  |
-| `lunge` | ATTACK | assault | - | assault | assault | foe | unclear: dash and hit; Assault by decision "Gap-close" |
 | `bleeding_cut` | ATTACK | assault | - | assault | assault | foe |  |
 | `barbed_arrow` | ATTACK | assault | - | assault | assault | foe |  |
-| `pounce` | ATTACK | assault | - | assault | assault | foe | unclear: dash and hit; Assault by decision "Gap-close" |
 | `smite` | ATTACK | assault | - | assault | assault | foe |  |
 | `deadeye` | ATTACK | assault | - | assault | assault | foe |  |
 | `judgement` | ATTACK | assault | - | assault | assault | foe |  |
-| `charge_in` | ATTACK | assault | - | assault | assault | foe | unclear: dash and hit; Assault by decision "Gap-close" |
 | `lacerate` | ATTACK | assault | - | assault | assault | foe |  |
 | `assassinate` | ATTACK | assault | - | assault | assault | foe |  |
 | `intimidate` | ATTACK | assault | - | assault | assault | foe | rule: a no-damage attack stays Assault |
@@ -97,13 +92,13 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 | Id | Kind | Now | Shape | Primary | Allowed | Bonus | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `shockwave` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
-| `volley` | ATTACK | assault | PLUS | field | field | reach | tile | feel: ranger loses its Volley-then-shots mix |
+| `volley` | ATTACK | assault | PLUS | field | field, assault | reach | tile | feel: ranger keeps Volley-then-shots mix via Assault half-splash row |
 | `firebomb` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `arc_lance` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
 | `inferno` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `glacial_burst` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `tripwire_snare` | ATTACK | assault | one tile | field | field | lingering | tile | feel: then Rest unless the pouch fills; wasted on a unit target today |
-| `foundry_shatter` | ATTACK | assault | SWEEP to ARC | field | field | power | arc | rule: ARC; never fires today |
+| `foundry_shatter` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
 | `phosphorus_pot` | ATTACK | assault | BURST | field | field | lingering | tile |  |
 | `magnesium_flash_bomb` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `choke_gas` | ATTACK | assault | BURST | field | field | lingering | tile |  |
@@ -112,13 +107,13 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 | `scalding_grease_pot` | ATTACK | assault | PLUS | field | field | lingering | tile | feel: Dredger has no Assault skill left |
 | `gilded_billhook_sunder` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today; Assault list left empty |
 | `execution_wall` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
-| `transfusion_pulse` | ATTACK | assault | BURST | field | field | power | tile | unclear: reach 1, reads as around you |
+| `transfusion_pulse` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |
 | `pneumatic_hammer_strike` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
-| `bone_mill_pulverizer` | ATTACK | assault | BURST | field | field | power | tile | unclear: reach 1, reads as around you |
-| `pressurized_lard_spray` | ATTACK | assault | BURST | field | field | reach | tile | feel: Field only, a boss telegraphs; alternates with Hook Drag |
-| `scalding_cataclysm` | ATTACK | assault | BURST | field | field | reach | tile | unclear: reach 1, reads as around you |
-| `ossified_spine_volley` | ATTACK | assault | BURST | field | field | reach | tile | unclear: reach 1, reads as around you |
-| `ossification_bloom` | ATTACK | assault | BURST | field | field | reach | tile | unclear: reach 0, may centre on itself |
+| `bone_mill_pulverizer` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |
+| `pressurized_lard_spray` | ATTACK | assault | BURST | field | field, assault | reach | tile | feel: `IR21` dual row; alternates with Hook Drag |
+| `scalding_cataclysm` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |
+| `ossified_spine_volley` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |
+| `ossification_bloom` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 0, may centre on itself (`IR21` dual row) |
 
 ## Proposed stand (id guard) (16)
 
@@ -158,12 +153,15 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 | `bile_coat` | SUPPORT | support | - | support | support | friend |  |
 | `resilience_ward` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
 
-## Proposed maneuver (11)
+## Proposed maneuver (14)
 
 | Id | Kind | Now | Shape | Primary | Allowed | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `backflip` | DISENGAGE | maneuver | - | maneuver | maneuver | place | rule: aims at a foe or a tile |
 | `leap_back` | DISENGAGE | maneuver | - | maneuver | maneuver | place | rule: aims at a foe or a tile |
+| `lunge` | ATTACK | assault | - | maneuver | maneuver | place | rule: `dash_tiles > 0` derives `maneuver` (`IR21`, `FB-17`) |
+| `pounce` | ATTACK | assault | - | maneuver | maneuver | place | rule: `dash_tiles > 0` derives `maneuver` (`IR21`, `FB-17`) |
+| `charge_in` | ATTACK | assault | - | maneuver | maneuver | place | rule: `dash_tiles > 0` derives `maneuver` (`IR21`, `FB-17`) |
 | `flank_cut` | ATTACK | maneuver | at flank | maneuver | maneuver | place |  |
 | `tl_hamstring_cut` | ATTACK | maneuver | at behind | maneuver | maneuver | place |  |
 | `tl_slip_strike` | ATTACK | maneuver | at flank | maneuver | maneuver | place |  |
