@@ -12,11 +12,11 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ATTACKLOCK1` (slice 1) | built (off) | `develop` | Waiting on `ATTACKLOCK1-O` design sign-off. |
 | `SIMCOUNT1` | done | `develop` | `sim feel counts=on` landed. |
 | `VISCLAR1-D` | built | `develop` | Battle view parts 1 and 2 landed; waiting on user look to close M1. |
-| `TESTCLEAN1` | built, in its partial gate | `claude/testclean1`, lane 1 | One scratch helper removing its folder on drop. |
+| `TESTCLEAN1` | review passed, landing | `claude/testclean1`, lane 1 | `aegis_core::scratch::Scratch`; 81 test files converted; docs delta FB-39. |
 | `SKILLS1` | staged | `staging` | Review passed; reaches `develop` with the next full gate. |
 | `KITIDS1` | staged | `staging` | Review fixes in; reaches `develop` with the next full gate; FB-23, FB-24, docs delta FB-38. |
 | `BASERULES1-M` | building | `claude/baserules1m`, lane 3 | |
-| `U1.2` (`U1_STATS`) | audited, slice 1 queued | - | FB-04 to FB-09 closed. `U1.2-S1` follows `BASERULES1-M`. |
+| `U1.2` (`U1_STATS`) | slice 1 building | `claude/u12s1`, lane 2 | FB-04 to FB-09 closed. Exact pipeline port and pool facade, goldens byte-identical. |
 | `U2.2` (`U2_CLASS`) | audited, slice 1 queued | - | FB-10 to FB-15 closed. `U2.2-S1` follows `U1.2-S1`. |
 | `A4.2` (`INTENT2`) | audited | - | FB-16 to FB-22 closed; design updating INTENT2. |
 | `U3.2` (`U3_GEAR`) | audited | - | Feasible, but the premise is partly stale; about 2M + 1M-L + 1L + 1S; FB-31 to FB-37. |
@@ -155,3 +155,36 @@ FB-01 to FB-22 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: SKILLS1: planner scripts live in `tools/planner/` (README there); `tools/fc.sh test` prints each panic's message; `flush.sh` logs gate times to `$AEGIS_PLANNER_LOG`. KITIDS1: `tools/fc.sh layers` also fails when kit `src` quotes a class id from a game's `classes.json`; the sim's classes, roles, rosters and limit tests come from `emberwake_sim::CLASSES`.
 - **Recommendation**: Apply to `docs/WORKFLOW.md` (fc.sh help, the planner scripts), `games/emberwake/docs/GAME_BRIEF.md` ("where to look": sim classes), `docs/STRUCTURE.md` (`tools/planner/`), and the planner and task-landing skills' script paths; TASKS: SKILLS1 and KITIDS1 done.
+
+### FB-39: Docs delta from TESTCLEAN1
+
+- **Spec**: shared docs
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Tests make scratch folders only through `aegis_core::scratch::Scratch` (`new`, `vacant`, `until_thread_end`), removed when the test ends; folders are named `aegis_*`. A helper that returns a derived path must hand back the guard or use `until_thread_end` (31 tests failed on a first pass that dropped it early).
+- **Recommendation**: `docs/STRUCTURE.md` `aegis_core/src/` row and `engine/README.md`: add `scratch.rs`; the `rust-conventions` skill: "tests make temp folders only through `Scratch`; never `temp_dir().join`; a helper returning a path keeps its guard"; TASKS: TESTCLEAN1 done.
+
+## 3. Notes for the user (non-build, read by the Design Session)
+
+The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
+
+### UN-01: Old test folders in the temp dir need a manual delete or a permission
+
+- **For**: user
+- **Status**: open
+- **Note**: About 19,000 folders from tests before TESTCLEAN1 sit in `C:\Users\tusha\AppData\Local\Temp` (`emberwake_*`, about 18,870, and `rpgkit_*`, about 194). New test runs no longer add any. The build session's cleanup command (delete those older than 90 minutes, so nothing a running build uses is touched) was blocked by the permission check, and it does not retry denied actions.
+- **Ask**: Delete them by hand, allow that command, or leave them; they are small.
+
+### UN-02: M1 waits on the user's look at the battle view
+
+- **For**: user
+- **Status**: open
+- **Note**: Battle view parts 1 and 2 (VISCLAR1-D) are on `develop`. The checklist with exact steps is `games/emberwake/docs/NEEDS_YOUR_EYES.md`, battle view section (Scene Runner > Arena > `tl_flank`, Ruleset set to Timeline).
+- **Ask**: The user's look closes M1; it blocks no build work.
+
+### UN-03: `main` is far behind `develop`
+
+- **For**: both
+- **Status**: open
+- **Note**: `develop` is about 90 commits ahead of `main` (release PR #54 was 2026-11-03). Releases go by PR at milestone ends or when asked; CI passes on `develop`.
+- **Ask**: Whether to release `develop` to `main` now, or at M1's close.
