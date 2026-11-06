@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check,
-#                                docs --all, tooltests
+#                                docs --all, tooltests, plannertests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt);
@@ -11,7 +11,8 @@
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
 #   tools/fc.sh docs [--all]     warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint. Files changed against the merge base
 #                                with origin/develop, staged or untracked; --all (the gate and the flush): every file
-#   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow
+#   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow;
+#                                then the tools/planner tests (plain Python, no Pillow)
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
@@ -114,14 +115,19 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }
 
-tools_python() {  # prints a Python that imports Pillow, or nothing; the WindowsApps `python` aliases are stubs, never probed
+python_with() {  # $1 = a Python statement; prints the first Python 3 that runs it, or nothing; the WindowsApps `python`
+  # aliases are stubs, never probed
   local c p
   for c in "${LOCALAPPDATA//\//}"/Programs/Python/Python3*/python.exe python3 python py; do
     p=$(command -v "$c") || continue
     case "$p" in *WindowsApps*) continue ;; esac
-    if "$p" -c "import PIL" >/dev/null 2>&1; then echo "$p"; return 0; fi
+    if "$p" -c "import sys; assert sys.version_info[0] == 3; $1" >/dev/null 2>&1; then echo "$p"; return 0; fi
   done
   return 1
+}
+
+tools_python() {  # prints a Python that imports Pillow, or nothing
+  python_with "import PIL"
 }
 
 kill_tree() {  # $1 = a background job started by tooltests. Windows: taskkill /T /F ends the native process and every descendant
@@ -155,6 +161,16 @@ tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT se
     tail -n 40 "$log"; echo "[tooltests] FAIL: tools/tiles tests, exit code $code"; status=1
   fi
   rm -f "$log"
+}
+
+plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, no Pillow; no Python at all is a visible SKIP
+  local py out
+  if ! py=$(python_with "pass"); then echo "[plannertests] SKIP: no Python 3 found, tools/planner tests did not run"; return 0; fi
+  if out=$(cd tools/planner && "$py" -m unittest -q 2>&1); then
+    echo "[plannertests] ok: $(echo "$out" | grep -E '^Ran [0-9]+ test') (tools/planner)"
+  else
+    echo "$out" | tail -n 40; echo "[plannertests] FAIL: tools/planner tests"; status=1
+  fi
 }
 
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
@@ -241,6 +257,7 @@ gate() {
   [ "$(echo "$out" | grep -c '^\[docs\] WARN')" -eq 0 ] || echo "[docs] $(echo "$out" | grep -c '^\[docs\] WARN') size warning(s)"
   [ $status -ne 0 ] && return
   tooltests; [ $status -ne 0 ] && return
+  plannertests; [ $status -ne 0 ] && return
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -287,7 +304,7 @@ case "$1" in
       ""|--all) docs_check "${2:-}" || status=1 ;;
       *) echo "usage: tools/fc.sh docs [--all]"; status=1 ;;
     esac ;;
-  tooltests) tooltests ;;
+  tooltests) tooltests; plannertests ;;
   layers) layers_check ;;
   content) aegis content "${@:2}" || status=1 ;;
   rules) aegis rules "${@:2}" || status=1 ;;
@@ -296,6 +313,6 @@ case "$1" in
   scenario) scenario "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,19p' "$0"; status=1 ;;
+  *) sed -n '2,20p' "$0"; status=1 ;;
 esac
 exit $status
