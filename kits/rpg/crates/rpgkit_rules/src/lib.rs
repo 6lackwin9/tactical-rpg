@@ -8,6 +8,7 @@ pub mod carry;
 pub mod damage;
 pub mod derived;
 pub mod gear;
+pub mod grants;
 pub mod pipeline;
 pub mod pool;
 pub mod ruleset;

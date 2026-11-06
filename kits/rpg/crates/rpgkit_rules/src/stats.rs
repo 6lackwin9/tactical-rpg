@@ -1,9 +1,7 @@
 //! StatRules, StatModifier, Proficiency and CharacterStats (scripts/core/specs/).
 
-use aegis_core::value;
 use rpgkit_data::{Catalog, ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
-use serde_json::Value;
 
 /// The level 1 unit budget (`unit_budget::BASE_BUDGET`).
 pub const CLASS_BUDGET: i32 = rpgkit_data::unit_budget::BASE_BUDGET;
@@ -135,20 +133,15 @@ impl Proficiency {
         *self.bonus_levels.entry(gear.to_lowercase()).or_insert(0) += levels;
     }
 
-    /// The `proficiency` effect of the passive grammar (keys `gear`, `levels`): the one reader, for a built unit and for
-    /// the gear rule (`with_drills`).
-    pub fn add_effect(&mut self, effect: &serde_json::Map<String, Value>) {
-        self.add_bonus(&value::string(effect, "gear", ""), value::int(effect, "levels", 0));
-    }
-
     /// UNITDRILL1: this proficiency plus the drills among `passive_ids`, the always-on passives (`slot` "") with a
-    /// `proficiency` effect, read as a built unit reads them (`Unit::apply_passive`). Unknown ids and slottable passives add
-    /// nothing: a slottable passive trains only while slotted, which is a battle's deck, not the gear rule's.
+    /// `proficiency` grant, read through the typed grant view as a built unit reads them (U4.2-S1, FB-27:
+    /// `grants::read`, `Unit::apply_grants`). Unknown ids and slottable passives add nothing: a slottable passive trains
+    /// only while slotted, which is a battle's deck, not the gear rule's.
     pub fn with_drills<'a>(mut self, cat: &Catalog, passive_ids: impl IntoIterator<Item = &'a String>) -> Self {
         for passive in passive_ids.into_iter().filter_map(|id| cat.passives.get(id)).filter(|p| p.slot.is_empty()) {
-            for effect in passive.effects.iter().filter_map(Value::as_object) {
-                if value::string(effect, "type", "") == "proficiency" {
-                    self.add_effect(effect);
+            for grant in crate::grants::read(&passive.effects) {
+                if let Some((gear, levels)) = grant.proficiency() {
+                    self.add_bonus(gear, levels);
                 }
             }
         }

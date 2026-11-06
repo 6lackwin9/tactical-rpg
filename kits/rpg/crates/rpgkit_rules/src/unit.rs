@@ -1,8 +1,9 @@
 //! Combatant (build-time and derived parts) and ContentFactory.unit: a catalog unit entry -> a ready unit.
 
 use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
+use crate::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
-use aegis_core::value::{self, to_int, to_str};
+use aegis_core::value::to_int;
 use rpgkit_data::{Catalog, ClassDef, Deck, UnitDef, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
@@ -43,14 +44,16 @@ pub struct ForcedTraits {
 }
 
 impl ForcedTraits {
-    /// Adds one `forced_move` effect row (`immune` "", always or guarding; `bonus_tiles` 0-2, summed).
-    fn add(&mut self, e: &value::Obj) {
-        match value::string(e, "immune", "").as_str() {
-            "always" => self.immune_always = true,
-            "guarding" => self.immune_guarding = true,
+    /// Adds one `forced_move` modifier of the typed view (U4.2-S1: an immunity, always or guarding, set by any row;
+    /// `bonus_tiles` 0-2 a row, summed).
+    fn add(&mut self, m: &Modifier) {
+        let c = m.target.combine();
+        match m.target {
+            Target::ForcedImmune(Immunity::Always) => self.immune_always = c.fold_flag(self.immune_always, true),
+            Target::ForcedImmune(Immunity::Guarding) => self.immune_guarding = c.fold_flag(self.immune_guarding, true),
+            Target::ForcedTiles => self.bonus_tiles = c.fold_i(self.bonus_tiles, m.value as i32),
             _ => {}
         }
-        self.bonus_tiles += value::int(e, "bonus_tiles", 0).clamp(0, 2);
     }
 
     /// Both sets together.
@@ -459,108 +462,98 @@ impl Unit {
         self.refresh_path_skills(cat);
     }
 
-    /// Passives.apply_effects (item effects and passives share the grammar).
+    /// Passives.apply_effects (item effects and passives share the grammar): the typed grant view of `effects`
+    /// (U4.2-S1, `grants::read`), applied by `apply_grants`.
     pub fn apply_effects(&mut self, cat: &Catalog, effects: &[Value], source: &str, gear: bool) {
+        self.apply_grants(cat, &grants::read(effects), source, gear);
+    }
+
+    /// U4.2-S1: applies typed grants under `source` (`passive:<id>`, `gear:<item>` or `gear:<item>:tier<n>`; `gear`
+    /// for a worn item's) to today's accumulators, each target by its combine rule, in grant order (the foresight
+    /// source, the trigger keys and the meter order read it).
+    pub fn apply_grants(&mut self, cat: &Catalog, list: &[Grant], source: &str, gear: bool) {
         let id = source.trim_start_matches("passive:").to_string();
-        for raw in effects {
-            let Some(e) = raw.as_object() else { continue };
-            match value::string(e, "type", "").as_str() {
-                "stat" => {
-                    let mut tag = "always".to_string();
-                    if let Some(ctx) = value::obj(e, "context") {
-                        for (k, v) in ctx {
-                            tag = format!("{}:{}", k, to_str(v));
-                        }
-                    }
-                    let stat = value::string(e, "stat", "");
-                    let mut m = StatModifier::permanent(&stat, value::int(e, "value", 0), &format!("passive:{id}"), &tag);
-                    // DERIVE1 4.1: the optional percent counts only on a derived id (base stats stay flat-only)
-                    if cat.derived_stats.contains_key(&stat) {
-                        m.percent = value::float(e, "percent", 0.0);
-                    }
-                    self.stats.modifiers.push(m);
-                }
-                "proficiency" => self.stats.proficiency.add_effect(e),
-                "resist" => {
-                    let status = value::string(e, "status", "");
-                    let target = if gear { &mut self.gear_status_resist } else { &mut self.status_resist };
-                    let cur = target.get(&status).copied().unwrap_or(0);
-                    target.insert(status, (cur + value::int(e, "value", 0)).min(100));
-                }
-                "ap_regen" => self.ap_regen_bonus += value::int(e, "value", 0),
-                "skill" => self.learn_skill(cat, &value::string(e, "skill", "")),
-                "skill_potency" => {
-                    let v = value::float(e, "value", 0.0);
-                    let group = value::string(e, "group", "");
-                    if !group.is_empty() {
-                        let g = if gear { &mut self.gear_potency_group } else { &mut self.potency_group };
-                        *g.entry(group).or_insert(0.0) += v;
-                    } else {
-                        let fam = value::string(e, "family", "");
-                        let f = if gear { &mut self.gear_potency_family } else { &mut self.potency_bonus };
-                        *f.entry(fam).or_insert(0.0) += v;
-                    }
-                }
-                "status_potency" => {
-                    if gear {
-                        self.gear_status_potency += value::int(e, "value", 0)
-                    } else {
-                        self.passive_status_potency += value::int(e, "value", 0)
-                    }
-                }
-                "spell_reach" => {
-                    if gear {
-                        self.gear_spell_reach += value::int(e, "value", 0)
-                    } else {
-                        self.passive_spell_reach += value::int(e, "value", 0)
-                    }
-                }
-                "unlock" if !gear => {
-                    let levels = value::int(e, "levels", 0).clamp(0, 2);
-                    let group = value::string(e, "group", "");
-                    let (map, key) = if group.is_empty() {
-                        (&mut self.unlock_bonus_family, value::string(e, "family", ""))
-                    } else {
-                        (&mut self.unlock_bonus_group, group)
+        for g in list.iter().filter(|g| !gear || g.gear_ok()) {
+            match g {
+                Grant::Modifier(m) => self.apply_modifier(cat, m, &id, gear),
+                Grant::Proficiency { gear: family, levels } => self.stats.proficiency.add_bonus(family, *levels),
+                Grant::GrantSkill(SkillGrant::Learn(skill)) => self.learn_skill(cat, skill),
+                Grant::GrantSkill(SkillGrant::Unlock { set, levels }) => {
+                    let (map, key) = match set {
+                        SkillSet::Family(f) => (&mut self.unlock_bonus_family, f),
+                        SkillSet::Group(g) => (&mut self.unlock_bonus_group, g),
                     };
-                    let cur = map.get(&key).copied().unwrap_or(0);
-                    map.insert(key, cur.max(levels));
+                    let cur = map.get(key).copied().unwrap_or(0);
+                    map.insert(key.clone(), SkillGrant::UNLOCK_COMBINE.fold_i(cur, *levels));
                     self.refresh_path_skills(cat);
-                }
-                "foresight" if !gear => {
-                    if self.foresight_source.is_empty() {
-                        self.foresight_source = id.clone();
-                    }
-                    self.foresight_range = self.foresight_range.max(value::int(e, "range", 0).clamp(0, FORESIGHT_RANGE_MAX));
-                }
-                // RULESET1 P6: passives only (gear effects are rebuilt on every sync and would pile up)
-                "stagger_taken" if !gear => {
-                    let mult = value::float(e, "mult", 1.0).clamp(0.0, STAGGER_TAKEN_MULT_MAX);
-                    self.stagger_taken.push(StaggerTaken { mult, max_blocks: value::int(e, "max_blocks", 0).max(0) });
-                }
-                // HOOKS1 FM5: passives and worn items (the gear set is cleared on every sync)
-                "forced_move" => {
-                    if gear {
-                        self.gear_forced.add(e);
-                    } else {
-                        self.passive_forced.add(e);
-                    }
                 }
                 // HOOKS1 8.1: passives and worn items (the gear list is cleared on every sync); a tier effect counts as
                 // its item's
-                "trigger" => {
+                Grant::Trigger(row) => {
                     let from = if gear { format!("gear:{}", source.trim_start_matches("gear:").split(':').next().unwrap_or("")) } else { source.to_string() };
                     let list = if gear { &mut self.gear_triggers } else { &mut self.passive_triggers };
                     let key = format!("{source}#{}", list.len());
-                    list.push(HeldTrigger { source: from, key, row: rpgkit_data::TriggerRow::from_obj(e) });
+                    list.push(HeldTrigger { source: from, key, row: row.clone() });
                 }
                 // HOOKS1 UM1: passives only (HOOKS1-S gives items no meter effect)
-                "meter" if !gear => {
-                    let floor = e.get("floor").filter(|v| v.is_number()).map(|v| to_int(v, 0));
-                    self.passive_meters.push(HeldMeter { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor });
-                }
-                _ => {}
+                Grant::GrantPool { meter, start, floor } => self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor: *floor }),
             }
+        }
+    }
+
+    /// One modifier grant (`id`: the source without `passive:`).
+    fn apply_modifier(&mut self, cat: &Catalog, m: &Modifier, id: &str, gear: bool) {
+        let c: Combine = m.target.combine();
+        let int = m.value as i32;
+        match &m.target {
+            Target::Stat { stat, tag, percent } => {
+                let mut sm = StatModifier::permanent(stat, int, &format!("passive:{id}"), tag);
+                // DERIVE1 4.1: the optional percent counts only on a derived id (base stats stay flat-only)
+                if cat.derived_stats.contains_key(stat) {
+                    sm.percent = *percent;
+                }
+                self.stats.modifiers.push(sm);
+            }
+            Target::Resist { status } => {
+                let held = if gear { &mut self.gear_status_resist } else { &mut self.status_resist };
+                let cur = held.get(status).copied().unwrap_or(0);
+                held.insert(status.clone(), c.fold_i(cur, int));
+            }
+            Target::ApRegen => self.ap_regen_bonus = c.fold_i(self.ap_regen_bonus, int),
+            Target::SkillPotency(set) => {
+                let (held, key) = match set {
+                    SkillSet::Group(g) => (if gear { &mut self.gear_potency_group } else { &mut self.potency_group }, g),
+                    SkillSet::Family(f) => (if gear { &mut self.gear_potency_family } else { &mut self.potency_bonus }, f),
+                };
+                let slot = held.entry(key.clone()).or_insert(0.0);
+                *slot = c.fold_f(*slot, m.value);
+            }
+            Target::StatusPotency => {
+                let held = if gear { &mut self.gear_status_potency } else { &mut self.passive_status_potency };
+                *held = c.fold_i(*held, int);
+            }
+            Target::SpellReach => {
+                let held = if gear { &mut self.gear_spell_reach } else { &mut self.passive_spell_reach };
+                *held = c.fold_i(*held, int);
+            }
+            Target::Foresight => {
+                if self.foresight_source.is_empty() {
+                    self.foresight_source = id.to_string();
+                }
+                self.foresight_range = c.fold_i(self.foresight_range, int);
+            }
+            // RULESET1 P6: passives only; the battle multiplies the rows that match an action's length
+            Target::StaggerTaken { max_blocks } => self.stagger_taken.push(StaggerTaken { mult: m.value, max_blocks: *max_blocks }),
+            // HOOKS1 FM5: passives and worn items (the gear set is cleared on every sync)
+            Target::ForcedTiles | Target::ForcedImmune(_) => {
+                if gear {
+                    self.gear_forced.add(m);
+                } else {
+                    self.passive_forced.add(m);
+                }
+            }
+            // HOOKS1 UM4: a band's crit, read by `apply_band` only
+            Target::Crit => {}
         }
     }
 
@@ -571,13 +564,10 @@ impl Unit {
         let resist = self.status_resist.clone();
         let (fam, group) = (self.potency_bonus.clone(), self.potency_group.clone());
         let (potency, stagger) = (self.passive_status_potency, self.stagger_taken.len());
-        let mut crit = 0.0;
-        let kinds = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency"];
-        let passive: Vec<Value> = effects.iter().filter(|e| e.as_object().is_some_and(|o| kinds.contains(&value::string(o, "type", "").as_str()))).cloned().collect();
-        self.apply_effects(cat, &passive, source, false);
-        for e in effects.iter().filter_map(Value::as_object).filter(|o| value::string(o, "type", "") == "crit") {
-            crit += value::float(e, "value", 0.0);
-        }
+        let view = grants::read(effects);
+        let passive: Vec<Grant> = view.iter().filter(|g| g.band_ok()).cloned().collect();
+        self.apply_grants(cat, &passive, source, false);
+        let crit = view.iter().filter_map(Grant::band_crit).fold(0.0, |held, v| Target::Crit.combine().fold_f(held, v));
         self.trigger_crit += crit;
         let diff_i = |now: &IndexMap<String, i32>, was: &IndexMap<String, i32>| -> Vec<(String, i32)> {
             now.iter().filter_map(|(k, v)| Some((k.clone(), v - was.get(k).copied().unwrap_or(0))).filter(|(_, d)| *d != 0)).collect()

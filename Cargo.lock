@@ -730,6 +730,7 @@ version = "0.1.0"
 dependencies = [
  "aegis_core",
  "emberwake_data",
+ "indexmap",
  "rpgkit_rules",
  "serde_json",
 ]
