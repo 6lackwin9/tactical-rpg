@@ -25,7 +25,7 @@ Execute these slices in order. Existing engine goldens must remain unchanged exc
 
 ## 2. Feasibility Check (`feasibility-check`)
 
-Read-only code audit requested from the Build Session for `S1.2`, `S2.2`, and `A1.2-A4.2` (Sessions 3 and 4 are now closed).
+Read-only code audit requested from the Build Session for `S1.2-S2.2`, `A1.2-A4.2`, `F1.2-F4.2`, `P1.2-P2.2`, and `I1.2` (the entire Combat Engine design across `U`, `S`, `A`, `F`, `P`, `I` is now closed).
 
 | Order | Sub-block / ID | Spec to Audit | Audit Focus | Status |
 | --- | --- | --- | --- | --- |
@@ -34,13 +34,16 @@ Read-only code audit requested from the Build Session for `S1.2`, `S2.2`, and `A
 | 3 | `A1.2` | `docs/sessions/A1_VALUE.md` | Audit consumables routed through `A2` pipeline & `S1` statuses (`item_ap = 0`), stance-off cleanup (`feint`, `crushing_blow`, `{flow}`, `{disrupt}`), and advisory skill budget check in `check/skill.rs`. | `feasibility-check` (new) |
 | 4 | `A2.2` | `docs/sessions/A2_RESOLUTION.md` | Audit dynamic hit/heal resolution over `rpgkit_rules::pipeline` (`Base -> Flat -> Mult -> Mitigation -> Round`) and the 3 explicit mid-fight re-derivation triggers. | `feasibility-check` (new) |
 | 5 | `A3.2` & `A4.2` | `docs/sessions/A3_SHAPES.md`, `docs/sessions/A4_EFFECTS.md` | `FB-16..22` folded into `A3_SHAPES.md` (`RING`/`ARC` replacing `SWEEP`, `affects`, melee vs shaped lock) and `A4_EFFECTS.md` (`IR21` 7-step precedence, item intent mapping, `EffectSpec` across 5 vocabularies). Verify slice readiness (`INTENT2-K1..K3`). | `feasibility-check` / audited (`FB-16..22`) |
-| 6 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
+| 6 | `F1.2-F4.2` | `docs/sessions/F_FIGHT_FLOW.md` | Audit `F1` (`Initiative` from `U1` speed split + `ATTACKLOCK1-O` switch-on), `F2` (data-driven debt status IDs replacing `"stagger"`/`"stun"` literals), `F3` (`INTENT2-K1` + `Stand` 1-tile `Move`), and `F4` (phase `status` via `EffectSpec`). | `feasibility-check` (new) |
+| 7 | `P1.2-P2.2` | `docs/sessions/P_SPACE.md` | Audit moving terrain `walkable` and `stops_forced_move` from `grid.rs:68` to `terrain.json` (`P1.2`), unified cell `EffectSpec` on hazards, and `move_after_blocks` schema promotion (`FB-40b`). | `feasibility-check` (new) |
+| 8 | `I1.2` | `docs/sessions/I_AI.md` | Audit replacing the 8 hardcoded status IDs in `ai.rs` with `S1` behaviour predicates (`has_targeting_pull`, `has_reactive_counter`, `has_tick`, `locks_movement`/`locks_blocks`, `modifies_rating`) + `INTENT2-AI` `ROWS` ladder. | `feasibility-check` (new) |
+| 9 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
 
 ## 3. Held / Waiting on Design
 
-- **`ATTACKLOCK1-O`**: Built behind off-switch (`ATTACKLOCK1` slice 1). Unblocks once `A3.2` / `F1` confirms `attack_lock = melee` switch-on.
+- **`ATTACKLOCK1-O`**: Design closed (`F_FIGHT_FLOW.md`, `A3_SHAPES.md`). Switches on in its own named commit once `A3.2` lands.
 - **`WORLDFIGHT1` (`C18`)**: Holds until `U` and `F` seams settle (`MASTERPLAN1` Q5).
-- **`F1.1-F4.1`, `P1.1-P2.1`, `I1.1`**: Next design session (Fight flow, Space, and AI).
+- **`E1.1-E3.1`, `W1.1-W3.1`, `T1.1-T2.1`**: Final design session (World, Economy & Story blocks — mostly Stage 2/3 ruleset naming pass).
 
 ## 4. Feedback Responses (Design answers to `docs/FEEDBACK.md`)
 
