@@ -12,10 +12,10 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ATTACKLOCK1` (slice 1) | built (off) | `develop` | Waiting on `ATTACKLOCK1-O` design sign-off. |
 | `SIMCOUNT1` | done | `develop` | `sim feel counts=on` landed. |
 | `VISCLAR1-D` | built | `develop` | Battle view parts 1 and 2 landed; waiting on user look to close M1. |
-| `TESTCLEAN1` | review passed, landing | `claude/testclean1`, lane 1 | `aegis_core::scratch::Scratch`; 81 test files converted; docs delta FB-39. |
+| `TESTCLEAN1` | staged, full gate running | `staging` | With SKILLS1 and KITIDS1; docs delta FB-39. |
 | `SKILLS1` | staged | `staging` | Review passed; reaches `develop` with the next full gate. |
 | `KITIDS1` | staged | `staging` | Review fixes in; reaches `develop` with the next full gate; FB-23, FB-24, docs delta FB-38. |
-| `BASERULES1-M` | building | `claude/baserules1m`, lane 3 | |
+| `BASERULES1-M` | review passed, lands after the running flush | `claude/baserules1m`, lane 3 | Register metadata, `Ruleset::notes()`, `aegis rules [--contract]`; one new golden; FB-40, FB-41. |
 | `U1.2` (`U1_STATS`) | slice 1 building | `claude/u12s1`, lane 2 | FB-04 to FB-09 closed. Exact pipeline port and pool facade, goldens byte-identical. |
 | `U2.2` (`U2_CLASS`) | audited, slice 1 queued | - | FB-10 to FB-15 closed. `U2.2-S1` follows `U1.2-S1`. |
 | `A4.2` (`INTENT2`) | audited | - | FB-16 to FB-22 closed; design updating INTENT2. |
@@ -164,6 +164,22 @@ FB-01 to FB-22 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Finding**: Tests make scratch folders only through `aegis_core::scratch::Scratch` (`new`, `vacant`, `until_thread_end`), removed when the test ends; folders are named `aegis_*`. A helper that returns a derived path must hand back the guard or use `until_thread_end` (31 tests failed on a first pass that dropped it early).
 - **Recommendation**: `docs/STRUCTURE.md` `aegis_core/src/` row and `engine/README.md`: add `scratch.rs`; the `rust-conventions` skill: "tests make temp folders only through `Scratch`; never `temp_dir().join`; a helper returning a path keeps its guard"; TASKS: TESTCLEAN1 done.
 
+### FB-40: BASERULES1-M as built: three parts of the spec are left for later rows
+
+- **Spec**: `docs/specs/BASERULES1.md` section 4.2, `BASERULES1_LIBRARY.md` sections 2 and 7; READY row 4
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: Built to the READY row: every REGISTER rule carries `requires`, `conflicts`, `bundle`, `system`, `tested` and `does`; `FIELD_RULES` (15), `BUNDLES` (7), `TESTED_SETS` (21, library section 4 without `[poise, flank]`), `LOCKED` (50 code constants with system and reason), `PROMOTED`. One hard error, `flank` without `round_intent`; warnings for conflicts, fields set with nothing reading them, `attack_lock` with `chase=classic` (untested), a split must-ship bundle, and an untested set. Both shipped rows are clean. Not built: (a) spec 4.2's contract surface (the `compute` signature, RNG draw order, the role list; no role table exists yet), as `--contract` lists ruleset fields per READY; (b) a schema entry for `move_after_blocks`, which library section 2 says this task adds; it would make the next save rewrite shipped data, so the contract shows it as `row-only`; (c) library section 7's short fight per tested set; (d) `game.json` `ruleset` and `test_rulesets`. The sim's `rules=` stays silent, where library section 7 says `adjust` prints the same warnings. The `LOCKED` scan checks both ways but does not recurse into subfolders, skips slice types, `pub(crate)`, `static` and multi-line declarations, and matches `PROMOTED` by name only.
+- **Recommendation**: Rows for (a) to (d) when their designs need them; (b) as a schema-first slice with the re-save; the sim printing notes and a recursive `LOCKED` scan are small and can ride the next base-rules slice.
+
+### FB-41: Docs delta from BASERULES1-M
+
+- **Spec**: shared docs
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: New command `aegis rules [--contract]` (`tools/fc.sh rules`): rules by system, fields, bundles, tested sets, locked constants and the game's rows; `aegis battle rules=` prints the set's notes to stderr. A new golden, `kits/rpg/crates/rpgkit_host/tests/fixtures/rules_contract_golden.json`, recorded with `RECORD=1`.
+- **Recommendation**: `CLAUDE.md` "Engine goldens": add the rules contract golden; `engine/README.md` and `docs/WORKFLOW.md`: the command; `docs/HISTORY.md`: a row for the new golden; `engine/docs/authoring/rule_library.md` (the design session's): the additive rule, the metadata, one picked set per game, the frozen-catalog test, value versus form versus new rule, and the candidates table; TASKS: BASERULES1-M done once landed.
+
 ## 3. Notes for the user (non-build, read by the Design Session)
 
 The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
@@ -186,5 +202,5 @@ The user may not read the build session's chat, so anything outside build work g
 
 - **For**: both
 - **Status**: open
-- **Note**: `develop` is about 90 commits ahead of `main` (release PR #54 was 2026-11-03). Releases go by PR at milestone ends or when asked; CI passes on `develop`.
+- **Note**: `develop` is 111 commits ahead of `main` (release PR #54 was 2026-11-03). Releases go by PR at milestone ends or when asked; CI passes on `develop`.
 - **Ask**: Whether to release `develop` to `main` now, or at M1's close.
