@@ -49,8 +49,22 @@ While `U1` derives continuous `Max Poise` (`CONS * 2 + STR + gear_poise_bonus`, 
 | `stagger_windup_mult` / `stagger_guard_mult` / `flank_stagger_mult` | **Tunable** | `2.0` / `0.5` / `1.5` (`0.25..3.0`) | Situational poise damage multipliers |
 | `debt_stagger` / `debt_stun` | **Tunable** | `3` / `5` (`1..10`) | AP debt thresholds queuing `stagger` / `stun` |
 
-## 4. Acceptance tests (`S2.2` - `S2.5`)
+## 4. Feasibility resolutions (`FB-49`, accepted 2026-11-07)
+
+1. **Standardized Pip Threshold formula (`FB-49(3)`)**: Use `T = max(1, roundi(max_poise / poise_pips))` everywhere (both `S2_POISE.md` and `READY.md`).
+2. **Continuous-to-Pip rule mappings (`FB-49(2),(4),(5)`)**:
+   - Store a discrete `pips` field beside `value` and add pip fields to `poise::forecast_hits` so UI pip bars and forecasts match.
+   - `windup_poise` grants bonus temporary pips (`roundi(windup_poise / T)`, min `1` when `windup_poise > 0`).
+   - `unbreakable` / `steadfast` holds remaining pips at `>= 1`; `sure_break` removes all remaining pips.
+   - Break chance uses `pips_lost / pips_before`; Rest restores `1` pip per `2` Rest blocks (clamped to `poise_pips`); `stagger_taken` passives, arena `stagger`, trigger `stagger`, and collision stagger all convert through `floor(D / T)`.
+3. **Slice separation (`FB-49(1)`)**:
+   - `S2.2-S1`: Add ruleset pip numbers and `pips` field (unused, `rules_contract_golden` only).
+   - `S2.2-S2`: Implement `floor(D / T)` across all stagger paths behind a `poise_mode` (`bar` | `pips`) switch, defaulting to `bar` (`0` golden diffs).
+   - `S2.2-S3`: Flip timeline ruleset to `pips` with UI forecast support (named `timeline_golden` and `sim_golden` re-record).
+   - `S2.2-S4`: Enable break-queues-`stagger` as its own named balance commit after `S1.2-S1` lands.
+
+## 5. Acceptance tests (`S2.2` - `S2.5`)
 
 1. **Chip-immunity proof**: A tank with `Max Poise = 60` (`5` pips, `T = 12`) hit 5 times in one round for `D = 10` poise damage each loses `0` pips (`10 < 12`) and never breaks; a single heavy wind-up flank hit dealing `D = 26` (`floor(26 / 12) = 2`) removes `2` pips.
 2. **Guard halves poise damage**: Raising `Unit.guard > 0` (via Defend or `S1` `guard` status) applies `stagger_guard_mult` (`0.5x`) before `floor(D / T)`, reducing a `D = 20` hit to `10` (`0` pips lost against `T = 12`).
-3. **Break & refill**: Dropping to `0` pips cancels the current wind-up, queues `stagger` for next round, and refills to `5` pips at `roll_over`.
+3. **Break & refill**: Dropping to `0` pips cancels the current wind-up, queues `stagger` for next round (in `S2.2-S4`), and refills to `5` pips at `roll_over`.

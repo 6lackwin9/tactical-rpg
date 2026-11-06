@@ -38,7 +38,14 @@ To keep combat state deterministic and avoid mid-fight max-pool shifts (`FB-21b`
 | `guard_cap` | **Tunable** | `0.90` -> `0.75` (`0.30..0.95`) | Situational mitigation cap (`FB-06` balance commit) |
 | `crit_mult` / `counter_mult` / `flank_power_mult` | **Tunable** | `1.50` / `0.50` / `1.25` (`0.10..3.00`) | Stage 3 (`Mult`) combat multipliers |
 
-## 4. Acceptance tests (`A2.2` - `A2.5`)
+## 4. Feasibility resolutions (`FB-56`, accepted 2026-11-07)
 
-1. **Exact port & `take_damage` unification (`FB-43`)**: Routing hits, heals, and `take_damage` through `rpgkit_rules::pipeline` keeps existing `rules_golden` and `sim_golden` byte-identical before balance parameter commits.
+1. **Exact ports & trace-only folded factors (`FB-56`)**:
+   - `A2.2-S1`: Port `take_damage` (`unit.rs:1091`, keeping `min 1` only when `guard > 0` initially), `heal`, and `heal_amount` (`heal_base + roundi(stat * mult)`) onto `rpgkit_rules::pipeline` with `0` golden diffs.
+   - `A2.2-S2`: Record the pre-multiplied `skill_mult` components (`flank`, `splash`, `counter`) as trace-only entries on `Hit.trace` rather than splitting the `f64` multiplication order, preserving exact rounding across all 1,652 golden rows.
+   - `A2.2-S3`: Wire pool-band modifier re-evaluation after `U1` bands land; land the universal `min 1` floor and `guard_cap` `0.90 -> 0.75` as separate, named balance commits.
+
+## 5. Acceptance tests (`A2.2` - `A2.5`)
+
+1. **Exact port & `take_damage` unification (`A2.2-S1`, `FB-43`, `FB-56`)**: Routing hits, heals, and `take_damage` through `rpgkit_rules::pipeline` keeps existing `rules_golden`, `timeline_golden`, and `sim_golden` byte-identical before balance parameter commits.
 2. **Re-derivation trigger isolation**: Applying `fortify`/`expose` or crossing a `< 50 %` pool band immediately updates `Armor Rating` / band modifiers on the next hit without changing `Max HP` or `Max Poise`.

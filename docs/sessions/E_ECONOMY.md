@@ -13,8 +13,9 @@ Design record for the Economy and Progression block (`E1.1` Levels & XP, `E2.1` 
 
 ## 2. `E2.1` — Purse, shop, stash and rewards (`C19`, `C22`)
 
-- **Parameterize `SUPPLIES_MAX` and `GOLD_MAX` (Fixes `MASTERPLAN1` §1 Special Case)**:
-  - Move `supplies_max` (`99` default) and `gold_max` (`9_999_999` default) into ruleset/manifest purse parameters so no currency or upkeep cap is hardcoded in Rust.
+- **Parameterize `SUPPLIES_MAX` and `GOLD_MAX` (`FB-53`, Fixes `MASTERPLAN1` §1 Special Case)**:
+  - Because `Party` and `purse` are global across worlds and `gold_max` is already an encounter check key, store `supplies_max` (`99` default) and `purse_gold_cap` (`9_999_999` default) as game-wide `PurseCaps` on `game.json` (clamped on load so no existing save breaks, and shared by `state.rs` and `check/{world,map,quest}.rs`).
+  - `E3` (`roster.rs`: keepsakes, party size, bunks, wounds, settle) is already built; `E3.2` is a contract-listing pass (`FB-53`).
 - **Shop Trade, Reputation Bands, and Loot Pools**:
   - All-or-nothing shop settlement (`shop::trade`: integer buy `ceil`, sell `floor`, stock tracked in `GameState.shops`, prices modified by `U4` faction reputation bands).
   - Quest and encounter rewards (`RewardGrant`): `xp`, `items`, `passives`, `skills`, `gold` (cap `5000`, soft `200`), and per-world `loot_pool` picks (`0..loot_picks`, claimed entries removed from other pools).

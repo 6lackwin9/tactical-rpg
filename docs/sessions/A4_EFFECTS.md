@@ -6,29 +6,30 @@ Design record for `A4.1` (Unified status/effect application across all 5 vocabul
 
 Statuses are currently applied through 5 separate schemas: skill `inflict`/`grant`, trigger `inflict`/`grant`, ground hazard rows, arena hazard effects, and encounter phase `status` effects.
 
-- **Unified `EffectSpec` (`C08`)**:
-  - All 5 vocabularies normalize at load/execution into a single `EffectSpec { status_id, potency, rounds, magnitude, source }` routed through `S1`:
-    - Resistable debuffs call `S1::try_inflict` (rolling `apply_chance` with attacker `KNOW` potency vs target `INT` + per-status resist).
-    - Buffs and non-resistable statuses call `S1::grant` (using round-granular timing from `S1.1`).
+- **Unified `EffectSpec` (`C08`, `FB-57(5)`, `FB-58`)**:
+  - All 5 vocabularies normalize at load/execution into a single `EffectSpec { status_id, potency, rounds, magnitude, resistable: Option<bool>, source }` routed through `S1` (built after `S1.2-S1`'s status table):
+    - When `resistable` resolves to `true` (defaulting to the status row's `resistable` for skills/hazards and `false` for encounter phase `status` effects so no extra RNG draw occurs on phases per `FB-58`), calls `S1::try_inflict`.
+    - Buffs and non-resistable effects call `S1::grant_now` or `S1::queue` (using round-granular timing from `S1.1`).
 - **Triggers, Riders, and Exploits**:
   - Passive (`U4`), item (`U3`), and skill (`A4`) triggers share the 15-event / 10-condition / 14-effect vocabulary (`trigger.rs`), preserving `source#index` trigger limit keys (`FB-30`).
   - Exploits (`flanked`, `behind`, `hp_below` execute) feed Stage 3 (`Mult`) of the `U1`/`A2` pipeline.
 
-## 2. Deterministic `IR21` intent derivation (`INTENT2-K1`, `FB-17` to `FB-22`)
+## 2. Deterministic `IR21` intent derivation (`INTENT2-K1`, `FB-17` to `FB-22`, `FB-57(3),(4)`)
 
 One derivation function in `rpgkit_rules` replaces the three diverging copies (`round_intent::skill_intent`, `skill::intent_id`, `check`'s `intent_of`), returning up to 2 allowed intents (the first is the primary intent, `IR15`) and the derived `Field` bonus:
 
-- **Skill Intent Precedence Order (`FB-19`)**:
+- **Skill Intent Precedence Order (`IR21`, `FB-19`, `FB-57(3)`)**:
   1. **Engine kinds (`MOVE`, `REST`, `TARGET`, `STATUS`)**: Neutral (no round intent required).
-  2. **`DEFEND`**: `Stand` (`hazard` on a `DEFEND` such as `ash_cloud_fade` stays `Stand`).
-  3. **`SUPPORT`**: `Support` (plus `Stand` when self-targetable).
-  4. **`ATTACK` with `dash_tiles` or `position`**: `Maneuver` (`Lunge`, `Pounce`, and `Charge In` derive `Maneuver`, per `FB-17`; `skill::position_by` reads the derived intent).
-  5. **`ATTACK` with `area` shape (`PLUS`, `BURST`, `LINE`, `CONE`, `RING`, `ARC`)**:
-     - Self-centred `RING`/`ARC` -> `Field` and `Stand`.
-     - Thrown/ranged shape (`reach_max > 1`) -> `Field` and `Assault`.
-     - Melee shape (`reach_max <= 1`) -> `Field` and `Assault`.
-  6. **`ATTACK` with `hazard` and no shape (`tripwire_snare`)**: `Field` (must precede the unshaped `Assault` rule, `FB-19`).
-  7. **Unshaped `ATTACK`**: `Assault`.
+  2. **`DEFEND` and `FOCUS`**: `Stand` (`hazard` on a `DEFEND` such as `ash_cloud_fade` stays `Stand`).
+  3. **`DISENGAGE`**: `Maneuver`.
+  4. **`SUPPORT`**: `Support` (plus `Stand` when self-targetable).
+  5. **`ATTACK` with `dash_tiles` or `position`**: `Maneuver` (`Lunge`, `Pounce`, and `Charge In` derive `Maneuver`, per `FB-17`; `skill::position_by` reads the derived intent).
+  6. **`ATTACK` with `area` shape (`PLUS`, `BURST`, `LINE`, `CONE`, `RING`, `ARC`)**:
+     - `RING` -> `Stand`.
+     - `ARC` and `LINE` -> `Field`.
+     - `CONE`, `BURST`, and `PLUS` -> `Field` and `Assault`.
+  7. **`ATTACK` with `hazard` and no shape (`tripwire_snare`)**: `Field` (must precede the unshaped `Assault` rule, `FB-19`).
+  8. **Unshaped `ATTACK`**: `Assault`.
 - **Consumable Item Intent Mapping (`FB-19`)**:
   - Heal item -> `Support` and `Stand`.
   - Buff item -> `Stand`.

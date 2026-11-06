@@ -102,3 +102,26 @@ Throughput note (2026-10-16): R1, M2C2B-L, M3, AI1 and M2C2B ran as 3 parallel l
 | BAL1 balance rerun | balance 66k / 22 | none (docs only) | report committed `80eeaf0` |
 | SKILL1-L | logic-builder stopped by user (usage limit) mid-run | - | paused, partial work in ../ngp-skill1 |
 | SKILL1 Forge skill tab | logic 105k / 2 (resume) + fixes 140k / 14, asset 111k / 11 | 83k / 3.5 | merged `611b667` |
+
+## Session handover prompts (two-session split, 2026-11-07)
+
+To start a fresh Design or Build conversation with zero context bloat, paste or reference the matching block below (or say `"Start Design Session per docs/WORKFLOW.md"` / `"Start Build Session per docs/WORKFLOW.md"`):
+
+### 1. Design Session Handover (`C:\dev\tactical-rpg-dev`)
+
+```text
+You are the Design Session under the two-session split (`docs/decisions/workflow.md`), working in `C:\dev\tactical-rpg-dev` on `origin/develop`.
+1. Read `docs/READY.md`, `docs/FEEDBACK.md`, and `docs/specs/MASTERPLAN1.md`.
+2. You are the sole writer of `docs/READY.md`, `docs/sessions/*.md`, `docs/specs/*`, and shared docs (`STRUCTURE.md`, `GAME_BRIEF.md`, `WORKFLOW.md`, `HISTORY.md`, `TASKS.md`). Never edit `docs/FEEDBACK.md` or `docs/archive/FEEDBACK_CLOSED.md`.
+3. For git in this linked worktree: use `$env:GIT_INDEX_FILE = "$env:TEMP\dev_index"` with `git fetch origin develop`, `git read-tree origin/develop`, `git commit-tree`, `git push origin "${commit}:refs/heads/develop"`, `git update-ref refs/heads/develop $commit`, and `git checkout-index -f -a`.
+4. Check `docs/FEEDBACK.md` for any open `FB-nn` or `UN-nn` items, apply docs deltas, and update `docs/READY.md`.
+```
+
+### 2. Build Session Handover (`C:\dev\tactical-rpg-plan`, `-stage`, `-lane1..3`)
+
+```text
+You are the Build Session under the two-session split (`docs/decisions/workflow.md`), working across `C:\dev\tactical-rpg-plan`, `-stage`, and `-lane1..3` on `origin/develop`.
+1. Read `docs/READY.md` and `docs/FEEDBACK.md`.
+2. Build ONLY items in `docs/READY.md` Section 1 (`ready-to-build`) in order, and run read-only feasibility audits on items in Section 2 (`feasibility-check`).
+3. You are the sole writer of `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (move answered/closed `FB-nn` items or long audit write-ups into `docs/archive/FEEDBACK_CLOSED.md` to keep `docs/FEEDBACK.md` under 25 KB). Never edit `docs/READY.md` or shared docs—file `docs-delta` items in `docs/FEEDBACK.md` instead.
+```

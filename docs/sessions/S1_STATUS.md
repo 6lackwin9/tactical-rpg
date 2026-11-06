@@ -41,10 +41,15 @@ Instead of hardcoding `ROWS: [StatusRow; 17]` and per-status branches across `st
 | 6 status behaviour primitives & round-granular lifecycle | **Fixed (Locked)** | `modifier`, `tick`, `block_lock`, `targeting`, `reactive`, `rule_flag` | Core `S1` schema |
 | `bleed_pct` | **Tunable** | `0.06` (`0.01..0.25`) | Fraction of `max_hp` dealt by `bleed` |
 | `counter_mult` | **Tunable** | `0.50` (`0.10..1.50`) | `riposte` damage multiplier |
-| `guard_common_mult` / `guard_multi_round_mult` | **Tunable** | `0.50` / `0.30` (`0.10..0.90`) | 1-round vs multi-round guard mitigation values |
+| `guard_common_mitigation` / `guard_multi_round_mitigation` | **Tunable** | `0.35` / `0.20` (`0.10..0.90`, per skill) | Mitigation fractions (`1 - guard`), with multi-round (`brace`) lower than 1-round (`FB-48`) |
 
-## 4. Acceptance tests (`S1.2` - `S1.5`)
+## 4. Feasibility resolutions (`FB-48`, accepted 2026-11-07)
 
-1. **Slice 1 exact port**: Loading the 17 existing statuses plus `guard` through the data-driven `S1` status class produces `0` diffs on `rules_golden` and `sim_golden`.
-2. **Guard status & wind-up timing (`FB-06`, `FB-16`)**: A 2-block Guard skill started at Block 2 raises `Unit.guard` from Block 2 through Block 6; a multi-round Guard skill (`brace`) queues the `guard` status for the following full round (Blocks 1-6) at the lower mitigation tier (`0.30`), and `max(running_defend, guard_status)` prevents double-guard stacking.
+1. **Guard mitigation fractions & `HeldGuard` mechanism (`FB-48(1),(2)`)**: Express guard values as mitigation fractions per skill (e.g., `0.15..0.35`, with multi-round guard lower than 1-round common guard). Implement `Option 1C` (wind-up start through Block 6) on the existing `HeldGuard { mitigation, last_block }` mechanism with `Unit.guard` kept as the accumulator, removing the guard instance on Poise break and exposing active guard to the AI so it avoids redundant Defends.
+2. **Frozen kit status table & behaviour reads (`FB-48(3)-(6)`)**: Load the 17+1 rows as a frozen kit table behind the existing `cap_of`/`stacking_of`/`display_name`/`row_of` signatures first (`S1.2-S1`, neutral); convert ID literals to primitive reads (`S1.2-S2`, neutral); promote `BLEED_PCT`, `DEBT_STAGGER`, `DEBT_STUN`, and `COUNTER_MULT` to ruleset numbers and honour `resistable` in `try_inflict` (`S1.2-S3`); route the trigger `resist` effect through `U4`'s combine rule; keep `stealth` (moved-this-round hide) and `bleed` (round-end tick) at today's behaviour until named balance commits.
+
+## 5. Acceptance tests (`S1.2` - `S1.5`)
+
+1. **Slice 1 exact port (`S1.2-S1`)**: Loading the 17 existing statuses through the frozen kit status table behind the existing function signatures produces `0` diffs on `rules_golden`, `timeline_golden`, and `sim_golden`.
+2. **Guard status & wind-up timing (`S1.2-S4`, `FB-06`, `FB-16`, `FB-48`)**: A 2-block Guard skill started at Block 2 raises `Unit.guard` via `HeldGuard` from Block 2 through Block 6; a multi-round Guard skill (`brace`) queues the full-round `guard` status for Round 2+ at the lower mitigation fraction (`0.20`), and `max(running_defend, guard_status)` prevents double-guard stacking.
 3. **Level-3 silo limit test (`S1.5`)**: Sweeping `INT` (`Status Resist`) from `6` to `20` monotonically lowers infliction rate across every `resistable: true` status in the catalog.

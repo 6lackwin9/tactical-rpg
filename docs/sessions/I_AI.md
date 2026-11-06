@@ -12,21 +12,12 @@ Currently, `ai.rs` checks 8 literal status IDs (`taunt`, `riposte`, `regen`, `ro
     2. **`has_reactive_counter()`** (replaces `"riposte"`): Deters non-flanking melee swings or weights ranged/area/flank options.
     3. **`has_tick(Heal | Damage)`** (replaces `"regen"`): Avoids redundant heal-over-time stacking and weights cleanse/support on heavy DoTs.
     4. **`locks_movement()` / `locks_blocks()`** (replaces `"root"`, `"stun"`): Skips unreachable move/dash plans when movement is locked and weights follow-up pressure on stunned/staggered targets.
-    5. **`modifies_rating(Armor | MoveRate | AttackPower)`** (replaces `"slow"`, `"expose"`, `"fortify"`): Evaluates net rating shift so any buff/debuff status in data is automatically scored by the AI without naming its ID in Rust.
-
-## 2. Unified AI role weights and `INTENT2-AI` row ladder (`C16`, `FB-21e`, `FB-22`)
-
-- **Priority Row Ladder (`ai.rs:1590` `ROWS` + `INTENT2-AI`)**:
-  - The AI evaluates candidate round intents (`Assault`, `Stand`, `Support`, `Maneuver`, `Field`) and targets through the ordered row table:
-    - **`Row Z` (Hazard / Area Escape, `INTENT2-AI`)**: Steps out of visible ground/arena hazards or telegraphed area zones when survival threshold requires it.
-    - **Flee / Morale Row**: Triggers when HP ratio `< flee_ratio`.
-    - **Support / Heal Row**: Triggers when an ally's HP ratio `< heal_below` (using skills or pouch heal items, `FB-21d`).
-    - **Stand / Guard / Cover / Self-`RING` Row (`INTENT2-AI`)**: Triggers when HP ratio `< defend_below`, when holding a `taunt` buff (`Shield Wall` candidate), when surrounded (`RING` row), or after taking heavy focus fire (`brace_after_hit`).
-    - **Maneuver / Flank Engage Row**: Skirmishers dash to open `flank`/`behind` tiles on high-priority targets.
-    - **Field / Area Row (`INTENT2-AI`)**: Places tile-anchored `Field` shapes or hazards when hitting `>= 2` hostiles (or choking an approach).
-    - **Assault / Advance Row**: Strikes the top-ranked target (`TargetPref`: `DEFAULT`, `SOFTEST`, `TOUGHEST`) or advances into cover/Stand.
-- **Role Thresholds & Temperament Overrides (`U2`, `U4`, `FB-29`)**:
-  - Each `ai_role` (`tank`, `striker`, `skirmisher`, `ranged`, `support`, `caster`, `boss`) sets default weights (`heal_below`, `defend_below`, `flee_ratio`, `reckless`, `TargetPref`), which a unit row or `U4` character `temperament` (`FB-29`) can override.
+    5. **`modifies_rating(Armor | MoveRate | AttackPower)`** (replaces `"slow"`, `"expose"`, `"fortify"` in `ai.rs` — where `fortify` and `expose` map to `Armor`, `slow` and `haste` to `MoveRate`, and `weaken`/`empower` to `AttackPower` per `FB-52`):
+       - **Slice 1 (`I1.2-S1`, after `S1.2-S1`)**: Replace the 8 status ID checks in `ai.rs` 1-to-1 with `S1` behaviour predicates (`Armor` for `fortify`/`expose`, `MoveRate` for `slow`) so `timeline_golden` and `sim_golden` remain byte-identical.
+       - **Slice 2 (`I1.2-S2`)**: Add a generic rating-modifier scorer behind a ruleset flag (default `off` until balance re-record) so scoring `haste`, `weaken`, and `empower` is opt-in.
+       - **Slice 3 (`I1.2-S3`, after `A3.2`, `A4.2`, `F3`)**: Add `Row Z`, `Maneuver`, `Field`, and `RING` rows to `ROWS` (`ai.rs:1590`) in a named `timeline_golden` and `sim_golden` re-record.
+- **Role Names (`FB-52`)**:
+  - Keep the schema `ai_role` enum (`AGGRESSOR`, `SKIRMISHER`, `SNIPER`, `SUPPORT`) as the canonical role list, with unit rows or `U4` character `temperament` (`FB-29`) overriding role thresholds (`heal_below`, `defend_below`, `flee_ratio`, `reckless`, `TargetPref`).
 
 ## 3. Fixed vs tunable parameters (`aegis rules --contract`)
 

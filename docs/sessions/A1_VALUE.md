@@ -35,7 +35,13 @@ Consumables (`consumable_type`: damage, heal, buff) no longer bypass combat rule
 | `thrown_miss_spends` / `pouch_stacks` | **Tunable** | `on` / `on` | Stackable pouch consumables |
 | Advisory skill budget weights | **Tunable** | Rider weights in `check/skill.rs` | Warning-only balance check |
 
-## 4. Acceptance tests (`A1.2` - `A1.5`)
+## 4. Feasibility resolutions (`FB-55`, accepted 2026-11-07)
 
-1. **Consumable pipeline parity**: Throwing a damage bomb at an armored, guarding target applies Armor and Guard mitigation (`min 1`) via `rpgkit_rules::pipeline` instead of dealing unmitigated flat damage; drinking a buff draught grants its `S1` status without altering `Max HP`.
-2. **Stance-off cleanliness & skill budget**: Under `stances = off`, no skill description prints `{flow}` or `{disrupt}`, `Crushing Blow` is not strictly worse than `Strike`, and `check/skill.rs` emits advisory budget warnings for out-of-band test skills.
+1. **Immediate buff items & `empower` cap (`FB-55(1)`)**: Buff consumables apply immediately via `status::grant_now` (not next-round `queue`), and raise `empower`'s magnitude cap (or allow item-sourced magnitude up to `50 %`) so Elixir of Focus (`50 %`) and Brimstone Draught (`30 %`) are not clipped.
+2. **Exact port before item mitigation (`FB-55(2),(3)`)**: Make `item_ap` a ruleset number (`1` under `classic`, `0` under `timeline`, `A1.2-S1`); port item damage through `rpgkit_rules::pipeline` matching today's unmitigated value first (`A1.2-S3`), then flip item mitigation on in its own rule-gated balance commit (`A1.2-S4`).
+3. **Ruleset-aware stance tokens & flag-gated budget check (`FB-55(4),(5)`)**: Pass a `stances` flag to the skill token renderer so `{flow}` and `{disrupt}` render empty when `stances` is off without breaking `classic` (`A1.2-S2`); keep `feint` (`1` block, `0.7x`) as-is; gate the advisory skill budget check behind a flag (off by default in `checks_golden`, `A1.2-S5`).
+
+## 5. Acceptance tests (`A1.2` - `A1.5`)
+
+1. **Consumable pipeline parity**: Throwing a damage bomb at an armored, guarding target applies Armor and Guard mitigation (`min 1`) via `rpgkit_rules::pipeline` when item mitigation is on; drinking a buff draught grants its `S1` status immediately via `grant_now` without altering `Max HP`.
+2. **Stance-off cleanliness & skill budget**: Under `stances = off`, no skill description prints `{flow}` or `{disrupt}`, and `check/skill.rs` emits advisory budget warnings when the budget flag is enabled.

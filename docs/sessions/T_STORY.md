@@ -8,10 +8,11 @@ Design record for the Story block (`T1.1` Dialogue, quests, flags & stat rolls, 
   - Flag store (`GameState.flags`) with `6` comparison operators gating region markers, travel routes, shop stock, dialogue choices, and vignette cards (`C25`).
   - Dialogue nodes with `5` condition kinds and `9` effect kinds (kept as direct calls per `SILOS1` T7), `U4` faction reputation bands, and service replies opening shop, recruit, or mission board screens (`SERVICES1`, `C22`).
   - Lore-free quest templates bound by world quests with flag-conditioned `variants` (`VARIANT_FIELDS`) and all-or-nothing completion (`QuestRunner::complete`).
-- **Dialogue Stat Check: Threshold or Seeded Roll (`U1.1` -> `T1.1`, `C25`)**:
-  - A dialogue `stat` condition reads any `U1` primary stat or standing derived rating and supports two modes:
-    1. **Flat threshold (`mode: "threshold"`, default)**: Succeeds when `unit_stat >= threshold` (preserving existing dialogue checks).
-    2. **Seeded roll (`mode: "roll"`, `U1.1` decision)**: Rolls `1..roll_die` (`d20` default) on the save's deterministic `GameRolls` stream plus the unit's stat bonus against `dc` (`roll + stat_value >= dc`), recording the outcome flag so the check cannot be save-scummed and remains 100% deterministic in `journey_golden`.
+- **Dialogue Stat Check: Threshold Condition or Choice-Time Roll Effect (`U1.1` -> `T1.1`, `C25`, `FB-54`)**:
+  - Because `condition_holds` takes `&GameState` and runs on every redraw, a dialogue check reads the **active party's best stat** (`best_stat`, or a named `who` member's stat when specified) and separates pure conditions from seeded rolls:
+    1. **Flat threshold condition (`T1.2-S1`, default)**: `stat` condition with `threshold` (alias of `min`) succeeds when `party_best_stat >= threshold` (pure `&GameState` read, preserving existing dialogue checks).
+    2. **Choice-time seeded roll effect (`T1.2-S2`, `U1.1` decision)**: A choice-time `check` effect draws `1..dialogue_roll_die` (`20` default, on a dedicated `dialogue` stream in `GameRolls`) plus `party_best_stat` against `dc` (`roll + stat_value >= dc`) and sets an outcome flag that follow-up node conditions read—never advancing `GameRolls` on redraw and preventing save-scumming.
+    3. **Standing rating reads (`T1.2-S3`, after `U1.2`)**: Extend `best_stat` to read `U1` standing derived ratings in addition to primary stats.
 
 ## 2. `T2.1` — Sequences, vignettes and story fights (`C24`)
 

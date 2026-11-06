@@ -11,22 +11,16 @@ Design record for the World block (`W1.1` Region map & interaction, `W2.1` World
 
 ## 2. `W3.1` — Campaign clock, meters and upkeep (`C20`, `C21`)
 
-- **Reuses `campaign/`**:
+- **Reuses `campaign/` (`FB-50`)**:
   - Gauge and countdown meters sharing `bands.rs` with `U1`/`S2` unit meters.
-  - Checkpoints and deadline previews (`aegis sim deadlines`), `tick(Cause)` triggered by `5` causes (`C21`: travel leg, region rest, fight end, quest step, dialogue effect), daily supply upkeep, rest rules, and defeat handling (`wake`, `retreat`, `run_over`).
+  - Checkpoints and deadline previews (`aegis sim deadlines`), `tick(Cause)` triggered by `Cause` (`Days`, `Leg`, `Battle`, `Enter`, `Effects`, plus act change), daily supply upkeep, rest rules, and defeat handling (`wake`, `retreat`, `run_over`). `W3.2`'s clock parameters are already manifest data (`campaign`, `purse`, `rest`, `defeat`), so `W3.2` is a contract listing only (`FB-50`).
 
-## 3. World-to-Battle seams (`C18` / `WORLDFIGHT1` and `C19`)
+## 3. World-to-Battle seams (`C18` / `WORLDFIGHT1` and `C19`, `FB-50`)
 
-- **`begin_world` (`C18`, `WORLDFIGHT1`)**:
-  - Builds the battle encounter from `GameState`:
-    1. Party units built through the single `C05` / `FB-12` unit builder with active world ruleset, `E3` wound cuts, `U4` live passive sources (`character -> faction grants -> discipline -> named items`), and character `temperament`.
-    2. Enemy roster built at `WorldRoster` `stage = campaign.act` (`0` when no campaign, `FB-13`).
-    3. Campaign `battle_mods`, upkeep AP adjustments, and encounter `zone` applied.
-- **`finish_world` (`C19`, `C20`, `C21`)**:
-  - Settles a completed world fight in strict order:
-    1. `settle_party_side` (`E3` HP, wounds, departures, keepsakes, `stay_behind` fates).
-    2. Encounter and objective rewards (`E2` XP at stage-resolved enemy level, gold, items, loot picks) and quest hooks (`T1` `on_encounter_won`).
-    3. Campaign clock tick and `after_fight` triggers (`W3`).
+- **Slices (`FB-50`)**:
+  - **`W.2-S1` (`WorldRoster::new` + `finish_world`)**: Replace the 16 `WorldRoster { d, world }` struct literals with `WorldRoster::new` and move runner dispatch / `FIGHT_SOURCE` settlement into kit `finish_world` (`0` golden diffs).
+  - **`W.2-S2` (`begin_world` + round-trip test, after `READY` row 10)**: Build party and enemy units in kit `begin_world` (returning units with a callback for GUI-only `Prebuilt` art) and add a headless world-fight round-trip test.
+  - **`W.2-S3` (`stage` from `campaign.act` + `SERVICES1`)**: Wire `stage` from `campaign.act` after mob growth lands, followed by `SERVICES1` (`C22`).
 
 ## 4. Fixed vs tunable parameters (`aegis rules --contract`)
 
