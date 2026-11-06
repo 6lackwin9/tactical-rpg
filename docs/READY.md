@@ -3,7 +3,7 @@
 This file is the **single active queue** for the Build Session under the two-session split (decision "Two-session split: Design and Build", 2026-11-07).
 
 - **Design Session** is the sole writer of `docs/READY.md` and all specs/shared docs.
-- **Build Session** builds **only** items marked `ready-to-build` below, runs read-only code audits on items marked `feasibility-check`, and writes all status updates, feasibility notes, and docs deltas exclusively to `docs/FEEDBACK.md`.
+- **Build Session** builds **only** items marked `ready-to-build` below, runs read-only code audits on items marked `feasibility-check`, and writes all status updates, feasibility notes, and docs deltas exclusively to `docs/FEEDBACK.md` (moving answered/closed `FB-nn` items into Build-owned `docs/archive/FEEDBACK_CLOSED.md` to keep `docs/FEEDBACK.md` under 25 KB).
 - Do not build directly from `docs/TASKS.md`, `docs/WORK_ORDER.md`, or pre-masterplan specs unless an item is listed here.
 
 ## 1. Ready to Build (`ready-to-build`)

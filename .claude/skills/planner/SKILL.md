@@ -8,7 +8,7 @@ description: The milestone and lane workflow run by the planner (desktop main se
 **Two-session split (since 2026-11-07, decision "Two-session split: Design and Build")**:
 
 - **Design Session** is the sole writer of `docs/READY.md`, specs (`docs/sessions/*`, `docs/specs/*`), `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/decisions/*`, `games/emberwake/docs/decisions/*`, `docs/HISTORY.md`, `README.md`, `GAME_BRIEF.md`, and `STRUCTURE.md`.
-- **Build Session** (this planner skill when running builds) reads **only** `docs/READY.md` (and the specs it names), builds only items marked `ready-to-build`, runs read-only code checks on items marked `feasibility-check`, and writes status, feasibility findings, spec questions, and docs deltas **exclusively to `docs/FEEDBACK.md`** (plus crate-local READMEs where appropriate). Do not edit `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, or specs from the Build Session.
+- **Build Session** (this planner skill when running builds) reads **only** `docs/READY.md` (and the specs it names), builds only items marked `ready-to-build`, runs read-only code checks on items marked `feasibility-check`, and writes status, feasibility findings, spec questions, and docs deltas **exclusively to `docs/FEEDBACK.md`** (moving answered/closed items into `docs/archive/FEEDBACK_CLOSED.md` to keep `docs/FEEDBACK.md` under 25 KB, plus crate-local READMEs where appropriate). Do not edit `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, or specs from the Build Session.
 
 Environment first: `$CLAUDE_CODE_REMOTE` empty = desktop, read `docs/workflow/desktop.md`; `true` = cloud, read `docs/workflow/cloud.md`.
 
@@ -16,8 +16,8 @@ Environment first: `$CLAUDE_CODE_REMOTE` empty = desktop, read `docs/workflow/de
 
 | Lane | Agent | Owns | Never touches |
 | --- | --- | --- | --- |
-| design-session | Design Session | `docs/READY.md`, specs, `docs/TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, shared READMEs, `GAME_BRIEF`, `STRUCTURE` | `docs/FEEDBACK.md`, builder lanes' code/data |
-| build-plan | Build Session planner | `docs/FEEDBACK.md` (status, feasibility notes, docs deltas), lane orchestration, commits & merges | `docs/READY.md`, specs, `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md` |
+| design-session | Design Session | `docs/READY.md`, specs, `docs/TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, shared READMEs, `GAME_BRIEF`, `STRUCTURE` | `docs/FEEDBACK.md`, `docs/archive/FEEDBACK_CLOSED.md`, builder lanes' code/data |
+| build-plan | Build Session planner | `docs/FEEDBACK.md`, `docs/archive/FEEDBACK_CLOSED.md` (status, feasibility notes, docs deltas, closed archive), lane orchestration, commits & merges | `docs/READY.md`, specs, `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md` |
 | logic | `logic-builder` | `engine/crates/**` (rules, schema, loader and writer, validation, tests), `kits/rpg/crates/**` and `kits/rpg/schema.json` (the kit's genre rules), `games/emberwake/**`, `tools/**` | shipped `games/emberwake/data/**`, `legacy/**`, the golden fixtures (re-recorded only for an intended change) |
 | asset | `asset-builder` | `games/emberwake/data/**` through `aegis content` (upsert, remove, `games/emberwake/data/seeds/<task>.json` with `apply`) | engine code, tests, docs |
 | balance | `balance` | `games/emberwake/docs/BALANCE_REPORT.md` (or findings in `docs/FEEDBACK.md`), sims | everything else |
