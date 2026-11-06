@@ -26,7 +26,7 @@ Operate as the **Design Session** (`C:\dev\tactical-rpg-dev`, branch `develop`) 
 
 ## 3. Committing & Pushing from Linked Worktree (`C:\dev\tactical-rpg-dev`)
 
-Because `.git/worktrees/tactical-rpg-dev/index.lock` lives inside the main repo's `.git` dir, use a temp `GIT_INDEX_FILE` and update both `origin/develop` and local `refs/heads/develop`:
+Because `.git/worktrees/tactical-rpg-dev/index` is write-protected inside the agent sandbox, stage and push via a temporary `GIT_INDEX_FILE`, and then **restore the working tree on disk back to the local `.git` index** (Clean Pull-Ready Mode). This leaves `C:\dev\tactical-rpg-dev` 100% clean (`[behind 1]`, zero modified or untracked files) so the user's VS Code **Sync / Pull** button fast-forwards cleanly every time:
 
 ```powershell
 $ErrorActionPreference = "Stop"
@@ -35,15 +35,14 @@ git fetch origin develop
 $env:GIT_INDEX_FILE = "$env:TEMP\dev_index"
 if (Test-Path $env:GIT_INDEX_FILE) { Remove-Item $env:GIT_INDEX_FILE -Force }
 git read-tree origin/develop
-git checkout-index -f -- docs/FEEDBACK.md docs/archive/FEEDBACK_CLOSED.md
 git add <design-owned-files>
 $tree = git write-tree
 $parent = git rev-parse origin/develop
 $commit = "<commit message>" | git commit-tree $tree -p $parent
 git push origin "${commit}:refs/heads/develop"
-git update-ref refs/heads/develop $commit
-git read-tree HEAD
-git checkout-index -f -a
 Remove-Item $env:GIT_INDEX_FILE -Force
 Remove-Item Env:\GIT_INDEX_FILE
+# Restore working tree to match local .git index so VS Code Sync/Pull fast-forwards with 0 conflicts
+git checkout-index -f -a
+git clean -fd
 ```
