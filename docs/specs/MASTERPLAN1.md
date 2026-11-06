@@ -106,11 +106,14 @@ What is not a new task:
 
 By dependency, bottom up: **U1** (everything reads it), then **U3, U2, U4**; **S1, S2** (read resist and poise from U1); **A1-A4** (effects pick from S1; resolution reads U1); **F1-F4, P1, P2, I1** (combat may be designed beside A, on the flat model); then **E1-E3, W1-W3, T1, T2**, built and at stage 2 or 3, mostly a design pass that names each ruleset. Shells serve whoever is active; final screens stay last.
 
-| Session | Sub-blocks | The user decides |
+| Session | Sub-blocks | Session Specs (`.1` Closed 2026-11-07) |
 | --- | --- | --- |
-| 1 | U1 | What each stat signifies and feeds (PERC and KNOW, BASERULES1 Q1); the derived roles and their off states; the formula grammar frozen (Q2); stats as data now or beside K1 (Q5); a 3-stat pack as the proof |
-| 2 | U2, U3, U4 | Class shape (budget 62, growth 5, tiers); gear behaviours kept or dropped (`block_cost`, wield penalty, budget); the passive effect list; affiliation and background (Q2 below); OFFHAND1 and temperaments in or parked |
-| 3 | S1, S2 | The status class: behaviours and properties, each of the 17 as a pick, so STATUSROWS1 takes that shape; one resist stat or several; poise as a pool beside meters (POISE1); the Stand guard as a status (feeds A2) |
+| 1 | `U1` | `docs/sessions/U1_STATS.md` (3 Pools + 6 Ratings, 5-stage pipeline, speed split, 3-stat pack proof) |
+| 2 | `U2, U3, U4` | `docs/sessions/U2_CLASS.md`, `U3_GEAR.md`, `U4_PASSIVES.md` (`unit_budget`, `item_families`, 5 typed grant kinds) |
+| 3 | `S1, S2` | `docs/sessions/S1_STATUS.md`, `S2_POISE.md` (18 statuses over 6 primitives, round-granular Guard, 5-pip Poise threshold) |
+| 4 | `A1, A2, A3, A4` | `docs/sessions/A1_VALUE.md`, `A2_RESOLUTION.md`, `A3_SHAPES.md`, `A4_EFFECTS.md` (items unified, `RING`/`ARC`, `EffectSpec`, `IR21`) |
+| 5 | `F1-F4, P1-P2, I1` | `docs/sessions/F_FIGHT_FLOW.md`, `P_SPACE.md`, `I_AI.md` (6-block timeline, data-driven terrain & AI status predicates) |
+| 6 | `E1-E3, W1-W3, T1-T2` | `docs/sessions/E_ECONOMY.md`, `W_WORLD.md`, `T_STORY.md` (purse caps in data, `WORLDFIGHT1` seam, dialogue stat checks) |
 
 ## 5. Answered questions (closed 2026-11-07)
 

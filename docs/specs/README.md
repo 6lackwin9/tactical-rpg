@@ -9,7 +9,7 @@ To prevent context bloat and outdated-spec noise in both the Design and Build se
 
 | File | Role | Status |
 | --- | --- | --- |
-| `MASTERPLAN1.md` | Canonical 9-block, 25-sub-block, 28-connection, 186-task master plan | active (Q1-Q6 closed 2026-11-07) |
+| `MASTERPLAN1.md` | Canonical 9-block, 25-sub-block, 28-connection, 186-task master plan (all 25 `.1` specs closed in `docs/sessions/*.md`) | active (`.1` closed 2026-11-07) |
 | `MASTERPLAN1_ROWS.md` | Mapping of all historical task rows onto the 186 masterplan tasks | active reference map |
 | `SILOS1.md` | Silo boundaries (`WORLDFIGHT1`, `SERVICES1`, `KITIDS1`) | active (Q1-Q3 closed 2026-11-07) |
 | `AGENTROLES1.md` | Lane scopes, `integration` agent, `aegis scenario`, `SKILLS1` | active (`X6`) |

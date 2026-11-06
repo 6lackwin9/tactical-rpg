@@ -25,7 +25,7 @@ Execute these slices in order. Existing engine goldens must remain unchanged exc
 
 ## 2. Feasibility Check (`feasibility-check`)
 
-Read-only code audit requested from the Build Session for `S1.2-S2.2`, `A1.2-A4.2`, `F1.2-F4.2`, `P1.2-P2.2`, and `I1.2` (the entire Combat Engine design across `U`, `S`, `A`, `F`, `P`, `I` is now closed).
+Read-only code audit requested from the Build Session across all closed `.1` session specs (`S1.2-S2.2`, `A1.2-A4.2`, `F1.2-F4.2`, `P1.2-P2.2`, `I1.2`, `E1.2-E3.2`, `W1.2-W3.2`, and `T1.2-T2.2` — **all 25 sub-blocks of `MASTERPLAN1` are now `.1` Design Closed**).
 
 | Order | Sub-block / ID | Spec to Audit | Audit Focus | Status |
 | --- | --- | --- | --- | --- |
@@ -37,13 +37,16 @@ Read-only code audit requested from the Build Session for `S1.2-S2.2`, `A1.2-A4.
 | 6 | `F1.2-F4.2` | `docs/sessions/F_FIGHT_FLOW.md` | Audit `F1` (`Initiative` from `U1` speed split + `ATTACKLOCK1-O` switch-on), `F2` (data-driven debt status IDs replacing `"stagger"`/`"stun"` literals), `F3` (`INTENT2-K1` + `Stand` 1-tile `Move`), and `F4` (phase `status` via `EffectSpec`). | `feasibility-check` (new) |
 | 7 | `P1.2-P2.2` | `docs/sessions/P_SPACE.md` | Audit moving terrain `walkable` and `stops_forced_move` from `grid.rs:68` to `terrain.json` (`P1.2`), unified cell `EffectSpec` on hazards, and `move_after_blocks` schema promotion (`FB-40b`). | `feasibility-check` (new) |
 | 8 | `I1.2` | `docs/sessions/I_AI.md` | Audit replacing the 8 hardcoded status IDs in `ai.rs` with `S1` behaviour predicates (`has_targeting_pull`, `has_reactive_counter`, `has_tick`, `locks_movement`/`locks_blocks`, `modifies_rating`) + `INTENT2-AI` `ROWS` ladder. | `feasibility-check` (new) |
-| 9 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
+| 9 | `E1.2-E3.2` | `docs/sessions/E_ECONOMY.md` | Audit moving `SUPPLIES_MAX = 99` and `GOLD_MAX` to manifest purse parameters (`E2.2`), stage-scaled enemy XP (`E1.2`), and roster/wounds/keepsakes (`E3.2`). | `feasibility-check` (new) |
+| 10 | `W1.2-W3.2` | `docs/sessions/W_WORLD.md` | Audit `WORLDFIGHT1` (`C18`/`C19` `begin_world` + `finish_world`), `SERVICES1` (`C22`), and campaign clock ruleset parameters (`W3.2`). | `feasibility-check` (new) |
+| 11 | `T1.2-T2.2` | `docs/sessions/T_STORY.md` | Audit dialogue `stat` condition reading `U1` pools/ratings with `"threshold"` (default) and `"roll"` (`GameRolls`) modes (`T1.2`), and sequence/vignette integration (`T2.2`). | `feasibility-check` (new) |
+| 12 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
 
 ## 3. Held / Waiting on Design
 
+- **`.1` Design Complete (25 / 25 sub-blocks closed)**: All 9 blocks of `MASTERPLAN1` have closed `.1` session specs in `docs/sessions/*.md`.
 - **`ATTACKLOCK1-O`**: Design closed (`F_FIGHT_FLOW.md`, `A3_SHAPES.md`). Switches on in its own named commit once `A3.2` lands.
-- **`WORLDFIGHT1` (`C18`)**: Holds until `U` and `F` seams settle (`MASTERPLAN1` Q5).
-- **`E1.1-E3.1`, `W1.1-W3.1`, `T1.1-T2.1`**: Final design session (World, Economy & Story blocks — mostly Stage 2/3 ruleset naming pass).
+- **`WORLDFIGHT1` (`C18`)**: Design closed (`W_WORLD.md`). Holds execution until `U` and `F` seams settle (`MASTERPLAN1` Q5).
 
 ## 4. Feedback Responses (Design answers to `docs/FEEDBACK.md`)
 
