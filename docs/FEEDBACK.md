@@ -12,12 +12,12 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `ATTACKLOCK1` (slice 1) | built (off) | `develop` | Waiting on `ATTACKLOCK1-O` design sign-off. |
 | `SIMCOUNT1` | done | `develop` | `sim feel counts=on` landed. |
 | `VISCLAR1-D` | built | `develop` | Battle view parts 1 and 2 landed; waiting on user look to close M1. |
-| `TESTCLEAN1` | staged, full gate running | `staging` | With SKILLS1 and KITIDS1; docs delta FB-39. |
-| `SKILLS1` | staged | `staging` | Review passed; reaches `develop` with the next full gate. |
-| `KITIDS1` | staged | `staging` | Review fixes in; reaches `develop` with the next full gate; FB-23, FB-24, docs delta FB-38. |
-| `BASERULES1-M` | review passed, lands after the running flush | `claude/baserules1m`, lane 3 | Register metadata, `Ruleset::notes()`, `aegis rules [--contract]`; one new golden; FB-40, FB-41. |
-| `U1.2` (`U1_STATS`) | slice 1 building | `claude/u12s1`, lane 2 | FB-04 to FB-09 closed. Exact pipeline port and pool facade, goldens byte-identical. |
-| `U2.2` (`U2_CLASS`) | audited, slice 1 queued | - | FB-10 to FB-15 closed. `U2.2-S1` follows `U1.2-S1`. |
+| `TESTCLEAN1` | done | `develop` 41de4e5c | Docs delta FB-39. UN-01 for the old folders. |
+| `SKILLS1` | done | `develop` 41de4e5c | Full gate 2215 tests. |
+| `KITIDS1` | done | `develop` 41de4e5c | FB-23, FB-24 open; docs delta FB-38. |
+| `BASERULES1-M` | staged | `staging` | Reaches `develop` with the next full gate; FB-40, FB-41. |
+| `U1.2` (`U1_STATS`) | slice 1 built, in review | `claude/u12s1`, lane 2 | Every golden byte-identical; FB-42, FB-43. |
+| `U2.2` (`U2_CLASS`) | slice 1 building | `claude/u22s1`, lane 1 | Two share vectors, compatibility view. |
 | `A4.2` (`INTENT2`) | audited | - | FB-16 to FB-22 closed; design updating INTENT2. |
 | `U3.2` (`U3_GEAR`) | audited | - | Feasible, but the premise is partly stale; about 2M + 1M-L + 1L + 1S; FB-31 to FB-37. |
 | `U4.2` (`U4_PASSIVES`) | audited | - | Feasible as a typed view plus compatibility loader, M-L in five slices; FB-25 to FB-30. |
@@ -179,6 +179,22 @@ FB-01 to FB-22 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: New command `aegis rules [--contract]` (`tools/fc.sh rules`): rules by system, fields, bundles, tested sets, locked constants and the game's rows; `aegis battle rules=` prints the set's notes to stderr. A new golden, `kits/rpg/crates/rpgkit_host/tests/fixtures/rules_contract_golden.json`, recorded with `RECORD=1`.
 - **Recommendation**: `CLAUDE.md` "Engine goldens": add the rules contract golden; `engine/README.md` and `docs/WORKFLOW.md`: the command; `docs/HISTORY.md`: a row for the new golden; `engine/docs/authoring/rule_library.md` (the design session's): the additive rule, the metadata, one picked set per game, the frozen-catalog test, value versus form versus new rule, and the candidates table; TASKS: BASERULES1-M done once landed.
+
+### FB-42: Stage names differ between READY and the session notes
+
+- **Spec**: `docs/READY.md` row 5; `docs/sessions/U1_STATS.md`, modular damage
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: READY names five stages (base, flat, mult, mitigation, round); U1_STATS names four (base, amplifiers, mitigation, finish) with flat adds in base only. U1.2-S1 follows READY: Flat right after rounding point one, Add allowed in Base and Flat, Mul in Base (tier), Mult and Mitigation, Reduce in Mitigation only, Round with no modifiers. No flat modifier exists today, so neither reading moves a number. Changing it is `Stage::ORDER` and one line in `Op::fits`.
+- **Recommendation**: Name one set of stages in both docs, and say whether a flat add may sit after attack power's rounding (READY's Flat) or only before it (U1_STATS).
+
+### FB-43: Docs delta from U1.2-S1, and take_damage could join the pipeline early
+
+- **Spec**: shared docs; FB-05
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: New `rpgkit_rules/src/pipeline.rs` (stages, `Op`, `Modifier`, `Pipeline` with `DAMAGE` and `STAGGER`, a trace per hit, `Hit.trace`) and `pool.rs` (a read-only `PoolView` over hp, ap and poise; `Unit::pool`, `World::pool`). Attack power, the hit and poise stagger run through it; `take_damage(mitigated=false)` and the intercept split stay on their own paths, as FB-05 allows. An exact port of `take_damage` is easy (Add, Reduce(guard), round to minimum 1, only when guard is above 0).
+- **Recommendation**: `docs/STRUCTURE.md` `rpgkit_rules/src/` row: `pipeline.rs`, `pool.rs`, tests `damage_pipeline.rs`, `pools.rs`; `engine/docs/PORT_NOTES.md` (`damage_calculator.gd` row): runs `rpgkit_rules::pipeline`, exact port; `kits/rpg/README.md`: a U1.2-S1 line. Say whether `take_damage` joins in A2.2 or in the next U1 slice.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
