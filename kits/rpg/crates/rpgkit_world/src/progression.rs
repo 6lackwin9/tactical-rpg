@@ -4,10 +4,10 @@
 use crate::data::Data;
 use crate::state::{GameState, PartyState, UnitState};
 use aegis_core::json::{self, int, Dict};
-use rpgkit_data::STATS;
-use rpgkit_rules::gear::{Equipment, Slot};
+use rpgkit_data::{UnitDef, STATS};
+use rpgkit_rules::gear::Slot;
 use rpgkit_rules::stats::MAX_LEVEL;
-use rpgkit_rules::{build_unit, Unit};
+use rpgkit_rules::{build_from, Growth, Overrides, Unit, UnitBuild};
 use serde_json::Value;
 
 // ---- XpCurve -------------------------------------------------------------------------------------------------
@@ -139,6 +139,8 @@ pub struct Built {
     /// Saved pouch ids that found no battle-pouch slot.
     pub pouch_unloaded: Vec<String>,
     pub warnings: Vec<String>,
+    /// The row it was built from (its base unit at its level and spend; the AI profile reads it).
+    pub def: UnitDef,
 }
 
 /// PartyBuilder.build_report with auto-spend: None when the state is invalid. World-free and classic: the base
@@ -191,58 +193,33 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         def.spend.insert(rpgkit_data::STATS[0].to_string(), 0);
     }
     def.name = display_name(d, &work);
-    let mut u = build_unit(cat, &def, 0);
-    if let Some(rule) = deck {
-        // RULESET1 9 D3-D5: the member's deck replaces its base unit's; the rule gates the passives below
-        if !work.deck.is_empty() {
-            u.deck = work.deck.clone();
-        }
-        u.deck_rule = Some(rule.clone());
-    }
-    for id in &work.passives {
-        if let Some(p) = cat.passives.get(id) {
-            u.apply_passive(cat, p);
-        }
-    }
-    for sk in &work.learned_skills {
-        u.learn_skill_checked(cat, sk, false);
-    }
-    for (slot_name, item_id) in &work.equipment {
-        let (Some(slot), Some(item)) = (Slot::parse(slot_name), cat.items.get(item_id)) else { continue };
-        if item.is_equipment() {
-            u.inventory.unequip(slot);
-            u.inventory.equip(Equipment::new(item), slot);
-        }
-    }
-    // The two-handed rule: a class default shield or focus is not held under a two-handed weapon (state::off_hand_ok).
-    if let (Some(main), Some(off)) = (u.inventory.get(Slot::MainHand), u.inventory.get(Slot::OffHand)) {
-        if !crate::state::off_hand_ok(Some(&main.item), &off.item) {
-            u.inventory.unequip(Slot::OffHand);
+    let growth = Growth {
+        deck: work.deck.clone(),
+        learned_skills: work.learned_skills.clone(),
+        equipment: work.equipment.iter().filter_map(|(slot, id)| Some((Slot::parse(slot)?, cat.items.get(id)?.clone()))).collect(),
+        pouch: work.pouch.iter().filter_map(|id| cat.items.get(id).cloned()).collect(),
+        loadout: (!work.loadout_class.is_empty() || !work.loadout_extra.is_empty()).then(|| (work.loadout_class.clone(), work.loadout_extra.clone())),
+        ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
+    };
+    let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
+    let b = build_from(cat, UnitBuild { row: &def, default_ap: 0, deck, over, growth: Some(growth) });
+    let warnings = b.loadout_error.map(|err| format!("Unit '{}': stored loadout ignored ({err}).", work.id)).into_iter().collect();
+    Some(Built { unit: b.unit, pouch_unloaded: b.pouch_unloaded, warnings, def })
+}
+
+/// U2.2-S2 (FB-28): a member's passives, re-gathered at each build: its character's sources now (character, faction,
+/// disciplines, named items, in that order, resolved in the character's own world), then the other ids it owns (quest
+/// grants, earned ones) in saved order, each once. A new game saves the sources as they were (`new_game`), so the two
+/// agree until the data changes; then a grant added to a source reaches the existing save.
+pub fn member_passives(d: &Data, state: &UnitState) -> Vec<String> {
+    let world = aegis_content::split_qid(&state.lore_ref).map(|(w, _)| w).unwrap_or_default();
+    let mut out = d.character_passives(character_of(d, state), &world);
+    for id in &state.passives {
+        if !out.contains(id) {
+            out.push(id.clone());
         }
     }
-    u.inventory.pouch.clear();
-    let mut unloaded = Vec::new();
-    for id in &work.pouch {
-        if let Some(item) = cat.items.get(id).filter(|i| i.item_type == "CONSUMABLE") {
-            if !u.inventory.add_to_pouch(item) {
-                unloaded.push(id.clone());
-            }
-        }
-    }
-    u.sync_from_stats_and_gear(cat);
-    u.hp = u.max_hp;
-    let mut warnings = Vec::new();
-    if !work.loadout_class.is_empty() || !work.loadout_extra.is_empty() {
-        if let Err(err) = u.set_loadout(cat, work.loadout_class.clone(), work.loadout_extra.clone()) {
-            warnings.push(format!("Unit '{}': stored loadout ignored ({err}).", work.id));
-        }
-    }
-    // RULESET1 9 D1, D2: the deck (else the loadout, auto) fills the active slots
-    u.apply_deck(cat);
-    // SKILLUI1 R4: a hero built from member state uses the ranks chosen on the Skills tab (set after gear, passives
-    // and the loadout, so every unlock is final; fixed for the battle like the loadout).
-    u.rank_choice = Some(work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect());
-    Some(Built { unit: u, pouch_unloaded: unloaded, warnings })
+    out
 }
 
 /// SKILLUI1 (the user's answer to Q2): every slotted family without a rank entry gets its highest unlocked rank now,

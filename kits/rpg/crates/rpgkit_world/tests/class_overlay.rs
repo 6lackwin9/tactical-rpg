@@ -148,8 +148,8 @@ fn a_loadout_owned_in_another_world_validates_and_drops_where_unowned() {
     }
 }
 
-/// CN3 for world characters in battle (the world roster's `customize`): the foe in `a` fights without the class path,
-/// with the same name and AP as in `c`, where it is built exactly as before.
+/// CN3 for world characters in battle (the world roster's `overrides`: its `path_cat`): the foe in `a` fights without
+/// the class path, with the same name and AP as in `c`, where it is built exactly as before.
 #[test]
 fn world_characters_fight_with_their_world_path() {
     let d = data();

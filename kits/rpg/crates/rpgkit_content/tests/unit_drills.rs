@@ -170,11 +170,11 @@ fn wears_untrained_is_refused_where_it_is_no_exception() {
         let v = with_characters(gear.clone(), characters);
         assert!(errors(&v).iter().any(|e| e == want), "{gear}: {:?}", errors(&v));
     }
-    // a unit with no class has no training rule to be excused from
+    // a unit with no class has no training rule to be excused from (and, U2.2-S2 FB-23, is an error itself)
     let mut classless = unit_row("u", json!({"body": "apron", "wears_untrained": ["apron"], "stat_mode": "fixed"}));
     classless["class_id"] = json!("");
     let v = view(json!([classless]), json!({}), json!([]));
-    assert_eq!(errors(&v), vec!["Wears untrained: 'apron' needs no exception (its class or a drill trains it)."]);
+    assert_eq!(errors(&v), vec!["Fixed units need a class too (their base stats are the class's at their level).", "Wears untrained: 'apron' needs no exception (its class or a drill trains it)."]);
 }
 
 #[test]

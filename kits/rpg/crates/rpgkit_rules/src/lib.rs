@@ -18,4 +18,4 @@ pub mod unit;
 /// U2.2-S1: the unit budget and class shares (lives in rpgkit_data, so the class loader can compute its view).
 pub use rpgkit_data::unit_budget;
 
-pub use unit::{build_unit, build_unit_in, DeckRule, Stance, Unit};
+pub use unit::{build_from, build_unit, build_unit_in, BuiltUnit, DeckRule, Growth, Overrides, Stance, Tuning, Unit, UnitBuild};

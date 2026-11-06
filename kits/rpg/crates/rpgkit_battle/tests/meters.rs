@@ -17,9 +17,9 @@ use rpgkit_battle::round_intent::RoundIntent;
 use rpgkit_battle::round_intent_plan as rip;
 use rpgkit_battle::session::{EncounterDef, Phase, Roster, Session};
 use rpgkit_battle::world::{UnitId, World};
-use rpgkit_data::{Catalog, UnitDef};
+use rpgkit_data::{Catalog, PassiveDef, UnitDef};
 use rpgkit_rules::ruleset::{Ruleset, TIMELINE, TRIGGERS, UNIT_METERS};
-use rpgkit_rules::{status, Unit};
+use rpgkit_rules::{status, Overrides};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -103,20 +103,28 @@ fn catalog() -> Catalog {
     }))
 }
 
-/// Catalog units whose passives give the listed `meter` effects (ref -> effects), as a world character's would.
+/// Catalog units whose passives give the listed `meter` effects (ref -> effects), as a world character's would: passive
+/// `trait<i>` per entry, added to the catalog (`with_traits`) and named in the ref's overrides (the one builder).
 struct Holders(Vec<(&'static str, Value)>);
+
+impl Holders {
+    fn with_traits(&self, mut cat: Catalog) -> Catalog {
+        for (i, (_, e)) in self.0.iter().enumerate() {
+            let id = format!("trait{i}");
+            cat.passives.insert(id.clone(), PassiveDef { id, name: format!("Trait {i}"), effects: vec![e.clone()], slot: String::new() });
+        }
+        cat
+    }
+}
 
 impl Roster for Holders {
     fn entry(&self, cat: &Catalog, r: &str) -> Option<UnitDef> {
         cat.units.get(r).cloned()
     }
 
-    fn customize(&self, cat: &Catalog, r: &str, u: &mut Unit) {
-        for (i, (who, e)) in self.0.iter().enumerate() {
-            if *who == r {
-                u.apply_effects(cat, std::slice::from_ref(e), &format!("passive:trait{i}"), false);
-            }
-        }
+    fn overrides(&self, _cat: &Catalog, r: &str) -> Overrides {
+        let passives = self.0.iter().enumerate().filter(|(_, (who, _))| *who == r).map(|(i, _)| format!("trait{i}")).collect();
+        Overrides { passives, ..Overrides::default() }
     }
 }
 
@@ -134,7 +142,8 @@ fn session(ruleset: Ruleset, held: Vec<(&'static str, Value)>) -> Session {
         "total_blocks": BLOCKS, "unit_ap": 10, "ap_regen": 0, "max_rounds": 8, "rng_seed": 1337});
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = ruleset;
-    let mut s = Session::start(Arc::new(catalog()), def, &Holders(held));
+    let holders = Holders(held);
+    let mut s = Session::start(Arc::new(holders.with_traits(catalog())), def, &holders);
     for (c, cell) in [(HERO, rpgkit_battle::grid::V2::new(4, 4)), (ALLY, rpgkit_battle::grid::V2::new(4, 5)), (FOE, rpgkit_battle::grid::V2::new(5, 4))] {
         s.w.grid.positions[c] = Some(cell);
     }

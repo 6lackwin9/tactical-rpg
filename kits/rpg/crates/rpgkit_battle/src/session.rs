@@ -17,7 +17,7 @@ use aegis_core::value::{self, Obj};
 use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
-use rpgkit_rules::{build_unit_in, DeckRule, Unit};
+use rpgkit_rules::{build_from, DeckRule, Overrides, Unit, UnitBuild};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -131,8 +131,11 @@ impl EncounterDef {
 /// (rpgkit_world: the base unit wearing the character, then its named items, passives and tuning).
 pub trait Roster {
     fn entry(&self, cat: &Catalog, r: &str) -> Option<UnitDef>;
-    /// CatalogEncounter._customize: a freshly spawned unit's extras.
-    fn customize(&self, _cat: &Catalog, _r: &str, _u: &mut Unit) {}
+    /// U2.2-S2 (FB-12): what ref `r` wears over its row, given to the one builder (`build_from`): a world character's
+    /// gathered passives, named items, tuning and class-path catalog; a catalog unit's none.
+    fn overrides(&self, _cat: &Catalog, _r: &str) -> Overrides {
+        Overrides::default()
+    }
     /// The roster tier of a ref (morale: leaders and fearless units).
     fn tier(&self, cat: &Catalog, r: &str) -> String {
         self.entry(cat, r).map(|e| e.tier).unwrap_or_default()
@@ -380,9 +383,9 @@ impl Session {
         let mut spawn = |r: &str, name: &str, built: &mut Vec<Unit>| -> UnitId {
             let mut e = roster.entry(&cat, r).expect("checked");
             e.name = name.to_string();
-            let mut u = build_unit_in(&cat, &e, def.unit_ap, deck.as_ref());
-            // a world character's passives pass the deck rule's slot gate (D3) set above
-            roster.customize(&cat, r, &mut u);
+            // U2.2-S2: every roster unit through the one builder; a world character's passives pass the deck rule's
+            // slot gate (D3)
+            let u = build_from(&cat, UnitBuild { row: &e, default_ap: def.unit_ap, deck: deck.as_ref(), over: roster.overrides(&cat, r), growth: None }).unit;
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));
             art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });

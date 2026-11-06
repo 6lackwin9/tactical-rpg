@@ -609,7 +609,7 @@
 			"name": "Training Dummy",
 			"side": "neutral",
 			"description": "Gear Dojo target: 500 HP, no armor, strikes back with 20 power when asked.",
-			"class_id": "",
+			"class_id": "warrior",
 			"level": 1,
 			"tier": "hero",
 			"spend": {},
@@ -638,13 +638,15 @@
 			"reckless": false,
 			"heal_below": 0.7,
 			"tactics": [],
-			"main_hand": "",
-			"off_hand": "",
-			"head": "",
-			"body": "",
-			"accessory_1": "",
-			"accessory_2": "",
-			"pouch": [],
+			"main_hand": "none",
+			"off_hand": "none",
+			"head": "none",
+			"body": "none",
+			"accessory_1": "none",
+			"accessory_2": "none",
+			"pouch": [
+				"none"
+			],
 			"loot": []
 		},
 		{

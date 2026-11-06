@@ -346,6 +346,9 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
     let arch = v.typed.classes.get(&class_id).filter(|_| !class_id.is_empty());
     if !fixed_mode && arch.is_none() {
         errors.push("Class-derived units need a class (or set the stat model to fixed).".into());
+    } else if arch.is_none() {
+        // U2.2-S2 (FB-23): no silent fallback to the catalog's first class
+        errors.push("Fixed units need a class too (their base stats are the class's at their level).".into());
     }
     if !fixed_mode {
         errors.extend(validate_spend(&json::ints(json::get(e, "spend")), json::i(e, "level", 1)));

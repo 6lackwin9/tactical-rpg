@@ -885,19 +885,178 @@ pub fn build_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
 
 /// `build_unit` under the deck rule (RULESET1 9 D1-D4) when `deck` is Some: the deck's slotted passives apply (D4,
 /// then the vitals of a derived unit are re-derived), the open basics replace the catalog's, the deck fills the active
-/// slots. None = `build_unit` exactly (classic).
+/// slots. None = `build_unit` exactly (classic). The row alone through `build_from`.
 pub fn build_unit_in(cat: &Catalog, e: &UnitDef, default_ap: i32, deck: Option<&DeckRule>) -> Unit {
-    let mut u = build_catalog_unit(cat, e, default_ap);
+    build_from(cat, UnitBuild::row(e, default_ap, deck)).unit
+}
+
+/// U2.2-S2 (FB-12): a character's tuning deltas (its five keys), applied after everything else.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Tuning {
+    pub hp_pct: i32,
+    pub power: i32,
+    pub armor: i32,
+    pub speed: i32,
+    pub ap: i32,
+}
+
+/// U2.2-S2 (FB-12): what a unit wears over its row, the one override layer of every unit: the passive ids of its
+/// sources in gather order (FB-28: character, faction, disciplines, named items; a member's other owned ids after),
+/// applied once each; the named items it wears; its tuning. `path_cat`: the catalog whose class paths the unit takes
+/// (HOOKS1 CN3: the world's overlay; None = the catalog passed to `build_from`; the two differ only in class paths, and
+/// only the row's build reads a class).
+#[derive(Debug, Clone, Default)]
+pub struct Overrides {
+    pub passives: Vec<String>,
+    pub named_items: Vec<rpgkit_data::ItemDef>,
+    pub tuning: Tuning,
+    pub path_cat: Option<std::sync::Arc<Catalog>>,
+}
+
+/// U2.2-S2 (FB-12): a growth unit's saved state (a party member's; its row carries the saved level and spend): its deck
+/// (empty = the row's), learned skills, worn gear, pouch, stored loadout (None = the class default) and chosen ranks.
+#[derive(Debug, Clone, Default)]
+pub struct Growth {
+    pub deck: Deck,
+    pub learned_skills: Vec<String>,
+    pub equipment: Vec<(Slot, rpgkit_data::ItemDef)>,
+    pub pouch: Vec<rpgkit_data::ItemDef>,
+    pub loadout: Option<(Vec<String>, Vec<String>)>,
+    pub ranks: IndexMap<String, i32>,
+}
+
+/// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
+/// row at the row's fixed level plus `over`; a growth unit (a party member) is its row at its saved level and spend,
+/// plus `over` and `growth`.
+#[derive(Debug, Clone)]
+pub struct UnitBuild<'a> {
+    pub row: &'a UnitDef,
+    /// The AP of a row without its own (0 = the Combatant default).
+    pub default_ap: i32,
+    /// The battle's deck rule (None = classic).
+    pub deck: Option<&'a DeckRule>,
+    pub over: Overrides,
+    pub growth: Option<Growth>,
+}
+
+impl<'a> UnitBuild<'a> {
+    /// The row alone (a catalog unit: no overrides, no saved state).
+    pub fn row(row: &'a UnitDef, default_ap: i32, deck: Option<&'a DeckRule>) -> Self {
+        Self { row, default_ap, deck, over: Overrides::default(), growth: None }
+    }
+}
+
+/// What `build_from` gives back: the unit, a growth unit's saved pouch ids that found no battle-pouch slot, and why its
+/// stored loadout was ignored (None = kept or none stored).
+#[derive(Debug, Clone)]
+pub struct BuiltUnit {
+    pub unit: Unit,
+    pub pouch_unloaded: Vec<String>,
+    pub loadout_error: Option<String>,
+}
+
+/// U2.2-S2 (FB-12): the one unit builder; every unit (hero, NPC, named enemy, Dojo and sim unit) is built here. The
+/// steps, in order: the row (`build_catalog_unit`); the deck (a static unit under the rule: its row deck's slotted
+/// passives, then the open basics and active slots; a growth unit: its own deck, filled at the end); the named items
+/// worn; the passives once each in gather order; a growth unit's learned skills, worn gear (the two-handed rule), pouch,
+/// vitals, stored loadout, deck fill and ranks (a static unit re-derives its vitals when named items geared a derived
+/// unit); the tuning last. `over.path_cat` replaces `cat` when set.
+pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
+    let cat: &Catalog = b.over.path_cat.as_deref().unwrap_or(cat);
+    let e = b.row;
+    let mut u = build_catalog_unit(cat, e, b.default_ap);
     u.deck = e.deck.clone();
-    if let Some(rule) = deck {
-        u.deck_rule = Some(rule.clone());
-        if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
+    match (&b.growth, b.deck) {
+        (None, Some(rule)) => {
+            u.deck_rule = Some(rule.clone());
+            if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
+                u.sync_from_stats_and_gear(cat);
+                u.hp = u.max_hp;
+            }
+            u.apply_deck(cat);
+        }
+        (Some(g), Some(rule)) => {
+            // RULESET1 9 D3-D5: the member's deck replaces its row's; the rule gates the passives below
+            if !g.deck.is_empty() {
+                u.deck = g.deck.clone();
+            }
+            u.deck_rule = Some(rule.clone());
+        }
+        (_, None) => {}
+    }
+    let mut geared = false;
+    for item in b.over.named_items.iter().filter(|i| i.is_equipment()) {
+        u.inventory.equip(Equipment::new(item), Slot::parse(&item.slot).unwrap_or(Slot::MainHand));
+        geared = true;
+    }
+    for id in &b.over.passives {
+        if let Some(p) = cat.passives.get(id) {
+            u.apply_passive(cat, p);
+        }
+    }
+    let (mut pouch_unloaded, mut loadout_error) = (Vec::new(), None);
+    match &b.growth {
+        Some(g) => {
+            for sk in &g.learned_skills {
+                u.learn_skill_checked(cat, sk, false);
+            }
+            for (slot, item) in g.equipment.iter().filter(|(_, i)| i.is_equipment()) {
+                u.inventory.unequip(*slot);
+                u.inventory.equip(Equipment::new(item), *slot);
+            }
+            // The two-handed rule: a class default shield or focus is not held under a two-handed weapon.
+            if let (Some(main), Some(off)) = (u.inventory.get(Slot::MainHand), u.inventory.get(Slot::OffHand)) {
+                if !crate::gear::off_hand_ok(Some(&main.item), &off.item) {
+                    u.inventory.unequip(Slot::OffHand);
+                }
+            }
+            u.inventory.pouch.clear();
+            for item in g.pouch.iter().filter(|i| i.item_type == "CONSUMABLE") {
+                if !u.inventory.add_to_pouch(item) {
+                    pouch_unloaded.push(item.id.clone());
+                }
+            }
+            u.sync_from_stats_and_gear(cat);
+            u.hp = u.max_hp;
+            if let Some((class_fams, extra_fams)) = &g.loadout {
+                if let Err(err) = u.set_loadout(cat, class_fams.clone(), extra_fams.clone()) {
+                    loadout_error = Some(err);
+                }
+            }
+            // RULESET1 9 D1, D2: the deck (else the loadout, auto) fills the active slots
+            u.apply_deck(cat);
+            // SKILLUI1 R4: the ranks chosen on the Skills tab (after gear, passives and the loadout: every unlock final)
+            u.rank_choice = Some(g.ranks.clone());
+        }
+        None if geared && e.stat_mode == "derived" => {
             u.sync_from_stats_and_gear(cat);
             u.hp = u.max_hp;
         }
-        u.apply_deck(cat);
+        None => {}
     }
-    u
+    apply_tuning(&mut u, &b.over.tuning);
+    BuiltUnit { unit: u, pouch_unloaded, loadout_error }
+}
+
+/// WorldFactory.apply_character's tuning: max HP by `hp_pct` percent, then power, armour, speed and AP deltas.
+fn apply_tuning(u: &mut Unit, t: &Tuning) {
+    if t.hp_pct != 0 {
+        u.max_hp = (roundi(u.max_hp as f64 * (1.0 + t.hp_pct as f64 / 100.0))).max(1);
+        u.hp = u.max_hp;
+    }
+    if t.power != 0 {
+        u.power_override = (crate::damage::power_of(u, u.attack_range > 1, false) + t.power).max(1);
+    }
+    if t.armor != 0 {
+        u.armor_override = (crate::damage::armor_rating(u) + t.armor).max(0);
+    }
+    if t.speed != 0 {
+        u.speed = (u.speed + t.speed).max(1);
+    }
+    if t.ap != 0 {
+        u.max_ap = (u.max_ap + t.ap).max(1);
+        u.ap = u.max_ap;
+    }
 }
 
 /// HOOKS1 DU1: the active slots catalog unit `e` fills with an automatic deck (its authored deck ignored) under `rule`:
@@ -912,7 +1071,8 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     let arch = class_for(cat, e);
     let derived = e.stat_mode == "derived" && arch.is_some();
     // KITIDS1: a unit without a class takes the stats of the catalog's first class at level 1 (a blank class when the
-    // catalog has none); the kit names no class id
+    // catalog has none); the kit names no class id. U2.2-S2 (FB-23): a classless unit is a content error, so shipped
+    // data never reaches this; it stays for catalogs frozen before (the goldens' fixture catalog)
     let classless = || cat.classes.values().next().cloned().unwrap_or_else(|| ClassDef::from_obj(&Default::default()));
     let mut u = if derived {
         let arch = arch.unwrap();

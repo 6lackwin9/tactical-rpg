@@ -15,7 +15,7 @@ use crate::skill;
 use crate::world::{AiProfile, UnitId};
 use aegis_core::rng::GodotRng;
 use rpgkit_data::{Catalog, Deck, ItemDef, SkillDef, UnitDef, STATS};
-use rpgkit_rules::build_unit_in;
+use rpgkit_rules::{build_from, UnitBuild};
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
 use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
@@ -259,7 +259,7 @@ impl DojoSession {
         let mut hero_ids = Vec::new();
         for id in HEROES {
             let Some(def) = cat.units.get(id) else { continue };
-            let mut u = build_unit_in(&cat, def, 0, None);
+            let mut u = build_from(&cat, UnitBuild::row(def, 0, None)).unit;
             u.max_ap = HERO_AP;
             u.ap = HERO_AP;
             heroes.push(u);
@@ -267,7 +267,7 @@ impl DojoSession {
             hero_ids.push(id.to_string());
         }
         let n = heroes.len();
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_unit_in(&cat, d, 0, None)).unwrap_or_else(|| build_unit_in(&cat, &UnitDef::from_obj(&Default::default()), 0, None));
+        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None)).unit);
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;
@@ -408,7 +408,7 @@ impl DojoSession {
         let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into() };
         let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
         if setup.partner.is_some() {
-            let mut partner = build_unit_in(&self.cat, dummy_def, 0, self.deck_rule().as_ref());
+            let mut partner = build_from(&self.cat, UnitBuild::row(dummy_def, 0, self.deck_rule().as_ref())).unit;
             partner.name = format!("{} 2", self.dummy.name);
             party.push(prebuilt(partner, dummy_def, "partner"));
         }
@@ -799,13 +799,13 @@ impl DojoSession {
         Some(def)
     }
 
-    /// Builds hero `i` again from its catalog row under the Dojo's ruleset (`build_unit_in`: under the deck rule its
-    /// deck's slotted passives, open basics and active slots; classic: `build_unit`), then puts back its gear, pouch
-    /// and the points spent here. HP and AP refill; the poise bar refills.
+    /// Builds hero `i` again from its catalog row under the Dojo's ruleset (`build_from`, the row alone: under the deck
+    /// rule its deck's slotted passives, open basics and active slots; classic: `build_unit`), then puts back its gear,
+    /// pouch and the points spent here. HP and AP refill; the poise bar refills.
     fn rebuild(&mut self, i: usize) {
         let Some(def) = self.hero_def(i) else { return };
         let rule = self.deck_rule();
-        let mut u = build_unit_in(&self.cat, &def, 0, rule.as_ref());
+        let mut u = build_from(&self.cat, UnitBuild::row(&def, 0, rule.as_ref())).unit;
         u.inventory = self.heroes[i].inventory.clone();
         for (st, pts) in &self.spent[i] {
             *u.stats.core.entry(st.clone()).or_insert(0) += pts;

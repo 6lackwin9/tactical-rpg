@@ -148,7 +148,7 @@ fn catalog(data: &Path) {
             {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": 1, "extra_skills": ["hook", "sweep"], "tactics": ["brace_after_hit", "hold_line"], "target_pref": "TOUGHEST",
              "deck": {"active": ["slam"]}},
             {"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1},
-            {"id": "imp", "name": "Imp", "side": "enemy", "stat_mode": "fixed", "hp": 30, "extra_skills": ["rush"]}
+            {"id": "imp", "name": "Imp", "side": "enemy", "class_id": "drill", "stat_mode": "fixed", "hp": 30, "extra_skills": ["rush"]}
         ]),
     );
     let mut rules = strs(&["round_intent", "deck"]);
