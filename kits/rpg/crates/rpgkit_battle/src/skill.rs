@@ -511,16 +511,19 @@ impl<'a> Book<'a> {
         self.available(Kind::Support, cap, c).into_iter().filter(|&i| cleanses(self.get(i)) && !heals(self.get(i))).collect()
     }
 
-    pub fn granting(&self, k: Kind, status: &str, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
-        self.available(k, cap, c).into_iter().filter(|&i| self.get(i).grant_status == status && !heals(self.get(i))).collect()
+    /// The available `k` skills whose granted status passes `grants` (I1.2-S1: a status behaviour predicate), no heals.
+    pub fn granting(&self, k: Kind, grants: fn(&str) -> bool, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
+        self.available(k, cap, c).into_iter().filter(|&i| grants(&self.get(i).grant_status) && !heals(self.get(i))).collect()
     }
 
-    pub fn ally_buffs(&self, except: &str, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
+    /// The available Support skills granting a status that does not pass `except` (I1.2-S1: a behaviour predicate), no
+    /// heals.
+    pub fn ally_buffs(&self, except: fn(&str) -> bool, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
         self.available(Kind::Support, cap, c)
             .into_iter()
             .filter(|&i| {
                 let s = self.get(i);
-                !s.grant_status.is_empty() && s.grant_status != except && !heals(s)
+                !s.grant_status.is_empty() && !except(&s.grant_status) && !heals(s)
             })
             .collect()
     }

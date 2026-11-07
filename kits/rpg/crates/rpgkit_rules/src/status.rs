@@ -67,6 +67,62 @@ impl Primitive {
     }
 }
 
+/// I1.2-S1 (docs/sessions/I_AI.md section 1 item 5): the rating a `modifier` row changes (the table's `rating` word;
+/// S1 section 1 `modifier`): outgoing attack (weaken, empower), Armor Rating (fortify, expose), Move Rate (haste, slow)
+/// or situational guard (guard).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rating {
+    AttackPower,
+    Armor,
+    MoveRate,
+    Guard,
+}
+
+impl Rating {
+    /// The table's `rating` word: `attack_power`, `armor`, `move_rate`, `guard`.
+    pub fn id(self) -> &'static str {
+        match self {
+            Rating::AttackPower => "attack_power",
+            Rating::Armor => "armor",
+            Rating::MoveRate => "move_rate",
+            Rating::Guard => "guard",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Rating> {
+        [Rating::AttackPower, Rating::Armor, Rating::MoveRate, Rating::Guard].into_iter().find(|r| r.id() == id)
+    }
+}
+
+/// I1.2-S1: what a `targeting` row does to enemy targeting (the table's `targeting` word; S1 section 1 `targeting`):
+/// `pull` draws enemy targeting toward the unit (taunt), `hide` makes it untargetable by single-target skills
+/// (stealth).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Targeting {
+    Pull,
+    Hide,
+}
+
+impl Targeting {
+    pub fn id(self) -> &'static str {
+        match self {
+            Targeting::Pull => "pull",
+            Targeting::Hide => "hide",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Targeting> {
+        [Targeting::Pull, Targeting::Hide].into_iter().find(|t| t.id() == id)
+    }
+}
+
+/// I1.2-S1: a `tick` row heals (a buff: regen) or damages (a debuff: bleed, poison, burn) at its tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tick {
+    Heal,
+    Damage,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct StatusRow {
     pub id: &'static str,
@@ -89,6 +145,10 @@ pub struct StatusRow {
     /// S1.2-S2: the timeline blocks a `block_lock` row locks (stagger 1 and 4, stun 1 and 2; root locks Move, not
     /// blocks); empty on every other row.
     pub lock_blocks: &'static [i32],
+    /// I1.2-S1: the rating a `modifier` row changes (`Some` on every `modifier` row, `None` elsewhere).
+    pub rating: Option<Rating>,
+    /// I1.2-S1: what a `targeting` row does (`Some` on every `targeting` row, `None` elsewhere).
+    pub targeting: Option<Targeting>,
     /// S1 behaviour primitives (at least one), see [`Primitive`].
     pub primitives: &'static [Primitive],
 }
@@ -144,6 +204,16 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
     let blocks = field("lock_blocks").as_array().unwrap_or_else(|| panic!("statuses.json row {i}: `lock_blocks` is not a list"));
     let lock_blocks: Vec<i32> = blocks.iter().map(|b| b.as_i64().unwrap_or_else(|| panic!("statuses.json row {i}: lock block {b} is not an integer")) as i32).collect();
     assert!(lock_blocks.is_empty() || primitives.contains(&Primitive::BlockLock), "statuses.json row {i}: lock_blocks on a block_lock row only");
+    let rating = match text("rating") {
+        "" => Option::None,
+        w => Some(Rating::from_id(w).unwrap_or_else(|| panic!("statuses.json row {i}: unknown rating `{w}`"))),
+    };
+    assert_eq!(rating.is_some(), primitives.contains(&Primitive::Modifier), "statuses.json row {i}: a rating on every modifier row and only there");
+    let targeting = match text("targeting") {
+        "" => Option::None,
+        w => Some(Targeting::from_id(w).unwrap_or_else(|| panic!("statuses.json row {i}: unknown targeting `{w}`"))),
+    };
+    assert_eq!(targeting.is_some(), primitives.contains(&Primitive::Targeting), "statuses.json row {i}: a targeting word on every targeting row and only there");
     StatusRow {
         id: text("id"),
         buff,
@@ -159,6 +229,8 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
         intent_bound: flag("intent_bound"),
         // Loaded once per process into a static table, so the lists live as long as the rows.
         lock_blocks: Box::leak(lock_blocks.into_boxed_slice()),
+        rating,
+        targeting,
         primitives: Box::leak(primitives.into_boxed_slice()),
     }
 }
@@ -328,6 +400,41 @@ pub fn tick_rows(buff: bool) -> impl Iterator<Item = &'static StatusRow> {
 /// The timeline blocks `status` locks: its row's `lock_blocks` when it is a `block_lock` row (S1.2-S2), else none.
 pub fn blocked_blocks(status: &str) -> &'static [i32] {
     row_of(status).filter(|r| r.has_primitive(Primitive::BlockLock)).map_or(&[], |r| r.lock_blocks)
+}
+
+/// I1.2-S1 (I_AI section 1 item 1): whether `status` is a `targeting` row that pulls enemy targeting toward its holder
+/// (false for an unknown id).
+pub fn has_targeting_pull(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Targeting) && r.targeting == Some(Targeting::Pull))
+}
+
+/// I1.2-S1 (item 2): whether `status` is a `reactive` row (a counter while active).
+pub fn has_reactive_counter(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Reactive))
+}
+
+/// I1.2-S1 (item 3): whether `status` is a `tick` row that heals (`Tick::Heal`, a buff) or damages (`Tick::Damage`, a
+/// debuff).
+pub fn has_tick(status: &str, tick: Tick) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Tick) && r.buff == (tick == Tick::Heal))
+}
+
+/// I1.2-S1 (item 4): whether `status` stops its holder moving this round: a `block_lock` row that locks the Move
+/// command itself (no `lock_blocks`: root) or every one of the round's `move_blocks` opening blocks (1 to
+/// `move_blocks`: stun with 2 move blocks; stagger leaves block 2 open).
+pub fn locks_movement(status: &str, move_blocks: usize) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::BlockLock) && (r.lock_blocks.is_empty() || (1..=move_blocks as i32).all(|b| r.lock_blocks.contains(&b))))
+}
+
+/// I1.2-S1 (item 5): whether `status` is a `modifier` row changing `rating` (either direction; a row's `kind` says
+/// which).
+pub fn modifies_rating(status: &str, rating: Rating) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Modifier) && r.rating == Some(rating))
+}
+
+/// Whether `status` is a buff row (false for an unknown id).
+pub fn is_buff(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.buff)
 }
 
 /// The chance (0-100) a roll of `potency` lands `status` on `target`: potency less INT resistance and the status's own

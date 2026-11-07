@@ -278,7 +278,7 @@ fn engage_any(w: &World, plan: &mut Plan, actor: UnitId, ranked: &[UnitId], cap:
 
 fn combo_ordered(w: &World, plan: &Plan, skills: &[SkillId], target: UnitId) -> Vec<SkillId> {
     let t = &w.units[target];
-    let guarded = t.stance == rpgkit_rules::Stance::Defensive || t.st.has_any("riposte") || plans_riposte(w, plan, target);
+    let guarded = t.stance == rpgkit_rules::Stance::Defensive || held_with(t, counters) || plans_riposte(w, plan, target);
     let (mut first, mut middle, mut last) = (Vec::new(), Vec::new(), Vec::new());
     for &sid in skills {
         let s = &w.cat.skills[sid];
@@ -299,7 +299,7 @@ fn combo_ordered(w: &World, plan: &Plan, skills: &[SkillId], target: UnitId) -> 
 }
 
 fn plans_riposte(w: &World, plan: &Plan, foe: UnitId) -> bool {
-    plan.steps_of(foe).iter().any(|st| st.skill.is_some_and(|s| skill::kind(&w.cat.skills[s]) == Kind::Defend && w.cat.skills[s].grant_status == "riposte"))
+    plan.steps_of(foe).iter().any(|st| st.skill.is_some_and(|s| skill::kind(&w.cat.skills[s]) == Kind::Defend && counters(&w.cat.skills[s].grant_status)))
 }
 
 fn can_strike_in_place(w: &World, actor: UnitId, cap: i32, dist: i32, profile: &AiProfile) -> bool {
@@ -625,7 +625,7 @@ fn rank_targets(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[Un
             reachable = !route.is_empty();
             score += if route.is_empty() { 400.0 } else { route.len() as f64 * 8.0 };
         }
-        if w.units[f].has_status("taunt") && reachable {
+        if active_with(&w.units[f], pulls_targeting) && reachable {
             score -= 100000.0;
         }
         scored.push((f, score));
@@ -653,7 +653,7 @@ fn rank_by_build(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[U
             let route = plan.approach_path(w, actor, st.pos, f, -1, -1);
             (route.is_empty(), if route.is_empty() { d } else { d.max(route.len() as i32) }, !route.is_empty() && route.len() <= move_tiles)
         };
-        let taunter = w.units[f].has_status("taunt") && !pathless;
+        let taunter = active_with(&w.units[f], pulls_targeting) && !pathless;
         let u = &w.units[f];
         let key = if softest {
             (i32::from(!taunter), i32::from(pathless || !this_round), damage::armor_rating(u), st.est(f), near)
@@ -738,12 +738,57 @@ pub fn guard_held(w: &World, c: UnitId) -> bool {
 }
 
 fn locked_down(w: &World, c: UnitId) -> bool {
-    w.units[c].st.has_any("stun") || w.units[c].st.has_any("root")
+    held_with(&w.units[c], stops_moving)
 }
 
 fn frees_lock(w: &World, c: UnitId, sid: SkillId) -> bool {
-    let l = cleansable(&w.units[c], &w.cat.skills[sid]);
-    l.contains(&"stun") || l.contains(&"root")
+    cleansable(&w.units[c], &w.cat.skills[sid]).into_iter().any(stops_moving)
+}
+
+/// I1.2-S1 (docs/sessions/I_AI.md section 1): the AI's status reads, each a behaviour predicate over the kit status
+/// table (`rpgkit_rules::status`) instead of a status id. A status that pulls enemy targeting toward its holder.
+pub fn pulls_targeting(status: &str) -> bool {
+    status::has_targeting_pull(status)
+}
+
+/// I1.2-S1: a reactive counter status (held on a Defend skill).
+pub fn counters(status: &str) -> bool {
+    status::has_reactive_counter(status)
+}
+
+/// I1.2-S1: a heal-over-time status.
+pub fn heals_over_time(status: &str) -> bool {
+    status::has_tick(status, status::Tick::Heal)
+}
+
+/// I1.2-S1: a status that stops its holder moving this round (a block lock over every move block, or on Move itself).
+pub fn stops_moving(status: &str) -> bool {
+    status::locks_movement(status, MAX_MOVE_BLOCKS)
+}
+
+/// I1.2-S1: a buff raising Armor Rating.
+pub fn raises_armor(status: &str) -> bool {
+    status::modifies_rating(status, status::Rating::Armor) && status::is_buff(status)
+}
+
+/// I1.2-S1: a debuff lowering Armor Rating.
+pub fn lowers_armor(status: &str) -> bool {
+    status::modifies_rating(status, status::Rating::Armor) && !status::is_buff(status)
+}
+
+/// I1.2-S1: a debuff lowering Move Rate.
+pub fn lowers_move_rate(status: &str) -> bool {
+    status::modifies_rating(status, status::Rating::MoveRate) && !status::is_buff(status)
+}
+
+/// Whether `u` has an active status passing `read` (the predicate form of `Unit::has_status`).
+fn active_with(u: &rpgkit_rules::Unit, read: fn(&str) -> bool) -> bool {
+    u.st.active.iter().any(|s| read(s))
+}
+
+/// Whether `u` has an active or queued status passing `read` (the predicate form of `StatusState::has_any`).
+fn held_with(u: &rpgkit_rules::Unit, read: fn(&str) -> bool) -> bool {
+    u.st.active.iter().chain(u.st.pending.iter()).any(|s| read(s))
 }
 
 fn try_disengage(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &AiProfile, ranked: &[UnitId], require_strike: bool) -> bool {
@@ -828,7 +873,7 @@ fn try_cleanse(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, urgent: bool
                 }
             }
         }
-        if needed.is_empty() || (urgent && !(needed.contains(&"stun") || needed.contains(&"root"))) {
+        if needed.is_empty() || (urgent && !needed.iter().any(|s| stops_moving(s))) {
             continue;
         }
         scored.push((f, needed.len(), hp_ratio(w, f), index));
@@ -963,7 +1008,7 @@ fn divers(w: &World, plan: &Plan, actor: UnitId) -> Vec<UnitId> {
 }
 
 fn taunt_options(w: &World, plan: &Plan, actor: UnitId, cap: i32, profile: &AiProfile) -> Vec<Step> {
-    if w.units[actor].st.has_any("taunt") {
+    if held_with(&w.units[actor], pulls_targeting) {
         return Vec::new();
     }
     let foes = w.foes_of(actor).to_vec();
@@ -980,7 +1025,7 @@ fn taunt_options(w: &World, plan: &Plan, actor: UnitId, cap: i32, profile: &AiPr
     if !exposed {
         return Vec::new();
     }
-    let skills = ordered(w, &optional(w, w.book().granting(Kind::Support, "taunt", cap, Some(&w.units[actor])), profile), profile);
+    let skills = ordered(w, &optional(w, w.book().granting(Kind::Support, pulls_targeting, cap, Some(&w.units[actor])), profile), profile);
     skills.into_iter().filter(|s| w.cat.skills[*s].target_mode != "ALLY").map(PlanStep::self_skill).collect()
 }
 
@@ -991,10 +1036,10 @@ fn picked_by_a_foe(w: &World, plan: &Plan, ally: UnitId, at: V2, foes: &[UnitId]
 fn buff_options(w: &World, plan: &Plan, actor: UnitId, cap: i32, profile: &AiProfile) -> Vec<Step> {
     let mut out = Vec::new();
     let foes = w.foes_of(actor).to_vec();
-    for sid in ordered(w, &optional(w, w.book().ally_buffs("taunt", cap, Some(&w.units[actor])), profile), profile) {
+    for sid in ordered(w, &optional(w, w.book().ally_buffs(pulls_targeting, cap, Some(&w.units[actor])), profile), profile) {
         let s = &w.cat.skills[sid];
-        if s.grant_status == "fortify" || s.grant_status == "regen" {
-            let picked = if s.grant_status == "fortify" { fortify_targets(w, plan, actor, sid) } else { regen_targets(w, plan, actor, sid, profile) };
+        if raises_armor(&s.grant_status) || heals_over_time(&s.grant_status) {
+            let picked = if raises_armor(&s.grant_status) { fortify_targets(w, plan, actor, sid) } else { regen_targets(w, plan, actor, sid, profile) };
             for t in picked {
                 out.push(if t == actor { PlanStep::self_skill(sid) } else { PlanStep::ally(sid, t) });
             }
@@ -1040,7 +1085,7 @@ fn fortify_targets(w: &World, plan: &Plan, actor: UnitId, sid: SkillId) -> Vec<U
     for (i, f) in buff_candidates(w, actor, sid).into_iter().enumerate() {
         let pos = plan.planned_position(w, f);
         let adjacent = foes.iter().filter(|&&e| w.units[e].is_active() && w.has(e) && pos.dist(w.pos(e)) <= 1).count() as i32;
-        let taunting = w.units[f].st.has_any("taunt") as i32;
+        let taunting = held_with(&w.units[f], pulls_targeting) as i32;
         cands.push((f, adjacent, taunting, damage::armor_rating(&w.units[f]), i + 1));
     }
     godot_sort(&mut cands, |a, b| {
@@ -1092,7 +1137,7 @@ fn fragile_friend(w: &World, actor: UnitId) -> Option<UnitId> {
 
 fn debuff_order(w: &World, plan: &Plan, actor: UnitId, st: &str, by_power: &[UnitId], ranked: &[UnitId]) -> Vec<UnitId> {
     let mut first: Vec<UnitId> = Vec::new();
-    if st == "expose" {
+    if lowers_armor(st) {
         if let Some(&r) = ranked.first() {
             if by_power.contains(&r) {
                 first.push(r);
@@ -1109,7 +1154,7 @@ fn debuff_order(w: &World, plan: &Plan, actor: UnitId, st: &str, by_power: &[Uni
                 }
             }
         }
-    } else if st == "slow" {
+    } else if lowers_move_rate(st) {
         if let Some(fragile) = fragile_friend(w, actor) {
             let target_pos = plan.planned_position(w, fragile);
             let actor_pos = w.pos(actor);
@@ -1169,9 +1214,9 @@ fn debuff_options(w: &World, plan: &Plan, actor: UnitId, cap: i32, profile: &AiP
 fn guard_smart(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &AiProfile, foes: &[UnitId], pos: V2) -> bool {
     let near = nearest_foe_unit(w, pos, foes);
     let melee = near.is_some_and(|n| w.units[n].attack_range <= 1);
-    let holding = w.units[actor].st.has_any("riposte");
-    let riposte_only = |s: SkillId| w.cat.skills[s].grant_status == "riposte";
-    let plain_only = |s: SkillId| w.cat.skills[s].grant_status != "riposte";
+    let holding = held_with(&w.units[actor], counters);
+    let riposte_only = |s: SkillId| counters(&w.cat.skills[s].grant_status);
+    let plain_only = |s: SkillId| !counters(&w.cat.skills[s].grant_status);
     let order: Vec<&dyn Fn(SkillId) -> bool> = if holding {
         vec![&plain_only]
     } else if melee {
@@ -1188,7 +1233,7 @@ fn guard_smart(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &Ai
 }
 
 fn riposte_finisher(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &AiProfile, foes: &[UnitId], ratio: f64) -> bool {
-    if profile.reckless || profile.defend_below <= 0.0 || ratio <= profile.defend_below || w.units[actor].st.has_any("riposte") {
+    if profile.reckless || profile.defend_below <= 0.0 || ratio <= profile.defend_below || held_with(&w.units[actor], counters) {
         return false;
     }
     let st = plan.compile(w, actor);
@@ -1197,7 +1242,7 @@ fn riposte_finisher(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile
     if st.withdrawn || w.units[near].attack_range > 1 || st.pos.dist(w.pos(near)) != 1 {
         return false;
     }
-    for sid in ordered(w, &optional(w, w.book().granting(Kind::Defend, "riposte", cap, Some(&w.units[actor])), profile), profile) {
+    for sid in ordered(w, &optional(w, w.book().granting(Kind::Defend, counters, cap, Some(&w.units[actor])), profile), profile) {
         if plan.add_step(w, actor, PlanStep::self_skill(sid), false).is_empty() {
             return true;
         }
@@ -1334,7 +1379,7 @@ fn likely_target(w: &World, plan: &Plan, foe: UnitId, target: UnitId, at: V2, wh
         }
         let hp = w.units[u].hp as f64;
         let mut score = if nearest_first { d as f64 * 100.0 + hp } else { hp + d as f64 * 4.0 };
-        if w.units[u].has_status("taunt") {
+        if active_with(&w.units[u], pulls_targeting) {
             score -= 100000.0;
         }
         best = best.min(score);
@@ -1378,7 +1423,7 @@ fn strike_chain(w: &World, foe: UnitId, target: UnitId, at: V2, by_block: i32) -
 
 fn taunt_pull(w: &World, plan: &Plan, actor: UnitId, st: &SimState, ranked: &[UnitId]) -> Option<UnitId> {
     let &taunter = ranked.first()?;
-    if !w.units[taunter].has_status("taunt") {
+    if !active_with(&w.units[taunter], pulls_targeting) {
         return None;
     }
     let band = basic_band(w, actor);
