@@ -87,7 +87,6 @@
     "locked stats.rs::ADVANCED_UNLOCK_FLOOR stats",
     "locked stats.rs::KNOW_UNLOCK_BASE stats",
     "locked stats.rs::KNOW_UNLOCK_STEP stats",
-    "locked stats.rs::MINION_SKILL_CAP stats",
     "locked stats.rs::HP_PER_CONS stats",
     "locked stats.rs::RANGE_PERC_THRESHOLD stats",
     "locked stats.rs::PROF_MAX_LEVEL stats",

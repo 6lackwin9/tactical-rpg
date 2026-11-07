@@ -58,7 +58,8 @@ pub struct AttackPower {
     pub stat_val: i32,
     pub unit_scaling: f64,
     /// The tier power scale the base stage multiplies by (unused by an authored power).
-    pub power_scale: f64,
+    /// U1.2-S4: the attacker's `tier_power` (the base stage's `Mul`).
+    pub tier_power: f64,
 }
 
 pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
@@ -119,7 +120,7 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
             res.unit_power = res.stat_val as f64 * scaling;
         }
     }
-    res.power_scale = u.power_scale;
+    res.tier_power = u.tier_power;
     let (base, n) = res.base_modifiers();
     res.attack_power = pipeline::DAMAGE.run(&base[..n]).base.unwrap_or(1);
     res
@@ -136,7 +137,7 @@ impl AttackPower {
         let mods = [
             Modifier::new("weapon", Stage::Base, Op::Add(self.weapon_power)),
             Modifier::new("unit", Stage::Base, Op::Add(self.unit_power)),
-            Modifier::new("tier", Stage::Base, Op::Mul(self.power_scale)),
+            Modifier::new("tier", Stage::Base, Op::Mul(self.tier_power)),
         ];
         (mods, 3)
     }

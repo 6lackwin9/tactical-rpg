@@ -154,7 +154,7 @@ impl AiProfile {
         };
         let mut cap = e.skill_cap;
         if cap <= 0 && arch.is_some() {
-            let tier_cap = rpgkit_rules::stats::tier_scales(&e.tier).2;
+            let tier_cap = rpgkit_rules::stats::tier_row(&e.tier).skill_cap;
             cap = if tier_cap > 0 { tier_cap } else { NO_CEILING };
         } else if cap <= 0 {
             cap = 1;

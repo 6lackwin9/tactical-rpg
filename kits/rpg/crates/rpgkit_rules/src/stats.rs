@@ -3,6 +3,8 @@
 use rpgkit_data::unit_budget::Shares;
 use rpgkit_data::{Catalog, ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
+use serde_json::Value;
+use std::sync::LazyLock;
 
 /// The level 1 unit budget (`unit_budget::BASE_BUDGET`).
 pub const CLASS_BUDGET: i32 = rpgkit_data::unit_budget::BASE_BUDGET;
@@ -16,7 +18,6 @@ pub const MAX_UNLOCK_REDUCTION: i32 = 2;
 pub const ADVANCED_UNLOCK_FLOOR: i32 = 3;
 pub const KNOW_UNLOCK_BASE: i32 = 12;
 pub const KNOW_UNLOCK_STEP: i32 = 4;
-pub const MINION_SKILL_CAP: i32 = 2;
 pub const HP_PER_CONS: i32 = 8;
 pub const RANGE_PERC_THRESHOLD: i32 = 18;
 
@@ -25,15 +26,40 @@ pub fn roundi(x: f64) -> i32 {
     x.round() as i32
 }
 
-/// StatRules.TIERS: (hp scale, power scale, default AI skill cap).
-pub fn tier_scales(tier: &str) -> (f64, f64, i32) {
-    match tier {
-        "minion" => (0.4, 0.6, MINION_SKILL_CAP),
-        "standard" => (0.7, 0.8, 0),
-        "elite" => (1.25, 1.0, 0),
-        "boss" => (1.5, 1.1, 0),
-        _ => (1.0, 1.0, 0),
-    }
+/// U1.2-S4 (U1_STATS feasibility 6, U2_CLASS feasibility 2): one row of the kit's tier table `tiers.json` (beside this
+/// file, embedded at build time; StatRules.TIERS before): `hp` is the formula input `tier_hp` (it multiplies the
+/// whole max HP for now; the `60 x tier_hp + stats` form is held, FB-78), `power` is `tier_power` (attack power's base-stage multiplier), `skill_cap` the default AI skill cap
+/// (0 = none).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TierRow {
+    pub id: String,
+    pub hp: f64,
+    pub power: f64,
+    pub skill_cap: i32,
+}
+
+/// The tier a unit has unless its row names one (and the row an unknown id reads as).
+pub const HERO_TIER: &str = "hero";
+
+const TIERS_TEXT: &str = include_str!("tiers.json");
+
+/// The tier table's rows in file order.
+pub static TIERS: LazyLock<Vec<TierRow>> = LazyLock::new(|| {
+    let rows: Value = serde_json::from_str(TIERS_TEXT).expect("tiers.json: valid JSON");
+    let rows = rows.as_array().expect("tiers.json: an array of rows");
+    rows.iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let num = |k: &str| r.get(k).and_then(Value::as_f64).unwrap_or_else(|| panic!("tiers.json row {i}: `{k}` is not a number"));
+            let id = r.get("id").and_then(Value::as_str).unwrap_or_else(|| panic!("tiers.json row {i}: `id` is not a string"));
+            TierRow { id: id.to_string(), hp: num("hp"), power: num("power"), skill_cap: num("skill_cap") as i32 }
+        })
+        .collect()
+});
+
+/// The row of `tier`; an id the table lacks reads as the hero row (factors 1, no cap), as before.
+pub fn tier_row(tier: &str) -> &'static TierRow {
+    TIERS.iter().find(|r| r.id == tier).or_else(|| TIERS.iter().find(|r| r.id == HERO_TIER)).expect("tiers.json: a hero row")
 }
 
 pub fn spend_pool(level: i32) -> i32 {
@@ -252,8 +278,10 @@ impl CharacterStats {
         self.effective(stat, weapon, "")
     }
 
-    pub fn max_hp(&self, weapon: Option<&str>) -> i32 {
-        60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2
+    /// `round((60 + CONS x 8 + STR x 2) x tier_hp)` (U1.2-S4: `tier_hp` from the tier table; the old hp scale). The
+    /// spec's base-only form, `60 x tier_hp + CONS x 8 + STR x 2`, waits for the user's confirmation as its own change.
+    pub fn max_hp(&self, tier_hp: f64, weapon: Option<&str>) -> i32 {
+        roundi((60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2) as f64 * tier_hp)
     }
 
     /// U1.2-S3c: initiative, `8 + DEX - burden`, at least 1 (the old speed formula; the unit takes carry overload off

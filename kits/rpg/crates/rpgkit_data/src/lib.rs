@@ -659,6 +659,10 @@ pub const LEVEL_INPUT: &str = "level";
 /// RULESET1 P1 (tasks 1.7): the formula input of the summed `effective_mitigation` of the unit's worn gear (reserved
 /// like `level`: no row id or constant takes it).
 pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
+/// U1.2-S4 (U1_STATS feasibility 6): the formula inputs of the unit's tier factors, its row in the kit's tier table
+/// (`hp`, `power`); reserved like `level`.
+pub const TIER_HP_INPUT: &str = "tier_hp";
+pub const TIER_POWER_INPUT: &str = "tier_power";
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]

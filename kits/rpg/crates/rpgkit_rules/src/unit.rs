@@ -175,8 +175,10 @@ pub struct Unit {
     pub name: String,
     pub catalog_id: String,
     pub tier: String,
-    pub hp_scale: f64,
-    pub power_scale: f64,
+    /// U1.2-S4: the tier's HP factor (`stats::TierRow::hp`; the formula input `tier_hp`).
+    pub tier_hp: f64,
+    /// U1.2-S4: the tier's power factor (`stats::TierRow::power`; `tier_power`), attack power's base-stage multiplier.
+    pub tier_power: f64,
     pub max_hp: i32,
     pub hp: i32,
     /// U1.2-S3c: initiative (the old speed): action order; a fixed-stat row's `speed`.
@@ -273,8 +275,8 @@ impl Unit {
             name: name.into(),
             catalog_id: String::new(),
             tier: "hero".into(),
-            hp_scale: 1.0,
-            power_scale: 1.0,
+            tier_hp: 1.0,
+            tier_power: 1.0,
             max_hp: hp,
             hp,
             initiative,
@@ -412,7 +414,7 @@ impl Unit {
             None => (1, None),
         };
         let ctx = ctx.as_deref();
-        self.max_hp = roundi(self.stats.max_hp(ctx) as f64 * self.hp_scale).max(1);
+        self.max_hp = self.stats.max_hp(self.tier_hp, ctx).max(1);
         self.hp = self.hp.min(self.max_hp);
         self.initiative = (self.stats.initiative(burden, ctx) - self.carry_penalty).max(1);
         self.move_rate = self.stats.move_rate(burden + self.carry_penalty, ctx);
@@ -1096,9 +1098,8 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     if derived {
         let arch = arch.unwrap();
         u.tier = e.tier.clone();
-        let (hp, power, _) = stats::tier_scales(&u.tier);
-        u.hp_scale = hp;
-        u.power_scale = power;
+        let row = stats::tier_row(&u.tier);
+        (u.tier_hp, u.tier_power) = (row.hp, row.power);
         u.sync_from_stats_and_gear(cat);
         u.hp = u.max_hp;
         let mut extras: Vec<String> = Vec::new();
