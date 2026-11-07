@@ -1,6 +1,6 @@
 ---
 name: build-session
-description: Bootstrap and operate the Build Session planner in the two-session split (Build in C:\dev\tactical-rpg-plan, -stage, -lane1..3 vs Design in C:\dev\tactical-rpg-dev). Use when starting or resuming a Build Session (/build-session, "start build session") to sync origin/develop, read docs/READY.md and docs/FEEDBACK.md, archive answered FB-nn items, and dispatch ready-to-build slices.
+description: Bootstrap and operate the Build Session planner in the two-session split (Build in C:\dev\tactical-rpg-plan, -stage, -lane1..3 vs Design in C:\dev\tactical-rpg-dev). Use when starting or resuming a Build Session (/build-session, /build-session force, "start build session", "start build session force") to sync origin/develop, claim or force-claim origin/build-lease, read docs/READY.md and docs/FEEDBACK.md, archive answered FB-nn items, and dispatch ready-to-build slices.
 ---
 
 # Build Session Start & Workflow (`C:\dev\tactical-rpg-plan` or Cloud Container)
@@ -12,14 +12,19 @@ Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`,
 - **Sole writer of**: `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (plus crate-local READMEs where appropriate), and orchestrator of code/data builds and flushes onto `origin/develop`.
 - **Never edit**: `docs/READY.md`, `docs/sessions/*.md`, `docs/specs/*`, `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `games/emberwake/docs/MILESTONES.md`, `docs/DECISIONS.md`, `docs/decisions/*`, `docs/HISTORY.md`, or shared READMEs.
 
-## 2. Startup Sequence (Run on Session Start)
+## 2. Startup Sequence (Run on Session Start — Supports `force` / `--force` Argument)
 
 1. Fetch `origin` and claim the **sticky remote Build Session lease** (`origin/build-lease`) so two Build Sessions (cloud vs desktop) never collide:
-   `git fetch -p origin`
-   `python tools/planner/feedback_check.py lease claim --no-fetch`
-   `git log -8 --oneline origin/develop`
-   - If `feedback_check.py lease claim` exits `1` (because `origin/build-lease` is owned by the other session or an unmerged `origin/claude/*` task branch / `building` row in `docs/FEEDBACK.md` was updated within the last 20 minutes), **stop immediately and ask the user** before touching any branch or file.
-   - If the user confirms you are taking over from a quota-paused session, run `python tools/planner/feedback_check.py lease claim --force` to move `origin/build-lease` to your session (`desktop` or `cloud`).
+   - **Normal start (`/build-session`)**:
+     `git fetch -p origin`
+     `python tools/planner/feedback_check.py lease claim --no-fetch`
+     `git log -8 --oneline origin/develop`
+     If `feedback_check.py lease claim` exits `1` (because `origin/build-lease` is owned by the other session or an unmerged `origin/claude/*` task branch / `building` row in `docs/FEEDBACK.md` was updated within the last 20 minutes), **stop immediately and ask the user** before touching any branch or file.
+   - **Force-lease takeover (`/build-session force`, `/build-session --force`, or user says `"force lease"` / `"take over"`)**:
+     `git fetch -p origin`
+     `python tools/planner/feedback_check.py lease claim --force --no-fetch`
+     `git log -8 --oneline origin/develop`
+     Immediately claims `origin/build-lease` for this session (`desktop` or `cloud`) without prompting, overriding the previous session's lease so any sleeping session is blocked on auto-wake.
 2. Read `docs/READY.md` and `docs/FEEDBACK.md`.
 3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4:
    - Archive any answered `FB-nn` / `UN-nn` items whose `Follow-up` column in `READY.md` Section 4 is `none` or names an existing row in `READY.md` Section 1 or Section 3, moving them into `docs/archive/FEEDBACK_CLOSED.md` with `<disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`, and verify with `python tools/planner/feedback_check.py`.
