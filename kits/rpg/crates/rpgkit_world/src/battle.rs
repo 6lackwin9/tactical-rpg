@@ -115,7 +115,7 @@ pub fn character_overrides(d: &Data, character: &Dict, world: &str) -> rpgkit_ru
         .collect();
     let tuning = json::dget(character, "tuning");
     let key = |k: &str| json::i(tuning, k, 0) as i32;
-    let tuning = rpgkit_rules::Tuning { hp_pct: key("hp_pct"), power: key("power"), armor: key("armor"), speed: key("speed"), ap: key("ap") };
+    let tuning = rpgkit_rules::Tuning { hp_pct: key("hp_pct"), power: key("power"), armor: key("armor"), initiative: key("speed"), ap: key("ap") };
     rpgkit_rules::Overrides { passives: d.character_passives(character, world), named_items, tuning, path_cat: None }
 }
 

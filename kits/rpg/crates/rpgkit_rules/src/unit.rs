@@ -179,7 +179,10 @@ pub struct Unit {
     pub power_scale: f64,
     pub max_hp: i32,
     pub hp: i32,
-    pub speed: i32,
+    /// U1.2-S3c: initiative (the old speed): action order; a fixed-stat row's `speed`.
+    pub initiative: i32,
+    /// U1.2-S3c: the move rate, tiles one move covers before haste and slow (`stats::move_rate_curve`, 1 to 4).
+    pub move_rate: i32,
     pub attack_range: i32,
     pub max_ap: i32,
     pub ap: i32,
@@ -188,7 +191,8 @@ pub struct Unit {
     pub guard: f64,
     pub power_override: i32,
     pub armor_override: i32,
-    pub carry_speed_penalty: i32,
+    /// The party's carry overload penalty (`carry::Report::overload_penalty`); lowers initiative first.
+    pub carry_penalty: i32,
     pub stats: CharacterStats,
     pub inventory: Inventory,
     pub known_skills: Vec<String>,
@@ -263,7 +267,8 @@ pub struct Unit {
 }
 
 impl Unit {
-    fn blank(name: &str, hp: i32, speed: i32, range: i32, stats: CharacterStats) -> Self {
+    /// U1.2-S3c: `initiative` is a fixed-stat row's `speed`; its move rate is the move curve on it (as before the split).
+    fn blank(name: &str, hp: i32, initiative: i32, range: i32, stats: CharacterStats) -> Self {
         Self {
             name: name.into(),
             catalog_id: String::new(),
@@ -272,7 +277,8 @@ impl Unit {
             power_scale: 1.0,
             max_hp: hp,
             hp,
-            speed,
+            initiative,
+            move_rate: stats::move_rate_curve(initiative),
             attack_range: range,
             max_ap: BASE_AP,
             ap: BASE_AP,
@@ -281,7 +287,7 @@ impl Unit {
             guard: 0.0,
             power_override: 0,
             armor_override: -1,
-            carry_speed_penalty: 0,
+            carry_penalty: 0,
             stats,
             inventory: Inventory::new(),
             known_skills: Vec::new(),
@@ -371,10 +377,9 @@ impl Unit {
     }
 
     pub fn move_per_block(&self) -> i32 {
-        let base = ((self.speed + 2) as f64 / 5.0).floor().clamp(1.0, 4.0) as i32;
         let hasted = self.has_status("haste") as i32;
         let slowed = self.has_status("slow") as i32;
-        (base + hasted - slowed).max(1)
+        (self.move_rate + hasted - slowed).max(1)
     }
 
     pub fn worn_burden(&self) -> i32 {
@@ -409,7 +414,8 @@ impl Unit {
         let ctx = ctx.as_deref();
         self.max_hp = roundi(self.stats.max_hp(ctx) as f64 * self.hp_scale).max(1);
         self.hp = self.hp.min(self.max_hp);
-        self.speed = (self.stats.initiative_speed(burden, ctx) - self.carry_speed_penalty).max(1);
+        self.initiative = (self.stats.initiative(burden, ctx) - self.carry_penalty).max(1);
+        self.move_rate = self.stats.move_rate(burden + self.carry_penalty, ctx);
         self.attack_range = self.stats.effective_range(base_rng, ctx);
         self.refresh_path_skills(cat);
     }
@@ -897,7 +903,8 @@ pub struct Tuning {
     pub hp_pct: i32,
     pub power: i32,
     pub armor: i32,
-    pub speed: i32,
+    /// The world tuning key `speed`: an initiative delta (U1.2-S3c; the move rate is left as built).
+    pub initiative: i32,
     pub ap: i32,
 }
 
@@ -1039,7 +1046,8 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     BuiltUnit { unit: u, pouch_unloaded, loadout_error }
 }
 
-/// WorldFactory.apply_character's tuning: max HP by `hp_pct` percent, then power, armour, speed and AP deltas.
+/// WorldFactory.apply_character's tuning: max HP by `hp_pct` percent, then power, armour, initiative (key `speed`) and AP
+/// deltas.
 fn apply_tuning(u: &mut Unit, t: &Tuning) {
     if t.hp_pct != 0 {
         u.max_hp = (roundi(u.max_hp as f64 * (1.0 + t.hp_pct as f64 / 100.0))).max(1);
@@ -1051,8 +1059,8 @@ fn apply_tuning(u: &mut Unit, t: &Tuning) {
     if t.armor != 0 {
         u.armor_override = (crate::damage::armor_rating(u) + t.armor).max(0);
     }
-    if t.speed != 0 {
-        u.speed = (u.speed + t.speed).max(1);
+    if t.initiative != 0 {
+        u.initiative = (u.initiative + t.initiative).max(1);
     }
     if t.ap != 0 {
         u.max_ap = (u.max_ap + t.ap).max(1);
@@ -1080,9 +1088,9 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
         let spend = if e.spend.is_empty() { stats::auto_spend(&arch.unit_shares().growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
         Unit::blank(&e.name, 1, 1, 1, CharacterStats::new(arch, e.level, &spend))
     } else if let Some(arch) = arch {
-        Unit::blank(&e.name, e.hp, e.speed, e.attack_range, CharacterStats::new(arch, e.level, &IndexMap::new()))
+        Unit::blank(&e.name, e.hp, e.initiative, e.attack_range, CharacterStats::new(arch, e.level, &IndexMap::new()))
     } else {
-        Unit::blank(&e.name, e.hp, e.speed, e.attack_range, CharacterStats::new(&classless(), 1, &IndexMap::new()))
+        Unit::blank(&e.name, e.hp, e.initiative, e.attack_range, CharacterStats::new(&classless(), 1, &IndexMap::new()))
     };
     equip(cat, &mut u, e, arch);
     if derived {

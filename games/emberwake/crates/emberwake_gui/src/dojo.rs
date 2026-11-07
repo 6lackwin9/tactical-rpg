@@ -383,7 +383,7 @@ impl Dojo {
             y += 27;
         }
         let c = self.s.carry_now();
-        ui.p.text(b.x as f32 + 3.0, y as f32 + 2.0, &format!("Carry {:.0} / {}  {}", c.load, c.capacity, c.tier.label()), SMALL, if c.speed_penalty > 0 { th().foe } else { th().text });
+        ui.p.text(b.x as f32 + 3.0, y as f32 + 2.0, &format!("Carry {:.0} / {}  {}", c.load, c.capacity, c.tier.label()), SMALL, if c.overload_penalty > 0 { th().foe } else { th().text });
         let bar = Rect::new(b.x + 3, y + 11, b.w - 6, 4);
         let col = match c.tier {
             emberwake_rules::carry::Tier::Light => th().good,
@@ -392,8 +392,8 @@ impl Dojo {
         };
         hp_bar(ui, bar, (c.ratio.min(1.0) * 100.0) as i32, 100, col);
         let help = format!(
-            "Party carry: capacity {} (base {} + STR x3 + CONS per member); load {:.1} = stash {:.1} + worn {:.1} + pouches {:.1}. Light under 75%, Heavy to 100%, Overloaded above: every member -1 speed per 10 over ({}).",
-            c.capacity, emberwake_rules::carry::BASE_CAPACITY, c.load, c.stash_weight, c.equipped_weight, c.pouch_weight, c.speed_penalty
+            "Party carry: capacity {} (base {} + STR x3 + CONS per member); load {:.1} = stash {:.1} + worn {:.1} + pouches {:.1}. Light under 75%, Heavy to 100%, Overloaded above: every member -1 initiative per 10 over, move rate only past initiative 1 ({}).",
+            c.capacity, emberwake_rules::carry::BASE_CAPACITY, c.load, c.stash_weight, c.equipped_weight, c.pouch_weight, c.overload_penalty
         );
         ui.push("dojo.carry", "row", format!("carry {}", c.tier.label()), Rect::new(b.x + 2, y, b.w - 4, 16), true, false, None, tip("Carry", &help));
     }
@@ -447,7 +447,7 @@ impl Dojo {
             ("Melee power", damage::attack_power(u, false, false).attack_power.to_string()),
             ("Ranged power", damage::attack_power(u, true, false).attack_power.to_string()),
             ("Off-hand power", off),
-            ("Speed", u.speed.to_string()),
+            ("Initiative", u.initiative.to_string()),
             ("Max HP", u.max_hp.to_string()),
             ("Armor", damage::armor_rating(u).to_string()),
             ("Burden", u.worn_burden().to_string()),

@@ -460,7 +460,7 @@ fn refusals_are_atomic_and_later_picks_drop() {
     let start = V2::new(4, 4);
     place(&mut s.w, VANGUARD, start);
     place(&mut s.w, ARCHER, V2::new(4, 6));
-    s.w.units[VANGUARD].speed = 20;
+    s.w.units[VANGUARD].initiative = 20;
     let away = V2::new(4, 2);
     pick(&mut s, VANGUARD, RoundTarget::Cell(away), &[Pick::MoveHere(away)]).unwrap();
     pick(&mut s, ARCHER, RoundTarget::Cell(start), &[Pick::MoveHere(start)]).unwrap();

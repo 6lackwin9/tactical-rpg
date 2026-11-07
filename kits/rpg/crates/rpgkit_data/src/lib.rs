@@ -172,7 +172,8 @@ pub struct UnitDef {
     pub spend: IndexMap<String, i32>,
     pub stat_mode: String,
     pub hp: i32,
-    pub speed: i32,
+    /// A fixed-stat row's initiative (the row key `speed`, kept; U1.2-S3c).
+    pub initiative: i32,
     pub attack_range: i32,
     pub ap: i32,
     pub power: i32,
@@ -260,7 +261,7 @@ impl UnitDef {
             spend: int_map(o, "spend"),
             stat_mode: string(o, "stat_mode", "derived"),
             hp: int(o, "hp", 50),
-            speed: int(o, "speed", 12),
+            initiative: int(o, "speed", 12),
             attack_range: int(o, "attack_range", 1),
             ap: int(o, "ap", 0),
             power: int(o, "power", 0),

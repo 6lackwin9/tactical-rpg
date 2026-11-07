@@ -96,7 +96,7 @@ fn snapshot(key: &str, u: &Unit) -> Value {
     json!({
         "key": key, "name": u.name, "catalog_id": u.catalog_id, "tier": u.tier, "level": u.stats.level,
         "hp_scale": u.hp_scale, "power_scale": u.power_scale, "base_stats": base, "stats": stats, "unallocated": u.stats.unallocated,
-        "max_hp": u.max_hp, "speed": u.speed, "attack_range": u.attack_range, "min_attack_range": u.min_attack_range(), "max_ap": u.max_ap,
+        "max_hp": u.max_hp, "initiative": u.initiative, "attack_range": u.attack_range, "min_attack_range": u.min_attack_range(), "max_ap": u.max_ap,
         "move_per_block": u.move_per_block(), "worn_burden": u.worn_burden(), "power_override": u.power_override,
         "armor_override": u.armor_override, "power_melee": damage::power_of(u, false, false),
         "power_ranged": damage::power_of(u, true, false), "power_offhand": damage::power_of(u, false, true),

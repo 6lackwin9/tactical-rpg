@@ -980,7 +980,7 @@ const USAGE: [&str; 30] = [
     "       tier [level]       hero vs its class (or tier_foe=) at minion/standard/elite/boss, 1v1 and 1v3",
     "       levels             class at L vs L+2 for L = 1, 3, 5, 7",
     "       group [level]      hero L vs 3 minions at L-2, 3 standard at L-2, 3 minions at L",
-    "       stats [level|all]  no fights: HP, armor, EHP, power, range, speed, crit, active families",
+    "       stats [level|all]  no fights: HP, armor, EHP, power, range, initiative, move rate, crit, active families",
     "       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
     "       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
     "       sweep [level]      every size-class composition (size=4; lead= fixes one class) vs enc: ranking, swap delta, top-5 appearances",

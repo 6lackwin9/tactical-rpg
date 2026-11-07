@@ -189,7 +189,7 @@ fn the_tick_order_decides_a_tie() {
         let mut res = Resolver::new(BLOCKS, 1);
         let a = book(&mut res, HERO, cmd, attack_at);
         book(&mut res, FOE, walk(FOE, &[v(1, 0)]), walk_at);
-        w.units[FOE].speed = w.units[HERO].speed + 1;
+        w.units[FOE].initiative = w.units[HERO].initiative + 1;
         run(&mut w, &mut res, 1, 3);
         assert_eq!(w.units[FOE].hp < hp, hits, "walk at {walk_at}, attack at {attack_at}: {:?}", res.log);
         assert_eq!(dodged(&res, a, FOE), !hits, "walk at {walk_at}, attack at {attack_at}");
@@ -197,7 +197,7 @@ fn the_tick_order_decides_a_tie() {
     for (walker_faster, hits) in [(true, false), (false, true)] {
         let mut w = world(timeline("melee"));
         let hp = w.units[FOE].hp;
-        w.units[FOE].speed = w.units[HERO].speed + if walker_faster { 1 } else { -1 };
+        w.units[FOE].initiative = w.units[HERO].initiative + if walker_faster { 1 } else { -1 };
         let cmd = hit(&w, HERO, FOE, "tl_cut");
         let mut res = Resolver::new(BLOCKS, 1);
         let a = book(&mut res, HERO, cmd, 1);
@@ -263,7 +263,7 @@ fn a_maneuver_attack_dashes_then_locks() {
         assert_eq!(res.scheduled[a].command.locked, Some((FOE, v(5, 4))));
         if moves {
             book(&mut res, FOE, walk(FOE, &[v(0, 1)]), 2);
-            w.units[FOE].speed = w.units[HERO].speed + 1;
+            w.units[FOE].initiative = w.units[HERO].initiative + 1;
         }
         run(&mut w, &mut res, 2, 2);
         assert_eq!(dodged(&res, a, FOE), moves, "{:?}", res.log);

@@ -199,6 +199,11 @@ impl Proficiency {
     }
 }
 
+/// U1.2-S3c: the move curve (the one speed used): tiles one move covers, `floor((value + 2) / 5)` from 1 to 4.
+pub fn move_rate_curve(value: i32) -> i32 {
+    ((value + 2) as f64 / 5.0).floor().clamp(1.0, 4.0) as i32
+}
+
 #[derive(Debug, Clone)]
 pub struct CharacterStats {
     pub level: i32,
@@ -251,8 +256,19 @@ impl CharacterStats {
         60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2
     }
 
-    pub fn initiative_speed(&self, burden: i32, weapon: Option<&str>) -> i32 {
+    /// U1.2-S3c: initiative, `8 + DEX - burden`, at least 1 (the old speed formula; the unit takes carry overload off
+    /// it as well).
+    pub fn initiative(&self, burden: i32, weapon: Option<&str>) -> i32 {
         (8 + self.stat("DEX", weapon) - burden).max(1)
+    }
+
+    /// U1.2-S3c (U1_STATS feasibility 4): the move rate, `move_rate_curve(8 + DEX - excess)`. `load` (worn burden plus
+    /// carry overload) lowers initiative first; only the part that would take initiative below its floor of 1,
+    /// `excess = max(0, 1 - (8 + DEX - load))`, lowers the move rate.
+    pub fn move_rate(&self, load: i32, weapon: Option<&str>) -> i32 {
+        let free = 8 + self.stat("DEX", weapon);
+        let excess = (1 - (free - load)).max(0);
+        move_rate_curve(free - excess)
     }
 
     pub fn mitigation_rating(&self, gear: i32, weapon: Option<&str>) -> i32 {

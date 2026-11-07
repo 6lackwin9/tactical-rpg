@@ -290,7 +290,7 @@ impl Command {
     }
 
     pub fn initiative(&self, w: &World) -> i32 {
-        self.priority * 1000 + w.units[self.source].speed
+        self.priority * 1000 + w.units[self.source].initiative
     }
 
     pub fn is_defend(&self) -> bool {

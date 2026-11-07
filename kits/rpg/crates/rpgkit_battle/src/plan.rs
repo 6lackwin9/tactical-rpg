@@ -1553,7 +1553,7 @@ impl Plan {
                     if m.to != NO_CELL {
                         blocked.insert(m.to);
                     }
-                    let leaves_first = m.leave == 1 && w.units[other].speed > w.units[c].speed;
+                    let leaves_first = m.leave == 1 && w.units[other].initiative > w.units[c].initiative;
                     if !leaves_first {
                         blocked.insert(start);
                     }
@@ -1581,7 +1581,7 @@ impl Plan {
             }
         }
         godot_sort(&mut units, |a, b| {
-            let (sa, sb) = (w.units[*a].speed, w.units[*b].speed);
+            let (sa, sb) = (w.units[*a].initiative, w.units[*b].initiative);
             sa > sb || (sa == sb && order[a] < order[b])
         });
         for &unit in &units {

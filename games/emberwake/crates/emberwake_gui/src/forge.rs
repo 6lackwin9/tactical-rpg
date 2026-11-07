@@ -154,7 +154,7 @@ impl Forge {
                 if let Some(def) = cat.units.get(id) {
                     let u = emberwake_rules::build_unit(cat, def, 0);
                     line(format!("{}  Lv {} {}", u.name, def.level, def.tier), th().gold);
-                    line(format!("HP {}   Speed {}   Reach {}   AP {}", u.max_hp, u.speed, u.attack_range, u.max_ap), th().text);
+                    line(format!("HP {}   Initiative {}   Reach {}   AP {}", u.max_hp, u.initiative, u.attack_range, u.max_ap), th().text);
                     line(format!("Power {} melee / {} ranged", emberwake_rules::damage::power_of(&u, false, false), emberwake_rules::damage::power_of(&u, true, false)), th().text);
                     line(format!("Armor rating {}   Crit {:.0}%", emberwake_rules::damage::armor_rating(&u), emberwake_rules::damage::crit_chance(&u)), th().text);
                     let gear: Vec<String> = u.inventory.gear().map(|g| g.item.name.clone()).collect();
@@ -207,7 +207,7 @@ impl Forge {
                     let unit = d.character_unit_entry(e);
                     if let Some(def) = (!unit.is_empty()).then(|| emberwake_data::UnitDef::from_obj(&unit)) {
                         let u = emberwake_rules::build_unit(cat, &def, 0);
-                        line(format!("Plays as {}: Lv {} {}, HP {}, speed {}", s(e, "base_unit"), def.level, def.tier, u.max_hp, u.speed), th().text);
+                        line(format!("Plays as {}: Lv {} {}, HP {}, initiative {}", s(e, "base_unit"), def.level, def.tier, u.max_hp, u.initiative), th().text);
                     }
                     let passives = d.character_passives(e, &self.world);
                     if !passives.is_empty() {

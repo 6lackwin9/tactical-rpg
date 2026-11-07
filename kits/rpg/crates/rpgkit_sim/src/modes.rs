@@ -135,10 +135,10 @@ pub fn group(r: &mut Runner, level: i32) {
 /// No fights: per class the derived numbers of the party-side unit (spend / loadout variants apply).
 pub fn stats(r: &mut Runner) {
     let levels: Vec<i32> = if r.args.all_levels { STATS_LEVELS.to_vec() } else { vec![r.args.level] };
-    r.print("STATS: HP, armor rating, reduction %, EHP = HP / (1 - reduction), melee / ranged power, range, speed, crit %, active class families");
+    r.print("STATS: HP, armor rating, reduction %, EHP = HP / (1 - reduction), melee / ranged power, range, initiative, move rate, crit %, active class families");
     r.print(format!(
-        "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
-        "class", "L", "spend", "HP", "armor", "red%", "EHP", "melee", "rngd", "range", "speed", "crit%", "families"
+        "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
+        "class", "L", "spend", "HP", "armor", "red%", "EHP", "melee", "rngd", "range", "init", "move", "crit%", "families"
     ));
     for lvl in levels {
         for &c in r.args.game.classes.ids {
@@ -152,7 +152,7 @@ pub fn stats(r: &mut Runner) {
                 let spend = variants::spend_for(&r.d.cat, &sv, c, lvl);
                 let spend_text = if spend.is_empty() { sv.clone() } else { format!("{sv}{}", variants::spend_text(&spend)) };
                 let line = format!(
-                    "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
+                    "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
                     c,
                     lvl,
                     spend_text,
@@ -163,7 +163,8 @@ pub fn stats(r: &mut Runner) {
                     damage::power_of(&u, false, false),
                     damage::power_of(&u, true, false),
                     u.attack_range,
-                    u.speed,
+                    u.initiative,
+                    u.move_rate,
                     fixed(damage::crit_chance(&u), 1),
                     u.active_class_families.join(",")
                 );

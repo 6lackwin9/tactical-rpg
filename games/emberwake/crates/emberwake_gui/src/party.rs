@@ -263,7 +263,7 @@ fn source_name(cat: &Catalog, src: &str) -> String {
 fn builtin_of(u: &Unit) -> Vec<(&'static str, i64)> {
     vec![
         ("Max HP", u.max_hp as i64),
-        ("Speed", u.speed as i64),
+        ("Initiative", u.initiative as i64),
         ("Tiles per move", u.move_per_block() as i64),
         ("Crit %", damage::crit_chance(u).round() as i64),
         ("Melee power", damage::attack_power(u, false, false).attack_power as i64),
@@ -291,7 +291,7 @@ fn stat_desc(st: &str) -> String {
     use emberwake_rules::stats::{HP_PER_CONS, KNOW_UNLOCK_BASE, KNOW_UNLOCK_STEP, MAX_UNLOCK_REDUCTION, RANGE_PERC_THRESHOLD};
     match st {
         "STR" => "Strength: power with STR weapons, +2 max HP per point, +1 armor per 4 points; unarmed hits use STR + DEX.".into(),
-        "DEX" => "Dexterity: speed (8 + DEX - gear burden), power with DEX weapons and of shots without a ranged weapon.".into(),
+        "DEX" => "Dexterity: initiative (8 + DEX - gear burden) and move rate, power with DEX weapons and of shots without a ranged weapon.".into(),
         "INT" => "Intelligence: debuff resistance (2.5% per point) and power with INT weapons.".into(),
         "CONS" => format!("Constitution: +{HP_PER_CONS} max HP per point."),
         "PERC" => format!("Perception: crit chance +{CRIT_PER_PERC}% per point above {CRIT_PERC_FLOOR}; at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further; power with PERC weapons."),
@@ -306,8 +306,8 @@ fn derived_desc(label: &str) -> String {
     use emberwake_rules::stats::HP_PER_CONS;
     match label {
         "Max HP" => format!("Health: 60 + {HP_PER_CONS} per CONS + 2 per STR."),
-        "Speed" => "Initiative: 8 + DEX - the burden of worn gear; faster units act earlier and move further.".into(),
-        "Tiles per move" => "Tiles one move covers: (speed + 2) / 5, from 1 to 4; haste adds 1, slow takes 1.".into(),
+        "Initiative" => "Initiative: 8 + DEX - the burden of worn gear and carry overload (at least 1); units with more act earlier.".into(),
+        "Tiles per move" => "Tiles one move covers (move rate): (8 + DEX + 2) / 5, from 1 to 4; burden and overload lower it only past initiative 1; haste adds 1, slow takes 1.".into(),
         "Crit %" => format!("Critical hit chance: {CRIT_BASE}% + {CRIT_PER_PERC}% per PERC above {CRIT_PERC_FLOOR}, plus the weapon proficiency bonus."),
         "Melee power" => "Melee hit power: the weapon's power (with tier and proficiency bonuses) + its scaling stat x your proficiency scaling.".into(),
         "Ranged power" => "Ranged hit power, the same way with a ranged weapon; without one, DEX alone.".into(),

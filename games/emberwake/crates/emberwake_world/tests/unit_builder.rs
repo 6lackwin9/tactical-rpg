@@ -126,7 +126,7 @@ fn old_npc(d: &Data, cat: &Catalog, world: &str, character: &Dict, e: &UnitDef, 
         u.armor_override = (emberwake_rules::damage::armor_rating(&u) + key("armor")).max(0);
     }
     if key("speed") != 0 {
-        u.speed = (u.speed + key("speed")).max(1);
+        u.initiative = (u.initiative + key("speed")).max(1);
     }
     if key("ap") != 0 {
         u.max_ap = (u.max_ap + key("ap")).max(1);
@@ -249,7 +249,7 @@ fn any_unit_npc_included_fights_through_the_one_builder() {
         let e = roster.entry(&d.cat, r).expect("its row");
         let want = build_from(&d.cat, UnitBuild { row: &e, default_ap: s.def.unit_ap, deck: s.w.units[s.w.enemies[i]].deck_rule.as_ref(), over: roster.overrides(&d.cat, r), growth: None }).unit;
         let got = &s.w.units[s.w.enemies[i]];
-        assert_eq!((got.max_hp, got.speed, &got.passives, &got.catalog_id), (want.max_hp, want.speed, &want.passives, &want.catalog_id), "enemy {r} is the builder's unit");
+        assert_eq!((got.max_hp, got.initiative, &got.passives, &got.catalog_id), (want.max_hp, want.initiative, &want.passives, &want.catalog_id), "enemy {r} is the builder's unit");
     }
     let mut rounds = 0;
     while !s.combat_over && rounds < 4 {

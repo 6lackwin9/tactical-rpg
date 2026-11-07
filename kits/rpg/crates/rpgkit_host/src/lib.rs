@@ -465,7 +465,7 @@ pub fn state_of(s: &Session) -> Value {
             let p = w.grid.pos(i);
             json!({
                 "id": i, "name": u.name, "side": if w.allies.contains(&i) { "party" } else { "enemy" },
-                "hp": u.hp, "max_hp": u.max_hp, "ap": u.ap, "max_ap": u.max_ap, "speed": u.speed, "range": u.attack_range,
+                "hp": u.hp, "max_hp": u.max_hp, "ap": u.ap, "max_ap": u.max_ap, "speed": u.initiative, "initiative": u.initiative, "move_rate": u.move_rate, "range": u.attack_range,
                 "pos": p.map(|p| json!([p.x, p.y])), "stance": stance_name(u), "level": u.stats.level, "tier": u.tier,
                 "statuses": u.st.active.iter().collect::<Vec<_>>(), "pending": u.st.pending.iter().collect::<Vec<_>>(),
                 "alive": u.is_alive(), "withdrawn": u.is_withdrawn, "target": u.active_target,

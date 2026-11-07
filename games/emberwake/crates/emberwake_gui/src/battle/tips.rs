@@ -542,7 +542,7 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         Some(c) => format!("Level {} {c} ({})", u.stats.level, u.tier),
         None => format!("Level {} {}", u.stats.level, u.tier),
     };
-    t.push((format!("{level}   Speed {}   Reach {}", u.speed, reach_text(w, i)), th().dim));
+    t.push((format!("{level}   Initiative {}   Reach {}", u.initiative, reach_text(w, i)), th().dim));
     if let Some(line) = derived_line(&derived_rows(s, i)) {
         t.push((line, th().dim));
     }

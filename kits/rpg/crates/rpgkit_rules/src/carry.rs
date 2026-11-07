@@ -1,8 +1,9 @@
 //! Party carry (PartyCarry, core/inventory/party_carry.gd): one shared capacity for everything the party owns. Burden is
-//! per unit (worn gear lowers that unit's speed); carry is party-wide:
+//! per unit (worn gear lowers that unit's initiative); carry is party-wide:
 //! capacity = BASE_CAPACITY + every member's STR x 3 + CONS; load = stash + worn gear + battle pouches (item weight).
-//! Light under 75% of capacity, Heavy from 75% to 100% (a warning), Overloaded above it: every member loses 1 speed per
-//! 10 weight over capacity (rounded up).
+//! Light under 75% of capacity, Heavy from 75% to 100% (a warning), Overloaded above it: every member loses 1 point per
+//! 10 weight over capacity (rounded up), off initiative first and off the move rate only past initiative's floor of 1
+//! (U1.2-S3c).
 
 use crate::unit::Unit;
 use rpgkit_data::Catalog;
@@ -37,7 +38,8 @@ pub struct Report {
     pub pouch_weight: f64,
     pub ratio: f64,
     pub tier: Tier,
-    pub speed_penalty: i32,
+    /// Overloaded: the points every member loses, initiative first (then move rate past initiative's floor; U1.2-S3c).
+    pub overload_penalty: i32,
     /// (member name, capacity it adds).
     pub members: Vec<(String, i32)>,
 }
@@ -62,21 +64,21 @@ pub fn evaluate(party: &[Unit], stash_weight: f64) -> Report {
     }
     let load = stash_weight + equipped_weight + pouch_weight;
     let ratio = load / capacity.max(1) as f64;
-    let (tier, speed_penalty) = if ratio > 1.0 {
+    let (tier, overload_penalty) = if ratio > 1.0 {
         (Tier::Overloaded, ((load - capacity as f64) / OVERLOAD_STEP).ceil() as i32)
     } else if ratio >= HEAVY_RATIO {
         (Tier::Heavy, 0)
     } else {
         (Tier::Light, 0)
     };
-    Report { capacity, load, stash_weight, equipped_weight, pouch_weight, ratio, tier, speed_penalty, members }
+    Report { capacity, load, stash_weight, equipped_weight, pouch_weight, ratio, tier, overload_penalty, members }
 }
 
-/// PartyCarry.apply: evaluates and gives every member the overload speed penalty.
+/// PartyCarry.apply: evaluates and gives every member the overload penalty (initiative first; U1.2-S3c).
 pub fn apply(cat: &Catalog, party: &mut [Unit], stash_weight: f64) -> Report {
     let report = evaluate(party, stash_weight);
     for u in party.iter_mut() {
-        u.carry_speed_penalty = report.speed_penalty;
+        u.carry_penalty = report.overload_penalty;
         u.sync_from_stats_and_gear(cat);
     }
     report

@@ -159,7 +159,7 @@ fn a_dodge_counts_for_the_swinger_and_not_as_lost() {
     place(&mut s.w, FOE, V2::new(6, 4));
     assault(&mut s, BLADE, "strike", FOE);
     confirm(&mut s);
-    s.w.units[FOE].speed = s.w.units[BLADE].speed + 1;
+    s.w.units[FOE].initiative = s.w.units[BLADE].initiative + 1;
     let step = rpgkit_battle::command::CmdKind::Walk { path: vec![V2::new(1, 0)], expected_start: rpgkit_battle::grid::NO_CELL, goal: rpgkit_battle::grid::NO_CELL, approach: None, moved_tiles: 0, cut_short: false, blocked_by: String::new() };
     assert!(s.resolver.schedule(FOE, rpgkit_battle::command::Command::new(FOE, 0, 1, step), 1));
     play_out(&mut s);

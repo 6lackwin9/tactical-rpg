@@ -520,7 +520,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let derived = derived_rows(s, h);
         let mut derived_at = None;
         let mut stats = |lines: &mut Vec<(String, Rgba)>| {
-            lines.push((format!("Speed {}  Reach {}", u.speed, reach_text(w, h)), th().text));
+            lines.push((format!("Initiative {}  Reach {}", u.initiative, reach_text(w, h)), th().text));
             if let Some(line) = derived_line(&derived) {
                 derived_at = Some(lines.len());
                 lines.push((line, th().text));
