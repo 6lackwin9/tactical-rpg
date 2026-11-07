@@ -1,0 +1,15 @@
+{
+  "id": "timeline_fight",
+  "title": "A fight on the Timeline ruleset plays to its end on screen",
+  "launch": {"screen": "arena", "encounter": "tl_flank", "seed": 7, "ruleset": "timeline"},
+  "timeout_s": 600,
+  "steps": [
+    {"step": "wait", "until": {"path": "state.ruleset.id", "eq": "timeline"}},
+    {"step": "shot", "name": "start"},
+    {"step": "key", "key": "a"},
+    {"step": "clip", "name": "playing", "frames": 12, "every_ms": 250, "max_w": 960},
+    {"step": "wait", "until": {"path": "state.outcome", "ne": ""}, "timeout_ms": 240000},
+    {"step": "assert", "until": {"path": "state.outcome", "eq": "won"}},
+    {"step": "shot", "name": "end"}
+  ]
+}

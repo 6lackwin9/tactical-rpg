@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check,
-#                                docs --all, tooltests
+#                                docs --all, tooltests, plannertests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
-#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt)
+#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt);
+#                                kit src names no class id of a game as a string literal (games/<id>/data/catalog/classes.json)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
 #   tools/fc.sh docs [--all]     warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint. Files changed against the merge base
 #                                with origin/develop, staged or untracked; --all (the gate and the flush): every file
-#   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow
+#   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow;
+#                                then the tools/planner tests (plain Python, no Pillow)
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
+#   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
+#                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
+#   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
+#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
+#                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
+#                                (0 pass, 1 a step failed, 2 could not start); never in the gate
+#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
+#                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
 # The Godot-only commands (parse, parse-all, arena, dojo, run, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
@@ -28,6 +38,16 @@ fi
 
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete the blocked exe so the next
 # run relinks it, up to 3 tries (engine/docs/PORT_NOTES.md).
+# The lines worth reading from a cargo test run: results, failures and errors, and under each "panicked at" line the message
+# that follows it (up to the first blank line, at most 6 lines), so a failure can be read without a second raw run (SKILLS1).
+test_summary() {
+  awk '
+    msg > 0 { if ($0 == "" || /^(test |thread |failures:|---- )/) msg = 0; else { print "    " $0; msg--; next } }
+    /panicked at/ { print; msg = 6; next }
+    /^test result|FAILED|^error|checked|diverge|compared|os error|frames that changed/ { if ($0 !~ / 0 passed; 0 failed/) print }
+  '
+}
+
 cargo_test() {
   local out try
   for try in 1 2 3 4; do
@@ -39,7 +59,7 @@ cargo_test() {
     fi
     break
   done
-  echo "$out" | grep -E "^test result|FAILED|panicked|^error|checked|diverge|compared|os error|frames that changed" | grep -v " 0 passed; 0 failed"
+  echo "$out" | test_summary
   echo "$out" | grep -qE "test result: FAILED|^error|os error 4551" && status=1
 }
 
@@ -95,14 +115,19 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
 }
 
-tools_python() {  # prints a Python that imports Pillow, or nothing; the WindowsApps `python` aliases are stubs, never probed
+python_with() {  # $1 = a Python statement; prints the first Python 3 that runs it, or nothing; the WindowsApps `python`
+  # aliases are stubs, never probed
   local c p
   for c in "${LOCALAPPDATA//\//}"/Programs/Python/Python3*/python.exe python3 python py; do
     p=$(command -v "$c") || continue
     case "$p" in *WindowsApps*) continue ;; esac
-    if "$p" -c "import PIL" >/dev/null 2>&1; then echo "$p"; return 0; fi
+    if "$p" -c "import sys; assert sys.version_info[0] == 3; $1" >/dev/null 2>&1; then echo "$p"; return 0; fi
   done
   return 1
+}
+
+tools_python() {  # prints a Python that imports Pillow, or nothing
+  python_with "import PIL"
 }
 
 kill_tree() {  # $1 = a background job started by tooltests. Windows: taskkill /T /F ends the native process and every descendant
@@ -136,6 +161,16 @@ tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT se
     tail -n 40 "$log"; echo "[tooltests] FAIL: tools/tiles tests, exit code $code"; status=1
   fi
   rm -f "$log"
+}
+
+plannertests() {  # the tools/planner script tests (SKILLS1-FB): plain Python, no Pillow; no Python at all is a visible SKIP
+  local py out
+  if ! py=$(python_with "pass"); then echo "[plannertests] SKIP: no Python 3 found, tools/planner tests did not run"; return 0; fi
+  if out=$(cd tools/planner && "$py" -m unittest -q 2>&1); then
+    echo "[plannertests] ok: $(echo "$out" | grep -E '^Ran [0-9]+ test') (tools/planner)"
+  else
+    echo "$out" | tail -n 40; echo "[plannertests] FAIL: tools/planner tests"; status=1
+  fi
 }
 
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
@@ -188,7 +223,27 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       bad=1
     fi
   done
-  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word (CLAUDE.md Layers)"; status=1; fi
+  # G4 (KITIDS1, SILOS1 T4): kit code assumes no class of a game: the entry ids of games/<id>/data/catalog/classes.json
+  # (the writer's form: one `"id"` line per entry, three tabs in) as a whole string literal ("<id>"), exact case. Scope:
+  # kit src (kit tests build their own classes; comments name no literal); the game passes its classes (SimGame.classes).
+  local cf cs
+  for id in "${ids[@]}"; do
+    cf="games/$id/data/catalog/classes.json"
+    [ -f "$cf" ] || continue
+    cs=$(tr -d '\r' < "$cf" | sed -n 's/^\t\t\t"id": "\([^"]*\)",\{0,1\}$/\1/p' | sed 's/[][\.*^$+?(){}|/]/\\&/g' | paste -sd'|')
+    if [ -z "$cs" ]; then  # a format the extraction does not know must not pass the check silently
+      echo "[layers] $cf: no class id found (expected the writer's form: one \"id\" line per entry, three tabs in)"
+      bad=1
+      continue
+    fi
+    if hits=$(git grep --untracked -n -I -E -e "\"($cs)\"" -- 'kits/*/crates/*/src/*'); then
+      echo "$hits" | head -20 | awk -v g="$id" -v cs="$cs" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t)
+        match(t, "\"(" cs ")\""); x = substr(t, RSTART, RLENGTH); c = RSTART > 40 ? RSTART - 40 : 1
+        printf "[layers] %s:%s names class id %s of game %s: %s\n", f[1], f[2], x, g, substr(t, c, 120) }'
+      bad=1
+    fi
+  done
+  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word and no class id"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word or class id (CLAUDE.md Layers)"; status=1; fi
 }
 
 gate() {
@@ -202,6 +257,7 @@ gate() {
   [ "$(echo "$out" | grep -c '^\[docs\] WARN')" -eq 0 ] || echo "[docs] $(echo "$out" | grep -c '^\[docs\] WARN') size warning(s)"
   [ $status -ne 0 ] && return
   tooltests; [ $status -ne 0 ] && return
+  plannertests; [ $status -ne 0 ] && return
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -209,8 +265,37 @@ aegis() {  # the CLI, built on demand
   cargo run -q -p emberwake_host -- "$@"
 }
 
+scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
+  local a rest=() rel=()
+  if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  local verb=run
+  if [ "$1" = "shots" ]; then
+    verb=shots; shift
+    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
+  fi
+  for a in "$@"; do
+    case "$a" in
+      profile=release) rel=(--release) ;;
+      profile=dev) ;;
+      profile=*) echo "[scenario] profile is dev or release"; status=2; return ;;
+      *) rest+=("$a") ;;
+    esac
+  done
+  cargo build -q -p emberwake_gui -p emberwake_host "${rel[@]}" || { echo "[scenario] FAIL: the build"; status=2; return; }
+  cargo run -q -p emberwake_host "${rel[@]}" -- scenario "$verb" "${rest[@]}" || status=$?
+}
+
+# Low-power laptop (CPU1): cargo runs below normal priority on the desktop, so the machine stays usable; children inherit it.
+case "$1" in gate|build|test|clippy)
+  [ -z "${CI:-}" ] && [ -r /proc/$$/winpid ] && powershell -NoProfile -Command "(Get-Process -Id $(cat /proc/$$/winpid)).PriorityClass='BelowNormal'" 2>/dev/null ;;
+esac
+
 case "$1" in
-  gate) gate ;;
+  gate)  # on the desktop a full gate joins the planner's queue, one heavy run at a time (CPU1)
+    heavy="tools/planner/heavy.sh"
+    [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
+    gate ;;
   build) build ;;
   test) cargo_test "${@:2}" ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
@@ -219,13 +304,15 @@ case "$1" in
       ""|--all) docs_check "${2:-}" || status=1 ;;
       *) echo "usage: tools/fc.sh docs [--all]"; status=1 ;;
     esac ;;
-  tooltests) tooltests ;;
+  tooltests) tooltests; plannertests ;;
   layers) layers_check ;;
   content) aegis content "${@:2}" || status=1 ;;
+  rules) aegis rules "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
+  scenario) scenario "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,16p' "$0"; status=1 ;;
+  *) sed -n '2,20p' "$0"; status=1 ;;
 esac
 exit $status

@@ -6,7 +6,7 @@
 
 use crate::battle::board::cell_rect;
 use crate::battle::input::pick_detail;
-use crate::battle::marks::{broken_units, hit_forecasts, round_summary_text, span_parts, HitForecast};
+use crate::battle::marks::{broken_units, hit_forecasts, round_summary_text, HitForecast};
 use crate::battle::overlays::{overlay_of, strike_tile, Layers, MoveKind, OVERLAY_GROUPS};
 use crate::battle::{BattleScreen, Mode, TILE};
 use crate::battle::tips::{intent_glyph, unit_tip};
@@ -46,8 +46,8 @@ fn assault(cx: &Cx, b: &mut BattleScreen) -> (usize, usize) {
     (h, foe)
 }
 
-/// The preference (user 2026-10-30): every group is at its default (on, but VISCLAR1's `first_move` and
-/// `all_bars`); the settings key switches one off and the board stops drawing it; the state lists the flags.
+/// The preference (user 2026-10-30): every group is at its default (on, but VISCLAR1's `all_bars` and the
+/// testing groups); the settings key switches one off and the board stops drawing it; the state lists the flags.
 #[test]
 fn each_overlay_group_has_its_flag() {
     let all = Layers::of(&Value::Null);
@@ -124,7 +124,7 @@ fn intent_names_read_the_games_terms() {
         let rec = emberwake_battle::intent::Intent { unit: d, line, revealed: false, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1,
             round_intent: Some(RoundIntent::Assault), round_target: Some(RoundTarget::Unit(f)), maneuver: None, impacts: Vec::new() };
         assert_eq!(intent_text::round_head(w, &rec), Some(format!("{assault}: {}", w.units[f].name)));
-        let opt = |i: RoundIntent, kind: Option<ManeuverKind>| rip::PickOption { picks: Vec::new(), intent: Some(i), kind, ap: 2, blocks: 2, problem: None, ap_short: None, drops: Vec::new() };
+        let opt = |i: RoundIntent, kind: Option<ManeuverKind>| rip::PickOption { picks: Vec::new(), intent: Some(i), kind, ap: 2, blocks: 2, problem: None, ap_short: None, drops: Vec::new(), at: RoundTarget::Myself };
         assert_eq!(pick_detail(&w.cat, &opt(RoundIntent::Assault, None)), format!("2 blocks, 2 AP; {assault}"));
         assert_eq!(pick_detail(&w.cat, &opt(RoundIntent::Maneuver, Some(ManeuverKind::Engage))), format!("2 blocks, 2 AP; {maneuver} (Engage)"));
         assert_eq!(ri::target_problem(w, d, RoundIntent::Assault, RoundTarget::Myself), format!("{assault} targets an enemy or a tile."), "the kit's intent text");
@@ -156,7 +156,7 @@ fn a_disengage_retreat_keeps_the_band_on_the_strike_tile() {
 
 /// RULESET1 5, 12: under the rule poise the hover card tells the bar; a planned hit's strip tip carries the kit's
 /// forecast of it (`poise::forecast` on the target's bar now, flank from its strike tile); a unit broken this round
-/// is listed for its BREAK plate; the strip's spans carry wind-up then impact parts for a command that winds up.
+/// is listed for its BREAK plate.
 #[test]
 fn poise_breaks_parts_and_forecasts_follow_the_kit() {
     let (mut cx, mut g, mut b) = arena(false);
@@ -166,17 +166,10 @@ fn poise_breaks_parts_and_forecasts_follow_the_kit() {
     let w = &s(&b).w;
     let bar = *emberwake_battle::poise::state(w, foe).unwrap();
     let tip = unit_tip(s(&b), foe, Some(h), &[], &[], &[]);
-    assert!(tip.iter().any(|t| t.0.starts_with(&format!("Poise {}/{}", bar.value, bar.max))), "{tip:?}");
-    let st = s(&b).plan.compile(w, h);
-    let spans = span_parts(s(&b), h, &st.entries.iter().map(|e| (e.start_block, e.end_block(w), String::new(), String::new(), None, 0, 0)).collect::<Vec<_>>());
-    for (sp, e) in spans.iter().zip(&st.entries) {
-        let winds = emberwake_battle::poise::winds_up(&e.build_command(w, h)) && e.end_block(w) > e.start_block;
-        let styles: Vec<aegis_ui::timeline::PartStyle> = sp.parts.iter().map(|p| p.style).collect();
-        assert_eq!(!styles.is_empty(), winds, "{styles:?}");
-        if winds {
-            assert_eq!((sp.parts[0].start, sp.parts[0].end, sp.parts[1].start), (e.start_block, e.end_block(w) - 1, e.end_block(w)));
-        }
-    }
+    // S2.2-S3: in pips under poise_mode pips
+    let n = &w.ruleset.numbers;
+    let want = if emberwake_battle::poise::pips_mode(n) { format!("Poise pips {}/{}", bar.pips, n.poise_pips) } else { format!("Poise {}/{}", bar.value, bar.max) };
+    assert!(tip.iter().any(|t| t.0.starts_with(&want)), "{tip:?}");
     assert!(broken_units(w, &Layers::of(&Value::Null)).is_empty(), "nobody broke yet");
     b.host.session.as_mut().unwrap().w.poise.get_mut(&foe).unwrap().broken = true;
     assert_eq!(broken_units(&s(&b).w, &Layers::of(&Value::Null)), vec![foe]);
@@ -208,8 +201,11 @@ fn forecasts_follow_the_kit_hit_by_hit() {
         let want = emberwake_battle::poise::forecast(w, &sess.resolver.scheduled, f, bar, e.end_block(w), &cmd.impact, cmd.block_cost, ri::flank_bonus_from(w, d, strike_tile(e), f), cmd.ignore_guard);
         assert_eq!(h.fc, want, "entry {k}");
         bar.value = want.after;
+        if emberwake_battle::poise::pips_mode(&w.ruleset.numbers) {
+            bar.pips = want.pips_after;
+        }
         if matches!(want.verdict, emberwake_battle::poise::Verdict::Breaks(_)) {
-            (bar.value, bar.broken) = (0, true);
+            (bar.value, bar.pips, bar.broken) = (0, 0, true);
         }
     }
     assert!(hits[0].1.fc.windup, "the first lands in the footman's wind-up");
@@ -254,6 +250,8 @@ fn card_and_token_glyphs_agree_in_playback() {
     assault(&cx, &mut b);
     let r = b.send(&cx, json!({"cmd": "confirm"}));
     assert_eq!(r["ok"], json!(true), "{r}");
+    // VISCLAR1-D: the token's plate shows while Alt is held (the ring tells the intent otherwise)
+    cx.held.alt = true;
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     let rounds = s(&b).round_intents();
     let mut checked = 0;

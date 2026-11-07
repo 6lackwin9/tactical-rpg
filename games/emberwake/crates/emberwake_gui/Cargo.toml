@@ -16,6 +16,7 @@ emberwake_battle = { path = "../emberwake_battle" }
 emberwake_host = { path = "../emberwake_host" }
 emberwake_world = { path = "../emberwake_world" }
 aegis_ui = { path = "../../../../engine/crates/aegis_ui" }
+aegis_layout = { path = "../../../../engine/crates/aegis_layout" }
 aegis_content = { path = "../../../../engine/crates/aegis_content" }
 aegis_host = { path = "../../../../engine/crates/aegis_host" }
 aegis_save = { path = "../../../../engine/crates/aegis_save" }

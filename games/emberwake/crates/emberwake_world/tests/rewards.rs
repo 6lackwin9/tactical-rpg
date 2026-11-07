@@ -26,17 +26,10 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 /// A scratch copy of the shipped data; `edits` are (world or None, kind, id, {field: value}) merged into entries.
-struct Scratch(PathBuf);
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+use aegis_core::scratch::Scratch;
 
 fn scratch(name: &str, edits: &[(Option<&str>, &str, &str, Value)]) -> (Scratch, Data) {
-    let tmp = std::env::temp_dir().join(format!("aegis_rewards_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = Scratch::vacant(&format!("rewards_{name}"));
     for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
@@ -58,7 +51,7 @@ fn scratch(name: &str, edits: &[(Option<&str>, &str, &str, Value)]) -> (Scratch,
         store::upsert(&tmp, *world, kind, &e, None).unwrap_or_else(|err| panic!("{kind} {id}: {err:?}"));
     }
     let d = Data::open(&tmp).unwrap().0;
-    (Scratch(tmp), d)
+    (tmp, d)
 }
 
 fn envelope(gs: &GameState, version: i64) -> Dict {
@@ -428,7 +421,7 @@ fn a_won_hold_battle_captures_the_holder_and_names_it_in_the_flag() {
     let (mut party, mut members) = (Vec::new(), Vec::new());
     for m in gs.party.active_members() {
         let f = roster::field_unit(&d, &gs, m, &world).expect("a start member takes the field");
-        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone() });
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
         members.push((m.id.clone(), f.pouch_unloaded));
     }
     assert!(members.len() >= 2, "a holder and someone to escape: {members:?}");

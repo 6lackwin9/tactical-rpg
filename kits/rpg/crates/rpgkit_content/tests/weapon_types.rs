@@ -60,7 +60,7 @@ fn families() -> Value {
 
 #[test]
 fn a_family_named_after_a_new_type_passes_the_gear_token_rule() {
-    let t = std::env::temp_dir().join(format!("rpgkit_weapon_types_{}", std::process::id()));
+    let t = aegis_core::scratch::Scratch::vacant("rpgkit_weapon_types");
     let _ = fs::remove_dir_all(&t);
     let data: PathBuf = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();

@@ -2,6 +2,7 @@
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
 
+use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
@@ -12,6 +13,7 @@ use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
 use emberwake_rules::damage;
 use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
 use emberwake_rules::gear::TIER_SOURCE;
+use emberwake_rules::unit::GEAR_EFFECT_SOURCE;
 use emberwake_rules::Unit;
 use emberwake_world::state::{off_hand_ok, UnitState, LOADOUT_SLOTS, POUCH_MAX};
 use emberwake_world::{progression, Data};
@@ -233,14 +235,25 @@ fn part_text(p: &derived::Part) -> String {
 /// The name of a modifier source (`derived::Part::source`): the item, passive or status it came from.
 fn source_name(cat: &Catalog, src: &str) -> String {
     let item = |id: &str| cat.items.get(id).map(|i| i.name.clone()).unwrap_or_else(|| id.to_string());
+    // a worn item's grant (`<item>`, `<item>:tier<n>`, `<item>:mastery`): the item, its tier or its family mastery
+    let grant = |rest: &str| -> String {
+        if let Some((id, n)) = rest.split_once(":tier") {
+            return format!("{} {}", item(id), roman(n.parse().unwrap_or(0)));
+        }
+        match rest.strip_suffix(":mastery") {
+            Some(id) => format!("{} mastery", item(id)),
+            None => item(rest),
+        }
+    };
     if let Some(id) = src.strip_prefix(derived::STATUS_SOURCE).and_then(|s| s.strip_prefix(':')) {
         return emberwake_rules::status::display_name(id);
     }
+    // AUDIT-05: a worn item's stat effect names its grant (`gear_effect:gear:<item>...`), never the raw kind
+    if let Some(rest) = src.strip_prefix(GEAR_EFFECT_SOURCE).and_then(|s| s.strip_prefix(':')) {
+        return grant(rest.strip_prefix("gear:").unwrap_or(rest));
+    }
     if let Some(rest) = src.strip_prefix("passive:gear:") {
-        return match rest.split_once(":tier") {
-            Some((id, n)) => format!("{} {}", item(id), roman(n.parse().unwrap_or(0))),
-            None => item(rest),
-        };
+        return grant(rest);
     }
     if let Some(id) = src.strip_prefix("passive:") {
         return cat.passives.get(id).map(|p| p.name.clone()).unwrap_or_else(|| id.to_string());
@@ -253,6 +266,7 @@ fn source_name(cat: &Catalog, src: &str) -> String {
     }
     match src {
         "gear" => "Gear".into(),
+        GEAR_EFFECT_SOURCE => "Worn item effects".into(),
         TIER_SOURCE => "Gear tiers".into(),
         _ => src.to_string(),
     }
@@ -262,7 +276,7 @@ fn source_name(cat: &Catalog, src: &str) -> String {
 fn builtin_of(u: &Unit) -> Vec<(&'static str, i64)> {
     vec![
         ("Max HP", u.max_hp as i64),
-        ("Speed", u.speed as i64),
+        ("Initiative", u.initiative as i64),
         ("Tiles per move", u.move_per_block() as i64),
         ("Crit %", damage::crit_chance(u).round() as i64),
         ("Melee power", damage::attack_power(u, false, false).attack_power as i64),
@@ -286,14 +300,14 @@ fn columns(ui: &mut Ui<PAct>, cols: &[(f32, &str)], gap: f32) -> Vec<(f32, f32)>
 
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
 fn stat_desc(st: &str) -> String {
-    use emberwake_rules::damage::{CRIT_DEX_FLOOR, CRIT_PER_DEX};
+    use emberwake_rules::damage::{CRIT_PER_PERC, CRIT_PERC_FLOOR};
     use emberwake_rules::stats::{HP_PER_CONS, KNOW_UNLOCK_BASE, KNOW_UNLOCK_STEP, MAX_UNLOCK_REDUCTION, RANGE_PERC_THRESHOLD};
     match st {
         "STR" => "Strength: power with STR weapons, +2 max HP per point, +1 armor per 4 points; unarmed hits use STR + DEX.".into(),
-        "DEX" => format!("Dexterity: speed (8 + DEX - gear burden), crit chance +{CRIT_PER_DEX}% per point above {CRIT_DEX_FLOOR}, power with DEX weapons and of shots without a ranged weapon."),
+        "DEX" => "Dexterity: initiative (8 + DEX - gear burden) and move rate, power with DEX weapons and of shots without a ranged weapon.".into(),
         "INT" => "Intelligence: debuff resistance (2.5% per point) and power with INT weapons.".into(),
         "CONS" => format!("Constitution: +{HP_PER_CONS} max HP per point."),
-        "PERC" => format!("Perception: at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further; power with PERC weapons."),
+        "PERC" => format!("Perception: crit chance +{CRIT_PER_PERC}% per point above {CRIT_PERC_FLOOR}; at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further."),
         "KNOW" => format!("Knowledge: from {KNOW_UNLOCK_BASE}, every {KNOW_UNLOCK_STEP} points open skill families one level earlier (up to {MAX_UNLOCK_REDUCTION} levels)."),
         _ => String::new(),
     }
@@ -301,13 +315,13 @@ fn stat_desc(st: &str) -> String {
 
 /// What a derived value (`derived` labels) means, for the detail pane.
 fn derived_desc(label: &str) -> String {
-    use emberwake_rules::damage::{ARMOR_K, CRIT_BASE, CRIT_DEX_FLOOR, CRIT_PER_DEX};
+    use emberwake_rules::damage::{ARMOR_K, CRIT_BASE, CRIT_PER_PERC, CRIT_PERC_FLOOR};
     use emberwake_rules::stats::HP_PER_CONS;
     match label {
         "Max HP" => format!("Health: 60 + {HP_PER_CONS} per CONS + 2 per STR."),
-        "Speed" => "Initiative: 8 + DEX - the burden of worn gear; faster units act earlier and move further.".into(),
-        "Tiles per move" => "Tiles one move covers: (speed + 2) / 5, from 1 to 4; haste adds 1, slow takes 1.".into(),
-        "Crit %" => format!("Critical hit chance: {CRIT_BASE}% + {CRIT_PER_DEX}% per DEX above {CRIT_DEX_FLOOR}, plus the weapon proficiency bonus."),
+        "Initiative" => "Initiative: 8 + DEX - the burden of worn gear and carry overload (at least 1); units with more act earlier.".into(),
+        "Tiles per move" => "Tiles one move covers (move rate): (8 + DEX + 2) / 5, from 1 to 4; burden and overload lower it only past initiative 1; haste adds 1, slow takes 1.".into(),
+        "Crit %" => format!("Critical hit chance: {CRIT_BASE}% + {CRIT_PER_PERC}% per PERC above {CRIT_PERC_FLOOR}, plus the weapon proficiency bonus."),
         "Melee power" => "Melee hit power: the weapon's power (with tier and proficiency bonuses) + its scaling stat x your proficiency scaling.".into(),
         "Ranged power" => "Ranged hit power, the same way with a ranged weapon; without one, DEX alone.".into(),
         "Armor" => format!("Armor rating: gear mitigation + STR / 4; it cuts damage taken by rating / (rating + {ARMOR_K})."),
@@ -354,7 +368,9 @@ impl DeckTerms {
         let cat = &d.cat;
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
-        let of_slot = |slot: &str| -> Vec<String> { m.passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
+        // FB-63 (2): the re-gathered list, as the equip check and validate read it
+        let owned_passives = progression::member_passives(d, m);
+        let of_slot = |slot: &str| -> Vec<String> { owned_passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
         let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
         let mut work = m.clone();
         work.deck = Deck::default();
@@ -999,7 +1015,7 @@ impl Character {
                 let m = self.m(cx);
                 let left = m.unspent(&d) - self.draft.values().sum::<i64>();
                 if let (Some(arch), true) = (d.cat.classes.get(&m.class_id(&d)), left > 0) {
-                    for (k, v) in emberwake_rules::stats::auto_spend(&arch.growth, left as i32) {
+                    for (k, v) in emberwake_rules::stats::auto_spend(&arch.unit_shares().growth, left as i32) {
                         if v > 0 {
                             *self.draft.entry(k).or_insert(0) += v as i64;
                         }
@@ -1353,6 +1369,10 @@ fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: 
 }
 
 impl Screen<GameCx> for Character {
+    /// At rest only the portrait moves, and slowly.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Within(SLOW_LIFE)
+    }
     fn id(&self) -> &'static str {
         "character"
     }
@@ -1588,10 +1608,12 @@ impl Character {
             ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
             ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
-        let names: Vec<String> = m.passives.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
+        // the re-gathered list (FB-63 (2); a hero's temperament is not in the save)
+        let owned = progression::member_passives(d, m);
+        let names: Vec<String> = owned.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
         ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
-        let about: Vec<String> = m.passives.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
+        let about: Vec<String> = owned.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
         ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
     }
@@ -1724,10 +1746,26 @@ impl Character {
         ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
         ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
+        // AUDIT-05 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
+        let worn: Vec<String> = u.gear_skills.clone();
+        let total = owned.len() + worn.len();
         const ROWS: usize = 6;
-        self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
-        if self.scroll > 0 || owned.len() > ROWS {
-            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
+        self.scroll = self.scroll.min(total.saturating_sub(ROWS));
+        if self.scroll > 0 || total > ROWS {
+            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(total), total), SMALL, th().dim);
+        }
+        for (k, id) in worn.iter().enumerate().map(|(j, id)| (owned.len() + j, id)).filter(|(k, _)| (self.scroll..self.scroll + ROWS).contains(k)) {
+            let y = 118 + (k - self.scroll) as i32 * 22;
+            let f = cat.family_of(id).to_string();
+            let top = u.selectable_ranks(cat, &f).last().copied().unwrap_or(1);
+            let row = row_of(&f, top).or_else(|| cat.tier_one(&f));
+            let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
+            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::Slot(f.clone()), false);
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  {ap} AP  from worn gear", fam_name(&f)), BODY, 238.0, th().gold);
+            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
+            let card = vec![(fam_name(&f), th().gold), (format!("Skill from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
+            ui.push(format!("skills.worn.{id}"), "row", fam_name(&f), Rect::new(366, y, 238, 20), true, false, None, card);
         }
         for (k, f) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
             let y = 118 + k as i32 * 22;
@@ -1956,10 +1994,22 @@ impl Character {
             ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
             ui.drop_target("deck.list");
             let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
+            // U3.2-S4 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
+            let worn: Vec<String> = built.as_ref().map(|u| u.gear_skills.clone()).unwrap_or_default();
+            let total = owned.len() + worn.len();
             const ROWS: usize = 7;
-            self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
-            if self.scroll > 0 || owned.len() > ROWS {
-                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
+            self.scroll = self.scroll.min(total.saturating_sub(ROWS));
+            if self.scroll > 0 || total > ROWS {
+                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(total), total), SMALL, th().dim);
+            }
+            for (k, id) in worn.iter().enumerate().map(|(j, id)| (owned.len() + j, id)).filter(|(k, _)| (self.scroll..self.scroll + ROWS).contains(k)) {
+                let y = 118 + (k - self.scroll) as i32 * 22;
+                let (name, intent, ap, _, desc) = skill_of(cat.family_of(id));
+                ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::DeckView("owned"), false);
+                ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{name}  [{intent}]  {ap} AP  from worn gear"), BODY, 238.0, th().gold);
+                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
+                let card = vec![(name.clone(), th().gold), (format!("{intent} skill from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
+                ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(366, y, 238, 20), true, false, None, card);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
                 let y = 118 + k as i32 * 22;
@@ -2032,12 +2082,18 @@ impl Character {
             });
             let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
             let label = format!("{}: {name}", title_case(slot));
+            // U3.2-S3 (FB-34): the worn item's wield penalty, as the built unit fights with it
+            let badge = shown.as_ref().and_then(|i| d.cat.items.get(i)).and_then(|def| wield_badge(built.as_ref().map(|b| &b.unit), def));
+            let note = badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default();
             let card = match (&explicit, &shown) {
-                (Some(item), _) => item_tip(d, item, "Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it."),
-                (None, Some(item)) => item_tip(d, item, "Class default gear: drag an item from the stash onto this slot to replace it."),
+                (Some(item), _) => item_tip(d, item, &format!("Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it.{note}")),
+                (None, Some(item)) => item_tip(d, item, &format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}")),
                 (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
             };
             ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            if let Some((b, _)) = &badge {
+                ui.p.text_right((mx + mw - 3) as f32, y as f32 + 2.0, b, SMALL, th().foe);
+            }
             if explicit.is_some() {
                 ui.draggable(format!("equip.{slot}"));
             }
@@ -2085,7 +2141,18 @@ impl Character {
                 (None, "Not wearable.")
             };
             let movable = act.is_some();
-            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, help));
+            // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty
+            // carries the badge, and its card says why
+            let badge = wield_badge(built.as_ref().map(|b| &b.unit), def);
+            let help = match &badge {
+                Some((_, n)) => format!("{help} {n}"),
+                None => help.to_string(),
+            };
+            let y = 116 + row as i32 * 15;
+            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
+            if let Some((b, _)) = &badge {
+                ui.p.text_right((sx + sw - 5) as f32, y as f32 + 2.0, b, SMALL, th().foe);
+            }
             if movable {
                 ui.draggable(format!("stash.{id}"));
             }
@@ -2162,6 +2229,25 @@ fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
 }
 
 /// An item's hover card: its name, then its description (tokens filled), its numbers and what a click or drag does.
+/// U3.2-S3 (FB-34, mock): the wield penalty `unit` wears `item` under (the rules' reading, `Equipment::wield_penalty`:
+/// the stat-deficit ramp and proficiency 0, stacking) as a badge (the power and armour factor, "x0.75") and a card
+/// sentence; None for an item it wears free, or no unit.
+fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -> Option<(String, String)> {
+    let u = unit.filter(|_| item.is_equipment())?;
+    let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&u.stats);
+    if !pen.penalized {
+        return None;
+    }
+    let mut why = Vec::new();
+    if pen.untrained {
+        why.push(format!("untrained in {} (x{}, +{} burden)", item.weapon_type.replace('_', " "), pen.untrained_mult, pen.burden_add));
+    }
+    if pen.deficit > 0 {
+        why.push(format!("{} stat point{} short (-{}%)", pen.deficit, if pen.deficit == 1 { "" } else { "s" }, (pen.ratio * 100.0).round()));
+    }
+    Some((format!("x{:.2}", pen.factor()), format!("Wield penalty: weapon power and armour x{:.2}; {}.", pen.factor(), why.join("; "))))
+}
+
 fn item_tip(d: &Data, id: &str, help: &str) -> aegis_ui::ui::Tip {
     let Some(def) = d.cat.items.get(id) else { return tip(id, help) };
     let desc = d.item_description(id);
@@ -2321,19 +2407,22 @@ mod tests {
         assert_eq!(m.pouch.len(), POUCH_MAX - 1);
     }
 
-    /// UnitState._gear_errors: a class without training in a weapon type can't wear it (clicks, drops and Confirm).
+    /// U3.2-S3 (FB-34): a class without training in a weapon type wears it (clicks, drops and Confirm), under the
+    /// wield penalty, which the slot's badge shows.
     #[test]
-    fn a_class_without_training_cannot_wear_the_weapon() {
+    fn a_class_without_training_wears_the_weapon_under_the_penalty() {
         let (d, mut m, mut st) = setup();
         let class = d.cat.classes.get(&m.class_id(&d)).unwrap().clone();
         let prof = emberwake_rules::stats::Proficiency::from_class(&class);
         let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
         untrained.sort();
-        let item = untrained.first().expect("a weapon this class has no training in").to_string();
-        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand").unwrap_err();
-        assert!(err.contains("no training"), "{err}");
-        m.equipment.insert("main_hand".into(), item);
-        assert!(m.validate(&d).iter().any(|e| e.contains("no training")), "Confirm refuses it too");
+        let item = untrained.into_iter().find(|id| !m.trains(&d, id)).expect("a weapon this member has no training in").to_string();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand").unwrap();
+        assert_eq!(m.equipment.get("main_hand"), Some(&item));
+        assert!(m.validate(&d).is_empty(), "Confirm takes it: {:?}", m.validate(&d));
+        let built = progression::build_with(&d, &m, "", false).unwrap();
+        let (badge, note) = wield_badge(Some(&built.unit), &d.cat.items[&item]).expect("a penalty badge");
+        assert!(badge.starts_with('x') && note.contains("untrained"), "{badge} {note}");
     }
 
     /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)").
@@ -2363,7 +2452,8 @@ mod tests {
     #[test]
     fn a_two_handed_weapon_and_a_focus_exclude_each_other() {
         let (d, _, mut st) = setup();
-        let base = d.cat.units.values().filter(|u| u.class_id == "mage" && u.side == "party").map(|u| u.id.clone()).min().expect("a party mage");
+        // The plain class row, by id: a named mage such as a founder may start with a two-handed weapon of its own.
+        let base = d.cat.units.get("mage").map(|u| u.id.clone()).expect("the mage row");
         let mut m = UnitState::create("test_mage", &base);
         let wear = |m: &UnitState, slot: &str, f: &dyn Fn(&emberwake_data::ItemDef) -> bool| {
             let mut ids: Vec<&String> = d.cat.items.iter().filter(|(id, i)| f(i) && m.can_wear(&d, id, slot).is_ok()).map(|(id, _)| id).collect();
@@ -2754,9 +2844,17 @@ mod tests {
     /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
     /// member.
     fn deck_cx(deck: bool) -> (Cx, String) {
+        // The test bed (decision "Ashlands is a test bed"), by name: a pick by rule follows whichever world sorts first,
+        // and sunk_ward's empty class paths leave a member no actives. It plays classic, so the deck case gives this
+        // test's own copy of its manifest the timeline row.
+        const WORLD: &str = "ashlands";
         let mut cx = crate::hud::hud_tests::game_cx();
-        let w = cx.data.world_ids().into_iter().find(|w| emberwake_rules::DeckRule::of(&cx.data.ruleset(w)).is_some() == deck).expect("a world");
-        cx.gs_mut().world_id = w;
+        if deck {
+            let manifest = &mut std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data").catalogs.worlds.get_mut(WORLD).expect("the world").manifest;
+            manifest.insert("ruleset".into(), json!(emberwake_rules::ruleset::TIMELINE));
+        }
+        assert_eq!(emberwake_rules::DeckRule::of(&cx.data.ruleset(WORLD)).is_some(), deck, "{WORLD} under the wanted rule");
+        cx.gs_mut().world_id = WORLD.into();
         let member = cx.gs().party.members[0].id.clone();
         (cx, member)
     }
@@ -2825,6 +2923,84 @@ mod tests {
             assert_eq!(n, t.order(&shown, intent).len(), "{intent}: one entry per skill of its order");
         }
         assert_laid_out(&c, "order view");
+    }
+
+    /// U3.2-S4 (OFFHAND1): a worn item's skill shows read-only under the basics (open while worn, no slot), never among
+    /// the actives, and goes when the item comes off. The skill effect is test-only, on this test's own data.
+    #[test]
+    fn under_the_deck_rule_a_worn_items_skill_shows_read_only_and_takes_no_slot() {
+        let (mut cx, member) = deck_cx(true);
+        let world = cx.gs().world_id.clone();
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let owned = m.owned_families_anywhere(&cx.data);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the member does not own");
+        let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
+        rings.sort();
+        let ring = rings[0].clone();
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        std::sync::Arc::make_mut(&mut data.cat).items.get_mut(&ring).unwrap().effects.push(json!({"type": "skill", "skill": skill}));
+        assert!(std::sync::Arc::ptr_eq(&cx.data.cat, cx.data.cat_in(&world)), "{world} builds with the base catalog");
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.insert("accessory_1".into(), ring);
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        let t = c.terms.clone().expect("deck terms");
+        assert!(c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "the worn skill shows");
+        assert!(!t.shown(&c.deck).active.iter().any(|f| f == cx.data.cat.family_of(&skill)), "it takes no active slot");
+        assert_laid_out(&c, "worn skills");
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.shift_remove("accessory_1");
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
+    }
+
+    /// AUDIT-05 (OFFHAND1) on the classic Skills tab: a worn item's skill closes the owned list read-only (open while
+    /// worn, no slot) and goes when the item comes off. The skill effect is test-only, on this test's own data.
+    #[test]
+    fn the_classic_skills_tab_shows_a_worn_items_skill_read_only() {
+        let (mut cx, member) = deck_cx(false);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let owned = m.owned_families_anywhere(&cx.data);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the member does not own");
+        let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
+        rings.sort();
+        let ring = rings[0].clone();
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        std::sync::Arc::make_mut(&mut data.cat).items.get_mut(&ring).unwrap().effects.push(json!({"type": "skill", "skill": skill}));
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.insert("accessory_1".into(), ring);
+        let mut c = Character::new(&cx, &member, "skills");
+        // the worn rows close the list: scroll to its end (clamped to the last page)
+        c.scroll = usize::MAX;
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(c.terms.is_none(), "classic");
+        assert!(c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "the worn skill shows");
+        let worn = c.w.iter().find(|w| w.id == format!("skills.slot.worn.{skill}")).expect("its Worn chip");
+        assert!(!worn.enabled, "read-only: no slot");
+        let r = rect_of(&c, &format!("skills.worn.{skill}"));
+        assert!(r.x >= 310 && r.x + r.w <= 604 && r.y >= 114 && r.y + r.h <= 272, "inside the owned list: {r:?}");
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.shift_remove("accessory_1");
+        let mut c = Character::new(&cx, &member, "skills");
+        c.scroll = usize::MAX;
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
+    }
+
+    /// AUDIT-05: a derived-stat breakdown names a worn item's stat effect by its item (its tier, its family mastery),
+    /// never the raw `gear_effect` source; the bare kind reads as worn item effects.
+    #[test]
+    fn a_breakdown_names_the_item_behind_a_worn_stat_effect() {
+        let cx = crate::hud::hud_tests::game_cx();
+        let cat = &cx.data.cat;
+        let mut ids: Vec<&String> = cat.items.keys().collect();
+        ids.sort();
+        let (id, name) = (ids[0].clone(), cat.items[ids[0]].name.clone());
+        let src = |grant: &str| emberwake_rules::unit::gear_effect_source(grant);
+        assert_eq!(source_name(cat, &src(&format!("gear:{id}"))), name);
+        assert_eq!(source_name(cat, &src(&format!("gear:{id}:tier2"))), format!("{name} II"));
+        assert_eq!(source_name(cat, &src(&format!("gear:{id}:mastery"))), format!("{name} mastery"));
+        assert_eq!(source_name(cat, GEAR_EFFECT_SOURCE), "Worn item effects");
+        for grant in [format!("gear:{id}"), format!("gear:{id}:tier2"), format!("gear:{id}:mastery")] {
+            assert!(!source_name(cat, &src(&grant)).contains(GEAR_EFFECT_SOURCE), "{grant}");
+        }
     }
 
     /// D3-D6 end to end: the member owns a slottable passive and keystone (shipped rows picked by `slot`); slotting

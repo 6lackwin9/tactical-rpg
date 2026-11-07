@@ -3,6 +3,7 @@
 //! tone, paint order, wear, strays, bites, sunken rims, the two cache levels, `soft_ellipse`, the Gallery view and the
 //! tools' job file; then random and placed patches and marks.
 
+use aegis_core::scratch::Scratch;
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
 use aegis_ui::ground::{self, GroundJob, GroundKey, GroundLayer, GroundMark, PlacedPatch, CELL_MAX, CELL_PX, LAYERS_MAX, MARKS_PER_100_MAX, MARK_PX_MAX, PATCHES_MAX, PHYSICAL_MAX, TEX_CELLS, TILTED_CELL};
 use aegis_ui::painter::{Fonts, Painter, View};
@@ -961,9 +962,8 @@ fn the_gallery_ground_view_draws_every_view_and_zoom_clean() {
     assert_eq!(ground::ground_composes(), c0);
 }
 
-fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_ground_{}_{name}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+fn scratch(name: &str) -> Scratch {
+    let dir = Scratch::new(&format!("ground_{name}"));
     dir
 }
 

@@ -14,7 +14,16 @@
 				"pierce",
 				"reach",
 				"flank",
-				"plan_badges"
+				"plan_badges",
+				"forced_move",
+				"ground_hazards",
+				"arena_hazards",
+				"triggers",
+				"unit_meters",
+				"hp_cost",
+				"ignore_guard",
+				"ai_tactics",
+				"execute"
 			],
 			"intents": [
 				"assault",
@@ -53,7 +62,9 @@
 			"chase": "every_skill",
 			"root_stops_chase": "on",
 			"switch_target_step": "off",
-			"stances": "off"
+			"stances": "off",
+			"attack_lock": "none",
+			"poise_mode": "pips"
 		},
 		{
 			"id": "classic",
@@ -85,7 +96,8 @@
 			"chase": "classic",
 			"root_stops_chase": "off",
 			"switch_target_step": "on",
-			"stances": "on"
+			"stances": "on",
+			"attack_lock": "none"
 		}
 	]
 }

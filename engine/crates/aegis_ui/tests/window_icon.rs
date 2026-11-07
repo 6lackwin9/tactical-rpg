@@ -1,17 +1,16 @@
 //! ICON1: the window icon from the manifest's path: the size bound, no path, a missing file and a bad file.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::canvas::Image;
 use aegis_ui::icon::{fit, window_icons, ICON_MAX, WINDOWS_SMALL};
-use std::path::PathBuf;
 
 fn image(w: i32, h: i32) -> Image {
     Image { w, h, px: [200, 150, 40, 255].repeat((w * h) as usize) }
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_window_icon_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn scratch(name: &str) -> Scratch {
+    let dir = Scratch::vacant(&format!("window_icon_{name}"));
     std::fs::create_dir_all(dir.join("ui")).unwrap();
     dir
 }
@@ -55,7 +54,7 @@ fn no_path_means_no_icon_and_no_notice() {
 #[test]
 fn a_named_file_no_layer_holds_is_a_notice() {
     let dir = scratch("missing");
-    let err = window_icons(&Layers::of(vec![dir.clone()]), "ui/none.png").err().expect("a notice");
+    let err = window_icons(&Layers::of(vec![dir.to_path_buf()]), "ui/none.png").err().expect("a notice");
     assert!(err.contains("ui/none.png"), "{err}");
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -65,7 +64,7 @@ fn a_bad_file_is_a_notice_not_a_crash() {
     let dir = scratch("bad");
     std::fs::write(dir.join("ui/bad.png"), b"not a png at all").unwrap();
     std::fs::write(dir.join("ui/empty.png"), b"").unwrap();
-    let layers = Layers::of(vec![dir.clone()]);
+    let layers = Layers::of(vec![dir.to_path_buf()]);
     for rel in ["ui/bad.png", "ui/empty.png"] {
         assert!(window_icons(&layers, rel).is_err(), "{rel}");
     }
@@ -76,7 +75,7 @@ fn a_bad_file_is_a_notice_not_a_crash() {
 fn a_good_file_is_found_over_the_layers() {
     let (first, second) = (scratch("first"), scratch("second"));
     write_png(&second.join("ui/mark.png"), 300, 300);
-    let layers = Layers::of(vec![first.clone(), second.clone()]);
+    let layers = Layers::of(vec![first.to_path_buf(), second.to_path_buf()]);
     assert!(matches!(window_icons(&layers, "ui/mark.png"), Ok(Some(_))));
     let _ = std::fs::remove_dir_all(first);
     let _ = std::fs::remove_dir_all(second);

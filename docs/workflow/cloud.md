@@ -2,6 +2,15 @@
 
 Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`). Shared rules: `CLAUDE.md`, skills `planner` and `planner-ops`. Differences from the desktop and the switching checklist: [README.md](README.md). Decided by the user 2026-10-17 (decisions "Cloud workflow" and "Environment split" in `docs/decisions/workflow.md`).
 
+## Two-session split in the cloud (since 2026-11-07)
+
+Under decision "Two-session split: Design and Build" (`2026-11-07`), cloud sessions operate as the **Build Session** while the **Design Session** (desktop `C:/dev/tactical-rpg-dev` or remote Gemini session on `develop`) owns all specs and shared docs:
+
+- **Entry point**: Read `docs/READY.md` (and the specific specs it names), `docs/STRUCTURE.md`, and `engine/README.md`. Build **only** items marked `ready-to-build` in `docs/READY.md` Section 1 and run read-only audits on `feasibility-check` items in Section 2.
+- **Sole writer of**: `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (plus crate-local READMEs where appropriate), and code/data commits on `claude/<task>` branches squashed onto `origin/develop` after `change-reviewer`, `tools/fc.sh gate`, and `tools/fc.sh docs`.
+- **Never edit**: `docs/READY.md`, `docs/specs/MASTERPLAN1.md`, `docs/sessions/*.md`, `docs/specs/*`, `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `games/emberwake/docs/MILESTONES.md`, `docs/DECISIONS.md` (`docs/decisions/*`, `games/emberwake/docs/decisions/*`), `docs/HISTORY.md`, or shared READMEs (`README.md`, `GAME_BRIEF.md`, `STRUCTURE.md`, `CLAUDE.md`). Instead, record build status, feasibility findings, spec questions (`FB-nn` / `UN-nn`), and docs deltas in `docs/FEEDBACK.md` for the Design Session to apply.
+- Where the older sections below refer to editing `docs/TASKS.md`, `ROADMAP.md`, `decisions/*`, or `HISTORY.md` directly inside a task commit, the two-session split rules above supersede them.
+
 ## Sessions
 
 - **Project chat (coordinator)**: the front desk. The user asks there; it routes each ask to the matching area thread and relays follow-ups. It does not edit the repo. It rotates at about 120k context like the area threads ("Fresh sessions" below) and takes no turn on routine thread status pings; the user drives it mainly through skills (user 2026-10-18, decision "Coordinator and assets cutbacks").
@@ -62,7 +71,7 @@ The thread is the planner (lane table: skill `planner`). It writes the planner d
 5. The squash commit title starts with the task id; its body says what changed and ends with the `Review:` line, for example `Review: change-reviewer clean` or `Review: change-reviewer 1 high (fixed), 2 nits accepted`, and `Gate: fc.sh gate passed` (docs-only: `Gate: fc.sh docs passed (docs-only)`). No task lands without both lines. It also carries a `Timing:` and a `Blocked-by:` line ("Task timing" below), one `AgentMap: | <agent> | <task> | <tokens> / <min> | <outcome> |` line per agent run (the `docs/AGENT_MAP.md` row), and one `Done: | <id> | <title> | <lane> | <depends on> | done | <spec> | <touches> |` line (the `docs/archive/TASKS_DONE.md` row).
 6. Not approved: a small change waits on its pushed task branch and goes to the user as a question in the thread; a large one waits for the user's feedback before work starts. Rows in `spec` or `idea` status and any design question that comes up mid-task go to the user.
 7. Patch notes: no message needed. The Merge & Release thread writes `PATCH_NOTES.md` once per release batch and when the user asks (decision "Patch notes per release"). Trial threads still send their own trial messages (for example `landed <id> <sha> model=<m>` to Platform for the Sonnet trial).
-8. Never push to `main`. Leave the task branch on the remote; the `branch-cleanup` workflow deletes it once its work is on `develop` ("Branch cleanup" below).
+8. Never push to `main`. After pushing the squash commit to `origin/develop`, fast-forward the task branch to a merge commit recording `origin/develop` (`git push origin $(git commit-tree "origin/develop^{tree}" -p origin/<task-branch> -p origin/develop -m "Close <task-branch> (squash-landed on develop)"):refs/heads/<task-branch>`) so `git branch -r --merged origin/develop` and the `branch-cleanup` workflow see it as merged and delete it automatically after the 6-hour age window ("Branch cleanup" below).
 
 ## Batched release to `main` (Merge & Release thread)
 
@@ -113,7 +122,7 @@ Work is time the thread is building, reviewing, gating or fixing; wait is time t
 
 ## Branch cleanup
 
-Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.github/workflows/branch-cleanup.yml` runs daily at 19:37 UTC and on request (**Actions > branch-cleanup > Run workflow**, optional dry run): it deletes every branch except `main`, `develop` and `engine` that has no open PR (this keeps the release branch while its PR is open), has had no commit for 6 hours, and is either the head of a merged PR or already contained in `develop` (squash-landed branches whose files later changed on `develop` are not detected; delete those by name with `also_delete` after checking their content is on `develop`); branches with work not on `develop` are kept and listed in the run summary. Do not turn on the repository setting "Automatically delete head branches": the release PR's head is `develop`, so it would be deleted at every release.
+Cloud sessions cannot delete remote branches (the proxy refuses ref deletes). `.github/workflows/branch-cleanup.yml` runs daily at 19:37 UTC and on request (**Actions > branch-cleanup > Run workflow**, optional dry run): it deletes every branch except `main`, `develop` and `engine` that has no open PR (this keeps the release branch while its PR is open), has had no commit for 6 hours, and is either the head of a merged PR or already contained in `develop` (squash-landed branches closed with `git commit-tree "origin/develop^{tree}" -p origin/<branch> -p origin/develop` per step 8 above are detected as ancestors of `develop`; any older unclosed squash branch whose files later changed on `develop` can be closed the same way or deleted by name with `also_delete`); branches with work not on `develop` are kept and listed in the run summary. Do not turn on the repository setting "Automatically delete head branches": the release PR's head is `develop`, so it would be deleted at every release.
 
 ## Scheduled routines
 
@@ -126,6 +135,6 @@ Paused in interactive mode (user 2026-10-18 16:28 UTC): the daily planner pass a
 
 ## Environment
 
-- Rust stable and PowerShell 7 come from the environment setup script (copy: `/mnt/project-files/cloud-setup/environment-setup-script.sh` in the project files; it may still install only PowerShell (and Godot, no longer used): then the repo hook installs Rust with rustup); `.claude/hooks/session-start.sh` installs what is missing, sets `RUSTUP_TOOLCHAIN=stable` and `CARGO_TARGET_DIR`. `github.com`, `sh.rustup.rs` and `static.rust-lang.org` must stay allowed in the environment's network policy.
+- Rust stable and PowerShell 7 come from the environment setup script (copy: `/mnt/project-files/cloud-setup/environment-setup-script.sh` in the project files; it may still install only PowerShell (and Godot, no longer used): then the repo hook installs Rust with rustup); `.claude/hooks/session-start.sh` installs what is missing (including the ALSA headers `libasound2-dev` and `pkg-config` when `pkg-config --exists alsa` fails), sets `RUSTUP_TOOLCHAIN=stable` and `CARGO_TARGET_DIR`. `github.com`, `sh.rustup.rs` and `static.rust-lang.org` must stay allowed in the environment's network policy.
 - Web build: none on the engine yet; the Godot web export (`web.yml`, paused since 2026-10-17) was removed with the Godot build (it stays on the `legacy` branch, [web.md](web.md)).
 - No interactive play. For UI work, run `emberwake` under Xvfb and use its agent link's `screenshot` (`xvfb-run -a -s "-screen 0 1280x720x24" "$CARGO_TARGET_DIR/release/emberwake" screen=runner`, then `aegis link '{"cmd":"screenshot","path":"out.png"}'`; not yet tried in a cloud container) and attach the frames to the thread reply. Playtesting feel, input and audio stays on desktop.

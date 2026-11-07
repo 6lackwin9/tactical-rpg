@@ -163,11 +163,10 @@ fn a_two_block_action_winds_up_from_the_confirm_and_strikes_from_its_strike_fram
     assert_eq!(a.player.frame(&k, 1000 + intro).unwrap().frame, 3, "the hold from loop_from");
     assert_eq!(bare.anims[u].player.base(), "idle", "no rows: idle as before");
     // step until the action pops
-    let root = std::env::temp_dir().join(format!("emberwake_windup_strike_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = aegis_core::scratch::Scratch::vacant("emberwake_windup_strike");
     write_body(&root, "test/windup", &rows(&[]));
     write_body(&root, "test/bare", &rows(&["windup", "windup_heavy", "windup_buff", "windup_debuff", "stagger", "dazed"]));
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     // play on until an action over one block pops live (its wind-up shown) and check its strike
     let mut now = 1000;
     let mut struck = None;
@@ -400,7 +399,7 @@ fn the_amber_outline_shows_only_during_a_windup() {
 
 /// The Test Arena on `goblin_ambush` whose every unit's body is a scratch body with the section 4 rows (layered
 /// over the game's art).
-fn windup_arena(tag: &str) -> (crate::screens::Cx, aegis_ui::ui::Gfx, BattleScreen, std::path::PathBuf) {
+fn windup_arena(tag: &str) -> (crate::screens::Cx, aegis_ui::ui::Gfx, BattleScreen, aegis_core::scratch::Scratch) {
     let mut cx = crate::hud::hud_tests::game_cx();
     let game = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     cx.art = Art::new(Some(game.clone()));
@@ -408,8 +407,7 @@ fn windup_arena(tag: &str) -> (crate::screens::Cx, aegis_ui::ui::Gfx, BattleScre
     cx.app.seed = Some(1);
     cx.settings.v["battle_view"] = json!("flat");
     let b = BattleScreen::sandbox(&cx);
-    let root = std::env::temp_dir().join(format!("emberwake_windup_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = aegis_core::scratch::Scratch::vacant(&format!("emberwake_windup_{tag}"));
     let s = b.host.session.as_ref().unwrap();
     for (i, u) in s.w.units.iter().enumerate() {
         if let Some(key) = cx.art.first_body(&crate::battle::tokens::body_keys(&s.art[i], u)) {
@@ -417,7 +415,7 @@ fn windup_arena(tag: &str) -> (crate::screens::Cx, aegis_ui::ui::Gfx, BattleScre
         }
     }
     let mut layers = Layers::for_game(&game);
-    layers.roots.insert(0, root.clone());
+    layers.roots.insert(0, root.to_path_buf());
     cx.art = Art::layered(layers);
     (cx, crate::hud::hud_tests::gfx(), b, root)
 }

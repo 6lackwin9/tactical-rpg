@@ -41,7 +41,8 @@ pub fn encounter_def_in(d: &Data, gs: &GameState, world: &str, entry: &Dict) -> 
 }
 
 /// WorldEncounter's roster: refs are world characters resolved in `world`; each spawns as its base unit wearing the
-/// character (WorldFactory.unit_entry) and then gets its named items, passives and tuning (apply_character).
+/// character (WorldFactory.unit_entry) and then gets its named items, passives and tuning (`character_overrides`, in
+/// the one builder).
 pub struct WorldRoster<'a> {
     pub d: &'a Data,
     pub world: String,
@@ -53,17 +54,12 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
         (!e.is_empty()).then(|| rpgkit_data::UnitDef::from_obj(&e))
     }
 
-    fn customize(&self, cat: &rpgkit_data::Catalog, r: &str, u: &mut rpgkit_rules::Unit) {
-        // HOOKS1 CN3: a class whose path the world's overlay replaces is rebuilt from the world's catalog (same name,
-        // deck rule and AP; the AP is kept because the session's default AP is not known here)
-        if let Some(mut e) = self.entry(cat, r).filter(|e| json::get(self.d.class_overlay(&self.world, &e.class_id), "skill_path").is_object()) {
-            e.name = u.name.clone();
-            let (max_ap, ap) = (u.max_ap, u.ap);
-            let deck = u.deck_rule.clone();
-            *u = rpgkit_rules::build_unit_in(self.d.cat_in(&self.world), &e, 0, deck.as_ref());
-            (u.max_ap, u.ap) = (max_ap, ap);
-        }
-        apply_character(self.d, cat, self.d.resolve(&self.world, "characters", r), &self.world, u);
+    /// U2.2-S2 (FB-12): the character's overrides (`character_overrides`), built from the world's catalog (HOOKS1 CN3:
+    /// the class path of the world playing the battle; the battle's catalog when the world replaces no path).
+    fn overrides(&self, _cat: &rpgkit_data::Catalog, r: &str) -> rpgkit_rules::Overrides {
+        let mut over = character_overrides(self.d, self.d.resolve(&self.world, "characters", r), &self.world);
+        over.path_cat = Some(self.d.cat_in(&self.world).clone());
+        over
     }
 
     fn tier(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
@@ -107,54 +103,20 @@ pub fn named_item(d: &Data, item_entry: &Dict) -> Option<rpgkit_data::ItemDef> {
     Some(rpgkit_data::ItemDef::from_obj(&base))
 }
 
-/// WorldFactory.apply_character: named items worn, lore passives applied, vitals re-derived when geared (derived
-/// units only), then the tuning deltas.
-pub fn apply_character(d: &Data, cat: &rpgkit_data::Catalog, character: &Dict, world: &str, u: &mut rpgkit_rules::Unit) {
-    let mut geared = false;
-    for r in json::aget(character, "named_items") {
-        let item_entry = d.resolve(world, "items", &json::gstr(r));
-        if item_entry.is_empty() {
-            continue;
-        }
-        if let Some(item) = named_item(d, item_entry).filter(|i| i.is_equipment()) {
-            let slot = rpgkit_rules::gear::Slot::parse(&item.slot).unwrap_or(rpgkit_rules::gear::Slot::MainHand);
-            u.inventory.equip(rpgkit_rules::gear::Equipment::new(&item), slot);
-            geared = true;
-        }
-    }
-    for id in d.character_passives(character, world) {
-        if let Some(p) = cat.passives.get(&id) {
-            u.apply_passive(cat, p);
-        }
-    }
-    let base_unit = d.entry("units", &json::s(character, "base_unit"));
-    if geared && json::s_or(base_unit, "stat_mode", "fixed") == "derived" {
-        u.sync_from_stats_and_gear(cat);
-        u.hp = u.max_hp;
-    }
+/// WorldFactory.apply_character as data (U2.2-S2, FB-12): what world character `character` of `world` wears over its
+/// base unit in the one builder (`rpgkit_rules::build_from`): its gathered passives (`Data::character_passives`, FB-28's
+/// order), its named items and its tuning's five keys.
+pub fn character_overrides(d: &Data, character: &Dict, world: &str) -> rpgkit_rules::Overrides {
+    let named_items = json::aget(character, "named_items")
+        .iter()
+        .map(|r| d.resolve(world, "items", &json::gstr(r)))
+        .filter(|e| !e.is_empty())
+        .filter_map(|e| named_item(d, e))
+        .collect();
     let tuning = json::dget(character, "tuning");
-    let hp_pct = json::i(tuning, "hp_pct", 0);
-    if hp_pct != 0 {
-        u.max_hp = (json::roundi(u.max_hp as f64 * (1.0 + hp_pct as f64 / 100.0)) as i32).max(1);
-        u.hp = u.max_hp;
-    }
-    let power = json::i(tuning, "power", 0) as i32;
-    if power != 0 {
-        u.power_override = (rpgkit_rules::damage::power_of(u, u.attack_range > 1, false) + power).max(1);
-    }
-    let armor = json::i(tuning, "armor", 0) as i32;
-    if armor != 0 {
-        u.armor_override = (rpgkit_rules::damage::armor_rating(u) + armor).max(0);
-    }
-    let speed = json::i(tuning, "speed", 0) as i32;
-    if speed != 0 {
-        u.speed = (u.speed + speed).max(1);
-    }
-    let ap = json::i(tuning, "ap", 0) as i32;
-    if ap != 0 {
-        u.max_ap = (u.max_ap + ap).max(1);
-        u.ap = u.max_ap;
-    }
+    let key = |k: &str| json::i(tuning, k, 0) as i32;
+    let tuning = rpgkit_rules::Tuning { hp_pct: key("hp_pct"), power: key("power"), armor: key("armor"), initiative: key("speed"), ap: key("ap") };
+    rpgkit_rules::Overrides { passives: d.character_passives(character, world), named_items, tuning, path_cat: None }
 }
 
 /// One enemy of an encounter's roster (REWARD1 2.1): its key `ref#n` (n counts that ref's earlier roster entries),

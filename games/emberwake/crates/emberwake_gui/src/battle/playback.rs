@@ -47,6 +47,25 @@ impl PlaySpeed {
     }
 }
 
+/// VISCLAR1-D: the round banner's fade in, hold and fade out (ms of the FX clock).
+pub(super) const ROUND_BANNER_MS: (u64, u64, u64) = (140, 760, 300);
+
+/// VISCLAR1-D: the round banner's alpha `age` ms after its round started (0: gone); `still` (skip animations, reduce
+/// motion) shows it whole for as long, with no fade.
+pub(super) fn round_banner_alpha(age: u64, still: bool) -> u8 {
+    let (fade_in, hold, fade_out) = ROUND_BANNER_MS;
+    let total = fade_in + hold + fade_out;
+    if age >= total {
+        0
+    } else if still || (age >= fade_in && age < fade_in + hold) {
+        255
+    } else if age < fade_in {
+        (255 * age / fade_in) as u8
+    } else {
+        (255 * (total - age) / fade_out) as u8
+    }
+}
+
 impl BattleScreen {
     /// The board catches up with the battle after a request: the HP changes become floats and hit flashes, new log
     /// lines their sounds, the tokens follow (`sync_anims`). FX1-L1: a pending impact fires first (rule F); a single
@@ -564,6 +583,33 @@ impl BattleScreen {
         }
         self.tokens.poses = s.w.units.iter().enumerate().map(|(i, u)| cx.art.first_body(&body_keys(&s.art[i], u)).and_then(|b| cx.art.clips(&b).map(PoseSet::of)).unwrap_or_default()).collect();
         true
+    }
+
+    /// VISCLAR1-D: the banner is still on its time (FX clock).
+    pub(super) fn round_banner_alive(&self) -> bool {
+        let (fade_in, hold, fade_out) = ROUND_BANNER_MS;
+        self.banner.is_some_and(|b| self.clock.now().saturating_sub(b.1) < fade_in + hold + fade_out)
+    }
+
+    /// VISCLAR1-D: a party card's pips have not yet landed on its unit's AP (FX clock).
+    pub(super) fn pips_moving(&self) -> bool {
+        let Some(s) = self.host.session.as_ref() else { return false };
+        self.card_ap.iter().any(|(a, p)| s.w.units.get(*a).is_some_and(|u| p.level(self.clock.now()) != u.ap as f32))
+    }
+
+    /// VISCLAR1-D: a new round's banner starts, once no talk holds the round's start (timeline battles).
+    pub(super) fn follow_round_banner(&mut self) {
+        let Some(round) = self.host.session.as_ref().filter(|s| emberwake_battle::round_intent::on(&s.w)).map(|s| s.current_round) else { return };
+        if self.banner.is_none_or(|b| b.0 != round) && !self.talk_due() {
+            self.banner = Some((round, self.clock.now()));
+        }
+    }
+
+    /// VISCLAR1-D: the round the banner names and its alpha now (None: no banner showing).
+    pub(super) fn round_banner_now(&self, cx: &Cx) -> Option<(i32, u8)> {
+        let (round, at) = self.banner?;
+        let still = cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion();
+        Some((round, round_banner_alpha(self.clock.now().saturating_sub(at), still))).filter(|b| b.1 > 0)
     }
 
     /// INPUT1 PB1-PB5: the playback aids are on: a timeline battle (the round intent or any ruleset rule, as TV1).

@@ -14,8 +14,6 @@ use rpgkit_rules::stats::roundi;
 use rpgkit_rules::{status, Stance, Unit};
 use serde_json::Value;
 
-pub const COUNTER_MULT: f64 = 0.5;
-
 #[derive(Debug, Clone)]
 pub struct Reaction {
     pub defender: UnitId,
@@ -50,7 +48,10 @@ pub enum CmdKind {
         crit_hits: Vec<(UnitId, bool)>,
     },
     Defend {
+        /// The guard fraction (S1.2-S4: the skill's, or the ruleset default, `skill::guard_mitigation`).
         mitigation: f64,
+        /// S1.2-S4: the rounds the guard lasts; 2 or more queues the `guard` status for the later rounds at the impact.
+        guard_rounds: i32,
         grant_status: String,
         status_rounds: i32,
         extra_grants: Vec<Value>,
@@ -133,6 +134,8 @@ pub struct Command {
     /// lands at its last `block_cost` block and occupies `recovery` more.
     pub recovery: i32,
     pub name: String,
+    /// VISCLAR1-B: the catalog id of the skill it runs ("" for an item or a command built by hand); names are not unique.
+    pub skill: String,
     pub ap_cost: i32,
     pub stance_switch_cost: i32,
     pub stance_on_start: Option<Stance>,
@@ -154,11 +157,16 @@ pub struct Command {
     pub intent_buff: bool,
     /// RULESET1_INTENT MV4: the carried move (Carry::None in classic and for every other command).
     pub carry: Carry,
+    /// Decision "Auto-fill keeps a flank": planned to stay on its flank or behind tile (`round_intent::keeps_flank`).
+    pub keep_flank: bool,
     /// RULESET1 5, 7: the skill's stagger, windup poise, unbreakable, sure break and armour piercing (read only under
     /// the rules `poise` and `pierce`).
     pub impact: crate::poise::Impact,
     /// RULESET1 P11: the windup poise this action added at its start (taken off when it lands or is cancelled).
     pub poise_bonus: i32,
+    /// S2.2-S3 (FB-71): the windup bonus pips this action added at its start under `poise_mode` pips (taken off with
+    /// `poise_bonus`; 0 under `bar`).
+    pub poise_bonus_pips: i32,
     /// RULESET1 P4: the units the last execution damaged, in hit order, each with whether the hit was a flank (MV3).
     pub hits: Vec<(UnitId, bool)>,
     /// RULESET1 P6-P14: what the last execution's hits did to poise (rule `poise` only; see `poise::resolve_hits`).
@@ -175,7 +183,7 @@ pub struct Command {
     pub triggers: Vec<rpgkit_data::TriggerRow>,
     /// HOOKS1 8.1: the damaging hits of the last execution, a redirected part included (rule `triggers` reads them).
     pub struck: Vec<crate::trigger::Struck>,
-    /// HOOKS1 8.1 `evaded`: the locked target the last execution did not find (GD5).
+    /// HOOKS1 8.1 `evaded`: the locked target the last execution did not find (GD5) or that dodged it (ATTACKLOCK1).
     pub evaded: Option<UnitId>,
     /// HOOKS1 8.4: the `ally_hit` triggers the hits consult (set by the resolver before the action lands; rule
     /// `triggers` only).
@@ -205,6 +213,19 @@ pub struct Command {
     pub missed: bool,
     /// INPUT1 MR12: the board event of the move the command made at its start (None = it did not move).
     pub moved: Option<MoveKind>,
+    /// SIMCOUNT1: `on_start` ran. A record for the feel sim; no rule reads it.
+    pub started: bool,
+    /// SIMCOUNT1: the start moved the unit by a dash, of a skill with a position or a plain `dash_tiles`. A record for the
+    /// feel sim; no rule reads it (`moved` stays the board event).
+    pub dashed: bool,
+    /// SIMCOUNT1: the hit landed from a tile only the diagonal rule puts in its band (INPUT1 MR10). A record for the feel
+    /// sim; no rule reads it.
+    pub diagonal_hit: bool,
+    /// ATTACKLOCK1: the target and its tile as the wind-up started, after the chase or dash, a forced move carrying the
+    /// tile along (`attack_lock`; None = no lock, or the target was out of reach).
+    pub locked: Option<(UnitId, V2)>,
+    /// ATTACKLOCK1: the target that had left the locked tile at the last execution's impact (the swing missed it).
+    pub dodged: Option<UnitId>,
 }
 
 impl Command {
@@ -215,6 +236,7 @@ impl Command {
             block_cost,
             recovery: 0,
             name: String::new(),
+            skill: String::new(),
             ap_cost: 0,
             stance_switch_cost: 0,
             stance_on_start: None,
@@ -234,8 +256,10 @@ impl Command {
             kind,
             intent_buff: false,
             carry: Carry::None,
+            keep_flank: false,
             impact: crate::poise::Impact::default(),
             poise_bonus: 0,
+            poise_bonus_pips: 0,
             hits: Vec::new(),
             staggers: Vec::new(),
             forced: None,
@@ -258,6 +282,11 @@ impl Command {
             follow: 0,
             missed: false,
             moved: None,
+            started: false,
+            dashed: false,
+            diagonal_hit: false,
+            locked: None,
+            dodged: None,
         }
     }
 
@@ -268,15 +297,36 @@ impl Command {
     }
 
     pub fn initiative(&self, w: &World) -> i32 {
-        self.priority * 1000 + w.units[self.source].speed
+        self.priority * 1000 + w.units[self.source].initiative
     }
 
     pub fn is_defend(&self) -> bool {
         matches!(self.kind, CmdKind::Defend { .. })
     }
 
+    /// ATTACKLOCK1: this command moves its unit by a dash as it starts (a carried Engage or a plain `dash_tiles`).
+    pub(crate) fn dashes_at_start(&self) -> bool {
+        matches!(self.carry, Carry::Engage(_)) || matches!(self.kind, CmdKind::Attack { dash_tiles, .. } if dash_tiles > 0)
+    }
+
+    /// ATTACKLOCK1: under `attack_lock`, an attack on a unit that has it in reach after its own chase or dash stores the
+    /// unit and its tile; out of reach it takes no lock, and the band test decides at impact. `opening`: the tiles the
+    /// block's dashes started from (decision "Attack lock answers": a dash on the same tick leaves the locked tile, for
+    /// both sides), else the tile now. A melee band is `round_intent::melee_band`; an area aims at tiles and never locks.
+    pub(crate) fn lock_tile(&mut self, w: &World, opening: Option<&[Option<V2>]>) {
+        self.locked = None;
+        let CmdKind::Attack { target, min_range, max_range, .. } = &self.kind else { return };
+        let band = reach_band(w, self.source, *min_range, *max_range);
+        if !w.ruleset.attack_lock().locks(round_intent::melee_band(band)) {
+            return;
+        }
+        let Some(t) = effective_target(w, self.source, *target).filter(|t| in_reach(w, self.source, *t, band, self.diagonal)) else { return };
+        self.locked = opening.map_or(w.grid.pos(t), |tiles| tiles[t]).map(|cell| (t, cell));
+    }
+
     /// Runs when the command STARTS (after AP and stance): attack dash / chase, defend grants.
     pub fn on_start(&mut self, w: &mut World, rng: &mut GodotRng) -> String {
+        self.started = true;
         let src = self.source;
         let diag = self.diagonal;
         match &mut self.kind {
@@ -288,8 +338,13 @@ impl Command {
                     return String::new();
                 }
                 if let (Carry::Engage(cell), Some(position)) = (self.carry, self.position) {
+                    // Decision "Auto-fill keeps a flank": planned to stay, it hits from there while the tile still flanks
+                    if self.keep_flank && cell == w.pos(src) && tgt.is_some_and(|t| round_intent::keeps_flank(w, t, cell, diag)) {
+                        return String::new();
+                    }
                     let (line, moved, protected) = carried_engage(w, rng, src, tgt, cell, position, self.carry_range, self.target_cell, diag);
                     self.moved = moved;
+                    self.dashed = moved == Some(MoveKind::Dash);
                     if protected {
                         // INPUT1 MR8 c, MR9: a miss at its impact; the ruleset's cost decides what of its AP stays paid
                         self.missed = true;
@@ -304,7 +359,7 @@ impl Command {
                     return line;
                 }
                 if *dash_tiles > 0 {
-                    return dash(w, rng, src, tgt, band, *dash_tiles);
+                    return dash(w, rng, src, tgt, band, *dash_tiles, &mut self.dashed);
                 }
                 let Some(t) = tgt else { return String::new() };
                 if *follow_tiles <= 0 || !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band, diag) {
@@ -362,6 +417,7 @@ impl Command {
         self.pushes.clear();
         self.struck.clear();
         self.evaded = None;
+        self.dodged = None;
         self.guard_bypassed = false;
         self.failed = false;
         let src = self.source;
@@ -393,6 +449,16 @@ impl Command {
                     self.log = format!("[Flank Protected] {src_name}'s {} misses {}: its flank is protected", self.name, w.units[t].name);
                     return;
                 }
+                // ATTACKLOCK1: the target left the tile the attack committed to by a move of its own, wherever it stands
+                // now (no hit, no riposte, AP stays spent; a forced move carries the lock along, `forced::shove_unit`); the
+                // tile is read at impact, so a target back on it is hit. An `evaded` event, as a lost attack is
+                if let Some((_, cell)) = self.locked.filter(|(l, cell)| *l == t && w.grid.pos(t) != Some(*cell)) {
+                    self.failed = true;
+                    self.dodged = Some(t);
+                    self.evaded = Some(t);
+                    self.log = format!("[Dodged] {} left {cell} before {src_name}'s {} landed", w.units[t].name, self.name);
+                    return;
+                }
                 let band = reach_band(w, src, min_range, max_range);
                 if !in_reach(w, src, t, band, self.diagonal) {
                     self.failed = true;
@@ -401,6 +467,8 @@ impl Command {
                 }
                 w.units[src].active_target = Some(t);
                 let damaging = skill_mult > 0.0;
+                // SIMCOUNT1: a hit only the diagonal rule let land (read before an intercept moves it)
+                self.diagonal_hit = damaging && self.diagonal && !in_reach(w, src, t, band, false);
                 // RULESET1_INTENT MV3: a flank hit (rule flank) matches `flanked`, takes the flank power and no riposte
                 let flank = round_intent::flank_bonus(w, src, t);
                 // HOOKS1 EX1: an `hp_below` entry matches the target's HP share before the hit (rule execute)
@@ -422,7 +490,9 @@ impl Command {
                 }
                 let mut detail = String::new();
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
-                    let ok = status::try_inflict(&mut w.units[t], &self.status_effect.clone(), self.status_potency, Some(rng), status_rounds, self.status_magnitude, &src_name);
+                    // U1.2-S3b: the actor's KNOW term (ruleset `know_potency`; 0 = potency off)
+                    let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
+                    let ok = status::try_inflict_with(&mut w.units[t], &self.status_effect.clone(), self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name);
                     detail = format!(" ({} {})", if ok { "inflicts" } else { "resisted" }, self.status_effect);
                 }
                 if !damaging {
@@ -472,8 +542,9 @@ impl Command {
                     let mut note = String::new();
                     if !self.status_effect.is_empty() && w.units[v].is_alive() {
                         let st = self.status_effect.clone();
-                        let chance = status::apply_chance(&w.units[v], &st, self.status_potency);
-                        note = if status::try_inflict(&mut w.units[v], &st, self.status_potency, Some(rng), status_rounds, self.status_magnitude, &src_name) {
+                        let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
+                        let chance = status::apply_chance_with(&w.units[v], &st, self.status_potency, bonus);
+                        note = if status::try_inflict_with(&mut w.units[v], &st, self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name) {
                             format!(" [{} next round ({chance}%)]", status::display_name(&st))
                         } else {
                             format!(" [resisted {} ({chance}%)]", status::display_name(&st).to_lowercase())
@@ -510,7 +581,7 @@ impl Command {
                     format!("[Attack] {src_name}'s {} hit {hits} unit{} for {total} damage ({})", self.name, if hits == 1 { "" } else { "s" }, parts.join(", "))
                 };
             }
-            CmdKind::Defend { mitigation, guard_broken, .. } => {
+            CmdKind::Defend { mitigation, guard_rounds, guard_broken, .. } => {
                 if !w.units[src].is_alive() {
                     self.failed = true;
                     return;
@@ -519,8 +590,20 @@ impl Command {
                     self.log = format!("[Defend] {src_name}'s guard was broken");
                     return;
                 }
-                w.units[src].guard = mitigation;
+                // S1.2-S4 (Option 1C): the guard is held from the wind-up start (`trigger::hold_defend`); the impact
+                // keeps the larger of it and the skill's own
+                let u = &mut w.units[src];
+                u.guard = u.guard.max(mitigation);
                 self.log = if mitigation > 0.0 { format!("[Defend] {src_name} raises guard ({}% less damage)", (mitigation * 100.0).round() as i32) } else { format!("[Defend] {src_name} holds a defensive stance") };
+                // S1.2-S4: a multi-round guard queues the full-round `guard` status for its later rounds, at its fraction
+                // in percent capped at the row's maximum; a fraction below the row's minimum queues nothing (it is not
+                // raised to the minimum)
+                let row = status::row_of(status::GUARD);
+                let pct = roundi(mitigation * 100.0).min(row.map_or(0, |r| r.magnitude_max));
+                if guard_rounds >= 2 && row.is_some_and(|r| pct >= r.magnitude_min) {
+                    status::queue(&mut w.units[src], status::GUARD, guard_rounds - 1, pct, &src_name);
+                    self.log += &format!("; guard holds {} more round{}", guard_rounds - 1, if guard_rounds == 2 { "" } else { "s" });
+                }
             }
             CmdKind::Focus { boost, rounds } => {
                 if !w.units[src].is_alive() {
@@ -537,9 +620,8 @@ impl Command {
                 if w.ruleset.rest_at_round_end() {
                     w.round_states.entry(src).or_default().rest_blocks += self.block_cost.max(1);
                 }
-                // RULESET1_INTENT RS3: each landed Rest block restores poise (rule poise)
-                let gain = w.ruleset.numbers.rest_poise_per_block * self.block_cost.max(1);
-                crate::poise::restore(w, src, gain);
+                // RULESET1_INTENT RS3: each landed Rest block restores poise (rule poise; S2.2-S2: a pip per 2 under pips)
+                crate::poise::restore(w, src, self.block_cost.max(1));
                 let u = &mut w.units[src];
                 u.ap = u.max_ap.min(u.ap + recover_ap);
                 self.log = format!("[Rest] {src_name} AP {}/{}", u.ap, u.max_ap);
@@ -851,7 +933,7 @@ fn effective_target(w: &World, src: UnitId, target: Option<UnitId>) -> Option<Un
 }
 
 /// The attack's reach band: the command's own, else the unit's (ranged 2..range, melee 1).
-pub(crate) fn reach_band(w: &World, src: UnitId, min_range: i32, max_range: i32) -> (i32, i32) {
+pub fn reach_band(w: &World, src: UnitId, min_range: i32, max_range: i32) -> (i32, i32) {
     let u = &w.units[src];
     (if min_range > 0 { min_range } else { u.min_attack_range() }, if max_range > 0 { max_range } else { u.attack_range })
 }
@@ -895,7 +977,7 @@ fn others_blocked(w: &World, src: UnitId, active_only: bool) -> Cells {
 }
 
 /// Gap-close: route to the nearest tile in reach within `dash_tiles` cost; hazards entered roll their status.
-fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32) -> String {
+fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32, dashed: &mut bool) -> String {
     let Some(t) = tgt else { return String::new() };
     if !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band, false) {
         return String::new();
@@ -928,6 +1010,7 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
         return format!("[Dash Blocked] {name} couldn't move toward {}.", w.units[t].name);
     }
     round_intent::note_moved(w, src);
+    *dashed = true;
     let mut line = format!("[Dash] {name} dashes at {}: {from} to {to}", w.units[t].name);
     for note in hazard_on_enter(w, rng, src, &entered) {
         line += &format!(" {note}");
@@ -1312,7 +1395,8 @@ pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defe
     }
     w.units[defender].riposted.push(attacker);
     let du = &w.units[defender];
-    let mult = COUNTER_MULT * du.weaken_factor() * du.empower_factor();
+    // S1.2-S3: the counter multiplier is the ruleset number `counter_mult`
+    let mult = w.ruleset.numbers.counter_mult * du.weaken_factor() * du.empower_factor();
     let hit = roll_hit(w, rng, defender, attacker, false, false, mult, 0.0);
     let taken = w.damage(attacker, hit.final_dmg, true);
     Some(Reaction { defender, attacker, damage: taken, crit: hit.is_crit, defeated: !w.units[attacker].is_alive() })
@@ -1325,10 +1409,8 @@ pub fn heal_amount(w: &World, caster: UnitId, skill_id: SkillId) -> i32 {
     if !skill::heals(s) {
         return 0;
     }
-    let c = &w.units[caster];
-    let stat = if s.heal_stat.is_empty() { 0 } else { c.stats.stat(&s.heal_stat, c.weapon_context().as_deref()) };
-    let base = s.heal_base + roundi(stat as f64 * s.heal_mult);
-    roundi(base as f64 * c.potency_for_skill(s)).max(0)
+    // U4.2-S4 (FB-30): the heal pipeline (base, then the caster's potency; one rounding, floor 0)
+    rpgkit_rules::damage::heal(&w.units[caster], s)
 }
 
 pub fn effective_heal(target: &Unit, amount: i32) -> i32 {

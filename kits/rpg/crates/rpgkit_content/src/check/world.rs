@@ -2,7 +2,7 @@
 //! problem of a world entry (id, name, enums, references across the lineage and connections, overrides, the rules of
 //! its kind) and of a world manifest, and the soft warnings over a world.
 
-use super::{board, campaign, dialogue, encounter, map, quest, shop, story, travel, View};
+use super::{board, campaign, dialogue, encounter, map, quest, shop, story, travel, unit, View};
 use crate::source::{content, fields};
 use aegis_content::world::split_qid;
 use aegis_core::json::{self, gstr, Dict};
@@ -376,12 +376,25 @@ fn tuning_errors(raw: &Value, allowed: &[&str], what: &str) -> Vec<String> {
     errors
 }
 
+/// U4.2-S3 (FB-29): a character's temperament is an always-on passive (slot ""; a slottable one would apply only while
+/// a deck slots it; an unknown id is the field table's ref error), and its default intent one some ruleset lists (the
+/// unit row's rule, `default_intent_errors`).
+fn temperament_errors(v: &View, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    if let Some(p) = v.typed.passives.get(&json::s(e, unit::TEMPERAMENT)).filter(|p| !p.slot.is_empty()) {
+        errors.push(format!("Temperament '{}' is slottable ({}); a temperament is always on (slot \"\").", p.id, p.slot));
+    }
+    errors.extend(unit::default_intent_errors(v, e));
+    errors
+}
+
 fn character_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     if json::s(e, "base_unit").is_empty() {
         errors.push("Choose the base unit this character plays as.".into());
     }
     errors.extend(tuning_errors(json::get(e, "tuning"), &TUNING_KEYS, "Character"));
+    errors.extend(temperament_errors(v, e));
     errors.extend(super::assets::body_errors(v, &json::s(e, "art")));
     match e.get("gone_flags").unwrap_or(&Value::Array(Vec::new())) {
         gone @ Value::Array(_) => errors.extend(quest::condition_errors(gone, "Gone flags")),

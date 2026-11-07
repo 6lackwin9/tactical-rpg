@@ -1,7 +1,7 @@
 //! Balance sim `party` and `sweep` modes (tools/sim/sim_party.gd, BAL2_SIM.md sections 5, 7, 8.2): asymmetric party
 //! fights (seeds only, no side swap) over the spend x preset arguments; values outside their band are marked X.
 
-use crate::args::{self, CLASSES};
+use crate::args;
 use crate::kpi;
 use crate::runner::Runner;
 use crate::scenarios::{self, FightSet};
@@ -128,9 +128,9 @@ pub fn compositions(r: &Runner) -> Vec<Vec<String>> {
     let a = r.args;
     let mut comps = Vec::new();
     if a.lead.is_empty() {
-        combine(&args::strings(&CLASSES), a.comp_size, 0, &[], a.dupes, &mut comps);
+        combine(&args::strings(a.game.classes.ids), a.comp_size, 0, &[], a.dupes, &mut comps);
     } else {
-        let pool: Vec<String> = CLASSES.iter().filter(|c| a.dupes || **c != a.lead).map(|c| c.to_string()).collect();
+        let pool: Vec<String> = a.game.classes.ids.iter().filter(|c| a.dupes || **c != a.lead).map(|c| c.to_string()).collect();
         combine(&pool, a.comp_size, 0, std::slice::from_ref(&a.lead), a.dupes, &mut comps);
     }
     if a.dupes && a.sample > 0 && a.sample < comps.len() {
@@ -235,9 +235,9 @@ fn sweep_summary(r: &mut Runner, rows: &[Row], ranked: &[usize]) {
         means += &format!("  {enc_id} {}{} ({})", m.round() as i64, clear_mark(r, enc_id, m), band_of(r, enc_id));
     }
     r.print(means);
-    let by_key: Vec<(String, f64)> = rows.iter().map(|row| (sorted_key(&row.comp), row.clear)).collect();
+    let by_key: Vec<(String, f64)> = rows.iter().map(|row| (sorted_key(a.game.classes.ids, &row.comp), row.clear)).collect();
     r.print(format!("{:<10} {:>12} {:>6} {:>12}", "class", "swap_delta", "pairs", format!("top{TOP_N}_count")));
-    for x in CLASSES {
+    for &x in a.game.classes.ids {
         let (mut delta_sum, mut pairs) = (0.0, 0);
         for row in rows {
             if row.comp.iter().any(|c| c == x) {
@@ -252,7 +252,7 @@ fn sweep_summary(r: &mut Runner, rows: &[Row], ranked: &[usize]) {
                 let mut swapped = row.comp.clone();
                 let at = swapped.iter().position(|c| c == y).unwrap();
                 swapped[at] = x.to_string();
-                let key = sorted_key(&swapped);
+                let key = sorted_key(a.game.classes.ids, &swapped);
                 if let Some((_, c)) = by_key.iter().find(|(k, _)| *k == key) {
                     delta_sum += c - row.clear;
                     pairs += 1;
@@ -267,9 +267,9 @@ fn sweep_summary(r: &mut Runner, rows: &[Row], ranked: &[usize]) {
     }
 }
 
-/// A composition's classes in class order, joined (the sweep's swap lookup).
-pub fn sorted_key(comp: &[String]) -> String {
+/// A composition's classes in `classes` order (SimClasses.ids), joined (the sweep's swap lookup).
+pub fn sorted_key(classes: &[&str], comp: &[String]) -> String {
     let mut order: Vec<&String> = comp.iter().collect();
-    order.sort_by_key(|c| CLASSES.iter().position(|k| k == c));
+    order.sort_by_key(|c| classes.iter().position(|k| k == c));
     order.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(",")
 }

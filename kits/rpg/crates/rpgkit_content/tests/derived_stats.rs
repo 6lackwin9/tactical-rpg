@@ -12,13 +12,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with an empty catalog folder.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_derived_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_derived_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -50,7 +49,7 @@ fn ids(list: &Value) -> Vec<String> {
 
 #[test]
 fn passing_rows_load_typed_in_dependency_order() {
-    let data = scratch("order");
+    let (_scratch, data) = scratch("order");
     write_kind(
         &data,
         derived::KIND,
@@ -81,7 +80,7 @@ fn passing_rows_load_typed_in_dependency_order() {
 
 #[test]
 fn a_missing_file_is_no_rows_and_no_error() {
-    let data = scratch("missing");
+    let (_scratch, data) = scratch("missing");
     let src = source::load(&data);
     assert_eq!(derived_errors(&src), Vec::<String>::new());
     assert_eq!(src.catalog[derived::KIND], json!([]));
@@ -91,7 +90,7 @@ fn a_missing_file_is_no_rows_and_no_error() {
 
 #[test]
 fn rows_naming_each_other_are_a_cycle_on_each_row() {
-    let data = scratch("cycle");
+    let (_scratch, data) = scratch("cycle");
     write_kind(
         &data,
         derived::KIND,
@@ -136,18 +135,21 @@ fn every_field_rule_has_its_error() {
         (json!({"id": "know"}), "ID 'know' is a base stat."),
         (json!({"id": "level"}), "ID 'level' is the unit level input."),
         (json!({"id": "gear_mitigation"}), "ID 'gear_mitigation' is the worn gear mitigation input."),
+        (json!({"id": "tier_hp"}), "ID 'tier_hp' is a tier factor input."),
+        (json!({"id": "tier_power"}), "ID 'tier_power' is a tier factor input."),
         (json!({"id": "clamp"}), "ID 'clamp' is a formula function."),
         (json!({"id": "other"}), "ID 'other' is already used by another derived stat."),
         (json!({"name": " "}), "Name is required."),
         (json!({"name": "N".repeat(25)}), "Name is 25 characters (max 24)."),
         (json!({"label": "L".repeat(17)}), "Label is 17 characters (max 16)."),
         (json!({"label": "Oth"}), "Label 'Oth' is already used by derived stat 'other'."),
-        (json!({"formula": "KNOW * nope"}), "Formula: unknown name 'nope' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, a derived stat id or a constant)."),
+        (json!({"formula": "KNOW * nope"}), "Formula: unknown name 'nope' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, tier_hp, tier_power, a derived stat id or a constant)."),
         (json!({"formula": "know + 1"}), "Formula: base stats are upper case ('KNOW', not 'know')."),
         (json!({"constants": [1]}), "Constants must be an object of name to number."),
         (json!({"constants": {"Str": 1}}), "Constants: 'Str' is a base stat."),
         (json!({"constants": {"level": 1}}), "Constants: 'level' is the unit level input."),
         (json!({"constants": {"gear_mitigation": 1}}), "Constants: 'gear_mitigation' is the worn gear mitigation input."),
+        (json!({"constants": {"tier_hp": 1}}), "Constants: 'tier_hp' is a tier factor input."),
         (json!({"constants": {"other": 1}}), "Constants: 'other' is a derived stat id."),
         (json!({"constants": {"2x": 1}}), "Constants: '2x' is not a name (a letter or _ first, then letters, digits or _; not a function)."),
         (json!({"constants": {"round": 1}}), "Constants: 'round' is not a name (a letter or _ first, then letters, digits or _; not a function)."),
@@ -188,6 +190,15 @@ fn gear_mitigation_is_a_formula_input() {
     assert_eq!(checked.order, [0]);
 }
 
+/// U1.2-S4 (U1_STATS feasibility 6): `tier_hp` and `tier_power` are reserved formula inputs like `level`.
+#[test]
+fn the_tier_factors_are_formula_inputs() {
+    let toughness = json!({"id": "toughness", "name": "Toughness", "formula": "60 * tier_hp + CONS * 8 + tier_power", "min": 0, "max": 500});
+    let checked = derived::check_rows(&[row(toughness)]);
+    assert!(checked.errors[0].is_empty(), "{:?}", checked.errors[0]);
+    assert_eq!(checked.order, [0]);
+}
+
 #[test]
 fn a_formula_that_does_not_parse_names_the_column() {
     for src in ["KNOW +", "(KNOW", "pow(KNOW, 2)", "KNOW / 0", ""] {
@@ -200,7 +211,8 @@ fn a_formula_that_does_not_parse_names_the_column() {
 
 /// A data folder with one derived row `grit` (or none) and a sword family for gear.
 fn gear_view(tag: &str, with_row: bool) -> (PathBuf, check::View) {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     if with_row {
         write_kind(&data, derived::KIND, 1, json!([{"id": "grit", "name": "Grit", "formula": "KNOW"}]));
     }
@@ -279,7 +291,7 @@ fn the_forge_check_of_one_row_sees_the_loaded_rows() {
 /// label are not.
 #[test]
 fn the_forge_check_of_a_rename_sees_later_rows() {
-    let data = scratch("rename");
+    let (_scratch, data) = scratch("rename");
     write_kind(&data, derived::KIND, 1, json!([{"id": "grit", "name": "Grit", "label": "Grt", "formula": "KNOW"}, {"id": "nerve", "name": "Nerve", "label": "Nrv", "formula": "CONS"}]));
     let v = store::view(&data);
     assert_eq!(v.derived_ids(), ["grit", "nerve"]);
@@ -293,11 +305,11 @@ fn the_forge_check_of_a_rename_sees_later_rows() {
 
 #[test]
 fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     let file = data.join("catalog").join("derived_stats.json");
     let up = |entry: Value| store::upsert(&data, None, derived::KIND, &dict(entry), None);
     let bad = up(json!({"id": "nerve", "name": "Nerve", "formula": "grit + 1"})).err().expect("the write is refused");
-    assert!(bad.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, a derived stat id or a constant).")), "{bad:?}");
+    assert!(bad.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, tier_hp, tier_power, a derived stat id or a constant).")), "{bad:?}");
     assert!(!file.exists(), "a refused first row leaves no file");
     up(json!({"id": "grit", "name": "Grit", "formula": "KNOW * k", "constants": {"k": 2}})).unwrap();
     up(json!({"id": "nerve", "name": "Nerve", "formula": "grit + 1", "show_on": ["party", "battle"]})).unwrap();
@@ -310,7 +322,7 @@ fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
     assert!(cycle.iter().any(|e| e.ends_with("derived stat 'grit': Formula: cycle grit -> nerve -> grit.")), "{cycle:?}");
     assert_eq!(fs::read_to_string(&file).unwrap(), text, "a refused write puts the file back");
     let gone = store::remove(&data, None, derived::KIND, "grit").err().expect("the write is refused");
-    assert!(gone.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, a derived stat id or a constant).")), "{gone:?}");
+    assert!(gone.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, tier_hp, tier_power, a derived stat id or a constant).")), "{gone:?}");
     store::remove(&data, None, derived::KIND, "nerve").unwrap();
     assert!(store::check(&data).iter().all(|p| !p.contains("derived stat")), "{:?}", store::check(&data));
     drop_scratch(&data);

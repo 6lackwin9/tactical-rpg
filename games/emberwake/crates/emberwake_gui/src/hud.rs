@@ -231,8 +231,7 @@ pub(crate) mod hud_tests {
     pub(crate) fn game_cx() -> Cx {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::temp_dir().join(format!("emberwake_hud_{}_{n}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let tmp = aegis_core::scratch::Scratch::vacant(&format!("emberwake_hud_{n}")).until_thread_end();
         let dir = Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
         let data = Arc::new(Data::open(&dir).expect("data").0);
         let world = emberwake_world::new_game::playable_worlds(&data).first().cloned().expect("a playable world");

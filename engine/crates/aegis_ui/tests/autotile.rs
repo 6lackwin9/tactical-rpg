@@ -2,6 +2,7 @@
 //! upper cell's four corners, a block's inside, the same list twice, a T shape's open edges; the page on fixture layers
 //! (the sets it lists, pieces on their corners, mask numbers without them, the block rule), at the four text sizes.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::autotile::{block_edges, corner_mask, corner_pieces, BlockEdges};
 use aegis_ui::canvas::{Canvas, Rect, Rgba};
@@ -12,7 +13,7 @@ use aegis_ui::theme::{self, Theme};
 use aegis_ui::ui::{by_id, Gfx, Kit, Ui, Widget};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const TEXT_SIZES: [f32; 4] = [0.85, 1.0, 1.15, 1.3];
 /// The Kit page's rect as the gallery gives it.
@@ -84,10 +85,8 @@ fn block_edges_on_a_t_shape() {
 // ---- the Tiles page ------------------------------------------------------------------------------------------------
 
 /// A folder for fixture layers, unique per test.
-fn sandbox(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_autotile_{}_{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+fn sandbox(name: &str) -> Scratch {
+    let dir = Scratch::new(&format!("autotile_{name}"));
     dir
 }
 
@@ -109,7 +108,8 @@ const FACE: [u8; 3] = [200, 200, 10];
 const PIECE: [u8; 3] = [200, 10, 200];
 
 /// Set `bare` (tiles only) and set `paired` (tiles, a wall with its face, the pair's 14 pieces).
-fn fixture_layers(name: &str) -> Layers {
+/// The folder comes back with the layers: it is removed when the test drops it.
+fn fixture_layers(name: &str) -> (Scratch, Layers) {
     let root = sandbox(name);
     tile(&root.join("tilesets/bare/ground/v0.png"), UPPER);
     let paired = root.join("tilesets/paired");
@@ -120,7 +120,8 @@ fn fixture_layers(name: &str) -> Layers {
     for m in 1..=14 {
         tile(&paired.join(format!("ground/over_pool/m{m:02}.png")), PIECE);
     }
-    Layers::of(vec![root])
+    let layers = Layers::of(vec![root.to_path_buf()]);
+    (root, layers)
 }
 
 fn font() -> Vec<u8> {
@@ -187,7 +188,8 @@ fn the_page_map_holds_every_mask() {
 /// With pieces: a piece's colour on the corners that take one, the ground and the lower kind away from them.
 #[test]
 fn a_set_with_pieces_draws_them_on_their_corners() {
-    theme::set_layers(fixture_layers("pieces"));
+    let (_dir, layers) = fixture_layers("pieces");
+    theme::set_layers(layers);
     let k = tiles_page(1);
     let mut g = gfx(1.0);
     let (w, audit) = page(&k, &mut g);
@@ -215,7 +217,8 @@ fn a_set_with_pieces_draws_them_on_their_corners() {
 /// Without pieces: no piece colour, and every mask the map holds written on it.
 #[test]
 fn a_set_without_pieces_shows_the_mask_numbers() {
-    theme::set_layers(fixture_layers("bare"));
+    let (_dir, layers) = fixture_layers("bare");
+    theme::set_layers(layers);
     let mut g = gfx(1.0);
     let (w, audit) = page(&tiles_page(0), &mut g);
     clean(&audit, "bare");
@@ -234,7 +237,8 @@ fn a_set_without_pieces_shows_the_mask_numbers() {
 /// when the south is a wall; 1 px lines on the open north and sides.
 #[test]
 fn a_wall_takes_its_face_only_over_an_open_south() {
-    theme::set_layers(fixture_layers("wall"));
+    let (_dir, layers) = fixture_layers("wall");
+    theme::set_layers(layers);
     let mut k = tiles_page(1);
     k.act(KitAct::TileView(1));
     let mut g = gfx(1.0);
@@ -274,7 +278,7 @@ fn a_set_with_two_pairs_picks_each() {
     }
     let solo = root.join("tilesets/solo");
     tile(&solo.join("ground/over_pool/m01.png"), PIECE);
-    theme::set_layers(Layers::of(vec![root]));
+    theme::set_layers(Layers::of(vec![root.to_path_buf()]));
 
     let picker = "kit.tiles.pair";
     let mut k = tiles_page(0);
@@ -317,7 +321,8 @@ fn a_set_with_two_pairs_picks_each() {
 #[test]
 fn every_view_and_zoom_draws_clean() {
     assert_eq!(PAGES[6], "Tiles");
-    theme::set_layers(fixture_layers("views"));
+    let (_dir, layers) = fixture_layers("views");
+    theme::set_layers(layers);
     for set in 0..2 {
         for view in 0..TILE_VIEWS.len() {
             for zoom in 0..TILE_ZOOMS.len() {
@@ -374,7 +379,8 @@ fn the_picker_lists_the_sets_of_the_layers() {
     clean(&audit, "no layers");
     assert!(!w.iter().find(|x| x.id == "kit.tiles.set").unwrap().enabled);
 
-    theme::set_layers(fixture_layers("picker"));
+    let (_dir, layers) = fixture_layers("picker");
+    theme::set_layers(layers);
     let (w, _) = page(&k, &mut gfx(1.0));
     let picker = w.iter().find(|x| x.id == "kit.tiles.set").unwrap();
     assert!(picker.enabled, "the same page reads the new layers");

@@ -17,7 +17,7 @@ use aegis_core::value::{self, Obj};
 use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
-use rpgkit_rules::{build_unit_in, DeckRule, Unit};
+use rpgkit_rules::{build_from, DeckRule, Overrides, Unit, UnitBuild};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -131,8 +131,11 @@ impl EncounterDef {
 /// (rpgkit_world: the base unit wearing the character, then its named items, passives and tuning).
 pub trait Roster {
     fn entry(&self, cat: &Catalog, r: &str) -> Option<UnitDef>;
-    /// CatalogEncounter._customize: a freshly spawned unit's extras.
-    fn customize(&self, _cat: &Catalog, _r: &str, _u: &mut Unit) {}
+    /// U2.2-S2 (FB-12): what ref `r` wears over its row, given to the one builder (`build_from`): a world character's
+    /// gathered passives, named items, tuning and class-path catalog; a catalog unit's none.
+    fn overrides(&self, _cat: &Catalog, _r: &str) -> Overrides {
+        Overrides::default()
+    }
     /// The roster tier of a ref (morale: leaders and fearless units).
     fn tier(&self, cat: &Catalog, r: &str) -> String {
         self.entry(cat, r).map(|e| e.tier).unwrap_or_default()
@@ -158,6 +161,9 @@ pub struct Prebuilt {
     pub profile: AiProfile,
     /// The party member id (GameEncounter.hero_key).
     pub key: String,
+    /// AUDIT-04 (RULESET1 TQ23 (a)): the intent it starts a round-intent battle in (a member's character's
+    /// `default_intent`, else its unit row's; "" = none).
+    pub default_intent: String,
 }
 
 /// One unit at one point of a round (BlockSnapshot: the state the screens show).
@@ -364,6 +370,10 @@ impl Session {
         // RULESET1 9 D1-D4: under the deck rule every unit fights with its deck (classic: None, units as today)
         let deck = DeckRule::of(&def.ruleset);
         for p in party {
+            // AUDIT-04: a prebuilt hero starts in its default intent as a roster unit does
+            if !p.default_intent.is_empty() {
+                default_intents.push((built.len(), p.default_intent));
+            }
             profiles.insert(built.len(), p.profile);
             hero_keys.insert(built.len(), p.key);
             art.push(p.art);
@@ -380,9 +390,9 @@ impl Session {
         let mut spawn = |r: &str, name: &str, built: &mut Vec<Unit>| -> UnitId {
             let mut e = roster.entry(&cat, r).expect("checked");
             e.name = name.to_string();
-            let mut u = build_unit_in(&cat, &e, def.unit_ap, deck.as_ref());
-            // a world character's passives pass the deck rule's slot gate (D3) set above
-            roster.customize(&cat, r, &mut u);
+            // U2.2-S2: every roster unit through the one builder; a world character's passives pass the deck rule's
+            // slot gate (D3)
+            let u = build_from(&cat, UnitBuild { row: &e, default_ap: def.unit_ap, deck: deck.as_ref(), wield: def.ruleset.numbers.wield(), over: roster.overrides(&cat, r), growth: None }).unit;
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));
             art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });
@@ -566,7 +576,7 @@ impl Session {
             self.resolver.finish_round(&mut self.w);
         }
         for &c in &self.resolver.registered.clone() {
-            status::roll_over(&mut self.w.units[c], self.def.ap_regen);
+            status::roll_over(&mut self.w.units[c], self.def.ap_regen, &self.w.ruleset.numbers);
         }
         // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
         let rest = round_intent::round_start(&mut self.w);

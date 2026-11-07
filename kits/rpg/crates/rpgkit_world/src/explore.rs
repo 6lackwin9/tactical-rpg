@@ -5,6 +5,7 @@
 use crate::data::Data;
 use crate::state::{GameState, HOME_WORLD_KEY, NO_POSITION};
 use crate::{dialogue, progression, quest, rolls, terms, travel};
+use aegis_core::assets::{Facing, View};
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 
@@ -121,7 +122,7 @@ pub fn marker_full(m: &Dict) -> Dict {
         "exit" => vec![("to", "".into()), ("to_anchor", "spawn".into()), ("locked_text", "The way is shut.".into())],
         "encounter" => vec![("encounter", "".into()), ("trigger", "touch".into()), ("radius", int(1)), ("once", Value::Bool(true))],
         "roamer" => vec![("encounter", "".into()), ("path", "".into()), ("radius", int(0)), ("once", Value::Bool(true))],
-        "npc" => vec![("character", "".into())],
+        "npc" => vec![("character", "".into()), ("face", "down".into())],
         "chest" => vec![("items", Value::Object(Dict::new())), ("loot", "".into()), ("gold", int(0)), ("supplies", int(0))],
         "lore" => vec![("lore", "".into())],
         _ => vec![],
@@ -133,6 +134,17 @@ pub fn marker_full(m: &Dict) -> Dict {
         out.insert(k, v);
     }
     out
+}
+
+/// NPCFACE1: the way a person's marker faces on the map when nobody is talking to them: its `face` (`up`, `left`,
+/// `right`, set by a row for a reason), else down. A bad value (the checks report it) reads as down.
+pub fn marker_facing(m: &Dict) -> Facing {
+    match json::s(m, "face").as_str() {
+        "up" => Facing { view: View::Up, left: false },
+        "left" => Facing::side(true),
+        "right" => Facing::side(false),
+        _ => Facing { view: View::Down, left: false },
+    }
 }
 
 pub fn binding_full(b: &Dict) -> Dict {

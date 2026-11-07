@@ -1,0 +1,62 @@
+{
+	"kind": "zones",
+	"version": 1,
+	"entries": [
+		{
+			"id": "alley",
+			"name": "Cinder Alley",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "stone"
+		},
+		{
+			"id": "rooftops",
+			"name": "Market Rooftops",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "stone"
+		},
+		{
+			"id": "canal",
+			"name": "Canal Bridge",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "bridge"
+		},
+		{
+			"id": "foundry",
+			"name": "The Fourth Kiln",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "floor"
+		},
+		{
+			"id": "tallow_vats",
+			"name": "Tallow Vats",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "floor"
+		},
+		{
+			"id": "undercroft",
+			"name": "Sluice Undercroft",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "stone"
+		},
+		{
+			"id": "watchpost",
+			"name": "Crucible Watchpost",
+			"description": "",
+			"rows": [],
+			"backdrop": "",
+			"ground": "floor"
+		}
+	]
+}

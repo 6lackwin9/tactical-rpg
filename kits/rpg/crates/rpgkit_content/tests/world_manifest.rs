@@ -11,13 +11,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_world_manifest_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_world_manifest_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -50,7 +49,7 @@ fn schema_keys() -> Vec<String> {
 
 #[test]
 fn a_new_world_is_written_whole_over_the_schema_defaults() {
-    let data = scratch("new");
+    let (_scratch, data) = scratch("new");
     let out = store::set_world(&data, "vale", &dict(json!({"name": "The Vale", "tagline": "Quiet."})), false).expect("new world");
     assert!(!out.replaced);
     assert_eq!(out.file, manifest_path(&data, "vale"));
@@ -71,7 +70,7 @@ fn a_new_world_is_written_whole_over_the_schema_defaults() {
 
 #[test]
 fn an_update_merges_one_field_and_keeps_the_others() {
-    let data = scratch("update");
+    let (_scratch, data) = scratch("update");
     store::set_world(&data, "vale", &dict(json!({"name": "The Vale", "description": "Hills.", "start_gold": 50})), false).unwrap();
     let before = stored(&data, "vale");
     let out = store::set_world(&data, "vale", &dict(json!({"tagline": "Still quiet."})), false).expect("update");
@@ -92,7 +91,7 @@ fn an_update_merges_one_field_and_keeps_the_others() {
 
 #[test]
 fn a_hand_written_manifest_resaves_byte_identical_and_full_writes_every_field() {
-    let data = scratch("trim");
+    let (_scratch, data) = scratch("trim");
     let dir = data.join("worlds").join("glen");
     fs::create_dir_all(&dir).unwrap();
     // a manifest in the writer's format that leaves default fields out (a world written before a field existed)
@@ -112,7 +111,7 @@ fn a_hand_written_manifest_resaves_byte_identical_and_full_writes_every_field() 
 
 #[test]
 fn bad_values_are_refused_and_nothing_is_written() {
-    let data = scratch("bad");
+    let (_scratch, data) = scratch("bad");
     for patch in [
         json!({"name": "Moor", "ruleset": "no_such_ruleset"}),
         json!({"name": "Moor", "party_max": "three"}),
@@ -136,7 +135,7 @@ fn bad_values_are_refused_and_nothing_is_written() {
 
 #[test]
 fn a_change_that_breaks_the_data_folder_rolls_back() {
-    let data = scratch("rollback");
+    let (_scratch, data) = scratch("rollback");
     // a new world naming an unknown parent: refused, and its folder taken back
     let errors = store::set_world(&data, "fen", &dict(json!({"name": "Fen", "extends": ["no_such_world"]})), false).err().expect("unknown parent refused");
     assert!(errors.iter().any(|e| e.contains("no_such_world")), "{errors:?}");

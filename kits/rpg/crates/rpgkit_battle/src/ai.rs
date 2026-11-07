@@ -165,7 +165,7 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
                 continue;
             }
         }
-        if low_hp && !guarded && dist <= reach + 1 && (pulled.is_none() || dist <= reach) {
+        if low_hp && !guarded && !guard_held(w, actor) && dist <= reach + 1 && (pulled.is_none() || dist <= reach) {
             guarded = true;
             if guard_smart(w, plan, actor, cap, profile, &foes, st.pos) {
                 continue;
@@ -729,6 +729,12 @@ fn optional(w: &World, skills: Vec<SkillId>, profile: &AiProfile) -> Vec<SkillId
 fn needs_heal(w: &World, f: UnitId, profile: &AiProfile) -> bool {
     let u = &w.units[f];
     u.hp < u.max_hp && hp_ratio(w, f) <= profile.heal_below
+}
+
+/// S1.2-S4 (FB-48): `c` is guarded for the whole round already (an active `guard` status: a multi-round Guard skill's
+/// later round), so a Defend picked to be safe would be redundant.
+pub fn guard_held(w: &World, c: UnitId) -> bool {
+    w.units[c].has_status(status::GUARD)
 }
 
 fn locked_down(w: &World, c: UnitId) -> bool {
@@ -1676,15 +1682,16 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
         }
     }
     // 3: hurt, not reckless, a Guard skill usable: Guard self, or the best cover tile in one move against a shooter;
-    // RULESET1-AI2: not after a round in Guard that no attack hit took HP in (the table goes on down)
-    if on(ROW_GUARD) && ratio <= profile.defend_below && !profile.reckless && !w.hits.guarded_unhit(c) {
+    // RULESET1-AI2: not after a round in Guard that no attack hit took HP in (the table goes on down); S1.2-S4: not while
+    // a multi-round guard already holds this round (no redundant Defend)
+    if on(ROW_GUARD) && ratio <= profile.defend_below && !profile.reckless && !w.hits.guarded_unhit(c) && !guard_held(w, c) {
         if let Some(p) = guard_pick(w, plan, c) {
             return Choice::Pick(ROW_GUARD, p);
         }
     }
     // HOOKS1 AT2 `brace_after_hit` (rule ai_tactics): a friend within 2 tiles, or itself, lost HP to an attack hit last
     // round, not reckless, a Guard skill usable: Guard self, or on its `hold_line` tile
-    if on(ROW_BRACE) && !profile.reckless && w.has_tactic(c, UnitTactic::BraceAfterHit) && hit_nearby(w, c) {
+    if on(ROW_BRACE) && !profile.reckless && w.has_tactic(c, UnitTactic::BraceAfterHit) && hit_nearby(w, c) && !guard_held(w, c) {
         if let Some(p) = brace_pick(w, plan, c) {
             return Choice::Pick(ROW_BRACE, p);
         }

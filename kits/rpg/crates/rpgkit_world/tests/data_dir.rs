@@ -4,11 +4,10 @@
 
 use rpgkit_world::Data;
 use std::fs;
-use std::path::PathBuf;
 
 /// A scratch tree `t/games/demo/` with game.json, data/catalog/ and data/worlds/, plus a folder inside the game.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_data_dir_{tag}_{}", std::process::id()));
+fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_data_dir_{tag}"));
     let _ = fs::remove_dir_all(&t);
     let game = t.join("games").join("demo");
     fs::create_dir_all(game.join("data").join("catalog")).unwrap();

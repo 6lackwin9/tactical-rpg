@@ -8,7 +8,10 @@
 //! and on entering, removed on leaving; UM4); a move across a rule's point runs the rule's effects (the trigger effects
 //! plus `meter_set`; UM5), whose own meter changes cross no further rule (depth 1). The row's `skills` are open to a
 //! holder without a slot while their cost is met (UM6). Every entry point reads the rule first, so classic battles hold
-//! no meter and log, draw or record nothing new.
+//! no meter and log, draw or record nothing new. U1.2-S5 (a pool from data): a ruleset's `unit_pools` meters are held by
+//! every unit; a row's `max_stat` makes each holder's max its value of that derived stat (fixed at battle start; a
+//! band may start at a percent of it, `from_pct`), `start_full` starts it full, `delta_max` bounds a `meter` effect, and
+//! its `triggers` are held by every holder (`held_triggers`, rule triggers).
 
 use crate::resolver::Resolver;
 use crate::trigger::{self, Event, Fired, Holder};
@@ -16,6 +19,8 @@ use crate::world::{UnitId, World};
 use aegis_core::value::{self, Obj};
 use rpgkit_data::{MeterDelta, TriggerRow, UnitMeterDef};
 use rpgkit_rules::bands;
+use rpgkit_rules::derived;
+use rpgkit_rules::pool::PoolView;
 use rpgkit_rules::ruleset;
 use rpgkit_rules::status;
 use rpgkit_rules::unit::BandApplied;
@@ -29,14 +34,16 @@ pub fn on(w: &World) -> bool {
     w.ruleset.has(ruleset::UNIT_METERS)
 }
 
-/// One meter one unit holds this battle: its value and floor, whether a skill raised it this round (UM3), the band it
-/// is in and what that band's effects added (UM4), and the `once` rules that fired (UM5).
+/// One meter one unit holds this battle: its value, floor and max (U1.2-S5: the row's max, or the holder's `max_stat`
+/// value), whether a skill raised it this round (UM3), the band it is in and what that band's effects added (UM4), and
+/// the `once` rules that fired (UM5).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gauge {
     pub unit: UnitId,
     pub meter: String,
     pub value: i32,
     pub floor: i32,
+    pub max: i32,
     pub gained: bool,
     pub band: Option<usize>,
     applied: BandApplied,
@@ -79,8 +86,29 @@ pub fn values(w: &World, c: UnitId) -> Vec<(String, i32)> {
     w.meters.gauges.iter().filter(|g| g.unit == c).map(|g| (g.meter.clone(), g.value)).collect()
 }
 
-fn band_from(b: &Obj) -> i64 {
+/// UM4, U1.2-S5: where band `b` starts on a gauge whose max is `max`: its `from`, or its `from_pct` of the max.
+fn band_from(b: &Obj, max: i32) -> i64 {
+    if b.contains_key("from_pct") {
+        return bands::pct_point(value::int(b, "from_pct", 0) as i64, max as i64);
+    }
     value::int(b, "from", 0) as i64
+}
+
+/// U1.2-S5: `c`'s max of meter `def`: its value of the row's `max_stat` (clamped to the row's min..max), else the
+/// row's max (also when the derived row is absent in the battle's ruleset).
+fn max_of(w: &World, c: UnitId, def: &UnitMeterDef) -> i32 {
+    if def.max_stat.is_empty() {
+        return def.max;
+    }
+    derived::value_for(&w.cat, &w.ruleset, &w.units[c], &def.max_stat).map_or(def.max, |v| v.clamp(def.min, def.max))
+}
+
+/// U1.2-S5 (FB-04's generic store): `c`'s meter `meter` as a pool view (floor to max; None when it holds none).
+pub fn pool(w: &World, c: UnitId, meter: &str) -> Option<PoolView> {
+    find(w, c, meter).map(|i| {
+        let g = &w.meters.gauges[i];
+        PoolView { current: g.value, min: g.floor, max: g.max }
+    })
 }
 
 fn band_name(b: &Obj) -> String {
@@ -105,19 +133,27 @@ pub fn battle_start(w: &mut World) {
         return;
     }
     let cat = w.cat.clone();
+    let pools = w.ruleset.numbers.unit_pools.clone();
     for c in 0..w.units.len() {
-        for h in w.units[c].passive_meters.clone() {
-            let Some(def) = cat.unit_meters.get(&h.meter) else { continue };
-            let floor = h.floor.unwrap_or(def.min).clamp(def.min, def.max);
-            if let Some(i) = find(w, c, &h.meter) {
+        // U1.2-S5: the ruleset's pools after the passives' meters (start -1: the row's start)
+        let held = w.units[c].passive_meters.clone().into_iter().map(|h| (h.meter, h.start, h.floor));
+        for (meter, start, floor) in held.chain(pools.iter().map(|m| (m.clone(), -1, None))) {
+            let Some(def) = cat.unit_meters.get(&meter) else { continue };
+            let max = max_of(w, c, def);
+            let floor = floor.unwrap_or(def.min).clamp(def.min, max);
+            if let Some(i) = find(w, c, &meter) {
                 let g = &mut w.meters.gauges[i];
                 g.floor = g.floor.max(floor);
                 g.value = g.value.max(g.floor);
                 continue;
             }
-            let start = if h.start < 0 { def.start } else { h.start };
-            let value = start.clamp(def.min, def.max).max(floor);
-            w.meters.gauges.push(Gauge { unit: c, meter: h.meter.clone(), value, floor, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
+            let start = match (start < 0, def.start_full) {
+                (true, true) => max,
+                (true, false) => def.start,
+                _ => start,
+            };
+            let value = start.clamp(def.min, max).max(floor);
+            w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
             for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
                 if !w.units[c].meter_skills.contains(s) {
                     w.units[c].meter_skills.push(s.clone());
@@ -134,12 +170,12 @@ pub fn battle_start(w: &mut World) {
 /// entering one adds its effects and (with `grant`) grants its statuses for 1 round. Returns the line of a band change.
 fn settle_band(w: &mut World, i: usize, grant: bool) -> Option<String> {
     let cat = w.cat.clone();
-    let (c, meter, v, old) = {
+    let (c, meter, v, old, max) = {
         let g = &w.meters.gauges[i];
-        (g.unit, g.meter.clone(), g.value, g.band)
+        (g.unit, g.meter.clone(), g.value, g.band, g.max)
     };
     let def = cat.unit_meters.get(&meter)?;
-    let new = bands::band_index(def.bands.iter().map(band_from), v as i64);
+    let new = bands::band_index(def.bands.iter().map(|b| band_from(b, max)), v as i64);
     if new == old {
         return None;
     }
@@ -150,7 +186,7 @@ fn settle_band(w: &mut World, i: usize, grant: bool) -> Option<String> {
     }
     if let Some(o) = old {
         for (st, _) in band_statuses(&def.bands[o]) {
-            status::remove(&mut w.units[c], &st);
+            status::band_release(&mut w.units[c], &st);
         }
     }
     let mut applied = BandApplied::default();
@@ -159,7 +195,7 @@ fn settle_band(w: &mut World, i: usize, grant: bool) -> Option<String> {
         applied = w.units[c].apply_band(&cat, value::array(b, "effects"), &format!("{METER_KEY}{meter}"));
         if grant {
             for (st, mag) in band_statuses(b) {
-                status::grant_now(&mut w.units[c], &st, 1, mag, &def.name);
+                status::band_hold(&mut w.units[c], &st, mag, &def.name);
             }
         }
     }
@@ -187,7 +223,7 @@ pub fn round_start(w: &mut World) {
             continue;
         }
         for (st, mag) in band_statuses(&def.bands[n]) {
-            status::grant_now(&mut w.units[g.unit], &st, 1, mag, &def.name);
+            status::band_hold(&mut w.units[g.unit], &st, mag, &def.name);
         }
     }
 }
@@ -212,12 +248,12 @@ fn delta_text(d: i32) -> String {
 #[allow(clippy::too_many_arguments)]
 fn move_to(res: &mut Resolver, w: &mut World, i: usize, to: i32, h: &Holder, what: &str, rules: bool, block: i32, fired: &mut Fired) -> bool {
     let cat = w.cat.clone();
-    let (meter, old, floor) = {
+    let (meter, old, floor, max) = {
         let g = &w.meters.gauges[i];
-        (g.meter.clone(), g.value, g.floor)
+        (g.meter.clone(), g.value, g.floor, g.max)
     };
     let Some(def) = cat.unit_meters.get(&meter) else { return false };
-    let new = to.clamp(floor, def.max.max(floor));
+    let new = to.clamp(floor, max.max(floor));
     if new == old {
         return false;
     }
@@ -240,7 +276,8 @@ fn move_to(res: &mut Resolver, w: &mut World, i: usize, to: i32, h: &Holder, wha
 /// default, `once` per battle) run their effects for the gauge's holder.
 #[allow(clippy::too_many_arguments)]
 fn run_rules(res: &mut Resolver, w: &mut World, i: usize, def: &UnitMeterDef, old: i64, new: i64, block: i32, fired: &mut Fired) {
-    let bands_at: Vec<(&str, i64)> = def.bands.iter().map(|b| (b.get("id").and_then(Value::as_str).unwrap_or(""), band_from(b))).collect();
+    let max = w.meters.gauges[i].max;
+    let bands_at: Vec<(&str, i64)> = def.bands.iter().map(|b| (b.get("id").and_then(Value::as_str).unwrap_or(""), band_from(b, max))).collect();
     let mut crossed: Vec<(i64, &Obj)> = def
         .rules
         .iter()
@@ -268,7 +305,8 @@ fn run_rules(res: &mut Resolver, w: &mut World, i: usize, def: &UnitMeterDef, ol
 }
 
 /// 8.2 `meter` and UM5 `meter_set` (run by `trigger::run_effects` for `to`): a trigger's meter change on a meter `to`
-/// holds (`delta` -10..10), or a rule's set (`value`); the line is the holder's; with `rules` the move may cross rules.
+/// holds (`delta` within the row's `delta_max`, 10 by default), or a rule's set (`value`); the line is the holder's;
+/// with `rules` the move may cross rules.
 #[allow(clippy::too_many_arguments)]
 pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e: &Obj, rules: bool, block: i32, fired: &mut Fired) {
     if !on(w) {
@@ -282,7 +320,7 @@ pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e:
         let v = value::int(e, "value", cur);
         (v, format!("{}'s {} set to {v}", w.units[to].name, def.name))
     } else {
-        let d = value::int(e, "delta", 0).clamp(-10, 10);
+        let d = value::int(e, "delta", 0).clamp(-def.delta_max, def.delta_max);
         if d == 0 {
             return;
         }
@@ -309,10 +347,9 @@ pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) ->
 pub fn spend(w: &World, c: UnitId, values: &mut [(String, i32)], deltas: &[MeterDelta]) {
     for d in deltas {
         let Some(i) = find(w, c, &d.meter) else { continue };
-        let Some(def) = w.cat.unit_meters.get(&d.meter) else { continue };
-        let floor = w.meters.gauges[i].floor;
+        let (floor, max) = (w.meters.gauges[i].floor, w.meters.gauges[i].max);
         if let Some(v) = values.iter_mut().find(|(m, _)| *m == d.meter) {
-            v.1 = (v.1 + d.delta).clamp(floor, def.max.max(floor));
+            v.1 = (v.1 + d.delta).clamp(floor, max.max(floor));
         }
     }
 }
@@ -403,6 +440,22 @@ pub fn round_end(res: &mut Resolver, w: &mut World) {
     }
 }
 
+/// U1.2-S5: the trigger rows of the meters `c` holds (a row's `triggers`, in gauge then list order; key
+/// `meter:<meter>#<n>`, source the meter's name). Empty without the rule.
+pub fn held_triggers(w: &World, c: UnitId) -> Vec<Holder> {
+    if !on(w) {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for g in w.meters.gauges.iter().filter(|g| g.unit == c) {
+        let Some(def) = w.cat.unit_meters.get(&g.meter) else { continue };
+        for (n, row) in def.triggers.iter().enumerate() {
+            out.push(Holder { unit: c, source: def.name.clone(), key: format!("{METER_KEY}{}#{n}", def.id), row: row.clone() });
+        }
+    }
+    out
+}
+
 /// UM6: `c`'s meter skills whose cost its meters meet now (offered without a slot; empty without the rule).
 pub fn offered(w: &World, c: UnitId) -> Vec<String> {
     let u = &w.units[c];
@@ -421,9 +474,9 @@ pub fn shown(w: &World, c: UnitId) -> Vec<Shown> {
         if def.show == "hidden" {
             continue;
         }
-        let show = if def.show == "pips" && def.max - def.min > rpgkit_data::METER_PIPS_MAX { "bar".to_string() } else { def.show.clone() };
+        let show = if def.show == "pips" && g.max - def.min > rpgkit_data::METER_PIPS_MAX { "bar".to_string() } else { def.show.clone() };
         let band = g.band.and_then(|n| def.bands.get(n)).map(band_name).unwrap_or_default();
-        out.push(Shown { id: def.id.clone(), name: def.name.clone(), short: def.short.clone(), value: g.value, min: def.min, max: def.max, show, band });
+        out.push(Shown { id: def.id.clone(), name: def.name.clone(), short: def.short.clone(), value: g.value, min: def.min, max: g.max, show, band });
     }
     out
 }

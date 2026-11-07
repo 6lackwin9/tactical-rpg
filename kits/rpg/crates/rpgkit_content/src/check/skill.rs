@@ -27,7 +27,8 @@ const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("area", &["area"]),
     ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
-    ("guard", &["mitigation"]),
+    // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
+    ("guard", &["mitigation", "guard_rounds"]),
     ("focus", &["boost", "boost_rounds"]),
     ("jump", &["jump_tiles"]),
     ("flow", &["ends_in_stance"]),
@@ -67,6 +68,10 @@ pub fn has_field(kind: &str, field: &str) -> bool {
     }
     if field == "stance" {
         return kind == "ATTACK";
+    }
+    // U1.2-S5: a Rest may move a meter (a pool's gain on rest), without the rest of the cost section
+    if field == "meters" && kind == "REST" {
+        return true;
     }
     sections_of(kind).iter().any(|s| section_fields(s).contains(&field))
 }
@@ -538,6 +543,28 @@ pub const GEAR_TYPES: [&str; 21] = ["sword", "axe", "mace", "hammer", "fist", "d
 /// Gear types added after the Godot freeze that need no item family until data uses them (ItemValidator.family_set_errors
 /// asks a family of every other gear type).
 pub const OPTIONAL_GEAR_TYPES: [&str; 5] = ["polearm", "scourge", "censer", "bone_saw", "sprayer"];
+/// The item types whose family id is a gear token (a weapon type, a shield, an armour), and of those the hand ones.
+const GEAR_ITEM_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
+const HAND_ITEM_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
+
+/// U3.2-S2: the gear tokens of a family table (Proficiency.gear_types): the ids of its WEAPON, SHIELD and ARMOR families
+/// in table order. No family table (a pre-family catalog, read like ItemValidator._legacy_errors) reads `GEAR_TYPES`.
+pub fn gear_tokens(families: &[Dict]) -> Vec<String> {
+    tokens_of(families, &GEAR_ITEM_TYPES, &GEAR_TYPES)
+}
+
+/// U3.2-S2: the weapon tokens of a family table (Proficiency.WEAPON_TYPES, the hand gear): the ids of its WEAPON and
+/// SHIELD families in table order (the gear tokens without the armour). No family table reads `unit::WEAPON_TYPES`.
+pub fn weapon_tokens(families: &[Dict]) -> Vec<String> {
+    tokens_of(families, &HAND_ITEM_TYPES, &super::unit::WEAPON_TYPES)
+}
+
+fn tokens_of(families: &[Dict], types: &[&str], legacy: &[&str]) -> Vec<String> {
+    if families.is_empty() {
+        return legacy.iter().map(|g| g.to_string()).collect();
+    }
+    families.iter().filter(|f| types.contains(&crate::source::item_type_of(f).as_str())).map(|f| json::s(f, "id")).collect()
+}
 
 fn grade_rank(grade: &str) -> usize {
     ["novice", "advanced", "expert"].iter().position(|g| *g == grade).unwrap_or(0)
@@ -555,8 +582,10 @@ fn magnitude_range(st: &str) -> (i64, i64) {
     status::row_of(st).map_or((0, 0), |r| (r.magnitude_min as i64, r.magnitude_max as i64))
 }
 
+/// The statuses a skill's `status_magnitude` can reach: a debuff it inflicts or a buff it grants (S1.2-S4: not `guard`,
+/// which only a multi-round Guard skill queues, at its own fraction).
 fn magnitude_ids() -> Vec<&'static str> {
-    status::ROWS.iter().filter(|r| r.magnitude_max > 0).map(|r| r.id).collect()
+    status::ROWS.iter().filter(|r| r.magnitude_max > 0 && (!r.buff || !r.grant.is_empty())).map(|r| r.id).collect()
 }
 
 /// Skill family rules: a valid family id, ids <head> / <head>_<n>, ranks 1..n without gaps, one kind per family, and
@@ -799,8 +828,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
     out.extend(timeline_problems(v, e, &kind));
     out.extend(super::hooks::skill_errors(v, e, &kind));
     let types = json::sget(e, "weapon_types");
+    let gear_types = gear_tokens(v.entries("item_families"));
     for gear in &types {
-        if !GEAR_TYPES.contains(&gear.as_str()) && gear != UNARMED_TOKEN {
+        if !gear_types.contains(gear) && gear != UNARMED_TOKEN {
             out.push(format!("Needs weapon type: unknown gear type '{gear}' (gear types or '{UNARMED_TOKEN}')."));
         }
     }

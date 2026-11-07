@@ -6,11 +6,10 @@ Once a layout is selected, the position and size of each element are calculated 
 positions, only relative positions and sizes; the actual size at render time comes from the layout. Changing a layout's
 dimensions needs few or no screen edits.
 
-Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part`, `frac`, `fill`, `resolve`, `Stack`, `pick`),
+Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part` with `min`, `frac`, `ratio`, `fill`, `resolve`, `Stack`, `Axis`, `pick`),
 `aegis_ui::shot_diff`, `Grid` and `Screen::grid`, `Metrics` with `hair`, `Env`, `Ui::m`, `Ui::env`, `Ui::screen`,
-`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, and the kit's widgets, panes, pip gauge, timeline and desk, which draw
-right on every grid. The later slice of the engine's layout work (`docs/specs/LAYOUT720.md`) adds `CanvasPolicy` and
-`layout_audit` (E5). A name on this page that the code does not have yet is one of those.
+`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, the kit's widgets, panes, pip gauge, timeline and desk, which draw
+right on every grid, `CanvasPolicy`, `View::native`, `layout_audit`, its size profiles and `layout_specimen`.
 
 What has no `Ui` to read answers in old units, with an `_on` form for any grid: `panes::slot_rects_on(&m, r, n)`,
 `panes::tab_rail_rects_on(&m, r, n)`, `panes::snap_on(v, m.grid)`, `pips::pip_rect_on(x, cy, k, m.g)`,
@@ -31,12 +30,25 @@ physical pixels one unit is.
 The engine supports any canvas; a game decides what it offers. The grid's size is set in one place and is never a number
 in a screen: every screen receives its canvas as a rect.
 
+A game declares both in its manifest, and they reach the shell through `Options`. A bad value is a notice and the default.
+
+| Key | Form | Absent |
+| --- | --- | --- |
+| `canvas` | `{"policy": "fixed", "fit" or "dp", "w": n, "h": n}`; `w` a whole multiple of 640; `dp` takes no `w` or `h` | `fixed`, the grid's size |
+| `window_sizes` | A list of 1 to 32 `WxH` strings, none twice. The saved size is held to it, and a settings row reads `Settings::window_sizes` | The shell holds nothing: the list the game gave `keep_window_size`, else the engine's |
+
+The canvas is a value in the view (`View.canvas`), and the policy decides the view of `Native` screens only: `Old` and
+`Quadrant` screens keep the old canvas whatever a game declares. A preview draws a native screen on the grid's canvas, whatever
+the game's policy. `View::native(policy, pw, ph, dpr, ui_scale)` gives the view; a side's canvas is whole units, rounded down,
+and what is left of the window, under a unit, stays blank.
+
 ## Writing a screen
 
 1. Cut from `ui.screen()`, the canvas as a rect. Read it each frame and assume no aspect.
 2. Take tokens from `ui.m()`: text sizes, gaps, small control heights, and `u(n)` for a number no token names. A theme's
    `metrics` block sets them (`theme_and_tiles.md`). What draws with no `Ui` reads `Metrics::of(&th(), p.v)`.
-3. Draw frames through `ui.frame_body(role, r)`, which returns the content rect, so content never reads a slice number.
+3. Draw frames through `ui.frame_body(role, r)`, which returns the content rect, so content never reads a slice number. A
+   panel sized by its content measures first with `ui.frame_content(role, r)`, the same rect with nothing drawn.
 4. Cut every pane first, then choose one corner size for the smallest (`ui.corner_size`), then draw. The size is against the
    art, as a sidecar's `corner_size`, and lasts for that `Ui`.
 5. Draw images through `ui.image_in(img, r)`, and read `ui.env()` for the canvas, its size classes, `dpr` and the pointer.
@@ -59,7 +71,7 @@ pronounced on smaller ones and always legible, and at one layout they keep the s
 | Kind of value | How it is written | Examples |
 | --- | --- | --- |
 | Position | Anchor, cut, split, stack; `at` for a free point. Never an absolute canvas number | A dialog, a logo, a panel in its screen; a close button in its frame |
-| Panel, pane and element size | `frac` or `fill`, or a token for a control's height | Dialog width, side rail, columns, list height |
+| Panel, pane and element size | `frac`, `ratio` or `fill`, or a token for a control's height; `.min(n)` for a floor | Dialog width, side rail, columns, list height |
 | Inner layout of a widget | Relative to its own rect | Icon centred in a button, slider knob by value |
 | Spacing | Tokens from `Metrics`, not fractions | Margin, gutter, padding; bands of a frame |
 | Thin things | Tokens; `Metrics.hair` at small scales | Lines, borders, focus ring, scroll bar, grips |
@@ -98,13 +110,33 @@ cell's width is the difference between its two boundaries. For fills over `room`
 - Cells can differ by 1 unit. That is the whole cost, and it never accumulates.
 
 `resolve(parts, room)` works out sizes in one place: tokens first, then shares of what is left, then fills by weight. The
-one exception is `Stack::next`, which reads a token and an over-budget share itself so `overflow` can count what did not
-fit. A size that cannot fit becomes 0; nothing panics and nothing goes negative. `cut_*` share their edge by construction,
-and `Stack` and `grid` use running totals. Parts with no fill whose shares total 1,000 end exactly on the area's edge. A
+one exception is `Stack::next`, which reads tokens and shares itself so `overflow` can count what did not fit. A size that
+cannot fit becomes 0; nothing panics and nothing goes negative. `cut_*` share their edge by construction, and `Stack` and
+`grid` use running totals. Parts with no fill whose shares total the whole end exactly on the area's edge. A
 `Stack` share is of the whole area, unlike `split_y`, whose shares are of what the tokens leave: at height 1000, a token 40
 then `frac(500)` twice gives 40, 500 and a 0-high rect with overflow 40 in a `Stack`, and 40, 480, 480 in `split_y`. `place` and `at` clamp to the parent, round the start down once and add the size, so a lone element has one
 rounding only, and a centred odd remainder rounds toward the top left. Never add a rounded size to a rounded position across
 neighbours: a screen that needs a shared edge cuts or splits.
+
+**Shares finer than per mille.** `ratio(n, d)` is a share of `n / d`, both at most 65,535, for what per mille cannot state;
+`frac(p)` is `ratio(p, 1000)`. The running total is an exact fraction across any mix, so `ratio(1, 3)` three times ends on
+the edge. `ratio(n, 0)` asks for nothing, and past the whole it gets 0 as `frac` does. A list whose running total would need
+a denominator above 2^90 refuses the share that passes it, with 0: that takes several large prime denominators in one list.
+
+**Floors.** `part.min(n)` holds a share or a token at `n` units or more; a fill is what is left, so it ignores a floor. In a
+list a floor pushes its share's far edge out: at room 1000, `frac(300).min(400)`, `frac(200)`, `frac(500)` is 400, 100, 500.
+The extra comes from the next shares until the running total's next boundary passes the pushed edge, then from the fills, so
+edges stay shared and the total stays the room.
+
+| Where | A floor that cannot fit |
+| --- | --- |
+| `resolve`, `split_*`, `cut_*` | The part is 0, as any size that cannot fit, and the parts after it get their turn |
+| `Stack` | The rect is 0 long and its length counts in `overflow`. A floor that fits still only adds: it takes nothing from a neighbour, so a later rect can overflow |
+| `place`, `at` | Clamped to the parent |
+
+**Stacks on either axis.** `Stack::new(area, gap)` runs down, `Stack::row(area, gap)` runs across, and
+`Stack::along(area, axis, gap)` takes `Axis::X` or `Axis::Y` as a value. A row follows every rule of a stack turned on its
+side, and its `overflow` counts width.
 
 **Worked example.** A screen: margin 16, a rail of `frac(186)`, gap 12, then a list and a detail pane split `fill(2)`,
 `fill(1)` with gap 12. These numbers are pinned by a test in `aegis_layout/tests/layout.rs`.
@@ -145,7 +177,7 @@ Every stack or list declares what it does when it does not fit; the default is R
 | Scroll | The widget kit's scroll area, content height from `Stack` | Lists, long text |
 | Collapse | The kit's section, or tabs through `pick` | Secondary panels |
 | Truncate | Fitted text with the full text on a tip and on focus | Names, one-line labels |
-| Report | `Stack::overflow()` goes into the audit; drawing is clipped to the area | Anything not designed to overflow |
+| Report | `ui.report_overflow(id, area, stack.overflow())` goes into the audit; drawing is clipped to the area | Anything not designed to overflow |
 
 ## `dpr`, Text size and UI scale
 
@@ -171,7 +203,7 @@ Each is its own later task, and no caller changes when it lands.
 | Later work | Where it attaches | Until then |
 | --- | --- | --- |
 | Images: a scale or fill rule per image | `Ui::image_in(img, r)`: a rule argument with a default, aspect-kept drawing, a `stretched_art` audit kind | Drawn in the given rect |
-| Minimum size caps, so some elements stay legible | `Part` (private fields, so a `.min(n)` adds without breaking callers); `Ui::m()`; `Env.dpr` | Parts have no caps; text keeps its pixel floor |
+| Minimums on text and targets, so some elements stay legible | `Ui::m()`; `Env.dpr` (floors on parts are built: `Part::min`) | Text keeps its pixel floor |
 | Space priority: what gives way when the minimums do not fit | `Part` (a `.give_way(rank)`), applied inside `resolve` before boundaries are worked out | Too little room gives 0 size, and the audit reports it |
 
 ## No hover-only information
@@ -191,8 +223,23 @@ portable. No `Native` screen assumes a wide canvas; one with no compact choice r
 
 - **Relations, not numbers.** "Yes is left of No, inside the frame, one gutter apart", over several canvases. Derive every
   expected value from the rules.
-- **Profiles.** A moved screen must pass the `desktop` profile at each text size. Other profiles (wide, ultrawide, handheld,
-  browser, phone) report only until the minimums exist, and must resolve without a panic.
+- **Profiles.** A moved screen must pass the `desktop` profile at each text size. Other profiles (`wide`, `ultrawide`,
+  `handheld`, `browser_small`, `phone_landscape`, `phone_portrait`) report only until the minimums exist, and must resolve
+  without a panic.
+- **`layout_audit`.** What a frame of a `Native` screen does with its space; `Old` and `Quadrant` screens answer
+  `{"audited": false, "why"}`. The agent link's `text_audit` gives it for one frame under its own `layout` key, so the text
+  audit's counts keep their form. Its `layout_audit {profile}` runs every profile, or that one, at the four text sizes, and
+  answers `{pass, profiles: [{profile, must_pass, window, policy, canvas, classes, clean, counts, text_counts, issues}]}`. With
+  no shell (a test, a tool): `layout_audit::audit_screen`. An issue has `kind`, `what`, `at` (in the screen's units) and `why`,
+  a sentence with the numbers.
+
+| Kind | Means | Fix |
+| --- | --- | --- |
+| `overflow` | A stack or list needs `by` units more than its area | Scroll, collapse, or a `pick` choice for less room |
+| `off_canvas` | A widget, frame or image runs up to `by` units past the canvas | A rect cut from the canvas, not added to it |
+| `zero_size` | A widget, frame, frame body or image got no room. A row scrolled out of its area is not one | A choice for less room; a minimum, once they exist |
+| `corner_shrunk` | A panel too small for its frame's corners draws them at `share` of their size, against one corner size per screen | A larger panel, or a smaller `corner_size` for the screen |
+| `hover_only` | A tip on a widget that takes neither focus nor a press | A focusable widget, or the text on the screen |
 - **`shot_diff`.** `aegis_ui::shot_diff::shot_diff(a, b, s)` compares two shots at `s` physical px per grid unit. A pixel
   matches if some pixel of the other image within `ceil(s)`, in a square window, is within 3 per channel. Both images are
   read against each other, and any unmatched pixel fails with a bounding box. It refuses shots of different sizes. It knows

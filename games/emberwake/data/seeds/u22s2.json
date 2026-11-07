@@ -1,0 +1,53 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "units",
+			"entry": {
+				"id": "training_dummy",
+				"name": "Training Dummy",
+				"side": "neutral",
+				"description": "Gear Dojo target: 500 HP, no armor, strikes back with 20 power when asked.",
+				"class_id": "warrior",
+				"level": 1,
+				"tier": "hero",
+				"spend": {},
+				"stat_mode": "fixed",
+				"hp": 500,
+				"speed": 10,
+				"attack_range": 1,
+				"ap": 0,
+				"power": 20,
+				"armor": 0,
+				"poise": -1,
+				"art": "dummy",
+				"palette": "",
+				"portrait_tier": "",
+				"skill_cap": 1,
+				"extra_skills": [],
+				"loadout": [],
+				"deck": {},
+				"default_intent": "",
+				"ai_role": "AGGRESSOR",
+				"target_pref": "ROLE",
+				"flee_ratio": 0.0,
+				"defend_below": 0.4,
+				"prefer_level": 0,
+				"status_resist": {},
+				"reckless": false,
+				"heal_below": 0.7,
+				"tactics": [],
+				"main_hand": "none",
+				"off_hand": "none",
+				"head": "none",
+				"body": "none",
+				"accessory_1": "none",
+				"accessory_2": "none",
+				"pouch": [
+					"none"
+				],
+				"loot": []
+			}
+		}
+	]
+}

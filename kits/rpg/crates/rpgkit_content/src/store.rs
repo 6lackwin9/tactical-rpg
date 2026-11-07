@@ -19,10 +19,30 @@ pub use aegis_content::store::Outcome;
 
 // ---- Storage forms -----------------------------------------------------------------------------------------------
 
-/// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false and `origin` system
-/// left out; unknown keys kept.
+/// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false, `origin` system and an empty
+/// `wears_untrained` (UNITDRILL1: a row without the exception reads as before) left out; unknown keys kept.
 fn content_storage(kind: &str, full: &Dict) -> Dict {
-    to_storage(source::schema(), "content", kind, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system"))
+    to_storage(source::schema(), "content", kind, full, |key, v| {
+        (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || (key == crate::check::unit::WEARS_UNTRAINED && json::strings(v).is_empty())
+    })
+}
+
+/// U2.2-S3 (FB-44): a class row stores an empty share vector (`base_shares`, `growth_shares`) as no key, so an integer
+/// row writes as before the share fields existed; a share row (`base_shares` set) stores its empty `base_stats` and
+/// `growth` as no key too (the typed catalog computes them from the shares). A non-empty value is always written.
+fn class_storage(full: &Dict) -> Dict {
+    let empty = |v: &Value| v.as_object().is_some_and(|m| m.is_empty());
+    let share_row = json::get(full, "base_shares").as_object().is_some_and(|m| !m.is_empty());
+    let mut row = content_storage("classes", full);
+    row.retain(|k, v| {
+        let dropped = match k.as_str() {
+            "base_shares" | "growth_shares" => true,
+            "base_stats" | "growth" => share_row,
+            _ => false,
+        };
+        !(dropped && empty(v))
+    });
+    row
 }
 
 /// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the
@@ -30,6 +50,32 @@ fn content_storage(kind: &str, full: &Dict) -> Dict {
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
     to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
+}
+
+/// U3.2-S4: a family row stores its Level-2 bonus and Level-3 passive as no key while they are empty (the defaults), so a
+/// row written before they existed re-saves byte for byte.
+fn family_storage(full: &Dict) -> Dict {
+    let mut row = content_storage("item_families", full);
+    row.retain(|k, v| match k.as_str() {
+        "level2_bonus" => v.as_object().is_some_and(|m| !m.is_empty()),
+        "level3_passive" => !gstr(v).is_empty(),
+        _ => true,
+    });
+    row
+}
+
+/// U1.2-S5: a unit meter row stores its pool fields (`max_stat`, `start_full`, `delta_max`, `triggers`) as no key while
+/// they hold their schema defaults, so a row written before they existed re-saves byte for byte.
+fn meter_storage(full: &Dict) -> Dict {
+    let mut row = content_storage(rpgkit_data::UNIT_METERS_KIND, full);
+    row.retain(|k, v| match k.as_str() {
+        "max_stat" => !gstr(v).is_empty(),
+        "start_full" => json::to_bool(v),
+        "delta_max" => json::to_int(v) != i64::from(rpgkit_data::METER_DELTA_MAX),
+        "triggers" => v.as_array().is_some_and(|a| !a.is_empty()),
+        _ => true,
+    });
+    row
 }
 
 /// PORTRAITFX1 5.1: a portrait cue row (and PORTRAITFX1-EX: an expression-effect row) stores its id and only the
@@ -83,13 +129,33 @@ fn without_empty_follow_ups(kind: &str, entry: &Dict) -> Dict {
     out
 }
 
-/// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` is left out).
-pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
-    aegis_content::schema::world_storage(source::schema(), kind, entry)
+/// NPCFACE1: a location's marker stores its `face` only when it is not the default `down`.
+fn without_default_faces(kind: &str, entry: &Dict) -> Dict {
+    let mut out = entry.clone();
+    if kind != "locations" {
+        return out;
+    }
+    if let Some(Value::Array(markers)) = out.get_mut("markers") {
+        for m in markers.iter_mut().filter_map(Value::as_object_mut) {
+            if m.get("face").is_some_and(|x| x.as_str() == Some("down")) {
+                m.shift_remove("face");
+            }
+        }
+    }
+    out
 }
 
-/// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule).
-const ITEM_DERIVED: [&str; 14] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE];
+/// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` is left out).
+pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
+    aegis_content::schema::world_storage(source::schema(), kind, &without_default_faces(kind, entry))
+}
+
+/// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule,
+/// U3.2-S2 the family's engine rules, U3.2-S4 its Level-2 bonus and Level-3 passive).
+const ITEM_DERIVED: [&str; 16] = [
+    "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE,
+    rpgkit_data::ITEM_FAMILY_RULES, rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3,
+];
 
 /// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections (one
 /// table with the checks; RULESET1-S added the timeline fields there).
@@ -140,7 +206,8 @@ fn skill_storage(entry: &Dict) -> Dict {
         out.insert(key, value);
     }
     for (k, v) in first {
-        if !out.contains_key(k) && !has_field(source::schema(), "content", "skills", k) {
+        // U3.2-S2: the loader's spell-source mark is derived from the family table, never stored
+        if !out.contains_key(k) && !has_field(source::schema(), "content", "skills", k) && k != rpgkit_data::SKILL_SPELL_SOURCE {
             out.insert(k.clone(), v.clone());
         }
     }
@@ -162,9 +229,11 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             let has_hand = !sget(&row, "hand", "").is_empty();
             Ok(row.into_iter().filter(|(k, _)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand))).map(|(k, v)| (k, copy(&v))).collect())
         }
-        "item_families" => Ok(content_storage(kind, &source::derive_family(&content(kind, entry)))),
+        "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),
         k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
         k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
+        "classes" => Ok(class_storage(&content(kind, entry))),
+        k if k == rpgkit_data::UNIT_METERS_KIND => Ok(meter_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
 }

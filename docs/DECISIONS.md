@@ -8,7 +8,7 @@ Index since 2026-10-17 (CLN-10): the decision rows live in one file per system, 
 | --- | --- | --- |
 | Content edits (2026-10-19) | Through `aegis content` (upsert, remove, `apply` of a JSON seed), validated by the engine's writer, which writes Godot's storage format | Hand-edited JSON and ad-hoc string patches broke files before; the Godot `ContentCatalog.upsert` scripts left with the Godot build (decision "Engine transition (user 2026-10-19)") |
 | Typing (2026-10-19) | Rust, statically typed; the build has no compiler warnings; clippy is advisory (skill `rust-conventions`) | User standing rule (strict static typing), carried over from GDScript at the transition |
-| README | Updated with every change | User standing rule |
+| README | Updated with every change (Build reports docs delta in `docs/FEEDBACK.md`; Design applies it) | User standing rule |
 | Uncertainty | Check known-issues table; max 2 failed fixes; then ask the user with findings and options. Always ask on design/gameplay choices | User request |
 
 Commits: only when `check_project.ps1 -Fast -Quiet` (or `tools/fc.sh gate`; since 2026-10-19 both build the engine and run every test) and `tools/fc.sh docs` are clean, plus an empty IDE Problems tab on desktop (`CLAUDE.md` standing rules; cloud: decision "Cloud workflow"); the trailer comes from the session's attribution (the hard-coded trailer row is archived).

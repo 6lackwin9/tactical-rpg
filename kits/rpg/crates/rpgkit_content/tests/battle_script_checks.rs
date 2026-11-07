@@ -11,13 +11,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_battle_script_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_battle_script_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -99,7 +98,7 @@ fn one(errors: Vec<String>, want: &str) {
 
 #[test]
 fn every_script_mistake_gives_its_error_in_a_catalog_encounter() {
-    let data = scratch("catalog");
+    let (_scratch, data) = scratch("catalog");
     catalog(&data);
     let v = store::view(&data);
     let e: Dict = v.get("encounters", "scripted").clone();
@@ -156,7 +155,7 @@ fn every_script_mistake_gives_its_error_in_a_catalog_encounter() {
 /// 1 and a locked round 2 are not).
 #[test]
 fn a_hold_escape_refuses_a_locked_round_one() {
-    let data = scratch("hold");
+    let (_scratch, data) = scratch("hold");
     catalog(&data);
     let v = store::view(&data);
     let mut e: Dict = v.get("encounters", "scripted").clone();
@@ -173,7 +172,7 @@ fn a_hold_escape_refuses_a_locked_round_one() {
 /// unit's.
 #[test]
 fn a_world_script_names_characters() {
-    let data = scratch("world");
+    let (_scratch, data) = scratch("world");
     catalog(&data);
     let ch = |id: &str, role: &str, base: &str| json!({"id": id, "name": id, "role": role, "base_unit": base});
     let row = json!({"id": "scripted", "name": "Scripted", "party": ["hero_c", "mate_c"], "enemies": ["brute_c", "guard_c", "guard_c"], "max_rounds": 6, "total_blocks": 6});

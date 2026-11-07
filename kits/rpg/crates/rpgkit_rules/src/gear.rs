@@ -1,13 +1,18 @@
 //! Equipment (tiers, wield penalty, mitigation) and Inventory (scripts/core/inventory/).
 
-use crate::stats::{CharacterStats, Proficiency};
+use crate::stats::{roundi, CharacterStats, Proficiency};
+pub use crate::stats::WieldRule;
 use aegis_core::value::{self, Obj};
-use rpgkit_data::ItemDef;
+use rpgkit_data::{ItemDef, ALWAYS_RANGED_RULE, FOCUS_RULE, SHIELD_RULE};
 use indexmap::IndexMap;
 
 /// StatModifier source of every gear tier stat bonus.
 pub const TIER_SOURCE: &str = "gear_tier";
-const ALWAYS_RANGED_TYPES: [&str; 3] = ["bow", "crossbow", "sling"];
+/// The stat-deficit ramp (FB-33: kept as built): weapon power and armour lose this share per missing requirement point
+/// (after the requirement discount) ...
+pub const WIELD_DEFICIT_STEP: f64 = 0.15;
+/// ... up to this share.
+pub const WIELD_DEFICIT_CAP: f64 = 0.60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Slot {
@@ -45,12 +50,27 @@ pub struct Equipment {
     pub item: ItemDef,
 }
 
+/// U3.2-S3 (U3 soft wield, FB-33): what wearing an item costs its wearer. `ratio` and `deficit` are the stat-deficit
+/// ramp (`WIELD_DEFICIT_STEP` per missing point, capped at `WIELD_DEFICIT_CAP`); `untrained` is proficiency 0 in its gear
+/// type (`trained_for` false), which multiplies by `untrained_mult` and adds `burden_add`; `penalized` is either.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct WieldPenalty {
     pub penalized: bool,
     pub ratio: f64,
-    pub extra_block_cost: i32,
     pub deficit: i32,
+    pub untrained: bool,
+    /// The wield terms' `untrained_power_mult` while `untrained` (unused otherwise).
+    pub untrained_mult: f64,
+    /// The wield terms' `untrained_burden_add` while `untrained` (0 otherwise).
+    pub burden_add: i32,
+}
+
+impl WieldPenalty {
+    /// The factor on the item's weapon power and armour: `(1 - ratio) x untrained_mult`, the two stacking
+    /// multiplicatively; 1.0 without a penalty.
+    pub fn factor(&self) -> f64 {
+        (1.0 - self.ratio) * if self.untrained { self.untrained_mult } else { 1.0 }
+    }
 }
 
 impl Equipment {
@@ -70,12 +90,14 @@ impl Equipment {
         self.item.item_type == "WEAPON"
     }
 
+    /// U3.2-S2: the item's family has the engine rule `shield`.
     pub fn is_shield(&self) -> bool {
-        self.item.item_type == "SHIELD" || self.item.off_hand_category == "shield"
+        self.item.has_rule(SHIELD_RULE)
     }
 
+    /// Equipment.is_ranged_weapon; U3.2-S2: a family with the engine rule `always_ranged`, or a base range above 1.
     pub fn is_ranged_weapon(&self) -> bool {
-        self.is_weapon() && (ALWAYS_RANGED_TYPES.contains(&self.item.weapon_type.to_lowercase().as_str()) || self.item.base_range > 1)
+        self.is_weapon() && (self.item.has_rule(ALWAYS_RANGED_RULE) || self.item.base_range > 1)
     }
 
     pub fn is_melee_weapon(&self) -> bool {
@@ -101,19 +123,27 @@ impl Equipment {
         self.item.required_stats.iter().all(|(s, req)| stats.stat(s, Some(&self.item.weapon_type)) + discount >= *req)
     }
 
+    /// U3.2-S3 (FB-33): the stat-deficit ramp (the largest missing point count after the requirement discount) and the
+    /// proficiency 0 penalty of the wield terms (`stats.proficiency.wield`), stacking (`WieldPenalty::factor`).
     pub fn wield_penalty(&self, stats: &CharacterStats) -> WieldPenalty {
-        if self.item.required_stats.is_empty() || self.meets_requirements(stats) {
-            return WieldPenalty::default();
-        }
-        let discount = self.discount(&stats.proficiency);
-        let mut deficit = 0;
-        for (s, req) in &self.item.required_stats {
-            let eff = stats.stat(s, Some(&self.item.weapon_type)) + discount;
-            if eff < *req {
-                deficit = deficit.max(req - eff);
+        let mut pen = WieldPenalty::default();
+        if !self.item.required_stats.is_empty() && !self.meets_requirements(stats) {
+            let discount = self.discount(&stats.proficiency);
+            let mut deficit = 0;
+            for (s, req) in &self.item.required_stats {
+                let eff = stats.stat(s, Some(&self.item.weapon_type)) + discount;
+                if eff < *req {
+                    deficit = deficit.max(req - eff);
+                }
             }
+            (pen.ratio, pen.deficit) = ((deficit as f64 * WIELD_DEFICIT_STEP).min(WIELD_DEFICIT_CAP), deficit);
         }
-        WieldPenalty { penalized: true, ratio: (deficit as f64 * 0.15).min(0.60), extra_block_cost: (deficit >= 4) as i32, deficit }
+        if !trained_for(&stats.proficiency, &self.item) {
+            let w = stats.proficiency.wield;
+            (pen.untrained, pen.untrained_mult, pen.burden_add) = (true, w.untrained_power_mult, w.untrained_burden_add);
+        }
+        pen.penalized = pen.deficit > 0 || pen.untrained;
+        pen
     }
 
     fn tier_when(tier: &Obj) -> (String, String, String, i32) {
@@ -159,10 +189,20 @@ impl Equipment {
         self.active_tiers(stats).map(|(_, t)| value::int(t, "bonus_power", 0)).sum()
     }
 
+    /// The item's armour: its mitigation, plus its unlocked tiers' with `stats`; U3.2-S3 (FB-33): times the wearer's
+    /// wield penalty factor (stat deficit and proficiency 0), rounded.
     pub fn effective_mitigation(&self, stats: Option<&CharacterStats>) -> i32 {
         match stats {
             None => self.item.mitigation,
-            Some(st) => self.item.mitigation + self.active_tiers(st).map(|(_, t)| value::int(&Self::tier_bonus(t), "mitigation", 0)).sum::<i32>(),
+            Some(st) => {
+                let raw = self.item.mitigation + self.active_tiers(st).map(|(_, t)| value::int(&Self::tier_bonus(t), "mitigation", 0)).sum::<i32>();
+                let pen = self.wield_penalty(st);
+                if pen.penalized && raw != 0 {
+                    roundi(raw as f64 * pen.factor())
+                } else {
+                    raw
+                }
+            }
         }
     }
 
@@ -186,14 +226,6 @@ impl Equipment {
             .filter(|(_, fx)| !fx.is_empty())
             .collect()
     }
-
-    pub fn effective_block_cost(&self, stats: &CharacterStats) -> i32 {
-        let mut cost = self.item.block_cost + self.wield_penalty(stats).extra_block_cost;
-        if !self.item.weapon_type.is_empty() {
-            cost -= stats.proficiency.block_cost_reduction(&self.item.weapon_type);
-        }
-        cost.max(1)
-    }
 }
 
 /// ContentFactory.item_fits_slot with worn gear kept: equipment whose slot is `slot` (a slot key like "main_hand"),
@@ -204,17 +236,19 @@ pub fn item_fits_slot(item: &ItemDef, slot: &str) -> bool {
 }
 
 /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)", the Godot gear dojo):
-/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (an orb or a tome:
-/// Equipment.is_focus, conflicts_with_main).
+/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (Equipment.is_focus,
+/// conflicts_with_main; U3.2-S2: a family with the engine rule `focus`).
 pub fn off_hand_ok(main: Option<&ItemDef>, off: &ItemDef) -> bool {
-    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !matches!(off.weapon_type.as_str(), "orb" | "tome"))
+    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !off.has_rule(FOCUS_RULE))
 }
 
-/// ClassArchetype.can_equip_gear: accessories always; gear with no weapon type, or a class with no proficiency list,
-/// too; otherwise the class must have training (level 1) in the gear type (`class` is the class's own proficiency,
-/// Proficiency::from_class, without passive bonuses).
-pub fn class_can_equip(class: &crate::stats::Proficiency, item: &ItemDef) -> bool {
-    item.item_type == "ACCESSORY" || item.slot.starts_with("ACCESSORY") || item.weapon_type.is_empty() || class.entries.is_empty() || class.base_level(&item.weapon_type) >= 1
+/// ClassArchetype.can_equip_gear, U3.2-S3 (FB-33, FB-34): no longer a gate (any unit may wear any item) but whether the
+/// item is worn trained, free of the proficiency 0 penalty: accessories always; gear with no weapon type, or a class with
+/// no proficiency list (or a unit with no class, `Proficiency::unrestricted`), too; otherwise training (level 1) in the
+/// gear type. UNITDRILL1: `prof` is the class's proficiency plus the wearer's drills (`Proficiency::with_drills`), read
+/// through `level_of` as `min_proficiency` reads it.
+pub fn trained_for(prof: &Proficiency, item: &ItemDef) -> bool {
+    item.item_type == "ACCESSORY" || item.slot.starts_with("ACCESSORY") || item.weapon_type.is_empty() || prof.entries.is_empty() || prof.unrestricted || prof.level_of(&item.weapon_type) >= 1
 }
 
 #[derive(Debug, Clone, Default)]
@@ -299,6 +333,22 @@ impl Inventory {
 
     pub fn gear(&self) -> impl Iterator<Item = &Equipment> {
         self.equipped.iter().map(|(_, e)| e)
+    }
+
+    /// AUDIT-01: the hand of a 2H main + off-hand weapon pair that is not ready (`needs_weapon_switch`): the main hand
+    /// while the off-hand weapon is active, else the off hand. None without a pair.
+    pub fn stowed_slot(&self) -> Option<Slot> {
+        if !self.needs_weapon_switch() {
+            return None;
+        }
+        Some(if self.off_active { Slot::MainHand } else { Slot::OffHand })
+    }
+
+    /// AUDIT-01: worn gear without the stowed weapon of a 2H pair (`stowed_slot`): the gear whose effects, tier
+    /// effects and family bonuses count (a backup weapon grants none of them while it is not ready).
+    pub fn ready_gear(&self) -> impl Iterator<Item = &Equipment> {
+        let stowed = self.stowed_slot();
+        self.equipped.iter().filter(move |(s, _)| Some(*s) != stowed).map(|(_, e)| e)
     }
 
     pub fn total_flat_mitigation(&self, stats: Option<&CharacterStats>) -> i32 {

@@ -1,9 +1,13 @@
 //! StatRules, StatModifier, Proficiency and CharacterStats (scripts/core/specs/).
 
-use rpgkit_data::{ClassDef, ProfEntry, STATS};
+use rpgkit_data::unit_budget::Shares;
+use rpgkit_data::{Catalog, ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
+use serde_json::Value;
+use std::sync::LazyLock;
 
-pub const CLASS_BUDGET: i32 = 62;
+/// The level 1 unit budget (`unit_budget::BASE_BUDGET`).
+pub const CLASS_BUDGET: i32 = rpgkit_data::unit_budget::BASE_BUDGET;
 pub const SPEND_BASE: i32 = 4;
 pub const FREE_PER_LEVEL: i32 = 1;
 pub const MAX_LEVEL: i32 = 10;
@@ -14,7 +18,6 @@ pub const MAX_UNLOCK_REDUCTION: i32 = 2;
 pub const ADVANCED_UNLOCK_FLOOR: i32 = 3;
 pub const KNOW_UNLOCK_BASE: i32 = 12;
 pub const KNOW_UNLOCK_STEP: i32 = 4;
-pub const MINION_SKILL_CAP: i32 = 2;
 pub const HP_PER_CONS: i32 = 8;
 pub const RANGE_PERC_THRESHOLD: i32 = 18;
 
@@ -23,15 +26,40 @@ pub fn roundi(x: f64) -> i32 {
     x.round() as i32
 }
 
-/// StatRules.TIERS: (hp scale, power scale, default AI skill cap).
-pub fn tier_scales(tier: &str) -> (f64, f64, i32) {
-    match tier {
-        "minion" => (0.4, 0.6, MINION_SKILL_CAP),
-        "standard" => (0.7, 0.8, 0),
-        "elite" => (1.25, 1.0, 0),
-        "boss" => (1.5, 1.1, 0),
-        _ => (1.0, 1.0, 0),
-    }
+/// U1.2-S4 (U1_STATS feasibility 6, U2_CLASS feasibility 2): one row of the kit's tier table `tiers.json` (beside this
+/// file, embedded at build time; StatRules.TIERS before): `hp` is the formula input `tier_hp` (it multiplies the
+/// whole max HP for now; the `60 x tier_hp + stats` form is held, FB-78), `power` is `tier_power` (attack power's base-stage multiplier), `skill_cap` the default AI skill cap
+/// (0 = none).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TierRow {
+    pub id: String,
+    pub hp: f64,
+    pub power: f64,
+    pub skill_cap: i32,
+}
+
+/// The tier a unit has unless its row names one (and the row an unknown id reads as).
+pub const HERO_TIER: &str = "hero";
+
+const TIERS_TEXT: &str = include_str!("tiers.json");
+
+/// The tier table's rows in file order.
+pub static TIERS: LazyLock<Vec<TierRow>> = LazyLock::new(|| {
+    let rows: Value = serde_json::from_str(TIERS_TEXT).expect("tiers.json: valid JSON");
+    let rows = rows.as_array().expect("tiers.json: an array of rows");
+    rows.iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let num = |k: &str| r.get(k).and_then(Value::as_f64).unwrap_or_else(|| panic!("tiers.json row {i}: `{k}` is not a number"));
+            let id = r.get("id").and_then(Value::as_str).unwrap_or_else(|| panic!("tiers.json row {i}: `id` is not a string"));
+            TierRow { id: id.to_string(), hp: num("hp"), power: num("power"), skill_cap: num("skill_cap") as i32 }
+        })
+        .collect()
+});
+
+/// The row of `tier`; an id the table lacks reads as the hero row (factors 1, no cap), as before.
+pub fn tier_row(tier: &str) -> &'static TierRow {
+    TIERS.iter().find(|r| r.id == tier).or_else(|| TIERS.iter().find(|r| r.id == HERO_TIER)).expect("tiers.json: a hero row")
 }
 
 pub fn spend_pool(level: i32) -> i32 {
@@ -47,24 +75,31 @@ pub fn know_unlock_reduction(know: i32) -> i32 {
     ((know - KNOW_UNLOCK_BASE) as f64 / KNOW_UNLOCK_STEP as f64).floor().clamp(0.0, MAX_UNLOCK_REDUCTION as f64) as i32
 }
 
-/// `points` spread over the stats in proportion to the class growth weights, heaviest first (the default spend).
-pub fn auto_spend(growth: &IndexMap<String, i32>, points: i32) -> IndexMap<String, i32> {
+/// Shares are weighed in billionths (`unit_budget`'s quota unit), so float noise in a stored share (the writer's 15
+/// digits) never changes an order or a floor.
+const SHARE_TICKS: f64 = 1_000_000_000.0;
+
+/// `points` spread over the stats in proportion to the class growth shares (`ClassDef::unit_shares().growth`: a share
+/// row's `growth_shares`, an integer row's growth / 5; U2.2-S3, FB-46), heaviest first (the default spend). Each stat
+/// with a share gets the floor of its proportional part, the points left go one each in that order; with no share at
+/// all every stat weighs the same.
+pub fn auto_spend(growth: &Shares, points: i32) -> IndexMap<String, i32> {
     let mut spend: IndexMap<String, i32> = IndexMap::new();
     if points <= 0 {
         return spend;
     }
-    let w = |s: &str| growth.get(s).copied().unwrap_or(0);
+    let w = |s: &str| growth.get(s).map(|x| (x * SHARE_TICKS).round() as i64).unwrap_or(0);
     let mut order: Vec<&str> = STATS.iter().copied().filter(|s| w(s) > 0).collect();
     if order.is_empty() {
         order = STATS.to_vec();
     }
     let pos = |s: &str| STATS.iter().position(|x| *x == s).unwrap_or(0);
     order.sort_by(|a, b| w(b).cmp(&w(a)).then(pos(a).cmp(&pos(b))));
-    let weights: Vec<i32> = order.iter().map(|s| w(s).max(1)).collect();
-    let weight_sum: i32 = weights.iter().sum();
+    let weights: Vec<i64> = order.iter().map(|s| w(s).max(1)).collect();
+    let weight_sum: i64 = weights.iter().sum();
     let mut given = 0;
     for (i, s) in order.iter().enumerate() {
-        let share = ((points * weights[i]) as f64 / weight_sum as f64).floor() as i32;
+        let share = (points as i64 * weights[i]).div_euclid(weight_sum) as i32;
         spend.insert(s.to_string(), share);
         given += share;
     }
@@ -111,11 +146,39 @@ impl StatModifier {
 pub const PROF_MAX_LEVEL: i32 = 3;
 pub const DEFAULT_SCALING: f64 = 1.5;
 pub const PASSIVE_ONLY_SCALING: f64 = 1.25;
+/// U3.2-S3 (U3 "Fixed vs parameter", FB-33): the default of the ruleset number `untrained_power_mult`, the factor on an
+/// untrained item's weapon power and armour (proficiency 0 in its gear type).
+pub const UNTRAINED_POWER_MULT: f64 = 0.75;
+/// U3.2-S3: the default of `untrained_burden_add`, the burden an untrained item adds.
+pub const UNTRAINED_BURDEN_ADD: i32 = 1;
+/// U3.2-S3: the default of `req_discount_per_level`, the stat requirement discount per proficiency level.
+pub const REQ_DISCOUNT_PER_LEVEL: i32 = 2;
+
+/// U3.2-S3 (FB-33, FB-34): the wield terms of the battle's ruleset (its row-only numbers `untrained_power_mult`,
+/// `untrained_burden_add`, `req_discount_per_level`; `Numbers::wield`). `Default` is the spec's defaults, so a unit
+/// built outside a battle (the party screen, the content check) reads them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WieldRule {
+    pub untrained_power_mult: f64,
+    pub untrained_burden_add: i32,
+    pub req_discount_per_level: i32,
+}
+
+impl Default for WieldRule {
+    fn default() -> Self {
+        Self { untrained_power_mult: UNTRAINED_POWER_MULT, untrained_burden_add: UNTRAINED_BURDEN_ADD, req_discount_per_level: REQ_DISCOUNT_PER_LEVEL }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Proficiency {
     pub entries: IndexMap<String, ProfEntry>,
     pub bonus_levels: IndexMap<String, i32>,
+    /// U3.2-S3: the wield terms its gear is read under (the ruleset's; `UnitBuild::wield`).
+    pub wield: WieldRule,
+    /// U3.2-S3 (FB-33): no gear restriction although `entries` is set: a unit with no class, which borrows the first
+    /// class's stats (`build_catalog_unit`'s fallback), wears everything trained, like a class with no proficiency list.
+    pub unrestricted: bool,
 }
 
 impl Proficiency {
@@ -125,11 +188,26 @@ impl Proficiency {
             .iter()
             .map(|(k, e)| (k.to_lowercase(), ProfEntry { level: e.level.clamp(0, PROF_MAX_LEVEL), scaling: e.scaling.clamp(1.0, 2.0) }))
             .collect();
-        Self { entries, bonus_levels: IndexMap::new() }
+        Self { entries, bonus_levels: IndexMap::new(), wield: WieldRule::default(), unrestricted: false }
     }
 
     pub fn add_bonus(&mut self, gear: &str, levels: i32) {
         *self.bonus_levels.entry(gear.to_lowercase()).or_insert(0) += levels;
+    }
+
+    /// UNITDRILL1: this proficiency plus the drills among `passive_ids`, the always-on passives (`slot` "") with a
+    /// `proficiency` grant, read through the typed grant view as a built unit reads them (U4.2-S1, FB-27:
+    /// `grants::read`, `Unit::apply_grants`). Unknown ids and slottable passives add nothing: a slottable passive trains
+    /// only while slotted, which is a battle's deck, not the gear rule's.
+    pub fn with_drills<'a>(mut self, cat: &Catalog, passive_ids: impl IntoIterator<Item = &'a String>) -> Self {
+        for passive in passive_ids.into_iter().filter_map(|id| cat.passives.get(id)).filter(|p| p.slot.is_empty()) {
+            for grant in crate::grants::read(&passive.effects) {
+                if let Some((gear, levels)) = grant.proficiency() {
+                    self.add_bonus(gear, levels);
+                }
+            }
+        }
+        self
     }
 
     pub fn base_level(&self, gear: &str) -> i32 {
@@ -153,8 +231,9 @@ impl Proficiency {
         }
     }
 
+    /// U3.2-S3: `req_discount_per_level` (the wield terms') per level in `gear`.
     pub fn requirement_discount(&self, gear: &str) -> i32 {
-        self.level_of(gear) * 2
+        self.level_of(gear) * self.wield.req_discount_per_level
     }
 
     /// Proficiency.can_use: no gear type, or at least level 1 in it.
@@ -173,10 +252,11 @@ impl Proficiency {
     pub fn burden_reduction(&self, gear: &str) -> i32 {
         (self.level_of(gear) - 1).max(0)
     }
+}
 
-    pub fn block_cost_reduction(&self, gear: &str) -> i32 {
-        (self.level_of(gear) >= PROF_MAX_LEVEL) as i32
-    }
+/// U1.2-S3c: the move curve (the one speed used): tiles one move covers, `floor((value + 2) / 5)` from 1 to 4.
+pub fn move_rate_curve(value: i32) -> i32 {
+    ((value + 2) as f64 / 5.0).floor().clamp(1.0, 4.0) as i32
 }
 
 #[derive(Debug, Clone)]
@@ -189,21 +269,15 @@ pub struct CharacterStats {
 }
 
 impl CharacterStats {
-    /// Class base stats + `spend` + the class growth of every level gained.
+    /// The class stats at the level (base and growth, `ClassDef::stats_at`; U2.2 unit budget) + `spend`.
     pub fn new(class: &ClassDef, level: i32, spend: &IndexMap<String, i32>) -> Self {
-        let mut core: IndexMap<String, i32> =
-            STATS.iter().map(|s| (s.to_string(), class.base_stats.get(*s).copied().unwrap_or(10))).collect();
         let target = level.clamp(1, MAX_LEVEL);
+        let mut core = class.stats_at(target);
         let mut spent = 0;
         for s in STATS {
             let pts = spend.get(s).copied().unwrap_or(0).max(0);
             *core.get_mut(s).unwrap() += pts;
             spent += pts;
-        }
-        for _ in 1..target {
-            for s in STATS {
-                *core.get_mut(s).unwrap() += class.growth.get(s).copied().unwrap_or(0);
-            }
         }
         Self { level: target, unallocated: (spend_pool(target) - spent).max(0), core, proficiency: Proficiency::from_class(class), modifiers: Vec::new() }
     }
@@ -233,12 +307,25 @@ impl CharacterStats {
         self.effective(stat, weapon, "")
     }
 
-    pub fn max_hp(&self, weapon: Option<&str>) -> i32 {
-        60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2
+    /// `round((60 + CONS x 8 + STR x 2) x tier_hp)` (U1.2-S4: `tier_hp` from the tier table; the old hp scale). The
+    /// spec's base-only form, `60 x tier_hp + CONS x 8 + STR x 2`, waits for the user's confirmation as its own change.
+    pub fn max_hp(&self, tier_hp: f64, weapon: Option<&str>) -> i32 {
+        roundi((60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2) as f64 * tier_hp)
     }
 
-    pub fn initiative_speed(&self, burden: i32, weapon: Option<&str>) -> i32 {
+    /// U1.2-S3c: initiative, `8 + DEX - burden`, at least 1 (the old speed formula; the unit takes carry overload off
+    /// it as well).
+    pub fn initiative(&self, burden: i32, weapon: Option<&str>) -> i32 {
         (8 + self.stat("DEX", weapon) - burden).max(1)
+    }
+
+    /// U1.2-S3c (U1_STATS feasibility 4): the move rate, `move_rate_curve(8 + DEX - excess)`. `load` (worn burden plus
+    /// carry overload) lowers initiative first; only the part that would take initiative below its floor of 1,
+    /// `excess = max(0, 1 - (8 + DEX - load))`, lowers the move rate.
+    pub fn move_rate(&self, load: i32, weapon: Option<&str>) -> i32 {
+        let free = 8 + self.stat("DEX", weapon);
+        let excess = (1 - (free - load)).max(0);
+        move_rate_curve(free - excess)
     }
 
     pub fn mitigation_rating(&self, gear: i32, weapon: Option<&str>) -> i32 {
@@ -250,8 +337,9 @@ impl CharacterStats {
         (base_range + bonus).max(1)
     }
 
+    /// Crit chance before the weapon proficiency bonus: base + PERC above the floor (U1.2-S3, crit from PERC).
     pub fn crit_rate(&self, weapon: Option<&str>) -> f64 {
-        crate::damage::CRIT_BASE + (self.stat("DEX", weapon) - crate::damage::CRIT_DEX_FLOOR).max(0) as f64 * crate::damage::CRIT_PER_DEX
+        crate::damage::CRIT_BASE + (self.stat("PERC", weapon) - crate::damage::CRIT_PERC_FLOOR).max(0) as f64 * crate::damage::CRIT_PER_PERC
     }
 
     pub fn debuff_resistance(&self, weapon: Option<&str>) -> f64 {

@@ -1,30 +1,53 @@
 //! Class and unit rows (ClassUnitValidator errors and warnings, StatRules.validate_class / validate_spend).
 
 use super::{capitalize, View, LOADOUT_SLOTS, NO_ITEM};
+use aegis_content::world::Catalogs;
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
 use rpgkit_data::{ClassDef, Deck, ItemDef, SkillDef, STATS};
-use rpgkit_rules::ruleset;
+use rpgkit_rules::{ruleset, unit_budget};
 use rpgkit_rules::stats::{spend_pool, Proficiency, CLASS_BUDGET, DEFAULT_SCALING, MAX_CLASS_SLOTS, MAX_EXTRA_SLOTS, MAX_LEVEL, PROF_MAX_LEVEL};
 use indexmap::IndexMap;
 use serde_json::Value;
 
 const STAT_FLOOR: i64 = 6;
 const STAT_CEILING: i64 = 18;
-const GROWTH_TOTAL: i64 = 5;
+const GROWTH_TOTAL: i64 = unit_budget::GROWTH_BUDGET as i64;
 const GROWTH_STAT_MAX: i64 = 3;
 /// StatRules.ADVANCED_MIN_LEVEL: an advanced family may not sit on a class path below this level.
 const ADVANCED_MIN_LEVEL: i64 = 5;
 const MIN_SCALING: f64 = 1.0;
 const MAX_SCALING: f64 = 2.0;
-/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`).
-const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
+/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`); U3.2-S2:
+/// read only without a family table (`skill::weapon_tokens`).
+pub const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
+/// UNITDRILL1: the unit field listing the items of its own gear it wears with no class or drill training. U3.2-S3
+/// (FB-34): retired (untrained gear is a soft wield penalty, never refused); nothing reads it, an empty list stores as no
+/// key, and the asset lane drops the last one.
+pub const WEARS_UNTRAINED: &str = "wears_untrained";
+/// U4.2-S3 (FB-29): the character field naming its temperament passive.
+pub const TEMPERAMENT: &str = "temperament";
 
 type Ints = IndexMap<String, i64>;
 
 /// StatRules.validate_class: every base stat in range, the class budget, the growth per level.
 fn validate_class(base: &Ints, growth: &Ints) -> Vec<String> {
+    let mut errors = validate_base(base);
+    let growth_total: i64 = growth.values().sum();
+    if growth_total != GROWTH_TOTAL {
+        errors.push(format!("Growth totals {growth_total}, every class gains exactly {GROWTH_TOTAL} per level."));
+    }
+    for s in STATS {
+        if !(0..=GROWTH_STAT_MAX).contains(&growth.get(s).copied().unwrap_or(0)) {
+            errors.push(format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level."));
+        }
+    }
+    errors
+}
+
+/// The base stats half of `validate_class`: every stat in range and the class budget.
+fn validate_base(base: &Ints) -> Vec<String> {
     let mut errors = Vec::new();
     let mut total = 0;
     for s in STATS {
@@ -37,13 +60,45 @@ fn validate_class(base: &Ints, growth: &Ints) -> Vec<String> {
     if total != CLASS_BUDGET as i64 {
         errors.push(format!("Base stats total {total}, every class must total {CLASS_BUDGET} (every stat set)."));
     }
-    let growth_total: i64 = growth.values().sum();
-    if growth_total != GROWTH_TOTAL {
-        errors.push(format!("Growth totals {growth_total}, every class gains exactly {GROWTH_TOTAL} per level."));
+    errors
+}
+
+/// U2.2-S1: a class row given as shares (`base_shares`, `growth_shares`): both vectors sum to 1, each share is 0-1,
+/// no `base_stats` or `growth` beside them, and the stats the unit budget gives keep the integer row's limits (base
+/// 6-18 at level 1, 0-3 gained per stat at every level).
+fn validate_shares(e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (key, label) in [("base_shares", "Base shares"), ("growth_shares", "Growth shares")] {
+        let raw = json::get(e, key).as_object().cloned().unwrap_or_default();
+        let shares: unit_budget::Shares = raw.iter().map(|(k, v)| (k.clone(), v.as_f64().unwrap_or(-1.0))).collect();
+        for (k, v) in &shares {
+            if !STATS.contains(&k.as_str()) {
+                errors.push(format!("{label}: '{k}' is not a stat."));
+            } else if !(0.0..=1.0).contains(v) {
+                errors.push(format!("{label} {k} must be a number from 0 to 1."));
+            }
+        }
+        if !unit_budget::sums_to_one(&shares) {
+            errors.push(format!("{label} total {}, a share vector must total 1.", fixed(shares.values().sum::<f64>(), 4)));
+        }
     }
-    for s in STATS {
-        if !(0..=GROWTH_STAT_MAX).contains(&growth.get(s).copied().unwrap_or(0)) {
-            errors.push(format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level."));
+    for key in ["base_stats", "growth"] {
+        if json::get(e, key).as_object().is_some_and(|m| !m.is_empty()) {
+            errors.push(format!("A class given as shares cannot also set {key}."));
+        }
+    }
+    if !errors.is_empty() {
+        return errors;
+    }
+    let shares = ClassDef::from_obj(e).unit_shares();
+    let base: Ints = unit_budget::stats_at(&shares, 1).into_iter().map(|(k, v)| (k, v as i64)).collect();
+    errors.extend(validate_base(&base));
+    for level in 2..=MAX_LEVEL {
+        for (s, gain) in unit_budget::gain_at(&shares, level) {
+            let msg = format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level.");
+            if !(0..=GROWTH_STAT_MAX).contains(&(gain as i64)) && !errors.contains(&msg) {
+                errors.push(msg);
+            }
         }
     }
     errors
@@ -78,7 +133,8 @@ fn fits_slot(item: &ItemDef, slot: &str) -> bool {
         return false;
     }
     let target = slot.to_uppercase();
-    if item.item_type == "SHIELD" || item.off_hand_category == "shield" {
+    // U3.2-S2: a shield is an item whose family has the engine rule `shield` (`Equipment::is_shield`)
+    if item.has_rule(rpgkit_data::SHIELD_RULE) {
         return target == "OFF_HAND";
     }
     if item.item_type == "WEAPON" {
@@ -96,9 +152,35 @@ fn fits_slot(item: &ItemDef, slot: &str) -> bool {
     target == item.slot
 }
 
-/// ClassUnitValidator._loadout_errors: every item fits its slot and (with `check_training`) is trained for by `prof`;
-/// no two-handed weapon with an off-hand item; no accessory twice.
-fn loadout_errors(v: &View, e: &Dict, prof: &Proficiency, check_training: bool) -> Vec<String> {
+/// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each. U4.2-S3
+/// (FB-29, U4 "Character (drills + temperament)"): its `temperament` comes right after its own passives.
+pub fn character_passives(worlds: &Catalogs, character: &Dict, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut add = |raw: &Value| {
+        for id in json::strings(raw) {
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+    };
+    add(json::get(character, "passives"));
+    let temperament = json::s(character, TEMPERAMENT);
+    if !temperament.is_empty() {
+        add(&Value::from(vec![temperament]));
+    }
+    add(json::get(worlds.resolve(w, "factions", &json::s(character, "faction")), "grants"));
+    for r in json::aget(character, "disciplines") {
+        add(json::get(worlds.resolve(w, "disciplines", &json::gstr(r)), "passives"));
+    }
+    for r in json::aget(character, "named_items") {
+        add(json::get(worlds.resolve(w, "items", &json::gstr(r)), "grants"));
+    }
+    out
+}
+
+/// ClassUnitValidator._loadout_errors: every item fits its slot; no two-handed weapon with an off-hand item; no
+/// accessory twice. U3.2-S3 (FB-34): training is not checked (an untrained item is worn under the wield penalty).
+fn loadout_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     for slot in LOADOUT_SLOTS {
         let item_id = json::s(e, slot);
@@ -110,11 +192,8 @@ fn loadout_errors(v: &View, e: &Dict, prof: &Proficiency, check_training: bool) 
             continue;
         }
         let name = json::s_or(item, "name", &item_id);
-        let weapon_type = json::s(item, "weapon_type");
         if !fits_slot(&ItemDef::from_obj(item), slot) {
             errors.push(format!("{name} can't be equipped in {}.", capitalize(slot)));
-        } else if check_training && !weapon_type.is_empty() && !prof.can_use(&weapon_type) {
-            errors.push(format!("This class has no training in '{weapon_type}' ({name})."));
         }
     }
     let main = v.get("items", &json::s(e, "main_hand"));
@@ -173,7 +252,15 @@ fn path_errors(v: &View, raw: &Value) -> Vec<String> {
 
 /// ClassUnitValidator.class_errors of a normalized class row.
 pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
-    let mut errors = validate_class(&json::ints(json::get(e, "base_stats")), &json::ints(json::get(e, "growth")));
+    let mut errors = if json::get(e, "base_shares").as_object().is_some_and(|m| !m.is_empty()) {
+        validate_shares(e)
+    } else {
+        let mut list = validate_class(&json::ints(json::get(e, "base_stats")), &json::ints(json::get(e, "growth")));
+        if json::get(e, "growth_shares").as_object().is_some_and(|m| !m.is_empty()) {
+            list.push("Growth shares need base shares (a class gives both vectors or neither).".into());
+        }
+        list
+    };
     // a class always names its body (A1; "" inherits only on units and characters)
     let art = json::s(e, "art");
     if art.is_empty() && !v.assets.roots.is_empty() {
@@ -184,9 +271,10 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
         None => errors.push("A class needs a gear proficiency dictionary.".into()),
         Some(prof) => {
             let mut weapons = 0;
+            let (gear_types, weapon_types) = (super::skill::gear_tokens(v.entries("item_families")), super::skill::weapon_tokens(v.entries("item_families")));
             for (gear, raw) in prof {
                 let entry = json::dict(raw);
-                if !super::skill::GEAR_TYPES.contains(&gear.as_str()) {
+                if !gear_types.contains(gear) {
                     errors.push(format!("Proficiency: unknown gear type '{gear}'."));
                 }
                 let level = json::i(entry, "level", 0);
@@ -197,7 +285,7 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
                 if !(MIN_SCALING..=MAX_SCALING).contains(&scaling) {
                     errors.push(format!("Proficiency {gear}: scaling must be {}-{}.", fixed(MIN_SCALING, 1), fixed(MAX_SCALING, 1)));
                 }
-                if WEAPON_TYPES.contains(&gear.as_str()) {
+                if weapon_types.contains(gear) {
                     weapons += 1;
                 }
             }
@@ -207,7 +295,7 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
         }
     }
     errors.extend(path_errors(v, json::get(e, "skill_path")));
-    errors.extend(loadout_errors(v, e, &Proficiency::from_class(&ClassDef::from_obj(e)), true));
+    errors.extend(loadout_errors(v, e));
     errors
 }
 
@@ -219,14 +307,16 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
     let arch = v.typed.classes.get(&class_id).filter(|_| !class_id.is_empty());
     if !fixed_mode && arch.is_none() {
         errors.push("Class-derived units need a class (or set the stat model to fixed).".into());
+    } else if arch.is_none() {
+        // U2.2-S2 (FB-23): no silent fallback to the catalog's first class
+        errors.push("Fixed units need a class too (their base stats are the class's at their level).".into());
     }
     if !fixed_mode {
         errors.extend(validate_spend(&json::ints(json::get(e, "spend")), json::i(e, "level", 1)));
     } else if json::get(e, "spend").as_object().is_some_and(|s| !s.is_empty()) {
         errors.push("Fixed units don't spend points.".into());
     }
-    let prof = arch.map(Proficiency::from_class).unwrap_or_default();
-    errors.extend(loadout_errors(v, e, &prof, arch.is_some()));
+    errors.extend(loadout_errors(v, e));
     if let Some(a) = arch.filter(|_| !fixed_mode) {
         errors.extend(skill_loadout_errors(v, e, a));
     }
@@ -255,7 +345,7 @@ pub(crate) fn owned_families(v: &View, e: &Dict) -> Vec<String> {
 
 /// RULESET1 TQ23 (a): a unit's `default_intent` (the schema's enum: "" or one of the four intents) is one a ruleset
 /// row lists among its intents; without ruleset rows only the enum applies.
-fn default_intent_errors(v: &View, e: &Dict) -> Vec<String> {
+pub(crate) fn default_intent_errors(v: &View, e: &Dict) -> Vec<String> {
     let intent = json::s(e, "default_intent");
     let rows = v.entries(ruleset::KIND);
     if intent.is_empty() || !ruleset::DEFAULT_INTENTS.contains(&intent.as_str()) || rows.is_empty() || rows.iter().any(|r| json::sget(r, "intents").contains(&intent)) {

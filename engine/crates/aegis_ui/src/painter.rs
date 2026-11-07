@@ -5,7 +5,9 @@
 //! (`Typeface`: body, display, mono; the theme's fonts, `Fonts::sync`) and nine-slice frames (`Painter::nine`).
 
 use crate::canvas::{Canvas, Image, Rect, Rgba};
+use crate::layout_audit::LayoutRec;
 use crate::theme::{Frame, Nine, NineFill};
+use serde_json::Value;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -66,6 +68,70 @@ impl Grid {
     }
 }
 
+/// How a game relates its canvas to the window (LAYOUT720-E5; manifest key `canvas`, read by `CanvasPolicy::read`). It
+/// decides the view of `Grid::Native` screens only: `Old` and `Quadrant` screens keep `View::fit`, whatever a game declares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasPolicy {
+    /// Always `w` x `h` units, with bars; only the scale changes. `w` is a whole multiple of the old canvas's width.
+    Fixed { w: i32, h: i32 },
+    /// Any aspect, at least `w` x `h` units at UI scale 1; the scale is `Fixed`'s times the UI scale.
+    Fit { w: i32, h: i32 },
+    /// One unit is one device-independent px times the UI scale, any aspect: a browser or a phone.
+    Dp,
+}
+
+impl Default for CanvasPolicy {
+    fn default() -> Self {
+        Self::Fixed { w: GRID.0, h: GRID.1 }
+    }
+}
+
+impl CanvasPolicy {
+    /// The manifest's `canvas` value: absent (null) is the default; else an object of `policy` (`fixed`, `fit` or `dp`;
+    /// default `fixed`) and, but for `dp`, `w` and `h` (default the grid's). Anything else is refused, with why.
+    pub fn read(v: &Value) -> Result<Self, String> {
+        if v.is_null() {
+            return Ok(Self::default());
+        }
+        let Some(o) = v.as_object() else { return Err(format!("canvas must be an object, not {v}")) };
+        if let Some(k) = o.keys().find(|k| !["policy", "w", "h"].contains(&k.as_str())) {
+            return Err(format!("canvas: unknown key '{k}' (allowed: policy, w, h)"));
+        }
+        let side = |key: &str, fallback: i32| match o.get(key) {
+            None => Ok(fallback),
+            Some(n) => n.as_i64().filter(|n| (1..=i64::from(crate::screen::WINDOW_SIDE_MAX)).contains(n)).map(|n| n as i32).ok_or_else(|| format!("canvas: {key} must be a whole number, 1 to {}, not {n}", crate::screen::WINDOW_SIDE_MAX)),
+        };
+        let (w, h) = (side("w", GRID.0)?, side("h", GRID.1)?);
+        if w % LW as i32 != 0 {
+            return Err(format!("canvas: w must be a whole multiple of {}, not {w}", LW as i32));
+        }
+        match o.get("policy").map(Value::as_str) {
+            None | Some(Some("fixed")) => Ok(Self::Fixed { w, h }),
+            Some(Some("fit")) => Ok(Self::Fit { w, h }),
+            Some(Some("dp")) if o.contains_key("w") || o.contains_key("h") => Err("canvas: policy dp takes no w or h".into()),
+            Some(Some("dp")) => Ok(Self::Dp),
+            Some(_) => Err(format!("canvas: policy must be fixed, fit or dp, not {}", o["policy"])),
+        }
+    }
+
+    /// The name the agent link reports, as `read` reads it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Fixed { .. } => "fixed",
+            Self::Fit { .. } => "fit",
+            Self::Dp => "dp",
+        }
+    }
+
+    /// Units per old unit on this canvas, `View.g`.
+    pub fn g(self) -> i32 {
+        match self {
+            Self::Fixed { w, .. } | Self::Fit { w, .. } => (w / LW as i32).max(1),
+            Self::Dp => UNITS,
+        }
+    }
+}
+
 /// Logical -> physical mapping (uniform scale, letterboxed and centred).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct View {
@@ -75,17 +141,51 @@ pub struct View {
     /// Units per old unit: 1 on an unmoved screen, `GRID.0 / LW` on a native one. What art, thin strokes and sidecar
     /// numbers multiply by, as those stay in old units for good.
     pub g: i32,
+    /// The canvas a screen draws on, in this view's units: a value, as `Fit` and `Dp` give a different one per window.
+    pub canvas: (i32, i32),
 }
+
+/// The old canvas in old units.
+const OLD_CANVAS: (i32, i32) = (LW as i32, LH as i32);
 
 impl View {
     pub fn fit(pw: u32, ph: u32) -> Self {
         let s = (pw as f32 / LW).min(ph as f32 / LH).max(0.25);
-        Self { s, ox: ((pw as f32 - LW * s) / 2.0).floor(), oy: ((ph as f32 - LH * s) / 2.0).floor(), g: 1 }
+        Self { s, ox: ((pw as f32 - LW * s) / 2.0).floor(), oy: ((ph as f32 - LH * s) / 2.0).floor(), g: 1, canvas: OLD_CANVAS }
     }
-    /// The view a screen on `grid` draws with, `self` being the whole window's (`View::fit`). `Grid::Old` gives `self`
-    /// exactly.
+    /// The view a screen on `grid` draws with, `self` being the whole window's (`View::fit`), on the default canvas.
+    /// `Grid::Old` gives `self` exactly.
     pub fn for_grid(self, grid: Grid) -> Self {
-        Self { s: self.s / grid.shrink() as f32, g: grid.g(), ..self }
+        Self { s: self.s / grid.shrink() as f32, g: grid.g(), canvas: if grid == Grid::Native { GRID } else { OLD_CANVAS }, ..self }
+    }
+    /// The view of a `Grid::Native` screen on a `pw` x `ph` window under `policy`: the table of LAYOUT720 6.4. A `dpr` or
+    /// `ui_scale` that is not a positive number counts as 1, and the scale has a floor, so the canvas stays bounded.
+    /// `Fixed` at the grid's size is exactly `View::fit(pw, ph).for_grid(Grid::Native)`.
+    pub fn native(policy: CanvasPolicy, pw: u32, ph: u32, dpr: f32, ui_scale: f32) -> Self {
+        let (fw, fh) = (pw as f32, ph as f32);
+        let positive = |x: f32| if x.is_finite() && x > 0.0 { x } else { 1.0 };
+        let fitted = |w: i32, h: i32| (fw / w as f32).min(fh / h as f32);
+        let least = |w: i32| 0.25 * LW / w as f32;
+        // What is left of a window under a whole number of units stays blank. The small addition keeps a side the scale
+        // was worked out from whole: 768 / (768 / 720) in floats may fall just under 720.
+        let whole = |side: u32, s: f32| ((f64::from(side) / f64::from(s) + 1e-3).floor() as i32).max(1);
+        let (s, canvas) = match policy {
+            CanvasPolicy::Fixed { w, h } => {
+                let s = fitted(w, h).max(least(w));
+                return Self { s, ox: ((fw - w as f32 * s) / 2.0).floor(), oy: ((fh - h as f32 * s) / 2.0).floor(), g: policy.g(), canvas: (w, h) };
+            }
+            CanvasPolicy::Fit { w, h } => {
+                let s = (fitted(w, h) * positive(ui_scale)).max(least(w));
+                (s, (whole(pw, s), whole(ph, s)))
+            }
+            CanvasPolicy::Dp => {
+                let s = (positive(dpr) * positive(ui_scale)).max(0.25);
+                (s, (whole(pw, s), whole(ph, s)))
+            }
+        };
+        // The canvas fits by construction, so a side's rounding never starts it a pixel off the window.
+        let bar = |room: f32| (room / 2.0).floor().max(0.0);
+        Self { s, ox: bar(fw - canvas.0 as f32 * s), oy: bar(fh - canvas.1 as f32 * s), g: policy.g(), canvas }
     }
     /// `n` old units in this view's units.
     pub fn u(&self, n: i32) -> i32 {
@@ -97,7 +197,7 @@ impl View {
     }
     /// The canvas a screen draws on, in this view's units.
     pub fn canvas(&self) -> (i32, i32) {
-        (LW as i32 * self.g, LH as i32 * self.g)
+        self.canvas
     }
     pub fn x(&self, x: f32) -> i32 {
         (self.ox + x * self.s).round() as i32
@@ -174,6 +274,9 @@ pub struct Fonts {
     /// TEXTFIT2: while on, the texts drawn are transient (a damage float rising over the board) and the audit records
     /// them as such, so `text_audit::issues` ignores them; set through `Painter::transient`.
     pub transient: bool,
+    /// LAYOUT720-E5 layout audit: while Some, what a frame placed or squeezed is recorded here, as `audit` is for its text
+    /// (the shell's `text_audit` and `layout_audit` commands; `layout_audit::issues` reads it).
+    pub layout: Option<Vec<LayoutRec>>,
 }
 
 /// One text drawn during an audited frame, in logical units.
@@ -203,7 +306,7 @@ impl Fonts {
     pub fn new(ttf: &[u8]) -> Self {
         let font = fontdue::Font::from_bytes(ttf, fontdue::FontSettings::default()).expect("valid TTF");
         let face = || FaceCache { font: font.clone(), scale: 1.0, src: None, cache: HashMap::new() };
-        Self { faces: [face(), face(), face()], base: font.clone(), scale: 1.0, audit: None, transient: false }
+        Self { faces: [face(), face(), face()], base: font.clone(), scale: 1.0, audit: None, transient: false, layout: None }
     }
 
     /// Sets `face` to the font in `ttf` (None: the base font) at size factor `scale`; the glyph cache is kept while the
@@ -643,8 +746,23 @@ impl<'a> Painter<'a> {
         let (hw, hh) = (pr.w as f32 / 2.0, pr.h as f32 / 2.0);
         let rad = rad.min(hw).min(hh);
         let (cx, cy) = (pr.x as f32 + hw, pr.y as f32 + hh);
+        // VISCLAR1-C: a pixel centre at least `rad` + 1.5 from every edge is all fill and no border, so the middle is
+        // filled at once; only the border band needs the distance. The same pixels, in far less time
+        let band = rad.ceil() as i32 + 1;
+        let middle = Rect::new(pr.x + band, pr.y + band, pr.w - 2 * band, pr.h - 2 * band);
+        let solid = middle.w > 0 && middle.h > 0;
+        if solid {
+            self.c.fill(middle, mix(fill, 1.0));
+        }
         for y in pr.y..pr.y + pr.h {
-            for x in pr.x..pr.x + pr.w {
+            let skip = solid && y >= middle.y && y < middle.y + middle.h;
+            let mut x = pr.x - 1;
+            while x + 1 < pr.x + pr.w {
+                x += 1;
+                if skip && x == middle.x {
+                    x += middle.w - 1;
+                    continue;
+                }
                 // Rounded-box signed distance (negative inside).
                 let qx = (x as f32 + 0.5 - cx).abs() - (hw - rad);
                 let qy = (y as f32 + 0.5 - cy).abs() - (hh - rad);
@@ -678,13 +796,15 @@ impl<'a> Painter<'a> {
         if pr.w <= 0 || pr.h <= 0 || a == 0 {
             return;
         }
-        for y in 0..pr.h {
-            let sy = y * img.h / pr.h;
-            for x in 0..pr.w {
-                let sx = x * img.w / pr.w;
+        // VISCLAR1-C: only the visible part is sampled, its pixels without a test each
+        let v = self.c.visible(pr);
+        for py in v.y..v.y + v.h {
+            let sy = (py - pr.y) * img.h / pr.h;
+            for px in v.x..v.x + v.w {
+                let sx = (px - pr.x) * img.w / pr.w;
                 let i = ((sy * img.w + sx) * 4) as usize;
                 let alpha = ((img.px[i + 3] as u32 * a as u32 + 127) / 255) as u8;
-                self.c.blend(pr.x + x, pr.y + y, [img.px[i], img.px[i + 1], img.px[i + 2], alpha]);
+                self.c.put(px, py, [img.px[i], img.px[i + 1], img.px[i + 2], alpha]);
             }
         }
     }
@@ -701,10 +821,7 @@ impl<'a> Painter<'a> {
         let mut pen = self.v.ox + x * self.v.s;
         let base = self.v.oy + y * self.v.s + ascent;
         for ch in s.chars() {
-            let (m, bitmap) = {
-                let g = self.fonts.glyph(face, ch, px);
-                (g.0, g.1.clone())
-            };
+            let (m, bitmap) = self.fonts.glyph(face, ch, px);
             let gx = (pen + m.xmin as f32).round() as i32;
             let gy = (base - m.height as f32 - m.ymin as f32).round() as i32;
             for row in 0..m.height {
@@ -791,6 +908,9 @@ impl<'a> Painter<'a> {
         let [sl, st, sr, sb] = nine.slice;
         // Physical px per art px: a sidecar's `scale` is art px per old unit on every grid.
         let k = self.v.old_scale() / nine.scale.max(1) as f32;
+        if self.fonts.layout.is_some() {
+            self.note_corners(nine, k, pr, r);
+        }
         if nine.straddle {
             let p = corner_scale(nine, k, pr);
             let reach = straddle_over(nine, k, p);
@@ -860,6 +980,29 @@ impl<'a> Painter<'a> {
         }
         if nine.center != NineFill::None {
             self.cover(r, 255);
+        }
+    }
+
+    /// The layout audit's record of a panel too small for its corners at their own size (LAYOUT720 section 9), which
+    /// breaks one corner size per screen: the share of that size they draw at. Named by `Ui` when it knows the role.
+    fn note_corners(&mut self, nine: &Nine, k: f32, pr: Rect, r: Rect) {
+        let wanted = k * nine.corner_size;
+        let share = if nine.straddle {
+            corner_scale(nine, k, pr) / wanted.max(f32::MIN_POSITIVE)
+        } else {
+            let need = |a: i32, b: i32| ((a as f32) * wanted).round() as i32 + ((b as f32) * wanted).round() as i32;
+            let room = |have: i32, want: i32| if want > have { have as f32 / want as f32 } else { 1.0 };
+            room(pr.w, need(nine.slice[0], nine.slice[2])).min(room(pr.h, need(nine.slice[1], nine.slice[3])))
+        };
+        if share < 0.999 {
+            self.note_layout(|| LayoutRec::CornerShrunk { what: String::new(), at: r, share });
+        }
+    }
+
+    /// A record for the layout audit, built only when one is running: with it off, drawing allocates nothing for it.
+    pub fn note_layout(&mut self, rec: impl FnOnce() -> LayoutRec) {
+        if let Some(recs) = self.fonts.layout.as_mut() {
+            recs.push(rec());
         }
     }
 

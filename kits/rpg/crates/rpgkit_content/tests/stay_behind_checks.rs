@@ -14,13 +14,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_stay_behind_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_stay_behind_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -119,7 +118,7 @@ fn the_schema_carries_the_fields_in_both_encounter_sections() {
 
 #[test]
 fn a_valid_hold_and_a_row_without_the_fields_check_clean() {
-    let data = scratch("valid");
+    let (_scratch, data) = scratch("valid");
     catalog(&data);
     let v = store::view(&data);
     assert_eq!(errors_with(&v, json!({})), Vec::<String>::new(), "the winch");
@@ -137,7 +136,7 @@ fn a_valid_hold_and_a_row_without_the_fields_check_clean() {
 
 #[test]
 fn each_broken_rule_is_one_error() {
-    let data = scratch("errors");
+    let (_scratch, data) = scratch("errors");
     catalog(&data);
     let v = store::view(&data);
     let one = |errors: Vec<String>, want: &str, tag: &str| assert_eq!(errors, vec![want.to_string()], "{tag}");
@@ -190,7 +189,7 @@ fn each_broken_rule_is_one_error() {
 
 #[test]
 fn a_world_encounter_checks_its_flag_and_then() {
-    let data = scratch("world");
+    let (_scratch, data) = scratch("world");
     catalog(&data);
     let dir = data.join("worlds").join("vale");
     fs::create_dir_all(&dir).unwrap();
@@ -214,7 +213,7 @@ fn a_world_encounter_checks_its_flag_and_then() {
 
 #[test]
 fn the_writer_stores_and_reloads_the_fields() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     catalog(&data);
     let e = dict(winch());
     store::upsert(&data, None, "encounters", &e, None).expect("a valid hold escape");

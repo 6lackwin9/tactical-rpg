@@ -190,6 +190,20 @@ pub fn deals_damage(s: &SkillDef) -> bool {
     kind(s) != Kind::Attack || s.power_mult > 0.0
 }
 
+/// S1.2-S4 (S1 section 3, FB-48): a Guard skill's guard fraction, for every round of its guard: its own `mitigation` (0 =
+/// no guard, as riposte's third rank), or for a row without the key the ruleset's `guard_common_mitigation` (1-round)
+/// or `guard_multi_round_mitigation` (`guard_rounds` 2 or more). A row the content loader resolved always has the key
+/// (the schema default fills it), so the ruleset numbers reach only rows built without it.
+pub fn guard_mitigation(s: &SkillDef, n: &ruleset::Numbers) -> f64 {
+    if s.raw.contains_key("mitigation") {
+        s.mitigation
+    } else if s.guard_rounds >= 2 {
+        n.guard_multi_round_mitigation
+    } else {
+        n.guard_common_mitigation
+    }
+}
+
 pub fn heals(s: &SkillDef) -> bool {
     kind(s) == Kind::Support && (s.heal_base > 0 || s.heal_mult > 0.0)
 }

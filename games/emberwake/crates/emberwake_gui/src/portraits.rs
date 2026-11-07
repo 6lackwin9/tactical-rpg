@@ -449,8 +449,7 @@ pub(crate) mod tests {
     /// A scratch asset layer: `rel` is a `side` px PNG of `fill` inside a 1/30 border of dark grey, with `sidecar`
     /// beside it when given.
     pub(crate) fn layer(name: &str, rel: &str, side: u32, fill: [u8; 3], sidecar: Option<Value>) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("emberwake_portraits_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = aegis_core::scratch::Scratch::vacant(&format!("emberwake_portraits_{name}"));
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let border = (side as f32 / 30.0).round() as u32;
@@ -469,7 +468,7 @@ pub(crate) mod tests {
         if let Some(s) = sidecar {
             std::fs::write(root.join(aegis_core::assets::face_file(rel)), s.to_string()).unwrap();
         }
-        root
+        root.until_thread_end()
     }
 
     /// PORTRAITFX1-R: `cx` with cue rows `rows` and its art a scratch layer holding each party member's portrait (the

@@ -3,11 +3,11 @@
 use aegis_ui::theme::th;
 use super::board::{cell_rect, draw_flat, draw_stage, hp_bar, note_drawn, with_alpha, Board};
 use super::input::{engage_positions, kind_name, rest_text, target_name, RowAct};
-use super::marks::{arena_badge, arrows_of, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, poise_bar, poise_shown, push_forecasts, push_text, seen_intents, span_parts, HitForecast, HoldMarks, HookMarks, SpanParts, HELD, METER};
+use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, pip_view, poise_bar, poise_number, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
-use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
-use super::tips::{ap_blocks, ap_gauge_of, class_names, committed, derived_line, derived_rows, draw_badge_row, inspect_tip, intent_glyph, kind_color, next_action, short_name, stance_name, unit_tip, ApAnim};
+use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
+use super::tips::{ap_blocks, ap_gauge_of, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, REST_BLOCK};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
@@ -53,6 +53,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     };
     let mut ui: Ui<Action> = Ui::new(gfx, mouse, live);
     g.menu_row = ((ui.p.line_h(BODY) + 2.5).ceil() as i32).max(11);
+    let menu_row = g.menu_row;
+    if let Some(pop) = g.popup.as_mut() {
+        // VISCLAR1-D: the skill menu beside its tile, in this frame's view of the board
+        let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
+        let tile = pop.anchor.map(|c| geo.cell_rect(c));
+        pop.fit_grid(&mut ui.p, menu_row, tile, Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4));
+    }
     let Some(s) = g.host.session.as_ref() else {
         ui.p.text(8.0, 8.0, &g.message, BODY, th().foe);
         g.w = ui.widgets;
@@ -77,7 +84,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // RULESET1-U slice 5: each overlay group behind its flag (settings `battle_overlays`; all on by default)
     let layers = Layers::of(&cx.settings.v["battle_overlays"]);
     // HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic)
-    let marks = HookMarks::of(s, &layers);
+    let marks = HookMarks::of(s, &layers, cx.held.alt);
     // ENCOUNTER2-U: a hold escape's tiles and gate (H7; None without a hold escape)
     let hold = HoldMarks::of(s, &layers);
     // HOOKS1-UI slice 2 (CN2): each unit's class name in the battle's world, for the hover cards
@@ -111,8 +118,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // INPUT1 IF5: a hovered skill-menu row previews the round as if picked (copies of the world and the plan, kept for
     // the battle's revision); GH2 a: a member whose ghost waits for Confirm shows it from copies too
     let timeline = ri::on(w);
-    let hovered_row = g.popup.as_ref().filter(|p| p.menu.is_some() && live).and_then(|p| (0..p.rows.len()).find(|&k| p.row(g.menu_row, k).contains(mouse.0, mouse.1)));
-    let hovered_pick = g.popup.as_ref().and_then(|p| Some((p.menu?, p.rows.get(hovered_row?)?.clone())));
+    let hovered_row = g.popup.as_ref().filter(|p| p.menu.is_some() && live).and_then(|p| p.row_at(g.menu_row, mouse));
+    // VISCLAR1-D: a cell may act on another target than the menu's own
+    let hovered_pick = g.popup.as_ref().and_then(|p| {
+        let row = p.rows.get(hovered_row?)?.clone();
+        let (h, at) = p.menu?;
+        Some(((h, row.at.unwrap_or(at)), row))
+    });
     if let Some(((h, at), row)) = hovered_pick.clone().filter(|_| planning) {
         let k = hovered_row.unwrap_or(0);
         if g.preview.as_ref().is_none_or(|p| (p.0, p.1) != (g.rev, k)) {
@@ -146,23 +158,27 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if planning {
         g.round_ap = (s.current_round, w.allies.iter().map(|&a| (a, w.units[a].ap)).collect());
     }
-    let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
-        Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
-        Some(u) if w.units[u].is_active() => pplan
-            .compile(pw, u)
-            .entries
+    // VISCLAR1-C: the selected hero's round, compiled once a frame for the strip, the costs and the panel
+    let compiled = sel.map(|u| pplan.compile(pw, u));
+    // VISCLAR1-B: with each planned block its icon chain (a skill's family, then its kind)
+    let (entries, icons): (Vec<(i32, i32, String, String, Option<String>, i32, i32)>, Vec<Vec<String>>) = match sel {
+        Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).zip(committed_icon_chains(s, u)).unzip(),
+        Some(u) if w.units[u].is_active() => compiled
             .iter()
+            .flat_map(|st| st.entries.iter())
             .map(|e| {
                 let sk = &w.cat.skills[e.skill];
-                (e.start_block, e.end_block(pw), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage)
+                let chain = if e.item.is_some() { vec![kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
+                ((e.start_block, e.end_block(pw), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage), chain)
             })
-            .collect(),
-        _ => Vec::new(),
+            .unzip(),
+        _ => (Vec::new(), Vec::new()),
     };
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
     // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
     let (reasons, rest, ghosts) = match sel {
-        Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)).filter(|_| w.ruleset.rest_at_round_end()), rip::ghost_entries(pw, pplan, u)),
+        // VISCLAR1-C (decision "Battle view answers, part 2"): the ghost shows in planning, not otherwise
+        Some(u) if timeline && s.is_planning() && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)).filter(|_| w.ruleset.rest_at_round_end()), rip::ghost_entries(pw, pplan, u)),
         _ => (Vec::new(), None, Vec::new()),
     };
     let gauge = match sel {
@@ -189,10 +205,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         _ => None,
     };
-    // RULESET1-U slice 5: each span's wind-up, impact and recovery (and a break), the planned hits' forecasts (the
-    // battle's own plan: a preview draws its spans plain)
-    let spans: Vec<SpanParts> = match sel {
-        Some(u) if timeline && layers.parts && !previewing => span_parts(s, u, &entries),
+    // RULESET1-U slice 5: each span's break, the planned hits' forecasts (the battle's own plan: a preview has none)
+    let broken: Vec<bool> = match sel {
+        Some(u) if timeline && s.plan_confirmed => broken_spans(s, u, &entries),
         _ => Vec::new(),
     };
     let hits: Vec<Option<HitForecast>> = match sel {
@@ -202,7 +217,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // HOOKS1-UI slice 3 review: each span's HP cost from its own skill (the plan entry's) or, once confirmed, its command
     let costs: Vec<i32> = match sel {
         Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| a.command.hp_cost).collect(),
-        Some(u) if w.units[u].is_active() => pplan.compile(pw, u).entries.iter().map(|e| emberwake_battle::command::hp_cost_of(pw, &w.cat.skills[e.skill])).collect(),
+        Some(u) if w.units[u].is_active() => compiled.iter().flat_map(|st| st.entries.iter()).map(|e| emberwake_battle::command::hp_cost_of(pw, &w.cat.skills[e.skill])).collect(),
         _ => Vec::new(),
     };
     // HOOKS1-UI slice 4: each planned entry's push and pull forecasts (rule forced_move; planning, layer `pushes`)
@@ -222,7 +237,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     } else if skip {
         ("Skip", Action::Skip, true)
     } else if s.phase == Phase::Replay && s.can_advance_round() {
-        ("Next round", Action::NextRound, !g.pending_next_round)
+        // VISCLAR1-D: under the round intent the round-end pause can be cut short (`run` ends the wait)
+        ("Next round", Action::NextRound, timeline || !g.pending_next_round)
     } else {
         (if s.combat_over { "Battle over" } else if s.phase == Phase::Replay { "Round limit" } else { "Resolving" }, Action::NextRound, false)
     };
@@ -287,7 +303,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 if let Some(f) = at.and_then(|i| hits.get(i)).and_then(|f| f.as_ref()) {
                     tip.extend(f.lines(w));
                 }
-                if at.and_then(|i| spans.get(i)).is_some_and(|sp| sp.broken) {
+                if at.and_then(|i| broken.get(i)).copied().unwrap_or(false) {
                     tip.push(("BREAK: cancelled by a poise break".into(), th().foe));
                 }
             }
@@ -313,33 +329,45 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, accept.map(Action::GhostSlot), tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
+    let mut strip_labels = Vec::new();
     for (k, e) in entries.iter().enumerate() {
         let r = Rect::new(bx + (e.0 - 1) * bw, 6, (e.1 - e.0 + 1) * bw - 1, 16);
         let live = live_block >= e.0 && live_block <= e.1;
-        // RULESET1-U (UI2): under the round intent Rest blocks are dim (the planner fills every spare block with them)
-        let dim = timeline && e.3 == "REST";
-        // INPUT1 GH8: a ghost span (the planner's, after the picks) in the engine's ghost look; a ghost Rest stays dim
-        let ghost = ghosts.get(k).copied().unwrap_or(false) && !dim;
-        let fill =if dim { rgb(34, 40, 54) } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
-        ui.p.panel(r, fill, if live { th().gold } else if ghost { rgba(0, 0, 0, 0) } else { rgba(255, 255, 255, if dim { 24 } else { 50 }) }, RADIUS);
-        if ghost {
-            aegis_ui::timeline::draw_ghost(&mut ui, r);
+        // VISCLAR1-D (mock `rest_colour`): under the round intent a Rest block is light slate (the planner fills every spare
+        // block with them, so it has to stand out as time not used)
+        let rest = timeline && e.3 == "REST";
+        // INPUT1 GH8: a ghost span (the planner's, after the picks) in the engine's ghost look
+        let ghost = ghosts.get(k).copied().unwrap_or(false) && !rest;
+        // VISCLAR1-C (decision "Battle view answers, part 2"): one solid colour a block, no wind-up or impact shading (the
+        // full timeline view keeps its parts); an auto-filled block fades, with no outline
+        let fill = if rest { REST_BLOCK } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
+        let edge = if live { th().gold } else if ghost { rgba(0, 0, 0, 0) } else if timeline { fill } else { rgba(255, 255, 255, 50) };
+        ui.p.panel(r, fill, edge, RADIUS);
+        if timeline {
+            // VISCLAR1-B (mock C): the skill's icon and name centred, the icon alone when the name does not fit
+            let look = if rest { BlockLook::Rest } else if ghost { BlockLook::Ghost } else { BlockLook::Chosen };
+            strip_labels.push(draw_block_label(&mut ui, &mut cx.art, r, &e.2, icons.get(k).map_or(&[], Vec::as_slice), look));
+        } else {
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, th().text);
         }
-        // RULESET1-U slice 5: the timeline widget's look: wind-up shaded, impact bright with its edge, recovery hatched
-        let sp = spans.get(k);
-        for part in sp.map(|sp| sp.parts.as_slice()).unwrap_or(&[]) {
-            let pr = Rect::new(bx + (part.start - 1) * bw, 6, (part.end - part.start + 1) * bw - 1, 16);
-            aegis_ui::timeline::draw_part(&mut ui, part.style, r, pr);
-        }
-        ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, if dim || ghost { th().dim } else { th().text });
-        if sp.is_some_and(|sp| sp.broken) && layers.breaks {
+        if broken.get(k).copied().unwrap_or(false) && layers.breaks {
             let mark = aegis_ui::timeline::Mark { key: "break".into(), block: e.0, glyph: "BREAK".into(), colour: th().foe, tip: vec![("BREAK".into(), th().foe), (format!("{}: cancelled by a poise break (AP paid stays spent)", e.2), th().text)] };
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
             aegis_ui::timeline::draw_mark(&mut ui, &format!("strip.mark.{k}"), &mark, mr);
         }
     }
+    g.strip_labels = strip_labels;
+    // VISCLAR1-D: a Move that replaced a larger block says so, under the blocks it left as Rest
+    // (drawn after the panels, as it lies over the board's top edge)
+    // and while the Move waits for its tile, what the tile under the mouse takes
+    let aimed = aegis_ui::ui::hit(&g.w, mouse).and_then(|a| if let Action::TileClick(c) = a { g.move_tiles.iter().find(|t| t.cell == c).cloned() } else { None }).filter(|_| g.move_aim.is_some());
+    let aim_note = aimed.map(|t| {
+        let drops = if t.drops.is_empty() { String::new() } else { format!(", drops {}", t.drops) };
+        (format!("Move here: {} block{}, {} AP{drops}", t.blocks, if t.blocks == 1 { "" } else { "s" }, t.ap), bx)
+    });
+    let move_note = aim_note.or(sel.filter(|_| timeline && planning).and_then(|u| rip::move_note(pplan, u)).map(|note| (note, entries.iter().find(|e| e.3 == "REST").map_or(bx, |e| bx + (e.0 - 1) * bw))));
     // HOOKS1-UI slice 1 (AH3): a badge on each block at whose end an arena hazard strikes, over the spans
-    for b in (1..=s.def.total_blocks).filter(|b| marks.arena.iter().any(|t| t.blocks.contains(b))) {
+    for b in (1..=s.def.total_blocks).filter(|b| marks.show_arena && marks.arena.iter().any(|t| t.blocks.contains(b))) {
         arena_badge(&mut ui.p, Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16));
     }
     // INPUT1 PB2: a 1 px GOLD frame around the resolving block's column, over the spans
@@ -404,11 +432,16 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let mut y = 44;
     // UI5: the party member the mouse is over (its card or its token) fills the threat intel panel
     let mut hovered_ally = None;
+    // VISCLAR1-D: the cards' AP pips run on the FX clock
+    let (fx_now, pips_still) = (g.clock.now(), cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion());
+    let mut cards_shown = Vec::with_capacity(w.allies.len());
+    let small_line = ui.p.line_h(SMALL);
     for &a in &w.allies {
         let u = &w.units[a];
-        // HOOKS1-UI slice 3: a meter row grows the card by 4 (UM7)
+        // VISCLAR1-D: the rows from the card's place and the text size; HOOKS1-UI slice 3: a meter row grows the card by 4 (UM7)
         let ms = meters_of(w, a, &layers);
-        let r = Rect::new(6, y, 116, if ms.is_empty() { 30 } else { 34 });
+        let rows = card_rows(Rect::new(6, y, 116, 0), small_line);
+        let r = Rect::new(6, y, 116, if ms.is_empty() { rows.h } else { rows.h + 4 });
         let is_sel = Some(a) == sel;
         let hover = ui.hover(r);
         if hover {
@@ -418,17 +451,34 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // UI5: the member's intent glyph at the card's top right (the name gives way)
         let glyph = round_of(a).filter(|_| u.is_active());
         if let Some(i) = glyph {
-            intent_glyph(&mut ui.p, &w.cat, i, Rect::new(r.x + r.w - 13, r.y + 2, 10, 10));
+            intent_glyph(&mut ui.p, &w.cat, i, Rect::new(r.x + r.w - 13, r.y + 1, 10, 10));
         }
         ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 }, if u.is_active() { ALLY } else { th().dim });
-        hp_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 12, 108, 4), u.hp, u.max_hp, th().good);
-        // RULESET1-U slice 5: the member's poise bar under its HP bar (rule poise)
-        if let Some(st) = poise_shown(w, a, &layers) {
-            poise_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 16, 108, 2), &st);
+        // VISCLAR1-D (mock `party_ap`): HP, poise and AP each a row, its number beside it at the card's right edge
+        let number = |ui: &mut Ui<Action>, row: Rect, text: &str, col: Rgba| {
+            let (right, shown) = (rows.right as f32, ui.p.fit(text, SMALL, (r.x + r.w - 2 - rows.right + rows.number_w) as f32));
+            ui.p.text_right(right, row.y as f32 + (row.h as f32 - ui.p.line_h(SMALL)) / 2.0, &shown, SMALL, col);
+        };
+        hp_bar(&mut ui.p, rows.hp, u.hp, u.max_hp, th().good);
+        number(&mut ui, rows.hp, &format!("{}/{}", u.hp, u.max_hp), th().text);
+        // RULESET1-U slice 5: the member's poise under its HP bar (rule poise)
+        let poise = poise_shown(w, a, &layers);
+        if let Some(st) = &poise {
+            poise_bar(&mut ui.p, rows.poise, st, &w.ruleset.numbers);
+            // S2.2-S3: in pips under poise_mode pips
+            number(&mut ui, rows.poise, &poise_number(&w.ruleset.numbers, st), if st.broken { th().foe } else { POISE });
         }
-        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, th().text);
-        ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 18.0, &format!("AP {}/{}", u.ap, u.max_ap), SMALL, ALLY);
-        meter_row(&mut ui.p, Rect::new(r.x + 4, r.y + 29, 108, 3), &ms);
+        // the pips follow the unit's AP: they drain as moves pay and refill when the round starts
+        let k = g.card_ap.iter().position(|c| c.0 == a).unwrap_or_else(|| {
+            g.card_ap.push((a, ApPips::still(u.ap as f32, fx_now)));
+            g.card_ap.len() - 1
+        });
+        g.card_ap[k].1 = g.card_ap[k].1.follow(u.ap as f32, fx_now, pips_still);
+        let level = g.card_ap[k].1.level(fx_now);
+        draw_ap_pips(&mut ui.p, rows.ap.x, rows.ap.y, level, u.max_ap);
+        number(&mut ui, rows.ap, &format!("{}/{}", u.ap, u.max_ap), AP_PIP);
+        cards_shown.push(json!({"unit": a, "ap": u.ap, "ap_shown": level, "poise_pips": poise.as_ref().map(|st| pip_view(&w.ruleset.numbers, st).lit), "poise": poise.as_ref().map(|st| st.value)}));
+        meter_row(&mut ui.p, Rect::new(r.x + 4, r.y + rows.h - 1, 108, 3), &ms);
         if layers.guard && held_guard(s, a).is_some() {
             ui.p.panel(r.inset(1), rgba(0, 0, 0, 0), HELD, RADIUS);
         }
@@ -436,6 +486,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
         y += r.h + 3;
     }
+    g.cards_shown = cards_shown;
     g.panels.push(("party", Rect::new(2, 28, 124, y - 26)));
     if let Some(h) = sel {
         let u = &w.units[h];
@@ -463,14 +514,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         } else {
             row3
         };
-        let st = pplan.compile(pw, h);
+        let st = compiled.as_ref().expect("a hero selected");
         let weapon = u.inventory.main_weapon().map(|e| e.item.name.clone()).unwrap_or_else(|| "Bare hands".into());
         let mut lines: Vec<(String, Rgba)> = Vec::new();
         // DERIVE1 4.4: the derived-stat line hovers to each row's formula and breakdown
         let derived = derived_rows(s, h);
         let mut derived_at = None;
         let mut stats = |lines: &mut Vec<(String, Rgba)>| {
-            lines.push((format!("Speed {}  Reach {}", u.speed, reach_text(w, h)), th().text));
+            lines.push((format!("Initiative {}  Reach {}", u.initiative, reach_text(w, h)), th().text));
             if let Some(line) = derived_line(&derived) {
                 derived_at = Some(lines.len());
                 lines.push((line, th().text));
@@ -629,6 +680,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             RowAct::Pick(picks) => engage_positions(s, *h, *at, picks),
             _ => Vec::new(),
         },
+        // VISCLAR1-D: the tiles the Move can go to while it waits for one
+        _ if planning && g.move_aim.is_some() => g.move_tiles.iter().map(|t| (t.cell, true)).collect(),
         _ => Vec::new(),
     };
     if let Some(o) = overlay.as_mut() {
@@ -766,7 +819,15 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let mut lines = if pinned.is_some() { inspect_tip(s, e, sel, &tells, &rounds, &classes, show_tells) } else { unit_tip(s, e, sel, &tells, &rounds, &classes) };
         // RULESET1-U slice 5: the selected hero's planned hits on this unit, forecast (rule poise)
         if let Some(h) = sel.filter(|h| layers.forecasts && planning && ri::on(w) && w.units[*h].is_active()) {
-            for f in hit_forecasts(s, h).into_iter().flatten().filter(|f| f.target == e) {
+            // VISCLAR1-C: the strip's list when it has one (a preview leaves that empty)
+            let own;
+            let list = if previewing {
+                own = hit_forecasts(s, h);
+                &own
+            } else {
+                &hits
+            };
+            for f in list.iter().flatten().filter(|f| f.target == e) {
                 lines.push(f.short(w));
             }
         }
@@ -808,8 +869,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // bar's right end; the message gives up the width
     let chip = g.arena_chip();
     let chip_w = chip.as_ref().map_or(0, |c| ((ui.p.text_w(c, SMALL) + 10.0).ceil() as i32).min(200) + 4);
-    ui.p.text_fit((200 + ox) as f32, 326.0, &g.message, BODY, (430 - ox - chip_w) as f32, th().text);
-    ui.push("bar.status", "label", format!("Round {} {phase}: {}", s.current_round, g.message), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, Vec::new());
+    // VISCLAR1-D: the last round's summary before the next round's prompt, as much of it as fits; the log row keeps it whole
+    let room = (430 - ox - chip_w) as f32;
+    let shown_message = match g.round_note.as_ref().filter(|n| n.0 == g.message) {
+        Some((prompt, summary)) => summary_and_prompt(summary, prompt, room, |t| ui.p.text_w(t, BODY)),
+        None => g.message.clone(),
+    };
+    ui.p.text_fit((200 + ox) as f32, 326.0, &shown_message, BODY, room, th().text);
+    ui.push("bar.status", "label", format!("Round {} {phase}: {shown_message}", s.current_round), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, Vec::new());
     if let Some(chip) = chip {
         let cr = Rect::new(W - 6 - (chip_w - 4), 325, chip_w - 4, 14);
         ui.p.panel(cr, th().game("chip", rgba(30, 44, 70, 255)), th().edge, 2.0);
@@ -920,6 +987,11 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.push("battle.banner", "label", text, r, true, false, None, Vec::new());
     }
 
+    // VISCLAR1-D: the round banner, over the board's upper part (under a scripted round's banner); it takes no input
+    if let Some((round, alpha)) = g.round_banner_now(cx) {
+        draw_round_banner(&mut ui.p, Rect::new(GRID_X, GRID_Y, GRID_W * TILE, GRID_H * TILE), round, alpha);
+    }
+
     // INPUT1 TV1-TV6: the full timeline view over the grid panel's rect (key T; T or Esc closes it): the engine widget
     // on the shared builder (`timeline_view`), 4 px inside the panel; its backdrop keeps the board's clicks and hover
     // cards from showing through
@@ -955,7 +1027,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         g.tv_shown = None;
     }
 
-    if let Some(pop) = g.popup.clone() {
+    if let Some((note, left)) = move_note {
+        let (tw, th_) = (ui.p.text_w(&note, SMALL).ceil() as i32 + 8, ui.p.line_h(SMALL).ceil() as i32 + 2);
+        let plate = Rect::new(left.min(W - tw - 2), 24, tw, th_);
+        ui.p.panel(plate, th().game("popup_fill", rgba(14, 20, 34, 252)), REST_BLOCK, 2.0);
+        ui.p.text(plate.x as f32 + 4.0, plate.y as f32 + 1.0, &note, SMALL, th().text);
+        ui.push("strip.move_note", "note", note.clone(), plate, true, false, None, vec![(note, th().text)]);
+    }
+
+    if let Some(grid) = g.popup.as_ref().and_then(|p| p.grid.clone()) {
+        // VISCLAR1-D: the skill menu as icons
+        let pop = g.popup.clone().expect("the grid's popup");
+        ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
+        super::skill_menu::draw_menu(&mut ui, &mut cx.art, &pop, &grid, g.menu_row);
+    } else if let Some(pop) = g.popup.clone() {
         let r = pop.rect(g.menu_row);
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
         ui.p.panel(r, th().game("popup_fill", rgba(14, 20, 34, 252)), th().gold, 3.0);
@@ -989,6 +1074,73 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
 
     g.w = ui.widgets;
+}
+
+// ---- VISCLAR1-D: the party card's rows and the round banner --------------------------------------------------------
+
+/// A party card's height with no meter row at the Normal text size (old units; the wrapper's grid, as the rest of this
+/// screen).
+const CARD_H: i32 = 30;
+/// Room for a number beside its row, at the Normal text size.
+const CARD_NUMBER_W: i32 = 32;
+/// The text audit's overlap share (`text_audit::OVERLAP_Y`) as the rows' pitch: two lines this share of their height apart
+/// are clear of each other.
+const CARD_PITCH: f32 = 1.0 - aegis_ui::text_audit::OVERLAP_Y;
+/// The rows' tightest pitch at the Normal text size, between the HP and poise rows' centres.
+const CARD_MIN_PITCH: f32 = 5.5;
+
+/// Where a party card's rows go, each from the card's own place: the name row on top, then HP, poise and AP on the left and
+/// their numbers right-aligned at `right`, `number_w` wide; `h` is the card's height without a meter row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct CardRows {
+    pub(super) hp: Rect,
+    pub(super) poise: Rect,
+    pub(super) ap: Rect,
+    pub(super) right: i32,
+    pub(super) number_w: i32,
+    pub(super) h: i32,
+}
+
+/// `card` at the text size whose SMALL line is `line` high: larger text moves the rows apart and grows the card, so the
+/// numbers neither overlap nor pass the card's edge; Normal text stays at `CARD_H`.
+pub(super) fn card_rows(card: Rect, line: f32) -> CardRows {
+    let (x, right) = (card.x + 4, card.x + card.w - 4);
+    let w = right - x - CARD_NUMBER_W - 2;
+    let step = ((CARD_PITCH * line - CARD_MIN_PITCH).ceil() as i32).max(0);
+    let ap = Rect::new(x, card.y + 23 + 3 * step, w, 5);
+    let bottom = ap.y - card.y + ap.h / 2;
+    let h = ((bottom as f32 + 0.5 + line / 2.0).ceil() as i32).max(CARD_H);
+    CardRows { hp: Rect::new(x, card.y + 12 + step, w, 4), poise: Rect::new(x, card.y + 18 + 2 * step, w, 3), ap, right, number_w: CARD_NUMBER_W, h }
+}
+
+/// The round's `summary` before the next round's `prompt` in `room`: the prompt stays whole; the summary gives up its last
+/// clauses to fit, all of it if it must (`width` measures a line).
+pub(super) fn summary_and_prompt(summary: &str, prompt: &str, room: f32, mut width: impl FnMut(&str) -> f32) -> String {
+    let mut kept = summary.trim_end_matches('.');
+    loop {
+        let line = format!("{kept}. {prompt}");
+        if width(&line) <= room {
+            return line;
+        }
+        match kept.rfind(", ") {
+            Some(k) => kept = &kept[..k],
+            None => return prompt.to_string(),
+        }
+    }
+}
+
+/// The new round's name on a ribbon, centred in the upper part of `board`, at `alpha` (`round_banner_alpha`). Transient for
+/// the text audit: it passes over the board by design.
+pub(super) fn draw_round_banner(p: &mut Painter, board: Rect, round: i32, alpha: u8) {
+    const SIZE: f32 = TITLE * 1.6;
+    let text = format!("Round {round}");
+    let (tw, lh) = (p.text_w(&text, SIZE), p.line_h(SIZE));
+    let r = Rect::new(board.x + (board.w as f32 - tw - 32.0) as i32 / 2, board.y + board.h / 5, (tw + 32.0) as i32, (lh + 6.0) as i32);
+    let scale = |a: u8| (a as u32 * alpha as u32 / 255) as u8;
+    p.panel(r, with_alpha(th().card, scale(235)), with_alpha(th().gold, scale(255)), RADIUS);
+    p.transient(|p| {
+        p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 3.0, &text, SIZE, with_alpha(th().gold, scale(255)));
+    });
 }
 
 // ---- INPUT1-PB: the combat log by round and block (INPUT1 PB4) ---------------------------------------------------

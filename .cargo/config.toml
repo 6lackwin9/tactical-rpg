@@ -2,3 +2,8 @@
 # Windows disk cleanup may empty it; the next build then rebuilds from scratch.
 [build]
 target-dir = "C:/Users/tusha/AppData/Local/Temp/aegis-target"
+# Low-power laptop (CPU1, user 2026-11-04): each cargo run takes at most 4 build jobs and 4 test threads.
+jobs = 4
+
+[env]
+RUST_TEST_THREADS = "4"

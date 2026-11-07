@@ -9,7 +9,6 @@ use indexmap::IndexMap;
 /// RULESET1-G: `feel` has no Godot original; nor has CAMPAIGN1-SIM's `deadlines` (deadlines.rs, no fights). Both are in
 /// the help text since CLN-39 (it was Godot parity before).
 pub const MODES: [&str; 11] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel", "deadlines"];
-pub const CLASSES: [&str; 6] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"];
 pub const SPENDS: [&str; 4] = ["class", "cons", "primary", "mixed"];
 pub const LOADOUTS: [&str; 3] = ["default", "newest", "role"];
 pub const SCORES: [&str; 3] = ["both", "hp", "binary"];
@@ -21,6 +20,14 @@ pub const TACTICS: [(&str, &str); 6] =
     [("balanced", "balanced"), ("all_out", "aggressive"), ("focus_weakest", "focus_weakest"), ("guard_counter", "defensive"), ("kite", "ranged_kite"), ("economy", "economy")];
 /// RULESET1-G2: the keys only the feel mode reads (any other mode refuses them).
 pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
+/// SIMCOUNT1: the feel key `usage` does not list (see `FEEL_COUNTS_USAGE`); any other mode refuses it too.
+pub const FEEL_COUNTS_KEY: &str = "counts";
+/// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
+/// `usage`.
+pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id";
+/// BASERULES1-M2 (FB-40, library section 7): the help of the ruleset notes, printed apart from `usage` (`sim help`), which
+/// `sim_golden` holds.
+pub const RULE_NOTES_USAGE: &str = "       with ruleset= or rules=: the picked ruleset's notes (aegis rules: requires, conflicts, untested sets, ranges) print after ARGS as RULES error: / RULES warning: lines; the run still plays";
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
@@ -44,7 +51,6 @@ pub const DISTANCE_MAX: i32 = 6;
 pub const METRIC_MODES: [&str; 3] = ["party", "role", "sweep"];
 /// Role limit tests start enemies 4 tiles away.
 pub const ROLE_DISTANCE: i32 = 4;
-pub const DEFAULT_COMP: [&str; 4] = ["warrior", "ranger", "priest", "mage"];
 const PARTY_MAX: usize = rpgkit_world::data::PARTY_MAX as usize;
 const POUCH_MAX: usize = rpgkit_world::state::POUCH_MAX;
 const MAX_LEVEL: i32 = rpgkit_rules::stats::MAX_LEVEL;
@@ -111,12 +117,20 @@ pub struct SimArgs {
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     ruleset_id: String,
     rules: String,
+    /// BASERULES1-M2 (FB-40): the picked ruleset's notes (`Ruleset::notes`, errors first) as printable lines, when the
+    /// command line gives `ruleset=`, or `rules=` on a run with no world fights; empty otherwise and for a clean row (the
+    /// feel mode's own timeline default prints none).
+    pub rule_notes: Vec<String>,
     /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's).
     pub melee_diagonal: Option<rpgkit_rules::ruleset::MeleeDiagonal>,
+    /// ATTACKLOCK1: `attack_lock=none|melee|all` over the ruleset row's value (None = the row's).
+    pub attack_lock: Option<rpgkit_rules::ruleset::AttackLock>,
     /// RULESET1-G2 (feel only): the party's AUTO1 tactic (a TACTICS name; `balanced`).
     pub tactic: String,
     /// RULESET1-G2 (feel only): the party drivers, each run as its own block (`party=auto|timed|both`; auto).
     pub drivers: Vec<crate::timed::Driver>,
+    /// SIMCOUNT1 (feel only): print the rule counts (`counts=on|off`; off).
+    pub counts: bool,
     /// RULESET1-G2 (feel only): unit id -> the armour it fights with in this run (`armor=<unit>:<0-200>`).
     pub armor: IndexMap<String, i32>,
     /// RULESET1-G2 (feel only): ruleset number -> its value in this run (`tune=<key>:<value>`), applied to `ruleset`.
@@ -147,7 +161,7 @@ impl Default for SimArgs {
             rewards: false,
             band_lo: 30,
             band_hi: 70,
-            comp: strings(&DEFAULT_COMP),
+            comp: Vec::new(),
             comp_set: false,
             heal: "none".into(),
             rest: Vec::new(),
@@ -155,10 +169,10 @@ impl Default for SimArgs {
             encounters: strings(&GENERATED),
             elevel: 0,
             elevel_set: false,
-            elite_class: "warrior".into(),
-            boss_class: "brawler".into(),
+            elite_class: String::new(),
+            boss_class: String::new(),
             roles: strings(&ROLES),
-            classes: strings(&CLASSES),
+            classes: Vec::new(),
             dupes: false,
             sample: 0,
             jitter: true,
@@ -177,9 +191,12 @@ impl Default for SimArgs {
             ruleset: rpgkit_rules::ruleset::Ruleset::default(),
             ruleset_id: String::new(),
             rules: String::new(),
+            rule_notes: Vec::new(),
             melee_diagonal: None,
+            attack_lock: None,
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
+            counts: false,
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
@@ -244,6 +261,13 @@ pub fn skipped_by_default(id: &str, row: &aegis_core::value::Obj) -> bool {
     id.starts_with("kit_") || filled("stay_behind") || filled("rooms")
 }
 
+/// BASERULES1-M2 (FB-40, `BASERULES1_LIBRARY.md` section 7): a ruleset's notes as the sim prints them, errors first,
+/// in `Ruleset::notes` order (the same text `aegis rules` shows).
+pub fn rule_note_lines(r: &rpgkit_rules::ruleset::Ruleset) -> Vec<String> {
+    let n = r.notes();
+    n.errors.iter().map(|e| format!("RULES error: {e}")).chain(n.warnings.iter().map(|w| format!("RULES warning: {w}"))).collect()
+}
+
 impl SimArgs {
     /// RULESET1 3.1.2-3.1.3: the ruleset of a fight. `world`: the ruleset of the world that resolves the encounter (None
     /// for a catalog or generated fight). `ruleset=` overrides it; without it a world fight plays by its world's ruleset
@@ -256,6 +280,9 @@ impl SimArgs {
                 let _ = r.adjust(&self.rules);
                 if let Some(m) = self.melee_diagonal {
                     r.numbers.melee_diagonal = m;
+                }
+                if let Some(l) = self.attack_lock {
+                    r.numbers.attack_lock = l;
                 }
                 r
             }
@@ -272,7 +299,17 @@ impl SimArgs {
     /// Parses the sim's command line (mode first) for `game`: world= defaults to its default world, the campaign
     /// mode plays its story run. Err = the message after "SIM argument error: ".
     pub fn parse_for(d: &Data, argv: &[String], game: &SimGame) -> Result<Self, String> {
-        let mut a = SimArgs { world: game.default_world.clone(), game: game.clone(), ..SimArgs::default() };
+        // KITIDS1: the class defaults are the game's (SimGame.classes); the kit names no class
+        let c = &game.classes;
+        let mut a = SimArgs {
+            world: game.default_world.clone(),
+            game: game.clone(),
+            comp: strings(c.default_comp),
+            elite_class: c.elite.into(),
+            boss_class: c.boss.into(),
+            classes: strings(c.ids),
+            ..SimArgs::default()
+        };
         let mut positional: Vec<String> = Vec::new();
         let mut metrics_set = false;
         let mut distance_set = false;
@@ -343,6 +380,9 @@ impl SimArgs {
         if a.quick {
             a.seed_count = 1;
         }
+        // BASERULES1-M2: whether the command line picked the rules (before the feel mode fills in its own default)
+        let picked_ruleset = !a.ruleset_id.is_empty();
+        let switched = !a.rules.is_empty();
         if a.mode == "feel" {
             a.feel_defaults(d, enc_set)?;
         } else if let Some(k) = a.feel_keys.first() {
@@ -359,6 +399,16 @@ impl SimArgs {
         a.ruleset.adjust(&a.rules)?;
         if let Some(m) = a.melee_diagonal {
             a.ruleset.numbers.melee_diagonal = m;
+        }
+        if let Some(l) = a.attack_lock {
+            a.ruleset.numbers.attack_lock = l;
+        }
+        // BASERULES1-M2 (FB-40): the notes of the rules the command line picked. `ruleset=` plays every fight by that row;
+        // `rules=` alone switches classic for catalog and generated fights but each world's own row for world fights
+        // (`ruleset_for`), so a run that may play world fights prints none rather than another ruleset's notes.
+        let world_fights = a.world_set || a.mode == "campaign" || a.encounters.iter().any(|e| parse_ref(e, &a.world).is_some());
+        if picked_ruleset || (switched && !world_fights) {
+            a.rule_notes = rule_note_lines(&a.ruleset);
         }
         if a.mode == "feel" {
             a.feel_checks(d)?;
@@ -418,8 +468,9 @@ impl SimArgs {
     }
 
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
-        let classes = godot_list(&CLASSES);
-        if FEEL_KEYS.contains(&key) && !self.feel_keys.iter().any(|k| k == key) {
+        let ids = self.game.classes.ids;
+        let classes = godot_list(ids);
+        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
         if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
@@ -446,6 +497,12 @@ impl SimArgs {
                     "both" => vec![crate::timed::Driver::Auto, crate::timed::Driver::Timed],
                     v => vec![crate::timed::Driver::parse(v).ok_or_else(|| format!("party must be one of {} or both (got '{value}')", godot_list(&crate::timed::DRIVERS)))?],
                 };
+            }
+            "counts" => {
+                if value != "on" && value != "off" {
+                    return Err(format!("counts must be on or off (got '{value}')"));
+                }
+                self.counts = value == "on";
             }
             "armor" => {
                 for part in list(value) {
@@ -521,6 +578,10 @@ impl SimArgs {
                 let ids = rpgkit_rules::ruleset::MeleeDiagonal::IDS;
                 self.melee_diagonal = Some(rpgkit_rules::ruleset::MeleeDiagonal::parse(value).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{value}')", godot_list(&ids)))?);
             }
+            "attack_lock" => {
+                let ids = rpgkit_rules::ruleset::AttackLock::IDS;
+                self.attack_lock = Some(rpgkit_rules::ruleset::AttackLock::parse(value).ok_or_else(|| format!("attack_lock must be one of {} (got '{value}')", godot_list(&ids)))?);
+            }
             "rewards" => {
                 if value != "on" && value != "off" {
                     return Err(format!("rewards must be on or off (got '{value}')"));
@@ -554,7 +615,7 @@ impl SimArgs {
                     return Err(format!("comp needs 1..{PARTY_MAX} class ids (got '{value}')"));
                 }
                 for c in &picked {
-                    if !CLASSES.contains(&c.as_str()) {
+                    if !ids.contains(&c.as_str()) {
                         return Err(format!("comp: unknown class '{c}' (one of {classes})"));
                     }
                 }
@@ -643,7 +704,7 @@ impl SimArgs {
                 }
             }
             "elite" | "boss" => {
-                if !CLASSES.contains(&value) {
+                if !ids.contains(&value) {
                     return Err(format!("{key} must be a class id of {classes} (got '{value}')"));
                 }
                 if key == "elite" {
@@ -663,8 +724,8 @@ impl SimArgs {
             }
             "class" => {
                 if value == "all" {
-                    self.classes = strings(&CLASSES);
-                } else if CLASSES.contains(&value) {
+                    self.classes = strings(ids);
+                } else if ids.contains(&value) {
                     self.classes = vec![value.into()];
                 } else {
                     return Err(format!("class must be one of {classes} or all (got '{value}')"));
@@ -710,13 +771,13 @@ impl SimArgs {
                 self.comp_size = int(value) as usize;
             }
             "lead" => {
-                if !CLASSES.contains(&value) {
+                if !ids.contains(&value) {
                     return Err(format!("lead must be a class id of {classes} (got '{value}')"));
                 }
                 self.lead = value.into();
             }
             "tier_foe" => {
-                if value != MIRROR && !CLASSES.contains(&value) {
+                if value != MIRROR && !ids.contains(&value) {
                     return Err(format!("tier_foe must be {MIRROR} or a class id of {classes} (got '{value}')"));
                 }
                 self.tier_foe = value.into();
@@ -772,6 +833,13 @@ impl SimArgs {
         self.score != "hp"
     }
 
+    /// KITIDS1: the campaign header's party text without comp=: "all trios (<lead> + 2 of <the other classes>)".
+    fn trios_text(&self) -> String {
+        let c = &self.game.classes;
+        let others: Vec<&str> = c.ids.iter().copied().filter(|id| *id != c.trio_lead).collect();
+        format!("all trios ({} + 2 of {})", c.trio_lead, others.join(","))
+    }
+
     /// One line echoing the effective arguments (every table starts with it).
     pub fn header(&self) -> String {
         let on = |b: bool| if b { "on" } else { "off" };
@@ -808,7 +876,7 @@ impl SimArgs {
                 }
             }
             "campaign" => {
-                let comp = if self.comp_set { self.comp.join(",") } else { "all trios (warrior + 2 of ranger,priest,brawler,rogue,mage)".into() };
+                let comp = if self.comp_set { self.comp.join(",") } else { self.trios_text() };
                 t += &format!(", comp {comp}, heal {}", self.heal);
                 if !self.rest.is_empty() {
                     t += &format!(", rest {}", self.rest.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(","));
@@ -833,6 +901,9 @@ impl SimArgs {
                 }
                 if self.drivers != [crate::timed::Driver::Auto] {
                     t += &format!(", party {}", if self.drivers.len() > 1 { "both" } else { self.drivers[0].id() });
+                }
+                if self.counts {
+                    t += ", counts on";
                 }
                 if !self.armor.is_empty() {
                     t += &format!(", armor {}", self.armor.iter().map(|(u, n)| format!("{u}:{n}")).collect::<Vec<_>>().join(","));
@@ -881,7 +952,17 @@ fn tune_fields() -> impl Iterator<Item = &'static serde_json::Map<String, serde_
 pub fn usage(game: &SimGame) -> Vec<String> {
     let campaign = game.story.as_ref().map_or(NO_STORY_USAGE, |s| s.usage.as_str());
     let world = format!("       world=<id> ({}): bare enc= ids also find that world's encounters (story characters with their extras and tuning)", game.default_world);
-    let mut out = strings(&USAGE);
+    // KITIDS1: the class defaults are the game's
+    let c = &game.classes;
+    let or_none = |s: String| if s.is_empty() { "none".to_string() } else { s };
+    let fill = |l: &str| {
+        l.replace("{comp}", &or_none(c.default_comp.join(",")))
+            .replace("{elite}", &or_none(c.elite.into()))
+            .replace("{boss}", &or_none(c.boss.into()))
+            .replace("{lead}", &or_none(c.trio_lead.into()))
+            .replace("{trios}", &crate::campaign::trios(c).len().to_string())
+    };
+    let mut out: Vec<String> = USAGE.iter().map(|l| fill(l)).collect();
     out.insert(USAGE_CAMPAIGN_AT, campaign.to_string());
     out.insert(USAGE_WORLD_AT, world);
     out
@@ -899,7 +980,7 @@ const USAGE: [&str; 30] = [
     "       tier [level]       hero vs its class (or tier_foe=) at minion/standard/elite/boss, 1v1 and 1v3",
     "       levels             class at L vs L+2 for L = 1, 3, 5, 7",
     "       group [level]      hero L vs 3 minions at L-2, 3 standard at L-2, 3 minions at L",
-    "       stats [level|all]  no fights: HP, armor, EHP, power, range, speed, crit, active families",
+    "       stats [level|all]  no fights: HP, armor, EHP, power, range, initiative, move rate, crit, active families",
     "       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
     "       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
     "       sweep [level]      every size-class composition (size=4; lead= fixes one class) vs enc: ranking, swap delta, top-5 appearances",
@@ -909,14 +990,14 @@ const USAGE: [&str; 30] = [
     "       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
     "       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
     "       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
-    "       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
-    "       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
+    "       comp=c1,c2,.. ({comp})  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
+    "       elite=<class> ({elite})  boss=<class> ({boss})  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
     "       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
     "       heal=none|full|rally|<pct> (none; campaign: between-battle healing, full also revives, rally = HealRules 25% after a win, a downed hero gets up)  comp=.. picks one campaign party",
     "       rest=<b,b> (none): campaign story battles that start after a full rest  extra=<b>:<enc>[,..] (none): campaign extra fight(s) before story battle b (a loss there is a fall at b)",
     "       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
     "       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
-    "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
+    "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead={lead}: the {trios} trios)",
     "       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes (authored since BAL5-R1b: no change)",
     "       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
     "       ruleset=classic|timeline (classic; a world encounter: its world's)  rules=+id,-id (none): switch single extensions  melee_diagonal=none|maneuver|all (the row's)",

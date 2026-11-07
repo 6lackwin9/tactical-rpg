@@ -5,6 +5,7 @@
 use crate::kpi::Acc;
 use crate::roles;
 use crate::runner::{Def, Runner};
+use crate::SimClasses;
 use aegis_core::json;
 use rpgkit_battle::encounter;
 use rpgkit_battle::metrics::accumulate;
@@ -17,24 +18,28 @@ pub const WAVE_BLOCK: i32 = 1;
 /// Striker band (8.1): the priority target down by this round.
 pub const PRIORITY_ROUND: i32 = 5;
 
-type Roster = &'static [(&'static str, &'static str)];
+/// [class, tier] per unit.
+pub type Roster = &'static [(&'static str, &'static str)];
 
-/// 5: generated encounters ([class, tier] per unit; "@elite" / "@boss" follow elite= / boss=; the wave arrives at
-/// WAVE_ROUND / WAVE_BLOCK).
-pub fn generated(id: &str) -> Option<(Roster, Roster)> {
-    Some(match id {
-        "mob" => (&[("brawler", "minion"), ("rogue", "minion"), ("ranger", "minion"), ("priest", "minion"), ("brawler", "minion")], &[]),
-        "line" => (&[("warrior", "standard"), ("brawler", "standard"), ("ranger", "standard"), ("rogue", "standard")], &[]),
-        "wave" => (&[("brawler", "standard"), ("rogue", "standard"), ("ranger", "standard")], &[("brawler", "minion"), ("rogue", "minion"), ("priest", "minion")]),
-        "elite" => (&[("@elite", "elite"), ("rogue", "standard"), ("mage", "standard"), ("warrior", "standard")], &[]),
-        "boss" => (&[("@boss", "boss"), ("ranger", "standard"), ("priest", "standard")], &[("ranger", "minion"), ("priest", "minion")]),
-        _ => return None,
-    })
+/// 5: a generated encounter's roster (KITIDS1: the game's, SimClasses.generated): [class, tier] per unit; "@elite" /
+/// "@boss" follow elite= / boss=; the wave arrives at WAVE_ROUND / WAVE_BLOCK.
+#[derive(Debug, Clone, Copy)]
+pub struct Generated {
+    pub id: &'static str,
+    pub enemies: Roster,
+    pub wave: Roster,
 }
 
-/// 6.4: one limit test. `allies`: reference classes after the test unit; `block`: the clumped enemy start;
-/// `tier_until`: up to that level the enemy at the slot uses the tier instead.
+/// The roster and wave of generated encounter `id` (None: the game gives it none).
+pub fn generated(c: &SimClasses, id: &str) -> Option<(Roster, Roster)> {
+    c.generated.iter().find(|g| g.id == id).map(|g| (g.enemies, g.wave))
+}
+
+/// 6.4: one limit test (KITIDS1: the game's, SimClasses.scenarios). `allies`: reference classes after the test unit;
+/// `block`: the clumped enemy start; `tier_until`: up to that level the enemy at the slot uses the tier instead.
+#[derive(Debug, Clone, Copy)]
 pub struct Scenario {
+    pub id: &'static str,
     pub role: &'static str,
     pub allies: &'static [&'static str],
     pub enemies: Roster,
@@ -43,42 +48,9 @@ pub struct Scenario {
     pub tier_until: Option<(i32, usize, &'static str)>,
 }
 
-pub fn scenario_def(id: &str) -> Scenario {
-    match id {
-        "tank_hold" => Scenario {
-            role: "tank",
-            allies: &["ranger", "mage"],
-            enemies: &[("brawler", "standard"), ("rogue", "standard"), ("brawler", "standard"), ("rogue", "standard")],
-            priority: false,
-            block: (0, 0),
-            tier_until: None,
-        },
-        "ranged_dive" => Scenario { role: "ranged", allies: &["warrior"], enemies: &[("rogue", "standard"), ("rogue", "standard"), ("brawler", "standard")], priority: false, block: (0, 0), tier_until: None },
-        "aoe_swarm" => Scenario {
-            role: "aoe",
-            allies: &["warrior", "priest"],
-            enemies: &[("brawler", "minion"), ("rogue", "minion"), ("brawler", "minion"), ("brawler", "minion"), ("rogue", "minion"), ("priest", "minion")],
-            priority: false,
-            block: (2, 3),
-            tier_until: None,
-        },
-        "support_attrition" => Scenario {
-            role: "support",
-            allies: &["warrior", "brawler"],
-            enemies: &[("ranger", "standard"), ("brawler", "standard"), ("mage", "standard"), ("rogue", "standard")],
-            priority: false,
-            block: (0, 0),
-            tier_until: None,
-        },
-        _ => Scenario {
-            role: "striker",
-            allies: &["warrior"],
-            enemies: &[("mage", "elite"), ("warrior", "standard"), ("warrior", "standard")],
-            priority: true,
-            block: (0, 0),
-            tier_until: Some((3, 0, "standard")),
-        },
-    }
+/// The limit test `id` (None: the game gives it none; `class_problem` refuses such a role line before any fight).
+pub fn scenario_def(c: &SimClasses, id: &str) -> Option<Scenario> {
+    c.scenarios.iter().find(|s| s.id == id).copied()
 }
 
 /// The scenario of each role.
@@ -92,8 +64,7 @@ pub fn role_scenario(role: &str) -> &'static str {
     }
 }
 
-/// BAL5 S2 foes of support_attrition (authored since BAL5-R1b: `s2=on` changes nothing).
-const S2_ENEMIES: Roster = &[("ranger", "standard"), ("brawler", "standard"), ("mage", "standard"), ("rogue", "standard")];
+/// BAL5 S2: the scenario whose foes `s2=on` swaps for SimClasses.s2_enemies.
 const S2_SCENARIO: &str = "support_attrition";
 
 /// BAL5 B2: the generated boss's phase (BOSS1 Crown of Nails effects) on unit `boss`.
@@ -157,7 +128,7 @@ pub fn define_enemies(r: &mut Runner, list: &[(&str, &str)], level: i32, first: 
 #[allow(clippy::too_many_arguments)]
 pub fn encounter(r: &mut Runner, id: &str, level: i32, elevel: i32, elevel_set: bool, elite: &str, boss: &str, boss_phase: bool) -> Enc {
     let foe_level = (level + elevel).clamp(1, MAX_LEVEL);
-    if let Some((enemies, wave)) = generated(id) {
+    if let Some((enemies, wave)) = generated(&r.args.game.classes, id) {
         let foes = define_enemies(r, enemies, foe_level, 1, elite, boss);
         let mut base = Map::new();
         let mut phases: Vec<Value> = Vec::new();
@@ -226,12 +197,13 @@ pub struct ScenarioUnits {
 /// A role scenario: the test unit simt_<class> (role loadout, variants apply), plain references simr_<class>_<i>,
 /// enemies at the same level.
 pub fn scenario(r: &mut Runner, id: &str, class_id: &str, level: i32, test_plain: bool, s2: bool) -> ScenarioUnits {
-    let s = scenario_def(id);
+    let c = r.args.game.classes;
+    let s = scenario_def(&c, id).expect("class_problem checked the role's limit test");
     let test = format!("simt_{class_id}{}", if test_plain { "_ref" } else { "" });
     if test_plain {
         r.define(&test, Def { plain: true, ..Def::new(class_id, level, "hero", true) });
     } else {
-        let loadout = roles::role_loadout(&r.d.cat, class_id, s.role, level);
+        let loadout = roles::role_loadout(&r.d.cat, &c, class_id, s.role, level);
         r.define(&test, Def { loadout, ..Def::new(class_id, level, "hero", true) });
     }
     let refs: Vec<String> = s
@@ -244,8 +216,8 @@ pub fn scenario(r: &mut Runner, id: &str, class_id: &str, level: i32, test_plain
             rid
         })
         .collect();
-    let list = scenario_enemies(id, level, s2);
-    let enemies = define_enemies(r, &list, level, 1, "warrior", "brawler");
+    let list = scenario_enemies(&c, id, level, s2);
+    let enemies = define_enemies(r, &list, level, 1, c.elite, c.boss);
     let mut party = vec![test.clone()];
     party.extend(refs.iter().cloned());
     let priority = if s.priority { enemies[0].clone() } else { String::new() };
@@ -253,9 +225,9 @@ pub fn scenario(r: &mut Runner, id: &str, class_id: &str, level: i32, test_plain
 }
 
 /// The [class, tier] enemy list of a scenario at `level` (tier_until applied).
-pub fn scenario_enemies(id: &str, level: i32, s2: bool) -> Vec<(&'static str, &'static str)> {
-    let s = scenario_def(id);
-    let mut list: Vec<(&'static str, &'static str)> = if s2 && id == S2_SCENARIO { S2_ENEMIES.to_vec() } else { s.enemies.to_vec() };
+pub fn scenario_enemies(c: &SimClasses, id: &str, level: i32, s2: bool) -> Vec<(&'static str, &'static str)> {
+    let Some(s) = scenario_def(c, id) else { return Vec::new() };
+    let mut list: Vec<(&'static str, &'static str)> = if s2 && id == S2_SCENARIO && !c.s2_enemies.is_empty() { c.s2_enemies.to_vec() } else { s.enemies.to_vec() };
     if let Some((lvl, slot, tier)) = s.tier_until {
         if level <= lvl {
             list[slot] = (list[slot].0, tier);

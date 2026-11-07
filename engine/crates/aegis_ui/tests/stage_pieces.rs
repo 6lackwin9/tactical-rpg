@@ -4,11 +4,12 @@
 //! `flip`. DIR4-HB: `Art::body_bounds_facing` boxes `idle`'s front or back row for a unit facing down or up (never
 //! mirrored) and falls back to the side `idle` (mirrored when left) for a side facing or a body without that view row.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::{Facing, Layers, View as Dir};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rect, OUTLINE_ALPHA};
 use aegis_ui::painter::{Fonts, Painter, View};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn write_png(path: &Path, w: u32, h: u32, px: &[u8]) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -84,9 +85,8 @@ fn opaque_bounds_box_the_pixels_at_or_above_the_alpha() {
 
 /// A body whose 8 x 8 `idle` frame 0 is solid over x 1..3, y 2..8 (left of centre) with a faint pixel at (7, 0)
 /// below `OUTLINE_ALPHA`; `idle` frame 1 is empty.
-fn body_tree() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_stage_pieces_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn body_tree() -> Scratch {
+    let root = Scratch::vacant("stage_pieces");
     let (w, h) = (16u32, 8u32);
     let mut px = vec![0u8; (w * h * 4) as usize];
     for y in 2..8 {
@@ -106,7 +106,7 @@ fn body_tree() -> PathBuf {
 #[test]
 fn body_bounds_are_the_fitted_idle_frames_solid_box_and_mirror_with_flip() {
     let root = body_tree();
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     for size in [8, 16, 24] {
         // Whole multiples (SPRITEFIT1 fills every size; the sizes between are in sprite_fit.rs): k x the solid box.
         let k = size / 8;
@@ -124,9 +124,8 @@ fn body_bounds_are_the_fitted_idle_frames_solid_box_and_mirror_with_flip() {
 /// A body `facer` with 8 x 8 rows `idle` (solid x 1..3, y 2..8), `idle_down` (view `down` of `idle`: solid x 2..8,
 /// y 5..8) and `walk_up` (view `up` of `walk`, not of `idle`: solid x 0..8, y 0..8), and a side-only body `plain`
 /// (its `idle` as facer's). Returns the root.
-fn view_tree() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_stage_pieces_views_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn view_tree() -> Scratch {
+    let root = Scratch::vacant("stage_pieces_views");
     let (w, h) = (8u32, 32u32);
     let mut px = vec![0u8; (w * h * 4) as usize];
     let mut fill = |row: u32, xs: std::ops::Range<u32>, ys: std::ops::Range<u32>| {
@@ -158,7 +157,7 @@ fn view_tree() -> PathBuf {
 #[test]
 fn body_bounds_follow_the_facing_view_and_fall_back_to_the_side_idle() {
     let root = view_tree();
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     for size in [8, 16, 24] {
         let k = size / 8;
         let side = Rect::new(k, 2 * k, 2 * k, 6 * k);

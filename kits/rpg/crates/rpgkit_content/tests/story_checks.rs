@@ -14,13 +14,12 @@ use std::path::{Path, PathBuf};
 
 const W: &str = "ward";
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_story_checks_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_story_checks_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds").join(W)).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -90,7 +89,8 @@ fn talk_a() -> Value {
 /// A scratch story world: the manifest, a hub with a map, two characters, an encounter, a quest, the dialogue, the
 /// vignette, two sequences and the board.
 fn story_world(tag: &str) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     fs::write(aegis_content::world::manifest_path(&data, W), manifest().to_string()).unwrap();
     fs::create_dir_all(data.join("maps")).unwrap();
     let rows = ["#####", "#...#", "#...#", "#####"];

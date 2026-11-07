@@ -94,6 +94,19 @@ fn coerce(f: &Dict, value: &Value) -> Value {
             }
             Value::Object(stats)
         }
+        // a stat -> number map kept to full float precision (no snap: the writer prints 15 significant digits); like
+        // `stats`, zeros and values that are not numbers are left out, and min/max are hints the game's checks enforce
+        "float_stats" => {
+            let mut stats = Dict::new();
+            if let Value::Object(src) = value {
+                for (k, raw) in src {
+                    if let Some(x) = raw.as_f64().filter(|x| *x != 0.0) {
+                        stats.insert(k.clone(), Value::from(x));
+                    }
+                }
+            }
+            Value::Object(stats)
+        }
         "json" | "modifier_table" | "tier_table" | "hand_grid" => copy(if value.is_array() || value.is_object() { value } else { fallback }),
         "table" => match value {
             Value::Object(src) => Value::Object(src.iter().map(|(k, v)| (k.clone(), whole_level(v))).collect()),
@@ -213,6 +226,7 @@ pub fn type_errors(fields: &[Value], entry: &Dict) -> Vec<String> {
             "id" | "string" | "text" | "ref" | "enum" => (v.is_string(), "text"),
             "refs" | "strings" | "multi_pick" => (v.as_array().is_some_and(|a| a.iter().all(Value::is_string)), "a list of text"),
             "stats" | "dict_pick" => (v.is_object(), "an object"),
+            "float_stats" => (v.as_object().is_some_and(|o| o.values().all(Value::is_number)), "an object of numbers"),
             "json" => (v.is_object() || v.is_array(), "an object or a list"),
             _ => (true, ""),
         };

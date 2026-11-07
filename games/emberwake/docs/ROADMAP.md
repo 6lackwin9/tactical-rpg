@@ -1,5 +1,7 @@
 # Roadmap (agent-facing, high level)
 
+Silo Release Cadence (`R1–R4`, `2026-11-07`, `UN-03`): active RPG Kit and Emberwake delivery follows the 9-block Masterplan (`U`, `S`, `A`, `F`, `P`, `I`, `E`, `W`, `T`) in [MASTERPLAN1.md](../../../docs/specs/MASTERPLAN1.md) and the live build queue in [READY.md](../../../docs/READY.md), gated by four user-testable Silo Releases (`R1` Combat Feel & Core Resolver, `R2` Spatial & Tactical AI, `R3` Economy, World & Story Spine, `R4` Full Slice Polish & Golden Lock) in [MILESTONES.md](MILESTONES.md).
+
 Transition (2026-10-19): the game now runs on the Aegis engine (Rust, `engine/`); `done` systems were built in the Godot build and reached step-for-step parity in the engine (`engine/docs/PORT_NOTES.md`, exceptions in `games/emberwake/docs/SCREENS.md` "Known gaps" and the balance sim's unported modes). Engine milestones and the transition itself: `engine/docs/ENGINE_SPEC.md`.
 
 Single source of truth for scope and status. Detailed per-system checklists remain in README "Roadmap". Do not delete entries: change the status and add the reason (see `docs/HISTORY.md` for deprecated ideas). Decided brainstorm options, answered questions and done plans (2026-10-15 brainstorm pass, plan v2, R1) are archived verbatim in `docs/archive/ROADMAP_2026-10.md` (CLN-11).
@@ -45,6 +47,8 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | LOOK1 | Visual pass: a game theme (palette, frames, fonts) on an engine theme, the title and menu screens on reusable engine panes, Sunk Ward tile sets with wall faces and transitions | approved | UIKIT1, STAGE1, PROPS1-L2, PLAYUI1; EXPLOREVIEW1 for the region sets | `games/emberwake/docs/specs/LOOK1.md`; user 2026-11-02 ("better tile sets, menu screens, layout and styling") |
 | REGIONGROUND1 | Region maps with several ground types and natural blends, tall walls, ground below units and props (region floors moved here from LOOK1) | approved (user 2026-11-02) | M2 | games/emberwake/docs/specs/REGIONGROUND1.md |
 | LAYOUT720 | Reactive, relative layout as an engine feature on a 1280 x 720 grid; screens move in their own tasks | approved (user 2026-11-02) | REGIONVIEW1 | `docs/specs/LAYOUT720.md` |
+| LAYOUTDATA1 | Screen layouts as data, authored by a UI agent | approved (user 2026-11-04) | LAYOUT720-M0 | `docs/specs/LAYOUTDATA1.md` |
+| INTEG1 | Integration agent, scenario driver, perf record | approved (user 2026-11-04) | - | `docs/specs/AGENTROLES1.md` |
 | FX1 | Attack effects and an engine camera shake: the engine effects (FX1-E), card and phase `shake` in the kit (FX1-S), the battle timeline with hits on the clip impact frame, hit-stop and flash (FX1-L1), skill, support and item looks (FX1-L2), card visuals (FX1-V), the slice's shakes as data (FX1-A) | in-progress (E, S, L1, L2, V done; FX1-A left; row added 2026-10-29, CLN-22) | STAGE1, STORYUI1 | `games/emberwake/docs/specs/FX1.md` (+ _TASKS.md); user 2026-10-23 (FX1), 2026-10-25 (camera shake, build the slice), decision "Attack timing on the board" A |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)

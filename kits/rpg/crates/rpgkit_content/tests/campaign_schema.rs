@@ -14,13 +14,12 @@ use std::path::{Path, PathBuf};
 
 const W: &str = "ward";
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_campaign_schema_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_campaign_schema_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds").join(W)).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -119,7 +118,8 @@ fn tess() -> Value {
 /// A scratch campaign world: the manifest, two locations (the hub a rest place), a quest, an encounter, the dialogue,
 /// the two meters, the checkpoints and the triggers.
 fn campaign_world(tag: &str) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     fs::write(aegis_content::world::manifest_path(&data, W), manifest().to_string()).unwrap();
     write_kind(&data, "locations", json!([{"id": "hub", "name": "Hub", "rest": true}, {"id": "street", "name": "Street"}]));
     write_kind(&data, "quests", json!([{"id": "q_cages", "name": "The Cages"}]));

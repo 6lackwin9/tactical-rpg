@@ -12,6 +12,7 @@
 //!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
 //!       {melee_diagonal?}                      INPUT1 MR11: none, maneuver or all over the ruleset row's value
 //!                                              (beyond classic the state's `ruleset` names it)
+//!       {attack_lock?}                         ATTACKLOCK1: none, melee or all over the ruleset row's value (also in `ruleset`)
 //!       {tactics?}                             ENCOUNTER2-C4: the players' tactics, as `tactics` below
 //!   state                                      round, block, phase, outcome, units, grid; `hold` (tiles, label,
 //!                                              holder, open, note) only for a hold escape (ENCOUNTER2 3.1)
@@ -68,6 +69,9 @@
 //! "target"}, {"mode": "area", "skill", "cell": [x, y]}, {"mode": "goto", "cell"}, {"mode": "move", "dir": [dx, dy],
 //! "tiles"}, {"mode": "withdraw"}, {"mode": "item", "item", "target"}. Units are referred to by index (as in `state`)
 //! or by name.
+//! BASERULES1-M: `rules` builds the `aegis rules` tweak report and its `--contract` surface.
+
+pub mod rules;
 
 use rpgkit_battle::command;
 use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL, TERRAIN_IDS};
@@ -79,7 +83,7 @@ use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::UnitId;
 use rpgkit_data::Catalog;
-use rpgkit_rules::ruleset::{MeleeDiagonal, Ruleset, CLASSIC};
+use rpgkit_rules::ruleset::{AttackLock, MeleeDiagonal, Ruleset, CLASSIC};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -110,6 +114,10 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
     // INPUT1 MR11: the diagonal melee to compare (the row's value when absent or "")
     if let Some(id) = req.get("melee_diagonal").and_then(Value::as_str).filter(|s| !s.is_empty()) {
         r.numbers.melee_diagonal = MeleeDiagonal::parse(id).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{id}')", MeleeDiagonal::IDS.join(", ")))?;
+    }
+    // ATTACKLOCK1: the lock to compare (the row's value when absent or "")
+    if let Some(id) = req.get("attack_lock").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        r.numbers.attack_lock = AttackLock::parse(id).ok_or_else(|| format!("attack_lock must be one of {} (got '{id}')", AttackLock::IDS.join(", ")))?;
     }
     Ok(r)
 }
@@ -457,7 +465,7 @@ pub fn state_of(s: &Session) -> Value {
             let p = w.grid.pos(i);
             json!({
                 "id": i, "name": u.name, "side": if w.allies.contains(&i) { "party" } else { "enemy" },
-                "hp": u.hp, "max_hp": u.max_hp, "ap": u.ap, "max_ap": u.max_ap, "speed": u.speed, "range": u.attack_range,
+                "hp": u.hp, "max_hp": u.max_hp, "ap": u.ap, "max_ap": u.max_ap, "speed": u.initiative, "initiative": u.initiative, "move_rate": u.move_rate, "range": u.attack_range,
                 "pos": p.map(|p| json!([p.x, p.y])), "stance": stance_name(u), "level": u.stats.level, "tier": u.tier,
                 "statuses": u.st.active.iter().collect::<Vec<_>>(), "pending": u.st.pending.iter().collect::<Vec<_>>(),
                 "alive": u.is_alive(), "withdrawn": u.is_withdrawn, "target": u.active_target,
@@ -474,7 +482,7 @@ pub fn state_of(s: &Session) -> Value {
         "grid": {"w": GRID_W, "h": GRID_H, "rows": rows, "exits": w.grid.exits.iter().map(|e| json!([e.x, e.y])).collect::<Vec<_>>()},
     });
     // INPUT1 MR11, CLN-46: the ruleset and its diagonal melee, always (every ruleset is a row; none is the odd one out)
-    state["ruleset"] = json!({"id": w.ruleset.id, "melee_diagonal": w.ruleset.melee_diagonal().id()});
+    state["ruleset"] = json!({"id": w.ruleset.id, "melee_diagonal": w.ruleset.melee_diagonal().id(), "attack_lock": w.ruleset.attack_lock().id()});
     // ENCOUNTER2 3.1: a hold escape's tiles, holder and gate (other battles keep the state's shape)
     if let Some(g) = &w.hold {
         state["hold"] = json!({"tiles": g.tiles.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "label": g.label, "holder": g.holder, "open": g.is_open(w), "note": g.note(w)});

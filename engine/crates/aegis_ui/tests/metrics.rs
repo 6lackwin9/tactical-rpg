@@ -2,6 +2,7 @@
 //! `Env`, `Ui::screen`, `Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`. Every expected value comes from the rules:
 //! today's constants and `layout` on the old grids, those doubled on the native one unless a theme file names the key.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_layout::{Anchor, SizeClass};
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
@@ -10,7 +11,7 @@ use aegis_ui::painter::{Fonts, Grid, View, GRID};
 use aegis_ui::theme::{self, Frame, Metrics, Nine, NineFill, Theme, BREAKPOINTS, CORNER_SIZE};
 use aegis_ui::ui::{self, Gfx, Kit, Pointer, Ui};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 fn fonts() -> Fonts {
@@ -27,15 +28,14 @@ fn view(grid: Grid) -> View {
 
 /// A game layer with this theme file, loaded.
 fn load(tag: &str, v: Value) -> Result<Theme, Vec<String>> {
-    let dir = scratch(tag);
+    let dir = scratch(tag).until_thread_end();
     std::fs::create_dir_all(dir.join("ui")).unwrap();
     std::fs::write(dir.join("ui/theme.json"), v.to_string()).unwrap();
-    theme::load(&Layers::of(vec![dir]))
+    theme::load(&Layers::of(vec![dir.to_path_buf()]))
 }
 
-fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_metrics_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn scratch(tag: &str) -> Scratch {
+    let dir = Scratch::vacant(&format!("metrics_{tag}"));
     dir
 }
 
@@ -120,7 +120,7 @@ fn bad_metrics_are_refused_with_every_problem_named() {
 #[test]
 fn hair_is_one_physical_pixel_at_any_scale() {
     let t = Theme::default();
-    let hair = |s: f32| Metrics::of(&t, View { s, ox: 0.0, oy: 0.0, g: 2 }).hair;
+    let hair = |s: f32| Metrics::of(&t, View { s, ox: 0.0, oy: 0.0, g: 2, canvas: GRID }).hair;
     assert_eq!((hair(1.0), hair(1.5), hair(3.0)), (1, 1, 1));
     assert_eq!((hair(0.5), hair(0.4), hair(0.25)), (2, 3, 4));
     for s in [0.2f32, 0.3, 0.7, 0.99] {
@@ -305,7 +305,9 @@ fn frame_body_returns_the_content_rect_on_every_grid() {
         let mut g = gfx(1920, 1080, grid);
         let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
         let r = Rect::new(20 * u, 20 * u, 200 * u, 100 * u);
+        let measured = ui.frame_content("inset", r);
         assert_eq!(ui.frame_body("inset", r), Rect::new(r.x + 3 * u, r.y + 4 * u, r.w - 8 * u, r.h - 10 * u), "{grid:?}: the sidecar's pad, in old units");
+        assert_eq!(ui.frame_content("inset", r), measured, "{grid:?}: measuring first gives what drawing gives");
         assert_eq!(ui.inset(r, false), Rect::new(r.x + 3 * u, r.y + 4 * u, r.w - 8 * u, r.h - 10 * u), "{grid:?}: `inset` is the same");
     }
     // A corner that reaches into the panel: past it at the size it draws, under the call.

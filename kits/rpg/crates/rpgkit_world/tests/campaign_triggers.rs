@@ -156,7 +156,7 @@ fn a_battle_trigger_runs_its_effects_and_queues_its_then_items() {
     let again = battle::settle(&d, &mut gs, "w:enc_x", "won", None);
     assert!(fired(&campaign_events(&again)).is_empty() && pending(&gs) == queued, "once by default");
     // the queue and the fired record are saved (11.5)
-    let dir = std::env::temp_dir().join(format!("rpgkit_campaign_triggers_{}", std::process::id()));
+    let dir = aegis_core::scratch::Scratch::vacant("rpgkit_campaign_triggers");
     assert!(save::write(&d, &dir, &gs, 1, 1).is_empty());
     let back = save::read(&d, &dir, 1).expect("reads back");
     let _ = std::fs::remove_dir_all(&dir);

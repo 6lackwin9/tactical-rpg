@@ -17,13 +17,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_expression_fx_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_expression_fx_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -42,7 +41,7 @@ fn default_of(key: &str) -> Value {
 
 #[test]
 fn a_missing_file_is_an_empty_table() {
-    let data = scratch("missing");
+    let (_scratch, data) = scratch("missing");
     let src = source::load(&data);
     assert!(json::arr(&src.catalog[KIND]).is_empty(), "the kind loads as no rows");
     assert!(src.errors.iter().all(|e| !e.contains(&format!("{KIND}.json"))), "{:?}", src.errors);
@@ -68,7 +67,7 @@ fn the_schema_options_are_the_kit_lists() {
 
 #[test]
 fn each_mistake_has_its_text() {
-    let data = scratch("texts");
+    let (_scratch, data) = scratch("texts");
     let v = store::view(&data);
     let check = |e: Value| check::validate_entry(&v, KIND, &dict(e), "");
     let ok = Vec::<String>::new();
@@ -109,7 +108,7 @@ fn each_mistake_has_its_text() {
 
 #[test]
 fn the_loader_keeps_the_rows_that_pass_and_warns_on_an_empty_row() {
-    let data = scratch("loader");
+    let (_scratch, data) = scratch("loader");
     let entries = json!([{"id": "angry", "tint": "#e11d48"}, {"id": "neutral", "tint": "#e11d48"}, {"id": "angry", "mark": "vein"}, {"id": "afraid"}]);
     fs::write(data.join("catalog").join(format!("{KIND}.json")), json!({"kind": KIND, "version": 1, "entries": entries}).to_string()).unwrap();
     let src = source::load(&data);
@@ -129,7 +128,7 @@ fn the_loader_keeps_the_rows_that_pass_and_warns_on_an_empty_row() {
 
 #[test]
 fn the_writer_stores_what_differs_and_resaves_byte_for_byte() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     let file = data.join("catalog").join(format!("{KIND}.json"));
     let refused = store::upsert(&data, None, KIND, &dict(json!({"id": "neutral", "tint": "#e11d48"})), None).err().expect("a neutral row is refused");
     assert!(refused.iter().any(|e| e.contains(expression_fx::NEUTRAL_MOTION_ONLY)), "{refused:?}");
@@ -183,7 +182,7 @@ fn the_motion_fields_default_to_the_plain_breath() {
 
 #[test]
 fn each_motion_mistake_has_its_text() {
-    let data = scratch("motion_texts");
+    let (_scratch, data) = scratch("motion_texts");
     let v = store::view(&data);
     let check = |e: Value| check::validate_entry(&v, KIND, &dict(e), "");
     let ok = Vec::<String>::new();
@@ -244,7 +243,7 @@ fn a_motion_row_draws_something_and_large_offsets_warn() {
 
 #[test]
 fn the_writer_stores_only_the_motion_fields_that_differ() {
-    let data = scratch("motion_writer");
+    let (_scratch, data) = scratch("motion_writer");
     let file = data.join("catalog").join(format!("{KIND}.json"));
     // today's rows, with every motion field written at its default: none is stored
     let mut plain = dict(json!({"id": "angry", "tint": "#e11d48", "tint_strength": 0.35}));

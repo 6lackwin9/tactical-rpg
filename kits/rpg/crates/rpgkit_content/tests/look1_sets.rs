@@ -7,7 +7,7 @@ use aegis_core::assets::Layers;
 use rpgkit_content::check::{assets, View};
 use rpgkit_content::art;
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn png(path: &Path, w: u32, h: u32) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -17,9 +17,8 @@ fn png(path: &Path, w: u32, h: u32) {
     std::fs::write(path, b).unwrap();
 }
 
-fn scratch(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("rpgkit_look1_sets_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+    let root = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_look1_sets_{tag}"));
     root
 }
 

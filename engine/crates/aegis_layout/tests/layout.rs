@@ -1,7 +1,8 @@
 //! LAYOUT720-E2: the crate's rules (docs/specs/LAYOUT720.md 6.1) and the worked example of 6.3. Expectations come from the
-//! rules or the spec's table, never from a printed result.
+//! rules or the spec's table, never from a printed result. LAYOUTDATA1-E1 (docs/specs/LAYOUTDATA1.md 10.1, gaps 1, 2, 5):
+//! `ratio`, `Part::min` and `Stack` on an axis, at the end.
 
-use aegis_layout::{fill, frac, pick, resolve, Anchor, Insets, Need, Part, Rect, Stack, MAX_GRID_CELLS};
+use aegis_layout::{fill, frac, pick, ratio, resolve, Anchor, Axis, Insets, Need, Part, Rect, Stack, MAX_GRID_CELLS};
 
 /// One past the last column.
 fn right(r: Rect) -> i32 {
@@ -481,4 +482,263 @@ fn pad_past_the_width_with_a_negative_far_side_ends_on_the_grown_edge() {
     let r = p.pad(Insets { l: 30, t: 30, r: -5, b: -5 });
     assert_eq!((r.w, r.h), (0, 0));
     assert_eq!((r.x, r.y), (right(p) + 5, bottom(p) + 5), "no size left: on the grown far edge");
+}
+
+#[test]
+fn frac_is_a_ratio_over_a_thousand() {
+    assert_eq!(frac(186), ratio(186, 1000));
+    assert_eq!(frac(u16::MAX), ratio(u16::MAX, 1000));
+}
+
+#[test]
+fn ratios_totalling_the_whole_end_on_the_edge_at_every_width() {
+    for room in 0..=2000 {
+        let width = room;
+        // Thirds, sevenths, and a mix of denominators that per mille cannot state: boundaries are the exact total, rounded
+        // down once.
+        let thirds = resolve(&[ratio(1, 3), ratio(1, 3), ratio(1, 3)], room);
+        assert_eq!(thirds, [room / 3, room * 2 / 3 - room / 3, room - room * 2 / 3], "width {width}");
+        let mixed = resolve(&[ratio(1, 3), frac(250), ratio(5, 12)], room);
+        assert_eq!(mixed, [room / 3, room * 7 / 12 - room / 3, room - room * 7 / 12], "width {width}");
+        let sevenths = resolve(&[ratio(3, 7), fill(1)], room);
+        assert_eq!(sevenths, [room * 3 / 7, room - room * 3 / 7], "width {width}");
+        let cells = Rect::new(5, 0, width, 9).split_x(&[ratio(1, 3), ratio(2, 3)], 0);
+        assert_eq!(cells[1].x, right(cells[0]), "width {width}: a shared edge");
+        assert_eq!(right(cells[1]), 5 + width, "width {width}");
+    }
+}
+
+#[test]
+fn a_ratio_past_the_whole_or_over_nothing_gets_zero() {
+    assert_eq!(resolve(&[ratio(2, 3), ratio(2, 3), ratio(1, 3)], 300), [200, 0, 100], "the later share still gets its turn");
+    assert_eq!(resolve(&[ratio(3, 2)], 300), [0]);
+    assert_eq!(resolve(&[ratio(1, 0), fill(1)], 300), [0, 300], "a zero denominator asks for nothing");
+    assert_eq!(ratio(1, 0), ratio(0, 1));
+    assert_eq!(resolve(&[ratio(0, 7), fill(1)], 300), [0, 300]);
+    let p = Rect::new(10, 20, 90, 60);
+    assert_eq!(p.place(Anchor::Center, ratio(3, 2), ratio(5, 1)), p, "`place` clamps it to the parent, as it does a frac");
+}
+
+#[test]
+fn a_running_total_too_fine_to_hold_is_refused_not_wrapped() {
+    // Primes under 65,536: nothing cancels, so the denominator is their product and passes 2^90 at the sixth.
+    let primes = [65521u16, 65519, 65497, 65479, 65449, 65447];
+    let product: u128 = primes[..5].iter().map(|&p| u128::from(p)).product();
+    assert!(product <= 1 << 90 && product * u128::from(primes[5]) > 1 << 90, "the list must straddle the limit");
+    let parts: Vec<Part> = primes.iter().map(|&p| ratio(1, p)).chain([fill(1)]).collect();
+    let room = i32::MAX;
+    let sizes = resolve(&parts, room);
+    for (i, p) in primes[..5].iter().enumerate() {
+        let near = i32::MAX / i32::from(*p);
+        assert!(sizes[i].abs_diff(near) <= 1, "share {i}: {} against {near}", sizes[i]);
+    }
+    assert_eq!(sizes[5], 0, "refused, as a share past the whole is");
+    assert_eq!(sizes.iter().map(|&s| i64::from(s)).sum::<i64>(), i64::from(room), "the fill still ends on the edge");
+}
+
+#[test]
+fn a_floor_holds_a_share_at_its_least() {
+    assert_eq!(resolve(&[frac(100).min(30)], 200), [30], "a share under its floor");
+    assert_eq!(resolve(&[frac(500).min(30)], 200), [100], "a share over its floor is untouched");
+    assert_eq!(resolve(&[ratio(1, 3).min(150)], 300), [150], "on a ratio");
+    assert_eq!(resolve(&[Part::from(10).min(25), fill(1)], 100), [25, 75], "on a token");
+    assert_eq!(resolve(&[Part::from(40).min(25), fill(1)], 100), [40, 60]);
+    assert_eq!(resolve(&[Part::from(-5).min(25), fill(1)], 100), [25, 75], "a negative token still has its floor");
+    assert_eq!(frac(100).min(-7), frac(100), "a negative floor is none");
+    assert_eq!(frac(100).min(0), frac(100));
+    assert_eq!(frac(100).min(9).min(4), frac(100).min(9), "of two floors the larger holds");
+    assert_eq!(frac(100).min(4).min(9), frac(100).min(9));
+    assert_eq!(resolve(&[fill(1).min(500), 20.into()], 100), [80, 20], "a fill ignores it");
+}
+
+#[test]
+fn the_extra_for_a_floor_comes_from_the_next_shares_then_the_fills() {
+    // The running total's boundaries stay where they are, so a floor only moves edges until the next boundary passes it.
+    assert_eq!(resolve(&[frac(300).min(400), frac(200), frac(500)], 1000), [400, 100, 500]);
+    assert_eq!(resolve(&[frac(100).min(400), frac(200), frac(700)], 1000), [400, 0, 600], "past the next boundary too");
+    assert_eq!(resolve(&[frac(100).min(400), frac(100).min(50), frac(800)], 1000), [400, 50, 550]);
+    assert_eq!(resolve(&[frac(100).min(400), fill(1), fill(1)], 1000), [400, 300, 300]);
+    assert_eq!(resolve(&[100.into(), frac(100).min(400), fill(1)], 1000), [100, 400, 500], "the token comes first");
+}
+
+#[test]
+fn floors_keep_shared_edges_and_the_total_at_every_width() {
+    for width in 0..=1500 {
+        let floor = 120;
+        let parts = [ratio(1, 7).min(floor), frac(100), ratio(1, 3).min(floor), frac(100).min(floor), fill(1)];
+        for gap in [0, 5] {
+            let area = Rect::new(3, 1, width, 7);
+            let cells = area.split_x(&parts, gap);
+            let room = width - gap * 4;
+            if room < 0 {
+                continue;
+            }
+            for pair in cells.windows(2) {
+                assert_eq!(pair[1].x, right(pair[0]) + gap, "width {width}, gap {gap}");
+            }
+            assert_eq!(right(cells[4]), right(area), "width {width}, gap {gap}: the fill ends on the edge");
+            assert!(cells.iter().all(|c| c.w >= 0), "width {width}, gap {gap}");
+            for i in [0, 2, 3] {
+                assert!(cells[i].w == 0 || cells[i].w >= floor, "width {width}, gap {gap}: part {i} is {}", cells[i].w);
+            }
+        }
+        // With no fill, shares totalling the whole still end on the edge once the room holds the floor.
+        let sizes = resolve(&[frac(100).min(floor), frac(400), frac(500)], width);
+        if width >= floor {
+            assert_eq!(sizes[0], floor.max(width / 10), "width {width}");
+            assert_eq!(sizes.iter().sum::<i32>(), width, "width {width}");
+        }
+    }
+}
+
+#[test]
+fn no_floor_that_does_not_bind_changes_a_list() {
+    for width in 0..=1500 {
+        let plain = resolve(&[frac(333), frac(333), 12.into(), fill(1), frac(334)], width);
+        let floored = resolve(&[frac(333).min(0), frac(333).min(-4), Part::from(12).min(12), fill(1).min(9000), frac(334)], width);
+        assert_eq!(plain, floored, "width {width}");
+    }
+}
+
+#[test]
+fn a_floor_that_cannot_fit_is_zero_and_the_rest_still_get_their_turn() {
+    assert_eq!(resolve(&[frac(500).min(600)], 500), [0]);
+    assert_eq!(resolve(&[Part::from(10).min(600), 20.into()], 500), [0, 20], "a token's floor");
+    assert_eq!(resolve(&[frac(500).min(600), frac(500)], 500), [0, 500], "the total runs on, so the next ends on the edge");
+    assert_eq!(resolve(&[frac(500).min(600), fill(1)], 500), [0, 500]);
+    assert_eq!(resolve(&[frac(500), frac(500).min(300)], 600), [300, 300], "exactly fits");
+    assert_eq!(resolve(&[frac(500), frac(500).min(301)], 600), [300, 0]);
+    let whole = Rect::new(10, 20, 100, 50);
+    let mut c = whole;
+    assert_eq!(c.cut_left(frac(100).min(101)).w, 0, "a cut");
+    assert_eq!(c, whole, "and the rest stays");
+    assert_eq!(c.cut_top(frac(100).min(30)).h, 30, "one that fits cuts its floor");
+    assert_eq!(c.y, 50);
+}
+
+#[test]
+fn place_and_at_clamp_a_floor_to_the_parent() {
+    let p = Rect::new(10, 20, 100, 60);
+    assert_eq!(p.place(Anchor::Center, frac(100).min(500), frac(100).min(500)), p, "a floor past the parent");
+    assert_eq!(p.place(Anchor::Center, Part::from(10).min(500), Part::from(10).min(500)), p, "on a token");
+    assert_eq!(p.place(Anchor::TopLeft, frac(100).min(40), ratio(1, 3).min(30)), Rect::new(10, 20, 40, 30));
+    assert_eq!(p.place(Anchor::TopLeft, frac(500).min(40), ratio(1, 3)), Rect::new(10, 20, 50, 20), "not binding");
+    assert_eq!(p.at(1000, 1000, Anchor::TopLeft, frac(100).min(40), 10), Rect::new(70, 70, 40, 10), "stays inside");
+}
+
+#[test]
+fn a_floor_in_a_stack_only_adds_and_past_the_area_is_overflow() {
+    let area = Rect::new(0, 0, 10, 1000);
+    let mut s = Stack::new(area, 0);
+    let (a, b) = (s.next(frac(100).min(300)), s.next(frac(700)));
+    assert_eq!((a.h, b.y, b.h), (300, 300, 700));
+    assert_eq!(s.overflow(), 0);
+    let mut s = Stack::new(area, 0);
+    let (a, b) = (s.next(frac(500).min(600)), s.next(frac(500)));
+    assert_eq!((a.h, b.h), (600, 0));
+    assert_eq!(s.overflow(), 100, "the floor's extra is reported, not taken from a neighbour");
+    let mut s = Stack::new(area, 0);
+    assert_eq!(s.next(Part::from(10).min(25)).h, 25, "on a token");
+    assert_eq!(s.next(frac(100).min(1200)).h, 0, "a floor past the area is 0");
+    assert_eq!(s.overflow(), 25 + 1200 - 1000);
+}
+
+#[test]
+fn a_stack_of_ratios_ends_on_the_edge_at_every_length() {
+    for h in 0..=2000 {
+        let area = Rect::new(0, 3, 10, h);
+        let mut s = Stack::new(area, 0);
+        let cells = [s.next(ratio(1, 3)), s.next(frac(250)), s.next(ratio(5, 12))];
+        assert_eq!((cells[0].h, cells[1].y, cells[2].y), (h / 3, 3 + h / 3, 3 + h * 7 / 12), "h {h}");
+        assert_eq!(bottom(cells[2]), bottom(area), "h {h}");
+        assert_eq!(s.overflow(), 0, "h {h}");
+    }
+}
+
+/// A rect with its axes swapped.
+fn swapped(r: Rect) -> Rect {
+    Rect::new(r.y, r.x, r.h, r.w)
+}
+
+#[test]
+fn a_row_is_a_stack_turned_on_its_side() {
+    let lists: [&[Part]; 6] = [
+        &[Part::from(20), Part::from(30), fill(1)],
+        &[frac(333), frac(333), frac(334)],
+        &[ratio(1, 3), Part::from(0), ratio(2, 3).min(40)],
+        &[Part::from(90), Part::from(20), fill(1), Part::from(1)],
+        &[frac(600), frac(600), frac(300)],
+        &[Part::from(-3), fill(0), frac(0), Part::from(5).min(70)],
+    ];
+    for parts in lists {
+        for len in [0, 1, 7, 99, 100, 101, 1000] {
+            for gap in [0, 4] {
+                let down_area = Rect::new(5, 10, 80, len);
+                let mut down = Stack::new(down_area, gap);
+                let mut across = Stack::row(swapped(down_area), gap);
+                for &part in parts {
+                    assert_eq!(across.next(part), swapped(down.next(part)), "{parts:?}, length {len}, gap {gap}");
+                    assert_eq!(across.overflow(), down.overflow(), "{parts:?}, length {len}, gap {gap}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_row_runs_across_one_gap_apart_and_counts_its_overflow_in_width() {
+    let area = Rect::new(5, 10, 100, 40);
+    let mut s = Stack::row(area, 4);
+    let (a, b) = (s.next(20), s.next(30));
+    assert_eq!(a, Rect::new(5, 10, 20, 40), "no gap before the first, and the area's height");
+    assert_eq!((b.x, b.y, b.h), (right(a) + 4, 10, 40));
+    let rest = s.next(fill(1));
+    assert_eq!(right(rest), right(area), "a fill takes what is left");
+    assert_eq!(s.overflow(), 0);
+    let late = s.next(50);
+    assert_eq!(late.w, 0);
+    assert_eq!(s.overflow(), 4 + 50, "past the width, whatever the height");
+    let mut tall = Stack::row(Rect::new(0, 0, 10, 500), 0);
+    tall.next(11);
+    assert_eq!(tall.overflow(), 1, "the height gives it no room");
+    let mut wide = Stack::new(Rect::new(0, 0, 500, 10), 0);
+    wide.next(11);
+    assert_eq!(wide.overflow(), 1, "nor the width to a stack running down");
+}
+
+#[test]
+fn along_names_the_same_two_stacks() {
+    let area = Rect::new(1, 2, 30, 40);
+    assert_eq!(Stack::along(area, Axis::Y, 3), Stack::new(area, 3));
+    assert_eq!(Stack::along(area, Axis::X, 3), Stack::row(area, 3));
+}
+
+#[test]
+fn new_parts_at_extreme_numbers_neither_panic_nor_go_negative() {
+    let big = [i32::MIN, -1, 0, 1, 1_000_000, i32::MAX];
+    for &n in &big {
+        for &room in &big {
+            let r = Rect::new(room, room, room, room);
+            let parts = [
+                ratio(u16::MAX, 1),
+                ratio(1, u16::MAX),
+                ratio(u16::MAX, u16::MAX),
+                ratio(u16::MAX, 0),
+                frac(500).min(n),
+                ratio(1, 3).min(n),
+                Part::from(n).min(n),
+                fill(u16::MAX).min(n),
+            ];
+            let sizes = resolve(&parts, room);
+            assert!(sizes.iter().all(|&s| s >= 0), "{n}, {room}: {sizes:?}");
+            assert!(sizes.iter().map(|&s| i64::from(s)).sum::<i64>() <= i64::from(room.max(0)), "{n}, {room}: {sizes:?}");
+            for part in parts {
+                let (mut c, mut down, mut across) = (r, Stack::new(r, n), Stack::row(r, n));
+                let mut got = vec![r.place(Anchor::Center, part, part), c.cut_top(part), c.cut_right(part), c];
+                got.extend([down.next(part), down.next(part), across.next(part), across.next(part)]);
+                assert!(got.iter().all(|s| s.w >= 0 && s.h >= 0), "{n}, {room}: {got:?}");
+                assert!(down.overflow() >= 0 && across.overflow() >= 0);
+            }
+        }
+    }
 }

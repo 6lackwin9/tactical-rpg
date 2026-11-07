@@ -14,7 +14,7 @@ use aegis_core::json;
 use rpgkit_battle::encounter::{PartyFate, STAY_THEN};
 use rpgkit_battle::session::Session;
 use rpgkit_battle::world::AiProfile;
-use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, UnitDef, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
+use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
 use rpgkit_rules::Unit;
 use serde_json::Value;
 
@@ -54,14 +54,20 @@ pub struct Fielded {
     pub unit: Unit,
     pub pouch_unloaded: Vec<String>,
     pub profile: AiProfile,
+    /// AUDIT-04: the intent it starts a round-intent battle in (its character's `default_intent`, else its base unit's;
+    /// "" = none): `Prebuilt::default_intent`.
+    pub default_intent: String,
 }
 
 /// Member `m` as it fights in world `world`, the world whose encounter it fights: its class path and deck rule there
-/// (`progression::build_played`), at its stored HP (HealRules.start_hp), with its base unit's AI profile. W2: a
+/// (`progression::build_played`), at its stored HP (HealRules.start_hp), with the AI profile of the row it was built from (its base unit's, as an NPC's comes from its entry). W2: a
 /// `wounded` member's max HP is cut by the played world's row's `wounded_max_hp_pct` (the default without a row) and
 /// its start HP is at most that max. None when the saved member does not build.
 pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Option<Fielded> {
     let built = progression::build_played(d, m, world)?;
+    let profile = AiProfile::for_unit(&d.cat, &built.def);
+    // AUDIT-04: `build_as` laid the character's default intent over the base unit's
+    let default_intent = built.def.default_intent.clone();
     let mut unit = built.unit;
     let max = unit.max_hp as i64;
     let mut hp = progression::start_hp(max, m.hp_lost);
@@ -72,8 +78,7 @@ pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Optio
         hp = hp.min(cut);
     }
     unit.hp = hp as i32;
-    let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
-    Some(Fielded { unit, pouch_unloaded: built.pouch_unloaded, profile: AiProfile::for_unit(&d.cat, &base) })
+    Some(Fielded { unit, pouch_unloaded: built.pouch_unloaded, profile, default_intent })
 }
 
 /// How a battle left one fielded member (ROSTER1 3.2's input).

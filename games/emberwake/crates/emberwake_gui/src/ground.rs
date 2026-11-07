@@ -198,9 +198,8 @@ mod tests {
     }
 
     /// Scratch art: `tilesets/common/ground/zz_ground/v0.png`, 256 px of busy noise, so two ways of reducing it differ.
-    fn noisy_art(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!("emberwake_ground_tex_{tag}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+    fn noisy_art(tag: &str) -> (aegis_core::scratch::Scratch, std::path::PathBuf) {
+        let root = aegis_core::scratch::Scratch::vacant(&format!("emberwake_ground_tex_{tag}"));
         let file = root.join("tilesets/common/ground/zz_ground/v0.png");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(&file).unwrap()), 256, 256);
@@ -234,7 +233,7 @@ mod tests {
         let (root, file) = noisy_art("reduce");
         let master = load_png(&file).expect("the file");
         let mut cx = cx_with("#102030");
-        cx.art = Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        cx.art = Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
         let t = template(4, 3);
         for (view, want) in [(View::Square, (64, 64)), (View::Tilted, (64, 48))] {
             let p = picture(&mut cx, &t, &["common".to_string()], view, 4).expect("a picture");

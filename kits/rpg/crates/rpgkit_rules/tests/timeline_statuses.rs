@@ -5,6 +5,7 @@
 //! never set a tag. Scratch catalog only.
 
 use rpgkit_data::Catalog;
+use rpgkit_rules::ruleset::Numbers;
 use rpgkit_rules::status::{self, Stacking};
 use rpgkit_rules::{build_unit, Unit};
 use serde_json::json;
@@ -41,7 +42,7 @@ fn an_intent_tag_lives_as_long_as_its_status() {
     u.st.intents.insert("stealth".into(), "guard".into());
     status::grant_now(&mut u, "steadfast", 1, 0, "");
     u.st.intents.insert("steadfast".into(), "support".into());
-    status::roll_over(&mut u, 0);
+    status::roll_over(&mut u, 0, &Numbers::default());
     assert!(u.st.active.contains("stealth") && !u.st.active.contains("steadfast"), "stealth runs 2 rounds, steadfast 1");
     assert_eq!(u.st.intents.keys().cloned().collect::<Vec<_>>(), ["stealth"]);
     // removed with the status
@@ -53,6 +54,6 @@ fn an_intent_tag_lives_as_long_as_its_status() {
     u.st.intents.insert("haste".into(), "support".into());
     status::remove_active(&mut u, "haste");
     assert_eq!(u.st.intents.get("haste").map(String::as_str), Some("support"), "the queued instance still carries it");
-    status::roll_over(&mut u, 0);
+    status::roll_over(&mut u, 0, &Numbers::default());
     assert!(u.st.active.contains("haste") && u.st.intents.contains_key("haste"), "the queued instance is active now, tagged");
 }

@@ -103,12 +103,40 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
         out.push(format!("Poise stat: {POISE} needs a derived stat."));
     }
     deck_slot_errors(json::get(e, "deck_slots"), has(DECK), &mut out);
+    // BASERULES1-M: a listed rule the register says would be silently inert (`flank` without `round_intent`)
+    out.extend(ruleset::Ruleset::from_row(e).notes().errors);
     // CLN-45: each switch is "" (by the rules) or one of its values
     for key in ruleset::BY_RULES_FIELDS {
         let v = json::s(e, key);
         let values = ruleset::by_rules_values(key);
         if !v.is_empty() && !values.contains(&v.as_str()) {
             out.push(format!("{key}: '{v}' is not one of {} (or empty: by the rules).", values.join(", ")));
+        }
+    }
+    // S2.2-S2: a row-only value field (`poise_mode`) is absent or one of its ids (else it would read as its default)
+    for f in ruleset::FIELD_RULES.iter().filter(|f| !f.values.is_empty()) {
+        let v = json::s(e, f.key);
+        if e.contains_key(f.key) && !f.values.contains(&v.as_str()) {
+            out.push(format!("{}: '{v}' is not one of {}.", f.key, f.values.join(", ")));
+        }
+    }
+    // U1.2-S5: `unit_pools` (row-only) is a list of unit meter ids, none twice; whether each names a row is
+    // `missing_pools` (the meters load after the rulesets)
+    if let Some(raw) = e.get("unit_pools") {
+        let mut seen: Vec<String> = Vec::new();
+        match raw.as_array() {
+            None => out.push("unit_pools must be a list of unit meter ids.".into()),
+            Some(list) => {
+                for v in list {
+                    let id = v.as_str().unwrap_or_default().to_string();
+                    if !is_id(&id) {
+                        out.push(format!("unit_pools: '{}' must be a unit meter id (lowercase snake_case).", json::gstr(v)));
+                    } else if seen.contains(&id) {
+                        out.push(format!("unit_pools lists '{id}' twice."));
+                    }
+                    seen.push(id);
+                }
+            }
         }
     }
     let origin = json::s(e, "origin");
@@ -143,14 +171,26 @@ pub fn missing_rows(v: &View, e: &Dict) -> Vec<String> {
         .collect()
 }
 
-/// INPUT1 1.7 (MR9): the soft problem of one row (normalized): a `flank_protected_ap` set while the cost is not `fixed`
-/// (it is not read). CLN-45: `melee_diagonal` maneuver without `round_intent` is no longer a warning (it reads as set).
+/// U1.2-S5: the ids of a ruleset row's `unit_pools` that name no loaded unit meter row.
+pub fn missing_pools(v: &View, e: &Dict) -> Vec<String> {
+    json::sget(e, "unit_pools")
+        .into_iter()
+        .filter(|m| is_id(m) && !v.has(rpgkit_data::UNIT_METERS_KIND, m))
+        .map(|m| format!("unit_pools: '{m}' has no row in {0} (data/catalog/{0}.json).", rpgkit_data::UNIT_METERS_KIND))
+        .collect()
+}
+
+/// INPUT1 1.7 (MR9): the soft problems of one row (normalized): a `flank_protected_ap` set while the cost is not `fixed`
+/// (it is not read), then the register metadata's warnings (BASERULES1-M, `Ruleset::notes`). CLN-45: `melee_diagonal` maneuver without `round_intent` is no longer a warning (it reads as set).
 pub fn warnings(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     let ap = e.get("flank_protected_ap").map(|v| json::to_int(v));
     if ap.is_some_and(|ap| ap != i64::from(ruleset::FlankCost::FIXED_AP)) && json::s(e, "flank_protected_cost") != "fixed" {
         out.push("flank_protected_ap is read only with fixed".into());
     }
+    // BASERULES1-M: the register metadata's warnings (a set field nothing reads, a conflict, a split bundle, an
+    // untested rule set)
+    out.extend(ruleset::Ruleset::from_row(e).notes().warnings);
     out
 }
 

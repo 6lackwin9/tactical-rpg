@@ -1,10 +1,10 @@
 //! The battle board: the Flat and Stage views' passes over the tiles, tokens, markers and hit rects (`Board`, `draw_flat`, `draw_stage`), status loops on tokens, board geometry helpers.
 
 use aegis_ui::theme::th;
-use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, first_move_chips, poise_bar, poise_shown, HoldMarks, HookMarks};
+use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
 use super::{Action, ALLY, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
-use super::tips::{intent_glyph, unit_tip};
+use super::tips::{intent_glyph, intent_ring_color, ring_intent, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx;
@@ -369,7 +369,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         let tr = geo.token_rect(pos, shake + dx + sx, dy + sy);
         let ring = if ally { ALLY } else { th().foe };
         if alive {
-            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
+            // VISCLAR1-D: the ellipse in its intent's colour (`ring_intent`), else its side's
+            let foot = ring_intent(rounds, i, ally, layers.glyphs, show_tells).map_or(ring, intent_ring_color);
+            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(foot[0], foot[1], foot[2], tuning.foot_alpha));
         }
         let hover = ui.hover(r) && !popup;
         let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
@@ -408,7 +410,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { th().good } else { th().foe });
             // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
             if let Some(st) = poise_shown(w, i, &layers) {
-                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st);
+                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st, &w.ruleset.numbers);
             }
         }
         let tip = unit_tip(s, i, sel, tells, rounds, classes);
@@ -417,12 +419,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
     if show_tells {
         for r in tells {
             let Some(from) = w.grid.pos(r.unit) else { continue };
-            // VISCLAR1 AR5, VC1: under the round intent no tell arrow (the target arrows replace it) and the kind chip
-            // only with the group `first_move`
+            // VISCLAR1 AR5, decision "Battle view answers": under the round intent no tell arrow (the target arrows
+            // replace it) and no first-move chip (the round's intent marker is enough)
             if overlay.is_some() {
-                if first_move_chips(true, &layers) {
-                    intent_chip(ui, cx, r.line.kind, Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10));
-                }
                 continue;
             }
             let (fx, fy) = center(from);
@@ -439,8 +438,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             intent_chip(ui, cx, r.line.kind, chip);
         }
     }
-    // RULESET1-U slice 4 (UI5): each unit's intent glyph at its cell's top right (an enemy's only while the tells show)
-    for r in rounds.iter().filter(|_| layers.glyphs) {
+    // RULESET1-U slice 4 (UI5): each unit's intent glyph at its cell's top right (an enemy's only while the tells show);
+    // VISCLAR1-D: the ring tells the intent, the plate shows while Alt is held
+    for r in rounds.iter().filter(|_| layers.glyphs && alt) {
         let (Some(i), Some(at)) = (r.round_intent, w.grid.pos(r.unit)) else { continue };
         if w.enemies.contains(&r.unit) && !show_tells {
             continue;
@@ -718,7 +718,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 for t in units.iter().filter(|t| t.alive) {
                     let (fx, fy) = (t.foot.0 as f32, t.foot.1 as f32);
                     ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4, rgba(8, 10, 6, tuning.shadow_alpha));
-                    ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha));
+                    // VISCLAR1-D (mock `intent_ring`): the ring in its intent's colour, heavier than the side ring it
+                    // replaces (`ring_intent`: the side's stays where no intent shows)
+                    match ring_intent(rounds, t.i, t.ally, layers.glyphs, show_tells) {
+                        Some(intent) => {
+                            let col = intent_ring_color(intent);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, col);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32 - 0.5, 2.7, col);
+                        }
+                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha)),
+                    }
                 }
             }
             Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, set),
@@ -798,12 +807,12 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
-                            poise_bar(&mut ui.p, Rect::new(fx - 12, fy + 6, 24, 2), &st);
+                            poise_bar(&mut ui.p, Rect::new(fx - 12, fy + 6, 24, 2), &st, &w.ruleset.numbers);
                         }
                     }
                 }
-                // VISCLAR1 VC1: under the round intent the tell's kind chip only with the group `first_move`
-                if show_tells && first_move_chips(overlay.is_some(), &layers) {
+                // Decision "Battle view answers": the first-move chip only in classic, which has no round intent marker
+                if show_tells && overlay.is_none() {
                     for r in tells {
                         let Some(t) = units.iter().find(|t| t.i == r.unit) else { continue };
                         let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10);
@@ -811,8 +820,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     }
                 }
                 // RULESET1-U slice 4 (UI5): each unit's intent glyph right of where the tell chip sits (an enemy's only
-                // while the tells show)
-                for r in rounds.iter().filter(|_| layers.glyphs) {
+                // while the tells show); VISCLAR1-D: the ring tells the intent, the plate shows while Alt is held
+                for r in rounds.iter().filter(|_| layers.glyphs && alt) {
                     let (Some(i), Some(t)) = (r.round_intent, units.iter().find(|t| t.i == r.unit && t.alive)) else { continue };
                     if w.enemies.contains(&r.unit) && !show_tells {
                         continue;

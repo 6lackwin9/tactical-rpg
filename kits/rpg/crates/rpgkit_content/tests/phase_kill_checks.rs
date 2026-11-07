@@ -10,13 +10,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_phase_kill_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_phase_kill_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -89,7 +88,7 @@ fn one(errors: Vec<String>, want: &str) {
 
 #[test]
 fn a_valid_cull_and_a_row_without_the_keys_check_clean() {
-    let data = scratch("valid");
+    let (_scratch, data) = scratch("valid");
     catalog(&data);
     let v = store::view(&data);
     assert_eq!(phase_errors(&v, "break", json!({})), Vec::<String>::new(), "the cull");
@@ -104,7 +103,7 @@ fn a_valid_cull_and_a_row_without_the_keys_check_clean() {
 
 #[test]
 fn each_kill_mistake_is_one_error() {
-    let data = scratch("kill");
+    let (_scratch, data) = scratch("kill");
     catalog(&data);
     let v = store::view(&data);
     one(kill_errors(&v, json!({"units": ["brute", "hero"]})), "Kill names hero 'hero'.");
@@ -122,7 +121,7 @@ fn each_kill_mistake_is_one_error() {
 
 #[test]
 fn each_group_mistake_is_one_error_and_hp_below_may_watch_a_wave_unit() {
-    let data = scratch("group");
+    let (_scratch, data) = scratch("group");
     catalog(&data);
     let v = store::view(&data);
     let want = "Phase 'break': the group is 1 to 24 characters a-z, 0-9 or _.";
@@ -136,7 +135,7 @@ fn each_group_mistake_is_one_error_and_hp_below_may_watch_a_wave_unit() {
 
 #[test]
 fn a_world_encounter_checks_its_kills_too() {
-    let data = scratch("world");
+    let (_scratch, data) = scratch("world");
     catalog(&data);
     let dir = data.join("worlds").join("vale");
     fs::create_dir_all(&dir).unwrap();

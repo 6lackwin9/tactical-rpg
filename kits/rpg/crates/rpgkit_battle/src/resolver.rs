@@ -78,11 +78,14 @@ pub struct Resolver {
     pub triggers: crate::trigger::State,
     /// HOOKS1 HC1: the HP costs paid since the session last took them (rule `hp_cost`; none in classic).
     pub hp_paid: Vec<HpPaid>,
+    /// S2.2-S3 (FB-85, Guard Option 1C): each (unit, block) of this round whose block started guarded (a running Defend,
+    /// a held guard or a `guard` status raised its guard), cleared with the round; the sim's feel mode counts them.
+    pub guarded: Vec<(UnitId, i32)>,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new() }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new(), guarded: Vec::new() }
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -122,14 +125,31 @@ impl Resolver {
             if !a.cancelled && w.units[a.unit].is_active() && block >= a.start && block <= a.end {
                 if let CmdKind::Defend { mitigation, guard_broken, .. } = &a.command.kind {
                     if !guard_broken {
-                        w.units[a.unit].guard = *mitigation;
+                        // S1.2-S4 (Option 1C): the guard is held from the wind-up start to the round's end
+                        if block == a.start {
+                            crate::trigger::hold_defend(w, a.unit, *mitigation, block);
+                        }
+                        let u = &mut w.units[a.unit];
+                        u.guard = u.guard.max(*mitigation);
                     }
                 }
+            }
+        }
+        // S1.2-S4: held guards and `guard` statuses raise the guards (the larger source counts; a stun ends them)
+        for &c in &self.registered {
+            if w.units[c].is_active() {
+                crate::trigger::raise_guard(w, c, block);
             }
         }
         // HOOKS1 8.3, 8.1: held guards, then the Defends' `guard_start` triggers (rule triggers; nothing in classic)
         let costs = self.hp_paid[paid..].to_vec();
         crate::trigger::on_block_start(self, w, block, &costs);
+        // S2.2-S3 (FB-85): the units that start this block guarded (read by the sim's feel mode only)
+        for &c in &self.registered {
+            if w.units[c].is_active() && w.units[c].guard > 0.0 {
+                self.guarded.push((c, block));
+            }
+        }
         let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].impact == block).collect();
         let inits: Vec<i32> = (0..self.scheduled.len()).map(|i| self.scheduled[i].command.initiative(w)).collect();
         godot_sort(&mut resolving, |a, b| inits[*a] > inits[*b]);
@@ -138,8 +158,16 @@ impl Resolver {
 
     /// Commands starting now pay AP (skill + stance switch; debt allowed; RULESET1 T11: not the units `pays_ap` spares),
     /// enter their stance and run on_start.
+    /// ATTACKLOCK1: under `attack_lock` the block's dashes start after its other actions and read the tiles as they
+    /// began, so a swing and a dash on one tick mostly end alike whichever side was scheduled first (the exceptions: ATTACKLOCK1-O).
     fn begin_actions(&mut self, w: &mut World, block: i32) {
-        for i in 0..self.scheduled.len() {
+        let lock_on = w.ruleset.attack_lock() != rpgkit_rules::ruleset::AttackLock::None;
+        let mut order: Vec<usize> = (0..self.scheduled.len()).collect();
+        if lock_on {
+            order.sort_by_key(|&i| self.scheduled[i].command.dashes_at_start());
+        }
+        let mut opening: Option<Vec<Option<crate::grid::V2>>> = None;
+        for i in order {
             let a = &self.scheduled[i];
             if a.cancelled || a.start != block || !w.units[a.unit].is_active() {
                 continue;
@@ -175,7 +203,13 @@ impl Resolver {
             self.pay_hp_cost(w, i);
             // HOOKS1 UM2: then the meter changes (rule unit_meters; nothing in classic)
             crate::meter::pay(self, w, i);
+            if lock_on && opening.is_none() && self.scheduled[i].command.dashes_at_start() {
+                opening = Some(w.grid.positions.clone());
+            }
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
+            if lock_on {
+                self.scheduled[i].command.lock_tile(w, opening.as_deref());
+            }
             if !msg.is_empty() {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
@@ -282,6 +316,10 @@ impl Resolver {
                     }
                 }
             }
+            // S1.2-S4: the broken stance ends the guard held since the wind-up (Option 1C) from the next block on, as
+            // it ends a running Defend's
+            w.units[b].held_guard = None;
+            status::remove(&mut w.units[b], status::GUARD);
         }
         let a = &self.scheduled[idx];
         if let Some(s) = a.command.stance_on_end {
@@ -297,32 +335,33 @@ impl Resolver {
         self.round_end_steps.clear();
         self.round_end_calls += 1;
         crate::trigger::before_round_end(self, w);
+        // S1.2-S2: the debuff `tick` rows in table order (bleed, poison, burn), then the buff ones (regen)
         for &c in &self.registered.clone() {
-            for st in ["bleed", "poison", "burn"] {
+            for row in status::tick_rows(false) {
                 let u = &w.units[c];
-                if !u.is_active() || !u.has_status(st) {
+                if !u.is_active() || !u.has_status(row.id) {
                     continue;
                 }
-                let dmg = match st {
-                    "bleed" => status::bleed_damage(u),
-                    "poison" => status::poison_damage(u),
-                    _ => status::burn_damage(u),
-                };
-                if st == "poison" && dmg <= 0 {
+                // a flat tick (poison) at 0 deals nothing; the others deal at least 1
+                let dmg = status::tick_amount(u, row, &w.ruleset.numbers);
+                if dmg <= 0 {
                     continue;
                 }
                 let before = u.hp;
                 w.damage(c, dmg, true);
-                self.step(w, c, st, before - w.units[c].hp);
+                self.step(w, c, row.id, before - w.units[c].hp);
             }
-            if w.units[c].is_active() && w.units[c].has_status("regen") {
+            for row in status::tick_rows(true) {
+                if !w.units[c].is_active() || !w.units[c].has_status(row.id) {
+                    continue;
+                }
                 let u = &w.units[c];
                 let before = u.hp;
-                let amount = status::regen_amount(u).min(u.max_hp - u.hp);
+                let amount = status::tick_amount(u, row, &w.ruleset.numbers).min(u.max_hp - u.hp);
                 w.heal(c, amount);
                 let healed = w.units[c].hp - before;
                 if healed > 0 {
-                    self.step(w, c, "regen", healed);
+                    self.step(w, c, row.id, healed);
                 }
             }
         }
@@ -335,6 +374,10 @@ impl Resolver {
         crate::meter::round_end(self, w);
         // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
         crate::trigger::round_end(self, w);
+        // S1.2-S4: every held guard ends with the round (a multi-round guard goes on as its `guard` status)
+        for &c in &self.registered {
+            w.units[c].held_guard = None;
+        }
         crate::ground::settle(self, w);
     }
 
@@ -351,6 +394,7 @@ impl Resolver {
             }
         }
         self.scheduled.clear();
+        self.guarded.clear();
         // HOOKS1 AT2: this round's hits become last round's (rules ai_tactics or round_intent, RULESET1-AI2; nothing in classic)
         w.roll_hits();
         self.current_round += 1;

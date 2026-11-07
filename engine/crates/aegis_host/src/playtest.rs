@@ -149,9 +149,14 @@ impl Recording {
     }
 
     pub fn load(path: &Path) -> Result<Self, String> {
-        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let v: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-        Self::from_json(&v)
+        Self::read(path).map_err(|u| u.detail)
+    }
+
+    /// `load`, with the failure split into what a screen shows and the full cause.
+    pub fn read(path: &Path) -> Result<Self, Unreadable> {
+        let text = std::fs::read_to_string(path).map_err(|e| Unreadable { reason: "The file cannot be read.".into(), detail: format!("{}: {e}", path.display()) })?;
+        let v: Value = serde_json::from_str(&text).map_err(|e| Unreadable { reason: format!("Not valid JSON: {e}"), detail: format!("{}: {e}", path.display()) })?;
+        Self::from_json(&v).map_err(|e| Unreadable { reason: e.clone(), detail: e })
     }
 
     /// Writes `<dir>/<id>.json` through a temporary file (an interrupted save never leaves half a recording).
@@ -207,9 +212,19 @@ pub fn new_id(dir: &Path, secs: i64) -> String {
     id
 }
 
+/// Why a recording did not load.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Unreadable {
+    /// What a screen shows: a function of the file's bytes alone, with no path and no operating system wording, so that
+    /// a drawn frame is the same on every platform (the list beside it already names the file).
+    pub reason: String,
+    /// The full cause for a person or an agent, in the operating system's own words where it has any: `load`'s error.
+    pub detail: String,
+}
+
 /// The recordings in `dir` (a flat `<id>.json`, or a shared folder `<id>/<id>.json`), newest first (by id), with what
 /// failed to load.
-pub fn list(dir: &Path) -> Vec<(PathBuf, Result<Recording, String>)> {
+pub fn list(dir: &Path) -> Vec<(PathBuf, Result<Recording, Unreadable>)> {
     let entry = |p: PathBuf| -> Option<PathBuf> {
         if p.is_dir() {
             let inner = p.join(format!("{}.json", p.file_name()?.to_string_lossy()));
@@ -221,7 +236,7 @@ pub fn list(dir: &Path) -> Vec<(PathBuf, Result<Recording, String>)> {
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().filter_map(|e| entry(e.path())).collect()).unwrap_or_default();
     paths.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
     paths.into_iter().map(|p| {
-        let r = Recording::load(&p);
+        let r = Recording::read(&p);
         (p, r)
     }).collect()
 }
@@ -536,7 +551,7 @@ mod tests {
         let mut rec = Recording::new("20261020-120000", "user", json!({"algo": "sha256-12", "total": "x", "files": {}}));
         rec.battles.push(s.clone());
         rec.extra.insert("future_key".into(), json!(7));
-        let dir = std::env::temp_dir().join(format!("aegis_playtest_{}", std::process::id()));
+        let dir = aegis_core::scratch::Scratch::vacant("playtest");
         let path = rec.save(&dir).unwrap();
         let back = Recording::load(&path).unwrap();
         assert_eq!(back.battles[0], s);

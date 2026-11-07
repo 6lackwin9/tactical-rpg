@@ -8,18 +8,18 @@
 			"description": "Tank: huge constitution, kite shield and plate; a wall that holds the line and hits lightly.",
 			"art": "warrior",
 			"ai_role": "AGGRESSOR",
-			"base_stats": {
-				"STR": 13,
-				"DEX": 7,
-				"INT": 6,
-				"CONS": 17,
-				"PERC": 9,
-				"KNOW": 10
+			"base_shares": {
+				"STR": 0.209677419354839,
+				"DEX": 0.112903225806452,
+				"INT": 0.0967741935483871,
+				"CONS": 0.274193548387097,
+				"PERC": 0.145161290322581,
+				"KNOW": 0.161290322580645
 			},
-			"growth": {
-				"CONS": 2,
-				"STR": 2,
-				"PERC": 1
+			"growth_shares": {
+				"CONS": 0.4,
+				"STR": 0.4,
+				"PERC": 0.2
 			},
 			"proficiency": {
 				"sword": {
@@ -74,19 +74,19 @@
 			"description": "Ranged skirmisher: dexterity and perception, bows and light armor.",
 			"art": "ranger",
 			"ai_role": "SNIPER",
-			"base_stats": {
-				"STR": 8,
-				"DEX": 15,
-				"INT": 9,
-				"CONS": 9,
-				"PERC": 14,
-				"KNOW": 7
+			"base_shares": {
+				"STR": 0.129032258064516,
+				"DEX": 0.241935483870968,
+				"INT": 0.145161290322581,
+				"CONS": 0.145161290322581,
+				"PERC": 0.225806451612903,
+				"KNOW": 0.112903225806452
 			},
-			"growth": {
-				"DEX": 2,
-				"PERC": 1,
-				"STR": 1,
-				"CONS": 1
+			"growth_shares": {
+				"DEX": 0.4,
+				"PERC": 0.2,
+				"STR": 0.2,
+				"CONS": 0.2
 			},
 			"proficiency": {
 				"bow": {
@@ -138,18 +138,18 @@
 			"description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
 			"art": "brawler",
 			"ai_role": "AGGRESSOR",
-			"base_stats": {
-				"STR": 14,
-				"DEX": 10,
-				"INT": 6,
-				"CONS": 15,
-				"PERC": 9,
-				"KNOW": 8
+			"base_shares": {
+				"STR": 0.225806451612903,
+				"DEX": 0.161290322580645,
+				"INT": 0.0967741935483871,
+				"CONS": 0.241935483870968,
+				"PERC": 0.145161290322581,
+				"KNOW": 0.129032258064516
 			},
-			"growth": {
-				"STR": 2,
-				"CONS": 2,
-				"DEX": 1
+			"growth_shares": {
+				"STR": 0.4,
+				"CONS": 0.4,
+				"DEX": 0.2
 			},
 			"proficiency": {
 				"fist": {
@@ -209,19 +209,19 @@
 			"description": "Support: heals and rallies allies; knowledge, maces and cloth.",
 			"art": "priest",
 			"ai_role": "SUPPORT",
-			"base_stats": {
-				"STR": 6,
-				"DEX": 8,
-				"INT": 11,
-				"CONS": 12,
-				"PERC": 10,
-				"KNOW": 15
+			"base_shares": {
+				"STR": 0.0967741935483871,
+				"DEX": 0.129032258064516,
+				"INT": 0.17741935483871,
+				"CONS": 0.193548387096774,
+				"PERC": 0.161290322580645,
+				"KNOW": 0.241935483870968
 			},
-			"growth": {
-				"KNOW": 2,
-				"CONS": 1,
-				"INT": 1,
-				"PERC": 1
+			"growth_shares": {
+				"KNOW": 0.4,
+				"CONS": 0.2,
+				"INT": 0.2,
+				"PERC": 0.2
 			},
 			"proficiency": {
 				"mace": {
@@ -279,19 +279,19 @@
 			"description": "Fast skirmisher: daggers and speed; dashes in, cuts and slips away.",
 			"art": "rogue",
 			"ai_role": "SKIRMISHER",
-			"base_stats": {
-				"STR": 9,
-				"DEX": 16,
-				"INT": 9,
-				"CONS": 8,
-				"PERC": 12,
-				"KNOW": 8
+			"base_shares": {
+				"STR": 0.145161290322581,
+				"DEX": 0.258064516129032,
+				"INT": 0.145161290322581,
+				"CONS": 0.129032258064516,
+				"PERC": 0.193548387096774,
+				"KNOW": 0.129032258064516
 			},
-			"growth": {
-				"DEX": 2,
-				"PERC": 1,
-				"STR": 1,
-				"CONS": 1
+			"growth_shares": {
+				"DEX": 0.4,
+				"PERC": 0.2,
+				"STR": 0.2,
+				"CONS": 0.2
 			},
 			"proficiency": {
 				"dagger": {
@@ -345,19 +345,19 @@
 			"description": "Glass caster: intelligence and area damage from range.",
 			"art": "mage",
 			"ai_role": "SNIPER",
-			"base_stats": {
-				"STR": 6,
-				"DEX": 9,
-				"INT": 17,
-				"CONS": 8,
-				"PERC": 10,
-				"KNOW": 12
+			"base_shares": {
+				"STR": 0.0967741935483871,
+				"DEX": 0.145161290322581,
+				"INT": 0.274193548387097,
+				"CONS": 0.129032258064516,
+				"PERC": 0.161290322580645,
+				"KNOW": 0.193548387096774
 			},
-			"growth": {
-				"INT": 2,
-				"CONS": 1,
-				"KNOW": 1,
-				"PERC": 1
+			"growth_shares": {
+				"INT": 0.4,
+				"CONS": 0.2,
+				"KNOW": 0.2,
+				"PERC": 0.2
 			},
 			"proficiency": {
 				"staff": {
@@ -408,18 +408,18 @@
 			"description": "Test class for the timeline test kit.",
 			"art": "warrior",
 			"ai_role": "AGGRESSOR",
-			"base_stats": {
-				"STR": 13,
-				"DEX": 10,
-				"INT": 6,
-				"CONS": 13,
-				"PERC": 10,
-				"KNOW": 10
+			"base_shares": {
+				"STR": 0.209677419354839,
+				"DEX": 0.161290322580645,
+				"INT": 0.0967741935483871,
+				"CONS": 0.209677419354839,
+				"PERC": 0.161290322580645,
+				"KNOW": 0.161290322580645
 			},
-			"growth": {
-				"STR": 2,
-				"CONS": 2,
-				"DEX": 1
+			"growth_shares": {
+				"STR": 0.4,
+				"CONS": 0.4,
+				"DEX": 0.2
 			},
 			"proficiency": {
 				"sword": {

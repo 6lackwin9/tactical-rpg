@@ -58,8 +58,7 @@ mod tests {
 
     #[test]
     fn a_changed_file_changes_the_total_and_is_listed() {
-        let dir = std::env::temp_dir().join(format!("aegis_fingerprint_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("fingerprint");
         std::fs::create_dir_all(dir.join("catalog")).unwrap();
         std::fs::write(dir.join("catalog/a.json"), "{}").unwrap();
         std::fs::write(dir.join("b.json"), "[]").unwrap();

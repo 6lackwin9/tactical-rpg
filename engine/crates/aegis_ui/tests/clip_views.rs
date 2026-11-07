@@ -4,6 +4,7 @@
 //! side rows. Expectations follow from the spec's rules and the fixture's own durations; the last test replays every
 //! body of every game in the workspace through both the side-only and the four-way path.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::{ClipPlayer, Clips, Facing, Layers, View};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Image, Rgba};
@@ -57,9 +58,8 @@ fn write_png(path: &Path, w: u32, h: u32, px: &[u8]) {
 
 /// A scratch asset root with body `hero` (the fixture clips): every frame lopsided (a 3-pixel bar at x 1..3 and one
 /// pixel at x 6, row 3) in its own colour, so a mirrored frame differs from the plain one.
-fn body_root(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_ui_clip_views_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn body_root(name: &str) -> Scratch {
+    let root = Scratch::vacant(&format!("ui_clip_views_{name}"));
     let rows = fixture();
     let cols = rows.iter().map(|r| r.3.len() as u32).max().unwrap();
     let (w, h) = (cols * F, rows.len() as u32 * F);
@@ -197,7 +197,7 @@ fn at(img: &Image, x: i32, y: i32) -> [u8; 4] {
 #[test]
 fn played_facing_mirrors_side_rows_only_and_its_outline_matches() {
     let root = body_root("played");
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let size = F as i32 * 3;
     let gold: Rgba = [244, 198, 84, 255];
     let mut p = ClipPlayer::default();

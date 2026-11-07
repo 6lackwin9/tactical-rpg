@@ -20,13 +20,12 @@ const W: &str = "ward";
 /// The derived stat the scratch catalog defines (a `derived` row names it).
 const STAT: &str = "nerve";
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_portrait_cues_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_portrait_cues_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds").join(W)).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(dir: &Path) {
@@ -195,7 +194,8 @@ fn an_unknown_condition_warns_and_duplicates_are_errors_on_both() {
 
 /// A scratch catalog with the derived stat the `derived` rows name.
 fn catalog(tag: &str) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     write_catalog(&data, "derived_stats", json!([{"id": STAT, "name": "Nerve", "formula": "KNOW"}]));
     data
 }
@@ -308,8 +308,7 @@ fn a11_reports_what_the_face_tool_reports() {
 
 #[test]
 fn a12_warns_once_per_misplaced_frame() {
-    let t = std::env::temp_dir().join(format!("rpgkit_portrait_a12_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+    let t = aegis_core::scratch::Scratch::vacant("rpgkit_portrait_a12");
     let root = t.join("layer").join("assets");
     let fixtures = tool_fixtures().join("portraits");
     let copy = |from: &str, to: &str| {
@@ -344,12 +343,12 @@ fn a12_warns_once_per_misplaced_frame() {
     // a neutral frame stands in for a missing portrait
     copy("heroes/good.png", "portraits/heroes/faces/ghost/neutral.png");
     assert!(!assets::portrait_file_warnings(&root, &Layers::of(vec![root.clone()]), &faces()).iter().any(|l| l.contains("/ghost/:")));
-    let _ = fs::remove_dir_all(&t);
 }
 
 /// A world with one character, a dialogue whose node and a vignette whose line card carry `expression`.
 fn talk_world(tag: &str, expression: Value) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     fs::write(aegis_content::world::manifest_path(&data, W), json!({"id": W, "name": "Ward", "extends": [], "connects": [], "version": 1}).to_string()).unwrap();
     let write = |kind: &str, entries: Value| fs::write(store::file_of(&data, Some(W), kind), json!({"kind": kind, "version": 1, "entries": entries}).to_string()).unwrap();
     write("characters", json!([{"id": "keeper_a", "name": "Keeper A"}]));

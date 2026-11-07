@@ -4,6 +4,7 @@
 //! sets it, a pip block keeps its caller's colour under any theme, and a source scan finds no colour literal left in the
 //! six files but those kept on purpose (`KEPT`).
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::art::Art;
 use aegis_ui::audio::Audio;
@@ -256,8 +257,9 @@ fn pane_hashes() -> Map<String, Value> {
     out
 }
 
-/// Pixel identity: with no theme file every recorded frame hash matches. Recording (only before the migration's first
-/// edit): `AEGIS_RECORD_PANE_HASHES=1`.
+/// Pixel identity: with no theme file every recorded frame hash matches, on every platform (so a frame draws no path or
+/// operating system wording, CIPANES1). Recording (only for an intended change, then diff the file):
+/// `AEGIS_RECORD_PANE_HASHES=1`.
 #[test]
 fn the_default_theme_draws_the_six_panes_exactly_as_before() {
     let file = root().join("tests/fixtures/theme/pane_hashes.json");
@@ -269,14 +271,7 @@ fn the_default_theme_draws_the_six_panes_exactly_as_before() {
     let recorded: Map<String, Value> = serde_json::from_str(&std::fs::read_to_string(&file).expect("pane_hashes.json recorded")).unwrap();
     assert_eq!(recorded.len(), now.len(), "the same frames as recorded");
     let differ: Vec<&String> = recorded.keys().filter(|k| now.get(*k) != recorded.get(*k)).collect();
-    // These hashes were recorded on Windows and CI's Linux run differs (first seen on the 2026-11-03 release; cause open,
-    // CIPANES1). Windows still holds them; elsewhere the frames are written past the test harness's capture for the log.
-    if cfg!(windows) {
-        assert!(differ.is_empty(), "frames that changed under the default theme: {differ:?}");
-    } else if !differ.is_empty() {
-        use std::io::Write;
-        let _ = writeln!(std::io::stdout(), "frames that changed under the default theme: {differ:?}");
-    }
+    assert!(differ.is_empty(), "frames that changed under the default theme: {differ:?}");
 }
 
 // ---- a theme reaches each pane -------------------------------------------------------------------------------------
@@ -294,10 +289,10 @@ const PANE_ROLES: [(&str, &[&str]); 6] = [
 
 /// The theme with `colors` set, loaded from a scratch asset layer as a game's would be.
 fn loaded_theme(tag: &str, colors: Map<String, Value>) -> theme::Theme {
-    let dir = std::env::temp_dir().join(format!("aegis_theme_panes_{tag}_{}", std::process::id()));
+    let dir = Scratch::vacant(&format!("theme_panes_{tag}"));
     std::fs::create_dir_all(dir.join("ui")).unwrap();
     std::fs::write(dir.join(theme::FILE), json!({"version": 1, "colors": colors}).to_string()).unwrap();
-    let t = theme::load(&Layers::of(vec![dir.clone()])).unwrap();
+    let t = theme::load(&Layers::of(vec![dir.to_path_buf()])).unwrap();
     let _ = std::fs::remove_dir_all(dir);
     t
 }

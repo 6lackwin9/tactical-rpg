@@ -12,7 +12,6 @@ pub const W_POWER: f64 = 1.0;
 pub const W_MITIGATION: f64 = 1.5;
 pub const W_STAT_POINT: f64 = 2.0;
 pub const W_BURDEN: f64 = -2.0;
-pub const W_EXTRA_BLOCK: f64 = -3.0;
 pub const W_SKILL_POTENCY: f64 = 20.0;
 pub const W_STATUS_POTENCY: f64 = 0.2;
 pub const W_SPELL_REACH: f64 = 3.0;
@@ -60,7 +59,6 @@ pub fn modifier_value(m: &Value) -> f64 {
                 "power" => delta * W_POWER,
                 "mitigation" => delta * W_MITIGATION,
                 "burden" => delta * W_BURDEN,
-                "block_cost" => delta * W_EXTRA_BLOCK,
                 _ => 0.0,
             }
         }
@@ -80,7 +78,6 @@ pub fn item_value(item: &ItemDef) -> f64 {
     v += item.mitigation as f64 * W_MITIGATION;
     v += bonus_total as f64 * W_STAT_POINT;
     v += item.burden as f64 * W_BURDEN;
-    v += (item.block_cost - 1).max(0) as f64 * W_EXTRA_BLOCK;
     v + item.effects.iter().map(effect_value).sum::<f64>()
 }
 

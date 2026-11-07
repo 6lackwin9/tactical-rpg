@@ -5,6 +5,21 @@
 //! windup may roll the break chance (P13) or break at once with `sure_break` (P14); `windup_poise`, `unbreakable` and the
 //! status `steadfast` hold a unit up (P11, P12). The battle keeps the bars in `World.poise`, which stays empty in classic:
 //! every function here reads the rule first, so classic battles never draw, log or record anything new.
+//!
+//! S2.2-S1/S2 (`docs/sessions/S2_POISE.md` 1 and 4): under the ruleset's `poise_mode` pips the bar is also `poise_pips`
+//! pips of `T = max(1, roundi(max_poise / poise_pips))` (`threshold`); every stagger path (a hit, a collision, the arena
+//! and trigger `stagger`, the Dojo) settles through `settle`, which removes `clamp(floor(D / T), 0,
+//! max_pip_loss_per_hit)` pips (`pip_loss`) and breaks at 0 pips. Under `bar` (the default) `pips` stays 0 and nothing
+//! reads it: every outcome and draw is the bar's. A break keeps its consequences in both modes (P7).
+//!
+//! S2.2-S3 (FB-71): under pips the continuous `value` mirrors the pips (`value = pips x T`, `mirror`), so every reader
+//! of the value (metrics, the sim, the host) follows the pips; a windup bonus stores its pip count on the command
+//! (`Command::poise_bonus_pips`) and may sit above `poise_pips`.
+//!
+//! S2.2-S4 (`S2_POISE.md` 1 "Poise Break (0 Pips)", FB-49d, C10): under pips a break (the unit's pips reach 0, by any
+//! cause) also queues the status `stagger` for its next round (the status table's row: `block_lock` on the row's
+//! `lock_blocks`, blocks 1 and 4; an AP-debt stagger the same round start joins the same active instance), unless it holds `steadfast`
+//! (`break_queues_stagger`). Under `bar` a break keeps the RULESET1 consequences only.
 
 use crate::command::{CmdKind, Command};
 use crate::resolver::{Resolver, ScheduledAction};
@@ -12,11 +27,27 @@ use crate::skill::{self, Kind};
 use crate::world::{UnitId, World};
 use rpgkit_data::SkillDef;
 use rpgkit_rules::derived;
-use rpgkit_rules::ruleset;
-use rpgkit_rules::stats::roundi;
+use rpgkit_rules::ruleset::{self, Numbers, PoiseMode};
+use rpgkit_rules::pipeline::{self, Modifier, Op, Stage};
+use rpgkit_rules::pool::PoolView;
 
 /// The status that keeps a unit from breaking (P12).
 pub const STEADFAST: &str = "steadfast";
+
+/// S2.2-S4: the status a break under pips queues for the unit's next round (the status table's row).
+pub const BREAK_STATUS: &str = "stagger";
+
+/// S2.2-S4 (`S2_POISE.md` 1, step 2 of a break): under `poise_mode` pips a broken unit `u` gets `stagger` queued for its
+/// next round (the row's default rounds and stacking), unless it holds `steadfast`. True when it queued. Nothing under
+/// `bar`.
+pub fn break_queues_stagger(n: &Numbers, u: &mut rpgkit_rules::Unit) -> bool {
+    if !pips_mode(n) || u.has_status(STEADFAST) {
+        return false;
+    }
+    let rounds = rpgkit_rules::status::row_of(BREAK_STATUS).map_or(1, |r| r.default_rounds);
+    rpgkit_rules::status::queue(u, BREAK_STATUS, rounds, 0, "");
+    true
+}
 
 /// What a skill does to poise and armour (RULESET1 tasks 1.3), carried by its command; read only under the rules
 /// `poise` (stagger, windup poise, unbreakable, sure break) and `pierce` (armour piercing).
@@ -64,6 +95,72 @@ pub struct PoiseState {
     pub broken: bool,
     /// Broken last round (P10: stagger x `stagger_repeat_mult` this round).
     pub broken_last: bool,
+    /// S2.2-S1: pips now under `poise_mode` pips (`poise_pips` at a refill, above it while a windup bonus holds, 0 once
+    /// broken); always 0 under `bar` (`pips_now` derives them there).
+    pub pips: i32,
+    /// S2.2-S2: Rest blocks landed this round under `poise_mode` pips (each second one restores a pip).
+    pub rest_blocks: i32,
+}
+
+/// S2.2-S2: whether `n` plays poise by pips (`poise_mode` pips).
+pub fn pips_mode(n: &Numbers) -> bool {
+    n.poise_mode == PoiseMode::Pips
+}
+
+/// S2.2-S2: the Pip Threshold of a bar of Max Poise `max`: `T = max(1, roundi(max / poise_pips))`.
+pub fn threshold(n: &Numbers, max: i32) -> i32 {
+    ((max as f64 / n.poise_pips.max(1) as f64).round() as i32).max(1)
+}
+
+/// S2.2-S2: the pips stagger taken `taken` removes on threshold `t`: `clamp(floor(D / T), 0, max_pip_loss_per_hit)`
+/// (a hit under the threshold removes none).
+pub fn pip_loss(n: &Numbers, taken: i32, t: i32) -> i32 {
+    (taken.max(0) / t.max(1)).clamp(0, n.max_pip_loss_per_hit.max(0))
+}
+
+/// S2.2-S2 (FB-49): the temporary pips a `windup_poise` grants on threshold `t`: `roundi(windup_poise / T)`, at least 1
+/// when above 0.
+pub fn bonus_pips(windup_poise: i32, t: i32) -> i32 {
+    if windup_poise <= 0 {
+        return 0;
+    }
+    ((windup_poise as f64 / t.max(1) as f64).round() as i32).max(1)
+}
+
+/// S2.2-S2: the pips a `bar` mode bar shows: each started `1 / poise_pips` of Max Poise lights one (a windup bonus over the
+/// max stays at all of them); none once broken or without a bar (the battle view's pip rule).
+pub fn bar_pips(n: &Numbers, st: &PoiseState) -> i32 {
+    if st.broken || st.max <= 0 {
+        return 0;
+    }
+    (st.value.clamp(0, st.max) * n.poise_pips.max(1) + st.max - 1) / st.max
+}
+
+/// S2.2-S2: `st`'s pips now: the stored ones under `poise_mode` pips, else `bar_pips`.
+pub fn pips_now(n: &Numbers, st: &PoiseState) -> i32 {
+    if pips_mode(n) {
+        st.pips
+    } else {
+        bar_pips(n, st)
+    }
+}
+
+/// S2.2-S3 (FB-71): under `poise_mode` pips the value mirrors the pips: `value = pips x T` (`threshold` of the bar's
+/// max). Nothing under `bar`.
+pub fn mirror(n: &Numbers, st: &mut PoiseState) {
+    if pips_mode(n) {
+        st.value = st.pips.max(0) * threshold(n, st.max);
+    }
+}
+
+/// P3, S2.2-S2: `st` refilled to Max Poise `max` (and to `poise_pips` pips under `poise_mode` pips; 0 under `bar`;
+/// S2.2-S3: the value then mirrors them, `mirror`).
+pub fn refill(n: &Numbers, st: &mut PoiseState, max: i32) {
+    st.max = max;
+    st.value = max;
+    st.pips = if pips_mode(n) && max > 0 { n.poise_pips.max(1) } else { 0 };
+    st.rest_blocks = 0;
+    mirror(n, st);
 }
 
 /// Whether the battle plays by poise.
@@ -77,6 +174,12 @@ pub fn state(w: &World, c: UnitId) -> Option<&PoiseState> {
         return None;
     }
     w.poise.get(&c)
+}
+
+/// U1.2 slice 1 (`FB-04`): `c`'s bar as a pool view over `World.poise` (0 to its Max Poise; the value sits above the
+/// max while a windup bonus holds, P11). None as `state`.
+pub fn pool(w: &World, c: UnitId) -> Option<PoolView> {
+    state(w, c).map(|s| PoolView { current: s.value, min: 0, max: s.max })
 }
 
 /// P1, P2: `c`'s Max Poise now: the unit row's fixed `poise` (above 0), none (0), else the ruleset's `poise_stat` row
@@ -100,13 +203,13 @@ pub fn round_start(w: &mut World) {
     if !on(w) {
         return;
     }
+    let n = w.ruleset.numbers.clone();
     for c in 0..w.units.len() {
         let max = max_poise(w, c);
         let st = w.poise.entry(c).or_default();
         st.broken_last = st.broken;
         st.broken = false;
-        st.max = max;
-        st.value = max;
+        refill(&n, st, max);
     }
 }
 
@@ -160,8 +263,33 @@ impl Default for Factors {
 }
 
 /// P6: stagger taken = `roundi(stagger x windup x guard x repeat x flank x passive x hook)`, floor 0.
+/// It runs the stage pipeline (U1.2 slice 1): the stagger as the base, the factors as amplifiers in that order.
 pub fn stagger_taken(stagger: i32, f: &Factors) -> i32 {
-    roundi(stagger as f64 * f.windup * f.guard * f.repeat * f.flank * f.passive * f.hook).max(0)
+    pipeline::STAGGER.run(&stagger_modifiers(stagger, f)).value
+}
+
+/// The pipeline modifiers of `stagger_taken`, in its order.
+pub fn stagger_modifiers(stagger: i32, f: &Factors) -> [Modifier; 7] {
+    let mult = |id: &'static str, x: f64| Modifier::new(id, Stage::Mult, Op::Mul(x));
+    [
+        Modifier::new("stagger", Stage::Base, Op::Add(stagger as f64)),
+        mult("windup", f.windup),
+        mult("guard", f.guard),
+        mult("repeat", f.repeat),
+        mult("flank", f.flank),
+        mult("passive", f.passive),
+        mult("hook", f.hook),
+    ]
+}
+
+/// U4.2-S4 (FB-30): `stagger_taken` keeping every step, its `passive` step the target's evaluator
+/// (`Unit::stagger_taken_modifier`, the same product as `factors` reads, with its grant sources as parts).
+pub fn stagger_traced(stagger: i32, f: &Factors, target: &rpgkit_rules::Unit, blocks: i32) -> (i32, pipeline::Trace) {
+    let [base, windup, guard, repeat, flank, _, hook] = stagger_modifiers(stagger, f);
+    let passive = target.stagger_taken_modifier(blocks);
+    debug_assert_eq!(passive.op, Op::Mul(f.passive), "the evaluator's product is the factors'");
+    let (out, trace) = pipeline::STAGGER.run_traced(&[base, windup, guard, repeat, flank, passive, hook]);
+    (out.value, trace)
 }
 
 /// P6: the factors of a hit of an action `blocks` long on `t` at `block` (`flank`: the hit was a flank with the rule on).
@@ -179,7 +307,8 @@ pub fn factors(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32, bloc
     }
 }
 
-/// P13: the break chance (0-100) of `taken` stagger on `before` poise: `min(cap, floor(100 x taken / before x scale))`.
+/// P13: the break chance (0-100) of `taken` stagger on `before` poise: `min(cap, floor(100 x taken / before x scale))`
+/// (S2.2-S2: under `poise_mode` pips, pips lost on pips before).
 pub fn break_chance(n: &ruleset::Numbers, taken: i32, before: i32) -> i32 {
     if before <= 0 || taken <= 0 {
         return 0;
@@ -230,6 +359,10 @@ pub struct StaggerHit {
     pub taken: i32,
     pub before: i32,
     pub after: i32,
+    /// S2.2-S2: the target's pips before and after the hit (`pips_now`: derived from the bar under `bar`; 0 after a
+    /// break).
+    pub pips_before: i32,
+    pub pips_after: i32,
     /// P13: (chance, roll) when the break chance was rolled.
     pub chance: Option<(i32, i32)>,
     pub broke: Option<Break>,
@@ -250,34 +383,88 @@ pub fn on_start(w: &mut World, c: UnitId, cmd: &mut Command) {
     if !on(w) || cmd.impact.windup_poise <= 0 {
         return;
     }
+    let n = &w.ruleset.numbers;
     let Some(st) = w.poise.get_mut(&c) else { return };
     if st.max <= 0 || st.broken {
         return;
     }
     st.value += cmd.impact.windup_poise;
+    // S2.2-S2 (FB-49): under pips the bonus is temporary pips (above `poise_pips` too); S2.2-S3 (FB-71): the command
+    // keeps the count for `drop_bonus` and the value mirrors the pips
+    if pips_mode(n) {
+        let extra = bonus_pips(cmd.impact.windup_poise, threshold(n, st.max));
+        st.pips += extra;
+        cmd.poise_bonus_pips = extra;
+        mirror(n, st);
+    }
     cmd.poise_bonus = cmd.impact.windup_poise;
 }
 
-/// P11: the bonus of an action that lands or is cancelled comes off, never below 0.
+/// P11: the bonus of an action that lands or is cancelled comes off, never below 0 (S2.2-S2: its bonus pips too, under
+/// `poise_mode` pips; S2.2-S3 (FB-71): the count `on_start` stored on the command, whatever the max is now, and the
+/// value mirrors the pips).
 pub fn drop_bonus(w: &mut World, c: UnitId, cmd: &mut Command) {
     if cmd.poise_bonus <= 0 {
         return;
     }
+    let n = &w.ruleset.numbers;
     if let Some(st) = w.poise.get_mut(&c) {
         st.value = (st.value - cmd.poise_bonus).max(0);
+        if pips_mode(n) {
+            st.pips = (st.pips - cmd.poise_bonus_pips).max(0);
+            mirror(n, st);
+        }
     }
     cmd.poise_bonus = 0;
+    cmd.poise_bonus_pips = 0;
 }
 
-/// RS3: landed Rest restores `amount` poise, up to Max Poise (a bar above it stays).
-pub fn restore(w: &mut World, c: UnitId, amount: i32) {
-    if !on(w) || amount <= 0 {
+/// RS3: landed Rest of `blocks` blocks restores `rest_poise_per_block` poise a block, up to Max Poise (a bar above it
+/// stays). S2.2-S2 (FB-49): under `poise_mode` pips each second Rest block of the round restores a pip instead, up to
+/// `poise_pips` (pips above it stay; S2.2-S3: the value mirrors the pips, so `rest_poise_per_block` adds nothing there).
+pub fn restore(w: &mut World, c: UnitId, blocks: i32) {
+    if !on(w) || blocks <= 0 {
         return;
     }
+    let n = &w.ruleset.numbers;
+    let amount = n.rest_poise_per_block * blocks;
     if let Some(st) = w.poise.get_mut(&c) {
-        if st.max > 0 && !st.broken && st.value < st.max {
+        if st.max <= 0 || st.broken {
+            return;
+        }
+        if pips_mode(n) {
+            rest_pips(n, st, blocks);
+        } else if amount > 0 && st.value < st.max {
             st.value = (st.value + amount).min(st.max);
         }
+    }
+}
+
+/// S2.2-S2 (FB-49): `blocks` more Rest blocks this round on `st` (not broken) under `poise_mode` pips: each second Rest
+/// block of the round restores a pip, up to `poise_pips` (pips above it stay; S2.2-S3: the value mirrors the pips).
+/// Nothing under `bar`.
+pub fn rest_pips(n: &Numbers, st: &mut PoiseState, blocks: i32) {
+    if !pips_mode(n) || blocks <= 0 || st.max <= 0 || st.broken {
+        return;
+    }
+    st.pips += rest_pip_gain(n, st.pips, st.rest_blocks, blocks);
+    st.rest_blocks += blocks;
+    mirror(n, st);
+}
+
+/// S2.2-S3 (FB-71): the pips `blocks` more Rest blocks restore under `poise_mode` pips on `pips` pips with `landed` Rest
+/// blocks already this round: a pip per second Rest block of the round, up to `poise_pips` (none from a count at or
+/// above it); 0 under `bar`. `rest_pips` and the planner's Rest preview (`round_intent_plan::rest_of`) read it.
+pub fn rest_pip_gain(n: &Numbers, pips: i32, landed: i32, blocks: i32) -> i32 {
+    if !pips_mode(n) || blocks <= 0 {
+        return 0;
+    }
+    let gain = (landed.max(0) + blocks) / 2 - landed.max(0) / 2;
+    let full = n.poise_pips.max(1);
+    if pips >= full {
+        0
+    } else {
+        gain.min(full - pips)
     }
 }
 
@@ -303,7 +490,20 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
             continue;
         }
         let fc = forecast(w, &res.scheduled, t, st, block, &impact, blocks, flank, ignore_guard);
-        let mut hit = StaggerHit { target: t, stagger: impact.stagger, factors: fc.factors, windup: fc.windup, taken: fc.taken, before: st.value, after: st.value, chance: None, broke: None };
+        let pips = pips_mode(&w.ruleset.numbers);
+        let mut hit = StaggerHit {
+            target: t,
+            stagger: impact.stagger,
+            factors: fc.factors,
+            windup: fc.windup,
+            taken: fc.taken,
+            before: st.value,
+            after: st.value,
+            pips_before: fc.pips_before,
+            pips_after: fc.pips_before,
+            chance: None,
+            broke: None,
+        };
         // P8: a unit broken this round stays at 0 and breaks no further
         if !st.broken {
             let cause = match fc.verdict {
@@ -315,10 +515,14 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
                 }
                 Verdict::Holds | Verdict::AlreadyBroken => None,
             };
-            w.poise.get_mut(&t).unwrap().value = fc.after;
-            hit.after = fc.after;
+            let bar = w.poise.get_mut(&t).unwrap();
+            bar.value = fc.after;
+            if pips {
+                bar.pips = fc.pips_after;
+            }
+            (hit.after, hit.pips_after) = (fc.after, fc.pips_after);
             if let Some(cause) = cause {
-                hit.after = 0;
+                (hit.after, hit.pips_after) = (0, 0);
                 hit.broke = Some(break_unit(res, w, t, block, cause));
             }
         }
@@ -353,24 +557,93 @@ pub fn forecast(w: &World, sched: &[ScheduledAction], t: UnitId, st: PoiseState,
         f.guard = 1.0;
     }
     let taken = stagger_taken(impact.stagger, &f);
-    if st.broken {
-        return Forecast { factors: f, windup, taken, before: st.value, after: st.value, verdict: Verdict::AlreadyBroken };
+    let n = &w.ruleset.numbers;
+    let held = !st.broken && unbreakable(w, sched, t, block);
+    let terms = Terms { windup, held, sure: impact.sure_break.then_some(BreakCause::Sure), chance: true };
+    let s = settle(n, &st, taken, terms);
+    let (pips_before, mut pips_after) = if pips_mode(n) { (st.pips, s.pips) } else { (bar_pips(n, &st), bar_pips(n, &PoiseState { value: s.after, ..st })) };
+    // AUDIT-02: a break sets the pips to 0 on top (`Forecast`'s contract)
+    if matches!(s.verdict, Verdict::Breaks(_)) {
+        pips_after = 0;
     }
-    let held = unbreakable(w, sched, t, block);
+    Forecast { factors: f, windup, taken, before: st.value, after: s.after, verdict: s.verdict, threshold: threshold(n, st.max), pips_before, pips_after }
+}
+
+/// S2.2-S2: what decides a stagger hit beside its stagger taken: the target winds up (P5), cannot be broken (P12), the
+/// windup break the hit makes (P14 `sure_break`, FM4 `collide_break`) and whether it may roll the break chance (P13: an
+/// attack's hit; a collision never rolls).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Terms {
+    pub windup: bool,
+    pub held: bool,
+    pub sure: Option<BreakCause>,
+    pub chance: bool,
+}
+
+/// `settle`'s result: the bar's value and pips after the hit (0 at the least; a break sets both to 0 on top) and the
+/// verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Settled {
+    pub after: i32,
+    /// The stored pips after the hit (`st.pips` unchanged under `bar` unless the hit breaks).
+    pub pips: i32,
+    pub verdict: Verdict,
+}
+
+/// P6-P14 and S2.2-S2, the one rule every stagger path settles by (deterministic, no roll): stagger taken `taken` on bar
+/// `st`. Under `bar` the value drops by it, held at 1 by P12, and breaks at 0 (P7); a hit into a windup that leaves poise
+/// may roll `break_chance(taken, before)` (P13). Under `poise_mode` pips the hit removes `pip_loss` pips: held at 1 pip
+/// by `unbreakable` or `steadfast`, a break at 0 pips, the chance from pips lost on pips before; the value after is the
+/// pips' mirror (`pips x T`, S2.2-S3). A `sure` break into a windup removes every pip (P14) in both modes.
+pub fn settle(n: &Numbers, st: &PoiseState, taken: i32, h: Terms) -> Settled {
+    if st.broken {
+        return Settled { after: st.value, pips: st.pips, verdict: Verdict::AlreadyBroken };
+    }
     let mut after = st.value - taken;
-    if held {
+    if h.held {
         after = after.max(st.value.min(1));
     }
-    let verdict = if taken > 0 && after <= 0 && !held {
+    let sure = h.sure.filter(|_| h.windup && !h.held);
+    let may_roll = h.chance && h.windup && !h.held && n.break_chance_scale > 0.0;
+    if !pips_mode(n) {
+        let verdict = if taken > 0 && after <= 0 && !h.held {
+            Verdict::Breaks(BreakCause::Poise)
+        } else if let Some(c) = sure {
+            Verdict::Breaks(c)
+        } else if may_roll && taken > 0 && after > 0 {
+            Verdict::Chance(break_chance(n, taken, st.value))
+        } else {
+            Verdict::Holds
+        };
+        return broken_to_zero(Settled { after: after.max(0), pips: st.pips, verdict });
+    }
+    let lost = pip_loss(n, taken, threshold(n, st.max));
+    let mut pips = st.pips - lost;
+    if h.held {
+        pips = pips.max(st.pips.min(1));
+    }
+    let pips_lost = st.pips - pips.max(0);
+    let verdict = if lost > 0 && pips <= 0 && !h.held {
         Verdict::Breaks(BreakCause::Poise)
-    } else if windup && impact.sure_break && !held {
-        Verdict::Breaks(BreakCause::Sure)
-    } else if windup && !held && taken > 0 && after > 0 && w.ruleset.numbers.break_chance_scale > 0.0 {
-        Verdict::Chance(break_chance(&w.ruleset.numbers, taken, st.value))
+    } else if let Some(c) = sure {
+        Verdict::Breaks(c)
+    } else if may_roll && pips_lost > 0 && pips > 0 {
+        Verdict::Chance(break_chance(n, pips_lost, st.pips))
     } else {
         Verdict::Holds
     };
-    Forecast { factors: f, windup, taken, before: st.value, after: after.max(0), verdict }
+    // S2.2-S3 (FB-71): the value mirrors the pips (`mirror`)
+    let pips = pips.max(0);
+    broken_to_zero(Settled { after: pips * threshold(n, st.max), pips, verdict })
+}
+
+/// AUDIT-02: a break leaves the bar at 0 value and 0 pips (`Settled`'s contract), a `sure` break whose stagger did not
+/// deplete the bar too.
+fn broken_to_zero(s: Settled) -> Settled {
+    match s.verdict {
+        Verdict::Breaks(_) => Settled { after: 0, pips: 0, ..s },
+        _ => s,
+    }
 }
 
 /// One planned hit for `forecast_hits`: its target, impact block, the skill's impact, the action's blocks, whether it
@@ -399,8 +672,11 @@ pub fn forecast_hits(w: &World, sched: &[ScheduledAction], hits: &[PlannedHit]) 
             let fc = forecast(w, sched, h.target, st, h.block, &h.impact, h.blocks, h.flank, h.ignore_guard);
             let mut next = st;
             next.value = fc.after;
+            if pips_mode(&w.ruleset.numbers) {
+                next.pips = fc.pips_after;
+            }
             if matches!(fc.verdict, Verdict::Breaks(_)) {
-                (next.value, next.broken) = (0, true);
+                (next.value, next.pips, next.broken) = (0, 0, true);
             }
             match bars.iter_mut().find(|b| b.0 == h.target) {
                 Some(b) => b.1 = next,
@@ -422,6 +698,12 @@ pub struct Forecast {
     /// Poise after the hit (0 at the least; a break sets it to 0 on top).
     pub after: i32,
     pub verdict: Verdict,
+    /// S2.2-S2: the target's Pip Threshold `T` (`threshold`; in both modes).
+    pub threshold: i32,
+    /// S2.2-S2: the target's pips before and after the hit (a break sets them to 0 on top): the stored pips under
+    /// `poise_mode` pips, `bar_pips` of the bar before and after under `bar`.
+    pub pips_before: i32,
+    pub pips_after: i32,
 }
 
 /// P7: `t` breaks at `block`: poise 0 until the next refill; every action of it that has not landed is cancelled (also
@@ -431,7 +713,11 @@ pub struct Forecast {
 pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, cause: BreakCause) -> Break {
     let st = w.poise.entry(t).or_default();
     st.value = 0;
+    st.pips = 0;
     st.broken = true;
+    // S2.2-S4: under pips the break queues `stagger` for next round (not on a `steadfast` unit)
+    let n = w.ruleset.numbers.clone();
+    break_queues_stagger(&n, &mut w.units[t]);
     let mut named: Option<(u8, String)> = None;
     for a in res.scheduled.iter_mut().filter(|a| a.unit == t && !a.cancelled) {
         if a.landed {
@@ -457,10 +743,11 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
         a.cancelled = true;
         a.broken = true;
         a.command.poise_bonus = 0;
+        a.command.poise_bonus_pips = 0;
     }
-    w.units[t].guard = 0.0;
-    // HOOKS1 8.3: a break ends a held guard (rule triggers; none in classic)
-    w.units[t].held_guard = None;
+    // HOOKS1 8.3, S1.2-S4: a break ends the guard: the held guard (a Guard skill's from its wind-up, Option 1C, or a
+    // trigger's) and the `guard` status instance
+    crate::trigger::end_guard(w, t);
     let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default() };
     res.log.push(break_line(w, t, &b));
     b

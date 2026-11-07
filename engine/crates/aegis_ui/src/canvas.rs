@@ -263,6 +263,15 @@ impl Canvas {
         if x < 0 || y < 0 || x >= self.w || y >= self.h || c[3] == 0 || self.clip.is_some_and(|r| !r.contains(x, y)) || self.bounds.is_some_and(|r| !r.contains(x, y)) {
             return;
         }
+        self.put(x, y, c);
+    }
+
+    /// `blend` on a pixel already known to be inside the canvas, `clip` and `bounds` (`visible`).
+    #[inline]
+    pub(crate) fn put(&mut self, x: i32, y: i32, c: Rgba) {
+        if c[3] == 0 {
+            return;
+        }
         let i = ((y * self.w + x) * 4) as usize;
         if c[3] == 255 {
             self.px[i..i + 4].copy_from_slice(&c);
@@ -275,10 +284,36 @@ impl Canvas {
         self.px[i + 3] = 255;
     }
 
+    /// The part of `r` that can be drawn: inside the canvas, `clip` and `bounds` (its `w` or `h` is 0 or less when none is).
+    pub(crate) fn visible(&self, r: Rect) -> Rect {
+        let (mut x0, mut y0, mut x1, mut y1) = (r.x.max(0), r.y.max(0), (r.x + r.w).min(self.w), (r.y + r.h).min(self.h));
+        for lim in [self.clip, self.bounds].into_iter().flatten() {
+            x0 = x0.max(lim.x);
+            y0 = y0.max(lim.y);
+            x1 = x1.min(lim.x + lim.w);
+            y1 = y1.min(lim.y + lim.h);
+        }
+        Rect::new(x0, y0, x1 - x0, y1 - y0)
+    }
+
+    /// `blend` over `r`, a row at a time (the same pixels; VISCLAR1-C: a whole frame's panels spent most of it here).
     pub fn fill(&mut self, r: Rect, c: Rgba) {
-        for y in r.y.max(0)..(r.y + r.h).min(self.h) {
-            for x in r.x.max(0)..(r.x + r.w).min(self.w) {
-                self.blend(x, y, c);
+        let v = self.visible(r);
+        if v.w <= 0 || v.h <= 0 || c[3] == 0 {
+            return;
+        }
+        let a = c[3] as u32;
+        for y in v.y..v.y + v.h {
+            let at = ((y * self.w + v.x) * 4) as usize;
+            for p in self.px[at..at + (v.w * 4) as usize].chunks_exact_mut(4) {
+                if a == 255 {
+                    p.copy_from_slice(&c);
+                } else {
+                    for k in 0..3 {
+                        p[k] = ((c[k] as u32 * a + p[k] as u32 * (255 - a)) / 255) as u8;
+                    }
+                    p[3] = 255;
+                }
             }
         }
     }

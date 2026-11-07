@@ -86,6 +86,149 @@ impl WalkStep {
     }
 }
 
+/// TURNFEEL1's debug settings (F10), both off by default; a release build reads them as off.
+pub const TURN_BEAT_KEY: &str = "walk_turn_beat";
+pub const EQUAL_SPEED_KEY: &str = "walk_equal_speed";
+pub const TURN_CORNER_KEY: &str = "walk_turn_corner";
+/// With the quick finish, the most the rest of a leg takes after a perpendicular press (animation ms).
+pub const QUICK_FINISH_MS: f64 = 60.0;
+/// With the finish, how many steps' time the drawn position may run behind the tile: quick turns past it play faster, so
+/// it never falls so far behind that it counts as a jump.
+const FINISH_BEHIND_STEPS: f64 = 2.0;
+/// How long the party stands, faced the new way, on a perpendicular turn with the beat on (animation ms).
+pub const TURN_BEAT_MS: f64 = 60.0;
+
+/// How a perpendicular press draws (TURNFEEL1). The press steps at once in all three: tile, events and the facing `E` uses,
+/// so a tap released during a finish has already turned; only the drawn position and the sprite's facing wait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TurnCorner {
+    /// From wherever it had got to, straight to the new tile: the path cuts the corner.
+    #[default]
+    Cut,
+    /// The current leg ends at its own speed, then the turn: an L, up to one step later.
+    Finish,
+    /// As `Finish`, with the rest of the leg squeezed into `QUICK_FINISH_MS`.
+    Quick,
+}
+
+/// F5's order; the first is the default.
+pub const TURN_CORNERS: [TurnCorner; 3] = [TurnCorner::Cut, TurnCorner::Finish, TurnCorner::Quick];
+
+impl TurnCorner {
+    /// The setting's value.
+    pub fn name(self) -> &'static str {
+        match self {
+            TurnCorner::Cut => "cut",
+            TurnCorner::Finish => "finish",
+            TurnCorner::Quick => "quick",
+        }
+    }
+
+    /// The setting's value read; anything unknown is `Cut`.
+    fn of_setting(v: &Value) -> Self {
+        TURN_CORNERS.into_iter().find(|c| v.as_str() == Some(c.name())).unwrap_or_default()
+    }
+}
+
+/// The walk's feel options (TURNFEEL1; the user picks by feel). Presentation only: the party's tile changes when the
+/// step is taken whatever they say; they set when its glide starts, how long it takes and when the next step comes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WalkFeel {
+    /// A perpendicular turn stands for `TURN_BEAT_MS` before its glide.
+    pub beat: bool,
+    /// A step's time goes with its screen distance (`screen_scale`).
+    pub equal: bool,
+    /// How a perpendicular press draws.
+    pub corner: TurnCorner,
+}
+
+impl WalkFeel {
+    pub fn of(settings: &Value) -> Self {
+        Self::read(settings, cfg!(debug_assertions))
+    }
+
+    /// `debug`: whether the settings count; anything but `true` is off.
+    pub fn read(settings: &Value, debug: bool) -> Self {
+        let on = |key: &str| debug && settings[key].as_bool() == Some(true);
+        let corner = if debug { TurnCorner::of_setting(&settings[TURN_CORNER_KEY]) } else { TurnCorner::Cut };
+        Self { beat: on(TURN_BEAT_KEY), equal: on(EQUAL_SPEED_KEY), corner }
+    }
+
+    /// A step's times: `step` the pace, `facing` the way the party faces before it, `dir` the step. The beat is on the
+    /// animation clock, so it divides by `anim_speed` as the pace does (`wall / base`).
+    pub fn leg(self, step: WalkStep, view: View, facing: (i64, i64), dir: (i64, i64)) -> Leg {
+        let scale = if self.equal { screen_scale(view, dir) } else { 1.0 };
+        let turn = is_turn(facing, dir);
+        let beat = if self.beat && turn { TURN_BEAT_MS } else { 0.0 };
+        let finish_cap = match self.corner {
+            TurnCorner::Cut => 0.0,
+            TurnCorner::Finish => FINISH_BEHIND_STEPS * step.wall,
+            TurnCorner::Quick => QUICK_FINISH_MS * step.wall / step.base,
+        };
+        Leg {
+            glide: step.wall * scale,
+            delay: beat * step.wall / step.base,
+            anim: step.base * scale + beat,
+            reach: if self.beat { Glide::BEAT_REACH } else { Glide::REACH },
+            corners: self.corner != TurnCorner::Cut,
+            turned: self.corner != TurnCorner::Cut && turn,
+            finish_cap,
+        }
+    }
+}
+
+/// Whether `dir` is a perpendicular turn from `facing` (a reversal or going straight on is not).
+pub fn is_turn(facing: (i64, i64), dir: (i64, i64)) -> bool {
+    facing.0 * dir.0 + facing.1 * dir.1 == 0
+}
+
+/// A step's screen distance over a horizontal step's, whatever the zoom (a cell's sides keep their ratio at every step of
+/// it). So a step left or right keeps the pace's time, as every step does on square cells, and the speed in px is the
+/// square view's in every direction.
+pub fn screen_scale(view: View, dir: (i64, i64)) -> f64 {
+    if dir.1 != 0 {
+        view.cell_h() as f64 / CELL_W as f64
+    } else {
+        1.0
+    }
+}
+
+/// One step's times (`WalkFeel::leg`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Leg {
+    /// The wall ms its glide takes.
+    pub glide: f64,
+    /// The wall ms it stands first.
+    pub delay: f64,
+    /// All of it on the animation clock (ms): how long the walk clip plays for this step.
+    pub anim: f64,
+    /// How far (cells) its glide may start from before it counts as a jump.
+    reach: f32,
+    /// A corner setting other than `Cut` is on.
+    corners: bool,
+    /// And this step is a perpendicular turn.
+    turned: bool,
+    /// The most the path still to play may take before this step's own glide (wall ms).
+    finish_cap: f64,
+}
+
+impl Leg {
+    /// A glide of `ms`, no feel option on.
+    pub fn plain(ms: f64) -> Self {
+        Self { glide: ms, delay: 0.0, anim: ms, reach: Glide::REACH, corners: false, turned: false, finish_cap: 0.0 }
+    }
+
+    #[cfg(test)]
+    fn with_anim(self, anim: f64) -> Self {
+        Self { anim, ..self }
+    }
+
+    /// The wall time to the next step: it waits for this one's beat and glide, so the glides chain with no change of speed.
+    pub fn gap(self) -> Duration {
+        Duration::from_secs_f64((self.delay + self.glide) / 1000.0)
+    }
+}
+
 /// The setting's quarters: a number to the nearest step in range; anything else (missing, unknown) the default.
 pub fn zoom_of(v: &Value) -> i32 {
     let (least, most, default) = ZOOM_QUARTERS;
@@ -249,6 +392,34 @@ pub fn party_px(view: View, q: i32, camera: (i32, i32), at: (f32, f32), s: f32) 
     (Rect::new(g.ox, g.oy, cw, ch), shift)
 }
 
+/// A stretch of a drawn path: it stands at `from` until `at`, then goes to `to` in `ms`.
+#[derive(Debug, Clone, Copy)]
+struct Seg {
+    from: (f32, f32),
+    to: (f32, f32),
+    at: Instant,
+    ms: f64,
+}
+
+fn after_ms(at: Instant, ms: f64) -> Instant {
+    at + Duration::from_secs_f64(ms.max(0.0) / 1000.0)
+}
+
+fn cells_apart(a: (f32, f32), b: (f32, f32)) -> f32 {
+    (a.0 - b.0).abs() + (a.1 - b.1).abs()
+}
+
+impl Seg {
+    fn end(&self) -> Instant {
+        after_ms(self.at, self.ms)
+    }
+
+    fn position(&self, now: Instant) -> (f32, f32) {
+        let t = (now.saturating_duration_since(self.at).as_secs_f64() * 1000.0 / self.ms).clamp(0.0, 1.0) as f32;
+        (self.from.0 + (self.to.0 - self.from.0) * t, self.from.1 + (self.to.1 - self.from.1) * t)
+    }
+}
+
 /// The party's drawn position (REGIONVIEW1): straight from where it was to its tile in one step's time. A step's start is
 /// its scheduled time, not the frame that noticed it, so steps every `WalkStep` make one even line. Presentation only.
 #[derive(Debug, Clone, Default)]
@@ -259,19 +430,27 @@ pub struct Glide {
     at: Option<Instant>,
     /// The current step's own time (WALKRUN1: the pace may change between steps and must not move the party back).
     ms: f64,
+    /// TURNFEEL1: what plays before that glide while a turn finishes its leg, oldest first.
+    before: Vec<Seg>,
 }
 
 impl Glide {
     /// The furthest the party glides (cells): one step, and one more if a key press met a step in the same frame.
     const REACH: f32 = 2.0;
+    /// With the beat on: a key press still steps at once, so quick turns stack more cells behind the drawn position, and
+    /// those are steps to glide, not jumps (a tile this far off in one frame is no step).
+    const BEAT_REACH: f32 = 4.0;
 
     fn rest(&mut self, loc: &str, tile: (i64, i64)) -> ((f32, f32), bool) {
         let here = (tile.0 as f32, tile.1 as f32);
-        *self = Glide { loc: loc.to_string(), to: Some(tile), from: here, at: None, ms: 0.0 };
+        *self = Glide { loc: loc.to_string(), to: Some(tile), from: here, at: None, ms: 0.0, before: Vec::new() };
         (here, true)
     }
 
     fn position(&self, now: Instant) -> (f32, f32) {
+        if let Some(s) = self.before.iter().find(|s| now < s.end()) {
+            return s.position(now);
+        }
         let (Some(to), Some(at)) = (self.to, self.at) else { return self.from };
         let t = (now.saturating_duration_since(at).as_secs_f64() * 1000.0 / self.ms).clamp(0.0, 1.0) as f32;
         (self.from.0 + (to.0 as f32 - self.from.0) * t, self.from.1 + (to.1 as f32 - self.from.1) * t)
@@ -279,8 +458,9 @@ impl Glide {
 
     /// The drawn position at `now` (None: no clock yet, so no time has passed: the tile), and whether it jumped: a first
     /// frame, a new location, or a tile too far to glide to (the camera then jumps with it). `step_at`: the scheduled time
-    /// of a step taken since the last frame; `step_ms`: the time a step taken now glides in.
-    pub fn update(&mut self, loc: &str, tile: (i64, i64), step_at: Option<Instant>, now: Option<Instant>, step_ms: f64) -> ((f32, f32), bool) {
+    /// of a step taken since the last frame; `leg`: the times of a step taken now. A leg's delay starts its glide later, at
+    /// the place the party has got to (TURNFEEL1); `position` stands there until then.
+    pub fn update(&mut self, loc: &str, tile: (i64, i64), step_at: Option<Instant>, now: Option<Instant>, leg: Leg) -> ((f32, f32), bool) {
         let Some(now) = now else { return self.rest(loc, tile) };
         if self.to.is_none() || self.loc != loc {
             return self.rest(loc, tile);
@@ -288,12 +468,80 @@ impl Glide {
         if self.to != Some(tile) {
             let start = step_at.unwrap_or(now);
             let was = self.position(start);
-            if (tile.0 as f32 - was.0).abs() + (tile.1 as f32 - was.1).abs() > Self::REACH {
+            if (tile.0 as f32 - was.0).abs() + (tile.1 as f32 - was.1).abs() > leg.reach {
                 return self.rest(loc, tile);
             }
-            (self.from, self.to, self.at, self.ms) = (was, Some(tile), Some(start), step_ms);
+            let begins = start + Duration::from_secs_f64(leg.delay / 1000.0);
+            (self.from, self.to, self.at, self.ms) = (was, Some(tile), Some(begins), leg.glide);
+            self.before.clear();
         }
         (self.position(now), false)
+    }
+}
+
+impl Glide {
+    /// The way the drawn party goes while a turn finishes its leg (None otherwise): the sprite faces it until the corner.
+    pub fn heading(&self, now: Instant) -> Option<(i32, i32)> {
+        let way = |d: f32| if d > 0.0 { 1 } else if d < 0.0 { -1 } else { 0 };
+        self.before.iter().find(|s| now < s.end()).map(|s| (way(s.to.0 - s.from.0), way(s.to.1 - s.from.1)))
+    }
+
+    /// A step from tile `from` to `tile` was just taken at `at`: plays a clean corner when the leg's corner setting asks for
+    /// one and a leg is still under way, and returns how much later than a plain step its own glide starts (wall ms).
+    /// None leaves the step to `update`, which draws it as it always did: `Cut`, a straight step or a reversal on a leg with
+    /// no turn pending, a step with the party already on its tile, or a change of map.
+    pub fn corner_step(&mut self, loc: &str, from: (i64, i64), tile: (i64, i64), at: Instant, leg: Leg) -> Option<f64> {
+        let adjacent = (from.0 - tile.0).abs() + (from.1 - tile.1).abs() == 1;
+        if !leg.corners || !adjacent || self.loc != loc || self.to != Some(from) {
+            return None;
+        }
+        let last_at = self.at?;
+        if after_ms(last_at, self.ms) <= at {
+            return None;
+        }
+        self.before.retain(|s| s.end() > at);
+        let target = (tile.0 as f32, tile.1 as f32);
+        if let Some(i) = self.before.iter().rposition(|s| s.to == target) {
+            // back to a corner not yet reached: the path goes no further than it
+            let s = self.before[i];
+            self.before.truncate(i);
+            (self.from, self.to, self.at, self.ms) = (s.from, Some(tile), Some(s.at), s.ms);
+            return Some(0.0);
+        }
+        if !leg.turned && self.before.is_empty() {
+            return None;
+        }
+        self.squeeze(at, leg.finish_cap);
+        let end = after_ms(self.at?, self.ms);
+        let corner = (from.0 as f32, from.1 as f32);
+        self.before.push(Seg { from: self.from, to: corner, at: self.at?, ms: self.ms });
+        (self.from, self.to, self.at, self.ms) = (corner, Some(tile), Some(after_ms(end, leg.delay)), leg.glide);
+        Some(end.saturating_duration_since(at).as_secs_f64() * 1000.0)
+    }
+
+    /// Plays all that is left of the path from `at` in at most `cap` ms, each stretch by its length.
+    fn squeeze(&mut self, at: Instant, cap: f64) {
+        let (Some(to), Some(last_at)) = (self.to, self.at) else { return };
+        if after_ms(last_at, self.ms).saturating_duration_since(at).as_secs_f64() * 1000.0 <= cap {
+            return;
+        }
+        let was = self.position(at);
+        let mut ends: Vec<(f32, f32)> = self.before.iter().map(|s| s.to).collect();
+        ends.push((to.0 as f32, to.1 as f32));
+        let total: f32 = ends.iter().fold((was, 0.0), |(p, d), e| (*e, d + cells_apart(p, *e))).1;
+        if total <= 0.0 {
+            return;
+        }
+        self.before.clear();
+        let (mut p, mut t) = (was, at);
+        for e in ends {
+            let ms = (cap * (cells_apart(p, e) / total) as f64).max(1e-3);
+            self.before.push(Seg { from: p, to: e, at: t, ms });
+            (p, t) = (e, after_ms(t, ms));
+        }
+        if let Some(last) = self.before.pop() {
+            (self.from, self.at, self.ms) = (last.from, Some(last.at), last.ms);
+        }
     }
 }
 
@@ -604,7 +852,7 @@ mod tests {
                     let at = (50.0 + i as f32 * 0.037, 50.0 + i as f32 * 0.011);
                     let cam = camera_px(cell_of(view, q), focus, (200, 200), at, s);
                     let (g, shift) = placed(view, q, cam, s);
-                    let shifted = aegis_ui::painter::View { s, ox: shift.0, oy: shift.1, g: 1 };
+                    let shifted = aegis_ui::painter::View { s, ox: shift.0, oy: shift.1, ..aegis_ui::painter::View::fit(1, 1) };
                     assert!(shift.0.abs() <= s / 2.0 + 0.01 && shift.1.abs() <= s / 2.0 + 0.01, "{s}: under a logical px from the geometry");
                     for (x, y) in [(50, 50), (51, 50), (52, 53)] {
                         let r = shifted.rect(g.cell(x, y));
@@ -614,7 +862,7 @@ mod tests {
                         assert_eq!((r.x + r.w, r.y + r.h), (want(cam.0, x + 1, cw), want(cam.1, y + 1, ch)), "{view:?} {s}");
                     }
                     let (pr, ps) = party_px(view, q, cam, at, s);
-                    let drawn = aegis_ui::painter::View { s, ox: ps.0, oy: ps.1, g: 1 }.rect(pr);
+                    let drawn = aegis_ui::painter::View { s, ox: ps.0, oy: ps.1, ..aegis_ui::painter::View::fit(1, 1) }.rect(pr);
                     assert_eq!(*party.get_or_insert(drawn), drawn, "{view:?} {s}: frame {i}");
                     assert_eq!((pr.w, pr.h), cell_of(view, q));
                 }
@@ -629,7 +877,7 @@ mod tests {
         let t0 = Instant::now();
         let ms = |m: f64| t0 + std::time::Duration::from_secs_f64(m / 1000.0);
         let mut g = Glide::default();
-        assert_eq!(g.update("a", (5, 5), None, Some(t0), 90.0), ((5.0, 5.0), true), "the first frame");
+        assert_eq!(g.update("a", (5, 5), None, Some(t0), Leg::plain(90.0)), ((5.0, 5.0), true), "the first frame");
         let mut tile = 5;
         let mut frame = 0.0;
         while frame < 900.0 {
@@ -639,16 +887,16 @@ mod tests {
                 tile += 1;
                 ms(due)
             });
-            let (at, jumped) = g.update("a", (tile, 5), step, Some(ms(frame)), 90.0);
+            let (at, jumped) = g.update("a", (tile, 5), step, Some(ms(frame)), Leg::plain(90.0));
             assert!(!jumped);
             assert!((at.0 as f64 - (5.0 + frame / 90.0)).abs() < 1e-3, "at {frame} ms: {}", at.0);
             frame += 16.0 + (frame as i64 % 7) as f64;
         }
-        let (at, _) = g.update("a", (tile, 5), None, Some(ms(5000.0)), 90.0);
+        let (at, _) = g.update("a", (tile, 5), None, Some(ms(5000.0)), Leg::plain(90.0));
         assert_eq!(at, (tile as f32, 5.0), "it ends on the tile");
-        assert_eq!(g.update("a", (tile + 9, 5), None, Some(ms(5001.0)), 90.0), (((tile + 9) as f32, 5.0), true), "too far");
-        assert_eq!(g.update("b", (tile + 9, 5), None, Some(ms(5002.0)), 90.0), (((tile + 9) as f32, 5.0), true), "another location");
-        assert_eq!(g.update("b", (tile, 5), None, None, 90.0), ((tile as f32, 5.0), true), "no clock");
+        assert_eq!(g.update("a", (tile + 9, 5), None, Some(ms(5001.0)), Leg::plain(90.0)), (((tile + 9) as f32, 5.0), true), "too far");
+        assert_eq!(g.update("b", (tile + 9, 5), None, Some(ms(5002.0)), Leg::plain(90.0)), (((tile + 9) as f32, 5.0), true), "another location");
+        assert_eq!(g.update("b", (tile, 5), None, None, Leg::plain(90.0)), ((tile as f32, 5.0), true), "no clock");
     }
 
     /// A change of look eases from where the camera was to a target that may move, then sits exactly on it; without a
@@ -757,17 +1005,244 @@ mod tests {
         let t0 = Instant::now();
         let at = |ms: u64| Some(t0 + Duration::from_millis(ms));
         let mut g = Glide::default();
-        assert_eq!(g.update("m", (0, 0), None, at(0), 130.0).0, (0.0, 0.0));
+        assert_eq!(g.update("m", (0, 0), None, at(0), Leg::plain(130.0)).0, (0.0, 0.0));
         // a run's step, half way
-        assert_eq!(g.update("m", (1, 0), at(0), at(65), 130.0).0, (0.5, 0.0));
+        assert_eq!(g.update("m", (1, 0), at(0), at(65), Leg::plain(130.0)).0, (0.5, 0.0));
         // Shift let go during it: the step keeps its own time
-        assert_eq!(g.update("m", (1, 0), None, at(65), 200.0).0, (0.5, 0.0), "no hop back when the pace changes");
-        assert_eq!(g.update("m", (1, 0), None, at(130), 200.0).0, (1.0, 0.0), "it ends on its time");
+        assert_eq!(g.update("m", (1, 0), None, at(65), Leg::plain(200.0)).0, (0.5, 0.0), "no hop back when the pace changes");
+        assert_eq!(g.update("m", (1, 0), None, at(130), Leg::plain(200.0)).0, (1.0, 0.0), "it ends on its time");
         // the next step is a walk's, from the tile
-        assert_eq!(g.update("m", (2, 0), at(130), at(130), 200.0).0, (1.0, 0.0), "from the tile, not from behind it");
-        assert_eq!(g.update("m", (2, 0), None, at(230), 200.0).0, (1.5, 0.0));
+        assert_eq!(g.update("m", (2, 0), at(130), at(130), Leg::plain(200.0)).0, (1.0, 0.0), "from the tile, not from behind it");
+        assert_eq!(g.update("m", (2, 0), None, at(230), Leg::plain(200.0)).0, (1.5, 0.0));
         // Shift pressed during it: no hop forward
-        assert_eq!(g.update("m", (2, 0), None, at(230), 130.0).0, (1.5, 0.0), "no hop on when the pace changes");
+        assert_eq!(g.update("m", (2, 0), None, at(230), Leg::plain(130.0)).0, (1.5, 0.0), "no hop on when the pace changes");
+    }
+
+    /// TURNFEEL1: a beat only on a perpendicular turn, in animation ms; off (and in a release build) a leg is the pace's.
+    #[test]
+    fn a_leg_has_a_beat_on_a_perpendicular_turn_only() {
+        let (up, down, left, right) = ((0, -1), (0, 1), (-1, 0), (1, 0));
+        for (from, to) in [(up, left), (up, right), (down, left), (down, right), (left, up), (left, down), (right, up), (right, down)] {
+            assert!(is_turn(from, to), "{from:?} {to:?}");
+        }
+        for (from, to) in [(up, up), (up, down), (down, up), (left, right), (right, left), (right, right)] {
+            assert!(!is_turn(from, to), "{from:?} {to:?}");
+        }
+        let beat = WalkFeel { beat: true, equal: false, corner: TurnCorner::Cut };
+        for speed in [0.5, 1.0, 2.0] {
+            let step = WalkStep::read(&json!({"anim_speed": speed}), false, true);
+            let turn = beat.leg(step, View::Square, up, right);
+            assert_eq!(turn.delay, TURN_BEAT_MS / speed, "the animation clock at {speed}x");
+            assert_eq!(turn.anim, step.base + TURN_BEAT_MS);
+            assert_eq!(turn.gap().as_secs_f64(), (step.wall + TURN_BEAT_MS / speed) / 1000.0, "the next step waits");
+            assert_eq!(turn.glide, step.wall, "the glide keeps its time");
+            for (from, to) in [(up, down), (right, right), (left, right)] {
+                assert_eq!(beat.leg(step, View::Square, from, to).delay, 0.0, "{from:?} {to:?}");
+            }
+            let off = WalkFeel::default().leg(step, View::Tilted, up, right);
+            assert_eq!(off, Leg::plain(step.wall).with_anim(step.base), "both off");
+            assert_eq!(off.gap(), step.gap(), "today's schedule");
+        }
+        assert_eq!(TURN_BEAT_MS, 60.0, "the brief's default");
+    }
+
+    /// TURNFEEL1: with equal speed a step's px per ms is the same both ways in the tilted view at every zoom and pace, and
+    /// is the square view's; on square cells it changes nothing.
+    #[test]
+    fn equal_speed_makes_the_screen_speed_the_same_every_way() {
+        let (up, right) = ((0, -1), (1, 0));
+        let feel = WalkFeel { beat: false, equal: true, corner: TurnCorner::Cut };
+        for run in [false, true] {
+            let step = WalkStep::read(&json!({}), run, true);
+            for q in ZOOM_QUARTERS.0..=ZOOM_QUARTERS.1 {
+                let (cw, ch) = cell_of(View::Tilted, q);
+                let across = cw as f64 / feel.leg(step, View::Tilted, right, right).glide;
+                let along = ch as f64 / feel.leg(step, View::Tilted, up, up).glide;
+                assert!((across - along).abs() < 1e-9, "{q}: {across} {along}");
+                let plain = WalkFeel::default();
+                let was = (cw as f64 / plain.leg(step, View::Tilted, right, right).glide, ch as f64 / plain.leg(step, View::Tilted, up, up).glide);
+                assert!((was.0 * 3.0 - was.1 * 4.0).abs() < 1e-9, "off: a third faster across than along");
+                let square = cell_of(View::Square, q).0 as f64 / step.wall;
+                assert!((across - square).abs() < 1e-9, "the square view's speed: {q}");
+            }
+            for dir in [up, right] {
+                assert_eq!(feel.leg(step, View::Square, dir, dir), WalkFeel::default().leg(step, View::Square, dir, dir), "square cells");
+            }
+            let tilted = feel.leg(step, View::Tilted, up, up);
+            assert_eq!(tilted.gap().as_secs_f64(), tilted.glide / 1000.0, "the next step comes as the glide ends");
+            assert_eq!(tilted.anim, step.base * 0.75);
+        }
+    }
+
+    fn corner_feel(corner: TurnCorner) -> WalkFeel {
+        WalkFeel { beat: false, equal: false, corner }
+    }
+
+    /// Walks up from (5, 5), takes `steps` at the given times, and returns the path drawn each 4 ms to `until`.
+    fn drawn_path(feel: WalkFeel, base: f64, steps: &[((i64, i64), f64)], until: f64) -> Vec<(f64, (f32, f32))> {
+        let t0 = Instant::now();
+        let ms = |m: f64| t0 + Duration::from_secs_f64(m / 1000.0);
+        let step = WalkStep { base, wall: base };
+        let mut g = Glide::default();
+        g.update("m", (5, 5), None, Some(t0), Leg::plain(base));
+        let mut tile = (5, 4);
+        let mut facing = (0, -1);
+        let first = feel.leg(step, View::Square, facing, facing);
+        assert_eq!(g.corner_step("m", (5, 5), tile, t0, first), None, "from rest");
+        g.update("m", tile, Some(t0), Some(t0), first);
+        let mut out = Vec::new();
+        let mut now = 0.0;
+        let mut i = 0;
+        while now <= until {
+            while i < steps.len() && steps[i].1 <= now {
+                let (dir, at) = steps[i];
+                let leg = feel.leg(step, View::Square, facing, dir);
+                let was = tile;
+                tile = (tile.0 + dir.0, tile.1 + dir.1);
+                facing = dir;
+                let handled = g.corner_step("m", was, tile, ms(at), leg).is_some();
+                assert!(!g.update("m", tile, (!handled).then(|| ms(at)), Some(ms(now)), leg).1, "no jump");
+                i += 1;
+            }
+            out.push((now, g.update("m", tile, None, Some(ms(now)), Leg::plain(base)).0));
+            now += 4.0;
+        }
+        out
+    }
+
+    /// Whether the path is on the column x = 5 down to the corner row, then on row `y`: no diagonal.
+    fn is_clean_l(path: &[(f64, (f32, f32))], y: f32) -> bool {
+        path.iter().all(|(_, p)| p.0 == 5.0 || p.1 == y)
+    }
+
+    /// TURNFEEL1: with finish and quick, a press at any point in a leg draws an L at walk and run pace, and ends on the new
+    /// tile; cut draws the diagonal (what the options are there to compare).
+    #[test]
+    fn a_clean_corner_draws_an_l_and_a_cut_does_not() {
+        for base in [200.0, RUN_STEP_MS] {
+            for phase in [0.05, 0.25, 0.5, 0.75, 0.95] {
+                let press = base * phase;
+                for corner in [TurnCorner::Finish, TurnCorner::Quick] {
+                    let path = drawn_path(corner_feel(corner), base, &[((1, 0), press)], 1000.0);
+                    assert!(is_clean_l(&path, 4.0), "{corner:?} {base} {phase}");
+                    assert_eq!(path.last().unwrap().1, (6.0, 4.0), "{corner:?} ends on the tile");
+                }
+                let cut = drawn_path(corner_feel(TurnCorner::Cut), base, &[((1, 0), press)], 1000.0);
+                assert!(!is_clean_l(&cut, 4.0), "cut {base} {phase}");
+                assert_eq!(cut.last().unwrap().1, (6.0, 4.0));
+            }
+        }
+    }
+
+    /// When the new way starts: the finish at the leg's end, the quick finish at most `QUICK_FINISH_MS` after the press, and
+    /// no slower than the leg (a press near the end keeps the leg's own speed); then a full glide.
+    #[test]
+    fn the_new_way_starts_when_the_setting_says() {
+        let base = 200.0;
+        let start = |path: &[(f64, (f32, f32))]| path.iter().find(|(_, p)| p.0 > 5.0).expect("it turns").0;
+        for (press, finish, quick) in [(40.0, 200.0, 100.0), (100.0, 200.0, 160.0), (180.0, 200.0, 200.0)] {
+            let at = |c| start(&drawn_path(corner_feel(c), base, &[((1, 0), press)], 800.0));
+            assert!((at(TurnCorner::Finish) - finish).abs() <= 4.0, "finish at {press}: {}", at(TurnCorner::Finish));
+            assert!((at(TurnCorner::Quick) - quick).abs() <= 4.0, "quick at {press}: {}", at(TurnCorner::Quick));
+        }
+        let leg = corner_feel(TurnCorner::Quick).leg(WalkStep { base: 200.0, wall: 100.0 }, View::Square, (0, -1), (1, 0));
+        assert_eq!(leg.finish_cap, QUICK_FINISH_MS / 2.0, "the cap is on the animation clock");
+    }
+
+    /// Straight walking and a reversal with no turn pending draw the same under every setting; a reversal during a finish
+    /// goes back to the corner it had not reached, and no further; quick turns stack to no jump and end on the tile.
+    #[test]
+    fn straight_steps_and_reversals_stay_as_they_are() {
+        for steps in [vec![((0, -1), 80.0), ((0, -1), 280.0)], vec![((0, 1), 80.0)], vec![((0, 1), 80.0), ((0, -1), 120.0)]] {
+            let cut = drawn_path(corner_feel(TurnCorner::Cut), 200.0, &steps, 700.0);
+            for corner in [TurnCorner::Finish, TurnCorner::Quick] {
+                assert_eq!(cut, drawn_path(corner_feel(corner), 200.0, &steps, 700.0), "{corner:?} {steps:?}");
+            }
+        }
+        let back = drawn_path(corner_feel(TurnCorner::Finish), 200.0, &[((1, 0), 100.0), ((-1, 0), 150.0)], 600.0);
+        assert!(back.iter().all(|(_, p)| p.0 == 5.0), "never leaves the column");
+        assert_eq!(back.last().unwrap().1, (5.0, 4.0));
+        // a staircase of presses 30 ms apart: more cells behind than any reach, still a glide, and the drawn lag is bounded
+        let stairs: Vec<((i64, i64), f64)> = (0..16).map(|i| (if i % 2 == 0 { (1, 0) } else { (0, -1) }, 40.0 + i as f64 * 30.0)).collect();
+        for corner in [TurnCorner::Finish, TurnCorner::Quick] {
+            let path = drawn_path(corner_feel(corner), 200.0, &stairs, 2000.0);
+            assert_eq!(path.last().unwrap().1, (13.0, -4.0), "{corner:?}");
+            let most = path.windows(2).map(|w| cells_apart(w[0].1, w[1].1)).fold(0.0, f32::max);
+            assert!(most <= 1.0, "{corner:?}: {most} cells in a 4 ms frame is a jump");
+        }
+    }
+
+    /// During a finish the sprite faces the way it is going; from the corner on, the new way.
+    #[test]
+    fn the_sprite_turns_at_the_corner() {
+        let t0 = Instant::now();
+        let ms = |m: f64| t0 + Duration::from_millis(m as u64);
+        let feel = corner_feel(TurnCorner::Finish);
+        let step = WalkStep { base: 200.0, wall: 200.0 };
+        let mut g = Glide::default();
+        g.update("m", (5, 5), None, Some(t0), Leg::plain(200.0));
+        g.update("m", (5, 4), Some(t0), Some(t0), feel.leg(step, View::Square, (0, -1), (0, -1)));
+        assert_eq!(g.heading(t0), None, "no turn yet");
+        assert_eq!(g.corner_step("m", (5, 4), (6, 4), ms(50.0), feel.leg(step, View::Square, (0, -1), (1, 0))), Some(150.0));
+        assert_eq!(g.heading(ms(50.0)), Some((0, -1)));
+        assert_eq!(g.heading(ms(199.0)), Some((0, -1)));
+        assert_eq!(g.heading(ms(200.0)), None);
+    }
+
+    /// TURNFEEL1: a release build reads every option off; only `true` is on; an unknown corner is the cut.
+    #[test]
+    fn the_feel_counts_in_a_debug_build_only() {
+        let on = json!({TURN_BEAT_KEY: true, EQUAL_SPEED_KEY: true, TURN_CORNER_KEY: "quick"});
+        assert_eq!(WalkFeel::read(&on, true).corner, TurnCorner::Quick);
+        for c in TURN_CORNERS {
+            assert_eq!(TurnCorner::of_setting(&json!(c.name())), c);
+        }
+        for bad in [json!("sharp"), json!(2), Value::Null] {
+            assert_eq!(TurnCorner::of_setting(&bad), TurnCorner::Cut, "{bad}");
+        }
+        let on = json!({TURN_BEAT_KEY: true, EQUAL_SPEED_KEY: true});
+        assert_eq!(WalkFeel::read(&on, true), WalkFeel { beat: true, equal: true, corner: TurnCorner::Cut });
+        assert_eq!(WalkFeel::read(&on, false), WalkFeel::default(), "a release build");
+        assert_eq!(WalkFeel::read(&json!({TURN_BEAT_KEY: 1, EQUAL_SPEED_KEY: "true"}), true), WalkFeel::default());
+        assert_eq!(WalkFeel::read(&crate::screens::default_settings(), true), WalkFeel::default(), "the settings' default");
+    }
+
+    /// TURNFEEL1: with a delay the drawn position stands where the party had got to, then glides its full time from there;
+    /// the camera's `jumped` stays false; stacked turns stay a glide with the beat on.
+    #[test]
+    fn a_beat_stands_then_glides_with_no_jump() {
+        let t0 = Instant::now();
+        let at = |ms: u64| Some(t0 + Duration::from_millis(ms));
+        let step = WalkStep::read(&json!({}), false, true);
+        let beat = WalkFeel { beat: true, equal: false, corner: TurnCorner::Cut };
+        let leg = beat.leg(step, View::Square, (0, -1), (1, 0));
+        let mut g = Glide::default();
+        g.update("m", (5, 5), None, at(0), Leg::plain(200.0));
+        // from rest: stands through the beat, half way at beat + 100, there at beat + 200
+        assert_eq!(g.update("m", (6, 5), at(0), at(0), leg), ((5.0, 5.0), false));
+        assert_eq!(g.update("m", (6, 5), None, at(59), leg).0, (5.0, 5.0), "still in the beat");
+        assert_eq!(g.update("m", (6, 5), None, at(60), leg).0, (5.0, 5.0), "the glide starts");
+        assert_eq!(g.update("m", (6, 5), None, at(160), leg).0, (5.5, 5.0));
+        assert_eq!(g.update("m", (6, 5), None, at(260), leg).0, (6.0, 5.0), "its full time");
+        // a straight step on: no stand, and from the tile
+        let on = beat.leg(step, View::Square, (1, 0), (1, 0));
+        assert_eq!(g.update("m", (7, 5), at(260), at(310), on).0, (6.25, 5.0));
+        // a press half way: stands where it had got to, not on a tile
+        let turn = beat.leg(step, View::Square, (1, 0), (0, 1));
+        assert_eq!(g.update("m", (7, 6), at(360), at(360), turn).0, (6.5, 5.0));
+        assert_eq!(g.update("m", (7, 6), None, at(419), turn).0, (6.5, 5.0));
+        assert_eq!(g.update("m", (7, 6), None, at(620), turn).0, (7.0, 6.0));
+        // three quick turns inside one beat: more cells behind than the plain reach, still a glide
+        let mut x = Glide::default();
+        x.update("m", (0, 0), None, at(0), Leg::plain(200.0));
+        for (i, tile) in [(1, 0), (1, 1), (2, 1)].into_iter().enumerate() {
+            let (_, jumped) = x.update("m", tile, at(i as u64 * 10), at(i as u64 * 10), turn);
+            assert!(!jumped, "{tile:?}");
+        }
+        let mut y = Glide::default();
+        y.update("m", (0, 0), None, at(0), Leg::plain(200.0));
+        y.update("m", (9, 0), None, at(10), turn);
+        assert_eq!(y.position(t0 + Duration::from_millis(10)), (9.0, 0.0), "a tile far off is still a jump");
     }
 
     /// A bad or missing saved base is the default; the range's ends are good; a release build reads the default always.

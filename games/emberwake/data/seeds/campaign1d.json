@@ -1,0 +1,261 @@
+{
+ "steps": [
+  {
+   "op": "world",
+   "id": "sunk_ward",
+   "fields": {
+    "campaign": {
+     "start_act": 0,
+     "act_saves": true
+    },
+    "purse": {
+     "currency": {
+      "name": "Scrap",
+      "icon": "ui/hud/scrap.png",
+      "tip": "Salvaged iron: trade, the forge, bribes."
+     },
+     "upkeep": {
+      "name": "Warded Tallow",
+      "short": "Tallow",
+      "icon": "ui/hud/tallow.png",
+      "tip": "1 a day on the move or at rest. Without it every fight starts at -2 AP.",
+      "per_day": 1,
+      "at_zero": {
+       "road_pct": 100,
+       "start_ap": -2
+      }
+     }
+    },
+    "rest": {
+     "days": 1,
+     "cost": 1,
+     "where": "rest_places",
+     "on_enter": false,
+     "needs_upkeep": false
+    },
+    "defeat": {
+     "mode": "retreat",
+     "to": "sluice_undercroft",
+     "days": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "meters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "alert",
+    "name": "Inquisition Alert",
+    "description": "How closely the Iron Inquisition watches the Sunk Ward.",
+    "kind": "gauge",
+    "min": 0,
+    "max": 100,
+    "start": 0,
+    "unit": "%",
+    "visible": false,
+    "bands": [
+     {
+      "id": "guarded",
+      "name": "Guarded",
+      "from": 0,
+      "tone": "calm"
+     },
+     {
+      "id": "suspicious",
+      "name": "Suspicious",
+      "from": 31,
+      "tone": "warn"
+     },
+     {
+      "id": "lockdown",
+      "name": "Lockdown",
+      "from": 71,
+      "tone": "danger"
+     },
+     {
+      "id": "breach",
+      "name": "Breach",
+      "from": 100,
+      "tone": "fatal"
+     }
+    ],
+    "rules": [
+     {
+      "id": "a_suspicious",
+      "at": "suspicious",
+      "warn": "PLACEHOLDER: The Inquisition is Suspicious: gates are watched. Quiet jobs and bribes at Tess lower Alert."
+     },
+     {
+      "id": "a_lockdown",
+      "at": "lockdown",
+      "warn": "PLACEHOLDER: Lockdown: hunter packs roam the main roads."
+     },
+     {
+      "id": "a_last",
+      "at": 90,
+      "acts": [
+       1
+      ],
+      "warn": "PLACEHOLDER: One more loud job and they find the grate. The run would end."
+     },
+     {
+      "id": "a_breach_1",
+      "at": "breach",
+      "acts": [
+       1
+      ],
+      "effects": [
+       {
+        "effect": "end",
+        "kind": "fail",
+        "card": "extinguished_breach"
+       }
+      ]
+     }
+    ],
+    "inputs": [
+     {
+      "on": "battle",
+      "tags": [
+       "loud"
+      ],
+      "outcomes": [
+       "won"
+      ],
+      "delta": 8
+     },
+     {
+      "on": "battle",
+      "tags": [
+       "loud"
+      ],
+      "outcomes": [
+       "lost",
+       "fled"
+      ],
+      "delta": 4
+     },
+     {
+      "on": "battle",
+      "tags": [
+       "quiet"
+      ],
+      "outcomes": [
+       "won"
+      ],
+      "delta": 2
+     }
+    ],
+    "modifiers": [
+     {
+      "bands": [
+       "lockdown"
+      ],
+      "road_pct": 150
+     }
+    ],
+    "floors": [
+     {
+      "from_act": 2,
+      "min": 30
+     }
+    ],
+    "hud": {
+     "short": "Alert",
+     "icon": "ui/hud/alert.png",
+     "order": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "meters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "doom_clock",
+    "name": "The Red Tithing",
+    "description": "Days until the Inquisition's next tithing rite.",
+    "kind": "countdown",
+    "min": 0,
+    "max": 99,
+    "start": 99,
+    "unit": "days",
+    "visible": false,
+    "bands": [
+     {
+      "id": "due",
+      "name": "Due",
+      "from": 0,
+      "tone": "danger"
+     },
+     {
+      "id": "near",
+      "name": "Near",
+      "from": 1,
+      "tone": "warn"
+     },
+     {
+      "id": "far",
+      "name": "Far",
+      "from": 8,
+      "tone": "calm"
+     }
+    ],
+    "rules": [
+     {
+      "id": "d_week",
+      "at": 7,
+      "warn": "PLACEHOLDER: Seven days to the Red Tithing."
+     },
+     {
+      "id": "d_zero",
+      "at": 0,
+      "acts": [
+       1,
+       2
+      ],
+      "effects": [
+       {
+        "effect": "add_flag",
+        "key": "lesser_tithings",
+        "delta": 1
+       }
+      ],
+      "restart_days": 14
+     }
+    ],
+    "hud": {
+     "short": "Tithing",
+     "icon": "ui/hud/doom_clock.png",
+     "order": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "triggers",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "t_wiped",
+    "name": "The cell is wiped out",
+    "on": "any",
+    "when": [
+     {
+      "key": "roster.living",
+      "op": "<",
+      "value": 1
+     }
+    ],
+    "once": true,
+    "effects": [
+     {
+      "effect": "end",
+      "kind": "fail",
+      "card": "extinguished_wiped"
+     }
+    ]
+   }
+  }
+ ]
+}

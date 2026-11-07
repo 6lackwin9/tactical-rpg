@@ -5,6 +5,9 @@
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
 //!                [ruleset=classic|timeline] [rules=-id,+id]               RULESET1: its rules (default classic; a
 //!                                                                         timeline test fight without ruleset= notes it)
+//!   aegis rules [--contract]                                       BASERULES1-M: the ruleset tweak report (rules,
+//!                                                                  fields, bundles, tested sets, locked, this game's
+//!                                                                  rows); --contract: the stable surface only
 //! Data: the project's data/ folder (`data=<dir>`), read by the game's loader. A sim key given twice keeps its last
 //! value.
 
@@ -24,12 +27,14 @@ pub struct Emberwake;
 
 impl Game for Emberwake {
     type Content = emberwake_content::store::RpgContent;
-    const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id> [seed=N] [preset=balanced] [ruleset=classic|timeline] [rules=-id,+id] [log]";
+    const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id> [seed=N] [preset=balanced] [ruleset=classic|timeline] [rules=-id,+id] [log]
+aegis rules [--contract]   (the ruleset tweak report; --contract: tunable and locked, one line each)";
 
     fn run(&self, args: &Args) -> Option<Result<()>> {
         match (args.pos(0), args.pos(1)) {
             (Some("sim"), _) => Some(sim(args)),
             (Some("battle"), Some(_)) => Some(battle(args)),
+            (Some("rules"), _) => Some(rules(args)),
             _ => None,
         }
     }
@@ -98,6 +103,23 @@ fn data_dir(args: &Args) -> Result<PathBuf> {
     }
 }
 
+/// `aegis rules [--contract]` (BASERULES1-M): the kit's tweak report on the game's ruleset rows, or with `--contract`
+/// the stable surface alone (no data read).
+fn rules(args: &Args) -> Result<()> {
+    let fields = aegis_content::schema::fields(emberwake_content::source::schema(), "content", emberwake_rules::ruleset::KIND);
+    let lines = if args.flag("--contract") {
+        rpgkit_host::rules::contract(fields)
+    } else {
+        let cat = load_catalog(args)?;
+        let rows: Vec<emberwake_rules::ruleset::Ruleset> = cat.rulesets.values().map(emberwake_rules::ruleset::Ruleset::from_row).collect();
+        rpgkit_host::rules::report(fields, &rows)
+    };
+    for line in lines {
+        println!("{line}");
+    }
+    Ok(())
+}
+
 /// `aegis sim <mode> [level] [seeds] [key=value ...]`: the balance sim (emberwake_sim) on the game's data folder;
 /// prints what the sim prints, the time on stderr.
 fn sim(args: &Args) -> Result<()> {
@@ -126,6 +148,13 @@ fn battle(args: &Args) -> Result<()> {
     // RULESET1 3.1.3: a catalog encounter plays classic unless ruleset= picks one; rules= switches single extensions
     def.ruleset = emberwake_rules::ruleset::Ruleset::of(&cat, &args.key("ruleset", "")).map_err(anyhow::Error::msg)?;
     def.ruleset.adjust(&args.key("rules", "")).map_err(anyhow::Error::msg)?;
+    // BASERULES1-M: an adjusted set prints the register metadata's notes (it never refuses: the tools try things)
+    if args.keys.contains_key("rules") {
+        let n = def.ruleset.notes();
+        for note in n.errors.iter().chain(&n.warnings) {
+            eprintln!("rules: {note}");
+        }
+    }
     // RULESET1-G2: a timeline test fight stays classic by default (the catalog encounter default), with a note on stderr
     if let Some(note) = classic_test_fight_note(id, &entry, args.keys.contains_key("ruleset")) {
         eprintln!("{note}");

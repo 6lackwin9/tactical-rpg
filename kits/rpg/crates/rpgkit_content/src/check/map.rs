@@ -29,6 +29,8 @@ const LABEL_MAX: usize = 32;
 const NOTE_MAX: usize = 160;
 const FLAG_KEYS: [&str; 3] = ["requires_flags", "unless_flags", "sets_flags"];
 const TRIGGERS: [&str; 2] = ["touch", "proximity"];
+/// NPCFACE1: the ways a person's marker may face on the map (`down`, the default, is never stored).
+const FACES: [&str; 4] = ["down", "up", "left", "right"];
 /// PROPS1 1: props per map, the longest footprint side, the highest explicit variant.
 pub const PROPS_MAX: usize = 128;
 pub const PROP_SIDE_MAX: i64 = 16;
@@ -44,7 +46,7 @@ fn marker_kind(kind: &str) -> Option<Dict> {
         "exit" => d(&[("to", Value::from("")), ("to_anchor", Value::from(SPAWN)), ("locked_text", Value::from("The way is shut."))]),
         "encounter" => d(&[("encounter", Value::from("")), ("trigger", Value::from("touch")), ("radius", json::int(1)), ("once", Value::Bool(true))]),
         "roamer" => d(&[("encounter", Value::from("")), ("path", Value::from("")), ("radius", json::int(0)), ("once", Value::Bool(true))]),
-        "npc" => d(&[("character", Value::from(""))]),
+        "npc" => d(&[("character", Value::from("")), ("face", Value::from("down"))]),
         "chest" => d(&[("items", Value::Object(Dict::new())), ("loot", Value::from("")), ("gold", json::int(0)), ("supplies", json::int(0))]),
         "lore" => d(&[("lore", Value::from(""))]),
         "point" => Dict::new(),
@@ -361,7 +363,12 @@ fn marker_kind_errors(v: &View, w: &str, e: &Dict, t: &Dict, mid: &str, kind: &s
             }
             errors.extend(radius_once_errors(mid, m));
         }
-        "npc" => errors.extend(ref_key_errors(v, w, mid, "character", "characters", m)),
+        "npc" => {
+            errors.extend(ref_key_errors(v, w, mid, "character", "characters", m));
+            if !m["face"].as_str().is_some_and(|f| FACES.contains(&f)) {
+                errors.push(format!("Marker '{mid}': face must be one of {}.", FACES.join(", ")));
+            }
+        }
         "lore" => errors.extend(ref_key_errors(v, w, mid, "lore", "lore", m)),
         "chest" => errors.extend(chest_errors(v, w, mid, m)),
         _ => {}

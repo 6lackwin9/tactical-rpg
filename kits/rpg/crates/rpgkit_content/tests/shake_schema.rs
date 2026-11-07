@@ -15,13 +15,12 @@ use std::sync::Arc;
 
 const W: &str = "ward";
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_shake_schema_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_shake_schema_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds").join(W)).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -42,7 +41,8 @@ fn write_world_kind(data: &Path, kind: &str, entries: Value) {
 
 /// A world with one location and a vignette of two text cards.
 fn story_world(tag: &str) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     let manifest = json!({"id": W, "name": "Ward", "extends": [], "connects": [], "start_location": "hub", "version": 1});
     fs::write(aegis_content::world::manifest_path(&data, W), manifest.to_string()).unwrap();
     write_world_kind(&data, "locations", json!([{"id": "hub", "name": "Hub"}]));
@@ -132,7 +132,7 @@ fn encounter_errors(v: &check::View, phases: Value) -> Vec<String> {
 
 #[test]
 fn a_phase_shake_needs_one_known_preset_and_comes_once() {
-    let data = scratch("phase");
+    let (_scratch, data) = scratch("phase");
     catalog(&data, tremor(2, &[]));
     let v = store::view(&data);
     let base = encounter_errors(&v, tremor(2, &[]));
@@ -159,7 +159,8 @@ fn a_phase_shake_needs_one_known_preset_and_comes_once() {
 /// The battle of `quaking` with `phases`. The battle fixtures put the phase at round 1 (the check asks for 2 or later,
 /// the session fires whatever it is given), so it fires as the session starts.
 fn battle(phases: Value) -> Session {
-    let data = scratch("battle");
+    let (scratch_dir, data) = scratch("battle");
+    scratch_dir.until_thread_end();
     catalog(&data, phases);
     let src = source::load(&data);
     drop_scratch(&data);

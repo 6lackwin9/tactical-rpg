@@ -2,16 +2,15 @@
 //! referenced or not; a file that fails is reported with its path and the reason. Scratch layers under the temp dir.
 
 use aegis_core::assets::{self, Layers};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn write(path: &Path, text: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, text).unwrap();
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_palette_files_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn scratch(name: &str) -> aegis_core::scratch::Scratch {
+    let root = aegis_core::scratch::Scratch::vacant(&format!("palette_files_{name}"));
     root
 }
 
@@ -25,7 +24,7 @@ fn good_palettes_pass() {
     write(&root.join("units/warrior/base/palettes/red.json"), r##"{"slots": {"main": "#ff0000", "trim": "#E0B43C"}}"##);
     write(&root.join("units/warrior/goblin/palettes/blue.json"), r##"{"slots": {"main": "#2040c0"}}"##);
     write(&root.join("units/warrior/goblin/palettes/notes.txt"), "not a palette");
-    assert_eq!(assets::palette_problems(&Layers::of(vec![root.clone()])), Vec::<String>::new());
+    assert_eq!(assets::palette_problems(&Layers::of(vec![root.to_path_buf()])), Vec::<String>::new());
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -37,7 +36,7 @@ fn a_hex_value_without_its_hash_is_reported_with_its_path() {
     let raw: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     let reason = assets::parse_palette(&raw).unwrap_err();
     let want: Vec<String> = reason.iter().map(|r| format!("{}: {r}", shown(&file))).collect();
-    assert_eq!(assets::palette_problems(&Layers::of(vec![root.clone()])), want, "the loader's reason, prefixed by the path");
+    assert_eq!(assets::palette_problems(&Layers::of(vec![root.to_path_buf()])), want, "the loader's reason, prefixed by the path");
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -51,7 +50,7 @@ fn unreferenced_bad_palettes_in_every_layer_are_reported_in_order() {
     write(&game.join("units/brawler/goblin/palettes/torn.json"), r##"{"slots": {"main": "#1"##);
     write(&engine.join("units/rogue/base/palettes/zeta.json"), r##"{"slots": {"main": "#12345g"}}"##);
     write(&engine.join("units/rogue/base/palettes/fine.json"), r##"{"slots": {"main": "#123456"}}"##);
-    let layers = Layers::of(vec![game.clone(), engine.clone()]);
+    let layers = Layers::of(vec![game.to_path_buf(), engine.to_path_buf()]);
     assert!(layers.bodies().is_empty(), "no body references the palettes");
     let problems = assets::palette_problems(&layers);
     let files: Vec<String> = problems.iter().map(|p| p.split(".json: ").next().unwrap().to_string() + ".json").collect();

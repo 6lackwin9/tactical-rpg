@@ -53,7 +53,8 @@ pub fn family_skill(w: &World, c: UnitId, fam: &str) -> Option<SkillId> {
 
 /// The families of FU4's auto order before the intent filter: the deck's actives (under the deck rule the unit's
 /// active slots, RULESET1 9 D2; without a deck: every family the unit can use that is not a basic, in catalog order),
-/// then its meter skills (HOOKS1 UM6, rule unit_meters: in the order the battle gave them), then the basics (the
+/// then its meter skills (HOOKS1 UM6, rule unit_meters: in the order the battle gave them) and its worn items' skills
+/// (U3.2-S4, OFFHAND1), then the basics (the
 /// ruleset's `basics` in their order; a row without any: the catalog's basic skills).
 fn auto_families(w: &World, c: UnitId) -> Vec<String> {
     let basics: Vec<String> = if w.ruleset.numbers.basics.is_empty() { w.cat.basic_ids().iter().map(|id| w.cat.family_of(id).to_string()).collect() } else { w.ruleset.numbers.basics.clone() };
@@ -71,7 +72,8 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
             fams
         }
     };
-    for id in &w.units[c].meter_skills {
+    // U3.2-S4 (OFFHAND1): the worn items' skills too, open while worn
+    for id in w.units[c].meter_skills.iter().chain(&w.units[c].gear_skills) {
         let fam = w.cat.family_of(id).to_string();
         if !out.contains(&fam) {
             out.push(fam);
@@ -358,12 +360,15 @@ pub fn preview(w: &World, plan: &Plan, c: UnitId, intent: RoundIntent, kind: Opt
 }
 
 /// RULESET1_INTENT UI2 ("Rest: 1 AP, 10 poise"): what the Rest blocks of `c`'s plan would give: the AP at round end
-/// (RS2) and the poise their landing restores (RS3, rule `poise`; before the Max Poise cap).
+/// (RS2) and the poise their landing restores (RS3, rule `poise`; before the Max Poise cap). S2.2-S3 (FB-71): under
+/// `poise_mode` pips the pips instead (a pip per 2 Rest blocks, before the `poise_pips` cap; `poise` 0 there).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RestGain {
     pub blocks: i32,
     pub ap: i32,
     pub poise: i32,
+    /// S2.2-S3: the pips the Rest blocks restore under `poise_mode` pips (0 under `bar`).
+    pub pips: i32,
 }
 
 /// UI2: the Rest gain of `c`'s planned round (its compiled Rest entries; the Dojo's planner view uses it too).
@@ -375,8 +380,12 @@ pub fn rest_preview(w: &World, plan: &Plan, c: UnitId) -> RestGain {
 /// The Rest gain of `blocks` Rest blocks under the battle's ruleset.
 pub fn rest_of(w: &World, blocks: i32) -> RestGain {
     let n = &w.ruleset.numbers;
-    let poise = if w.ruleset.has(rpgkit_rules::ruleset::POISE) { n.rest_poise_per_block * blocks } else { 0 };
-    RestGain { blocks, ap: round_intent::rest_gain(n, blocks), poise }
+    let on = w.ruleset.has(rpgkit_rules::ruleset::POISE);
+    // S2.2-S3 (FB-71): by pips under poise_mode pips (from a round with no Rest landed, below the cap)
+    let pips_mode = crate::poise::pips_mode(n);
+    let poise = if on && !pips_mode { n.rest_poise_per_block * blocks } else { 0 };
+    let pips = if on { crate::poise::rest_pip_gain(n, 0, 0, blocks) } else { 0 };
+    RestGain { blocks, ap: round_intent::rest_gain(n, blocks), poise, pips }
 }
 
 /// PL6: the reason tag of each of `c`'s compiled entries (aligned with `Plan::entries_for`): a move entry a step
@@ -854,6 +863,8 @@ impl<'a> Builder<'a> {
                 } else if !meter.is_empty() {
                     why = meter;
                 } else if let Some(step) = self.follow_step(&st, sid) {
+                    // Decision "Auto-fill keeps a flank": only the fill (and the same step accepted from the ghost)
+                    step.stay.set(true);
                     let before = st.entries.len();
                     let p = plan.add_step(w, self.c, tagged(step, &format!("follow-up {}", k + 1), ""), false);
                     if p.is_empty() {
@@ -940,6 +951,11 @@ pub use crate::round_intent::Pick;
 /// PL6 reason tags of the picks (INPUT1 13): a plain move picked first, the step after.
 pub const MOVE_HERE: &str = "move here";
 pub const STEP_AFTER: &str = "step after";
+/// PL6 (VISCLAR1-D): the tag of the Rest blocks a step after left when the block it replaced was larger, before that
+/// block's name (`move_note`).
+pub const MOVE_REPLACED: &str = "rest: the move replaced ";
+/// VISCLAR1-D: the refusal of a skill, an item or the fill after the round's Move.
+pub const ONLY_REST: &str = "Only Rest after a Move";
 
 /// INPUT1 ET5: the round's one regular move, by what planned it (a carried move, a chase or a jump never counts).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -995,6 +1011,8 @@ pub struct PickOption {
     pub problem: Option<String>,
     pub ap_short: Option<i32>,
     pub drops: Vec<String>,
+    /// The target the picks go on (the menu's own, or for a `menu_options` cell the one its skill or item acts on).
+    pub at: RoundTarget,
 }
 
 /// A pick's refusal: its words and, for an AP refusal (IF6 d), how many AP short it is (INPUT1 AP3, AP8).
@@ -1064,6 +1082,7 @@ fn set_picks(w: &mut World, c: UnitId, picks: Vec<Pick>) {
         rs.maneuver = None;
         rs.maneuver_auto = false;
     }
+    rs.accepted.retain(|i| *i < picks.len());
     rs.picks = picks;
 }
 
@@ -1217,6 +1236,12 @@ fn set_up_picks(w: &mut World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Re
                     if cur != Some(i) {
                         return Err(format!("Only {} skills this round ({} set it)", cur.map_or_else(|| "other".to_string(), |c| c.label(&w.cat)), pick_name(w, &h)));
                     }
+                    // IF2: one Maneuver kind a round, as `pick_options` lists them
+                    let (_, kind) = row_meta(w, c, std::slice::from_ref(p));
+                    let cur_kind = round_intent::maneuver_of(w, c);
+                    if kind.is_some_and(|k| k != cur_kind) {
+                        return Err(format!("Only {} this round ({} set it)", crate::intent::maneuver_id(cur_kind), pick_name(w, &h)));
+                    }
                     let round = w.round_states.get(&c).and_then(|r| r.target);
                     let self_cast = i == RoundIntent::Guard || matches!(p, Pick::Skill { skill, .. } if w.cat.skills[*skill].target_mode == "SELF");
                     if let Some(r) = round.filter(|r| !same_target(w, *r, t, self_cast)) {
@@ -1274,6 +1299,9 @@ pub fn unpick(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), String>,
 /// (an area) or self, an item, a Rest block, a step after (an after-move); a move before a skill is the skill's implied
 /// move (no pick), a move with no skill after it in the accepted steps is "Move here" when it comes first.
 pub fn ghost_picks(w: &World, plan: &Plan, c: UnitId, upto: Option<usize>) -> Result<(RoundTarget, Vec<Pick>), String> {
+    if picks_of(w, c).iter().any(|p| matches!(p, Pick::StepAfter(_))) {
+        return Err(ONLY_REST.into());
+    }
     let steps = plan.steps_of(c);
     let ghosts = ghost_entries(w, plan, c);
     let entries = plan.entries_for(w, c);
@@ -1331,7 +1359,14 @@ pub fn accept_ghost(w: &mut World, plan: &mut Plan, c: UnitId, upto: Option<usiz
         Ok(x) => x,
         Err(e) => return (Err(e), Vec::new()),
     };
+    // decision "Auto-fill keeps a flank": what was filled plans as it was filled, so accepting moves no one
+    let from = picks_of(w, c).len();
+    let accepted = w.round_states.get(&c).map(|r| r.accepted.clone()).unwrap_or_default();
+    w.round_states.entry(c).or_default().accepted.extend(from..from + picks.len());
     let (r, later) = pick(w, plan, c, at, &picks);
+    if r.is_err() {
+        w.round_states.entry(c).or_default().accepted = accepted;
+    }
     (r.map(|()| picks.len()), later)
 }
 
@@ -1396,10 +1431,11 @@ fn rest_to(w: &World, plan: &mut Plan, c: UnitId, tag: &str, limit: i32) {
     }
 }
 
-/// GH1: marks `c`'s steps from index `from` on as ghost (the planner's), all but `keep` (the step after, a pick).
-fn mark_ghost(plan: &Plan, c: UnitId, from: usize, keep: Option<&Step>) {
+/// GH1: marks `c`'s steps from index `from` on as ghost (the planner's), all but `keep` (the step after and the Rest picked
+/// after it).
+fn mark_ghost(plan: &Plan, c: UnitId, from: usize, keep: &[Step]) {
     for (i, s) in plan.steps_of(c).iter().enumerate() {
-        s.ghost.set(i >= from && !keep.is_some_and(|k| Rc::ptr_eq(k, s)));
+        s.ghost.set(i >= from && !keep.iter().any(|k| Rc::ptr_eq(k, s)));
     }
 }
 
@@ -1408,16 +1444,11 @@ fn free_blocks(st: &SimState, limit: i32) -> i32 {
     (st.next_block..=limit).filter(|b| !st.blocked_blocks.contains_key(b)).count() as i32
 }
 
-/// The last block of the round that is not lost (the step after's block).
-fn last_free_block(st: &SimState) -> i32 {
-    (1..=st.total_blocks).rev().find(|b| !st.blocked_blocks.contains_key(b)).unwrap_or(st.total_blocks)
-}
-
-/// The step after held back for the round's last block (ET4, GH4): its pick index, step and AP.
+/// The step after, held back until the fill is built (ET4, GH4, VISCLAR1-D): its pick index, step and tile.
 struct After {
     index: usize,
     step: Step,
-    ap: i32,
+    cell: V2,
 }
 
 /// What `place` checks a pick's steps against: the last block it may use, the AP it must leave, and the blocks
@@ -1438,19 +1469,16 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
     let pays = w.pays_ap(c);
     let mv = w.book().lowest(Kind::Move);
     let mut after: Option<After> = None;
+    let mut rests_after: Vec<usize> = Vec::new();
     let opener_at = picks.iter().position(Pick::holds_target);
     for (i, p) in picks.iter().enumerate() {
         let st = plan.compile(w, c);
-        let (reserved, reserve_ap) = after.as_ref().map_or((0, 0), |a| (1, a.ap));
-        let limit = limit_of(&st, reserved);
+        let limit = limit_of(&st, 0);
         let free = free_blocks(&st, limit);
         let has_after = after.is_some();
-        let taken = |need: i32| {
-            let tail = if has_after && fits_before(&st, need, st.total_blocks) { format!(" (the step after takes B{})", last_free_block(&st)) } else { String::new() };
-            format!("Blocks {free} < {need}{tail}")
-        };
-        let room = Room { limit, reserve_ap, taken: &taken };
-        let ap_free = st.ap_left - reserve_ap;
+        let taken = |need: i32| format!("Blocks {free} < {need}");
+        let room = Room { limit, reserve_ap: 0, taken: &taken };
+        let ap_free = st.ap_left;
         let moved = regular_move(w, plan, c);
         let fail = |e: String| (i, Refusal::from(e));
         let refuse = |r: Refusal| (i, r);
@@ -1470,18 +1498,19 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                     return Err(fail(format!("{} is rooted this round and can't move.", w.units[c].name)));
                 }
                 let route = move_route(w, plan, c, st.pos, *cell).map_err(fail)?;
-                let mpb = w.units[c].move_per_block();
-                if route.len() as i32 > mpb {
-                    return Err(fail(format!("Too far for one move block: {} > {mpb}", route.len())));
+                let need = path::blocks_needed(&w.grid, st.pos, &route, w.units[c].move_per_block()) as i32;
+                let cap = w.ruleset.numbers.move_after_blocks;
+                if need > cap {
+                    return Err(fail(format!("Too far: {need} move blocks > {cap}")));
                 }
-                if free < 1 {
-                    return Err(fail("Blocks 0 < 1 (the picks fill the round)".into()));
+                if free < need {
+                    return Err(fail(format!("Blocks {free} < {need} (the picks fill the round)")));
                 }
                 let ap = if pays { route.len() as i32 } else { 0 };
                 if ap > ap_free {
                     return Err(refuse(Refusal::ap(ap_free, ap)));
                 }
-                after = Some(After { index: i, step: tagged(PlanStep::after_move(mv, *cell), STEP_AFTER, ""), ap });
+                after = Some(After { index: i, step: tagged(PlanStep::after_move_up_to(mv, *cell, cap), STEP_AFTER, ""), cell: *cell });
             }
             Pick::MoveHere(cell) => {
                 // ET2, ET3: a plain move, the round's first pick, while no move is planned
@@ -1505,6 +1534,8 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                 }
                 place(w, plan, c, vec![tagged(PlanStep::go_to(mv, *cell), MOVE_HERE, "")], true, &room).map_err(refuse)?;
             }
+            // VISCLAR1-D: Rest after the Move goes after it, once it is placed
+            Pick::Rest if has_after => rests_after.push(i),
             Pick::Rest => {
                 if free < 1 {
                     return Err(fail(taken(1)));
@@ -1513,25 +1544,31 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                 place(w, plan, c, vec![tagged(PlanStep::self_skill(rest), &format!("pick {}", i + 1), "")], false, &room).map_err(refuse)?;
             }
             Pick::Skill { .. } | Pick::Item(_) => {
+                if has_after {
+                    return Err(fail(ONLY_REST.into()));
+                }
                 let Some(b) = b.as_ref() else { return Err(fail("Pick a round intent first.".into())) };
                 let opener = opener_at == Some(i);
                 let tag = if opener { OPENER.to_string() } else { format!("pick {}", i + 1) };
                 // the opener brings its before-move (PL5) unless the round already moves (ET5)
                 let may_move = opener && moved.is_none();
-                let steps = b.pick_steps(plan, &st, p, may_move, &tag, ap_free, &room).map_err(refuse)?;
+                let accepted = !opener && w.round_states.get(&c).is_some_and(|r| r.accepted.contains(&i));
+                let steps = b.pick_steps(plan, &st, p, may_move, &tag, ap_free, &room, accepted).map_err(refuse)?;
+                if accepted {
+                    steps.iter().for_each(|s| s.stay.set(true));
+                }
                 place(w, plan, c, steps, may_move, &room).map_err(|e| if e.text == REACH { fail(b.reach_text(plan, &st, p)) } else { refuse(e) })?;
             }
         }
     }
     let mark = plan.steps_of(c).len();
-    let reserved = i32::from(after.is_some());
+    let mut rest_tag = REST.to_string();
     match b.as_ref().filter(|_| fills(w, c)) {
         Some(b) => {
-            // GH3: the fill (FU2, FU3), AS3's reserve unless a step after is picked or the round has its move (ET5)
-            let reserve = match &after {
-                Some(a) => Reserve { blocks: 1, ap: a.ap, step: None },
-                None => b.reserve(plan),
-            };
+            // GH3: the fill (FU2, FU3) and AS3's reserve (none once the round has its move: ET5). A step after does not
+            // refill the round: the fill stays as it was and the step takes the place of its last move or block
+            let mut reserve = b.reserve(plan);
+            let held_back = reserve.step.take_if(|_| after.is_some());
             // FL2: the first skill or item pick (the opener) chooses the follow-up list; an item reads the order
             let opener = opener_at.and_then(|i| match &picks[i] {
                 Pick::Skill { skill, .. } => Some(Opener::Skill(*skill)),
@@ -1541,21 +1578,64 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
             if let Some(step) = reserve.step {
                 let _ = plan.add_step(w, c, step, false);
             }
-            let tag = if cause.is_empty() { REST.to_string() } else { format!("{REST}: {cause}") };
-            rest_to(w, plan, c, &tag, limit_of(&plan.compile(w, c), reserved));
+            // a reserve larger than the step (a Disengage's jump) counts as the larger block it replaces
+            let held_back = held_back.filter(|_| reserve.blocks > 1).and_then(|s| s.skill).map(|s| w.cat.skills[s].name.clone());
+            let replaced = after.as_ref().and_then(|a| replace_last_fill(w, plan, c, mark, a.cell)).or(held_back);
+            rest_tag = match replaced {
+                Some(name) => format!("{MOVE_REPLACED}{name}"),
+                None if cause.is_empty() => REST.to_string(),
+                None => format!("{REST}: {cause}"),
+            };
         }
-        None => rest_to(w, plan, c, REST, limit_of(&plan.compile(w, c), reserved)),
+        None => {}
     }
+    // VISCLAR1-D: the Move goes in the first slot left, where the block it replaced would have started; only Rest follows
+    let mut kept: Vec<Step> = Vec::new();
     if let Some(a) = &after {
         let p = plan.add_step(w, c, a.step.clone(), false);
         if !p.is_empty() {
             plan.set_steps(c, Vec::new());
             return Err((a.index, p.into()));
         }
-        rest_to(w, plan, c, REST, w.total_blocks);
+        kept.push(a.step.clone());
+        let rest = w.book().lowest(Kind::Rest);
+        for &i in &rests_after {
+            let step = tagged(PlanStep::self_skill(rest), &format!("pick {}", i + 1), "");
+            let p = plan.add_step(w, c, step.clone(), false);
+            if !p.is_empty() {
+                plan.set_steps(c, Vec::new());
+                return Err((i, Refusal::from("Blocks 0 < 1 (the Move and its Rest fill the round)".to_string())));
+            }
+            kept.push(step);
+        }
     }
-    mark_ghost(plan, c, mark, after.as_ref().map(|a| &a.step));
+    rest_to(w, plan, c, &rest_tag, limit_of(&plan.compile(w, c), 0));
+    mark_ghost(plan, c, mark, &kept);
     Ok(())
+}
+
+/// VISCLAR1-D (the menu's Move): makes room for a Move to `cell` by taking the planner's last steps back (those from `mark`
+/// on), last first, until from the tile the steps left end on the route fits the cap, the free blocks and the AP (the removed
+/// steps' AP comes back). The names of the steps removed, in round order, when spare blocks are left beyond the Move's (they
+/// go to Rest); None when not.
+fn replace_last_fill(w: &World, plan: &mut Plan, c: UnitId, mark: usize, cell: V2) -> Option<String> {
+    let mut removed: Vec<String> = Vec::new();
+    let pays = w.pays_ap(c);
+    loop {
+        let st = plan.compile(w, c);
+        let free = free_blocks(&st, st.total_blocks);
+        let steps = plan.steps_of(c);
+        let need = move_route(w, plan, c, st.pos, cell).ok().map(|r| (path::blocks_needed(&w.grid, st.pos, &r, w.units[c].move_per_block()) as i32, r.len() as i32));
+        let fits = need.is_some_and(|(n, tiles)| n <= w.ruleset.numbers.move_after_blocks && n <= free && (!pays || tiles <= st.ap_left));
+        if fits || steps.len() <= mark {
+            removed.reverse();
+            let spare = free - need.map_or(0, |n| n.0);
+            return (!removed.is_empty() && spare > 0).then(|| removed.join(" and "));
+        }
+        let last = steps.len() - 1;
+        removed.extend(steps[last].skill.map(|s| w.cat.skills[s].name.clone()));
+        plan.remove_step(c, last);
+    }
 }
 
 /// GH3, ENCOUNTER2-C SR3: whether the ghost after `c`'s picks is the planner's fill: a scripted entry's own `fill`
@@ -1626,7 +1706,7 @@ impl Builder<'_> {
     /// The steps of a skill or item pick from the tile at `st` (IF6 a, c, d first: intent, blocks, AP): the opener's
     /// (with its before-move when `may_move`, PL5) or a follow-up's from where the plan leaves the unit.
     #[allow(clippy::too_many_arguments)]
-    fn pick_steps(&self, plan: &Plan, st: &SimState, p: &Pick, may_move: bool, tag: &str, ap_free: i32, room: &Room) -> Result<Vec<Step>, Refusal> {
+    fn pick_steps(&self, plan: &Plan, st: &SimState, p: &Pick, may_move: bool, tag: &str, ap_free: i32, room: &Room, accepted: bool) -> Result<Vec<Step>, Refusal> {
         let w = self.w;
         let u = &w.units[self.c];
         let pays = w.pays_ap(self.c);
@@ -1656,7 +1736,9 @@ impl Builder<'_> {
                     // the opener's own steps, tagged as PL5's (only the opener may move)
                     return Ok(self.skill_opener(plan, st, *sid)?);
                 }
-                if let Some(e) = self.reach_problem(plan, st, p) {
+                // decision "Auto-fill keeps a flank": what the ghost showed on its flank tile, accepted, needs no position
+                let keeps = accepted && carries(w, s) && self.kind != ManeuverKind::Disengage && self.target_unit().is_some_and(|t| round_intent::keeps_flank(w, t, st.pos, round_intent::diagonal(w, self.c, Some(s))));
+                if let Some(e) = self.reach_problem(plan, st, p).filter(|_| !keeps) {
                     return Err(e.into());
                 }
                 let Some(step) = self.follow_step(st, *sid) else { return Err(format!("{} can't act on {}", s.name, self.target_name()).into()) };
@@ -1767,9 +1849,14 @@ impl Builder<'_> {
 /// INPUT1 GH1: whether each of `c`'s compiled entries (aligned with `Plan::entries_for`) is ghost: the planner's after
 /// the picks; with no pick every entry of the planned round (its tactic's or intent's plan); lost blocks never.
 pub fn ghost_entries(w: &World, plan: &Plan, c: UnitId) -> Vec<bool> {
+    ghosts_of(w, plan, c, &plan.entries_for(w, c))
+}
+
+/// `ghost_entries` of `c`'s entries already compiled.
+fn ghosts_of(w: &World, plan: &Plan, c: UnitId, entries: &[crate::plan::PlanEntry]) -> Vec<bool> {
     let steps = plan.steps_of(c);
     let none = picks_of(w, c).is_empty();
-    plan.entries_for(w, c)
+    entries
         .iter()
         .map(|e| usize::try_from(e.step_index).ok().and_then(|i| steps.get(i)).is_some_and(|s| none || s.ghost.get()))
         .collect()
@@ -1807,7 +1894,7 @@ pub fn regular_move(w: &World, plan: &Plan, c: UnitId) -> Option<RegularMove> {
 pub fn ap_forecast(w: &World, plan: &Plan, c: UnitId) -> ApForecast {
     let u = &w.units[c];
     let entries = plan.entries_for(w, c);
-    let ghost = ghost_entries(w, plan, c);
+    let ghost = ghosts_of(w, plan, c, &entries);
     let (mut picked, mut filled) = (0, 0);
     for (e, g) in entries.iter().zip(&ghost) {
         if *g {
@@ -1880,8 +1967,29 @@ pub fn pick_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
     if held && !matches!(at, RoundTarget::Cell(_)) && round.is_some_and(|r| !same_target(w, r, at, at == RoundTarget::Myself)) {
         return Vec::new();
     }
+    let rows = menu_rows_on(w, c, at, held);
     let cur = round_intent::intent_of(w, c);
     let cur_kind = round_intent::maneuver_of(w, c);
+    let base = picked_cost(w, plan, c);
+    let mut out = Vec::new();
+    for (picks, row_at) in rows {
+        let (intent, kind) = row_meta(w, c, &picks);
+        // IF2: after the first pick only the round intent's (and kind's) rows, and no Move here (ET2)
+        let other = intent.is_some() && intent != cur;
+        let other_kind = intent == Some(RoundIntent::Maneuver) && kind.is_some_and(|k| k != cur_kind);
+        if held && (other || other_kind || picks.iter().any(|p| matches!(p, Pick::MoveHere(_)))) {
+            continue;
+        }
+        let o = option_of(w, plan, c, picks, row_at, base);
+        if !(held && o.problem.is_some()) {
+            out.push(o);
+        }
+    }
+    out
+}
+
+/// The picks IF2 lists for `c` on `at` by the target's kind, each with the target it goes on (`pick_options`, `menu_options`).
+fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<Pick>, RoundTarget)> {
     let skills = hotkey_skills(w, c);
     let intent_is = |s: &SkillDef, i: RoundIntent| round_intent::skill_intent(s) == i.id();
     let mut rows: Vec<(Vec<Pick>, RoundTarget)> = Vec::new();
@@ -1953,34 +2061,213 @@ pub fn pick_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         }
     }
     rows.push((vec![Pick::Rest], at));
+    rows
+}
+
+/// The intent and Maneuver kind a row's first skill or item pick sets.
+fn row_meta(w: &World, c: UnitId, picks: &[Pick]) -> (Option<RoundIntent>, Option<ManeuverKind>) {
+    let first = picks.iter().find(|p| p.holds_target());
+    let intent = first.and_then(|p| pick_intent_of(w, c, p));
+    let kind = match first {
+        Some(Pick::Skill { kind, .. }) if intent == Some(RoundIntent::Maneuver) => *kind,
+        Some(Pick::Item(_)) if intent == Some(RoundIntent::Maneuver) => Some(ManeuverKind::Utility),
+        _ => None,
+    };
+    (intent, kind)
+}
+
+/// One row of a menu: `picks` on `at` tried on copies (`base`: `picked_cost` before them).
+fn option_of(w: &World, plan: &Plan, c: UnitId, picks: Vec<Pick>, at: RoundTarget, base: (i32, i32)) -> PickOption {
+    let (intent, kind) = row_meta(w, c, &picks);
+    let held = picks_of(w, c).iter().any(Pick::holds_target);
+    let (problem, ap_short, ap, blocks) = match trial(w, plan, c, at, &picks) {
+        Ok((w2, p2)) => {
+            let now = picked_cost(&w2, &p2, c);
+            (None, None, now.0 - base.0, now.1 - base.1)
+        }
+        Err(e) => (Some(e.text), e.ap_short, 0, 0),
+    };
+    let drops = intent.filter(|_| !held).map(|i| round_intent::would_drop(w, c, i)).unwrap_or_default();
+    PickOption { picks, intent, kind, ap, blocks, problem, ap_short, drops, at }
+}
+
+/// VISCLAR1-D (decisions "Battle view answers, part 2", "Intent framework answers"): the icon menu's cells for `c`, the same
+/// list in the same order whatever the target and the picks so far, so nothing shifts when an opener fixes the intent: each
+/// of `c`'s skills in hotkey order (a Maneuver attack that carries a move once per kind, Engage then Disengage), its pouch
+/// items, Rest, and on a tile the move there (`Pick::MoveHere` first in a round, `Pick::StepAfter` after a skill). A cell is
+/// lit only when `pick_options` has it on `at`; else it carries why (`target_hint` for the wrong kind of target). Empty as
+/// `pick_options` is: a unit other than the round target a pick holds.
+pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<PickOption> {
+    if !round_intent::on(w) || !w.units[c].is_active() {
+        return Vec::new();
+    }
+    let at = round_intent::normalize(c, at);
+    let held = picks_of(w, c).iter().any(Pick::holds_target);
+    let round = w.round_states.get(&c).and_then(|r| r.target);
+    if held && !matches!(at, RoundTarget::Cell(_)) && round.is_some_and(|r| !same_target(w, r, at, at == RoundTarget::Myself)) {
+        return Vec::new();
+    }
+    let rows = menu_rows_on(w, c, at, held);
     let base = picked_cost(w, plan, c);
+    let cell = |p: Pick, same: &dyn Fn(&Pick) -> bool| -> PickOption {
+        if let Some((r, t)) = rows.iter().find(|(r, _)| r.last().is_some_and(same) && !(held && r.len() > 1)) {
+            return option_of(w, plan, c, r.clone(), *t, base);
+        }
+        // no row on this target: after an opener the pick's own refusal ("Only Assault skills"), else what it needs
+        let why = if held { option_of(w, plan, c, vec![p.clone()], at, base).problem } else { None };
+        let (intent, kind) = row_meta(w, c, std::slice::from_ref(&p));
+        let problem = why.unwrap_or_else(|| target_hint(w, c, &p));
+        PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), ap_short: None, drops: Vec::new(), at }
+    };
     let mut out = Vec::new();
-    for (picks, row_at) in rows {
-        let first = picks.iter().find(|p| p.holds_target()).cloned();
-        let intent = first.as_ref().and_then(|p| pick_intent_of(w, c, p));
-        let kind = match first {
-            Some(Pick::Skill { kind, .. }) if intent == Some(RoundIntent::Maneuver) => kind,
-            Some(Pick::Item(_)) if intent == Some(RoundIntent::Maneuver) => Some(ManeuverKind::Utility),
-            _ => None,
+    for sid in hotkey_skills(w, c) {
+        let s = &w.cat.skills[sid];
+        let kinds: &[Option<ManeuverKind>] = match (round_intent::skill_intent(s) == RoundIntent::Maneuver.id(), skill::kind(s)) {
+            (true, Kind::Disengage) => &[Some(ManeuverKind::Disengage)],
+            (true, Kind::Attack) if carries(w, s) && !skill::is_area(s) => &[Some(ManeuverKind::Engage), Some(ManeuverKind::Disengage)],
+            (true, Kind::Attack) => &[Some(ManeuverKind::Engage)],
+            _ => &[None],
         };
-        // IF2: after the first pick only the round intent's (and kind's) rows, and no Move here (ET2)
-        let other = intent.is_some() && intent != cur;
-        let other_kind = intent == Some(RoundIntent::Maneuver) && kind.is_some_and(|k| k != cur_kind);
-        if held && (other || other_kind || picks.iter().any(|p| matches!(p, Pick::MoveHere(_)))) {
-            continue;
+        for &kind in kinds {
+            // the kit's row of this cell: the same skill, and for Maneuver the same side of Disengage
+            let same = |r: &Pick| matches!(r, Pick::Skill { skill, kind: k } if *skill == sid && (*k == Some(ManeuverKind::Disengage)) == (kind == Some(ManeuverKind::Disengage)));
+            out.push(cell(Pick::Skill { skill: sid, kind }, &same));
         }
-        let (problem, ap_short, ap, blocks) = match trial(w, plan, c, row_at, &picks) {
-            Ok((w2, p2)) => {
-                let now = picked_cost(&w2, &p2, c);
-                (None, None, now.0 - base.0, now.1 - base.1)
-            }
-            Err(e) => (Some(e.text), e.ap_short, 0, 0),
-        };
-        if held && problem.is_some() {
-            continue;
+    }
+    for id in command::pouch_ids(w, c) {
+        if command::pouch_item(w, c, &id).is_some_and(|i| i.offered_in_battle()) {
+            let same = |r: &Pick| matches!(r, Pick::Item(x) if *x == id);
+            out.push(cell(Pick::Item(id.clone()), &same));
         }
-        let drops = intent.filter(|_| !held).map(|i| round_intent::would_drop(w, c, i)).unwrap_or_default();
-        out.push(PickOption { picks, intent, kind, ap, blocks, problem, ap_short, drops });
+    }
+    out.push(option_of(w, plan, c, vec![Pick::Rest], at, base));
+    if let RoundTarget::Cell(p) = at {
+        // the fade is wider than the pick's own rule: a dash has moved the unit too, though ET5 lets a step follow it
+        let mut o = option_of(w, plan, c, vec![if held { Pick::StepAfter(p) } else { Pick::MoveHere(p) }], at, base);
+        if let Some(why) = move_refusal(w, plan, c).filter(|_| o.problem.is_none()) {
+            o = PickOption { problem: Some(why), ap: 0, blocks: 0, ..o };
+        }
+        out.push(o);
     }
     out
+}
+
+/// VISCLAR1-D (decision "Intent framework answers"): what a cell greyed for the kind of target needs.
+fn target_hint(w: &World, c: UnitId, p: &Pick) -> String {
+    let needs = match p {
+        Pick::Skill { skill, .. } => {
+            let s = &w.cat.skills[*skill];
+            match round_intent::skill_intent(s) {
+                i if i == RoundIntent::Guard.id() || self_only(s) => "yourself",
+                i if i == RoundIntent::Support.id() && s.target_mode == "ALLY" => "an ally",
+                i if i == RoundIntent::Support.id() => "yourself or an ally",
+                _ if skill::is_area(s) => "an enemy or a tile",
+                _ => "an enemy",
+            }
+        }
+        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| i.aims_at_foes()) => "an enemy",
+        Pick::Item(_) => "yourself or an ally",
+        _ => "a tile",
+    };
+    format!("Target {needs} to use this")
+}
+
+/// VISCLAR1-D: one tile the menu's Move can go to now, what it takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MoveTile {
+    pub cell: V2,
+    pub blocks: i32,
+    pub ap: i32,
+    /// The filled skills this tile takes back, in round order ("": none): a far tile can cost more than the last block.
+    pub drops: String,
+}
+
+/// The skills in `before` that `after` no longer has, in round order, joined for a note (Move and Rest do not count).
+fn dropped_fill(w: &World, before: &Plan, after: &Plan, c: UnitId) -> String {
+    let skills = |p: &Plan| -> Vec<SkillId> {
+        p.steps_of(c).iter().filter_map(|s| s.skill).filter(|s| !matches!(skill::kind(&w.cat.skills[*s]), Kind::Move | Kind::Rest)).collect()
+    };
+    let mut left = skills(after);
+    let mut gone = Vec::new();
+    for s in skills(before) {
+        match left.iter().position(|x| *x == s) {
+            Some(i) => {
+                left.remove(i);
+            }
+            None => gone.push(w.cat.skills[s].name.clone()),
+        }
+    }
+    gone.join(" and ")
+}
+
+/// VISCLAR1-D: the tiles the menu's Move reaches now under its cap and the AP, each tried as the pick (empty when
+/// `move_refusal` says no): what the board marks while the Move waits for its tile.
+pub fn move_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<MoveTile> {
+    if move_refusal(w, plan, c).is_some() || !w.has(c) {
+        return Vec::new();
+    }
+    let held = picks_of(w, c).iter().any(Pick::holds_target);
+    let from = w.pos(c);
+    let reach = w.units[c].move_per_block() * if held { w.ruleset.numbers.move_after_blocks } else { 2 };
+    let base = picked_cost(w, plan, c);
+    let mut out = Vec::new();
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            let cell = V2::new(x, y);
+            if cell == from || cell.dist(from) > reach || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || w.occupant(cell).is_some() {
+                continue;
+            }
+            let o = option_of(w, plan, c, vec![if held { Pick::StepAfter(cell) } else { Pick::MoveHere(cell) }], RoundTarget::Cell(cell), base);
+            if o.problem.is_none() {
+                let drops = trial(w, plan, c, o.at, &o.picks).map_or_else(|_| String::new(), |(_, after)| dropped_fill(w, plan, &after, c));
+                out.push(MoveTile { cell, blocks: o.blocks, ap: o.ap, drops });
+            }
+        }
+    }
+    out
+}
+
+/// VISCLAR1-D: why the menu's Move cannot be taken now whatever the tile (None: it can): the unit has moved this round
+/// (a picked move, or the opener's own walk or dash), a step after is picked, a pick other than a skill came first, the
+/// picks fill the round, no AP is left after them, or it is rooted. The planner's own moves in the ghost do not count: a
+/// Move replaces them.
+pub fn move_refusal(w: &World, plan: &Plan, c: UnitId) -> Option<String> {
+    let picks = picks_of(w, c);
+    if picks.iter().any(|p| matches!(p, Pick::StepAfter(_))) {
+        return Some("One step after a round".into());
+    }
+    let st = plan.compile(w, c);
+    if !picks.is_empty() {
+        if !picks.iter().any(Pick::holds_target) {
+            return Some("Move here comes first in a round".into());
+        }
+        let steps = plan.steps_of(c);
+        let entries = plan.entries_for(w, c);
+        let picked = |e: &crate::plan::PlanEntry| usize::try_from(e.step_index).ok().and_then(|i| steps.get(i)).is_some_and(|s| !s.ghost.get());
+        if entries.iter().any(|e| picked(e) && skill::kind(&w.cat.skills[e.skill]) == Kind::Move) {
+            let label = regular_move(w, plan, c).map_or("a move", RegularMove::label);
+            return Some(format!("Already moved this round ({label})"));
+        }
+        if entries.iter().any(|e| picked(e) && e.pos_before != e.pos_after) {
+            return Some("Already moved this round (a dash)".into());
+        }
+        if entries.iter().all(picked) && free_blocks(&st, st.total_blocks) == 0 {
+            return Some("Blocks 0 < 1 (the picks fill the round)".into());
+        }
+    }
+    let ap_free = w.units[c].ap - picked_cost(w, plan, c).0;
+    if w.pays_ap(c) && ap_free < 1 {
+        return Some(format!("AP {} < 1", ap_free.max(0)));
+    }
+    st.rooted.then(|| format!("{} is rooted this round and can't move.", w.units[c].name))
+}
+
+/// VISCLAR1-D: the strip's note when `c`'s Move replaced a block larger than its own: "Move replaces <skill>: <n> blocks
+/// left as Rest" (the Rest blocks tagged `MOVE_REPLACED`); None otherwise.
+pub fn move_note(plan: &Plan, c: UnitId) -> Option<String> {
+    let steps = plan.steps_of(c);
+    let mut tags = steps.iter().filter_map(|s| s.reason.strip_prefix(MOVE_REPLACED));
+    let name = tags.next()?;
+    let n = tags.count() + 1;
+    Some(format!("Move replaces {name}: {n} block{} left as Rest", if n == 1 { "" } else { "s" }))
 }

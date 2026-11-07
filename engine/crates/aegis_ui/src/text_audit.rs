@@ -7,8 +7,8 @@
 use crate::painter::TextRec;
 use serde_json::{json, Value};
 
-/// How much two text boxes must share to count as overlapping: more than this many logical px across, and more than
-/// this share of the shorter line's height down.
+/// How much two text boxes must share to count as overlapping: more than this many old units across, and more than this
+/// share of the shorter line's height down.
 pub const OVERLAP_X: f32 = 1.0;
 pub const OVERLAP_Y: f32 = 0.35;
 /// Problems listed per kind (the counts are always complete).
@@ -22,14 +22,21 @@ fn at(r: &TextRec) -> Value {
 /// cut: [{text, shown, at}], edge: [{text, at}], overlap: [{a, b, at_a, at_b}], spill: [{text, widget, at}], counts}.
 /// A spill is text that starts inside a control (the smallest one holding its first letter) and runs past its edge.
 pub fn issues(recs: &[TextRec], w: f32, h: f32, boxes: &[(String, f32, f32, f32, f32)]) -> Value {
+    issues_on(recs, w, h, boxes, 1)
+}
+
+/// `issues` for a screen on a grid of `g` units per old unit (`View::g`): every tolerance is a length, so it scales with
+/// the unit, and a shadow drawn one old unit away stays a shadow.
+pub fn issues_on(recs: &[TextRec], w: f32, h: f32, boxes: &[(String, f32, f32, f32, f32)], g: i32) -> Value {
+    let u = g.max(1) as f32;
     let live: Vec<&TextRec> = recs.iter().filter(|r| !r.clipped && !r.covered && !r.transient).collect();
     let mut spill = Vec::new();
-    let off_canvas = |r: &TextRec| r.x < -0.5 || r.y < -0.5 || r.x + r.w > w + 0.5 || r.y + r.h > h + 0.5;
+    let off_canvas = |r: &TextRec| r.x < -0.5 * u || r.y < -0.5 * u || r.x + r.w > w + 0.5 * u || r.y + r.h > h + 0.5 * u;
     for r in live.iter().filter(|r| !off_canvas(r)) {
-        let (px, py) = (r.x + 1.0, r.y + r.h / 2.0);
+        let (px, py) = (r.x + u, r.y + r.h / 2.0);
         let holder = boxes.iter().filter(|b| px >= b.1 && px <= b.1 + b.3 && py >= b.2 && py <= b.2 + b.4).min_by(|a, b| (a.3 * a.4).total_cmp(&(b.3 * b.4)));
         if let Some((id, bx, by, bw, bh)) = holder {
-            if r.x + r.w > bx + bw + 1.0 || r.y + r.h > by + bh + 2.0 {
+            if r.x + r.w > bx + bw + u || r.y + r.h > by + bh + 2.0 * u {
                 spill.push(json!({"text": r.text, "widget": id, "at": at(r), "box": [bx, by, bw, bh]}));
             }
         }
@@ -44,12 +51,12 @@ pub fn issues(recs: &[TextRec], w: f32, h: f32, boxes: &[(String, f32, f32, f32,
     for (i, a) in live.iter().enumerate() {
         for b in &live[i + 1..] {
             // the same text drawn twice in place (an outline or a shadow) is not a collision
-            if a.text == b.text && (a.x - b.x).abs() < 1.5 && (a.y - b.y).abs() < 1.5 {
+            if a.text == b.text && (a.x - b.x).abs() < 1.5 * u && (a.y - b.y).abs() < 1.5 * u {
                 continue;
             }
             let ix = (a.x + a.w).min(b.x + b.w) - a.x.max(b.x);
             let iy = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
-            if ix > OVERLAP_X && iy > OVERLAP_Y * a.h.min(b.h) {
+            if ix > OVERLAP_X * u && iy > OVERLAP_Y * a.h.min(b.h) {
                 overlap.push(json!({"a": a.text, "b": b.text, "at_a": at(a), "at_b": at(b)}));
             }
         }

@@ -124,7 +124,7 @@ pub struct RegionMap {
     /// The leader's clips (`walk` / `idle`), the clock time of the last step that moved the party, and the facing
     /// (side view, left after a step to the left until a step to the right; DIR4-M adds up and down).
     leader: ClipPlayer,
-    moved_at: Option<f64>,
+    moved_at: Option<(f64, f64)>,
     leader_face: Facing,
     /// The sprites drawn last frame (agent link `state.sprites`, tests).
     sprites: Vec<Value>,
@@ -143,6 +143,11 @@ pub struct RegionMap {
     frame_at: Option<Instant>,
     /// The scheduled time of a step taken since the last frame.
     step_at: Option<Instant>,
+    /// That step's times (TURNFEEL1).
+    leg: mapview::Leg,
+    /// When the last step was taken (`state.walk_feel`, under `camera_trail` as it is a clock reading: what a render
+    /// measures a turn from).
+    last_step: Option<Instant>,
     /// The party's drawn position and the camera over frames.
     glide: mapview::Glide,
     follow: mapview::Follow,
@@ -279,6 +284,8 @@ impl RegionMap {
             ground: MapGround::default(),
             frame_at: None,
             step_at: None,
+            leg: mapview::Leg::plain(0.0),
+            last_step: None,
             glide: mapview::Glide::default(),
             follow: mapview::Follow::default(),
             cam: CamShot::default(),
@@ -295,6 +302,17 @@ impl RegionMap {
         } else {
             now
         }
+    }
+
+    /// A step in `dir` is taken at `at`: its times, and when the next one comes (TURNFEEL1: it waits out this one's beat
+    /// and glide; a key press does not wait, so a turn answers at once and only the drawn glide starts later). Before the
+    /// step: it turns the party, and the beat asks which way it faced.
+    fn plan_step(&mut self, cx: &Cx, at: Instant, dir: Pos) {
+        let view = mapview::View::of_setting(&cx.settings.v["region_view"]);
+        self.leg = mapview::WalkFeel::of(&cx.settings.v).leg(self.step, view, self.facing, dir);
+        self.step_at = Some(at);
+        self.last_step = Some(at);
+        self.next_walk = at + self.leg.gap();
     }
 
     fn talking(&self) -> bool {
@@ -322,7 +340,14 @@ impl RegionMap {
         let from = cx.gs().position;
         let res = explore::step(&d, cx.gs_mut(), dir);
         if cx.gs().position != from {
-            self.moved_at = Some(self.anim_ms);
+            // TURNFEEL1: a clean corner plays the rest of the leg first; the next step and the walk clip wait for it
+            let to = cx.gs().position;
+            let corner = self.step_at.and_then(|at| self.glide.corner_step(&cx.gs().location_id, from, to, at, self.leg));
+            if let Some(wait) = corner {
+                self.next_walk += std::time::Duration::from_secs_f64(wait / 1000.0);
+                self.leg.anim += wait * self.step.base / self.step.wall;
+            }
+            self.moved_at = Some((self.anim_ms, self.leg.anim));
             self.pan = None;
         }
         if !json::b(&res, "ok", false) {
@@ -414,8 +439,7 @@ impl RegionMap {
         if self.hold && self.walk.is_empty() && !self.modal() {
             if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
                 let at = self.step_time(now);
-                self.next_walk = at + self.step.gap();
-                self.step_at = Some(at);
+                self.plan_step(cx, at, dir);
                 let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
                 if t.is_empty() || !self.step(cx, dir) {
                     self.hold = false;
@@ -427,9 +451,8 @@ impl RegionMap {
             return;
         }
         let at = self.step_time(now);
-        self.next_walk = at + self.step.gap();
-        self.step_at = Some(at);
         let dir = self.walk.remove(0);
+        self.plan_step(cx, at, dir);
         if !self.step(cx, dir) {
             self.walk.clear();
             self.walk_target = None;
@@ -442,9 +465,10 @@ impl RegionMap {
         }
     }
 
-    /// Whether the leader walks at the clock's now: on a walked path, or within a step and `WALK_LINGER_MS` of the last step.
+    /// Whether the leader walks at the clock's now: on a walked path, or within a step and `WALK_LINGER_MS` of the last step
+    /// (that step's own time: Shift pressed during it must not end it early, TURNFEEL1).
     fn moving(&self) -> bool {
-        !self.walk.is_empty() || self.moved_at.is_some_and(|t| self.anim_ms - t < self.step.base + WALK_LINGER_MS)
+        !self.walk.is_empty() || self.moved_at.is_some_and(|(t, step)| self.anim_ms - t < step + WALK_LINGER_MS)
     }
 
     fn interact(&mut self, cx: &mut Cx, dir: Pos) {
@@ -879,7 +903,9 @@ impl Screen<GameCx> for RegionMap {
             // REGIONVIEW1: the party's drawn position, and what the camera looks at (MAPNAV1-U: outside a talk the panned
             // tile, a legend row or an edge arrow, when set); the party's glide always counts, the pan and talk ease
             let scale = ui.p.v.s;
-            let (drawn, jumped) = self.glide.update(&gs.location_id, gs.position, self.step_at.take(), self.frame_at, self.step.wall);
+            let step_at = self.step_at.take();
+            let leg = if step_at.is_some() { self.leg } else { mapview::Leg::plain(self.step.wall) };
+            let (drawn, jumped) = self.glide.update(&gs.location_id, gs.position, step_at, self.frame_at, leg);
             let tile_at = |p: Pos| (p.0 as f32, p.1 as f32);
             let (look, at) = match (talk_view.as_ref(), self.pan) {
                 (Some(v), _) => {
@@ -1018,8 +1044,10 @@ impl Screen<GameCx> for RegionMap {
                         top = mapview::sprite_rect(r);
                     }
                     // facing the party while in the conversation (four ways, DIR4-M: up or down when the party is
-                    // more above or below, keeping the sheets' right); else the sheets' right
-                    let face = if talk_tiles.contains(&at) { Facing::default().toward((gs.position.0 - at.0) as i32, (gs.position.1 - at.1) as i32) } else { Facing::default() };
+                    // more above or below, keeping their left or right); else the row's `face`, down by default
+                    // (NPCFACE1; a body with no down row keeps its side view)
+                    let rest = explore::marker_facing(&m);
+                    let face = if talk_tiles.contains(&at) { rest.toward((gs.position.0 - at.0) as i32, (gs.position.1 - at.1) as i32) } else { rest };
                     npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
@@ -1083,6 +1111,8 @@ impl Screen<GameCx> for RegionMap {
             let (leader_body, leader_palette) = leader_art(cx);
             let leader_sprite = cx.art.first_body(&emberwake_content::art::body_chain(&leader_body));
             let base = if self.moving() { "walk" } else { "idle" };
+            // TURNFEEL1: while a turn finishes its leg the sprite faces the way it still goes
+            let leader_shown = self.frame_at.and_then(|at| self.glide.heading(at)).map_or(self.leader_face, |d| self.leader_face.toward(d.0, d.1));
             self.leader.set_base(base, now);
             let drawn_party = if leader_sprite.is_some() { mapview::sprite_rect(pr) } else { pr };
             let order = crate::props::sorted(&props, &blocks, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), drawn_party);
@@ -1100,7 +1130,7 @@ impl Screen<GameCx> for RegionMap {
                     }
                     Item::Party => {
                         ui.p.v = party_view;
-                        let sprite = leader_sprite.as_deref().and_then(|b| draw_sprite(&mut ui, cx, b, &leader_palette, &self.leader, now, self.leader_face, pr, crate::props::PARTY));
+                        let sprite = leader_sprite.as_deref().and_then(|b| draw_sprite(&mut ui, cx, b, &leader_palette, &self.leader, now, leader_shown, pr, crate::props::PARTY));
                         match sprite {
                             Some(sp) => {
                                 sprites.push(sp.info("party"));
@@ -1249,8 +1279,9 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
-        // VIEWKEYS1, VIEWKEYS2: a debug build's F6 (map zoom), F11 (walk step) and F9 (window size), whatever is open
-        if crate::viewkeys::zoom_key(cx, k) || crate::viewkeys::walk_key(cx, k) || crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Log) {
+        // VIEWKEYS1, VIEWKEYS2, TURNFEEL1: a debug build's F6 (map zoom), F11 (walk step), F10 (walk feel), F5 (turn corner) and
+        // F9 (window size), whatever is open
+        if crate::viewkeys::zoom_key(cx, k) || crate::viewkeys::walk_key(cx, k) || crate::viewkeys::feel_key(cx, k) || crate::viewkeys::corner_key(cx, k) || crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Log) {
             return;
         }
         // EXPLOREVIEW1: a debug build's F7 flips the region view live, whatever is open
@@ -1290,9 +1321,8 @@ impl Screen<GameCx> for RegionMap {
                 self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
                 // the frame's clock: the press moves from this frame on, and the steps chain from it
                 let at = self.frame_at.unwrap_or_else(Instant::now);
-                self.step_at = Some(at);
+                self.plan_step(cx, at, dir);
                 self.hold = self.step(cx, dir);
-                self.next_walk = at + self.step.gap();
             }
         } else if k == Key::Char('e') || k == Key::Enter {
             let dir = self.facing;
@@ -1328,7 +1358,10 @@ impl Screen<GameCx> for RegionMap {
 
     fn state(&self, cx: &Cx) -> Value {
         let gs = cx.gs();
+        let feel = mapview::WalkFeel::of(&cx.settings.v);
         json!({"location": gs.location_id, "position": [gs.position.0, gs.position.1], "facing": [self.facing.0, self.facing.1],
+            // TURNFEEL1: the feel options and the last step's times (wall ms)
+            "walk_feel": {"turn_beat": feel.beat, "equal_speed": feel.equal, "corner": feel.corner.name(), "step_at_ms": self.last_step.filter(|_| cx.settings.v["camera_trail"] == json!(true)).map(|t| t.saturating_duration_since(self.opened_at).as_secs_f64() * 1000.0), "glide_ms": self.leg.glide, "delay_ms": self.leg.delay},
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
@@ -3135,12 +3168,75 @@ mod sprite_tests {
             map.end_talk(cx);
             frame(map, cx, &mut g, 1.0);
             let after = sprite(map, cx, them["id"].as_str().unwrap_or("")).expect("still drawn");
-            assert_eq!((after["left"].clone(), after["facing"].clone()), (json!(false), json!("side")), "out of the conversation the sheets face right");
+            // NPCFACE1: out of the conversation back to the row's facing (down by default)
+            let loc = cx.data.resolve(&cx.gs().world_id, "locations", &cx.gs().location_id);
+            let t = explore::template_of(&cx.data, loc);
+            let steps = cx.gs().explore_int("loc_steps");
+            let rest = explore::markers_of(loc).iter().find(|m| explore::marker_pos(t, m, steps) == npc).map(explore::marker_facing).expect("their marker");
+            assert_eq!((after["left"].clone(), after["facing"].clone()), (json!(rest.left), json!(view_name(rest.view))), "out of the conversation they rest as their row says");
             true
         });
         println!("conversations checked (left, right, down or up): {sides:?}");
         assert!(n > 0, "someone on a map of the world talks");
         assert!(sides.0 > 0 && sides.1 > 0 && sides.2 > 0, "talked to from both sides and from above or below: {sides:?}");
+    }
+
+    /// NPCFACE1 under both region views: a person with no `face` draws down, a row's `face` draws that way, a bad value
+    /// (a `content check` problem) still draws down, a body with no down row (beast, crawler, dummy) keeps its side
+    /// view, and the party is untouched.
+    #[test]
+    fn people_rest_facing_down_unless_their_row_says() {
+        use crate::screens::Game;
+        use emberwake_world::{new_game, Data};
+        // (marker id, its art, its face, the drawn `facing`, the drawn `view`, mirrored)
+        let cases: [(&str, &str, Option<Value>, &str, &str, bool); 8] = [
+            ("plain", "warrior", None, "down", "down", false),
+            ("up", "warrior", Some(json!("up")), "up", "up", false),
+            ("left", "warrior", Some(json!("left")), "side", "side", true),
+            ("right", "warrior", Some(json!("right")), "side", "side", false),
+            ("bad", "warrior", Some(json!("sideways")), "down", "down", false),
+            ("beast", "beast", None, "down", "side", false),
+            ("crawler", "crawler", None, "down", "side", false),
+            ("dummy", "dummy", None, "down", "side", false),
+        ];
+        let at = |i: usize| (2 + 2 * i as i64, 2);
+        let anchors: Vec<Value> = cases.iter().enumerate().map(|(i, c)| json!({"id": c.0, "x": at(i).0, "y": at(i).1})).chain([json!({"id": "spawn", "x": 2, "y": 4})]).collect();
+        let markers: Vec<Value> = cases.iter().map(|c| {
+            let mut m = json!({"id": c.0, "kind": "npc", "anchor": c.0, "character": c.0});
+            if let Some(f) = &c.2 {
+                m["face"] = f.clone();
+            }
+            m
+        }).collect();
+        let owned = |id: &str, mut r: Value| {
+            r["_world"] = json!("yard");
+            r["_qid"] = json!(format!("yard:{id}"));
+            r
+        };
+        let people: Vec<Value> = cases.iter().map(|c| owned(c.0, json!({"id": c.0, "name": c.0, "role": "npc", "art": c.1}))).collect();
+        let worlds = json!({"yard": {"manifest": {"id": "yard", "name": "Yard", "start_location": "hub", "start_party": ["hero"]}, "own": {
+            "locations": [owned("hub", json!({"id": "hub", "name": "Hub", "map": "yard_map", "markers": markers}))], "characters": people}}});
+        let catalog = json!({"classes": [{"id": "fighter", "name": "Fighter", "art": "warrior"}], "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}]});
+        let rows = vec![".".repeat(24); 8];
+        let data = std::sync::Arc::new(Data::from_values(&catalog, &worlds, &json!({"maps": [{"id": "yard_map", "rows": rows, "anchors": anchors}]})));
+        for (view, _) in mapview::VIEWS {
+            let (mut cx, mut g) = (art_cx(), gfx());
+            let mut gs = new_game::create_for_world(&data, "yard", 1).expect("a new game");
+            explore::enter(&data, &mut gs, "hub", explore::SPAWN);
+            cx.app.data = data.clone();
+            cx.app.game = Some(Game::new(gs, -1, true));
+            cx.settings.v["region_view"] = json!(view);
+            cx.settings.v["map_legend_open"] = json!(false);
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let sprites = map.state(&cx)["sprites"].as_array().cloned().unwrap_or_default();
+            for (i, c) in cases.iter().enumerate() {
+                let sp = sprites.iter().find(|s| s["id"] != "party" && stands_on(&map, rect_of(s)) == at(i)).unwrap_or_else(|| panic!("{} is drawn in {view}: {sprites:?}", c.0));
+                assert_eq!((sp["facing"].clone(), sp["view"].clone(), sp["left"].clone()), (json!(c.3), json!(c.4), json!(c.5)), "{} in {view}", c.0);
+            }
+            let party = sprites.iter().find(|s| s["id"] == "party").expect("the leader");
+            assert_eq!(party["facing"], json!("side"), "the party keeps its own facing in {view}");
+        }
     }
 
     /// 2.4: on every map of the world each person whose body chain loads is a sprite, and the sprites draw in row
@@ -3340,8 +3436,7 @@ mod sprite_tests {
             println!("the shipped leader body {shipped} has view rows: checked by the scratch bodies only");
         }
         // scratch bodies as the leader's: side clips only, then with front and back rows
-        let root = std::env::temp_dir().join(format!("emberwake_dir4m_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = aegis_core::scratch::Scratch::vacant("emberwake_dir4m");
         let side = root.join("side");
         scratch_body(&side, &key, &["idle", "walk"]);
         cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![side.clone()]));
@@ -3682,7 +3777,7 @@ mod nav_tests {
 mod view_tests {
     use super::*;
     use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     const WALL_FACE: [u8; 3] = [30, 45, 38];
     const WALL_CAP: [u8; 3] = [40, 60, 50];
@@ -3807,10 +3902,8 @@ mod view_tests {
         enc.write_header().unwrap().write_image_data(&row).unwrap();
     }
 
-    fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("emberwake_mapview_{tag}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
+    fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::new(&format!("emberwake_mapview_{tag}"));
         root
     }
 
@@ -4196,6 +4289,187 @@ mod view_tests {
         assert!(ended.windows(2).all(|p| p[0] == p[1]), "the same end at every step time: {ended:?}");
     }
 
+    /// Past the run's base and linger, the frames where the old `moving` read idle at the run's pace.
+    const RUN_LATE_MS: f64 = mapview::RUN_STEP_MS + WALK_LINGER_MS + 1.0;
+
+    /// TURNFEEL1 (and WALKRUN1's carried fix): Shift pressed during a walk's step, on a keyed step and on a path, ends
+    /// neither the walk clip early nor the step's schedule: the step keeps its own time until the next one is taken.
+    #[test]
+    fn a_change_of_pace_shows_no_idle_frame() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let at = free_row(&mut cx, 4);
+        cx.gs_mut().position = at;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let begin = Instant::now() + Duration::from_secs(1);
+        map.walk = vec![(1, 0)];
+        map.next_walk = begin;
+        map.tick_at(&mut cx, begin);
+        assert_eq!(cx.gs().position, (at.0 + 1, at.1));
+        assert!(map.walk.is_empty(), "only the last step's time can hold the clip");
+        let walk = map.step.base;
+        // 16 ms frames to the next step's time, with Shift pressed just past where the run's base and linger would end
+        cx.held.shift = true;
+        let mut t = RUN_LATE_MS;
+        while t < walk {
+            map.tick_at(&mut cx, begin + Duration::from_secs_f64(t / 1000.0));
+            assert_eq!(map.step.base, mapview::RUN_STEP_MS, "the pace changed");
+            assert!(map.moving(), "no idle frame at {t} ms of a {walk} ms step");
+            t += 16.0;
+        }
+    }
+
+    /// TURNFEEL1, end to end on the map: with the beat on a turn moves the party's tile at once, faces it at once, holds
+    /// the drawn position through the beat and takes the next step late by the beat; the same walk ends on the same tile.
+    #[test]
+    fn a_turn_beat_delays_the_glide_and_the_next_step_not_the_tile() {
+        let mut ended = Vec::new();
+        for beat in [false, true] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v[mapview::TURN_BEAT_KEY] = json!(beat);
+            let mut map = RegionMap::new(&mut cx);
+            let at = free_row(&mut cx, 4);
+            cx.gs_mut().position = at;
+            map.facing = (0, 1);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let begin = Instant::now() + Duration::from_secs(1);
+            map.walk = vec![(1, 0), (1, 0), (1, 0)];
+            map.next_walk = begin;
+            map.tick_at(&mut cx, begin);
+            assert_eq!(cx.gs().position, (at.0 + 1, at.1), "the tile changes on schedule");
+            assert_eq!(map.facing, (1, 0), "and the party faces it");
+            let on = beat && cfg!(debug_assertions);
+            let wall = map.step.wall;
+            let delay = if on { mapview::TURN_BEAT_MS } else { 0.0 };
+            assert_eq!(map.next_walk, begin + Duration::from_secs_f64((delay + wall) / 1000.0), "the next step waits");
+            assert!(map.moving());
+            map.tick_at(&mut cx, map.next_walk);
+            assert_eq!(cx.gs().position, (at.0 + 2, at.1));
+            assert_eq!(map.leg.delay, 0.0, "straight on: no beat");
+            map.tick_at(&mut cx, map.next_walk);
+            ended.push(cx.gs().position.0 - at.0);
+        }
+        assert_eq!(ended[0], ended[1], "the same walk");
+    }
+
+    /// TURNFEEL1: a press answers at once with the beat on: the tile moves on the press, whatever the schedule says.
+    #[test]
+    fn a_key_press_during_a_beat_still_steps_at_once() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v[mapview::TURN_BEAT_KEY] = json!(true);
+        let mut map = RegionMap::new(&mut cx);
+        let at = free_row(&mut cx, 4);
+        cx.gs_mut().position = at;
+        map.facing = (0, 1);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        map.key(&mut cx, Key::Right);
+        map.key(&mut cx, Key::Right);
+        assert_eq!(cx.gs().position, (at.0 + 2, at.1), "two presses, two tiles, with no wait");
+    }
+
+    /// A free tile with a free tile to its right and one below that: a walk right, then a turn down.
+    fn free_corner(cx: &mut Cx) -> Pos {
+        let d = cx.data.clone();
+        let start = cx.gs().clone();
+        let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+        let (w, h) = explore::size_of(&t);
+        let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| free((x, y)) && free((x + 1, y)) && free((x + 2, y)) && free((x + 1, y + 1)) && free((x + 1, y + 2))).expect("a free corner")
+    }
+
+    /// TURNFEEL1, on the map: a press mid-leg moves the tile and the facing `E` uses at once, and a tap released during the
+    /// finish still turns: the drawn path finishes the leg, then goes to the new tile, in the time the setting says; the
+    /// next held step waits for it; the sprite's clip never idles on the way.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_tap_released_during_a_finish_still_turns() {
+        for (name, wait) in [("finish", 150.0), ("quick", 60.0)] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v[mapview::TURN_CORNER_KEY] = json!(name);
+            let mut map = RegionMap::new(&mut cx);
+            let at = free_corner(&mut cx);
+            cx.gs_mut().position = at;
+            map.facing = (1, 0);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let t0 = Instant::now() + Duration::from_secs(1);
+            let ms = |m: f64| t0 + Duration::from_secs_f64(m / 1000.0);
+            map.tick_at(&mut cx, t0);
+            cx.held.dir = None;
+            let loc = cx.gs().location_id.clone();
+            let drawn = |map: &mut RegionMap, cx: &mut Cx, now: f64| {
+                let (leg, step_at) = (map.leg, map.step_at.take());
+                map.glide.update(&loc, cx.gs().position, step_at, Some(ms(now)), leg).0
+            };
+            // a step right from rest
+            map.key(&mut cx, Key::Right);
+            let (x, y) = (at.0 as f32, at.1 as f32);
+            assert_eq!(drawn(&mut map, &mut cx, 0.0), (x, y));
+            assert_eq!(drawn(&mut map, &mut cx, 50.0), (x + 0.25, y));
+            // a tap down 50 ms in, let go at once: the frame's clock reads the press
+            map.tick_at(&mut cx, ms(50.0));
+            cx.held.dir = Some((0, 1));
+            map.key(&mut cx, Key::Down);
+            cx.held.dir = None;
+            assert_eq!(cx.gs().position, (at.0 + 1, at.1 + 1), "{name}: the tile moves on the press");
+            assert_eq!(map.facing, (0, 1), "{name}: E faces it at once");
+            let walk = map.step.wall;
+            assert_eq!(map.next_walk, ms(50.0 + wait + walk), "{name}: the next step waits");
+            let mut t = 50.0;
+            while t < 50.0 + wait + walk {
+                let p = drawn(&mut map, &mut cx, t);
+                assert!(p.1 == y || p.0 == x + 1.0, "{name}: an L at {t} ms: {p:?}");
+                map.tick_at(&mut cx, ms(t));
+                assert!(map.moving(), "{name}: no idle frame at {t} ms");
+                t += 8.0;
+            }
+            assert_eq!(drawn(&mut map, &mut cx, 50.0 + wait + walk), (x + 1.0, y + 1.0), "{name}: the turn played");
+            assert_eq!(cx.gs().position, (at.0 + 1, at.1 + 1), "{name}: one step only");
+        }
+    }
+
+    /// TURNFEEL1: the corner setting changes no tile: the same keys end on the same tile, with the same log, under each;
+    /// a reversal on a leg with no turn pending has the same schedule.
+    #[test]
+    fn the_corner_setting_changes_no_tile() {
+        let mut ended = Vec::new();
+        for name in ["cut", "finish", "quick"] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v[mapview::TURN_CORNER_KEY] = json!(name);
+            let mut map = RegionMap::new(&mut cx);
+            let at = free_corner(&mut cx);
+            cx.gs_mut().position = at;
+            map.facing = (1, 0);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            map.tick(&mut cx);
+            map.key(&mut cx, Key::Right);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            map.tick(&mut cx);
+            map.key(&mut cx, Key::Left);
+            let reversal = map.next_walk.saturating_duration_since(map.frame_at.expect("the frame's clock"));
+            assert_eq!(reversal, map.step.gap(), "{name}: a reversal keeps its time");
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            for k in [Key::Right, Key::Down, Key::Down] {
+                map.tick(&mut cx);
+                map.key(&mut cx, k);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+            }
+            ended.push((cx.gs().position, cx.log.len()));
+        }
+        assert!(ended.windows(2).all(|p| p[0] == p[1]), "{ended:?}");
+    }
+
+    /// A tile with `n` free tiles in a row going right, on the start map (no walls, no markers).
+    fn free_row(cx: &mut Cx, n: i64) -> Pos {
+        let d = cx.data.clone();
+        let start = cx.gs().clone();
+        let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+        let (w, h) = explore::size_of(&t);
+        let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..n).all(|i| free((x + i, y)))).expect("a free row")
+    }
+
     /// VIEWKEYS1: on the map a debug build's F6 redraws at the next zoom and F9 saves the next size, both in the log and
     /// neither taking a step; a release build ignores them (the rules are `viewkeys`' tests).
     #[test]
@@ -4233,7 +4507,7 @@ mod ground_tests {
     use aegis_ui::canvas::Canvas;
     use aegis_ui::ground::{ground_composes, ground_expands};
     use emberwake_world::{new_game, Data};
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use std::sync::Arc;
 
     const WORLD: &str = "zz_world";
@@ -4392,10 +4666,8 @@ mod ground_tests {
         (0..f.rows).flat_map(|y| (0..f.cols).map(move |x| (x, y))).filter(|at| inside(mid(map, *at))).collect()
     }
 
-    fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("emberwake_ground_{tag}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
+    fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::new(&format!("emberwake_ground_{tag}"));
         root
     }
 

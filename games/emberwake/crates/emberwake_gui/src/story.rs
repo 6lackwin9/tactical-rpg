@@ -379,8 +379,7 @@ pub(crate) mod tests {
     pub(crate) fn story_cx(d: Data) -> Cx {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::temp_dir().join(format!("emberwake_story_{}_{n}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let tmp = aegis_core::scratch::Scratch::vacant(&format!("emberwake_story_{n}")).until_thread_end();
         let app = GameCx {
             data: Arc::new(d),
             manifest: Default::default(),
@@ -391,7 +390,7 @@ pub(crate) mod tests {
             encounter: String::new(),
             seed: None,
             debug: true,
-            data_dir: tmp.clone(),
+            data_dir: tmp.to_path_buf(),
         };
         Cx {
             settings: Settings::load(tmp.join("settings.json"), default_settings()),
