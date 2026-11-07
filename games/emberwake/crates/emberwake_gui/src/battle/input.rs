@@ -933,8 +933,10 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
     }
     if let Some(rip::Pick::Skill { skill, .. }) = o.picks.iter().find(|p| matches!(p, rip::Pick::Skill { .. })) {
         let sk = &w.cat.skills[*skill];
-        if let Some(d) = sk.raw.get("description").and_then(Value::as_str).filter(|d| !d.is_empty()) {
-            tip.push((d.to_string(), th().text));
+        // FB-107: the description as the battle's ruleset shows it (no stance tokens with stances off)
+        let d = emberwake_content::source::skill_description(&sk.raw, w.ruleset.stances());
+        if !d.is_empty() {
+            tip.push((d, th().text));
         }
         tip.push((intent_text::range_line(w, h, sk), th().dim));
         // INPUT2: the row's hotkey (the label's digit) is Shift with that digit

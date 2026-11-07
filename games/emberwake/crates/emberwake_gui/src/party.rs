@@ -1678,6 +1678,8 @@ impl Character {
         let cat = &d.cat;
         let Some(b) = progression::build_with(d, m, &cx.gs().world_id, false) else { return };
         let u = &b.unit;
+        // FB-107: skill text as the world's ruleset shows it (no stance tokens with stances off)
+        let stances = d.ruleset(&cx.gs().world_id).stances();
         let fam_name = |f: &str| cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
         let row_of = |f: &str, rank: i32| cat.family_rows(f).into_iter().find(|s| s.tier == rank);
         let path = self.path_families(cx);
@@ -1708,7 +1710,7 @@ impl Character {
                 let at = ranks.iter().position(|&x| x == rank).unwrap_or(0);
                 let row = row_of(f, rank);
                 let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
-                let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+                let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
                 ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
                 ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, th().text);
                 let card = vec![(fam_name(f), th().gold), (desc.clone(), th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)];
@@ -1760,7 +1762,7 @@ impl Character {
             let top = u.selectable_ranks(cat, &f).last().copied().unwrap_or(1);
             let row = row_of(&f, top).or_else(|| cat.tier_one(&f));
             let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
-            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
             ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::Slot(f.clone()), false);
             ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  {ap} AP  from worn gear", fam_name(&f)), BODY, 238.0, th().gold);
             ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
@@ -1776,7 +1778,7 @@ impl Character {
             let full = !slotted && self.extra_slots.len() >= max_extra && (!on_path || self.class_slots.len() >= max_class);
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
-            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
             ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, th().text);
             ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
             ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
@@ -1822,7 +1824,7 @@ impl Character {
             let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
             let intent = intent_name(t.intent_of.get(f).map(String::as_str).unwrap_or(""));
             match row {
-                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, json::s(&s.raw, "description")),
+                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
                 None => (name, intent, 0, top, String::new()),
             }
         };

@@ -547,8 +547,63 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
 
 /// SkillText.render: literal parts as they are, valid tokens by the rank's effective row; `stances` (A1.2-S2: the
 /// ruleset's `stances`) off renders the stance tokens (`STANCE_TOKENS`) as nothing.
+/// FB-107 (W2-4): a suppressed stance token takes its separator with it (`"power, {flow}."` reads `"power."`, see
+/// `drop_suppressed`); with stances on the text is exactly as before.
 pub fn render(template: &str, kind: &str, row: &Dict, rank: usize, stances: bool) -> String {
-    render_tokens(template, |token, suffix| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind)).then(|| token_value(token, suffix, row, rank, stances)))
+    let valid = |token: &str| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind));
+    let text = render_tokens(template, |token, suffix| {
+        valid(token).then(|| if !stances && STANCE_TOKENS.contains(&token) { SUPPRESSED.to_string() } else { token_value(token, suffix, row, rank, stances) })
+    });
+    if stances { text } else { drop_suppressed(&text) }
+}
+
+/// FB-107: a skill row's description as a ruleset shows it. Stances on: the stored (catalog) text. Stances off: the
+/// rank's template re-rendered without the stance tokens, when the stored text is that template's render (a rank's
+/// literal text, or a template without stance tokens, is shown as stored).
+pub fn skill_description(row: &Dict, stances: bool) -> String {
+    let stored = sget(row, "description", "");
+    let template = sget(row, "template", "");
+    if stances || !STANCE_TOKENS.iter().any(|t| template.contains(&format!("{{{t}"))) {
+        return stored;
+    }
+    let kind = sget(row, "kind", "");
+    let rank = usize::try_from(to_int_or(json::get(row, "tier"), 1)).unwrap_or(1).max(1);
+    if render(&template, &kind, row, rank, true) == stored { render(&template, &kind, row, rank, false) } else { stored }
+}
+
+/// The marker a suppressed stance token renders as before `drop_suppressed` removes it (never in a template).
+const SUPPRESSED: char = '\u{0}';
+
+/// FB-107: removes each run of suppressed tokens (`SUPPRESSED`) with one separator: the preceding `", "` / `"; "` when
+/// there is one (`"a, {flow}, b"` -> `"a, b"`, `"a, {flow}."` -> `"a."`), else the following one (`"{flow}, b"` -> `"b"`);
+/// a bare space before punctuation or a doubled space is dropped too (`"a {flow}."` -> `"a."`).
+fn drop_suppressed(text: &str) -> String {
+    let mut parts = text.split(SUPPRESSED);
+    let mut out = parts.next().unwrap_or("").to_string();
+    let rest: Vec<&str> = parts.collect();
+    let last = rest.len();
+    for (i, next) in rest.into_iter().enumerate() {
+        if next.is_empty() && i + 1 < last {
+            continue; // another suppressed token follows: one run, one separator
+        }
+        let head = out.trim_end();
+        if head.ends_with([',', ';']) {
+            out = head[..head.len() - 1].trim_end().to_string();
+            out.push_str(next);
+            continue;
+        }
+        let mut n = next.trim_start();
+        if let Some(after) = n.strip_prefix([',', ';']) {
+            n = after.trim_start();
+        }
+        if n.is_empty() || n.starts_with(['.', ',', ';', ':', '!', '?', ')']) {
+            out.truncate(out.trim_end().len());
+        } else if !out.is_empty() && !out.ends_with(char::is_whitespace) && next.starts_with(char::is_whitespace) {
+            out.push(' ');
+        }
+        out.push_str(n);
+    }
+    out
 }
 
 /// A1.2-S2 (A1 "Retire orphaned stance fields"): the skill tokens only the classic stance machinery reads; they render
