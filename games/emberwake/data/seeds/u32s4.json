@@ -1,0 +1,74 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "shd_tower",
+    "name": "Tower Shield",
+    "family": "shield",
+    "rarity": "UNCOMMON",
+    "weight": 8.0,
+    "value": 90,
+    "description": "A wall of iron. Superb protection, but heavy and slow to raise.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Tank wall: the best armor in the game (mitigation 16), but heavy (burden 3, needs STR 15) and paired with the weakest sword; the warrior gives up offense and mobility for it.",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "burden",
+      "delta": 1
+     },
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 10
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 15
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_glass_wand",
+    "name": "Glass Wand",
+    "family": "wand",
+    "rarity": "RARE",
+    "weight": 0.3,
+    "value": 140,
+    "description": "A brittle crystal wand that hums with raw power.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Glass cannon: very high ranged power (30 at range 3, needs INT 14) and no protection at all; best for a mage kept behind a tank.",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 15
+     },
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 14
+     }
+    ],
+    "tiers": []
+   }
+  }
+ ]
+}

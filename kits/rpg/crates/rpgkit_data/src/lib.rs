@@ -499,6 +499,12 @@ pub struct ItemDef {
     /// U3.2-S2: the engine rules of the item's family (the resolved row's `ITEM_FAMILY_RULES` key; a row without it
     /// reads the pre-family rules, `family_rules_of`). The gear rules read these, never a family id.
     pub family_rules: Vec<String>,
+    /// U3.2-S4 (U3 "Level 2 (Adept)"): the family's Level-2 bonus (the resolved row's `ITEM_FAMILY_LEVEL2` key; the
+    /// default: none).
+    pub level2_bonus: FamilyBonus,
+    /// U3.2-S4 (U3 "Level 3 (Master)"): the family's mastery passive id (the resolved row's `ITEM_FAMILY_LEVEL3` key; ""
+    /// = none).
+    pub level3_passive: String,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
     pub raw: Obj,
@@ -511,6 +517,32 @@ pub const ITEM_REACH_RULE: &str = "reach_rule";
 /// U3.2-S2: the resolved item row's key that carries its family's `engine_rules` (written by the loader on every row it
 /// resolves against a family; the writer leaves it out of the stored form).
 pub const ITEM_FAMILY_RULES: &str = "family_rules";
+/// U3.2-S4: the resolved item row's key that carries its family's `level2_bonus` (written by the loader; the writer
+/// leaves it out of the stored form).
+pub const ITEM_FAMILY_LEVEL2: &str = "family_level2_bonus";
+/// U3.2-S4: the resolved item row's key that carries its family's `level3_passive` (as `ITEM_FAMILY_LEVEL2`).
+pub const ITEM_FAMILY_LEVEL3: &str = "family_level3_passive";
+
+/// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
+/// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at
+/// proficiency 2 or more; `burden` takes that much off each such item's burden (to 0 at least). Both sit on top of the
+/// built per-level crit and burden of `Proficiency` (`crit_bonus`, `burden_reduction`).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FamilyBonus {
+    pub crit: f64,
+    pub burden: i32,
+}
+
+impl FamilyBonus {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { crit: float(o, "crit", 0.0), burden: int(o, "burden", 0) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.crit == 0.0 && self.burden == 0
+    }
+}
+
 /// U3.2-S2: the resolved skill row's key that says whether one of its `weapon_types` is a family with the engine rule
 /// `spell_source` (written by the loader on every skill row when the catalog has a family table).
 pub const SKILL_SPELL_SOURCE: &str = "spell_source";
@@ -596,6 +628,8 @@ impl ItemDef {
             weight: float(o, "weight", 1.0),
             reach_rule: family_rules.iter().any(|r| r == REACH_ENGINE_RULE),
             family_rules,
+            level2_bonus: obj(o, ITEM_FAMILY_LEVEL2).map(FamilyBonus::from_obj).unwrap_or_default(),
+            level3_passive: string(o, ITEM_FAMILY_LEVEL3, ""),
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
             raw: o.clone(),
         }

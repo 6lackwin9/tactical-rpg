@@ -36,7 +36,10 @@ const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delt
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES];
+const DERIVED_KEYS: [&str; 15] = [
+    "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES,
+    rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3,
+];
 const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const WHEN_STAT: &str = "stat_at_least";
@@ -1042,6 +1045,7 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
             out.extend(reach_rule_problems(f, &t));
         }
     }
+    out.extend(mastery_problems(v, f, &t));
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
     let users: Vec<&Dict> = v.entries("items").iter().filter(|i| json::s(i, "family") == old_id).collect();
     if old_id != id && !users.is_empty() {
@@ -1056,6 +1060,65 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
     }
     if !failing.is_empty() {
         out.push(format!("This family change breaks {} item(s): {}.", failing.len(), failing.join("; ")));
+    }
+    out
+}
+
+/// U3.2-S4: the bounds of a family's Level-2 bonus (`level2_bonus`): crit chance points, burden taken off each item.
+const LEVEL2_CRIT: (f64, f64) = (1.0, 10.0);
+const LEVEL2_BURDEN: (i64, i64) = (1, 3);
+/// U3.2-S4: the item types whose proficiency a unit trains (an accessory, a consumable or a material has no level).
+const TRAINED_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
+
+/// U3.2-S4 (U3 Level 2 and Level 3): `level2_bonus` is `{}` or exactly one of `{"crit": 1-10}` (crit chance points) and
+/// `{"burden": 1-3}` (whole); `level3_passive` is "" or an always-on passive (slot "") whose effects worn gear can apply
+/// (`grants::Grant::gear_ok`: no unlock, foresight, stagger_taken, meter or proficiency); both only on a family whose
+/// level a unit trains (WEAPON, SHIELD, ARMOR).
+fn mastery_problems(v: &View, f: &Dict, t: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let raw = json::get(f, "level2_bonus");
+    let bonus = raw.as_object();
+    let level3 = json::s(f, "level3_passive");
+    let set = bonus.is_some_and(|b| !b.is_empty()) || !level3.is_empty();
+    if set && !TRAINED_TYPES.contains(&t) {
+        out.push(format!("Level 2 and 3 bonuses need a family a unit trains ({}).", TRAINED_TYPES.join(", ")));
+    }
+    match bonus {
+        None if !raw.is_null() => out.push("Level 2 bonus must be an object: {} or {\"crit\": n} or {\"burden\": n}.".into()),
+        Some(b) if b.len() > 1 => out.push("Level 2 bonus is one of crit or burden, not both.".into()),
+        Some(b) => {
+            for (k, x) in b {
+                match k.as_str() {
+                    "crit" if !x.as_f64().is_some_and(|c| (LEVEL2_CRIT.0..=LEVEL2_CRIT.1).contains(&c)) => {
+                        out.push(format!("Level 2 crit must be {}-{}.", LEVEL2_CRIT.0, LEVEL2_CRIT.1));
+                    }
+                    "burden" if !x.as_f64().is_some_and(|c| c.fract() == 0.0 && (LEVEL2_BURDEN.0 as f64..=LEVEL2_BURDEN.1 as f64).contains(&c)) => {
+                        out.push(format!("Level 2 burden must be a whole number {}-{}.", LEVEL2_BURDEN.0, LEVEL2_BURDEN.1));
+                    }
+                    "crit" | "burden" => {}
+                    _ => out.push(format!("Level 2 bonus: unknown key '{k}' (crit or burden).")),
+                }
+            }
+        }
+        None => {}
+    }
+    if !level3.is_empty() {
+        match v.typed.passives.get(&level3) {
+            None => out.push(format!("Level 3 passive: unknown passive '{level3}'.")),
+            Some(p) if !p.slot.is_empty() => out.push(format!("Level 3 passive '{level3}' is slottable ({}); a mastery passive is always on (slot \"\").", p.slot)),
+            Some(p) => {
+                if rpgkit_rules::grants::read(&p.effects).iter().any(|g| !g.gear_ok()) {
+                    out.push(format!("Level 3 passive '{level3}' has an effect worn gear can't apply (unlock, foresight, stagger_taken, meter or proficiency)."));
+                }
+                // applied as the item's, so only what an item may carry (no ap_regen, whose bonus no sync resets)
+                for e in &p.effects {
+                    let t = e.get("type").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    if !super::simple::ITEM_TYPES.contains(&t.as_str()) {
+                        out.push(format!("Level 3 passive '{level3}' has effect '{t}', which an item can't carry ({}).", super::simple::ITEM_TYPES.join(", ")));
+                    }
+                }
+            }
+        }
     }
     out
 }

@@ -53,7 +53,8 @@ pub fn family_skill(w: &World, c: UnitId, fam: &str) -> Option<SkillId> {
 
 /// The families of FU4's auto order before the intent filter: the deck's actives (under the deck rule the unit's
 /// active slots, RULESET1 9 D2; without a deck: every family the unit can use that is not a basic, in catalog order),
-/// then its meter skills (HOOKS1 UM6, rule unit_meters: in the order the battle gave them), then the basics (the
+/// then its meter skills (HOOKS1 UM6, rule unit_meters: in the order the battle gave them) and its worn items' skills
+/// (U3.2-S4, OFFHAND1), then the basics (the
 /// ruleset's `basics` in their order; a row without any: the catalog's basic skills).
 fn auto_families(w: &World, c: UnitId) -> Vec<String> {
     let basics: Vec<String> = if w.ruleset.numbers.basics.is_empty() { w.cat.basic_ids().iter().map(|id| w.cat.family_of(id).to_string()).collect() } else { w.ruleset.numbers.basics.clone() };
@@ -71,7 +72,8 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
             fams
         }
     };
-    for id in &w.units[c].meter_skills {
+    // U3.2-S4 (OFFHAND1): the worn items' skills too, open while worn
+    for id in w.units[c].meter_skills.iter().chain(&w.units[c].gear_skills) {
         let fam = w.cat.family_of(id).to_string();
         if !out.contains(&fam) {
             out.push(fam);

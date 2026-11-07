@@ -178,6 +178,10 @@ pub fn crit_chance(u: &Unit) -> f64 {
         None if trained_fists(u) => chance += u.stats.proficiency.crit_bonus(FIST),
         None => {}
     }
+    // U3.2-S4 (U3 Level 2): the worn families' Level-2 crit (0 without one, so nothing changes)
+    if u.gear_crit != 0.0 {
+        chance += u.gear_crit;
+    }
     // HOOKS1 8.2: the trigger effect `crit` (rule triggers; 0 otherwise, so nothing changes)
     if u.trigger_crit != 0.0 {
         chance += u.trigger_crit;

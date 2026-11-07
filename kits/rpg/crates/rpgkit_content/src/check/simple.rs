@@ -75,8 +75,10 @@ const STAGGER_MULT_MAX: f64 = 2.0;
 const STAGGER_MAX_BLOCKS: i64 = 6;
 /// RULESET1 V4: a foresight effect's optional reveal range in tiles (0 = today's rule).
 const FORESIGHT_RANGE_MAX: i64 = 8;
-/// The effect types gear may carry; HOOKS1-S adds `trigger` and `forced_move`.
-const ITEM_TYPES: [&str; 6] = ["skill_potency", "status_potency", "spell_reach", "resist", "trigger", "forced_move"];
+/// The effect types gear may carry; HOOKS1-S adds `trigger` and `forced_move`; U3.2-S4 (FB-35, OFFHAND1) `skill` (a worn
+/// skill: always active while worn, no slot) and `stat` (a U1 modifier), both taken off with the item. `proficiency`
+/// stays out (training is the class's and the drills'; an item training its own gear would undo the wield penalty).
+pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", "spell_reach", "resist", "trigger", "forced_move", "skill", "stat"];
 const GROUPS: [&str; 2] = ["spell", "heal"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 

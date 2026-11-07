@@ -1963,10 +1963,22 @@ impl Character {
             ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
             ui.drop_target("deck.list");
             let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
+            // U3.2-S4 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
+            let worn: Vec<String> = built.as_ref().map(|u| u.gear_skills.clone()).unwrap_or_default();
+            let total = owned.len() + worn.len();
             const ROWS: usize = 7;
-            self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
-            if self.scroll > 0 || owned.len() > ROWS {
-                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
+            self.scroll = self.scroll.min(total.saturating_sub(ROWS));
+            if self.scroll > 0 || total > ROWS {
+                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(total), total), SMALL, th().dim);
+            }
+            for (k, id) in worn.iter().enumerate().map(|(j, id)| (owned.len() + j, id)).filter(|(k, _)| (self.scroll..self.scroll + ROWS).contains(k)) {
+                let y = 118 + (k - self.scroll) as i32 * 22;
+                let (name, intent, ap, _, desc) = skill_of(cat.family_of(id));
+                ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::DeckView("owned"), false);
+                ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{name}  [{intent}]  {ap} AP  from worn gear"), BODY, 238.0, th().gold);
+                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
+                let card = vec![(name.clone(), th().gold), (format!("{intent} skill from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
+                ui.push(format!("skills.worn.{id}"), "row", name, Rect::new(366, y, 238, 20), true, false, None, card);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
                 let y = 118 + k as i32 * 22;
@@ -2880,6 +2892,34 @@ mod tests {
             assert_eq!(n, t.order(&shown, intent).len(), "{intent}: one entry per skill of its order");
         }
         assert_laid_out(&c, "order view");
+    }
+
+    /// U3.2-S4 (OFFHAND1): a worn item's skill shows read-only under the basics (open while worn, no slot), never among
+    /// the actives, and goes when the item comes off. The skill effect is test-only, on this test's own data.
+    #[test]
+    fn under_the_deck_rule_a_worn_items_skill_shows_read_only_and_takes_no_slot() {
+        let (mut cx, member) = deck_cx(true);
+        let world = cx.gs().world_id.clone();
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let owned = m.owned_families_anywhere(&cx.data);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the member does not own");
+        let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
+        rings.sort();
+        let ring = rings[0].clone();
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        std::sync::Arc::make_mut(&mut data.cat).items.get_mut(&ring).unwrap().effects.push(json!({"type": "skill", "skill": skill}));
+        assert!(std::sync::Arc::ptr_eq(&cx.data.cat, cx.data.cat_in(&world)), "{world} builds with the base catalog");
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.insert("accessory_1".into(), ring);
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        let t = c.terms.clone().expect("deck terms");
+        assert!(c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "the worn skill shows");
+        assert!(!t.shown(&c.deck).active.iter().any(|f| f == cx.data.cat.family_of(&skill)), "it takes no active slot");
+        assert_laid_out(&c, "worn skills");
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.shift_remove("accessory_1");
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
     }
 
     /// D3-D6 end to end: the member owns a slottable passive and keystone (shipped rows picked by `slot`); slotting

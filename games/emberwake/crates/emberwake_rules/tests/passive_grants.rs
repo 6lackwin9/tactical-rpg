@@ -13,7 +13,7 @@ use aegis_core::value::{self, to_int, to_str, Obj};
 use emberwake_data::{Catalog, ClassDef, PassiveDef, TriggerRow};
 use emberwake_rules::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, Target};
 use emberwake_rules::stats::{Proficiency, StatModifier};
-use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, StaggerTaken, FORESIGHT_RANGE_MAX, STAGGER_TAKEN_MULT_MAX};
+use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, StaggerTaken, FORESIGHT_RANGE_MAX, GEAR_EFFECT_SOURCE, STAGGER_TAKEN_MULT_MAX};
 use emberwake_rules::{build_unit, Unit};
 use indexmap::IndexMap;
 use serde_json::{json, Map, Value};
@@ -65,6 +65,8 @@ fn assert_same(a: &Unit, b: &Unit, what: &str) {
 }
 
 // ---- The oracle: the raw-JSON reader as it was before U4.2-S1 (unit.rs, stats.rs), kept verbatim ------------------
+// U3.2-S4 (FB-35) changed its gear branch on purpose, marked below: a worn item's `stat` goes under GEAR_EFFECT_SOURCE,
+// its `skill` to `gear_skills` (both rebuilt on every sync), and gear applies no `proficiency`.
 
 fn old_forced_add(f: &mut ForcedTraits, e: &Obj) {
     match value::string(e, "immune", "").as_str() {
@@ -88,13 +90,14 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
                     }
                 }
                 let stat = value::string(e, "stat", "");
-                let mut m = StatModifier::permanent(&stat, value::int(e, "value", 0), &format!("passive:{id}"), &tag);
+                let source = if gear { GEAR_EFFECT_SOURCE.to_string() } else { format!("passive:{id}") };
+                let mut m = StatModifier::permanent(&stat, value::int(e, "value", 0), &source, &tag);
                 if cat.derived_stats.contains_key(&stat) {
                     m.percent = value::float(e, "percent", 0.0);
                 }
                 u.stats.modifiers.push(m);
             }
-            "proficiency" => u.stats.proficiency.add_bonus(&value::string(e, "gear", ""), value::int(e, "levels", 0)),
+            "proficiency" if !gear => u.stats.proficiency.add_bonus(&value::string(e, "gear", ""), value::int(e, "levels", 0)),
             "resist" => {
                 let status = value::string(e, "status", "");
                 let target = if gear { &mut u.gear_status_resist } else { &mut u.status_resist };
@@ -102,6 +105,12 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
                 target.insert(status, (cur + value::int(e, "value", 0)).min(100));
             }
             "ap_regen" => u.ap_regen_bonus += value::int(e, "value", 0),
+            "skill" if gear => {
+                let skill = value::string(e, "skill", "");
+                if !u.gear_skills.contains(&skill) {
+                    u.gear_skills.push(skill);
+                }
+            }
             "skill" => u.learn_skill(cat, &value::string(e, "skill", "")),
             "skill_potency" => {
                 let v = value::float(e, "value", 0.0);

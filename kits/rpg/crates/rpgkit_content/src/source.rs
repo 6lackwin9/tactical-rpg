@@ -905,6 +905,16 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     row.shift_remove(rpgkit_data::ITEM_REACH_RULE);
     let rules = json::strings(json::get(family, "engine_rules"));
     row.insert(rpgkit_data::ITEM_FAMILY_RULES.into(), Value::Array(rules.into_iter().map(Value::from).collect()));
+    // U3.2-S4: the family's Level-2 bonus and Level-3 mastery passive ride on the row the same way (left out of the
+    // stored form; an empty one is no key, so a row of a family without them reads as before)
+    let level2 = json::dget(family, "level2_bonus");
+    if !level2.is_empty() {
+        row.insert(rpgkit_data::ITEM_FAMILY_LEVEL2.into(), Value::Object(level2.clone()));
+    }
+    let level3 = sget(family, "level3_passive", "");
+    if !level3.is_empty() {
+        row.insert(rpgkit_data::ITEM_FAMILY_LEVEL3.into(), Value::from(level3));
+    }
     row
 }
 

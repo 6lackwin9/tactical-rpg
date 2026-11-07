@@ -17,6 +17,9 @@ pub const FORESIGHT_RANGE_MAX: i32 = 8;
 pub const STAGGER_TAKEN_MULT_MAX: f64 = 2.0;
 /// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this).
 pub const REACH_WEAPON_REACH: i32 = 2;
+/// U3.2-S4 (FB-35): the source of the stat modifiers worn items' effects add (their `stat` effects and their families'
+/// mastery passives'); every sync takes them all off before it applies the worn gear again.
+pub const GEAR_EFFECT_SOURCE: &str = "gear_effect";
 
 /// RULESET1 P6, tasks 1.4: a passive `stagger_taken` effect: stagger from an action of at most `max_blocks` blocks
 /// (0 = any action) is multiplied by `mult` (a Snap-proof trait: mult 0, max_blocks 1).
@@ -234,6 +237,12 @@ pub struct Unit {
     /// only under the rule triggers (`held_triggers`).
     pub passive_triggers: Vec<HeldTrigger>,
     pub gear_triggers: Vec<HeldTrigger>,
+    /// U3.2-S4 (FB-35, OFFHAND1): the skills worn items grant (their `skill` effects, their families' mastery
+    /// passives'), rebuilt on every sync: owned, unlocked and always active while worn, no slot (`gear_skill`).
+    pub gear_skills: Vec<String>,
+    /// U3.2-S4 (U3 Level 2): crit chance points the worn gear's families give at proficiency 2 or more (their
+    /// `level2_bonus` crit, each family once), rebuilt on every sync.
+    pub gear_crit: f64,
     /// HOOKS1 8.3: the held guard a trigger set this round (None in classic and without the rule).
     pub held_guard: Option<HeldGuard>,
     /// HOOKS1 8.2: crit chance points the trigger effect `crit` added for the battle (0 in classic).
@@ -319,6 +328,8 @@ impl Unit {
             gear_forced: ForcedTraits::default(),
             passive_triggers: Vec::new(),
             gear_triggers: Vec::new(),
+            gear_skills: Vec::new(),
+            gear_crit: 0.0,
             held_guard: None,
             trigger_crit: 0.0,
             passive_meters: Vec::new(),
@@ -387,7 +398,12 @@ impl Unit {
     /// The worn gear's burden after the training reduction; U3.2-S3 (FB-33): plus the wield terms'
     /// `untrained_burden_add` per item worn untrained (proficiency 0), which lowers initiative first like any burden.
     pub fn worn_burden(&self) -> i32 {
-        self.inventory.gear().map(|e| (e.item.burden - self.stats.proficiency.burden_reduction(e.weapon_type())).max(0) + e.wield_penalty(&self.stats).burden_add).sum()
+        self.inventory.gear().map(|e| (e.item.burden - self.stats.proficiency.burden_reduction(e.weapon_type()) - self.level2_burden(e)).max(0) + e.wield_penalty(&self.stats).burden_add).sum()
+    }
+
+    /// U3.2-S4 (U3 Level 2): the burden the item's family's `level2_bonus` takes off it at proficiency 2 or more.
+    fn level2_burden(&self, e: &Equipment) -> i32 {
+        if self.stats.proficiency.level_of(e.weapon_type()) >= 2 { e.item.level2_bonus.burden } else { 0 }
     }
 
     pub fn debuff_resistance(&self) -> f64 {
@@ -401,6 +417,8 @@ impl Unit {
     /// Gear stat bonuses -> tier stat bonuses (read without tier modifiers) -> gear effects -> derived numbers.
     pub fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
         self.stats.remove_modifier("gear");
+        // U3.2-S4 (FB-35): what the worn items' effects added goes first (tier criteria never read it)
+        self.stats.remove_modifier(GEAR_EFFECT_SOURCE);
         let bonuses: Vec<(String, i32)> =
             self.inventory.gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
         for (k, v) in bonuses {
@@ -447,6 +465,8 @@ impl Unit {
         self.gear_spell_reach = 0;
         self.gear_forced = ForcedTraits::default();
         self.gear_triggers.clear();
+        self.gear_skills.clear();
+        self.gear_crit = 0.0;
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
         for (src, fx) in item_fx {
             self.apply_effects(cat, &fx, &src, true);
@@ -458,6 +478,32 @@ impl Unit {
             .collect();
         for (src, fx) in tier_fx {
             self.apply_effects(cat, &fx, &src, true);
+        }
+        self.apply_family_bonuses(cat);
+    }
+
+    /// U3.2-S4 (U3 Level 2 and Level 3): each worn gear family once, at the unit's proficiency in it: from level 2 its
+    /// `level2_bonus` crit (the burden part is `worn_burden`'s), at level 3 its `level3_passive`'s effects, applied as the
+    /// item's (`gear:<item>:mastery`; worn gear's grants only, rebuilt with them on every sync).
+    fn apply_family_bonuses(&mut self, cat: &Catalog) {
+        let mut seen: Vec<String> = Vec::new();
+        let worn: Vec<(String, String, rpgkit_data::FamilyBonus, String)> =
+            self.inventory.gear().map(|e| (e.id().to_string(), e.weapon_type().to_string(), e.item.level2_bonus, e.item.level3_passive.clone())).collect();
+        for (item, family, level2, level3) in worn {
+            if family.is_empty() || seen.contains(&family) {
+                continue;
+            }
+            seen.push(family.clone());
+            let level = self.stats.proficiency.level_of(&family);
+            if level >= 2 && level2.crit != 0.0 {
+                self.apply_grants(cat, &[Grant::Modifier(Modifier { target: Target::Crit, value: level2.crit })], &format!("gear:{item}:level2"), true);
+            }
+            if level >= 3 {
+                if let Some(p) = cat.passives.get(&level3) {
+                    let fx = p.effects.clone();
+                    self.apply_effects(cat, &fx, &format!("gear:{item}:mastery"), true);
+                }
+            }
         }
     }
 
@@ -487,6 +533,12 @@ impl Unit {
             match g {
                 Grant::Modifier(m) => self.apply_modifier(cat, m, &id, gear),
                 Grant::Proficiency { gear: family, levels } => self.stats.proficiency.add_bonus(family, *levels),
+                // U3.2-S4 (FB-35, OFFHAND1): a worn item's skill is held apart, rebuilt on every sync (no slot)
+                Grant::GrantSkill(SkillGrant::Learn(skill)) if gear => {
+                    if !self.gear_skills.contains(skill) {
+                        self.gear_skills.push(skill.clone());
+                    }
+                }
                 Grant::GrantSkill(SkillGrant::Learn(skill)) => self.learn_skill(cat, skill),
                 Grant::GrantSkill(SkillGrant::Unlock { set, levels }) => {
                     let (map, key) = match set {
@@ -517,7 +569,9 @@ impl Unit {
         let int = m.value as i32;
         match &m.target {
             Target::Stat { stat, tag, percent } => {
-                let mut sm = StatModifier::permanent(stat, int, &format!("passive:{id}"), tag);
+                // U3.2-S4 (FB-35): a worn item's stat effect under the gear source every sync takes off
+                let source = if gear { GEAR_EFFECT_SOURCE.to_string() } else { format!("passive:{id}") };
+                let mut sm = StatModifier::permanent(stat, int, &source, tag);
                 // DERIVE1 4.1: the optional percent counts only on a derived id (base stats stay flat-only)
                 if cat.derived_stats.contains_key(stat) {
                     sm.percent = *percent;
@@ -562,7 +616,8 @@ impl Unit {
                     self.passive_forced.add(m);
                 }
             }
-            // HOOKS1 UM4: a band's crit, read by `apply_band` only
+            // HOOKS1 UM4: a band's crit, read by `apply_band` only; U3.2-S4: a worn family's Level-2 crit
+            Target::Crit if gear => self.gear_crit = c.fold_f(self.gear_crit, m.value),
             Target::Crit => {}
         }
     }
@@ -633,6 +688,12 @@ impl Unit {
         self.meter_skills.iter().any(|s| s == skill_id)
     }
 
+    /// U3.2-S4 (OFFHAND1, FB-35): whether a worn item grants `skill_id` now (owned, unlocked and open without a slot
+    /// while worn, like a meter skill; gone when the item comes off).
+    pub fn gear_skill(&self, skill_id: &str) -> bool {
+        self.gear_skills.iter().any(|s| s == skill_id)
+    }
+
     // ---- Skills: ownership, unlocks (SK2), loadout ---------------------------------------------------------------
 
     pub fn active_families(&self) -> Vec<String> {
@@ -657,7 +718,7 @@ impl Unit {
     /// Catalog.is_always_active, with the deck rule's open and closed basics (D1).
     /// HOOKS1 UM6: a meter skill the battle gave is open without a slot.
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
-        if self.meter_skill(skill_id) {
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) {
             return true;
         }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
@@ -705,7 +766,8 @@ impl Unit {
         let mut actives: Vec<String> = Vec::new();
         for fam in wanted {
             let basic = cat.is_basic_family(&fam) || rule.basics.contains(&fam);
-            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id));
+            // U3.2-S4 (OFFHAND1): a family owned only through worn gear takes no slot (it is open while worn)
+            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id));
             if !basic && owned && !actives.contains(&fam) {
                 actives.push(fam);
             }
@@ -720,7 +782,7 @@ impl Unit {
 
     /// HOOKS1 UM6: a meter skill the battle gave is owned (before the deck rule's closed basics).
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
-        if self.meter_skill(skill_id) {
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) {
             return true;
         }
         if let Some(open) = self.deck_basic(cat, skill_id) {
@@ -1371,7 +1433,7 @@ impl Unit {
     /// The level gate of can_use: basics (under the deck rule the ruleset's basics, D1), engine skills, meter skills
     /// (HOOKS1 UM6) and hand-built units are never gated.
     pub fn tier_unlocked(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
-        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
+        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.gear_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
             return true;
         }
         self.stats.level >= self.skill_unlock_level(cat, skill)

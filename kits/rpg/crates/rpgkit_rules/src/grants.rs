@@ -148,12 +148,14 @@ pub enum Grant {
 
 impl Grant {
     /// Whether worn gear applies it: no unlock, foresight, stagger_taken or meter from an item (gear effects are rebuilt
-    /// on every sync; RULESET1 P6, HOOKS1 UM1).
+    /// on every sync; RULESET1 P6, HOOKS1 UM1); U3.2-S4: no proficiency either (training is the class's and the drills';
+    /// a worn item's `skill` and `stat` are rebuilt with the rest).
     pub fn gear_ok(&self) -> bool {
         !matches!(
             self,
             Grant::GrantSkill(SkillGrant::Unlock { .. })
                 | Grant::GrantPool { .. }
+                | Grant::Proficiency { .. }
                 | Grant::Modifier(Modifier { target: Target::Foresight | Target::StaggerTaken { .. }, .. })
         )
     }
