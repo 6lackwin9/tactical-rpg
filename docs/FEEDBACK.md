@@ -17,7 +17,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | READY row 14 `A2.2-S1/S2` | done (FB-102) | `develop` | - |
 | READY row 16 `A4.2-K1a` + `A3.2-S1` | done (FB-105; gate rename parked FB-106) | `develop` | R2-W1 batch 1 complete. |
 | READY row 19 `I1.2-S1` | done (FB-104) | `develop` | - |
-| READY rows 15, 17, 18 (R2-W1 batch 2) | next | - | Build in parallel, land one by one (each re-records `rules_contract_golden`). |
+| READY rows 15, 17, 18 (R2-W1 batch 2) | building: 3 parallel `logic-builder` worktrees | - | Land one by one (each re-records `rules_contract_golden`); row 18 then needs an asset-lane terrain re-save. |
 | READY row 20 (R3-W1) | queued | - | - |
 
 ## 2. Feedback Items (Append-Only)
