@@ -437,6 +437,9 @@ pub struct Numbers {
     pub max_pip_loss_per_hit: i32,
     /// S2.2-S2 (`poise_mode`): how a hit lowers poise (default `bar`).
     pub poise_mode: PoiseMode,
+    /// U1.2-S3b (`know_potency`, U1 "status potency from KNOW", S1 section 2 `attacker_know_potency`): the potency a
+    /// point of the attacker's KNOW adds to a skill's status roll; 0 (the default) is the spec's "potency off".
+    pub know_potency: f64,
 }
 
 impl Default for Numbers {
@@ -472,6 +475,7 @@ impl Default for Numbers {
             poise_pips: 5,
             max_pip_loss_per_hit: 3,
             poise_mode: PoiseMode::Bar,
+            know_potency: 0.0,
         }
     }
 }
@@ -532,6 +536,7 @@ impl Numbers {
             poise_pips: value::int(o, "poise_pips", d.poise_pips),
             max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
             poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
+            know_potency: value::float(o, "know_potency", d.know_potency),
         }
     }
 
@@ -746,7 +751,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 22] = [
+pub const FIELD_RULES: [FieldRule; 23] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -773,6 +778,8 @@ pub const FIELD_RULES: [FieldRule; 22] = [
     FieldRule { values: &PoiseMode::IDS, ..field_rule("poise_mode", &[POISE]) },
     FieldRule { range: Some((3.0, 8.0)), ..field_rule("poise_pips", &[POISE, "poise_mode=pips"]) },
     FieldRule { range: Some((1.0, 5.0)), ..field_rule("max_pip_loss_per_hit", &[POISE, "poise_mode=pips"]) },
+    // U1.2-S3b (U1 parameter table "potency weight (KNOW)"): row-only like the status numbers; read whatever the rules
+    FieldRule { range: Some((0.0, 3.0)), ..field_rule("know_potency", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -988,6 +995,7 @@ impl Numbers {
             "poise_pips" => self.poise_pips.to_string(),
             "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
             "poise_mode" => self.poise_mode.id().to_string(),
+            "know_potency" => self.know_potency.to_string(),
             _ => return None,
         })
     }

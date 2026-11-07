@@ -1008,9 +1008,11 @@ impl DojoSession {
                 }
                 if !s.status_effect.is_empty() && self.dummy.is_alive() {
                     let potency = s.status_potency + self.hero().status_potency_bonus();
-                    let chance = status::apply_chance(&self.dummy, &s.status_effect, potency);
+                    // U1.2-S3b: the hero's KNOW term (ruleset `know_potency`; 0 = potency off), shown and rolled alike
+                    let bonus = status::know_bonus(self.hero(), self.ruleset.numbers.know_potency);
+                    let chance = status::apply_chance_with(&self.dummy, &s.status_effect, potency, bonus);
                     let source = self.hero().name.clone();
-                    let landed = status::try_inflict(&mut self.dummy, &s.status_effect, potency, Some(&mut self.rng), 1, s.status_magnitude, &source);
+                    let landed = status::try_inflict_with(&mut self.dummy, &s.status_effect, potency, bonus, Some(&mut self.rng), 1, s.status_magnitude, &source);
                     detail += &format!(" • {} {} ({chance}%)", status::display_name(&s.status_effect), if landed { "next round" } else { "resisted" });
                 }
                 let (dmg, outcome, breakdown) = hit.as_ref().map(|h| (h.dmg, h.outcome, h.breakdown.clone())).unwrap_or((0, "STATUS", String::new()));

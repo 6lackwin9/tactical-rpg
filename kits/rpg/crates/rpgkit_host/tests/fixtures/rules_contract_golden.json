@@ -32,6 +32,7 @@
     "tunable poise_mode row-only default=bar values=bar|pips needs=poise (no schema entry)",
     "tunable poise_pips row-only default=5 range=3..8 needs=poise+poise_mode=pips (no schema entry)",
     "tunable max_pip_loss_per_hit row-only default=3 range=1..5 needs=poise+poise_mode=pips (no schema entry)",
+    "tunable know_potency row-only default=0 range=0..3 (no schema entry)",
     "rule round_intent option system=planning bundle=intent_core requires=- conflicts=stances=on, switch_target_step=on",
     "rule enemy_moves option system=timing bundle=windup requires=- conflicts=-",
     "rule deck option system=build bundle=build requires=- conflicts=-",

@@ -483,7 +483,9 @@ impl Command {
                 }
                 let mut detail = String::new();
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
-                    let ok = status::try_inflict(&mut w.units[t], &self.status_effect.clone(), self.status_potency, Some(rng), status_rounds, self.status_magnitude, &src_name);
+                    // U1.2-S3b: the actor's KNOW term (ruleset `know_potency`; 0 = potency off)
+                    let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
+                    let ok = status::try_inflict_with(&mut w.units[t], &self.status_effect.clone(), self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name);
                     detail = format!(" ({} {})", if ok { "inflicts" } else { "resisted" }, self.status_effect);
                 }
                 if !damaging {
@@ -533,8 +535,9 @@ impl Command {
                     let mut note = String::new();
                     if !self.status_effect.is_empty() && w.units[v].is_alive() {
                         let st = self.status_effect.clone();
-                        let chance = status::apply_chance(&w.units[v], &st, self.status_potency);
-                        note = if status::try_inflict(&mut w.units[v], &st, self.status_potency, Some(rng), status_rounds, self.status_magnitude, &src_name) {
+                        let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
+                        let chance = status::apply_chance_with(&w.units[v], &st, self.status_potency, bonus);
+                        note = if status::try_inflict_with(&mut w.units[v], &st, self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name) {
                             format!(" [{} next round ({chance}%)]", status::display_name(&st))
                         } else {
                             format!(" [resisted {} ({chance}%)]", status::display_name(&st).to_lowercase())

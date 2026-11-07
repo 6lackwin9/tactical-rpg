@@ -313,13 +313,28 @@ pub fn blocked_blocks(status: &str) -> &'static [i32] {
 }
 
 /// The chance (0-100) a roll of `potency` lands `status` on `target`: potency less INT resistance and the status's own
-/// resist; S1.2-S3: 100 for a row that is not `resistable` (no roll).
+/// resist; S1.2-S3: 100 for a row that is not `resistable` (no roll). No attacker term (hazards, grounds, triggers).
 pub fn apply_chance(target: &Unit, status: &str, potency: i32) -> i32 {
+    apply_chance_with(target, status, potency, 0.0)
+}
+
+/// U1.2-S3b: the attacker's potency term of a skill's status roll, `know_potency x KNOW` (S1 section 2
+/// `attacker_know_potency`; the ruleset number `know_potency`, 0 = potency off, so the term is 0).
+pub fn know_bonus(attacker: &Unit, know_potency: f64) -> f64 {
+    if know_potency == 0.0 {
+        return 0.0;
+    }
+    know_potency * attacker.stats.stat("KNOW", attacker.weapon_context().as_deref()) as f64
+}
+
+/// `apply_chance` with an attacker term `bonus` (`know_bonus`) added to the potency before resistance:
+/// `clamp(round(potency + bonus - INT resist - status resist), 0, 100)`; 100 for a row that is not `resistable`.
+pub fn apply_chance_with(target: &Unit, status: &str, potency: i32, bonus: f64) -> i32 {
     if !resistable(status) {
         return 100;
     }
     let resist = target.debuff_resistance() + target.resist_for(status) as f64;
-    roundi(potency as f64 - resist).clamp(0, 100)
+    roundi(potency as f64 + bonus - resist).clamp(0, 100)
 }
 
 /// Whether `status` is rolled against resistance: its row's `resistable` (true for an id with no row, as before).
@@ -330,6 +345,13 @@ pub fn resistable(status: &str) -> bool {
 /// Rolls a skill-inflicted status (randi_range(1, 100) <= chance); on success it is queued for next round. S1.2-S3: a
 /// row that is not `resistable` lands without a roll (no draw).
 pub fn try_inflict(target: &mut Unit, status: &str, potency: i32, rng: Option<&mut GodotRng>, rounds: i32, magnitude: i32, source: &str) -> bool {
+    try_inflict_with(target, status, potency, 0.0, rng, rounds, magnitude, source)
+}
+
+/// `try_inflict` with an attacker term `bonus` (`know_bonus`; U1.2-S3b) in the chance (`apply_chance_with`); a row that
+/// is not `resistable` still lands without a roll.
+#[allow(clippy::too_many_arguments)]
+pub fn try_inflict_with(target: &mut Unit, status: &str, potency: i32, bonus: f64, rng: Option<&mut GodotRng>, rounds: i32, magnitude: i32, source: &str) -> bool {
     if !target.is_alive() {
         return false;
     }
@@ -337,7 +359,7 @@ pub fn try_inflict(target: &mut Unit, status: &str, potency: i32, rng: Option<&m
         queue(target, status, rounds, magnitude, source);
         return true;
     }
-    let chance = apply_chance(target, status, potency);
+    let chance = apply_chance_with(target, status, potency, bonus);
     let roll = match rng {
         Some(r) => r.randi_range(1, 100),
         Option::None => 100,
