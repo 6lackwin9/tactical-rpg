@@ -122,9 +122,20 @@ impl Resolver {
             if !a.cancelled && w.units[a.unit].is_active() && block >= a.start && block <= a.end {
                 if let CmdKind::Defend { mitigation, guard_broken, .. } = &a.command.kind {
                     if !guard_broken {
-                        w.units[a.unit].guard = *mitigation;
+                        // S1.2-S4 (Option 1C): the guard is held from the wind-up start to the round's end
+                        if block == a.start {
+                            crate::trigger::hold_defend(w, a.unit, *mitigation, block);
+                        }
+                        let u = &mut w.units[a.unit];
+                        u.guard = u.guard.max(*mitigation);
                     }
                 }
+            }
+        }
+        // S1.2-S4: held guards and `guard` statuses raise the guards (the larger source counts; a stun ends them)
+        for &c in &self.registered {
+            if w.units[c].is_active() {
+                crate::trigger::raise_guard(w, c, block);
             }
         }
         // HOOKS1 8.3, 8.1: held guards, then the Defends' `guard_start` triggers (rule triggers; nothing in classic)
@@ -296,6 +307,10 @@ impl Resolver {
                     }
                 }
             }
+            // S1.2-S4: the broken stance ends the guard held since the wind-up (Option 1C) from the next block on, as
+            // it ends a running Defend's
+            w.units[b].held_guard = None;
+            status::remove(&mut w.units[b], status::GUARD);
         }
         let a = &self.scheduled[idx];
         if let Some(s) = a.command.stance_on_end {
@@ -350,6 +365,10 @@ impl Resolver {
         crate::meter::round_end(self, w);
         // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
         crate::trigger::round_end(self, w);
+        // S1.2-S4: every held guard ends with the round (a multi-round guard goes on as its `guard` status)
+        for &c in &self.registered {
+            w.units[c].held_guard = None;
+        }
         crate::ground::settle(self, w);
     }
 

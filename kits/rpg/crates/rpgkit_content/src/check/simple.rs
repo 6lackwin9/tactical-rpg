@@ -45,7 +45,8 @@ pub fn terrain_errors(e: &Dict) -> Vec<String> {
             }
         }
         None if magnitude != 0 => {
-            let ids: Vec<&str> = status::ROWS.iter().filter(|r| r.magnitude_max > 0).map(|r| r.id).collect();
+            // S1.2-S4: `guard` (queued only by a multi-round Guard skill) is not a hazard's
+            let ids: Vec<&str> = status::ROWS.iter().filter(|r| r.magnitude_max > 0 && (!r.buff || !r.grant.is_empty())).map(|r| r.id).collect();
             errors.push(format!("magnitude only applies to {}", ids.join(", ")));
         }
         None => {}

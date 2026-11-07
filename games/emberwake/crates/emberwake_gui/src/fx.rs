@@ -906,8 +906,9 @@ const fn tint(id: &'static str, col: Rgba, lo: u8, hi: u8, period: u64) -> Statu
 
 /// Section 3's table in its order (the order a slot cycles in, S2); `stagger` has none (WINDUP1's `dazed` loop). As
 /// built (user 2026-10-29, the review board): the drifting sparks are 2 px and about twice as many, slow's and expose's
-/// rings at full alpha, steadfast's flash at 160.
-pub const STATUS_LOOKS: [StatusLook; 16] = [
+/// rings at full alpha, steadfast's flash at 160. S1.2-S4: `guard` (a multi-round guard's later rounds) a steel tint, a
+/// placeholder until the board picks its look.
+pub const STATUS_LOOKS: [StatusLook; 17] = [
     on("stun", Slot::Head, Prim::Orbit(Orbit { at: O, rx: 7.0, ry: 2.5, ms: 900, count: 3, size: 2, cols: [GOLD, LINEN], phase_deg: 0.0, star: true }), 0.0, 900),
     on("taunt", Slot::Head, hoop(2.0, 7.0, 200, 700, CRIMSON), 0.0, 1100),
     on("burn", Slot::Body, drift(7, -90.0, 70.0, 25.0, -20.0, 500, [AMBER, GOLD]), 4.0, 600),
@@ -923,6 +924,7 @@ pub const STATUS_LOOKS: [StatusLook; 16] = [
     tint("weaken", ASH, 40, 70, 1600),
     tint("empower", AMBER, 30, 70, 900),
     tint("fortify", CYAN, 25, 50, 1600),
+    tint("guard", STEEL, 25, 50, 1600),
     StatusLook { id: "stealth", slot: Slot::Alpha, shape: Shape::Fade },
 ];
 

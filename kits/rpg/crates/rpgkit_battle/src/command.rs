@@ -48,7 +48,10 @@ pub enum CmdKind {
         crit_hits: Vec<(UnitId, bool)>,
     },
     Defend {
+        /// The guard fraction (S1.2-S4: the skill's, or the ruleset default, `skill::guard_mitigation`).
         mitigation: f64,
+        /// S1.2-S4: the rounds the guard lasts; 2 or more queues the `guard` status for the later rounds at the impact.
+        guard_rounds: i32,
         grant_status: String,
         status_rounds: i32,
         extra_grants: Vec<Value>,
@@ -574,7 +577,7 @@ impl Command {
                     format!("[Attack] {src_name}'s {} hit {hits} unit{} for {total} damage ({})", self.name, if hits == 1 { "" } else { "s" }, parts.join(", "))
                 };
             }
-            CmdKind::Defend { mitigation, guard_broken, .. } => {
+            CmdKind::Defend { mitigation, guard_rounds, guard_broken, .. } => {
                 if !w.units[src].is_alive() {
                     self.failed = true;
                     return;
@@ -583,8 +586,20 @@ impl Command {
                     self.log = format!("[Defend] {src_name}'s guard was broken");
                     return;
                 }
-                w.units[src].guard = mitigation;
+                // S1.2-S4 (Option 1C): the guard is held from the wind-up start (`trigger::hold_defend`); the impact
+                // keeps the larger of it and the skill's own
+                let u = &mut w.units[src];
+                u.guard = u.guard.max(mitigation);
                 self.log = if mitigation > 0.0 { format!("[Defend] {src_name} raises guard ({}% less damage)", (mitigation * 100.0).round() as i32) } else { format!("[Defend] {src_name} holds a defensive stance") };
+                // S1.2-S4: a multi-round guard queues the full-round `guard` status for its later rounds, at its fraction
+                // in percent capped at the row's maximum; a fraction below the row's minimum queues nothing (it is not
+                // raised to the minimum)
+                let row = status::row_of(status::GUARD);
+                let pct = roundi(mitigation * 100.0).min(row.map_or(0, |r| r.magnitude_max));
+                if guard_rounds >= 2 && row.is_some_and(|r| pct >= r.magnitude_min) {
+                    status::queue(&mut w.units[src], status::GUARD, guard_rounds - 1, pct, &src_name);
+                    self.log += &format!("; guard holds {} more round{}", guard_rounds - 1, if guard_rounds == 2 { "" } else { "s" });
+                }
             }
             CmdKind::Focus { boost, rounds } => {
                 if !w.units[src].is_alive() {

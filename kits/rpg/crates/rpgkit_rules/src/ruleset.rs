@@ -450,6 +450,11 @@ pub struct Numbers {
     pub untrained_burden_add: i32,
     /// U3.2-S3 (`req_discount_per_level`): the stat requirement discount per proficiency level.
     pub req_discount_per_level: i32,
+    /// S1.2-S4 (`guard_common_mitigation`, S1 section 3): the guard fraction of a 1-round Guard skill that authors none.
+    pub guard_common_mitigation: f64,
+    /// S1.2-S4 (`guard_multi_round_mitigation`, S1 section 3): the guard fraction of a multi-round Guard skill
+    /// (`guard_rounds` 2 or more) that authors none, lower than the 1-round one (FB-48).
+    pub guard_multi_round_mitigation: f64,
 }
 
 impl Default for Numbers {
@@ -490,6 +495,8 @@ impl Default for Numbers {
             untrained_power_mult: crate::stats::UNTRAINED_POWER_MULT,
             untrained_burden_add: crate::stats::UNTRAINED_BURDEN_ADD,
             req_discount_per_level: crate::stats::REQ_DISCOUNT_PER_LEVEL,
+            guard_common_mitigation: status::GUARD_COMMON_MITIGATION,
+            guard_multi_round_mitigation: status::GUARD_MULTI_ROUND_MITIGATION,
         }
     }
 }
@@ -555,6 +562,8 @@ impl Numbers {
             untrained_power_mult: value::float(o, "untrained_power_mult", d.untrained_power_mult),
             untrained_burden_add: value::int(o, "untrained_burden_add", d.untrained_burden_add),
             req_discount_per_level: value::int(o, "req_discount_per_level", d.req_discount_per_level),
+            guard_common_mitigation: value::float(o, "guard_common_mitigation", d.guard_common_mitigation),
+            guard_multi_round_mitigation: value::float(o, "guard_multi_round_mitigation", d.guard_multi_round_mitigation),
         }
     }
 
@@ -774,7 +783,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 27] = [
+pub const FIELD_RULES: [FieldRule; 29] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -809,6 +818,10 @@ pub const FIELD_RULES: [FieldRule; 27] = [
     FieldRule { range: Some((0.25, 1.0)), ..field_rule("untrained_power_mult", &[]) },
     FieldRule { range: Some((0.0, 4.0)), ..field_rule("untrained_burden_add", &[]) },
     FieldRule { range: Some((0.0, 4.0)), ..field_rule("req_discount_per_level", &[]) },
+    // S1.2-S4 (S1 section 3): the guard fractions a Guard skill that authors none takes, row-only like the status
+    // numbers; read whatever the rules
+    FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_common_mitigation", &[]) },
+    FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_multi_round_mitigation", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -975,7 +988,7 @@ pub const LOCKED: [Locked; 48] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 9] = [
+pub const PROMOTED: [(&str, &str); 11] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -985,6 +998,8 @@ pub const PROMOTED: [(&str, &str); 9] = [
     ("UNTRAINED_POWER_MULT", "untrained_power_mult"),
     ("UNTRAINED_BURDEN_ADD", "untrained_burden_add"),
     ("REQ_DISCOUNT_PER_LEVEL", "req_discount_per_level"),
+    ("GUARD_COMMON_MITIGATION", "guard_common_mitigation"),
+    ("GUARD_MULTI_ROUND_MITIGATION", "guard_multi_round_mitigation"),
 ];
 
 impl Numbers {
@@ -1033,6 +1048,8 @@ impl Numbers {
             "untrained_power_mult" => self.untrained_power_mult.to_string(),
             "untrained_burden_add" => self.untrained_burden_add.to_string(),
             "req_discount_per_level" => self.req_discount_per_level.to_string(),
+            "guard_common_mitigation" => self.guard_common_mitigation.to_string(),
+            "guard_multi_round_mitigation" => self.guard_multi_round_mitigation.to_string(),
             _ => return None,
         })
     }

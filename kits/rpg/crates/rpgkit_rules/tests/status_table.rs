@@ -1,14 +1,15 @@
 //! S1.2-S1 (docs/sessions/S1_STATUS.md section 4 item 2): the 17 status rows load from the frozen kit table
-//! `statuses.json` behind the old readers. `OLD` is the Rust const the table replaced, copied row for row, so every
+//! `statuses.json` behind the old readers (S1.2-S4 adds the 18th, `guard`, last). `OLD` is the Rust const the table replaced, copied row for row, so every
 //! reader (`row_of`, `cap_of`, `stacking_of`, `display_name`, `intent_bound`, `magnitude_unit`, the buff lists) must
 //! give exactly what the const gave.
 
 use rpgkit_rules::status::{self, Primitive, Stacking, Stacking::*, PRIMITIVES};
 
 /// (id, buff, resistable, default_rounds, stacking, cap, display, grant, magnitude_min, magnitude_max, intent_bound,
-/// magnitude_unit): the removed `ROWS: [StatusRow; 17]` const in table order, plus the old `magnitude_unit` match.
+/// magnitude_unit): the removed `ROWS: [StatusRow; 17]` const in table order, plus the old `magnitude_unit` match, then
+/// S1.2-S4's `guard` (a buff no skill grants by `grant_status`: a multi-round Guard skill queues it, 10-90 percent).
 type Old = (&'static str, bool, bool, i32, Stacking, i32, &'static str, &'static str, i32, i32, bool, &'static str);
-const OLD: [Old; 17] = [
+const OLD: [Old; 18] = [
     ("stagger", false, true, 1, RefreshMaxDuration, 0, "Staggered", "", 0, 0, false, "pct"),
     ("stun", false, true, 1, RefreshMaxDuration, 0, "Stunned", "", 0, 0, false, "pct"),
     ("root", false, true, 1, RefreshMaxDuration, 0, "Rooted", "", 0, 0, false, "pct"),
@@ -26,12 +27,14 @@ const OLD: [Old; 17] = [
     ("empower", true, false, 2, RefreshMaxDuration, 25, "Empowered", "support", 1, 25, false, "pct"),
     ("steadfast", true, false, 1, RefreshMaxDuration, 0, "Steadfast", "support", 0, 0, false, "pct"),
     ("stealth", true, false, 2, RefreshMaxDuration, 0, "Stealthed", "defend", 0, 0, true, "pct"),
+    ("guard", true, false, 1, RefreshMaxDuration, 90, "Guarded", "", 10, 90, false, "pct"),
 ];
 
-/// 1: the table holds the 17 rows in the const's order, and every reader returns the const's value for each id.
+/// 1: the table holds the 17 rows in the const's order then `guard`, and every reader returns the const's value for each
+/// id.
 #[test]
 fn the_table_loads_the_seventeen_rows_with_the_old_values() {
-    assert_eq!(status::ROWS.len(), 17, "17 rows (guard is S1.2-S4)");
+    assert_eq!(status::ROWS.len(), 18, "17 rows and guard (S1.2-S4)");
     let ids: Vec<&str> = status::ROWS.iter().map(|r| r.id).collect();
     assert_eq!(ids, OLD.iter().map(|o| o.0).collect::<Vec<_>>(), "table order is the old const order");
     for (id, buff, resistable, rounds, stacking, cap, display, grant, mmin, mmax, bound, unit) in OLD {
@@ -79,7 +82,7 @@ fn every_row_has_a_valid_primitive_tag() {
         assert_eq!(Stacking::from_id(r.stacking.id()), Some(r.stacking));
     }
     let s1: [(Primitive, &[&str]); 6] = [
-        (Primitive::Modifier, &["weaken", "empower", "fortify", "expose", "haste", "slow"]),
+        (Primitive::Modifier, &["weaken", "empower", "fortify", "expose", "haste", "slow", "guard"]),
         (Primitive::Tick, &["poison", "burn", "regen", "bleed"]),
         (Primitive::BlockLock, &["stagger", "stun", "root"]),
         (Primitive::Targeting, &["taunt", "stealth"]),
@@ -92,7 +95,7 @@ fn every_row_has_a_valid_primitive_tag() {
         }
     }
     let listed: usize = s1.iter().map(|(_, ids)| ids.len()).sum();
-    assert_eq!(listed, status::ROWS.len(), "S1 section 1 places each of the 17 rows");
+    assert_eq!(listed, status::ROWS.len(), "S1 section 1 places each of the 18 rows");
 }
 
 /// 4: the derived lists keep the const's table order (cleanse lists and the content checks follow it).

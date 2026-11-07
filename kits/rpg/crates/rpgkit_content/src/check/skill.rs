@@ -581,8 +581,10 @@ fn magnitude_range(st: &str) -> (i64, i64) {
     status::row_of(st).map_or((0, 0), |r| (r.magnitude_min as i64, r.magnitude_max as i64))
 }
 
+/// The statuses a skill's `status_magnitude` can reach: a debuff it inflicts or a buff it grants (S1.2-S4: not `guard`,
+/// which only a multi-round Guard skill queues, at its own fraction).
 fn magnitude_ids() -> Vec<&'static str> {
-    status::ROWS.iter().filter(|r| r.magnitude_max > 0).map(|r| r.id).collect()
+    status::ROWS.iter().filter(|r| r.magnitude_max > 0 && (!r.buff || !r.grant.is_empty())).map(|r| r.id).collect()
 }
 
 /// Skill family rules: a valid family id, ids <head> / <head>_<n>, ranks 1..n without gaps, one kind per family, and
@@ -718,6 +720,14 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let Some(f) = fields("content", "skills").iter().map(json::dict).find(|f| json::s(f, "key") == key) else { continue };
         if !json::deep_equal(json::get(e, key), json::get(f, "default")) {
             out.push(format!("{} belongs to {} skills, not {kind}.", json::s(f, "label"), kinds_with(key).join("/")));
+        }
+    }
+    // S1.2-S4: `guard_rounds` is a row-only key until its schema entry (the checks golden's frozen family rows lack it)
+    if e.contains_key("guard_rounds") {
+        if kind != "DEFEND" {
+            out.push(format!("Guard rounds belong to DEFEND skills, not {kind}."));
+        } else if !(1..=5).contains(&json::i(e, "guard_rounds", 1)) {
+            out.push("Guard rounds must be 1-5.".into());
         }
     }
     let status_id = json::s(e, "status_effect");

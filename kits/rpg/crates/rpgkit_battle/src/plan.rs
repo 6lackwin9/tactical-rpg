@@ -271,7 +271,7 @@ impl PlanEntry {
             Kind::Status => Command::new(actor, 0, 1, CmdKind::StatusBlock { status: self.status_name.clone() }),
             Kind::Support => Command::new(actor, 0, s.blocks, CmdKind::Support { target: self.target.unwrap_or(actor), skill: self.skill, last_heal: 0, last_status: String::new(), last_cleansed: Vec::new() }),
             Kind::Defend => {
-                let mut c = Command::new(actor, 1, s.blocks, CmdKind::Defend { mitigation: s.mitigation, grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
+                let mut c = Command::new(actor, 1, s.blocks, CmdKind::Defend { mitigation: skill::guard_mitigation(s, &w.ruleset.numbers), guard_rounds: s.guard_rounds, grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
                 c.status_magnitude = s.status_magnitude;
                 c
             }

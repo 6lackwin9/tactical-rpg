@@ -198,17 +198,52 @@ pub fn guarding(w: &World, sched: &[crate::resolver::ScheduledAction], c: UnitId
     crate::poise::guarded(sched, c, block) || held_at(w, c, block).is_some()
 }
 
-/// 8.3: `c`'s held guard mitigation at `block` (None without one).
+/// 8.3: `c`'s held guard mitigation at `block` (None without one). S1.2-S4: an active `guard` status (a multi-round
+/// guard's later rounds) is held for the whole round; the sources do not stack (the larger counts).
 pub fn held_at(w: &World, c: UnitId, block: i32) -> Option<f64> {
-    w.units[c].held_guard.filter(|g| block <= g.last_block).map(|g| g.mitigation)
+    let held = w.units[c].held_guard.filter(|g| block <= g.last_block).map(|g| g.mitigation);
+    let status = status::guard_status_mitigation(&w.units[c]);
+    match held {
+        Some(m) => Some(m.max(status)),
+        None => (status > 0.0).then_some(status),
+    }
 }
 
-/// 8.3: `prepare_block` raises each unit's guard to its held guard when that is larger (rule triggers).
+/// 8.3: `prepare_block` raises each unit's guard to its held guard when that is larger (`guard_mitigation =
+/// max(running Defend, held guard, guard status)`, S1 section 1).
 pub fn raise_held(w: &mut World, c: UnitId, block: i32) {
     if let Some(m) = held_at(w, c, block) {
         let u = &mut w.units[c];
         u.guard = u.guard.max(m);
     }
+}
+
+/// S1.2-S4 (Option 1C): a Guard skill's guard is held from the block its wind-up starts through the round's last block
+/// at the skill's own fraction, unclamped, so it is what the running Defend gives (the damage path caps guard and cover
+/// at `GUARD_CAP`); merged with any held guard (the larger mitigation, the later last block); 0 holds nothing.
+pub fn hold_defend(w: &mut World, c: UnitId, mitigation: f64, block: i32) {
+    if mitigation > 0.0 {
+        hold(w, c, mitigation, 0, block);
+    }
+}
+
+/// S1.2-S4: `c`'s guard ends (a Poise break, a stun, the `end_guard` effect): the held guard and the `guard` status instance
+/// (active and queued) go and this block's guard drops to 0. True when it held one.
+pub fn end_guard(w: &mut World, c: UnitId) -> bool {
+    let u = &mut w.units[c];
+    let had = u.held_guard.take().is_some() | status::remove(u, status::GUARD);
+    u.guard = 0.0;
+    had
+}
+
+/// S1.2-S4: `prepare_block` for `c` (every ruleset): a stun locking `block` ends its guard (S1 section 1: "unless
+/// Poise-broken or Stunned"), then the held guard and the `guard` status raise its guard.
+pub fn raise_guard(w: &mut World, c: UnitId, block: i32) {
+    if w.units[c].has_status("stun") && status::blocked_blocks("stun").contains(&block) {
+        end_guard(w, c);
+        return;
+    }
+    raise_held(w, c, block);
 }
 
 /// The holders of `c` now: the triggers of its commands that run (start to impact) at `block`, then its passives' and
@@ -323,10 +358,15 @@ fn target_of(e: &Obj, ev: &Event) -> Option<UnitId> {
     }
 }
 
-/// 8.3: sets `c`'s held guard (the larger mitigation and the later last block when it holds one) and raises its guard.
+/// 8.3: a trigger's `guard` effect: sets `c`'s held guard at `mitigation` clamped to 0.1-0.9 (`hold`).
 fn hold_guard(w: &mut World, c: UnitId, mitigation: f64, blocks: i32, block: i32) -> HeldGuard {
+    hold(w, c, mitigation.clamp(0.1, 0.9), blocks, block)
+}
+
+/// 8.3: sets `c`'s held guard (the larger mitigation and the later last block when it holds one) and raises its guard.
+fn hold(w: &mut World, c: UnitId, mitigation: f64, blocks: i32, block: i32) -> HeldGuard {
     let last = if blocks <= 0 { w.total_blocks } else { (block + blocks - 1).min(w.total_blocks) };
-    let mut g = HeldGuard { mitigation: mitigation.clamp(0.1, 0.9), last_block: last };
+    let mut g = HeldGuard { mitigation, last_block: last };
     if let Some(old) = w.units[c].held_guard.filter(|o| block <= o.last_block) {
         g = HeldGuard { mitigation: g.mitigation.max(old.mitigation), last_block: g.last_block.max(old.last_block) };
     }
@@ -767,8 +807,8 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                         }
                     }
                 }
-                let had = w.units[to].held_guard.take().is_some_and(|g| block <= g.last_block);
-                w.units[to].guard = 0.0;
+                let had = w.units[to].held_guard.is_some_and(|g| block <= g.last_block) | (status::guard_status_mitigation(&w.units[to]) > 0.0);
+                end_guard(w, to);
                 if n == 0 && !had {
                     continue;
                 }

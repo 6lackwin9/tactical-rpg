@@ -111,13 +111,14 @@ impl StatusRow {
 use Stacking::*;
 
 /// S1.2-S1: the frozen kit status table (`statuses.json` beside this file), embedded at build time so every reader
-/// works without a catalog. Games do not override it (the 18th row, `guard`, comes with S1.2-S4).
+/// works without a catalog. Games do not override it (the 18th row, `guard`, came with S1.2-S4).
 const TABLE_TEXT: &str = include_str!("statuses.json");
 
 static TABLE: LazyLock<Value> = LazyLock::new(|| serde_json::from_str(TABLE_TEXT).expect("statuses.json: valid JSON"));
 
 /// The status rows in table order (Godot's StatusRegistry order; rows 16-17, RULESET1 P12 / intent GD5, engine-only:
-/// `steadfast` (cannot be broken) and `stealth` (a Guard buff), which classic data never grants). Every field is
+/// `steadfast` (cannot be broken) and `stealth` (a Guard buff), which classic data never grants; row 18, S1.2-S4: `guard`,
+/// the later rounds of a multi-round Guard skill, queued by the skill, never a grant option). Every field is
 /// required; a malformed table fails on first use (the kit test `status_table` loads it).
 pub static ROWS: LazyLock<Vec<StatusRow>> = LazyLock::new(|| {
     let rows = TABLE.as_array().expect("statuses.json: an array of rows");
@@ -170,6 +171,23 @@ pub const DEBT_STAGGER: i32 = 3;
 pub const DEBT_STUN: i32 = 5;
 /// S1.2-S3: the default of `counter_mult` (riposte's counter damage multiplier; was `rpgkit_battle::command`'s const).
 pub const COUNTER_MULT: f64 = 0.5;
+/// S1.2-S4: the default of `guard_common_mitigation` (the guard fraction of a 1-round Guard skill that authors none).
+pub const GUARD_COMMON_MITIGATION: f64 = 0.35;
+/// S1.2-S4: the default of `guard_multi_round_mitigation` (the guard fraction of a multi-round Guard skill that authors
+/// none; lower than the 1-round one, FB-48).
+pub const GUARD_MULTI_ROUND_MITIGATION: f64 = 0.20;
+
+/// S1.2-S4 (S1 section 1, `modifier`): the status a multi-round Guard skill queues for its later rounds; its magnitude
+/// is the guard fraction in percent and it raises the unit's guard for every block of the rounds it is active in.
+pub const GUARD: &str = "guard";
+
+/// S1.2-S4: the guard fraction an active `guard` status gives `c` (its magnitude / 100), 0 without one.
+pub fn guard_status_mitigation(c: &Unit) -> f64 {
+    if !c.st.active.contains(GUARD) {
+        return 0.0;
+    }
+    c.active_magnitude(GUARD) as f64 / 100.0
+}
 
 pub fn row_of(status: &str) -> Option<&'static StatusRow> {
     ROWS.iter().find(|r| r.id == status)

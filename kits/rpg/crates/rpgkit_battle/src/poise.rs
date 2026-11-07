@@ -670,9 +670,9 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
         a.broken = true;
         a.command.poise_bonus = 0;
     }
-    w.units[t].guard = 0.0;
-    // HOOKS1 8.3: a break ends a held guard (rule triggers; none in classic)
-    w.units[t].held_guard = None;
+    // HOOKS1 8.3, S1.2-S4: a break ends the guard: the held guard (a Guard skill's from its wind-up, Option 1C, or a
+    // trigger's) and the `guard` status instance
+    crate::trigger::end_guard(w, t);
     let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default() };
     res.log.push(break_line(w, t, &b));
     b

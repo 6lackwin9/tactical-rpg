@@ -1023,8 +1023,9 @@ impl DojoSession {
                 }
             }
             "DEFEND" => {
-                self.hero_mut().guard = s.mitigation;
-                let pct = (s.mitigation * 100.0).round() as i32;
+                let mitigation = skill::guard_mitigation(&s, &self.ruleset.numbers);
+                self.hero_mut().guard = mitigation;
+                let pct = (mitigation * 100.0).round() as i32;
                 self.log_event("DEFEND", &s.name, &format!("Guard -{pct}% until the next round • {ap_note}"), pct, "GUARD");
                 self.fx("glow", true, &format!("{} -{pct}%", s.name), Tone::Info);
             }

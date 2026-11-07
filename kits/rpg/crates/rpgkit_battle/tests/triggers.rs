@@ -436,8 +436,12 @@ fn ap_grant_and_reveal() {
     assert!(w.units[HERO].has_status("steadfast"), "granted as the Defend starts");
     run(&mut w, &mut res, 1, 2);
     assert!(w.units[HERO].has_status("steadfast"), "while it runs");
+    // S1.2-S4 (Option 1C): the guard holds past the Defend's own blocks to the round's end, and the grant with it
     res.prepare_block(&mut w, 3);
-    assert!(!w.units[HERO].has_status("steadfast"), "gone once it ends");
+    assert!(w.units[HERO].has_status("steadfast"), "the guard holds after the Defend's blocks (1C)");
+    trigger::end_guard(&mut w, HERO);
+    res.prepare_block(&mut w, 4);
+    assert!(!w.units[HERO].has_status("steadfast"), "gone once the guard ends");
 
     let mut w = s.w.clone();
     w.units[FOE].hp = 1;

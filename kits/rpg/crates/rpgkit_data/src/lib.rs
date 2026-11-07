@@ -326,7 +326,12 @@ pub struct SkillDef {
     pub grant_status: String,
     pub extra_grants: Vec<Value>,
     pub cleanse_statuses: Vec<String>,
+    /// DEFEND: the guard fraction (0 = none); S1.2-S4: a row without the key takes the ruleset default for its
+    /// `guard_rounds` (`rpgkit_battle::skill::guard_mitigation`).
     pub mitigation: f64,
+    /// S1.2-S4 (DEFEND): the rounds the guard lasts (1 = this round, from the wind-up start to the round's end); 2 or
+    /// more queues the `guard` status for the later rounds.
+    pub guard_rounds: i32,
     pub boost: f64,
     pub boost_rounds: i32,
     pub jump_tiles: i32,
@@ -416,6 +421,7 @@ impl SkillDef {
             extra_grants: array(o, "extra_grants").to_vec(),
             cleanse_statuses: strings(o, "cleanse_statuses"),
             mitigation: float(o, "mitigation", 0.0),
+            guard_rounds: int(o, "guard_rounds", 1),
             boost: float(o, "boost", 0.0),
             boost_rounds: int(o, "boost_rounds", 0),
             jump_tiles: int(o, "jump_tiles", 0),
