@@ -28,7 +28,7 @@ While `U1` derives continuous `Max Poise` (`CONS * 2 + STR + gear_poise_bonus`, 
 - **Poise Break (`0 Pips` remaining)**:
   - When remaining Poise Pips reach `0` (unless `steadfast` from `S1` is active):
     1. Cancels the target's winding-up action in the current/remaining blocks of this round.
-    2. Queues the `stagger` status (`blocks [1, 4]` locked next round).
+    2. Queues the `stagger` status (locks discrete timeline blocks `1` and `4` next round, list `[1, 4]`).
     3. Refills all `5 Pips` (`Max Poise`) at round `roll_over` so units cannot be chain-broken across consecutive rounds without refilling first.
 
 ## 2. AP overspend debt (`C10`) and unit meters (`unit_meters`)
