@@ -36,6 +36,18 @@ impl StaggerTaken {
     }
 }
 
+/// U4.2-S4 (FB-30): one hit-time modifier grant the unit holds (`skill_potency`, `stagger_taken`, `forced_move` tiles)
+/// and its source (`passive:<id>`, a band's `passive:<source>`, `gear:<item>`, `gear:<item>:tier<n>`), in apply order.
+/// The accumulators stay the numbers every hit reads (unchanged arithmetic, FB-26's combine rules); these name the
+/// sources of the stage modifier the unit's evaluators give a hit (`potency_modifier`, `stagger_taken_modifier`,
+/// `forced_tile_parts`), so the hit's trace shows them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HitSource {
+    pub source: String,
+    pub target: Target,
+    pub value: f64,
+}
+
 /// HOOKS1 FM5 (rule `forced_move`; engine-only): what a unit's passive and worn-item `forced_move` effects add up to:
 /// it holds firm against every forced move (`immune` always) or while guarding (`immune` guarding), and its own pushes
 /// and pulls move `bonus_tiles` more tiles. Read only under the rule.
@@ -249,6 +261,11 @@ pub struct Unit {
     pub trigger_crit: f64,
     /// HOOKS1 UM1: the passives' `meter` effects in apply order; read only under the rule unit_meters.
     pub passive_meters: Vec<HeldMeter>,
+    /// U4.2-S4 (FB-30): the hit-time modifier grants of passives and meter bands, with their sources (`HitSource`); a
+    /// band's go when the band is left.
+    pub hit_sources: Vec<HitSource>,
+    /// U4.2-S4: the worn items', rebuilt on every sync.
+    pub gear_hit_sources: Vec<HitSource>,
     /// HOOKS1 UM6: the meter skills the battle gave this unit (open without a slot, like a basic; empty outside a
     /// battle under the rule unit_meters).
     pub meter_skills: Vec<String>,
@@ -333,6 +350,8 @@ impl Unit {
             held_guard: None,
             trigger_crit: 0.0,
             passive_meters: Vec::new(),
+            hit_sources: Vec::new(),
+            gear_hit_sources: Vec::new(),
             meter_skills: Vec::new(),
             passives: Vec::new(),
             st: StatusState::default(),
@@ -465,6 +484,7 @@ impl Unit {
         self.gear_spell_reach = 0;
         self.gear_forced = ForcedTraits::default();
         self.gear_triggers.clear();
+        self.gear_hit_sources.clear();
         self.gear_skills.clear();
         self.gear_crit = 0.0;
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
@@ -566,6 +586,15 @@ impl Unit {
     /// One modifier grant (`id`: the source without `passive:`).
     fn apply_modifier(&mut self, cat: &Catalog, m: &Modifier, id: &str, gear: bool) {
         let c: Combine = m.target.combine();
+        // U4.2-S4 (FB-30): a hit-time target keeps its source (a passive's or band's as its stat modifiers name it)
+        if matches!(m.target, Target::SkillPotency(_) | Target::StaggerTaken { .. } | Target::ForcedTiles) {
+            let held = HitSource { source: if gear { id.to_string() } else { format!("passive:{id}") }, target: m.target.clone(), value: m.value };
+            if gear {
+                self.gear_hit_sources.push(held);
+            } else {
+                self.hit_sources.push(held);
+            }
+        }
         let int = m.value as i32;
         match &m.target {
             Target::Stat { stat, tag, percent } => {
@@ -681,6 +710,8 @@ impl Unit {
             }
         }
         self.trigger_crit -= a.crit;
+        // U4.2-S4: the band's hit-time sources go with it
+        self.hit_sources.retain(|h| h.source != a.source);
     }
 
     /// HOOKS1 UM6: whether the battle gave this unit `skill_id` as a meter skill.
@@ -1392,6 +1423,61 @@ impl Unit {
             }
         }
         total
+    }
+
+    /// U4.2-S4 (FB-30): the sources of `potency_for_skill`, in its sum order (the family's passive adds, its worn ones,
+    /// then per group of the skill the passive adds and the worn ones); each part is one grant's add (a 0 add, which
+    /// changes nothing, names no part).
+    pub fn potency_parts(&self, skill: &rpgkit_data::SkillDef) -> Vec<crate::pipeline::Part> {
+        let fam = skill.family_id();
+        let groups: Vec<&str> = GROUPS.iter().copied().filter(|g| skill_in_group(skill, g)).collect();
+        let of = |list: &[HitSource], set: &dyn Fn(&SkillSet) -> bool| -> Vec<crate::pipeline::Part> {
+            list.iter()
+                .filter(|h| h.value != 0.0 && matches!(&h.target, Target::SkillPotency(x) if set(x)))
+                .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
+                .collect()
+        };
+        let family = |x: &SkillSet| matches!(x, SkillSet::Family(f) if f == fam);
+        let mut out = of(&self.hit_sources, &family);
+        out.extend(of(&self.gear_hit_sources, &family));
+        for g in groups {
+            let group = |x: &SkillSet| matches!(x, SkillSet::Group(y) if y == g);
+            out.extend(of(&self.hit_sources, &group));
+            out.extend(of(&self.gear_hit_sources, &group));
+        }
+        out
+    }
+
+    /// U4.2-S4 (FB-30): the skill potency as the hit's mult-stage modifier `potency`: the value `potency_for_skill` folds
+    /// (1 + the sum, FB-26), the parts its sources.
+    pub fn potency_modifier(&self, skill: &rpgkit_data::SkillDef) -> crate::pipeline::Modifier {
+        use crate::pipeline::{Modifier as Stage1, Op, Stage};
+        Stage1::new("potency", Stage::Mult, Op::Mul(self.potency_for_skill(skill))).with_parts(self.potency_parts(skill))
+    }
+
+    /// U4.2-S4 (FB-30): the target's `stagger_taken` effects that match an action `blocks` long as the stagger hit's
+    /// mult-stage modifier `passive`: their product (FB-26, as `poise::factors` reads it), the parts its sources.
+    pub fn stagger_taken_modifier(&self, blocks: i32) -> crate::pipeline::Modifier {
+        use crate::pipeline::{Modifier as Stage1, Op, Part, Stage};
+        let product: f64 = self.stagger_taken.iter().filter(|e| e.matches(blocks)).map(|e| e.mult).product();
+        let parts = self
+            .hit_sources
+            .iter()
+            .filter(|h| matches!(h.target, Target::StaggerTaken { max_blocks } if StaggerTaken { mult: h.value, max_blocks }.matches(blocks)))
+            .map(|h| Part { source: h.source.clone().into(), value: h.value })
+            .collect();
+        Stage1::new("passive", Stage::Mult, Op::Mul(product)).with_parts(parts)
+    }
+
+    /// U4.2-S4 (FB-30): the sources of `forced_traits().bonus_tiles` (passives first, then worn items; each a row's tiles;
+    /// an immunity-only row, 0 tiles, names no part).
+    pub fn forced_tile_parts(&self) -> Vec<crate::pipeline::Part> {
+        self.hit_sources
+            .iter()
+            .chain(&self.gear_hit_sources)
+            .filter(|h| h.target == Target::ForcedTiles && h.value != 0.0)
+            .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
+            .collect()
     }
 
     /// SkillDef.power_for: the skill multiplier x potency x weaken x empower.

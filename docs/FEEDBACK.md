@@ -9,8 +9,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 | Task / Sub-block | Stage / Status | Branch / Commit | Notes |
 | --- | --- | --- | --- |
-| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5. |
-| R1 path (READY R1-6..R1-8) | W2-1 done; W2-2 slices 1-3 done; slice 4 (`U4.2-S3` temperament) in review | `claude/u42s3-temperament` | Then W2-2 slice 5, W2-3, then the R1 release PR. |
+| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3. |
+| R1 path (READY R1-6..R1-8) | W2-1 done; W2-2 slices 1-4 done; slice 5 (`U4.2-S4`) in review | `claude/u42s4-evaluators` | Then W2-3, then the R1 release PR. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
@@ -124,6 +124,14 @@ FB-01 to FB-66 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: World `characters` gain `temperament` (an always-on passive), `default_intent` and `ai_role` (the unit field's vocabularies), stored only when set. Gather order: own passives, temperament, faction, disciplines, named items (each id once); heroes too (RECRUIT1), and the hero save leaves the temperament out so every build re-reads it. A character's `ai_role` / `default_intent` override its base unit's (roster entry, AI profile, session start intent; the hero build definition). Checks: a slottable temperament is refused; `default_intent` must be listed by a ruleset. No golden moved. Tests: `rpgkit_world/tests/temperament.rs` (4), `rpgkit_content/tests/temperament.rs` (4).
 - **Recommendation**: Pick temperaments (Build proposes only two from personality text: Tev Quill `keen_senses`, Mara Voss `steady_nerves`). Answer: should a hero's `default_intent` set its battle start intent (no reader today)? Should faction and discipline passives also leave the hero save snapshot? Role warnings for a character's `ai_role`? Follow-up when data sets the AI keys: the balance sim does not apply a character's `ai_role` / `default_intent` (`rpgkit_sim/src/world.rs` `has_extras`, `character_overrides`). Docs delta: GAME_BRIEF passives bullet as above; STRUCTURE: the two tests; HISTORY: "U4.2-S3: character temperament, default_intent, ai_role (FB-29); no golden moved"; PORT_NOTES: `character_passives` includes the temperament.
+
+### FB-84: U4.2-S4 (W2-2 slice 5) built as an exact port: hit-time grants reach the pipeline with sources
+
+- **Spec**: `docs/sessions/U4_PASSIVES.md` (modifier grants); `U1_STATS.md` (the pipeline); FB-30
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Hit-time grants (`skill_potency`, `stagger_taken`, `forced_move` tiles) are recorded per source (`Unit::hit_sources`, `gear_hit_sources`) and reach the hit as pipeline modifiers whose trace `parts` name each passive or item: damage's `skill` step, a new HEAL pipeline (base, mult `potency`, round floor 0) behind `heal_amount`, the stagger `passive` step, forced-tile parts. Unit-state ratings stay accumulators (stats, resist, ap_regen, status_potency, reach, foresight, crit, immunities). Each modifier's value is the folded number the accumulator path computed, so no number moved (the `skill` step's op also holds weaken and empower, so its parts do not add up to the op); the traced runs exist but nothing shows them yet (no UI or log reads the parts); a double-path test covers every shipped and frozen passive and item. No golden moved. Not built (each moves numbers or timing): damage potency as its own hit-time step (today folded at planning with weaken and empower), one modifier per potency source (needs an `add_pct` op that sums within a stage), one `Mul` per `stagger_taken` row (float order). Test: `emberwake_rules/tests/hit_modifiers.rs` (2).
+- **Recommendation**: Decide whether damage potency moves to hit time (a measured golden move) and whether to add an `add_pct` stage op; does a status-roll pipeline belong to S1/S2? Docs delta: PORT_NOTES / engine README: modifiers and trace steps carry `parts`, the HEAL pipeline, `compute_traced_skill`, `stagger_traced`, `hit_sources`; GAME_BRIEF passives: hit-time grants reach a hit as sourced modifiers (trace only); STRUCTURE: tests `hit_modifiers.rs`, `rpgkit_battle/tests/stagger_trace.rs`; HISTORY: "U4.2-S4: exact port, no golden moved".
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

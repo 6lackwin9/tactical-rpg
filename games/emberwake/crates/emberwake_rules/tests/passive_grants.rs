@@ -11,9 +11,9 @@
 
 use aegis_core::value::{self, to_int, to_str, Obj};
 use emberwake_data::{Catalog, ClassDef, PassiveDef, TriggerRow};
-use emberwake_rules::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, Target};
+use emberwake_rules::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use emberwake_rules::stats::{Proficiency, StatModifier};
-use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, StaggerTaken, FORESIGHT_RANGE_MAX, GEAR_EFFECT_SOURCE, STAGGER_TAKEN_MULT_MAX};
+use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, HitSource, StaggerTaken, FORESIGHT_RANGE_MAX, GEAR_EFFECT_SOURCE, STAGGER_TAKEN_MULT_MAX};
 use emberwake_rules::{build_unit, Unit};
 use indexmap::IndexMap;
 use serde_json::{json, Map, Value};
@@ -66,7 +66,18 @@ fn assert_same(a: &Unit, b: &Unit, what: &str) {
 
 // ---- The oracle: the raw-JSON reader as it was before U4.2-S1 (unit.rs, stats.rs), kept verbatim ------------------
 // U3.2-S4 (FB-35) changed its gear branch on purpose, marked below: a worn item's `stat` goes under GEAR_EFFECT_SOURCE,
-// its `skill` to `gear_skills` (both rebuilt on every sync), and gear applies no `proficiency`.
+// its `skill` to `gear_skills` (both rebuilt on every sync), and gear applies no `proficiency`. U4.2-S4 (FB-30) adds
+// the source records of the hit-time targets (`old_record`): skill_potency, stagger_taken and forced_move tiles.
+
+/// U4.2-S4: what `apply_modifier` records for a hit-time target (`Unit::hit_sources` / `gear_hit_sources`).
+fn old_record(u: &mut Unit, id: &str, gear: bool, target: Target, value: f64) {
+    let held = HitSource { source: if gear { id.to_string() } else { format!("passive:{id}") }, target, value };
+    if gear {
+        u.gear_hit_sources.push(held);
+    } else {
+        u.hit_sources.push(held);
+    }
+}
 
 fn old_forced_add(f: &mut ForcedTraits, e: &Obj) {
     match value::string(e, "immune", "").as_str() {
@@ -115,6 +126,8 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
             "skill_potency" => {
                 let v = value::float(e, "value", 0.0);
                 let group = value::string(e, "group", "");
+                let set = if group.is_empty() { SkillSet::Family(value::string(e, "family", "")) } else { SkillSet::Group(group.clone()) };
+                old_record(u, &id, gear, Target::SkillPotency(set), v);
                 if !group.is_empty() {
                     let g = if gear { &mut u.gear_potency_group } else { &mut u.potency_group };
                     *g.entry(group).or_insert(0.0) += v;
@@ -154,9 +167,11 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
             }
             "stagger_taken" if !gear => {
                 let mult = value::float(e, "mult", 1.0).clamp(0.0, STAGGER_TAKEN_MULT_MAX);
+                old_record(u, &id, gear, Target::StaggerTaken { max_blocks: value::int(e, "max_blocks", 0).max(0) }, mult);
                 u.stagger_taken.push(StaggerTaken { mult, max_blocks: value::int(e, "max_blocks", 0).max(0) });
             }
             "forced_move" => {
+                old_record(u, &id, gear, Target::ForcedTiles, f64::from(value::int(e, "bonus_tiles", 0).clamp(0, 2)));
                 if gear {
                     old_forced_add(&mut u.gear_forced, e);
                 } else {

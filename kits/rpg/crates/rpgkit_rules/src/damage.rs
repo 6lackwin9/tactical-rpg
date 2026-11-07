@@ -240,15 +240,43 @@ pub struct Hit {
 /// One hit, keeping no trace (`Hit.trace` stays empty and allocates nothing): the planner, forecasts, the sim and
 /// every resolved hit.
 pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
-    hit(attacker, target, h, false)
+    hit(attacker, target, h, false, Vec::new())
 }
 
 /// `compute`, keeping every pipeline step in `Hit.trace` (for a hit that is shown with its steps).
 pub fn compute_traced(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
-    hit(attacker, target, h, true)
+    hit(attacker, target, h, true, Vec::new())
 }
 
-fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool) -> Hit {
+/// U4.2-S4 (FB-30): `compute_traced` for a hit of `skill`: the `skill` step also names the grant sources of the
+/// attacker's potency for it (`Unit::potency_parts`; the skill factor folds them in when the action is planned,
+/// `Unit::power_for`, so its value is `h.skill_mult` as before).
+pub fn compute_traced_skill(attacker: &Unit, target: &Unit, h: HitInput, skill: &rpgkit_data::SkillDef) -> Hit {
+    hit(attacker, target, h, true, attacker.potency_parts(skill))
+}
+
+/// U4.2-S4 (FB-30): a heal's pipeline modifiers (SupportRules.heal_amount): the heal base (`heal_base` + the heal
+/// stat x `heal_mult`, rounded) in the base stage, then the caster's skill potency in the mult stage (`potency`, its
+/// grant sources as parts when `traced`). The HEAL pipeline rounds once, floor 0: `roundi(base x potency)`, as before.
+pub fn heal_modifiers(caster: &Unit, skill: &rpgkit_data::SkillDef, traced: bool) -> [Modifier; 2] {
+    let stat = if skill.heal_stat.is_empty() { 0 } else { caster.stats.stat(&skill.heal_stat, caster.weapon_context().as_deref()) };
+    let base = skill.heal_base + roundi(stat as f64 * skill.heal_mult);
+    let potency = if traced { caster.potency_modifier(skill) } else { Modifier::new("potency", Stage::Mult, Op::Mul(caster.potency_for_skill(skill))) };
+    [Modifier::new("heal", Stage::Base, Op::Add(base as f64)), potency]
+}
+
+/// U4.2-S4: the heal `caster` gives with `skill` (no trace).
+pub fn heal(caster: &Unit, skill: &rpgkit_data::SkillDef) -> i32 {
+    pipeline::HEAL.run(&heal_modifiers(caster, skill, false)).value
+}
+
+/// U4.2-S4: `heal`, keeping every step (the `potency` step names its sources).
+pub fn heal_traced(caster: &Unit, skill: &rpgkit_data::SkillDef) -> (i32, Trace) {
+    let (out, trace) = pipeline::HEAL.run_traced(&heal_modifiers(caster, skill, true));
+    (out.value, trace)
+}
+
+fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool, skill_parts: Vec<pipeline::Part>) -> Hit {
     let explained = attack_power(attacker, h.ranged, h.offhand);
     let power = explained.attack_power;
     let buff = attacker.attack_boost.max(1.0);
@@ -273,7 +301,8 @@ fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool) -> Hit {
     let (out, trace) = if traced {
         // every base term, so the trace shows them
         let (base, n) = explained.base_modifiers();
-        let mods: Vec<Modifier> = base.into_iter().take(n).chain(rest).collect();
+        let [r0, r1, r2, r3, r4, r5] = rest;
+        let mods: Vec<Modifier> = base.into_iter().take(n).chain([r0, r1.with_parts(skill_parts), r2, r3, r4, r5]).collect();
         pipeline::DAMAGE.run_traced(&mods)
     } else {
         // the base stage already ran in `attack_power`: its rounded result (an integer, so rounding point one keeps it)

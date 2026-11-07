@@ -248,6 +248,16 @@ pub fn stagger_modifiers(stagger: i32, f: &Factors) -> [Modifier; 7] {
     ]
 }
 
+/// U4.2-S4 (FB-30): `stagger_taken` keeping every step, its `passive` step the target's evaluator
+/// (`Unit::stagger_taken_modifier`, the same product as `factors` reads, with its grant sources as parts).
+pub fn stagger_traced(stagger: i32, f: &Factors, target: &rpgkit_rules::Unit, blocks: i32) -> (i32, pipeline::Trace) {
+    let [base, windup, guard, repeat, flank, _, hook] = stagger_modifiers(stagger, f);
+    let passive = target.stagger_taken_modifier(blocks);
+    debug_assert_eq!(passive.op, Op::Mul(f.passive), "the evaluator's product is the factors'");
+    let (out, trace) = pipeline::STAGGER.run_traced(&[base, windup, guard, repeat, flank, passive, hook]);
+    (out.value, trace)
+}
+
 /// P6: the factors of a hit of an action `blocks` long on `t` at `block` (`flank`: the hit was a flank with the rule on).
 pub fn factors(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32, blocks: i32, flank: bool) -> Factors {
     let n = &w.ruleset.numbers;

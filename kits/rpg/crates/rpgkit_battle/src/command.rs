@@ -1390,10 +1390,8 @@ pub fn heal_amount(w: &World, caster: UnitId, skill_id: SkillId) -> i32 {
     if !skill::heals(s) {
         return 0;
     }
-    let c = &w.units[caster];
-    let stat = if s.heal_stat.is_empty() { 0 } else { c.stats.stat(&s.heal_stat, c.weapon_context().as_deref()) };
-    let base = s.heal_base + roundi(stat as f64 * s.heal_mult);
-    roundi(base as f64 * c.potency_for_skill(s)).max(0)
+    // U4.2-S4 (FB-30): the heal pipeline (base, then the caster's potency; one rounding, floor 0)
+    rpgkit_rules::damage::heal(&w.units[caster], s)
 }
 
 pub fn effective_heal(target: &Unit, amount: i32) -> i32 {

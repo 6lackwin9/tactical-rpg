@@ -74,17 +74,35 @@ impl Op {
     }
 }
 
-/// One modifier: its id (for the trace), its stage and its op.
+/// U4.2-S4 (FB-30): one source's share of a modifier: who gave it (`passive:<id>`, `gear:<item>`, `gear:<item>:tier<n>`,
+/// a band's source) and its value as the source wrote it (an add to a summed potency, a factor of a product, tiles).
+/// The modifier's op holds the value the target's combine rule folded from its parts (FB-26), so the number is the one
+/// the unit's evaluator gives; the parts only name where it came from in the trace.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Part {
+    pub source: Cow<'static, str>,
+    pub value: f64,
+}
+
+/// One modifier: its id (for the trace), its stage, its op and (U4.2-S4) the grant sources it folds (empty: a rule
+/// term of the kit's own, no source).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Modifier {
     pub id: Cow<'static, str>,
     pub stage: Stage,
     pub op: Op,
+    pub parts: Vec<Part>,
 }
 
 impl Modifier {
     pub fn new(id: &'static str, stage: Stage, op: Op) -> Self {
-        Self { id: Cow::Borrowed(id), stage, op }
+        Self { id: Cow::Borrowed(id), stage, op, parts: Vec::new() }
+    }
+
+    /// U4.2-S4: the modifier with the grant sources it folds (for the trace; the op is unchanged).
+    pub fn with_parts(mut self, parts: Vec<Part>) -> Self {
+        self.parts = parts;
+        self
     }
 }
 
@@ -104,6 +122,8 @@ pub struct Step {
     pub kind: StepKind,
     pub before: f64,
     pub after: f64,
+    /// U4.2-S4: the grant sources the modifier folds (none for a rounding or a rule term).
+    pub parts: Vec<Part>,
 }
 
 /// Every step of one run, in order.
@@ -151,6 +171,8 @@ pub const MIN_POWER: i32 = 1;
 pub const DAMAGE: Pipeline = Pipeline { base_round: Some(MIN_POWER), finish_min: 1 };
 /// Poise stagger (RULESET1 P6): one rounding, floor 0.
 pub const STAGGER: Pipeline = Pipeline { base_round: None, finish_min: 0 };
+/// U4.2-S4: a heal (SupportRules.heal_amount): the heal base, the skill potency, one rounding, floor 0.
+pub const HEAL: Pipeline = Pipeline { base_round: None, finish_min: 0 };
 
 impl Pipeline {
     /// Runs `mods` (the value starts at 0).
@@ -210,7 +232,7 @@ impl Run<'_> {
         }
         let after = m.op.apply(self.v);
         if let Some(t) = self.trace.as_deref_mut() {
-            t.steps.push(Step { stage: m.stage, id: m.id.clone(), kind: StepKind::Apply(m.op), before: self.v, after });
+            t.steps.push(Step { stage: m.stage, id: m.id.clone(), kind: StepKind::Apply(m.op), before: self.v, after, parts: m.parts.clone() });
         }
         self.v = after;
     }
@@ -231,7 +253,7 @@ impl Run<'_> {
     fn round(&mut self, stage: Stage, min: i32) -> i32 {
         let r = roundi(self.v).max(min);
         if let Some(t) = self.trace.as_deref_mut() {
-            t.steps.push(Step { stage, id: Cow::Borrowed("round"), kind: StepKind::Round { min }, before: self.v, after: r as f64 });
+            t.steps.push(Step { stage, id: Cow::Borrowed("round"), kind: StepKind::Round { min }, before: self.v, after: r as f64, parts: Vec::new() });
         }
         r
     }
