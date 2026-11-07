@@ -18,8 +18,9 @@ const GROWTH_STAT_MAX: i64 = 3;
 const ADVANCED_MIN_LEVEL: i64 = 5;
 const MIN_SCALING: f64 = 1.0;
 const MAX_SCALING: f64 = 2.0;
-/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`).
-const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
+/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`); U3.2-S2:
+/// read only without a family table (`skill::weapon_tokens`).
+pub const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
 /// UNITDRILL1: the unit field listing the items of its own gear it wears with no class or drill training.
 pub const WEARS_UNTRAINED: &str = "wears_untrained";
@@ -128,7 +129,8 @@ fn fits_slot(item: &ItemDef, slot: &str) -> bool {
         return false;
     }
     let target = slot.to_uppercase();
-    if item.item_type == "SHIELD" || item.off_hand_category == "shield" {
+    // U3.2-S2: a shield is an item whose family has the engine rule `shield` (`Equipment::is_shield`)
+    if item.has_rule(rpgkit_data::SHIELD_RULE) {
         return target == "OFF_HAND";
     }
     if item.item_type == "WEAPON" {
@@ -311,9 +313,10 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
         None => errors.push("A class needs a gear proficiency dictionary.".into()),
         Some(prof) => {
             let mut weapons = 0;
+            let (gear_types, weapon_types) = (super::skill::gear_tokens(v.entries("item_families")), super::skill::weapon_tokens(v.entries("item_families")));
             for (gear, raw) in prof {
                 let entry = json::dict(raw);
-                if !super::skill::GEAR_TYPES.contains(&gear.as_str()) {
+                if !gear_types.contains(gear) {
                     errors.push(format!("Proficiency: unknown gear type '{gear}'."));
                 }
                 let level = json::i(entry, "level", 0);
@@ -324,7 +327,7 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
                 if !(MIN_SCALING..=MAX_SCALING).contains(&scaling) {
                     errors.push(format!("Proficiency {gear}: scaling must be {}-{}.", fixed(MIN_SCALING, 1), fixed(MAX_SCALING, 1)));
                 }
-                if WEAPON_TYPES.contains(&gear.as_str()) {
+                if weapon_types.contains(gear) {
                     weapons += 1;
                 }
             }

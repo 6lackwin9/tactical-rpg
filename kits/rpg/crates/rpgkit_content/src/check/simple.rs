@@ -143,7 +143,7 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 }
             }
             "proficiency" => {
-                if !super::skill::GEAR_TYPES.contains(&json::s(e, "gear").as_str()) {
+                if !hooks.gear.contains(&json::s(e, "gear")) {
                     errors.push(format!("{at}: unknown gear type '{}'.", json::s(e, "gear")));
                 }
                 if !(1..=3).contains(&json::i(e, "levels", 0)) {

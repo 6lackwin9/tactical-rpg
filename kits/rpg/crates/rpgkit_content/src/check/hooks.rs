@@ -65,6 +65,8 @@ pub const PATH_LEVEL: (i64, i64) = (1, 30);
 #[derive(Debug, Clone, Default)]
 pub struct Ctx {
     pub families: Vec<String>,
+    /// U3.2-S2: the gear tokens (`skill::gear_tokens` of the family table; a passive's `proficiency.gear`).
+    pub gear: Vec<String>,
     pub meters: Vec<(String, i64, i64)>,
     pub hazards: Vec<String>,
 }
@@ -74,6 +76,7 @@ impl Ctx {
     pub fn from_rows(skills: &[Dict], meters: &[Dict], hazards: &[Dict]) -> Self {
         Self {
             families: skills.iter().filter(|s| json::i(s, "tier", 1) <= 1).map(|s| json::s(s, "id")).collect(),
+            gear: super::skill::gear_tokens(&[]),
             meters: meters.iter().map(|m| (json::s(m, "id"), json::i(m, "min", 0), json::i(m, "max", 10))).collect(),
             hazards: hazards.iter().map(|h| json::s(h, "id")).collect(),
         }
@@ -81,7 +84,9 @@ impl Ctx {
 
     /// From the checked catalog.
     pub fn of(v: &View) -> Self {
-        Self::from_rows(v.entries("skills"), v.entries(rpgkit_data::UNIT_METERS_KIND), v.entries(rpgkit_data::HAZARDS_KIND))
+        let mut ctx = Self::from_rows(v.entries("skills"), v.entries(rpgkit_data::UNIT_METERS_KIND), v.entries(rpgkit_data::HAZARDS_KIND));
+        ctx.gear = super::skill::gear_tokens(v.entries("item_families"));
+        ctx
     }
 
     fn meter(&self, id: &str) -> Option<(i64, i64)> {

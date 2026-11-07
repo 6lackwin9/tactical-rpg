@@ -106,8 +106,9 @@ pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
     aegis_content::schema::world_storage(source::schema(), kind, &without_default_faces(kind, entry))
 }
 
-/// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule).
-const ITEM_DERIVED: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE];
+/// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule,
+/// U3.2-S2 the family's engine rules).
+const ITEM_DERIVED: [&str; 14] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE, rpgkit_data::ITEM_FAMILY_RULES];
 
 /// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections (one
 /// table with the checks; RULESET1-S added the timeline fields there).
@@ -158,7 +159,8 @@ fn skill_storage(entry: &Dict) -> Dict {
         out.insert(key, value);
     }
     for (k, v) in first {
-        if !out.contains_key(k) && !has_field(source::schema(), "content", "skills", k) {
+        // U3.2-S2: the loader's spell-source mark is derived from the family table, never stored
+        if !out.contains_key(k) && !has_field(source::schema(), "content", "skills", k) && k != rpgkit_data::SKILL_SPELL_SOURCE {
             out.insert(k.clone(), v.clone());
         }
     }

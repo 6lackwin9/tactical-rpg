@@ -1,6 +1,7 @@
 //! RULESET1-K (docs/specs/RULESET1.md 8 K1) in the loader and the writer: an item of a family with the engine rule
-//! `reach` resolves with the row key `reach_rule` (true), which the typed catalog reads as `ItemDef.reach_rule`; an item
-//! of any other family resolves without the key (the Godot shape); the stored form never carries it. Scratch data only.
+//! `reach` resolves with the rule in its row key `family_rules` (U3.2-S2; before, a `reach_rule` key true), which the
+//! typed catalog reads as `ItemDef.reach_rule`; an item of any other family resolves without it; the stored form never
+//! carries either key. Scratch data only.
 
 use aegis_core::json::Dict;
 use rpgkit_content::{source, store};
@@ -41,15 +42,16 @@ fn a_reach_family_marks_its_items_and_the_stored_form_leaves_it_out() {
     let src = source::load(&data);
     let rows: Vec<&Dict> = src.catalog["items"].as_array().unwrap().iter().filter_map(Value::as_object).collect();
     let row = |id: &str| rows.iter().find(|r| r["id"] == id).copied().unwrap_or_else(|| panic!("item {id}"));
-    assert_eq!(row("t_hook").get(rpgkit_data::ITEM_REACH_RULE), Some(&json!(true)), "K1: the reach family's item carries the rule");
-    assert!(row("t_sabre").get(rpgkit_data::ITEM_REACH_RULE).is_none(), "any other family's item keeps its shape");
+    assert_eq!(row("t_hook").get(rpgkit_data::ITEM_FAMILY_RULES), Some(&json!(["reach"])), "K1: the reach family's item carries the rule");
+    assert_eq!(row("t_sabre").get(rpgkit_data::ITEM_FAMILY_RULES), Some(&json!([])), "any other family's item has no rule");
+    assert!(row("t_hook").get(rpgkit_data::ITEM_REACH_RULE).is_none(), "U3.2-S2: the old reach key is no longer written");
     let cat = rpgkit_data::Catalog::from_value(&src.catalog);
     assert!(cat.items["t_hook"].reach_rule);
     assert!(!cat.items["t_sabre"].reach_rule);
     // the writer: the stored form of a reach item (resolved, then the derived keys left out) has no rule key
     let fams: Vec<Dict> = src.game["item_families"].as_array().unwrap().iter().filter_map(|f| f.as_object().cloned()).collect();
     let stored = store::catalog_storage("items", item("t_hook", "t_pole").as_object().unwrap(), &fams).expect("stored form");
-    assert!(stored.get(rpgkit_data::ITEM_REACH_RULE).is_none(), "the rule is derived from the family, never stored");
+    assert!(stored.get(rpgkit_data::ITEM_REACH_RULE).is_none() && stored.get(rpgkit_data::ITEM_FAMILY_RULES).is_none(), "the rule is derived from the family, never stored");
     assert_eq!(stored.get("family"), Some(&json!("t_pole")));
     let _ = fs::remove_dir_all(data.parent().unwrap());
 }

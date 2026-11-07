@@ -301,6 +301,9 @@ pub struct SkillDef {
     pub stance: String,
     pub unlock_offset: i32,
     pub weapon_types: Vec<String>,
+    /// U3.2-S2: one of `weapon_types` is a family with the engine rule `spell_source` (the resolved row's
+    /// `SKILL_SPELL_SOURCE` key; a row without it reads `LEGACY_FAMILY_RULES`).
+    pub spell_source: bool,
     pub min_proficiency: i32,
     pub reach_min: i32,
     pub reach_max: i32,
@@ -388,6 +391,10 @@ impl SkillDef {
             stance: string(o, "stance", "AUTO"),
             unlock_offset: int(o, "unlock_offset", -1),
             weapon_types: strings(o, "weapon_types"),
+            spell_source: match o.get(SKILL_SPELL_SOURCE) {
+                Some(v) => v.as_bool().unwrap_or(false),
+                None => strings(o, "weapon_types").iter().any(|w| legacy_rules_of(w).any(|r| r == SPELL_SOURCE_RULE)),
+            },
             min_proficiency: int(o, "min_proficiency", 0),
             reach_min: int(o, "reach_min", 0),
             reach_max: int(o, "reach_max", 0),
@@ -485,22 +492,81 @@ pub struct ItemDef {
     pub use_reach: i32,
     /// Carry weight (PartyCarry; Item.weight, 1 when unset).
     pub weight: f64,
-    /// RULESET1 K1: the item's family has the engine rule `reach` (the resolved row's `ITEM_REACH_RULE` key, written
-    /// by the loader only for such families); the battle reads it only under the rule `reach`.
+    /// RULESET1 K1: the item's family has the engine rule `reach` (`family_rules` holds it); the battle reads it only
+    /// under the rule `reach`.
     pub reach_rule: bool,
+    /// U3.2-S2: the engine rules of the item's family (the resolved row's `ITEM_FAMILY_RULES` key; a row without it
+    /// reads the pre-family rules, `family_rules_of`). The gear rules read these, never a family id.
+    pub family_rules: Vec<String>,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
     pub raw: Obj,
 }
 
-/// RULESET1 K1: the resolved item row's key that carries its family's engine rule `reach` (set to true only for those
-/// families, so every other row keeps its Godot shape; the writer leaves it out of the stored form).
+/// RULESET1 K1: the resolved item row's key that carried its family's engine rule `reach` before U3.2-S2 (true only
+/// for those families); read now only on a row without `ITEM_FAMILY_RULES`, and the writer leaves it out of the stored
+/// form.
 pub const ITEM_REACH_RULE: &str = "reach_rule";
+/// U3.2-S2: the resolved item row's key that carries its family's `engine_rules` (written by the loader on every row it
+/// resolves against a family; the writer leaves it out of the stored form).
+pub const ITEM_FAMILY_RULES: &str = "family_rules";
+/// U3.2-S2: the resolved skill row's key that says whether one of its `weapon_types` is a family with the engine rule
+/// `spell_source` (written by the loader on every skill row when the catalog has a family table).
+pub const SKILL_SPELL_SOURCE: &str = "spell_source";
 /// RULESET1 K1: the family engine rule that gives a melee weapon its reach.
 pub const REACH_ENGINE_RULE: &str = "reach";
+/// U3.2-S2: the family engine rule that makes a weapon ranged whatever its base range.
+pub const ALWAYS_RANGED_RULE: &str = "always_ranged";
+/// U3.2-S2: the family engine rule of an off-hand focus (never held under a two-handed main weapon).
+pub const FOCUS_RULE: &str = "focus";
+/// U3.2-S2: the family engine rule of a shield (the off-hand item that blocks).
+pub const SHIELD_RULE: &str = "shield";
+/// U3.2-S2: the family engine rule of a spell-source weapon (an attack skill needing one is in the passive group
+/// "spell").
+pub const SPELL_SOURCE_RULE: &str = "spell_source";
+/// U3.2-S2: the engine rules of the gear families the kit named in code before the family table drove them (Godot's
+/// Equipment and SkillDef lists). Read only for a row the loader did not resolve against a family table: a catalog
+/// frozen before U3.2-S2 (the golden fixtures) or a hand-built row; shipped data reads its family's `engine_rules`.
+pub const LEGACY_FAMILY_RULES: [(&str, &str); 8] = [
+    ("bow", ALWAYS_RANGED_RULE),
+    ("crossbow", ALWAYS_RANGED_RULE),
+    ("sling", ALWAYS_RANGED_RULE),
+    ("staff", SPELL_SOURCE_RULE),
+    ("wand", SPELL_SOURCE_RULE),
+    ("orb", FOCUS_RULE),
+    ("tome", FOCUS_RULE),
+    ("shield", SHIELD_RULE),
+];
+
+/// U3.2-S2: `LEGACY_FAMILY_RULES` of gear token `gear`.
+pub fn legacy_rules_of(gear: &str) -> impl Iterator<Item = &'static str> + '_ {
+    LEGACY_FAMILY_RULES.iter().filter(move |(f, _)| *f == gear).map(|(_, r)| *r)
+}
+
+/// U3.2-S2: an item row's family rules: the resolved `ITEM_FAMILY_RULES` key, else the pre-family reading (the
+/// legacy rules of its gear token, `shield` for item type SHIELD, `reach` for the old `ITEM_REACH_RULE` key).
+fn family_rules_of(o: &Obj) -> Vec<String> {
+    if o.contains_key(ITEM_FAMILY_RULES) {
+        return strings(o, ITEM_FAMILY_RULES);
+    }
+    let mut out: Vec<String> = legacy_rules_of(&string(o, "weapon_type", "")).map(String::from).collect();
+    let mut add = |rule: &str| {
+        if !out.iter().any(|r| r == rule) {
+            out.push(rule.to_string());
+        }
+    };
+    if string(o, "item_type", "MATERIAL") == "SHIELD" {
+        add(SHIELD_RULE);
+    }
+    if boolean(o, ITEM_REACH_RULE, false) {
+        add(REACH_ENGINE_RULE);
+    }
+    out
+}
 
 impl ItemDef {
     pub fn from_obj(o: &Obj) -> Self {
+        let family_rules = family_rules_of(o);
         Self {
             id: string(o, "id", ""),
             name: string(o, "name", ""),
@@ -527,10 +593,16 @@ impl ItemDef {
             use_blocks: int(o, "use_blocks", 1),
             use_reach: int(o, "use_reach", -1),
             weight: float(o, "weight", 1.0),
-            reach_rule: boolean(o, ITEM_REACH_RULE, false),
+            reach_rule: family_rules.iter().any(|r| r == REACH_ENGINE_RULE),
+            family_rules,
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
             raw: o.clone(),
         }
+    }
+
+    /// U3.2-S2: whether the item's family has engine rule `rule`.
+    pub fn has_rule(&self, rule: &str) -> bool {
+        self.family_rules.iter().any(|r| r == rule)
     }
 
     pub fn is_equipment(&self) -> bool {

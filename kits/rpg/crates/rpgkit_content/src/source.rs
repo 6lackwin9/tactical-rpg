@@ -94,7 +94,11 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     let mut out = Dict::new();
     let families = read_kind(&dir, "item_families", &[], errors);
     for kind in CATALOG_KINDS {
-        out.insert(kind.into(), Value::Array(read_kind(&dir, kind, &families, errors).into_iter().map(Value::Object).collect()));
+        let mut rows = read_kind(&dir, kind, &families, errors);
+        if kind == "skills" {
+            mark_spell_sources(&mut rows, &families);
+        }
+        out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
     }
     out.insert(DERIVED_KIND.into(), Value::Array(read_derived(&dir, errors).into_iter().map(Value::Object).collect()));
     let rulesets = read_rulesets(&dir, &out, errors);
@@ -104,7 +108,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     let cues = read_portrait_cues(&dir, &out, errors);
     out.insert(PORTRAIT_KIND.into(), Value::Array(cues.into_iter().map(Value::Object).collect()));
     for kind in HOOK_KINDS {
-        let rows = read_hook_kind(&dir, kind, &out, errors);
+        let rows = read_hook_kind(&dir, kind, &out, &families, errors);
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
     }
     out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
@@ -266,9 +270,9 @@ fn read_grounds(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
 }
 
 /// HOOKS1-S (engine-only, beside CATALOG_KINDS): the rows of a combat hook kind that pass their checks
-/// (`check::hook_kinds`) against the loaded skills (`loaded`), in file order; every problem goes to `errors` and its row
-/// is skipped.
-fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+/// (`check::hook_kinds`) against the loaded skills (`loaded`) and the item families (U3.2-S2: the gear tokens), in file
+/// order; every problem goes to `errors` and its row is skipped.
+fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, families: &[Dict], errors: &mut Vec<String>) -> Vec<Dict> {
     let path = dir.join(format!("{kind}.json"));
     let Some(doc) = read(&path, errors) else { return Vec::new() };
     let at = path.display().to_string();
@@ -280,7 +284,7 @@ fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, errors: &mut Vec<String
         }
     }
     let skills: Vec<Dict> = json::arr(json::get(loaded, "skills")).iter().map(|e| json::dict(e).clone()).collect();
-    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills });
+    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, families });
     let mut kept = Vec::new();
     for (row, found) in rows.into_iter().zip(checked) {
         if found.is_empty() {
@@ -290,6 +294,24 @@ fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, errors: &mut Vec<String
         }
     }
     kept
+}
+
+/// U3.2-S2: the gear tokens whose family has engine rule `rule`, in table order.
+pub fn families_with_rule(families: &[Dict], rule: &str) -> Vec<String> {
+    families.iter().filter(|f| json::strings(json::get(f, "engine_rules")).iter().any(|r| r == rule)).map(|f| sget(f, "id", "")).collect()
+}
+
+/// U3.2-S2: each skill row says whether one of its `weapon_types` is a family with the engine rule `spell_source`
+/// (`rpgkit_data::SKILL_SPELL_SOURCE`, read by the passive group "spell"); no family table leaves the rows as they are.
+pub(crate) fn mark_spell_sources(rows: &mut [Dict], families: &[Dict]) {
+    if families.is_empty() {
+        return;
+    }
+    let sources = families_with_rule(families, rpgkit_data::SPELL_SOURCE_RULE);
+    for row in rows {
+        let spell = json::strings(json::get(row, "weapon_types")).iter().any(|w| sources.contains(w));
+        row.insert(rpgkit_data::SKILL_SPELL_SOURCE.into(), Value::Bool(spell));
+    }
 }
 
 /// ContentCatalog._read_kind.
@@ -687,7 +709,6 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) ->
 const HAND_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
 const SLOT_TYPES: [&str; 2] = ["ARMOR", "ACCESSORY"];
 const GEAR_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
-const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
 const NUMBER_FIELDS: [(&str, &str, i64); 4] = [("power", "base_power", 0), ("range", "base_range", 1), ("burden", "burden", 0), ("mitigation", "mitigation", 0)];
 /// U3.2-S1: number keys gear no longer has (gear `block_cost`: priced in the budget, never read by combat; the wind-up
 /// belongs to the skill). The loader ignores them in a family's base and band rows, its adjustable list, an item's adjust
@@ -724,10 +745,11 @@ pub(crate) fn category(family: &Dict) -> &'static str {
     }
 }
 
+/// ItemFamilies.off_hand_category: an off-hand family's id is its off-hand category (U3.2-S2: every off-hand family of
+/// the table, no fixed list; the content check still names the allowed ones).
 pub(crate) fn off_hand_category(family: &Dict) -> String {
-    let id = sget(family, "id", "");
-    if category(family) == "off" && OFF_CATEGORIES.contains(&id.as_str()) {
-        id
+    if category(family) == "off" {
+        sget(family, "id", "")
     } else {
         String::new()
     }
@@ -877,11 +899,11 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if sget(entry, "damage_type", "").is_empty() {
         row.insert("damage_type".into(), Value::from(sget(family, "damage_type", "")));
     }
-    // RULESET1 K1: the family's engine rule `reach` rides on the resolved row, and only for such a family (every other
-    // row keeps the Godot shape); the writer leaves it out of the stored form (`store::ITEM_DERIVED`)
-    if json::strings(json::get(family, "engine_rules")).iter().any(|r| r == rpgkit_data::REACH_ENGINE_RULE) {
-        row.insert(rpgkit_data::ITEM_REACH_RULE.into(), Value::Bool(true));
-    }
+    // U3.2-S2 (RULESET1 K1 for `reach`): the family's engine rules ride on the resolved row, so the gear rules read them
+    // and never a family id; the writer leaves them out of the stored form (`store::ITEM_DERIVED`)
+    row.shift_remove(rpgkit_data::ITEM_REACH_RULE);
+    let rules = json::strings(json::get(family, "engine_rules"));
+    row.insert(rpgkit_data::ITEM_FAMILY_RULES.into(), Value::Array(rules.into_iter().map(Value::from).collect()));
     row
 }
 

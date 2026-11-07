@@ -67,13 +67,13 @@ pub const LOOK_FALLBACK_FAMILY: &str = "sword";
 
 impl Grip {
     /// From the equipped items (resolved item rows: `item_type`, `weapon_type` = the item's family, `two_handed`,
-    /// `burden`; a shield is `item_type` SHIELD or `off_hand_category` shield, a buckler a shield of burden at most
-    /// `BUCKLER_MAX_BURDEN`). None = the slot is empty.
+    /// `burden`; a shield is an item whose family has the engine rule `shield` (U3.2-S2, `ItemDef::has_rule`), a buckler
+    /// a shield of burden at most `BUCKLER_MAX_BURDEN`). None = the slot is empty.
     pub fn of(main: Option<&ItemDef>, off: Option<&ItemDef>) -> Grip {
         let weapon = main.filter(|m| m.item_type == "WEAPON");
         let off_hand = match off {
             None => OffHand::Empty,
-            Some(o) if o.item_type == "SHIELD" || o.off_hand_category == "shield" => {
+            Some(o) if o.has_rule(rpgkit_data::SHIELD_RULE) => {
                 if o.burden <= BUCKLER_MAX_BURDEN {
                     OffHand::Buckler
                 } else {

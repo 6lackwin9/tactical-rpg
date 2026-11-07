@@ -16,8 +16,11 @@ const GEAR_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
 const HAND_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
 const SLOT_TYPES: [&str; 2] = ["ARMOR", "ACCESSORY"];
 const HANDS: [&str; 3] = ["main_1h", "main_2h", "off"];
-const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
-const FOCUS_TYPES: [&str; 2] = ["orb", "tome"];
+/// ItemFamilies.OFF_CATEGORIES: the off-hand families the family check allows (U3.2-S2: still a closed list; its
+/// message prints it in this order, and the loader derives an off-hand family's category from its id).
+pub const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
+/// The focus gear types of a pre-family (flat) catalog (`legacy_errors`; with a family table the rule `focus` decides).
+pub const FOCUS_TYPES: [&str; 2] = ["orb", "tome"];
 const ARMOR_SLOTS: [&str; 2] = ["HEAD", "BODY"];
 const ACCESSORY_SLOTS: [&str; 2] = ["ACCESSORY_1", "ACCESSORY_2"];
 const SCALING_STATS: [&str; 3] = ["STR", "DEX", "INT"];
@@ -33,7 +36,7 @@ const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delt
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 12] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
+const DERIVED_KEYS: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES];
 const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const WHEN_STAT: &str = "stat_at_least";

@@ -143,7 +143,7 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
         "status_buff" => std::iter::once(String::new()).chain(rpgkit_rules::status::ROWS.iter().filter(|r| r.buff && !r.grant.is_empty()).map(|r| r.id.to_string())).collect(),
-        "weapon_types" => skill::GEAR_TYPES.iter().map(|g| g.to_string()).chain(std::iter::once("unarmed".to_string())).collect(),
+        "weapon_types" => skill::gear_tokens(v.entries("item_families")).into_iter().chain(std::iter::once("unarmed".to_string())).collect(),
         "debuffs_or_all" => rpgkit_rules::status::debuffs().into_iter().map(String::from).chain(std::iter::once("all".to_string())).collect(),
         _ => json::aget(f, "options").iter().map(gstr).collect(),
     }

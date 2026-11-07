@@ -37,6 +37,8 @@ pub const HAZARD_COVER: (f64, f64) = (0.0, 0.5);
 /// What the rows' checks read from the rest of the catalog: the loaded skill rows (flat rank rows).
 pub struct Refs<'a> {
     pub skills: &'a [Dict],
+    /// U3.2-S2: the item family table (the gear tokens a `proficiency` effect may name; empty = the code list).
+    pub families: &'a [Dict],
 }
 
 /// The noun of a row of `kind` in load messages.
@@ -85,7 +87,8 @@ fn common_errors(kind: &str, e: &Dict, out: &mut Vec<String>) {
 
 /// The problems of each row (same order as the rows), on its own and against the others (unique ids).
 pub fn check_rows(kind: &str, rows: &[Dict], refs: &Refs) -> Vec<Vec<String>> {
-    let ctx = Ctx::from_rows(refs.skills, if kind == UNIT_METERS_KIND { rows } else { &[] }, &[]);
+    let mut ctx = Ctx::from_rows(refs.skills, if kind == UNIT_METERS_KIND { rows } else { &[] }, &[]);
+    ctx.gear = super::skill::gear_tokens(refs.families);
     let ids: Vec<String> = rows.iter().map(|r| json::s(r, "id")).collect();
     let mut out: Vec<Vec<String>> = rows.iter().map(|r| row_errors(kind, r, &ctx, refs)).collect();
     for (i, found) in out.iter_mut().enumerate() {
@@ -322,7 +325,7 @@ fn band_effect_errors(raw: &Value, at: &str, refs: &Refs, out: &mut Vec<String>)
                 out.push(format!("{eat}: crit needs a value {}-{}.", super::hooks::CRIT.0, super::hooks::CRIT.1));
             }
         } else {
-            let ctx = Ctx::default();
+            let ctx = Ctx { gear: super::skill::gear_tokens(refs.families), ..Ctx::default() };
             for m in super::simple::effect_errors(&Value::Array(vec![item.clone()]), &has_skill, &[], true, false, &ctx) {
                 out.push(format!("{at}: {m}"));
             }
@@ -365,5 +368,5 @@ fn asset_key_ok(key: &str) -> bool {
 pub fn entry_errors(v: &View, kind: &str, e: &Dict, current_id: &str) -> Vec<String> {
     let mut rows: Vec<Dict> = v.entries(kind).iter().filter(|r| current_id.is_empty() || json::s(r, "id") != current_id).cloned().collect();
     rows.push(e.clone());
-    check_rows(kind, &rows, &Refs { skills: v.entries("skills") }).pop().unwrap_or_default()
+    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), families: v.entries("item_families") }).pop().unwrap_or_default()
 }

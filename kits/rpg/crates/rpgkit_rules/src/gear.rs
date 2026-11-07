@@ -2,12 +2,11 @@
 
 use crate::stats::{CharacterStats, Proficiency};
 use aegis_core::value::{self, Obj};
-use rpgkit_data::ItemDef;
+use rpgkit_data::{ItemDef, ALWAYS_RANGED_RULE, FOCUS_RULE, SHIELD_RULE};
 use indexmap::IndexMap;
 
 /// StatModifier source of every gear tier stat bonus.
 pub const TIER_SOURCE: &str = "gear_tier";
-const ALWAYS_RANGED_TYPES: [&str; 3] = ["bow", "crossbow", "sling"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Slot {
@@ -69,12 +68,14 @@ impl Equipment {
         self.item.item_type == "WEAPON"
     }
 
+    /// U3.2-S2: the item's family has the engine rule `shield`.
     pub fn is_shield(&self) -> bool {
-        self.item.item_type == "SHIELD" || self.item.off_hand_category == "shield"
+        self.item.has_rule(SHIELD_RULE)
     }
 
+    /// Equipment.is_ranged_weapon; U3.2-S2: a family with the engine rule `always_ranged`, or a base range above 1.
     pub fn is_ranged_weapon(&self) -> bool {
-        self.is_weapon() && (ALWAYS_RANGED_TYPES.contains(&self.item.weapon_type.to_lowercase().as_str()) || self.item.base_range > 1)
+        self.is_weapon() && (self.item.has_rule(ALWAYS_RANGED_RULE) || self.item.base_range > 1)
     }
 
     pub fn is_melee_weapon(&self) -> bool {
@@ -195,10 +196,10 @@ pub fn item_fits_slot(item: &ItemDef, slot: &str) -> bool {
 }
 
 /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)", the Godot gear dojo):
-/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (an orb or a tome:
-/// Equipment.is_focus, conflicts_with_main).
+/// under a two-handed main weapon the off hand holds only a weapon that is not a focus (Equipment.is_focus,
+/// conflicts_with_main; U3.2-S2: a family with the engine rule `focus`).
 pub fn off_hand_ok(main: Option<&ItemDef>, off: &ItemDef) -> bool {
-    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !matches!(off.weapon_type.as_str(), "orb" | "tome"))
+    !main.is_some_and(|m| m.two_handed) || (off.item_type == "WEAPON" && !off.has_rule(FOCUS_RULE))
 }
 
 /// ClassArchetype.can_equip_gear: accessories always; gear with no weapon type, or a class with no proficiency list,
