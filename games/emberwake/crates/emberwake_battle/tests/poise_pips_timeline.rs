@@ -1,8 +1,8 @@
 //! S2.2-S3 (`docs/sessions/S2_POISE.md` 4 item 3, 5; FB-71): the shipped `timeline` ruleset row plays poise by pips
 //! (seed `s22s3`); the tests below build the row with `poise_mode: pips` in memory from the shipped one, so they read the
-//! pip rule whatever the row says. Section 5's acceptance tests 1 and 2 on a battle under that row (every timeline rule on): chip hits
-//! under the threshold remove no pip and a heavy hit removes `floor(D / T)`; a guard halves the stagger before the
-//! threshold. A whole fight of each catalog encounter keeps the value the mirror of the pips (`value = pips x T`) and
+//! pip rule whatever the row says. Section 5's acceptance tests 1 and 2 on a battle under that row (every timeline rule
+//! on): chip hits under the threshold remove no pip and a heavy hit removes `floor(D / T)`; a guard halves the stagger
+//! before the threshold. Test 3 (S2.2-S4) on fights: a break queues `stagger` and the next round refills the pips. A whole fight of each catalog encounter keeps the value the mirror of the pips (`value = pips x T`) and
 //! never takes a pip for a hit under the threshold. Expectations come from the rules, never from shipped numbers: the
 //! tank's Max Poise is set here (60: 5 pips of T 12 at the default `poise_pips`), its stagger passives and statuses are
 //! cleared in memory, and the hits are planned through the kit's `poise::forecast_hits`.
@@ -171,4 +171,59 @@ fn a_timeline_fight_keeps_the_value_the_mirror_of_the_pips() {
         }
     }
     assert!(hits > 0, "the fights landed stagger hits");
+}
+
+/// S2.2-S4 (S2 section 5 test 3) on timeline fights: whenever a unit breaks (0 pips) it has no wind-up left and has
+/// `stagger` queued unless it holds `steadfast`; at the next round its pips are full again (not broken, broken last
+/// round), `stagger` is active and the planner locks the stagger row's blocks.
+#[test]
+fn a_break_queues_stagger_on_a_timeline_fight() {
+    let d = data();
+    let rules = pips_timeline(&d);
+    let row = emberwake_rules::status::row_of(poise::BREAK_STATUS).expect("the stagger row");
+    let mut checked = 0;
+    for id in fightable(&d) {
+        for seed in [1337, 7, 42] {
+            let mut s = battle(&d, &rules, &id, seed);
+            for round in 0..s.def.max_rounds {
+                s.auto_draft("balanced");
+                if !s.confirm_plan() {
+                    break;
+                }
+                let mut queued: Vec<UnitId> = Vec::new();
+                for _ in 0..600 {
+                    if s.phase == Phase::Replay {
+                        break;
+                    }
+                    let before: Vec<UnitId> = s.w.poise.iter().filter(|(_, st)| st.broken).map(|(c, _)| *c).collect();
+                    s.step_next();
+                    for (&c, st) in s.w.poise.iter().filter(|(c, st)| st.broken && !before.contains(c)) {
+                        let u = &s.w.units[c];
+                        assert_eq!(st.pips, 0, "{id} seed {seed} round {round}: a break is 0 pips");
+                        assert!(!s.resolver.scheduled.iter().any(|a| a.unit == c && poise::action_in_windup(a, s.current_block)), "{id}: 1. no wind-up left");
+                        let steadfast = u.has_status(poise::STEADFAST);
+                        assert_eq!(u.st.pending.contains(poise::BREAK_STATUS), !steadfast, "{id} seed {seed} round {round}: 2. stagger queued unless steadfast");
+                        if !steadfast && u.is_alive() {
+                            queued.push(c);
+                        }
+                    }
+                }
+                if s.combat_over || !s.can_advance_round() {
+                    break;
+                }
+                s.advance_round();
+                for c in queued.into_iter().filter(|&c| s.w.units[c].is_active()) {
+                    let st = s.w.poise[&c];
+                    assert_eq!((st.pips, st.broken, st.broken_last), (s.w.ruleset.numbers.poise_pips, false, true), "{id}: 3. refilled at the roll-over");
+                    assert!(s.w.units[c].has_status(poise::BREAK_STATUS), "{id}: staggered this round");
+                    let locked = s.plan.compile(&s.w, c).blocked_blocks;
+                    for b in row.lock_blocks.iter().filter(|&&b| b <= s.w.total_blocks) {
+                        assert!(locked.contains_key(b), "{id}: block {b} locked");
+                    }
+                    checked += 1;
+                }
+            }
+        }
+    }
+    assert!(checked > 0, "some timeline fight broke a unit");
 }

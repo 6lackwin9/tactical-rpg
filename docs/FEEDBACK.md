@@ -9,8 +9,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 | Task / Sub-block | Stage / Status | Branch / Commit | Notes |
 | --- | --- | --- | --- |
-| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4. |
-| R1 path (READY R1-8..R1-9) | W2-3 slice 1 done; slice 2 (`S2.2-S3` pips on) in review | `claude/s22s3-pips-on` | Then slice 3, AUDIT-R1 (AUDIT-01..06), the R1 release PR. |
+| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3. |
+| R1 path (READY R1-8..R1-9) | W2-3 slices 1-2 done; slice 3 (`S2.2-S4` break queues stagger) in review | `claude/s22s4-break-stagger` | Then AUDIT-R1 (AUDIT-01..07), the R1 release PR. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
@@ -34,6 +34,30 @@ FB-01 to FB-84 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: Seed `s22s3` sets `poise_mode: pips` on the shipped timeline ruleset; the frozen fixture `timeline_kit.json` (which the timeline and sim goldens read) gets the same one key, set by script (only that line changed). FB-71 done: under pips the value mirrors the pips (`value = pips x T`, so a full bar can read above Max Poise, 65 against 64), Rest restores pips only (1 per 2 blocks), the windup bonus pip count is stored on the command (`Command::poise_bonus_pips`) and may exceed `poise_pips`, the Rest preview (`RestGain.pips`), battle marks, tips, forecasts ("Pips 5 -> 4", "under T 12"), the party card and the Dojo show pips (screenshot sent to the user). `sim feel` now counts the blocks a unit starts guarded (`Resolver.guarded`, Guard 1C), not the Defend's span. Named re-records: `sim_golden` (run 21 feel guard-block counts, the feel fix), then with the flip `timeline_golden` (15 of 15 fights; first: "Stagger 30 (poise 64 -> 34)" becomes "(poise 65 -> 39)") and `sim_golden` (run 21 `tl_skirmish` capped becomes won). Break consequences unchanged until slice 3. Tests: `poise_pips.rs` (+3), `poise_pips_timeline.rs` (5), a GUI pips test.
 - **Recommendation**: Confirm the mirrored value may read above Max Poise (or hold it at max). Note for HISTORY / GAME_BRIEF: under pips the `stagger_dealt` metric ("poise taken") sums the mirrored drop; the feel report's "guard blocks" now counts every guard source (Defend, held guard, `guard` status, triggers) in every ruleset; the retired known-issues row 46 (shared target dir) could be reinstated for the cloud `target/`. Known-issues row to add (skill, user approval): "a repo copy built into the same `CARGO_TARGET_DIR` leaves test binaries whose `CARGO_MANIFEST_DIR` points at the copy, so main-tree runs read the copy's fixtures; use a separate target folder, or touch the sources and rebuild" (it hid a failing `ruleset_switches.rs` test here, since fixed). Docs delta: GAME_BRIEF poise line: the timeline plays pips since S2.2-S3; the value mirrors the pips; Rest restores pips; the view shows pips; HISTORY: "S2.2-S3: `sim feel` guard blocks follow Guard 1C; the timeline ruleset (shipped and frozen fixture) plays pips; re-recorded on purpose: `sim_golden`, `timeline_golden`"; STRUCTURE: `poise::mirror`, `rest_pip_gain`, `Resolver.guarded`, test `poise_pips_timeline.rs`, GUI `pip_view`.
+
+### FB-87: S1.2-S4 re-recorded an unnamed golden (PHASEFOLD) before the Authority Matrix landed
+
+- **Spec**: `docs/READY.md` W2-3 slice 1 (`S1.2-S4`, @4905d95c); build-session skill section 4 (Authority Matrix, @391fafe2)
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: W2-3's Acceptance names `timeline_golden`, `sim_golden` and `rules_contract_golden`. Guard Option 1C holds the guard in every ruleset (the spec's timing, not a ruleset gate), so it also moved PHASEFOLD (18 of 72 fights; first divergence `goblin_ambush` defensive seed 1: the Ranger's guard now covers block 3, 27 x 0.7 = 19), which S1.2-S4 re-recorded and landed before the Authority Matrix forbade re-recording unnamed behavioural goldens. A probe with the hold off matched the old goldens, so the move is the spec's. W2-2's slices likewise re-recorded PHASEFOLD in U1.2-S3a and U3.2-S3 under rows that did not name it.
+- **Recommendation**: (A, recommended) ratify the PHASEFOLD re-records as intended (named in each commit; HISTORY rows already proposed) and name PHASEFOLD in W2-3's Acceptance for slice 3; (B) restrict 1C to the timeline ruleset (a spec change; moves PHASEFOLD back). Build continues W2-3 slice 3 under the Matrix: any unnamed golden it moves stops the slice with a limit-blocker.
+
+### FB-88: S2.2-S4 built: a Poise break under pips queues stagger; timeline and sim goldens re-recorded
+
+- **Spec**: `docs/READY.md` W2-3 slice 3 (`S2.2-S4`); `docs/sessions/S2_POISE.md` section 1 "Poise Break", section 4 item 3, section 5 test 3; FB-49 (d)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Under `poise_mode` pips a break (any cause) also queues `stagger` for the unit's next round through the status row (`default_rounds` 1, `refresh_max`), unless `steadfast` (`poise::break_queues_stagger`, from `break_unit` and the Dojo). Scope: pips only (S2 section 1 is the pips break); the shipped rows are `timeline` (pips) and `classic` (no poise), so no other golden moves. An AP-debt stagger at the same round start is one instance. No new ruleset number or data field. Re-recorded (named in W2-3): `timeline_golden` (8 of 15 fights; first `tl_duel_windup` seed 7 round 2 block 4: Vanguard pending `stagger`), `sim_golden` (run 21 only; `tl_skirmish` auto driver back from won to capped). Everything else byte-identical. Tests: `poise_pips.rs` (+4), `dojo_timeline.rs` (+1), `poise_pips_timeline.rs` (+1).
+- **Recommendation**: HISTORY: "S2.2-S4: a Poise break under pips queues `stagger` next round (not when `steadfast`); re-recorded on purpose: `timeline_golden`, `sim_golden`"; GAME_BRIEF poise line: under pips a break queues `stagger`, under bar it cancels unlanded actions and drops the guard only; Dojo: a break staggers the dummy next round; STRUCTURE: `poise.rs` `break_queues_stagger`, `BREAK_STATUS`. UI follow-up (not W2-3): the battle's break forecast and the BREAK log event do not yet mention the queued stagger (the Dojo line does).
+
+### FB-89: stagger locks blocks 1 and 4, or 1 through 4?
+
+- **Spec**: `docs/READY.md` W2-3 slice 3; `S2_POISE.md` section 1 ("blocks [1, 4] locked next round"); `S1_STATUS.md` (stagger locks `[1, 4]`)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: The `stagger` row's `lock_blocks: [1, 4]` is read as a list since S1.2-S2 (stagger locks blocks 1 and 4; stun 1 and 2), so a staggered unit keeps blocks 2, 3, 5 and 6. S2's wording can read as 1 through 4. S2.2-S4 uses the row as it is.
+- **Recommendation**: (A, default) keep the list reading; (B) read the row as a range (stagger 1-4, stun 1-2): a bigger balance lever that moves `timeline_golden` and `sim_golden` again and needs naming. Either way a balance look at the combined break lever (lost round, stagger next round, 0.5 repeat) after R1.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

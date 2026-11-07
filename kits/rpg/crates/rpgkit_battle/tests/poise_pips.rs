@@ -597,3 +597,119 @@ fn the_rest_preview_shows_the_pips() {
     poise::restore(&mut w, FOE, 4);
     assert_eq!(bar(&w, FOE).pips, rip::rest_of(&s.w, 4).pips);
 }
+
+// ---- S2.2-S4 (FB-49d, C10): a break under pips queues `stagger` ------------------------------------------------------
+
+/// The blocks a status locks next round on `u` once its queued statuses take effect (the planner's locks).
+fn locks_after_roll(w: &mut World, c: UnitId) -> Vec<i32> {
+    let n = w.ruleset.numbers.clone();
+    status::roll_over(&mut w.units[c], 0, &n);
+    poise::round_start(w);
+    let mut out: Vec<i32> = w.units[c].st.active.iter().flat_map(|s| status::blocked_blocks(s).iter().copied()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// S2 section 5 test 3 (the resolver's hits): dropping to 0 pips cancels the wind-up, queues `stagger` (the status
+/// row's rounds), and the next round refills the pips with the row's blocks locked.
+#[test]
+fn a_break_under_pips_queues_stagger_and_refills_next_round() {
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    let t = poise::threshold(&n, TANK);
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    let h = hit(&w, FOE, HERO, "p_heavy");
+    running(&mut res, FOE, h, 1, 3);
+    let big = t * n.max_pip_loss_per_hit;
+    let mut b = 1;
+    let broke = loop {
+        let st = strike(&mut w, &mut res, "p_jab", big, b);
+        if st.broke.is_some() {
+            break st;
+        }
+        assert!(st.pips_after > 0, "a hit that leaves no pip breaks");
+        b += 1;
+    };
+    assert_eq!(broke.pips_after, 0, "0 pips (by the pips or the chance roll of a hit into the wind-up)");
+    assert!(res.scheduled[0].cancelled && res.scheduled[0].broken, "1. the wind-up is cancelled");
+    assert!(w.units[FOE].st.pending.contains(poise::BREAK_STATUS), "2. stagger queued");
+    let row = status::row_of(poise::BREAK_STATUS).expect("the stagger row");
+    assert_eq!(w.units[FOE].st.pending_rounds.get(poise::BREAK_STATUS).copied(), Some(row.default_rounds), "the row's rounds");
+    assert!(!w.units[FOE].has_status(poise::BREAK_STATUS), "not this round");
+    let locks = locks_after_roll(&mut w, FOE);
+    assert!(w.units[FOE].has_status(poise::BREAK_STATUS), "active next round");
+    assert_eq!(locks, row.lock_blocks.to_vec(), "the row's block_lock blocks are locked next round");
+    let st = bar(&w, FOE);
+    assert_eq!((st.pips, st.value, st.broken, st.broken_last), (n.poise_pips, n.poise_pips * t, false, true), "3. the refill");
+}
+
+/// FB-49d: every break cause under pips queues it (a `sure_break` into a wind-up, a collision through the arena path);
+/// under `bar` a break queues nothing (RULESET1's consequences only).
+#[test]
+fn every_pip_break_queues_stagger_and_a_bar_break_none() {
+    let s = session(pips_rules());
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    let h = hit(&w, FOE, HERO, "p_heavy");
+    running(&mut res, FOE, h, 1, 3);
+    let st = strike(&mut w, &mut res, "p_sure", 4, 2);
+    assert_eq!(st.broke.as_ref().map(|b| b.cause), Some(BreakCause::Sure));
+    assert!(w.units[FOE].st.pending.contains(poise::BREAK_STATUS), "sure break");
+
+    let s = session(timeline(json!({})));
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    let st = strike(&mut w, &mut res, "p_jab", TANK, 1);
+    assert_eq!(st.broke.as_ref().map(|b| b.cause), Some(BreakCause::Poise), "bar: 0 poise breaks");
+    assert!(w.units[FOE].st.pending.is_empty(), "bar: no stagger queued");
+    let mut u = w.units[FOE].clone();
+    assert!(!poise::break_queues_stagger(&w.ruleset.numbers, &mut u), "bar");
+}
+
+/// `steadfast` prevents the queued stagger: it holds the pips at 1 so nothing breaks, and a break forced past it (the
+/// rule itself) queues nothing.
+#[test]
+fn steadfast_prevents_the_queued_stagger() {
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    let mut w = s.w.clone();
+    status::grant_now(&mut w.units[FOE], poise::STEADFAST, 1, 0, "test");
+    let mut res = Resolver::new(BLOCKS, 1);
+    let big = poise::threshold(&n, TANK) * n.max_pip_loss_per_hit;
+    for b in 1..=3 {
+        assert!(strike(&mut w, &mut res, "p_jab", big, b).broke.is_none(), "held at 1 pip");
+    }
+    assert!(!w.units[FOE].st.pending.contains(poise::BREAK_STATUS));
+    poise::break_unit(&mut res, &mut w, FOE, 4, BreakCause::Poise);
+    assert!(bar(&w, FOE).broken && !w.units[FOE].st.pending.contains(poise::BREAK_STATUS), "steadfast: no stagger");
+}
+
+/// The break's stagger and an AP-debt stagger at the same round start are one instance (the row's `refresh_max`): the
+/// same rounds and the same locks as either alone.
+#[test]
+fn the_break_stagger_and_an_ap_debt_stagger_are_one_instance() {
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    let row = status::row_of(poise::BREAK_STATUS).expect("the stagger row");
+    let roll = |debt: bool, broke: bool| {
+        let mut w = s.w.clone();
+        let mut res = Resolver::new(BLOCKS, 1);
+        if broke {
+            poise::break_unit(&mut res, &mut w, FOE, 1, BreakCause::Poise);
+        }
+        if debt {
+            w.units[FOE].ap = -n.debt_stagger;
+        }
+        let locks = locks_after_roll(&mut w, FOE);
+        let u = &w.units[FOE];
+        (u.has_status(poise::BREAK_STATUS), u.st.rounds_left.get(poise::BREAK_STATUS).copied().unwrap_or(0).max(i32::from(u.has_status(poise::BREAK_STATUS))), locks)
+    };
+    let one = (true, row.default_rounds, row.lock_blocks.to_vec());
+    assert_eq!(status::debt_status(n.debt_stagger, &n), poise::BREAK_STATUS, "the debt that staggers");
+    assert_eq!(roll(false, true), one, "the break alone");
+    assert!(roll(true, false).0, "the debt alone staggers");
+    assert_eq!(roll(true, true), one, "both: not doubled");
+    assert_eq!(roll(false, false), (false, 0, Vec::new()));
+}

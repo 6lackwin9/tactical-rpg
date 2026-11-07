@@ -15,6 +15,11 @@
 //! S2.2-S3 (FB-71): under pips the continuous `value` mirrors the pips (`value = pips x T`, `mirror`), so every reader
 //! of the value (metrics, the sim, the host) follows the pips; a windup bonus stores its pip count on the command
 //! (`Command::poise_bonus_pips`) and may sit above `poise_pips`.
+//!
+//! S2.2-S4 (`S2_POISE.md` 1 "Poise Break (0 Pips)", FB-49d, C10): under pips a break (the unit's pips reach 0, by any
+//! cause) also queues the status `stagger` for its next round (the status table's row: `block_lock` on the row's
+//! `lock_blocks`, blocks 1 and 4; an AP-debt stagger the same round start joins the same active instance), unless it holds `steadfast`
+//! (`break_queues_stagger`). Under `bar` a break keeps the RULESET1 consequences only.
 
 use crate::command::{CmdKind, Command};
 use crate::resolver::{Resolver, ScheduledAction};
@@ -28,6 +33,21 @@ use rpgkit_rules::pool::PoolView;
 
 /// The status that keeps a unit from breaking (P12).
 pub const STEADFAST: &str = "steadfast";
+
+/// S2.2-S4: the status a break under pips queues for the unit's next round (the status table's row).
+pub const BREAK_STATUS: &str = "stagger";
+
+/// S2.2-S4 (`S2_POISE.md` 1, step 2 of a break): under `poise_mode` pips a broken unit `u` gets `stagger` queued for its
+/// next round (the row's default rounds and stacking), unless it holds `steadfast`. True when it queued. Nothing under
+/// `bar`.
+pub fn break_queues_stagger(n: &Numbers, u: &mut rpgkit_rules::Unit) -> bool {
+    if !pips_mode(n) || u.has_status(STEADFAST) {
+        return false;
+    }
+    let rounds = rpgkit_rules::status::row_of(BREAK_STATUS).map_or(1, |r| r.default_rounds);
+    rpgkit_rules::status::queue(u, BREAK_STATUS, rounds, 0, "");
+    true
+}
 
 /// What a skill does to poise and armour (RULESET1 tasks 1.3), carried by its command; read only under the rules
 /// `poise` (stagger, windup poise, unbreakable, sure break) and `pierce` (armour piercing).
@@ -682,6 +702,9 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
     st.value = 0;
     st.pips = 0;
     st.broken = true;
+    // S2.2-S4: under pips the break queues `stagger` for next round (not on a `steadfast` unit)
+    let n = w.ruleset.numbers.clone();
+    break_queues_stagger(&n, &mut w.units[t]);
     let mut named: Option<(u8, String)> = None;
     for a in res.scheduled.iter_mut().filter(|a| a.unit == t && !a.cancelled) {
         if a.landed {

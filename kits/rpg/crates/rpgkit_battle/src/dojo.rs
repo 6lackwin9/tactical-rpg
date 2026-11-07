@@ -933,6 +933,11 @@ impl DojoSession {
             bar.pips = 0;
             bar.broken = true;
             line += &format!(" {c}");
+            // S2.2-S4: under pips the break queues `stagger` for next round (not on a `steadfast` unit)
+            let queued = if on_dummy { poise::break_queues_stagger(&n, &mut self.dummy) } else { poise::break_queues_stagger(&n, self.hero_mut()) };
+            if queued {
+                line += ", staggered next round";
+            }
         }
         if on_dummy {
             self.dummy_poise = bar;

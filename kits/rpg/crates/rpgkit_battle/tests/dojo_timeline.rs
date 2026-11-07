@@ -6,6 +6,7 @@
 //! (P2) and the bars refill at the next round (P3); landed Rest blocks pay their AP at the round's end (RS2). Slice 2
 //! (review): a rebuild keeps the spent points and the pouch; a broken dummy loses its action (P7); Reset rebuilds under
 //! timeline; the Rest AP is lost on a hero switch; the planner shows its scratch battle's AP; Rest matches by kind.
+//! S2.2-S4: under pips a break queues `stagger`, so the dummy loses its next round's action.
 
 use rpgkit_battle::dojo::{DojoSession, HEROES};
 use rpgkit_battle::round_intent::{self, RoundIntent};
@@ -237,4 +238,29 @@ fn rest_is_matched_by_its_kind_only() {
     assert_eq!(s.rest_blocks, 0, "a MOVE used in the Dojo books no Rest block");
     let mv = s.cat.skills.iter().find(|k| k.id == "move").unwrap().clone();
     assert_eq!(s.hero().ap, ap - s.skill_ap(&mv));
+}
+
+/// S2.2-S4 (FB-49d): under `poise_mode` pips the Dojo's break also queues `stagger`, so after "Next round" the bar is
+/// full again and the dummy, staggered, loses its action (under bar it strikes again: the test above).
+#[test]
+fn a_pip_break_staggers_the_dummy_next_round() {
+    let mut row = json!({"id": TIMELINE, "name": "Timeline", "rules": [ROUND_INTENT, AP_COST, POISE, DECK], "basics": BASICS, "deck_slots": {"active": 2, "passive": 1, "keystone": 1}});
+    row["poise_mode"] = json!("pips");
+    let mut s = dojo(Some(Ruleset::from_row(row.as_object().unwrap())));
+    s.toggle_dummy_windup();
+    for _ in 0..10 {
+        if s.dummy_poise.broken {
+            break;
+        }
+        s.heal_dummy();
+        s.use_skill(Some("t_heavy"));
+    }
+    assert!(s.dummy_poise.broken, "heavy hits into the windup break the dummy");
+    assert!(s.dummy.st.pending.contains(rpgkit_battle::poise::BREAK_STATUS), "stagger queued");
+    s.next_round();
+    assert!(!s.dummy_poise.broken && s.dummy_poise.pips == s.ruleset.numbers.poise_pips, "the pips refill");
+    let hp = s.hero().hp;
+    s.dummy_attack();
+    let shown = rpgkit_rules::status::display_name(rpgkit_battle::poise::BREAK_STATUS).to_uppercase();
+    assert_eq!((s.log.last().unwrap().outcome.as_str(), s.hero().hp), (shown.as_str(), hp), "staggered: no strike");
 }
