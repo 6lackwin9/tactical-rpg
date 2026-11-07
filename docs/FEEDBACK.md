@@ -10,7 +10,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | Task / Sub-block | Stage / Status | Branch / Commit | Notes |
 | --- | --- | --- | --- |
 | Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3 and -S4, AUDIT-R1. |
-| R1 path | all R1 rows done; release gate passed (FB-92) | `claude/release-batch-vmj4rj` | The R1 release PR to `main`. |
+| R1 release | released: `main` @98ab973a (PR #55, merge commit; tree = develop @f7f5cb71) | `main` | Next: the post-R1 rows when Design promotes them. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
