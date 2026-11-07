@@ -13,7 +13,7 @@ their field tables `schema.json`; the lookup chains that pick a body, portrait, 
 `battle_backdrop`, STAGE1-L) are in `rpgkit_content`'s `art.rs`,
 the writer hooks are `rpgkit_content::store::RpgContent`, and the data folder is found by `Data::find_data_dir` or
 `find_game_data_dir` with the game's id. A game's crates re-export the kit and add their own code. The sim names no world: a game passes
-`SimGame { default_world, story }` (KIT1-SIM). Base-class ids (`warrior`, ...) are the kit's contract. `rpgkit_rules::pipeline` (`U1.2-S1`: `Stage`, `Op`, `Modifier`, `Pipeline`, `Hit.trace`) and `rpgkit_rules::pool` (`PoolView` over `hp`, `ap`, and `poise`) provide the modular damage/stagger pipeline and pool facade. See `docs/specs/KIT1.md`.
+`SimGame { default_world, story }` (KIT1-SIM). Base-class ids (`warrior`, ...) are the kit's contract. `rpgkit_rules::pipeline` (`U1.2-S1`, `A2.2-S1..S2`: `Stage`, `Op`, `Modifier`, `Pipeline`, `TAKE_GUARDED`, `PASS`, `Hit.trace`; `Unit::take_damage` -> `damage::take_damage(_traced)`, `Unit::heal` -> `damage::heal_gain(_traced)`, and `damage::compute_traced_folded` naming the factors folded into `skill_mult` as trace-only parts) and `rpgkit_rules::pool` (`PoolView` over `hp`, `ap`, and `poise`) provide the modular damage/stagger/heal pipeline and pool facade. See `docs/specs/KIT1.md`.
 
 `kit.json` is written through `aegis content manifest --kit rpg <json>` (id = this folder's name, a semver version,
 the engine range it needs).
