@@ -1372,19 +1372,18 @@ impl Unit {
         self.is_alive() && !self.is_withdrawn
     }
 
-    /// Combatant.take_damage: `mitigated` false applies the unit's guard first. Returns the damage dealt.
+    /// Combatant.take_damage: `mitigated` false applies the unit's guard first. Returns the damage dealt. A2.2-S1
+    /// (FB-43): through the pipeline (`damage::take_damage`; floor 1 only when the guard applies, as before).
     pub fn take_damage(&mut self, amount: i32, mitigated: bool) -> i32 {
-        let mut dmg = amount;
-        if !mitigated && self.guard > 0.0 {
-            dmg = roundi(amount as f64 * (1.0 - self.guard)).max(1);
-        }
+        let dmg = crate::damage::take_damage(amount, self.guard, mitigated);
         self.hp = (self.hp - dmg).max(0);
         dmg
     }
 
+    /// Combatant.heal. A2.2-S1: through the pipeline (`damage::heal_gain`; capped at max HP, as before).
     pub fn heal(&mut self, amount: i32) {
         if self.is_alive() {
-            self.hp = self.max_hp.min(self.hp + amount);
+            self.hp += crate::damage::heal_gain(self.hp, self.max_hp, amount);
         }
     }
 

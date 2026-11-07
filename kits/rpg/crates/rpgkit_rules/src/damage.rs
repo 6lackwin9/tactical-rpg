@@ -276,6 +276,65 @@ pub fn heal_traced(caster: &Unit, skill: &rpgkit_data::SkillDef) -> (i32, Trace)
     (out.value, trace)
 }
 
+/// A2.2-S1 (FB-43, FB-56a): the pipeline and modifiers of damage a unit takes (Combatant.take_damage): with the guard
+/// applied (`mitigated` false and `guard` > 0) the amount, then the guard as a mitigation ratio, rounded once with
+/// floor 1 (`TAKE_GUARDED`: `max(1, roundi(amount x (1 - guard)))`, as before); otherwise the amount as it is (`PASS`).
+/// The modifiers are the first `n` of the array.
+pub fn take_damage_modifiers(amount: i32, guard: f64, mitigated: bool) -> (pipeline::Pipeline, [Modifier; 2], usize) {
+    let amount = Modifier::new("amount", Stage::Base, Op::Add(amount as f64));
+    let guard_mod = Modifier::new("guard", Stage::Mitigation, Op::Reduce(guard));
+    if !mitigated && guard > 0.0 {
+        (pipeline::TAKE_GUARDED, [amount, guard_mod], 2)
+    } else {
+        (pipeline::PASS, [amount, guard_mod], 1)
+    }
+}
+
+/// A2.2-S1: the damage a unit with `guard` takes from `amount` (no trace; `Unit::take_damage` applies it).
+pub fn take_damage(amount: i32, guard: f64, mitigated: bool) -> i32 {
+    let (pipe, mods, n) = take_damage_modifiers(amount, guard, mitigated);
+    pipe.run(&mods[..n]).value
+}
+
+/// A2.2-S1: `take_damage`, keeping every step.
+pub fn take_damage_traced(amount: i32, guard: f64, mitigated: bool) -> (i32, Trace) {
+    let (pipe, mods, n) = take_damage_modifiers(amount, guard, mitigated);
+    let (out, trace) = pipe.run_traced(&mods[..n]);
+    (out.value, trace)
+}
+
+/// A2.2-S1 (FB-56a): the HP a heal of `amount` adds to a unit at `hp` of `max_hp` (Combatant.heal): the amount through
+/// `PASS` (the value is the amount), then capped at the missing HP (`hp + gain = min(max_hp, hp + amount)`, as before;
+/// the pipeline has no ceiling stage, so the cap is the integer step after it). Returns the gain and the trace.
+pub fn heal_gain_traced(hp: i32, max_hp: i32, amount: i32) -> (i32, Trace) {
+    let (out, trace) = pipeline::PASS.run_traced(&[Modifier::new("heal", Stage::Base, Op::Add(amount as f64))]);
+    (out.value.min(max_hp - hp), trace)
+}
+
+/// A2.2-S1: `heal_gain_traced` without the trace.
+pub fn heal_gain(hp: i32, max_hp: i32, amount: i32) -> i32 {
+    pipeline::PASS.run(&[Modifier::new("heal", Stage::Base, Op::Add(amount as f64))]).value.min(max_hp - hp)
+}
+
+/// A2.2-S2 (FB-56b): ids of the factors a caller multiplies into `HitInput.skill_mult` before the hit (trace only).
+pub const FOLD_SKILL: &str = "fold:skill";
+pub const FOLD_EXPLOIT: &str = "fold:exploit";
+pub const FOLD_FLANK: &str = "fold:flank";
+pub const FOLD_SPLASH: &str = "fold:splash";
+pub const FOLD_COUNTER: &str = "fold:counter";
+pub const FOLD_WEAKEN: &str = "fold:weaken";
+pub const FOLD_EMPOWER: &str = "fold:empower";
+
+/// A2.2-S2 (FB-56b): `compute_traced` (or `compute_traced_skill` when `skill` is given) with the factors the caller
+/// already multiplied into `h.skill_mult` named as trace-only parts of the `skill` step, after the skill's grant
+/// sources: `folded` lists them as `(id, factor)` in the caller's order (`FOLD_*`). The step's op stays
+/// `Mul(h.skill_mult)`, so the f64 multiplication order and every number are unchanged.
+pub fn compute_traced_folded(attacker: &Unit, target: &Unit, h: HitInput, skill: Option<&rpgkit_data::SkillDef>, folded: &[(&'static str, f64)]) -> Hit {
+    let mut parts = skill.map(|s| attacker.potency_parts(s)).unwrap_or_default();
+    parts.extend(folded.iter().map(|&(id, value)| pipeline::Part { source: std::borrow::Cow::Borrowed(id), value }));
+    hit(attacker, target, h, true, parts)
+}
+
 fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool, skill_parts: Vec<pipeline::Part>) -> Hit {
     let explained = attack_power(attacker, h.ranged, h.offhand);
     let power = explained.attack_power;
