@@ -45,7 +45,8 @@ pub fn terrain_errors(e: &Dict) -> Vec<String> {
             }
         }
         None if magnitude != 0 => {
-            let ids: Vec<&str> = status::ROWS.iter().filter(|r| r.magnitude_max > 0).map(|r| r.id).collect();
+            // S1.2-S4: `guard` (queued only by a multi-round Guard skill) is not a hazard's
+            let ids: Vec<&str> = status::ROWS.iter().filter(|r| r.magnitude_max > 0 && (!r.buff || !r.grant.is_empty())).map(|r| r.id).collect();
             errors.push(format!("magnitude only applies to {}", ids.join(", ")));
         }
         None => {}
@@ -75,8 +76,10 @@ const STAGGER_MULT_MAX: f64 = 2.0;
 const STAGGER_MAX_BLOCKS: i64 = 6;
 /// RULESET1 V4: a foresight effect's optional reveal range in tiles (0 = today's rule).
 const FORESIGHT_RANGE_MAX: i64 = 8;
-/// The effect types gear may carry; HOOKS1-S adds `trigger` and `forced_move`.
-const ITEM_TYPES: [&str; 6] = ["skill_potency", "status_potency", "spell_reach", "resist", "trigger", "forced_move"];
+/// The effect types gear may carry; HOOKS1-S adds `trigger` and `forced_move`; U3.2-S4 (FB-35, OFFHAND1) `skill` (a worn
+/// skill: always active while worn, no slot) and `stat` (a U1 modifier), both taken off with the item. `proficiency`
+/// stays out (training is the class's and the drills'; an item training its own gear would undo the wield penalty).
+pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", "spell_reach", "resist", "trigger", "forced_move", "skill", "stat"];
 const GROUPS: [&str; 2] = ["spell", "heal"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 
@@ -143,7 +146,7 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 }
             }
             "proficiency" => {
-                if !super::skill::GEAR_TYPES.contains(&json::s(e, "gear").as_str()) {
+                if !hooks.gear.contains(&json::s(e, "gear")) {
                     errors.push(format!("{at}: unknown gear type '{}'.", json::s(e, "gear")));
                 }
                 if !(1..=3).contains(&json::i(e, "levels", 0)) {

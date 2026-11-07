@@ -1,5 +1,5 @@
-//! Balance sim roles (tools/sim/sim_roles.gd, BAL2_SIM.md section 6): the class -> role map, the role loadouts and
-//! the role KPIs with their section 8.1 bands.
+//! Balance sim roles (tools/sim/sim_roles.gd, BAL2_SIM.md section 6): the class -> role map and the role loadouts
+//! (KITIDS1: the game's, SimClasses.roles) and the role KPIs with their section 8.1 bands.
 
 use crate::kpi::{per_fight, ratio, Acc};
 use crate::scenarios::FightSet;
@@ -8,6 +8,7 @@ use aegis_core::fmt::fixed;
 use rpgkit_battle::metrics::EARLY_DOWN_ROUND;
 use rpgkit_data::Catalog;
 use rpgkit_rules::stats::MAX_CLASS_SLOTS;
+use crate::SimClasses;
 
 pub fn role_label(role: &str) -> &'static str {
     match role {
@@ -19,35 +20,39 @@ pub fn role_label(role: &str) -> &'static str {
     }
 }
 
-/// 6.2 (rogue = melee striker, brawler = melee AoE).
-pub fn primary_role(class_id: &str) -> &'static str {
-    match class_id {
-        "warrior" => "tank",
-        "ranger" => "ranged",
-        "priest" => "support",
-        "brawler" => "aoe",
-        "rogue" => "striker",
-        "mage" => "aoe",
-        _ => "tank",
-    }
+/// The role of a class the game gives no roles row.
+pub const DEFAULT_ROLE: &str = "tank";
+
+/// KITIDS1: one class's roles (BAL2_SIM 6.2) and role loadouts (6.3), as the game gives them (SimClasses.roles).
+#[derive(Debug, Clone, Copy)]
+pub struct ClassRoles {
+    pub class: &'static str,
+    pub primary: &'static str,
+    pub secondary: &'static [&'static str],
+    /// Role -> the L5 loadout (families in pick order).
+    pub loadouts: &'static [(&'static str, &'static [&'static str])],
+    /// Role -> (family, replacement) from L7_LEVEL on (the bracketed L7 deltas of 6.3).
+    pub l7_swaps: &'static [(&'static str, &'static str, &'static str)],
 }
 
-pub fn secondary_roles(class_id: &str) -> &'static [&'static str] {
-    match class_id {
-        "warrior" => &["support"],
-        "ranger" => &["aoe"],
-        "priest" => &["striker"],
-        "brawler" => &["tank", "striker"],
-        "mage" => &["ranged"],
-        _ => &[],
-    }
+fn row<'c>(c: &'c SimClasses, class_id: &str) -> Option<&'c ClassRoles> {
+    c.roles.iter().find(|r| r.class == class_id)
+}
+
+/// 6.2: the class's primary role (DEFAULT_ROLE without a row).
+pub fn primary_role(c: &SimClasses, class_id: &str) -> &'static str {
+    row(c, class_id).map_or(DEFAULT_ROLE, |r| r.primary)
+}
+
+pub fn secondary_roles(c: &SimClasses, class_id: &str) -> &'static [&'static str] {
+    row(c, class_id).map_or(&[], |r| r.secondary)
 }
 
 /// "P" primary, "S" secondary, "-" off-role.
-pub fn fit(class_id: &str, role: &str) -> &'static str {
-    if primary_role(class_id) == role {
+pub fn fit(c: &SimClasses, class_id: &str, role: &str) -> &'static str {
+    if primary_role(c, class_id) == role {
         "P"
-    } else if secondary_roles(class_id).contains(&role) {
+    } else if secondary_roles(c, class_id).contains(&role) {
         "S"
     } else {
         "-"
@@ -55,41 +60,23 @@ pub fn fit(class_id: &str, role: &str) -> &'static str {
 }
 
 /// 6.3 role loadouts at L5.
-fn loadouts(class_id: &str, role: &str) -> Option<&'static [&'static str]> {
-    Some(match (class_id, role) {
-        ("warrior", "tank") => &["taunt_shout", "shield_bash", "intimidate", "shield_wall"],
-        ("warrior", "support") => &["taunt_shout", "intimidate", "shield_bash", "sunder", "riposte"],
-        ("ranger", "ranged") => &["aimed_shot", "pinning_shot", "leap_back", "barbed_arrow", "deadeye"],
-        ("ranger", "aoe") => &["aimed_shot", "pinning_shot", "leap_back", "volley", "deadeye"],
-        ("priest", "support") => &["rally", "mend", "purify", "greater_mend", "renewal"],
-        ("priest", "striker") => &["smite", "rally", "hex", "mend", "greater_mend"],
-        ("brawler", "aoe") | ("brawler", "tank") => &["body_blow", "lunge", "sweep_kick", "cyclone_kick", "haymaker"],
-        ("brawler", "striker") => &["body_blow", "lunge", "charge_in", "hamstring", "haymaker"],
-        ("rogue", "striker") => &["quick_stab", "pounce", "lacerate", "backflip", "hamstring"],
-        ("mage", "aoe") => &["arcane_bolt", "arc_lance", "firebomb", "glacial_burst", "focus"],
-        ("mage", "ranged") => &["arcane_bolt", "arc_lance", "hex", "focus", "firebomb"],
-        _ => return None,
-    })
+fn loadouts(c: &SimClasses, class_id: &str, role: &str) -> Option<&'static [&'static str]> {
+    row(c, class_id)?.loadouts.iter().find(|(r, _)| *r == role).map(|(_, l)| *l)
 }
 
 /// The bracketed L7 deltas of 6.3 apply from this level on.
 pub const L7_LEVEL: i32 = 7;
 
-fn l7_swap(class_id: &str, role: &str) -> Option<(&'static str, &'static str)> {
-    match (class_id, role) {
-        ("priest", "striker") => Some(("mend", "judgement")),
-        ("rogue", "striker") => Some(("hamstring", "assassinate")),
-        ("mage", "aoe") => Some(("focus", "inferno")),
-        _ => None,
-    }
+fn l7_swap(c: &SimClasses, class_id: &str, role: &str) -> Option<(&'static str, &'static str)> {
+    row(c, class_id)?.l7_swaps.iter().find(|(r, _, _)| *r == role).map(|(_, from, to)| (*from, *to))
 }
 
 /// The class's loadout for `role` (its primary loadout when it has none for the role), with the L7 swap, cut to the
 /// families owned at `level` and filled by path order up to MAX_CLASS_SLOTS.
-pub fn role_loadout(cat: &Catalog, class_id: &str, role: &str, level: i32) -> Vec<String> {
-    let key = if loadouts(class_id, role).is_some() { role } else { primary_role(class_id) };
-    let mut wanted: Vec<String> = loadouts(class_id, key).unwrap_or(&[]).iter().map(|s| s.to_string()).collect();
-    if let Some((from, to)) = l7_swap(class_id, key) {
+pub fn role_loadout(cat: &Catalog, c: &SimClasses, class_id: &str, role: &str, level: i32) -> Vec<String> {
+    let key = if loadouts(c, class_id, role).is_some() { role } else { primary_role(c, class_id) };
+    let mut wanted: Vec<String> = loadouts(c, class_id, key).unwrap_or(&[]).iter().map(|s| s.to_string()).collect();
+    if let Some((from, to)) = l7_swap(c, class_id, key) {
         if level >= L7_LEVEL {
             if let Some(i) = wanted.iter().position(|f| f == from) {
                 wanted[i] = to.to_string();
@@ -146,8 +133,8 @@ fn k(id: &'static str, label: &str, band: &'static str, pct: bool) -> Kpi {
     Kpi { id, label: label.into(), band, pct, lower: false }
 }
 
-/// The KPIs of `role` (the first is its ranking KPI).
-pub fn kpis(role: &str) -> Vec<Kpi> {
+/// The KPIs of `role` (the first is its ranking KPI); the support survivor gain names the game's support baseline.
+pub fn kpis(c: &SimClasses, role: &str) -> Vec<Kpi> {
     match role {
         "tank" => vec![
             k("taken_share", "dmg_taken share%", "tank_taken_share", true),
@@ -178,7 +165,7 @@ pub fn kpis(role: &str) -> Vec<Kpi> {
             k("cleanses", "cleanse/fight", "", false),
             k("buff_rounds", "buff rds/fight", "", false),
             k("debuff_rounds", "debuff rds/f", "", false),
-            k("survivor_gain", "surv vs brawler", "support_survivor_gain", false),
+            k("survivor_gain", &format!("surv vs {}", c.support_baseline), "support_survivor_gain", false),
             k("heal_casts", "heal casts/f", "", false),
             k("down_early", &format!("down<r{EARLY_DOWN_ROUND}%"), "", true),
             k("down_round", "down rnd", "", false),
@@ -295,8 +282,8 @@ pub fn cell(pct: bool, band: &str, s: Spread, t: &Targets, marked: bool) -> Stri
 
 /// Ranking check (8.1) on the first KPI: primary classes in the top 2, a secondary class above every off-role class.
 /// Returns class -> "rank N" (+ " X" on a miss), in `means` order.
-pub fn rank_marks(role: &str, means: &[(String, f64)]) -> Vec<(String, String)> {
-    let lower = kpis(role)[0].lower;
+pub fn rank_marks(c: &SimClasses, role: &str, means: &[(String, f64)]) -> Vec<(String, String)> {
+    let lower = kpis(c, role)[0].lower;
     let mut order: Vec<(String, f64)> = means.to_vec();
     order.sort_by(|a, b| {
         if targets::approx(a.1, b.1) {
@@ -309,13 +296,13 @@ pub fn rank_marks(role: &str, means: &[(String, f64)]) -> Vec<(String, String)> 
             ord.reverse()
         }
     });
-    let best_off = order.iter().position(|(c, _)| fit(c, role) == "-").unwrap_or(order.len());
+    let best_off = order.iter().position(|(id, _)| fit(c, id, role) == "-").unwrap_or(order.len());
     let ranks: Vec<(String, String)> = order
         .iter()
         .enumerate()
-        .map(|(i, (c, _))| {
-            let miss = (fit(c, role) == "P" && i >= 2) || (fit(c, role) == "S" && i > best_off);
-            (c.clone(), format!("rank {}{}", i + 1, if miss { " X" } else { "" }))
+        .map(|(i, (id, _))| {
+            let miss = (fit(c, id, role) == "P" && i >= 2) || (fit(c, id, role) == "S" && i > best_off);
+            (id.clone(), format!("rank {}{}", i + 1, if miss { " X" } else { "" }))
         })
         .collect();
     means.iter().map(|(c, _)| ranks.iter().find(|r| &r.0 == c).cloned().unwrap()).collect()

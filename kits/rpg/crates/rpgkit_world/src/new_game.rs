@@ -16,7 +16,10 @@ pub fn hero_from_character(d: &Data, world_id: &str, character_ref: &str) -> Opt
     let level = json::i(d.entry("units", &base), "level", 1);
     let mut hero = UnitState::at_level(d, &base, level, &json::s(c, "id"));
     hero.lore_ref = json::s(c, "_qid");
-    hero.passives = d.character_passives(c, world_id);
+    // U4.2-S3 (FB-29): the temperament is not saved; every build gathers it from the character (`member_passives`), so a
+    // temperament the data clears or changes reaches the save
+    let temperament = json::s(c, rpgkit_content::check::unit::TEMPERAMENT);
+    hero.passives = d.character_passives(c, world_id).into_iter().filter(|p| *p != temperament).collect();
     Some(hero)
 }
 

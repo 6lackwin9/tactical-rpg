@@ -13,13 +13,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_rulesets_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_rulesets_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -95,6 +94,33 @@ fn the_schema_lists_what_the_code_owns() {
     assert_eq!(options("content", ruleset::KIND, "intents"), strs(&INTENTS));
 }
 
+/// ATTACKLOCK1: the schema lists the code's `attack_lock` values with `none` as the default; a normalized row reads them
+/// and a row that does not name the field stays at none, as the built-in classic values do. Which attacks each value
+/// locks: `locks` (melee bands under melee, every attack under all, none under none).
+#[test]
+fn the_attack_lock_option_reads_from_the_row() {
+    use rpgkit_rules::ruleset::AttackLock;
+    assert_eq!(options("content", ruleset::KIND, "attack_lock"), strs(&AttackLock::IDS));
+    let row = |extra: Value| {
+        let mut r = dict(good_row());
+        for (k, v) in extra.as_object().unwrap() {
+            r.insert(k.clone(), v.clone());
+        }
+        normalize(fields(source::schema(), "content", ruleset::KIND), &r, false)
+    };
+    assert_eq!(json::s(&row(json!({})), "attack_lock"), "none", "the schema's default");
+    assert_eq!(Ruleset::from_row(&row(json!({}))).attack_lock(), AttackLock::None);
+    assert_eq!(Ruleset::classic().attack_lock(), AttackLock::None);
+    for id in AttackLock::IDS {
+        let lock = AttackLock::parse(id).unwrap();
+        assert_eq!(lock.id(), id);
+        assert_eq!(Ruleset::from_row(&row(json!({"attack_lock": id}))).attack_lock(), lock);
+    }
+    assert_eq!([AttackLock::None.locks(true), AttackLock::None.locks(false)], [false, false]);
+    assert_eq!([AttackLock::Melee.locks(true), AttackLock::Melee.locks(false)], [true, false]);
+    assert_eq!([AttackLock::All.locks(true), AttackLock::All.locks(false)], [true, true]);
+}
+
 /// INPUT1 1.7 (MR9, MR10): the schema lists the code's `melee_diagonal` and `flank_protected_cost` values; a row reads
 /// them (classic: none and full); CLN-45: `maneuver` reads as set without `round_intent` too (no warning); the cost
 /// pays as MR9 says (4 AP: full 4, half 2, fixed 1, none 0); the soft problem is a warning.
@@ -137,7 +163,7 @@ fn a_row_without_numbers_reads_the_schema_defaults() {
 
 #[test]
 fn a_valid_row_loads_and_reads_as_its_rules_and_numbers() {
-    let data = scratch("valid");
+    let (_scratch, data) = scratch("valid");
     base_catalog(&data);
     write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
     let src = source::load(&data);
@@ -158,7 +184,7 @@ fn a_valid_row_loads_and_reads_as_its_rules_and_numbers() {
 
 #[test]
 fn without_a_file_there_is_no_row_and_timeline_cannot_be_had() {
-    let data = scratch("missing");
+    let (_scratch, data) = scratch("missing");
     let src = source::load(&data);
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());
     assert_eq!(src.catalog[ruleset::KIND], json!([]));
@@ -198,7 +224,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         // intents other than the default need the round_intent rule
         ("rules", json!(["deck", "poise"]), "Intents need round_intent in Rules."),
     ];
-    let data = scratch("rules");
+    let (_scratch, data) = scratch("rules");
     base_catalog(&data);
     let mut runs: Vec<(Value, String)> = Vec::new();
     for (key, v, want) in cases {
@@ -242,7 +268,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
 /// the bound, as for every kind).
 #[test]
 fn numbers_past_their_range_load_at_the_schema_bounds() {
-    let data = scratch("ranges");
+    let (_scratch, data) = scratch("ranges");
     base_catalog(&data);
     let mut row = good_row();
     let mut want: Vec<(String, f64)> = Vec::new();
@@ -267,7 +293,7 @@ fn numbers_past_their_range_load_at_the_schema_bounds() {
 
 #[test]
 fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     base_catalog(&data);
     let file = data.join("catalog").join("rulesets.json");
     let up = |entry: Value| store::upsert(&data, None, ruleset::KIND, &dict(entry), None);
@@ -297,7 +323,7 @@ fn world_problems(data: &Path, world: &str) -> Vec<String> {
 
 #[test]
 fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
-    let data = scratch("worlds");
+    let (_scratch, data) = scratch("worlds");
     base_catalog(&data);
     write_world(&data, "vale", json!({"id": "vale", "name": "Vale", "ruleset": "timeline"}));
     write_world(&data, "glen", json!({"id": "glen", "name": "Glen", "extends": ["vale"]}));
@@ -323,7 +349,7 @@ fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
 /// a content error, and with the row it is clean.
 #[test]
 fn classic_is_a_row_and_the_rulesets_lists_name_rows() {
-    let data = scratch("classic_row");
+    let (_scratch, data) = scratch("classic_row");
     base_catalog(&data);
     write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
     write_kind(&data, "derived_stats", 1, json!([{"id": "max_poise", "name": "Max Poise", "formula": "CONS * 2", "rulesets": ["timeline", "hardcore"]}]));
@@ -382,7 +408,7 @@ fn the_switches_read_by_the_rules_or_as_set() {
     assert_eq!(switches(&flipped), intent_choices, "set, without round_intent");
     assert!(!flipped.has(ruleset::ROUND_INTENT));
 
-    let data = scratch("switches");
+    let (_scratch, data) = scratch("switches");
     base_catalog(&data);
     for key in BY_RULES_FIELDS {
         let mut row = good_row();
@@ -402,5 +428,63 @@ fn the_switches_read_by_the_rules_or_as_set() {
     assert_eq!(BY_RULES_FIELDS.map(|k| row[k].clone()), [json!("round_end"), json!("every_skill"), json!("on"), json!("off"), json!("off")], "set switches are stored");
     let text = fs::read_to_string(&file).unwrap();
     assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "a re-save without changes is byte-identical");
+    drop_scratch(&data);
+}
+
+/// BASERULES1-M: the register's metadata in the row checks. A rule that would be silently inert (flank without
+/// round_intent) is one load error and the row is dropped; with what it requires it loads; a conflict, a field set
+/// without its rule and a split bundle are warnings only, beside the row's own (`check::ruleset::warnings`).
+#[test]
+fn the_register_metadata_refuses_an_inert_rule_and_warns_on_the_rest() {
+    let (_scratch, data) = scratch("metadata");
+    base_catalog(&data);
+    let lone = json!({"id": "loose", "name": "Loose", "rules": ["flank"]});
+    write_kind(&data, ruleset::KIND, 1, json!([lone]));
+    let src = source::load(&data);
+    let errors = ruleset_errors(&src);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].ends_with("flank needs round_intent in Rules: without it the rule does nothing."), "{errors:?}");
+    assert!(src.catalog[ruleset::KIND].as_array().is_none_or(|rows| rows.is_empty()), "the row is dropped");
+    write_kind(&data, ruleset::KIND, 1, json!([{"id": "loose", "name": "Loose", "rules": ["round_intent", "flank"]}]));
+    assert_eq!(ruleset_errors(&source::load(&data)), Vec::<String>::new(), "with what it requires");
+    drop_scratch(&data);
+
+    let norm = |v: Value| normalize(fields(source::schema(), "content", ruleset::KIND), &dict(v), false);
+    assert_eq!(check::ruleset::warnings(&norm(good_row())), Vec::<String>::new(), "a complete row");
+    let mut conflict = good_row();
+    conflict["stances"] = json!("on");
+    assert_eq!(check::ruleset::warnings(&norm(conflict)), ["round_intent conflicts with stances=on: it runs, but the two cut against each other."]);
+    let plain = norm(json!({"id": "plain", "name": "Plain", "rules": [], "stagger_windup_mult": 3.0}));
+    assert_eq!(check::ruleset::warnings(&plain), ["stagger_windup_mult is set but read only with poise."]);
+    let split = norm(json!({"id": "split", "name": "Split", "rules": ["round_intent"], "chase": "classic", "flank_protected_ap": 3}));
+    assert_eq!(check::ruleset::warnings(&split), ["flank_protected_ap is read only with fixed", "Bundle intent_core ships together: it needs chase=every_skill."]);
+}
+
+/// S2.2-S2: the row-only `poise_mode` loads as set (`pips`), absent reads `bar`, and another id is one error naming its
+/// values.
+#[test]
+fn the_row_only_poise_mode_loads_and_refuses_an_unknown_id() {
+    let (_scratch, data) = scratch("poise_mode");
+    base_catalog(&data);
+    for (mode, want) in [(Some("pips"), Some(ruleset::PoiseMode::Pips)), (None, Some(ruleset::PoiseMode::Bar)), (Some("pip"), None)] {
+        let mut row = good_row();
+        if let Some(m) = mode {
+            row["poise_mode"] = json!(m);
+        }
+        write_kind(&data, ruleset::KIND, 1, json!([row]));
+        let src = source::load(&data);
+        let errors = ruleset_errors(&src);
+        match want {
+            Some(m) => {
+                assert_eq!(errors, Vec::<String>::new(), "{mode:?}");
+                let loaded = src.catalog[ruleset::KIND][0].as_object().expect("the row loads");
+                assert_eq!(Ruleset::from_row(loaded).numbers.poise_mode, m, "{mode:?}");
+            }
+            None => {
+                assert_eq!(errors.len(), 1, "{errors:?}");
+                assert!(errors[0].ends_with("poise_mode: 'pip' is not one of bar, pips."), "{errors:?}");
+            }
+        }
+    }
     drop_scratch(&data);
 }

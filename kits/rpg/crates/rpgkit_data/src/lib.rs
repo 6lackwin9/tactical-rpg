@@ -16,7 +16,9 @@ use indexmap::IndexMap;
 use serde_json::Value;
 
 pub mod terms;
+pub mod unit_budget;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
+pub use unit_budget::ClassShares;
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -63,8 +65,12 @@ pub struct ClassDef {
     pub name: String,
     pub art: String,
     pub ai_role: String,
+    /// Level 1 stats. On a row given as shares (`base_shares`), the computed view `unit_budget::stats_at(level 1)`.
     pub base_stats: IndexMap<String, i32>,
+    /// Points per level. On a row given as shares, the computed view of level 2's gain (`unit_budget::gain_at`).
     pub growth: IndexMap<String, i32>,
+    /// U2.2-S1: the row's own `base_shares` and `growth_shares` (None on a row given as `base_stats` and `growth`).
+    pub shares: Option<ClassShares>,
     pub proficiency: IndexMap<String, ProfEntry>,
     /// Family head id -> unlock level, in entry order.
     pub skill_path: IndexMap<String, i32>,
@@ -92,18 +98,54 @@ impl ClassDef {
                 (!id.is_empty()).then(|| (s.to_string(), id))
             })
             .collect();
+        let id = string(o, "id", "");
+        // U2.2-S1: a row with base_shares is read as shares and base_stats/growth become a computed view
+        let shares = obj(o, "base_shares").filter(|m| !m.is_empty()).map(|base| ClassShares {
+            base: float_map(base),
+            growth: obj(o, "growth_shares").map(float_map).unwrap_or_default(),
+        });
+        let (base_stats, growth) = match &shares {
+            Some(sh) => (unit_budget::stats_at(sh, 1), unit_budget::gain_at(sh, 2)),
+            None => (int_map(o, "base_stats"), int_map(o, "growth")),
+        };
         Self {
-            id: string(o, "id", ""),
+            // KITIDS1: without an art key the class wears the body named like itself (the kit names no class)
+            art: string(o, "art", &id),
+            id,
             name: string(o, "name", "New Class"),
-            art: string(o, "art", "warrior"),
             ai_role: string(o, "ai_role", "AGGRESSOR"),
-            base_stats: int_map(o, "base_stats"),
-            growth: int_map(o, "growth"),
+            base_stats,
+            growth,
+            shares,
             proficiency,
             skill_path: int_map(o, "skill_path"),
             loadout,
             pouch: strings(o, "pouch"),
         }
+    }
+
+    /// The class's share vectors: its own (a share row), or today's integer row read as shares (base / 62, growth / 5).
+    pub fn unit_shares(&self) -> ClassShares {
+        self.shares.clone().unwrap_or_else(|| ClassShares {
+            base: unit_budget::shares_of(&self.base_stats, unit_budget::BASE_BUDGET),
+            growth: unit_budget::shares_of(&self.growth, unit_budget::GROWTH_BUDGET),
+        })
+    }
+
+    /// The class stats at `level` before the free spend: a share row by the unit budget's running total; an integer
+    /// row as base + growth per level gained (a missing base stat is 10), as before U2.2.
+    pub fn stats_at(&self, level: i32) -> IndexMap<String, i32> {
+        if let Some(sh) = &self.shares {
+            return unit_budget::stats_at(sh, level);
+        }
+        let gained = level.max(1) - 1;
+        STATS
+            .iter()
+            .map(|s| {
+                let v = self.base_stats.get(*s).copied().unwrap_or(10) + self.growth.get(*s).copied().unwrap_or(0) * gained;
+                (s.to_string(), v)
+            })
+            .collect()
     }
 
     /// The path as ordered steps (level, family): unlock level ascending, then entry position.
@@ -130,7 +172,8 @@ pub struct UnitDef {
     pub spend: IndexMap<String, i32>,
     pub stat_mode: String,
     pub hp: i32,
-    pub speed: i32,
+    /// A fixed-stat row's initiative (the row key `speed`, kept; U1.2-S3c).
+    pub initiative: i32,
     pub attack_range: i32,
     pub ap: i32,
     pub power: i32,
@@ -218,7 +261,7 @@ impl UnitDef {
             spend: int_map(o, "spend"),
             stat_mode: string(o, "stat_mode", "derived"),
             hp: int(o, "hp", 50),
-            speed: int(o, "speed", 12),
+            initiative: int(o, "speed", 12),
             attack_range: int(o, "attack_range", 1),
             ap: int(o, "ap", 0),
             power: int(o, "power", 0),
@@ -259,6 +302,9 @@ pub struct SkillDef {
     pub stance: String,
     pub unlock_offset: i32,
     pub weapon_types: Vec<String>,
+    /// U3.2-S2: one of `weapon_types` is a family with the engine rule `spell_source` (the resolved row's
+    /// `SKILL_SPELL_SOURCE` key; a row without it reads `LEGACY_FAMILY_RULES`).
+    pub spell_source: bool,
     pub min_proficiency: i32,
     pub reach_min: i32,
     pub reach_max: i32,
@@ -280,7 +326,12 @@ pub struct SkillDef {
     pub grant_status: String,
     pub extra_grants: Vec<Value>,
     pub cleanse_statuses: Vec<String>,
+    /// DEFEND: the guard fraction (0 = none); S1.2-S4: a row without the key takes the ruleset default for its
+    /// `guard_rounds` (`rpgkit_battle::skill::guard_mitigation`).
     pub mitigation: f64,
+    /// S1.2-S4 (DEFEND): the rounds the guard lasts (1 = this round, from the wind-up start to the round's end); 2 or
+    /// more queues the `guard` status for the later rounds.
+    pub guard_rounds: i32,
     pub boost: f64,
     pub boost_rounds: i32,
     pub jump_tiles: i32,
@@ -346,6 +397,10 @@ impl SkillDef {
             stance: string(o, "stance", "AUTO"),
             unlock_offset: int(o, "unlock_offset", -1),
             weapon_types: strings(o, "weapon_types"),
+            spell_source: match o.get(SKILL_SPELL_SOURCE) {
+                Some(v) => v.as_bool().unwrap_or(false),
+                None => strings(o, "weapon_types").iter().any(|w| legacy_rules_of(w).any(|r| r == SPELL_SOURCE_RULE)),
+            },
             min_proficiency: int(o, "min_proficiency", 0),
             reach_min: int(o, "reach_min", 0),
             reach_max: int(o, "reach_max", 0),
@@ -366,6 +421,7 @@ impl SkillDef {
             extra_grants: array(o, "extra_grants").to_vec(),
             cleanse_statuses: strings(o, "cleanse_statuses"),
             mitigation: float(o, "mitigation", 0.0),
+            guard_rounds: int(o, "guard_rounds", 1),
             boost: float(o, "boost", 0.0),
             boost_rounds: int(o, "boost_rounds", 0),
             jump_tiles: int(o, "jump_tiles", 0),
@@ -426,7 +482,6 @@ pub struct ItemDef {
     pub two_handed: bool,
     pub off_hand_category: String,
     pub scaling_stat: String,
-    pub block_cost: i32,
     pub burden: i32,
     pub mitigation: i32,
     pub required_stats: IndexMap<String, i32>,
@@ -444,22 +499,113 @@ pub struct ItemDef {
     pub use_reach: i32,
     /// Carry weight (PartyCarry; Item.weight, 1 when unset).
     pub weight: f64,
-    /// RULESET1 K1: the item's family has the engine rule `reach` (the resolved row's `ITEM_REACH_RULE` key, written
-    /// by the loader only for such families); the battle reads it only under the rule `reach`.
+    /// RULESET1 K1: the item's family has the engine rule `reach` (`family_rules` holds it); the battle reads it only
+    /// under the rule `reach`.
     pub reach_rule: bool,
+    /// U3.2-S2: the engine rules of the item's family (the resolved row's `ITEM_FAMILY_RULES` key; a row without it
+    /// reads the pre-family rules, `family_rules_of`). The gear rules read these, never a family id.
+    pub family_rules: Vec<String>,
+    /// U3.2-S4 (U3 "Level 2 (Adept)"): the family's Level-2 bonus (the resolved row's `ITEM_FAMILY_LEVEL2` key; the
+    /// default: none).
+    pub level2_bonus: FamilyBonus,
+    /// U3.2-S4 (U3 "Level 3 (Master)"): the family's mastery passive id (the resolved row's `ITEM_FAMILY_LEVEL3` key; ""
+    /// = none).
+    pub level3_passive: String,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
     pub raw: Obj,
 }
 
-/// RULESET1 K1: the resolved item row's key that carries its family's engine rule `reach` (set to true only for those
-/// families, so every other row keeps its Godot shape; the writer leaves it out of the stored form).
+/// RULESET1 K1: the resolved item row's key that carried its family's engine rule `reach` before U3.2-S2 (true only
+/// for those families); read now only on a row without `ITEM_FAMILY_RULES`, and the writer leaves it out of the stored
+/// form.
 pub const ITEM_REACH_RULE: &str = "reach_rule";
+/// U3.2-S2: the resolved item row's key that carries its family's `engine_rules` (written by the loader on every row it
+/// resolves against a family; the writer leaves it out of the stored form).
+pub const ITEM_FAMILY_RULES: &str = "family_rules";
+/// U3.2-S4: the resolved item row's key that carries its family's `level2_bonus` (written by the loader; the writer
+/// leaves it out of the stored form).
+pub const ITEM_FAMILY_LEVEL2: &str = "family_level2_bonus";
+/// U3.2-S4: the resolved item row's key that carries its family's `level3_passive` (as `ITEM_FAMILY_LEVEL2`).
+pub const ITEM_FAMILY_LEVEL3: &str = "family_level3_passive";
+
+/// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
+/// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at
+/// proficiency 2 or more; `burden` takes that much off each such item's burden (to 0 at least). Both sit on top of the
+/// built per-level crit and burden of `Proficiency` (`crit_bonus`, `burden_reduction`).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FamilyBonus {
+    pub crit: f64,
+    pub burden: i32,
+}
+
+impl FamilyBonus {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { crit: float(o, "crit", 0.0), burden: int(o, "burden", 0) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.crit == 0.0 && self.burden == 0
+    }
+}
+
+/// U3.2-S2: the resolved skill row's key that says whether one of its `weapon_types` is a family with the engine rule
+/// `spell_source` (written by the loader on every skill row when the catalog has a family table).
+pub const SKILL_SPELL_SOURCE: &str = "spell_source";
 /// RULESET1 K1: the family engine rule that gives a melee weapon its reach.
 pub const REACH_ENGINE_RULE: &str = "reach";
+/// U3.2-S2: the family engine rule that makes a weapon ranged whatever its base range.
+pub const ALWAYS_RANGED_RULE: &str = "always_ranged";
+/// U3.2-S2: the family engine rule of an off-hand focus (never held under a two-handed main weapon).
+pub const FOCUS_RULE: &str = "focus";
+/// U3.2-S2: the family engine rule of a shield (the off-hand item that blocks).
+pub const SHIELD_RULE: &str = "shield";
+/// U3.2-S2: the family engine rule of a spell-source weapon (an attack skill needing one is in the passive group
+/// "spell").
+pub const SPELL_SOURCE_RULE: &str = "spell_source";
+/// U3.2-S2: the engine rules of the gear families the kit named in code before the family table drove them (Godot's
+/// Equipment and SkillDef lists). Read only for a row the loader did not resolve against a family table: a catalog
+/// frozen before U3.2-S2 (the golden fixtures) or a hand-built row; shipped data reads its family's `engine_rules`.
+pub const LEGACY_FAMILY_RULES: [(&str, &str); 8] = [
+    ("bow", ALWAYS_RANGED_RULE),
+    ("crossbow", ALWAYS_RANGED_RULE),
+    ("sling", ALWAYS_RANGED_RULE),
+    ("staff", SPELL_SOURCE_RULE),
+    ("wand", SPELL_SOURCE_RULE),
+    ("orb", FOCUS_RULE),
+    ("tome", FOCUS_RULE),
+    ("shield", SHIELD_RULE),
+];
+
+/// U3.2-S2: `LEGACY_FAMILY_RULES` of gear token `gear`.
+pub fn legacy_rules_of(gear: &str) -> impl Iterator<Item = &'static str> + '_ {
+    LEGACY_FAMILY_RULES.iter().filter(move |(f, _)| *f == gear).map(|(_, r)| *r)
+}
+
+/// U3.2-S2: an item row's family rules: the resolved `ITEM_FAMILY_RULES` key, else the pre-family reading (the
+/// legacy rules of its gear token, `shield` for item type SHIELD, `reach` for the old `ITEM_REACH_RULE` key).
+fn family_rules_of(o: &Obj) -> Vec<String> {
+    if o.contains_key(ITEM_FAMILY_RULES) {
+        return strings(o, ITEM_FAMILY_RULES);
+    }
+    let mut out: Vec<String> = legacy_rules_of(&string(o, "weapon_type", "")).map(String::from).collect();
+    let mut add = |rule: &str| {
+        if !out.iter().any(|r| r == rule) {
+            out.push(rule.to_string());
+        }
+    };
+    if string(o, "item_type", "MATERIAL") == "SHIELD" {
+        add(SHIELD_RULE);
+    }
+    if boolean(o, ITEM_REACH_RULE, false) {
+        add(REACH_ENGINE_RULE);
+    }
+    out
+}
 
 impl ItemDef {
     pub fn from_obj(o: &Obj) -> Self {
+        let family_rules = family_rules_of(o);
         Self {
             id: string(o, "id", ""),
             name: string(o, "name", ""),
@@ -471,7 +617,6 @@ impl ItemDef {
             two_handed: boolean(o, "two_handed", false),
             off_hand_category: string(o, "off_hand_category", ""),
             scaling_stat: string(o, "scaling_stat", "STR"),
-            block_cost: int(o, "block_cost", 1),
             burden: int(o, "burden", 0),
             mitigation: int(o, "mitigation", 0),
             required_stats: int_map(o, "required_stats"),
@@ -487,10 +632,18 @@ impl ItemDef {
             use_blocks: int(o, "use_blocks", 1),
             use_reach: int(o, "use_reach", -1),
             weight: float(o, "weight", 1.0),
-            reach_rule: boolean(o, ITEM_REACH_RULE, false),
+            reach_rule: family_rules.iter().any(|r| r == REACH_ENGINE_RULE),
+            family_rules,
+            level2_bonus: obj(o, ITEM_FAMILY_LEVEL2).map(FamilyBonus::from_obj).unwrap_or_default(),
+            level3_passive: string(o, ITEM_FAMILY_LEVEL3, ""),
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
             raw: o.clone(),
         }
+    }
+
+    /// U3.2-S2: whether the item's family has engine rule `rule`.
+    pub fn has_rule(&self, rule: &str) -> bool {
+        self.family_rules.iter().any(|r| r == rule)
     }
 
     pub fn is_equipment(&self) -> bool {
@@ -546,6 +699,10 @@ pub const LEVEL_INPUT: &str = "level";
 /// RULESET1 P1 (tasks 1.7): the formula input of the summed `effective_mitigation` of the unit's worn gear (reserved
 /// like `level`: no row id or constant takes it).
 pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
+/// U1.2-S4 (U1_STATS feasibility 6): the formula inputs of the unit's tier factors, its row in the kit's tier table
+/// (`hp`, `power`); reserved like `level`.
+pub const TIER_HP_INPUT: &str = "tier_hp";
+pub const TIER_POWER_INPUT: &str = "tier_power";
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]
@@ -1620,6 +1777,11 @@ fn objs(o: &Obj, key: &str) -> Vec<Obj> {
     array(o, key).iter().filter_map(|v| v.as_object().cloned()).collect()
 }
 
+/// The numeric values of an object as floats, in its key order (other values left out).
+fn float_map(m: &Obj) -> IndexMap<String, f64> {
+    m.iter().filter_map(|(k, v)| v.as_f64().map(|x| (k.clone(), x))).collect()
+}
+
 /// FM1: a skill's forced move (`forced_move`), read with its defaults.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForcedMove {
@@ -1777,8 +1939,16 @@ impl HazardDef {
     }
 }
 
+/// U1.2-S5: the largest change one `meter` effect makes to a meter by default (a row's `delta_max`).
+pub const METER_DELTA_MAX: i32 = 10;
+/// U1.2-S5: the largest `delta_max` a meter row may set.
+pub const METER_DELTA_CAP: i32 = 100;
+
 /// UM1: a unit meter row (kind `unit_meters`): its range and start, how it shows, its decay, bands and rules (raw;
-/// HOOKS1-M reads them) and the meter skills it opens.
+/// HOOKS1-M reads them) and the meter skills it opens. U1.2-S5 (a pool from data, U1 "Adding a derived value without a
+/// logic change"): `max_stat` names a derived-stat row whose value is each holder's max (clamped to min..max; "" = the
+/// row's max), `start_full` starts each battle at that max, `delta_max` bounds one `meter` effect's change, and
+/// `triggers` are trigger rows every holder holds while it holds the meter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitMeterDef {
     pub id: String,
@@ -1794,6 +1964,10 @@ pub struct UnitMeterDef {
     pub bands: Vec<Obj>,
     pub rules: Vec<Obj>,
     pub skills: Vec<String>,
+    pub max_stat: String,
+    pub start_full: bool,
+    pub delta_max: i32,
+    pub triggers: Vec<TriggerRow>,
 }
 
 impl UnitMeterDef {
@@ -1811,6 +1985,10 @@ impl UnitMeterDef {
             bands: objs(o, "bands"),
             rules: objs(o, "rules"),
             skills: strings(o, "skills"),
+            max_stat: string(o, "max_stat", ""),
+            start_full: boolean(o, "start_full", false),
+            delta_max: int(o, "delta_max", METER_DELTA_MAX),
+            triggers: objs(o, "triggers").iter().map(TriggerRow::from_obj).collect(),
         }
     }
 }

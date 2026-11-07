@@ -20,14 +20,12 @@
 				"main_2h": {
 					"power": 24,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 1,
 					"mitigation": 0
 				},
 				"main_1h": {
 					"power": 14,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -41,10 +39,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -68,10 +62,6 @@
 						"min": 1,
 						"max": 2
 					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
-					},
 					"burden": {
 						"min": 0,
 						"max": 4
@@ -89,7 +79,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -122,14 +111,12 @@
 				"main_1h": {
 					"power": 16,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				},
 				"main_2h": {
 					"power": 27,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 2,
 					"mitigation": 0
 				}
@@ -143,10 +130,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -170,10 +153,6 @@
 						"min": 1,
 						"max": 2
 					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
-					},
 					"burden": {
 						"min": 0,
 						"max": 4
@@ -191,7 +170,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -224,7 +202,6 @@
 				"main_1h": {
 					"power": 13,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -238,10 +215,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -260,7 +233,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -292,7 +264,6 @@
 				"main_2h": {
 					"power": 34,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 3,
 					"mitigation": 0
 				}
@@ -306,10 +277,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -328,7 +295,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -360,7 +326,6 @@
 				"main_1h": {
 					"power": 12,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -374,10 +339,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -396,7 +357,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -428,7 +388,6 @@
 				"main_1h": {
 					"power": 15,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -442,10 +401,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -464,7 +419,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -496,7 +450,6 @@
 				"main_2h": {
 					"power": 20,
 					"range": 3,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -510,10 +463,6 @@
 					"range": {
 						"min": 2,
 						"max": 6
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -532,7 +481,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -567,14 +515,12 @@
 				"main_2h": {
 					"power": 22,
 					"range": 2,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				},
 				"main_1h": {
 					"power": 22,
 					"range": 2,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -586,10 +532,6 @@
 						"max": 32
 					},
 					"range": {
-						"min": 1,
-						"max": 3
-					},
-					"block_cost": {
 						"min": 1,
 						"max": 3
 					},
@@ -612,10 +554,6 @@
 						"max": 32
 					},
 					"range": {
-						"min": 1,
-						"max": 3
-					},
-					"block_cost": {
 						"min": 1,
 						"max": 3
 					},
@@ -636,7 +574,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -670,7 +607,6 @@
 				"main_1h": {
 					"power": 15,
 					"range": 3,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -684,10 +620,6 @@
 					"range": {
 						"min": 2,
 						"max": 4
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -706,7 +638,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -740,7 +671,6 @@
 				"off": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -754,10 +684,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -776,7 +702,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -810,7 +735,6 @@
 				"off": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -824,10 +748,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -846,7 +766,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -877,17 +796,12 @@
 				"off": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 2,
 					"mitigation": 6
 				}
 			},
 			"bands": {
 				"off": {
-					"block_cost": {
-						"min": 1,
-						"max": 3
-					},
 					"burden": {
 						"min": 0,
 						"max": 4
@@ -904,8 +818,7 @@
 			},
 			"adjustable": [
 				"mitigation",
-				"burden",
-				"block_cost"
+				"burden"
 			],
 			"modifier_kinds": [
 				"adjust",
@@ -935,17 +848,12 @@
 				"none": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 3,
 					"mitigation": 8
 				}
 			},
 			"bands": {
 				"none": {
-					"block_cost": {
-						"min": 1,
-						"max": 2
-					},
 					"burden": {
 						"min": 2,
 						"max": 4
@@ -962,8 +870,7 @@
 			},
 			"adjustable": [
 				"mitigation",
-				"burden",
-				"block_cost"
+				"burden"
 			],
 			"modifier_kinds": [
 				"adjust",
@@ -991,17 +898,12 @@
 				"none": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 1,
 					"mitigation": 4
 				}
 			},
 			"bands": {
 				"none": {
-					"block_cost": {
-						"min": 1,
-						"max": 2
-					},
 					"burden": {
 						"min": 0,
 						"max": 2
@@ -1018,8 +920,7 @@
 			},
 			"adjustable": [
 				"mitigation",
-				"burden",
-				"block_cost"
+				"burden"
 			],
 			"modifier_kinds": [
 				"adjust",
@@ -1047,17 +948,12 @@
 				"none": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 2
 				}
 			},
 			"bands": {
 				"none": {
-					"block_cost": {
-						"min": 1,
-						"max": 2
-					},
 					"burden": {
 						"min": 0,
 						"max": 0
@@ -1074,8 +970,7 @@
 			},
 			"adjustable": [
 				"mitigation",
-				"burden",
-				"block_cost"
+				"burden"
 			],
 			"modifier_kinds": [
 				"adjust",
@@ -1106,7 +1001,6 @@
 				"main_2h": {
 					"power": 20,
 					"range": 3,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -1120,10 +1014,6 @@
 					"range": {
 						"min": 2,
 						"max": 6
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -1142,7 +1032,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -1173,17 +1062,12 @@
 				"none": {
 					"power": 0,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
 			},
 			"bands": {
 				"none": {
-					"block_cost": {
-						"min": 1,
-						"max": 2
-					},
 					"burden": {
 						"min": 0,
 						"max": 0
@@ -1277,7 +1161,6 @@
 				"main_2h": {
 					"power": 26,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 2,
 					"mitigation": 0
 				}
@@ -1291,10 +1174,6 @@
 					"range": {
 						"min": 1,
 						"max": 2
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -1313,7 +1192,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -1348,7 +1226,6 @@
 				"main_1h": {
 					"power": 12,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -1362,10 +1239,6 @@
 					"range": {
 						"min": 1,
 						"max": 1
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -1383,7 +1256,6 @@
 			},
 			"adjustable": [
 				"power",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -1418,7 +1290,6 @@
 				"main_1h": {
 					"power": 11,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 1,
 					"mitigation": 0
 				}
@@ -1432,10 +1303,6 @@
 					"range": {
 						"min": 1,
 						"max": 1
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -1453,7 +1320,6 @@
 			},
 			"adjustable": [
 				"power",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -1486,7 +1352,6 @@
 				"main_1h": {
 					"power": 14,
 					"range": 1,
-					"block_cost": 1,
 					"burden": 0,
 					"mitigation": 0
 				}
@@ -1500,10 +1365,6 @@
 					"range": {
 						"min": 1,
 						"max": 1
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -1521,7 +1382,6 @@
 			},
 			"adjustable": [
 				"power",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [
@@ -1553,7 +1413,6 @@
 				"main_2h": {
 					"power": 18,
 					"range": 3,
-					"block_cost": 1,
 					"burden": 1,
 					"mitigation": 0
 				}
@@ -1567,10 +1426,6 @@
 					"range": {
 						"min": 2,
 						"max": 4
-					},
-					"block_cost": {
-						"min": 1,
-						"max": 3
 					},
 					"burden": {
 						"min": 0,
@@ -1589,7 +1444,6 @@
 			"adjustable": [
 				"power",
 				"range",
-				"block_cost",
 				"burden"
 			],
 			"modifier_kinds": [

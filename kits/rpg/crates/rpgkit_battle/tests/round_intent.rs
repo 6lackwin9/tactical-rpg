@@ -10,7 +10,8 @@ use rpgkit_battle::grid::V2;
 use rpgkit_battle::plan::{Plan, PlanStep};
 use rpgkit_battle::resolver::Resolver;
 use rpgkit_battle::round_intent::{self, ManeuverKind, RoundIntent, RoundTarget};
-use rpgkit_battle::session::{EncounterDef, Phase, Session};
+use rpgkit_battle::session::{EncounterDef, Phase, Prebuilt, Session};
+use rpgkit_battle::world::AiProfile;
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::Catalog;
@@ -588,5 +589,27 @@ fn a_round_closes_with_its_summary_in_the_log() {
         } else {
             assert!(lines.is_empty(), "classic: {lines:?}");
         }
+    }
+}
+
+/// AUDIT-04: a prebuilt party hero (a saved member, the Dojo's hero) starts in its `Prebuilt::default_intent` under
+/// the round intent, as a roster unit starts in its row's; none in classic.
+#[test]
+fn a_prebuilt_hero_starts_in_its_default_intent() {
+    let cat = Arc::new(catalog());
+    for (rules, want) in [(timeline(), Some(RoundIntent::Support)), (Ruleset::classic(), None)] {
+        let row = json!({"id": "t_fight", "name": "Fight", "party": [], "enemies": ["t_foe"], "total_blocks": BLOCKS, "unit_ap": UNIT_AP, "ap_regen": 0, "max_rounds": 8});
+        let def = EncounterDef::from_obj_with(row.as_object().unwrap(), rules);
+        let prebuilt = |id: &str, intent: &str| Prebuilt {
+            unit: rpgkit_rules::build_unit(&cat, &cat.units[id], UNIT_AP),
+            art: String::new(),
+            palette: String::new(),
+            profile: AiProfile::for_unit(&cat, &cat.units[id]),
+            key: id.into(),
+            default_intent: intent.into(),
+        };
+        let s = Session::start_with(cat.clone(), def, &IndexMap::<String, rpgkit_data::UnitDef>::new(), vec![prebuilt("t_hero", "support"), prebuilt("t_ally", "")]);
+        assert_eq!(round_intent::intent_of(&s.w, s.w.allies[0]), want, "the hero's default intent");
+        assert_eq!(round_intent::intent_of(&s.w, s.w.allies[1]), None, "an empty one sets none (the prebuilt unit's, not its row's)");
     }
 }

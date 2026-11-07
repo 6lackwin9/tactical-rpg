@@ -658,8 +658,7 @@ mod tests {
     /// EXPLOREVIEW1 check 9: the Developer panel's select shows and saves `region_view`, and offers both views.
     #[test]
     fn the_region_view_select_saves_the_setting() {
-        let dir = std::env::temp_dir().join(format!("emberwake_runner_view_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_runner_view");
         std::fs::create_dir_all(&dir).expect("a scratch folder");
         let path = dir.join("settings.json");
         let mut cx = crate::hud::hud_tests::game_cx();

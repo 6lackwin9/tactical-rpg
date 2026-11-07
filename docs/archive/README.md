@@ -15,3 +15,8 @@ Superseded drafts and specs of done tasks, kept for history. Agents should not r
 | AGENT_MAP_2026-10.md | `docs/AGENT_MAP.md` keeps only "Active now" (CLN-25, Q-F, 2026-10-29); finished runs in `docs/archive/TASKS_DONE.md` and `git log` |
 | handover/*.md (7 files) | the 2026-10-18 cloud wind-down handovers (CLN-32, 2026-10-29); a resumed area thread writes a fresh `docs/handover/<area>.md` |
 | CLEANUP_PASS1.md | Pass 1 of `docs/specs/CLEANUP.md` (2026-10-17, all candidates done or closed; CLN-32, 2026-10-29) |
+| TASKS_PRE_MASTERPLAN.md | Full pre-masterplan `docs/TASKS.md` row text (archived 2026-11-07); active queue is `docs/READY.md`, compact reference table in `docs/TASKS.md`, masterplan mapping in `docs/specs/MASTERPLAN1_ROWS.md` |
+| WORK_ORDER_2026-11.md, ROADMAP_STUB.md, EFFICIENCY_GODOT_2026-10.md | Superseded root `docs/` files and Godot-era timings (archived 2026-11-07 Phase 1 docs cleanup); active queue is `docs/READY.md` and `games/emberwake/docs/ROADMAP.md` |
+| `docs/metrics/` (folder, removed from the tree 2026-11-07; in git history) | October 2026 Godot token-efficiency trial logs and CSV reports (`TASK_LOG.md`, `usage/*`) |
+| specs/{CAMPAIGN1*,DERIVE1,ENCOUNTER2*,HOOKS1*,INPUT1*,INPUT2,KIT1_TASKS,RESCOPE1,ROSTER1*,RULESET1*,STORYUI1*}.md | Pre-Masterplan Tier 2 specs and `_TASKS.md` breakdowns folded into `docs/sessions/*.md` (archived 2026-11-07) |
+| specs/emberwake/*.md (79 files) | Completed/superseded Emberwake task specs (`S9..S14`, `BAL2..5`, `DLG1`, `EXP1`, `M4`, `REP1`, `TRAV1..2`, `UI1..3`, `FORGE1_*`, `FX1`, `STAGE1`, `SPRITE1`, `STATUSFX1`, `PLAYUI1`, etc., archived 2026-11-07) |

@@ -2,6 +2,7 @@
 //! (battle_results_model.gd). Read-only views over the game state, except the hub's doors (save, load, settings,
 //! party, quit to the main menu).
 
+use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
@@ -158,6 +159,10 @@ impl Hub {
 }
 
 impl Screen<GameCx> for Hub {
+    /// At rest only the portrait moves, and slowly.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Within(SLOW_LIFE)
+    }
     fn id(&self) -> &'static str {
         "hub"
     }
@@ -292,6 +297,10 @@ impl Journal {
 }
 
 impl Screen<GameCx> for Journal {
+    /// Nothing here moves by itself.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Idle
+    }
     /// Up / Down pick the quest (the list's own keys).
     fn arrow_focus(&self) -> bool {
         false
@@ -539,6 +548,10 @@ impl Results {
 }
 
 impl Screen<GameCx> for Results {
+    /// Nothing here moves by itself.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Idle
+    }
     fn id(&self) -> &'static str {
         "battle_results"
     }

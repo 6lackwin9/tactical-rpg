@@ -36,6 +36,7 @@ live in `%APPDATA%/Aegis/emberwake` (copied from `%APPDATA%/Aegis` on the first 
   crates name no game and have no path into `games/`). CI runs the same on pull requests into `main` and pushes to
   `main` (`.github/workflows/gate.yml`, required check `gate`); no step runs Godot (CLN-42).
 - `tools/fc.sh docs`: doc size and markdown lint.
+- `tools/fc.sh scenario <id|all>`: walks a game's real screens with no window, at a chosen size (`window=1` opens a real muted one). `tools/fc.sh scenario shots <name> ...` takes proof shots of a named fight or screen (`engine/docs/authoring/scenarios.md`).
 
 ## Editing content
 

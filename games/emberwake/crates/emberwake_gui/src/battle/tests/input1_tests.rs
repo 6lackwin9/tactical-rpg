@@ -43,8 +43,7 @@ fn the_stage_draws_the_set_of_the_battles_world() {
     let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
     let mut b = BattleScreen::arena_with(&cx, None, &encounter, Some(TIMELINE.into()), "", false);
     assert_eq!(b.stage_set(&cx), "", "a catalog encounter");
-    let root = std::env::temp_dir().join(format!("emberwake_battle_set_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = aegis_core::scratch::Scratch::vacant("emberwake_battle_set");
     const MARK: [u8; 3] = [251, 3, 247];
     for id in emberwake_battle::grid::TERRAIN_IDS {
         let path = root.join(format!("tilesets/zz_set/{id}/v0.png"));
@@ -54,7 +53,7 @@ fn the_stage_draws_the_set_of_the_battles_world() {
         enc.set_depth(png::BitDepth::Eight);
         enc.write_header().unwrap().write_image_data(&[MARK[0], MARK[1], MARK[2], 255].repeat(64 * 48)).unwrap();
     }
-    let mut roots = vec![root.clone()];
+    let mut roots = vec![root.to_path_buf()];
     roots.extend(aegis_core::assets::Layers::for_game(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).roots);
     cx.art = Art::layered(aegis_core::assets::Layers::of(roots));
     let marked = |g: &Gfx| g.canvas.px.chunks_exact(4).filter(|c| c[..3] == MARK).count();
@@ -129,7 +128,9 @@ fn row_intent(b: &BattleScreen, row: &Row) -> Option<String> {
 }
 
 fn first_valid_pick(b: &BattleScreen) -> usize {
-    b.popup.as_ref().expect("the skill menu").rows.iter().position(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if p.iter().any(|x| x.holds_target()))).expect("a usable skill row")
+    let p = b.popup.as_ref().expect("the skill menu");
+    let at = p.menu.map(|m| m.1);
+    p.rows.iter().position(|r| r.valid && r.at == at && matches!(&r.act, RowAct::Pick(p) if p.iter().any(|x| x.holds_target()))).expect("a usable skill row")
 }
 
 /// IF1, IF2, IF4: a click on an enemy sets the round target and opens the skill menu at the click, titled "<hero> ->
@@ -145,8 +146,8 @@ fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
     let p = b.popup.as_ref().expect("the skill menu");
     assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("{} -> {}", w(&b).units[h].name, w(&b).units[f].name)));
     let s = b.host.session.as_ref().unwrap();
-    assert_eq!(p.rows.len(), rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit option");
-    for row in &p.rows {
+    assert_eq!(p.rows.iter().filter(|r| matches!(r.act, crate::battle::input::RowAct::Pick(_))).count(), rip::menu_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit cell");
+    for row in p.rows.iter().filter(|r| r.valid) {
         assert!(row_intent(&b, row).is_none_or(|i| i == "assault" || i == "maneuver"), "an enemy takes Assault and Maneuver skills: {}", row.label);
     }
     let k = first_valid_pick(&b);
@@ -154,8 +155,8 @@ fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
     assert_eq!(rip::picks_of(w(&b), h).len(), 1, "{}", b.message);
     let intent = ri::intent_of(w(&b), h).map(|i| i.id().to_string());
     if let Some(p) = b.popup.as_ref() {
-        assert!(p.rows.iter().all(|r| r.valid), "after the first pick no disabled row");
-        assert!(p.rows.iter().all(|r| row_intent(&b, r).is_none_or(|i| Some(i) == intent)), "only the round intent's rows");
+        // VISCLAR1-D: the rows stay and the other intents' fade (`skill_menu_tests`)
+        assert!(p.rows.iter().filter(|r| r.valid).all(|r| row_intent(&b, r).is_none_or(|i| Some(i) == intent)), "only the round intent's rows can be picked");
     }
     let rp = round_plan(&mut b);
     assert_eq!(rp.as_array().unwrap().iter().find(|r| r["unit"] == json!(h)).unwrap()["picks"].as_array().unwrap().len(), 1);
@@ -380,7 +381,9 @@ fn an_empty_tile_offers_move_here_first() {
     let free = free_tile(w(&b));
     b.run(&mut cx, Action::TileClick(free));
     let p = b.popup.as_ref().expect("the tile menu");
-    assert_eq!((p.menu, p.rows[0].label.as_str()), (Some((hero(&b), RoundTarget::Cell(free))), "Move here"));
+    assert_eq!(p.menu, Some((hero(&b), RoundTarget::Cell(free))));
+    let row = p.rows.iter().find(|r| r.slot == Some(crate::battle::skill_menu::Slot::Neutral("Move"))).expect("the neutral row's Move");
+    assert_eq!(row.label, "Move here");
 }
 
 /// MR13: hovering a Maneuver Engage row marks its target's open position tiles (the kit's `positions`).
@@ -907,7 +910,8 @@ fn payable_row(cx: &mut Cx, b: &mut BattleScreen) -> (usize, usize, i32) {
     let s = b.host.session.as_ref().unwrap();
     let opts = rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(f));
     let k = opts.iter().position(|o| o.problem.is_none() && o.ap >= 1 && matches!(o.picks[..], [rip::Pick::Skill { .. }])).expect("a payable skill row with an AP cost");
-    (f, k, opts[k].ap)
+    let row = b.popup.as_ref().expect("the menu").rows.iter().position(|r| matches!(&r.act, RowAct::Pick(p) if *p == opts[k].picks)).expect("the option's cell");
+    (f, row, opts[k].ap)
 }
 
 /// AP3, AP8: hovering a row the hero cannot pay (its AP one short of the row's) turns the gauge red with "-1" after

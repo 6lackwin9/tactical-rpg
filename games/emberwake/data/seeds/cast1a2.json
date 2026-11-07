@@ -1,0 +1,812 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "polearm_drill",
+    "name": "Polearm Drill",
+    "description": "Drilled with the billhook: +2 polearm proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "polearm",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "censer_drill",
+    "name": "Censer Rites",
+    "description": "Scriptorium rites: +2 censer proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "censer",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "sprayer_drill",
+    "name": "Still Craft",
+    "description": "Still-room craft: +2 sprayer proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "sprayer",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "scourge_drill",
+    "name": "Penitent Rite",
+    "description": "Penitent habit: +2 scourge proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "scourge",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "bone_saw_drill",
+    "name": "Vivisector's Hand",
+    "description": "A surgeon's grip: +2 bone saw proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "bone_saw",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "braced_poise",
+    "name": "Braced Poise",
+    "description": "+20 Max Poise; cannot be moved while guarding.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "max_poise",
+      "value": 20
+     },
+     {
+      "type": "forced_move",
+      "immune": "guarding"
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "kinetic_leverage",
+    "name": "Kinetic Leverage",
+    "description": "Gains 1 AP when a guarded hit lands on him.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "guarded_hit",
+      "effects": [
+       {
+        "type": "ap",
+        "value": 1
+       }
+      ]
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "unbroken_phalanx",
+    "name": "Unbroken Phalanx",
+    "description": "Steadfast while guarding.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "guard_start",
+      "effects": [
+       {
+        "type": "grant",
+        "status": "steadfast",
+        "rounds": 1,
+        "until": "guard_end"
+       }
+      ]
+     }
+    ],
+    "slot": "keystone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "castellans_penance",
+    "name": "Castellan's Penance",
+    "description": "Covers a friend within 1 tile: part of the blow lands on him, guarded.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "ally_hit",
+      "when": {
+       "range": 1
+      },
+      "effects": [
+       {
+        "type": "guard",
+        "mitigation": 0.5,
+        "blocks": 1
+       },
+       {
+        "type": "redirect",
+        "pct": 35
+       }
+      ]
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "prowlers_cadence",
+    "name": "Prowler's Cadence",
+    "description": "40% resistance to Slow and Root.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "slow",
+      "value": 40
+     },
+     {
+      "type": "resist",
+      "status": "root",
+      "value": 40
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "ghost_of_the_undercroft",
+    "name": "Ghost of the Undercroft",
+    "description": "Sees the enemy round plan; +1 AP each round.",
+    "effects": [
+     {
+      "type": "foresight"
+     },
+     {
+      "type": "ap_regen",
+      "value": 1
+     }
+    ],
+    "slot": "keystone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "anatomical_precision",
+    "name": "Anatomical Precision",
+    "description": "+8 Max Poise; 25% resistance to Stun.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "max_poise",
+      "value": 8
+     },
+     {
+      "type": "resist",
+      "status": "stun",
+      "value": 25
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "triage_efficiency",
+    "name": "Triage Efficiency",
+    "description": "Gains 1 AP when she heals an ally below 30% HP.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "heal_given",
+      "when": {
+       "other_hp_below": 30
+      },
+      "effects": [
+       {
+        "type": "ap",
+        "value": 1
+       }
+      ]
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "pure_hippocratic_oath",
+    "name": "Hippocratic Oath",
+    "description": "Healing skills are 40% stronger.",
+    "effects": [
+     {
+      "type": "skill_potency",
+      "group": "heal",
+      "value": 0.4
+     }
+    ],
+    "slot": "keystone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "copyist_of_st_lyras",
+    "name": "Copyist of St. Lyra's",
+    "description": "Each cleanse she lands fills a Bile Phial pip.",
+    "effects": [
+     {
+      "type": "meter",
+      "meter": "bile_phial"
+     },
+     {
+      "type": "trigger",
+      "on": "cleanse_given",
+      "limit": "none",
+      "effects": [
+       {
+        "type": "meter",
+        "meter": "bile_phial",
+        "delta": 1
+       }
+      ]
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "high_ground_traverse",
+    "name": "High-Ground Traverse",
+    "description": "+2 PERC.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "PERC",
+      "value": 2
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "cover_breaker",
+    "name": "Cover Breaker",
+    "description": "Statuses he inflicts are 15 potency stronger.",
+    "effects": [
+     {
+      "type": "status_potency",
+      "value": 15
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "dead_eye_discipline",
+    "name": "Dead-Eye Discipline",
+    "description": "A ranged kill returns 2 AP and reveals the enemies' next round plan.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "kill",
+      "when": {
+       "ranged": true
+      },
+      "effects": [
+       {
+        "type": "ap",
+        "value": 2
+       },
+       {
+        "type": "reveal",
+        "rounds": 1
+       }
+      ]
+     }
+    ],
+    "slot": "keystone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "crag_hawkeye",
+    "name": "Crag Hawkeye",
+    "description": "Foresight out to 4 tiles.",
+    "effects": [
+     {
+      "type": "foresight",
+      "range": 4
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "hypertrophy",
+    "name": "Hypertrophy",
+    "description": "+3 CONS; his pushes go 1 tile further.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "CONS",
+      "value": 3
+     },
+     {
+      "type": "forced_move",
+      "bonus_tiles": 1
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "anvil_posture",
+    "name": "Anvil Posture",
+    "description": "Takes no stagger from the first block of an action.",
+    "effects": [
+     {
+      "type": "stagger_taken",
+      "mult": 0,
+      "max_blocks": 1
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "unbroken_iron",
+    "name": "Unbroken Iron",
+    "description": "Once, below 30% HP: 2 AP and Fortify.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "hp_below",
+      "when": {
+       "pct": 30
+      },
+      "limit": "battle",
+      "effects": [
+       {
+        "type": "ap",
+        "value": 2
+       },
+       {
+        "type": "grant",
+        "status": "fortify",
+        "magnitude": 8,
+        "rounds": 2
+       }
+      ]
+     }
+    ],
+    "slot": "keystone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "foundry_wired_spite",
+    "name": "Foundry-Wired Spite",
+    "description": "Slag Fury builds with each hit taken; below 50% HP he stands steadfast and cannot be stunned.",
+    "effects": [
+     {
+      "type": "meter",
+      "meter": "slag_fury"
+     },
+     {
+      "type": "trigger",
+      "on": "hp_below",
+      "when": {
+       "pct": 50
+      },
+      "limit": "battle",
+      "effects": [
+       {
+        "type": "grant",
+        "status": "steadfast",
+        "rounds": -1
+       },
+       {
+        "type": "resist",
+        "status": "stun",
+        "value": 100
+       }
+      ]
+     },
+     {
+      "type": "trigger",
+      "on": "hit_taken",
+      "limit": "none",
+      "effects": [
+       {
+        "type": "meter",
+        "meter": "slag_fury",
+        "delta": 1
+       }
+      ]
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "combustion_formula",
+    "name": "Combustion Formula",
+    "description": "50% resistance to Burn.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "burn",
+      "value": 50
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "catalytic_munitions",
+    "name": "Catalytic Munitions",
+    "description": "Hitting a burning foe leaves it exposed.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "hit_dealt",
+      "when": {
+       "other_status": "burn"
+      },
+      "limit": "none",
+      "effects": [
+       {
+        "type": "inflict",
+        "status": "expose",
+        "potency": 90,
+        "magnitude": 4,
+        "rounds": 3,
+        "to": "other"
+       }
+      ]
+     }
+    ],
+    "slot": "passive"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "volatile_reaction_catalyst",
+    "name": "Volatile Catalyst",
+    "description": "+2 INT.",
+    "effects": [
+     {
+      "type": "stat",
+      "stat": "INT",
+      "value": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "unyielding_authority",
+    "name": "Unyielding Authority",
+    "description": "Takes no stagger from the first block of an action; cannot be moved.",
+    "effects": [
+     {
+      "type": "stagger_taken",
+      "mult": 0,
+      "max_blocks": 1
+     },
+     {
+      "type": "forced_move",
+      "immune": "always"
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "fanatical_agony",
+    "name": "Fanatical Agony",
+    "description": "Once, below 50% HP: hasted for the battle and +20 crit.",
+    "effects": [
+     {
+      "type": "trigger",
+      "on": "hp_below",
+      "when": {
+       "pct": 50
+      },
+      "limit": "battle",
+      "effects": [
+       {
+        "type": "grant",
+        "status": "haste",
+        "rounds": -1
+       },
+       {
+        "type": "crit",
+        "value": 20
+       }
+      ]
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "heat_tempered_carapace",
+    "name": "Heat-Tempered Carapace",
+    "description": "75% resistance to Burn, 50% to Poison.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "burn",
+      "value": 75
+     },
+     {
+      "type": "resist",
+      "status": "poison",
+      "value": 50
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "calcified_frame",
+    "name": "Calcified Frame",
+    "description": "50% resistance to Bleed and Poison.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "bleed",
+      "value": 50
+     },
+     {
+      "type": "resist",
+      "status": "poison",
+      "value": 50
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "traitors_discipline",
+    "name": "Traitor's Discipline",
+    "description": "50% resistance to Stagger and Stun.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "stagger",
+      "value": 50
+     },
+     {
+      "type": "resist",
+      "status": "stun",
+      "value": 50
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "marrow_valve",
+    "name": "Marrow Valve",
+    "description": "An illegal marrow valve in his neck. Once, it will not let him fall.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "bleed",
+      "value": 25
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "molten_slag_tempering",
+    "name": "Slag Tempering",
+    "description": "Immune to Burn; takes 25% less stagger.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "burn",
+      "value": 100
+     },
+     {
+      "type": "stagger_taken",
+      "mult": 0.75,
+      "max_blocks": 0
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "vat_masters_grease",
+    "name": "Vat-Master's Grease",
+    "description": "Immune to Burn; 50% resistance to Poison.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "burn",
+      "value": 100
+     },
+     {
+      "type": "resist",
+      "status": "poison",
+      "value": 50
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "amalgam_carapace",
+    "name": "Bone Carapace",
+    "description": "75% resistance to Bleed and Poison, 50% to Root.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "bleed",
+      "value": 75
+     },
+     {
+      "type": "resist",
+      "status": "poison",
+      "value": 75
+     },
+     {
+      "type": "resist",
+      "status": "root",
+      "value": 50
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "marrow_infused",
+    "name": "Marrow-Infused",
+    "description": "Takes half stagger; 75% resistance to Stun and Root.",
+    "effects": [
+     {
+      "type": "stagger_taken",
+      "mult": 0.5,
+      "max_blocks": 0
+     },
+     {
+      "type": "resist",
+      "status": "stun",
+      "value": 75
+     },
+     {
+      "type": "resist",
+      "status": "root",
+      "value": 75
+     }
+    ],
+    "slot": ""
+   }
+  }
+ ]
+}

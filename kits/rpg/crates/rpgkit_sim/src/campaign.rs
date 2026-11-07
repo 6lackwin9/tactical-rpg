@@ -1,16 +1,15 @@
-//! Balance sim `campaign` mode (tools/sim/sim_campaign.gd, BAL4-ATTR): a party of three (warrior + two of the other
-//! five classes: all 10 trios, or comp=) plays the game's story run (KIT1-SIM: SimGame.story) in quest order once per
+//! Balance sim `campaign` mode (tools/sim/sim_campaign.gd, BAL4-ATTR): a party of three (the game's trio lead + two of
+//! its other classes, KITIDS1: SimClasses; all trios, or comp=) plays the game's story run (KIT1-SIM: SimGame.story) in quest order once per
 //! branch of its choice flag. HP
 //! carries over (statuses reset); a hero at 0 sits out the later fights; the run ends at the first battle not cleared.
 //! Between battles `heal` applies: none, full (a downed hero revives), rally (HealRules "won") or a percent of max HP
 //! for heroes still up; rest=<b,b> restores everyone before those story battles; extra=<b>:<enc> plays a filler fight
 //! before story battle b.
 
-use crate::args::CLASSES;
 use crate::runner::Runner;
 use crate::scenarios::{self, Enc};
 use crate::world;
-use crate::StoryRun;
+use crate::{SimClasses, StoryRun};
 use aegis_core::fmt::fixed;
 use rpgkit_rules::stats::MAX_LEVEL;
 use indexmap::IndexMap;
@@ -18,13 +17,13 @@ use indexmap::IndexMap;
 /// Battle i of a run uses seed + i * SEED_STEP.
 const SEED_STEP: i64 = 101;
 
-/// The 10 trios: the warrior plus every pair of the five other classes.
-pub fn trios() -> Vec<Vec<String>> {
-    let others: Vec<&str> = CLASSES.iter().copied().filter(|c| *c != "warrior").collect();
+/// The trios: the game's trio lead plus every pair of its other classes (10 for six classes).
+pub fn trios(c: &SimClasses) -> Vec<Vec<String>> {
+    let others: Vec<&str> = c.ids.iter().copied().filter(|id| *id != c.trio_lead).collect();
     let mut out = Vec::new();
     for i in 0..others.len() {
         for j in i + 1..others.len() {
-            out.push(vec!["warrior".to_string(), others[i].to_string(), others[j].to_string()]);
+            out.push(vec![c.trio_lead.to_string(), others[i].to_string(), others[j].to_string()]);
         }
     }
     out
@@ -169,7 +168,7 @@ pub fn campaign_mode(r: &mut Runner) {
         return;
     };
     let choice = &story_run.choice;
-    let parties = if a.comp_set { vec![a.comp.clone()] } else { trios() };
+    let parties = if a.comp_set { vec![a.comp.clone()] } else { trios(&a.game.classes) };
     let story: Vec<String> = story_run
         .branches
         .iter()

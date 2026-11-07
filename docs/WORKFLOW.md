@@ -29,8 +29,8 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 
 | Tool | Use |
 | --- | --- |
-| `tools/fc.sh build / test / gate / clippy / docs / tooltests / layers / content / sim` | Compact checks, data edits and the sim (see the header of the script); `gate` is the commit gate in bash, `check_project.ps1` the same in PowerShell; `layers` is the layer check alone (KIT1-G, under 1 s): engine crates and kit crates (`kits/*/crates/**`, `kits/*/schema.json`) name no game (each folder under `games/`, any case, `_` as a separator, tracked or new files) and no engine or kit `Cargo.toml` has a path into `games/` (engine none into `kits/`); G3 (TERMS1-G): kit `src/`, `schema.json` and `kit.json` name no lore word of a game (its world ids, any case, and the lines of `games/<id>/lore_words.txt`, exact case, whole word; kit tests and READMEs are not scanned); the gate and `check_project.ps1` step [3/5] run it; `docs` checks size and lint on changed files, `docs --all` on every file (gate step [4/5], the flush; under 1 s); `tooltests` runs `tools/tiles`' `test_tiles` with a Python that has Pillow (gate step [5/5], about 30 s; a visible SKIP when there is none, a failure after a time limit of 180 s, `FC_TOOLTESTS_LIMIT`, killing the whole process tree) |
-| `aegis` (shell `engine/crates/aegis_cli`, binary in `games/emberwake/crates/emberwake_host`; `cargo run -q -p emberwake_host -- ...` from the repo root) | `sim <mode> [level] [seeds] [key=value ...]` (the balance sim: duel, tier, levels, group, stats, party, role, sweep, campaign; `sim help` lists the keys; a duel table in under a second; engine-only, not in the help: `feel` and CAMPAIGN1-SIM's fightless `deadlines [world=<id>] [losses=0..9]`, the best and worst day per campaign checkpoint and its slack), `battle <encounter> [seed=N] [log]`, `serve` (the battle command API over stdin / stdout), `link` (drive a running `emberwake`), `content` (edit `games/emberwake/data/`) |
+| `tools/fc.sh build / test / gate / clippy / docs / tooltests / layers / content / sim` | Compact checks, data edits and the sim (see the header of the script); `test` prints each panic's message on failure (SKILLS1); `gate` is the commit gate in bash, `check_project.ps1` the same in PowerShell; `layers` is the layer check alone (KIT1-G, KITIDS1, under 1 s): engine crates and kit crates (`kits/*/crates/**`, `kits/*/schema.json`) name no game (each folder under `games/`, any case, `_` as a separator, tracked or new files), kit `src/` quotes no class id from a game's `classes.json`, and no engine or kit `Cargo.toml` has a path into `games/` (engine none into `kits/`); G3 (TERMS1-G): kit `src/`, `schema.json` and `kit.json` name no lore word of a game (its world ids, any case, and the lines of `games/<id>/lore_words.txt`, exact case, whole word; kit tests and READMEs are not scanned); the gate and `check_project.ps1` step [3/5] run it; `docs` checks size and lint on changed files, `docs --all` on every file (gate step [4/5], the flush; under 1 s); `tooltests` runs `tools/tiles`' `test_tiles` with a Python that has Pillow (gate step [5/5], about 30 s; a visible SKIP when there is none, a failure after a time limit of 180 s, `FC_TOOLTESTS_LIMIT`, killing the whole process tree); planner helper scripts live in `tools/planner/` (`flush.sh` logs gate times to `$AEGIS_PLANNER_LOG`) |
+| `aegis` (shell `engine/crates/aegis_cli`, binary in `games/emberwake/crates/emberwake_host`; `cargo run -q -p emberwake_host -- ...` from the repo root) | `sim <mode> [level] [seeds] [key=value ...]` (the balance sim: duel, tier, levels, group, stats, party, role, sweep, campaign; `sim help` lists the keys; a duel table in under a second; engine-only, not in the help: `feel` and CAMPAIGN1-SIM's fightless `deadlines [world=<id>] [losses=0..9]`, the best and worst day per campaign checkpoint and its slack), `rules [--contract]` (`tools/fc.sh rules`, BASERULES1-M: rules by system, fields, bundles, tested sets, locked constants and the game's rows), `battle <encounter> [seed=N] [log]` (`rules=` prints the set's notes to stderr), `serve` (the battle command API over stdin / stdout), `link` (drive a running `emberwake`), `content` (edit `games/emberwake/data/`) |
 | `games/emberwake/parity/*.sh` (`tools/fc.sh parity`) | Retired by CLN-42 (2026-11-01): the Godot recorders; the engine goldens replace the parity suites |
 | `RECORD=1 tools/fc.sh test --test timeline_golden` | Re-records the timeline golden (RULESET1-X, `emberwake_battle/tests/fixtures/timeline_golden.json`) from the frozen catalog `timeline_kit.json` (delete that file first to re-freeze it from the shipped data); only for an intended rule change, named in the commit and a `docs/HISTORY.md` row; never edit the golden by hand |
 | Agent `design-brainstorm` | Options + trade-offs + recommendation from the brief and sim numbers; never edits |
@@ -102,3 +102,26 @@ Throughput note (2026-10-16): R1, M2C2B-L, M3, AI1 and M2C2B ran as 3 parallel l
 | BAL1 balance rerun | balance 66k / 22 | none (docs only) | report committed `80eeaf0` |
 | SKILL1-L | logic-builder stopped by user (usage limit) mid-run | - | paused, partial work in ../ngp-skill1 |
 | SKILL1 Forge skill tab | logic 105k / 2 (resume) + fixes 140k / 14, asset 111k / 11 | 83k / 3.5 | merged `611b667` |
+
+## Session handover prompts (two-session split, 2026-11-07)
+
+To start a fresh Design or Build conversation with zero context bloat, paste or reference the matching block below (or say `"Start Design Session per docs/WORKFLOW.md"` / `"Start Build Session per docs/WORKFLOW.md"`):
+
+### 1. Design Session Handover (`C:\dev\tactical-rpg-dev`)
+
+```text
+You are the Design Session under the two-session split (`docs/decisions/workflow.md`), working in `C:\dev\tactical-rpg-dev` on `origin/develop`.
+1. Read `docs/READY.md`, `docs/FEEDBACK.md`, and `docs/specs/MASTERPLAN1.md`.
+2. You are the sole writer of `docs/READY.md`, `docs/sessions/*.md`, `docs/specs/*`, and shared docs (`STRUCTURE.md`, `GAME_BRIEF.md`, `WORKFLOW.md`, `HISTORY.md`, `TASKS.md`). Never edit `docs/FEEDBACK.md` or `docs/archive/FEEDBACK_CLOSED.md`.
+3. For git in this linked worktree: use `$env:GIT_INDEX_FILE = "$env:TEMP\dev_index"` with `git fetch origin develop`, `git read-tree origin/develop`, `git commit-tree`, `git push origin "${commit}:refs/heads/develop"`, and then restore the working tree to the local index (`git checkout-index -f -a; git clean -fd`) so the user's VS Code Sync/Pull fast-forwards with zero conflicts.
+4. Check `docs/FEEDBACK.md` for any open `FB-nn` or `UN-nn` items, apply docs deltas, and update `docs/READY.md`.
+```
+
+### 2. Build Session Handover (`C:\dev\tactical-rpg-plan`, `-stage`, `-lane1..3`)
+
+```text
+You are the Build Session under the two-session split (`docs/decisions/workflow.md`), working across `C:\dev\tactical-rpg-plan`, `-stage`, and `-lane1..3` on `origin/develop`.
+1. Read `docs/READY.md` and `docs/FEEDBACK.md`.
+2. Build ONLY items in `docs/READY.md` Section 1 (`ready-to-build`) in order, and run read-only feasibility audits on items in Section 2 (`feasibility-check`).
+3. You are the sole writer of `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (move answered/closed `FB-nn` items or long audit write-ups into `docs/archive/FEEDBACK_CLOSED.md` to keep `docs/FEEDBACK.md` under 25 KB). Never edit `docs/READY.md` or shared docs—file `docs-delta` items in `docs/FEEDBACK.md` instead.
+```

@@ -3,6 +3,7 @@
 use aegis_ui::theme::th;
 use super::marks::skills_hp;
 use super::playback::PlaySpeed;
+use super::skill_menu::{menu_intents, MenuGrid, Slot};
 use super::{Action, BattleScreen, ALLY, TACTICS, TACTIC_HELP, TACTIC_INTENT_HELP, TACTIC_LABELS};
 use aegis_ui::canvas::Rect;
 use crate::intent_text;
@@ -24,6 +25,10 @@ pub(super) enum RowAct {
     Pick(Vec<rip::Pick>),
     /// SL6: the ally menu's last row, "Select <ally>".
     SelectAlly(usize),
+    /// VISCLAR1-C: the skill menu's Fill: what key F does (`accept_ghost`).
+    Fill,
+    /// VISCLAR1-D: the Move of a menu on a unit: the next tile clicked is where it goes.
+    MoveAim,
 }
 
 /// INPUT1 GH2, IN6 timing (decision "INPUT1 answers, part 4" Q18): a member's ghost that waits for Confirm because its
@@ -171,9 +176,13 @@ pub(super) fn target_name(w: &World, t: RoundTarget) -> String {
     }
 }
 
-/// UI2's Rest gain ("Rest: 1 AP, 10 poise"; the poise only under the rule poise).
+/// UI2's Rest gain ("Rest: 1 AP, 10 poise"; the poise only under the rule poise; S2.2-S3: "Rest: 1 AP, 1 pip" under
+/// `poise_mode` pips).
 pub(super) fn rest_text(g: rip::RestGain) -> String {
-    let poise = if g.poise > 0 { format!(", {} poise", g.poise) } else { String::new() };
+    let mut poise = if g.poise > 0 { format!(", {} poise", g.poise) } else { String::new() };
+    if g.pips > 0 {
+        poise += &format!(", {} pip{}", g.pips, if g.pips == 1 { "" } else { "s" });
+    }
     format!("Rest: {} AP{poise}", g.ap)
 }
 
@@ -188,6 +197,14 @@ pub(super) struct Row {
     pub(super) warn: bool,
     /// INPUT1 AP3, AP8: a skill-menu row refused for its AP: how many AP short it is (the kit's `PickOption::ap_short`).
     pub(super) ap_short: Option<i32>,
+    /// VISCLAR1-D: the skill menu's place for the row (None: a text row of a tactic or step menu).
+    pub(super) slot: Option<Slot>,
+    /// VISCLAR1-D: a skill cell's icon chain (empty: no icon).
+    pub(super) icon: Vec<String>,
+    /// VISCLAR1-D: the target the row's picks go on when it is not the menu's own.
+    pub(super) at: Option<RoundTarget>,
+    /// VISCLAR1-D: a pouch item's copies left (drawn on its cell).
+    pub(super) count: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -199,17 +216,48 @@ pub(super) struct Popup {
     pub(super) rows: Vec<Row>,
     /// INPUT1 IF1-IF5: the skill menu's hero and target (None: a tactic or step menu).
     pub(super) menu: Option<(usize, RoundTarget)>,
+    /// VISCLAR1-D: the skill menu's icon layout (None: a text menu, each row a line).
+    pub(super) grid: Option<MenuGrid>,
+    /// VISCLAR1-D: the board tile the skill menu opens beside (None: where it was placed).
+    pub(super) anchor: Option<V2>,
 }
 
 impl Popup {
     /// The menu's rect with rows `row_h` high (TEXTFIT1: the pitch grows with the text size; 11 at Normal).
     pub(super) fn rect(&self, row_h: i32) -> Rect {
-        Rect::new(self.x, self.y, self.w, row_h + 4 + self.rows.len() as i32 * row_h)
+        match &self.grid {
+            Some(g) => {
+                let (w, h) = g.size(row_h);
+                Rect::new(self.x, self.y, w, h)
+            }
+            None => Rect::new(self.x, self.y, self.w, row_h + 4 + self.rows.len() as i32 * row_h),
+        }
     }
 
     /// Row `k`'s rect (under the title).
     pub(super) fn row(&self, row_h: i32, k: usize) -> Rect {
-        Rect::new(self.x + 2, self.y + row_h + 2 + k as i32 * row_h, self.w - 4, row_h)
+        match &self.grid {
+            Some(g) => g.cell(self.x, self.y, row_h, k),
+            None => Rect::new(self.x + 2, self.y + row_h + 2 + k as i32 * row_h, self.w - 4, row_h),
+        }
+    }
+
+    /// The row under `at` (`row_h` as `row`): a skill menu's row it does not show takes no hover and no click.
+    pub(super) fn row_at(&self, row_h: i32, at: (i32, i32)) -> Option<usize> {
+        (0..self.rows.len()).find(|&k| self.grid.as_ref().is_none_or(|g| g.shows(self.rows[k].slot)) && self.row(row_h, k).contains(at.0, at.1))
+    }
+
+    /// VISCLAR1-D: a skill menu measured for this frame's text size and placed beside its tile (`tile`: that tile's rect in
+    /// the board's view) inside the battle view `view`.
+    pub(super) fn fit_grid(&mut self, p: &mut aegis_ui::painter::Painter, row_h: i32, tile: Option<Rect>, view: Rect) {
+        let Some(g) = self.grid.as_mut() else { return };
+        g.fit(p);
+        let (w, h) = g.size(row_h);
+        self.w = w;
+        (self.x, self.y) = match tile {
+            Some(t) => super::skill_menu::menu_place(t, (w, h), view),
+            None => (self.x.clamp(2, (W - w - 2).max(2)), self.y.clamp(2, (H - h - 2).max(2))),
+        };
     }
 }
 
@@ -227,10 +275,14 @@ impl BattleScreen {
                 tip: vec![(TACTIC_LABELS[i].to_string(), th().gold), (help[i].to_string(), th().text)],
                 warn: false,
                 ap_short: None,
+                slot: None,
+                icon: Vec::new(),
+                at: None,
+                count: None,
             })
             .collect();
         let anchor = self.w.iter().find(|w| w.id == if party { "strip.party" } else { "strip.hero" }).map(|w| w.rect).unwrap_or_default();
-        self.popup = Some(Popup { title: if party { "Draft the whole party".into() } else { "Draft the selected hero".into() }, x: anchor.x, y: anchor.y + anchor.h + 1, w: 120, rows, menu: None });
+        self.popup = Some(Popup { title: if party { "Draft the whole party".into() } else { "Draft the selected hero".into() }, x: anchor.x, y: anchor.y + anchor.h + 1, w: 120, rows, menu: None, grid: None, anchor: None });
     }
 
     pub(super) fn unit_click(&mut self, cx: &Cx, u: usize) {
@@ -439,29 +491,72 @@ impl BattleScreen {
     /// IF1: a click on a unit or a tile while `h` plans: the round target first (GH2 b) unless a pick holds it, then the
     /// skill menu at the click.
     pub(super) fn target_click(&mut self, cx: &Cx, h: usize, at: RoundTarget) {
+        // VISCLAR1-D: the menu's Move waits for its tile; any other target click ends the wait
+        let round = self.session().current_round;
+        let waiting = self.move_aim.take();
+        self.move_tiles.clear();
+        if let (Some(aim), RoundTarget::Cell(p)) = (waiting, at) {
+            if aim == (h, round) {
+                let held = rip::picks_of(&self.session().w, h).iter().any(|x| x.holds_target());
+                self.choose_pick(cx, h, at, &[if held { rip::Pick::StepAfter(p) } else { rip::Pick::MoveHere(p) }], "Move");
+                return;
+            }
+        }
         let held = rip::picks_of(&self.session().w, h).iter().any(|p| p.holds_target());
         if !held {
             self.apply_target(cx, h, at);
             self.reghost_after(cx, h);
         }
-        self.open_menu(h, at, None, false);
+        let anchor = self.menu_anchor(h, at);
+        self.open_menu(h, at, anchor, false);
     }
 
-    /// IF2: the skill menu's title and rows for `h` on `at` (the kit's `pick_options`, in hotkey order), with "Select
-    /// <ally>" last on another ally (SL6).
-    fn menu_rows(&self, h: usize, at: RoundTarget) -> (String, Vec<Row>) {
+    /// VISCLAR1-D (user 2026-11-05): the tile the skill menu opens beside: the clicked unit's or tile, whichever panel the
+    /// click came from; the mouse is there on targeting.
+    fn menu_anchor(&self, h: usize, at: RoundTarget) -> Option<V2> {
+        let w = &self.session().w;
+        match ri::normalize(h, at) {
+            RoundTarget::Cell(p) => Some(p),
+            RoundTarget::Unit(u) => w.has(u).then(|| w.pos(u)),
+            RoundTarget::Myself => w.has(h).then(|| w.pos(h)),
+        }
+    }
+
+    /// IF2, VISCLAR1-D: the skill menu's title and rows for `h` on `at`: the kit's `menu_options` in the slots of the rows
+    /// the ruleset lists, then Move on a unit (`menu_options` has it on a tile), Fill, and "Select <ally>" on another ally
+    /// (SL6). The same rows in the same order before and after a pick; what cannot be picked now is faded, not gone.
+    pub(super) fn menu_rows(&self, h: usize, at: RoundTarget) -> (String, Vec<Row>) {
         let s = self.session();
         let w = &s.w;
-        let opts = rip::pick_options(w, &s.plan, h, at);
+        let listed = menu_intents(w);
+        let opts = rip::menu_options(w, &s.plan, h, at);
         let mut rows: Vec<Row> = opts
             .iter()
-            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(&w.cat, o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short })
+            .filter(|o| o.intent.map_or(!o.picks.iter().any(|p| p.holds_target()), |i| listed.contains(&i)))
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(&w.cat, o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o) })
             .collect();
+        if !rows.is_empty() {
+            // VISCLAR1-D: on a unit the Move takes its tile from the next click (on a tile it is one of the kit's cells)
+            if !matches!(at, RoundTarget::Cell(_)) {
+                let why = rip::move_refusal(w, &s.plan, h);
+                let mut tip: Tip = vec![("Move".into(), th().gold), (move_tip(w), th().text)];
+                tip.extend(why.iter().map(|y| (y.clone(), th().foe)));
+                rows.push(Row { label: "Move".into(), detail: why.clone().unwrap_or_else(|| "then click a tile".into()), valid: why.is_none(), act: RowAct::MoveAim, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Move")), icon: Vec::new(), at: None, count: None });
+            }
+            // VISCLAR1-C, VISCLAR1-D: Fill on the neutral row, faded with no ghost to take
+            let has_ghost = self.deferred.iter().any(|d| d.0 == h) || rip::ghost_entries(w, &s.plan, h).contains(&true);
+            let after_move = rip::picks_of(w, h).iter().any(|p| matches!(p, rip::Pick::StepAfter(_)));
+            let mut tip: Tip = vec![("Fill (F)".into(), th().gold), ("Accepts the auto-fill for the rest of the round.".into(), th().text)];
+            if after_move {
+                tip.push((rip::ONLY_REST.into(), th().foe));
+            }
+            rows.push(Row { label: "Fill".into(), detail: if after_move { rip::ONLY_REST } else if has_ghost { "the rest of the round" } else { "nothing to fill" }.into(), valid: has_ghost && !after_move, act: RowAct::Fill, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Fill")), icon: Vec::new(), at: None, count: None });
+        }
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
         if let RoundTarget::Unit(u) = at {
             if u != h && w.allies.contains(&u) {
-                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), th().gold), ("Plan this hero's round instead.".into(), th().text)], warn: false, ap_short: None });
+                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), th().gold), ("Plan this hero's round instead.".into(), th().text)], warn: false, ap_short: None, slot: Some(Slot::Neutral("Select")), icon: Vec::new(), at: None, count: None });
             }
         }
         let skill_rows = rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)));
@@ -477,7 +572,7 @@ impl BattleScreen {
 
     /// IF1, IF4: opens (or, after a pick, re-lists in place) `h`'s skill menu on `at`. Another ally with no usable row
     /// is selected at once (SL6); after a pick the menu closes when no skill row is left.
-    fn open_menu(&mut self, h: usize, at: RoundTarget, place: Option<(i32, i32)>, after_pick: bool) {
+    fn open_menu(&mut self, h: usize, at: RoundTarget, anchor: Option<V2>, after_pick: bool) {
         let (title, rows) = self.menu_rows(h, at);
         let ally = match at {
             RoundTarget::Unit(u) if u != h && self.session().w.allies.contains(&u) => Some(u),
@@ -489,16 +584,26 @@ impl BattleScreen {
             self.popup = None;
             return;
         }
-        if rows.is_empty() || (after_pick && !rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)))) {
+        if rows.is_empty() || (after_pick && !usable) {
             self.popup = None;
             if !after_pick {
                 self.message = title;
             }
             return;
         }
-        let (x, y) = place.unwrap_or(self.mouse);
-        let (pw, ph) = (MENU_W, self.menu_row + 4 + rows.len() as i32 * self.menu_row);
-        self.popup = Some(Popup { title, x: x.clamp(2, W - pw - 2), y: y.clamp(2, H - ph - 2), w: pw, rows, menu: Some((h, at)) });
+        let (x, y) = self.mouse;
+        // VISCLAR1-D: the layout comes from the rows and the ruleset's intents; `fit_grid` places it beside `anchor`
+        let w = &self.session().w;
+        let intents: Vec<(RoundIntent, String)> = menu_intents(w).into_iter().map(|i| (i, i.label(&w.cat))).collect();
+        let fixed = rip::picks_of(w, h).iter().any(|p| p.holds_target()).then(|| ri::intent_of(w, h)).flatten();
+        // every row shows (the row list is one input: a subset keeps every place)
+        let grid = MenuGrid::new(&intents, intents.iter().map(|i| i.0).collect(), &rows, fixed);
+        let mut popup = Popup { title, x, y, w: 0, rows, menu: Some((h, at)), grid: Some(grid), anchor };
+        let (pw, ph) = popup.grid.as_ref().map_or((0, 0), |g| g.size(self.menu_row));
+        popup.w = pw;
+        popup.x = x.clamp(2, (W - pw - 2).max(2));
+        popup.y = y.clamp(2, (H - ph - 2).max(2));
+        self.popup = Some(popup);
     }
 
     /// IF4: appends `picks` (a menu row or a hotkey) to `h`'s round on `at` through the host's `pick`; the message names
@@ -524,8 +629,8 @@ impl BattleScreen {
             self.message = format!("{name}: {shown}");
         }
         self.reghost_after(cx, h);
-        if let Some(place) = self.popup.as_ref().filter(|p| p.menu.is_some()).map(|p| (p.x, p.y)) {
-            self.open_menu(h, at, Some(place), true);
+        if let Some(anchor) = self.popup.as_ref().filter(|p| p.menu.is_some()).map(|p| p.anchor) {
+            self.open_menu(h, at, anchor, true);
         }
     }
 
@@ -608,13 +713,23 @@ impl BattleScreen {
         let skill_name = keys.get(d - 1).map(|k| w.cat.skills[*k].name.clone());
         if let Some(p) = self.popup.as_ref().filter(|p| p.menu.is_some()) {
             let prefix = format!("{d} ");
-            match p.rows.iter().position(|r| r.label.starts_with(&prefix)) {
-                Some(k) if p.rows[k].valid => self.run_choose(cx, k),
-                Some(k) => self.message = format!("{}: {}", &p.rows[k].label[prefix.len()..], p.rows[k].detail),
-                None => self.message = skill_name.map_or_else(|| format!("No skill on key {d}."), |n| format!("{n} is not offered on this target now.")),
+            // a skill with both Maneuver kinds has two cells on one digit: the one that can be picked
+            let on_digit = |r: &Row| r.label.starts_with(&prefix);
+            let row = p.rows.iter().position(|r| r.valid && on_digit(r)).or_else(|| p.rows.iter().position(on_digit));
+            // HK3: a self-only key greyed on this target still acts on self, as with the menu closed
+            let to_self = !row.is_some_and(|k| p.rows[k].valid) && keys.get(d - 1).is_some_and(|k| rip::hotkey_target(w, h, *k) == Some(RoundTarget::Myself) && rip::self_only(&w.cat.skills[*k]));
+            if !to_self {
+                match row {
+                    Some(k) if p.rows[k].valid => self.run_choose(cx, k),
+                    Some(k) => self.message = format!("{}: {}", &p.rows[k].label[prefix.len()..], p.rows[k].detail),
+                    None => self.message = skill_name.map_or_else(|| format!("No skill on key {d}."), |n| format!("{n} is not offered on this target now.")),
+                }
+                return;
             }
-            return;
+            self.popup = None;
         }
+        let s = self.session();
+        let w = &s.w;
         let Some(&sid) = keys.get(d - 1) else {
             self.message = format!("No skill on key {d}.");
             return;
@@ -641,7 +756,7 @@ impl BattleScreen {
         let Some(p) = self.popup.clone() else { return };
         let Some(row) = p.rows.get(k).filter(|r| r.valid).cloned() else { return };
         match (row.act, p.menu) {
-            (RowAct::Pick(picks), Some((h, at))) => self.choose_pick(cx, h, at, &picks, &row.label),
+            (RowAct::Pick(picks), Some((h, at))) => self.choose_pick(cx, h, row.at.unwrap_or(at), &picks, &row.label),
             (RowAct::SelectAlly(u), _) => {
                 self.selected = Some(u);
                 self.popup = None;
@@ -669,7 +784,7 @@ impl BattleScreen {
         let (mx, my) = self.mouse;
         let w = 170;
         let h = self.menu_row + 4 + rows.len() as i32 * self.menu_row;
-        self.popup = Some(Popup { title, x: mx.clamp(2, W - w - 2), y: my.clamp(2, H - h - 2), w, rows, menu: None });
+        self.popup = Some(Popup { title, x: mx.clamp(2, W - w - 2), y: my.clamp(2, H - h - 2), w, rows, menu: None, grid: None, anchor: None });
     }
 
     /// Candidate steps for hero `h` (`what`: foe / ally / self / tile), each probed through the API.
@@ -756,21 +871,66 @@ impl BattleScreen {
                 tip.push((r.clone(), th().foe));
                 r
             };
-            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false, ap_short: None });
+            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None });
         }
         rows.sort_by_key(|r| !r.valid);
         rows
     }
 }
 
-/// INPUT1 IF1: the skill menu's width (wider than the step menus: "4 blocks, 4 AP; Maneuver (Engage)" on a row).
-const MENU_W: i32 = 214;
+/// VISCLAR1-D: what the menu's Move does (the kit's `build_picks`).
+fn move_tip(w: &World) -> String {
+    format!("Before a skill, it moves first. After one, it replaces the last auto-filled block, up to {} move blocks, and only Rest can follow. 1 AP a tile; near keeps blocks for Rest, far is safer.", w.ruleset.numbers.move_after_blocks)
+}
 
-/// IF3: a skill-menu row's hover card: the name, the skill's description and its range line (MR4), the refusal, the
-/// buffs an intent change drops (IN6).
+/// VISCLAR1-D: a pouch item's copies left.
+fn item_count(s: &Session, h: usize, o: &rip::PickOption) -> Option<i32> {
+    match &o.picks[..] {
+        [rip::Pick::Item(id)] => Some(s.plan.items_left(&s.w, h, id, -1)),
+        _ => None,
+    }
+}
+
+
+/// VISCLAR1-D: a kit cell's place in the menu: its intent's row, or the neutral row for Rest and the moves.
+fn slot_of(o: &rip::PickOption) -> Slot {
+    match (o.intent, &o.picks[..]) {
+        (Some(i), _) => Slot::Intent(i),
+        (None, [rip::Pick::Rest]) => Slot::Neutral("Rest"),
+        _ => Slot::Neutral("Move"),
+    }
+}
+
+/// VISCLAR1-D: a kit cell's icon chain: the skill's (it falls back on its family's and kind's generic icons), for an item the
+/// item kind's when art comes, else the generic icon of what it does (kit `aims_at_foes`).
+fn cell_icon(w: &World, o: &rip::PickOption) -> Vec<String> {
+    match o.picks.iter().find(|p| p.holds_target()) {
+        Some(rip::Pick::Skill { skill, .. }) => {
+            let sk = &w.cat.skills[*skill];
+            emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind)
+        }
+        Some(rip::Pick::Item(_)) if o.intent == Some(RoundIntent::Maneuver) => vec![super::tips::kind_icon("ITEM"), super::tips::kind_icon("ATTACK")],
+        Some(_) => vec![super::tips::kind_icon("ITEM"), super::tips::kind_icon("SUPPORT")],
+        None => Vec::new(),
+    }
+}
+
+/// IF3: a skill-menu row's hover card: the name (an item's with its copies left), its cost and intent (the icon shows neither),
+/// the skill's description and its range line (MR4), the refusal, the buffs an intent change drops (IN6).
 fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
     let w = &s.w;
-    let mut tip: Tip = vec![(o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "), th().gold)];
+    // an item's name and copies left, as the old row's label: two items can share an icon
+    let title = match item_count(s, h, o) {
+        Some(n) => format!("{} ({n} left)", rip::pick_name(w, &o.picks[0])),
+        None => o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "),
+    };
+    let mut tip: Tip = vec![(title, th().gold)];
+    if o.problem.is_none() {
+        tip.push((pick_detail(&w.cat, o), th().gold));
+    }
+    if o.picks.iter().any(|p| matches!(p, rip::Pick::MoveHere(_) | rip::Pick::StepAfter(_))) && o.picks.len() == 1 {
+        tip.push((move_tip(w), th().text));
+    }
     if let Some(rip::Pick::Skill { skill, .. }) = o.picks.iter().find(|p| matches!(p, rip::Pick::Skill { .. })) {
         let sk = &w.cat.skills[*skill];
         if let Some(d) = sk.raw.get("description").and_then(Value::as_str).filter(|d| !d.is_empty()) {

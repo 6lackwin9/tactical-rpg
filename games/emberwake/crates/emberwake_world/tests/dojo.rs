@@ -174,18 +174,16 @@ fn the_ready_weapon_returns_to_the_main_hand_when_the_pair_changes() {
     assert!(!s.hero().inventory.off_active, "no pair: the main hand is ready (_normalize_active_weapon)");
 }
 
+/// U3.2-S3 (FB-34): a preset piece the hero has no training for is worn (soft wield), under the wield penalty.
 #[test]
-fn a_preset_piece_the_hero_cannot_use_is_not_left_in_the_stash() {
+fn a_preset_piece_the_hero_has_no_training_for_is_worn_untrained() {
     let mut s = session();
-    let before = s.stash.clone();
-    let preset = PRESETS.iter().find(|p| p.gear.iter().any(|(_, i)| !s.can_equip(&s.cat.items[*i]) && !before.iter().any(|b| b == i))).expect("a preset with a piece the warrior can't use and the stash lacks");
+    let preset = PRESETS.iter().find(|p| p.gear.iter().any(|(_, i)| !s.trained_for(&s.cat.items[*i]))).expect("a preset with a piece the warrior has no training for");
     s.apply_preset(preset.id);
-    for (_, item) in preset.gear {
-        if !s.can_equip(&s.cat.items[*item]) && !before.iter().any(|b| b == item) {
-            assert!(!s.stash.iter().any(|x| x == item), "{item} was made and skipped, so dropped");
-        }
+    for (_, item) in preset.gear.iter().filter(|(_, i)| !s.trained_for(&s.cat.items[*i])) {
+        let worn = s.hero().inventory.gear().find(|e| e.id() == *item).unwrap_or_else(|| panic!("{item} is worn"));
+        assert!(worn.wield_penalty(&s.hero().stats).untrained, "{item} is worn untrained");
     }
-    assert!(s.log.last().unwrap().detail.contains("skipped"));
 }
 
 #[test]

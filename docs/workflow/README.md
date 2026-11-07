@@ -20,7 +20,7 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 | Branch | a `claude/<task>` branch per task from the local `staging` branch (decision "Batched gate", 2026-10-28), created by the planner (a worktree per concurrent builder) | a `claude/...` branch per task from the latest `develop`; feature branches are free; the squash commit on `develop` starts with the task id |
 | Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit; `change-reviewer` reviews the whole task branch before it lands on `develop` and its verdict goes in the squash commit (`Review:` line) |
 | Merge to `main` | tasks land on the local `staging` branch under a partial gate and reach `develop` in batches under one full gate (`flush.sh`, skill `task-landing`; no PR); the planner session, acting as Merge & Release, releases `develop` -> `main` through one PR with the GitHub CLI after CI (merge commit), then fast-forwards `develop` to it | area threads squash tasks into `develop` (no PR); the Merge & Release thread merges one batched `develop` -> `main` PR (merge commit) after CI |
-| Writer of `docs/TASKS.md`, ROADMAP, decisions, HISTORY | planner only | each area thread for its tasks' rows and the decisions you gave in that thread, inside the task's commit |
+| Writer of `docs/READY.md`, specs, `TASKS.md`, ROADMAP, decisions, HISTORY | Design Session only (`C:/dev/tactical-rpg-dev` or remote Gemini session on `develop`); Build Session writes exclusively to `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (since 2026-11-07) | Design Session only (`origin/develop`); cloud Build Session threads read `docs/READY.md` and write status, questions, and docs deltas exclusively to `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (since 2026-11-07; supersedes the pre-split area-thread `TASKS.md` rule) |
 | `docs/AGENT_MAP.md` "Active now" | kept current by the planner | not used (the project's thread list is live); the finished-run log and `docs/archive/TASKS_DONE.md` are written only by the Merge & Release thread at release time, from each task commit's `AgentMap:` and `Done:` lines |
 | Gate | `check_project.ps1 -Fast -Quiet` (builds every engine crate and runs every test, ~30 s warm) and IDE Problems tab 0 | `tools/fc.sh gate` (the same steps; `auto` is accepted and runs everything) and `tools/fc.sh docs`; no IDE rule; CI runs the same gate (`gate`, a required check on `main`) |
 | Toolchain | Rust (rustup, the `stable-x86_64-pc-windows-gnullvm` toolchain pinned in `rust-toolchain.toml`) | Rust stable (`RUSTUP_TOOLCHAIN=stable`, `CARGO_TARGET_DIR=<checkout>/target`) (environment setup script, repo hook as fallback) |
@@ -31,7 +31,7 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 
 ## Switching environments
 
-The repo is the handover: state lives in `docs/TASKS.md`, `docs/AGENT_MAP.md`, the decisions files and pushed branches, never only in a session.
+The repo is the handover: under the two-session split (`2026-11-07`), the active build queue lives in `docs/READY.md` (written by the Design Session), build progress, open `FB-nn` / `UN-nn` questions, and docs deltas live in `docs/FEEDBACK.md` (written by the Build Session), and in-flight code lives on pushed `claude/<task>` branches, never only in a session.
 
 ### Desktop to cloud
 

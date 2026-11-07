@@ -1,7 +1,6 @@
 //! The matrix modes of the balance sim (tools/balance_sim.gd): duel, tier, levels, group and stats. Duel, tier,
 //! levels and group run every matchup with sides swapped over every seed, so side and position bias cancel out.
 
-use crate::args::CLASSES;
 use crate::runner::{Cell, Def, Runner};
 use crate::variants;
 use aegis_core::fmt::fixed;
@@ -53,20 +52,21 @@ fn band_flag(r: &Runner, row: &[Cell]) -> String {
 }
 
 pub fn duel(r: &mut Runner, level: i32) {
-    for c in CLASSES {
+    let classes = r.args.game.classes.ids;
+    for &c in classes {
         r.define(&format!("simp_{c}"), Def::new(c, level, "hero", true));
         r.define(&format!("sime_{c}"), Def::new(c, level, "hero", false));
     }
     r.print(format!("DUEL level {level}, hero vs hero, score of the ROW class ({})", score_label(r)));
     let mut header = format!("{:<10}", "");
-    for c in CLASSES {
+    for &c in classes {
         header += &format!("{c:<10}");
     }
     r.print(format!("{header}avg"));
-    for a in CLASSES {
+    for &a in classes {
         let mut line = format!("{a:<10}");
         let mut row = Vec::new();
-        for b in CLASSES {
+        for &b in classes {
             if a == b {
                 line += &format!("{:<10}", "-");
                 continue;
@@ -84,7 +84,7 @@ pub fn tier(r: &mut Runner, level: i32) {
     let mirror = r.args.tier_foe == crate::args::MIRROR;
     let foe = if mirror { "its own class".to_string() } else { format!("a {}", r.args.tier_foe) };
     r.print(format!("TIER level {level}: hero class vs {foe} at a tier (score of the hero, {})", score_label(r)));
-    for c in CLASSES {
+    for &c in r.args.game.classes.ids {
         r.define(&format!("simp_{c}"), Def::new(c, level, "hero", true));
         let mut line = format!("{c:<10}");
         let foe_class = r.args.tier_foe_for(c);
@@ -102,7 +102,7 @@ pub fn tier(r: &mut Runner, level: i32) {
 
 pub fn levels(r: &mut Runner) {
     r.print(format!("LEVELS: class at level N vs the same class at N+2 (score of the lower level, {})", score_label(r)));
-    for c in CLASSES {
+    for &c in r.args.game.classes.ids {
         let mut line = format!("{c:<10}");
         for lvl in LEVEL_STEPS {
             r.define(&format!("simp_{c}"), Def::new(c, lvl, "hero", true));
@@ -118,7 +118,7 @@ pub fn levels(r: &mut Runner) {
 pub fn group(r: &mut Runner, level: i32) {
     let low = (level - 2).max(1);
     r.print(format!("GROUP level {level}: hero vs 3 of its class (score of the hero, {})", score_label(r)));
-    for c in CLASSES {
+    for &c in r.args.game.classes.ids {
         r.define(&format!("simp_{c}"), Def::new(c, level, "hero", true));
         r.define(&format!("sime_{c}_minion_low"), Def::new(c, low, "minion", false));
         r.define(&format!("sime_{c}_standard_low"), Def::new(c, low, "standard", false));
@@ -135,13 +135,13 @@ pub fn group(r: &mut Runner, level: i32) {
 /// No fights: per class the derived numbers of the party-side unit (spend / loadout variants apply).
 pub fn stats(r: &mut Runner) {
     let levels: Vec<i32> = if r.args.all_levels { STATS_LEVELS.to_vec() } else { vec![r.args.level] };
-    r.print("STATS: HP, armor rating, reduction %, EHP = HP / (1 - reduction), melee / ranged power, range, speed, crit %, active class families");
+    r.print("STATS: HP, armor rating, reduction %, EHP = HP / (1 - reduction), melee / ranged power, range, initiative, move rate, crit %, active class families");
     r.print(format!(
-        "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
-        "class", "L", "spend", "HP", "armor", "red%", "EHP", "melee", "rngd", "range", "speed", "crit%", "families"
+        "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
+        "class", "L", "spend", "HP", "armor", "red%", "EHP", "melee", "rngd", "range", "init", "move", "crit%", "families"
     ));
     for lvl in levels {
-        for c in CLASSES {
+        for &c in r.args.game.classes.ids {
             for sv in r.args.spend_variants() {
                 r.spend_variant = sv.clone();
                 r.define(&format!("simp_{c}"), Def::new(c, lvl, "hero", true));
@@ -152,7 +152,7 @@ pub fn stats(r: &mut Runner) {
                 let spend = variants::spend_for(&r.d.cat, &sv, c, lvl);
                 let spend_text = if spend.is_empty() { sv.clone() } else { format!("{sv}{}", variants::spend_text(&spend)) };
                 let line = format!(
-                    "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
+                    "{:<8} {:<3} {:<16} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}  {}",
                     c,
                     lvl,
                     spend_text,
@@ -163,7 +163,8 @@ pub fn stats(r: &mut Runner) {
                     damage::power_of(&u, false, false),
                     damage::power_of(&u, true, false),
                     u.attack_range,
-                    u.speed,
+                    u.initiative,
+                    u.move_rate,
                     fixed(damage::crit_chance(&u), 1),
                     u.active_class_families.join(",")
                 );

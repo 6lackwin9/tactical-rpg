@@ -403,6 +403,7 @@ pub(crate) fn clear_side(s: &mut Session, side: &[UnitId]) {
     for c in side {
         if let Some(rs) = s.w.round_states.get_mut(c) {
             rs.picks.clear();
+            rs.accepted.clear();
             rs.fill = None;
         }
     }

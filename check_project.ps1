@@ -16,6 +16,9 @@ if (-not $env:CARGO_TARGET_DIR -and (Test-Path (Join-Path $projectRoot ".git") -
     $base = (Select-String -Path (Join-Path $projectRoot ".cargo\config.toml") -Pattern '^target-dir = "(.*)"').Matches[0].Groups[1].Value
     $env:CARGO_TARGET_DIR = "$base-$(Split-Path -Leaf $projectRoot)"
 }
+# Low-power laptop (CPU1): cargo runs below normal priority, so the machine stays usable; children inherit it.
+# Only when this process was started for the gate: a run from an open terminal must not leave that terminal lowered.
+if ([Environment]::CommandLine -match 'check_project') { try { (Get-Process -Id $PID).PriorityClass = 'BelowNormal' } catch {} }
 Set-Location $projectRoot   # the Cargo workspace is at the repo root (SPLIT1-1)
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {

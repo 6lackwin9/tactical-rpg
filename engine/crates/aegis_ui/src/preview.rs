@@ -20,6 +20,7 @@ pub fn region_view(outer: View, r: Rect, src: Rect, grid: Grid) -> View {
         ox: outer.ox + (r.x as f32 + (r.w as f32 - w) / 2.0 - src.x as f32 * k) * outer.s,
         oy: outer.oy + (r.y as f32 + (r.h as f32 - h) / 2.0 - src.y as f32 * k) * outer.s,
         g: grid.g(),
+        canvas: View::fit(1, 1).for_grid(grid).canvas,
     }
 }
 
@@ -56,7 +57,7 @@ mod tests {
 
     #[test]
     fn the_whole_canvas_lands_inside_the_rect_at_its_aspect() {
-        let outer = View { s: 2.0, ox: 0.0, oy: 0.0, g: 1 };
+        let outer = View { s: 2.0, ox: 0.0, oy: 0.0, g: 1, canvas: (640, 360) };
         let v = view_in(outer, Rect::new(100, 50, 320, 300), Grid::Old);
         assert_eq!(v.s, 1.0, "half the width, so half the scale");
         assert_eq!((v.x(0.0), v.y(0.0)), (200, 100 + 2 * (300 - 180) / 2), "left edge on the rect, centred down");
@@ -71,7 +72,7 @@ mod tests {
 
     #[test]
     fn a_region_is_enlarged_into_the_rect_and_nothing_draws_outside_it() {
-        let outer = View { s: 1.0, ox: 0.0, oy: 0.0, g: 1 };
+        let outer = View { s: 1.0, ox: 0.0, oy: 0.0, g: 1, canvas: (640, 360) };
         let v = region_view(outer, Rect::new(0, 0, 200, 100), Rect::new(500, 300, 100, 50), Grid::Old);
         assert_eq!(v.s, 2.0);
         assert_eq!((v.x(500.0), v.y(300.0), v.x(600.0), v.y(350.0)), (0, 0, 200, 100), "the region's corners on the rect's");

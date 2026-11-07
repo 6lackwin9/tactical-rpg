@@ -20,6 +20,7 @@ Rules:
 - No compiler warnings; content/data only through `aegis content` when a fixture or the schema migration needs it; use the Edit tool, not sed ranges.
 - Put files where `docs/STRUCTURE.md` says. If a needed path is not listed, stop and ask.
 - Add rule-derived tests (integration tests in the crate's `tests/` folder (`engine/crates/<crate>/tests/` or `games/emberwake/crates/<crate>/tests/`), one file per system). Do not hard-code numbers you have not printed. A golden that diverges because of the rule change the task intends: re-record it and list it in the docs delta (CLAUDE.md "Engine goldens"; the commit and a HISTORY row name it); an unintended divergence is a bug to fix.
+- Proof shots: `tools/fc.sh scenario shots <name> ...` (no window, no script to write); compare with `shot_compare`, with `reduce_motion` for a still battle; a real window only with `window=1`.
 - Verify with `tools/fc.sh build` then `tools/fc.sh test <filter>`; finish with `check_project.ps1 -Fast -Quiet` (or `tools/fc.sh gate`). Each worktree builds into its own folder (fc.sh sets it).
 - One slice per run (decision "Logic lane scope"): do the slice the brief names, then end with the report; do not start the next slice. Open only the files and functions the brief and spec name (plus what a compiler error points at). Send build, test and gate output to a file and read only its summary and failures.
 - Uncertainty rule: after two failed targeted fixes for the same problem, or on any gameplay/design question, STOP and report the question with findings and options instead of guessing.
@@ -28,3 +29,5 @@ Rules:
 - Run `tools/fc.sh docs` if you touched any markdown (it includes a markdownlint subset).
 
 Report (concise): branch/worktree, files changed, behaviour added, tests added and PASS/FAIL counts, deviations from the spec, a short "docs delta" (the exact README / engine README / PORT_NOTES / GAME_BRIEF / STRUCTURE / decisions-file lines the planner should add), and open questions. Do not update README or roadmap; the planner does.
+
+Repeats (user 2026-11-04): before writing a temp script or repeating a loop, check `docs/EFFICIENCY.md` "Repeat findings". A first-time script or trial-and-error loop is fine, but end your report with a `Repeats:` line naming anything you did more than once or wrote that could be kept, or `Repeats: none`. Keep scratch files in the task's own subfolder of the scratchpad.

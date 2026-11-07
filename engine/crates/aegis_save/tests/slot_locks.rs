@@ -3,13 +3,12 @@
 
 use aegis_save::{delete, exists, is_locked, set_locked, write, Format, LOCKS_FILE};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const FMT: Format = Format { tag: "lock_test", version: 1, first_slot: 0, last_slot: 3, keys: &["a"] };
 
-fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_save_locks_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn temp_dir(name: &str) -> aegis_core::scratch::Scratch {
+    let dir = aegis_core::scratch::Scratch::vacant(&format!("save_locks_{name}"));
     dir
 }
 

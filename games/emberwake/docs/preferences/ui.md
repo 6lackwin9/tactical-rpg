@@ -54,6 +54,8 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - While the fight logic is built, every battle overlay, badge and readout stays (tells, intents, impact badges, reach band,
   facing chevrons, revealed walks, status looks): they are good to have for debugging. Once the fight logic is built, a
   visual clarity pass decides what the actual game view keeps; the rest stays reachable for debugging (VISCLAR1).
+- Note 2026-11-03 (VISCLAR1-B, decision "Battle view answers"): `first_move` below is gone, under the round intent only
+  the intent marker stays.
 - Slice A's outcome (VISCLAR1-A, 2026-11-01; decisions "Combat input feedback" and "INPUT1 answers", parts 1 and 4):
   every overlay group stays on by default but two new ones, off: `first_move` (the enemy's first-move kind chip on its
   token, a debug view) and `all_bars` (every unit's token bars; by default only the selected hero's, its target's, the
@@ -67,5 +69,18 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
   "Impact tracers"), a gold frame on the strip's resolving block, playback speed 1x / 0.5x / block by block (chips
   during playback, P, N, remembered), the combat log grouped by round and block, and the full timeline view (T)
   pausing the playback at the block's end. Nothing else draws on the board during playback.
+- The skill menu is icons only (VISCLAR1-D slice 2; decision "Battle view answers, part 2", mock `menu_icons`): a neutral row
+  with Fill, Move and Rest on top, one row per intent, the others fading in place once the opener fixes the intent, nothing
+  shifting; cost and AP on hover. Rows the clicked target does not allow are grey, not clickable (decision "Intent framework
+  answers"). The menu opens beside the clicked unit, inside the battle view (user 2026-11-05: the mouse is there on targeting).
+  A Move after a skill takes the slot of the last auto-filled block, Rest after it, only Rest can follow, up to 3 move blocks:
+  near gains Rest AP, far is the safe choice (user 2026-11-05); a short note under the strip says what it replaced; Undo
+  restores. An auto-filled follow-up keeps its flank or behind tile (decision "Auto-fill keeps a flank").
+- The battle view after the test battle (VISCLAR1-D slice 1; decision "Battle view answers, part 2"): Rest blocks light slate with
+  their icon, an auto-filled Rest staying solid; the intent ring replaces the side ring on every unit, the letter plate over a
+  token on Alt; no always-on affiliation outline, the user judges rings on real faction sprites; AP pips in the party cards, one
+  colour, draining with moves, refilling at round start; HP, poise and AP numbers beside their rows; poise as 5 pips of 20 %
+  each; timeline battles add a Round N ribbon and the next round by itself ("Auto-confirm next round", on by default). Classic
+  keeps its Next round, its Space and no ribbon. The T view's Rest stays grey.
 - Secondary text carries real information (levels, stats, labels), so it stays comfortable to read: `dim` is #9ca3af, about 6-8:1, not the darker Cinder Ash #6b7280 (user 2026-11-02).
 - Battle plan strip blocks: filled in the skill kind's colour, the icon and the name centred together (icon alone when the name does not fit), a thin light border on the icon, near-white text with a 1 px dark outline (user 2026-11-03, mock C).

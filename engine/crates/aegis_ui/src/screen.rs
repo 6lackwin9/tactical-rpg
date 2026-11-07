@@ -6,6 +6,7 @@
 use crate::art::Art;
 use crate::audio::Audio;
 use crate::canvas::Rect;
+use crate::pacing::FrameNeed;
 pub use crate::painter::Grid;
 use crate::painter::Painter;
 use crate::ui::{self, Gfx, Ui, Widget, BODY, H, W};
@@ -31,7 +32,7 @@ pub enum Key {
     CtrlEnter,
     /// Shift with a digit key (0-9, the top row or the keypad), whatever character the layout types for it.
     ShiftDigit(u8),
-    /// A function key a screen may use for debugging (F6, F7, F9, F11; the shell keeps F8 and F12 for itself).
+    /// A function key a screen may use for debugging (F5, F6, F7, F9, F10, F11; the shell keeps F8 and F12 for itself).
     Fn(u8),
     Char(char),
 }
@@ -52,9 +53,11 @@ impl Key {
             "pagedown" => Key::PageDown,
             "ctrl+enter" => Key::CtrlEnter,
             d if d.len() == 7 && d.starts_with("shift+") && d.as_bytes()[6].is_ascii_digit() => Key::ShiftDigit(d.as_bytes()[6] - b'0'),
+            "f5" => Key::Fn(5),
             "f6" => Key::Fn(6),
             "f7" => Key::Fn(7),
             "f9" => Key::Fn(9),
+            "f10" => Key::Fn(10),
             "f11" => Key::Fn(11),
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
             _ => return None,
@@ -107,10 +110,12 @@ pub enum Nav<G> {
 pub struct Settings {
     pub v: Value,
     path: PathBuf,
+    /// The window sizes offered (`window_sizes`): the last list `keep_window_size` held to, else `WINDOW_SIZES`.
+    offered: Vec<String>,
 }
 
-/// The engine's choices (Godot SettingsFile / DisplaySettings): window modes, window sizes, frame-rate caps.
-pub const WINDOW_MODES: [&str; 3] = ["Windowed", "Borderless", "Fullscreen"];
+/// The engine's choices (Godot SettingsFile / DisplaySettings): window sizes, frame-rate caps. `WINDOW_SIZES` is the
+/// default list; a game offers its own (its settings rows, `Settings::keep_window_size`).
 pub const WINDOW_SIZES: [&str; 8] = ["960x540", "1024x576", "1152x648", "1280x720", "1366x768", "1600x900", "1920x1080", "2560x1440"];
 pub const FPS_CAPS: [&str; 5] = ["Unlimited", "30", "60", "120", "144"];
 /// Text size levels (Godot TEXT_LEVELS): label and font factor.
@@ -119,11 +124,102 @@ pub const TEXT_SIZES: [(&str, f64); 4] = [("Small", 0.85), ("Normal", 1.0), ("La
 /// all at once.
 pub const TEXT_SPEEDS: [&str; 4] = ["slow", "normal", "fast", "instant"];
 
+/// How the settings ask the window to show (DISPLAY2, keys `fullscreen` and `borderless`; anything but `true` is off).
+/// Fullscreen covers the monitor whatever `borderless` says; `borderless` waits for its turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowShow {
+    Fullscreen,
+    Borderless,
+    Windowed,
+}
+
+impl WindowShow {
+    pub fn of(settings: &Value) -> Self {
+        let on = |k: &str| settings[k].as_bool().unwrap_or(false);
+        match (on("fullscreen"), on("borderless")) {
+            (true, _) => Self::Fullscreen,
+            (false, true) => Self::Borderless,
+            (false, false) => Self::Windowed,
+        }
+    }
+}
+
+/// The largest side a `window_size` value may name: past it the value is no size, so a bad file cannot ask the OS for
+/// an absurd window on a platform that reports no monitor to cap it by.
+pub const WINDOW_SIDE_MAX: u32 = 16384;
+
+/// A `window_size` value's width and height in real pixels, at any display scale (None: not a size, or a side of 0 or past `WINDOW_SIDE_MAX`).
+pub fn window_size_of(size: &Value) -> Option<(u32, u32)> {
+    let (w, h) = size.as_str()?.split_once('x')?;
+    let (w, h) = (w.parse::<u32>().ok()?, h.parse::<u32>().ok()?);
+    ((1..=WINDOW_SIDE_MAX).contains(&w) && (1..=WINDOW_SIDE_MAX).contains(&h)).then_some((w, h))
+}
+
+/// The longest list of window sizes a game may offer: a settings row cycles through it.
+pub const WINDOW_SIZES_MAX: usize = 32;
+
+/// The manifest's `window_sizes` value (LAYOUT720-E5): absent (null) is `WINDOW_SIZES`; else a list of 1 to
+/// `WINDOW_SIZES_MAX` `WxH` strings (`window_size_of`), none twice. Anything else is refused, with why.
+pub fn read_window_sizes(v: &Value) -> Result<Vec<String>, String> {
+    if v.is_null() {
+        return Ok(WINDOW_SIZES.map(String::from).to_vec());
+    }
+    let Some(list) = v.as_array() else { return Err(format!("window_sizes must be a list of WxH strings, not {v}")) };
+    if list.is_empty() || list.len() > WINDOW_SIZES_MAX {
+        return Err(format!("window_sizes must list 1 to {WINDOW_SIZES_MAX} sizes, not {}", list.len()));
+    }
+    let mut sizes: Vec<String> = Vec::with_capacity(list.len());
+    for size in list {
+        let text = size.as_str().filter(|s| window_size_of(size).is_some() && !sizes.iter().any(|o| o == s));
+        sizes.push(text.ok_or_else(|| format!("window_sizes: {size} is not a WxH size up to {WINDOW_SIDE_MAX}, or is listed twice"))?.to_string());
+    }
+    Ok(sizes)
+}
+
+/// An area of the desktop in physical px.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScreenRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+}
+
+/// The client size for a window that asks for `want`, with `frame` px around it, on `usable`: `want` when the whole
+/// window fits, else `want` scaled down to fit with its shape kept, so the fixed canvas gains no bars. Never below 1 px.
+pub fn window_capped(want: (u32, u32), frame: (u32, u32), usable: (u32, u32)) -> (u32, u32) {
+    let room = (u64::from(usable.0.saturating_sub(frame.0)).max(1), u64::from(usable.1.saturating_sub(frame.1)).max(1));
+    let asked = (u64::from(want.0).max(1), u64::from(want.1).max(1));
+    if asked.0 <= room.0 && asked.1 <= room.1 {
+        return want;
+    }
+    // The tighter side sets the scale; whole integers, so neither side can round past its room.
+    let (num, den) = if room.0 * asked.1 <= room.1 * asked.0 { (room.0, asked.0) } else { (room.1, asked.1) };
+    ((asked.0 * num / den).max(1) as u32, (asked.1 * num / den).max(1) as u32)
+}
+
+/// Where a window of `outer` size goes to stay inside `usable`, from `at`: as near as it can; the top left wins when it
+/// is too big to fit.
+pub fn window_kept_in(usable: ScreenRect, at: (i32, i32), outer: (u32, u32)) -> (i32, i32) {
+    let axis = |at: i32, start: i32, room: u32, size: u32| {
+        let last = i64::from(start) + i64::from(room) - i64::from(size);
+        i64::from(at).min(last).max(i64::from(start)) as i32
+    };
+    (axis(at.0, usable.x, usable.w, outer.0), axis(at.1, usable.y, usable.h, outer.1))
+}
+
+/// Where a borderless window of `outer` size goes: centred on the monitor, then moved only as far as it must to stay
+/// inside `usable` (a window as tall as the usable area sits above the taskbar, not under it).
+pub fn window_centred(monitor: ScreenRect, usable: ScreenRect, outer: (u32, u32)) -> (i32, i32) {
+    let middle = |start: i32, room: u32, size: u32| (i64::from(start) + (i64::from(room) - i64::from(size)) / 2) as i32;
+    window_kept_in(usable, (middle(monitor.x, monitor.w, outer.0), middle(monitor.y, monitor.h, outer.1)), outer)
+}
+
 impl Settings {
     /// The engine's keys and their defaults. STORYUI1-E: `text_speed` (the vignette player's typewriter) and
     /// `reduce_motion` (no drifting or shaking effects; shared with FX1).
     pub fn engine_defaults() -> Value {
-        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "window_mode": "Windowed", "window_size": "1280x720",
+        json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "fullscreen": false, "borderless": false, "window_size": "1280x720",
             "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false})
     }
 
@@ -144,15 +240,44 @@ impl Settings {
         self.v[crate::vignette::REDUCE_MOTION].as_bool().unwrap_or(false)
     }
 
-    /// The saved settings over the defaults (keys the file lacks keep their default).
+    /// The saved settings over the defaults (keys the file lacks keep their default). A file from before DISPLAY2 has
+    /// `window_mode`: Borderless (it covered the monitor) and Fullscreen become `fullscreen` on, Windowed or anything
+    /// else both off. The old key goes, so the next save does not write it; a file with the new keys keeps them.
     pub fn load(path: PathBuf, game_defaults: Value) -> Self {
         let mut v = Self::defaults(game_defaults);
-        if let Ok(Value::Object(saved)) = std::fs::read_to_string(&path).map(|t| serde_json::from_str::<Value>(&t).unwrap_or(Value::Null)) {
+        if let Ok(Value::Object(mut saved)) = std::fs::read_to_string(&path).map(|t| serde_json::from_str::<Value>(&t).unwrap_or(Value::Null)) {
+            if let Some(old) = saved.shift_remove("window_mode") {
+                if !saved.contains_key("fullscreen") && !saved.contains_key("borderless") {
+                    saved.insert("fullscreen".into(), Value::Bool(matches!(old.as_str(), Some("Borderless" | "Fullscreen"))));
+                }
+            }
             for (k, x) in saved {
                 v[k] = x;
             }
         }
-        Self { v, path }
+        Self { v, path, offered: WINDOW_SIZES.map(String::from).to_vec() }
+    }
+
+    /// The window sizes the game offers, for a settings row: what `keep_window_size` was last given, else `WINDOW_SIZES`.
+    pub fn window_sizes(&self) -> &[String] {
+        &self.offered
+    }
+
+    /// Holds `window_size` to the sizes a game offers: a listed value stays, a size off the list becomes the listed one
+    /// nearest in pixels, anything else the first listed. An empty list changes nothing. Not written until the next save.
+    pub fn keep_window_size(&mut self, offered: &[&str]) {
+        if !offered.is_empty() {
+            self.offered = offered.iter().map(|s| s.to_string()).collect();
+        }
+        let now = &self.v["window_size"];
+        if now.as_str().is_some_and(|s| offered.contains(&s)) {
+            return;
+        }
+        let area = |s: &Value| window_size_of(s).map(|(w, h)| i64::from(w) * i64::from(h));
+        let nearest = area(now).and_then(|have| offered.iter().filter_map(|o| Some((*o, (area(&json!(o))? - have).abs()))).min_by_key(|c| c.1).map(|c| c.0));
+        if let Some(to) = nearest.or(offered.first().copied()) {
+            self.v["window_size"] = json!(to);
+        }
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -306,6 +431,11 @@ pub trait Screen<G> {
     }
     fn wheel(&mut self, _cx: &mut Cx<G>, _lines: i32) {}
     fn tick(&mut self, _cx: &mut Cx<G>) {}
+    /// What the frame loop owes this screen now (FPSCAP1). Default: every frame. Say less only when `tick` and `draw` have
+    /// nothing to do until input or the time named; the shell asks every screen it draws, after each frame.
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Full
+    }
     /// Extra state for the agent's ui_tree.
     fn state(&self, _cx: &Cx<G>) -> Value {
         Value::Null
@@ -408,6 +538,9 @@ impl<G> Screen<G> for Ask<G> {
     fn id(&self) -> &'static str {
         "ask"
     }
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Idle
+    }
     fn overlay(&self) -> bool {
         true
     }
@@ -470,6 +603,9 @@ impl Notice {
 impl<G> Screen<G> for Notice {
     fn id(&self) -> &'static str {
         "notice"
+    }
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Idle
     }
     fn overlay(&self) -> bool {
         true

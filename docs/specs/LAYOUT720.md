@@ -402,6 +402,9 @@ let page = body.pad(Insets::all(m.padding));
 
 As built (E3): defaults with no key are the `layout` value in force doubled, not fixed numbers, as the shipped `layout` has radius 0 and `focus_glow` 1; the focused tip is on `Grid::Native` only until each screen moves; `edit.rs` also touched.
 
+As built (M0): the logo room is a share of the right half, since a whole-canvas share cannot land on 470; the crest centre snaps to `m.u(1)`; the title picture stays a physical blit until the image rule.
+As built (E5): the canvas is a field of `View`, `View::native` gives a native screen's view, and `Fixed` at the grid's size is exactly `View::fit(pw, ph).for_grid(Grid::Native)`; `Grid::{g, extent}` stay the grid's, so a preview draws a native screen on the default canvas. `aegis_content`'s `Manifest` holds the two keys as written, so G0 can set them through the writer; only the shell's reader checks them, so the writer takes a bad value and the game shows a notice. The agent link's `text_audit` takes `profile`, and `layout_audit {profile}` is new, beside it. `Settings::window_sizes` reads the list `keep_window_size` was last given, and the shell holds the saved size only to a declared list, so an absent key leaves the game's own (the one source is G0's). `Stack` still reports no used height (`aegis_layout` was left to LAYOUTDATA1-E1); `overflow()` is all the audit needs.
+
 E3 owns `Ui::screen`, `Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, which no slice named (found by the E2 review). Carried from that review: E5 and M2 need `Stack` to report its used height for scrolled lists; E3, E4 and E5 watch `place`, which clamps an oversized child where old code went negative; M0 passes the native view's `s` to `shot_diff`.
 
 | Id | What | Layer | Lane | Depends on | Touches | Size |

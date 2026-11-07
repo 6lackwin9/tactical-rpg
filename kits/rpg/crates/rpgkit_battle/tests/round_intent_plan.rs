@@ -166,7 +166,7 @@ fn worked_examples_vanguard() {
     assert_eq!(round_intent::rest_gain(&w.ruleset.numbers, 3), 1, "then Rest +1 at round end");
     // UI2: the battle screen's Rest gain counts the planned Rest blocks; no poise without the rule poise
     let rest = rip::rest_preview(w, &s.plan, VANGUARD);
-    assert_eq!(rest, rip::RestGain { blocks: 3, ap: round_intent::rest_gain(&w.ruleset.numbers, 3), poise: 0 });
+    assert_eq!(rest, rip::RestGain { blocks: 3, ap: round_intent::rest_gain(&w.ruleset.numbers, 3), poise: 0, pips: 0 });
 }
 
 /// Section 4's second example: tl_archer, 10 AP, the footman adjacent, Assault: b1 kite 2 tiles (2 AP) to the farthest

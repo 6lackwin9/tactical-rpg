@@ -182,12 +182,6 @@ pub(super) fn focus_set(w: &World, sel: Option<usize>, hovered: Option<usize>, i
     out
 }
 
-/// VC1: whether the tells' kind chips draw on the enemy tokens (while the tells show): in classic always; under the
-/// round intent only with the group `first_move`.
-pub(super) fn first_move_chips(timeline: bool, layers: &Layers) -> bool {
-    !timeline || layers.first_move
-}
-
 /// VC2, VC3: whether unit `i`'s token bars draw: in classic always; under the round intent for the focus set, every
 /// unit while Alt is held or the group `all_bars` is on.
 pub(super) fn bars_shown(timeline: bool, layers: &Layers, alt: bool, focus: &[usize], i: usize) -> bool {
@@ -377,22 +371,24 @@ pub(super) struct HookMarks {
     pub(super) arena: Vec<emberwake_battle::intent::ArenaTell>,
     /// Each arena hazard's effect in words, aligned with `arena`.
     arena_effects: Vec<String>,
+    /// Decision "Battle view answers" (user 2026-11-03): the board draws the marks with their group on or while Alt is
+    /// held; the hover lines read `ground` and `arena` whatever these say.
+    show_ground: bool,
+    pub(super) show_arena: bool,
 }
 
 impl HookMarks {
-    pub(super) fn of(s: &Session, layers: &Layers) -> HookMarks {
+    pub(super) fn of(s: &Session, layers: &Layers, alt: bool) -> HookMarks {
         let w = &s.w;
-        let mut out = HookMarks::default();
-        if layers.hazards && emberwake_battle::ground::on(w) {
+        let mut out = HookMarks { show_ground: layers.hazards || alt, show_arena: layers.arena || alt, ..HookMarks::default() };
+        if emberwake_battle::ground::on(w) {
             // the party's side sees what any of its members sees (GH6 is per side)
             if let Some(&viewer) = w.allies.first() {
                 out.ground = w.grid.ground.iter().filter(|(_, p)| p.seen_by(w, viewer)).map(|(c, p)| ground_mark(w, *c, p)).collect();
             }
         }
-        if layers.arena {
-            out.arena = emberwake_battle::intent::arena_tells(w);
-            out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(arena_effect_text).unwrap_or_default()).collect();
-        }
+        out.arena = emberwake_battle::intent::arena_tells(w);
+        out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(arena_effect_text).unwrap_or_default()).collect();
         out
     }
 
@@ -428,8 +424,8 @@ impl HookMarks {
     /// The agent link's state: the marks as drawn (tiles as [x, y]).
     pub(super) fn json(&self) -> Value {
         json!({
-            "ground": self.ground.iter().map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
-            "arena": emberwake_battle::intent::arena_json(&self.arena),
+            "ground": self.ground.iter().filter(|_| self.show_ground).map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
+            "arena": if self.show_arena { emberwake_battle::intent::arena_json(&self.arena) } else { json!([]) },
         })
     }
 }
@@ -528,7 +524,7 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         View::Stage => inset2(geo.cell_rect(c), 1, 1),
         View::Flat => geo.cell_rect(c).inset(1),
     };
-    for g in &m.ground {
+    for g in m.ground.iter().filter(|_| m.show_ground) {
         let r = plate_of(g.cell);
         let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
         plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
@@ -538,7 +534,7 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         }
     }
     let mut struck: Vec<V2> = Vec::new();
-    for c in m.arena.iter().flat_map(|t| &t.cells) {
+    for c in m.arena.iter().filter(|_| m.show_arena).flat_map(|t| &t.cells) {
         if !struck.contains(c) {
             struck.push(*c);
         }
@@ -823,16 +819,72 @@ pub(super) fn poise_shown(w: &World, i: usize, layers: &Layers) -> Option<emberw
     emberwake_battle::poise::state(w, i).filter(|st| layers.poise && st.max > 0 && w.units[i].is_active()).copied()
 }
 
-/// A poise bar in `r`: the share of Max Poise left in `POISE` (a windup bonus over the max shows as a gold tip); empty
-/// on a red ground once broken this round.
-pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState) {
-    p.fill(r, if st.broken { rgba(120, 30, 34, 255) } else { rgb(28, 34, 48) });
-    if st.broken || st.max <= 0 {
-        return;
+/// VISCLAR1-D (decision "Battle view answers, part 2", POISE1's look, no rule in it): poise shows as this many pips, each
+/// 20 % of the unit's Max Poise.
+pub(super) const POISE_PIPS: i32 = 5;
+
+/// The pips lit for `value` of `max`: every started 20 % lights one, so none lit means no poise left; a windup bonus over
+/// the max stays at all five; none once broken this round.
+pub(super) fn poise_pips(value: i32, max: i32, broken: bool) -> i32 {
+    if broken || max <= 0 {
+        return 0;
     }
-    let w = (r.w * st.value.clamp(0, st.max) + st.max - 1) / st.max;
-    p.fill(Rect::new(r.x, r.y, w.min(r.w), r.h), POISE);
-    if st.value > st.max {
+    (value.clamp(0, max) * POISE_PIPS + max - 1) / max
+}
+
+/// Pip `k`'s rect in row `r` of `total` pips: relative to the row, so a card's and a token's are the same pips with a
+/// 1-unit gap.
+pub(super) fn poise_pip_rect(r: Rect, k: i32, total: i32) -> Rect {
+    let total = total.max(1);
+    let x = |k: i32| r.x + k * (r.w + 1) / total;
+    Rect::new(x(k), r.y, x(k + 1) - x(k) - 1, r.h)
+}
+
+/// S2.2-S3 (FB-71; display only): what a poise row shows of bar `st` under the ruleset's numbers `n`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PipView {
+    /// The pips lit (0 once broken this round).
+    pub(super) lit: i32,
+    /// The row's pips: `POISE_PIPS` under `bar`, the ruleset's `poise_pips` under `poise_mode` pips.
+    pub(super) total: i32,
+    /// A windup bonus holds above the full row (a gold tip on the last pip).
+    pub(super) bonus: bool,
+    /// Under `poise_mode` pips (the numbers and tips speak in pips).
+    pub(super) pips: bool,
+}
+
+/// The pip view of `st`: under `bar` the pips from the value (`poise_pips`), under `poise_mode` pips the bar's own pips
+/// (`PoiseState.pips`, the kit's `poise::pips_now`), a bonus above `poise_pips` showing as the gold tip.
+pub(super) fn pip_view(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_battle::poise::PoiseState) -> PipView {
+    use emberwake_battle::poise;
+    if !poise::pips_mode(n) {
+        return PipView { lit: poise_pips(st.value, st.max, st.broken), total: POISE_PIPS, bonus: !st.broken && st.value > st.max, pips: false };
+    }
+    let total = n.poise_pips.max(1);
+    let now = if st.broken || st.max <= 0 { 0 } else { poise::pips_now(n, st) };
+    PipView { lit: now.clamp(0, total), total, bonus: now > total, pips: true }
+}
+
+/// The poise number beside a row: `value/max` under `bar`, `pips/poise_pips` under `poise_mode` pips.
+pub(super) fn poise_number(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_battle::poise::PoiseState) -> String {
+    let v = pip_view(n, st);
+    if v.pips {
+        let now = if st.broken { 0 } else { st.pips };
+        format!("{now}/{}", v.total)
+    } else {
+        format!("{}/{}", st.value, st.max)
+    }
+}
+
+/// A poise row in `r`: the pips lit in `POISE` (a windup bonus over the max, or above `poise_pips`, shows as a gold tip
+/// on the last); every pip on a red ground once broken this round.
+pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState, n: &emberwake_rules::ruleset::Numbers) {
+    let v = pip_view(n, st);
+    for k in 0..v.total {
+        let pip = poise_pip_rect(r, k, v.total);
+        p.fill(pip, if st.broken { rgba(120, 30, 34, 255) } else if k < v.lit { POISE } else { rgb(28, 34, 48) });
+    }
+    if v.bonus {
         p.fill(Rect::new(r.x + r.w - 2, r.y, 2, r.h), th().gold);
     }
 }
@@ -853,28 +905,10 @@ pub(super) fn break_plate(p: &mut Painter, x: f32, y: f32) {
     p.text_center(x, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "BREAK", SMALL, th().text);
 }
 
-/// A strip span's parts in the timeline widget's look (wind-up, impact, recovery) and whether a break cancelled it.
-pub(super) struct SpanParts {
-    pub(super) parts: Vec<aegis_ui::timeline::Part>,
-    pub(super) broken: bool,
-}
-
-/// RULESET1-U slice 5: the parts of the selected hero's strip spans (aligned with `entries`, the strip's spans):
-/// planning, from its plan (a command that winds up, P5, longer than a block: its wind-up blocks, then its impact
-/// block); once confirmed, from its scheduled actions (start, impact, recovery to its end; broken by a break, P7).
-pub(super) fn span_parts(s: &Session, u: usize, entries: &[(i32, i32, String, String, Option<String>, i32, i32)]) -> Vec<SpanParts> {
-    use crate::timeline_view::parts_of;
-    let w = &s.w;
-    if s.plan_confirmed {
-        return entries
-            .iter()
-            .map(|e| match s.resolver.scheduled.iter().find(|a| a.unit == u && a.start == e.0 && a.command.name == e.2) {
-                Some(a) => SpanParts { parts: parts_of(a.start, a.impact, e.1, emberwake_battle::poise::winds_up(&a.command)), broken: a.broken },
-                None => SpanParts { parts: Vec::new(), broken: false },
-            })
-            .collect();
-    }
-    s.plan.compile(w, u).entries.iter().map(|e| SpanParts { parts: parts_of(e.start_block, e.end_block(w), e.end_block(w), emberwake_battle::poise::winds_up(&e.build_command(w, u))), broken: false }).collect()
+/// RULESET1-U slice 5, P7: once the round is confirmed, whether a break cancelled each of the selected hero's strip spans
+/// (aligned with `entries`; VISCLAR1-C: the strip draws no parts, so a planned span needs no reading).
+pub(super) fn broken_spans(s: &Session, u: usize, entries: &[(i32, i32, String, String, Option<String>, i32, i32)]) -> Vec<bool> {
+    entries.iter().map(|e| s.resolver.scheduled.iter().any(|a| a.unit == u && a.start == e.0 && a.command.name == e.2 && a.broken)).collect()
 }
 
 /// One planned hit's forecast (RULESET1 12 "forecasts").
@@ -886,6 +920,8 @@ pub(super) struct HitForecast {
     pub(super) fc: emberwake_battle::poise::Forecast,
     flank: bool,
     pierce: bool,
+    /// S2.2-S3: the battle plays poise by pips (the verdict speaks in pips).
+    pips: bool,
 }
 
 impl HitForecast {
@@ -912,15 +948,17 @@ impl HitForecast {
         out
     }
 
-    /// The verdict line ("Breaks: poise 20 -> 0", "May break: 40%", "Poise 40 -> 28").
+    /// The verdict line ("Breaks: poise 20 -> 0", "May break: 40%", "Poise 40 -> 28"; S2.2-S3: under `poise_mode` pips in
+    /// pips, "Pips 5 -> 4", and a hit under the threshold says so: "Pips 5 -> 5 (under T 12)").
     fn verdict(&self) -> (String, Rgba) {
         use emberwake_battle::poise::{BreakCause, Verdict};
-        let (b, a) = (self.fc.before, self.fc.after);
+        let (word, b, a) = if self.pips { ("pips", self.fc.pips_before, self.fc.pips_after) } else { ("poise", self.fc.before, self.fc.after) };
+        let chip = if self.pips && self.fc.taken > 0 && self.fc.taken < self.fc.threshold { format!(" (under T {})", self.fc.threshold) } else { String::new() };
         match self.fc.verdict {
             Verdict::Breaks(BreakCause::Sure) => ("Breaks: a sure break into its wind-up".into(), th().foe),
-            Verdict::Breaks(_) => (format!("Breaks: poise {b} -> 0"), th().foe),
-            Verdict::Chance(c) => (format!("May break: {c}% (poise {b} -> {a})"), th().gold),
-            Verdict::Holds => (format!("Poise {b} -> {a}"), th().text),
+            Verdict::Breaks(_) => (format!("Breaks: {word} {b} -> 0"), th().foe),
+            Verdict::Chance(c) => (format!("May break: {c}% ({word} {b} -> {a})"), th().gold),
+            Verdict::Holds => (format!("{}{} {b} -> {a}{chip}", word[..1].to_uppercase(), &word[1..]), th().text),
             Verdict::AlreadyBroken => ("Already broken this round".into(), th().dim),
         }
     }
@@ -984,7 +1022,7 @@ pub(super) fn hit_forecasts(s: &Session, h: usize) -> Vec<Option<HitForecast>> {
         .map(|(e, p)| {
             let (t, cmd, block, flank) = p.as_ref()?;
             let fc = fcs.next()??;
-            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w) };
+            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w), pips: poise::pips_mode(&w.ruleset.numbers) };
             // a hit with nothing to say (no stagger, no flank, no pierce) has no forecast
             (f.staggers() || f.flank || f.pierce).then_some(f)
         })

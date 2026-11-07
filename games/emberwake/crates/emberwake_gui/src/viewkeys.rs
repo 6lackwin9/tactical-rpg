@@ -3,9 +3,11 @@
 //! the game menu, the main menu). Each press saves like a normal setting and shows the new value; the shell applies a
 //! window size when it sees the setting change. A release build ignores both keys. The Settings screen does not call
 //! them: its draft would overwrite the key's value on Apply. VIEWKEYS2: F11 cycles the walk step on the region map.
+//! TURNFEEL1: F10 cycles the walk's beat and equal speed on the region map, F5 its turn corner.
 
-use crate::mapview::{zoom_of, WalkStep, WALK_STEP_KEY};
+use crate::mapview::{zoom_of, TurnCorner, View, WalkFeel, WalkStep, EQUAL_SPEED_KEY, QUICK_FINISH_MS, TURN_BEAT_KEY, TURN_BEAT_MS, TURN_CORNERS, TURN_CORNER_KEY, WALK_STEP_KEY};
 use crate::screens::{show_errors, Cx, Key};
+use aegis_ui::screen::WindowShow;
 use serde_json::{json, Value};
 
 /// F6's steps, in the quarters of `mapview::ZOOM_QUARTERS`: 1x, 1.5x, 2x.
@@ -15,6 +17,14 @@ pub const SIZE_CYCLE: [&str; 3] = ["1280x720", "1600x900", "1920x1080"];
 
 /// F11's steps, as `walk_step_ms` values.
 pub const WALK_CYCLE: [f64; 5] = [90.0, 110.0, 130.0, 160.0, 200.0];
+
+/// F10's steps: off, the beat, equal speed, both.
+pub const FEEL_CYCLE: [WalkFeel; 4] = [
+    WalkFeel { beat: false, equal: false, corner: TurnCorner::Cut },
+    WalkFeel { beat: true, equal: false, corner: TurnCorner::Cut },
+    WalkFeel { beat: false, equal: true, corner: TurnCorner::Cut },
+    WalkFeel { beat: true, equal: true, corner: TurnCorner::Cut },
+];
 
 /// Where a screen shows the key's note: the region map's log ticker, or a notice on a screen with no log in view.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -39,6 +49,18 @@ pub fn next_walk(now: &Value) -> f64 {
     now.as_f64().map_or(WALK_CYCLE[0], |b| next_above(&WALK_CYCLE, b))
 }
 
+/// The options F10 goes to from `now`: the next beat and equal speed, the corner kept.
+pub fn next_feel(now: WalkFeel) -> WalkFeel {
+    let at = FEEL_CYCLE.iter().position(|f| (f.beat, f.equal) == (now.beat, now.equal)).unwrap_or(0);
+    WalkFeel { corner: now.corner, ..FEEL_CYCLE[(at + 1) % FEEL_CYCLE.len()] }
+}
+
+/// The corner F5 goes to from `now`.
+pub fn next_corner(now: TurnCorner) -> TurnCorner {
+    let at = TURN_CORNERS.iter().position(|c| *c == now).unwrap_or(0);
+    TURN_CORNERS[(at + 1) % TURN_CORNERS.len()]
+}
+
 /// A `window_size` value's pixel count (None: not a size).
 fn pixels(size: &str) -> Option<u64> {
     let (w, h) = size.split_once('x')?;
@@ -52,10 +74,10 @@ pub fn next_size(now: &Value) -> &'static str {
     SIZE_CYCLE.into_iter().find(|s| pixels(s).is_some_and(|p| p > have)).unwrap_or(SIZE_CYCLE[0])
 }
 
-/// Why F9 may not size the window in this `window_mode` (the modes the shell does not size); None when it may.
-pub fn size_refusal(mode: &Value) -> Option<String> {
-    let mode = mode.as_str().filter(|m| matches!(*m, "Borderless" | "Fullscreen"))?;
-    Some(format!("F9: the window size only applies in Windowed mode (now {mode})."))
+/// Why F9 may not size the window under these settings (Fullscreen covers the monitor, as the greyed-out Resolution
+/// row shows; a Borderless window sizes like a framed one); None when it may.
+pub fn size_refusal(settings: &Value) -> Option<String> {
+    (WindowShow::of(settings) == WindowShow::Fullscreen).then(|| "F9: Resolution does not apply in Fullscreen.".to_string())
 }
 
 fn show(cx: &mut Cx, line: String, shown: Shown) {
@@ -84,6 +106,16 @@ pub fn window_key(cx: &mut Cx, k: Key, shown: Shown) -> bool {
 /// F11 on the region map: whether `k` was the key (a release build takes it and does nothing).
 pub fn walk_key(cx: &mut Cx, k: Key) -> bool {
     press_walk(cx, k, cfg!(debug_assertions))
+}
+
+/// F10 on the region map: whether `k` was the key (a release build takes it and does nothing).
+pub fn feel_key(cx: &mut Cx, k: Key) -> bool {
+    press_feel(cx, k, cfg!(debug_assertions))
+}
+
+/// F5 on the region map: whether `k` was the key (a release build takes it and does nothing).
+pub fn corner_key(cx: &mut Cx, k: Key) -> bool {
+    press_corner(cx, k, cfg!(debug_assertions))
 }
 
 /// The walk's step time for the F6 and F11 notes, so it reads while comparing zoom levels: the base and, when the Animation speed
@@ -124,12 +156,57 @@ fn press_walk(cx: &mut Cx, k: Key, debug: bool) -> bool {
     true
 }
 
+fn feel_words(feel: WalkFeel, view: View, key: &str) -> String {
+    let beat = if feel.beat { format!("{TURN_BEAT_MS:.0} ms") } else { "off".to_string() };
+    let equal = match (feel.equal, view) {
+        (false, _) => "off",
+        (true, View::Tilted) => "on",
+        (true, View::Square) => "on (changes nothing on square cells)",
+    };
+    let corner = match feel.corner {
+        TurnCorner::Cut => "cut".to_string(),
+        TurnCorner::Finish => "finish the leg".to_string(),
+        TurnCorner::Quick => format!("quick finish {QUICK_FINISH_MS:.0} ms"),
+    };
+    format!("Turn beat {beat}, equal speed {equal}, corner {corner} ({key}).")
+}
+
+fn press_corner(cx: &mut Cx, k: Key, debug: bool) -> bool {
+    if k != Key::Fn(5) {
+        return false;
+    }
+    if debug {
+        let now = WalkFeel::read(&cx.settings.v, true);
+        let to = WalkFeel { corner: next_corner(now.corner), ..now };
+        cx.settings.v[TURN_CORNER_KEY] = json!(to.corner.name());
+        save(cx);
+        let line = feel_words(to, View::of_setting(&cx.settings.v["region_view"]), "F5");
+        cx.log(line);
+    }
+    true
+}
+
+fn press_feel(cx: &mut Cx, k: Key, debug: bool) -> bool {
+    if k != Key::Fn(10) {
+        return false;
+    }
+    if debug {
+        let to = next_feel(WalkFeel::read(&cx.settings.v, true));
+        cx.settings.v[TURN_BEAT_KEY] = json!(to.beat);
+        cx.settings.v[EQUAL_SPEED_KEY] = json!(to.equal);
+        save(cx);
+        let line = feel_words(to, View::of_setting(&cx.settings.v["region_view"]), "F10");
+        cx.log(line);
+    }
+    true
+}
+
 fn press_window(cx: &mut Cx, k: Key, shown: Shown, debug: bool) -> bool {
     if k != Key::Fn(9) {
         return false;
     }
     if debug {
-        match size_refusal(&cx.settings.v["window_mode"]) {
+        match size_refusal(&cx.settings.v) {
             Some(why) => show(cx, why, shown),
             None => {
                 let to = next_size(&cx.settings.v["window_size"]);
@@ -148,7 +225,8 @@ mod tests {
     use crate::hud::hud_tests::game_cx;
     use crate::mapview::{zoom_steps, WALK_STEP_MS, ZOOM_QUARTERS};
     use crate::screens::Screen;
-    use aegis_ui::screen::{Settings, WINDOW_MODES, WINDOW_SIZES};
+    use crate::screens::WINDOW_SIZES;
+    use aegis_ui::screen::Settings;
 
     /// `game_cx`'s settings file, in its own folder.
     fn file_of(cx: &Cx) -> std::path::PathBuf {
@@ -204,7 +282,7 @@ mod tests {
     #[test]
     fn f9_from_an_off_cycle_value_goes_to_the_next_step_above() {
         let area = |s: &str| pixels(s).expect("a size");
-        for s in WINDOW_SIZES.into_iter().filter(|s| !SIZE_CYCLE.contains(s)) {
+        for s in aegis_ui::screen::WINDOW_SIZES.into_iter().filter(|s| !SIZE_CYCLE.contains(s)) {
             let want = SIZE_CYCLE.into_iter().find(|c| area(c) > area(s)).unwrap_or(SIZE_CYCLE[0]);
             assert_eq!(next_size(&json!(s)), want, "from {s}");
         }
@@ -232,34 +310,53 @@ mod tests {
         assert_eq!(reload.v["map_zoom"], json!(2.0), "a new run reads it");
     }
 
-    /// In Windowed mode F9 saves the size and shows it where the screen says; other keys pass.
+    /// A Windowed and a Borderless window both take F9: it saves the size and shows it where the screen says; other
+    /// keys pass.
     #[test]
-    fn f9_in_windowed_mode_saves_and_shows_the_size() {
-        let mut cx = game_cx();
-        assert_eq!(cx.settings.v["window_mode"], json!("Windowed"), "the default");
-        assert!(!press_window(&mut cx, Key::Fn(6), Shown::Log, true), "not its key");
-        assert!(press_window(&mut cx, Key::Fn(9), Shown::Log, true));
-        assert_eq!(cx.settings.v["window_size"], json!("1600x900"));
-        assert_eq!(saved(&cx, "window_size"), json!("1600x900"), "the file");
-        assert_eq!(cx.log.last().map(String::as_str), Some("Window 1600x900 (F9)."));
-        assert!(cx.notice.is_empty(), "the log shows it");
-        press_window(&mut cx, Key::Fn(9), Shown::Notice, true);
-        assert_eq!(cx.notice, vec!["Window 1920x1080 (F9).".to_string()]);
+    fn f9_saves_and_shows_the_size_unless_fullscreen() {
+        for borderless in [false, true] {
+            let mut cx = game_cx();
+            assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Windowed, "the default");
+            cx.settings.v["borderless"] = json!(borderless);
+            assert!(!press_window(&mut cx, Key::Fn(6), Shown::Log, true), "not its key");
+            assert!(press_window(&mut cx, Key::Fn(9), Shown::Log, true));
+            assert_eq!(cx.settings.v["window_size"], json!("1600x900"));
+            assert_eq!(saved(&cx, "window_size"), json!("1600x900"), "the file");
+            assert_eq!(cx.log.last().map(String::as_str), Some("Window 1600x900 (F9)."));
+            assert!(cx.notice.is_empty(), "the log shows it");
+            press_window(&mut cx, Key::Fn(9), Shown::Notice, true);
+            assert_eq!(cx.notice, vec!["Window 1920x1080 (F9).".to_string()]);
+        }
     }
 
-    /// Every mode but Windowed leaves the size and its file alone and says why, naming the mode.
+    /// Fullscreen, with or without Borderless, leaves the size and its file alone and says why.
     #[test]
-    fn f9_outside_windowed_mode_only_says_why() {
-        let others: Vec<&str> = WINDOW_MODES.into_iter().filter(|m| *m != "Windowed").collect();
-        assert_eq!(others, ["Borderless", "Fullscreen"], "the modes the shell does not size");
-        for mode in others {
+    fn f9_in_fullscreen_only_says_why() {
+        for borderless in [false, true] {
             let mut cx = game_cx();
-            cx.settings.v["window_mode"] = json!(mode);
+            cx.settings.v["fullscreen"] = json!(true);
+            cx.settings.v["borderless"] = json!(borderless);
             let was = cx.settings.v["window_size"].clone();
             assert!(press_window(&mut cx, Key::Fn(9), Shown::Notice, true));
-            assert_eq!(cx.settings.v["window_size"], was, "{mode}");
-            assert!(!file_of(&cx).exists(), "{mode}: nothing to save");
-            assert!(cx.notice[0].contains(mode) && cx.notice[0].contains("Windowed"), "{:?}", cx.notice);
+            assert_eq!(cx.settings.v["window_size"], was);
+            assert!(!file_of(&cx).exists(), "nothing to save");
+            assert!(cx.notice[0].contains("Fullscreen") && cx.notice[0].contains("F9"), "{:?}", cx.notice);
+        }
+    }
+
+    /// The game's list starts at the decision's 720p: the engine's default list without what is under it, the first
+    /// is the default size, and a saved smaller size opens at the first.
+    #[test]
+    fn the_game_offers_720p_and_up() {
+        let area = |s: &str| pixels(s).expect("a size");
+        let engine: Vec<&str> = aegis_ui::screen::WINDOW_SIZES.into_iter().filter(|s| area(s) >= area("1280x720")).collect();
+        assert_eq!(WINDOW_SIZES.to_vec(), engine);
+        let mut cx = game_cx();
+        assert_eq!(cx.settings.v["window_size"], json!(WINDOW_SIZES[0]), "the default");
+        for small in aegis_ui::screen::WINDOW_SIZES.into_iter().filter(|s| area(s) < area("1280x720")) {
+            cx.settings.v["window_size"] = json!(small);
+            cx.settings.keep_window_size(&WINDOW_SIZES);
+            assert_eq!(cx.settings.v["window_size"], json!(WINDOW_SIZES[0]), "{small}");
         }
     }
 
@@ -309,6 +406,62 @@ mod tests {
         let was = cx.settings.v[WALK_STEP_KEY].clone();
         assert!(walk_key(&mut cx, Key::Fn(11)), "the public key takes it");
         assert_eq!(cx.settings.v[WALK_STEP_KEY] != was, cfg!(debug_assertions), "and follows the build");
+    }
+
+    /// TURNFEEL1: F10 walks the four combinations in order and back; a value that is no bool reads as off; each press saves
+    /// and notes what is on, and says when the view makes equal speed do nothing; other keys pass; with the debug gate
+    /// shut it is taken and changes nothing.
+    #[test]
+    fn f10_cycles_the_four_feels_and_saves_them() {
+        let mut cx = game_cx();
+        let before = cx.settings.v.clone();
+        assert!(press_feel(&mut cx, Key::Fn(10), false));
+        assert_eq!(cx.settings.v, before);
+        assert!(!file_of(&cx).exists() && cx.log.is_empty(), "the gate shut: nothing");
+        assert!(!press_feel(&mut cx, Key::Fn(11), true), "not its key");
+        assert_eq!(WalkFeel::read(&cx.settings.v, true), FEEL_CYCLE[0], "both off by default");
+        for i in 1..=FEEL_CYCLE.len() {
+            let want = FEEL_CYCLE[i % FEEL_CYCLE.len()];
+            assert!(press_feel(&mut cx, Key::Fn(10), true));
+            assert_eq!(WalkFeel::read(&cx.settings.v, true), want);
+            assert_eq!((saved(&cx, TURN_BEAT_KEY), saved(&cx, EQUAL_SPEED_KEY)), (json!(want.beat), json!(want.equal)), "the file");
+            assert_eq!(cx.log.last().cloned(), Some(feel_words(want, View::Square, "F10")));
+        }
+        let distinct: std::collections::HashSet<(bool, bool)> = FEEL_CYCLE.iter().map(|f| (f.beat, f.equal)).collect();
+        assert_eq!(distinct.len(), 4, "every combination");
+        cx.settings.v[TURN_BEAT_KEY] = json!("yes");
+        cx.settings.v[EQUAL_SPEED_KEY] = json!(1);
+        assert_eq!(WalkFeel::read(&cx.settings.v, true), FEEL_CYCLE[0], "no bool is off");
+        assert_eq!(feel_words(FEEL_CYCLE[3], View::Tilted, "F10"), "Turn beat 60 ms, equal speed on, corner cut (F10).");
+        assert_eq!(feel_words(FEEL_CYCLE[2], View::Square, "F10"), "Turn beat off, equal speed on (changes nothing on square cells), corner cut (F10).");
+        assert_eq!(feel_words(FEEL_CYCLE[0], View::Tilted, "F10"), "Turn beat off, equal speed off, corner cut (F10).");
+    }
+
+    /// F5 walks the three corners in order and back, leaves the beat and equal speed alone, and F10 leaves the corner
+    /// alone; each saves and notes it; with the debug gate shut it is taken and changes nothing.
+    #[test]
+    fn f5_cycles_the_corner_and_saves_it() {
+        let mut cx = game_cx();
+        let before = cx.settings.v.clone();
+        assert!(press_corner(&mut cx, Key::Fn(5), false));
+        assert_eq!(cx.settings.v, before);
+        assert!(!file_of(&cx).exists() && cx.log.is_empty(), "the gate shut: nothing");
+        assert!(!press_corner(&mut cx, Key::Fn(10), true), "not its key");
+        press_feel(&mut cx, Key::Fn(10), true);
+        let was = WalkFeel::read(&cx.settings.v, true);
+        for want in [TurnCorner::Finish, TurnCorner::Quick, TurnCorner::Cut] {
+            assert!(press_corner(&mut cx, Key::Fn(5), true));
+            let now = WalkFeel::read(&cx.settings.v, true);
+            assert_eq!(now, WalkFeel { corner: want, ..was }, "only the corner moves");
+            assert_eq!(saved(&cx, TURN_CORNER_KEY), json!(want.name()), "the file");
+            assert_eq!(cx.log.last().cloned(), Some(feel_words(now, View::Square, "F5")));
+        }
+        assert_eq!(WalkFeel::read(&crate::screens::default_settings(), true).corner, TurnCorner::Cut, "the default");
+        cx.settings.v[TURN_CORNER_KEY] = json!("quick");
+        press_feel(&mut cx, Key::Fn(10), true);
+        assert_eq!(WalkFeel::read(&cx.settings.v, true).corner, TurnCorner::Quick, "F10 keeps the corner");
+        assert_eq!(feel_words(WalkFeel { beat: false, equal: false, corner: TurnCorner::Quick }, View::Tilted, "F5"), "Turn beat off, equal speed off, corner quick finish 60 ms (F5).");
+        assert_eq!(feel_words(WalkFeel { beat: false, equal: false, corner: TurnCorner::Finish }, View::Tilted, "F5"), "Turn beat off, equal speed off, corner finish the leg (F5).");
     }
 
     /// With the debug gate shut the keys are taken and change, save and show nothing.
@@ -370,6 +523,32 @@ mod tests {
         }
     }
 
+    /// DISPLAY2: the Display tab has the two toggles and its Resolution row greys out only in Fullscreen; a toggle is a
+    /// draft until Apply, which saves it.
+    #[test]
+    fn the_display_tab_greys_resolution_only_in_fullscreen() {
+        use crate::hud::hud_tests::gfx;
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = crate::menus::SettingsScreen::new(&cx);
+        s.draw(&mut cx, &mut g, (-500, -500), true);
+        s.click_id(&mut cx, "settings.tab.display").expect("the tab");
+        let mut enabled = |s: &mut crate::menus::SettingsScreen, cx: &mut Cx| {
+            s.draw(cx, &mut g, (-500, -500), true);
+            s.widgets().iter().find(|w| w["id"] == "settings.window_size").expect("the row")["enabled"].clone()
+        };
+        assert_eq!(enabled(&mut s, &mut cx), json!(true), "Windowed");
+        s.click_id(&mut cx, "settings.borderless").expect("the toggle");
+        assert_eq!(enabled(&mut s, &mut cx), json!(true), "Borderless");
+        s.click_id(&mut cx, "settings.fullscreen").expect("the toggle");
+        assert_eq!(enabled(&mut s, &mut cx), json!(false), "Fullscreen");
+        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Windowed, "only a draft so far");
+        s.click_id(&mut cx, "settings.apply").expect("apply");
+        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Fullscreen);
+        assert_eq!((saved(&cx, "fullscreen"), saved(&cx, "borderless")), (json!(true), json!(true)), "the file");
+        s.click_id(&mut cx, "settings.fullscreen").expect("the toggle");
+        assert_eq!(enabled(&mut s, &mut cx), json!(true), "Borderless again");
+    }
+
     /// The screens that call `window_key` act on F9 and show it in a notice; the agent link knows the names.
     #[test]
     fn f9_reaches_the_wired_screens_and_the_link_has_the_names() {
@@ -389,7 +568,7 @@ mod tests {
             assert_eq!(cx.notice.len(), cfg!(debug_assertions) as usize, "{id}");
             assert!(cx.nav.is_empty(), "{id}: no screen change");
         }
-        for (name, k) in [("f6", Key::Fn(6)), ("f9", Key::Fn(9)), ("f11", Key::Fn(11))] {
+        for (name, k) in [("f5", Key::Fn(5)), ("f6", Key::Fn(6)), ("f9", Key::Fn(9)), ("f10", Key::Fn(10)), ("f11", Key::Fn(11))] {
             assert_eq!(Key::parse(name), Some(k));
             assert_eq!(k.name(), name);
         }

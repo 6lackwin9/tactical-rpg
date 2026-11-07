@@ -16,8 +16,11 @@ const GEAR_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
 const HAND_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
 const SLOT_TYPES: [&str; 2] = ["ARMOR", "ACCESSORY"];
 const HANDS: [&str; 3] = ["main_1h", "main_2h", "off"];
-const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
-const FOCUS_TYPES: [&str; 2] = ["orb", "tome"];
+/// ItemFamilies.OFF_CATEGORIES: the off-hand families the family check allows (U3.2-S2: still a closed list; its
+/// message prints it in this order, and the loader derives an off-hand family's category from its id).
+pub const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
+/// The focus gear types of a pre-family (flat) catalog (`legacy_errors`; with a family table the rule `focus` decides).
+pub const FOCUS_TYPES: [&str; 2] = ["orb", "tome"];
 const ARMOR_SLOTS: [&str; 2] = ["HEAD", "BODY"];
 const ACCESSORY_SLOTS: [&str; 2] = ["ACCESSORY_1", "ACCESSORY_2"];
 const SCALING_STATS: [&str; 3] = ["STR", "DEX", "INT"];
@@ -27,15 +30,18 @@ const BONUS_BAND: &str = "bonus_value";
 /// timeline's reach rule).
 const ENGINE_RULES: [&str; 5] = ["focus", "always_ranged", "shield", "spell_source", "reach"];
 /// ItemFamilies.NUMBER_FIELDS with their flat keys and schema ranges.
-const NUMBERS: [(&str, &str, i64, i64); 5] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("block_cost", "block_cost", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
+const NUMBERS: [(&str, &str, i64, i64); 4] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
 /// ItemModifiers.KINDS: (kind, params, unique param, min, max).
 const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delta"], "field", -100, 100), ("stat_bonus", &["stat", "value"], "stat", 1, 8), ("requirement", &["stat", "value"], "stat", 1, 30), ("effect", &["effect"], "effect", 0, 0)];
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
-const FLAT_MARKERS: [&str; 9] = ["base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
-const ENGINE_KEYS: [&str; 15] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
+const DERIVED_KEYS: [&str; 15] = [
+    "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES,
+    rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3,
+];
+const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
+const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const WHEN_STAT: &str = "stat_at_least";
 const WHEN_PROFICIENCY: &str = "proficiency_at_least";
 const WHEN_LEVEL: &str = "unit_level_at_least";
@@ -62,7 +68,7 @@ fn kind_names() -> String {
 fn number_fields_for(item_type: &str) -> Vec<&'static str> {
     match item_type {
         "WEAPON" => NUMBERS.iter().map(|n| n.0).collect(),
-        "SHIELD" | "ARMOR" | "ACCESSORY" => vec!["block_cost", "burden", "mitigation"],
+        "SHIELD" | "ARMOR" | "ACCESSORY" => vec!["burden", "mitigation"],
         _ => Vec::new(),
     }
 }
@@ -105,7 +111,7 @@ fn hand_key(family: &Dict, hand: &str) -> String {
     }
 }
 
-/// ItemFamilies.base_of: the five base numbers of `hand` (a missing one is the schema minimum).
+/// ItemFamilies.base_of: the four base numbers of `hand` (a missing one is the schema minimum).
 fn base_of(family: &Dict, hand: &str) -> Vec<(&'static str, i64)> {
     let row = json::dget(json::dget(family, "base"), &hand_key(family, hand));
     NUMBERS.iter().map(|(f, _, lo, _)| (*f, row.get(*f).map_or(*lo, |v| json::to_int_or(v, *lo)))).collect()
@@ -742,7 +748,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
 // ---- ItemText ----
 
 /// ItemText.TOKEN_TYPES: token -> the item types it is valid for (None = every type).
-const TEXT_TOKENS: [(&str, Option<&[&str]>); 12] = [
+const TEXT_TOKENS: [(&str, Option<&[&str]>); 11] = [
     ("name", None),
     ("family", None),
     ("power", Some(&["WEAPON"])),
@@ -750,14 +756,13 @@ const TEXT_TOKENS: [(&str, Option<&[&str]>); 12] = [
     ("hand", Some(&["WEAPON", "SHIELD"])),
     ("burden", Some(&EQUIP_TYPES)),
     ("mitigation", Some(&EQUIP_TYPES)),
-    ("block_cost", Some(&EQUIP_TYPES)),
     ("req", Some(&EQUIP_TYPES)),
     ("bon", Some(&EQUIP_TYPES)),
     ("tier.value", Some(&EQUIP_TYPES)),
     ("tier.power", Some(&["WEAPON"])),
 ];
 const STAT_TOKENS: [&str; 2] = ["req", "bon"];
-const NUMBER_TOKENS: [(&str, &str); 5] = [("power", "base_power"), ("range", "base_range"), ("burden", "burden"), ("mitigation", "mitigation"), ("block_cost", "block_cost")];
+const NUMBER_TOKENS: [(&str, &str); 4] = [("power", "base_power"), ("range", "base_range"), ("burden", "burden"), ("mitigation", "mitigation")];
 
 fn token_valid_for(token: &str, t: &str) -> bool {
     TEXT_TOKENS.iter().find(|(k, _)| *k == token).is_some_and(|(_, types)| types.is_none_or(|ts| ts.contains(&t)))
@@ -1040,6 +1045,7 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
             out.extend(reach_rule_problems(f, &t));
         }
     }
+    out.extend(mastery_problems(v, f, &t));
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
     let users: Vec<&Dict> = v.entries("items").iter().filter(|i| json::s(i, "family") == old_id).collect();
     if old_id != id && !users.is_empty() {
@@ -1054,6 +1060,65 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
     }
     if !failing.is_empty() {
         out.push(format!("This family change breaks {} item(s): {}.", failing.len(), failing.join("; ")));
+    }
+    out
+}
+
+/// U3.2-S4: the bounds of a family's Level-2 bonus (`level2_bonus`): crit chance points, burden taken off each item.
+const LEVEL2_CRIT: (f64, f64) = (1.0, 10.0);
+const LEVEL2_BURDEN: (i64, i64) = (1, 3);
+/// U3.2-S4: the item types whose proficiency a unit trains (an accessory, a consumable or a material has no level).
+const TRAINED_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
+
+/// U3.2-S4 (U3 Level 2 and Level 3): `level2_bonus` is `{}` or exactly one of `{"crit": 1-10}` (crit chance points) and
+/// `{"burden": 1-3}` (whole); `level3_passive` is "" or an always-on passive (slot "") whose effects worn gear can apply
+/// (`grants::Grant::gear_ok`: no unlock, foresight, stagger_taken, meter or proficiency); both only on a family whose
+/// level a unit trains (WEAPON, SHIELD, ARMOR).
+fn mastery_problems(v: &View, f: &Dict, t: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let raw = json::get(f, "level2_bonus");
+    let bonus = raw.as_object();
+    let level3 = json::s(f, "level3_passive");
+    let set = bonus.is_some_and(|b| !b.is_empty()) || !level3.is_empty();
+    if set && !TRAINED_TYPES.contains(&t) {
+        out.push(format!("Level 2 and 3 bonuses need a family a unit trains ({}).", TRAINED_TYPES.join(", ")));
+    }
+    match bonus {
+        None if !raw.is_null() => out.push("Level 2 bonus must be an object: {} or {\"crit\": n} or {\"burden\": n}.".into()),
+        Some(b) if b.len() > 1 => out.push("Level 2 bonus is one of crit or burden, not both.".into()),
+        Some(b) => {
+            for (k, x) in b {
+                match k.as_str() {
+                    "crit" if !x.as_f64().is_some_and(|c| (LEVEL2_CRIT.0..=LEVEL2_CRIT.1).contains(&c)) => {
+                        out.push(format!("Level 2 crit must be {}-{}.", LEVEL2_CRIT.0, LEVEL2_CRIT.1));
+                    }
+                    "burden" if !x.as_f64().is_some_and(|c| c.fract() == 0.0 && (LEVEL2_BURDEN.0 as f64..=LEVEL2_BURDEN.1 as f64).contains(&c)) => {
+                        out.push(format!("Level 2 burden must be a whole number {}-{}.", LEVEL2_BURDEN.0, LEVEL2_BURDEN.1));
+                    }
+                    "crit" | "burden" => {}
+                    _ => out.push(format!("Level 2 bonus: unknown key '{k}' (crit or burden).")),
+                }
+            }
+        }
+        None => {}
+    }
+    if !level3.is_empty() {
+        match v.typed.passives.get(&level3) {
+            None => out.push(format!("Level 3 passive: unknown passive '{level3}'.")),
+            Some(p) if !p.slot.is_empty() => out.push(format!("Level 3 passive '{level3}' is slottable ({}); a mastery passive is always on (slot \"\").", p.slot)),
+            Some(p) => {
+                if rpgkit_rules::grants::read(&p.effects).iter().any(|g| !g.gear_ok()) {
+                    out.push(format!("Level 3 passive '{level3}' has an effect worn gear can't apply (unlock, foresight, stagger_taken, meter or proficiency)."));
+                }
+                // applied as the item's, so only what an item may carry (no ap_regen, whose bonus no sync resets)
+                for e in &p.effects {
+                    let t = e.get("type").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    if !super::simple::ITEM_TYPES.contains(&t.as_str()) {
+                        out.push(format!("Level 3 passive '{level3}' has effect '{t}', which an item can't carry ({}).", super::simple::ITEM_TYPES.join(", ")));
+                    }
+                }
+            }
+        }
     }
     out
 }

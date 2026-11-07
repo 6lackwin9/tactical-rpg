@@ -5,7 +5,9 @@ description: Planner checklist for landing a finished, reviewed task (desktop, b
 
 # Task landing (planner, desktop)
 
-Order: review passed -> docs delta -> commit -> `stage.sh` -> confirm STAGED -> cleanup -> flush every 3-4 tasks.
+**Two-session split (since 2026-11-07)**: The Build Session **never** edits `docs/TASKS.md`, `docs/AGENT_MAP.md`, `docs/WORKFLOW.md`, `README.md`, `docs/STRUCTURE.md`, `games/emberwake/docs/GAME_BRIEF.md`, `docs/HISTORY.md`, decisions, or specs directly. Instead, record all status updates and the "docs delta" lines listed by `docs_needed.py` in **`docs/FEEDBACK.md`** (plus crate-local READMEs where appropriate); the Design Session applies them to shared docs.
+
+Order: review passed -> record docs delta in `docs/FEEDBACK.md` -> commit -> `stage.sh` -> confirm STAGED -> cleanup -> flush every 3-4 tasks.
 
 ## 1. Docs the change needs
 

@@ -221,3 +221,19 @@ user says otherwise.
 | CQ16 | Kaelen's signature plants a tower shield, but he wields a two-handed billhook | (a) the Bulwark needs no shield; (b) a one-handed weapon and a shield from the start | a: planner pick, user away |
 | CQ17 | Which boss fights are `loud` (CAMPAIGN1_TASKS 4.2 says the main missions' boss fights) | (a) as written: the prologue untagged, the job and M1-M4 loud, M5 and the interlude not (the Crucible ends the act; the fissure is under the cell's own hub); (b) every main boss fight loud, M5 and the interlude included | a: a loud Crucible win could trip the Act 1 Breach at the climax |
 | CQ18 | Kaelen's two `ally_hit` redirects (Penance 35, the Hook's intercept 100; HOOKS1 8.4 allows one a hit) | (a) a running skill's trigger goes before the unit's passives (the Hook intercepts; Penance covers the hits the Hook does not); (b) as written (passives first: Penance takes the first hit of each round) | a: the chosen Guard should do what it says; a one-line HOOKS1 8.4 amendment (HOOKS1-E) |
+
+### As built: UNITDRILL1 (user chose the kit fix over CQ1 b)
+
+- A unit's gear passes when its class or the drills of a world character on it (any world) train it. A character needs
+  its own drills. A member (`can_wear`) reads its `passives`, set from its character by `hero_from_character`.
+- `wears_untrained` on a unit row (default empty): item ids of its own gear excused from training. Refused when the item
+  is not worn, or the class or a drill trains it. Only `inquisitorial_purifier` needs it: `["warded_apron"]`.
+- A unit whose gear only a drill trains needs its character first, and a character needs its unit first. So the seed
+  upserts the unit without that gear, then the character, then the full unit.
+- The party founders hold their drill in the character's `passives`: a party hero may not carry `disciplines` yet
+  (`party_character_errors`, RECRUIT1), against CAST1_FOUNDERS. `start_party` lists the characters (`kaelen`, ...): a
+  member made from a unit row has no character and no drills, and the manifest check now refuses that.
+- No code removes a passive. A member that did lose a drill keeps its gear. Gear equipped over the default then fails
+  validation ("no training", no save, no build) until it comes off; base gear from the unit row validates and builds,
+  untrained: lower power, and `min_proficiency` skills gated off. A data update between save and load is the one way
+  there, and it can refuse a load (DRILLSAVE1, proposed).

@@ -1,0 +1,148 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "meters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "doom_clock",
+    "name": "The Red Tithing",
+    "description": "Days until the Inquisition's next tithing rite.",
+    "kind": "countdown",
+    "min": 0,
+    "max": 99,
+    "start": 99,
+    "unit": "days",
+    "visible": false,
+    "bands": [
+     {
+      "id": "due",
+      "name": "Due",
+      "from": 0,
+      "tone": "danger"
+     },
+     {
+      "id": "near",
+      "name": "Near",
+      "from": 1,
+      "tone": "warn"
+     },
+     {
+      "id": "far",
+      "name": "Far",
+      "from": 8,
+      "tone": "calm"
+     }
+    ],
+    "rules": [
+     {
+      "id": "d_week",
+      "at": 7,
+      "warn": "PLACEHOLDER: Seven days to the Red Tithing."
+     },
+     {
+      "id": "d_zero",
+      "at": 0,
+      "acts": [
+       1,
+       2
+      ],
+      "effects": [
+       {
+        "effect": "add_flag",
+        "key": "lesser_tithings",
+        "delta": 1
+       }
+      ],
+      "then": [
+       {
+        "vignette": "v_lesser_tithing"
+       }
+      ],
+      "restart_days": 14
+     }
+    ],
+    "hud": {
+     "short": "Tithing",
+     "icon": "ui/hud/doom_clock.png",
+     "order": 1
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "triggers",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "t_act1",
+    "name": "Act 1 begins",
+    "on": "enter",
+    "location": "sluice_undercroft",
+    "when": [
+     {"key": "prologue_done"}
+    ],
+    "once": true,
+    "effects": [
+     {
+      "effect": "set_act",
+      "act": 1
+     },
+     {
+      "effect": "meter_show",
+      "meter": "alert"
+     },
+     {
+      "effect": "clock_start",
+      "meter": "doom_clock",
+      "days": 42
+     }
+    ],
+    "then": [
+     {
+      "vignette": "v_act1_title"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "checkpoints",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cp_cages",
+    "name": "cp_cages",
+    "act": 1,
+    "quest": "PLACEHOLDER_M2_cages",
+    "deadline": 14,
+    "warn_days": [
+     7,
+     3,
+     1
+    ],
+    "mode": "end_run",
+    "card": "bad_end_cages",
+    "text": "PLACEHOLDER: The deadline passed."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "checkpoints",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "cp_crucible",
+    "name": "cp_crucible",
+    "act": 1,
+    "quest": "PLACEHOLDER_M5_crucible",
+    "deadline": 38,
+    "warn_days": [
+     7,
+     3,
+     1
+    ],
+    "mode": "end_run",
+    "card": "bad_end_crucible",
+    "text": "PLACEHOLDER: The deadline passed."
+   }
+  }
+ ]
+}

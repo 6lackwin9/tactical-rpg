@@ -882,7 +882,7 @@ mod tests {
     use aegis_core::assets::Layers;
     use emberwake_battle::grid::TerrainTable;
     use serde_json::json;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     fn zone(id: &str) -> Grid {
         let mut g = Grid::new(false, Vec::new(), TerrainTable { rows: Vec::new() }, 0);
@@ -1024,10 +1024,8 @@ mod tests {
         enc.write_header().unwrap().write_image_data(&vec![128u8; (w * h * 4) as usize]).unwrap();
     }
 
-    fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("emberwake_stage_{tag}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
+    fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::new(&format!("emberwake_stage_{tag}"));
         root
     }
 
@@ -1039,7 +1037,7 @@ mod tests {
         png(&root, "tilesets/common/grass/v0.png", 32, 32);
         png(&root, "tilesets/common/tree/v0.png", 32, 32);
         png(&root, "tilesets/common/wall/v0.png", 32, 32);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert_eq!(tile_art(&mut art, "grass", "", 2, 3), TileArt::Common("tilesets/common/grass/v0.png".into()));
         assert_eq!(tile_art(&mut art, "lava", "", 2, 3), TileArt::Colour, "neither: the colour");
         assert_eq!(face_art(&mut art, "", 2, 3), None, "the face falls back to the darkened cap");
@@ -1053,7 +1051,7 @@ mod tests {
         png(&full, "tilesets/common_stage/grass/v0.png", 128, 96);
         png(&full, "tilesets/common_stage/wall_face/v0.png", 128, 48);
         png(&full, "props/common/tree/v0.png", 40, 52);
-        let mut art = Art::layered(Layers::of(vec![full.clone(), root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![full.to_path_buf(), root.to_path_buf()]));
         assert_eq!(tile_art(&mut art, "grass", "", 2, 3), TileArt::Stage("tilesets/common_stage/grass/v0.png".into()));
         assert_eq!(face_art(&mut art, "", 2, 3), Some("tilesets/common_stage/wall_face/v0.png".into()));
         assert_eq!(prop_art(&mut art, "tree", 2, 3), Some(("props/common/tree/v0.png".into(), (40, 52))));
@@ -1290,11 +1288,11 @@ mod tests {
     fn an_empty_stage_set_draws_todays_frame() {
         let root = scratch("todays");
         todays_layer(&root);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert_eq!(frame_hash(&mut art, &ZONES, ""), TODAYS_FRAME);
         assert_eq!(frame_hash(&mut art, &ZONES, "no_such_set"), TODAYS_FRAME, "a set with no files: common_stage");
         ramp(&root, "tilesets/zz_set/grass/v0.png", 64, 48, [250, 0, 250]);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert_ne!(frame_hash(&mut art, &ZONES, "zz_set"), TODAYS_FRAME);
         assert_eq!(frame_hash(&mut art, &ZONES, ""), TODAYS_FRAME, "the same layer without the set named");
         let _ = std::fs::remove_dir_all(&root);
@@ -1354,7 +1352,7 @@ mod tests {
     fn a_lone_water_cell_takes_pieces_on_its_four_corners() {
         let root = scratch("lone");
         two_colour_set(&root);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let (x, y) = (5, 4);
         let grid = board_of(&[(x, y, "shallow_water")]);
         // Each corner's mask: all bits but the one where the water cell sits.
@@ -1382,10 +1380,10 @@ mod tests {
         let plain = scratch("lone_plain");
         flat_png(&plain, "tilesets/zz_set/floor/v0.png", 64, 48, |_, _| UPPER);
         flat_png(&plain, "tilesets/zz_set/shallow_water/v0.png", 64, 48, |_, _| LOWER);
-        let mut art = Art::layered(Layers::of(vec![plain.clone()]));
+        let mut art = Art::layered(Layers::of(vec![plain.to_path_buf()]));
         assert!(stage_pieces(&mut art, &grid, "zz_set").is_empty(), "no pieces in the set");
         assert_eq!(at_px(&paint(&mut art, &grid, "zz_set", 0, 1, (0, 0)), cell.x + 8, cell.y + 12), LOWER);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert!(stage_pieces(&mut art, &grid, "").is_empty(), "no set, no pieces");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&plain);
@@ -1397,7 +1395,7 @@ mod tests {
     fn a_piece_on_the_edge_stays_on_the_board() {
         let root = scratch("edge");
         two_colour_set(&root);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let grid = board_of(&[(5, 0, "shallow_water")]);
         let piece = |m: u8| transition_piece("zz_set", "floor", "shallow_water", m);
         let found = stage_pieces(&mut art, &grid, "zz_set");
@@ -1422,7 +1420,7 @@ mod tests {
         let root = scratch("third");
         two_colour_set(&root);
         ramp(&root, "props/common/tree/v0.png", 40, 52, [20, 120, 30]);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let corner = |art: &mut Art, g: &Grid, cx: i32, cy: i32| stage_pieces(art, g, "zz_set").into_iter().find(|p| (p.0, p.1) == (cx, cy)).map(|p| p.2);
         let piece = |m: u8| Some(transition_piece("zz_set", "floor", "shallow_water", m));
         let w = (5, 4, "shallow_water");
@@ -1449,7 +1447,7 @@ mod tests {
         flat_png(&root, "tilesets/common_stage/floor/v0.png", 64, 48, |_, _| [9, 9, 9]);
         flat_png(&root, "tilesets/common_stage/grass/v0.png", 64, 48, |x, _| if x % 2 == 0 { [10, 90, 10] } else { [90, 10, 90] });
         flat_png(&root, "tilesets/common_stage/wall_face/v0.png", 64, 24, |_, _| [90, 90, 10]);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert_eq!(tile_art(&mut art, "floor", "zz_set", 2, 3), TileArt::Stage("tilesets/zz_set/floor/v0.png".into()), "the set first");
         assert_eq!(tile_art(&mut art, "floor", "", 2, 3), TileArt::Stage("tilesets/common_stage/floor/v0.png".into()));
         assert_eq!(tile_art(&mut art, "grass", "zz_set", 2, 3), TileArt::Stage("tilesets/common_stage/grass/v0.png".into()), "missing in the set");
@@ -1459,7 +1457,7 @@ mod tests {
         assert_eq!(at_px(&paint(&mut art, &grid, "zz_set", 0, 1, (0, 0)), c.x + 8, c.y + 8), at_px(&paint(&mut art, &grid, "", 0, 1, (0, 0)), c.x + 8, c.y + 8), "the fallback draws as today");
         flat_png(&root, "tilesets/zz_set/wall_face/v0.png", 64, 24, |_, _| [77, 7, 7]);
         flat_png(&root, "tilesets/zz_set/stone/v0.png", 64, 48, |x, _| if x % 2 == 0 { [1, 2, 3] } else { [200, 201, 202] });
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         assert_eq!(face_art(&mut art, "zz_set", 2, 3), Some("tilesets/zz_set/wall_face/v0.png".into()), "the set's own face");
         let walled = board_of(&[(3, 3, "wall")]);
         let g = paint(&mut art, &walled, "zz_set", 0, 1, (0, 0));

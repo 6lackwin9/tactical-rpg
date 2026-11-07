@@ -11,16 +11,20 @@
 //! with the `tactic=` tactic, or by the `timed` driver (timed.rs); `party=both` prints a block (and a FEEL_JSON line) per
 //! driver. `armor=` and `tune=` change the run's in-memory units and ruleset only.
 //!
+//! SIMCOUNT1: `counts=on` adds the rule counts of `RULE_COUNTERS` per side to each block and to FEEL_JSON. It is a key, not
+//! the default, because `sim_golden` holds the default lines. A new count is one row of that table.
+//!
 //! The runner calls the hooks (`start`, `planned`, `round_end`, `end`) while it fights; they only read the session.
 
 use crate::runner::Runner;
 use aegis_core::json;
 use indexmap::IndexMap;
-use rpgkit_battle::command::{Carry, CmdKind};
+use rpgkit_battle::command::{self, Carry, CmdKind, MoveKind};
+use rpgkit_battle::resolver::ScheduledAction;
 use rpgkit_battle::round_intent::{self, RoundIntent};
 use rpgkit_battle::round_intent_plan as rip;
 use rpgkit_battle::session::Session;
-use rpgkit_battle::world::UnitId;
+use rpgkit_battle::world::{UnitId, World};
 use rpgkit_rules::ruleset;
 use serde_json::{json, Map, Value};
 
@@ -28,6 +32,51 @@ use serde_json::{json, Map, Value};
 pub const FEEL_SEEDS: usize = 10;
 /// The prefix of the machine-readable line.
 pub const JSON_PREFIX: &str = "FEEL_JSON ";
+
+/// SIMCOUNT1: reads one count from a scheduled action at the round's end, every action including the cancelled ones.
+pub type RuleCount = fn(&World, &ScheduledAction) -> i64;
+
+/// SIMCOUNT1: the rule counts, by the side of the acting unit: JSON key, human label, how an action counts. ADD A COUNTER
+/// HERE: one row, and the JSON and the human line carry it. Read structured command fields, never log strings.
+pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
+    ("protected_flanks", "protected flanks", |_, a| a.command.missed as i64),
+    ("maneuver_commands", "Maneuver commands", |_, a| is_maneuver(a) as i64),
+    ("dashes", "dashes", |_, a| a.command.dashed as i64),
+    ("diagonal_hits", "diagonal hits", |_, a| a.command.diagonal_hit as i64),
+    ("chases_melee", "melee chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Melee)) as i64),
+    ("chases_ranged", "ranged chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Ranged)) as i64),
+    ("chases_support", "Support chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Support)) as i64),
+    ("items_used", "items used", |_, a| matches!(a.command.kind, CmdKind::Item { used: true, .. }) as i64),
+    ("dodges", "dodges", |_, a| a.command.dodged.is_some() as i64),
+];
+
+/// A command that started as a dash to a position tile (INPUT1 MR1, MR8), whatever came of it: it dashed, stayed on its
+/// tile, could not reach, or found the flank protected.
+fn is_maneuver(a: &ScheduledAction) -> bool {
+    let c = &a.command;
+    c.started && c.position.is_some() && matches!(c.carry, Carry::Engage(_)) && matches!(c.kind, CmdKind::Attack { .. })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChaseKind {
+    Melee,
+    Ranged,
+    Support,
+}
+
+/// What kind of skill chased at its start (INPUT1 MR16). An attack whose band reaches at most 2 is melee, reach weapons
+/// too, as MR10's `round_intent::diagonal` reads it. A dash whose budget took MR16's extra tile counts as a dash.
+fn chase_kind(w: &World, a: &ScheduledAction) -> Option<ChaseKind> {
+    if a.command.moved != Some(MoveKind::Chase) {
+        return None;
+    }
+    match a.command.kind {
+        CmdKind::Support { .. } => Some(ChaseKind::Support),
+        CmdKind::Attack { min_range, max_range, .. } if matches!(command::reach_band(w, a.unit, min_range, max_range), (0..=1, 0..=2)) => Some(ChaseKind::Melee),
+        CmdKind::Attack { .. } => Some(ChaseKind::Ranged),
+        _ => None,
+    }
+}
 
 /// One side's numbers (party or enemy).
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -50,10 +99,15 @@ pub struct Side {
     pub rest_ap: i64,
     /// MV4, MV8: landed commands with a carried move (Engage or Disengage).
     pub carried_moves: i64,
-    /// Blocks of landed Defend commands.
+    /// Blocks a unit started guarded (S2.2-S3, FB-85: under Guard Option 1C a Defend's guard runs from its wind-up start
+    /// to the round's end, so the resolver's `guarded` blocks, not the Defend's own span).
     pub guard_blocks: i64,
     /// OI1: unit-rounds (deck rule) whose intent had no active of that intent.
     pub no_active: i64,
+    /// SIMCOUNT1: `RULE_COUNTERS` by key (a key with no count yet is absent; `rule_count` reads 0).
+    pub rule_counts: IndexMap<&'static str, i64>,
+    /// SIMCOUNT1: the pouch items used, by item id.
+    pub items_by_id: IndexMap<String, i64>,
 }
 
 impl Side {
@@ -71,6 +125,45 @@ impl Side {
         self.carried_moves += o.carried_moves;
         self.guard_blocks += o.guard_blocks;
         self.no_active += o.no_active;
+        for (k, v) in &o.rule_counts {
+            *self.rule_counts.entry(k).or_default() += v;
+        }
+        for (k, v) in &o.items_by_id {
+            *self.items_by_id.entry(k.clone()).or_default() += v;
+        }
+    }
+
+    /// SIMCOUNT1: one `RULE_COUNTERS` count (0 when nothing counted it).
+    pub fn rule_count(&self, key: &str) -> i64 {
+        self.rule_counts.get(key).copied().unwrap_or(0)
+    }
+
+    /// SIMCOUNT1: the protected share of the Maneuver commands, in percent.
+    fn protected_share(&self) -> f64 {
+        round1(pct(self.rule_count("protected_flanks"), self.rule_count("maneuver_commands")))
+    }
+
+    /// SIMCOUNT1: the rule counts as JSON; `fights` and `rounds` (fight rounds, all the fights') are the denominators.
+    fn rule_json(&self, fights: i64, rounds: i64) -> Value {
+        let counts: Map<String, Value> = RULE_COUNTERS.iter().map(|(k, _, _)| (k.to_string(), json!(self.rule_count(k)))).collect();
+        let per_fight: Map<String, Value> = RULE_COUNTERS.iter().map(|(k, _, _)| (k.to_string(), json!(round2(ratio(self.rule_count(k), fights))))).collect();
+        json!({
+            "counts": counts, "per_fight": per_fight, "protected_share_pct": self.protected_share(),
+            "rest_blocks_per_round": round2(ratio(self.rest_blocks, rounds)), "items_by_id": counts_json(&self.items_by_id),
+        })
+    }
+
+    /// SIMCOUNT1: the human line of the rule counts.
+    fn rule_line(&self, name: &str, fights: i64, rounds: i64) -> String {
+        let counts: Vec<String> = RULE_COUNTERS.iter().map(|(k, label, _)| format!("{label} {} ({}/fight)", self.rule_count(k), round2(ratio(self.rule_count(k), fights)))).collect();
+        let items: Vec<String> = self.items_by_id.iter().map(|(k, v)| format!("{k} {v}")).collect();
+        format!(
+            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}",
+            counts.join(", "),
+            self.protected_share(),
+            round2(ratio(self.rest_blocks, rounds)),
+            if items.is_empty() { "-".to_string() } else { items.join(" ") }
+        )
     }
 
     fn to_json(&self) -> Value {
@@ -206,6 +299,28 @@ impl Counts {
             "lost_attacks": self.lost_attacks, "kite_steps": self.kite_steps, "kite_ap": self.kite_ap, "reasons": counts_json(&self.reasons), "timed_rounds": self.timed_rounds,
             "party": self.party.to_json(), "enemy": self.enemy.to_json(),
         })
+    }
+
+    /// SIMCOUNT1: `to_json`, with each side's rule counts under `rule_counts` when `counts=on`.
+    pub fn report_json(&self, rules: bool) -> Value {
+        let mut v = self.to_json();
+        if rules {
+            let rounds: i64 = self.rounds.iter().map(|r| *r as i64).sum();
+            v["party"]["rule_counts"] = self.party.rule_json(self.fights, rounds);
+            v["enemy"]["rule_counts"] = self.enemy.rule_json(self.fights, rounds);
+        }
+        v
+    }
+
+    /// SIMCOUNT1: `lines`, with each side's rule counts when `counts=on`.
+    pub fn report_lines(&self, title: &str, rules: bool) -> Vec<String> {
+        let mut out = self.lines(title);
+        if rules {
+            let rounds: i64 = self.rounds.iter().map(|r| *r as i64).sum();
+            out.push(self.party.rule_line("party", self.fights, rounds));
+            out.push(self.enemy.rule_line("enemy", self.fights, rounds));
+        }
+        out
     }
 
     fn lines(&self, title: &str) -> Vec<String> {
@@ -374,6 +489,23 @@ impl Feel {
     /// The round's blocks are resolved: the landed commands, the stagger records, the Rest blocks, the locks, AP.
     pub fn round_end(&mut self, s: &Session) {
         let w = &s.w;
+        // SIMCOUNT1: every action, the cancelled ones too: a command cancelled in its wind-up has already moved
+        for a in &s.resolver.scheduled {
+            let side = self.side(s, a.unit);
+            for (key, _, count) in RULE_COUNTERS {
+                let n = count(w, a);
+                if n != 0 {
+                    *side.rule_counts.entry(key).or_default() += n;
+                }
+            }
+            if let CmdKind::Item { used: true, item, .. } = &a.command.kind {
+                *side.items_by_id.entry(item.id.clone()).or_default() += 1;
+            }
+        }
+        // S2.2-S3 (FB-85): the guarded blocks as the resolver saw them (Guard Option 1C holds past the Defend's span)
+        for &(c, _) in &s.resolver.guarded {
+            self.side(s, c).guard_blocks += 1;
+        }
         let pierce_on = w.ruleset.has(ruleset::PIERCE);
         let mut firsts: IndexMap<UnitId, i32> = IndexMap::new();
         let mut actions: Vec<_> = s.resolver.scheduled.iter().filter(|a| a.landed).collect();
@@ -383,13 +515,12 @@ impl Feel {
             let skill_like = matches!(cmd.kind, CmdKind::Attack { .. } | CmdKind::Area { .. } | CmdKind::Support { .. } | CmdKind::Focus { .. } | CmdKind::Defend { .. } | CmdKind::Item { .. });
             let follow = skill_like && *firsts.entry(a.unit).and_modify(|n| *n += 1).or_insert(0) > 0;
             let carried = !matches!(cmd.carry, Carry::None);
-            let guard = if matches!(cmd.kind, CmdKind::Defend { .. }) { (a.end - a.start + 1).max(0) as i64 } else { 0 };
             let side = self.side(s, a.unit);
             side.follow_ups += follow as i64;
             side.carried_moves += carried as i64;
-            side.guard_blocks += guard;
             let c = &mut self.counts;
-            c.lost_attacks += cmd.evaded.is_some() as i64;
+            // RULESET1_INTENT GD5 only: an ATTACKLOCK1 dodge raises `evaded` too and has its own row
+            c.lost_attacks += (cmd.evaded.is_some() && cmd.dodged.is_none()) as i64;
             c.hits += cmd.hits.len() as i64;
             c.flank_hits += cmd.hits.iter().filter(|h| h.1).count() as i64;
             if pierce_on && cmd.impact.armor_piercing {
@@ -486,6 +617,7 @@ fn feel_block(r: &mut Runner) {
     let rules = r.fight_ruleset();
     let seeds = r.args.seeds();
     let driver = r.driver.id();
+    let rule_counts = r.args.counts;
     r.print(format!(
         "FEEL: {} rules [{}], {} seeds per encounter, party driver {driver}, tactic {}, preset {}",
         rules.name,
@@ -499,12 +631,12 @@ fn feel_block(r: &mut Runner) {
     let mut per: Map<String, Value> = Map::new();
     for id in r.args.encounters.clone() {
         let counts = fight_encounter(r, &id, &seeds);
-        let lines = counts.lines(&format!("{id} ({})", json::s_or(r.d.entry("encounters", &id), "name", &id)));
+        let lines = counts.report_lines(&format!("{id} ({})", json::s_or(r.d.entry("encounters", &id), "name", &id)), rule_counts);
         r.out.extend(lines);
-        per.insert(id.clone(), counts.to_json());
+        per.insert(id.clone(), counts.report_json(rule_counts));
         total.add(&counts);
     }
-    let lines = total.lines("TOTAL");
+    let lines = total.report_lines("TOTAL", rule_counts);
     r.out.extend(lines);
     let (fails, skips, fights) = (r.plan_fails - fails_before, r.plan_skips - skips_before, r.fights - fights_before);
     r.print(format!("plan checks: {fails} PLAN FAIL, {skips} PLAN SKIP over {fights} fights"));
@@ -512,7 +644,7 @@ fn feel_block(r: &mut Runner) {
     let tune: Map<String, Value> = r.args.tune.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
     let out = json!({
         "ruleset": rules.id, "rules": rules.rules, "seeds": seeds.len(), "driver": driver, "tactic": r.args.tactic, "preset": r.preset,
-        "armor": armor, "tune": tune, "plan_fails": fails, "plan_skips": skips, "encounters": per, "total": total.to_json(),
+        "armor": armor, "tune": tune, "plan_fails": fails, "plan_skips": skips, "encounters": per, "total": total.report_json(rule_counts),
     });
     r.print(format!("{JSON_PREFIX}{out}"));
 }

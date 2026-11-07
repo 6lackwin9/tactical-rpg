@@ -8,6 +8,7 @@ pub mod formula;
 pub mod ghash;
 pub mod json;
 pub mod rng;
+pub mod scratch;
 pub mod sha256;
 pub mod sort;
 pub mod value;

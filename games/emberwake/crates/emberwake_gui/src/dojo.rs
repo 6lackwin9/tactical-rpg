@@ -383,7 +383,7 @@ impl Dojo {
             y += 27;
         }
         let c = self.s.carry_now();
-        ui.p.text(b.x as f32 + 3.0, y as f32 + 2.0, &format!("Carry {:.0} / {}  {}", c.load, c.capacity, c.tier.label()), SMALL, if c.speed_penalty > 0 { th().foe } else { th().text });
+        ui.p.text(b.x as f32 + 3.0, y as f32 + 2.0, &format!("Carry {:.0} / {}  {}", c.load, c.capacity, c.tier.label()), SMALL, if c.overload_penalty > 0 { th().foe } else { th().text });
         let bar = Rect::new(b.x + 3, y + 11, b.w - 6, 4);
         let col = match c.tier {
             emberwake_rules::carry::Tier::Light => th().good,
@@ -392,8 +392,8 @@ impl Dojo {
         };
         hp_bar(ui, bar, (c.ratio.min(1.0) * 100.0) as i32, 100, col);
         let help = format!(
-            "Party carry: capacity {} (base {} + STR x3 + CONS per member); load {:.1} = stash {:.1} + worn {:.1} + pouches {:.1}. Light under 75%, Heavy to 100%, Overloaded above: every member -1 speed per 10 over ({}).",
-            c.capacity, emberwake_rules::carry::BASE_CAPACITY, c.load, c.stash_weight, c.equipped_weight, c.pouch_weight, c.speed_penalty
+            "Party carry: capacity {} (base {} + STR x3 + CONS per member); load {:.1} = stash {:.1} + worn {:.1} + pouches {:.1}. Light under 75%, Heavy to 100%, Overloaded above: every member -1 initiative per 10 over, move rate only past initiative 1 ({}).",
+            c.capacity, emberwake_rules::carry::BASE_CAPACITY, c.load, c.stash_weight, c.equipped_weight, c.pouch_weight, c.overload_penalty
         );
         ui.push("dojo.carry", "row", format!("carry {}", c.tier.label()), Rect::new(b.x + 2, y, b.w - 4, 16), true, false, None, tip("Carry", &help));
     }
@@ -447,7 +447,7 @@ impl Dojo {
             ("Melee power", damage::attack_power(u, false, false).attack_power.to_string()),
             ("Ranged power", damage::attack_power(u, true, false).attack_power.to_string()),
             ("Off-hand power", off),
-            ("Speed", u.speed.to_string()),
+            ("Initiative", u.initiative.to_string()),
             ("Max HP", u.max_hp.to_string()),
             ("Armor", damage::armor_rating(u).to_string()),
             ("Burden", u.worn_burden().to_string()),
@@ -542,9 +542,12 @@ impl Dojo {
         let off = ui.scroll_begin("dojo.stash.rows", view, rows.len() as i32 * 12 + 2);
         for (i, (id, n)) in rows.iter().enumerate() {
             let Some(item) = self.s.cat.items.get(id) else { continue };
-            let usable = item.item_type == "CONSUMABLE" || SLOTS.iter().any(|(k, _)| item_fits_slot(item, k) && self.s.can_equip(item));
+            let usable = item.item_type == "CONSUMABLE" || SLOTS.iter().any(|(k, _)| item_fits_slot(item, k));
             let r = Rect::new(view.x + 1, view.y + 1 - off + i as i32 * 12, view.w - 5, 12);
-            let help = format!("{} Click to wear it in its first free slot (or load the pouch), or drag it.", item_line(item));
+            // U3.2-S3 (FB-34): untrained gear equips; the help names the wield penalty
+            let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&self.s.hero().stats);
+            let untrained = if item.is_equipment() && pen.untrained { format!(" Untrained: x{} power and armour, +{} burden.", pen.untrained_mult, pen.burden_add) } else { String::new() };
+            let help = format!("{}{untrained} Click to wear it in its first free slot (or load the pouch), or drag it.", item_line(item));
             ui.row(&format!("dojo.stash.{id}"), r, &format!("{} x{n}", item.name), if usable { th().text } else { th().dim }, Some(DAct::StashClick(id.clone())), false, tip(&item.name, &help));
             ui.draggable(format!("stash.{id}"));
         }
@@ -563,8 +566,11 @@ impl Dojo {
             // RULESET1 5 (rule poise): the poise bar under the HP bar
             if self.s.poise_on() {
                 let p = if i == 0 { self.s.poise() } else { self.s.dummy_poise };
-                hp_bar(ui, Rect::new(x, b.y + 18, w, 2), p.value, p.max, th().gold);
-                line2 = format!("{}  poise {}/{}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, p.value, p.max, if p.broken { " BROKEN" } else { "" });
+                // S2.2-S3 (FB-71): the bar's own pips under poise_mode pips
+                let n = &self.s.ruleset.numbers;
+                let (now, full, word) = if emberwake_battle::poise::pips_mode(n) { (p.pips, n.poise_pips.max(1), "pips") } else { (p.value, p.max, "poise") };
+                hp_bar(ui, Rect::new(x, b.y + 18, w, 2), now, full, th().gold);
+                line2 = format!("{}  {word} {now}/{full}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, if p.broken { " BROKEN" } else { "" });
                 if i == 1 && self.s.dummy_windup {
                     line2 += "  windup";
                 }
@@ -772,7 +778,11 @@ impl Dojo {
             y += 8;
         }
         if v.rest_blocks > 0 {
-            let poise = if v.rest_poise > 0 { format!(", {} poise", v.rest_poise) } else { String::new() };
+            let mut poise = if v.rest_poise > 0 { format!(", {} poise", v.rest_poise) } else { String::new() };
+            // S2.2-S3: the pips the Rest restores under poise_mode pips
+            if v.rest_pips > 0 {
+                poise += &format!(", {} pip{}", v.rest_pips, if v.rest_pips == 1 { "" } else { "s" });
+            }
             ui.p.text_fit(x0 as f32, y as f32, &format!("Rest: {} AP{poise} ({} block{})", v.rest_ap, v.rest_blocks, if v.rest_blocks == 1 { "" } else { "s" }), SMALL, fit, th().good);
             y += 9;
         }
@@ -809,12 +819,15 @@ impl Dojo {
             }
         };
         let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
+        // AUDIT-05 (OFFHAND1): the worn items' skills, read-only (open while worn, no slot)
+        let worn: Vec<String> = self.s.hero().gear_skills.clone();
+        let worn_lines = if worn.is_empty() { 0 } else { 1 + worn.len() as i32 };
         let orders: Vec<(String, Vec<String>)> = t.intents.iter().map(|i| (i.clone(), t.order(&shown, i))).collect();
         // INPUT1 FL3: the open opener's follow-up list (its header, entries, the skills to add, "Use the order")
         let open = self.follow_open.clone().filter(|op| orders.iter().any(|o| o.1.contains(op)));
         let (follow, adds) = open.as_ref().map(|op| (t.follow_list(&shown, op), t.follow_candidates(&shown, op))).unwrap_or_default();
         let follow_lines = if open.is_some() { 3 + follow.len().max(1) as i32 + adds.len() as i32 } else { 0 };
-        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + follow_lines + 3;
+        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + worn_lines + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + follow_lines + 3;
         let off = ui.scroll_begin("dojo.deck_scroll", b, lines * 9 + 20);
         let mut y = b.y + 2 - off;
         for (kind, label, takes) in DECK_KINDS {
@@ -850,6 +863,15 @@ impl Dojo {
             let n = name_of(kind, id);
             let label = format!("{n} [{}]{}", kind, if slotted { " slotted" } else if full { " full" } else { "" });
             ui.row(&format!("dojo.deck.owned.{kind}.{id}"), Rect::new(x0, y, b.w - 8, 8), &label, if slotted { th().dim } else { th().text }, (!slotted && !full).then(|| DAct::DeckSlot(kind, id.clone())), slotted, tip(&n, "Click to slot it in the first free slot of its bucket."));
+            y += 9;
+        }
+        if !worn.is_empty() {
+            ui.p.text(x0 as f32, y as f32, "Worn gear (no slot)", SMALL, th().info);
+            y += 9;
+        }
+        for id in &worn {
+            let n = name_of("active", cat.family_of(id));
+            ui.row(&format!("dojo.deck.worn.{id}"), Rect::new(x0, y, b.w - 8, 8), &format!("{n} [worn]"), th().gold, None, false, tip(&n, "Open while the item is worn: it takes no slot, and taking the item off removes it."));
             y += 9;
         }
         for (intent, list) in &orders {
@@ -1097,6 +1119,11 @@ impl Screen<GameCx> for Dojo {
                 let (p, d) = (self.s.poise(), self.s.dummy_poise);
                 out["poise"] = json!([p.value, p.max]);
                 out["dummy_poise"] = json!([d.value, d.max, d.broken]);
+                // S2.2-S3: the pips under poise_mode pips
+                if emberwake_battle::poise::pips_mode(&self.s.ruleset.numbers) {
+                    out["pips"] = json!([p.pips, self.s.ruleset.numbers.poise_pips]);
+                    out["dummy_pips"] = json!([d.pips, self.s.ruleset.numbers.poise_pips]);
+                }
                 out["dummy_windup"] = json!(self.s.dummy_windup);
             }
             // the plan as it stands now, the planner window open or not (the window's cache when it is current)
@@ -1112,7 +1139,7 @@ impl Screen<GameCx> for Dojo {
                 let v = &pc.view;
                 out["plan"] = json!({
                     "intent": v.intent, "kind": v.kind, "target": v.target, "refused": v.refused, "ap_before": v.ap_before, "ap_after": v.ap_after,
-                    "rest": [v.rest_ap, v.rest_poise],
+                    "rest": [v.rest_ap, v.rest_poise], "rest_pips": v.rest_pips,
                     "rows": v.rows.iter().map(|r| json!({"skill": r.skill, "start": r.start, "end": r.end, "ap": r.ap, "reason": r.reason, "damage": r.damage, "notes": r.notes})).collect::<Vec<_>>(),
                     "by_intent": pc.by_intent.iter().map(|p| (p.intent.to_lowercase(), json!(plan_line(p)))).collect::<serde_json::Map<String, Value>>(),
                 });
@@ -1162,6 +1189,31 @@ mod tests {
         assert_eq!(dojo.s.deck_of(dojo.s.active).follow_ups.get(&op), Some(&vec![op.clone()]));
         dojo.act(&mut cx, DAct::FollowClear(op.clone()));
         assert!(!dojo.s.hero().deck.follow_ups.contains_key(&op), "Use the order empties it");
+    }
+
+    /// AUDIT-05 (OFFHAND1): the Deck window lists the hero's worn items' skills read-only (no slot action) after the
+    /// owned list. The skill effect is test-only, on this test's own data.
+    #[test]
+    fn the_deck_window_lists_worn_gear_skills_read_only() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
+        rings.sort();
+        let ring = rings[0].clone();
+        let mut dojo = Dojo::new(&cx);
+        pick(&mut cx, &mut dojo, TIMELINE);
+        let owned = dojo.s.hero().owned_families(&dojo.s.cat);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the hero does not own");
+        let mut item = cx.data.cat.items[&ring].clone();
+        item.effects.push(json!({"type": "skill", "skill": skill}));
+        let cat = dojo.s.cat.clone();
+        let a = dojo.s.active;
+        dojo.s.heroes[a].inventory.equip(emberwake_rules::gear::Equipment::new(&item), emberwake_rules::gear::Slot::Accessory1);
+        dojo.s.heroes[a].sync_from_stats_and_gear(&cat);
+        assert!(dojo.s.hero().gear_skill(&skill));
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = dojo.w.iter().find(|w| w.id == format!("dojo.deck.worn.{skill}")).expect("the worn skill's row");
+        assert!(w.action.is_none(), "read-only: no slot");
     }
 
     /// DERIVE1 4.4: the Derived Stats window lists the catalog rows shown on the Dojo after the built-in numbers, each

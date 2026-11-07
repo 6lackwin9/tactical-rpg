@@ -14,7 +14,8 @@
 //! card and the themed ask, standalone pieces on the theme) and the tile masks (`autotile`, LOOK1-E2: corner masks for
 //! transition pieces, a block's open edges) and the ground composer (`ground`, REGIONGROUND1-E1: a cell grid to one
 //! opaque image with generated edges, cached and blitted) and two shots compared with a tolerance (`shot_diff`,
-//! LAYOUT720-E2). `Rect` lives in `aegis_layout` and `canvas` re-exports it. A game
+//! LAYOUT720-E2) and what a native screen does with its space, on any window (`layout_audit`, LAYOUT720-E5, and its
+//! subject `layout_specimen`). `Rect` lives in `aegis_layout` and `canvas` re-exports it. A game
 //! supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
@@ -30,7 +31,10 @@ pub mod fx;
 pub mod ground;
 pub mod icon;
 pub mod jpeg;
+pub mod layout_audit;
+pub mod layout_specimen;
 pub mod notes;
+pub mod pacing;
 pub mod painter;
 pub mod panes;
 pub mod pips;

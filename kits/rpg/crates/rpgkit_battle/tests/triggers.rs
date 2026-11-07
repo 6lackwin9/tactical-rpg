@@ -228,6 +228,27 @@ fn a_lost_attack_raises_evaded() {
     assert_eq!(fired(&res, FOE, "evaded"), 1);
 }
 
+/// ATTACKLOCK1 (decision "Attack lock answers" 2): a dodge raises `evaded` on the unit that dodged; `attack_lock` none
+/// raises nothing for the same move.
+#[test]
+fn a_dodge_raises_evaded() {
+    for (lock, fires) in [(rpgkit_rules::ruleset::AttackLock::Melee, 1), (rpgkit_rules::ruleset::AttackLock::None, 0)] {
+        let s = session(timeline(&[TRIGGERS, ROUND_INTENT]));
+        let mut w = s.w.clone();
+        w.ruleset.numbers.attack_lock = lock;
+        count(&mut w, FOE, "evaded", "round");
+        let mut cmd = Command::new(HERO, 0, 2, CmdKind::Attack { target: Some(FOE), skill_mult: 0.5, use_offhand: false, follow_tiles: 0, dash_tiles: 0, status_rounds: 0, min_range: 0, max_range: 0, last_damage: 0, last_crit: false, last_target: None });
+        cmd.name = "Jab".into();
+        let mut res = Resolver::new(BLOCKS, 1);
+        let a = book(&mut res, HERO, cmd, 1);
+        run(&mut w, &mut res, 1, 1);
+        w.grid.positions[FOE] = Some(V2::new(4, 3));
+        run(&mut w, &mut res, 2, 2);
+        assert_eq!(fired(&res, FOE, "evaded"), fires, "{lock:?}: {:?}", res.log);
+        assert_eq!(res.scheduled[a].command.dodged.is_some(), fires == 1);
+    }
+}
+
 /// 8.1: a heal that landed raises `heal_given`, a cleanse that removed a status `cleanse_given`.
 #[test]
 fn heals_and_cleanses_given() {
@@ -415,8 +436,12 @@ fn ap_grant_and_reveal() {
     assert!(w.units[HERO].has_status("steadfast"), "granted as the Defend starts");
     run(&mut w, &mut res, 1, 2);
     assert!(w.units[HERO].has_status("steadfast"), "while it runs");
+    // S1.2-S4 (Option 1C): the guard holds past the Defend's own blocks to the round's end, and the grant with it
     res.prepare_block(&mut w, 3);
-    assert!(!w.units[HERO].has_status("steadfast"), "gone once it ends");
+    assert!(w.units[HERO].has_status("steadfast"), "the guard holds after the Defend's blocks (1C)");
+    trigger::end_guard(&mut w, HERO);
+    res.prepare_block(&mut w, 4);
+    assert!(!w.units[HERO].has_status("steadfast"), "gone once the guard ends");
 
     let mut w = s.w.clone();
     w.units[FOE].hp = 1;

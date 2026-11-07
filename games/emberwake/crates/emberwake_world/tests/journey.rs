@@ -634,9 +634,7 @@ impl Walker<'_> {
 /// One walk's trace: a start line (the new game's state) and a line per action.
 fn walk(d: &Data, world: &str, seed: i64) -> Vec<String> {
     let gs = new_game::create_for_world(d, world, seed).unwrap_or_else(|e| panic!("{world}: new game refused: {e:?}"));
-    let save_dir = std::env::temp_dir().join(format!("emberwake_journey_{}_{world}_{seed}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&save_dir);
-    std::fs::create_dir_all(&save_dir).unwrap();
+    let save_dir = aegis_core::scratch::Scratch::new(&format!("emberwake_journey_{world}_{seed}"));
     let rng = GodotRng::from_i64(seed * 7919 + i64::from(string_hash(world)));
     let mut w = Walker {
         d,
@@ -651,7 +649,7 @@ fn walk(d: &Data, world: &str, seed: i64) -> Vec<String> {
         dialogue_actions: 0,
         goal: String::new(),
         goal_loc: String::new(),
-        save_dir: save_dir.clone(),
+        save_dir: save_dir.to_path_buf(),
     };
     let mut lines = vec![json::sorted(&json!({"start": w.gs.to_value()})).to_string()];
     let first = act([("op", "begin".into())]);

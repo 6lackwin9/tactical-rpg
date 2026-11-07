@@ -9,7 +9,7 @@ use crate::stats::roundi;
 use crate::unit::Unit;
 use aegis_core::rng::GodotRng;
 use indexmap::IndexMap;
-use rpgkit_data::{Catalog, DerivedStatDef, GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS};
+use rpgkit_data::{Catalog, DerivedStatDef, GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS, TIER_HP_INPUT, TIER_POWER_INPUT};
 use serde_json::Value;
 
 /// The per-save roll stream of resist checks out of battle (`rolls::chance(gs, RESIST_STREAM, chance)`).
@@ -31,6 +31,8 @@ pub enum InputKind {
     Level,
     /// RULESET1 P1: the summed `effective_mitigation` of the unit's worn gear (`Inventory::total_flat_mitigation`).
     Gear,
+    /// U1.2-S4: a factor of the unit's tier (`tier_hp`, `tier_power`; the kit's tier table).
+    Tier,
     /// A key of the row's `constants`.
     Constant,
     /// Another derived row (its final value).
@@ -243,7 +245,7 @@ impl<'a> Eval<'a> {
         Self { cat, unit, weapon: unit.weapon_context(), done: IndexMap::new(), busy: Vec::new() }
     }
 
-    /// A formula name: a base stat, `level`, `gear_mitigation`, a constant of the row, another row (computed whatever
+    /// A formula name: a base stat, `level`, `gear_mitigation`, `tier_hp`, `tier_power`, a constant of the row, another row (computed whatever
     /// its rulesets), or 0.
     fn input(&mut self, d: &DerivedStatDef, name: &str) -> (InputKind, f64) {
         if STATS.contains(&name) {
@@ -254,6 +256,12 @@ impl<'a> Eval<'a> {
         }
         if name == GEAR_MITIGATION_INPUT {
             return (InputKind::Gear, self.unit.inventory.total_flat_mitigation(Some(&self.unit.stats)) as f64);
+        }
+        if name == TIER_HP_INPUT {
+            return (InputKind::Tier, self.unit.tier_hp);
+        }
+        if name == TIER_POWER_INPUT {
+            return (InputKind::Tier, self.unit.tier_power);
         }
         if let Some(c) = d.constants.get(name) {
             return (InputKind::Constant, *c);

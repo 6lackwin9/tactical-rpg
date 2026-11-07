@@ -9,6 +9,7 @@
 //! stances) are row fields with values (`BY_RULES_FIELDS`); empty, each reads as the round intent rule's choice when the
 //! row lists it, else the legacy one.
 
+use crate::status;
 use aegis_core::value::{self, Obj};
 use rpgkit_data::Catalog;
 use std::collections::HashSet;
@@ -54,32 +55,51 @@ pub enum RuleKind {
     Extension,
 }
 
+/// BASERULES1-M (docs/specs/BASERULES1_LIBRARY.md 7): a register entry and its metadata. `requires` names the rules
+/// without which this one is silently inert (the content check refuses a row that lists it alone: an error);
+/// `conflicts` names rules or `field=value` settings it runs with but cuts against (a warning); `bundle` the bundle it
+/// belongs to (`BUNDLES`, "" = none); `system` the system it reads in; `tested` the kit tests that fight it
+/// (`rpgkit_battle/tests/`, "golden" = the timeline golden). Additive: a rule is off when a row does not list it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rule {
     pub id: &'static str,
     pub kind: RuleKind,
+    pub requires: &'static [&'static str],
+    pub conflicts: &'static [&'static str],
+    pub bundle: &'static str,
+    pub system: &'static str,
+    pub tested: &'static [&'static str],
+    /// What it does when on, in a few words (the `aegis rules` report).
+    pub does: &'static str,
 }
 
-/// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order.
+const fn rule_of(id: &'static str, kind: RuleKind, system: &'static str, bundle: &'static str, tested: &'static [&'static str], does: &'static str) -> Rule {
+    Rule { id, kind, requires: &[], conflicts: &[], bundle, system, tested, does }
+}
+
+/// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order, with its metadata (BASERULES1-M).
 pub const REGISTER: [Rule; 18] = [
-    Rule { id: ROUND_INTENT, kind: RuleKind::Option },
-    Rule { id: ENEMY_MOVES, kind: RuleKind::Option },
-    Rule { id: DECK, kind: RuleKind::Option },
-    Rule { id: POISE, kind: RuleKind::Extension },
-    Rule { id: AP_COST, kind: RuleKind::Extension },
-    Rule { id: PIERCE, kind: RuleKind::Extension },
-    Rule { id: REACH, kind: RuleKind::Extension },
-    Rule { id: FLANK, kind: RuleKind::Extension },
-    Rule { id: PLAN_BADGES, kind: RuleKind::Extension },
-    Rule { id: FORCED_MOVE, kind: RuleKind::Extension },
-    Rule { id: GROUND_HAZARDS, kind: RuleKind::Extension },
-    Rule { id: ARENA_HAZARDS, kind: RuleKind::Extension },
-    Rule { id: TRIGGERS, kind: RuleKind::Extension },
-    Rule { id: UNIT_METERS, kind: RuleKind::Extension },
-    Rule { id: HP_COST, kind: RuleKind::Extension },
-    Rule { id: IGNORE_GUARD, kind: RuleKind::Extension },
-    Rule { id: AI_TACTICS, kind: RuleKind::Extension },
-    Rule { id: EXECUTE, kind: RuleKind::Extension },
+    Rule {
+        conflicts: &["stances=on", "switch_target_step=on"],
+        ..rule_of(ROUND_INTENT, RuleKind::Option, "planning", "intent_core", &["round_intent.rs", "golden"], "one intent and target a round, follow-ups, facing, flanks drawn")
+    },
+    rule_of(ENEMY_MOVES, RuleKind::Option, "timing", "windup", &["timeline_timing.rs"], "enemies pay no AP and book recovery blocks"),
+    rule_of(DECK, RuleKind::Option, "build", "build", &["deck.rs"], "open basics, slots, slottable passives"),
+    rule_of(POISE, RuleKind::Extension, "poise", "windup", &["poise.rs", "battle_talk.rs"], "max poise, stagger, breaks, rest poise"),
+    rule_of(AP_COST, RuleKind::Extension, "timing", "windup", &["timeline_timing.rs"], "a skill's ap_cost replaces its level as AP"),
+    rule_of(PIERCE, RuleKind::Extension, "damage", "", &["poise.rs"], "armor_piercing drops the armour term"),
+    rule_of(REACH, RuleKind::Extension, "positioning", "positioning", &["reach.rs"], "melee band 1-2 by the family rule"),
+    Rule { requires: &[ROUND_INTENT], ..rule_of(FLANK, RuleKind::Extension, "positioning", "positioning", &["round_intent.rs"], "flanked exploit, flank power, no riposte") },
+    rule_of(PLAN_BADGES, RuleKind::Extension, "tells", "tells", &["plan_badges.rs"], "impact badges, intents in tells, foresight"),
+    rule_of(FORCED_MOVE, RuleKind::Extension, "hooks", "hooks", &["forced_move.rs"], "push, pull, collision"),
+    rule_of(GROUND_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["ground_hazards.rs"], "skill and item hazards on tiles"),
+    rule_of(ARENA_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["arena_hazards.rs"], "scheduled hazards"),
+    rule_of(TRIGGERS, RuleKind::Extension, "hooks", "hooks", &["triggers.rs", "riders.rs"], "events, riders, held guard, intercept"),
+    rule_of(UNIT_METERS, RuleKind::Extension, "hooks", "hooks", &["meters.rs"], "meters, bands, meter costs"),
+    rule_of(HP_COST, RuleKind::Extension, "hooks", "hooks", &["riders.rs"], "a skill's HP cost"),
+    rule_of(IGNORE_GUARD, RuleKind::Extension, "hooks", "hooks", &["riders.rs", "poise.rs"], "a skill drops guard, keeps cover"),
+    rule_of(AI_TACTICS, RuleKind::Extension, "ai", "hooks", &["tactics.rs"], "target preferences and unit tactics"),
+    rule_of(EXECUTE, RuleKind::Extension, "hooks", "hooks", &["execute.rs"], "the hp_below exploit"),
 ];
 
 /// The register entry of `id`.
@@ -225,6 +245,80 @@ impl Chase {
     }
 }
 
+/// ATTACKLOCK1 (decision "Attack lock at wind-up"): which attacks on a unit commit to their target's tile when their
+/// wind-up starts, after any chase or dash, and miss if it has left that tile at impact: none (the built-in classic
+/// values and a row that sets nothing), melee bands, or every attack on a unit. Area attacks keep their tiles fixed at
+/// planning under every value. Read as the row sets it, whatever the rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AttackLock {
+    #[default]
+    None,
+    Melee,
+    All,
+}
+
+impl AttackLock {
+    /// The `attack_lock` values, in order.
+    pub const IDS: [&'static str; 3] = ["none", "melee", "all"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "none" => Some(AttackLock::None),
+            "melee" => Some(AttackLock::Melee),
+            "all" => Some(AttackLock::All),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            AttackLock::None => "none",
+            AttackLock::Melee => "melee",
+            AttackLock::All => "all",
+        }
+    }
+
+    /// Whether an attack on a unit locks its tile (`melee`: it hits in a melee band).
+    pub fn locks(self, melee: bool) -> bool {
+        match self {
+            AttackLock::None => false,
+            AttackLock::Melee => melee,
+            AttackLock::All => true,
+        }
+    }
+}
+
+/// S2.2-S2 (`docs/sessions/S2_POISE.md` 1 and 4, `poise_mode`; rule `poise`): how a hit's stagger lowers poise. `bar`
+/// (the default, every shipped row): the continuous bar breaks at 0 (RULESET1 P6-P14). `pips`: the bar is
+/// `poise_pips` pips of `T = max(1, roundi(max_poise / poise_pips))` each; a hit of stagger taken `D` removes
+/// `clamp(floor(D / T), 0, max_pip_loss_per_hit)` pips and the unit breaks at 0 pips. Row-only (no schema entry).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PoiseMode {
+    #[default]
+    Bar,
+    Pips,
+}
+
+impl PoiseMode {
+    /// The `poise_mode` values, in order.
+    pub const IDS: [&'static str; 2] = ["bar", "pips"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "bar" => Some(PoiseMode::Bar),
+            "pips" => Some(PoiseMode::Pips),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            PoiseMode::Bar => "bar",
+            PoiseMode::Pips => "pips",
+        }
+    }
+}
+
 /// CLN-45: the values of an on/off ruleset field (`root_stops_chase`, `switch_target_step`, `stances`; beside "" = by
 /// the rules).
 pub const SWITCH_IDS: [&str; 2] = ["on", "off"];
@@ -287,6 +381,9 @@ pub struct DeckSlots {
     pub keystone: i32,
 }
 
+/// VISCLAR1-D: the default of `move_after_blocks`.
+pub const MOVE_AFTER_BLOCKS: i32 = 3;
+
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Numbers {
@@ -311,6 +408,8 @@ pub struct Numbers {
     pub melee_diagonal: MeleeDiagonal,
     /// INPUT1 MR9 (`flank_protected_cost`, `flank_protected_ap`; default `full`).
     pub flank_protected: FlankCost,
+    /// VISCLAR1-D (`move_after_blocks`): the most move blocks of a Move after a skill; a Move as the opener keeps its two.
+    pub move_after_blocks: i32,
     /// CLN-45: when Rest returns its AP (`rest_ap`).
     pub rest_ap: RestAp,
     /// CLN-45: which skills chase (`chase`).
@@ -322,6 +421,40 @@ pub struct Numbers {
     pub switch_target_step: bool,
     /// CLN-45 (RULESET1_INTENT IN3): whether the classic stance machinery runs (`stances`).
     pub stances: bool,
+    /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up (`attack_lock`; default none).
+    pub attack_lock: AttackLock,
+    /// S1.2-S3 (`bleed_pct`, S1 section 3): the fraction of max HP a bleed tick deals.
+    pub bleed_pct: f64,
+    /// S1.2-S3 (`counter_mult`, S1 section 3): riposte's counter damage multiplier.
+    pub counter_mult: f64,
+    /// S1.2-S3 (`debt_stagger`): the AP debt at a round start that staggers.
+    pub debt_stagger: i32,
+    /// S1.2-S3 (`debt_stun`): the AP debt at a round start that stuns.
+    pub debt_stun: i32,
+    /// S2.2-S1 (`poise_pips`, S2 section 3): the pips of a full bar under `poise_mode` pips.
+    pub poise_pips: i32,
+    /// S2.2-S1 (`max_pip_loss_per_hit`, S2 section 3): the most pips one hit removes under `poise_mode` pips.
+    pub max_pip_loss_per_hit: i32,
+    /// S2.2-S2 (`poise_mode`): how a hit lowers poise (default `bar`).
+    pub poise_mode: PoiseMode,
+    /// U1.2-S3b (`know_potency`, U1 "status potency from KNOW", S1 section 2 `attacker_know_potency`): the potency a
+    /// point of the attacker's KNOW adds to a skill's status roll; 0 (the default) is the spec's "potency off".
+    pub know_potency: f64,
+    /// U1.2-S5 (`unit_pools`, U1 "Adding a derived value without a logic change"): the unit meter rows every unit holds
+    /// in this ruleset's battles (rule unit_meters), beside the ones passives give; empty (the default) = none.
+    pub unit_pools: Vec<String>,
+    /// U3.2-S3 (`untrained_power_mult`, U3 "Fixed vs parameter"): the factor on an untrained item's weapon power and
+    /// armour.
+    pub untrained_power_mult: f64,
+    /// U3.2-S3 (`untrained_burden_add`): the burden an untrained item adds.
+    pub untrained_burden_add: i32,
+    /// U3.2-S3 (`req_discount_per_level`): the stat requirement discount per proficiency level.
+    pub req_discount_per_level: i32,
+    /// S1.2-S4 (`guard_common_mitigation`, S1 section 3): the guard fraction of a 1-round Guard skill that authors none.
+    pub guard_common_mitigation: f64,
+    /// S1.2-S4 (`guard_multi_round_mitigation`, S1 section 3): the guard fraction of a multi-round Guard skill
+    /// (`guard_rounds` 2 or more) that authors none, lower than the 1-round one (FB-48).
+    pub guard_multi_round_mitigation: f64,
 }
 
 impl Default for Numbers {
@@ -343,11 +476,27 @@ impl Default for Numbers {
             deck_slots: DeckSlots::default(),
             melee_diagonal: MeleeDiagonal::Maneuver,
             flank_protected: FlankCost::Full,
+            move_after_blocks: MOVE_AFTER_BLOCKS,
             rest_ap: RestAp::OnUse,
             chase: Chase::Classic,
             root_stops_chase: false,
             switch_target_step: true,
             stances: true,
+            attack_lock: AttackLock::None,
+            bleed_pct: status::BLEED_PCT,
+            counter_mult: status::COUNTER_MULT,
+            debt_stagger: status::DEBT_STAGGER,
+            debt_stun: status::DEBT_STUN,
+            poise_pips: 5,
+            max_pip_loss_per_hit: 3,
+            poise_mode: PoiseMode::Bar,
+            know_potency: 0.0,
+            unit_pools: Vec::new(),
+            untrained_power_mult: crate::stats::UNTRAINED_POWER_MULT,
+            untrained_burden_add: crate::stats::UNTRAINED_BURDEN_ADD,
+            req_discount_per_level: crate::stats::REQ_DISCOUNT_PER_LEVEL,
+            guard_common_mitigation: status::GUARD_COMMON_MITIGATION,
+            guard_multi_round_mitigation: status::GUARD_MULTI_ROUND_MITIGATION,
         }
     }
 }
@@ -393,13 +542,34 @@ impl Numbers {
             rest_poise_per_block: value::int(o, "rest_poise_per_block", d.rest_poise_per_block),
             deck_slots: DeckSlots { active: slot("active"), passive: slot("passive"), keystone: slot("keystone") },
             melee_diagonal: MeleeDiagonal::parse(&value::string(o, "melee_diagonal", "")).unwrap_or(raw_diagonal),
+            move_after_blocks: value::int(o, "move_after_blocks", MOVE_AFTER_BLOCKS),
             flank_protected: FlankCost::from_ids(&value::string(o, "flank_protected_cost", ""), value::int(o, "flank_protected_ap", FlankCost::FIXED_AP)),
             rest_ap: RestAp::parse(&value::string(o, "rest_ap", "")).unwrap_or(d.rest_ap),
             chase: Chase::parse(&value::string(o, "chase", "")).unwrap_or(d.chase),
             root_stops_chase: switch("root_stops_chase", d.root_stops_chase),
             switch_target_step: switch("switch_target_step", d.switch_target_step),
             stances: switch("stances", d.stances),
+            attack_lock: AttackLock::parse(&value::string(o, "attack_lock", "")).unwrap_or(d.attack_lock),
+            bleed_pct: value::float(o, "bleed_pct", d.bleed_pct),
+            counter_mult: value::float(o, "counter_mult", d.counter_mult),
+            debt_stagger: value::int(o, "debt_stagger", d.debt_stagger),
+            debt_stun: value::int(o, "debt_stun", d.debt_stun),
+            poise_pips: value::int(o, "poise_pips", d.poise_pips),
+            max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
+            poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
+            know_potency: value::float(o, "know_potency", d.know_potency),
+            unit_pools: value::strings(o, "unit_pools"),
+            untrained_power_mult: value::float(o, "untrained_power_mult", d.untrained_power_mult),
+            untrained_burden_add: value::int(o, "untrained_burden_add", d.untrained_burden_add),
+            req_discount_per_level: value::int(o, "req_discount_per_level", d.req_discount_per_level),
+            guard_common_mitigation: value::float(o, "guard_common_mitigation", d.guard_common_mitigation),
+            guard_multi_round_mitigation: value::float(o, "guard_multi_round_mitigation", d.guard_multi_round_mitigation),
         }
+    }
+
+    /// U3.2-S3: the wield terms units are built under in this ruleset's battles (`UnitBuild::wield`).
+    pub fn wield(&self) -> crate::stats::WieldRule {
+        crate::stats::WieldRule { untrained_power_mult: self.untrained_power_mult, untrained_burden_add: self.untrained_burden_add, req_discount_per_level: self.req_discount_per_level }
     }
 
     /// RULESET1-G2 (`sim feel tune=`): sets one tuning number by its row key (the `stagger_*`, `flank_*`,
@@ -521,6 +691,11 @@ impl Ruleset {
         self.numbers.switch_target_step
     }
 
+    /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up.
+    pub fn attack_lock(&self) -> AttackLock {
+        self.numbers.attack_lock
+    }
+
     pub fn is_classic(&self) -> bool {
         self.id == CLASSIC
     }
@@ -582,4 +757,370 @@ fn note_fallback(id: &str) {
 /// nearest first): the first non-empty `ruleset`, else classic.
 pub fn world_ruleset<'a>(nearest_first: impl IntoIterator<Item = &'a Obj>) -> String {
     nearest_first.into_iter().map(|m| value::string(m, "ruleset", "")).find(|r| !r.is_empty()).unwrap_or_else(|| CLASSIC.to_string())
+}
+
+// BASERULES1-M (docs/specs/BASERULES1_LIBRARY.md 7): the register's metadata beside it. A token names a condition on a
+// ruleset: a rule id (listed), `!<rule>` (not listed), `<field>=<value>` (the field reads as the value, by the rules
+// when empty) or a bare field key (set: it reads other than the schema default).
+
+/// A row field and what it needs to be read: `needs` tokens that must hold when the field is set (else a warning, or
+/// nothing when `refused`: the row checks already refuse it), `untested_with` tokens no test fights it with; `range`
+/// (S1.2-S3) the bounds of a row-only number the schema does not hold (a value outside is an error); `values` (S2.2-S2)
+/// the ids a row-only value field may take (empty: not one; another id is a content check error).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FieldRule {
+    pub key: &'static str,
+    pub needs: &'static [&'static str],
+    pub untested_with: &'static [&'static str],
+    pub refused: bool,
+    pub range: Option<(f64, f64)>,
+    pub values: &'static [&'static str],
+}
+
+const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldRule {
+    FieldRule { key, needs, untested_with: &[], refused: false, range: None, values: &[] }
+}
+
+/// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
+/// rules.
+pub const FIELD_RULES: [FieldRule; 29] = [
+    FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
+    field_rule("flank_protected_cost", &[ROUND_INTENT]),
+    field_rule("flank_protected_ap", &[ROUND_INTENT]),
+    field_rule("move_after_blocks", &[ROUND_INTENT]),
+    field_rule("stagger_windup_mult", &[POISE]),
+    field_rule("stagger_guard_mult", &[POISE]),
+    field_rule("stagger_repeat_mult", &[POISE]),
+    field_rule("flank_stagger_mult", &[POISE, FLANK]),
+    field_rule("flank_power_mult", &[FLANK]),
+    field_rule("break_chance_scale", &[POISE]),
+    field_rule("break_chance_cap", &[POISE]),
+    field_rule("rest_ap_per_block", &["rest_ap=round_end"]),
+    field_rule("rest_ap_cap", &["rest_ap=round_end"]),
+    field_rule("rest_poise_per_block", &[POISE]),
+    FieldRule { untested_with: &["chase=classic"], ..field_rule("attack_lock", &[]) },
+    // S1.2-S3 (S1 section 3; the debt ranges S2 section 3): the status numbers, row-only until a schema entry with a
+    // data re-save (like move_after_blocks); read whatever the rules
+    FieldRule { range: Some((0.01, 0.25)), ..field_rule("bleed_pct", &[]) },
+    FieldRule { range: Some((0.10, 1.50)), ..field_rule("counter_mult", &[]) },
+    FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stagger", &[]) },
+    FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stun", &[]) },
+    // S2.2-S1/S2 (S2 section 3): the poise pip numbers and the bar-or-pips switch, row-only like the status numbers; the
+    // pip numbers are read only under poise_mode pips
+    FieldRule { values: &PoiseMode::IDS, ..field_rule("poise_mode", &[POISE]) },
+    FieldRule { range: Some((3.0, 8.0)), ..field_rule("poise_pips", &[POISE, "poise_mode=pips"]) },
+    FieldRule { range: Some((1.0, 5.0)), ..field_rule("max_pip_loss_per_hit", &[POISE, "poise_mode=pips"]) },
+    // U1.2-S3b (U1 parameter table "potency weight (KNOW)"): row-only like the status numbers; read whatever the rules
+    FieldRule { range: Some((0.0, 3.0)), ..field_rule("know_potency", &[]) },
+    // U1.2-S5: the unit meters every unit holds, row-only like the status numbers; read only under unit_meters
+    field_rule("unit_pools", &[UNIT_METERS]),
+    // U3.2-S3 (U3 "Fixed vs parameter"): the wield terms, row-only like the status numbers; read whatever the rules
+    FieldRule { range: Some((0.25, 1.0)), ..field_rule("untrained_power_mult", &[]) },
+    FieldRule { range: Some((0.0, 4.0)), ..field_rule("untrained_burden_add", &[]) },
+    FieldRule { range: Some((0.0, 4.0)), ..field_rule("req_discount_per_level", &[]) },
+    // S1.2-S4 (S1 section 3): the guard fractions a Guard skill that authors none takes, row-only like the status
+    // numbers; read whatever the rules
+    FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_common_mitigation", &[]) },
+    FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_multi_round_mitigation", &[]) },
+];
+
+/// The metadata of row field `key`, if it has any.
+pub fn field_rule_of(key: &str) -> Option<&'static FieldRule> {
+    FIELD_RULES.iter().find(|f| f.key == key)
+}
+
+/// Must ship together (a bundle breaks if split: a warning) or works well (a suggestion, never a warning).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BundleKind {
+    MustShip,
+    WorksWell,
+}
+
+/// A bundle (library 5): when every `anchor` token holds, a must-ship bundle wants every `holds` token too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bundle {
+    pub id: &'static str,
+    pub kind: BundleKind,
+    pub anchor: &'static [&'static str],
+    pub holds: &'static [&'static str],
+    pub note: &'static str,
+}
+
+/// The bundles of the rules built so far (library 5; the coming options add theirs).
+pub const BUNDLES: [Bundle; 7] = [
+    Bundle {
+        id: "legacy_core",
+        kind: BundleKind::MustShip,
+        anchor: &["!round_intent"],
+        holds: &["stances=on", "chase=classic", "rest_ap=on_use", "switch_target_step=on", "root_stops_chase=off"],
+        note: "the classic row; melee_diagonal reads as set",
+    },
+    Bundle {
+        id: "intent_core",
+        kind: BundleKind::MustShip,
+        anchor: &[ROUND_INTENT],
+        holds: &["rest_ap=round_end", "chase=every_skill", "root_stops_chase=on"],
+        note: "the by-rules choices; stances and the Switch Target step are round_intent's conflicts",
+    },
+    Bundle { id: "build", kind: BundleKind::MustShip, anchor: &[DECK], holds: &["basics", "deck_slots"], note: "the row checks refuse it split" },
+    Bundle { id: "windup", kind: BundleKind::WorksWell, anchor: &[], holds: &[ENEMY_MOVES, AP_COST, POISE, "poise_stat"], note: "" },
+    Bundle { id: "positioning", kind: BundleKind::WorksWell, anchor: &[], holds: &[FLANK, REACH, "melee_diagonal=maneuver", "attack_lock=melee"], note: "flank needs round_intent" },
+    Bundle { id: "tells", kind: BundleKind::WorksWell, anchor: &[], holds: &[PLAN_BADGES, ROUND_INTENT], note: "" },
+    Bundle {
+        id: "hooks",
+        kind: BundleKind::WorksWell,
+        anchor: &[],
+        holds: &[FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS, TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE],
+        note: "each alone",
+    },
+];
+
+/// The bundle `id`.
+pub fn bundle(id: &str) -> Option<&'static Bundle> {
+    BUNDLES.iter().find(|b| b.id == id)
+}
+
+/// The rule sets kit tests fight (library 4, `[poise, flank]` left out: it is read only, and flank is inert there); a
+/// row listing another set is untested together (a warning).
+pub const TESTED_SETS: [&[&str]; 21] = [
+    &[],
+    &[ROUND_INTENT],
+    &[ROUND_INTENT, FLANK],
+    &[ROUND_INTENT, AP_COST],
+    &[ROUND_INTENT, AP_COST, FLANK],
+    &[ROUND_INTENT, DECK],
+    &[ROUND_INTENT, REACH],
+    &[ROUND_INTENT, PLAN_BADGES],
+    &[ROUND_INTENT, POISE, PIERCE],
+    &[ROUND_INTENT, ENEMY_MOVES, AP_COST],
+    &[ROUND_INTENT, AP_COST, POISE, DECK],
+    &[ENEMY_MOVES, AP_COST],
+    &[DECK],
+    &[DECK, POISE],
+    &[POISE],
+    &[REACH],
+    &[UNIT_METERS],
+    &[TRIGGERS],
+    &[AI_TACTICS],
+    &[GROUND_HAZARDS],
+    &[
+        ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS, TRIGGERS,
+        UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
+    ],
+];
+
+/// Whether the rule set `rules` is one the kit tests fight (order does not matter).
+pub fn tested_set(rules: &[&str]) -> bool {
+    TESTED_SETS.iter().any(|t| t.len() == rules.len() && t.iter().all(|r| rules.contains(r)))
+}
+
+/// A numeric `pub const` of `rpgkit_rules/src` that stays code (BASERULES1 4.1): its name, file, system and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Locked {
+    pub name: &'static str,
+    pub file: &'static str,
+    pub system: &'static str,
+    pub why: &'static str,
+}
+
+const fn locked(name: &'static str, file: &'static str, system: &'static str, why: &'static str) -> Locked {
+    Locked { name, file, system, why }
+}
+
+const BUDGET_WHY: &str = "gear budget weight of a soft check (warnings only)";
+const STATS_WHY: &str = "stat and level rule; opens in the stat sessions (U1, U2)";
+const CRIT_WHY: &str = "crit input; becomes a role row (BASERULES1 4)";
+const FORMULA_WHY: &str = "formula value; leaves code as a value (BASERULES1 4)";
+const CARRY_WHY: &str = "the carry formula; one form, no option yet";
+const BOUND_WHY: &str = "a schema field's bound";
+
+/// What stays code, and why (BASERULES1 4.1). A test scans `src` and fails on a numeric `pub const` neither here nor in
+/// `PROMOTED`, so the table cannot go stale.
+pub const LOCKED: [Locked; 48] = [
+    locked("W_POWER", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_MITIGATION", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_STAT_POINT", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_BURDEN", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_SKILL_POTENCY", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_STATUS_POTENCY", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_SPELL_REACH", "budget.rs", "gear", BUDGET_WHY),
+    locked("TARGET_BUDGET", "budget.rs", "gear", BUDGET_WHY),
+    locked("TOLERANCE", "budget.rs", "gear", BUDGET_WHY),
+    locked("UNARMED_VALUE", "budget.rs", "gear", "follows UNARMED_BASE_POWER"),
+    locked("BASE_CAPACITY", "carry.rs", "carry", CARRY_WHY),
+    locked("HEAVY_RATIO", "carry.rs", "carry", CARRY_WHY),
+    locked("OVERLOAD_STEP", "carry.rs", "carry", CARRY_WHY),
+    locked("DEFAULT_UNIT_SCALING", "damage.rs", "damage", "unit power scale of an untrained wielder"),
+    locked("MIN_POWER", "pipeline.rs", "damage", "attack power floor at rounding point one (U1.2-S2, FB-45)"),
+    locked("ARMOR_K", "damage.rs", "damage", FORMULA_WHY),
+    locked("CRIT_BASE", "damage.rs", "damage", CRIT_WHY),
+    locked("CRIT_PER_PERC", "damage.rs", "damage", CRIT_WHY),
+    locked("CRIT_PERC_FLOOR", "damage.rs", "damage", CRIT_WHY),
+    locked("CRIT_MULT", "damage.rs", "damage", FORMULA_WHY),
+    locked("UNARMED_BASE_POWER", "damage.rs", "damage", "unarmed power input; becomes a role row (BASERULES1 4)"),
+    locked("TRAINED_FIST_MIN_LEVEL", "damage.rs", "damage", "the fist proficiency gate"),
+    locked("GUARD_CAP", "damage.rs", "damage", FORMULA_WHY),
+    locked("WIELD_DEFICIT_STEP", "gear.rs", "gear", "the stat-deficit wield ramp, kept as built (U3.2-S3, FB-33)"),
+    locked("WIELD_DEFICIT_CAP", "gear.rs", "gear", "the stat-deficit wield ramp, kept as built (U3.2-S3, FB-33)"),
+    locked("POTENCY_MIN", "derived.rs", "stats", BOUND_WHY),
+    locked("POTENCY_MAX", "derived.rs", "stats", BOUND_WHY),
+    locked("CLASS_BUDGET", "stats.rs", "stats", STATS_WHY),
+    locked("SPEND_BASE", "stats.rs", "stats", STATS_WHY),
+    locked("FREE_PER_LEVEL", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_LEVEL", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_CLASS_SLOTS", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_EXTRA_SLOTS", "stats.rs", "stats", STATS_WHY),
+    locked("TIER_UNLOCK_STEP", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_UNLOCK_REDUCTION", "stats.rs", "stats", STATS_WHY),
+    locked("ADVANCED_UNLOCK_FLOOR", "stats.rs", "stats", STATS_WHY),
+    locked("KNOW_UNLOCK_BASE", "stats.rs", "stats", STATS_WHY),
+    locked("KNOW_UNLOCK_STEP", "stats.rs", "stats", STATS_WHY),
+    locked("HP_PER_CONS", "stats.rs", "stats", STATS_WHY),
+    locked("RANGE_PERC_THRESHOLD", "stats.rs", "stats", STATS_WHY),
+    locked("PROF_MAX_LEVEL", "stats.rs", "stats", STATS_WHY),
+    locked("DEFAULT_SCALING", "stats.rs", "stats", STATS_WHY),
+    locked("PASSIVE_ONLY_SCALING", "stats.rs", "stats", STATS_WHY),
+    locked("BASE_AP", "unit.rs", "timing", "the AP pool every timing rule counts in"),
+    locked("GEAR_REACH_CAP", "unit.rs", "positioning", "the most reach gear adds"),
+    locked("FORESIGHT_RANGE_MAX", "unit.rs", "tells", BOUND_WHY),
+    locked("STAGGER_TAKEN_MULT_MAX", "unit.rs", "poise", BOUND_WHY),
+    locked("REACH_WEAPON_REACH", "unit.rs", "positioning", "the reach rule's band"),
+];
+
+/// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
+pub const PROMOTED: [(&str, &str); 11] = [
+    ("FIXED_AP", "flank_protected_ap"),
+    ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
+    ("BLEED_PCT", "bleed_pct"),
+    ("COUNTER_MULT", "counter_mult"),
+    ("DEBT_STAGGER", "debt_stagger"),
+    ("DEBT_STUN", "debt_stun"),
+    ("UNTRAINED_POWER_MULT", "untrained_power_mult"),
+    ("UNTRAINED_BURDEN_ADD", "untrained_burden_add"),
+    ("REQ_DISCOUNT_PER_LEVEL", "req_discount_per_level"),
+    ("GUARD_COMMON_MITIGATION", "guard_common_mitigation"),
+    ("GUARD_MULTI_ROUND_MITIGATION", "guard_multi_round_mitigation"),
+];
+
+impl Numbers {
+    /// BASERULES1-M: a row field as it reads, in its row form (a number, a value id, `on`/`off`, a comma list; deck
+    /// slots `active/passive/keystone`); None for a key that is not a ruleset field.
+    pub fn field(&self, key: &str) -> Option<String> {
+        let switch = |on: bool| if on { "on" } else { "off" }.to_string();
+        Some(match key {
+            "intents" => self.intents.join(","),
+            "basics" => self.basics.join(","),
+            "poise_stat" => self.poise_stat.clone(),
+            "stagger_windup_mult" => self.stagger_windup_mult.to_string(),
+            "stagger_guard_mult" => self.stagger_guard_mult.to_string(),
+            "stagger_repeat_mult" => self.stagger_repeat_mult.to_string(),
+            "flank_stagger_mult" => self.flank_stagger_mult.to_string(),
+            "flank_power_mult" => self.flank_power_mult.to_string(),
+            "break_chance_scale" => self.break_chance_scale.to_string(),
+            "break_chance_cap" => self.break_chance_cap.to_string(),
+            "rest_ap_per_block" => self.rest_ap_per_block.to_string(),
+            "rest_ap_cap" => self.rest_ap_cap.to_string(),
+            "rest_poise_per_block" => self.rest_poise_per_block.to_string(),
+            "deck_slots" => format!("{}/{}/{}", self.deck_slots.active, self.deck_slots.passive, self.deck_slots.keystone),
+            "melee_diagonal" => self.melee_diagonal.id().to_string(),
+            "flank_protected_cost" => self.flank_protected.id().to_string(),
+            "flank_protected_ap" => match self.flank_protected {
+                FlankCost::Fixed(ap) => ap,
+                _ => FlankCost::FIXED_AP,
+            }
+            .to_string(),
+            "move_after_blocks" => self.move_after_blocks.to_string(),
+            "rest_ap" => self.rest_ap.id().to_string(),
+            "chase" => self.chase.id().to_string(),
+            "root_stops_chase" => switch(self.root_stops_chase),
+            "switch_target_step" => switch(self.switch_target_step),
+            "stances" => switch(self.stances),
+            "attack_lock" => self.attack_lock.id().to_string(),
+            "bleed_pct" => self.bleed_pct.to_string(),
+            "counter_mult" => self.counter_mult.to_string(),
+            "debt_stagger" => self.debt_stagger.to_string(),
+            "debt_stun" => self.debt_stun.to_string(),
+            "poise_pips" => self.poise_pips.to_string(),
+            "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
+            "poise_mode" => self.poise_mode.id().to_string(),
+            "know_potency" => self.know_potency.to_string(),
+            "unit_pools" => self.unit_pools.join(","),
+            "untrained_power_mult" => self.untrained_power_mult.to_string(),
+            "untrained_burden_add" => self.untrained_burden_add.to_string(),
+            "req_discount_per_level" => self.req_discount_per_level.to_string(),
+            "guard_common_mitigation" => self.guard_common_mitigation.to_string(),
+            "guard_multi_round_mitigation" => self.guard_multi_round_mitigation.to_string(),
+            _ => return None,
+        })
+    }
+}
+
+/// BASERULES1-M: what the register's metadata says of a rule set: errors (a rule that would be silently inert; the
+/// content check refuses the row) and warnings (a set field nothing reads, a conflict, a split bundle, an untested set).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuleNotes {
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+impl Ruleset {
+    /// Whether the metadata token `token` holds (see `FIELD_RULES`); an unknown token never holds.
+    pub fn holds(&self, token: &str) -> bool {
+        if let Some(t) = token.strip_prefix('!') {
+            return !self.holds(t);
+        }
+        if let Some((key, v)) = token.split_once('=') {
+            return self.numbers.field(key).is_some_and(|x| x == v);
+        }
+        if rule(token).is_some() {
+            return self.has(token);
+        }
+        match (self.numbers.field(token), Numbers::default().field(token)) {
+            (Some(x), Some(d)) => x != d,
+            _ => false,
+        }
+    }
+
+    /// The register metadata's notes on this ruleset (the content check's, and an `adjust`ed set's for the tools).
+    /// Additive: a rule not listed and a field at its default raise nothing.
+    pub fn notes(&self) -> RuleNotes {
+        let mut n = RuleNotes::default();
+        for r in REGISTER.iter().filter(|r| self.has(r.id)) {
+            for req in r.requires.iter().filter(|t| !self.holds(t)) {
+                n.errors.push(format!("{} needs {req} in Rules: without it the rule does nothing.", r.id));
+            }
+            for c in r.conflicts.iter().filter(|t| self.holds(t)) {
+                n.warnings.push(format!("{} conflicts with {c}: it runs, but the two cut against each other.", r.id));
+            }
+        }
+        for f in FIELD_RULES.iter().filter(|f| self.holds(f.key)) {
+            let unmet: Vec<&str> = f.needs.iter().copied().filter(|t| !self.holds(t)).collect();
+            if !unmet.is_empty() && !f.refused {
+                n.warnings.push(format!("{} is set but read only with {}.", f.key, unmet.join(" and ")));
+            }
+            for u in f.untested_with.iter().filter(|t| self.holds(t)) {
+                n.warnings.push(format!("{} {} is untested with {u}.", f.key, self.numbers.field(f.key).unwrap_or_default()));
+            }
+            // S1.2-S3: a row-only number outside its range
+            if let (Some((lo, hi)), Some(v)) = (f.range, self.numbers.field(f.key).and_then(|v| v.parse::<f64>().ok())) {
+                if v < lo || v > hi {
+                    n.errors.push(format!("{} {v} is outside {lo}..{hi}.", f.key));
+                }
+            }
+        }
+        // S1.2-S3: the AP debt rule tests stun first, so a stagger threshold above the stun one never staggers
+        let (stagger, stun) = (self.numbers.debt_stagger, self.numbers.debt_stun);
+        if stagger > stun {
+            n.errors.push(format!("debt_stagger {stagger} is above debt_stun {stun}: a debt stuns first, so it never staggers."));
+        }
+        for b in BUNDLES.iter().filter(|b| b.kind == BundleKind::MustShip && b.anchor.iter().all(|t| self.holds(t))) {
+            for t in b.holds.iter().filter(|t| !self.holds(t)) {
+                n.warnings.push(format!("Bundle {} ships together: it needs {t}.", b.id));
+            }
+        }
+        if !tested_set(&self.rules) {
+            n.warnings.push(format!("Rules untested together: {} (no kit test fights this set; aegis rules lists the tested sets).", self.rules.join(", ")));
+        }
+        n
+    }
 }

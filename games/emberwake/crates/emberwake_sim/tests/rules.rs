@@ -21,7 +21,7 @@ fn argv(line: &str) -> Vec<String> {
 #[test]
 fn argument_errors_name_the_problem() {
     let d = data();
-    let err = |line: &str| SimArgs::parse(&d, &argv(line)).err().unwrap_or_default();
+    let err = |line: &str| emberwake_sim::parse(&d, &argv(line)).err().unwrap_or_default();
     assert_eq!(err("duel 5 1 bad=1"), "unknown key 'bad'");
     assert_eq!(err("fly"), "unknown mode 'fly'");
     assert_eq!(err("duel 99"), "level must be 1..10 (got '99')");
@@ -31,9 +31,9 @@ fn argument_errors_name_the_problem() {
     assert!(err("party 5 1 comp=warrior,knight").starts_with("comp: unknown class 'knight'"));
     assert!(err("party 5 1 enc=nowhere").starts_with("enc: unknown encounter 'nowhere'"));
     assert!(err("duel 5 1 target=duel:inf-90").starts_with("target must be"), "inf is no number");
-    let a = SimArgs::parse(&d, &argv("party 3")).unwrap();
+    let a = emberwake_sim::parse(&d, &argv("party 3")).unwrap();
     assert_eq!((a.level, a.seed_count, a.metrics), (3, 10, true), "party: 10 seeds and metrics by default");
-    let a = SimArgs::parse(&d, &argv("role quick")).unwrap();
+    let a = emberwake_sim::parse(&d, &argv("role quick")).unwrap();
     assert_eq!((a.distance, a.seed_count), (4, 1), "role: distance 4; quick: one seed");
 }
 
@@ -73,7 +73,7 @@ fn target_bands() {
 fn sweep_compositions() {
     let d = data();
     let count = |line: &str| {
-        let a = SimArgs::parse(&d, &argv(line)).unwrap();
+        let a = emberwake_sim::parse(&d, &argv(line)).unwrap();
         compositions(&Runner::new(&d, &a))
     };
     assert_eq!(count("sweep").len(), 15, "4 of 6 classes");
@@ -84,7 +84,7 @@ fn sweep_compositions() {
     let sample = count("sweep dupes=on sample=7");
     assert_eq!(sample.len(), 7);
     assert_eq!(sample, count("sweep dupes=on sample=7"), "the draw is seeded");
-    assert_eq!(sorted_key(&["mage".into(), "warrior".into(), "priest".into()]), "warrior,priest,mage", "class order");
+    assert_eq!(sorted_key(emberwake_sim::CLASSES.ids, &["mage".into(), "warrior".into(), "priest".into()]), "warrior,priest,mage", "class order");
 }
 
 #[test]

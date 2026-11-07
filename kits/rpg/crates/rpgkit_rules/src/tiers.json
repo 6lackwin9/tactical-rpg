@@ -1,0 +1,7 @@
+[
+  {"id": "hero", "hp": 1.0, "power": 1.0, "skill_cap": 0},
+  {"id": "minion", "hp": 0.4, "power": 0.6, "skill_cap": 2},
+  {"id": "standard", "hp": 0.7, "power": 0.8, "skill_cap": 0},
+  {"id": "elite", "hp": 1.25, "power": 1.0, "skill_cap": 0},
+  {"id": "boss", "hp": 1.5, "power": 1.1, "skill_cap": 0}
+]

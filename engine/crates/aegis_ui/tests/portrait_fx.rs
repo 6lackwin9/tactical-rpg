@@ -4,6 +4,7 @@
 //! state) and the Kit widgets Portraits page. Expectations follow from the spec's rules; images are built here and
 //! files go to scratch folders under the temp dir.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::{Face, Layers};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
@@ -14,7 +15,7 @@ use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIO
 use aegis_ui::text_audit;
 use aegis_ui::ui::{by_id, Gfx, Kit, Ui, Widget, BG};
 use serde_json::json;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const EDGE: Rgba = [250, 0, 250, 255];
 const GREY: Rgba = [100, 100, 100, 255];
@@ -103,9 +104,8 @@ fn fnv1a64(s: &str) -> u64 {
     h
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_portrait_fx_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn scratch(name: &str) -> Scratch {
+    let root = Scratch::vacant(&format!("portrait_fx_{name}"));
     root
 }
 

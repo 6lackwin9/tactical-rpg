@@ -199,7 +199,7 @@ fn breach_in_act_1_ends_the_run_once_and_refuses_saves() {
     let c = gs.campaign.as_ref().unwrap();
     assert!(c.is_over() && c.pending.is_empty(), "the tick stops at the end: no then item queued (F1)");
     assert!(campaign::tick(&d, &mut gs, &Cause::Effects).is_empty(), "nothing runs once the run is over");
-    let dir = std::env::temp_dir().join(format!("rpgkit_campaign_over_{}", std::process::id()));
+    let dir = aegis_core::scratch::Scratch::vacant("rpgkit_campaign_over");
     assert_eq!(save::write(&d, &dir, &gs, 1, 1), vec![RUN_OVER_TEXT.to_string()], "F3");
     assert!(!save::exists(&dir, 1));
     assert!(!gs.to_value()["campaign"].as_object().unwrap().contains_key("over"), "over is never saved");
@@ -321,7 +321,7 @@ fn the_campaign_block_saves_and_loads() {
         c.fired.sort();
         assert!(!c.pending.is_empty());
     }
-    let dir = std::env::temp_dir().join(format!("rpgkit_campaign_save_{}", std::process::id()));
+    let dir = aegis_core::scratch::Scratch::vacant("rpgkit_campaign_save");
     assert!(save::write(&d, &dir, &gs, 1, 1).is_empty());
     let back = save::read(&d, &dir, 1).expect("reads back");
     let _ = std::fs::remove_dir_all(&dir);

@@ -3,11 +3,12 @@
 //! folders (`Art::varied`, `Art::pick`; `Art::tile_in` wraps it). Expectations follow from the sort keys and the
 //! position formula (x x 7 + y x 13) mod n of the spec (PROPS1 3.2, 4.1).
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::art::Art;
 use aegis_ui::canvas::Image;
 use aegis_ui::depth::DepthList;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn write_png(path: &Path, w: u32, h: u32, px: &[u8]) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -23,9 +24,8 @@ fn dot(path: &Path, red: u8) {
     write_png(path, 1, 1, &[red, 0, 0, 255]);
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_draw_pieces_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn scratch(name: &str) -> Scratch {
+    let root = Scratch::vacant(&format!("draw_pieces_{name}"));
     root
 }
 
@@ -70,7 +70,7 @@ fn mirroring_swaps_columns_and_twice_gives_the_original() {
 fn art_mirrors_a_file_and_reads_its_own_size() {
     let root = scratch("mirror");
     write_png(&root.join("props/common/post/v0.png"), 2, 3, &[[9, 0, 0, 255], [0, 0, 0, 0]].repeat(3).concat());
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     assert_eq!(art.size_of("props/common/post/v0.png"), Some((2, 3)));
     assert_eq!(art.size_of("props/common/none/v0.png"), None);
     let plain = art.image("props/common/post/v0.png", 2, 3).unwrap().clone();
@@ -94,7 +94,7 @@ fn a_variant_comes_from_the_first_folder_with_files() {
         dot(&kit.join(format!("props/common/crate/v{v}.png")), v);
         dot(&kit.join(format!("tilesets/common/crate/v{v}.png")), v);
     }
-    let mut art = Art::layered(Layers::of(vec![game.clone(), kit.clone()]));
+    let mut art = Art::layered(Layers::of(vec![game.to_path_buf(), kit.to_path_buf()]));
     let red = |art: &mut Art, dirs: &[&str], v: Option<u32>, x: i32, y: i32| art.varied(dirs, v, x, y, 1, 1).map(|i| i.px[0]);
     let tent = ["props/world_a/tent", "props/common/tent"];
     assert_eq!(red(&mut art, &tent, Some(1), 0, 0), Some(101), "the world's own folder first, its v1");

@@ -9,4 +9,5 @@ rpgkit_rules = { path = "../../../../kits/rpg/crates/rpgkit_rules" }
 [dev-dependencies]
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 emberwake_data = { path = "../emberwake_data" }
+indexmap = { workspace = true }
 serde_json = { workspace = true }

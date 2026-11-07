@@ -1,0 +1,28 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "unit_meters",
+   "entry": {
+    "id": "composure",
+    "name": "Composure",
+    "short": "Comp",
+    "description": "Nerve in a fight: full at the start, 10 lost when a friend within 2 tiles is knocked, 5 back on Rest; below half it weakens. Off in this game: no ruleset lists it in unit_pools.",
+    "min": 0,
+    "max": 100,
+    "start": 0,
+    "show": "bar",
+    "max_stat": "composure",
+    "start_full": true,
+    "bands": [
+     {"id": "shaken", "name": "Shaken", "from": 0, "effects": [], "statuses": []},
+     {"id": "rattled", "name": "Rattled", "from": 1, "effects": [], "statuses": [{"status": "weaken", "magnitude": 10}]},
+     {"id": "steady", "name": "Steady", "from_pct": 50, "effects": [], "statuses": []}
+    ],
+    "triggers": [
+     {"on": "ally_downed", "when": {"range": 2}, "effects": [{"type": "meter", "meter": "composure", "delta": -10}], "limit": "none"}
+    ]
+   }
+  }
+ ]
+}

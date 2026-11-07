@@ -11,13 +11,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_battle_talk_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_battle_talk_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -80,7 +79,7 @@ fn line() -> Value {
 
 #[test]
 fn round_blocks_and_event_triggers_check_in_a_catalog_encounter() {
-    let data = scratch("catalog");
+    let (_scratch, data) = scratch("catalog");
     catalog(&data);
     let v = store::view(&data);
     let clean = Vec::<String>::new();
@@ -169,7 +168,7 @@ fn talk(dialogue: &str, speaker: &str) -> Value {
 
 #[test]
 fn a_world_talk_resolves_its_tree_and_speaker_and_runs_only_flags() {
-    let data = scratch("world");
+    let (_scratch, data) = scratch("world");
     catalog(&data);
     worlds(&data);
     let v = store::view(&data);
@@ -192,7 +191,7 @@ fn a_world_talk_resolves_its_tree_and_speaker_and_runs_only_flags() {
 
 #[test]
 fn a_world_broken_trigger_needs_the_poise_rule() {
-    let data = scratch("broken");
+    let (_scratch, data) = scratch("broken");
     catalog(&data);
     worlds(&data);
     let v = store::view(&data);

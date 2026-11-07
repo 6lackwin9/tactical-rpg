@@ -3,10 +3,11 @@
 //! next one and reduced by a true box to the exact size; below 1x it is today's `downsample`. Expectations follow from
 //! that rule and the fixture's own shape.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const F: i32 = 48;
 const A: [u8; 4] = [200, 40, 40, 255];
@@ -45,9 +46,8 @@ fn write_png(path: &Path, img: &Image) {
 }
 
 /// A scratch asset root holding one body `hero` whose idle frame is `img`.
-fn body_root(name: &str, img: &Image) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_sprite_fit_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn body_root(name: &str, img: &Image) -> Scratch {
+    let root = Scratch::vacant(&format!("sprite_fit_{name}"));
     write_png(&root.join("units/hero/base/sheet.png"), img);
     let clips = format!(r#"{{"frame": [{}, {}], "clips": [{{"id": "idle", "frames": 1, "ms": [100]}}]}}"#, img.w, img.h);
     std::fs::write(root.join("units/hero/base/clips.json"), clips).unwrap();
@@ -157,7 +157,7 @@ fn a_frame_keeps_its_proportions_and_place_in_the_square() {
 #[test]
 fn a_flipped_frame_mirrors_the_unflipped_one_and_its_outline_and_silhouette_line_up() {
     let root = body_root("flip", &frame());
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let col: Rgba = [244, 198, 84, 255];
     for size in [F, 72, 90, 96, 144] {
         let plain = art.body_clip_flipped("hero", "", "idle", 0, size, false).unwrap().clone();
@@ -190,7 +190,7 @@ fn a_flipped_frame_mirrors_the_unflipped_one_and_its_outline_and_silhouette_line
 #[test]
 fn each_size_is_cached_apart_with_its_own_pixels() {
     let root = body_root("cache", &frame());
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let a72 = art.body_clip("hero", "", "idle", 0, 72).unwrap().clone();
     let a90 = art.body_clip("hero", "", "idle", 0, 90).unwrap().clone();
     assert_eq!((a72.w, a90.w), (72, 90));

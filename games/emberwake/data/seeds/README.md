@@ -50,8 +50,10 @@ effect is in the data. Restore one with `git show <hash>:games/emberwake/data/se
 | `props1_ashlands.json` | PROPS1-A1 (`props` on the four Ashlands map templates: 63 props, spec 6.3) | full template entries, as above |
 | `war2h1_gear.json` | WAR2H1 slice 2 (gear behind the looks: world items `<name>_hatchet` and `<name>_buckler` as the `named_items` of Hest and Brask (ashlands) and Orsa (iron_reaches); `goblin_warlord` `main_hand` `wpn_battle_axe` (2H), no off hand) | world item and character entries, the catalog unit |
 | `sprite2.json` | SPRITE2 (art and palette keys: 4 named Horde elites drop their own art folder for the goblin body + own palette, gruk_smokecaller and 5 ash_* grunts get palettes, orsa_tallow gets art warrior/orsa_tallow) | full entries, as above |
+| `u22s2.json` | U2.2-S2 (`training_dummy` gets `class_id` warrior with every slot and the pouch `none`, so it builds as before; a fixed unit with no class is now a content error) | full entries, as above |
 | `ruleset1a2.json` | RULESET1-A2 (tl_spiker SKIRMISHER; Guard active on every tl_ enemy: tl_brace_counter / tl_fade; tl_crushing_judgment power_mult 2.2 to 1.5; encounter tl_flank_elite) | full entries, as above |
 | `ruleset1a3.json` | RULESET1-A3 (tl_crushing_judgment power_mult 1.5 to 1.8; tl_footman, tl_footman_b, tl_crossbowman level 2 with CONS spend for about +20 % HP; tl_footman deck swaps Snap Jab for tl_hook_thrust; encounter tl_skirmish max_rounds 8 to 10; kit_culling gains a goblin_warlord) | full entries, as above |
+| `u32s1.json` | U3.2-S1 (gear `block_cost` retired: the 22 item families and 2 items that set it re-saved without it; no other field moves) | full entries, as above |
 
 ## Godot-era seeds
 

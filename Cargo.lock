@@ -29,7 +29,9 @@ name = "aegis_cli"
 version = "0.1.0"
 dependencies = [
  "aegis_content",
+ "aegis_core",
  "aegis_host",
+ "aegis_save",
  "anyhow",
  "indexmap",
  "serde_json",
@@ -56,6 +58,7 @@ dependencies = [
 name = "aegis_host"
 version = "0.1.0"
 dependencies = [
+ "aegis_core",
  "serde_json",
 ]
 
@@ -86,6 +89,7 @@ dependencies = [
  "png",
  "rodio",
  "serde_json",
+ "windows-sys 0.52.0",
  "winit",
 ]
 
@@ -685,6 +689,7 @@ dependencies = [
  "aegis_content",
  "aegis_core",
  "aegis_host",
+ "aegis_layout",
  "aegis_save",
  "aegis_ui",
  "anyhow",
@@ -725,6 +730,7 @@ version = "0.1.0"
 dependencies = [
  "aegis_core",
  "emberwake_data",
+ "indexmap",
  "rpgkit_rules",
  "serde_json",
 ]

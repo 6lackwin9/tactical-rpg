@@ -23,8 +23,8 @@ fn strs(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
 }
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_ground_{tag}_{}", std::process::id()));
+fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_ground_{tag}"));
     let _ = fs::remove_dir_all(&t);
     fs::create_dir_all(&t).unwrap();
     t
@@ -155,7 +155,7 @@ fn a_right_row_passes_and_each_limit_gives_its_message() {
 
 /// A scratch data folder holding `grounds` rows and `maps`.
 fn data_with(tag: &str, grounds: Value, maps: Value) -> PathBuf {
-    let t = scratch(tag);
+    let t = scratch(tag).until_thread_end();
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
@@ -709,7 +709,7 @@ fn a18_a_marks_file_is_there_and_small() {
     let catalog = json!({GROUNDS_KIND: [{"id": "dust", "name": "Dust", "order": 10, "colour": "#000000", "marks": ["scuff", "rut"]}, row("pool", 5, "water")]});
     png(&root.join("tilesets/common/ground/dust/v0.png"), 256, 256);
     png(&root.join("tilesets/common/ground/pool/v0.png"), 256, 256);
-    let view = || View::new(&catalog, &worlds, &json!({"maps": [with_ground()]}), Layers::of(vec![root.clone()]));
+    let view = || View::new(&catalog, &worlds, &json!({"maps": [with_ground()]}), Layers::of(vec![root.to_path_buf()]));
     assert_eq!(assets::ground_warnings(&view(), "test_world"), ["Ground 'dust' mark 'scuff': no file props/{test_world,common}/scuff/v0.png for world 'test_world'.", "Ground 'dust' mark 'rut': no file props/{test_world,common}/rut/v0.png for world 'test_world'."]);
     png(&root.join("props/common/scuff/v0.png"), 64, 64);
     png(&root.join("props/test_world/rut/v0.png"), 64, 32);

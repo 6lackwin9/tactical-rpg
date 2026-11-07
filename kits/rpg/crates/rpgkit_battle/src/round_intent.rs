@@ -109,6 +109,9 @@ pub struct RoundState {
     /// ENCOUNTER2-C SR3: a scripted entry's own ghost fill this round (Some(true) the planner's fill, Some(false) Rest),
     /// read instead of the Auto-fill setting; None = the setting. Cleared at every round start; in no trace or save.
     pub fill: Option<bool>,
+    /// Decision "Auto-fill keeps a flank": the indexes in `picks` accepted from the ghost (`accept_ghost`): they plan as
+    /// the fill did, so accepting keeps the tile; a pick from the menu still repositions. Cleared with the picks.
+    pub accepted: Vec<usize>,
 }
 
 /// INPUT1 IF4, ET1-ET4 (`round_intent_plan::pick`): one pick of a member's round. A skill (with the Maneuver kind of
@@ -355,6 +358,7 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.rest_blocks = 0;
         // INPUT1 GH6: the picks go with the target, kind and opener; the intent carries over
         rs.picks.clear();
+        rs.accepted.clear();
         rs.fill = None;
     }
     lines
@@ -598,13 +602,18 @@ pub fn hit_band(w: &World, c: UnitId, s: &SkillDef) -> (i32, i32) {
     }
 }
 
+/// Whether a hit band is a melee one: it starts next to the target and ends within a reach weapon's 2 tiles (K1). A
+/// skill with a position has the band (1, 1).
+pub fn melee_band(band: (i32, i32)) -> bool {
+    band.0 <= 1 && band.1 <= 2
+}
+
 /// INPUT1 MR10: whether the band test of `c`'s skill `s` (None: the riposte counter) counts a diagonal neighbour as
 /// distance 1: under `maneuver` a Maneuver attack with a position or a melee band, under `all` every melee attack, every
 /// skill with a position and the counter; never under `none` (classic) nor for a ranged band.
 pub fn diagonal(w: &World, c: UnitId, s: Option<&SkillDef>) -> bool {
     let melee_attack = |s: &SkillDef| {
-        let band = hit_band(w, c, s);
-        skill::kind(s) == Kind::Attack && !skill::is_area(s) && band.0 <= 1 && band.1 <= 2
+        skill::kind(s) == Kind::Attack && !skill::is_area(s) && melee_band(hit_band(w, c, s))
     };
     match w.ruleset.melee_diagonal() {
         MeleeDiagonal::None => false,
@@ -692,6 +701,25 @@ pub fn positions(w: &World, t: UnitId, attacker: UnitId, position: Position, fro
         }
     }
     out
+}
+
+/// Decision "Auto-fill keeps a flank": whether `cell` is a tile beside (k 2) or behind (k 0) `t` from which a positioned
+/// skill hits it (MR4's (1, 1), with diagonal melee `diag` per MR10). An auto-filled follow-up stays there rather than
+/// moving to its own position.
+pub fn keeps_flank(w: &World, t: UnitId, cell: V2, diag: bool) -> bool {
+    if !w.has(t) {
+        return false;
+    }
+    let tp = w.pos(t);
+    let off = cell - tp;
+    if !RING.contains(&off) || band_dist(diag, cell, tp) != 1 {
+        return false;
+    }
+    let mut f = facing(w, t);
+    if f == ZERO {
+        f = sign(off);
+    }
+    matches!(ring_steps(off, V2::new(-f.x, -f.y)), 0 | 2)
 }
 
 /// INPUT1 MR4: the open position tiles of `c`'s skill `s` on `t` that `c` reaches from `from` within `budget` move cost

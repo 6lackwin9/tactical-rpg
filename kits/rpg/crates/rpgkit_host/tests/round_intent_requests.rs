@@ -150,7 +150,12 @@ fn classic_refuses_round_intents() {
 fn new_takes_melee_diagonal_and_replays() {
     let mut h = Host::new(Battle::new(catalog()));
     let r = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline"}));
-    assert_eq!(r["state"]["ruleset"], json!({"id": "timeline", "melee_diagonal": "maneuver"}), "the row's default");
+    assert_eq!(r["state"]["ruleset"], json!({"id": "timeline", "melee_diagonal": "maneuver", "attack_lock": "none"}), "the row's default");
+    // ATTACKLOCK1: `attack_lock` as `melee_diagonal`
+    let r = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "attack_lock": "melee"}));
+    assert_eq!(r["state"]["ruleset"]["attack_lock"], json!("melee"), "{r}");
+    let bad = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "attack_lock": "sideways"}));
+    assert_eq!(bad["error"], json!("attack_lock must be one of none, melee, all (got 'sideways')"));
     let r = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "all"}));
     assert_eq!(r["state"]["ruleset"]["melee_diagonal"], json!("all"), "{r}");
     let bad = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "sideways"}));

@@ -1,0 +1,163 @@
+{
+	"kind": "unit_meters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "bile_phial",
+			"name": "Bile Phial",
+			"short": "Phial",
+			"description": "",
+			"min": 0,
+			"max": 3,
+			"start": 0,
+			"show": "pips",
+			"decay": [],
+			"bands": [],
+			"rules": [],
+			"skills": [
+				"bile_coat"
+			]
+		},
+		{
+			"id": "slag_fury",
+			"name": "Slag Fury",
+			"short": "Fury",
+			"description": "",
+			"min": 0,
+			"max": 5,
+			"start": 0,
+			"show": "pips",
+			"decay": [],
+			"bands": [
+				{
+					"id": "f0",
+					"name": "Cold",
+					"from": 0,
+					"effects": [],
+					"statuses": []
+				},
+				{
+					"id": "f1",
+					"name": "Fury 1",
+					"from": 1,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 5
+						}
+					]
+				},
+				{
+					"id": "f2",
+					"name": "Fury 2",
+					"from": 2,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 10
+						}
+					]
+				},
+				{
+					"id": "f3",
+					"name": "Fury 3",
+					"from": 3,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 15
+						}
+					]
+				},
+				{
+					"id": "f4",
+					"name": "Fury 4",
+					"from": 4,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 20
+						}
+					]
+				},
+				{
+					"id": "f5",
+					"name": "Fury 5",
+					"from": 5,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 25
+						}
+					]
+				}
+			],
+			"rules": [],
+			"skills": []
+		},
+		{
+			"id": "composure",
+			"name": "Composure",
+			"short": "Comp",
+			"description": "Nerve in a fight: full at the start, 10 lost when a friend within 2 tiles is knocked, 5 back on Rest; below half it weakens. Off in this game: no ruleset lists it in unit_pools.",
+			"min": 0,
+			"max": 100,
+			"start": 0,
+			"max_stat": "composure",
+			"start_full": true,
+			"show": "bar",
+			"decay": [],
+			"bands": [
+				{
+					"id": "shaken",
+					"name": "Shaken",
+					"from": 0,
+					"effects": [],
+					"statuses": []
+				},
+				{
+					"id": "rattled",
+					"name": "Rattled",
+					"from": 1,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "weaken",
+							"magnitude": 10
+						}
+					]
+				},
+				{
+					"id": "steady",
+					"name": "Steady",
+					"from_pct": 50,
+					"effects": [],
+					"statuses": []
+				}
+			],
+			"rules": [],
+			"skills": [],
+			"triggers": [
+				{
+					"on": "ally_downed",
+					"when": {
+						"range": 2
+					},
+					"effects": [
+						{
+							"type": "meter",
+							"meter": "composure",
+							"delta": -10
+						}
+					],
+					"limit": "none"
+				}
+			]
+		}
+	]
+}

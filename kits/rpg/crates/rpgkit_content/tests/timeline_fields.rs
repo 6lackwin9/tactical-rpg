@@ -14,13 +14,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_timeline_fields_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_timeline_fields_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -168,7 +167,7 @@ fn the_schema_and_the_checks_name_the_same_fields_kinds_and_options() {
 
 #[test]
 fn the_fields_load_into_the_typed_catalog_and_default_to_nothing() {
-    let data = scratch("load");
+    let (_scratch, data) = scratch("load");
     catalog(&data);
     let src = source::load(&data);
     assert_eq!(catalog_errors(&src), Vec::<String>::new());
@@ -208,7 +207,7 @@ fn errors_of(v: &check::View, kind: &str, id: &str, change: &Value) -> Vec<Strin
 
 #[test]
 fn each_broken_rule_is_one_error_naming_its_field() {
-    let data = scratch("rules");
+    let (_scratch, data) = scratch("rules");
     catalog(&data);
     let v = store::view(&data);
     let cases: Vec<Case> = vec![
@@ -286,7 +285,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
 
 #[test]
 fn channel_is_taken_once_a_ruleset_lists_it() {
-    let data = scratch("channel");
+    let (_scratch, data) = scratch("channel");
     catalog(&data);
     write_kind(
         &data,
@@ -306,7 +305,7 @@ fn channel_is_taken_once_a_ruleset_lists_it() {
 /// unbreakable windup with windup poise warns as before.
 #[test]
 fn the_dash_tiles_transition_reach_min_with_a_position_and_an_unbreakable_windup_with_poise_warn() {
-    let data = scratch("warnings");
+    let (_scratch, data) = scratch("warnings");
     catalog(&data);
     let v = store::view(&data);
     let warnings = |id: &str, change: Value| {
@@ -337,7 +336,7 @@ fn the_dash_tiles_transition_reach_min_with_a_position_and_an_unbreakable_windup
 /// `dash_tiles` with it is one error; a Maneuver attack with a position and `reach_max` is clean.
 #[test]
 fn a_position_needs_a_maneuver_attack_and_no_dash_tiles() {
-    let data = scratch("position");
+    let (_scratch, data) = scratch("position");
     catalog(&data);
     let v = store::view(&data);
     let only = "position: only a Maneuver attack names a position";
@@ -375,7 +374,7 @@ fn range_and_position_tokens_render_the_dash() {
 /// they differ), the loader expands them per rank, the tokens render each rank's numbers, and a re-save is identical.
 #[test]
 fn ranked_timeline_fields_fold_expand_and_render() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     catalog(&data);
     let entry = json!({"id": "cleave", "name": "Cleave", "kind": "ATTACK", "blocks": 3, "round_intent": "assault", "ap_cost": 3, "recovery_blocks": 1, "stagger": 15,
         "windup_poise": 10, "unbreakable": true, "description": "{ap}, {stagger} stagger, then {recovery} ({ap:n}/{stagger:n}/{recovery:n}).",
@@ -409,7 +408,7 @@ fn ranked_timeline_fields_fold_expand_and_render() {
 /// TQ23 (a): a unit's default intent is one a ruleset lists (the fixture row lists the four, this one two).
 #[test]
 fn a_default_intent_no_ruleset_lists_is_refused() {
-    let data = scratch("default_intent");
+    let (_scratch, data) = scratch("default_intent");
     catalog(&data);
     write_kind(&data, ruleset::KIND, 1, json!([{"id": "timeline", "name": "Timeline", "rules": ["round_intent"], "intents": ["assault", "guard"]}]));
     let v = store::view(&data);
@@ -435,7 +434,7 @@ fn an_intent_bound_buff_is_no_start_buff() {
 /// byte-identical; a set list is stored in its written order and reads back into the typed deck.
 #[test]
 fn the_writer_keeps_only_set_follow_up_lists() {
-    let data = scratch("follow_ups");
+    let (_scratch, data) = scratch("follow_ups");
     catalog(&data);
     let file = data.join("catalog").join("units.json");
     let up = |deck: Value| {

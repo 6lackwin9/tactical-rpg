@@ -10,7 +10,7 @@ use crate::playtest::TAGS;
 use crate::screen::{Cx, Nav, Screen};
 use crate::ui::{clipboard, tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use crate::widget_plumbing;
-use aegis_host::playtest::{self, Recording, Session};
+use aegis_host::playtest::{self, Recording, Session, Unreadable};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -42,7 +42,7 @@ struct Item {
     path: PathBuf,
     /// From a repo folder (shared), not the user folder.
     repo: bool,
-    rec: Result<Recording, String>,
+    rec: Result<Recording, Unreadable>,
 }
 
 pub struct Recordings<G> {
@@ -228,7 +228,7 @@ impl<G> Screen<G> for Recordings<G> {
         let (x, mut y) = (right.x + 6, right.y + 4);
         match self.items.get(self.pick).map(|i| (&i.rec, i.repo)) {
             None => {}
-            Some((Err(e), _)) => ui.p.text_fit(x as f32, y as f32, e, BODY, (right.w - 12) as f32, t.foe),
+            Some((Err(e), _)) => ui.p.text_fit(x as f32, y as f32, &e.reason, BODY, (right.w - 12) as f32, t.foe),
             Some((Ok(rec), repo)) => {
                 let stale = cx.playtest.stale(rec);
                 ui.p.text(x as f32, y as f32, &rec.id, BODY, t.info);
@@ -306,7 +306,8 @@ impl<G> Screen<G> for Recordings<G> {
 
     fn state(&self, cx: &Cx<G>) -> Value {
         json!({"on": cx.playtest.on, "recordings": self.items.iter().map(|i| i.path.file_stem().map(|s| s.to_string_lossy().to_string())).collect::<Vec<_>>(),
-            "pick": self.pick, "battle": self.battle, "round": self.round, "message": self.message})
+            "pick": self.pick, "battle": self.battle, "round": self.round, "message": self.message,
+            "error": self.items.get(self.pick).and_then(|i| i.rec.as_ref().err()).map(|e| e.detail.as_str())})
     }
 
     widget_plumbing!(Cx<G>);

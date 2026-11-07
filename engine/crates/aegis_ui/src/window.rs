@@ -252,6 +252,7 @@ impl Desk {
     /// which `body(ui, id, rect)` fills, clipped to it. Under a window the mouse counts as elsewhere, so covered
     /// widgets show no hover.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, mut body: impl FnMut(&mut Ui<A>, &str, Rect)) {
+        debug_assert_eq!(self.g, ui.m().g, "a desk on another grid than its screen: Desk::on_grid");
         let mouse = ui.mouse;
         let top = self.top_at(mouse).map(String::from);
         let front = self.wins.iter().rev().find(|w| w.open).map(|w| w.id.clone());
@@ -307,6 +308,7 @@ impl Desk {
 
     /// The toolbar at (x, y): a toggle per window (gold while open) and a button per layout; returns the right edge.
     pub fn toolbar<A: Clone>(&self, ui: &mut Ui<A>, x: i32, y: i32) -> i32 {
+        debug_assert_eq!(self.g, ui.m().g, "a desk on another grid than its screen: Desk::on_grid");
         let mut x = x;
         for id in &self.order {
             let Some(w) = self.win(id) else { continue };

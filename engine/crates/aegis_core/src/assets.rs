@@ -1109,9 +1109,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn tree(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("aegis_assets_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+    fn tree(name: &str) -> crate::scratch::Scratch {
+        let root = crate::scratch::Scratch::vacant(&format!("assets_{name}"));
         root
     }
 

@@ -6,7 +6,6 @@
 use rpgkit_world::state::{explore_errors, PartyState, UnitState, LEADER_KEY};
 use rpgkit_world::{save, Data, GameState};
 use serde_json::{json, Value};
-use std::path::PathBuf;
 
 fn data() -> Data {
     let catalog = json!({
@@ -41,19 +40,11 @@ fn ids(gs: &GameState) -> Vec<String> {
     gs.party.active_members().iter().map(|m| m.id.clone()).collect()
 }
 
-struct Scratch(PathBuf);
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+use aegis_core::scratch::Scratch;
 
 fn scratch(tag: &str) -> Scratch {
-    let dir = std::env::temp_dir().join(format!("rpgkit_explore_leader_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    Scratch(dir)
+    let dir = Scratch::new(&format!("rpgkit_explore_leader_{tag}"));
+    dir
 }
 
 #[test]
@@ -107,8 +98,8 @@ fn the_lead_survives_a_save_and_a_load() {
     assert_eq!(gs.explore[LEADER_KEY], json!(to));
     assert!(explore_errors(&gs.explore).is_empty(), "{:?}", explore_errors(&gs.explore));
     let dir = scratch("trip");
-    assert!(save::write(&d, &dir.0, &gs, 1, 5).is_empty());
-    let back = save::read(&d, &dir.0, 1).expect("reads back");
+    assert!(save::write(&d, dir.path(), &gs, 1, 5).is_empty());
+    let back = save::read(&d, dir.path(), 1).expect("reads back");
     assert!(back.warnings.is_empty(), "{:?}", back.warnings);
     assert_eq!(back.state, gs);
     assert_eq!(back.state.explore_leader(all).map(|m| m.id.clone()), Some(to));

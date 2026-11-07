@@ -51,7 +51,8 @@ fn data() -> Data {
     // a party character's base unit is class-derived (the world's new game checks it)
     let hero = json!({"id": "t_hero", "name": "t_hero", "side": "party", "class_id": "drill", "level": 1});
     let class = json!({"id": "drill", "name": "Drill", "base_stats": {"STR": 8, "DEX": 10, "INT": 6, "CONS": 30, "PERC": 10, "KNOW": 10}});
-    let catalog = json!({"skills": skills, "classes": [class], "units": [hero, unit("t_foe", "enemy")]});
+    let ruleset = json!({"id": "timeline", "name": "Timeline", "rules": ["round_intent", "ap_cost"], "basics": ["move", "rest", "strike", "guard"]});
+    let catalog = json!({"skills": skills, "classes": [class], "units": [hero, unit("t_foe", "enemy")], "rulesets": [ruleset]});
     let encounter = |id: &str, phases: Value| {
         json!({"id": id, "name": id, "rows": vec![".".repeat(12); 9], "party": ["ash"], "enemies": ["grunt"], "total_blocks": 6, "unit_ap": 10, "max_rounds": 3, "phases": phases})
     };
@@ -73,7 +74,9 @@ fn data() -> Data {
         "locations": with_ids(json!([{"id": "hub", "name": "Hub"}])),
         "characters": with_ids(json!([{"id": "ash", "name": "Ash", "role": "party", "base_unit": "t_hero"}, {"id": "grunt", "name": "Grunt", "role": "enemy", "base_unit": "t_foe"}])),
         "dialogues": with_ids(dialogues),
-        "encounters": with_ids(json!([encounter("t_talk", phases), encounter("t_plain", json!([]))]))
+        "encounters": with_ids(json!([encounter("t_talk", phases), encounter("t_plain", json!([])), encounter("t_round2", json!([
+            {"id": "second", "name": "Second", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "talk", "dialogue": "dlg_mid", "once": true}]}
+        ]))]))
     }}});
     Data::from_values(&catalog, &worlds, &json!({}))
 }
@@ -278,4 +281,43 @@ fn the_battle_talk_box_reads_clean_at_every_text_size() {
     // the replies run in the scratch state: add_flag counts up
     b.run(&mut cx, Action::Talk(TalkAct::Choose(1)));
     assert_eq!(b.talk_gs.as_ref().map(|gs| json::i(&gs.flags, "fallback", 0)), Some(1));
+}
+
+/// VISCLAR1-D: the next round by itself still waits for a talk that opens at its start: the talk comes first, the banner and
+/// the ghosts' draft follow it, and the plan waits for the player after that.
+#[test]
+fn a_round_start_talk_goes_before_the_next_rounds_plan() {
+    let mut cx = talk_cx();
+    let mut b = BattleScreen::arena_with(&cx, Some(WORLD.into()), "t_round2", Some("timeline".into()), "", false);
+    assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+    let mut g = gfx();
+    b.tick(&mut cx);
+    b.act(&mut cx, Action::Confirm);
+    for _ in 0..300 {
+        if b.session().phase == emberwake_battle::session::Phase::Replay {
+            break;
+        }
+        tick_ready(&mut b, &mut cx);
+    }
+    assert!(b.pending_next_round, "due after the pause");
+    tick_ready(&mut b, &mut cx);
+    assert_eq!(b.session().current_round, 2);
+    assert!(b.talk_due(), "the round's talk waits to open");
+    assert_ne!(b.ghosted, 2, "no draft under the talk");
+    tick_ready(&mut b, &mut cx);
+    assert!(b.talk.is_some(), "the talk opened");
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert_ne!(b.banner.map(|x| x.0), Some(2), "the banner follows the talk");
+    b.run(&mut cx, Action::Talk(TalkAct::Advance));
+    assert!(b.talk.is_none(), "one line, closed");
+    tick_ready(&mut b, &mut cx);
+    assert_eq!(b.ghosted, 2, "the draft follows the talk");
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert_eq!(b.banner.map(|x| x.0), Some(2));
+    let confirms = b.host.history.iter().filter(|r| r["cmd"] == json!("confirm")).count();
+    for _ in 0..20 {
+        tick_ready(&mut b, &mut cx);
+    }
+    assert!(b.planning(), "the plan waits for the player");
+    assert_eq!(b.host.history.iter().filter(|r| r["cmd"] == json!("confirm")).count(), confirms);
 }

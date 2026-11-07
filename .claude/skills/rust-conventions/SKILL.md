@@ -52,4 +52,4 @@ A rule lives in exactly one place; the GUI, the CLI and the tests call it (the G
 
 - Integration tests live in `crates/<crate>/tests/*.rs`; the golden tests compare the engine with its own recorded fixtures (`tests/fixtures/*_golden.json`); `legacy/` is never read.
 - New behaviour gets a test whose expectation comes from a rule or from a printed golden, never a number nobody printed.
-- A test that changes data works on a scratch copy (`std::env::temp_dir()`), never on the shipped `games/emberwake/data/` (see `tests/store.rs`).
+- A test that changes data works on a scratch copy through `aegis_core::scratch::Scratch` (`new`, `vacant`, `until_thread_end`), never raw `std::env::temp_dir().join(...)` and never on the shipped `games/emberwake/data/`; a helper returning a derived path must return the `Scratch` guard or use `until_thread_end` (TESTCLEAN1).

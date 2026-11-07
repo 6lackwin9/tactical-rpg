@@ -7,7 +7,7 @@
 //! screen. Crit rolls are seeded, so benchmarks repeat.
 
 use crate::grid::V2;
-use crate::poise::{self, Factors, Impact, PoiseState};
+use crate::poise::{self, BreakCause, Factors, Impact, PoiseState, Verdict};
 use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent};
 use crate::round_intent_plan as rip;
 use crate::session::{EncounterDef, Prebuilt, Session};
@@ -15,10 +15,10 @@ use crate::skill;
 use crate::world::{AiProfile, UnitId};
 use aegis_core::rng::GodotRng;
 use rpgkit_data::{Catalog, Deck, ItemDef, SkillDef, UnitDef, STATS};
-use rpgkit_rules::build_unit_in;
+use rpgkit_rules::{build_from, UnitBuild};
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
-use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
+use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for, Equipment, Slot};
 use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::stats::Proficiency;
 use rpgkit_rules::status;
@@ -207,6 +207,8 @@ pub struct PlanView {
     /// RS2, RS3: the AP and poise the Rest blocks would give.
     pub rest_ap: i32,
     pub rest_poise: i32,
+    /// S2.2-S3 (FB-71): the pips the Rest blocks would restore under `poise_mode` pips (0 under `bar`).
+    pub rest_pips: i32,
 }
 
 pub struct DojoSession {
@@ -257,9 +259,11 @@ impl DojoSession {
         let mut heroes = Vec::new();
         let mut classes = Vec::new();
         let mut hero_ids = Vec::new();
+        // CLN-44: the Dojo starts on the catalog's classic row; AUDIT-03: its heroes are built under its wield terms
+        let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
         for id in HEROES {
             let Some(def) = cat.units.get(id) else { continue };
-            let mut u = build_unit_in(&cat, def, 0, None);
+            let mut u = build_from(&cat, UnitBuild::row(def, 0, None).with_wield(ruleset.numbers.wield())).unit;
             u.max_ap = HERO_AP;
             u.ap = HERO_AP;
             heroes.push(u);
@@ -267,7 +271,7 @@ impl DojoSession {
             hero_ids.push(id.to_string());
         }
         let n = heroes.len();
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_unit_in(&cat, d, 0, None)).unwrap_or_else(|| build_unit_in(&cat, &UnitDef::from_obj(&Default::default()), 0, None));
+        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None)).unit);
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;
@@ -275,8 +279,6 @@ impl DojoSession {
         stash.sort();
         let weight = Self::weight_of(&cat, &stash);
         let carry = carry::apply(&cat, &mut heroes, weight);
-        // CLN-44: the Dojo starts on the catalog's classic row
-        let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
         Self {
             cat,
             heroes,
@@ -405,10 +407,10 @@ impl DojoSession {
         let hero_def = self.hero_def(self.active).unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
         let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [DUMMY], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
         let def = EncounterDef::from_obj_with(row.as_object().expect("an object"), self.ruleset.clone());
-        let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into() };
+        let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into(), default_intent: d.default_intent.clone() };
         let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
         if setup.partner.is_some() {
-            let mut partner = build_unit_in(&self.cat, dummy_def, 0, self.deck_rule().as_ref());
+            let mut partner = build_from(&self.cat, UnitBuild::row(dummy_def, 0, self.deck_rule().as_ref()).with_wield(self.ruleset.numbers.wield())).unit;
             partner.name = format!("{} 2", self.dummy.name);
             party.push(prebuilt(partner, dummy_def, "partner"));
         }
@@ -505,7 +507,7 @@ impl DojoSession {
             v.rows.push(PlanRow { skill: sk.id.clone(), name: sk.name.clone(), start: e.start_block, end: e.end_block(w), ap: e.total_ap(), reason, cell: e.pos_after, damage: e.est_damage, notes });
         }
         let rest = rip::rest_preview(w, &s.plan, c);
-        (v.rest_blocks, v.rest_ap, v.rest_poise) = (rest.blocks, rest.ap, rest.poise);
+        (v.rest_blocks, v.rest_ap, v.rest_poise, v.rest_pips) = (rest.blocks, rest.ap, rest.poise, rest.pips);
         v
     }
 
@@ -799,13 +801,14 @@ impl DojoSession {
         Some(def)
     }
 
-    /// Builds hero `i` again from its catalog row under the Dojo's ruleset (`build_unit_in`: under the deck rule its
-    /// deck's slotted passives, open basics and active slots; classic: `build_unit`), then puts back its gear, pouch
-    /// and the points spent here. HP and AP refill; the poise bar refills.
+    /// Builds hero `i` again from its catalog row under the Dojo's ruleset (`build_from`, the row alone: under the deck
+    /// rule its deck's slotted passives, open basics and active slots; classic: `build_unit`), then puts back its gear,
+    /// pouch and the points spent here. HP and AP refill; the poise bar refills.
     fn rebuild(&mut self, i: usize) {
         let Some(def) = self.hero_def(i) else { return };
         let rule = self.deck_rule();
-        let mut u = build_unit_in(&self.cat, &def, 0, rule.as_ref());
+        // U3.2-S3: under the Dojo ruleset's wield terms
+        let mut u = build_from(&self.cat, UnitBuild { wield: self.ruleset.numbers.wield(), ..UnitBuild::row(&def, 0, rule.as_ref()) }).unit;
         u.inventory = self.heroes[i].inventory.clone();
         for (st, pts) in &self.spent[i] {
             *u.stats.core.entry(st.clone()).or_insert(0) += pts;
@@ -857,7 +860,9 @@ impl DojoSession {
             return PoiseState::default();
         }
         let max = poise::max_poise_of(&self.cat, &self.ruleset, u);
-        PoiseState { max, value: max, broken: false, broken_last: last.broken }
+        let mut st = PoiseState { broken_last: last.broken, ..PoiseState::default() };
+        poise::refill(&self.ruleset.numbers, &mut st, max);
+        st
     }
 
     /// The active hero's poise bar.
@@ -904,25 +909,35 @@ impl DojoSession {
             return Some(format!("{} = {taken} (already broken this round)", terms.join(" x ")));
         }
         let before = bar.value;
-        let after = (before - taken).max(0);
+        // S2.2-S2: the one stagger rule (by pips under poise_mode pips); the Dojo holds no one up (no P12)
+        let settled = poise::settle(&n, &bar, taken, poise::Terms { windup, held: false, sure: imp.sure_break.then_some(BreakCause::Sure), chance: true });
+        let after = settled.after;
         let mut line = format!("{} = {taken} -> poise {before} -> {after}", terms.join(" x "));
-        let cause = if taken > 0 && after == 0 {
-            Some("BREAK")
-        } else if windup && imp.sure_break {
-            Some("BREAK (sure break)")
-        } else if windup && taken > 0 && n.break_chance_scale > 0.0 {
-            let chance = poise::break_chance(&n, taken, before);
-            let roll = self.rng.randi_range(1, 100);
-            line += &format!(" (may break: {chance}%, rolled {roll})");
-            (roll <= chance).then_some("BREAK (chance)")
-        } else {
-            None
+        if poise::pips_mode(&n) {
+            line += &format!(" (pips {} -> {}, T {})", bar.pips, settled.pips, poise::threshold(&n, bar.max));
+        }
+        let cause = match settled.verdict {
+            Verdict::Breaks(BreakCause::Sure) => Some("BREAK (sure break)"),
+            Verdict::Breaks(_) => Some("BREAK"),
+            Verdict::Chance(chance) => {
+                let roll = self.rng.randi_range(1, 100);
+                line += &format!(" (may break: {chance}%, rolled {roll})");
+                (roll <= chance).then_some("BREAK (chance)")
+            }
+            Verdict::Holds | Verdict::AlreadyBroken => None,
         };
         bar.value = after;
+        bar.pips = settled.pips;
         if let Some(c) = cause {
             bar.value = 0;
+            bar.pips = 0;
             bar.broken = true;
             line += &format!(" {c}");
+            // S2.2-S4: under pips the break queues `stagger` for next round (not on a `steadfast` unit)
+            let queued = if on_dummy { poise::break_queues_stagger(&n, &mut self.dummy) } else { poise::break_queues_stagger(&n, self.hero_mut()) };
+            if queued {
+                line += ", staggered next round";
+            }
         }
         if on_dummy {
             self.dummy_poise = bar;
@@ -1001,9 +1016,11 @@ impl DojoSession {
                 }
                 if !s.status_effect.is_empty() && self.dummy.is_alive() {
                     let potency = s.status_potency + self.hero().status_potency_bonus();
-                    let chance = status::apply_chance(&self.dummy, &s.status_effect, potency);
+                    // U1.2-S3b: the hero's KNOW term (ruleset `know_potency`; 0 = potency off), shown and rolled alike
+                    let bonus = status::know_bonus(self.hero(), self.ruleset.numbers.know_potency);
+                    let chance = status::apply_chance_with(&self.dummy, &s.status_effect, potency, bonus);
                     let source = self.hero().name.clone();
-                    let landed = status::try_inflict(&mut self.dummy, &s.status_effect, potency, Some(&mut self.rng), 1, s.status_magnitude, &source);
+                    let landed = status::try_inflict_with(&mut self.dummy, &s.status_effect, potency, bonus, Some(&mut self.rng), 1, s.status_magnitude, &source);
                     detail += &format!(" • {} {} ({chance}%)", status::display_name(&s.status_effect), if landed { "next round" } else { "resisted" });
                 }
                 let (dmg, outcome, breakdown) = hit.as_ref().map(|h| (h.dmg, h.outcome, h.breakdown.clone())).unwrap_or((0, "STATUS", String::new()));
@@ -1013,8 +1030,9 @@ impl DojoSession {
                 }
             }
             "DEFEND" => {
-                self.hero_mut().guard = s.mitigation;
-                let pct = (s.mitigation * 100.0).round() as i32;
+                let mitigation = skill::guard_mitigation(&s, &self.ruleset.numbers);
+                self.hero_mut().guard = mitigation;
+                let pct = (mitigation * 100.0).round() as i32;
                 self.log_event("DEFEND", &s.name, &format!("Guard -{pct}% until the next round • {ap_note}"), pct, "GUARD");
                 self.fx("glow", true, &format!("{} -{pct}%", s.name), Tone::Info);
             }
@@ -1029,15 +1047,24 @@ impl DojoSession {
                 let blocks = s.blocks.max(1);
                 self.rest_blocks += blocks;
                 let mut bar = self.poise();
-                let before = bar.value;
-                if self.poise_on() && bar.max > 0 && !bar.broken && bar.value < bar.max {
+                let (before, pips_before) = (bar.value, bar.pips);
+                let pips_mode = poise::pips_mode(&self.ruleset.numbers);
+                if self.poise_on() && !pips_mode && bar.max > 0 && !bar.broken && bar.value < bar.max {
                     bar.value = (bar.value + self.ruleset.numbers.rest_poise_per_block * blocks).min(bar.max);
+                    self.hero_poise[self.active] = bar;
+                }
+                // S2.2-S2: a pip per 2 Rest blocks under poise_mode pips instead (S2.2-S3: the value mirrors them)
+                if self.poise_on() && poise::pips_mode(&self.ruleset.numbers) && bar.max > 0 && !bar.broken {
+                    poise::rest_pips(&self.ruleset.numbers, &mut bar, blocks);
                     self.hero_poise[self.active] = bar;
                 }
                 let ap = round_intent::rest_gain(&self.ruleset.numbers, self.rest_blocks);
                 let mut detail = format!("{} Rest block{} this round: +{ap} AP at the round's end", self.rest_blocks, if self.rest_blocks == 1 { "" } else { "s" });
                 if bar.value > before {
                     detail += &format!(", poise {before} -> {}", bar.value);
+                }
+                if bar.pips > pips_before {
+                    detail += &format!(", pips {pips_before} -> {}", bar.pips);
                 }
                 self.log_event("BUFF", &s.name, &format!("{detail} • {ap_note}"), ap, &format!("REST {}", self.rest_blocks));
                 self.fx("text", true, "Rest", Tone::Good);
@@ -1124,7 +1151,7 @@ impl DojoSession {
         let mut notes = Vec::new();
         for c in [&mut self.heroes[self.active], &mut self.dummy] {
             c.tick_round_buffs();
-            for st in status::roll_over(c, ROUND_AP_REGEN) {
+            for st in status::roll_over(c, ROUND_AP_REGEN, &self.ruleset.numbers) {
                 notes.push(format!("{} {}", c.name, status::display_name(&st).to_lowercase()));
             }
         }
@@ -1269,18 +1296,20 @@ impl DojoSession {
 
     // ---- Gear (stash, equip, presets, pouch, weapon switch) ------------------------------------------------------
 
-    /// ClassArchetype.can_equip_gear for the active hero.
-    pub fn can_equip(&self, item: &ItemDef) -> bool {
-        self.cat.classes.get(&self.classes[self.active]).is_none_or(|c| class_can_equip(&Proficiency::from_class(c), item))
+    /// U3.2-S3 (FB-34): whether the active hero wears `item` trained (its class's proficiency; `gear::trained_for`). No
+    /// longer a gate: an untrained piece equips and fights under the wield penalty.
+    pub fn trained_for(&self, item: &ItemDef) -> bool {
+        self.cat.classes.get(&self.classes[self.active]).is_none_or(|c| trained_for(&Proficiency::from_class(c), item))
     }
 
-    /// The stash items the active hero can put in `slot` (fit, class training, the two-handed rule), one per id.
+    /// The stash items the active hero can put in `slot` (fit and the two-handed rule; U3.2-S3: trained or not), one per
+    /// id.
     pub fn eligible(&self, slot: &str) -> Vec<String> {
         let main = self.hero().inventory.main_weapon().map(|e| e.item.clone());
         let mut out: Vec<String> = Vec::new();
         for id in &self.stash {
             let Some(item) = self.cat.items.get(id) else { continue };
-            if out.contains(id) || !item_fits_slot(item, slot) || !self.can_equip(item) {
+            if out.contains(id) || !item_fits_slot(item, slot) {
                 continue;
             }
             if slot == "off_hand" && !off_hand_ok(main.as_ref(), item) {
@@ -1318,13 +1347,6 @@ impl DojoSession {
     /// piece (from the stash when there).
     fn equip_internal(&mut self, id: &str, slot_key: &str, announce: bool) -> bool {
         let (Some(item), Some(slot)) = (self.cat.items.get(id).cloned(), slot_of(slot_key)) else { return false };
-        let hero = self.hero().name.clone();
-        if !self.can_equip(&item) {
-            if announce {
-                self.fail("Equip", &format!("{hero} cannot equip {} (class proficiency)", item.name));
-            }
-            return false;
-        }
         if !item_fits_slot(&item, slot_key) {
             if announce {
                 self.fail("Equip", &format!("{} cannot be equipped in the {} slot", item.name, slot_label(slot_key)));
@@ -1456,6 +1478,8 @@ impl DojoSession {
         if !self.hero_mut().inventory.toggle_active_weapon() {
             return self.fail("Switch Weapon", "Nothing to switch: pair a 2H weapon with an off-hand weapon (1H weapons attack with both hands freely)");
         }
+        // AUDIT-01: the ready weapon's effects and family bonuses count, the stowed one's not (a resync)
+        self.changed();
         let ready = self.hero().inventory.active_weapon().map(|e| e.item.name.clone()).unwrap_or_default();
         let breakdown = format!("[color=#38bdf8][b]Switch Weapon[/b][/color]  costs 1 block.\nActive weapon is now [b]{ready}[/b]; the other weapon is sheathed until you switch back.");
         let target = self.hero().name.clone();
@@ -1570,6 +1594,10 @@ pub fn breakdown_strike(title: &str, attacker: &str, target: &Unit, res: &Hit, a
             lines.push(format!("1. Weapon Power: [color=#e2e8f0]{}[/color] ({})", p.total_w_power, parts.join(", ")));
             if p.pen_ratio > 0.0 {
                 lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), p.weapon_power));
+            }
+            // U3.2-S3 (FB-33): the proficiency 0 factor, after any deficit
+            if p.untrained {
+                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, p.weapon_power));
             }
         } else {
             lines.push("1. Weapon Power: 0 (this weapon doesn't suit the attack)".into());

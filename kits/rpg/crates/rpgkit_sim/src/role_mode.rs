@@ -12,8 +12,6 @@ use serde_json::Map;
 
 const GRID_SPENDS: [&str; 3] = ["class", "cons", "primary"];
 const GRID_PRESETS: [&str; 2] = ["balanced", "aggressive"];
-/// 8.1 support band: survivors versus this class in the slot.
-const SUPPORT_BASELINE_CLASS: &str = "brawler";
 
 fn spends(r: &Runner) -> Vec<&'static str> {
     if r.args.quick {
@@ -37,7 +35,7 @@ fn run_class(r: &mut Runner, scenario_id: &str, class_id: &str, plain: bool) -> 
     let a = r.args;
     let sc = scenarios::scenario(r, scenario_id, class_id, a.level, plain, a.s2);
     let mut variants = Vec::new();
-    r.enemy_block = scenarios::scenario_def(scenario_id).block;
+    r.enemy_block = scenarios::scenario_def(&a.game.classes, scenario_id).map_or((0, 0), |s| s.block);
     for sv in spends(r) {
         r.spend_variant = sv.into();
         for pv in presets(r) {
@@ -71,14 +69,16 @@ pub fn role_mode(r: &mut Runner) {
         a.seed_count
     ));
     let mut baseline = -1.0;
+    // 8.1 support band: survivors versus the game's baseline class in the slot.
+    let c = a.game.classes;
     for role in a.roles.clone() {
         let scenario_id = scenarios::role_scenario(&role);
         if role == "support" && baseline < 0.0 {
-            let base_runs = run_class(r, scenario_id, SUPPORT_BASELINE_CLASS, true);
+            let base_runs = run_class(r, scenario_id, c.support_baseline, true);
             baseline = roles::spread("survivors", &base_runs).mean;
-            r.print(format!("support baseline: reference {SUPPORT_BASELINE_CLASS} in the support slot of {scenario_id}: {} survivors per fight", fixed(baseline, 2)));
+            r.print(format!("support baseline: reference {} in the support slot of {scenario_id}: {} survivors per fight", c.support_baseline, fixed(baseline, 2)));
         }
-        let ks = roles::kpis(&role);
+        let ks = roles::kpis(&c, &role);
         r.print(format!("{scenario_id} ({}) - {}", roles::role_label(&role), bands_line(r, &ks)));
         let mut header = format!("{:<8} {:<2} {:<18} {:<20}", "class", "", format!("clear ({})", targets::band_text(&a.targets, "scenario_clear")), "survivors");
         for k in &ks {
@@ -97,13 +97,13 @@ pub fn role_mode(r: &mut Runner) {
             means.push((class_id.clone(), roles::spread(ks[0].id, &runs).mean));
             results.push((class_id, runs));
         }
-        let ranks = roles::rank_marks(&role, &means);
+        let ranks = roles::rank_marks(&c, &role, &means);
         for (class_id, runs) in &results {
             if runs.is_empty() {
                 r.print(format!("{class_id:<8} n/a (every variant refused)"));
                 continue;
             }
-            let fit = roles::fit(class_id, &role);
+            let fit = roles::fit(&c, class_id, &role);
             let primary = fit == "P";
             let clear_s = roles::spread("clear", runs);
             let mut clear_text = roles::cell(true, "scenario_clear", clear_s, &a.targets, false);
@@ -118,7 +118,7 @@ pub fn role_mode(r: &mut Runner) {
             let rank = ranks.iter().find(|(c, _)| c == class_id).map(|(_, t)| t.clone()).unwrap_or_default();
             r.print(format!("{line} {rank}"));
         }
-        let loadouts: Vec<String> = a.classes.iter().map(|c| format!("{c} [{}]", roles::role_loadout(&r.d.cat, c, &role, a.level).join(","))).collect();
+        let loadouts: Vec<String> = a.classes.iter().map(|c| format!("{c} [{}]", roles::role_loadout(&r.d.cat, &a.game.classes, c, &role, a.level).join(","))).collect();
         r.print(format!("loadouts: {}", loadouts.join("; ")));
     }
     r.print(format!("block misses: {}", r.block_misses));

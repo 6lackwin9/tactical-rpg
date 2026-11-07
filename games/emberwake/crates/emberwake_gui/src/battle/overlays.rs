@@ -79,8 +79,8 @@ pub(super) struct Overlay {
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows, default);
-/// VISCLAR1 VC6: every group on by default but `first_move` and `all_bars`.
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 25] = [
+/// VISCLAR1 VC6: every group on by default but `all_bars`, `test_hazards` and `test_arena`.
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver).", true),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver).", true),
     ("valid", "Valid targets", "Rings on the units a click would make the round target.", true),
@@ -91,20 +91,22 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 25] = [
     ("facings", "Enemy facings", "A chevron where each enemy faces (a flank comes from beside or behind).", true),
     // VISCLAR1 AR5: a revealed enemy's moves are its target arrow's move leg
     ("walks", "Revealed enemy moves", "The move leg of a revealed enemy's target arrow (off: the arrow goes straight to its target).", true),
-    ("glyphs", "Intent glyphs", "The round intent's plate on the strip, the cards and the tokens.", true),
-    // VISCLAR1 VC1: the tell's kind chip on an enemy's token, a debug view
-    ("first_move", "Enemy first move", "The kind chip of each enemy's first action on its token (debug).", false),
+    // VISCLAR1-D (mock `intent_ring`): the ring replaces the side ring on the board; the plate there waits for Alt
+    ("glyphs", "Intent glyphs", "The round intent's plate on the strip and the cards, and a ring in its colour under each unit (off: the side's colour). Hold Alt: the plate over the tokens too.", true),
     ("badges", "Impact badges", "The row of blocks on each hostile card with its impacts.", true),
-    ("poise", "Poise bars", "The poise bars under the HP bars.", true),
+    ("poise", "Poise pips", "Five poise pips under the HP bars, each 20 % of the unit's poise.", true),
     // VISCLAR1 VC3: today's look, every unit's bars on the board
     ("all_bars", "All bars", "Every unit's HP and poise bars on the board; off: only the selected hero, its target and the unit under the mouse (hold Alt: all).", false),
     ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span.", true),
-    ("parts", "Wind-up and impact", "The strip's wind-up, impact and recovery shading.", true),
+    ("parts", "Wind-up and impact", "The full timeline's wind-up, impact and recovery shading.", true),
     ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel.", true),
     ("summary", "Round summary", "The round summary in the message bar at round end.", true),
-    // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3)
-    ("hazards", "Ground hazards", "The hazards skills and items leave on tiles, in their tint, with their glyph (a foe's hidden one stays hidden).", true),
-    ("arena", "Arena telegraph", "The cells an arena hazard strikes this round, and a badge on the strip at the blocks it strikes.", true),
+    // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3). VISCLAR1-B, decision "Battle view answers": the board's marks
+    // for testing (in the real game they are part of the arena), off by default; Alt shows them and the hover lines
+    // always tell. New ids, as every settings file already
+    // saved holds `hazards` and `arena` on, which would keep them on.
+    ("test_hazards", "Ground hazards (testing)", "Testing: the hazards skills and items leave, drawn on their tiles in their tint, with their glyph (a foe's hidden one stays hidden). Off: hold Alt to draw them; pointing at the tile always tells.", false),
+    ("test_arena", "Arena telegraph (testing)", "Testing: the cells an arena hazard strikes this round drawn on the board, and a badge on the strip at the blocks it strikes. Off: hold Alt to draw them; pointing at the tile or block always tells.", false),
     // HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3)
     ("meters", "Unit meters", "Each unit's meters as pips or a bar on its card, and the selected hero's under the strip title.", true),
     ("guard", "Held guard", "A blue edge on the card of a unit holding a guard a trigger gave it (it counts as guarding).", true),
@@ -125,7 +127,7 @@ pub(crate) fn overlay_default(id: &str) -> bool {
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
 /// group behind its own flag, on by default (they help debugging the fight); the settings key `battle_overlays`
 /// ({<group>: false}) switches a group off; slice 6 lists them on the Settings Battle tab; VISCLAR1 slice A adds
-/// `first_move` and `all_bars`, off by default (VC6). Classic draws none of them whatever the flags say.
+/// `all_bars`, `test_hazards` and `test_arena`, off by default (VC6). Classic draws none of them whatever the flags say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Layers {
     /// Slice 3: the reach band, the Maneuver front, the valid-target rings, the stealth veils, the hero's moves, the
@@ -140,10 +142,8 @@ pub(crate) struct Layers {
     /// Slices 4-5: revealed enemy moves, intent glyphs, impact badge rows.
     pub(super) walks: bool,
     pub(super) glyphs: bool,
-    /// VISCLAR1 VC1: the tell's kind chip on an enemy's token (off by default).
-    pub(super) first_move: bool,
     pub(crate) badges: bool,
-    /// Slice 5: poise bars, BREAK markers, wind-up / impact / recovery on the strip, hit forecasts, the round summary.
+    /// Slice 5: poise bars, BREAK markers, impact / recovery on the strip (the full timeline adds wind-up), hit forecasts, the round summary.
     pub(super) poise: bool,
     /// VISCLAR1 VC3: every unit's token bars, not only the focus set's (off by default).
     pub(super) all_bars: bool,
@@ -168,10 +168,10 @@ pub(crate) struct Layers {
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    pub(super) const IDS: [&'static str; 25] = {
-        let mut ids = [""; 25];
+    pub(super) const IDS: [&'static str; 24] = {
+        let mut ids = [""; 24];
         let mut k = 0;
-        while k < 25 {
+        while k < 24 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -191,7 +191,6 @@ impl Layers {
             facings: on("facings"),
             walks: on("walks"),
             glyphs: on("glyphs"),
-            first_move: on("first_move"),
             badges: on("badges"),
             poise: on("poise"),
             all_bars: on("all_bars"),
@@ -199,8 +198,8 @@ impl Layers {
             parts: on("parts"),
             forecasts: on("forecasts"),
             summary: on("summary"),
-            hazards: on("hazards"),
-            arena: on("arena"),
+            hazards: on("test_hazards"),
+            arena: on("test_arena"),
             meters: on("meters"),
             guard: on("guard"),
             pushes: on("pushes"),
@@ -212,7 +211,7 @@ impl Layers {
 
     /// The flags by group id (the agent link's state).
     pub(super) fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.first_move, self.badges, self.poise, self.all_bars, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate, self.tracers];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.all_bars, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate, self.tracers];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }

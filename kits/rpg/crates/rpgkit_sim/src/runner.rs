@@ -106,9 +106,11 @@ impl Roster for SimRoster<'_> {
         self.units.get(r).cloned().or_else(|| cat.units.get(r).cloned())
     }
 
-    fn customize(&self, cat: &Catalog, r: &str, u: &mut rpgkit_rules::Unit) {
-        if let Some((w, c)) = self.characters.get(r) {
-            rpgkit_world::battle::apply_character(self.d, cat, self.d.resolve(w, "characters", c), w, u);
+    /// U2.2-S2: a story character's overrides (its passives, named items and tuning), built from the sandbox catalog.
+    fn overrides(&self, _cat: &Catalog, r: &str) -> rpgkit_rules::Overrides {
+        match self.characters.get(r) {
+            Some((w, c)) => rpgkit_world::battle::character_overrides(self.d, self.d.resolve(w, "characters", c), w),
+            None => rpgkit_rules::Overrides::default(),
         }
     }
 }
@@ -234,7 +236,7 @@ impl<'a> Runner<'a> {
             if def.loadout.is_empty() && self.args.loadout == "newest" {
                 entry.insert("loadout".into(), json!(variants::newest_loadout(&self.d.cat, &def.class_id, def.level)));
             } else if def.loadout.is_empty() && self.args.loadout == "role" {
-                entry.insert("loadout".into(), json!(roles::role_loadout(&self.d.cat, &def.class_id, roles::primary_role(&def.class_id), def.level)));
+                entry.insert("loadout".into(), json!(roles::role_loadout(&self.d.cat, &self.args.game.classes, &def.class_id, roles::primary_role(&self.args.game.classes, &def.class_id), def.level)));
             }
         }
         self.units.insert(id.into(), UnitDef::from_obj(&entry));
@@ -257,7 +259,7 @@ impl<'a> Runner<'a> {
             return None;
         }
         let def = self.units.get(id)?;
-        Some(rpgkit_rules::build_unit(&self.d.cat, def, STATS_AP))
+        Some(rpgkit_rules::build_from(&self.d.cat, rpgkit_rules::UnitBuild::row(def, STATS_AP, None)).unit)
     }
 
     /// One battle of `left` (party) vs `right` (enemies); `base` replaces encounter defaults (zone, arena, exits,

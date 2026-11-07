@@ -1,4 +1,6 @@
+mod pacing_tests;
 mod windup_tests;
+mod skill_menu_tests;
 mod arena_rules_tests;
 mod status_tests;
 mod input1_tests;
@@ -18,6 +20,7 @@ mod playback_tests;
 mod script_screen_tests;
 mod portrait_panel_tests;
 mod portrait_timeline_tests;
+mod strip_block_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};
@@ -56,8 +59,7 @@ fn an_action_picks_the_rig_clip_of_its_skill_kind_and_weapon() {
 #[test]
 fn a_token_facing_left_is_the_sheet_frame_mirrored_and_one_facing_right_is_not() {
     const F: u32 = 8;
-    let root = std::env::temp_dir().join(format!("emberwake_foe_facing_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = aegis_core::scratch::Scratch::vacant("emberwake_foe_facing");
     let dir = root.join("units/brawler/goblin");
     std::fs::create_dir_all(&dir).unwrap();
     // A bar on the left of the 8x8 frame (x 1..3, the back) and one pixel on the right (x 6, the face).
@@ -71,7 +73,7 @@ fn a_token_facing_left_is_the_sheet_frame_mirrored_and_one_facing_right_is_not()
     enc.set_depth(png::BitDepth::Eight);
     enc.write_header().unwrap().write_image_data(&px).unwrap();
     std::fs::write(dir.join("clips.json"), json!({"frame": [F, F], "clips": [{"id": "idle", "frames": 1, "ms": [100]}]}).to_string()).unwrap();
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let (body, p, size) = ("brawler/goblin", ClipPlayer::default(), 3 * F as i32);
     let sheet = art.body_clip(body, "", "idle", 0, size).unwrap().clone();
     let left = token_frame(&mut art, body, "", &p, 0, size, Facing::side(true)).unwrap().1.clone();
@@ -120,12 +122,11 @@ fn scratch_body(root: &std::path::Path, key: &str, ids: &[&str]) {
 
 /// DIR4-G: a scratch tree with a body with front and back views (`test/views`) and one with side clips only
 /// (`test/side`, as every body before DIR4-R1/R2/R3), and its `Art`.
-fn view_bodies(tag: &str) -> (std::path::PathBuf, Art) {
-    let root = std::env::temp_dir().join(format!("emberwake_dir4g_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn view_bodies(tag: &str) -> (aegis_core::scratch::Scratch, Art) {
+    let root = aegis_core::scratch::Scratch::vacant(&format!("emberwake_dir4g_{tag}"));
     scratch_body(&root, "test/views", &["idle", "walk", "hurt", "idle_down", "idle_up", "walk_up"]);
     scratch_body(&root, "test/side", &["idle", "walk", "hurt"]);
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     for body in ["test/views", "test/side"] {
         assert_eq!(art.body_problems(body), Vec::<String>::new(), "the scratch body {body} loads");
     }
@@ -887,11 +888,10 @@ fn a_dash_starts_its_attack_after_the_slide() {
 /// has one, else its walk; under skip animations it stands on the position at once.
 #[test]
 fn dash_tests_a_dash_plays_its_clip_faster_than_a_walk() {
-    let root = std::env::temp_dir().join(format!("emberwake_dash_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = aegis_core::scratch::Scratch::vacant("emberwake_dash");
     scratch_body(&root, "test/dash", &["idle", "walk", "dash", "hurt"]);
     scratch_body(&root, "test/side", &["idle", "walk", "hurt"]);
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let mut host = skirmish(3);
     assert_eq!(host.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
     let s = host.session.as_mut().unwrap();
@@ -1262,3 +1262,5 @@ fn the_camera_shakes_the_board_only() {
         assert_eq!(rects(&b), hit_rects, "{view}: the hit rects stay");
     }
 }
+mod visclar_c_tests;
+mod visclar_d_tests;

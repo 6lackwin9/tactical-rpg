@@ -276,6 +276,23 @@ fn row_3_guard_self_without_a_shooter() {
     assert!(plan.entries_for(w, ARCHER).iter().all(|e| matches!(kind_of(w, e.skill), Kind::Defend | Kind::Rest)));
 }
 
+/// S1.2-S4 (FB-48): row 3 skips a redundant Defend: a hurt unit whose multi-round guard already holds this round (an
+/// active `guard` status) goes on down the table; without it the same unit Guards.
+#[test]
+fn row_3_skips_a_defend_while_a_guard_status_holds() {
+    let mut s = session(timeline());
+    let w = &mut s.w;
+    place(w, ARCHER, V2::new(6, 4));
+    place(w, BLADE, V2::new(4, 5));
+    hurt(w, ARCHER, 0.3);
+    assert!(!ai::guard_held(w, ARCHER));
+    assert_eq!(pick(w, ARCHER).0.row, ai::ROW_GUARD, "unguarded: row 3");
+    status::grant_now(&mut w.units[ARCHER], status::GUARD, 1, 20, "brace");
+    assert!(ai::guard_held(w, ARCHER), "the active guard status is visible to the AI");
+    let (r, _) = pick(w, ARCHER);
+    assert_ne!(r.row, ai::ROW_GUARD, "guarded already: no redundant Defend ({r:?})");
+}
+
 /// The tiles `c` may move to this round on open ground (its own and the free walkable tiles within `blocks` move
 /// blocks), each with the foes within `c`'s reach band from it, its threats and its cover against `shooter`.
 fn tiles(w: &World, c: UnitId, blocks: i32, shooter: UnitId) -> Vec<(V2, usize, usize, f64)> {

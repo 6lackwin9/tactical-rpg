@@ -718,14 +718,9 @@
 			"icon_id": "",
 			"starter_stash": false,
 			"special": true,
-			"special_note": "Tank wall: the best armor in the game, but heavy, slow to raise (2 blocks) and paired with the weakest sword; the warrior gives up offense and mobility for it.",
+			"special_note": "Tank wall: the best armor in the game (mitigation 16), but heavy (burden 3, needs STR 15) and paired with the weakest sword; the warrior gives up offense and mobility for it.",
 			"hand": "off",
 			"modifiers": [
-				{
-					"kind": "adjust",
-					"field": "block_cost",
-					"delta": 1
-				},
 				{
 					"kind": "adjust",
 					"field": "burden",
@@ -843,7 +838,7 @@
 			"icon_id": "",
 			"starter_stash": false,
 			"special": true,
-			"special_note": "Glass cannon: very high ranged power, but every block spent defending costs 3 AP-blocks; best for a mage kept behind a tank.",
+			"special_note": "Glass cannon: very high ranged power (30 at range 3, needs INT 14) and no protection at all; best for a mage kept behind a tank.",
 			"hand": "main_1h",
 			"scaling_stat": "INT",
 			"modifiers": [
@@ -851,11 +846,6 @@
 					"kind": "adjust",
 					"field": "power",
 					"delta": 15
-				},
-				{
-					"kind": "adjust",
-					"field": "block_cost",
-					"delta": 2
 				},
 				{
 					"kind": "requirement",

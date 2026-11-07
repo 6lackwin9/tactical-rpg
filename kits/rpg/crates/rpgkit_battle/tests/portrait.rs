@@ -245,7 +245,7 @@ fn skill_goes_to_the_actor_with_its_skill_level_and_rows_read_min_level() {
     let level = |s: &Session, name: &str| s.w.cat.skills.iter().find(|k| k.name == name).map(|k| k.level).expect("a skill row");
     popped(&mut s, 1, "Rally", focus(), false);
     assert_eq!(skill_event(&s), Some((1, level(&s, "Rally"))), "the acting unit, at its skill's level");
-    popped(&mut s, 1, "Guard", CmdKind::Defend { mitigation: 0.3, grant_status: String::new(), status_rounds: 0, extra_grants: Vec::new(), guard_broken: false }, false);
+    popped(&mut s, 1, "Guard", CmdKind::Defend { mitigation: 0.3, guard_rounds: 1, grant_status: String::new(), status_rounds: 0, extra_grants: Vec::new(), guard_broken: false }, false);
     assert_eq!(skill_event(&s), None, "a defend is not a skill command");
     popped(&mut s, 0, "Rally", focus(), true);
     assert_eq!(skill_event(&s), None, "a cancelled action");

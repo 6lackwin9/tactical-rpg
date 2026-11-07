@@ -159,7 +159,7 @@ fn max_poise_follows_the_unit_row_and_refills_each_round() {
     let s = session(poise_rules());
     let w = &s.w;
     for c in [HERO, ALLY, FOE, FOE_B] {
-        assert_eq!(bar(w, c), PoiseState { max: BAR, value: BAR, broken: false, broken_last: false }, "unit {c}: the fixed poise");
+        assert_eq!(bar(w, c), PoiseState { max: BAR, value: BAR, broken: false, broken_last: false, ..PoiseState::default() }, "unit {c}: the fixed poise");
     }
     let derived_max = derived::value_for(&w.cat, &w.ruleset, &w.units[DERIVED], "max_poise").expect("the row is in timeline");
     assert!(derived_max >= 1);
@@ -169,7 +169,7 @@ fn max_poise_follows_the_unit_row_and_refills_each_round() {
     set_poise(&mut w, HERO, 3);
     w.poise.get_mut(&HERO).unwrap().broken = true;
     poise::round_start(&mut w);
-    assert_eq!(bar(&w, HERO), PoiseState { max: BAR, value: BAR, broken: false, broken_last: true }, "refilled; the break is remembered");
+    assert_eq!(bar(&w, HERO), PoiseState { max: BAR, value: BAR, broken: false, broken_last: true, ..PoiseState::default() }, "refilled; the break is remembered");
     poise::round_start(&mut w);
     assert!(!bar(&w, HERO).broken_last, "two rounds on, forgotten");
     let classic = session(Ruleset::classic());
@@ -192,7 +192,7 @@ fn stagger_is_the_product_of_its_factors() {
             let stagger = rng.randi_range(0, 100);
             let mut w = s.w.clone();
             let mut res = Resolver::new(BLOCKS, 1);
-            w.poise.insert(FOE, PoiseState { max: 1000, value: 1000, broken: false, broken_last: repeat });
+            w.poise.insert(FOE, PoiseState { max: 1000, value: 1000, broken: false, broken_last: repeat, ..PoiseState::default() });
             if passive {
                 w.units[FOE].stagger_taken = vec![StaggerTaken { mult: 0.5, max_blocks: 0 }];
             }
@@ -725,4 +725,26 @@ fn a_hit_sequence_forecasts_on_the_bar_the_earlier_hits_leave() {
     let sum = round_intent::RoundSummary { breaks: 1, windup_breaks: 1, windup_hits: 2, flanks: 1, follow_ups: 3, rest_ap: 1 };
     assert_eq!(round_intent::summary_text(&sum), "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP");
     assert_eq!(round_intent::summary_text(&round_intent::RoundSummary::default()), "no breaks");
+}
+
+/// U1.2 slice 1 (`FB-04`): the battle's pool facade reads poise from the bar (0 to its Max Poise, a windup bonus above
+/// it unclamped), HP and AP from the unit's typed fields; classic has no poise pool.
+#[test]
+fn the_pool_facade_reads_the_bar_and_the_unit_fields() {
+    use rpgkit_rules::pool::{PoolId, PoolView};
+    let s = session(poise_rules());
+    let mut w = s.w.clone();
+    for c in [HERO, FOE, NO_BAR] {
+        let b = bar(&w, c);
+        assert_eq!(w.pool(c, PoolId::Poise), Some(PoolView { current: b.value, min: 0, max: b.max }), "unit {c}");
+        assert_eq!(w.pool(c, PoolId::Hp), w.units[c].pool(PoolId::Hp));
+        assert_eq!(w.pool(c, PoolId::Ap).map(|p| (p.current, p.max)), Some((w.units[c].ap, w.units[c].max_ap)));
+    }
+    set_poise(&mut w, HERO, BAR + 20);
+    assert_eq!(w.pool(HERO, PoolId::Poise).map(|p| (p.current, p.max)), Some((BAR + 20, BAR)), "a windup bonus sits above the max");
+    w.damage(FOE, 9, true);
+    assert_eq!(w.pool(FOE, PoolId::Hp).map(|p| p.current), Some(w.units[FOE].hp), "a write through the typed field shows");
+    let classic = session(Ruleset::classic());
+    assert_eq!(classic.w.pool(HERO, PoolId::Poise), None, "classic keeps no bars");
+    assert!(classic.w.pool(HERO, PoolId::Hp).is_some());
 }

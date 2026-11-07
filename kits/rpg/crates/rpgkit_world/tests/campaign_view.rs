@@ -153,8 +153,7 @@ fn the_next_rule_point_skips_fired_once_rules_and_other_acts() {
 fn the_act_start_save_reads_back_and_is_refused_while_the_run_is_over() {
     let d = data();
     let gs = state(&d, "camp");
-    let dir = std::env::temp_dir().join(format!("rpgkit_campaign_view_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = aegis_core::scratch::Scratch::vacant("rpgkit_campaign_view");
     let key = campaign::act_save_key(1, &gs.campaign.as_ref().unwrap().run);
     assert!(save::write_keyed(&d, &dir, &gs, &key, 1).is_empty());
     assert!(save::exists_keyed(&dir, &key));
