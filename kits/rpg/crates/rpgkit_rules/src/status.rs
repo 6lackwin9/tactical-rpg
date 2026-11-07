@@ -2,6 +2,7 @@
 //! roll-over. Statuses inflicted this round become active next round; DEFEND buffs (riposte) are active at once.
 //! Since S1.2-S1 the rows are the frozen kit table `statuses.json` (embedded), tagged with S1's behaviour primitives.
 
+use crate::ruleset::Numbers;
 use crate::stats::roundi;
 use crate::unit::{GrantUnder, Unit};
 use aegis_core::rng::GodotRng;
@@ -33,7 +34,8 @@ impl Stacking {
 }
 
 /// S1 (docs/sessions/S1_STATUS.md section 1): the six composable behaviour primitives a status row is tagged with.
-/// Metadata only since S1.2-S1: no rule reads the tags yet (S1.2-S2 turns id literals into primitive reads).
+/// Since S1.2-S2 the rules read them where a primitive carries the meaning (the round-end ticks, the block locks, a flat
+/// tick's unit); a status's own behaviour (bleed's formula, root, stealth, riposte, steadfast) stays on its id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Primitive {
     Modifier,
@@ -84,7 +86,10 @@ pub struct StatusRow {
     /// RULESET1_INTENT IN6 (timeline, rule round_intent): an instance lasts only while the round intent it was applied
     /// under stays active (riposte, stealth). Classic never reads it.
     pub intent_bound: bool,
-    /// S1 behaviour primitives (at least one); metadata only, see [`Primitive`].
+    /// S1.2-S2: the timeline blocks a `block_lock` row locks (stagger 1 and 4, stun 1 and 2; root locks Move, not
+    /// blocks); empty on every other row.
+    pub lock_blocks: &'static [i32],
+    /// S1 behaviour primitives (at least one), see [`Primitive`].
     pub primitives: &'static [Primitive],
 }
 
@@ -135,6 +140,9 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
     let tags = field("primitives").as_array().unwrap_or_else(|| panic!("statuses.json row {i}: `primitives` is not a list"));
     let primitives: Vec<Primitive> = tags.iter().map(|t| t.as_str().and_then(Primitive::from_id).unwrap_or_else(|| panic!("statuses.json row {i}: unknown primitive {t}"))).collect();
     assert!(!primitives.is_empty(), "statuses.json row {i}: at least one primitive");
+    let blocks = field("lock_blocks").as_array().unwrap_or_else(|| panic!("statuses.json row {i}: `lock_blocks` is not a list"));
+    let lock_blocks: Vec<i32> = blocks.iter().map(|b| b.as_i64().unwrap_or_else(|| panic!("statuses.json row {i}: lock block {b} is not an integer")) as i32).collect();
+    assert!(lock_blocks.is_empty() || primitives.contains(&Primitive::BlockLock), "statuses.json row {i}: lock_blocks on a block_lock row only");
     StatusRow {
         id: text("id"),
         buff,
@@ -148,14 +156,20 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
         magnitude_max: int("magnitude_max"),
         magnitude_unit,
         intent_bound: flag("intent_bound"),
-        // Loaded once per process into a static table, so the tag list lives as long as the rows.
+        // Loaded once per process into a static table, so the lists live as long as the rows.
+        lock_blocks: Box::leak(lock_blocks.into_boxed_slice()),
         primitives: Box::leak(primitives.into_boxed_slice()),
     }
 }
 
+/// S1.2-S3: the default of the ruleset number `bleed_pct` (the fraction of max HP a bleed tick deals).
 pub const BLEED_PCT: f64 = 0.06;
+/// S1.2-S3: the default of `debt_stagger` (the AP debt at a round start that staggers).
 pub const DEBT_STAGGER: i32 = 3;
+/// S1.2-S3: the default of `debt_stun` (the AP debt at a round start that stuns).
 pub const DEBT_STUN: i32 = 5;
+/// S1.2-S3: the default of `counter_mult` (riposte's counter damage multiplier; was `rpgkit_battle::command`'s const).
+pub const COUNTER_MULT: f64 = 0.5;
 
 pub fn row_of(status: &str) -> Option<&'static StatusRow> {
     ROWS.iter().find(|r| r.id == status)
@@ -184,7 +198,8 @@ pub fn format_magnitude(st: &str, magnitude: i32) -> String {
         return String::new();
     }
     match magnitude_unit(st) {
-        "flat" if st == "poison" => format!("{magnitude} HP"),
+        // S1.2-S2: a flat tick (poison) deals HP; a flat modifier (fortify, expose) is armor
+        "flat" if row_of(st).is_some_and(|r| r.has_primitive(Primitive::Tick)) => format!("{magnitude} HP"),
         "flat" => format!("{magnitude} armor"),
         "pct_max_hp" => format!("{magnitude}% max HP"),
         _ => format!("{magnitude}%"),
@@ -269,39 +284,58 @@ pub fn stack(existing_rounds: i32, existing_potency: i32, new_rounds: i32, new_p
     (rounds, potency)
 }
 
-pub fn bleed_damage(c: &Unit) -> i32 {
-    roundi(c.max_hp as f64 * BLEED_PCT).max(1)
+/// Bleed's tick: `bleed_pct` (ruleset number, S1.2-S3) of max HP, at least 1.
+pub fn bleed_damage(c: &Unit, n: &Numbers) -> i32 {
+    roundi(c.max_hp as f64 * n.bleed_pct).max(1)
 }
 
-pub fn poison_damage(c: &Unit) -> i32 {
-    c.active_magnitude("poison")
-}
-
-pub fn burn_damage(c: &Unit) -> i32 {
-    roundi(c.max_hp as f64 * c.active_magnitude("burn") as f64 / 100.0).max(1)
-}
-
-pub fn regen_amount(c: &Unit) -> i32 {
-    roundi(c.max_hp as f64 * c.active_magnitude("regen") as f64 / 100.0).max(1)
-}
-
-pub fn blocked_blocks(status: &str) -> &'static [i32] {
-    match status {
-        "stagger" => &[1, 4],
-        "stun" => &[1, 2],
-        _ => &[],
+/// S1.2-S2: the round-end amount of the `tick` row `row` on `c` (damage for a debuff, healing for a buff): bleed its
+/// own formula (kept on its id, S1 section 4 item 2), a `flat` tick its magnitude (poison: may be 0), a `pct_max_hp`
+/// tick that percent of max HP, at least 1 (burn, regen).
+pub fn tick_amount(c: &Unit, row: &StatusRow, n: &Numbers) -> i32 {
+    if row.id == "bleed" {
+        return bleed_damage(c, n);
+    }
+    match row.magnitude_unit {
+        "flat" => c.active_magnitude(row.id),
+        _ => roundi(c.max_hp as f64 * c.active_magnitude(row.id) as f64 / 100.0).max(1),
     }
 }
 
+/// The `tick` rows in table order, debuffs (`buff` false: bleed, poison, burn) or buffs (regen).
+pub fn tick_rows(buff: bool) -> impl Iterator<Item = &'static StatusRow> {
+    ROWS.iter().filter(move |r| r.buff == buff && r.has_primitive(Primitive::Tick))
+}
+
+/// The timeline blocks `status` locks: its row's `lock_blocks` when it is a `block_lock` row (S1.2-S2), else none.
+pub fn blocked_blocks(status: &str) -> &'static [i32] {
+    row_of(status).filter(|r| r.has_primitive(Primitive::BlockLock)).map_or(&[], |r| r.lock_blocks)
+}
+
+/// The chance (0-100) a roll of `potency` lands `status` on `target`: potency less INT resistance and the status's own
+/// resist; S1.2-S3: 100 for a row that is not `resistable` (no roll).
 pub fn apply_chance(target: &Unit, status: &str, potency: i32) -> i32 {
+    if !resistable(status) {
+        return 100;
+    }
     let resist = target.debuff_resistance() + target.resist_for(status) as f64;
     roundi(potency as f64 - resist).clamp(0, 100)
 }
 
-/// Rolls a skill-inflicted status (randi_range(1, 100) <= chance); on success it is queued for next round.
+/// Whether `status` is rolled against resistance: its row's `resistable` (true for an id with no row, as before).
+pub fn resistable(status: &str) -> bool {
+    row_of(status).is_none_or(|r| r.resistable)
+}
+
+/// Rolls a skill-inflicted status (randi_range(1, 100) <= chance); on success it is queued for next round. S1.2-S3: a
+/// row that is not `resistable` lands without a roll (no draw).
 pub fn try_inflict(target: &mut Unit, status: &str, potency: i32, rng: Option<&mut GodotRng>, rounds: i32, magnitude: i32, source: &str) -> bool {
     if !target.is_alive() {
         return false;
+    }
+    if !resistable(status) {
+        queue(target, status, rounds, magnitude, source);
+        return true;
     }
     let chance = apply_chance(target, status, potency);
     let roll = match rng {
@@ -446,10 +480,12 @@ pub fn remove_active(target: &mut Unit, status: &str) -> bool {
     found
 }
 
-pub fn debt_status(debt: i32) -> &'static str {
-    if debt >= DEBT_STUN {
+/// The status an AP debt of `debt` at a round start imposes: stun from `debt_stun`, stagger from `debt_stagger` (ruleset
+/// numbers, S1.2-S3; the AP debt rule names its statuses), else none.
+pub fn debt_status(debt: i32, n: &Numbers) -> &'static str {
+    if debt >= n.debt_stun {
         "stun"
-    } else if debt >= DEBT_STAGGER {
+    } else if debt >= n.debt_stagger {
         "stagger"
     } else {
         ""
@@ -467,8 +503,8 @@ pub fn regen_ap(c: &Unit, ap: i32, ap_regen: i32) -> i32 {
 }
 
 /// Round start: last round's statuses expire (multi-round ones count down), queued ones and AP-debt penalties take
-/// effect, then AP recovers (`regen_ap`). Returns the statuses now active.
-pub fn roll_over(c: &mut Unit, ap_regen: i32) -> Vec<String> {
+/// effect (`n`: the ruleset's debt numbers), then AP recovers (`regen_ap`). Returns the statuses now active.
+pub fn roll_over(c: &mut Unit, ap_regen: i32, n: &Numbers) -> Vec<String> {
     let st = &mut c.st;
     let carried: Vec<(String, i32)> = st.rounds_left.iter().filter_map(|(k, v)| (v - 1 > 0).then(|| (k.clone(), v - 1))).collect();
     let old_magnitudes = st.magnitudes.clone();
@@ -520,7 +556,7 @@ pub fn roll_over(c: &mut Unit, ap_regen: i32) -> Vec<String> {
     let (active, intents) = (&st.active, &mut st.intents);
     intents.retain(|k, _| active.contains(k));
     c.riposted.clear();
-    let penalty = debt_status((-c.ap).max(0));
+    let penalty = debt_status((-c.ap).max(0), n);
     if !penalty.is_empty() {
         c.st.active.insert(penalty.to_string());
     }

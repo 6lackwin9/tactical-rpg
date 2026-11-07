@@ -1124,7 +1124,7 @@ impl DojoSession {
         let mut notes = Vec::new();
         for c in [&mut self.heroes[self.active], &mut self.dummy] {
             c.tick_round_buffs();
-            for st in status::roll_over(c, ROUND_AP_REGEN) {
+            for st in status::roll_over(c, ROUND_AP_REGEN, &self.ruleset.numbers) {
                 notes.push(format!("{} {}", c.name, status::display_name(&st).to_lowercase()));
             }
         }

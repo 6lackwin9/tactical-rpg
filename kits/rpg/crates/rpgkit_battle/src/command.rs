@@ -14,8 +14,6 @@ use rpgkit_rules::stats::roundi;
 use rpgkit_rules::{status, Stance, Unit};
 use serde_json::Value;
 
-pub const COUNTER_MULT: f64 = 0.5;
-
 #[derive(Debug, Clone)]
 pub struct Reaction {
     pub defender: UnitId,
@@ -1376,7 +1374,8 @@ pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defe
     }
     w.units[defender].riposted.push(attacker);
     let du = &w.units[defender];
-    let mult = COUNTER_MULT * du.weaken_factor() * du.empower_factor();
+    // S1.2-S3: the counter multiplier is the ruleset number `counter_mult`
+    let mult = w.ruleset.numbers.counter_mult * du.weaken_factor() * du.empower_factor();
     let hit = roll_hit(w, rng, defender, attacker, false, false, mult, 0.0);
     let taken = w.damage(attacker, hit.final_dmg, true);
     Some(Reaction { defender, attacker, damage: taken, crit: hit.is_crit, defeated: !w.units[attacker].is_alive() })

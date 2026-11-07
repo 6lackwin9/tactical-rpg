@@ -9,6 +9,7 @@
 //! stances) are row fields with values (`BY_RULES_FIELDS`); empty, each reads as the round intent rule's choice when the
 //! row lists it, else the legacy one.
 
+use crate::status;
 use aegis_core::value::{self, Obj};
 use rpgkit_data::Catalog;
 use std::collections::HashSet;
@@ -391,6 +392,14 @@ pub struct Numbers {
     pub stances: bool,
     /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up (`attack_lock`; default none).
     pub attack_lock: AttackLock,
+    /// S1.2-S3 (`bleed_pct`, S1 section 3): the fraction of max HP a bleed tick deals.
+    pub bleed_pct: f64,
+    /// S1.2-S3 (`counter_mult`, S1 section 3): riposte's counter damage multiplier.
+    pub counter_mult: f64,
+    /// S1.2-S3 (`debt_stagger`): the AP debt at a round start that staggers.
+    pub debt_stagger: i32,
+    /// S1.2-S3 (`debt_stun`): the AP debt at a round start that stuns.
+    pub debt_stun: i32,
 }
 
 impl Default for Numbers {
@@ -419,6 +428,10 @@ impl Default for Numbers {
             switch_target_step: true,
             stances: true,
             attack_lock: AttackLock::None,
+            bleed_pct: status::BLEED_PCT,
+            counter_mult: status::COUNTER_MULT,
+            debt_stagger: status::DEBT_STAGGER,
+            debt_stun: status::DEBT_STUN,
         }
     }
 }
@@ -472,6 +485,10 @@ impl Numbers {
             switch_target_step: switch("switch_target_step", d.switch_target_step),
             stances: switch("stances", d.stances),
             attack_lock: AttackLock::parse(&value::string(o, "attack_lock", "")).unwrap_or(d.attack_lock),
+            bleed_pct: value::float(o, "bleed_pct", d.bleed_pct),
+            counter_mult: value::float(o, "counter_mult", d.counter_mult),
+            debt_stagger: value::int(o, "debt_stagger", d.debt_stagger),
+            debt_stun: value::int(o, "debt_stun", d.debt_stun),
         }
     }
 
@@ -667,22 +684,24 @@ pub fn world_ruleset<'a>(nearest_first: impl IntoIterator<Item = &'a Obj>) -> St
 // when empty) or a bare field key (set: it reads other than the schema default).
 
 /// A row field and what it needs to be read: `needs` tokens that must hold when the field is set (else a warning, or
-/// nothing when `refused`: the row checks already refuse it), `untested_with` tokens no test fights it with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// nothing when `refused`: the row checks already refuse it), `untested_with` tokens no test fights it with; `range`
+/// (S1.2-S3) the bounds of a row-only number the schema does not hold (a value outside is an error).
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FieldRule {
     pub key: &'static str,
     pub needs: &'static [&'static str],
     pub untested_with: &'static [&'static str],
     pub refused: bool,
+    pub range: Option<(f64, f64)>,
 }
 
 const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldRule {
-    FieldRule { key, needs, untested_with: &[], refused: false }
+    FieldRule { key, needs, untested_with: &[], refused: false, range: None }
 }
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 15] = [
+pub const FIELD_RULES: [FieldRule; 19] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -698,6 +717,12 @@ pub const FIELD_RULES: [FieldRule; 15] = [
     field_rule("rest_ap_cap", &["rest_ap=round_end"]),
     field_rule("rest_poise_per_block", &[POISE]),
     FieldRule { untested_with: &["chase=classic"], ..field_rule("attack_lock", &[]) },
+    // S1.2-S3 (S1 section 3; the debt ranges S2 section 3): the status numbers, row-only until a schema entry with a
+    // data re-save (like move_after_blocks); read whatever the rules
+    FieldRule { range: Some((0.01, 0.25)), ..field_rule("bleed_pct", &[]) },
+    FieldRule { range: Some((0.10, 1.50)), ..field_rule("counter_mult", &[]) },
+    FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stagger", &[]) },
+    FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stun", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -808,12 +833,11 @@ const STATS_WHY: &str = "stat and level rule; opens in the stat sessions (U1, U2
 const CRIT_WHY: &str = "crit input; becomes a role row (BASERULES1 4)";
 const FORMULA_WHY: &str = "formula value; leaves code as a value (BASERULES1 4)";
 const CARRY_WHY: &str = "the carry formula; one form, no option yet";
-const STATUS_WHY: &str = "status rule; opens in the status session (S1)";
 const BOUND_WHY: &str = "a schema field's bound";
 
 /// What stays code, and why (BASERULES1 4.1). A test scans `src` and fails on a numeric `pub const` neither here nor in
 /// `PROMOTED`, so the table cannot go stale.
-pub const LOCKED: [Locked; 49] = [
+pub const LOCKED: [Locked; 46] = [
     locked("W_POWER", "budget.rs", "gear", BUDGET_WHY),
     locked("W_MITIGATION", "budget.rs", "gear", BUDGET_WHY),
     locked("W_STAT_POINT", "budget.rs", "gear", BUDGET_WHY),
@@ -855,9 +879,6 @@ pub const LOCKED: [Locked; 49] = [
     locked("PROF_MAX_LEVEL", "stats.rs", "stats", STATS_WHY),
     locked("DEFAULT_SCALING", "stats.rs", "stats", STATS_WHY),
     locked("PASSIVE_ONLY_SCALING", "stats.rs", "stats", STATS_WHY),
-    locked("BLEED_PCT", "status.rs", "statuses", STATUS_WHY),
-    locked("DEBT_STAGGER", "status.rs", "statuses", STATUS_WHY),
-    locked("DEBT_STUN", "status.rs", "statuses", STATUS_WHY),
     locked("BASE_AP", "unit.rs", "timing", "the AP pool every timing rule counts in"),
     locked("GEAR_REACH_CAP", "unit.rs", "positioning", "the most reach gear adds"),
     locked("FORESIGHT_RANGE_MAX", "unit.rs", "tells", BOUND_WHY),
@@ -866,7 +887,14 @@ pub const LOCKED: [Locked; 49] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 2] = [("FIXED_AP", "flank_protected_ap"), ("MOVE_AFTER_BLOCKS", "move_after_blocks")];
+pub const PROMOTED: [(&str, &str); 6] = [
+    ("FIXED_AP", "flank_protected_ap"),
+    ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
+    ("BLEED_PCT", "bleed_pct"),
+    ("COUNTER_MULT", "counter_mult"),
+    ("DEBT_STAGGER", "debt_stagger"),
+    ("DEBT_STUN", "debt_stun"),
+];
 
 impl Numbers {
     /// BASERULES1-M: a row field as it reads, in its row form (a number, a value id, `on`/`off`, a comma list; deck
@@ -902,6 +930,10 @@ impl Numbers {
             "switch_target_step" => switch(self.switch_target_step),
             "stances" => switch(self.stances),
             "attack_lock" => self.attack_lock.id().to_string(),
+            "bleed_pct" => self.bleed_pct.to_string(),
+            "counter_mult" => self.counter_mult.to_string(),
+            "debt_stagger" => self.debt_stagger.to_string(),
+            "debt_stun" => self.debt_stun.to_string(),
             _ => return None,
         })
     }
@@ -953,6 +985,17 @@ impl Ruleset {
             for u in f.untested_with.iter().filter(|t| self.holds(t)) {
                 n.warnings.push(format!("{} {} is untested with {u}.", f.key, self.numbers.field(f.key).unwrap_or_default()));
             }
+            // S1.2-S3: a row-only number outside its range
+            if let (Some((lo, hi)), Some(v)) = (f.range, self.numbers.field(f.key).and_then(|v| v.parse::<f64>().ok())) {
+                if v < lo || v > hi {
+                    n.errors.push(format!("{} {v} is outside {lo}..{hi}.", f.key));
+                }
+            }
+        }
+        // S1.2-S3: the AP debt rule tests stun first, so a stagger threshold above the stun one never staggers
+        let (stagger, stun) = (self.numbers.debt_stagger, self.numbers.debt_stun);
+        if stagger > stun {
+            n.errors.push(format!("debt_stagger {stagger} is above debt_stun {stun}: a debt stuns first, so it never staggers."));
         }
         for b in BUNDLES.iter().filter(|b| b.kind == BundleKind::MustShip && b.anchor.iter().all(|t| self.holds(t))) {
             for t in b.holds.iter().filter(|t| !self.holds(t)) {

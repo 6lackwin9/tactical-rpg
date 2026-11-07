@@ -65,7 +65,11 @@ fn tunables(fields: &[Value]) -> Vec<String> {
     }
     for m in FIELD_RULES.iter().filter(|m| !seen.contains(&m.key)) {
         let default = ruleset::Numbers::default().field(m.key).unwrap_or_default();
-        out.push(format!("tunable {} row-only default={default}{} (no schema entry)", m.key, meta(m)));
+        // a whole-number field (its default has no point) shows a whole range, as the schema's int fields do
+        let whole = !default.contains('.');
+        let num = |v: f64| if whole { Value::from(v as i64) } else { Value::from(v) };
+        let range = m.range.map_or(String::new(), |(lo, hi)| format!(" range={}..{}", num(lo), num(hi)));
+        out.push(format!("tunable {} row-only default={default}{range}{} (no schema entry)", m.key, meta(m)));
     }
     out
 }

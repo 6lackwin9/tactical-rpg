@@ -569,7 +569,7 @@ impl Session {
             self.resolver.finish_round(&mut self.w);
         }
         for &c in &self.resolver.registered.clone() {
-            status::roll_over(&mut self.w.units[c], self.def.ap_regen);
+            status::roll_over(&mut self.w.units[c], self.def.ap_regen, &self.w.ruleset.numbers);
         }
         // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
         let rest = round_intent::round_start(&mut self.w);

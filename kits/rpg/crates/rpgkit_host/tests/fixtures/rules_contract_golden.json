@@ -25,6 +25,10 @@
     "tunable stances enum default=\"\" values=\"\"|on|off",
     "tunable attack_lock enum default=\"none\" values=none|melee|all untested_with=chase=classic",
     "tunable move_after_blocks row-only default=3 needs=round_intent (no schema entry)",
+    "tunable bleed_pct row-only default=0.06 range=0.01..0.25 (no schema entry)",
+    "tunable counter_mult row-only default=0.5 range=0.1..1.5 (no schema entry)",
+    "tunable debt_stagger row-only default=3 range=1..10 (no schema entry)",
+    "tunable debt_stun row-only default=5 range=1..10 (no schema entry)",
     "rule round_intent option system=planning bundle=intent_core requires=- conflicts=stances=on, switch_target_step=on",
     "rule enemy_moves option system=timing bundle=windup requires=- conflicts=-",
     "rule deck option system=build bundle=build requires=- conflicts=-",
@@ -84,15 +88,16 @@
     "locked stats.rs::PROF_MAX_LEVEL stats",
     "locked stats.rs::DEFAULT_SCALING stats",
     "locked stats.rs::PASSIVE_ONLY_SCALING stats",
-    "locked status.rs::BLEED_PCT statuses",
-    "locked status.rs::DEBT_STAGGER statuses",
-    "locked status.rs::DEBT_STUN statuses",
     "locked unit.rs::BASE_AP timing",
     "locked unit.rs::GEAR_REACH_CAP positioning",
     "locked unit.rs::FORESIGHT_RANGE_MAX tells",
     "locked unit.rs::STAGGER_TAKEN_MULT_MAX poise",
     "locked unit.rs::REACH_WEAPON_REACH positioning",
     "promoted FIXED_AP -> flank_protected_ap",
-    "promoted MOVE_AFTER_BLOCKS -> move_after_blocks"
+    "promoted MOVE_AFTER_BLOCKS -> move_after_blocks",
+    "promoted BLEED_PCT -> bleed_pct",
+    "promoted COUNTER_MULT -> counter_mult",
+    "promoted DEBT_STAGGER -> debt_stagger",
+    "promoted DEBT_STUN -> debt_stun"
   ]
 }

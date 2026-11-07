@@ -311,32 +311,33 @@ impl Resolver {
         self.round_end_steps.clear();
         self.round_end_calls += 1;
         crate::trigger::before_round_end(self, w);
+        // S1.2-S2: the debuff `tick` rows in table order (bleed, poison, burn), then the buff ones (regen)
         for &c in &self.registered.clone() {
-            for st in ["bleed", "poison", "burn"] {
+            for row in status::tick_rows(false) {
                 let u = &w.units[c];
-                if !u.is_active() || !u.has_status(st) {
+                if !u.is_active() || !u.has_status(row.id) {
                     continue;
                 }
-                let dmg = match st {
-                    "bleed" => status::bleed_damage(u),
-                    "poison" => status::poison_damage(u),
-                    _ => status::burn_damage(u),
-                };
-                if st == "poison" && dmg <= 0 {
+                // a flat tick (poison) at 0 deals nothing; the others deal at least 1
+                let dmg = status::tick_amount(u, row, &w.ruleset.numbers);
+                if dmg <= 0 {
                     continue;
                 }
                 let before = u.hp;
                 w.damage(c, dmg, true);
-                self.step(w, c, st, before - w.units[c].hp);
+                self.step(w, c, row.id, before - w.units[c].hp);
             }
-            if w.units[c].is_active() && w.units[c].has_status("regen") {
+            for row in status::tick_rows(true) {
+                if !w.units[c].is_active() || !w.units[c].has_status(row.id) {
+                    continue;
+                }
                 let u = &w.units[c];
                 let before = u.hp;
-                let amount = status::regen_amount(u).min(u.max_hp - u.hp);
+                let amount = status::tick_amount(u, row, &w.ruleset.numbers).min(u.max_hp - u.hp);
                 w.heal(c, amount);
                 let healed = w.units[c].hp - before;
                 if healed > 0 {
-                    self.step(w, c, "regen", healed);
+                    self.step(w, c, row.id, healed);
                 }
             }
         }

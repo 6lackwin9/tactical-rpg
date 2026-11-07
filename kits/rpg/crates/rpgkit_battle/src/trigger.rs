@@ -20,6 +20,7 @@ use crate::world::{UnitId, World};
 use aegis_core::value::{self, Obj};
 use indexmap::IndexMap;
 use rpgkit_data::TriggerRow;
+use rpgkit_rules::grants::Target;
 use rpgkit_rules::ruleset;
 use rpgkit_rules::stats::roundi;
 use rpgkit_rules::status;
@@ -726,9 +727,11 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
             "resist" => {
                 let st = value::string(e, "status", "");
                 let v = value::int(e, "value", 0);
+                // S1.2-S3: folded by U4's combine rule for `resist` (summed, capped at 100), as a passive's resist is
+                let fold = Target::Resist { status: st.clone() }.combine();
                 let u = &mut w.units[to];
                 let cur = u.status_resist.get(&st).copied().unwrap_or(0);
-                u.status_resist.insert(st.clone(), (cur + v).min(100));
+                u.status_resist.insert(st.clone(), fold.fold_i(cur, v));
                 format!("{name} resists {} {v} for the battle", status::display_name(&st))
             }
             "stagger" => {

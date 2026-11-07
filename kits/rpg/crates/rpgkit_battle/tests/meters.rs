@@ -283,7 +283,7 @@ fn a_band_holds_its_effects_and_statuses_only_while_in_it() {
     assert_eq!(meter::value(&w, HERO, "fury"), Some(HOT_FROM));
     assert_eq!((u.active_magnitude("empower"), u.trigger_crit, u.status_resist.get("stun").copied().unwrap_or(0)), (HOT_EMPOWER, crit + HOT_CRIT, resist + HOT_RESIST));
     assert!(res.log.iter().any(|l| l == "[Meter] p_hero's Heat: p_hero's Fury enters Hot"), "{:?}", res.log);
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     assert!(!w.units[HERO].has_status("empower"), "a 1-round grant");
     meter::round_start(&mut w);
     assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER, "held again at the round start");
@@ -456,10 +456,10 @@ fn a_skill_grants_empower_for_its_rounds() {
     run(&mut w, &mut res, 1, 1);
     assert_eq!(meter::value(&w, ALLY, "salve"), Some(0));
     assert!(w.units[HERO].st.has_any("empower") && !w.units[HERO].has_status("empower"), "queued for next round");
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     assert_eq!(w.units[HERO].active_magnitude("empower"), GRANT_EMPOWER);
     assert!((w.units[HERO].empower_factor() - (1.0 + GRANT_EMPOWER as f64 / 100.0)).abs() < 1e-9);
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     assert!(!w.units[HERO].st.has_any("empower"), "a 1-round grant");
 }
 
@@ -503,7 +503,7 @@ fn a_grant_outlives_a_band_it_landed_on() {
     heat(&mut w, &mut res, 1);
     status::grant_now(&mut w.units[HERO], "empower", 2, HOT_EMPOWER - 1, "coat");
     assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     meter::round_start(&mut w);
     assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
     vent(&mut w, &mut res, 2);
@@ -522,14 +522,14 @@ fn a_queued_grant_outlives_a_band() {
     status::queue(&mut w.units[HERO], "empower", 1, GRANT_EMPOWER, "coat");
     vent(&mut w, &mut res, 2);
     assert!(!w.units[HERO].has_status("empower") && w.units[HERO].st.pending.contains("empower"), "the band's part went, the queue stayed");
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     assert_eq!(w.units[HERO].active_magnitude("empower"), GRANT_EMPOWER);
 
     let mut w = s.w.clone();
     let mut res = Resolver::new(BLOCKS, 1);
     heat(&mut w, &mut res, 1);
     status::queue(&mut w.units[HERO], "empower", 2, HOT_EMPOWER - 1, "coat");
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     meter::round_start(&mut w);
     assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
     vent(&mut w, &mut res, 2);
@@ -545,7 +545,7 @@ fn a_grant_ending_leaves_the_band() {
     heat(&mut w, &mut res, 1);
     status::grant_now(&mut w.units[HERO], "empower", 1, GRANT_EMPOWER, "coat");
     assert_eq!(w.units[HERO].active_magnitude("empower"), GRANT_EMPOWER);
-    status::roll_over(&mut w.units[HERO], 0);
+    status::roll_over(&mut w.units[HERO], 0, &w.ruleset.numbers);
     meter::round_start(&mut w);
     assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
     vent(&mut w, &mut res, 2);
