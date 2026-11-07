@@ -7,7 +7,6 @@
 
 use crate::campaign::purse::purse;
 use crate::data::Data;
-use crate::state::{GOLD_MAX, SUPPLIES_MAX};
 pub use rpgkit_data::terms::*;
 use rpgkit_data::PurseCounter;
 
@@ -52,7 +51,7 @@ pub fn not_enough_currency(d: &Data, w: &str) -> String {
 
 /// Gold that does not fit the purse: "Gold is capped at 9999999 (12 not added).".
 pub fn currency_capped(d: &Data, w: &str, lost: i64) -> String {
-    format!("{} is capped at {GOLD_MAX} ({lost} not added).", short(d, w, CURRENCY))
+    format!("{} is capped at {} ({lost} not added).", short(d, w, CURRENCY), d.purse.purse_gold_cap)
 }
 
 /// A dialogue option's currency lock: "Needs 10 gold".
@@ -62,7 +61,7 @@ pub fn needs_currency(d: &Data, w: &str, n: i64) -> String {
 
 /// A supply buy beyond the cap: "You can carry at most 99 supplies.".
 pub fn upkeep_carry_max(d: &Data, w: &str) -> String {
-    format!("You can carry at most {SUPPLIES_MAX} {}.", word(d, w, UPKEEP))
+    format!("You can carry at most {} {}.", d.purse.supplies_max, word(d, w, UPKEEP))
 }
 
 /// TM6: supplies that do not fit: "Supplies are capped at 99 (3 left behind)." while the upkeep has its default name
@@ -70,8 +69,8 @@ pub fn upkeep_carry_max(d: &Data, w: &str) -> String {
 pub fn upkeep_capped(d: &Data, w: &str, lost: i64) -> String {
     let t = term(d, w, UPKEEP);
     if t.name == default_name(UPKEEP) {
-        format!("{} are capped at {SUPPLIES_MAX} ({lost} left behind).", t.short)
+        format!("{} are capped at {} ({lost} left behind).", t.short, d.purse.supplies_max)
     } else {
-        format!("{}: capped at {SUPPLIES_MAX} ({lost} left behind).", t.short)
+        format!("{}: capped at {} ({lost} left behind).", t.short, d.purse.supplies_max)
     }
 }

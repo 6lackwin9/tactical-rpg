@@ -3,7 +3,7 @@
 //! its kind) and of a world manifest, and the soft warnings over a world.
 
 use super::{board, campaign, dialogue, encounter, map, quest, shop, story, travel, unit, View};
-use crate::source::{content, fields};
+use crate::source::{content, fields, START_GOLD_MAX, SUPPLIES_START};
 use aegis_content::world::split_qid;
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
@@ -14,7 +14,6 @@ const TUNING_KEYS: [&str; 5] = ["hp_pct", "power", "armor", "speed", "ap"];
 const ITEM_TUNING_KEYS: [&str; 3] = ["power", "mitigation", "burden"];
 const STANCES: [&str; 4] = ["ally", "rival", "enemy", "neutral"];
 const PARTY_MAX: i64 = 4;
-const SUPPLIES_MAX: i64 = 99;
 const GONE_FLAGS_NOT_LIST: &str = "Gone flags must be a list of {\"key\", \"value\"} conditions.";
 
 pub fn qid(w: &str, id: &str) -> String {
@@ -672,13 +671,21 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     if resolved <= PARTY_MAX && resolved > party_max(v, w) {
         errors.push(format!("Start party has {resolved} heroes; party max is {}.", party_max(v, w)));
     }
+    // E2.2-S1 (FB-53b): the start gold and supplies fit the game's purse caps
     let gold = m.get("start_gold").cloned().unwrap_or(json::int(-1));
-    if !json::is_int(&gold) || !(-1..=99999).contains(&json::to_int(&gold)) {
-        errors.push("Start gold must be -1 (inherited) or 0..99999.".into());
+    let gold_max = START_GOLD_MAX.min(v.purse.purse_gold_cap);
+    if !json::is_int(&gold) || !(-1..=gold_max).contains(&json::to_int(&gold)) {
+        errors.push(format!("Start gold must be -1 (inherited) or 0..{gold_max}."));
     }
     let supplies = m.get("start_supplies").cloned().unwrap_or(json::int(-1));
-    if !json::is_int(&supplies) || !(-1..=SUPPLIES_MAX).contains(&json::to_int(&supplies)) {
-        errors.push("Start supplies must be -1 (inherited) or 0..99.".into());
+    let supplies_max = v.purse.supplies_max;
+    if !json::is_int(&supplies) || !(-1..=supplies_max).contains(&json::to_int(&supplies)) {
+        errors.push(format!("Start supplies must be -1 (inherited) or 0..{supplies_max}."));
+    }
+    // the inherited default start (no world in the lineage sets one) must fit too
+    let inherited = v.worlds.lineage(w).iter().map(|lw| json::get(v.worlds.manifest(lw), "start_supplies")).all(|s| !json::is_int(s) || json::to_int(s) < 0);
+    if inherited && SUPPLIES_START > supplies_max {
+        errors.push(format!("Start supplies inherit the default {SUPPLIES_START}, above the game's supply cap {supplies_max}; set start_supplies 0..{supplies_max}."));
     }
     errors.extend(dialogue::service_lines_errors(m.get("service_lines").unwrap_or(&Value::Object(Dict::new())), "Service lines"));
     errors.extend(ruleset_errors(v, m));

@@ -6,7 +6,7 @@
 use crate::data::Data;
 use crate::dialogue::{self, rep};
 use crate::quest;
-use crate::state::{GameState, SUPPLIES_MAX};
+use crate::state::GameState;
 use crate::terms;
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
@@ -114,7 +114,7 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
             ("item", "".into()),
             ("count", int(1)),
             ("price", int(supply_price)),
-            ("left", int((SUPPLIES_MAX - gs.party.supplies).max(0))),
+            ("left", int((gs.party.purse.supplies_max - gs.party.supplies).max(0))),
         ]));
     }
     out
@@ -243,8 +243,8 @@ fn trade_result(errors: &[String], spent: i64, earned: i64, gold: i64, notes: &[
 /// `buys` are (kind, id, count) as `offers` (kind item | loot | supplies), `sells` (item, count); counts are summed per
 /// id and side, then each buy passes `buy`'s checks and each sale `sell`'s against the state before the trade. Sales
 /// pay for purchases: the trade needs `gold + earned - spent >= 0`. Gold changes once, by `earned - spent` (a gain capped
-/// at GOLD_MAX with `sell`'s note). {ok, errors, spent, earned, gold (added or removed), notes}. `buy` and `sell` stay
-/// as they are (the journey golden calls them).
+/// at the purse gold cap with `sell`'s note). {ok, errors, spent, earned, gold (added or removed), notes}. `buy` and
+/// `sell` stay as they are (the journey golden calls them).
 pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64)], sells: &[(String, i64)]) -> Dict {
     if !is_open(d, gs, r) {
         return trade_result(&["The shop is closed.".into()], 0, 0, 0, &[]);

@@ -2,9 +2,9 @@
 //! panels, text, hover cards and menus are drawn smooth at the window's real resolution (painter.rs). Every change goes
 //! through the command API (emberwake_host on aegis_host), the same one `aegis serve` and the agent link use.
 //! Two modes: the Test Arena (a catalog encounter, Restart / Play again) and a world battle (GameEncounter: the saved
-//! party at its stored HP against a world encounter; on Continue the runner's after_fight settles the battle's tally
-//! (the kit settles the party: HP, the stay-behind and roster rules; then the rewards) and the results popup opens
-//! over the map).
+//! party at its stored HP against a world encounter; on Continue the kit's `finish_world` (the runner's after_fight)
+//! settles the battle's tally (the kit settles the party: HP, the stay-behind and roster rules; then the rewards) and
+//! the results popup opens over the map).
 //! Mouse: click a hero to select; click a foe, an ally, the hero itself or a tile for its options; hover anything for
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
@@ -72,8 +72,8 @@ use aegis_core::json::{self, s, Dict};
 use emberwake_world::battle::WorldRoster;
 use emberwake_battle::world::World;
 use emberwake_host::{Battle, Host};
-use emberwake_world::campaign::{purse, trigger};
-use emberwake_world::{dialogue, explore, story, travel};
+use emberwake_world::campaign::purse;
+use emberwake_world::story;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -194,19 +194,6 @@ pub enum Action {
     /// INPUT2: a click on a strip block showing a ghost entry (the entry's index in the plan): the ghost up to it becomes
     /// picks, so that command is the hero's latest pick.
     GhostSlot(usize),
-}
-
-/// The runner's settle of a world fight (BattleBridge's after_fight by the fight's source): `travel`, `dialogue`,
-/// `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts), `trigger` (CAMPAIGN1 T2: a queued battle,
-/// settled like a dialogue fight), else `explore`. The battle screen and the debug fight popup both settle through it.
-pub fn after_fight(d: &emberwake_world::Data, gs: &mut emberwake_world::GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&emberwake_world::battle::Tally>) -> Dict {
-    match runner {
-        "travel" => travel::after_fight(d, gs, fight, outcome, tally),
-        "dialogue" => dialogue::after_fight(d, gs, fight, outcome, tally),
-        story::FIGHT_SOURCE => story::after_fight(d, gs, fight, outcome, tally),
-        trigger::FIGHT_SOURCE => trigger::after_fight(d, gs, fight, outcome, tally),
-        _ => explore::after_fight(d, gs, fight, outcome, tally),
-    }
 }
 
 /// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and
@@ -704,7 +691,7 @@ impl BattleScreen {
         // PACE1 rule 7 (GameEncounter): a start_status entry is granted when its requires_flags all hold.
         let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| emberwake_world::quest::condition_met(gs, json::dict(c)))).collect();
         def.start_grant = StartGrant::Only(grants);
-        let roster = WorldRoster { d: &d, world: world.clone() };
+        let roster = WorldRoster::new(&d, world.clone());
         let mut party = Vec::new();
         let mut members = Vec::new();
         // ROSTER1-L: the world fields each member (its class path and deck rule in this world, at its stored HP)

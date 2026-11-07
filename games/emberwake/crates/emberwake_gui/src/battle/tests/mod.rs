@@ -744,7 +744,7 @@ fn a_boss_tier_enemy_makes_a_boss_fight() {
     let d = Data::open(&dir).expect("data").0;
     let fight = |id: &str| {
         let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", id));
-        boss_fight(&Session::start(d.cat.clone(), def, &WorldRoster { d: &d, world: "ashlands".into() }))
+        boss_fight(&Session::start(d.cat.clone(), def, &WorldRoster::new(&d, "ashlands")))
     };
     assert!(fight("ashmaw_stand"));
     assert!(!fight("courtyard_skirmish"));

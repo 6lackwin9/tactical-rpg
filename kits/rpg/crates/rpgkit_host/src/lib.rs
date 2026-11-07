@@ -228,7 +228,7 @@ impl Battle {
             Err(e) => return err(e),
         }
         def.id = format!("{world}:{local}");
-        let roster = rpgkit_world::battle::WorldRoster { d: &d, world: world.to_string() };
+        let roster = rpgkit_world::battle::WorldRoster::new(&d, world);
         let s = Session::start(d.cat.clone(), def, &roster);
         let state = state_of(&s);
         self.begin(s);

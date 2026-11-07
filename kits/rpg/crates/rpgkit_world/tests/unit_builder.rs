@@ -72,7 +72,7 @@ fn strs(ids: &[&str]) -> Vec<String> {
 #[test]
 fn an_npc_applies_its_four_sources_once_each_in_gather_order() {
     let d = data(json!([SOURCES[1]]));
-    let roster = WorldRoster { d: &d, world: "w".into() };
+    let roster = WorldRoster::new(&d, "w");
     let e = roster.entry(&d.cat, "foe").expect("the foe's entry");
     let over = roster.overrides(&d.cat, "foe");
     assert_eq!(over.passives, strs(&SOURCES), "character, faction, disciplines, named items; the repeat once");

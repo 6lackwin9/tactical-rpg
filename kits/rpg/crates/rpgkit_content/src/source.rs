@@ -20,7 +20,62 @@ pub struct Source {
     pub catalog: Value,
     pub worlds: Value,
     pub game: Value,
+    /// E2.2-S1 (FB-53): the game-wide purse caps, from the game's manifest beside the data folder.
+    pub purse: PurseCaps,
     pub errors: Vec<String>,
+}
+
+/// The supplies a new game starts with when no world in the lineage sets `start_supplies` (E2.2-S1: the world check
+/// flags it when the game's `supplies_max` is lower).
+pub const SUPPLIES_START: i64 = 10;
+/// The highest `start_gold` a world may author (E2.2-S1: lower when the game's `purse_gold_cap` is).
+pub const START_GOLD_MAX: i64 = 99999;
+
+/// E2.2-S1 (FB-53a,b): the game-wide purse caps (the party and its purse are shared by every world, so one per game):
+/// `supplies_max` and `purse_gold_cap`, optional keys of the game's manifest (`game.json`). A missing key, or one that is
+/// not a whole number 1 or more (`PurseCaps::problems`), reads the default: today's caps. Read by the party (gold and
+/// supply grants, the save check, a save loaded under lower caps is clamped to them) and the world checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PurseCaps {
+    pub supplies_max: i64,
+    pub purse_gold_cap: i64,
+}
+
+impl PurseCaps {
+    /// The manifest keys, in this order.
+    pub const KEYS: [&'static str; 2] = ["supplies_max", "purse_gold_cap"];
+    pub const SUPPLIES_MAX: i64 = 99;
+    pub const PURSE_GOLD_CAP: i64 = 9_999_999;
+
+    /// The caps of a game manifest object (`game.json`), each key its default when missing or not valid.
+    pub fn from_manifest(m: &Dict) -> Self {
+        let cap = |key: &str, default: i64| m.get(key).map(json::normalize).filter(|v| json::is_int(v) && json::to_int(v) >= 1).map_or(default, |v| json::to_int(&v));
+        Self { supplies_max: cap("supplies_max", Self::SUPPLIES_MAX), purse_gold_cap: cap("purse_gold_cap", Self::PURSE_GOLD_CAP) }
+    }
+
+    /// The caps of the manifest beside `data_dir` (the game folder's `game.json`); the defaults when there is none.
+    pub fn beside(data_dir: &Path) -> Self {
+        let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| p.is_file()) else { return Self::default() };
+        match read(&path, &mut Vec::new()) {
+            Some(Value::Object(m)) => Self::from_manifest(&m),
+            _ => Self::default(),
+        }
+    }
+
+    /// What keeps a manifest's purse caps from being valid: a key present that is not a whole number 1 or more.
+    pub fn problems(m: &Dict) -> Vec<String> {
+        Self::KEYS
+            .iter()
+            .filter(|k| m.get(**k).map(json::normalize).is_some_and(|v| !json::is_int(&v) || json::to_int(&v) < 1))
+            .map(|k| format!("game.json: {k} must be a whole number 1 or more."))
+            .collect()
+    }
+}
+
+impl Default for PurseCaps {
+    fn default() -> Self {
+        Self { supplies_max: Self::SUPPLIES_MAX, purse_gold_cap: Self::PURSE_GOLD_CAP }
+    }
 }
 
 /// Catalog kinds in the order the catalog export lists them (item families go with the game data).
@@ -79,7 +134,7 @@ pub fn load(data_dir: &Path) -> Source {
     game.insert("item_families".into(), catalog["item_families"].clone());
     let mut cat = catalog.as_object().cloned().unwrap_or_default();
     cat.shift_remove("item_families");
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), errors }
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.

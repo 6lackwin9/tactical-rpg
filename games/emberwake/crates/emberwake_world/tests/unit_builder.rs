@@ -179,7 +179,7 @@ fn every_hero_and_world_character_builds_as_before() {
     }
     let mut npcs = 0;
     for w in d.world_ids() {
-        let roster = WorldRoster { d: &d, world: w.clone() };
+        let roster = WorldRoster::new(&d, w.clone());
         let rule = progression::deck_rule(&d, &w);
         for c in d.own_entries(&w, "characters") {
             let r = json::s(c, "id");
@@ -245,7 +245,7 @@ impl Roster for AnyUnit<'_> {
 fn any_unit_npc_included_fights_through_the_one_builder() {
     let d = data();
     let (w, hero) = heroes(&d).into_iter().next().expect("a party hero");
-    let roster = AnyUnit(WorldRoster { d: &d, world: w.clone() });
+    let roster = AnyUnit(WorldRoster::new(&d, w.clone()));
     // the world character with the most overrides, a derived enemy template, a fixed unit
     let sources = |c: &Dict| d.character_passives(c, &w).len() + json::aget(c, "named_items").len() + json::dget(c, "tuning").len();
     let npc = d.own_entries(&w, "characters").iter().filter(|c| json::s(c, "role") != "party" && roster.0.entry(&d.cat, &json::s(c, "id")).is_some()).max_by_key(|c| sources(c)).map(|c| json::s(c, "id")).expect("a world character");

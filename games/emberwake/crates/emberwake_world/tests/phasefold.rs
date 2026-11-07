@@ -71,7 +71,7 @@ fn run(d: &Data, world: &str, id: &str, over: &Value, preset: &str, seed: i64) -
     }
     def.rng_seed = seed;
     let extras: IndexMap<String, UnitDef> = IndexMap::new();
-    let roster = WorldRoster { d, world: world.to_string() };
+    let roster = WorldRoster::new(d, world);
     let mut s = if world.is_empty() { Session::start(d.cat.clone(), def, &extras) } else { Session::start(d.cat.clone(), def, &roster) };
     let start = units_state(&s);
     s.attach_metrics(BattleMetrics::new(), false);

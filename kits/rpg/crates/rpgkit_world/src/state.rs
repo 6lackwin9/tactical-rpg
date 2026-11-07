@@ -12,9 +12,12 @@ use indexmap::IndexMap;
 pub use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for};
 use serde_json::Value;
 
-pub const GOLD_MAX: i64 = 9_999_999;
-pub const SUPPLIES_MAX: i64 = 99;
-pub const SUPPLIES_START: i64 = 10;
+pub use rpgkit_content::source::PurseCaps;
+/// The default purse gold cap (E2.2-S1: a game's `purse_gold_cap` replaces it; read `PartyState::purse`).
+pub const GOLD_MAX: i64 = PurseCaps::PURSE_GOLD_CAP;
+/// The default supply cap (E2.2-S1: a game's `supplies_max` replaces it; read `PartyState::purse`).
+pub const SUPPLIES_MAX: i64 = PurseCaps::SUPPLIES_MAX;
+pub const SUPPLIES_START: i64 = rpgkit_content::source::SUPPLIES_START;
 pub const SEED_MAX: i64 = 2_147_483_647;
 pub const POUCH_MAX: usize = 3;
 pub const NO_POSITION: (i64, i64) = (-1, -1);
@@ -636,6 +639,8 @@ pub struct PartyState {
     pub max_active: i64,
     /// ROSTER1 BK7: the world's roster settings (never saved).
     pub roster: RosterCaps,
+    /// E2.2-S1 (FB-53a): the game's purse caps (never saved; set at create and load from `Data::purse`).
+    pub purse: PurseCaps,
     pub stash: IndexMap<String, i64>,
     pub gold: i64,
     pub supplies: i64,
@@ -646,7 +651,7 @@ pub struct PartyState {
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
+        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
     }
 }
 
@@ -694,13 +699,13 @@ impl PartyState {
 
     pub fn add_gold(&mut self, amount: i64) -> i64 {
         let before = self.gold;
-        self.gold = (self.gold + amount.max(0)).clamp(0, GOLD_MAX);
+        self.gold = (self.gold + amount.max(0)).clamp(0, self.purse.purse_gold_cap);
         self.gold - before
     }
 
     pub fn add_supplies(&mut self, n: i64) -> i64 {
         let before = self.supplies;
-        self.supplies = (self.supplies + n.max(0)).clamp(0, SUPPLIES_MAX);
+        self.supplies = (self.supplies + n.max(0)).clamp(0, self.purse.supplies_max);
         (self.supplies - before).max(0)
     }
 
@@ -712,6 +717,14 @@ impl PartyState {
         let spent = Self::supplies_cost(self.supplies, n);
         self.supplies -= spent;
         spent
+    }
+
+    /// E2.2-S1 (FB-53a): takes the game's purse caps, lowering gold and supplies above them to them (a save made under
+    /// higher caps loads, never fails the check); a damaged value (below 0) is left for `validate`.
+    pub fn apply_purse(&mut self, caps: PurseCaps) {
+        self.purse = caps;
+        self.gold = self.gold.min(caps.purse_gold_cap);
+        self.supplies = self.supplies.min(caps.supplies_max);
     }
 
     pub fn apply_cap(&mut self, cap: i64) {
@@ -757,6 +770,7 @@ impl PartyState {
             active_ids: json::sget(d, "active_ids"),
             max_active: PARTY_MAX,
             roster: RosterCaps::default(),
+            purse: PurseCaps::default(),
             stash: d.get("stash").map(json::ints).unwrap_or_default(),
             gold: whole("gold"),
             supplies: whole("supplies"),
@@ -817,11 +831,12 @@ impl PartyState {
                 errors.push(format!("Stash count of '{k}' must be >= 1."));
             }
         }
-        if self.gold < 0 || self.gold > GOLD_MAX {
-            errors.push(format!("gold must be 0..{GOLD_MAX}."));
+        let PurseCaps { supplies_max, purse_gold_cap } = self.purse;
+        if self.gold < 0 || self.gold > purse_gold_cap {
+            errors.push(format!("gold must be 0..{purse_gold_cap}."));
         }
-        if self.supplies < 0 || self.supplies > SUPPLIES_MAX {
-            errors.push(format!("supplies must be 0..{SUPPLIES_MAX}."));
+        if self.supplies < 0 || self.supplies > supplies_max {
+            errors.push(format!("supplies must be 0..{supplies_max}."));
         }
         errors
     }
@@ -916,6 +931,7 @@ impl GameState {
         let mut g = Self { world_id: world_id.into(), party, ..Default::default() };
         g.party.apply_cap(d.party_max(world_id));
         g.party.roster = crate::roster::caps(d, world_id);
+        g.party.apply_purse(d.purse);
         g.campaign = crate::campaign::Campaign::fresh(d, world_id, g.rng_seed);
         g
     }
@@ -1035,6 +1051,7 @@ impl GameState {
         g.party = PartyState::from_dict(json::dget(d, "party"));
         g.party.apply_cap(data.party_max(&g.world_id));
         g.party.roster = crate::roster::caps(data, &g.world_id);
+        g.party.apply_purse(data.purse);
         for (k, v) in json::dict(&json::normalize(d.get("flags").unwrap_or(&Value::Null))) {
             g.flags.insert(k.clone(), v.clone());
         }

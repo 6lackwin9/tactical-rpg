@@ -39,6 +39,8 @@ pub struct Data {
     pub quest_templates: Vec<Dict>,
     pub services: Vec<Dict>,
     pub xp: XpCurve,
+    /// E2.2-S1 (FB-53a): the game-wide purse caps (the manifest's beside the data folder; the defaults from values).
+    pub purse: rpgkit_content::source::PurseCaps,
     /// HOOKS1 CN3: per world whose `classes` overlay replaces a class path, the catalog with those paths (built at load;
     /// other worlds build with `cat`).
     world_cats: IndexMap<String, Arc<Catalog>>,
@@ -67,7 +69,9 @@ impl Data {
     pub fn open(dir: &Path) -> Result<(Self, Vec<String>)> {
         anyhow::ensure!(dir.join("catalog").is_dir(), "{} is not a data folder (catalog/, worlds/, ...)", dir.display());
         let src = rpgkit_content::source::load(dir);
-        Ok((Self::from_values(&src.catalog, &src.worlds, &src.game), src.errors))
+        let mut d = Self::from_values(&src.catalog, &src.worlds, &src.game);
+        d.purse = src.purse;
+        Ok((d, src.errors))
     }
 
     /// The data/ folder of the nearest game folder at or above `start` (one holding game.json, data/catalog/ and
@@ -108,6 +112,7 @@ impl Data {
             quest_templates: dicts(json::get(g, "quests")),
             services: dicts(json::get(g, "services")),
             xp,
+            purse: rpgkit_content::source::PurseCaps::default(),
             world_cats: IndexMap::new(),
         };
         d.refresh_world_cats();

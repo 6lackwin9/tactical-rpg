@@ -3,7 +3,7 @@
 use super::input::RowAct;
 use super::marks::{hold_line, round_summary_text};
 use super::overlays::Layers;
-use super::{after_fight, log_settled, Action, BattleScreen, Mode, AUTO_CONFIRM, CONFIRM_GUARD_MS, PLAYBACK_SPEED, PLAYBACK_SPEEDS, TACTICS, TACTIC_LABELS};
+use super::{log_settled, Action, BattleScreen, Mode, AUTO_CONFIRM, CONFIRM_GUARD_MS, PLAYBACK_SPEED, PLAYBACK_SPEEDS, TACTICS, TACTIC_LABELS};
 use super::tokens::Tokens;
 use crate::screens::{show_errors, Cx, Nav};
 use aegis_ui::audio::Bus;
@@ -191,7 +191,7 @@ impl BattleScreen {
         let d = cx.data.clone();
         let tally = emberwake_world::battle::Tally::of_world_fight(self.session(), members, &self.class_world);
         let gs = cx.gs_mut();
-        let res = after_fight(&d, gs, runner, fight, &outcome, Some(&tally));
+        let res = emberwake_world::battle::finish_world(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {
             show_errors(cx, json::sget(&res, "errors"));

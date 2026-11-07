@@ -51,7 +51,7 @@ fn sid(d: &Data, id: &str) -> usize {
 /// A battle with the member as the only party unit (GameEncounter's path: a Prebuilt hero).
 fn battle(d: &Data, m: &UnitState) -> (Session, usize) {
     let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", "courtyard_skirmish"));
-    let roster = WorldRoster { d, world: "ashlands".into() };
+    let roster = WorldRoster::new(d, "ashlands");
     let base = d.cat.units.get("priest").unwrap().clone();
     let hero = Prebuilt { unit: built(d, m), art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone(), default_intent: base.default_intent.clone() };
     let s = Session::start_with(d.cat.clone(), def, &roster, vec![hero]);

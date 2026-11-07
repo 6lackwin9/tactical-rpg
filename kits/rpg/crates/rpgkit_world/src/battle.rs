@@ -48,6 +48,13 @@ pub struct WorldRoster<'a> {
     pub world: String,
 }
 
+impl<'a> WorldRoster<'a> {
+    /// W.2-S1 (FB-50a): the roster of a battle played in `world` (the one constructor; `begin_world` builds on it).
+    pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
+        Self { d, world: world.into() }
+    }
+}
+
 impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     fn entry(&self, _cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
@@ -469,6 +476,21 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
             }
             apply(d, gs, encounter_qid, outcome, &t)
         }
+    }
+}
+
+/// W.2-S1 (FB-50a): the settle of a world fight by the runner that started it (BattleBridge's after_fight by the
+/// fight's source): `travel`, `dialogue`, `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts),
+/// `trigger` (CAMPAIGN1 T2: a queued battle, settled like a dialogue fight), else `explore`. Each runner settles the
+/// party side first, then the rewards, then its clock tick (`apply`). The battle screen and the debug fight popup both
+/// settle through it.
+pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&Tally>) -> Dict {
+    match runner {
+        "travel" => crate::travel::after_fight(d, gs, fight, outcome, tally),
+        "dialogue" => crate::dialogue::after_fight(d, gs, fight, outcome, tally),
+        crate::story::FIGHT_SOURCE => crate::story::after_fight(d, gs, fight, outcome, tally),
+        crate::campaign::trigger::FIGHT_SOURCE => crate::campaign::trigger::after_fight(d, gs, fight, outcome, tally),
+        _ => crate::explore::after_fight(d, gs, fight, outcome, tally),
     }
 }
 

@@ -21,7 +21,7 @@ const MAX_TEXT: usize = 1000;
 const NODE_KEYS: [&str; 8] = ["id", "speaker", "expression", "text", "choices", "effects", "next", "end"];
 const CHOICE_KEYS: [&str; 6] = ["text", "to", "requires", "unless", "effects", "show_locked"];
 /// Condition kind -> its keys besides `kind`.
-const CONDITION_KINDS: [(&str, &[&str]); 5] = [("flag", &["key", "value", "op"]), ("quest", &["quest", "status"]), ("items", &["item", "count"]), ("gold", &["min"]), ("stat", &["stat", "min"])];
+const CONDITION_KINDS: [(&str, &[&str]); 5] = [("flag", &["key", "value", "op"]), ("quest", &["quest", "status"]), ("items", &["item", "count"]), ("gold", &["min"]), ("stat", &["stat", "min", "threshold"])];
 const QUEST_STATUSES: [&str; 7] = ["locked", "available", "unavailable", "active", "ready", "blocked", "completed"];
 const GOLD_CONDITION_MAX: i64 = 9999999;
 const STAT_MIN: i64 = 1;
@@ -316,8 +316,13 @@ pub fn conditions_errors(v: &View, w: &str, raw: &Value, label: &str) -> Vec<Str
                 if !stat.is_string() || !STATS.contains(&gstr(&stat).as_str()) {
                     errors.push(format!("{cl}: stat '{}' is not one of {}.", gstr(&stat), STATS.join(", ")));
                 }
-                if !int_in(json::get(cond, "min"), STAT_MIN, STAT_MAX) {
-                    errors.push(format!("{cl}: min must be a whole number {STAT_MIN}..{STAT_MAX}."));
+                // T1.2-S1 (FB-54a): `threshold` is a pure alias of `min` (one of them, not both)
+                if cond.contains_key("min") && cond.contains_key("threshold") {
+                    errors.push(format!("{cl}: give min or threshold (its alias), not both."));
+                }
+                let key = if cond.contains_key("threshold") && !cond.contains_key("min") { "threshold" } else { "min" };
+                if !int_in(json::get(cond, key), STAT_MIN, STAT_MAX) {
+                    errors.push(format!("{cl}: {key} must be a whole number {STAT_MIN}..{STAT_MAX}."));
                 }
             }
         }

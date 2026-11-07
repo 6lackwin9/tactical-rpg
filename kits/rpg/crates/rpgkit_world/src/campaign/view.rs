@@ -7,7 +7,7 @@
 use super::meter::MeterDef;
 use super::purse::purse;
 use crate::data::Data;
-use crate::state::{GameState, SUPPLIES_MAX};
+use crate::state::GameState;
 use aegis_core::json;
 
 /// What a HUD chip counts.
@@ -67,13 +67,13 @@ fn tip_lines(tip: &str) -> Vec<String> {
     }
 }
 
-/// W4: the HUD chips of `gs`, left to right: the currency, the upkeep (`amount/SUPPLIES_MAX`), then each visible meter
+/// W4: the HUD chips of `gs`, left to right: the currency, the upkeep (`amount/supplies_max`, the game's supply cap), then each visible meter
 /// by its `hud.order` (data order on a tie). Outside a campaign world: today's two counters.
 pub fn hud(d: &Data, gs: &GameState) -> Vec<HudChip> {
     let p = purse(d, &gs.world_id);
     let mut out = vec![
         HudChip { id: "currency".into(), kind: ChipKind::Currency, short: String::new(), icon: p.currency.icon.clone(), value: gs.party.gold.to_string(), tone: String::new(), title: p.currency.name.clone(), lines: tip_lines(&p.currency.tip) },
-        HudChip { id: "upkeep".into(), kind: ChipKind::Upkeep, short: String::new(), icon: p.upkeep.icon.clone(), value: format!("{}/{SUPPLIES_MAX}", gs.party.supplies), tone: String::new(), title: p.upkeep.name.clone(), lines: tip_lines(&p.upkeep.tip) },
+        HudChip { id: "upkeep".into(), kind: ChipKind::Upkeep, short: String::new(), icon: p.upkeep.icon.clone(), value: format!("{}/{}", gs.party.supplies, gs.party.purse.supplies_max), tone: String::new(), title: p.upkeep.name.clone(), lines: tip_lines(&p.upkeep.tip) },
     ];
     let Some(c) = gs.campaign.as_ref() else { return out };
     let mut shown: Vec<(i64, usize, HudChip)> = Vec::new();

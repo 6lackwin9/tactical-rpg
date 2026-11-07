@@ -493,6 +493,7 @@ fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, data_dir.parent().map(aegis_core::assets::Layers::for_game).unwrap_or_default());
     view.terrain_file = data_dir.join("catalog/terrain.json").is_file();
     view.load_errors = src.errors.clone();
+    view.purse = src.purse;
     view
 }
 
@@ -558,6 +559,10 @@ fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
         Err(e) => return vec![e],
     };
     let mut out = m.problems();
+    // E2.2-S1 (FB-53): the game-wide purse caps, when the manifest sets them
+    if let Some(Value::Object(raw)) = read(&path, &mut Vec::new()) {
+        out.extend(source::PurseCaps::problems(&raw));
+    }
     let folders: Vec<String> = worlds.as_object().map(|w| w.keys().cloned().collect()).unwrap_or_default();
     for w in m.worlds.iter().filter(|w| !folders.contains(w)) {
         out.push(format!("game.json: world '{w}' has no folder in data/worlds/."));
