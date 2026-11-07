@@ -114,3 +114,28 @@ fn the_default_reads_the_classic_row() {
     assert!(a.ruleset.rules.is_empty() && a.ruleset.stances());
     assert_eq!(parse(&data(false), "duel").unwrap().ruleset, Ruleset::classic(), "no row: the built-in classic values");
 }
+
+/// BASERULES1-M2 (FB-40, library section 7): with `ruleset=` or `rules=` the sim prints the picked ruleset's notes (the
+/// same text as `aegis rules`), errors first (`run` prints them right under ARGS); no pick or a clean row prints none; `sim help` names it.
+#[test]
+fn a_picked_ruleset_prints_its_notes() {
+    let d = data(true);
+    assert!(parse(&d, "duel").unwrap().rule_notes.is_empty(), "no pick: no notes");
+    let clean = parse(&d, "duel ruleset=classic").unwrap();
+    assert!(clean.rule_notes.is_empty(), "the classic row is clean: {:?}", clean.rule_notes);
+    // flank without round_intent is the one hard error (BASERULES1-M)
+    let a = parse(&d, "duel rules=+flank").unwrap();
+    assert_eq!(a.rule_notes, rpgkit_sim::args::rule_note_lines(&a.ruleset));
+    assert!(a.rule_notes.first().is_some_and(|l| l.starts_with("RULES error: ") && l.contains("flank")), "{:?}", a.rule_notes);
+    let mut seen_warning = false;
+    for l in &a.rule_notes {
+        assert!(l.starts_with("RULES error: ") && !seen_warning || l.starts_with("RULES warning: "), "errors first: {l}");
+        seen_warning |= l.starts_with("RULES warning: ");
+    }
+    // a world fight with rules= alone plays its world's row switched, so the classic notes would mislead: none
+    assert!(parse(&d, "duel rules=+flank enc=world:vale/e_vale").unwrap().rule_notes.is_empty(), "world fights: no notes");
+    assert!(!parse(&d, "duel ruleset=timeline rules=+flank enc=world:vale/e_vale").unwrap().rule_notes.is_empty(), "ruleset= plays every fight by its row");
+    let game = rpgkit_sim::SimGame::default();
+    let help = rpgkit_sim::run(&d, &["help".to_string()], &game);
+    assert!(help.contains(&rpgkit_sim::args::RULE_NOTES_USAGE.to_string()), "sim help names the notes");
+}

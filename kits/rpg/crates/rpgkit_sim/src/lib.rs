@@ -147,6 +147,10 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
             if matches!(argv.first().map(String::as_str), Some("help" | "feel")) {
                 out.push(args::FEEL_COUNTS_USAGE.to_string());
             }
+            // BASERULES1-M2: the same, for the ruleset notes (no golden run asks for help)
+            if argv.first().map(String::as_str) == Some("help") {
+                out.push(args::RULE_NOTES_USAGE.to_string());
+            }
             return out;
         }
     };
@@ -163,6 +167,10 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
     let mut r = Runner::new(d, &a);
     r.metrics.keep_totals = a.metrics && !args::METRIC_MODES.contains(&a.mode.as_str());
     r.print(a.header());
+    // BASERULES1-M2 (FB-40): the picked ruleset's notes, right under ARGS (none for a clean row)
+    for line in &a.rule_notes {
+        r.print(line.clone());
+    }
     // RULESET1-G: the feel report ends with its FEEL_JSON line (no score footers)
     if a.mode == "feel" {
         feel::feel_mode(&mut r);

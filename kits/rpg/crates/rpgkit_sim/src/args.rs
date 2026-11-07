@@ -25,6 +25,9 @@ pub const FEEL_COUNTS_KEY: &str = "counts";
 /// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
 /// `usage`.
 pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id";
+/// BASERULES1-M2 (FB-40, library section 7): the help of the ruleset notes, printed apart from `usage` (`sim help`), which
+/// `sim_golden` holds.
+pub const RULE_NOTES_USAGE: &str = "       with ruleset= or rules=: the picked ruleset's notes (aegis rules: requires, conflicts, untested sets, ranges) print after ARGS as RULES error: / RULES warning: lines; the run still plays";
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
@@ -114,6 +117,10 @@ pub struct SimArgs {
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     ruleset_id: String,
     rules: String,
+    /// BASERULES1-M2 (FB-40): the picked ruleset's notes (`Ruleset::notes`, errors first) as printable lines, when the
+    /// command line gives `ruleset=`, or `rules=` on a run with no world fights; empty otherwise and for a clean row (the
+    /// feel mode's own timeline default prints none).
+    pub rule_notes: Vec<String>,
     /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's).
     pub melee_diagonal: Option<rpgkit_rules::ruleset::MeleeDiagonal>,
     /// ATTACKLOCK1: `attack_lock=none|melee|all` over the ruleset row's value (None = the row's).
@@ -184,6 +191,7 @@ impl Default for SimArgs {
             ruleset: rpgkit_rules::ruleset::Ruleset::default(),
             ruleset_id: String::new(),
             rules: String::new(),
+            rule_notes: Vec::new(),
             melee_diagonal: None,
             attack_lock: None,
             tactic: "balanced".into(),
@@ -251,6 +259,13 @@ pub fn skipped_by_default(id: &str, row: &aegis_core::value::Obj) -> bool {
         _ => false,
     };
     id.starts_with("kit_") || filled("stay_behind") || filled("rooms")
+}
+
+/// BASERULES1-M2 (FB-40, `BASERULES1_LIBRARY.md` section 7): a ruleset's notes as the sim prints them, errors first,
+/// in `Ruleset::notes` order (the same text `aegis rules` shows).
+pub fn rule_note_lines(r: &rpgkit_rules::ruleset::Ruleset) -> Vec<String> {
+    let n = r.notes();
+    n.errors.iter().map(|e| format!("RULES error: {e}")).chain(n.warnings.iter().map(|w| format!("RULES warning: {w}"))).collect()
 }
 
 impl SimArgs {
@@ -365,6 +380,9 @@ impl SimArgs {
         if a.quick {
             a.seed_count = 1;
         }
+        // BASERULES1-M2: whether the command line picked the rules (before the feel mode fills in its own default)
+        let picked_ruleset = !a.ruleset_id.is_empty();
+        let switched = !a.rules.is_empty();
         if a.mode == "feel" {
             a.feel_defaults(d, enc_set)?;
         } else if let Some(k) = a.feel_keys.first() {
@@ -384,6 +402,13 @@ impl SimArgs {
         }
         if let Some(l) = a.attack_lock {
             a.ruleset.numbers.attack_lock = l;
+        }
+        // BASERULES1-M2 (FB-40): the notes of the rules the command line picked. `ruleset=` plays every fight by that row;
+        // `rules=` alone switches classic for catalog and generated fights but each world's own row for world fights
+        // (`ruleset_for`), so a run that may play world fights prints none rather than another ruleset's notes.
+        let world_fights = a.world_set || a.mode == "campaign" || a.encounters.iter().any(|e| parse_ref(e, &a.world).is_some());
+        if picked_ruleset || (switched && !world_fights) {
+            a.rule_notes = rule_note_lines(&a.ruleset);
         }
         if a.mode == "feel" {
             a.feel_checks(d)?;
