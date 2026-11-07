@@ -22,7 +22,7 @@ Operate as the **Design Session** (`C:\dev\tactical-rpg-dev`, branch `develop`) 
 4. Summarize for the user:
    - Which `READY.md` rows have landed or are currently building.
    - Any new open `FB-nn` or `UN-nn` items in `docs/FEEDBACK.md` that need Design answers, docs-delta application, or `READY.md` queue updates.
-   - Proposed next actions (applying docs deltas, answering `FB-nn` in `READY.md` Section 4 with explicit `Disposition` and `Follow-up` columns, verifying with `python tools/planner/feedback_check.py`, or promoting Wave 2 slices from Section 3 to Section 1).
+   - Proposed next actions (applying docs deltas, answering `FB-nn` in `READY.md` Section 4 with explicit `Disposition` and `Follow-up` columns, verifying with `python tools/planner/feedback_check.py`, running `/audit-build` via `build-auditor` to independently audit landed Build commits and evaluate system/decision health, or promoting Wave 2 slices from Section 3 to Section 1).
 
 ## 3. Committing & Pushing from Linked Worktree (`C:\dev\tactical-rpg-dev`)
 

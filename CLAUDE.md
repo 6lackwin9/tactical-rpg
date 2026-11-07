@@ -40,6 +40,7 @@ Read these by role instead of crawling the code or historical specs (`docs/specs
 
 - **Build Planner** (skills `planner`, `planner-ops`): reads `docs/READY.md`, dispatches lanes (`logic-builder`, `asset-builder`, `balance`, `change-reviewer`), merges to `staging`/`develop`, and records status, feasibility notes, and docs deltas in `docs/FEEDBACK.md` (does not edit `TASKS.md`, `ROADMAP.md`, decisions, `HISTORY.md`, or shared READMEs directly).
 - `design-brainstorm` agent (Design Session only): options and specs in `docs/sessions/` or `docs/specs/`.
+- `build-auditor` agent (Design Session only, skill `audit-build`): independent read-only audit of landed Build commits against specs (`AUDIT-nn` fix tasks) plus big-picture critique of project systems and decisions.
 - `logic-builder` agent (logic lane): code in the task's layer (`engine/crates/**` engine, `kits/rpg/crates/**` kit, `games/emberwake/crates/**` game), schema, validation, tests and tools on the task's branch (desktop: a feature worktree); never edits shipped data; never commits.
 - `asset-builder` agent (asset lane): fills `games/emberwake/data/` through `aegis content` (upsert / remove / apply a seed) against a merged schema; no code, no tests.
 - `balance` agent (balance lane): sims on `balance-ready` systems; reports findings for `docs/FEEDBACK.md` / `BALANCE_REPORT.md`.
