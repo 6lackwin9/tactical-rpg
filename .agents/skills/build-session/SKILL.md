@@ -18,7 +18,7 @@ Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`,
    `git fetch origin develop`
    `git log -8 --oneline origin/develop`
 2. Read `docs/READY.md` and `docs/FEEDBACK.md`.
-3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4:
-   - Archive any answered `FB-nn` / `UN-nn` items whose `Follow-up` column in `READY.md` Section 4 is `none` or names an existing row in `READY.md` Section 1 or Section 3, moving them into `docs/archive/FEEDBACK_CLOSED.md` with `<disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`.
+3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4 (`SKILLS1-FB`):
+   - Run `python3 tools/planner/feedback_check.py --pending-ok` to verify all answered rows and list any open items waiting for Design, then run `python3 tools/planner/feedback_check.py archive` to move every answered `FB-nn` / `UN-nn` item into `docs/archive/FEEDBACK_CLOSED.md` with `closed: <disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`.
 4. Check which `ready-to-build` rows in `docs/READY.md` Section 1 are already on `origin/develop`, which are in progress in `-lane1..3` or `-stage`, and which are next in line.
 5. Present the parallel lane dispatch plan for the next `ready-to-build` slices in `docs/READY.md` Section 1 and wait for user confirmation before changing code.

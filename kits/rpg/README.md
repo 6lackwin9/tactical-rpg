@@ -5,7 +5,7 @@ reuse groups (user 2026-10-20)"). A game uses the kit by naming it in its `game.
 then looks up every asset in the game's `assets/`, this kit's `assets/` and `engine/assets/`, in that order, so a game
 overrides a kit file by putting its own at the same path.
 
-Gear training (UNITDRILL1): a unit's class or its own always-on drill passives train its gear, read through `Proficiency::with_drills` by the unit check and `can_wear`; a unit row's `wears_untrained` names items worn without training, and adds none.
+Gear training (UNITDRILL1): a unit's class or its own always-on drill passives train its gear, read through `Proficiency::with_drills` (which reads `rpgkit_rules::grants::read`, `U4.2-S1`) by the unit check and `can_wear`; a unit row's `wears_untrained` names items worn without training, and adds none.
 
 Since KIT1-M and KIT1-N (2026-10-25) the kit also holds code and names no game: the genre rules in
 `crates/rpgkit_{data,rules,battle,content,world,sim,host}` (the host crate is the battle command set on `aegis_host`) and
@@ -58,7 +58,7 @@ HOOKS1-C: class names and paths per world: a world manifest's `classes` overlay 
 HOOKS1-GF: with the rule `ground_hazards` off a battle's catalog drops skill hazards at the start (`World::ignore_hazards_when_off`).
 HOOKS1-Z: zones as data: the 8 code zones plus `zones` rows (encounter and road-fight `zone` options, `Grid::apply_board(zone, rows, &cat.zones)`, `grid::data_zone`, `art::zone_backdrop`).
 HOOKS1-E: events and triggers (rule `triggers`): passive, item and running-skill triggers on 15 events with `when` conditions and `limit`, 12 effects (`meter` acts since HOOKS1-M), held guard, redirect and intercept (one per hit, the running skill first, the holder kept at 1 HP); `[Trigger]` log lines.
-RULESET1-G: the Dojo under the timeline ruleset (`rpgkit_battle` `dojo.rs`): a ruleset toggle rebuilding heroes with `build_unit_in` (gear, pouch, points kept), `DojoSession::set_deck`, poise readouts, Rest AP at the round's end, a planner API on a scratch session (plans per intent with AP, estimates and reasons). Slice 2: the sim's `feel` mode (`rpgkit_sim` `feel.rs`, `SimGame.feel_encounters`; machine-readable `FEEL_JSON` line) and the Dojo's review fixes (the planner shows its scratch battle's AP, Rest matched by kind).
+RULESET1-G: the Dojo under the timeline ruleset (`rpgkit_battle` `dojo.rs`): a ruleset toggle rebuilding heroes with `rpgkit_rules::build_from` (`UnitBuild::row`, `U2.2-S2` / `U4.2-S2`; gear, pouch, points kept), `DojoSession::set_deck`, poise readouts, Rest AP at the round's end, a planner API on a scratch session (plans per intent with AP, estimates and reasons). Slice 2: the sim's `feel` mode (`rpgkit_sim` `feel.rs`, `SimGame.feel_encounters`; machine-readable `FEEL_JSON` line) and the Dojo's review fixes (the planner shows its scratch battle's AP, Rest matched by kind).
 
 RULESET1-G2: one auto driver (`rpgkit_battle` `Session::auto_draft` and `resolve_round`, what the battle screen's autoplay sends) for the host's `autoplay`, the game CLI's `battle`, both sims and the timeline golden; the sim's `feel` mode gains the outcome columns (won, lost, capped, fled; median rounds of won fights) and the keys `tactic=`, `party=auto|timed|both`, `armor=<unit>:<n>`, `tune=<number>:<v>` (ranges from the kit schema; `Numbers::set`), `preset=` refused under timeline; the `timed` party driver (`rpgkit_sim` `timed.rs`: times an Assault into the target's visible windup, reading only tells and impact badges).
 
