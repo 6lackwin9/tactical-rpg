@@ -1,10 +1,12 @@
 //! StatusRegistry + StatusEffects (scripts/combat/status/): the one status table, stacking, inflicting, round
 //! roll-over. Statuses inflicted this round become active next round; DEFEND buffs (riposte) are active at once.
+//! Since S1.2-S1 the rows are the frozen kit table `statuses.json` (embedded), tagged with S1's behaviour primitives.
 
 use crate::stats::roundi;
 use crate::unit::{GrantUnder, Unit};
 use aegis_core::rng::GodotRng;
 use serde_json::Value;
+use std::sync::LazyLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stacking {
@@ -14,9 +16,59 @@ pub enum Stacking {
     None,
 }
 
+impl Stacking {
+    /// The table's `stacking` word (S1 lifecycle header): `refresh_max`, `extend_duration`, `stack_potency`, `none`.
+    pub fn id(self) -> &'static str {
+        match self {
+            RefreshMaxDuration => "refresh_max",
+            ExtendDuration => "extend_duration",
+            StackPotency => "stack_potency",
+            None => "none",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Stacking> {
+        [RefreshMaxDuration, ExtendDuration, StackPotency, None].into_iter().find(|s| s.id() == id)
+    }
+}
+
+/// S1 (docs/sessions/S1_STATUS.md section 1): the six composable behaviour primitives a status row is tagged with.
+/// Metadata only since S1.2-S1: no rule reads the tags yet (S1.2-S2 turns id literals into primitive reads).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Primitive {
+    Modifier,
+    Tick,
+    BlockLock,
+    Targeting,
+    Reactive,
+    RuleFlag,
+}
+
+/// The six primitives in S1's order.
+pub const PRIMITIVES: [Primitive; 6] = [Primitive::Modifier, Primitive::Tick, Primitive::BlockLock, Primitive::Targeting, Primitive::Reactive, Primitive::RuleFlag];
+
+impl Primitive {
+    /// The table's tag word: `modifier`, `tick`, `block_lock`, `targeting`, `reactive`, `rule_flag`.
+    pub fn id(self) -> &'static str {
+        match self {
+            Primitive::Modifier => "modifier",
+            Primitive::Tick => "tick",
+            Primitive::BlockLock => "block_lock",
+            Primitive::Targeting => "targeting",
+            Primitive::Reactive => "reactive",
+            Primitive::RuleFlag => "rule_flag",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Primitive> {
+        PRIMITIVES.into_iter().find(|p| p.id() == id)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct StatusRow {
     pub id: &'static str,
+    /// The table's `kind`: `buff` (true) or `debuff` (false).
     pub buff: bool,
     pub resistable: bool,
     pub default_rounds: i32,
@@ -27,42 +79,79 @@ pub struct StatusRow {
     pub grant: &'static str,
     pub magnitude_min: i32,
     pub magnitude_max: i32,
+    /// "pct", "flat" (armor points; poison HP per round) or "pct_max_hp" (S1 lifecycle header `magnitude_unit`).
+    pub magnitude_unit: &'static str,
     /// RULESET1_INTENT IN6 (timeline, rule round_intent): an instance lasts only while the round intent it was applied
     /// under stays active (riposte, stealth). Classic never reads it.
     pub intent_bound: bool,
+    /// S1 behaviour primitives (at least one); metadata only, see [`Primitive`].
+    pub primitives: &'static [Primitive],
 }
 
-const fn row(id: &'static str, buff: bool, resistable: bool, default_rounds: i32, stacking: Stacking, cap: i32, display: &'static str, grant: &'static str, mmin: i32, mmax: i32) -> StatusRow {
-    StatusRow { id, buff, resistable, default_rounds, stacking, cap, display, grant, magnitude_min: mmin, magnitude_max: mmax, intent_bound: false }
-}
+impl StatusRow {
+    /// The table's `kind` word: "buff" or "debuff".
+    pub fn kind(&self) -> &'static str {
+        if self.buff {
+            "buff"
+        } else {
+            "debuff"
+        }
+    }
 
-/// A row whose instances are intent-bound (IN6).
-const fn bound(r: StatusRow) -> StatusRow {
-    StatusRow { intent_bound: true, ..r }
+    pub fn has_primitive(&self, p: Primitive) -> bool {
+        self.primitives.contains(&p)
+    }
 }
 
 use Stacking::*;
-/// Rows 16-17 (RULESET1 P12, intent GD5; engine-only, no Godot row): `steadfast` (cannot be broken) and `stealth`
-/// (a Guard buff); classic data never grants them.
-pub const ROWS: [StatusRow; 17] = [
-    row("stagger", false, true, 1, RefreshMaxDuration, 0, "Staggered", "", 0, 0),
-    row("stun", false, true, 1, RefreshMaxDuration, 0, "Stunned", "", 0, 0),
-    row("root", false, true, 1, RefreshMaxDuration, 0, "Rooted", "", 0, 0),
-    row("bleed", false, true, 1, RefreshMaxDuration, 0, "Bleeding", "", 0, 0),
-    row("weaken", false, true, 2, RefreshMaxDuration, 25, "Weakened", "", 1, 25),
-    row("haste", true, false, 1, RefreshMaxDuration, 0, "Hasted", "support", 0, 0),
-    row("taunt", true, false, 1, RefreshMaxDuration, 0, "Taunting", "support", 0, 0),
-    bound(row("riposte", true, false, 2, RefreshMaxDuration, 0, "Riposte", "defend", 0, 0)),
-    row("slow", false, true, 1, RefreshMaxDuration, 0, "Slowed", "", 0, 0),
-    row("expose", false, true, 2, RefreshMaxDuration, 20, "Exposed", "", 1, 20),
-    row("fortify", true, false, 2, RefreshMaxDuration, 20, "Fortified", "support", 1, 20),
-    row("regen", true, false, 2, RefreshMaxDuration, 10, "Regenerating", "support", 1, 10),
-    row("poison", false, true, 3, StackPotency, 30, "Poisoned", "", 1, 15),
-    row("burn", false, true, 2, RefreshMaxDuration, 10, "Burning", "", 1, 10),
-    row("empower", true, false, 2, RefreshMaxDuration, 25, "Empowered", "support", 1, 25),
-    row("steadfast", true, false, 1, RefreshMaxDuration, 0, "Steadfast", "support", 0, 0),
-    bound(row("stealth", true, false, 2, RefreshMaxDuration, 0, "Stealthed", "defend", 0, 0)),
-];
+
+/// S1.2-S1: the frozen kit status table (`statuses.json` beside this file), embedded at build time so every reader
+/// works without a catalog. Games do not override it (the 18th row, `guard`, comes with S1.2-S4).
+const TABLE_TEXT: &str = include_str!("statuses.json");
+
+static TABLE: LazyLock<Value> = LazyLock::new(|| serde_json::from_str(TABLE_TEXT).expect("statuses.json: valid JSON"));
+
+/// The status rows in table order (Godot's StatusRegistry order; rows 16-17, RULESET1 P12 / intent GD5, engine-only:
+/// `steadfast` (cannot be broken) and `stealth` (a Guard buff), which classic data never grants). Every field is
+/// required; a malformed table fails on first use (the kit test `status_table` loads it).
+pub static ROWS: LazyLock<Vec<StatusRow>> = LazyLock::new(|| {
+    let rows = TABLE.as_array().expect("statuses.json: an array of rows");
+    rows.iter().enumerate().map(|(i, r)| parse_row(i, r)).collect()
+});
+
+fn parse_row(i: usize, r: &'static Value) -> StatusRow {
+    let field = |k: &str| r.get(k).unwrap_or_else(|| panic!("statuses.json row {i}: missing `{k}`"));
+    let text = |k: &str| field(k).as_str().unwrap_or_else(|| panic!("statuses.json row {i}: `{k}` is not a string"));
+    let int = |k: &str| field(k).as_i64().unwrap_or_else(|| panic!("statuses.json row {i}: `{k}` is not an integer")) as i32;
+    let flag = |k: &str| field(k).as_bool().unwrap_or_else(|| panic!("statuses.json row {i}: `{k}` is not a bool"));
+    let buff = match text("kind") {
+        "buff" => true,
+        "debuff" => false,
+        k => panic!("statuses.json row {i}: kind `{k}` is not buff or debuff"),
+    };
+    let stacking = Stacking::from_id(text("stacking")).unwrap_or_else(|| panic!("statuses.json row {i}: unknown stacking"));
+    let magnitude_unit = text("magnitude_unit");
+    assert!(["pct", "flat", "pct_max_hp"].contains(&magnitude_unit), "statuses.json row {i}: unknown magnitude_unit `{magnitude_unit}`");
+    let tags = field("primitives").as_array().unwrap_or_else(|| panic!("statuses.json row {i}: `primitives` is not a list"));
+    let primitives: Vec<Primitive> = tags.iter().map(|t| t.as_str().and_then(Primitive::from_id).unwrap_or_else(|| panic!("statuses.json row {i}: unknown primitive {t}"))).collect();
+    assert!(!primitives.is_empty(), "statuses.json row {i}: at least one primitive");
+    StatusRow {
+        id: text("id"),
+        buff,
+        resistable: flag("resistable"),
+        default_rounds: int("default_rounds"),
+        stacking,
+        cap: int("cap"),
+        display: text("display"),
+        grant: text("grant"),
+        magnitude_min: int("magnitude_min"),
+        magnitude_max: int("magnitude_max"),
+        magnitude_unit,
+        intent_bound: flag("intent_bound"),
+        // Loaded once per process into a static table, so the tag list lives as long as the rows.
+        primitives: Box::leak(primitives.into_boxed_slice()),
+    }
+}
 
 pub const BLEED_PCT: f64 = 0.06;
 pub const DEBT_STAGGER: i32 = 3;
@@ -127,12 +216,9 @@ pub fn defend_buffs() -> Vec<&'static str> {
 }
 
 /// StatusRegistry.magnitude_unit: "pct", "flat" (armor points; poison HP per round) or "pct_max_hp".
+/// Read from the row's `magnitude_unit` since S1.2-S1; "pct" for an unknown id.
 pub fn magnitude_unit(status: &str) -> &'static str {
-    match status {
-        "expose" | "fortify" | "poison" => "flat",
-        "regen" | "burn" => "pct_max_hp",
-        _ => "pct",
-    }
+    row_of(status).map(|r| r.magnitude_unit).unwrap_or("pct")
 }
 
 pub fn has_magnitude(status: &str) -> bool {

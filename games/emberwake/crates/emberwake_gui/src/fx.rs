@@ -1640,7 +1640,7 @@ mod tests {
     /// names a row and the table holds each id once.
     #[test]
     fn every_status_row_but_stagger_has_a_look() {
-        let rows = emberwake_rules::status::ROWS;
+        let rows = &*emberwake_rules::status::ROWS;
         for r in rows.iter() {
             assert_eq!(status_look(r.id).is_some(), r.id != "stagger", "{}: a look unless it is stagger", r.id);
         }
