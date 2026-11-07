@@ -264,8 +264,9 @@ impl CharacterStats {
         (base_range + bonus).max(1)
     }
 
+    /// Crit chance before the weapon proficiency bonus: base + PERC above the floor (U1.2-S3, crit from PERC).
     pub fn crit_rate(&self, weapon: Option<&str>) -> f64 {
-        crate::damage::CRIT_BASE + (self.stat("DEX", weapon) - crate::damage::CRIT_DEX_FLOOR).max(0) as f64 * crate::damage::CRIT_PER_DEX
+        crate::damage::CRIT_BASE + (self.stat("PERC", weapon) - crate::damage::CRIT_PERC_FLOOR).max(0) as f64 * crate::damage::CRIT_PER_PERC
     }
 
     pub fn debuff_resistance(&self, weapon: Option<&str>) -> f64 {

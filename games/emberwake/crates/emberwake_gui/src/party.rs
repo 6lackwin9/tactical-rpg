@@ -287,14 +287,14 @@ fn columns(ui: &mut Ui<PAct>, cols: &[(f32, &str)], gap: f32) -> Vec<(f32, f32)>
 
 /// What a core stat does, for the detail pane (numbers from the rules: StatRules, DamageCalculator).
 fn stat_desc(st: &str) -> String {
-    use emberwake_rules::damage::{CRIT_DEX_FLOOR, CRIT_PER_DEX};
+    use emberwake_rules::damage::{CRIT_PER_PERC, CRIT_PERC_FLOOR};
     use emberwake_rules::stats::{HP_PER_CONS, KNOW_UNLOCK_BASE, KNOW_UNLOCK_STEP, MAX_UNLOCK_REDUCTION, RANGE_PERC_THRESHOLD};
     match st {
         "STR" => "Strength: power with STR weapons, +2 max HP per point, +1 armor per 4 points; unarmed hits use STR + DEX.".into(),
-        "DEX" => format!("Dexterity: speed (8 + DEX - gear burden), crit chance +{CRIT_PER_DEX}% per point above {CRIT_DEX_FLOOR}, power with DEX weapons and of shots without a ranged weapon."),
+        "DEX" => "Dexterity: speed (8 + DEX - gear burden), power with DEX weapons and of shots without a ranged weapon.".into(),
         "INT" => "Intelligence: debuff resistance (2.5% per point) and power with INT weapons.".into(),
         "CONS" => format!("Constitution: +{HP_PER_CONS} max HP per point."),
-        "PERC" => format!("Perception: at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further; power with PERC weapons."),
+        "PERC" => format!("Perception: crit chance +{CRIT_PER_PERC}% per point above {CRIT_PERC_FLOOR}; at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further; power with PERC weapons."),
         "KNOW" => format!("Knowledge: from {KNOW_UNLOCK_BASE}, every {KNOW_UNLOCK_STEP} points open skill families one level earlier (up to {MAX_UNLOCK_REDUCTION} levels)."),
         _ => String::new(),
     }
@@ -302,13 +302,13 @@ fn stat_desc(st: &str) -> String {
 
 /// What a derived value (`derived` labels) means, for the detail pane.
 fn derived_desc(label: &str) -> String {
-    use emberwake_rules::damage::{ARMOR_K, CRIT_BASE, CRIT_DEX_FLOOR, CRIT_PER_DEX};
+    use emberwake_rules::damage::{ARMOR_K, CRIT_BASE, CRIT_PER_PERC, CRIT_PERC_FLOOR};
     use emberwake_rules::stats::HP_PER_CONS;
     match label {
         "Max HP" => format!("Health: 60 + {HP_PER_CONS} per CONS + 2 per STR."),
         "Speed" => "Initiative: 8 + DEX - the burden of worn gear; faster units act earlier and move further.".into(),
         "Tiles per move" => "Tiles one move covers: (speed + 2) / 5, from 1 to 4; haste adds 1, slow takes 1.".into(),
-        "Crit %" => format!("Critical hit chance: {CRIT_BASE}% + {CRIT_PER_DEX}% per DEX above {CRIT_DEX_FLOOR}, plus the weapon proficiency bonus."),
+        "Crit %" => format!("Critical hit chance: {CRIT_BASE}% + {CRIT_PER_PERC}% per PERC above {CRIT_PERC_FLOOR}, plus the weapon proficiency bonus."),
         "Melee power" => "Melee hit power: the weapon's power (with tier and proficiency bonuses) + its scaling stat x your proficiency scaling.".into(),
         "Ranged power" => "Ranged hit power, the same way with a ranged weapon; without one, DEX alone.".into(),
         "Armor" => format!("Armor rating: gear mitigation + STR / 4; it cuts damage taken by rating / (rating + {ARMOR_K})."),

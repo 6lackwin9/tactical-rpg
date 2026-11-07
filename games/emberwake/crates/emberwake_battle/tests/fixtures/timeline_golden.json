@@ -21371,7 +21371,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    160,
+                    177,
                     6,
                     5,
                     4,
@@ -21421,7 +21421,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    144,
+                    161,
                     6,
                     5,
                     4,
@@ -21471,7 +21471,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    144,
+                    161,
                     6,
                     5,
                     4,
@@ -21521,7 +21521,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    144,
+                    161,
                     6,
                     5,
                     4,
@@ -21571,7 +21571,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    128,
+                    145,
                     6,
                     5,
                     4,
@@ -21621,7 +21621,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    128,
+                    145,
                     6,
                     5,
                     4,
@@ -21671,7 +21671,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     6,
                     5,
                     4,
@@ -21721,7 +21721,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     6,
                     5,
                     4,
@@ -21771,7 +21771,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     6,
                     5,
                     4,
@@ -21821,7 +21821,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     6,
                     5,
                     4,
@@ -22005,7 +22005,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     8,
                     5,
                     4,
@@ -22055,7 +22055,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     8,
                     7,
                     4,
@@ -22105,7 +22105,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     4,
                     7,
                     4,
@@ -22155,7 +22155,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     4,
                     7,
                     4,
@@ -22205,7 +22205,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     4,
                     7,
                     4,
@@ -22255,7 +22255,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    95,
+                    112,
                     4,
                     7,
                     4,
@@ -22305,7 +22305,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    62,
+                    79,
                     4,
                     7,
                     4,
@@ -22355,7 +22355,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    62,
+                    79,
                     4,
                     7,
                     4,
@@ -22405,7 +22405,7 @@
                 "units": [
                   [
                     "Vanguard (test)",
-                    62,
+                    79,
                     4,
                     7,
                     4,
@@ -22457,7 +22457,7 @@
             "Vanguard (test)": {
               "dmg_dealt": 0,
               "dmg_dealt_ranged": 0,
-              "dmg_taken": 148,
+              "dmg_taken": 131,
               "dot_taken": 0,
               "ff_dealt": 0,
               "ff_taken": 0,
@@ -22476,8 +22476,8 @@
               "kills": 0,
               "blocks_alive": 11,
               "survived": 1,
-              "hp_end_frac": 0.29523809523809524,
-              "min_hp_frac": 0.29523809523809524,
+              "hp_end_frac": 0.3761904761904762,
+              "min_hp_frac": 0.3761904761904762,
               "near_death_saves": 0,
               "dist_sum": 13,
               "dist_samples": 10,
@@ -22486,7 +22486,7 @@
               "taunt_blocks": 0,
               "priority_dmg": 0,
               "hp_start": 210,
-              "hp_end": 62,
+              "hp_end": 79,
               "max_hp": 210,
               "other_loss": 0,
               "other_gain": 0,
@@ -22590,8 +22590,8 @@
               "combos": 0
             },
             "Crossbowman (test)": {
-              "dmg_dealt": 116,
-              "dmg_dealt_ranged": 116,
+              "dmg_dealt": 99,
+              "dmg_dealt_ranged": 99,
               "dmg_taken": 111,
               "dot_taken": 0,
               "ff_dealt": 0,
@@ -22696,7 +22696,7 @@
               },
               "regen_done": 0,
               "best_hit": {
-                "amount": 50,
+                "amount": 33,
                 "skill": "Aimed Shot",
                 "target": "Vanguard (test)",
                 "round": 1,
@@ -22710,7 +22710,7 @@
           "fight": {
             "cleared": true,
             "rounds": 2,
-            "party_hp_frac": 0.6476190476190476,
+            "party_hp_frac": 0.6880952380952381,
             "enemy_hp_frac": 0.0,
             "hp_score": 1.0,
             "survivors": 2,
@@ -22774,7 +22774,7 @@
               "dealt": 0,
               "dealt_dot": 0,
               "ff_dealt": 0,
-              "taken": 148,
+              "taken": 131,
               "taken_dot": 0,
               "healed": 0,
               "regen": 0,
@@ -22893,11 +22893,11 @@
             true,
             "Aimed Shot",
             "Reach 2-3",
-            50,
-            50,
-            "CRIT",
-            "Dealt 50 | Skill x1.10 | Range 3 | Stagger 12 (poise 64 -> 52)",
-            "Target HP: 160/210"
+            33,
+            33,
+            "HIT",
+            "Dealt 33 | Skill x1.10 | Range 3 | Stagger 12 (poise 64 -> 52)",
+            "Target HP: 177/210"
           ],
           [
             1,
@@ -22913,7 +22913,7 @@
             16,
             "HIT",
             "Dealt 16 | Skill x0.70 | Range 1 | Stagger 24 (poise 52 -> 28)",
-            "Target HP: 144/210"
+            "Target HP: 161/210"
           ],
           [
             1,
@@ -22961,7 +22961,7 @@
             16,
             "HIT",
             "Dealt 16 | Skill x0.70 | Range 1 | Stagger 24 (poise 28 -> 0)",
-            "Target HP: 128/210"
+            "Target HP: 145/210"
           ],
           [
             1,
@@ -23009,7 +23009,7 @@
             33,
             "HIT",
             "Dealt 33 | Skill x1.10 | Range 3 | Stagger 6 (poise 0 -> 0)",
-            "Target HP: 95/210"
+            "Target HP: 112/210"
           ],
           [
             1,
@@ -23105,7 +23105,7 @@
             0,
             "OUT OF RANGE",
             "Dealt 0 | Skill x1.10 | Range 3",
-            "Target HP: 95/210"
+            "Target HP: 112/210"
           ],
           [
             2,
@@ -23201,7 +23201,7 @@
             33,
             "HIT",
             "Dealt 33 | Skill x1.10 | Range 3 | Stagger 6 (poise 64 -> 58)",
-            "Target HP: 62/210"
+            "Target HP: 79/210"
           ],
           [
             2,
