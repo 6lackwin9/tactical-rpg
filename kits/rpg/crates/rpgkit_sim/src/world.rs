@@ -97,10 +97,12 @@ pub fn story_fights(d: &Data, story: &StoryRun, flag_on: bool) -> Vec<StoryFight
     out
 }
 
-/// WorldFactory.divergence is not empty: the character has tuning, named items, disciplines or inherited passives.
+/// WorldFactory.divergence is not empty: the character has tuning, named items, disciplines or inherited passives
+/// (its temperament among them); C02-A (FB-83): or its own AI role or default intent (U4.2-S3).
 fn has_extras(d: &Data, character: &Dict, world: &str) -> bool {
     let tuning = json::dget(character, "tuning").values().any(|v| json::to_int(v) != 0);
-    tuning || !json::aget(character, "named_items").is_empty() || !json::aget(character, "disciplines").is_empty() || !d.character_passives(character, world).is_empty()
+    let ai = rpgkit_world::data::CHARACTER_AI_KEYS.iter().any(|k| !json::s(character, k).is_empty());
+    tuning || ai || !json::aget(character, "named_items").is_empty() || !json::aget(character, "disciplines").is_empty() || !d.character_passives(character, world).is_empty()
 }
 
 struct Ctx {

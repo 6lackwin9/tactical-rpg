@@ -713,7 +713,7 @@
 			"rarity": "UNCOMMON",
 			"weight": 8.0,
 			"value": 90,
-			"description": "A wall of iron. Superb protection, but heavy and slow to raise.",
+			"description": "A wall of iron. Superb protection, but heavy.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,

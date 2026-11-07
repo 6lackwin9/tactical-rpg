@@ -19,6 +19,8 @@
 				"ember_blade"
 			],
 			"passives": [],
+			"temperament": "steady_nerves",
+			"default_intent": "guard",
 			"named_items": [
 				"ember_brigandine"
 			],
@@ -50,6 +52,8 @@
 				"cinder_archery"
 			],
 			"passives": [],
+			"temperament": "keen_senses",
+			"default_intent": "assault",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},
@@ -377,6 +381,8 @@
 			"passives": [
 				"wardens_eye"
 			],
+			"temperament": "keen_senses",
+			"default_intent": "assault",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},
@@ -399,6 +405,8 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
+			"temperament": "volatile_reaction_catalyst",
+			"default_intent": "support",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},
@@ -421,6 +429,8 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
+			"temperament": "dirty_tricks",
+			"default_intent": "maneuver",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},
@@ -443,6 +453,8 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
+			"temperament": "hardy",
+			"default_intent": "guard",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},
@@ -465,6 +477,8 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
+			"temperament": "ruin_lore",
+			"default_intent": "support",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},
@@ -487,6 +501,8 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
+			"temperament": "heat_tempered_carapace",
+			"default_intent": "assault",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},

@@ -108,10 +108,15 @@ impl Roster for SimRoster<'_> {
 
     /// U2.2-S2: a story character's overrides (its passives, named items and tuning), built from the sandbox catalog.
     fn overrides(&self, _cat: &Catalog, r: &str) -> rpgkit_rules::Overrides {
-        match self.characters.get(r) {
-            Some((w, c)) => rpgkit_world::battle::character_overrides(self.d, self.d.resolve(w, "characters", c), w),
-            None => rpgkit_rules::Overrides::default(),
-        }
+        sim_overrides(self.d, self.characters.get(r))
+    }
+}
+
+/// A sim unit's overrides: the story character's it plays (`character_overrides`, as a world battle builds it), else none.
+fn sim_overrides(d: &Data, character: Option<&(String, String)>) -> rpgkit_rules::Overrides {
+    match character {
+        Some((w, c)) => rpgkit_world::battle::character_overrides(d, d.resolve(w, "characters", c), w),
+        None => rpgkit_rules::Overrides::default(),
     }
 }
 
@@ -226,6 +231,17 @@ impl<'a> Runner<'a> {
             let mut e = self.d.entry("units", &def.copy_of).clone();
             e.insert("id".into(), json!(id));
             e.insert("level".into(), json!(def.level));
+            // C02-A (FB-83): a story character's AI role and default intent over its base unit's, as a world battle
+            // spawns it (`Data::character_unit_entry`, U4.2-S3; AUDIT-04 `Prebuilt::default_intent`)
+            if let Some((w, c)) = &def.character {
+                let character = self.d.resolve(w, "characters", c);
+                for key in rpgkit_world::data::CHARACTER_AI_KEYS {
+                    let v = json::s(character, key);
+                    if !v.is_empty() {
+                        e.insert(key.into(), json!(v));
+                    }
+                }
+            }
             e
         };
         if !def.loadout.is_empty() {
@@ -251,6 +267,17 @@ impl<'a> Runner<'a> {
         def.armor = armor;
         self.units.insert(id.into(), def);
         true
+    }
+
+    /// C02-A: the unit row and overrides a fight spawns sim unit `id` from (the sandbox roster's `entry` and
+    /// `overrides`); None when it does not write.
+    pub fn spawn_row(&mut self, id: &str) -> Option<(UnitDef, rpgkit_rules::Overrides)> {
+        if !self.write(id) {
+            return None;
+        }
+        let row = self.units.get(id).cloned().or_else(|| self.d.cat.units.get(id).cloned())?;
+        let character = self.defs.get(id).and_then(|d| d.character.as_ref());
+        Some((row, sim_overrides(self.d, character)))
     }
 
     /// The unit of declared `id` for the current variant (stats mode).

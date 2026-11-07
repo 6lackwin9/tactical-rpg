@@ -91,6 +91,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "slash",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_poise_ward",
 			"art": ""
 		},
 		{
@@ -182,6 +186,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "slash",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_bleed_edge",
 			"art": ""
 		},
 		{
@@ -245,6 +253,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "blunt",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_heavy_impact",
 			"art": ""
 		},
 		{
@@ -307,6 +319,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "blunt",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_heavy_impact",
 			"art": ""
 		},
 		{
@@ -369,6 +385,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "blunt",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_fist",
 			"art": ""
 		},
 		{
@@ -431,6 +451,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "pierce",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_agile_step",
 			"art": ""
 		},
 		{
@@ -495,6 +519,10 @@
 				"always_ranged"
 			],
 			"damage_type": "pierce",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_bow",
 			"art": ""
 		},
 		{
@@ -588,6 +616,10 @@
 				"spell_source"
 			],
 			"damage_type": "magic",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_arcane_focus",
 			"art": ""
 		},
 		{
@@ -652,6 +684,10 @@
 				"spell_source"
 			],
 			"damage_type": "magic",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_arcane_focus",
 			"art": ""
 		},
 		{
@@ -716,6 +752,10 @@
 				"focus"
 			],
 			"damage_type": "magic",
+			"level2_bonus": {
+				"crit": 1
+			},
+			"level3_passive": "mastery_arcane_focus",
 			"art": ""
 		},
 		{
@@ -780,6 +820,10 @@
 				"focus"
 			],
 			"damage_type": "magic",
+			"level2_bonus": {
+				"crit": 1
+			},
+			"level3_passive": "mastery_arcane_focus",
 			"art": ""
 		},
 		{
@@ -832,6 +876,10 @@
 				"shield"
 			],
 			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_bulwark_stance",
 			"art": ""
 		},
 		{
@@ -882,6 +930,10 @@
 			"max_tiers": 2,
 			"engine_rules": [],
 			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_poise_ward",
 			"art": ""
 		},
 		{
@@ -932,6 +984,10 @@
 			"max_tiers": 2,
 			"engine_rules": [],
 			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_agile_step",
 			"art": ""
 		},
 		{
@@ -982,6 +1038,10 @@
 			"max_tiers": 2,
 			"engine_rules": [],
 			"damage_type": "",
+			"level2_bonus": {
+				"crit": 1
+			},
+			"level3_passive": "mastery_woven_ward",
 			"art": ""
 		},
 		{
@@ -1046,6 +1106,10 @@
 				"always_ranged"
 			],
 			"damage_type": "pierce",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_crossbow",
 			"art": ""
 		},
 		{
@@ -1206,6 +1270,10 @@
 				"reach"
 			],
 			"damage_type": "pierce",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_heavy_impact",
 			"art": ""
 		},
 		{
@@ -1270,6 +1338,10 @@
 				"reach"
 			],
 			"damage_type": "slash",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_bleed_edge",
 			"art": "scourge"
 		},
 		{
@@ -1332,6 +1404,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "blunt",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_sacred_censer",
 			"art": "censer"
 		},
 		{
@@ -1394,6 +1470,10 @@
 			"max_tiers": 3,
 			"engine_rules": [],
 			"damage_type": "slash",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_bleed_edge",
 			"art": "bone_saw"
 		},
 		{
@@ -1458,6 +1538,10 @@
 				"always_ranged"
 			],
 			"damage_type": "fire",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_bleed_edge",
 			"art": "sprayer"
 		}
 	]
