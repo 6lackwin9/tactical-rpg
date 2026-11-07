@@ -290,9 +290,16 @@ fn holds_firm(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32) -> bo
 }
 
 /// FM3: whether `t` can be moved into `cell` now (what `World::jump_unit` takes): `t` on the field, `cell` on the grid,
-/// walkable, not an exit (a forced move never withdraws) and not held by an active unit.
+/// walkable, not a terrain that stops forced moves (P1.2-S1: the row's `stops_forced_move`, by default `!walkable`), not
+/// an exit (a forced move never withdraws) and not held by an active unit.
 fn can_enter(w: &World, t: UnitId, cell: V2) -> bool {
-    w.units[t].is_active() && w.grid.positions[t].is_some() && w.grid.is_valid(cell) && w.grid.is_walkable(cell) && !w.grid.is_exit(cell) && !w.is_occupied(cell)
+    w.units[t].is_active()
+        && w.grid.positions[t].is_some()
+        && w.grid.is_valid(cell)
+        && w.grid.is_walkable(cell)
+        && !w.grid.stops_forced_move(cell)
+        && !w.grid.is_exit(cell)
+        && !w.is_occupied(cell)
 }
 
 /// FM3, FM6: the step rule of every forced move, on the world as it is (nothing moves): the tiles `t` enters going by

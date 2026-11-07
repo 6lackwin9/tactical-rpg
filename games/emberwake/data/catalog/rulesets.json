@@ -64,6 +64,7 @@
 			"switch_target_step": "off",
 			"stances": "off",
 			"attack_lock": "none",
+			"move_after_blocks": 3,
 			"item_ap": 0,
 			"poise_mode": "pips"
 		},
@@ -99,6 +100,7 @@
 			"switch_target_step": "on",
 			"stances": "on",
 			"attack_lock": "none",
+			"move_after_blocks": 3,
 			"item_ap": 1
 		}
 	]

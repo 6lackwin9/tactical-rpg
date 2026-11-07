@@ -65,12 +65,17 @@ pub const TERRAIN_IDS: [&str; 17] = [
 ];
 /// The terrain glyph per type, in TERRAIN_IDS order (CombatZones' row glyphs; also the glyphs of authored rows).
 pub const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
+/// P1.2-S1: the missing-key fallback of a terrain row's `walkable` (and of a type with no row): deep water, lava, wall
+/// and tree block. The rules read the row's `walkable` (`TerrainTable`); this only fills a row that leaves it out (the
+/// frozen kit's rows, a row written before the field existed).
 const BLOCKED: [usize; 4] = [7, 9, 10, 11]; // deep water, lava, wall, tree
 
-/// Terrain.is_walkable of a terrain type id (an unknown id is walkable).
+/// P1.2-S1: the missing-key fallback of a terrain row's `walkable` by type id (an unknown id is walkable); the rules read
+/// the row (`Grid::is_walkable`, `TerrainTable`).
 pub fn terrain_walkable(id: &str) -> bool {
     TERRAIN_IDS.iter().position(|t| *t == id).is_none_or(|i| !BLOCKED.contains(&i))
 }
+/// The move cost of a type with no catalog row (a row's `move_cost` is read from the row).
 const SLOW: [usize; 5] = [4, 5, 6, 8, 13]; // sand, snow, shallow water, mud, rubble
 
 #[derive(Debug, Clone, PartialEq)]
@@ -86,6 +91,8 @@ pub struct Hazard {
 #[derive(Debug, Clone)]
 pub struct TerrainRow {
     pub walkable: bool,
+    /// P1.2-S1 (FB-51): a forced move cannot enter the tile (the row's `stops_forced_move`, by default `!walkable`).
+    pub stops_forced_move: bool,
     pub move_cost: i32,
     pub cover_guard: f64,
     pub hazard: Option<Hazard>,
@@ -103,11 +110,14 @@ impl TerrainTable {
             .iter()
             .enumerate()
             .map(|(i, id)| {
-                let walkable = !BLOCKED.contains(&i);
                 let default_cost = if SLOW.contains(&i) { 2 } else { 1 };
                 let Some(r) = cat.terrain.get(*id) else {
-                    return TerrainRow { walkable, move_cost: if walkable { default_cost } else { 1 }, cover_guard: 0.0, hazard: None };
+                    let walkable = !BLOCKED.contains(&i);
+                    return TerrainRow { walkable, stops_forced_move: !walkable, move_cost: if walkable { default_cost } else { 1 }, cover_guard: 0.0, hazard: None };
                 };
+                // P1.2-S1: the row's own `walkable` and `stops_forced_move`, else their missing-key fallbacks
+                let walkable = value::boolean(r, "walkable", !BLOCKED.contains(&i));
+                let stops_forced_move = value::boolean(r, "stops_forced_move", !walkable);
                 let status = value::string(r, "hazard_status", "");
                 let hazard = (!status.is_empty() && walkable).then(|| Hazard {
                     status,
@@ -118,6 +128,7 @@ impl TerrainTable {
                 });
                 TerrainRow {
                     walkable,
+                    stops_forced_move,
                     move_cost: if walkable { value::int(r, "move_cost", default_cost).max(1) } else { 1 },
                     cover_guard: value::float(r, "cover_guard", 0.0),
                     hazard,
@@ -223,6 +234,11 @@ impl Grid {
 
     pub fn is_walkable(&self, c: V2) -> bool {
         self.is_valid(c) && self.row(c).walkable
+    }
+
+    /// P1.2-S1 (FB-51): a forced move stops before the tile (off the grid, or the row's `stops_forced_move`).
+    pub fn stops_forced_move(&self, c: V2) -> bool {
+        !self.is_valid(c) || self.row(c).stops_forced_move
     }
 
     /// The terrain's move cost, plus a ground hazard's `move_cost` (HOOKS1 GH5).

@@ -1,0 +1,385 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "floor",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "grass",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "dirt",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "stone",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "sand",
+    "move_cost": 2,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "snow",
+    "move_cost": 2,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "shallow_water",
+    "move_cost": 2,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "deep_water",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": false,
+    "stops_forced_move": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "mud",
+    "move_cost": 2,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "lava",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": false,
+    "stops_forced_move": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "wall",
+    "move_cost": 1,
+    "cover_guard": 0.3,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": false,
+    "stops_forced_move": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "tree",
+    "move_cost": 1,
+    "cover_guard": 0.15,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": false,
+    "stops_forced_move": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "bridge",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "rubble",
+    "move_cost": 2,
+    "cover_guard": 0.15,
+    "hazard_status": "",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "burning_ground",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "burn",
+    "hazard_potency": 100,
+    "hazard_magnitude": 5,
+    "hazard_rounds": 1,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "toxic_bog",
+    "move_cost": 2,
+    "cover_guard": 0.0,
+    "hazard_status": "poison",
+    "hazard_potency": 80,
+    "hazard_magnitude": 4,
+    "hazard_rounds": 2,
+    "hazard_on": "both",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terrain",
+   "entry": {
+    "id": "ice",
+    "move_cost": 1,
+    "cover_guard": 0.0,
+    "hazard_status": "slow",
+    "hazard_potency": 100,
+    "hazard_magnitude": 0,
+    "hazard_rounds": 1,
+    "hazard_on": "enter",
+    "walkable": true,
+    "stops_forced_move": false
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "timeline",
+    "name": "Timeline",
+    "rules": [
+     "round_intent",
+     "enemy_moves",
+     "deck",
+     "poise",
+     "ap_cost",
+     "pierce",
+     "reach",
+     "flank",
+     "plan_badges",
+     "forced_move",
+     "ground_hazards",
+     "arena_hazards",
+     "triggers",
+     "unit_meters",
+     "hp_cost",
+     "ignore_guard",
+     "ai_tactics",
+     "execute"
+    ],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [
+     "move",
+     "rest",
+     "strike",
+     "offhand_jab",
+     "active_guard",
+     "flank_cut"
+    ],
+    "poise_stat": "max_poise",
+    "stagger_windup_mult": 1.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.5,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {
+     "active": 3,
+     "passive": 2,
+     "keystone": 1
+    },
+    "melee_diagonal": "maneuver",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "round_end",
+    "chase": "every_skill",
+    "root_stops_chase": "on",
+    "switch_target_step": "off",
+    "stances": "off",
+    "attack_lock": "none",
+    "item_ap": 0,
+    "poise_mode": "pips",
+    "move_after_blocks": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "classic",
+    "name": "Classic",
+    "rules": [],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [],
+    "poise_stat": "",
+    "stagger_windup_mult": 2.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.0,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {},
+    "melee_diagonal": "none",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "on_use",
+    "chase": "classic",
+    "root_stops_chase": "off",
+    "switch_target_step": "on",
+    "stances": "on",
+    "attack_lock": "none",
+    "item_ap": 1,
+    "move_after_blocks": 3
+   }
+  }
+ ]
+}

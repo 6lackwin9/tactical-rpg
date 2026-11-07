@@ -9,7 +9,7 @@ use rpgkit_battle::encounter::{
     ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, BROKEN, BROKEN_KEYS, DOWNED, DOWNED_KEYS, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PARTY_NAME, PARTY_PREFIX, PICK_DEFAULTS, ROUND_KEYS, STAY_HOLD,
     STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS,
 };
-use rpgkit_battle::grid::{rows_valid, terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
+use rpgkit_battle::grid::{rows_valid, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
@@ -799,7 +799,7 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
                     let mut grid = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&v.typed), 0);
                     grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")), &v.typed.zones);
                     let tile_ok = |c: V2| {
-                        if !on_grid(c) || !terrain_walkable(grid.terrain_id(c)) {
+                        if !on_grid(c) || !grid.is_walkable(c) {
                             return false;
                         }
                         if arena_open {
@@ -955,7 +955,7 @@ pub fn stay_behind_problems(v: &View, e: &Dict, world: bool) -> Vec<String> {
                 let pair = json::arr(raw);
                 let cell = (pair.len() == 2).then(|| cell_of(pair));
                 let ok = cell.is_some_and(|c| {
-                    on_grid(c) && terrain_walkable(grid.terrain_id(c)) && !exits.contains(&c) && (!arena_open || (c.x > 0 && c.y > 0 && c.x < GRID_W - 1 && c.y < GRID_H - 1))
+                    on_grid(c) && grid.is_walkable(c) && !exits.contains(&c) && (!arena_open || (c.x > 0 && c.y > 0 && c.x < GRID_W - 1 && c.y < GRID_H - 1))
                 });
                 if !ok {
                     errors.push(format!("Hold tile {} is off the grid, blocked or an exit.", cell.map_or_else(|| gstr(raw), |c| c.to_string())));

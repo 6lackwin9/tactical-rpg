@@ -84,7 +84,26 @@ pub fn load(data_dir: &Path) -> Source {
 
 /// ContentSchema.normalize of a catalog entry of `kind`.
 pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
+    if kind == "terrain" {
+        return normalize(fields("content", kind), &terrain_fallbacks(entry), false);
+    }
     normalize(fields("content", kind), entry, false)
+}
+
+/// P1.2-S1 (FB-51): the terrain keys a row may leave out (the frozen kit's rows, a row written before they existed)
+/// take their type's fallback, not the schema default: `walkable` its type's (`grid::terrain_walkable`), then
+/// `stops_forced_move` not walkable.
+pub const TERRAIN_FALLBACK_KEYS: [&str; 2] = ["walkable", "stops_forced_move"];
+
+fn terrain_fallbacks(entry: &Dict) -> Dict {
+    let mut out = entry.clone();
+    let walkable = match entry.get(TERRAIN_FALLBACK_KEYS[0]) {
+        Some(v) => json::to_bool(v),
+        None => rpgkit_battle::grid::terrain_walkable(&sget(entry, "id", "")),
+    };
+    out.entry(TERRAIN_FALLBACK_KEYS[0]).or_insert(Value::Bool(walkable));
+    out.entry(TERRAIN_FALLBACK_KEYS[1]).or_insert(Value::Bool(!walkable));
+    out
 }
 
 // ---- ContentCatalog --------------------------------------------------------------------------------------------

@@ -816,7 +816,7 @@ pub const FIELD_RULES: [FieldRule; 32] = [
     field_rule("rest_poise_per_block", &[POISE]),
     FieldRule { untested_with: &["chase=classic"], ..field_rule("attack_lock", &[]) },
     // S1.2-S3 (S1 section 3; the debt ranges S2 section 3): the status numbers, row-only until a schema entry with a
-    // data re-save (like move_after_blocks); read whatever the rules
+    // data re-save (as move_after_blocks got in P2.2-S1); read whatever the rules
     FieldRule { range: Some((0.01, 0.25)), ..field_rule("bleed_pct", &[]) },
     FieldRule { range: Some((0.10, 1.50)), ..field_rule("counter_mult", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stagger", &[]) },

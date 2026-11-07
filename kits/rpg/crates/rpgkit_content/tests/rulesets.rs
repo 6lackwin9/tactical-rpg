@@ -279,8 +279,8 @@ fn numbers_past_their_range_load_at_the_schema_bounds() {
         row[&key] = json!(if below { lo - 5.0 } else { hi + 5.0 });
         want.push((key, if below { lo } else { hi }));
     }
-    // RULESET1_TASKS 1.2's ten numbers, INPUT1 1.7's `flank_protected_ap` and A1.2-S1's `item_ap`
-    assert_eq!(want.len(), 12, "every number of 1.2 (and INPUT1 1.7, A1.2-S1) has its range in the schema");
+    // RULESET1_TASKS 1.2's ten numbers, INPUT1 1.7's `flank_protected_ap`, A1.2-S1's `item_ap` and P2.2-S1's `move_after_blocks`
+    assert_eq!(want.len(), 13, "every number of 1.2 (and INPUT1 1.7, A1.2-S1, P2.2-S1) has its range in the schema");
     write_kind(&data, ruleset::KIND, 1, json!([row]));
     let src = source::load(&data);
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());
