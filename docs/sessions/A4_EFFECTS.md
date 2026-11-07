@@ -26,8 +26,8 @@ One derivation function in `rpgkit_rules` replaces the three diverging copies (`
   5. **`ATTACK` with `dash_tiles` or `position`**: `Maneuver` (`Lunge`, `Pounce`, and `Charge In` derive `Maneuver`, per `FB-17`; `skill::position_by` reads the derived intent).
   6. **`ATTACK` with `area` shape (`PLUS`, `BURST`, `LINE`, `CONE`, `RING`, `ARC`)**:
      - `RING` -> `Stand`.
-     - `ARC` and `LINE` -> `Field`.
-     - `CONE`, `BURST`, and `PLUS` -> `Field` and `Assault`.
+     - `ARC`, `LINE`, and `CONE` (without `hazard`), and `BURST` / `PLUS` (with `reach_max > 1` and no `hazard`) -> `Field` and `Assault` (otherwise `Field`, e.g., when a shape places a ground `hazard`).
+     - In `Field` mode, `ARC` and `LINE` are ground-aimed (`WASD` / source tile) and receive the `area` `Field` bonus (`ARC 3 -> 5` wide, `LINE 3 -> 4` long); in `Assault` mode, their direction is locked to the picked enemy target at impact (`IR7`), using base shape size, `foes only` (`IR9`), `splash_mult` off the primary target, and `+assault_shape_blocks` (`+1` wind-up block, capped at `MAX_ACTION_BLOCKS = 6`).
   7. **`ATTACK` with `hazard` and no shape (`tripwire_snare`)**: `Field` (must precede the unshaped `Assault` rule, `FB-19`).
   8. **Unshaped `ATTACK`**: `Assault`.
 - **Consumable Item Intent Mapping (`FB-19`)**:
@@ -50,5 +50,5 @@ One derivation function in `rpgkit_rules` replaces the three diverging copies (`
 
 ## 4. Acceptance tests (`A4.2` - `A4.5`)
 
-1. **Single derivation function (`FB-19`)**: Running the derivation function across all 129 skills after the 7 `SWEEP -> ARC/RING` data fixes yields a deterministic 1-or-2 intent list for every skill (`Assault` 59, `Maneuver` 14, 19 dual-intent skills; `11` reach, `5` lingering, `7` area, `0` power Field bonuses).
+1. **Single derivation function (`FB-19`)**: Running the derivation function across all 129 skills after the 7 `SWEEP -> ARC/RING` data fixes yields a deterministic 1-or-2 intent list for every skill (`Assault` 59, `Maneuver` 14, 26 dual-intent skills: 8 `Support, Stand` + 18 `Field, Assault`; `11` reach, `5` lingering, `7` area, `0` power Field bonuses).
 2. **Unified `EffectSpec` (`C08`)**: Statuses applied from skills, triggers, ground hazards, arena hazards, and encounter phases all route through `S1` using the same resistance and stacking rules.
