@@ -438,7 +438,8 @@ pub(crate) fn expand(e: &Dict) -> Vec<Dict> {
         // SkillRanks.resolve
         let literal = if rank >= 2 { mods[rank - 2].get("description").filter(|v| !v.is_null()).map(gstr) } else { None };
         let kind = sget(&row, "kind", "");
-        let text = literal.unwrap_or_else(|| render(&template, &kind, &row, rank));
+        // A1.2-S2: the catalog text is ruleset-free, so it renders the stance tokens (stances on)
+        let text = literal.unwrap_or_else(|| render(&template, &kind, &row, rank, true));
         row.insert("description".into(), Value::from(text));
         rows.push(row);
     }
@@ -470,10 +471,15 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-/// SkillText.render: literal parts as they are, valid tokens by the rank's effective row.
-pub fn render(template: &str, kind: &str, row: &Dict, rank: usize) -> String {
-    render_tokens(template, |token, suffix| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind)).then(|| token_value(token, suffix, row, rank)))
+/// SkillText.render: literal parts as they are, valid tokens by the rank's effective row; `stances` (A1.2-S2: the
+/// ruleset's `stances`) off renders the stance tokens (`STANCE_TOKENS`) as nothing.
+pub fn render(template: &str, kind: &str, row: &Dict, rank: usize, stances: bool) -> String {
+    render_tokens(template, |token, suffix| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind)).then(|| token_value(token, suffix, row, rank, stances)))
 }
+
+/// A1.2-S2 (A1 "Retire orphaned stance fields"): the skill tokens only the classic stance machinery reads; they render
+/// as nothing when a ruleset's `stances` is off.
+pub const STANCE_TOKENS: [&str; 2] = ["flow", "disrupt"];
 
 /// SkillText.parse as used by render: `{{` and `}}` are literal braces, `{token}` or `{token:suffix}` is filled by
 /// `value` (None, an empty or an unclosed token renders as nothing or as written).
@@ -584,8 +590,11 @@ fn maneuver_dash(row: &Dict) -> Option<i64> {
     (maneuver && dash > 0).then_some(dash)
 }
 
-/// SkillText.token_value.
-pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
+/// SkillText.token_value; `stances` off: a stance token (`STANCE_TOKENS`) is "" (A1.2-S2).
+pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize, stances: bool) -> String {
+    if !stances && STANCE_TOKENS.contains(&token) {
+        return String::new();
+    }
     let bare = suffix == "n";
     let i = |k: &str, fb: i64| to_int_or(json::get(row, k), fb);
     let f = |k: &str, fb: f64| to_float_or(json::get(row, k), fb);

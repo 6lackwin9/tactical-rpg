@@ -24,6 +24,7 @@
     "tunable switch_target_step enum default=\"\" values=\"\"|on|off",
     "tunable stances enum default=\"\" values=\"\"|on|off",
     "tunable attack_lock enum default=\"none\" values=none|melee|all untested_with=chase=classic",
+    "tunable item_ap int default=1 range=0..2",
     "tunable move_after_blocks row-only default=3 needs=round_intent (no schema entry)",
     "tunable bleed_pct row-only default=0.06 range=0.01..0.25 (no schema entry)",
     "tunable counter_mult row-only default=0.5 range=0.1..1.5 (no schema entry)",
@@ -115,6 +116,7 @@
     "promoted UNTRAINED_BURDEN_ADD -> untrained_burden_add",
     "promoted REQ_DISCOUNT_PER_LEVEL -> req_discount_per_level",
     "promoted GUARD_COMMON_MITIGATION -> guard_common_mitigation",
-    "promoted GUARD_MULTI_ROUND_MITIGATION -> guard_multi_round_mitigation"
+    "promoted GUARD_MULTI_ROUND_MITIGATION -> guard_multi_round_mitigation",
+    "promoted ITEM_AP -> item_ap"
   ]
 }

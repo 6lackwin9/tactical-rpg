@@ -296,7 +296,7 @@ pub fn fold(head: &str, family_rows: &[Dict]) -> Result<Dict, Vec<String>> {
                 m.insert(k.clone(), json::get(row, k).clone());
             }
         }
-        if json::s(row, "description") != render(&base_template, &kind, row, rank) {
+        if json::s(row, "description") != render(&base_template, &kind, row, rank, true) {
             m.insert("description".into(), Value::from(json::s(row, "description")));
         }
         modifiers.push(Value::Object(m));
@@ -477,12 +477,12 @@ fn validate_template(template: &str, entry: &Dict) -> Vec<String> {
         let row = effective(entry, rank);
         for raw in &usable {
             let (token, suffix) = raw.split_once(':').map_or((raw.as_str(), ""), |(a, b)| (a, b.split(':').next().unwrap_or("")));
-            if token_value(token, suffix, &row, rank).is_empty() {
+            if token_value(token, suffix, &row, rank, true).is_empty() {
                 errors.push(format!("Rank {rank} ({}): token {{{raw}}} resolves to nothing (the field is empty or 0 for that rank).", json::s(&row, "name")));
             }
         }
         if errors.is_empty() {
-            let text = render(template, &kind, &row, rank);
+            let text = render(template, &kind, &row, rank, true);
             if chars_len(&text) > MAX_LENGTH {
                 errors.push(format!("Rank {rank} ({}): the rendered description is {} characters (max {MAX_LENGTH}).", json::s(&row, "name"), chars_len(&text)));
             }
@@ -513,9 +513,9 @@ fn template_warnings(template: &str, entry: &Dict) -> Vec<String> {
                 .into_iter()
                 .filter(|t| *t != "name")
                 .find(|t| {
-                    let plain = token_value(t, "", &first, 1);
+                    let plain = token_value(t, "", &first, 1, true);
                     let plain = plain.strip_suffix('%').unwrap_or(&plain);
-                    token_value(t, "n", &first, 1) == d || plain.strip_suffix(" AP").unwrap_or(plain) == d
+                    token_value(t, "n", &first, 1, true) == d || plain.strip_suffix(" AP").unwrap_or(plain) == d
                 })
                 .map(|t| format!(" Use {{{t}}}."))
                 .unwrap_or_default();

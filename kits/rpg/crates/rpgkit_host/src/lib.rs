@@ -555,7 +555,7 @@ fn items_of(s: &Session, u: UnitId, target: Option<UnitId>) -> Vec<Value> {
             continue;
         }
         out.push(json!({"item": id, "name": con.name, "left": left, "heal": con.heal, "damage": con.damage, "buff_pct": con.buff_pct, "rounds": con.duration,
-            "reach": con.battle_reach(), "blocks": con.use_blocks.max(1), "ap": command::ITEM_AP, "at_foes": con.aims_at_foes(), "description": con.raw.get("description")}));
+            "reach": con.battle_reach(), "blocks": con.use_blocks.max(1), "ap": command::item_ap(&s.w, u), "at_foes": con.aims_at_foes(), "description": con.raw.get("description")}));
     }
     out
 }

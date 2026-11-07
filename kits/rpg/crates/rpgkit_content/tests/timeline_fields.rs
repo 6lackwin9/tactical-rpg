@@ -361,13 +361,13 @@ fn range_and_position_tokens_render_the_dash() {
         r
     };
     let flank = row(json!({"position": "flank", "reach_max": 2}));
-    assert_eq!(source::render("Dashes up to {range} {position}, then hits.", "ATTACK", &flank, 1), "Dashes up to 2 to a flank, then hits.");
+    assert_eq!(source::render("Dashes up to {range} {position}, then hits.", "ATTACK", &flank, 1, true), "Dashes up to 2 to a flank, then hits.");
     let behind = row(json!({"position": "behind", "reach_max": 3}));
-    assert_eq!(source::render("Dashes up to {range} {position}.", "ATTACK", &behind, 1), "Dashes up to 3 behind the target.");
+    assert_eq!(source::render("Dashes up to {range} {position}.", "ATTACK", &behind, 1, true), "Dashes up to 3 behind the target.");
     let transition = row(json!({"dash_tiles": 2}));
-    assert_eq!(source::render("Dashes up to {dash} {position}; {range}.", "ATTACK", &transition, 1), "Dashes up to 2 tiles to a flank; 2.");
+    assert_eq!(source::render("Dashes up to {dash} {position}; {range}.", "ATTACK", &transition, 1, true), "Dashes up to 2 tiles to a flank; 2.");
     let band = dict(json!({"id": "y", "name": "Y", "kind": "ATTACK", "reach_min": 2, "reach_max": 4}));
-    assert_eq!(source::render("Range {range}{position}.", "ATTACK", &band, 1), "Range 2-4.");
+    assert_eq!(source::render("Range {range}{position}.", "ATTACK", &band, 1, true), "Range 2-4.");
 }
 
 /// The writer stores the timeline fields as every skill field (family fields once, rank fields as rank modifiers when

@@ -384,6 +384,9 @@ pub struct DeckSlots {
 /// VISCLAR1-D: the default of `move_after_blocks`.
 pub const MOVE_AFTER_BLOCKS: i32 = 3;
 
+/// A1.2-S1 (ITEMUSE1 rule 3): the default of `item_ap` (the AP a consumable use costs); the shipped `timeline` row sets 0 in data.
+pub const ITEM_AP: i32 = 1;
+
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Numbers {
@@ -455,6 +458,9 @@ pub struct Numbers {
     /// S1.2-S4 (`guard_multi_round_mitigation`, S1 section 3): the guard fraction of a multi-round Guard skill
     /// (`guard_rounds` 2 or more) that authors none, lower than the 1-round one (FB-48).
     pub guard_multi_round_mitigation: f64,
+    /// A1.2-S1 (`item_ap`, A1 parameter table): the AP a consumable use costs (AP debt allowed; a unit that pays no AP
+    /// pays nothing); by the rules: `ITEM_AP` (classic), 0 under `round_intent`.
+    pub item_ap: i32,
 }
 
 impl Default for Numbers {
@@ -497,6 +503,7 @@ impl Default for Numbers {
             req_discount_per_level: crate::stats::REQ_DISCOUNT_PER_LEVEL,
             guard_common_mitigation: status::GUARD_COMMON_MITIGATION,
             guard_multi_round_mitigation: status::GUARD_MULTI_ROUND_MITIGATION,
+            item_ap: ITEM_AP,
         }
     }
 }
@@ -564,6 +571,7 @@ impl Numbers {
             req_discount_per_level: value::int(o, "req_discount_per_level", d.req_discount_per_level),
             guard_common_mitigation: value::float(o, "guard_common_mitigation", d.guard_common_mitigation),
             guard_multi_round_mitigation: value::float(o, "guard_multi_round_mitigation", d.guard_multi_round_mitigation),
+            item_ap: value::int(o, "item_ap", d.item_ap),
         }
     }
 
@@ -783,7 +791,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 29] = [
+pub const FIELD_RULES: [FieldRule; 30] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -822,6 +830,9 @@ pub const FIELD_RULES: [FieldRule; 29] = [
     // numbers; read whatever the rules
     FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_common_mitigation", &[]) },
     FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_multi_round_mitigation", &[]) },
+    // A1.2-S1 (A1 parameter table): the AP of a consumable use (schema int 0..2, which loading clamps to; this range
+    // flags a raw row); read whatever the rules
+    FieldRule { range: Some((0.0, 2.0)), ..field_rule("item_ap", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -988,7 +999,7 @@ pub const LOCKED: [Locked; 48] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 11] = [
+pub const PROMOTED: [(&str, &str); 12] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -1000,6 +1011,7 @@ pub const PROMOTED: [(&str, &str); 11] = [
     ("REQ_DISCOUNT_PER_LEVEL", "req_discount_per_level"),
     ("GUARD_COMMON_MITIGATION", "guard_common_mitigation"),
     ("GUARD_MULTI_ROUND_MITIGATION", "guard_multi_round_mitigation"),
+    ("ITEM_AP", "item_ap"),
 ];
 
 impl Numbers {
@@ -1050,6 +1062,7 @@ impl Numbers {
             "req_discount_per_level" => self.req_discount_per_level.to_string(),
             "guard_common_mitigation" => self.guard_common_mitigation.to_string(),
             "guard_multi_round_mitigation" => self.guard_multi_round_mitigation.to_string(),
+            "item_ap" => self.item_ap.to_string(),
             _ => return None,
         })
     }

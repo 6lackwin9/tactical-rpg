@@ -1753,7 +1753,7 @@ impl Builder<'_> {
                 if !fits_before(st, need, room.limit) {
                     return Err((room.taken)(need).into());
                 }
-                let ap = if pays { command::ITEM_AP } else { 0 };
+                let ap = command::item_ap(w, self.c);
                 if ap > ap_free {
                     return Err(Refusal::ap(ap_free, ap));
                 }

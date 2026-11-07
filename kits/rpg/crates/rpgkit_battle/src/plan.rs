@@ -696,7 +696,7 @@ impl Plan {
         idx
     }
 
-    /// ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. 1 AP, `use_blocks` blocks at the lowest free blocks
+    /// ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. `item_ap` AP, `use_blocks` blocks at the lowest free blocks
     /// like a SELF step, no auto-move: the target must stand within the item's reach of the user's planned tile when the
     /// step starts. Earlier ITEM steps of this round use up copies (nothing leaves the pouch before the command resolves).
     fn apply_item(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
@@ -729,9 +729,10 @@ impl Plan {
         let last = st.entries.len() - 1;
         let e = &mut st.entries[last];
         e.item = Some(con.clone());
-        // add_entry charged the skill's AP; an item costs ITEM_AP (RULESET1 T11: nothing for a unit that pays no AP)
+        // add_entry charged the skill's AP; an item costs the ruleset's item_ap (RULESET1 T11: nothing for a unit that
+        // pays no AP)
         let charged = e.skill_ap;
-        e.skill_ap = if w.pays_ap(c) { command::ITEM_AP } else { 0 };
+        e.skill_ap = command::item_ap(w, c);
         st.ap_left += charged - e.skill_ap;
         if st.dry_entry == last as i32 && st.ap_left >= 0 {
             st.dry_entry = -1;

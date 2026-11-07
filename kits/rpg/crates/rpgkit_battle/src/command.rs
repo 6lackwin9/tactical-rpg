@@ -1475,8 +1475,15 @@ pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Opti
 
 // ---- ItemCommand shared rules (planner, AI, command) --------------------------------------------------------
 
-/// ITEMUSE1 rule 3: every item use costs 1 AP (AP debt allowed).
-pub const ITEM_AP: i32 = 1;
+/// ITEMUSE1 rule 3 (A1.2-S1): the AP an item use costs `c`: the ruleset's `item_ap` (AP debt allowed); nothing for a
+/// unit that pays no AP (RULESET1 T11).
+pub fn item_ap(w: &World, c: UnitId) -> i32 {
+    if w.pays_ap(c) {
+        w.ruleset.numbers.item_ap
+    } else {
+        0
+    }
+}
 
 /// ItemCommand.pouch_item: the first consumable with `item_id` in the unit's battle pouch.
 pub fn pouch_item<'a>(w: &'a World, c: UnitId, item_id: &str) -> Option<&'a ItemDef> {

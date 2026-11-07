@@ -188,7 +188,7 @@ fn skill_storage(entry: &Dict) -> Dict {
                 m.insert(k.clone(), json::get(row, k).clone());
             }
         }
-        if sget(row, "description", "") != source::render(&base_template, &kind, row, i + 1) {
+        if sget(row, "description", "") != source::render(&base_template, &kind, row, i + 1, true) {
             m.insert("description".into(), Value::from(sget(row, "description", "")));
         }
         mods.push(Value::Object(m));

@@ -248,7 +248,7 @@ fn the_fields_load_into_the_typed_catalog_and_default_to_nothing() {
     assert!(!off.has(ruleset::EXECUTE) && !off.has(ruleset::FORCED_MOVE) && off.has(ruleset::TRIGGERS), "they switch one by one");
     // the description token of an execute entry
     let carver = cat.skill("carver").unwrap();
-    assert_eq!(source::render("{exploit}", "ATTACK", &carver.raw, 1), "x1.5 vs Exposed, x2.0 at 35% HP or less");
+    assert_eq!(source::render("{exploit}", "ATTACK", &carver.raw, 1, true), "x1.5 vs Exposed, x2.0 at 35% HP or less");
     drop_scratch(&data);
 }
 

@@ -64,6 +64,7 @@
 			"switch_target_step": "off",
 			"stances": "off",
 			"attack_lock": "none",
+			"item_ap": 0,
 			"poise_mode": "pips"
 		},
 		{
@@ -97,7 +98,8 @@
 			"root_stops_chase": "off",
 			"switch_target_step": "on",
 			"stances": "on",
-			"attack_lock": "none"
+			"attack_lock": "none",
+			"item_ap": 1
 		}
 	]
 }
