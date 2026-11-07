@@ -42,6 +42,10 @@ pub enum Shape {
     Line,
     /// Three tiles across the heading, centred on the anchor (target) or the tile ahead of the user (self).
     Sweep,
+    /// A3.2-S1: the 8 tiles around the anchor (target) or the user (self), never the centre.
+    Ring,
+    /// A3.2-S1: the 3-tile front arc: across the heading, as `Sweep` (the legacy alias it replaces in W2-4).
+    Arc,
 }
 
 /// GH2: a skill's or consumable's `hazard`, carried by its command (read only under the rule).
@@ -64,6 +68,8 @@ impl Place {
             "BURST" => Shape::Burst,
             "LINE" => Shape::Line,
             "SWEEP" => Shape::Sweep,
+            "RING" => Shape::Ring,
+            "ARC" => Shape::Arc,
             _ => Shape::One,
         };
         Self { id: p.id.clone(), shape, at_self: p.at == "self", rounds: p.rounds.clamp(0, 5) }
@@ -215,7 +221,8 @@ pub fn cells(w: &World, by: UnitId, def: &HazardDef, p: &Place, anchor: V2, aim:
         Shape::Skill | Shape::One => vec![anchor],
         Shape::Plus => vec![anchor, anchor + V2::new(1, 0), anchor + V2::new(-1, 0), anchor + V2::new(0, 1), anchor + V2::new(0, -1)],
         Shape::Burst => (-1..=1).flat_map(|dx| (-1..=1).map(move |dy| anchor + V2::new(dx, dy))).collect(),
-        Shape::Line | Shape::Sweep => {
+        Shape::Ring => skill::ring_cells(if p.at_self { w.pos(by) } else { anchor }),
+        Shape::Line | Shape::Sweep | Shape::Arc => {
             let d = heading(w, by, aim);
             let start = if p.at_self { w.pos(by) + d } else { anchor };
             if p.shape == Shape::Line {

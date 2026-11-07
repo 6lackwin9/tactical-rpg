@@ -201,6 +201,13 @@ fn placement_shapes_cover_walkable_tiles() {
     assert_eq!(cells(Shape::Line, true), vec![v(5, 4), v(6, 4)], "from the tile ahead of the user");
     assert_eq!(cells(Shape::Sweep, false), vec![v(6, 3), v(6, 4), v(6, 5)], "across the heading at the aim");
     assert_eq!(cells(Shape::Sweep, true), vec![v(5, 3), v(5, 4), v(5, 5)], "across the heading ahead of the user");
+    // A3.2-S1: ARC covers SWEEP's tiles (the alias it replaces in W2-4); RING the 8 around its centre, never the centre.
+    assert_eq!(cells(Shape::Arc, false), cells(Shape::Sweep, false), "ARC at the aim as SWEEP");
+    assert_eq!(cells(Shape::Arc, true), cells(Shape::Sweep, true), "ARC ahead of the user as SWEEP");
+    let ring = cells(Shape::Ring, true);
+    assert_eq!((ring.len(), ring.contains(&me), ring.contains(&v(4, 3)), ring.contains(&v(5, 5))), (7, false, false, true), "around the user but the wall");
+    let ring = cells(Shape::Ring, false);
+    assert_eq!((ring.len(), ring.contains(&aim), ring.contains(&v(7, 4)), ring.contains(&v(5, 3))), (7, false, false, true), "around the aim but the wall");
     let area = [v(6, 4), v(7, 4), v(6, 5)];
     let p = Place { id: "g_smoke".into(), shape: Shape::Skill, at_self: false, rounds: 0 };
     assert_eq!(ground::cells(&w, HERO, &smoke, &p, aim, aim, &area), vec![v(6, 4), v(6, 5)], "SKILL: the skill's cells");

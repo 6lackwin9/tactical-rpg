@@ -64,7 +64,12 @@ pub enum Area {
     Plus,
     Burst,
     Line,
+    /// The legacy quadrant swing (A3.2-S1: kept for the frozen kit until the W2-4 migration to `Arc` / `Ring`).
     Sweep,
+    /// A3.2-S1 (A3.1, FB-57): the hollow ring of the 8 tiles around the user, self-anchored (IR21: Stand).
+    Ring,
+    /// A3.2-S1 (A3.1, FB-17): the 3-tile front arc toward the aim (IR21: Field and Assault).
+    Arc,
 }
 
 pub fn kind(s: &SkillDef) -> Kind {
@@ -77,6 +82,8 @@ pub fn area(s: &SkillDef) -> Area {
         "BURST" => Area::Burst,
         "LINE" => Area::Line,
         "SWEEP" => Area::Sweep,
+        "RING" => Area::Ring,
+        "ARC" => Area::Arc,
         _ => Area::None,
     }
 }
@@ -291,15 +298,21 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
         return (1, 1);
     }
     let a = area(s);
-    let extra = if skill_in_group(s, "spell") && a != Area::Line && a != Area::Sweep { c.spell_reach_bonus() } else { 0 };
+    let extra = if skill_in_group(s, "spell") && !from_user(a) { c.spell_reach_bonus() } else { 0 };
     if s.reach_max > 0 {
         return (s.reach_min, s.reach_max + extra);
     }
-    if is_off_hand(s) || a == Area::Line || a == Area::Sweep {
+    if is_off_hand(s) || from_user(a) {
         return (1, 1);
     }
     let (lo, hi) = plain_band(c, melee);
     (lo, hi + extra)
+}
+
+/// The shapes drawn from the user's own tile (LINE, SWEEP and A3.2-S1's RING and ARC): no spell reach bonus, a (1, 1)
+/// band without their own reach.
+fn from_user(a: Area) -> bool {
+    matches!(a, Area::Line | Area::Sweep | Area::Ring | Area::Arc)
 }
 
 /// The band of a plain attack (no own reach, no area, no spell bonus): ranged (2, max(3, range)), melee (1, `melee`).
@@ -403,8 +416,31 @@ pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
             let q = V2::new((cell.x - from.x).signum(), (cell.y - from.y).signum());
             vec![from + V2::new(q.x, 0), from + q, from + V2::new(0, q.y)]
         }
+        Area::Ring => ring_cells(from),
+        Area::Arc => arc_cells(from, cell),
         Area::None => vec![cell],
     }
+}
+
+/// A3.2-S1 RING: the 8 tiles around `from` (row by row), never `from` itself.
+pub fn ring_cells(from: V2) -> Vec<V2> {
+    (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| V2::new(dx, dy))).filter(|d| *d != V2::new(0, 0)).map(|d| from + d).collect()
+}
+
+/// A3.2-S1 ARC (base size 3): the front arc from `from` toward `cell`: aimed along an axis, the tile ahead and its two
+/// side neighbours; aimed off-axis, the diagonal tile and the two tiles beside it on each axis (as SWEEP's quadrant).
+/// Empty when `cell` is `from` (no direction).
+pub fn arc_cells(from: V2, cell: V2) -> Vec<V2> {
+    let q = V2::new((cell.x - from.x).signum(), (cell.y - from.y).signum());
+    if q.x != 0 && q.y != 0 {
+        return vec![from + V2::new(q.x, 0), from + q, from + V2::new(0, q.y)];
+    }
+    if q == V2::new(0, 0) {
+        return Vec::new();
+    }
+    let ahead = from + q;
+    let across = V2::new(q.y, q.x);
+    vec![ahead - across, ahead, ahead + across]
 }
 
 /// The best exploit entry whose status is ACTIVE on `target`, skipping `skip`: (status, mult); ("", 1.0) when none.

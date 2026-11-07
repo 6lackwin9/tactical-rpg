@@ -9,6 +9,7 @@ pub mod damage;
 pub mod derived;
 pub mod gear;
 pub mod grants;
+pub mod intent;
 pub mod pipeline;
 pub mod pool;
 pub mod ruleset;

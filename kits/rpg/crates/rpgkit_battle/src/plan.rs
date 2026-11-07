@@ -1317,7 +1317,11 @@ impl Plan {
         if a == skill::Area::Sweep && ((aim.x - st.pos.x).abs() != 1 || (aim.y - st.pos.y).abs() != 1) {
             return "Needs a diagonal tile.".into();
         }
-        if a != skill::Area::Line && a != skill::Area::Sweep && (d < band.0 || d > band.1) {
+        // A3.2-S1: ARC swings toward a neighbouring tile; RING is drawn around the user whatever the aim.
+        if a == skill::Area::Arc && (aim == st.pos || (aim.x - st.pos.x).abs() > 1 || (aim.y - st.pos.y).abs() > 1) {
+            return "Needs a neighbouring tile.".into();
+        }
+        if !matches!(a, skill::Area::Line | skill::Area::Sweep | skill::Area::Ring | skill::Area::Arc) && (d < band.0 || d > band.1) {
             return "Out of reach.".into();
         }
         let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
