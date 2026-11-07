@@ -14,24 +14,26 @@ Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`,
 
 ## 2. Startup Sequence (Run on Session Start)
 
-1. Fetch `origin` and run the **active Build Session lease guard** so two Build Sessions (cloud vs desktop) never collide:
+1. Fetch `origin` and claim the **sticky remote Build Session lease** (`origin/build-lease`) so two Build Sessions (cloud vs desktop) never collide:
    `git fetch -p origin`
-   `python tools/planner/feedback_check.py lease --no-fetch`
+   `python tools/planner/feedback_check.py lease claim --no-fetch`
    `git log -8 --oneline origin/develop`
-   - If `feedback_check.py lease` exits `1` (an unmerged `origin/claude/*` task branch or a `building` row in `docs/FEEDBACK.md` was updated within the last 20 minutes), **stop immediately and ask the user** before touching any branch or file (if the user confirms the other session stopped due to a usage limit, pass `--window-minutes 0` to take over cleanly).
+   - If `feedback_check.py lease claim` exits `1` (because `origin/build-lease` is owned by the other session or an unmerged `origin/claude/*` task branch / `building` row in `docs/FEEDBACK.md` was updated within the last 20 minutes), **stop immediately and ask the user** before touching any branch or file.
+   - If the user confirms you are taking over from a quota-paused session, run `python tools/planner/feedback_check.py lease claim --force` to move `origin/build-lease` to your session (`desktop` or `cloud`).
 2. Read `docs/READY.md` and `docs/FEEDBACK.md`.
 3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4:
    - Archive any answered `FB-nn` / `UN-nn` items whose `Follow-up` column in `READY.md` Section 4 is `none` or names an existing row in `READY.md` Section 1 or Section 3, moving them into `docs/archive/FEEDBACK_CLOSED.md` with `<disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`, and verify with `python tools/planner/feedback_check.py`.
 4. Check which `ready-to-build` rows in `docs/READY.md` Section 1 are already on `origin/develop`, which are in progress in `-lane1..3` or `-stage`, and which are next in line.
 5. Present the parallel lane dispatch plan for the next `ready-to-build` slices in `docs/READY.md` Section 1 and wait for user confirmation before changing code.
 
-## 3. Continuous Queue Sync (Between Slices & Before Stopping)
+## 3. Continuous Queue Sync & Auto-Wake Lease Guard (Between Slices, On Resume, & Before Pushing)
 
-The Design Session pushes `docs/READY.md` updates (answered `FB-nn` items, promoted waves, and `AUDIT-nn` bug-fix rows from `/audit-build`) directly to `origin/develop` while the Build Session is running:
+The Design Session pushes `docs/READY.md` updates (answered `FB-nn` items, promoted waves, and `AUDIT-nn` bug-fix rows from `/audit-build`) directly to `origin/develop` while the Build Session is running, and the user may move the Build Session lease between `cloud` and `desktop` if a session hits a quota limit:
 
-1. **On every rebase/pull from `origin/develop`**: Whenever `git fetch origin develop` or `git pull --rebase origin develop` brings in a new Design commit that touches `docs/READY.md`, immediately re-read `docs/READY.md` Section 1 and Section 4.
-2. **Archive newly answered feedback**: If the Design commit answered open `FB-nn` / `UN-nn` rows in `READY.md` Section 4, archive those answered items from `docs/FEEDBACK.md` into `docs/archive/FEEDBACK_CLOSED.md` (`python tools/planner/feedback_check.py`) on your next flush.
-3. **Pick up newly queued slices automatically**: Before declaring a batch, wave, or Silo Release (`R1` / `R2` / `R3`) complete—or before ending a turn at a slice boundary—always `git fetch origin develop` and check `origin/develop:docs/READY.md` Section 1 for any new `ready-to-build` rows (such as `AUDIT-R1` or newly promoted wave rows) added since session start, and continue executing them in order before cutting the release PR or stopping.
+1. **Before resuming after any pause/auto-wake AND before every push/flush to `origin`**: Always run `python tools/planner/feedback_check.py lease check`. If `lease check` exits `1` because `origin/build-lease` was moved to another session (`desktop` vs `cloud`), **halt immediately without committing, merging, or pushing**.
+2. **On every rebase/pull from `origin/develop`**: Whenever `git fetch origin develop` or `git pull --rebase origin develop` brings in a new Design commit that touches `docs/READY.md`, immediately re-read `docs/READY.md` Section 1 and Section 4.
+3. **Archive newly answered feedback**: If the Design commit answered open `FB-nn` / `UN-nn` rows in `READY.md` Section 4, archive those answered items from `docs/FEEDBACK.md` into `docs/archive/FEEDBACK_CLOSED.md` (`python tools/planner/feedback_check.py`) on your next flush.
+4. **Pick up newly queued slices automatically**: Before declaring a batch, wave, or Silo Release (`R1` / `R2` / `R3`) complete—or before ending a turn at a slice boundary—always `git fetch origin develop` and check `origin/develop:docs/READY.md` Section 1 for any new `ready-to-build` rows (such as `AUDIT-R1` or newly promoted wave rows) added since session start, and continue executing them in order before cutting the release PR or stopping.
 
 ## 4. Builder Authority Matrix (Allowed vs Forbidden)
 
