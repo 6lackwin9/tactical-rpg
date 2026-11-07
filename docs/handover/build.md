@@ -1,7 +1,6 @@
 # Build Session handover (cloud)
 
-Written 2026-11-07 by the cloud Build Session (rotated at about 246k context, cloud.md "Fresh sessions"). Read this, then
-run `/build-session`.
+Updated 2026-11-07 by the cloud Build Session after W2-1. Read this, then run `/build-session`.
 
 ## Goal of the session
 
@@ -11,22 +10,24 @@ gate and a `sim feel` sanity check. Rows `14-20` are post-`R1`.
 
 ## Queue position
 
-- Done this session: `SKILLS1-FB` (127f168), cloud hook ALSA headers (d4094eaf), `U3.2-S2` row 8 (c212bf4c).
-- Next: row 11 `S1.2-S1` (`docs/sessions/S1_STATUS.md` section 4 item 2, FB-48 in the archive): the 17 status rows
-  as a frozen kit table behind `cap_of`, `stacking_of`, `display_name`, `row_of`, plus behaviour primitive tags; 0 golden
-  diffs. Logic-builder run (several files).
-- Then 12 (`rules_contract_golden` re-record), 13, 21, W2-1..W2-3 (each golden-moving switch its own named commit, logged
-  in FEEDBACK for HISTORY). Row 12 and post-R1 row 17 both promote the debt numbers: 17 reuses 12's.
+- Done (all on `develop`): Wave 1 R1 rows 8, 11, 12, 13, 21, 22; W2-1 complete: U1.2-S2 (4f84b780), U2.2-S3
+  (ecf83501), U1.2-S3a crit from PERC (8bf4be58), U1.2-S3b know_potency at 0 (1bf30ee6), U1.2-S3c speed split
+  (b4f11aa8), U1.2-S4 tier table, HP form held (28a5308b), U1.2-S5 data pools + inert Composure (e5201625).
+- Next: W2-2 (R1-7, the Unit half): U3.2-S3 soft wield penalty + `state.rs:180` equip check and deck ownership on
+  `progression::member_passives` + party-screen penalty summary in FEEDBACK; U3.2-S4 reversible item grants, OFFHAND1,
+  level 2-3 bonuses, `shd_tower` / `wpn_glass_wand` notes; U3.2-S5 carry/burden; U4.2-S3 temperament; U4.2-S4 U4
+  evaluators on the U1 pipeline. One builder run and commit per slice, each with its named golden re-records.
+- Then W2-3 (R1-8), then the full gate + `sim feel` sanity check and the `develop -> main` release PR.
 
 ## In flight
 
-Nothing. No open task branch with unlanded work (`claude/skills1-fb-feedback-check`, `claude/hook-alsa`,
-`claude/u32s2-family-table` are all squashed onto `develop`).
+Nothing. All task branches are squash-landed and closed for branch-cleanup.
 
-## Open with Design
+## Open with Design (none blocks R1)
 
-- FB-67 (row 8 held parts): reach stays `REACH_WEAPON_REACH` (no `range_band` field) and the printed check lists stay
-  code until Design answers. Not an R1 blocker. Build recommends reach option B, lists option C.
+FB-67, FB-69 to FB-79 (FEEDBACK.md; FB-67/69/70/71 full text in the archive). User decisions this session: R1 keeps
+today's tier HP formula as a temporary measure (FB-78; the user wants stat-based units by one rule); the KNOW potency
+weight is 0 until chosen (FB-76).
 
 ## Working notes
 
