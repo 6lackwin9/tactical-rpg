@@ -284,7 +284,8 @@ fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, families: &[Dict], erro
         }
     }
     let skills: Vec<Dict> = json::arr(json::get(loaded, "skills")).iter().map(|e| json::dict(e).clone()).collect();
-    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, families });
+    let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
+    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, derived: &derived, families });
     let mut kept = Vec::new();
     for (row, found) in rows.into_iter().zip(checked) {
         if found.is_empty() {

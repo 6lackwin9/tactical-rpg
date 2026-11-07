@@ -52,6 +52,20 @@ fn ruleset_storage(full: &Dict) -> Dict {
     to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
 }
 
+/// U1.2-S5: a unit meter row stores its pool fields (`max_stat`, `start_full`, `delta_max`, `triggers`) as no key while
+/// they hold their schema defaults, so a row written before they existed re-saves byte for byte.
+fn meter_storage(full: &Dict) -> Dict {
+    let mut row = content_storage(rpgkit_data::UNIT_METERS_KIND, full);
+    row.retain(|k, v| match k.as_str() {
+        "max_stat" => !gstr(v).is_empty(),
+        "start_full" => json::to_bool(v),
+        "delta_max" => json::to_int(v) != i64::from(rpgkit_data::METER_DELTA_MAX),
+        "triggers" => v.as_array().is_some_and(|a| !a.is_empty()),
+        _ => true,
+    });
+    row
+}
+
 /// PORTRAITFX1 5.1: a portrait cue row (and PORTRAITFX1-EX: an expression-effect row) stores its id and only the
 /// fields that differ from their schema defaults (a float default compared as normalize snaps it too, so 0.85 is the
 /// default whichever way it was read).
@@ -204,6 +218,7 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
         k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
         k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
         "classes" => Ok(class_storage(&content(kind, entry))),
+        k if k == rpgkit_data::UNIT_METERS_KIND => Ok(meter_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
 }

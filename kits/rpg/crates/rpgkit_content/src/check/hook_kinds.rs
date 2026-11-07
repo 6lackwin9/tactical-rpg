@@ -3,14 +3,14 @@
 //! numbers' ranges live in these checks (the schema rows carry no `min` / `max`, so normalizing never clamps): a value
 //! out of range is refused with its reason. The loader keeps the rows that pass, in file order.
 
-use super::hooks::{effects_errors, whole_in, Ctx};
+use super::hooks::{effects_errors, trigger_row_errors, whole_in, Ctx, SKILL_ROWS_MAX};
 use super::View;
 use crate::source::fields;
 use aegis_content::schema::is_id;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{rows_valid, TERRAIN_IDS, ZONE_IDS};
-use rpgkit_data::{BAND_EFFECTS, HAZARDS_KIND, HAZARD_AFFECTS, HAZARD_ON, METER_PIPS_MAX, METER_SHOW, UNIT_METERS_KIND, ZONES_KIND};
+use rpgkit_data::{BAND_EFFECTS, HAZARDS_KIND, HAZARD_AFFECTS, HAZARD_ON, METER_DELTA_CAP, METER_PIPS_MAX, METER_SHOW, TRIGGER_EVENTS, UNIT_METERS_KIND, ZONES_KIND};
 use rpgkit_rules::status;
 use serde_json::Value;
 
@@ -37,6 +37,8 @@ pub const HAZARD_COVER: (f64, f64) = (0.0, 0.5);
 /// What the rows' checks read from the rest of the catalog: the loaded skill rows (flat rank rows).
 pub struct Refs<'a> {
     pub skills: &'a [Dict],
+    /// U1.2-S5: the loaded derived-stat ids (a meter's `max_stat`).
+    pub derived: &'a [String],
     /// U3.2-S2: the item family table (the gear tokens a `proficiency` effect may name; empty = the code list).
     pub families: &'a [Dict],
 }
@@ -181,6 +183,14 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
         // UM7: one pip a step from min to max, as the battle screen draws them (`meter::shown`)
         out.push(format!("Pips show at most {METER_PIPS_MAX} steps (max - min is {}); use bar.", max - min));
     }
+    // U1.2-S5: the pool fields
+    let max_stat = json::s(e, "max_stat");
+    if !max_stat.is_empty() && !refs.derived.contains(&max_stat) {
+        out.push(format!("Max stat: unknown derived stat '{max_stat}'."));
+    }
+    if !whole_in(json::get(e, "delta_max"), (1, i64::from(METER_DELTA_CAP))) {
+        out.push(format!("Largest change (delta_max) must be a whole number 1-{METER_DELTA_CAP}."));
+    }
     let list = |key: &str, label: &str, cap: usize, out: &mut Vec<String>| -> Vec<Dict> {
         let raw = json::get(e, key);
         let Some(a) = raw.as_array() else {
@@ -220,8 +230,8 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
     for (i, b) in bands.iter().enumerate() {
         let bid = json::s(b, "id");
         let at = format!("Band '{}'", if bid.is_empty() { (i + 1).to_string() } else { bid.clone() });
-        for k in b.keys().filter(|k| !["id", "name", "from", "effects", "statuses"].contains(&k.as_str())) {
-            out.push(format!("{at}: unknown key '{k}' (keys: id, name, from, effects, statuses)."));
+        for k in b.keys().filter(|k| !["id", "name", "from", "from_pct", "effects", "statuses"].contains(&k.as_str())) {
+            out.push(format!("{at}: unknown key '{k}' (keys: id, name, from or from_pct, effects, statuses)."));
         }
         if !is_id(&bid) {
             out.push(format!("{at}: the id must be lowercase snake_case (a-z, 0-9, _)."));
@@ -229,11 +239,26 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
             out.push(format!("Band ids must be unique: '{bid}'."));
         }
         band_ids.push(bid);
+        // U1.2-S5: a band starts at a value (`from`) or at a percent of the max (`from_pct`; checked at the row's max)
+        let pct = b.get("from_pct");
         let from = json::get(b, "from");
-        if !whole_in(from, (min, max)) {
-            out.push(format!("{at}: from must be a whole number {min}-{max}."));
-        } else {
-            let f = json::to_int(from);
+        let start = match pct {
+            Some(_) if b.contains_key("from") => {
+                out.push(format!("{at}: set from or from_pct, not both."));
+                None
+            }
+            Some(p) if !whole_in(p, (0, 100)) => {
+                out.push(format!("{at}: from_pct must be a whole number 0-100."));
+                None
+            }
+            Some(p) => Some(rpgkit_rules::bands::pct_point(json::to_int(p), max).max(min)),
+            None if !whole_in(from, (min, max)) => {
+                out.push(format!("{at}: from must be a whole number {min}-{max}."));
+                None
+            }
+            None => Some(json::to_int(from)),
+        };
+        if let Some(f) = start {
             if i == 0 && f != min {
                 out.push(format!("{at}: the first band starts at min ({min})."));
             }
@@ -249,9 +274,10 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
                 out.push(format!("{sat} must be an object {{status, magnitude}}."));
                 continue;
             };
+            // U1.2-S5: any kit status (a pool's low band holds a debuff such as weaken)
             let st = json::s(s, "status");
-            if !status::buffs().contains(&st.as_str()) {
-                out.push(format!("{sat}: '{st}' is not a buff."));
+            if status::row_of(&st).is_none() {
+                out.push(format!("{sat}: '{st}' is not a status."));
                 continue;
             }
             let m = json::get(s, "magnitude");
@@ -290,6 +316,10 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
             out.push(format!("{at}: once must be true or false."));
         }
         out.extend(effects_errors(json::get(r, "effects"), ctx, &at, Some(""), true));
+    }
+    // U1.2-S5: the trigger rows every holder holds
+    for (i, t) in list("triggers", "Triggers", SKILL_ROWS_MAX, out).iter().enumerate() {
+        out.extend(trigger_row_errors(t, ctx, &format!("Trigger {}", i + 1), &TRIGGER_EVENTS, &[]));
     }
     // UM6: a meter skill spends this meter (a negative delta on it)
     for s in json::sget(e, "skills") {
@@ -368,5 +398,6 @@ fn asset_key_ok(key: &str) -> bool {
 pub fn entry_errors(v: &View, kind: &str, e: &Dict, current_id: &str) -> Vec<String> {
     let mut rows: Vec<Dict> = v.entries(kind).iter().filter(|r| current_id.is_empty() || json::s(r, "id") != current_id).cloned().collect();
     rows.push(e.clone());
-    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), families: v.entries("item_families") }).pop().unwrap_or_default()
+    let derived = v.derived_ids();
+    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), derived: &derived, families: v.entries("item_families") }).pop().unwrap_or_default()
 }

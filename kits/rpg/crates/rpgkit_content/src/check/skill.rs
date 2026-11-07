@@ -68,6 +68,10 @@ pub fn has_field(kind: &str, field: &str) -> bool {
     if field == "stance" {
         return kind == "ATTACK";
     }
+    // U1.2-S5: a Rest may move a meter (a pool's gain on rest), without the rest of the cost section
+    if field == "meters" && kind == "REST" {
+        return true;
+    }
     sections_of(kind).iter().any(|s| section_fields(s).contains(&field))
 }
 

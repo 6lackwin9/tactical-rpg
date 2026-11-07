@@ -1899,8 +1899,16 @@ impl HazardDef {
     }
 }
 
+/// U1.2-S5: the largest change one `meter` effect makes to a meter by default (a row's `delta_max`).
+pub const METER_DELTA_MAX: i32 = 10;
+/// U1.2-S5: the largest `delta_max` a meter row may set.
+pub const METER_DELTA_CAP: i32 = 100;
+
 /// UM1: a unit meter row (kind `unit_meters`): its range and start, how it shows, its decay, bands and rules (raw;
-/// HOOKS1-M reads them) and the meter skills it opens.
+/// HOOKS1-M reads them) and the meter skills it opens. U1.2-S5 (a pool from data, U1 "Adding a derived value without a
+/// logic change"): `max_stat` names a derived-stat row whose value is each holder's max (clamped to min..max; "" = the
+/// row's max), `start_full` starts each battle at that max, `delta_max` bounds one `meter` effect's change, and
+/// `triggers` are trigger rows every holder holds while it holds the meter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitMeterDef {
     pub id: String,
@@ -1916,6 +1924,10 @@ pub struct UnitMeterDef {
     pub bands: Vec<Obj>,
     pub rules: Vec<Obj>,
     pub skills: Vec<String>,
+    pub max_stat: String,
+    pub start_full: bool,
+    pub delta_max: i32,
+    pub triggers: Vec<TriggerRow>,
 }
 
 impl UnitMeterDef {
@@ -1933,6 +1945,10 @@ impl UnitMeterDef {
             bands: objs(o, "bands"),
             rules: objs(o, "rules"),
             skills: strings(o, "skills"),
+            max_stat: string(o, "max_stat", ""),
+            start_full: boolean(o, "start_full", false),
+            delta_max: int(o, "delta_max", METER_DELTA_MAX),
+            triggers: objs(o, "triggers").iter().map(TriggerRow::from_obj).collect(),
         }
     }
 }

@@ -440,6 +440,9 @@ pub struct Numbers {
     /// U1.2-S3b (`know_potency`, U1 "status potency from KNOW", S1 section 2 `attacker_know_potency`): the potency a
     /// point of the attacker's KNOW adds to a skill's status roll; 0 (the default) is the spec's "potency off".
     pub know_potency: f64,
+    /// U1.2-S5 (`unit_pools`, U1 "Adding a derived value without a logic change"): the unit meter rows every unit holds
+    /// in this ruleset's battles (rule unit_meters), beside the ones passives give; empty (the default) = none.
+    pub unit_pools: Vec<String>,
 }
 
 impl Default for Numbers {
@@ -476,6 +479,7 @@ impl Default for Numbers {
             max_pip_loss_per_hit: 3,
             poise_mode: PoiseMode::Bar,
             know_potency: 0.0,
+            unit_pools: Vec::new(),
         }
     }
 }
@@ -537,6 +541,7 @@ impl Numbers {
             max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
             poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
             know_potency: value::float(o, "know_potency", d.know_potency),
+            unit_pools: value::strings(o, "unit_pools"),
         }
     }
 
@@ -751,7 +756,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 23] = [
+pub const FIELD_RULES: [FieldRule; 24] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -780,6 +785,8 @@ pub const FIELD_RULES: [FieldRule; 23] = [
     FieldRule { range: Some((1.0, 5.0)), ..field_rule("max_pip_loss_per_hit", &[POISE, "poise_mode=pips"]) },
     // U1.2-S3b (U1 parameter table "potency weight (KNOW)"): row-only like the status numbers; read whatever the rules
     FieldRule { range: Some((0.0, 3.0)), ..field_rule("know_potency", &[]) },
+    // U1.2-S5: the unit meters every unit holds, row-only like the status numbers; read only under unit_meters
+    field_rule("unit_pools", &[UNIT_METERS]),
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -995,6 +1002,7 @@ impl Numbers {
             "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
             "poise_mode" => self.poise_mode.id().to_string(),
             "know_potency" => self.know_potency.to_string(),
+            "unit_pools" => self.unit_pools.join(","),
             _ => return None,
         })
     }

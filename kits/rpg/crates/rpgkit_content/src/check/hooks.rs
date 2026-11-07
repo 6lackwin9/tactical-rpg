@@ -68,6 +68,8 @@ pub struct Ctx {
     /// U3.2-S2: the gear tokens (`skill::gear_tokens` of the family table; a passive's `proficiency.gear`).
     pub gear: Vec<String>,
     pub meters: Vec<(String, i64, i64)>,
+    /// U1.2-S5: each meter's `delta_max` (a `meter` effect's change on it lies within it).
+    pub meter_deltas: Vec<(String, i64)>,
     pub hazards: Vec<String>,
 }
 
@@ -78,6 +80,11 @@ impl Ctx {
             families: skills.iter().filter(|s| json::i(s, "tier", 1) <= 1).map(|s| json::s(s, "id")).collect(),
             gear: super::skill::gear_tokens(&[]),
             meters: meters.iter().map(|m| (json::s(m, "id"), json::i(m, "min", 0), json::i(m, "max", 10))).collect(),
+            // a `delta_max` out of range is the row's own error: its effects check against the default meanwhile
+            meter_deltas: meters
+                .iter()
+                .map(|m| (json::s(m, "id"), Some(json::i(m, "delta_max", i64::from(rpgkit_data::METER_DELTA_MAX))).filter(|d| (1..=i64::from(rpgkit_data::METER_DELTA_CAP)).contains(d)).unwrap_or(METER_DELTA.1)))
+                .collect(),
             hazards: hazards.iter().map(|h| json::s(h, "id")).collect(),
         }
     }
@@ -91,6 +98,12 @@ impl Ctx {
 
     fn meter(&self, id: &str) -> Option<(i64, i64)> {
         self.meters.iter().find(|m| m.0 == id).map(|m| (m.1, m.2))
+    }
+
+    /// U1.2-S5: the range of a `meter` effect's delta on meter `id` (its row's `delta_max` either way; the default
+    /// METER_DELTA when the row sets none).
+    fn meter_delta(&self, id: &str) -> (i64, i64) {
+        self.meter_deltas.iter().find(|m| m.0 == id).map_or(METER_DELTA, |m| (-m.1, m.1))
     }
 }
 
@@ -532,8 +545,9 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
                 Some(range) if t == METER_SET => whole_key(o, "value", range, true, at, &mut out),
                 Some(_) => {
                     let delta = json::get(o, "delta");
-                    if !whole_in(delta, METER_DELTA) || json::to_int(delta) == 0 {
-                        out.push(format!("{at}: delta must be a whole number {}..{}, not 0.", METER_DELTA.0, METER_DELTA.1));
+                    let range = ctx.meter_delta(&meter);
+                    if !whole_in(delta, range) || json::to_int(delta) == 0 {
+                        out.push(format!("{at}: delta must be a whole number {}..{}, not 0.", range.0, range.1));
                     }
                 }
             }

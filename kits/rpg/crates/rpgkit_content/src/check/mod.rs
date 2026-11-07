@@ -440,6 +440,10 @@ pub fn validate_all(v: &View) -> Report {
             add(&format!("{kind}:{}", json::s(e, "id")), ruleset::missing_rows(v, e));
         }
     }
+    // U1.2-S5: a ruleset's `unit_pools` name unit meter rows
+    for e in v.entries(ruleset::KIND) {
+        add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::missing_pools(v, e));
+    }
     add("load", v.load_errors.clone());
     problems
 }

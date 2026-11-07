@@ -17,6 +17,17 @@ pub fn band_index(froms: impl IntoIterator<Item = i64>, value: i64) -> Option<us
     out
 }
 
+/// U1.2-S5: the value a band given in percent of the max (`from_pct`, 0-100) starts at: the smallest whole value at or
+/// above `pct` % of `max` (`ceil(max x pct / 100)`), so "below half" (a band `from_pct` 50 above it) holds every value
+/// under half the max.
+pub fn pct_point(pct: i64, max: i64) -> i64 {
+    let n = max * pct;
+    if n <= 0 {
+        return n / 100;
+    }
+    (n + 99) / 100
+}
+
 /// M5, UM5: a rule's point: a band id (that band's `from`) or a whole number; None when it names no band.
 pub fn point<'a>(raw: &Value, bands: impl IntoIterator<Item = (&'a str, i64)>) -> Option<i64> {
     match raw {

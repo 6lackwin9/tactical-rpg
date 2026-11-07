@@ -212,7 +212,7 @@ pub fn raise_held(w: &mut World, c: UnitId, block: i32) {
 }
 
 /// The holders of `c` now: the triggers of its commands that run (start to impact) at `block`, then its passives' and
-/// worn items' (8.1). None when it is not on the field.
+/// worn items' (8.1), then its meters' (U1.2-S5). None when it is not on the field.
 fn holders_of(res: &Resolver, w: &World, c: UnitId, block: i32, skills: bool, held: bool) -> Vec<Holder> {
     let mut out = Vec::new();
     if !w.has(c) {
@@ -229,6 +229,8 @@ fn holders_of(res: &Resolver, w: &World, c: UnitId, block: i32, skills: bool, he
         for t in w.units[c].held_triggers() {
             out.push(Holder { unit: c, source: source_name(w, &t.source), key: t.key.clone(), row: t.row.clone() });
         }
+        // U1.2-S5: then the trigger rows of the meters it holds
+        out.extend(crate::meter::held_triggers(w, c));
     }
     out
 }

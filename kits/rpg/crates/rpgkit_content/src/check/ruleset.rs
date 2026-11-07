@@ -120,6 +120,25 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
             out.push(format!("{}: '{v}' is not one of {}.", f.key, f.values.join(", ")));
         }
     }
+    // U1.2-S5: `unit_pools` (row-only) is a list of unit meter ids, none twice; whether each names a row is
+    // `missing_pools` (the meters load after the rulesets)
+    if let Some(raw) = e.get("unit_pools") {
+        let mut seen: Vec<String> = Vec::new();
+        match raw.as_array() {
+            None => out.push("unit_pools must be a list of unit meter ids.".into()),
+            Some(list) => {
+                for v in list {
+                    let id = v.as_str().unwrap_or_default().to_string();
+                    if !is_id(&id) {
+                        out.push(format!("unit_pools: '{}' must be a unit meter id (lowercase snake_case).", json::gstr(v)));
+                    } else if seen.contains(&id) {
+                        out.push(format!("unit_pools lists '{id}' twice."));
+                    }
+                    seen.push(id);
+                }
+            }
+        }
+    }
     let origin = json::s(e, "origin");
     if origin != super::ORIGIN_SYSTEM && origin != "user" {
         out.push(format!("Origin: '{origin}' is not one of system, user."));
@@ -149,6 +168,15 @@ pub fn missing_rows(v: &View, e: &Dict) -> Vec<String> {
         .into_iter()
         .filter(|r| is_id(r) && !v.has(KIND, r))
         .map(|r| format!("Rulesets: '{r}' has no row in {KIND} (data/catalog/{KIND}.json)."))
+        .collect()
+}
+
+/// U1.2-S5: the ids of a ruleset row's `unit_pools` that name no loaded unit meter row.
+pub fn missing_pools(v: &View, e: &Dict) -> Vec<String> {
+    json::sget(e, "unit_pools")
+        .into_iter()
+        .filter(|m| is_id(m) && !v.has(rpgkit_data::UNIT_METERS_KIND, m))
+        .map(|m| format!("unit_pools: '{m}' has no row in {0} (data/catalog/{0}.json).", rpgkit_data::UNIT_METERS_KIND))
         .collect()
 }
 
