@@ -9,8 +9,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 | Task / Sub-block | Stage / Status | Branch / Commit | Notes |
 | --- | --- | --- | --- |
-| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3 and -S4. |
-| R1 path (READY R1-9) | W2-3 done; AUDIT-R1 (AUDIT-01..07) in review | `claude/audit-r1` | Then the R1 release PR. |
+| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3 and -S4, AUDIT-R1. |
+| R1 path | all R1 rows done; release gate passed (FB-92) | `claude/release-batch-vmj4rj` | The R1 release PR to `main`. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
@@ -74,6 +74,14 @@ FB-01 to FB-84 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: Built as AUDIT-01 says: a stowed backup weapon in a 2H + 1H pair grants nothing, its `grant_skill` included, until Switch Weapon readies it (the earlier hand-rule test was flipped to match). FB-35 can read as keeping that skill while the weapon is merely carried.
 - **Recommendation**: Confirm (default, as built), or exempt `grant_skill` from AUDIT-01. Also: should the tier comparison read a missing key as its schema default (a one-off checks_golden move of about 73 lines that clears the frozen-fixture `position` and `guard_rounds` artefacts)? Should the Dojo dummy also use the ruleset's wield terms? Also: a stowed weapon's tier `stat_bonuses`, flat stat bonuses, mitigation and burden still apply (only item effects, tier effects and family bonuses read the ready gear): should they follow AUDIT-01 too, or stay as "worn"?
+
+### FB-92: R1 release gate: full gate and sim feel sanity check on develop (@709b586b)
+
+- **Spec**: `docs/READY.md` R1 path (W2-3, AUDIT-R1: "full gate + `sim feel` sanity check, then the `develop -> main` release PR")
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: `tools/fc.sh gate` ALL CHECKS PASSED on develop @709b586b. `tools/fc.sh sim feel` (timeline, 10 seeds per encounter, auto driver): 50 fights, won 72 % (36 won, 13 lost, 1 capped, 0 fled), median 4 rounds, 0 PLAN FAIL, 0 PLAN SKIP; `tl_duel_windup` 20 %, `tl_duel_reach` 60 %, `tl_duel_armour` 100 %, `tl_flank` 100 %, `tl_skirmish` 80 %; 79 breaks (36 chance, 35 poise, 8 sure). The enemy side reports 0 AP per round in every encounter. Release: `main` and `develop` share no history (develop's root `bf026515`, 2026-11-06; main's last release PR #54, 2026-11-03); develop holds everything except 17 `docs/metrics/` files (usage reports, `TASK_LOG.md`) only on main. The release commit takes develop's tree with both main and develop as parents, so later releases merge normally.
+- **Recommendation**: R1-BAL: look at `tl_duel_windup` (20 %) with the crit, potency and break levers (FB-75, FB-76, FB-89). Check whether the enemy's 0 AP per round is a metric gap. Decide whether the `docs/metrics/` files should come back to develop (the Merge & Release logs).
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
