@@ -13,7 +13,7 @@
 
 use crate::command::{hazard_on_enter, terrain_name, CmdKind};
 use crate::grid::{V2, ZERO};
-use crate::poise::{self, BreakCause, StaggerHit};
+use crate::poise::{self, BreakCause, StaggerHit, Verdict};
 use crate::resolver::{Resolver, ScheduledAction};
 use crate::round_intent;
 use crate::skill::{self, Kind};
@@ -483,29 +483,27 @@ pub(crate) fn collision_stagger(res: &mut Resolver, w: &mut World, v: UnitId, c:
     let windup = poise::in_windup(&res.scheduled, v, block);
     let f = poise::factors(w, &res.scheduled, v, block, c.blocks.max(1), false);
     let taken = poise::stagger_taken(c.stagger.max(0), &f);
-    let mut hit = StaggerHit { target: v, stagger: c.stagger.max(0), factors: f, windup, taken, before: st.value, after: st.value, chance: None, broke: None };
+    let pips = poise::pips_mode(&w.ruleset.numbers);
+    let pips_before = poise::pips_now(&w.ruleset.numbers, &st);
+    let mut hit = StaggerHit { target: v, stagger: c.stagger.max(0), factors: f, windup, taken, before: st.value, after: st.value, pips_before, pips_after: pips_before, chance: None, broke: None };
     // P8: a unit broken this round stays at 0 and breaks no further
     if st.broken {
         return Some(hit);
     }
+    // S2.2-S2: P7, P12 and P14 (no P13 roll) through the one stagger rule, by pips under poise_mode pips
     let held = poise::unbreakable(w, &res.scheduled, v, block);
-    let mut after = st.value - taken;
-    if held {
-        after = after.max(st.value.min(1));
-    }
-    let cause = if taken > 0 && after <= 0 && !held {
-        Some(BreakCause::Poise)
-    } else if windup && sure && !held {
-        Some(BreakCause::Collision)
-    } else {
-        None
-    };
+    let terms = poise::Terms { windup, held, sure: sure.then_some(BreakCause::Collision), chance: false };
+    let s = poise::settle(&w.ruleset.numbers, &st, taken, terms);
     if let Some(bar) = w.poise.get_mut(&v) {
-        bar.value = after.max(0);
+        bar.value = s.after;
+        if pips {
+            bar.pips = s.pips;
+        }
     }
-    hit.after = after.max(0);
-    if let Some(cause) = cause {
-        hit.after = 0;
+    hit.after = s.after;
+    hit.pips_after = if pips { s.pips } else { poise::bar_pips(&w.ruleset.numbers, &poise::PoiseState { value: s.after, ..st }) };
+    if let Verdict::Breaks(cause) = s.verdict {
+        (hit.after, hit.pips_after) = (0, 0);
         hit.broke = Some(poise::break_unit(res, w, v, block, cause));
     }
     Some(hit)

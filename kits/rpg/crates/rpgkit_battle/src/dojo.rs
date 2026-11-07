@@ -7,7 +7,7 @@
 //! screen. Crit rolls are seeded, so benchmarks repeat.
 
 use crate::grid::V2;
-use crate::poise::{self, Factors, Impact, PoiseState};
+use crate::poise::{self, BreakCause, Factors, Impact, PoiseState, Verdict};
 use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent};
 use crate::round_intent_plan as rip;
 use crate::session::{EncounterDef, Prebuilt, Session};
@@ -857,7 +857,9 @@ impl DojoSession {
             return PoiseState::default();
         }
         let max = poise::max_poise_of(&self.cat, &self.ruleset, u);
-        PoiseState { max, value: max, broken: false, broken_last: last.broken }
+        let mut st = PoiseState { broken_last: last.broken, ..PoiseState::default() };
+        poise::refill(&self.ruleset.numbers, &mut st, max);
+        st
     }
 
     /// The active hero's poise bar.
@@ -904,23 +906,28 @@ impl DojoSession {
             return Some(format!("{} = {taken} (already broken this round)", terms.join(" x ")));
         }
         let before = bar.value;
-        let after = (before - taken).max(0);
+        // S2.2-S2: the one stagger rule (by pips under poise_mode pips); the Dojo holds no one up (no P12)
+        let settled = poise::settle(&n, &bar, taken, poise::Terms { windup, held: false, sure: imp.sure_break.then_some(BreakCause::Sure), chance: true });
+        let after = settled.after;
         let mut line = format!("{} = {taken} -> poise {before} -> {after}", terms.join(" x "));
-        let cause = if taken > 0 && after == 0 {
-            Some("BREAK")
-        } else if windup && imp.sure_break {
-            Some("BREAK (sure break)")
-        } else if windup && taken > 0 && n.break_chance_scale > 0.0 {
-            let chance = poise::break_chance(&n, taken, before);
-            let roll = self.rng.randi_range(1, 100);
-            line += &format!(" (may break: {chance}%, rolled {roll})");
-            (roll <= chance).then_some("BREAK (chance)")
-        } else {
-            None
+        if poise::pips_mode(&n) {
+            line += &format!(" (pips {} -> {}, T {})", bar.pips, settled.pips, poise::threshold(&n, bar.max));
+        }
+        let cause = match settled.verdict {
+            Verdict::Breaks(BreakCause::Sure) => Some("BREAK (sure break)"),
+            Verdict::Breaks(_) => Some("BREAK"),
+            Verdict::Chance(chance) => {
+                let roll = self.rng.randi_range(1, 100);
+                line += &format!(" (may break: {chance}%, rolled {roll})");
+                (roll <= chance).then_some("BREAK (chance)")
+            }
+            Verdict::Holds | Verdict::AlreadyBroken => None,
         };
         bar.value = after;
+        bar.pips = settled.pips;
         if let Some(c) = cause {
             bar.value = 0;
+            bar.pips = 0;
             bar.broken = true;
             line += &format!(" {c}");
         }
@@ -1029,15 +1036,23 @@ impl DojoSession {
                 let blocks = s.blocks.max(1);
                 self.rest_blocks += blocks;
                 let mut bar = self.poise();
-                let before = bar.value;
+                let (before, pips_before) = (bar.value, bar.pips);
                 if self.poise_on() && bar.max > 0 && !bar.broken && bar.value < bar.max {
                     bar.value = (bar.value + self.ruleset.numbers.rest_poise_per_block * blocks).min(bar.max);
+                    self.hero_poise[self.active] = bar;
+                }
+                // S2.2-S2: a pip per 2 Rest blocks under poise_mode pips
+                if self.poise_on() && poise::pips_mode(&self.ruleset.numbers) && bar.max > 0 && !bar.broken {
+                    poise::rest_pips(&self.ruleset.numbers, &mut bar, blocks);
                     self.hero_poise[self.active] = bar;
                 }
                 let ap = round_intent::rest_gain(&self.ruleset.numbers, self.rest_blocks);
                 let mut detail = format!("{} Rest block{} this round: +{ap} AP at the round's end", self.rest_blocks, if self.rest_blocks == 1 { "" } else { "s" });
                 if bar.value > before {
                     detail += &format!(", poise {before} -> {}", bar.value);
+                }
+                if bar.pips > pips_before {
+                    detail += &format!(", pips {pips_before} -> {}", bar.pips);
                 }
                 self.log_event("BUFF", &s.name, &format!("{detail} • {ap_note}"), ap, &format!("REST {}", self.rest_blocks));
                 self.fx("text", true, "Rest", Tone::Good);

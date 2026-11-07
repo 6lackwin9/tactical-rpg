@@ -288,6 +288,37 @@ impl AttackLock {
     }
 }
 
+/// S2.2-S2 (`docs/sessions/S2_POISE.md` 1 and 4, `poise_mode`; rule `poise`): how a hit's stagger lowers poise. `bar`
+/// (the default, every shipped row): the continuous bar breaks at 0 (RULESET1 P6-P14). `pips`: the bar is
+/// `poise_pips` pips of `T = max(1, roundi(max_poise / poise_pips))` each; a hit of stagger taken `D` removes
+/// `clamp(floor(D / T), 0, max_pip_loss_per_hit)` pips and the unit breaks at 0 pips. Row-only (no schema entry).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PoiseMode {
+    #[default]
+    Bar,
+    Pips,
+}
+
+impl PoiseMode {
+    /// The `poise_mode` values, in order.
+    pub const IDS: [&'static str; 2] = ["bar", "pips"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "bar" => Some(PoiseMode::Bar),
+            "pips" => Some(PoiseMode::Pips),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            PoiseMode::Bar => "bar",
+            PoiseMode::Pips => "pips",
+        }
+    }
+}
+
 /// CLN-45: the values of an on/off ruleset field (`root_stops_chase`, `switch_target_step`, `stances`; beside "" = by
 /// the rules).
 pub const SWITCH_IDS: [&str; 2] = ["on", "off"];
@@ -400,6 +431,12 @@ pub struct Numbers {
     pub debt_stagger: i32,
     /// S1.2-S3 (`debt_stun`): the AP debt at a round start that stuns.
     pub debt_stun: i32,
+    /// S2.2-S1 (`poise_pips`, S2 section 3): the pips of a full bar under `poise_mode` pips.
+    pub poise_pips: i32,
+    /// S2.2-S1 (`max_pip_loss_per_hit`, S2 section 3): the most pips one hit removes under `poise_mode` pips.
+    pub max_pip_loss_per_hit: i32,
+    /// S2.2-S2 (`poise_mode`): how a hit lowers poise (default `bar`).
+    pub poise_mode: PoiseMode,
 }
 
 impl Default for Numbers {
@@ -432,6 +469,9 @@ impl Default for Numbers {
             counter_mult: status::COUNTER_MULT,
             debt_stagger: status::DEBT_STAGGER,
             debt_stun: status::DEBT_STUN,
+            poise_pips: 5,
+            max_pip_loss_per_hit: 3,
+            poise_mode: PoiseMode::Bar,
         }
     }
 }
@@ -489,6 +529,9 @@ impl Numbers {
             counter_mult: value::float(o, "counter_mult", d.counter_mult),
             debt_stagger: value::int(o, "debt_stagger", d.debt_stagger),
             debt_stun: value::int(o, "debt_stun", d.debt_stun),
+            poise_pips: value::int(o, "poise_pips", d.poise_pips),
+            max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
+            poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
         }
     }
 
@@ -685,7 +728,8 @@ pub fn world_ruleset<'a>(nearest_first: impl IntoIterator<Item = &'a Obj>) -> St
 
 /// A row field and what it needs to be read: `needs` tokens that must hold when the field is set (else a warning, or
 /// nothing when `refused`: the row checks already refuse it), `untested_with` tokens no test fights it with; `range`
-/// (S1.2-S3) the bounds of a row-only number the schema does not hold (a value outside is an error).
+/// (S1.2-S3) the bounds of a row-only number the schema does not hold (a value outside is an error); `values` (S2.2-S2)
+/// the ids a row-only value field may take (empty: not one; another id is a content check error).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FieldRule {
     pub key: &'static str,
@@ -693,15 +737,16 @@ pub struct FieldRule {
     pub untested_with: &'static [&'static str],
     pub refused: bool,
     pub range: Option<(f64, f64)>,
+    pub values: &'static [&'static str],
 }
 
 const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldRule {
-    FieldRule { key, needs, untested_with: &[], refused: false, range: None }
+    FieldRule { key, needs, untested_with: &[], refused: false, range: None, values: &[] }
 }
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 19] = [
+pub const FIELD_RULES: [FieldRule; 22] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -723,6 +768,11 @@ pub const FIELD_RULES: [FieldRule; 19] = [
     FieldRule { range: Some((0.10, 1.50)), ..field_rule("counter_mult", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stagger", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stun", &[]) },
+    // S2.2-S1/S2 (S2 section 3): the poise pip numbers and the bar-or-pips switch, row-only like the status numbers; the
+    // pip numbers are read only under poise_mode pips
+    FieldRule { values: &PoiseMode::IDS, ..field_rule("poise_mode", &[POISE]) },
+    FieldRule { range: Some((3.0, 8.0)), ..field_rule("poise_pips", &[POISE, "poise_mode=pips"]) },
+    FieldRule { range: Some((1.0, 5.0)), ..field_rule("max_pip_loss_per_hit", &[POISE, "poise_mode=pips"]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -934,6 +984,9 @@ impl Numbers {
             "counter_mult" => self.counter_mult.to_string(),
             "debt_stagger" => self.debt_stagger.to_string(),
             "debt_stun" => self.debt_stun.to_string(),
+            "poise_pips" => self.poise_pips.to_string(),
+            "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
+            "poise_mode" => self.poise_mode.id().to_string(),
             _ => return None,
         })
     }

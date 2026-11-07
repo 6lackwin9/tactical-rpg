@@ -459,3 +459,32 @@ fn the_register_metadata_refuses_an_inert_rule_and_warns_on_the_rest() {
     let split = norm(json!({"id": "split", "name": "Split", "rules": ["round_intent"], "chase": "classic", "flank_protected_ap": 3}));
     assert_eq!(check::ruleset::warnings(&split), ["flank_protected_ap is read only with fixed", "Bundle intent_core ships together: it needs chase=every_skill."]);
 }
+
+/// S2.2-S2: the row-only `poise_mode` loads as set (`pips`), absent reads `bar`, and another id is one error naming its
+/// values.
+#[test]
+fn the_row_only_poise_mode_loads_and_refuses_an_unknown_id() {
+    let (_scratch, data) = scratch("poise_mode");
+    base_catalog(&data);
+    for (mode, want) in [(Some("pips"), Some(ruleset::PoiseMode::Pips)), (None, Some(ruleset::PoiseMode::Bar)), (Some("pip"), None)] {
+        let mut row = good_row();
+        if let Some(m) = mode {
+            row["poise_mode"] = json!(m);
+        }
+        write_kind(&data, ruleset::KIND, 1, json!([row]));
+        let src = source::load(&data);
+        let errors = ruleset_errors(&src);
+        match want {
+            Some(m) => {
+                assert_eq!(errors, Vec::<String>::new(), "{mode:?}");
+                let loaded = src.catalog[ruleset::KIND][0].as_object().expect("the row loads");
+                assert_eq!(Ruleset::from_row(loaded).numbers.poise_mode, m, "{mode:?}");
+            }
+            None => {
+                assert_eq!(errors.len(), 1, "{errors:?}");
+                assert!(errors[0].ends_with("poise_mode: 'pip' is not one of bar, pips."), "{errors:?}");
+            }
+        }
+    }
+    drop_scratch(&data);
+}

@@ -159,7 +159,7 @@ fn max_poise_follows_the_unit_row_and_refills_each_round() {
     let s = session(poise_rules());
     let w = &s.w;
     for c in [HERO, ALLY, FOE, FOE_B] {
-        assert_eq!(bar(w, c), PoiseState { max: BAR, value: BAR, broken: false, broken_last: false }, "unit {c}: the fixed poise");
+        assert_eq!(bar(w, c), PoiseState { max: BAR, value: BAR, broken: false, broken_last: false, ..PoiseState::default() }, "unit {c}: the fixed poise");
     }
     let derived_max = derived::value_for(&w.cat, &w.ruleset, &w.units[DERIVED], "max_poise").expect("the row is in timeline");
     assert!(derived_max >= 1);
@@ -169,7 +169,7 @@ fn max_poise_follows_the_unit_row_and_refills_each_round() {
     set_poise(&mut w, HERO, 3);
     w.poise.get_mut(&HERO).unwrap().broken = true;
     poise::round_start(&mut w);
-    assert_eq!(bar(&w, HERO), PoiseState { max: BAR, value: BAR, broken: false, broken_last: true }, "refilled; the break is remembered");
+    assert_eq!(bar(&w, HERO), PoiseState { max: BAR, value: BAR, broken: false, broken_last: true, ..PoiseState::default() }, "refilled; the break is remembered");
     poise::round_start(&mut w);
     assert!(!bar(&w, HERO).broken_last, "two rounds on, forgotten");
     let classic = session(Ruleset::classic());
@@ -192,7 +192,7 @@ fn stagger_is_the_product_of_its_factors() {
             let stagger = rng.randi_range(0, 100);
             let mut w = s.w.clone();
             let mut res = Resolver::new(BLOCKS, 1);
-            w.poise.insert(FOE, PoiseState { max: 1000, value: 1000, broken: false, broken_last: repeat });
+            w.poise.insert(FOE, PoiseState { max: 1000, value: 1000, broken: false, broken_last: repeat, ..PoiseState::default() });
             if passive {
                 w.units[FOE].stagger_taken = vec![StaggerTaken { mult: 0.5, max_blocks: 0 }];
             }

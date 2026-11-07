@@ -68,7 +68,11 @@ fn tunables(fields: &[Value]) -> Vec<String> {
         // a whole-number field (its default has no point) shows a whole range, as the schema's int fields do
         let whole = !default.contains('.');
         let num = |v: f64| if whole { Value::from(v as i64) } else { Value::from(v) };
-        let range = m.range.map_or(String::new(), |(lo, hi)| format!(" range={}..{}", num(lo), num(hi)));
+        let mut range = m.range.map_or(String::new(), |(lo, hi)| format!(" range={}..{}", num(lo), num(hi)));
+        // S2.2-S2: a row-only value field shows its ids, as the schema's option fields do
+        if !m.values.is_empty() {
+            range.push_str(&format!(" values={}", m.values.join("|")));
+        }
         out.push(format!("tunable {} row-only default={default}{range}{} (no schema entry)", m.key, meta(m)));
     }
     out

@@ -113,6 +113,13 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
             out.push(format!("{key}: '{v}' is not one of {} (or empty: by the rules).", values.join(", ")));
         }
     }
+    // S2.2-S2: a row-only value field (`poise_mode`) is absent or one of its ids (else it would read as its default)
+    for f in ruleset::FIELD_RULES.iter().filter(|f| !f.values.is_empty()) {
+        let v = json::s(e, f.key);
+        if e.contains_key(f.key) && !f.values.contains(&v.as_str()) {
+            out.push(format!("{}: '{v}' is not one of {}.", f.key, f.values.join(", ")));
+        }
+    }
     let origin = json::s(e, "origin");
     if origin != super::ORIGIN_SYSTEM && origin != "user" {
         out.push(format!("Origin: '{origin}' is not one of system, user."));

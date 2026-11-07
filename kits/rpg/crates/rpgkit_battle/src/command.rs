@@ -598,9 +598,8 @@ impl Command {
                 if w.ruleset.rest_at_round_end() {
                     w.round_states.entry(src).or_default().rest_blocks += self.block_cost.max(1);
                 }
-                // RULESET1_INTENT RS3: each landed Rest block restores poise (rule poise)
-                let gain = w.ruleset.numbers.rest_poise_per_block * self.block_cost.max(1);
-                crate::poise::restore(w, src, gain);
+                // RULESET1_INTENT RS3: each landed Rest block restores poise (rule poise; S2.2-S2: a pip per 2 under pips)
+                crate::poise::restore(w, src, self.block_cost.max(1));
                 let u = &mut w.units[src];
                 u.ap = u.max_ap.min(u.ap + recover_ap);
                 self.log = format!("[Rest] {src_name} AP {}/{}", u.ap, u.max_ap);
