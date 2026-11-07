@@ -59,3 +59,10 @@ FB-01 to FB-95 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
 
 UN-01 to UN-09 are closed and moved to the archive (2026-11-07). New notes start at UN-10.
+
+### UN-10: start R2 Wave 1 while R1-BAL waits on tuning approval?
+
+- **For**: user
+- **Status**: open
+- **Note**: Phase R1.1 is built except what waits on your answers: FB-97 (two R1-BAL clauses that each move a golden) and FB-98 (the timeline tuning numbers, H6 recommended). READY runs R1.1 before R2, so Build is idle until those come back. R2 Wave 1 batch 1 (rows 14, 16, 19: damage/heal pipeline port, IR21 derive + RING/ARC shapes, AI status predicates) is independent of the R1-BAL numbers and expects 0 battle/sim golden diffs.
+- **Ask**: Start R2 Wave 1 batch 1 now and fold R1-BAL's remaining clauses and tuning in as their own commits when answered (default), or hold R2 until R1-BAL is fully closed?
