@@ -413,6 +413,12 @@ impl Unit {
         self.passive_triggers.iter().chain(&self.gear_triggers)
     }
 
+    /// F1.2-S1 (FB-58c): the U1 Initiative rating the within-block order reads (`priority * 1000 + initiative`); the one
+    /// read point the burden change (FB-07) moves.
+    pub fn initiative_rating(&self) -> i32 {
+        self.initiative
+    }
+
     pub fn has_status(&self, s: &str) -> bool {
         self.st.active.contains(s)
     }

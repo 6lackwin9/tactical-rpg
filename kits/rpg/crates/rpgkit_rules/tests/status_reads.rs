@@ -149,3 +149,52 @@ fn try_inflict_honours_resistable() {
     assert!(!status::try_inflict(&mut u, res, 0, Some(&mut rng), 1, 0, "t"));
     assert!(status::resistable("no_such_status"), "an id with no row rolls as before");
 }
+
+/// F2.2-S1 (FB-58b): the debt statuses are ruleset values with the old ids as defaults (`stagger`, `stun`), read from a
+/// row (empty reads as the default), shown as row fields, read whatever the rules; an id no status row has is an error.
+#[test]
+fn the_debt_status_ids_are_ruleset_values() {
+    let d = Numbers::default();
+    assert_eq!((d.debt_stagger_status.as_str(), d.debt_stun_status.as_str()), (status::DEBT_STAGGER_STATUS, status::DEBT_STUN_STATUS));
+    assert_eq!((status::DEBT_STAGGER_STATUS, status::DEBT_STUN_STATUS), ("stagger", "stun"), "F section 2 defaults");
+    let r = row(json!({"id": "t", "rules": [], "debt_stagger_status": "root", "debt_stun_status": "stagger"}));
+    assert_eq!((r.numbers.debt_stagger_status.as_str(), r.numbers.debt_stun_status.as_str()), ("root", "stagger"));
+    assert_eq!(r.numbers.field("debt_stagger_status").as_deref(), Some("root"));
+    assert!(r.notes().errors.is_empty(), "known ids: {:?}", r.notes());
+    let blank = row(json!({"id": "t", "rules": [], "debt_stagger_status": "", "debt_stun_status": ""}));
+    assert_eq!((blank.numbers.debt_stagger_status, blank.numbers.debt_stun_status), (d.debt_stagger_status.clone(), d.debt_stun_status.clone()));
+    for key in ["debt_stagger_status", "debt_stun_status"] {
+        assert!(ruleset::field_rule_of(key).is_some_and(|f| f.needs.is_empty() && f.range.is_none()), "{key}: a field rule, read whatever the rules");
+        let bad = row(json!({"id": "t", "rules": [], key: "no_such_status"})).notes().errors;
+        assert_eq!(bad, [format!("{key} 'no_such_status' is not a status.")]);
+    }
+    assert!(Ruleset::classic().notes().errors.is_empty(), "the defaults name status rows");
+}
+
+/// F2.2-S1 (FB-58b): roll-over puts the ruleset's debt status straight into `st.active` for the coming round with a
+/// 1-round `rounds_left`, so the next roll-over expires it as before; a longer instance already there keeps its count.
+#[test]
+fn the_debt_status_is_active_with_a_consistent_round_count() {
+    let d = Numbers::default();
+    for (debt, id) in [(d.debt_stagger, "stagger"), (d.debt_stun, "stun")] {
+        let mut u = unit();
+        u.ap = -debt;
+        assert!(status::roll_over(&mut u, 0, &d).contains(&id.to_string()), "debt {debt}");
+        assert!(u.st.pending.is_empty(), "not queued: active now");
+        assert_eq!(u.st.rounds_left.get(id), Some(&1), "debt {debt}: one round");
+        u.ap = 0;
+        assert!(!status::roll_over(&mut u, 0, &d).contains(&id.to_string()), "debt {debt}: gone the round after");
+        assert!(!u.st.rounds_left.contains_key(id));
+    }
+    let custom = Numbers { debt_stun_status: "root".into(), ..Numbers::default() };
+    let mut u = unit();
+    u.ap = -custom.debt_stun;
+    let active = status::roll_over(&mut u, 0, &custom);
+    assert!(active.contains(&"root".to_string()) && !active.contains(&"stun".to_string()), "{active:?}");
+    assert_eq!(u.st.rounds_left.get("root"), Some(&1));
+    let mut u = unit();
+    status::queue(&mut u, "stagger", 2, 0, "t");
+    u.ap = -d.debt_stagger;
+    status::roll_over(&mut u, 0, &d);
+    assert_eq!(u.st.rounds_left.get("stagger"), Some(&2), "the queued 2-round instance keeps its count");
+}

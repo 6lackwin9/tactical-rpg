@@ -434,6 +434,10 @@ pub struct Numbers {
     pub debt_stagger: i32,
     /// S1.2-S3 (`debt_stun`): the AP debt at a round start that stuns.
     pub debt_stun: i32,
+    /// F2.2-S1 (`debt_stagger_status`, FB-58b): the status a `debt_stagger` debt puts in `st.active` (default `stagger`).
+    pub debt_stagger_status: String,
+    /// F2.2-S1 (`debt_stun_status`, FB-58b): the status a `debt_stun` debt puts in `st.active` (default `stun`).
+    pub debt_stun_status: String,
     /// S2.2-S1 (`poise_pips`, S2 section 3): the pips of a full bar under `poise_mode` pips.
     pub poise_pips: i32,
     /// S2.2-S1 (`max_pip_loss_per_hit`, S2 section 3): the most pips one hit removes under `poise_mode` pips.
@@ -493,6 +497,8 @@ impl Default for Numbers {
             counter_mult: status::COUNTER_MULT,
             debt_stagger: status::DEBT_STAGGER,
             debt_stun: status::DEBT_STUN,
+            debt_stagger_status: status::DEBT_STAGGER_STATUS.to_string(),
+            debt_stun_status: status::DEBT_STUN_STATUS.to_string(),
             poise_pips: 5,
             max_pip_loss_per_hit: 3,
             poise_mode: PoiseMode::Bar,
@@ -561,6 +567,8 @@ impl Numbers {
             counter_mult: value::float(o, "counter_mult", d.counter_mult),
             debt_stagger: value::int(o, "debt_stagger", d.debt_stagger),
             debt_stun: value::int(o, "debt_stun", d.debt_stun),
+            debt_stagger_status: Some(value::string(o, "debt_stagger_status", "")).filter(|v| !v.is_empty()).unwrap_or(d.debt_stagger_status),
+            debt_stun_status: Some(value::string(o, "debt_stun_status", "")).filter(|v| !v.is_empty()).unwrap_or(d.debt_stun_status),
             poise_pips: value::int(o, "poise_pips", d.poise_pips),
             max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
             poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
@@ -791,7 +799,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 30] = [
+pub const FIELD_RULES: [FieldRule; 32] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -813,6 +821,10 @@ pub const FIELD_RULES: [FieldRule; 30] = [
     FieldRule { range: Some((0.10, 1.50)), ..field_rule("counter_mult", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stagger", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stun", &[]) },
+    // F2.2-S1 (F section 2, FB-58b): the statuses the debt thresholds impose, row-only like the status numbers; read
+    // whatever the rules (a status id no status row has is an error)
+    field_rule("debt_stagger_status", &[]),
+    field_rule("debt_stun_status", &[]),
     // S2.2-S1/S2 (S2 section 3): the poise pip numbers and the bar-or-pips switch, row-only like the status numbers; the
     // pip numbers are read only under poise_mode pips
     FieldRule { values: &PoiseMode::IDS, ..field_rule("poise_mode", &[POISE]) },
@@ -1052,6 +1064,8 @@ impl Numbers {
             "counter_mult" => self.counter_mult.to_string(),
             "debt_stagger" => self.debt_stagger.to_string(),
             "debt_stun" => self.debt_stun.to_string(),
+            "debt_stagger_status" => self.debt_stagger_status.clone(),
+            "debt_stun_status" => self.debt_stun_status.clone(),
             "poise_pips" => self.poise_pips.to_string(),
             "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
             "poise_mode" => self.poise_mode.id().to_string(),
@@ -1125,6 +1139,12 @@ impl Ruleset {
         let (stagger, stun) = (self.numbers.debt_stagger, self.numbers.debt_stun);
         if stagger > stun {
             n.errors.push(format!("debt_stagger {stagger} is above debt_stun {stun}: a debt stuns first, so it never staggers."));
+        }
+        // F2.2-S1: a debt status names a status row
+        for (key, id) in [("debt_stagger_status", &self.numbers.debt_stagger_status), ("debt_stun_status", &self.numbers.debt_stun_status)] {
+            if status::row_of(id).is_none() {
+                n.errors.push(format!("{key} '{id}' is not a status."));
+            }
         }
         for b in BUNDLES.iter().filter(|b| b.kind == BundleKind::MustShip && b.anchor.iter().all(|t| self.holds(t))) {
             for t in b.holds.iter().filter(|t| !self.holds(t)) {

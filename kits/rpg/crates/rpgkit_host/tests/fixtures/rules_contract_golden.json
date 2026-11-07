@@ -30,6 +30,8 @@
     "tunable counter_mult row-only default=0.5 range=0.1..1.5 (no schema entry)",
     "tunable debt_stagger row-only default=3 range=1..10 (no schema entry)",
     "tunable debt_stun row-only default=5 range=1..10 (no schema entry)",
+    "tunable debt_stagger_status row-only default=stagger (no schema entry)",
+    "tunable debt_stun_status row-only default=stun (no schema entry)",
     "tunable poise_mode row-only default=bar values=bar|pips needs=poise (no schema entry)",
     "tunable poise_pips row-only default=5 range=3..8 needs=poise+poise_mode=pips (no schema entry)",
     "tunable max_pip_loss_per_hit row-only default=3 range=1..5 needs=poise+poise_mode=pips (no schema entry)",

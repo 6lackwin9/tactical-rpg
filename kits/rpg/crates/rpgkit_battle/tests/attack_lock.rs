@@ -51,6 +51,7 @@ fn catalog() -> Catalog {
         atk("tl_slip_strike", 2, json!({"round_intent": "maneuver", "position": "flank", "reach_max": 2})),
         atk("flank_cut", 1, json!({"round_intent": "maneuver", "position": "flank", "reach_max": 2})),
         atk("tl_thrust", 2, json!({"reach_min": 1, "reach_max": 2})),
+        atk("tl_roar", 2, json!({"power_mult": 0.0, "reach_min": 1, "reach_max": 2})),
         atk("tl_hook", 2, json!({"reach_min": 1, "reach_max": 3})),
         atk("tl_aimed_shot", 2, json!({})),
         atk("tl_burst", 2, json!({"area": "BURST", "reach_min": 1, "reach_max": 3})),
@@ -206,6 +207,38 @@ fn the_tick_order_decides_a_tie() {
         assert_eq!(w.pos(FOE), v(6, 4), "the Walk lands either way");
         assert_eq!(w.units[FOE].hp < hp, hits, "walker faster {walker_faster}: {:?}", res.log);
         assert_eq!(dodged(&res, a, FOE), !hits, "walker faster {walker_faster}");
+    }
+}
+
+/// F1.2-S1 (FB-58a): an attack with no power (`power_mult` 0, a roar like `intimidate`) takes no lock under `melee` or
+/// `all`, so a target that walks off in its wind-up is no `[Dodged]`; the same swing with power locks the tile.
+#[test]
+fn a_zero_power_attack_takes_no_lock() {
+    for lock in ["melee", "all"] {
+        for (skill, locks) in [("tl_roar", false), ("tl_heavy", true)] {
+            let mut w = world(timeline(lock));
+            let cmd = hit(&w, HERO, FOE, skill);
+            let mut res = Resolver::new(BLOCKS, 1);
+            let a = book(&mut res, HERO, cmd, 1);
+            book(&mut res, FOE, walk(FOE, &[v(0, -1), v(-1, 0)]), 1);
+            run(&mut w, &mut res, 1, 2);
+            assert_eq!(res.scheduled[a].command.locked.is_some(), locks, "{lock} {skill}");
+            assert_eq!(dodged(&res, a, FOE), locks, "{lock} {skill}: {:?}", res.log);
+        }
+    }
+}
+
+/// F1.2-S1 (FB-58c): the within-block key is `priority * 1000 + initiative`, the initiative read through
+/// `Unit::initiative_rating` (Defend 1, Target 2, others 0).
+#[test]
+fn the_tick_key_reads_priority_then_the_initiative_rating() {
+    let mut w = world(timeline("melee"));
+    w.units[FOE].initiative = 7;
+    for priority in [0, 1, 2] {
+        let mut cmd = walk(FOE, &[v(1, 0)]);
+        cmd.priority = priority;
+        assert_eq!(w.units[FOE].initiative_rating(), 7);
+        assert_eq!(cmd.initiative(&w), priority * 1000 + 7, "priority {priority}");
     }
 }
 

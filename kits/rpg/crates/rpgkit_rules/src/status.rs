@@ -241,6 +241,10 @@ pub const BLEED_PCT: f64 = 0.06;
 pub const DEBT_STAGGER: i32 = 3;
 /// S1.2-S3: the default of `debt_stun` (the AP debt at a round start that stuns).
 pub const DEBT_STUN: i32 = 5;
+/// F2.2-S1: the default of `debt_stagger_status` (the status a `debt_stagger` debt imposes).
+pub const DEBT_STAGGER_STATUS: &str = "stagger";
+/// F2.2-S1: the default of `debt_stun_status` (the status a `debt_stun` debt imposes).
+pub const DEBT_STUN_STATUS: &str = "stun";
 /// S1.2-S3: the default of `counter_mult` (riposte's counter damage multiplier; was `rpgkit_battle::command`'s const).
 pub const COUNTER_MULT: f64 = 0.5;
 /// S1.2-S4: the default of `guard_common_mitigation` (the guard fraction of a 1-round Guard skill that authors none).
@@ -627,13 +631,13 @@ pub fn remove_active(target: &mut Unit, status: &str) -> bool {
     found
 }
 
-/// The status an AP debt of `debt` at a round start imposes: stun from `debt_stun`, stagger from `debt_stagger` (ruleset
-/// numbers, S1.2-S3; the AP debt rule names its statuses), else none.
-pub fn debt_status(debt: i32, n: &Numbers) -> &'static str {
+/// The status an AP debt of `debt` at a round start imposes: `debt_stun_status` from `debt_stun`, `debt_stagger_status`
+/// from `debt_stagger` (ruleset numbers, S1.2-S3, F2.2-S1), else none.
+pub fn debt_status(debt: i32, n: &Numbers) -> &str {
     if debt >= n.debt_stun {
-        "stun"
+        &n.debt_stun_status
     } else if debt >= n.debt_stagger {
-        "stagger"
+        &n.debt_stagger_status
     } else {
         ""
     }
@@ -703,9 +707,12 @@ pub fn roll_over(c: &mut Unit, ap_regen: i32, n: &Numbers) -> Vec<String> {
     let (active, intents) = (&st.active, &mut st.intents);
     intents.retain(|k, _| active.contains(k));
     c.riposted.clear();
+    // F2.2-S1 (FB-58b): the debt status goes straight into `st.active` for the coming round, with the round count of
+    // a 1-round instance (an instance already there keeps its longer count)
     let penalty = debt_status((-c.ap).max(0), n);
     if !penalty.is_empty() {
         c.st.active.insert(penalty.to_string());
+        c.st.rounds_left.entry(penalty.to_string()).or_insert(1);
     }
     c.ap = regen_ap(c, c.ap, ap_regen);
     c.st.active.iter().cloned().collect()

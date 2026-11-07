@@ -298,8 +298,10 @@ impl Command {
         self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
 
+    /// F1.2-S1: the within-block resolution key, `priority * 1000 + initiative` (Defend 1, Target 2, others 0), the
+    /// initiative being the source's U1 rating (`Unit::initiative_rating`).
     pub fn initiative(&self, w: &World) -> i32 {
-        self.priority * 1000 + w.units[self.source].initiative
+        self.priority * 1000 + w.units[self.source].initiative_rating()
     }
 
     pub fn is_defend(&self) -> bool {
@@ -315,9 +317,13 @@ impl Command {
     /// unit and its tile; out of reach it takes no lock, and the band test decides at impact. `opening`: the tiles the
     /// block's dashes started from (decision "Attack lock answers": a dash on the same tick leaves the locked tile, for
     /// both sides), else the tile now. A melee band is `round_intent::melee_band`; an area aims at tiles and never locks.
+    /// F1.2-S1 (FB-58a): an attack with no power (`intimidate`, `tripwire_snare`) never locks.
     pub(crate) fn lock_tile(&mut self, w: &World, opening: Option<&[Option<V2>]>) {
         self.locked = None;
-        let CmdKind::Attack { target, min_range, max_range, .. } = &self.kind else { return };
+        let CmdKind::Attack { target, min_range, max_range, skill_mult, .. } = &self.kind else { return };
+        if *skill_mult <= 0.0 {
+            return;
+        }
         let band = reach_band(w, self.source, *min_range, *max_range);
         if !w.ruleset.attack_lock().locks(round_intent::melee_band(band)) {
             return;

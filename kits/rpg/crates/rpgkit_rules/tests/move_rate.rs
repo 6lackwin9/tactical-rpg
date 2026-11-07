@@ -59,6 +59,7 @@ fn initiative_keeps_the_old_speed_formula() {
         assert_eq!(u.worn_burden(), burden, "the plate's burden is worn as is");
         let old = ((8 + dex(&u) - burden).max(1) - overload).max(1);
         assert_eq!(u.initiative, old, "burden {burden}, overload {overload}");
+        assert_eq!(u.initiative_rating(), u.initiative, "F1.2-S1: the accessor reads the rating");
     }
 }
 
