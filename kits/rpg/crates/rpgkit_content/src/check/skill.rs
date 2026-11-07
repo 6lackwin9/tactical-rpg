@@ -636,7 +636,11 @@ fn family_errors(v: &View, e: &Dict) -> Vec<String> {
             if DERIVED_KEYS.contains(&key.as_str()) || RANK_KEYS.contains(&key.as_str()) || key == "basic" || key == "kind" || !has_field(&kind, &key) {
                 continue;
             }
-            if !json::deep_equal(json::get(other, &key), json::get(e, &key)) {
+            // AUDIT-10: a missing key reads as the field's schema default (frozen rows predate later fields).
+            let default = json::get(f, "default");
+            let (a, b) = (json::get(other, &key), json::get(e, &key));
+            let (a, b) = (if a.is_null() { default } else { a }, if b.is_null() { default } else { b });
+            if !json::deep_equal(a, b) {
                 errors.push(format!("Family '{head}': {} must match across all tiers ({other_id} differs).", json::s_or(f, "label", &key).to_lowercase()));
             }
         }

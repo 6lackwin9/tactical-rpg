@@ -190,17 +190,32 @@ pub fn deals_damage(s: &SkillDef) -> bool {
     kind(s) != Kind::Attack || s.power_mult > 0.0
 }
 
-/// S1.2-S4 (S1 section 3, FB-48): a Guard skill's guard fraction, for every round of its guard: its own `mitigation` (0 =
+/// S1.2-S4 (S1 section 3, FB-48): a Guard skill's guard fraction for the round it is used in: its own `mitigation` (0 =
 /// no guard, as riposte's third rank), or for a row without the key the ruleset's `guard_common_mitigation` (1-round)
-/// or `guard_multi_round_mitigation` (`guard_rounds` 2 or more). A row the content loader resolved always has the key
-/// (the schema default fills it), so the ruleset numbers reach only rows built without it.
+/// or `guard_multi_round_mitigation` (`guard_rounds` 2 or more). AUDIT-11: the content loader leaves the key off a
+/// DEFEND row that does not author it (`mitigation_authored`), so the ruleset numbers reach loaded rows too.
 pub fn guard_mitigation(s: &SkillDef, n: &ruleset::Numbers) -> f64 {
-    if s.raw.contains_key("mitigation") {
+    if mitigation_authored(s) {
         s.mitigation
     } else if s.guard_rounds >= 2 {
         n.guard_multi_round_mitigation
     } else {
         n.guard_common_mitigation
+    }
+}
+
+/// AUDIT-11: whether the skill row authors its own `mitigation` (a row the loader resolved keeps the key only then).
+pub fn mitigation_authored(s: &SkillDef) -> bool {
+    s.raw.contains_key("mitigation")
+}
+
+/// AUDIT-11 (S1.2-S4, FB-85): the fraction of the `guard` status a multi-round Guard skill queues for its Round 2+:
+/// its own `mitigation` when it authors one, else the ruleset's `guard_multi_round_mitigation`.
+pub fn guard_later_mitigation(s: &SkillDef, n: &ruleset::Numbers) -> f64 {
+    if mitigation_authored(s) {
+        s.mitigation
+    } else {
+        n.guard_multi_round_mitigation
     }
 }
 

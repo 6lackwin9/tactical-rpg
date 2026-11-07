@@ -175,11 +175,16 @@ fn skill_storage(entry: &Dict) -> Dict {
     let base_template = if template.is_empty() { sget(first, "description", "").replace('{', "{{").replace('}', "}}") } else { template };
     let schema = fields("content", "skills");
     let rank_fields: Vec<String> = schema.iter().map(|f| json::s(json::dict(f), "key")).filter(|k| RANK_KEYS.contains(&k.as_str()) && skill_has_field(&kind, k)).collect();
+    // AUDIT-11 (FB-94): a DEFEND entry's authored `mitigation` (entry or rank modifier) is kept even at the schema
+    // default or rank 1's value, since the loader tells authored from unauthored (`source::unset_default_mitigation`).
+    let raw_mods: Vec<Dict> = json::aget(entry, "ranks").iter().map(|r| r.as_object().cloned().unwrap_or_default()).collect();
+    let authored = |k: &str, raw: &Dict| kind == "DEFEND" && k == "mitigation" && raw.contains_key(k);
     let mut mods = Vec::new();
     for (i, row) in rows.iter().enumerate().skip(1) {
         let mut m = Dict::new();
+        let raw = raw_mods.get(i - 1).cloned().unwrap_or_default();
         for k in &rank_fields {
-            if !json::deep_equal(json::get(row, k), json::get(first, k)) {
+            if authored(k, &raw) || !json::deep_equal(json::get(row, k), json::get(first, k)) {
                 m.insert(k.clone(), json::get(row, k).clone());
             }
         }
@@ -200,7 +205,7 @@ fn skill_storage(entry: &Dict) -> Dict {
             "description" => Value::from(base_template.clone()),
             _ => json::get(first, &key).clone(),
         };
-        if !CORE.contains(&key.as_str()) && json::deep_equal(&value, json::get(f, "default")) {
+        if !CORE.contains(&key.as_str()) && !authored(&key, entry) && json::deep_equal(&value, json::get(f, "default")) {
             continue;
         }
         out.insert(key, value);

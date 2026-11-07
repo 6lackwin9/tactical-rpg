@@ -380,9 +380,10 @@ impl Unit {
         }
     }
 
-    /// The main weapon's type (the stat context of weapon-conditional modifiers).
+    /// The ready weapon's type (the stat context of weapon-conditional modifiers); AUDIT-09: the off-hand backup's
+    /// while it is the ready one of a 2H pair (`Inventory::active_weapon`).
     pub fn weapon_context(&self) -> Option<String> {
-        self.inventory.main_weapon().map(|w| w.weapon_type().to_string())
+        self.inventory.active_weapon().map(|w| w.weapon_type().to_string())
     }
 
     pub fn min_attack_range(&self) -> i32 {
@@ -394,10 +395,10 @@ impl Unit {
     }
 
     /// RULESET1 K1, K2: whether the unit is melee (`attack_range` at most 1, which the rule leaves as it is) with a
-    /// main weapon whose family has the engine rule `reach`. A gear fact: the battle reads it only under the rule
-    /// `reach` (`rpgkit_battle::skill::melee_reach`).
+    /// ready weapon (AUDIT-09: `Inventory::active_weapon`) whose family has the engine rule `reach`. A gear fact: the
+    /// battle reads it only under the rule `reach` (`rpgkit_battle::skill::melee_reach`).
     pub fn has_reach_weapon(&self) -> bool {
-        self.attack_range <= 1 && self.inventory.main_weapon().is_some_and(|w| w.has_reach())
+        self.attack_range <= 1 && self.inventory.active_weapon().is_some_and(|w| w.has_reach())
     }
 
     /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the
@@ -446,12 +447,14 @@ impl Unit {
     }
 
     /// Gear stat bonuses -> tier stat bonuses (read without tier modifiers) -> gear effects -> derived numbers.
+    /// AUDIT-08/09: from the ready gear (`Inventory::ready_gear`; a stowed backup weapon adds only its burden) and the
+    /// ready weapon's range and type; call it again after `Inventory::toggle_active_weapon`.
     pub fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
         self.stats.remove_modifier("gear");
         // U3.2-S4 (FB-35): what the worn items' effects added goes first (tier criteria never read it)
         self.stats.modifiers.retain(|m| !is_gear_effect_source(&m.source));
         let bonuses: Vec<(String, i32)> =
-            self.inventory.gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
+            self.inventory.ready_gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
         for (k, v) in bonuses {
             if v != 0 {
                 self.stats.modifiers.push(StatModifier::permanent(&k, v, "gear", "always"));
@@ -460,7 +463,7 @@ impl Unit {
         self.rebuild_gear_tier_stats();
         self.rebuild_gear_effects(cat);
         let burden = self.worn_burden();
-        let (base_rng, ctx) = match self.inventory.main_weapon() {
+        let (base_rng, ctx) = match self.inventory.active_weapon() {
             Some(w) => (w.item.base_range, Some(w.weapon_type().to_string())),
             None => (1, None),
         };
@@ -476,7 +479,7 @@ impl Unit {
     fn rebuild_gear_tier_stats(&mut self) {
         self.stats.remove_modifier(TIER_SOURCE);
         let mut totals: IndexMap<String, i32> = IndexMap::new();
-        for eq in self.inventory.gear() {
+        for eq in self.inventory.ready_gear() {
             for (k, v) in eq.tier_stat_bonuses(&self.stats) {
                 *totals.entry(k).or_insert(0) += v;
             }
@@ -1518,6 +1521,8 @@ impl Unit {
     }
 
     /// The weapon type that counts for skill gating in `hand` ("main", "off"): "unarmed" when that hand is empty.
+    /// AUDIT-09: "main" is the ready weapon (`Inventory::active_weapon`: the off-hand backup while it is ready in a 2H
+    /// pair); a 2H pair shares one ready slot, so its "off" hand is empty either way.
     pub fn wielded_type(&self, hand: &str) -> String {
         let main = self.inventory.main_weapon();
         let weapon = if hand == "off" {
@@ -1527,7 +1532,7 @@ impl Unit {
                 self.inventory.offhand_weapon()
             }
         } else {
-            main
+            self.inventory.active_weapon()
         };
         weapon.map(|w| w.weapon_type().to_string()).unwrap_or_else(|| "unarmed".into())
     }

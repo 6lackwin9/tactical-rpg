@@ -351,8 +351,9 @@ impl Inventory {
         self.equipped.iter().filter(move |(s, _)| Some(*s) != stowed).map(|(_, e)| e)
     }
 
+    /// AUDIT-08: the ready gear's armour (`ready_gear`; a stowed backup weapon adds none).
     pub fn total_flat_mitigation(&self, stats: Option<&CharacterStats>) -> i32 {
-        self.gear().map(|e| e.effective_mitigation(stats)).sum()
+        self.ready_gear().map(|e| e.effective_mitigation(stats)).sum()
     }
 
     pub fn add_to_pouch(&mut self, item: &ItemDef) -> bool {

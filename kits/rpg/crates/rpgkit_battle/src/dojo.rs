@@ -271,7 +271,9 @@ impl DojoSession {
             hero_ids.push(id.to_string());
         }
         let n = heroes.len();
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None)).unit);
+        // AUDIT-12: the dummy under the same wield terms as the heroes
+        let wield = ruleset.numbers.wield();
+        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None).with_wield(wield)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None).with_wield(wield)).unit);
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;
@@ -938,6 +940,12 @@ impl DojoSession {
             if queued {
                 line += ", staggered next round";
             }
+            // AUDIT-12 (FB-94): a break ends the broken side's guard, as in battle (`poise::break_unit`)
+            let side = if on_dummy { &mut self.dummy } else { self.hero_mut() };
+            let guarded = side.guard > 0.0;
+            if crate::trigger::end_unit_guard(side) || guarded {
+                line += ", guard broken";
+            }
         }
         if on_dummy {
             self.dummy_poise = bar;
@@ -1033,7 +1041,15 @@ impl DojoSession {
                 let mitigation = skill::guard_mitigation(&s, &self.ruleset.numbers);
                 self.hero_mut().guard = mitigation;
                 let pct = (mitigation * 100.0).round() as i32;
-                self.log_event("DEFEND", &s.name, &format!("Guard -{pct}% until the next round • {ap_note}"), pct, "GUARD");
+                // AUDIT-12 (S1.2-S4): a multi-round guard queues the `guard` status for its later rounds, as in battle
+                let later = skill::guard_later_mitigation(&s, &self.ruleset.numbers);
+                let hero_name = self.hero().name.clone();
+                let more = if crate::command::queue_later_guard(self.hero_mut(), s.guard_rounds, later, &hero_name) {
+                    format!("; guard holds {} more round{}", s.guard_rounds - 1, if s.guard_rounds == 2 { "" } else { "s" })
+                } else {
+                    String::new()
+                };
+                self.log_event("DEFEND", &s.name, &format!("Guard -{pct}% until the next round{more} • {ap_note}"), pct, "GUARD");
                 self.fx("glow", true, &format!("{} -{pct}%", s.name), Tone::Info);
             }
             "FOCUS" => {
@@ -1155,7 +1171,9 @@ impl DojoSession {
                 notes.push(format!("{} {}", c.name, status::display_name(&st).to_lowercase()));
             }
         }
-        self.hero_mut().guard = 0.0;
+        // AUDIT-12: the skill's guard drops; a queued later-round `guard` status that just took effect holds instead
+        let held = status::guard_status_mitigation(self.hero());
+        self.hero_mut().guard = held;
         // RULESET1_INTENT RS2: the Rest gain of the round that ended (`rest_ap` round_end, CLN-45); RULESET1 P3: the
         // bars refill (poise)
         let mut extra = String::new();

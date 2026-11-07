@@ -379,11 +379,24 @@ fn ranked_skills(list: &[Value], at: &str, errors: &mut Vec<String>) -> Vec<Dict
         if bad {
             continue;
         }
-        for (i, row) in expand(d).into_iter().enumerate() {
+        let mods = rank_mods(d);
+        for (i, mut row) in expand(d).into_iter().enumerate() {
+            unset_default_mitigation(&mut row, d, &mods, i);
             by_rank[i.min(4)].push(row);
         }
     }
     by_rank.into_iter().flatten().collect()
+}
+
+/// AUDIT-11 (S1.2-S4, FB-85): a loaded DEFEND rank row whose entry authors no `mitigation` (neither the entry nor this
+/// rank's modifier) loses the schema default the normalisation filled, so the battle takes the ruleset's guard fraction
+/// for it (`rpgkit_battle::skill::guard_mitigation`). Only the loader drops it: the writer (`store`) expands the same
+/// entries with the default kept, so a resave is unchanged. `index` is the rank row's 0-based position.
+fn unset_default_mitigation(row: &mut Dict, entry: &Dict, mods: &[Dict], index: usize) {
+    let authored = entry.contains_key("mitigation") || index.checked_sub(1).and_then(|m| mods.get(m)).is_some_and(|m| m.contains_key("mitigation"));
+    if !authored && sget(row, "kind", "") == "DEFEND" {
+        row.shift_remove("mitigation");
+    }
 }
 
 fn rank_mods(e: &Dict) -> Vec<Dict> {

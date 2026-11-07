@@ -1426,7 +1426,8 @@
 			"ap_cost": 1,
 			"blocks": 2,
 			"description": "Guard, Standard: raise a guard, -{mitigation} damage.",
-			"round_intent": "guard"
+			"round_intent": "guard",
+			"mitigation": 0.35
 		},
 		{
 			"id": "flank_cut",
@@ -1765,7 +1766,8 @@
 					"magnitude": 6,
 					"rounds": 2
 				}
-			]
+			],
+			"mitigation": 0.35
 		},
 		{
 			"id": "hamstring_sever",
