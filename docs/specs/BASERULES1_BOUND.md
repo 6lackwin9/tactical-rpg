@@ -94,7 +94,7 @@ its code **[R, checked by `rules_golden`]**:
 | `speed` | `max(1, max(1, 8 + DEX - burden) - carry_penalty)` | |
 | `move_rate` | `clamp(floor((speed + 2) / 5), 1, 4)` | Haste, slow |
 | `armor_base` | `gear_mitigation + round(STR * 0.25)` | Authored `armor`, fortify, expose |
-| `crit_rate` | `5 + max(0, DEX - 10)` | Training, trigger |
+| `crit_rate` | `5 + max(0, DEX - 10)` (`5 + max(0, PERC - 10)` since `U1.2-S3a`) | Training, trigger |
 | `status_resist` | `INT * 2.5`, `round` none | Per-status resist |
 | `range_bonus` | `min(1, floor(PERC / 18))` | Only on `base_range` above 1 |
 | `carry` | `STR * 3 + CONS` | Base capacity |

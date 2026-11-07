@@ -25,7 +25,7 @@ Six ids, `rpgkit_data::STATS` (`lib.rs:21`). What reads each **[V]**:
 | Stat | Reads | Where |
 | --- | --- | --- |
 | STR | HP +2 a point; armour +1 per 4; weapon scaling; unarmed power; carry x3; item requirements and tiers | `stats.rs:259,267`, `damage.rs:73`, `carry.rs:48` |
-| DEX | Speed +1 (move rate, initiative); crit +1 % above 10; weapon scaling; unarmed power | `stats.rs:263,276`, `damage.rs:73` |
+| DEX | Speed +1 (move rate, initiative; split into `Initiative` + `Move Rate` in `U1.2-S3c`); crit +1 % above 10 (moved to `PERC` in `U1.2-S3a`); weapon scaling; unarmed power | `stats.rs:263,276`, `damage.rs:73` |
 | INT | Status resist 2.5 a point; weapon scaling | `stats.rs:280` |
 | CONS | HP +8; Max Poise x2; Composure +1; carry +1 | `stats.rs:259`, `derived_stats.json`, `carry.rs:48` |
 | PERC | At 18 or more, ranged weapons reach 1 more | `stats.rs:271` |
@@ -39,7 +39,7 @@ Six ids, `rpgkit_data::STATS` (`lib.rs:21`). What reads each **[V]**:
 | Speed | `max(1, 8 + DEX - burden)`, minus carry overload, floor 1 | `stats.rs:263`, `unit.rs:409` |
 | Move rate | `clamp(floor((speed + 2) / 5), 1, 4)`, +1 haste, -1 slow, floor 1 | `unit.rs:370` |
 | Armour rating | Worn mitigation + `round(STR x 0.25)` + fortify - expose, floor 0; a unit's `armor` replaces the first two | `damage.rs:123-134` |
-| Crit | `5 + (DEX above 10) + (training - 1) + trigger`; x1.5 | `damage.rs:141`, `stats.rs:276` |
+| Crit | `5 + (DEX above 10) + (training - 1) + trigger`; x1.5 (`U1.2-S3a` moved the stat term to `PERC above 10`) | `damage.rs:141`, `stats.rs:276` |
 | Status resist | `INT x 2.5` + per-status resist, as a float | `status.rs:210` |
 | Max Poise | Row `max_poise`: `CONS x 2 + gear_mitigation`, or the unit's `poise` | data, `poise.rs:93` |
 | Composure | Row `composure`: `KNOW x 2 + CONS`. Only portrait cues read it; no rule does | data |
@@ -96,7 +96,7 @@ rest 0; `command.rs:276`), so speed decides who lands first in a block. **[V]**
 - **Wield penalty**: 15 % of weapon power per point short, cap 60 %, after a discount of 2 per training level (`gear.rs:116`).
 - **Budget** (M2d): one weighted number per item, class loadouts near 23 +- 20 %, warning only (`budget.rs:12-21`).
 - **Proficiency**: per class `{gear: {level 0-3, scaling 1.0-2.0}}`. Level gives +1 power each, -2 requirement each, crit and
-  burden from level 2. Level 0 cannot be worn. Drills add levels (UNITDRILL1); `wears_untrained` excuses single items.
+  burden from level 2. Level 0 cannot be worn in the pre-`U3.2-S3` snapshot (`U3.2-S3` replaced the hard block and `wears_untrained` with a soft `0.75x` power/armour penalty and `+1` burden). Drills add levels (UNITDRILL1).
 - **Carry**: party-wide capacity `30 + sum(STR x 3 + CONS)`; over it, every member loses 1 speed per 10 weight (`carry.rs`). **Burden** is per unit.
 
 ### 1.8 Items, classes and the statuses damage needs

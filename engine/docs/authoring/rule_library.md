@@ -6,9 +6,9 @@ Every kit rule option in `REGISTER` (`ruleset.rs`) is additive and off by defaul
 
 - **Additive options**: A new rule is off when unlisted in a ruleset row, and a new numeric/switch field defaults to existing behaviour. Shipped rows and frozen catalogs are never re-read differently.
 - **Metadata per rule (`REGISTER`)**: Each rule declares `id`, `kind` (`Option` or `Extension`), `requires`, `conflicts`, `bundle`, `system`, `tested`, and `does`. Each `FIELD_RULES` entry links a tunable ruleset key to the rule that reads it (`needs`).
-- **Validation (`Ruleset::notes()`, `check/ruleset.rs`)**:
+- **Validation (`Ruleset::notes()`, `check/ruleset.rs`, `BASERULES1-M2`)**:
   - An unmet `requires` where the rule would be silently inert (such as `flank` without `round_intent`) is a hard error.
-  - Conflicts, fields set when their `needs` rule is off, split must-ship bundles (`BUNDLES`), and combinations outside `TESTED_SETS` emit warnings.
+  - Conflicts, fields set when their `needs` rule is off, split must-ship bundles (`BUNDLES`), and combinations outside `TESTED_SETS` emit warnings; `tools/fc.sh sim` with `ruleset=` or `rules=` prints any `RULES error:` or `RULES warning:` lines under `ARGS`, and `LOCKED` validation recursively scans nested objects and arrays.
 - **One picked set per game**: A game's worlds pick one active ruleset row; `TESTED_SETS` pins the supported option combinations on a frozen catalog, and `kits/rpg/crates/rpgkit_host/tests/fixtures/rules_contract_golden.json` pins `aegis rules --contract`.
 
 ## 2. Value vs form vs new rule (the stop rule)
