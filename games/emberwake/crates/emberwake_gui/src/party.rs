@@ -2232,7 +2232,7 @@ fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
 /// U3.2-S3 (FB-34, mock): the wield penalty `unit` wears `item` under (the rules' reading, `Equipment::wield_penalty`:
 /// the stat-deficit ramp and proficiency 0, stacking) as a badge (the power and armour factor, "x0.75") and a card
 /// sentence; None for an item it wears free, or no unit.
-fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -> Option<(String, String)> {
+pub(crate) fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -> Option<(String, String)> {
     let u = unit.filter(|_| item.is_equipment())?;
     let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&u.stats);
     if !pen.penalized {

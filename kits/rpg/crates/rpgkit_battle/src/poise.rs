@@ -41,12 +41,28 @@ pub const BREAK_STATUS: &str = "stagger";
 /// next round (the row's default rounds and stacking), unless it holds `steadfast`. True when it queued. Nothing under
 /// `bar`.
 pub fn break_queues_stagger(n: &Numbers, u: &mut rpgkit_rules::Unit) -> bool {
-    if !pips_mode(n) || u.has_status(STEADFAST) {
+    if !break_would_queue_stagger(n, u) {
         return false;
     }
     let rounds = rpgkit_rules::status::row_of(BREAK_STATUS).map_or(1, |r| r.default_rounds);
     rpgkit_rules::status::queue(u, BREAK_STATUS, rounds, 0, "");
     true
+}
+
+/// R1-BAL (FB-88): whether a break of `u` now would queue `stagger` (`break_queues_stagger` without queueing it):
+/// `poise_mode` pips and `u` not `steadfast`.
+pub fn break_would_queue_stagger(n: &Numbers, u: &rpgkit_rules::Unit) -> bool {
+    pips_mode(n) && !u.has_status(STEADFAST)
+}
+
+/// R1-BAL (FB-88): the break forecast's note when a break of `u` would queue `stagger` ("queues Stagger next round
+/// (locks B1, B4)", the blocks from the status row's `lock_blocks`); None when it would not (`bar`, `steadfast`).
+pub fn break_stagger_note(n: &Numbers, u: &rpgkit_rules::Unit) -> Option<String> {
+    if !break_would_queue_stagger(n, u) {
+        return None;
+    }
+    let locks: Vec<String> = rpgkit_rules::status::blocked_blocks(BREAK_STATUS).iter().map(|b| format!("B{b}")).collect();
+    Some(if locks.is_empty() { "queues Stagger next round".to_string() } else { format!("queues Stagger next round (locks {})", locks.join(", ")) })
 }
 
 /// What a skill does to poise and armour (RULESET1 tasks 1.3), carried by its command; read only under the rules

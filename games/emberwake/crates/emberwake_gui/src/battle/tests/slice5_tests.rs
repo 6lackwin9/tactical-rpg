@@ -224,6 +224,38 @@ fn forecasts_follow_the_kit_hit_by_hit() {
     assert!(block.tip.iter().any(|t| t.0.starts_with("Stagger 12 x in wind-up")), "{:?}", block.tip);
 }
 
+/// R1-BAL (FB-88): a break forecast (breaks or may break) under `poise_mode` pips adds the kit's
+/// `poise::break_stagger_note` ("queues Stagger next round (locks B1, B4)") after its verdict; a hit that holds, a
+/// `steadfast` target and `bar` add none.
+#[test]
+fn a_break_forecast_under_pips_names_the_queued_stagger() {
+    use emberwake_battle::poise::{self, BreakCause, Verdict};
+    let (mut sess, d, _) = scratch_session(false);
+    let mut fcs = hit_forecasts(&sess, d);
+    let h = fcs.iter_mut().flatten().find(|h| h.lines(&sess.w).len() > 2).expect("a planned hit with a verdict");
+    sess.w.ruleset.numbers.poise_mode = emberwake_rules::ruleset::PoiseMode::Pips;
+    let note = poise::break_stagger_note(&sess.w.ruleset.numbers, &sess.w.units[h.target]).expect("pips: a note");
+    assert!(note.starts_with("queues Stagger next round"), "{note}");
+    let shows = |s: &Session, h: &HitForecast| {
+        let lines = h.lines(&s.w);
+        let at = lines.iter().position(|l| l.0 == note);
+        // right after the verdict line
+        at.is_some_and(|k| k >= 2 && (lines[k - 1].0.starts_with("Breaks") || lines[k - 1].0.starts_with("May break")))
+    };
+    for v in [Verdict::Breaks(BreakCause::Poise), Verdict::Chance(40)] {
+        h.fc.verdict = v;
+        assert!(shows(&sess, h), "{v:?}: {:?}", h.lines(&sess.w));
+    }
+    h.fc.verdict = Verdict::Holds;
+    assert!(!h.lines(&sess.w).iter().any(|l| l.0 == note), "a hit that holds");
+    h.fc.verdict = Verdict::Breaks(BreakCause::Poise);
+    let mut steady = sess.w.clone();
+    emberwake_rules::status::grant_now(&mut steady.units[h.target], poise::STEADFAST, 1, 0, "test");
+    assert!(!h.lines(&steady).iter().any(|l| l.0 == note), "steadfast");
+    sess.w.ruleset.numbers.poise_mode = emberwake_rules::ruleset::PoiseMode::Bar;
+    assert!(!h.lines(&sess.w).iter().any(|l| l.0 == note), "bar");
+}
+
 /// RULESET1 12: once the round is over, the state's summary is the kit's `round_summary` and the message leads
 /// with it; classic has neither.
 #[test]

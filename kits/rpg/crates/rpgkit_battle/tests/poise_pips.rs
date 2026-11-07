@@ -744,3 +744,30 @@ fn a_sure_break_settles_and_forecasts_at_zero_poise_and_pips() {
         assert_eq!((fc.verdict, fc.after, fc.pips_after), (Verdict::Breaks(BreakCause::Sure), 0, 0));
     }
 }
+
+/// R1-BAL (FB-88): the break forecast's note follows `break_queues_stagger`: under pips it names the next round's
+/// Stagger and the status row's locked blocks; under `bar` and on a `steadfast` unit there is none; the check never
+/// queues.
+#[test]
+fn the_break_stagger_note_follows_the_queue_rule() {
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    let mut w = s.w.clone();
+    let locks: Vec<String> = status::blocked_blocks(poise::BREAK_STATUS).iter().map(|b| format!("B{b}")).collect();
+    assert!(!locks.is_empty(), "the stagger row locks blocks");
+    let note = poise::break_stagger_note(&n, &w.units[FOE]).expect("pips: a note");
+    assert_eq!(note, format!("queues Stagger next round (locks {})", locks.join(", ")));
+    assert!(poise::break_would_queue_stagger(&n, &w.units[FOE]));
+    assert!(!w.units[FOE].st.pending.contains(poise::BREAK_STATUS), "the forecast queues nothing");
+    let mut u = w.units[FOE].clone();
+    assert!(poise::break_queues_stagger(&n, &mut u), "the forecast agrees with the break");
+
+    status::grant_now(&mut w.units[FOE], poise::STEADFAST, 1, 0, "test");
+    assert_eq!(poise::break_stagger_note(&n, &w.units[FOE]), None, "steadfast");
+    let mut u = w.units[FOE].clone();
+    assert!(!poise::break_queues_stagger(&n, &mut u), "steadfast agrees");
+
+    let s = session(timeline(json!({})));
+    let w = s.w.clone();
+    assert_eq!(poise::break_stagger_note(&w.ruleset.numbers, &w.units[FOE]), None, "bar");
+}

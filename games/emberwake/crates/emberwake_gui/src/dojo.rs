@@ -495,11 +495,16 @@ impl Dojo {
             let label = format!("{}: {}", key.replace('_', " "), worn.as_ref().map(|w| w.name.clone()).unwrap_or_else(|| "empty".into()));
             // While a stash item is dragged, the slots it fits are named in gold.
             let fits = dragging.as_deref().and_then(|d| d.strip_prefix("stash.")).is_some_and(|id| self.s.eligible(key).iter().any(|e| e == id));
+            // R1-BAL (FB-80): the worn item's wield penalty (untrained or a stat deficit), as on the party screen
+            let badge = worn.as_ref().and_then(|w| crate::party::wield_badge(Some(self.s.hero()), w));
             let card = match &worn {
-                Some(w) => tip(&w.name, "Click to unequip, or drag it to the stash."),
+                Some(w) => tip(&w.name, &format!("Click to unequip, or drag it to the stash.{}", badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default())),
                 None => tip(key, "Drag an item from the stash here."),
             };
             ui.row(&format!("dojo.slot.{key}"), Rect::new(b.x + 1, y, b.w - 2, 12), &label, if fits { th().gold } else if worn.is_some() { th().text } else { th().dim }, worn.as_ref().map(|_| DAct::Unequip(key)), false, card);
+            if let Some((text, _)) = &badge {
+                ui.p.text_right((b.x + b.w - 4) as f32, y as f32 + 1.0, text, SMALL, th().foe);
+            }
             if worn.is_some() {
                 ui.draggable(format!("equip.{key}"));
             }
@@ -1189,6 +1194,41 @@ mod tests {
         assert_eq!(dojo.s.deck_of(dojo.s.active).follow_ups.get(&op), Some(&vec![op.clone()]));
         dojo.act(&mut cx, DAct::FollowClear(op.clone()));
         assert!(!dojo.s.hero().deck.follow_ups.contains_key(&op), "Use the order empties it");
+    }
+
+    /// R1-BAL (FB-80): a worn item the hero wears under a wield penalty (here a stat deficit, on a test-only copy of a
+    /// weapon that asks for more than any stat holds) gets the party screen's red "x0.75"-style badge right-aligned in
+    /// its gear slot row and the penalty sentence on its card; a copy with no requirement and no weapon type shows none.
+    #[test]
+    fn a_penalized_worn_item_shows_the_wield_badge_in_the_gear_slot() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut weapons: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| item_fits_slot(i, "main_hand") && i.item_type == "WEAPON").map(|(id, _)| id.clone()).collect();
+        weapons.sort();
+        let base = cx.data.cat.items[&weapons[0]].clone();
+        for penalized in [true, false] {
+            let mut dojo = Dojo::new(&cx);
+            let mut item = base.clone();
+            item.required_stats.clear();
+            if penalized {
+                item.required_stats.insert(STATS[0].to_string(), 999);
+            } else {
+                item.weapon_type.clear();
+            }
+            let cat = dojo.s.cat.clone();
+            let a = dojo.s.active;
+            dojo.s.heroes[a].inventory.equip(emberwake_rules::gear::Equipment::new(&item), emberwake_rules::gear::Slot::MainHand);
+            dojo.s.heroes[a].sync_from_stats_and_gear(&cat);
+            let pen = emberwake_rules::gear::Equipment::new(&item).wield_penalty(&dojo.s.hero().stats);
+            assert_eq!(pen.untrained || pen.deficit > 0, penalized, "the fixture's penalty");
+            let badge = format!("x{:.2}", pen.factor());
+            let recs = crate::hud::hud_tests::frame(&mut dojo, &mut cx, &mut crate::hud::hud_tests::gfx(), 1.0);
+            let slot = dojo.w.iter().find(|w| w.id == "dojo.slot.main_hand").expect("the main hand slot row");
+            let card: String = slot.tip.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join(" ");
+            let r = slot.rect;
+            let drawn = recs.iter().find(|t| t.text == badge && t.y >= r.y as f32 && t.y < (r.y + r.h) as f32 && t.x + t.w <= (r.x + r.w) as f32 && t.x > (r.x + r.w / 2) as f32);
+            assert_eq!(drawn.is_some(), penalized, "the badge {badge} in the slot row {r:?}");
+            assert_eq!(card.contains("Wield penalty"), penalized, "the card: {card}");
+        }
     }
 
     /// AUDIT-05 (OFFHAND1): the Deck window lists the hero's worn items' skills read-only (no slot action) after the
