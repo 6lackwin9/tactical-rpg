@@ -2,7 +2,7 @@
 //! skill's `area` reads them; RING covers the 8 tiles around the user whatever the aim; ARC the 3-tile front arc
 //! toward the aim (along an axis: the tile ahead and its two side neighbours; off-axis: SWEEP's quadrant); both are
 //! drawn from the user, so a skill without its own reach keeps the (1, 1) band. SWEEP, PLUS, BURST and LINE are
-//! unchanged.
+//! unchanged. A3.2-K2 draws ARC on the source tile (`shape_direction.rs`).
 
 use rpgkit_battle::grid::V2;
 use rpgkit_battle::skill::{self, Area};
@@ -48,7 +48,8 @@ fn arc_is_the_front_arc_toward_the_aim() {
     let s = skill_with("ARC");
     let me = v(4, 4);
     assert_eq!(sorted(skill::area_cells(&s, me, v(5, 4))), [(5, 3), (5, 4), (5, 5)], "east: ahead and both sides");
-    assert_eq!(sorted(skill::area_cells(&s, me, v(4, 1))), [(3, 3), (4, 3), (5, 3)], "north from afar: the direction only");
+    // A3.2-K2 (IR6): the arc is drawn on the source tile (S1 drew it beside the user whatever the aim)
+    assert_eq!(sorted(skill::area_cells(&s, me, v(4, 1))), [(3, 1), (4, 1), (5, 1)], "north from afar: on the source");
     let sweep = skill_with("SWEEP");
     for aim in [v(5, 5), v(3, 3), v(5, 3), v(3, 5)] {
         assert_eq!(skill::area_cells(&s, me, aim), skill::area_cells(&sweep, me, aim), "off-axis as SWEEP's quadrant at {aim:?}");

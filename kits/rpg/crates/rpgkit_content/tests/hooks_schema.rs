@@ -324,7 +324,10 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         ("skills", "sweep", json!({"hazard": {"id": "lava"}}), "Leaves hazard: unknown hazard 'lava'."),
         ("skills", "sweep", json!({"hazard": {"shape": "BURST"}}), "Leaves hazard: id is required"),
         ("skills", "slam", json!({"hazard": {"id": "fire", "shape": "SKILL"}}), "Leaves hazard: shape SKILL needs an area attack"),
-        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "RING"}}), "Leaves hazard: shape 'RING' is not one of"),
+        // A3.2-K2: RING and ARC are hazard shapes (as the skill shapes); CONE is not (no hazard wants it yet)
+        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "CONE"}}), "Leaves hazard: shape 'CONE' is not one of"),
+        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "RING"}}), ""),
+        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "ARC"}}), ""),
         ("skills", "sweep", json!({"hazard": {"id": "fire", "at": "near"}}), "Leaves hazard: at 'near' is not one of target, self."),
         ("skills", "sweep", json!({"hazard": {"id": "fire", "rounds": 6}}), "Leaves hazard: rounds must be a whole number 0-5."),
         ("skills", "snare", json!({"hazard": {}}), "A skill with no damage needs a status"),
@@ -410,7 +413,7 @@ fn item_and_encounter_rules_each_report_one_error() {
     let v = store::view(&data);
     let item = |hazard: Value| errors_of(&v, "items", "pot", &json!({"hazard": hazard}));
     assert_eq!(item(json!({})), Vec::<String>::new());
-    assert_eq!(item(json!({"id": "fire", "shape": "SKILL"})), ["Leaves hazard: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE or SWEEP)."]);
+    assert_eq!(item(json!({"id": "fire", "shape": "SKILL"})), ["Leaves hazard: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE, RING or ARC)."]);
     assert_eq!(item(json!({"id": "smog"})), ["Leaves hazard: unknown hazard 'smog'."]);
     let vents = |patch: Value| {
         let mut h = json!({"id": "vents", "name": "Slag Vents", "columns": [7, 8], "blocks": [3, 6], "effect": {"damage_pct": 12}});

@@ -39,12 +39,15 @@ pub enum Shape {
     /// The 3 x 3 square around the anchor.
     Burst,
     /// Three tiles in a row along the heading: from the anchor (`at` target), from the tile ahead of the user (self).
+    /// A3.2-K2: the heading is IR7's snapped direction (`shape_heading`).
     Line,
-    /// Three tiles across the heading, centred on the anchor (target) or the tile ahead of the user (self).
+    /// Legacy: three tiles across the straight heading, centred on the anchor (target) or the tile ahead of the user
+    /// (self); kept as it was until W2-4 removes SWEEP.
     Sweep,
     /// A3.2-S1: the 8 tiles around the anchor (target) or the user (self), never the centre.
     Ring,
-    /// A3.2-S1: the 3-tile front arc: across the heading, as `Sweep` (the legacy alias it replaces in W2-4).
+    /// A3.2-S1: the 3-tile front arc; A3.2-K2 (FB-106): the skill's own ARC cells (`skill::arc_cells`) drawn on the
+    /// anchor (target) or the tile ahead of the user (self), so a hazard and the skill's ARC cover the same tiles.
     Arc,
 }
 
@@ -194,7 +197,7 @@ impl Ledger {
 
 // ---- Placement (GH2-GH4, GH7) --------------------------------------------------------------------------------------
 
-/// GH2 LINE, SWEEP: the user's heading toward `aim`: the dominant axis (a tie on its facing axis, else x); with no aim
+/// GH2 SWEEP (and LINE / ARC with no aim, `shape_heading`): the user's heading toward `aim`: the dominant axis (a tie on its facing axis, else x); with no aim
 /// off its own tile, its straight facing, else toward the other side.
 fn heading(w: &World, by: UnitId, aim: V2) -> V2 {
     let d = crate::forced::direction(w, by, w.pos(by), aim, false);
@@ -213,6 +216,17 @@ fn heading(w: &World, by: UnitId, aim: V2) -> V2 {
     }
 }
 
+/// A3.2-K2 (INTENT2 IR7): the direction of a LINE or ARC placement: from the user toward `aim`, snapped
+/// (`skill::snap`: a tie is the exact diagonal); with no aim off its own tile, `heading`'s fallback (its facing).
+fn shape_heading(w: &World, by: UnitId, aim: V2) -> V2 {
+    let d = skill::snap(aim - w.pos(by));
+    if d != ZERO {
+        d
+    } else {
+        heading(w, by, aim)
+    }
+}
+
 /// GH2: the tiles `p` covers from `by` (anchor: the aim or target tile, or the user's; `area`: the skill's own cells):
 /// on the board and walkable, a trap only where no active unit stands, each once.
 pub fn cells(w: &World, by: UnitId, def: &HazardDef, p: &Place, anchor: V2, aim: V2, area: &[V2]) -> Vec<V2> {
@@ -222,15 +236,22 @@ pub fn cells(w: &World, by: UnitId, def: &HazardDef, p: &Place, anchor: V2, aim:
         Shape::Plus => vec![anchor, anchor + V2::new(1, 0), anchor + V2::new(-1, 0), anchor + V2::new(0, 1), anchor + V2::new(0, -1)],
         Shape::Burst => (-1..=1).flat_map(|dx| (-1..=1).map(move |dy| anchor + V2::new(dx, dy))).collect(),
         Shape::Ring => skill::ring_cells(if p.at_self { w.pos(by) } else { anchor }),
-        Shape::Line | Shape::Sweep | Shape::Arc => {
+        Shape::Line => {
+            let d = shape_heading(w, by, aim);
+            let start = if p.at_self { w.pos(by) + d } else { anchor };
+            (0..3).map(|i| start + d * i).collect()
+        }
+        Shape::Arc => {
+            // FB-106: drawn as the skill's ARC from the user's tile; a source on the user's own tile reads the heading
+            let (pos, d) = (w.pos(by), shape_heading(w, by, aim));
+            let source = if p.at_self { pos + d } else { anchor };
+            skill::arc_cells(if source == pos { source - d } else { pos }, source)
+        }
+        Shape::Sweep => {
             let d = heading(w, by, aim);
             let start = if p.at_self { w.pos(by) + d } else { anchor };
-            if p.shape == Shape::Line {
-                (0..3).map(|i| start + d * i).collect()
-            } else {
-                let across = V2::new(d.y, d.x);
-                vec![start - across, start, start + across]
-            }
+            let across = V2::new(d.y, d.x);
+            vec![start - across, start, start + across]
         }
     };
     let mut out: Vec<V2> = Vec::new();

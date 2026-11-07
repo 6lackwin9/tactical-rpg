@@ -240,7 +240,7 @@ impl PlanEntry {
             }
             Kind::Attack => {
                 let mut c = if skill::is_area(s) {
-                    Command::new(actor, 0, s.blocks, CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s), status_rounds: s.status_rounds, last_damage: 0, last_hits: 0, crit_hits: Vec::new() })
+                    Command::new(actor, 0, s.blocks, CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s), status_rounds: s.status_rounds, affects: skill::affects_by(s, round_intent::intent_of(w, actor)), last_damage: 0, last_hits: 0, crit_hits: Vec::new() })
                 } else {
                     // INPUT1 MR4: a skill with a position hits from the tile next to its target
                     let (lo, hi) = round_intent::hit_band(w, actor, s);
@@ -1318,11 +1318,12 @@ impl Plan {
         if a == skill::Area::Sweep && ((aim.x - st.pos.x).abs() != 1 || (aim.y - st.pos.y).abs() != 1) {
             return "Needs a diagonal tile.".into();
         }
-        // A3.2-S1: ARC swings toward a neighbouring tile; RING is drawn around the user whatever the aim.
-        if a == skill::Area::Arc && (aim == st.pos || (aim.x - st.pos.x).abs() > 1 || (aim.y - st.pos.y).abs() > 1) {
+        // A3.2-S1: ARC (A3.2-K2: and CONE) swings toward a neighbouring tile; RING is drawn around the user whatever
+        // the aim.
+        if matches!(a, skill::Area::Arc | skill::Area::Cone) && (aim == st.pos || (aim.x - st.pos.x).abs() > 1 || (aim.y - st.pos.y).abs() > 1) {
             return "Needs a neighbouring tile.".into();
         }
-        if !matches!(a, skill::Area::Line | skill::Area::Sweep | skill::Area::Ring | skill::Area::Arc) && (d < band.0 || d > band.1) {
+        if !skill::from_user(a) && (d < band.0 || d > band.1) {
             return "Out of reach.".into();
         }
         let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
@@ -1331,9 +1332,11 @@ impl Plan {
             let stance_before = st.entries.last().unwrap().stance_before;
             let attack_stance = if w.ruleset.stances() { skill::stance_during(s, stance_before) } else { stance_before };
             let pos = st.pos;
+            // A3.2-K2 (IR9): the units the area hits by its `affects` in this round's row
+            let affects = skill::affects_by(s, round_intent::intent_of(w, c));
             let mut total = 0;
             for &foe in w.foes_of(c) {
-                if w.units[foe].is_active() && w.has(foe) && cells.contains(&w.pos(foe)) {
+                if skill::affects_unit(affects, false) && w.units[foe].is_active() && w.has(foe) && cells.contains(&w.pos(foe)) {
                     let hit = self.estimate_hit(w, c, st, sid, attack_stance, foe, pos);
                     total += hit;
                     *st.est_hp.entry(foe).or_insert(0) -= hit;
@@ -1341,7 +1344,7 @@ impl Plan {
             }
             let mut friends_hit = 0;
             for &f in w.friends_of(c) {
-                if f != c && w.units[f].is_active() && cells.contains(&self.planned_position(w, f)) {
+                if f != c && skill::affects_unit(affects, true) && w.units[f].is_active() && cells.contains(&self.planned_position(w, f)) {
                     friends_hit += 1;
                 }
             }

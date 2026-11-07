@@ -230,7 +230,7 @@ pub fn hazard_place_errors(raw: &Value, ctx: &Ctx, skill_area: bool) -> Vec<Stri
     }
     enum_key(o, "shape", &HAZARD_SHAPES, false, at, &mut out);
     if json::s(o, "shape") == "SKILL" && !skill_area {
-        out.push(format!("{at}: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE or SWEEP)."));
+        out.push(format!("{at}: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE, RING or ARC)."));
     }
     enum_key(o, "at", &HAZARD_AT, false, at, &mut out);
     whole_key(o, "rounds", PLACE_ROUNDS, false, at, &mut out);

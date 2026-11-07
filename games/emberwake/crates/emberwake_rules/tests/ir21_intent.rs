@@ -1,10 +1,12 @@
 //! INTENT2-K1a (A4.2, IR21; READY row 16, FB-57) on the shipped skills: every row derives a 1-or-2 intent list
 //! (`rpgkit_rules::intent::derive`), the same from the raw row and from the loaded skill. The dual-intent rows are the
 //! SUPPORT rows that may target their user (`Support, Stand`) and the IR21-shaped attacks the rule makes dual
-//! (`Field, Assault`). The shipped data still has its 7 legacy SWEEP rows (the SWEEP -> ARC/RING split is data work
-//! for W2-4), which derive as unshaped attacks: 22 = 8 + 14 dual rows raw. FB-101 Option A applies the named split
-//! in memory (4 ARC, 3 RING) and checks 26 = 8 + 18 and the per-intent totals. Read-only: the rows are game data, so
-//! the test lives in the game's façade crate.
+//! (`Field, Assault`). The shipped data had 7 legacy SWEEP rows (the SWEEP -> ARC/RING split is data work for W2-4,
+//! the asset lane after A3.2-K2), which derive as unshaped attacks: 22 = 8 + 14 dual rows raw before the split. FB-101
+//! Option A applies the named split in memory (4 ARC, 3 RING) and checks 26 = 8 + 18 and the per-intent totals. The
+//! raw checks hold before, during and after the shipped migration (each named row is SWEEP or its new shape; each
+//! ARC row still SWEEP is one dual row short of 26). Read-only: the rows are game data, so the test lives in the
+//! game's façade crate.
 
 use emberwake_data::Catalog;
 use emberwake_rules::intent::{self, IntentInput, ASSAULT, FIELD, MANEUVER, STAND, SUPPORT};
@@ -84,7 +86,7 @@ fn shipped_dual_intent_breakdown_by_rule() {
     assert_eq!(support_stand.len(), 8, "READY row 16: 8 Support,Stand");
     assert!(sweeps.iter().all(|s| derive(rows.iter().find(|r| id(r) == *s).unwrap()) == [ASSAULT]), "legacy SWEEP derives as an unshaped attack");
     assert!(field_assault.iter().all(|f| ["LINE", "PLUS", "BURST", "ARC", "CONE"].contains(&area(rows.iter().find(|r| id(r) == *f).unwrap()))));
-    assert_eq!(field_assault.len() + sweeps.len(), 21, "14 Field,Assault + 7 SWEEP awaiting the ARC/RING split (FB-101, W2-4)");
+    assert_eq!(field_assault.len() + arc_ids_still_sweep(&rows), 18, "14 Field,Assault + the 4 ARC rows of the split (FB-101, W2-4), migrated or still SWEEP");
 }
 
 #[test]
@@ -103,6 +105,11 @@ fn sweep_split_hook_moves_rows_by_shape() {
 /// FB-101 Option A: the SWEEP rows that become ARC and RING (`INTENT2_SKILLS.md`), applied in memory until W2-4.
 const SWEEP_TO_ARC: [&str; 4] = ["foundry_shatter", "crushing_judgment", "gilded_billhook_sunder", "pneumatic_hammer_strike"];
 const SWEEP_TO_RING: [&str; 3] = ["sweep_kick", "cyclone_kick", "tendril_flail"];
+
+/// The FB-101 ARC rows the shipped data still has as SWEEP (4 before the W2-4 migration, 0 after).
+fn arc_ids_still_sweep(rows: &[Value]) -> usize {
+    rows.iter().filter(|r| SWEEP_TO_ARC.contains(&id(r).as_str()) && area(r) == "SWEEP").count()
+}
 
 fn owned(ids: &[&str]) -> Vec<String> {
     ids.iter().map(|s| s.to_string()).collect()
@@ -128,8 +135,9 @@ fn raw_shipped_data_has_22_dual_intent_rows() {
     let rows = rows();
     assert_eq!(rows.len(), 129, "IR21 covers all 129 skills");
     assert_eq!(ids_with(&rows, &[SUPPORT, STAND]).len(), 8);
-    assert_eq!(ids_with(&rows, &[FIELD, ASSAULT]).len(), 14, "before the SWEEP split");
-    assert_eq!(rows.iter().filter(|r| derive(r).len() == 2).count(), 22, "22 = 8 + 14");
+    let pending = arc_ids_still_sweep(&rows);
+    assert_eq!(ids_with(&rows, &[FIELD, ASSAULT]).len() + pending, 18, "14 before the SWEEP split, 18 after");
+    assert_eq!(rows.iter().filter(|r| derive(r).len() == 2).count() + pending, 26, "22 = 8 + 14 before the split, 26 = 8 + 18 after");
 }
 
 #[test]
@@ -138,10 +146,13 @@ fn fb101_split_in_memory_gives_26_dual_and_the_intent_totals() {
     let sweeps: Vec<String> = raw.iter().filter(|r| area(r) == "SWEEP").map(id).collect();
     let mut named = owned(&SWEEP_TO_ARC);
     named.extend(owned(&SWEEP_TO_RING));
-    let (mut a, mut b) = (sweeps.clone(), named.clone());
-    a.sort();
-    b.sort();
-    assert_eq!(a, b, "the FB-101 ids are exactly the shipped SWEEP rows");
+    assert!(sweeps.iter().all(|s| named.contains(s)), "every shipped SWEEP row is an FB-101 id: {sweeps:?}");
+    for (ids, shape) in [(&SWEEP_TO_ARC[..], "ARC"), (&SWEEP_TO_RING[..], "RING")] {
+        for i in ids {
+            let r = raw.iter().find(|r| id(r) == *i).unwrap_or_else(|| panic!("{i} shipped"));
+            assert!(["SWEEP", shape].contains(&area(r)), "{i}: SWEEP before the W2-4 migration, {shape} after, not {}", area(r));
+        }
+    }
     let rows = split_rows(&raw);
     assert!(rows.iter().all(|r| area(r) != "SWEEP"));
     for r in &rows {

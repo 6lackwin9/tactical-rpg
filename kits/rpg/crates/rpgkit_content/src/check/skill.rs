@@ -24,7 +24,8 @@ const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max", "position"]),
-    ("area", &["area"]),
+    // A3.2-K2: `affects` (IR9) beside the shape it filters
+    ("area", &["area", "affects"]),
     ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
@@ -796,6 +797,10 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
             if area != "NONE" {
                 out.push("A skill with no damage can't be an area attack.".into());
             }
+        }
+        // A3.2-K2 (IR9): `affects` filters an area's units; a single-target attack has none to filter
+        if area == "NONE" && !json::s(e, "affects").is_empty() {
+            out.push("Affects needs an area (it picks which units the shape hits).".into());
         }
         if area == "SWEEP" && (dash > 0 || reach_max > 1) {
             out.push("SWEEP hits the L of tiles around you; leave reach at 0 or 1 and no gap-close.".into());

@@ -43,6 +43,8 @@ pub enum CmdKind {
         aim: V2,
         skill_mult: f64,
         status_rounds: i32,
+        /// A3.2-K2 (IR9): the units it hits (`skill::affects_by`, the skill's field or its row's default).
+        affects: rpgkit_data::Affects,
         last_damage: i32,
         last_hits: i32,
         crit_hits: Vec<(UnitId, bool)>,
@@ -518,7 +520,7 @@ impl Command {
                 let tu = &w.units[t];
                 self.log = format!("[Attack] {src_name} struck {} for {taken}{}{detail} (HP {}/{})", tu.name, if crit { " CRIT" } else { "" }, tu.hp, tu.max_hp);
             }
-            CmdKind::Area { cells, skill_mult, status_rounds, .. } => {
+            CmdKind::Area { cells, skill_mult, status_rounds, affects, .. } => {
                 let mut total = 0;
                 let mut hits = 0;
                 let mut crits = Vec::new();
@@ -532,7 +534,7 @@ impl Command {
                 let inside: Vec<UnitId> = if self.ally.is_some() { cells.iter().filter_map(|c| w.occupant(*c)).collect() } else { Vec::new() };
                 for cell in cells {
                     let Some(v) = w.occupant(cell) else { continue };
-                    if v == src || skill_mult <= 0.0 {
+                    if v == src || skill_mult <= 0.0 || !skill::affects_unit(affects, w.friends_of(src).contains(&v)) {
                         continue;
                     }
                     let ranged = w.units[src].attack_range > 1;

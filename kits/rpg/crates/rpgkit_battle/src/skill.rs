@@ -2,7 +2,7 @@
 //! skill_catalog.gd, scripts/content/skill_kinds.gd). Skills are referenced by their index in `Catalog::skills`.
 
 use crate::grid::{V2, DIRS};
-use rpgkit_data::{Catalog, Position, SkillDef};
+use rpgkit_data::{Affects, Catalog, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::unit::{skill_in_group, BASE_AP, REACH_WEAPON_REACH};
 use rpgkit_rules::{Stance, Unit};
@@ -70,6 +70,8 @@ pub enum Area {
     Ring,
     /// A3.2-S1 (A3.1, FB-17): the 3-tile front arc toward the aim (IR21: Field and Assault).
     Arc,
+    /// A3.2-K2 (IR6): the source, then the 3 tiles across one step on (defined now, built when a skill wants it).
+    Cone,
 }
 
 pub fn kind(s: &SkillDef) -> Kind {
@@ -84,6 +86,7 @@ pub fn area(s: &SkillDef) -> Area {
         "SWEEP" => Area::Sweep,
         "RING" => Area::Ring,
         "ARC" => Area::Arc,
+        "CONE" => Area::Cone,
         _ => Area::None,
     }
 }
@@ -309,10 +312,15 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
     (lo, hi + extra)
 }
 
-/// The shapes drawn from the user's own tile (LINE, SWEEP and A3.2-S1's RING and ARC): no spell reach bonus, a (1, 1)
-/// band without their own reach.
-fn from_user(a: Area) -> bool {
-    matches!(a, Area::Line | Area::Sweep | Area::Ring | Area::Arc)
+/// The shapes drawn from the user's own tile (LINE, SWEEP, A3.2-S1's RING and ARC, A3.2-K2's CONE): no spell reach
+/// bonus, a (1, 1) band without their own reach.
+pub fn from_user(a: Area) -> bool {
+    matches!(a, Area::Line | Area::Sweep | Area::Ring | Area::Arc | Area::Cone)
+}
+
+/// A3.2-K2 (IR6, IR7): the shapes that read a direction (from the user's tile toward the source tile).
+pub fn directed(a: Area) -> bool {
+    matches!(a, Area::Line | Area::Arc | Area::Cone)
 }
 
 /// The band of a plain attack (no own reach, no area, no spell bonus): ranged (2, max(3, range)), melee (1, `melee`).
@@ -408,16 +416,14 @@ pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
             }
             out
         }
-        Area::Line => {
-            let dir = cell - from;
-            (1..4).map(|i| from + dir * i).collect()
-        }
+        Area::Line => line_cells(from, cell),
         Area::Sweep => {
             let q = V2::new((cell.x - from.x).signum(), (cell.y - from.y).signum());
             vec![from + V2::new(q.x, 0), from + q, from + V2::new(0, q.y)]
         }
         Area::Ring => ring_cells(from),
         Area::Arc => arc_cells(from, cell),
+        Area::Cone => cone_cells(from, cell),
         Area::None => vec![cell],
     }
 }
@@ -427,20 +433,86 @@ pub fn ring_cells(from: V2) -> Vec<V2> {
     (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| V2::new(dx, dy))).filter(|d| *d != V2::new(0, 0)).map(|d| from + d).collect()
 }
 
-/// A3.2-S1 ARC (base size 3): the front arc from `from` toward `cell`: aimed along an axis, the tile ahead and its two
-/// side neighbours; aimed off-axis, the diagonal tile and the two tiles beside it on each axis (as SWEEP's quadrant).
-/// Empty when `cell` is `from` (no direction).
-pub fn arc_cells(from: V2, cell: V2) -> Vec<V2> {
-    let q = V2::new((cell.x - from.x).signum(), (cell.y - from.y).signum());
-    if q.x != 0 && q.y != 0 {
-        return vec![from + V2::new(q.x, 0), from + q, from + V2::new(0, q.y)];
+/// A3.2-K2 (INTENT2 IR7): the direction of `d` (source minus the user's tile), snapped: |dx| > |dy| left or right,
+/// |dy| > |dx| up or down, |dx| = |dy| the exact diagonal; (0, 0) for no offset (a directed shape is then refused).
+pub fn snap(d: V2) -> V2 {
+    let (ax, ay) = (d.x.abs(), d.y.abs());
+    if ax > ay {
+        V2::new(d.x.signum(), 0)
+    } else if ay > ax {
+        V2::new(0, d.y.signum())
+    } else {
+        V2::new(d.x.signum(), d.y.signum())
     }
-    if q == V2::new(0, 0) {
+}
+
+/// A3.2-K2 (IR6) LINE: 3 tiles from the source `cell` onward along the snapped direction from `from`. Empty when
+/// `cell` is `from`. An adjacent source gives the 3 tiles from the neighbour on, as before K2.
+pub fn line_cells(from: V2, cell: V2) -> Vec<V2> {
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
         return Vec::new();
     }
-    let ahead = from + q;
-    let across = V2::new(q.y, q.x);
-    vec![ahead - across, ahead, ahead + across]
+    (0..3).map(|i| cell + d * i).collect()
+}
+
+/// A3.2-S1 / A3.2-K2 (IR6) ARC (base size 3), drawn on the source `cell` toward the snapped direction from `from`:
+/// straight, the source and its two neighbours across the direction; on the exact diagonal, the L with the source as
+/// the corner and its arms back toward the user's row and column (an adjacent diagonal source: SWEEP's quadrant).
+/// Empty when `cell` is `from` (no direction). The hazard shape ARC uses it too (`ground::cells`, FB-106).
+pub fn arc_cells(from: V2, cell: V2) -> Vec<V2> {
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    if d.x != 0 && d.y != 0 {
+        return vec![cell - V2::new(0, d.y), cell, cell - V2::new(d.x, 0)];
+    }
+    let across = V2::new(d.y, d.x);
+    vec![cell - across, cell, cell + across]
+}
+
+/// A3.2-K2 (IR6) CONE: the source `cell`, then the 3 tiles across one step on along the snapped direction; on the
+/// exact diagonal, the source and its 3 neighbours away from the user. Empty when `cell` is `from`.
+pub fn cone_cells(from: V2, cell: V2) -> Vec<V2> {
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    if d.x != 0 && d.y != 0 {
+        return vec![cell, cell + V2::new(d.x, 0), cell + d, cell + V2::new(0, d.y)];
+    }
+    let (on, across) = (cell + d, V2::new(d.y, d.x));
+    vec![cell, on - across, on, on + across]
+}
+
+/// A3.2-K2 (INTENT2 IR9, A3.1): the units an area of `s` hits in a round of row `row` (None: no round intents, the
+/// classic battle). The skill's own `affects` wins; else a skill that leaves a hazard hits all (its tiles are marked,
+/// as a Field row's); else by row: Assault and Stand (`Guard`) hit enemies, Support allies, any other row (Field,
+/// Maneuver) and the classic battle all, as before K2.
+pub fn affects_by(s: &SkillDef, row: Option<crate::round_intent::RoundIntent>) -> Affects {
+    use crate::round_intent::RoundIntent;
+    if let Some(a) = s.affects {
+        return a;
+    }
+    if crate::ground::Place::of_skill(s).is_some() {
+        return Affects::All;
+    }
+    match row {
+        Some(RoundIntent::Assault | RoundIntent::Guard) => Affects::Enemies,
+        Some(RoundIntent::Support) => Affects::Allies,
+        _ => Affects::All,
+    }
+}
+
+/// A3.2-K2 (IR9): whether an area under `affects` hits a unit that is (`friend`) or is not one of the user's friends;
+/// the user itself is never hit (callers skip it).
+pub fn affects_unit(affects: Affects, friend: bool) -> bool {
+    match affects {
+        Affects::All => true,
+        Affects::Enemies => !friend,
+        Affects::Allies => friend,
+    }
 }
 
 /// The best exploit entry whose status is ACTIVE on `target`, skipping `skip`: (status, mult); ("", 1.0) when none.

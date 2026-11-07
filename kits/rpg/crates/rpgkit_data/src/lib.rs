@@ -53,6 +53,40 @@ impl Position {
     }
 }
 
+/// A3.2-K2 (INTENT2 IR9, A3.1): which units an area shape hits. The skill field `affects`; its `""` takes the row's
+/// default (`rpgkit_battle::skill::affects_by`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Affects {
+    /// Every unit on the shape's tiles but the user (the classic area, "hits allies too").
+    All,
+    /// The user's foes only.
+    Enemies,
+    /// The user's friends only (never the user).
+    Allies,
+}
+
+impl Affects {
+    /// The field values (`""` is the row's default).
+    pub const IDS: [&'static str; 3] = ["all", "enemies", "allies"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "all" => Some(Affects::All),
+            "enemies" => Some(Affects::Enemies),
+            "allies" => Some(Affects::Allies),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Affects::All => "all",
+            Affects::Enemies => "enemies",
+            Affects::Allies => "allies",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProfEntry {
     pub level: i32,
@@ -309,6 +343,8 @@ pub struct SkillDef {
     pub reach_min: i32,
     pub reach_max: i32,
     pub area: String,
+    /// A3.2-K2 (IR9): the units the area hits as written; None (`""`) = the row's default.
+    pub affects: Option<Affects>,
     pub power_mult: f64,
     pub weapon_hand: String,
     pub dash_tiles: i32,
@@ -405,6 +441,7 @@ impl SkillDef {
             reach_min: int(o, "reach_min", 0),
             reach_max: int(o, "reach_max", 0),
             area: string(o, "area", "NONE"),
+            affects: Affects::parse(&string(o, "affects", "")),
             power_mult: float(o, "power_mult", 1.0),
             weapon_hand: string(o, "weapon_hand", "main"),
             dash_tiles: int(o, "dash_tiles", 0),
@@ -1699,7 +1736,8 @@ pub const FORCED_MOVE_KEYS: [&str; 8] = ["kind", "tiles", "from", "when", "stop_
 pub const FORCED_IMMUNE: [&str; 3] = ["", "always", "guarding"];
 
 /// GH2: the shapes a placed hazard covers (SKILL = the skill's own area cells; the others as `area`, NONE one tile).
-pub const HAZARD_SHAPES: [&str; 6] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "SWEEP"];
+/// A3.2-K2: RING and ARC as the skill shapes; SWEEP is the legacy alias of ARC until W2-4 removes it.
+pub const HAZARD_SHAPES: [&str; 8] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "RING", "ARC", "SWEEP"];
 /// GH2: where a hazard is placed.
 pub const HAZARD_AT: [&str; 2] = ["target", "self"];
 /// GH2: the keys of a skill's or item's `hazard`.

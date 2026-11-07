@@ -220,6 +220,31 @@ fn placement_shapes_cover_walkable_tiles() {
     assert!(Place::of_skill(&w.cat.skills[sid(&w, "g_plain")]).is_none());
 }
 
+/// A3.2-K2 (FB-106, INTENT2 IR7): a hazard ARC covers the skill's own ARC tiles (`skill::arc_cells`) at the aim, off-axis
+/// and diagonal included; at the user's tile, the arc on the snapped tile ahead toward the aim. A hazard LINE takes the
+/// snapped direction too (a tie is the diagonal). An open board (no walls), the trap-free smoke.
+#[test]
+fn hazard_arc_and_line_follow_the_skill_shapes() {
+    let s = session(rules());
+    let w = s.w.clone();
+    let smoke = w.cat.hazards["g_smoke"].clone();
+    let me = w.pos(HERO);
+    let cells = |shape: Shape, at_self: bool, aim: V2| {
+        let p = Place { id: "g_smoke".into(), shape, at_self, rounds: 0 };
+        ground::cells(&w, HERO, &smoke, &p, if at_self { me } else { aim }, aim, &[])
+    };
+    for d in [v(1, 0), v(0, -1), v(1, 1), v(-1, 1), v(2, 0), v(2, 1), v(2, 2), v(-1, -3)] {
+        let aim = me + d;
+        assert_eq!(cells(Shape::Arc, false, aim), skill::arc_cells(me, aim), "ARC at the aim {d:?} as the skill's ARC");
+        let ahead = me + skill::snap(d);
+        assert_eq!(cells(Shape::Arc, true, aim), skill::arc_cells(me, ahead), "ARC ahead of the user toward {d:?}");
+    }
+    assert_eq!(cells(Shape::Line, false, me + v(2, 2)), vec![me + v(2, 2), me + v(3, 3), me + v(4, 4)], "LINE on a tie: the diagonal");
+    assert_eq!(cells(Shape::Line, true, me + v(2, 1)), vec![me + v(1, 0), me + v(2, 0), me + v(3, 0)], "LINE (2, 1) snaps east");
+    // SWEEP keeps its straight heading (legacy, until W2-4 removes it)
+    assert_eq!(cells(Shape::Sweep, true, me + v(1, 0)), vec![me + v(1, -1), me + v(1, 0), me + v(1, 1)]);
+}
+
 /// GH3: an ATTACK with power 0 and a hazard is a placement aimed at a tile: no damage, no random draw, its hazard on the
 /// tile for its rounds; a trap aimed at an occupied tile places nothing.
 #[test]

@@ -1267,11 +1267,14 @@ fn try_area(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &AiPro
     for &sid in &skills {
         let s = &w.cat.skills[sid];
         let band = skill::reach_by(s, &w.units[actor], &w.ruleset);
+        // A3.2-K2 (IR9): an area hits only the units its `affects` names in this round's row
+        let affects = skill::affects_by(s, round_intent::intent_of(w, actor));
+        let (on_foes, on_friends) = (skill::affects_unit(affects, false), skill::affects_unit(affects, true));
         for aim in aim_cells(w, st.pos, sid, band) {
             let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|c| w.grid.is_valid(*c) && *c != st.pos).collect();
-            let hit: Vec<UnitId> = foes.iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && cells.contains(&w.pos(f))).collect();
+            let hit: Vec<UnitId> = foes.iter().copied().filter(|&f| on_foes && w.units[f].is_active() && w.has(f) && st.est(f) > 0 && cells.contains(&w.pos(f))).collect();
             let foes_hit = hit.len() as i32;
-            let hit_friends: Vec<UnitId> = friends.iter().copied().filter(|&f| f != actor && w.units[f].is_active() && cells.contains(&plan.planned_position(w, f))).collect();
+            let hit_friends: Vec<UnitId> = friends.iter().copied().filter(|&f| on_friends && f != actor && w.units[f].is_active() && cells.contains(&plan.planned_position(w, f))).collect();
             if foes_hit < profile.area_threshold() || !friendly_fire_ok(w, actor, sid, &hit_friends, foes_hit) {
                 continue;
             }
@@ -1320,8 +1323,9 @@ fn aim_cells(w: &World, pos: V2, sid: SkillId, band: (i32, i32)) -> Vec<V2> {
     match skill::area(s) {
         skill::Area::Sweep => [V2::new(1, 1), V2::new(1, -1), V2::new(-1, 1), V2::new(-1, -1)].into_iter().map(|d| pos + d).filter(|c| w.grid.is_valid(*c)).collect(),
         skill::Area::Line => DIRS.into_iter().map(|d| pos + d).filter(|c| w.grid.is_valid(*c)).collect(),
-        // A3.2-S1: ARC toward each neighbouring tile; RING has one aim (the user's tile: the ring is drawn around it).
-        skill::Area::Arc => skill::ring_cells(pos).into_iter().filter(|c| w.grid.is_valid(*c)).collect(),
+        // A3.2-S1: ARC (A3.2-K2: and CONE) toward each neighbouring tile; RING has one aim (the user's tile: the ring is
+        // drawn around it).
+        skill::Area::Arc | skill::Area::Cone => skill::ring_cells(pos).into_iter().filter(|c| w.grid.is_valid(*c)).collect(),
         skill::Area::Ring => vec![pos],
         _ => {
             let mut out = Vec::new();
@@ -1949,9 +1953,11 @@ fn flush_pick(w: &mut World, plan: &mut Plan, c: UnitId, t: Option<UnitId>) -> O
         if !cells.contains(&goal) {
             return None;
         }
-        let hit: Vec<&V2> = foes.iter().filter(|p| cells.contains(p)).collect();
+        // A3.2-K2 (IR9): the Assault row's `affects`
+        let affects = skill::affects_by(s, Some(RoundIntent::Assault));
+        let hit: Vec<&V2> = foes.iter().filter(|p| skill::affects_unit(affects, false) && cells.contains(p)).collect();
         let covered = hit.iter().filter(|p| command::cover_for(&w.grid, here, ***p, true) > 0.0).count();
-        Some(((hit.len() + covered) as i32, friends.iter().filter(|p| cells.contains(p)).count()))
+        Some(((hit.len() + covered) as i32, friends.iter().filter(|p| skill::affects_unit(affects, true) && cells.contains(p)).count()))
     };
     let mut cands: Vec<((i32, usize, i32), SkillId, V2)> = Vec::new();
     for (i, sid) in round_intent_plan::order(w, c, RoundIntent::Assault).into_iter().enumerate() {
