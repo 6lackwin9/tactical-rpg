@@ -167,7 +167,7 @@ to switch as a bundle are ruleset row fields with values (`ruleset::BY_RULES_FIE
 `round_intent` (round_end, every_skill, on, off, off) and the legacy one otherwise (on_use, classic, off, on, on;
 `Numbers::by_rules`), so a row without the fields plays as before. Read through `Ruleset::rest_ap` /
 `rest_at_round_end`, `chase`, `root_stops_chase`, `switch_target_step` and `stances` (plan, command, round_intent,
-round_intent_plan, the Dojo); with `rest_ap` round_end and no `round_intent`, `round_intent::round_start` pays the Rest
+round_intent_plan, the Dojo, and `source::render` / `source::skill_description` dropping `{flow}` and `{disrupt}` with their separator when `stances` is off); with `rest_ap` round_end and no `round_intent`, `round_intent::round_start` pays the Rest
 gain too. `melee_diagonal` reads as the row sets it (the coupling to `round_intent` and its warning are gone; the
 classic row sets `none`; a raw row without the key reads `maneuver` with `round_intent`, else `none`). Checks: a switch
 is "" or one of its values; the writer leaves a "" switch out.
