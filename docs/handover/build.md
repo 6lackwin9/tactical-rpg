@@ -34,6 +34,9 @@ Nothing. No open task branch with unlanded work (`claude/skills1-fb-feedback-che
   task branch.
 - `python3 tools/planner/feedback_check.py --pending-ok`, then `archive` when READY section 4 answers items; fix the
   "FB-.. are closed" lines in FEEDBACK by hand.
-- The user asked for a watcher on `docs/READY.md`: a background loop that fetches `origin/develop` every 5 min and
-  exits (waking the session) when the READY.md blob changes; re-arm it after each wake (2 h limit per run).
+- After a squash landing, close the task branch so `branch-cleanup` deletes it (its "content already on develop" test
+  misses squash-landed branches once develop changes their files, e.g. FEEDBACK.md):
+  `c=$(git commit-tree "origin/develop^{tree}" -p origin/<branch> -p origin/develop -m "Close task branch")`, then
+  `git push origin "$c:refs/heads/<branch>"`. Done for the three branches above (deleted at the next daily run after 6 h).
+- No separate READY.md watcher (user 2026-11-07: Design is idle); fetch and re-read READY.md at each task start.
 - A fresh container needs `libasound2-dev` for the gate; the session-start hook now installs it.
