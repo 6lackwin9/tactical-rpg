@@ -1,28 +1,22 @@
 ---
 name: audit-build
-description: Run an independent Design-Session audit on landed Build commits in origin/develop using the build-auditor subagent. Checks implementation fidelity against specs (Part A: bugs, missed call sites, AUDIT-nn fix rows) and evaluates big-picture system/decision health across the project (Part B).
+description: Run an independent Design-Session audit over landed Build commits on origin/develop using the build-auditor agent. Surfaces implementation bugs/misses (AUDIT-nn rows for READY.md), unlogged Builder changes / control-plane drift, and big-picture system/decision critique.
 ---
 
 # Independent Build Audit (`/audit-build`)
 
-Use this skill in the **Design Session** (`C:\dev\tactical-rpg-dev`) to independently verify code, schema, data, and test commits landed by the Build Session on `origin/develop`.
+Use this skill in the **Design Session** (`C:\dev\tactical-rpg-dev`) after the Build Session lands a batch or Silo Release (`R1`, `R2`, `R3`) on `origin/develop`.
 
 ## Workflow
 
 1. **Identify Commit Range**:
-   - Fetch `origin/develop`:
-     `git -C C:\dev\tactical-rpg-dev fetch origin develop`
-   - List Build commits landed since the last Design audit (`git -C C:\dev\tactical-rpg-dev log --oneline <last-design-sha>..origin/develop`).
-2. **Sync Working Tree for Read-Only Inspection**:
-   - Checkout `origin/develop` into `C:\dev\tactical-rpg-dev` via a temporary `GIT_INDEX_FILE` so the auditor can read the current source files directly without touching `.git/worktrees/tactical-rpg-dev/index`.
-3. **Dispatch `build-auditor` Subagent**:
-   - Invoke the `build-auditor` agent (`.claude/agents/build-auditor.md`) on the commit range and the corresponding session specs (`docs/sessions/*.md`) and `docs/READY.md` rows.
-   - Ask for the two-part report:
-     - **Part A (Spec & Implementation Audit)**: Call-site completeness across `rules`/`battle`/`world`/`content`/`sim`/`gui`, edge-case invariants, test coverage, and ready-to-queue `AUDIT-nn` rows for `docs/READY.md` Section 1.
-     - **Part B (Project & System Health Critique)**: Outdated decisions/fields, cross-silo friction for upcoming blocks, and architectural/balance recommendations.
-4. **Act on Findings**:
-   - Present Part A and Part B to the user with recommended dispositions:
-     - Queue urgent bugs or implementation misses as `AUDIT-nn` rows in `docs/READY.md` Section 1 (`ready-to-build`).
-     - Queue post-release polish or architectural cleanups in `docs/READY.md` Section 3.
-     - Retire or update outdated decisions/docs in `docs/DECISIONS.md`, `docs/HISTORY.md`, and `games/emberwake/docs/GAME_BRIEF.md`.
-   - Restore `C:\dev\tactical-rpg-dev` to **Clean Pull-Ready Mode** after committing any `READY.md` / docs updates.
+   - Run `git -C C:\dev\tactical-rpg-dev fetch origin` and `git -C C:\dev\tactical-rpg-dev log --oneline origin/develop -n 25` to identify the landed Build commits since the last audit.
+2. **Dispatch `build-auditor`**:
+   - Spawn the `build-auditor` subagent with the commit range, the corresponding `docs/READY.md` rows, and the governing session specs (`docs/sessions/*.md`).
+   - Require `build-auditor` to inspect the actual Rust/JSON diffs (`git show`, `read_file`, `grep_search`) and return:
+     - **Part A (Implementation Audit)**: Bugs, missed call sites, edge-case gaps, and concrete `AUDIT-nn` rows for `docs/READY.md` Section 1.
+     - **Part B (Unlogged Builder Changes & Control-Plane Drift)**: Any self-decided code/schema/data changes not logged in `docs/FEEDBACK.md`, unnamed golden re-records (e.g. `phasefold_golden` or `checks_golden`), raw-key workarounds bypassing `schema.json`, or ownership boundary slips, plus control-plane fixes.
+     - **Part C (Project & System Critique)**: Outdated decisions, cross-silo friction, split state, and design/balance recommendations.
+3. **Present & Queue**:
+   - Present Part A (`AUDIT-nn` bug fixes), Part B (Unlogged Changes & Control-Plane Drift), and Part C (Big-Picture Critique) to the user.
+   - Add approved `AUDIT-nn` rows to `docs/READY.md` Section 1 (`ready-to-build`) and any control-plane/doc updates to the relevant skills or specs, commit, push to `origin/develop`, and restore Clean Pull-Ready Mode.
