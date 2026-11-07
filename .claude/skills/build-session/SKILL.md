@@ -5,12 +5,12 @@ description: Bootstrap and operate the Build Session planner in the two-session 
 
 # Build Session Start & Workflow (`C:\dev\tactical-rpg-plan` or Cloud Container)
 
-Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`, `-lane1..3`; cloud when `$CLAUDE_CODE_REMOTE` is `true`: container checkout on `origin/develop`) under the two-session split (`CLAUDE.md`, `docs/WORKFLOW.md`). Load `.claude/skills/planner/SKILL.md` and the environment file (`docs/workflow/desktop.md` on desktop, `docs/workflow/cloud.md` in the cloud).
+Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`, `-lane1..3`; cloud when `$CLAUDE_CODE_REMOTE` is `true`: container checkout on `origin/develop`) under the two-session split (`CLAUDE.md`, `docs/WORKFLOW.md`, `docs/decisions/workflow.md`). Load `.claude/skills/planner/SKILL.md` and the environment file (`docs/workflow/desktop.md` on desktop, `docs/workflow/cloud.md` in the cloud).
 
 ## 1. Ownership & Boundaries
 
 - **Sole writer of**: `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (plus crate-local READMEs where appropriate), and orchestrator of code/data builds and flushes onto `origin/develop`.
-- **Never edit**: `docs/READY.md`, `docs/sessions/*.md`, `docs/specs/*`, `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `games/emberwake/docs/MILESTONES.md`, `docs/DECISIONS.md`, `docs/HISTORY.md`, or shared READMEs (instead, log a `docs-delta` or `FB-nn` item in `docs/FEEDBACK.md` for the Design Session to apply).
+- **Never edit**: `docs/READY.md`, `docs/sessions/*.md`, `docs/specs/*`, `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `games/emberwake/docs/MILESTONES.md`, `docs/DECISIONS.md`, `docs/decisions/*`, `docs/HISTORY.md`, or shared READMEs.
 
 ## 2. Startup Sequence (Run on Session Start)
 
@@ -31,10 +31,37 @@ The Design Session pushes `docs/READY.md` updates (answered `FB-nn` items, promo
 2. **Archive newly answered feedback**: If the Design commit answered open `FB-nn` / `UN-nn` rows in `READY.md` Section 4, archive those answered items from `docs/FEEDBACK.md` into `docs/archive/FEEDBACK_CLOSED.md` (`python tools/planner/feedback_check.py`) on your next flush.
 3. **Pick up newly queued slices automatically**: Before declaring a batch, wave, or Silo Release (`R1` / `R2` / `R3`) complete—or before ending a turn at a slice boundary—always `git fetch origin develop` and check `origin/develop:docs/READY.md` Section 1 for any new `ready-to-build` rows (such as `AUDIT-R1` or newly promoted wave rows) added since session start, and continue executing them in order before cutting the release PR or stopping.
 
-## 4. Governance Mandate: Implement-Only as Specified (Never Invent Workarounds for Limits)
+## 4. Builder Authority Matrix (Allowed vs Forbidden)
 
 The **Design Session is the sole governance authority**; the **Build Session is strictly implement-only as per spec**:
 
-1. **Never work around a limit—raise it in `docs/FEEDBACK.md` with your assessment and let Design unblock it**: If a clean implementation of the spec hits any limit, gate constraint, or conflict (for example: an `Acceptance Test` column omits a golden fixture like `checks_golden` or `phasefold_golden` that would move, a spec clause conflicts with an existing check or legacy ruleset, or a decision is ambiguous), **do not invent a workaround** (such as reading "row-only" JSON keys in `source.rs` without `kits/rpg/schema.json`, keeping shadow/dual legacy paths, re-recording an unauthorized golden on your own, or silently dropping part of the slice).
-2. **Stop on the blocked item & log `FB-nn` (`Finding` + `Recommendation`)**: Keep writing your full technical assessment, codebase findings, and recommended options in `docs/FEEDBACK.md` (`Finding` and `Recommendation`) just as before—both for completed slices (`docs-delta`, balance/feel observations, follow-up suggestions) and for blocked limits (`blocker` / `spec-gap`). When an item hits a limit, leave the blocked slice or clause parked/uncommitted until the Design Session rules in `docs/READY.md` (while continuing with independent non-blocked rows in `READY.md`).
-3. **No shadow / dual legacy paths or silent deferrals**: Every consumer (battle, planner, AI, Dojo, Party UI, Content Forge, `kits/rpg/schema.json`, CLI/sim, save/load) must be wired to the canonical implementation specified in `READY.md`. Never mark a slice `done` with silent caveats or half-wired consumers.
+| Category | Allowed (Proceed & Build) | Forbidden (Stop on Item & Raise `Kind: limit-blocker`) |
+| --- | --- | --- |
+| **Task Selection** | Build rows in `docs/READY.md` Section 1 (`ready-to-build`) in order, plus explicit instructions in `READY.md` Section 4. | Building from `TASKS.md`, `READY.md` Section 3 (`Held`), or self-initiating unqueued features/cleanups. |
+| **Spec & Formula Implementation** | Implement exact formulas, data structures, UI hooks, and call sites specified in `READY.md` and the linked `docs/sessions/*.md` spec. | Changing a formula, default value, ruleset gate (`classic` vs `timeline`), or skipping a consumer/UI call site ("done with caveats") because it moves numbers or is inconvenient. |
+| **Schema & Data (`schema.json` & `source.rs`)** | Add new fields to *both* `source.rs`/`store.rs` and `kits/rpg/schema.json` as one unit. | "Row-only" JSON keys in `source.rs` that bypass `kits/rpg/schema.json` or content checks. |
+| **Golden Fixtures** | Re-record **only** the behavioral goldens named in `READY.md`'s `Acceptance Test` column (plus purely mechanical schema/contract field-count updates in `checks_golden` / `rules_contract_golden` when adding a spec-mandated field). | Re-recording an unnamed behavioral golden (`rules_golden`, `timeline_golden`, `sim_golden`, `phasefold_golden`, `journey_golden`), OR inventing a code workaround to avoid moving a golden when the spec itself causes the move. |
+| **Ambiguities & Edge Cases** | Internal Rust/engine plumbing choices (helper names, module split, test structure) with zero behavioral or schema impact. | Guessing gameplay/design intent when two specs disagree or when a spec clause breaks an existing invariant. |
+
+## 5. Structured Feedback Protocol (`docs/FEEDBACK.md` Section 2)
+
+Every `FB-nn` item in `docs/FEEDBACK.md` must use one of three structured `Kind` templates (or separate sub-blocks if a slice has both a `docs-delta` and a `suggestion`/`limit-blocker`):
+
+1. **`Kind: limit-blocker`** (Builder hit a Forbidden boundary or constraint conflict and parked the blocked slice/clause):
+   - `- **Spec**: <spec & READY slice>`
+   - `- **Kind**: limit-blocker`
+   - `- **Status**: open`
+   - `- **Finding**: <exact limit/constraint hit + technical trace/assessment from code or tests>`
+   - `- **Recommendation**: <Option A / Option B with trade-offs + Recommended default to unblock>`
+2. **`Kind: suggestion`** (Slice built 100% as specified without workarounds; Builder is proposing a balance, feel, or follow-up improvement):
+   - `- **Spec**: <spec & READY slice (@commit)>`
+   - `- **Kind**: suggestion`
+   - `- **Status**: open`
+   - `- **Finding**: <what was observed in code, tests, or sims>`
+   - `- **Recommendation**: <proposed follow-up task or tuning options with recommended default>`
+3. **`Kind: docs-delta`** (Routine landing report for shared docs—no design decision required):
+   - `- **Spec**: <spec & READY slice (@commit)>`
+   - `- **Kind**: docs-delta`
+   - `- **Status**: open`
+   - `- **Finding**: <concise summary of what landed and test counts>`
+   - `- **Recommendation**: <exact lines/bullets to apply to HISTORY.md, GAME_BRIEF.md, STRUCTURE.md, PORT_NOTES.md>`
