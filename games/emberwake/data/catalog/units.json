@@ -2742,9 +2742,6 @@
 			"pouch": [
 				"none"
 			],
-			"wears_untrained": [
-				"warded_apron"
-			],
 			"loot": [
 				{
 					"item": "pyre_nozzle",

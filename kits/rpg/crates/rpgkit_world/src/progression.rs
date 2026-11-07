@@ -203,7 +203,9 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
-    let b = build_from(cat, UnitBuild { row: &def, default_ap: 0, deck, over, growth: Some(growth) });
+    // U3.2-S3: the gear is read under the world's ruleset's wield terms
+    let wield = d.ruleset(world).numbers.wield();
+    let b = build_from(cat, UnitBuild { row: &def, default_ap: 0, deck, wield, over, growth: Some(growth) });
     let warnings = b.loadout_error.map(|err| format!("Unit '{}': stored loadout ignored ({err}).", work.id)).into_iter().collect();
     Some(Built { unit: b.unit, pouch_unloaded: b.pouch_unloaded, warnings, def })
 }

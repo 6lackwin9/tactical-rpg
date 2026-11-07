@@ -173,7 +173,7 @@ fn every_hero_and_world_character_builds_as_before() {
             let r = json::s(c, "id");
             let Some(e) = roster.entry(&d.cat, &r) else { continue };
             for (ap, deck) in [(0, None), (12, rule.as_ref())] {
-                let new = build_from(&d.cat, UnitBuild { row: &e, default_ap: ap, deck, over: roster.overrides(&d.cat, &r), growth: None }).unit;
+                let new = build_from(&d.cat, UnitBuild { row: &e, default_ap: ap, deck, wield: d.ruleset(&w).numbers.wield(), over: roster.overrides(&d.cat, &r), growth: None }).unit;
                 let old = old_npc(&d, &d.cat, &w, d.resolve(&w, "characters", &r), &e, ap, deck);
                 assert!(same(&new, &old), "character {w}:{r} (deck rule {}) differs", deck.is_some());
             }
@@ -196,7 +196,10 @@ fn a_fixed_unit_with_its_class_has_the_stats_the_classless_fallback_gave() {
         classless.pouch.clear();
         for rule in [None, progression::deck_rule(&d, &d.world_ids()[0])] {
             let now = build_from(&d.cat, UnitBuild::row(e, 0, rule.as_ref())).unit;
-            let before = build_unit_in(&d.cat, &classless, 0, rule.as_ref());
+            let mut before = build_unit_in(&d.cat, &classless, 0, rule.as_ref());
+            // U3.2-S3 (FB-33): a classless build wears its gear unrestricted; with no gear the flag is all that differs
+            assert!(before.stats.proficiency.unrestricted, "a classless build is unrestricted");
+            before.stats.proficiency.unrestricted = false;
             assert!(same(&now, &before), "fixed unit {} differs from its classless build", e.id);
         }
     }
@@ -247,7 +250,7 @@ fn any_unit_npc_included_fights_through_the_one_builder() {
     assert_eq!(s.w.units.len(), 4, "the hero and the three enemies take the field");
     for (i, r) in [&npc, &template, &fixed].into_iter().enumerate() {
         let e = roster.entry(&d.cat, r).expect("its row");
-        let want = build_from(&d.cat, UnitBuild { row: &e, default_ap: s.def.unit_ap, deck: s.w.units[s.w.enemies[i]].deck_rule.as_ref(), over: roster.overrides(&d.cat, r), growth: None }).unit;
+        let want = build_from(&d.cat, UnitBuild { row: &e, default_ap: s.def.unit_ap, deck: s.w.units[s.w.enemies[i]].deck_rule.as_ref(), wield: s.def.ruleset.numbers.wield(), over: roster.overrides(&d.cat, r), growth: None }).unit;
         let got = &s.w.units[s.w.enemies[i]];
         assert_eq!((got.max_hp, got.initiative, &got.passives, &got.catalog_id), (want.max_hp, want.initiative, &want.passives, &want.catalog_id), "enemy {r} is the builder's unit");
     }

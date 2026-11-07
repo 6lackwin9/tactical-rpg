@@ -18,7 +18,7 @@ use rpgkit_data::{Catalog, Deck, ItemDef, SkillDef, UnitDef, STATS};
 use rpgkit_rules::{build_from, UnitBuild};
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
-use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
+use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for, Equipment, Slot};
 use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::stats::Proficiency;
 use rpgkit_rules::status;
@@ -805,7 +805,8 @@ impl DojoSession {
     fn rebuild(&mut self, i: usize) {
         let Some(def) = self.hero_def(i) else { return };
         let rule = self.deck_rule();
-        let mut u = build_from(&self.cat, UnitBuild::row(&def, 0, rule.as_ref())).unit;
+        // U3.2-S3: under the Dojo ruleset's wield terms
+        let mut u = build_from(&self.cat, UnitBuild { wield: self.ruleset.numbers.wield(), ..UnitBuild::row(&def, 0, rule.as_ref()) }).unit;
         u.inventory = self.heroes[i].inventory.clone();
         for (st, pts) in &self.spent[i] {
             *u.stats.core.entry(st.clone()).or_insert(0) += pts;
@@ -1286,18 +1287,20 @@ impl DojoSession {
 
     // ---- Gear (stash, equip, presets, pouch, weapon switch) ------------------------------------------------------
 
-    /// ClassArchetype.can_equip_gear for the active hero.
-    pub fn can_equip(&self, item: &ItemDef) -> bool {
-        self.cat.classes.get(&self.classes[self.active]).is_none_or(|c| class_can_equip(&Proficiency::from_class(c), item))
+    /// U3.2-S3 (FB-34): whether the active hero wears `item` trained (its class's proficiency; `gear::trained_for`). No
+    /// longer a gate: an untrained piece equips and fights under the wield penalty.
+    pub fn trained_for(&self, item: &ItemDef) -> bool {
+        self.cat.classes.get(&self.classes[self.active]).is_none_or(|c| trained_for(&Proficiency::from_class(c), item))
     }
 
-    /// The stash items the active hero can put in `slot` (fit, class training, the two-handed rule), one per id.
+    /// The stash items the active hero can put in `slot` (fit and the two-handed rule; U3.2-S3: trained or not), one per
+    /// id.
     pub fn eligible(&self, slot: &str) -> Vec<String> {
         let main = self.hero().inventory.main_weapon().map(|e| e.item.clone());
         let mut out: Vec<String> = Vec::new();
         for id in &self.stash {
             let Some(item) = self.cat.items.get(id) else { continue };
-            if out.contains(id) || !item_fits_slot(item, slot) || !self.can_equip(item) {
+            if out.contains(id) || !item_fits_slot(item, slot) {
                 continue;
             }
             if slot == "off_hand" && !off_hand_ok(main.as_ref(), item) {
@@ -1335,13 +1338,6 @@ impl DojoSession {
     /// piece (from the stash when there).
     fn equip_internal(&mut self, id: &str, slot_key: &str, announce: bool) -> bool {
         let (Some(item), Some(slot)) = (self.cat.items.get(id).cloned(), slot_of(slot_key)) else { return false };
-        let hero = self.hero().name.clone();
-        if !self.can_equip(&item) {
-            if announce {
-                self.fail("Equip", &format!("{hero} cannot equip {} (class proficiency)", item.name));
-            }
-            return false;
-        }
         if !item_fits_slot(&item, slot_key) {
             if announce {
                 self.fail("Equip", &format!("{} cannot be equipped in the {} slot", item.name, slot_label(slot_key)));
@@ -1587,6 +1583,10 @@ pub fn breakdown_strike(title: &str, attacker: &str, target: &Unit, res: &Hit, a
             lines.push(format!("1. Weapon Power: [color=#e2e8f0]{}[/color] ({})", p.total_w_power, parts.join(", ")));
             if p.pen_ratio > 0.0 {
                 lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), p.weapon_power));
+            }
+            // U3.2-S3 (FB-33): the proficiency 0 factor, after any deficit
+            if p.untrained {
+                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, p.weapon_power));
             }
         } else {
             lines.push("1. Weapon Power: 0 (this weapon doesn't suit the attack)".into());

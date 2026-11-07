@@ -77,7 +77,7 @@ fn an_npc_applies_its_four_sources_once_each_in_gather_order() {
     let over = roster.overrides(&d.cat, "foe");
     assert_eq!(over.passives, strs(&SOURCES), "character, faction, disciplines, named items; the repeat once");
     assert_eq!(over.named_items.len(), 1, "the named item is worn");
-    let u = build_from(&d.cat, UnitBuild { row: &e, default_ap: 0, deck: None, over, growth: None }).unit;
+    let u = build_from(&d.cat, UnitBuild { row: &e, default_ap: 0, deck: None, wield: Default::default(), over, growth: None }).unit;
     assert_eq!(u.passives, strs(&SOURCES), "applied in the gather order");
     assert_eq!(u.foresight_source, SOURCES[0], "the first source keeps the foresight id");
     assert!(u.inventory.gear().any(|g| g.item.id.starts_with("sword__")), "the named blade over the row's gear");

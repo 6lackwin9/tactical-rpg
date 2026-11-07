@@ -54,6 +54,10 @@ pub struct AttackPower {
     pub total_w_power: i32,
     pub pen_ratio: f64,
     pub def_amount: i32,
+    /// U3.2-S3 (FB-33): the weapon is worn untrained (proficiency 0): its power takes the wield terms'
+    /// `untrained_power_mult` (`untrained_mult`), stacking with the deficit ratio.
+    pub untrained: bool,
+    pub untrained_mult: f64,
     pub stat_name: String,
     pub stat_val: i32,
     pub unit_scaling: f64,
@@ -111,9 +115,10 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                 let pen = w.wield_penalty(&u.stats);
                 (res.base_w_power, res.tier_boost, res.training_pwr, res.total_w_power) = (w.item.base_power, tier, training, total);
                 if pen.penalized {
-                    (res.pen_ratio, res.def_amount) = (pen.ratio, pen.deficit);
+                    (res.pen_ratio, res.def_amount, res.untrained) = (pen.ratio, pen.deficit, pen.untrained);
+                    res.untrained_mult = if pen.untrained { pen.untrained_mult } else { 0.0 };
                 }
-                res.weapon_power = total as f64 * (1.0 - if pen.penalized { pen.ratio } else { 0.0 });
+                res.weapon_power = if pen.penalized { total as f64 * pen.factor() } else { total as f64 };
             }
             res.stat_name = stat_name.to_string();
             res.stat_val = u.stats.stat(stat_name, ctx);

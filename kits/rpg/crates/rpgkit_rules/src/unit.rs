@@ -384,8 +384,10 @@ impl Unit {
         (self.move_rate + hasted - slowed).max(1)
     }
 
+    /// The worn gear's burden after the training reduction; U3.2-S3 (FB-33): plus the wield terms'
+    /// `untrained_burden_add` per item worn untrained (proficiency 0), which lowers initiative first like any burden.
     pub fn worn_burden(&self) -> i32 {
-        self.inventory.gear().map(|e| (e.item.burden - self.stats.proficiency.burden_reduction(e.weapon_type())).max(0)).sum()
+        self.inventory.gear().map(|e| (e.item.burden - self.stats.proficiency.burden_reduction(e.weapon_type())).max(0) + e.wield_penalty(&self.stats).burden_add).sum()
     }
 
     pub fn debuff_resistance(&self) -> f64 {
@@ -945,6 +947,8 @@ pub struct UnitBuild<'a> {
     pub default_ap: i32,
     /// The battle's deck rule (None = classic).
     pub deck: Option<&'a DeckRule>,
+    /// U3.2-S3: the wield terms of the battle's ruleset (`Numbers::wield`; the default outside a battle).
+    pub wield: crate::stats::WieldRule,
     pub over: Overrides,
     pub growth: Option<Growth>,
 }
@@ -952,7 +956,7 @@ pub struct UnitBuild<'a> {
 impl<'a> UnitBuild<'a> {
     /// The row alone (a catalog unit: no overrides, no saved state).
     pub fn row(row: &'a UnitDef, default_ap: i32, deck: Option<&'a DeckRule>) -> Self {
-        Self { row, default_ap, deck, over: Overrides::default(), growth: None }
+        Self { row, default_ap, deck, wield: crate::stats::WieldRule::default(), over: Overrides::default(), growth: None }
     }
 }
 
@@ -974,7 +978,7 @@ pub struct BuiltUnit {
 pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     let cat: &Catalog = b.over.path_cat.as_deref().unwrap_or(cat);
     let e = b.row;
-    let mut u = build_catalog_unit(cat, e, b.default_ap);
+    let mut u = build_catalog_unit(cat, e, b.default_ap, b.wield);
     u.deck = e.deck.clone();
     match (&b.growth, b.deck) {
         (None, Some(rule)) => {
@@ -1078,7 +1082,7 @@ pub fn auto_actives(cat: &Catalog, e: &UnitDef, rule: &DeckRule) -> Vec<String> 
     build_unit_in(cat, &auto, 1, Some(rule)).active_families()
 }
 
-fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
+fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32, wield: crate::stats::WieldRule) -> Unit {
     let arch = class_for(cat, e);
     let derived = e.stat_mode == "derived" && arch.is_some();
     // KITIDS1: a unit without a class takes the stats of the catalog's first class at level 1 (a blank class when the
@@ -1092,8 +1096,13 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     } else if let Some(arch) = arch {
         Unit::blank(&e.name, e.hp, e.initiative, e.attack_range, CharacterStats::new(arch, e.level, &IndexMap::new()))
     } else {
-        Unit::blank(&e.name, e.hp, e.initiative, e.attack_range, CharacterStats::new(&classless(), 1, &IndexMap::new()))
+        let mut u = Unit::blank(&e.name, e.hp, e.initiative, e.attack_range, CharacterStats::new(&classless(), 1, &IndexMap::new()));
+        // U3.2-S3 (FB-33): no class, no gear restriction (the borrowed class's training does not bind it)
+        u.stats.proficiency.unrestricted = true;
+        u
     };
+    // U3.2-S3: the gear is read under the battle's wield terms from the first sync on
+    u.stats.proficiency.wield = wield;
     equip(cat, &mut u, e, arch);
     if derived {
         let arch = arch.unwrap();

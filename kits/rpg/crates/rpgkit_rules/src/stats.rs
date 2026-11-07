@@ -146,11 +146,39 @@ impl StatModifier {
 pub const PROF_MAX_LEVEL: i32 = 3;
 pub const DEFAULT_SCALING: f64 = 1.5;
 pub const PASSIVE_ONLY_SCALING: f64 = 1.25;
+/// U3.2-S3 (U3 "Fixed vs parameter", FB-33): the default of the ruleset number `untrained_power_mult`, the factor on an
+/// untrained item's weapon power and armour (proficiency 0 in its gear type).
+pub const UNTRAINED_POWER_MULT: f64 = 0.75;
+/// U3.2-S3: the default of `untrained_burden_add`, the burden an untrained item adds.
+pub const UNTRAINED_BURDEN_ADD: i32 = 1;
+/// U3.2-S3: the default of `req_discount_per_level`, the stat requirement discount per proficiency level.
+pub const REQ_DISCOUNT_PER_LEVEL: i32 = 2;
+
+/// U3.2-S3 (FB-33, FB-34): the wield terms of the battle's ruleset (its row-only numbers `untrained_power_mult`,
+/// `untrained_burden_add`, `req_discount_per_level`; `Numbers::wield`). `Default` is the spec's defaults, so a unit
+/// built outside a battle (the party screen, the content check) reads them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WieldRule {
+    pub untrained_power_mult: f64,
+    pub untrained_burden_add: i32,
+    pub req_discount_per_level: i32,
+}
+
+impl Default for WieldRule {
+    fn default() -> Self {
+        Self { untrained_power_mult: UNTRAINED_POWER_MULT, untrained_burden_add: UNTRAINED_BURDEN_ADD, req_discount_per_level: REQ_DISCOUNT_PER_LEVEL }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Proficiency {
     pub entries: IndexMap<String, ProfEntry>,
     pub bonus_levels: IndexMap<String, i32>,
+    /// U3.2-S3: the wield terms its gear is read under (the ruleset's; `UnitBuild::wield`).
+    pub wield: WieldRule,
+    /// U3.2-S3 (FB-33): no gear restriction although `entries` is set: a unit with no class, which borrows the first
+    /// class's stats (`build_catalog_unit`'s fallback), wears everything trained, like a class with no proficiency list.
+    pub unrestricted: bool,
 }
 
 impl Proficiency {
@@ -160,7 +188,7 @@ impl Proficiency {
             .iter()
             .map(|(k, e)| (k.to_lowercase(), ProfEntry { level: e.level.clamp(0, PROF_MAX_LEVEL), scaling: e.scaling.clamp(1.0, 2.0) }))
             .collect();
-        Self { entries, bonus_levels: IndexMap::new() }
+        Self { entries, bonus_levels: IndexMap::new(), wield: WieldRule::default(), unrestricted: false }
     }
 
     pub fn add_bonus(&mut self, gear: &str, levels: i32) {
@@ -203,8 +231,9 @@ impl Proficiency {
         }
     }
 
+    /// U3.2-S3: `req_discount_per_level` (the wield terms') per level in `gear`.
     pub fn requirement_discount(&self, gear: &str) -> i32 {
-        self.level_of(gear) * 2
+        self.level_of(gear) * self.wield.req_discount_per_level
     }
 
     /// Proficiency.can_use: no gear type, or at least level 1 in it.

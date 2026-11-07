@@ -34,6 +34,9 @@
     "tunable max_pip_loss_per_hit row-only default=3 range=1..5 needs=poise+poise_mode=pips (no schema entry)",
     "tunable know_potency row-only default=0 range=0..3 (no schema entry)",
     "tunable unit_pools row-only default= needs=unit_meters (no schema entry)",
+    "tunable untrained_power_mult row-only default=0.75 range=0.25..1.0 (no schema entry)",
+    "tunable untrained_burden_add row-only default=1 range=0..4 (no schema entry)",
+    "tunable req_discount_per_level row-only default=2 range=0..4 (no schema entry)",
     "rule round_intent option system=planning bundle=intent_core requires=- conflicts=stances=on, switch_target_step=on",
     "rule enemy_moves option system=timing bundle=windup requires=- conflicts=-",
     "rule deck option system=build bundle=build requires=- conflicts=-",
@@ -75,6 +78,8 @@
     "locked damage.rs::UNARMED_BASE_POWER damage",
     "locked damage.rs::TRAINED_FIST_MIN_LEVEL damage",
     "locked damage.rs::GUARD_CAP damage",
+    "locked gear.rs::WIELD_DEFICIT_STEP gear",
+    "locked gear.rs::WIELD_DEFICIT_CAP gear",
     "locked derived.rs::POTENCY_MIN stats",
     "locked derived.rs::POTENCY_MAX stats",
     "locked stats.rs::CLASS_BUDGET stats",
@@ -103,6 +108,9 @@
     "promoted BLEED_PCT -> bleed_pct",
     "promoted COUNTER_MULT -> counter_mult",
     "promoted DEBT_STAGGER -> debt_stagger",
-    "promoted DEBT_STUN -> debt_stun"
+    "promoted DEBT_STUN -> debt_stun",
+    "promoted UNTRAINED_POWER_MULT -> untrained_power_mult",
+    "promoted UNTRAINED_BURDEN_ADD -> untrained_burden_add",
+    "promoted REQ_DISCOUNT_PER_LEVEL -> req_discount_per_level"
   ]
 }

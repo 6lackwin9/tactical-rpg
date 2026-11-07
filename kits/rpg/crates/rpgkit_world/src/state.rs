@@ -9,7 +9,7 @@ use rpgkit_data::{Deck, RosterManifest, DEPART_CAUSES, DEPART_LIVES, MEMBER_COND
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
-pub use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok};
+pub use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for};
 use serde_json::Value;
 
 pub const GOLD_MAX: i64 = 9_999_999;
@@ -167,21 +167,24 @@ impl UnitState {
         rpgkit_rules::stats::spend_pool(self.level(d) as i32) as i64 - self.spent()
     }
 
-    /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept) and it has
-    /// training in the weapon or gear type: its class's or its own drill passives' (UNITDRILL1; a character's drills are
-    /// in `passives` from `hero_from_character`, and a built unit reads the same list), or the base unit names the item
-    /// in `wears_untrained`.
+    /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept). U3.2-S3
+    /// (FB-34): training is no longer a gate (any unit may wear any item; an untrained one fights under the wield
+    /// penalty, `trains`), so `wears_untrained` is retired.
     pub fn can_wear(&self, d: &Data, item: &str, slot: &str) -> Result<(), String> {
         let def = d.cat.items.get(item).ok_or_else(|| format!("unknown item '{item}'."))?;
         if !item_fits_slot(def, slot) {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
-        let class = d.cat.classes.get(&self.class_id(d));
-        let trained = class.is_some_and(|c| class_can_equip(&rpgkit_rules::stats::Proficiency::from_class(c).with_drills(&d.cat, &self.passives), def));
-        if !trained && !json::sget(d.entry("units", &self.base_unit), rpgkit_content::check::unit::WEARS_UNTRAINED).iter().any(|i| i == item) {
-            return Err(format!("{} has no training in {} ({}).", class.map(|c| c.name.as_str()).unwrap_or("This class"), def.weapon_type, def.name));
-        }
         Ok(())
+    }
+
+    /// U3.2-S3 (FB-34, FB-63 (2)): whether the member wears `item` trained: its class's training or its drill passives'
+    /// (UNITDRILL1), the passives re-gathered as a build reads them (`progression::member_passives`), not the saved list.
+    /// A class with no proficiency list trains everything (`gear::trained_for`).
+    pub fn trains(&self, d: &Data, item: &str) -> bool {
+        let Some(def) = d.cat.items.get(item) else { return true };
+        let class = d.cat.classes.get(&self.class_id(d));
+        class.is_none_or(|c| trained_for(&rpgkit_rules::stats::Proficiency::from_class(c).with_drills(&d.cat, &progression::member_passives(d, self)), def))
     }
 
     pub fn class_id(&self, d: &Data) -> String {
@@ -432,6 +435,8 @@ impl UnitState {
             }
         };
         let owned = self.owned_families_anywhere(d);
+        // U3.2-S3 (FB-63 (2)): the passives it owns as a build gathers them (character sources now, then saved ids)
+        let owned_passives = progression::member_passives(d, self);
         twice("active", &self.deck.active, &mut Vec::new(), &mut errors);
         for fam in &self.deck.active {
             if d.cat.tier_one(fam).is_none() {
@@ -449,7 +454,7 @@ impl UnitState {
                 match d.cat.passives.get(id) {
                     None => errors.push(format!("{at}: deck {slot}: unknown passive '{id}'.")),
                     Some(p) if p.slot != slot => errors.push(format!("{at}: deck {slot}: '{id}' does not take the {slot} slot.")),
-                    Some(_) if !self.passives.contains(id) => errors.push(format!("{at}: deck {slot}: passive '{id}' is not owned.")),
+                    Some(_) if !owned_passives.contains(id) => errors.push(format!("{at}: deck {slot}: passive '{id}' is not owned.")),
                     Some(_) => {}
                 }
             }

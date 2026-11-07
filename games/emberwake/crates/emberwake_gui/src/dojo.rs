@@ -542,9 +542,12 @@ impl Dojo {
         let off = ui.scroll_begin("dojo.stash.rows", view, rows.len() as i32 * 12 + 2);
         for (i, (id, n)) in rows.iter().enumerate() {
             let Some(item) = self.s.cat.items.get(id) else { continue };
-            let usable = item.item_type == "CONSUMABLE" || SLOTS.iter().any(|(k, _)| item_fits_slot(item, k) && self.s.can_equip(item));
+            let usable = item.item_type == "CONSUMABLE" || SLOTS.iter().any(|(k, _)| item_fits_slot(item, k));
             let r = Rect::new(view.x + 1, view.y + 1 - off + i as i32 * 12, view.w - 5, 12);
-            let help = format!("{} Click to wear it in its first free slot (or load the pouch), or drag it.", item_line(item));
+            // U3.2-S3 (FB-34): untrained gear equips; the help names the wield penalty
+            let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&self.s.hero().stats);
+            let untrained = if item.is_equipment() && pen.untrained { format!(" Untrained: x{} power and armour, +{} burden.", pen.untrained_mult, pen.burden_add) } else { String::new() };
+            let help = format!("{}{untrained} Click to wear it in its first free slot (or load the pouch), or drag it.", item_line(item));
             ui.row(&format!("dojo.stash.{id}"), r, &format!("{} x{n}", item.name), if usable { th().text } else { th().dim }, Some(DAct::StashClick(id.clone())), false, tip(&item.name, &help));
             ui.draggable(format!("stash.{id}"));
         }

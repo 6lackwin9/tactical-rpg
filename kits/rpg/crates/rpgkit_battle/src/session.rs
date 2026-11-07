@@ -385,7 +385,7 @@ impl Session {
             e.name = name.to_string();
             // U2.2-S2: every roster unit through the one builder; a world character's passives pass the deck rule's
             // slot gate (D3)
-            let u = build_from(&cat, UnitBuild { row: &e, default_ap: def.unit_ap, deck: deck.as_ref(), over: roster.overrides(&cat, r), growth: None }).unit;
+            let u = build_from(&cat, UnitBuild { row: &e, default_ap: def.unit_ap, deck: deck.as_ref(), wield: def.ruleset.numbers.wield(), over: roster.overrides(&cat, r), growth: None }).unit;
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));
             art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });

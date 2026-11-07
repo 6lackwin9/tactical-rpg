@@ -355,7 +355,9 @@ impl DeckTerms {
         let cat = &d.cat;
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
-        let of_slot = |slot: &str| -> Vec<String> { m.passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
+        // FB-63 (2): the re-gathered list, as the equip check and validate read it
+        let owned_passives = progression::member_passives(d, m);
+        let of_slot = |slot: &str| -> Vec<String> { owned_passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
         let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
         let mut work = m.clone();
         work.deck = Deck::default();
@@ -2037,12 +2039,18 @@ impl Character {
             });
             let name = shown.as_ref().map(|i| d.item_name(i)).unwrap_or_else(|| "empty".into());
             let label = format!("{}: {name}", title_case(slot));
+            // U3.2-S3 (FB-34): the worn item's wield penalty, as the built unit fights with it
+            let badge = shown.as_ref().and_then(|i| d.cat.items.get(i)).and_then(|def| wield_badge(built.as_ref().map(|b| &b.unit), def));
+            let note = badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default();
             let card = match (&explicit, &shown) {
-                (Some(item), _) => item_tip(d, item, "Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it."),
-                (None, Some(item)) => item_tip(d, item, "Class default gear: drag an item from the stash onto this slot to replace it."),
+                (Some(item), _) => item_tip(d, item, &format!("Click or drag it to the stash to take it off (the class default comes back); drag it onto another slot it fits to move it.{note}")),
+                (None, Some(item)) => item_tip(d, item, &format!("Class default gear: drag an item from the stash onto this slot to replace it.{note}")),
                 (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
             };
             ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            if let Some((b, _)) = &badge {
+                ui.p.text_right((mx + mw - 3) as f32, y as f32 + 2.0, b, SMALL, th().foe);
+            }
             if explicit.is_some() {
                 ui.draggable(format!("equip.{slot}"));
             }
@@ -2090,7 +2098,18 @@ impl Character {
                 (None, "Not wearable.")
             };
             let movable = act.is_some();
-            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, help));
+            // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty
+            // carries the badge, and its card says why
+            let badge = wield_badge(built.as_ref().map(|b| &b.unit), def);
+            let help = match &badge {
+                Some((_, n)) => format!("{help} {n}"),
+                None => help.to_string(),
+            };
+            let y = 116 + row as i32 * 15;
+            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, y, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, &help));
+            if let Some((b, _)) = &badge {
+                ui.p.text_right((sx + sw - 5) as f32, y as f32 + 2.0, b, SMALL, th().foe);
+            }
             if movable {
                 ui.draggable(format!("stash.{id}"));
             }
@@ -2167,6 +2186,25 @@ fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
 }
 
 /// An item's hover card: its name, then its description (tokens filled), its numbers and what a click or drag does.
+/// U3.2-S3 (FB-34, mock): the wield penalty `unit` wears `item` under (the rules' reading, `Equipment::wield_penalty`:
+/// the stat-deficit ramp and proficiency 0, stacking) as a badge (the power and armour factor, "x0.75") and a card
+/// sentence; None for an item it wears free, or no unit.
+fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -> Option<(String, String)> {
+    let u = unit.filter(|_| item.is_equipment())?;
+    let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&u.stats);
+    if !pen.penalized {
+        return None;
+    }
+    let mut why = Vec::new();
+    if pen.untrained {
+        why.push(format!("untrained in {} (x{}, +{} burden)", item.weapon_type.replace('_', " "), pen.untrained_mult, pen.burden_add));
+    }
+    if pen.deficit > 0 {
+        why.push(format!("{} stat point{} short (-{}%)", pen.deficit, if pen.deficit == 1 { "" } else { "s" }, (pen.ratio * 100.0).round()));
+    }
+    Some((format!("x{:.2}", pen.factor()), format!("Wield penalty: weapon power and armour x{:.2}; {}.", pen.factor(), why.join("; "))))
+}
+
 fn item_tip(d: &Data, id: &str, help: &str) -> aegis_ui::ui::Tip {
     let Some(def) = d.cat.items.get(id) else { return tip(id, help) };
     let desc = d.item_description(id);
@@ -2326,19 +2364,22 @@ mod tests {
         assert_eq!(m.pouch.len(), POUCH_MAX - 1);
     }
 
-    /// UnitState._gear_errors: a class without training in a weapon type can't wear it (clicks, drops and Confirm).
+    /// U3.2-S3 (FB-34): a class without training in a weapon type wears it (clicks, drops and Confirm), under the
+    /// wield penalty, which the slot's badge shows.
     #[test]
-    fn a_class_without_training_cannot_wear_the_weapon() {
+    fn a_class_without_training_wears_the_weapon_under_the_penalty() {
         let (d, mut m, mut st) = setup();
         let class = d.cat.classes.get(&m.class_id(&d)).unwrap().clone();
         let prof = emberwake_rules::stats::Proficiency::from_class(&class);
         let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
         untrained.sort();
-        let item = untrained.first().expect("a weapon this class has no training in").to_string();
-        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand").unwrap_err();
-        assert!(err.contains("no training"), "{err}");
-        m.equipment.insert("main_hand".into(), item);
-        assert!(m.validate(&d).iter().any(|e| e.contains("no training")), "Confirm refuses it too");
+        let item = untrained.into_iter().find(|id| !m.trains(&d, id)).expect("a weapon this member has no training in").to_string();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand").unwrap();
+        assert_eq!(m.equipment.get("main_hand"), Some(&item));
+        assert!(m.validate(&d).is_empty(), "Confirm takes it: {:?}", m.validate(&d));
+        let built = progression::build_with(&d, &m, "", false).unwrap();
+        let (badge, note) = wield_badge(Some(&built.unit), &d.cat.items[&item]).expect("a penalty badge");
+        assert!(badge.starts_with('x') && note.contains("untrained"), "{badge} {note}");
     }
 
     /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)").
