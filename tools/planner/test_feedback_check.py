@@ -197,6 +197,18 @@ class ArchiveTest(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(paths["fb"].read_text(encoding="utf-8"), FEEDBACK)
 
+    def test_parse_building_rows_detects_active_section1_rows(self):
+        fb = (
+            "## 1. Build Status\n\n"
+            "| Task / Sub-block | Stage / Status | Branch / Commit | Notes |\n"
+            "| --- | --- | --- | --- |\n"
+            "| Done on `develop` | done | `develop` | ok |\n"
+            "| R1.1-1 `AUDIT-R1b` | building: 3 lanes | `claude/audit-r1b` | wip |\n"
+            "| R1.1-2 `C02-A` | queued | - | - |\n"
+            "\n## 2. Feedback Items\n"
+        )
+        self.assertEqual(fc.parse_building_rows(fb), ["R1.1-1 `AUDIT-R1b` (building: 3 lanes)"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@
 Usage (from anywhere; paths default to this checkout):
   python3 tools/planner/feedback_check.py [check] [--pending-ok]
   python3 tools/planner/feedback_check.py archive [--commit <sha>] [--dry-run]
+  python3 tools/planner/feedback_check.py lease [--window-minutes 20] [--session auto|cloud|desktop] [--no-fetch]
   common options: --feedback <path> --ready <path> --closed <path>
 
 check (exit 0 = FEEDBACK.md and READY.md match, 1 = a mismatch, 2 = a file could not be read or parsed):
@@ -25,9 +26,11 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,6 +41,8 @@ HEADER = re.compile(r"^### ((?:FB|UN)-\d+)\b")
 STATUS = re.compile(r"^- \*\*Status\*\*:\s*(.*)$")
 TICKED = re.compile(r"`([^`]+)`")
 RANGE = re.compile(r"^(.*-[A-Z]+)(\d+)\.\.[A-Z]*(\d+)$")  # U4.2-S3..S4 -> U4.2-S3, U4.2-S4
+CLOSED_SUBJECT = re.compile(r"^Close .*squash-landed on develop", re.IGNORECASE)
+BUILDING_STATUS = re.compile(r"\b(building|in-progress|in progress|running)\b", re.IGNORECASE)
 
 
 class ParseError(Exception):
@@ -267,16 +272,111 @@ def archive(feedback: str, closed: str, items: list[Item], answers: dict[str, An
     return new_fb, new_closed
 
 
+def parse_building_rows(feedback_text: str) -> list[str]:
+    """Finds rows in FEEDBACK.md Section 1 whose Stage / Status cell indicates an active build."""
+    in_sec1 = False
+    rows: list[str] = []
+    for line in feedback_text.splitlines():
+        if line.startswith("## 1."):
+            in_sec1 = True
+            continue
+        if in_sec1 and line.startswith("## "):
+            break
+        if not in_sec1 or not line.strip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or cells[0].lower().startswith("task") or all(set(c) <= {"-", ":"} for c in cells):
+            continue
+        if BUILDING_STATUS.search(cells[1]):
+            rows.append(f"{cells[0]} ({cells[1]})")
+    return rows
+
+
+def check_lease(window_minutes: float, session: str, no_fetch: bool) -> int:
+    """Checks origin for an active Build Session within window_minutes (0 = safe, 1 = conflict)."""
+    def git_out(*args: str) -> str:
+        r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            raise ParseError(f"git {' '.join(args)} failed: {r.stderr.strip()}")
+        return r.stdout
+
+    if session == "auto":
+        session = "cloud" if os.environ.get("CLAUDE_CODE_REMOTE", "").lower() == "true" else "desktop"
+    if not no_fetch:
+        git_out("fetch", "-p", "-q", "origin")
+    now = int(time.time())
+    merged = {
+        b.strip()
+        for b in git_out("branch", "-r", "--merged", "origin/develop").splitlines()
+        if b.strip() and "->" not in b
+    }
+    ref_out = git_out(
+        "for-each-ref",
+        "--format=%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(subject)",
+        "refs/remotes/origin/claude/",
+    )
+    active_branches: list[tuple[str, str, float, str]] = []
+    for raw in ref_out.splitlines():
+        parts = raw.split("|", 3)
+        if len(parts) < 4:
+            continue
+        branch, sha, ts_str, subject = parts[0], parts[1], parts[2], parts[3]
+        if branch in merged or CLOSED_SUBJECT.search(subject) or branch.startswith("origin/claude/release-batch"):
+            continue
+        age_min = max(0.0, (now - int(ts_str)) / 60.0)
+        active_branches.append((branch, sha, age_min, subject))
+
+    log_line = (
+        git_out("log", "-1", "--format=%h|%ct|%s", "origin/develop", "--", "docs/FEEDBACK.md").strip()
+        or git_out("log", "-1", "--format=%h|%ct|%s", "origin/develop").strip()
+    )
+    dev_sha, dev_ts, dev_subj = log_line.split("|", 2)
+    dev_age = max(0.0, (now - int(dev_ts)) / 60.0)
+    building = parse_building_rows(git_out("show", "origin/develop:docs/FEEDBACK.md"))
+
+    print(f"[build-lease] session={session} | origin/develop={dev_sha} ({dev_age:.1f}m ago) '{dev_subj}'")
+    if building:
+        print(f"[build-lease] FEEDBACK.md active rows: {', '.join(building)}")
+    for b, sha, age, subj in active_branches:
+        print(f"[build-lease] unmerged branch: {b} ({sha}, {age:.1f}m ago) '{subj}'")
+
+    conflicts: list[str] = []
+    for b, sha, age, subj in active_branches:
+        if age <= window_minutes:
+            conflicts.append(f"unmerged task branch `{b}` ({sha}, {age:.1f}m ago <= {window_minutes:.0f}m): {subj}")
+    if dev_age <= window_minutes and building:
+        conflicts.append(
+            f"origin/develop FEEDBACK.md updated {dev_age:.1f}m ago ({dev_sha}) with active build status: {', '.join(building)}"
+        )
+    if conflicts:
+        print("[build-lease] CONFLICT: another Build Session appears active within the window:")
+        for c in conflicts:
+            print(f"  - {c}")
+        print("[build-lease] Wait for it to finish, or pass --window-minutes 0 to force takeover if you know it stopped.")
+        return 1
+    print("[build-lease] ok: no conflicting active Build Session within window.")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("command", nargs="?", default="check", choices=("check", "archive"))
+    p.add_argument("command", nargs="?", default="check", choices=("check", "archive", "lease"))
     p.add_argument("--feedback", type=Path, default=ROOT / "docs/FEEDBACK.md")
     p.add_argument("--ready", type=Path, default=ROOT / "docs/READY.md")
     p.add_argument("--closed", type=Path, default=ROOT / "docs/archive/FEEDBACK_CLOSED.md")
     p.add_argument("--pending-ok", action="store_true", help="open items with no section 4 row yet are not a failure")
     p.add_argument("--commit", help="archive: the commit recorded as @<commit> (default: last commit of READY.md)")
     p.add_argument("--dry-run", action="store_true", help="archive: print what would move, change nothing")
+    p.add_argument("--window-minutes", type=float, default=20.0, help="lease: activity window in minutes (default: 20)")
+    p.add_argument("--session", default="auto", choices=("auto", "cloud", "desktop"))
+    p.add_argument("--no-fetch", action="store_true", help="lease: skip git fetch -p origin")
     args = p.parse_args(argv)
+    if args.command == "lease":
+        try:
+            return check_lease(args.window_minutes, args.session, args.no_fetch)
+        except ParseError as e:
+            print(f"[build-lease] ERROR: {e}")
+            return 2
     try:
         texts = [f.read_text(encoding="utf-8") for f in (args.feedback, args.ready, args.closed)]
         rep, items, answers = check(*texts, pending_ok=args.pending_ok or args.command == "archive")

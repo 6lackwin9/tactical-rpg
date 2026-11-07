@@ -13,7 +13,7 @@ The build session's helper scripts, moved here from the planner's own folder by 
 | `cleanup.sh lane<n>` | Detaches a lane and deletes its task branches, keeping the build cache |
 | `heavy.sh` | Sourced: one heavy run at a time on the machine, at below-normal priority (CPU1) |
 | `land.sh` | The older single-step landing, kept for reference |
-| `feedback_check.py [check\|archive]` | Checks `docs/FEEDBACK.md` against `docs/READY.md` section 4 (every open item answered, every Follow-up a task id in section 1 or 3; `--pending-ok` lists unanswered items as waiting) and `archive` moves answered items to `docs/archive/FEEDBACK_CLOSED.md` as `closed: <disposition> (@<commit>)` (SKILLS1-FB, UN-05); tests in `test_feedback_check.py`, run by `tools/fc.sh tooltests` and the gate |
+| `feedback_check.py [check\|archive\|lease]` | Checks `docs/FEEDBACK.md` against `docs/READY.md` section 4 (every open item answered, every Follow-up a task id in section 1 or 3; `--pending-ok` lists unanswered items as waiting), `archive` moves answered items to `docs/archive/FEEDBACK_CLOSED.md` as `closed: <disposition> (@<commit>)` (SKILLS1-FB, UN-05), and `lease` checks `origin` for an active Build Session within `--window-minutes` (unmerged `origin/claude/*` task branches and `building` rows in `FEEDBACK.md` Section 1); tests in `test_feedback_check.py`, run by `tools/fc.sh tooltests` and the gate |
 | `resolve_docs.py`, `sch_merge.py` | Conflict helpers for `.md` files and the schema |
 
 Run `landlane.sh` and `landtask.sh` from a checkout that already has `tools/planner/` landed (the main checkout or the stage worktree), not from the lane being landed: `landlane.sh` checks out `staging` inside that lane, which removes its own copy of the scripts if `staging` lacks them.

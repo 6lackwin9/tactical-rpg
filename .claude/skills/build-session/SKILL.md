@@ -14,9 +14,11 @@ Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`,
 
 ## 2. Startup Sequence (Run on Session Start)
 
-1. Fetch and checkout the latest `origin/develop` (desktop: in `C:\dev\tactical-rpg-plan` and check `git status` across `-stage` and `-lane1..3`; cloud: in the container checkout):
-   `git fetch origin develop`
+1. Fetch `origin` and run the **active Build Session lease guard** so two Build Sessions (cloud vs desktop) never collide:
+   `git fetch -p origin`
+   `python tools/planner/feedback_check.py lease --no-fetch`
    `git log -8 --oneline origin/develop`
+   - If `feedback_check.py lease` exits `1` (an unmerged `origin/claude/*` task branch or a `building` row in `docs/FEEDBACK.md` was updated within the last 20 minutes), **stop immediately and ask the user** before touching any branch or file (if the user confirms the other session stopped due to a usage limit, pass `--window-minutes 0` to take over cleanly).
 2. Read `docs/READY.md` and `docs/FEEDBACK.md`.
 3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4:
    - Archive any answered `FB-nn` / `UN-nn` items whose `Follow-up` column in `READY.md` Section 4 is `none` or names an existing row in `READY.md` Section 1 or Section 3, moving them into `docs/archive/FEEDBACK_CLOSED.md` with `<disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`, and verify with `python tools/planner/feedback_check.py`.
