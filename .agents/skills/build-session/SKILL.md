@@ -18,7 +18,15 @@ Operate as the **Build Session** (desktop: `C:\dev\tactical-rpg-plan`, `-stage`,
    `git fetch origin develop`
    `git log -8 --oneline origin/develop`
 2. Read `docs/READY.md` and `docs/FEEDBACK.md`.
-3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4 (`SKILLS1-FB`):
-   - Run `python3 tools/planner/feedback_check.py --pending-ok` to verify all answered rows and list any open items waiting for Design, then run `python3 tools/planner/feedback_check.py archive` to move every answered `FB-nn` / `UN-nn` item into `docs/archive/FEEDBACK_CLOSED.md` with `closed: <disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`.
+3. Compare `docs/FEEDBACK.md` against `docs/READY.md` Section 4:
+   - Archive any answered `FB-nn` / `UN-nn` items whose `Follow-up` column in `READY.md` Section 4 is `none` or names an existing row in `READY.md` Section 1 or Section 3, moving them into `docs/archive/FEEDBACK_CLOSED.md` with `<disposition> (@<commit>)` so `docs/FEEDBACK.md` stays well under `25 KB`, and verify with `python tools/planner/feedback_check.py`.
 4. Check which `ready-to-build` rows in `docs/READY.md` Section 1 are already on `origin/develop`, which are in progress in `-lane1..3` or `-stage`, and which are next in line.
 5. Present the parallel lane dispatch plan for the next `ready-to-build` slices in `docs/READY.md` Section 1 and wait for user confirmation before changing code.
+
+## 3. Continuous Queue Sync (Between Slices & Before Stopping)
+
+The Design Session pushes `docs/READY.md` updates (answered `FB-nn` items, promoted waves, and `AUDIT-nn` bug-fix rows from `/audit-build`) directly to `origin/develop` while the Build Session is running:
+
+1. **On every rebase/pull from `origin/develop`**: Whenever `git fetch origin develop` or `git pull --rebase origin develop` brings in a new Design commit that touches `docs/READY.md`, immediately re-read `docs/READY.md` Section 1 and Section 4.
+2. **Archive newly answered feedback**: If the Design commit answered open `FB-nn` / `UN-nn` rows in `READY.md` Section 4, archive those answered items from `docs/FEEDBACK.md` into `docs/archive/FEEDBACK_CLOSED.md` (`python tools/planner/feedback_check.py`) on your next flush.
+3. **Pick up newly queued slices automatically**: Before declaring a batch, wave, or Silo Release (`R1` / `R2` / `R3`) complete—or before ending a turn at a slice boundary—always `git fetch origin develop` and check `origin/develop:docs/READY.md` Section 1 for any new `ready-to-build` rows (such as `AUDIT-R1` or newly promoted wave rows) added since session start, and continue executing them in order before cutting the release PR or stopping.
