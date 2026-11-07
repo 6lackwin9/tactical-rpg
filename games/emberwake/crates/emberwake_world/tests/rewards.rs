@@ -421,7 +421,7 @@ fn a_won_hold_battle_captures_the_holder_and_names_it_in_the_flag() {
     let (mut party, mut members) = (Vec::new(), Vec::new());
     for m in gs.party.active_members() {
         let f = roster::field_unit(&d, &gs, m, &world).expect("a start member takes the field");
-        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone() });
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
         members.push((m.id.clone(), f.pouch_unloaded));
     }
     assert!(members.len() >= 2, "a holder and someone to escape: {members:?}");

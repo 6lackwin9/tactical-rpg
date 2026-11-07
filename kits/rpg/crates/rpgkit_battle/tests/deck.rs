@@ -235,7 +235,7 @@ fn the_order_list_else_the_auto_order() {
 #[test]
 fn a_prebuilt_member_gets_the_rule_at_the_start() {
     let cat = catalog();
-    let prebuilt = |id: &str| Prebuilt { unit: classic_unit(id), art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&cat, &cat.units[id]), key: id.into() };
+    let prebuilt = |id: &str| Prebuilt { unit: classic_unit(id), art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&cat, &cat.units[id]), key: id.into(), default_intent: String::new() };
     let s = session_with(deck_rules(), vec![prebuilt("d_decked")]);
     let u = &s.w.units[0];
     assert!(u.deck_rule.is_some());

@@ -561,7 +561,11 @@ pub fn forecast(w: &World, sched: &[ScheduledAction], t: UnitId, st: PoiseState,
     let held = !st.broken && unbreakable(w, sched, t, block);
     let terms = Terms { windup, held, sure: impact.sure_break.then_some(BreakCause::Sure), chance: true };
     let s = settle(n, &st, taken, terms);
-    let (pips_before, pips_after) = if pips_mode(n) { (st.pips, s.pips) } else { (bar_pips(n, &st), bar_pips(n, &PoiseState { value: s.after, ..st })) };
+    let (pips_before, mut pips_after) = if pips_mode(n) { (st.pips, s.pips) } else { (bar_pips(n, &st), bar_pips(n, &PoiseState { value: s.after, ..st })) };
+    // AUDIT-02: a break sets the pips to 0 on top (`Forecast`'s contract)
+    if matches!(s.verdict, Verdict::Breaks(_)) {
+        pips_after = 0;
+    }
     Forecast { factors: f, windup, taken, before: st.value, after: s.after, verdict: s.verdict, threshold: threshold(n, st.max), pips_before, pips_after }
 }
 
@@ -581,7 +585,7 @@ pub struct Terms {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settled {
     pub after: i32,
-    /// The stored pips after the hit (`st.pips` unchanged under `bar`).
+    /// The stored pips after the hit (`st.pips` unchanged under `bar` unless the hit breaks).
     pub pips: i32,
     pub verdict: Verdict,
 }
@@ -611,7 +615,7 @@ pub fn settle(n: &Numbers, st: &PoiseState, taken: i32, h: Terms) -> Settled {
         } else {
             Verdict::Holds
         };
-        return Settled { after: after.max(0), pips: st.pips, verdict };
+        return broken_to_zero(Settled { after: after.max(0), pips: st.pips, verdict });
     }
     let lost = pip_loss(n, taken, threshold(n, st.max));
     let mut pips = st.pips - lost;
@@ -630,7 +634,16 @@ pub fn settle(n: &Numbers, st: &PoiseState, taken: i32, h: Terms) -> Settled {
     };
     // S2.2-S3 (FB-71): the value mirrors the pips (`mirror`)
     let pips = pips.max(0);
-    Settled { after: pips * threshold(n, st.max), pips, verdict }
+    broken_to_zero(Settled { after: pips * threshold(n, st.max), pips, verdict })
+}
+
+/// AUDIT-02: a break leaves the bar at 0 value and 0 pips (`Settled`'s contract), a `sure` break whose stagger did not
+/// deplete the bar too.
+fn broken_to_zero(s: Settled) -> Settled {
+    match s.verdict {
+        Verdict::Breaks(_) => Settled { after: 0, pips: 0, ..s },
+        _ => s,
+    }
 }
 
 /// One planned hit for `forecast_hits`: its target, impact block, the skill's impact, the action's blocks, whether it

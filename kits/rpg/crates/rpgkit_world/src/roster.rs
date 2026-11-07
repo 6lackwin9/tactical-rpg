@@ -54,6 +54,9 @@ pub struct Fielded {
     pub unit: Unit,
     pub pouch_unloaded: Vec<String>,
     pub profile: AiProfile,
+    /// AUDIT-04: the intent it starts a round-intent battle in (its character's `default_intent`, else its base unit's;
+    /// "" = none): `Prebuilt::default_intent`.
+    pub default_intent: String,
 }
 
 /// Member `m` as it fights in world `world`, the world whose encounter it fights: its class path and deck rule there
@@ -63,6 +66,8 @@ pub struct Fielded {
 pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Option<Fielded> {
     let built = progression::build_played(d, m, world)?;
     let profile = AiProfile::for_unit(&d.cat, &built.def);
+    // AUDIT-04: `build_as` laid the character's default intent over the base unit's
+    let default_intent = built.def.default_intent.clone();
     let mut unit = built.unit;
     let max = unit.max_hp as i64;
     let mut hp = progression::start_hp(max, m.hp_lost);
@@ -73,7 +78,7 @@ pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Optio
         hp = hp.min(cut);
     }
     unit.hp = hp as i32;
-    Some(Fielded { unit, pouch_unloaded: built.pouch_unloaded, profile })
+    Some(Fielded { unit, pouch_unloaded: built.pouch_unloaded, profile, default_intent })
 }
 
 /// How a battle left one fielded member (ROSTER1 3.2's input).

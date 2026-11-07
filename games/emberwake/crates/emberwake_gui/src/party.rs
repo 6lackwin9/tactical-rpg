@@ -13,6 +13,7 @@ use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
 use emberwake_rules::damage;
 use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
 use emberwake_rules::gear::TIER_SOURCE;
+use emberwake_rules::unit::GEAR_EFFECT_SOURCE;
 use emberwake_rules::Unit;
 use emberwake_world::state::{off_hand_ok, UnitState, LOADOUT_SLOTS, POUCH_MAX};
 use emberwake_world::{progression, Data};
@@ -234,14 +235,25 @@ fn part_text(p: &derived::Part) -> String {
 /// The name of a modifier source (`derived::Part::source`): the item, passive or status it came from.
 fn source_name(cat: &Catalog, src: &str) -> String {
     let item = |id: &str| cat.items.get(id).map(|i| i.name.clone()).unwrap_or_else(|| id.to_string());
+    // a worn item's grant (`<item>`, `<item>:tier<n>`, `<item>:mastery`): the item, its tier or its family mastery
+    let grant = |rest: &str| -> String {
+        if let Some((id, n)) = rest.split_once(":tier") {
+            return format!("{} {}", item(id), roman(n.parse().unwrap_or(0)));
+        }
+        match rest.strip_suffix(":mastery") {
+            Some(id) => format!("{} mastery", item(id)),
+            None => item(rest),
+        }
+    };
     if let Some(id) = src.strip_prefix(derived::STATUS_SOURCE).and_then(|s| s.strip_prefix(':')) {
         return emberwake_rules::status::display_name(id);
     }
+    // AUDIT-05: a worn item's stat effect names its grant (`gear_effect:gear:<item>...`), never the raw kind
+    if let Some(rest) = src.strip_prefix(GEAR_EFFECT_SOURCE).and_then(|s| s.strip_prefix(':')) {
+        return grant(rest.strip_prefix("gear:").unwrap_or(rest));
+    }
     if let Some(rest) = src.strip_prefix("passive:gear:") {
-        return match rest.split_once(":tier") {
-            Some((id, n)) => format!("{} {}", item(id), roman(n.parse().unwrap_or(0))),
-            None => item(rest),
-        };
+        return grant(rest);
     }
     if let Some(id) = src.strip_prefix("passive:") {
         return cat.passives.get(id).map(|p| p.name.clone()).unwrap_or_else(|| id.to_string());
@@ -254,6 +266,7 @@ fn source_name(cat: &Catalog, src: &str) -> String {
     }
     match src {
         "gear" => "Gear".into(),
+        GEAR_EFFECT_SOURCE => "Worn item effects".into(),
         TIER_SOURCE => "Gear tiers".into(),
         _ => src.to_string(),
     }
@@ -294,7 +307,7 @@ fn stat_desc(st: &str) -> String {
         "DEX" => "Dexterity: initiative (8 + DEX - gear burden) and move rate, power with DEX weapons and of shots without a ranged weapon.".into(),
         "INT" => "Intelligence: debuff resistance (2.5% per point) and power with INT weapons.".into(),
         "CONS" => format!("Constitution: +{HP_PER_CONS} max HP per point."),
-        "PERC" => format!("Perception: crit chance +{CRIT_PER_PERC}% per point above {CRIT_PERC_FLOOR}; at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further; power with PERC weapons."),
+        "PERC" => format!("Perception: crit chance +{CRIT_PER_PERC}% per point above {CRIT_PERC_FLOOR}; at {RANGE_PERC_THRESHOLD} or more, ranged weapons reach 1 tile further."),
         "KNOW" => format!("Knowledge: from {KNOW_UNLOCK_BASE}, every {KNOW_UNLOCK_STEP} points open skill families one level earlier (up to {MAX_UNLOCK_REDUCTION} levels)."),
         _ => String::new(),
     }
@@ -1733,10 +1746,26 @@ impl Character {
         ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
         ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
+        // AUDIT-05 (OFFHAND1): the worn items' skills close the list, read-only: open while worn, no slot
+        let worn: Vec<String> = u.gear_skills.clone();
+        let total = owned.len() + worn.len();
         const ROWS: usize = 6;
-        self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
-        if self.scroll > 0 || owned.len() > ROWS {
-            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
+        self.scroll = self.scroll.min(total.saturating_sub(ROWS));
+        if self.scroll > 0 || total > ROWS {
+            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(total), total), SMALL, th().dim);
+        }
+        for (k, id) in worn.iter().enumerate().map(|(j, id)| (owned.len() + j, id)).filter(|(k, _)| (self.scroll..self.scroll + ROWS).contains(k)) {
+            let y = 118 + (k - self.scroll) as i32 * 22;
+            let f = cat.family_of(id).to_string();
+            let top = u.selectable_ranks(cat, &f).last().copied().unwrap_or(1);
+            let row = row_of(&f, top).or_else(|| cat.tier_one(&f));
+            let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
+            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::Slot(f.clone()), false);
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  {ap} AP  from worn gear", fam_name(&f)), BODY, 238.0, th().gold);
+            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
+            let card = vec![(fam_name(&f), th().gold), (format!("Skill from worn gear, {ap} AP"), th().info), (desc, th().text), ("Open while the item is worn: it takes no slot, and taking the item off removes it.".into(), th().dim)];
+            ui.push(format!("skills.worn.{id}"), "row", fam_name(&f), Rect::new(366, y, 238, 20), true, false, None, card);
         }
         for (k, f) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
             let y = 118 + k as i32 * 22;
@@ -2922,6 +2951,56 @@ mod tests {
         let mut c = Character::new(&cx, &member, "skills");
         c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
         assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
+    }
+
+    /// AUDIT-05 (OFFHAND1) on the classic Skills tab: a worn item's skill closes the owned list read-only (open while
+    /// worn, no slot) and goes when the item comes off. The skill effect is test-only, on this test's own data.
+    #[test]
+    fn the_classic_skills_tab_shows_a_worn_items_skill_read_only() {
+        let (mut cx, member) = deck_cx(false);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        let owned = m.owned_families_anywhere(&cx.data);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the member does not own");
+        let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
+        rings.sort();
+        let ring = rings[0].clone();
+        let data = std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data");
+        std::sync::Arc::make_mut(&mut data.cat).items.get_mut(&ring).unwrap().effects.push(json!({"type": "skill", "skill": skill}));
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.insert("accessory_1".into(), ring);
+        let mut c = Character::new(&cx, &member, "skills");
+        // the worn rows close the list: scroll to its end (clamped to the last page)
+        c.scroll = usize::MAX;
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(c.terms.is_none(), "classic");
+        assert!(c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "the worn skill shows");
+        let worn = c.w.iter().find(|w| w.id == format!("skills.slot.worn.{skill}")).expect("its Worn chip");
+        assert!(!worn.enabled, "read-only: no slot");
+        let r = rect_of(&c, &format!("skills.worn.{skill}"));
+        assert!(r.x >= 310 && r.x + r.w <= 604 && r.y >= 114 && r.y + r.h <= 272, "inside the owned list: {r:?}");
+        cx.gs_mut().party.member_mut(&member).unwrap().equipment.shift_remove("accessory_1");
+        let mut c = Character::new(&cx, &member, "skills");
+        c.scroll = usize::MAX;
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
+    }
+
+    /// AUDIT-05: a derived-stat breakdown names a worn item's stat effect by its item (its tier, its family mastery),
+    /// never the raw `gear_effect` source; the bare kind reads as worn item effects.
+    #[test]
+    fn a_breakdown_names_the_item_behind_a_worn_stat_effect() {
+        let cx = crate::hud::hud_tests::game_cx();
+        let cat = &cx.data.cat;
+        let mut ids: Vec<&String> = cat.items.keys().collect();
+        ids.sort();
+        let (id, name) = (ids[0].clone(), cat.items[ids[0]].name.clone());
+        let src = |grant: &str| emberwake_rules::unit::gear_effect_source(grant);
+        assert_eq!(source_name(cat, &src(&format!("gear:{id}"))), name);
+        assert_eq!(source_name(cat, &src(&format!("gear:{id}:tier2"))), format!("{name} II"));
+        assert_eq!(source_name(cat, &src(&format!("gear:{id}:mastery"))), format!("{name} mastery"));
+        assert_eq!(source_name(cat, GEAR_EFFECT_SOURCE), "Worn item effects");
+        for grant in [format!("gear:{id}"), format!("gear:{id}:tier2"), format!("gear:{id}:mastery")] {
+            assert!(!source_name(cat, &src(&grant)).contains(GEAR_EFFECT_SOURCE), "{grant}");
+        }
     }
 
     /// D3-D6 end to end: the member owns a slottable passive and keystone (shipped rows picked by `slot`); slotting

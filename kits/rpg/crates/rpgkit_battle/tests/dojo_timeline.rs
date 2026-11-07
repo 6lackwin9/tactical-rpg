@@ -12,7 +12,7 @@ use rpgkit_battle::dojo::{DojoSession, HEROES};
 use rpgkit_battle::round_intent::{self, RoundIntent};
 use rpgkit_data::{Catalog, Deck, STATS};
 use rpgkit_rules::gear::{Equipment, Slot};
-use rpgkit_rules::ruleset::{Ruleset, AP_COST, DECK, POISE, ROUND_INTENT, TIMELINE};
+use rpgkit_rules::ruleset::{Ruleset, AP_COST, CLASSIC, DECK, POISE, ROUND_INTENT, TIMELINE};
 use rpgkit_rules::stats::roundi;
 use rpgkit_rules::build_unit;
 use serde_json::json;
@@ -24,6 +24,11 @@ const DUMMY_POISE: i32 = 40;
 const HEAVY_STAGGER: i32 = 12;
 
 fn catalog() -> Catalog {
+    Catalog::from_value(&catalog_value())
+}
+
+/// The fixture catalog's tables (`catalog`'s source).
+fn catalog_value() -> serde_json::Value {
     let atk = |id: &str, blocks: i32, ap: i32, stagger: i32| json!({"id": id, "name": id, "kind": "ATTACK", "round_intent": "assault", "level": 1, "blocks": blocks, "ap_cost": ap, "power_mult": 1.0, "stagger": stagger, "target_mode": "ENEMY"});
     let skills = vec![
         json!({"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"}),
@@ -40,12 +45,12 @@ fn catalog() -> Catalog {
         json!({"id": "t_brace", "name": "t_brace", "kind": "DEFEND", "round_intent": "guard", "level": 1, "blocks": 2, "ap_cost": 2, "mitigation": 0.3}),
     ];
     let unit = |id: &str, side: &str, poise: i32| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 400, "speed": 12, "attack_range": 1, "skill_cap": 5, "poise": poise});
-    Catalog::from_value(&json!({
+    json!({
         "skills": skills,
         "passives": [{"id": "t_tough", "name": "Tough", "slot": "passive", "effects": [{"type": "stat", "stat": "max_poise", "value": 5}]}],
         "items": [{"id": "t_sword", "name": "Sword", "item_type": "WEAPON", "base_power": 5}, {"id": "t_potion", "name": "Potion", "item_type": "CONSUMABLE", "starter_stash": true}],
         "units": [unit(HEROES[0], "party", 30), unit(HEROES[1], "party", 30), unit("training_dummy", "enemy", DUMMY_POISE)],
-    }))
+    })
 }
 
 /// The timeline ruleset of the fixture: the round intent, AP by `ap_cost`, poise and the deck (2 actives, 1 passive).
@@ -263,4 +268,20 @@ fn a_pip_break_staggers_the_dummy_next_round() {
     s.dummy_attack();
     let shown = rpgkit_rules::status::display_name(rpgkit_battle::poise::BREAK_STATUS).to_uppercase();
     assert_eq!((s.log.last().unwrap().outcome.as_str(), s.hero().hp), (shown.as_str(), hp), "staggered: no strike");
+}
+
+/// AUDIT-03: the Dojo builds its heroes under its starting (classic) row's wield terms (`Numbers::wield`), not the
+/// defaults: a catalog classic row with its own untrained terms reaches every hero's proficiency.
+#[test]
+fn the_dojo_builds_its_heroes_under_its_rulesets_wield_terms() {
+    let mut raw = catalog_value();
+    raw["rulesets"] = json!([{"id": CLASSIC, "name": "Classic", "rules": [], "untrained_power_mult": 0.5, "untrained_burden_add": 3, "req_discount_per_level": 1}]);
+    let cat = Catalog::from_value(&raw);
+    let want = Ruleset::of_or_classic(&cat, CLASSIC).numbers.wield();
+    assert_ne!(want, rpgkit_rules::stats::WieldRule::default(), "the fixture row sets its own terms");
+    let s = DojoSession::new(Arc::new(cat));
+    assert_eq!(s.heroes.len(), HEROES.len());
+    for h in &s.heroes {
+        assert_eq!(h.stats.proficiency.wield, want, "{}", h.name);
+    }
 }

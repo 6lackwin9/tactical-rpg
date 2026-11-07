@@ -819,12 +819,15 @@ impl Dojo {
             }
         };
         let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
+        // AUDIT-05 (OFFHAND1): the worn items' skills, read-only (open while worn, no slot)
+        let worn: Vec<String> = self.s.hero().gear_skills.clone();
+        let worn_lines = if worn.is_empty() { 0 } else { 1 + worn.len() as i32 };
         let orders: Vec<(String, Vec<String>)> = t.intents.iter().map(|i| (i.clone(), t.order(&shown, i))).collect();
         // INPUT1 FL3: the open opener's follow-up list (its header, entries, the skills to add, "Use the order")
         let open = self.follow_open.clone().filter(|op| orders.iter().any(|o| o.1.contains(op)));
         let (follow, adds) = open.as_ref().map(|op| (t.follow_list(&shown, op), t.follow_candidates(&shown, op))).unwrap_or_default();
         let follow_lines = if open.is_some() { 3 + follow.len().max(1) as i32 + adds.len() as i32 } else { 0 };
-        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + follow_lines + 3;
+        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + worn_lines + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + follow_lines + 3;
         let off = ui.scroll_begin("dojo.deck_scroll", b, lines * 9 + 20);
         let mut y = b.y + 2 - off;
         for (kind, label, takes) in DECK_KINDS {
@@ -860,6 +863,15 @@ impl Dojo {
             let n = name_of(kind, id);
             let label = format!("{n} [{}]{}", kind, if slotted { " slotted" } else if full { " full" } else { "" });
             ui.row(&format!("dojo.deck.owned.{kind}.{id}"), Rect::new(x0, y, b.w - 8, 8), &label, if slotted { th().dim } else { th().text }, (!slotted && !full).then(|| DAct::DeckSlot(kind, id.clone())), slotted, tip(&n, "Click to slot it in the first free slot of its bucket."));
+            y += 9;
+        }
+        if !worn.is_empty() {
+            ui.p.text(x0 as f32, y as f32, "Worn gear (no slot)", SMALL, th().info);
+            y += 9;
+        }
+        for id in &worn {
+            let n = name_of("active", cat.family_of(id));
+            ui.row(&format!("dojo.deck.worn.{id}"), Rect::new(x0, y, b.w - 8, 8), &format!("{n} [worn]"), th().gold, None, false, tip(&n, "Open while the item is worn: it takes no slot, and taking the item off removes it."));
             y += 9;
         }
         for (intent, list) in &orders {
@@ -1177,6 +1189,31 @@ mod tests {
         assert_eq!(dojo.s.deck_of(dojo.s.active).follow_ups.get(&op), Some(&vec![op.clone()]));
         dojo.act(&mut cx, DAct::FollowClear(op.clone()));
         assert!(!dojo.s.hero().deck.follow_ups.contains_key(&op), "Use the order empties it");
+    }
+
+    /// AUDIT-05 (OFFHAND1): the Deck window lists the hero's worn items' skills read-only (no slot action) after the
+    /// owned list. The skill effect is test-only, on this test's own data.
+    #[test]
+    fn the_deck_window_lists_worn_gear_skills_read_only() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
+        rings.sort();
+        let ring = rings[0].clone();
+        let mut dojo = Dojo::new(&cx);
+        pick(&mut cx, &mut dojo, TIMELINE);
+        let owned = dojo.s.hero().owned_families(&dojo.s.cat);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the hero does not own");
+        let mut item = cx.data.cat.items[&ring].clone();
+        item.effects.push(json!({"type": "skill", "skill": skill}));
+        let cat = dojo.s.cat.clone();
+        let a = dojo.s.active;
+        dojo.s.heroes[a].inventory.equip(emberwake_rules::gear::Equipment::new(&item), emberwake_rules::gear::Slot::Accessory1);
+        dojo.s.heroes[a].sync_from_stats_and_gear(&cat);
+        assert!(dojo.s.hero().gear_skill(&skill));
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = dojo.w.iter().find(|w| w.id == format!("dojo.deck.worn.{skill}")).expect("the worn skill's row");
+        assert!(w.action.is_none(), "read-only: no slot");
     }
 
     /// DERIVE1 4.4: the Derived Stats window lists the catalog rows shown on the Dojo after the built-in numbers, each

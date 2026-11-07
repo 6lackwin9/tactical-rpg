@@ -27,7 +27,8 @@ const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("area", &["area"]),
     ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
-    ("guard", &["mitigation"]),
+    // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
+    ("guard", &["mitigation", "guard_rounds"]),
     ("focus", &["boost", "boost_rounds"]),
     ("jump", &["jump_tiles"]),
     ("flow", &["ends_in_stance"]),
@@ -720,14 +721,6 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let Some(f) = fields("content", "skills").iter().map(json::dict).find(|f| json::s(f, "key") == key) else { continue };
         if !json::deep_equal(json::get(e, key), json::get(f, "default")) {
             out.push(format!("{} belongs to {} skills, not {kind}.", json::s(f, "label"), kinds_with(key).join("/")));
-        }
-    }
-    // S1.2-S4: `guard_rounds` is a row-only key until its schema entry (the checks golden's frozen family rows lack it)
-    if e.contains_key("guard_rounds") {
-        if kind != "DEFEND" {
-            out.push(format!("Guard rounds belong to DEFEND skills, not {kind}."));
-        } else if !(1..=5).contains(&json::i(e, "guard_rounds", 1)) {
-            out.push("Guard rounds must be 1-5.".into());
         }
     }
     let status_id = json::s(e, "status_effect");

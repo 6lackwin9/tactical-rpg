@@ -479,7 +479,10 @@ fn bar_mode_ignores_the_pip_numbers() {
         let h = Terms { windup: rng.randi_range(0, 1) == 1, held: rng.randi_range(0, 3) == 0, sure, chance: rng.randi_range(0, 1) == 1 };
         let taken = rng.randi_range(0, 120);
         let got = poise::settle(&n, &st, taken, h);
-        assert_eq!((got.after, got.verdict, got.pips), (bar_reference(&n, &st, taken, h).0, bar_reference(&n, &st, taken, h).1, st.pips), "{st:?} taken {taken} {h:?}");
+        let (after, verdict) = bar_reference(&n, &st, taken, h);
+        // AUDIT-02: a break settles at 0 value and 0 pips
+        let want = if matches!(verdict, Verdict::Breaks(_)) { (0, verdict, 0) } else { (after, verdict, st.pips) };
+        assert_eq!((got.after, got.verdict, got.pips), want, "{st:?} taken {taken} {h:?}");
     }
 
     let plain = session(timeline(json!({"break_chance_scale": 1.0})));
@@ -712,4 +715,32 @@ fn the_break_stagger_and_an_ap_debt_stagger_are_one_instance() {
     assert!(roll(true, false).0, "the debt alone staggers");
     assert_eq!(roll(true, true), one, "both: not doubled");
     assert_eq!(roll(false, false), (false, 0, Vec::new()));
+}
+
+/// AUDIT-02: a break leaves the bar at 0 value and 0 pips in `settle`'s result and `forecast`'s (their doc contracts),
+/// a `sure` break into a windup whose stagger alone leaves poise too, under `bar` and under pips; a held bar keeps its
+/// value.
+#[test]
+fn a_sure_break_settles_and_forecasts_at_zero_poise_and_pips() {
+    for n in [Numbers::default(), pips_numbers()] {
+        let st = full(&n, TANK);
+        let sure = Terms { windup: true, held: false, sure: Some(BreakCause::Sure), chance: true };
+        let s = poise::settle(&n, &st, 1, sure);
+        assert_eq!((s.verdict, s.after, s.pips), (Verdict::Breaks(BreakCause::Sure), 0, 0), "{:?}", n.poise_mode);
+        let out = poise::settle(&n, &st, 1, Terms { windup: false, ..sure });
+        assert_eq!(out.verdict, Verdict::Holds, "out of a windup it only staggers");
+        assert!(out.after > 0, "{:?}", n.poise_mode);
+    }
+    for rules in [timeline(json!({})), pips_rules()] {
+        let s = session(rules);
+        let w = s.w.clone();
+        let mut res = Resolver::new(BLOCKS, 1);
+        let h = hit(&w, FOE, HERO, "p_heavy");
+        running(&mut res, FOE, h, 1, 3);
+        let mut cmd = hit(&w, HERO, FOE, "p_sure");
+        cmd.impact.stagger = 1;
+        let fc = poise::forecast(&w, &res.scheduled, FOE, bar(&w, FOE), 2, &cmd.impact, cmd.block_cost, false, false);
+        assert!(fc.windup && fc.taken < bar(&w, FOE).value, "the stagger alone leaves poise");
+        assert_eq!((fc.verdict, fc.after, fc.pips_after), (Verdict::Breaks(BreakCause::Sure), 0, 0));
+    }
 }

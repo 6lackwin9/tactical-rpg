@@ -17,9 +17,21 @@ pub const FORESIGHT_RANGE_MAX: i32 = 8;
 pub const STAGGER_TAKEN_MULT_MAX: f64 = 2.0;
 /// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this).
 pub const REACH_WEAPON_REACH: i32 = 2;
-/// U3.2-S4 (FB-35): the source of the stat modifiers worn items' effects add (their `stat` effects and their families'
-/// mastery passives'); every sync takes them all off before it applies the worn gear again.
+/// U3.2-S4 (FB-35): the source kind of the stat modifiers worn items' effects add (their `stat` effects and their
+/// families' mastery passives'); every sync takes them all off before it applies the worn gear again. AUDIT-05: each
+/// modifier names its item as `gear_effect:<grant source>` (`gear_effect_source`), so a breakdown can name the item.
 pub const GEAR_EFFECT_SOURCE: &str = "gear_effect";
+
+/// AUDIT-05: the stat modifier source of a worn item's effect granted under `source` (`gear:<item>`,
+/// `gear:<item>:tier<n>`, `gear:<item>:mastery`): `gear_effect:<source>`.
+pub fn gear_effect_source(source: &str) -> String {
+    format!("{GEAR_EFFECT_SOURCE}:{source}")
+}
+
+/// AUDIT-05: a stat modifier source of the `GEAR_EFFECT_SOURCE` kind (the kind alone or `gear_effect:<source>`).
+pub fn is_gear_effect_source(source: &str) -> bool {
+    source.strip_prefix(GEAR_EFFECT_SOURCE).is_some_and(|r| r.is_empty() || r.starts_with(':'))
+}
 
 /// RULESET1 P6, tasks 1.4: a passive `stagger_taken` effect: stagger from an action of at most `max_blocks` blocks
 /// (0 = any action) is multiplied by `mult` (a Snap-proof trait: mult 0, max_blocks 1).
@@ -437,7 +449,7 @@ impl Unit {
     pub fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
         self.stats.remove_modifier("gear");
         // U3.2-S4 (FB-35): what the worn items' effects added goes first (tier criteria never read it)
-        self.stats.remove_modifier(GEAR_EFFECT_SOURCE);
+        self.stats.modifiers.retain(|m| !is_gear_effect_source(&m.source));
         let bonuses: Vec<(String, i32)> =
             self.inventory.gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
         for (k, v) in bonuses {
@@ -487,13 +499,14 @@ impl Unit {
         self.gear_hit_sources.clear();
         self.gear_skills.clear();
         self.gear_crit = 0.0;
-        let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
+        // AUDIT-01: a 2H pair's stowed weapon grants nothing while it is not ready (`Inventory::ready_gear`)
+        let item_fx: Vec<(String, Vec<Value>)> = self.inventory.ready_gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
         for (src, fx) in item_fx {
             self.apply_effects(cat, &fx, &src, true);
         }
         let tier_fx: Vec<(String, Vec<Value>)> = self
             .inventory
-            .gear()
+            .ready_gear()
             .flat_map(|e| e.active_tier_effects(&self.stats).into_iter().map(|(n, fx)| (format!("gear:{}:tier{}", e.id(), n), fx)).collect::<Vec<_>>())
             .collect();
         for (src, fx) in tier_fx {
@@ -504,11 +517,12 @@ impl Unit {
 
     /// U3.2-S4 (U3 Level 2 and Level 3): each worn gear family once, at the unit's proficiency in it: from level 2 its
     /// `level2_bonus` crit (the burden part is `worn_burden`'s), at level 3 its `level3_passive`'s effects, applied as the
-    /// item's (`gear:<item>:mastery`; worn gear's grants only, rebuilt with them on every sync).
+    /// item's (`gear:<item>:mastery`; worn gear's grants only, rebuilt with them on every sync). AUDIT-01: a 2H pair's
+    /// stowed weapon counts no family while it is not ready (`Inventory::ready_gear`).
     fn apply_family_bonuses(&mut self, cat: &Catalog) {
         let mut seen: Vec<String> = Vec::new();
         let worn: Vec<(String, String, rpgkit_data::FamilyBonus, String)> =
-            self.inventory.gear().map(|e| (e.id().to_string(), e.weapon_type().to_string(), e.item.level2_bonus, e.item.level3_passive.clone())).collect();
+            self.inventory.ready_gear().map(|e| (e.id().to_string(), e.weapon_type().to_string(), e.item.level2_bonus, e.item.level3_passive.clone())).collect();
         for (item, family, level2, level3) in worn {
             if family.is_empty() || seen.contains(&family) {
                 continue;
@@ -598,8 +612,9 @@ impl Unit {
         let int = m.value as i32;
         match &m.target {
             Target::Stat { stat, tag, percent } => {
-                // U3.2-S4 (FB-35): a worn item's stat effect under the gear source every sync takes off
-                let source = if gear { GEAR_EFFECT_SOURCE.to_string() } else { format!("passive:{id}") };
+                // U3.2-S4 (FB-35): a worn item's stat effect under the gear source every sync takes off (AUDIT-05: naming
+                // its item)
+                let source = if gear { gear_effect_source(id) } else { format!("passive:{id}") };
                 let mut sm = StatModifier::permanent(stat, int, &source, tag);
                 // DERIVE1 4.1: the optional percent counts only on a derived id (base stats stay flat-only)
                 if cat.derived_stats.contains_key(stat) {
@@ -1050,6 +1065,11 @@ impl<'a> UnitBuild<'a> {
     /// The row alone (a catalog unit: no overrides, no saved state).
     pub fn row(row: &'a UnitDef, default_ap: i32, deck: Option<&'a DeckRule>) -> Self {
         Self { row, default_ap, deck, wield: crate::stats::WieldRule::default(), over: Overrides::default(), growth: None }
+    }
+
+    /// AUDIT-03: the build under a ruleset's wield terms (`Numbers::wield`).
+    pub fn with_wield(self, wield: crate::stats::WieldRule) -> Self {
+        Self { wield, ..self }
     }
 }
 

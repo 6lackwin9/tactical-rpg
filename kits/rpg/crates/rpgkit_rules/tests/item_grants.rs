@@ -4,7 +4,8 @@
 //!
 //! - a `skill` effect: the skill is owned, unlocked and open while worn with no slot (no loadout or deck slot; a deck
 //!   that names its family does not slot it), and gone when the item comes off; the hand rule decides what is worn;
-//! - a `stat` effect: a modifier under `GEAR_EFFECT_SOURCE`, never stacking over syncs;
+//! - a `stat` effect: a modifier under `GEAR_EFFECT_SOURCE` naming its item (`gear_effect:gear:<item>`, AUDIT-05),
+//!   never stacking over syncs;
 //! - a `proficiency` effect on an item applies nothing (training stays the class's and the drills');
 //! - the family's Level-2 bonus (crit points, or burden off each item) from proficiency 2, each family once; its Level-3
 //!   passive from proficiency 3, applied as the item's effects and taken off with it.
@@ -12,7 +13,7 @@
 use rpgkit_data::{Catalog, ItemDef, ITEM_FAMILY_LEVEL2, ITEM_FAMILY_LEVEL3};
 use rpgkit_rules::gear::{Equipment, Slot};
 use rpgkit_rules::ruleset::DeckSlots;
-use rpgkit_rules::unit::GEAR_EFFECT_SOURCE;
+use rpgkit_rules::unit::{gear_effect_source, is_gear_effect_source};
 use rpgkit_rules::{build_from, build_unit, build_unit_in, damage, DeckRule, Growth, Unit, UnitBuild};
 use serde_json::{json, Value};
 
@@ -127,10 +128,24 @@ fn a_worn_stat_effect_is_rebuilt_every_sync_and_taken_off() {
         u.sync_from_stats_and_gear(&cat);
         assert_eq!(u.stats.stat("STR", None), base + STR_BONUS, "no stacking over syncs");
     }
-    assert!(u.stats.modifiers.iter().any(|m| m.source == GEAR_EFFECT_SOURCE));
+    assert!(u.stats.modifiers.iter().any(|m| m.source == gear_effect_source("gear:strong_belt")));
     take_off(&cat, &mut u, Slot::Accessory1);
     assert_eq!(u.stats.stat("STR", None), base);
-    assert!(!u.stats.modifiers.iter().any(|m| m.source == GEAR_EFFECT_SOURCE));
+    assert!(!u.stats.modifiers.iter().any(|m| is_gear_effect_source(&m.source)));
+}
+
+/// AUDIT-05: a worn item's stat effect and its family's Level-3 passive stat each keep their item as the modifier's
+/// source (`gear_effect:gear:<item>`, `gear_effect:gear:<item>:mastery`), never the bare kind, so a breakdown can name
+/// the item; the kind test covers both and nothing else.
+#[test]
+fn a_worn_stat_effect_names_its_item_as_the_source() {
+    let cat = catalog();
+    let mut u = unit(&cat, "master");
+    wear(&cat, &mut u, &cat.items["strong_belt"].clone(), Slot::Accessory1);
+    wear(&cat, &mut u, &with_family(&cat, "plain_sword", json!({}), "sword_mastery"), Slot::MainHand);
+    let gear: Vec<&str> = u.stats.modifiers.iter().filter(|m| is_gear_effect_source(&m.source)).map(|m| m.source.as_str()).collect();
+    assert_eq!(gear, ["gear_effect:gear:strong_belt", "gear_effect:gear:plain_sword:mastery"]);
+    assert!(is_gear_effect_source("gear_effect") && !is_gear_effect_source("gear_effects") && !is_gear_effect_source("gear"));
 }
 
 #[test]
@@ -152,14 +167,48 @@ fn the_hand_rule_decides_which_worn_skills_hold() {
     assert!(both.inventory.get(Slot::OffHand).is_none() && !both.gear_skill("orb_bolt"), "the orb is not held under the staff");
     let alone = build_from(&cat, UnitBuild { growth: Some(growth(vec![(Slot::OffHand, orb)])), ..UnitBuild::row(&cat.units["adept"], 0, None) }).unit;
     assert!(alone.gear_skill("orb_bolt"), "held, it grants its skill");
-    // an off-hand weapon held beside a two-handed main (the weapon switch) is worn: its skill holds whichever is ready
+    // AUDIT-01: an off-hand weapon held beside a two-handed main (the weapon switch) grants its skill only while ready
     let mut u = unit(&cat, "adept");
     u.inventory.equip(Equipment::new(&staff), Slot::MainHand);
     wear(&cat, &mut u, &cat.items["parry_dagger"].clone(), Slot::OffHand);
-    assert!(u.inventory.needs_weapon_switch() && u.gear_skill("parry_jab"));
+    assert!(u.inventory.needs_weapon_switch() && !u.gear_skill("parry_jab"), "stowed behind the ready staff");
     u.inventory.toggle_active_weapon();
     u.sync_from_stats_and_gear(&cat);
-    assert!(u.gear_skill("parry_jab"));
+    assert!(u.gear_skill("parry_jab"), "ready");
+}
+
+/// AUDIT-01: in a 2H main + off-hand weapon pair only the ready weapon counts: the stowed one grants no item effect, no
+/// Level-2 crit and no Level-3 passive until the switch readies it (and the other hand's stop counting then); without
+/// a pair (the 1H weapon alone in the off hand) it counts as worn.
+#[test]
+fn a_stowed_backup_weapon_grants_nothing_until_it_is_ready() {
+    let cat = catalog();
+    let sword = with_family(&cat, "show_sword", json!({"crit": CRIT}), "sword_mastery");
+    let mut staff_raw = cat.items["great_staff"].raw.clone();
+    staff_raw.insert("effects".into(), json!([{"type": "skill", "skill": "orb_bolt"}]));
+    let staff = ItemDef::from_obj(&staff_raw);
+    let dex = |u: &Unit| u.stats.stat("DEX", None);
+    let mut plain = unit(&cat, "master");
+    wear(&cat, &mut plain, &staff, Slot::MainHand);
+    let base_dex = dex(&plain);
+    let mut u = unit(&cat, "master");
+    wear(&cat, &mut u, &staff, Slot::MainHand);
+    wear(&cat, &mut u, &sword, Slot::OffHand);
+    assert!(u.inventory.needs_weapon_switch() && !u.inventory.is_offhand_active());
+    assert!(u.gear_skill("orb_bolt"), "the ready staff's effect counts");
+    assert!(!u.gear_skill("flourish"), "the stowed sword's item effect and mastery skill do not");
+    assert_eq!(u.gear_crit, 0.0, "no stowed Level-2 crit");
+    assert_eq!(dex(&u), base_dex, "no stowed Level-3 passive stat");
+    u.inventory.toggle_active_weapon();
+    u.sync_from_stats_and_gear(&cat);
+    assert!(u.gear_skill("flourish") && !u.gear_skill("orb_bolt"), "the switch readies the sword and stows the staff");
+    assert_eq!(u.gear_crit, CRIT);
+    assert!(dex(&u) > base_dex, "the ready sword's Level-3 passive applies");
+    u.inventory.toggle_active_weapon();
+    u.sync_from_stats_and_gear(&cat);
+    assert!(u.gear_skill("orb_bolt") && !u.gear_skill("flourish") && u.gear_crit == 0.0 && dex(&u) == base_dex, "switched back");
+    take_off(&cat, &mut u, Slot::MainHand);
+    assert!(!u.inventory.needs_weapon_switch() && u.gear_skill("flourish") && u.gear_crit == CRIT, "no pair: the off-hand sword counts");
 }
 
 #[test]

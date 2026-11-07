@@ -161,6 +161,9 @@ pub struct Prebuilt {
     pub profile: AiProfile,
     /// The party member id (GameEncounter.hero_key).
     pub key: String,
+    /// AUDIT-04 (RULESET1 TQ23 (a)): the intent it starts a round-intent battle in (a member's character's
+    /// `default_intent`, else its unit row's; "" = none).
+    pub default_intent: String,
 }
 
 /// One unit at one point of a round (BlockSnapshot: the state the screens show).
@@ -367,6 +370,10 @@ impl Session {
         // RULESET1 9 D1-D4: under the deck rule every unit fights with its deck (classic: None, units as today)
         let deck = DeckRule::of(&def.ruleset);
         for p in party {
+            // AUDIT-04: a prebuilt hero starts in its default intent as a roster unit does
+            if !p.default_intent.is_empty() {
+                default_intents.push((built.len(), p.default_intent));
+            }
             profiles.insert(built.len(), p.profile);
             hero_keys.insert(built.len(), p.key);
             art.push(p.art);

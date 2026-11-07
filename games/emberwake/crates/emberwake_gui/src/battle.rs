@@ -719,7 +719,7 @@ impl BattleScreen {
             } else {
                 crate::screens::character_art(&d, character)
             };
-            party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone() });
+            party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone(), default_intent: field.default_intent });
             members.push((m.id.clone(), field.pouch_unloaded));
         }
         // CAMPAIGN1 P3, W6: at zero upkeep the party starts with less AP (read before the session, logged once)

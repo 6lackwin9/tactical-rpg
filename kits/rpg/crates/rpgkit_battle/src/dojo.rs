@@ -259,9 +259,11 @@ impl DojoSession {
         let mut heroes = Vec::new();
         let mut classes = Vec::new();
         let mut hero_ids = Vec::new();
+        // CLN-44: the Dojo starts on the catalog's classic row; AUDIT-03: its heroes are built under its wield terms
+        let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
         for id in HEROES {
             let Some(def) = cat.units.get(id) else { continue };
-            let mut u = build_from(&cat, UnitBuild::row(def, 0, None)).unit;
+            let mut u = build_from(&cat, UnitBuild::row(def, 0, None).with_wield(ruleset.numbers.wield())).unit;
             u.max_ap = HERO_AP;
             u.ap = HERO_AP;
             heroes.push(u);
@@ -277,8 +279,6 @@ impl DojoSession {
         stash.sort();
         let weight = Self::weight_of(&cat, &stash);
         let carry = carry::apply(&cat, &mut heroes, weight);
-        // CLN-44: the Dojo starts on the catalog's classic row
-        let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
         Self {
             cat,
             heroes,
@@ -407,10 +407,10 @@ impl DojoSession {
         let hero_def = self.hero_def(self.active).unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
         let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [DUMMY], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
         let def = EncounterDef::from_obj_with(row.as_object().expect("an object"), self.ruleset.clone());
-        let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into() };
+        let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into(), default_intent: d.default_intent.clone() };
         let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
         if setup.partner.is_some() {
-            let mut partner = build_from(&self.cat, UnitBuild::row(dummy_def, 0, self.deck_rule().as_ref())).unit;
+            let mut partner = build_from(&self.cat, UnitBuild::row(dummy_def, 0, self.deck_rule().as_ref()).with_wield(self.ruleset.numbers.wield())).unit;
             partner.name = format!("{} 2", self.dummy.name);
             party.push(prebuilt(partner, dummy_def, "partner"));
         }
@@ -1478,6 +1478,8 @@ impl DojoSession {
         if !self.hero_mut().inventory.toggle_active_weapon() {
             return self.fail("Switch Weapon", "Nothing to switch: pair a 2H weapon with an off-hand weapon (1H weapons attack with both hands freely)");
         }
+        // AUDIT-01: the ready weapon's effects and family bonuses count, the stowed one's not (a resync)
+        self.changed();
         let ready = self.hero().inventory.active_weapon().map(|e| e.item.name.clone()).unwrap_or_default();
         let breakdown = format!("[color=#38bdf8][b]Switch Weapon[/b][/color]  costs 1 block.\nActive weapon is now [b]{ready}[/b]; the other weapon is sheathed until you switch back.");
         let target = self.hero().name.clone();

@@ -13,7 +13,8 @@ use aegis_core::value::{self, to_int, to_str, Obj};
 use emberwake_data::{Catalog, ClassDef, PassiveDef, TriggerRow};
 use emberwake_rules::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use emberwake_rules::stats::{Proficiency, StatModifier};
-use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, HitSource, StaggerTaken, FORESIGHT_RANGE_MAX, GEAR_EFFECT_SOURCE, STAGGER_TAKEN_MULT_MAX};
+use emberwake_rules::unit::{BandApplied, ForcedTraits, HeldMeter, HeldTrigger, HitSource, StaggerTaken, FORESIGHT_RANGE_MAX, STAGGER_TAKEN_MULT_MAX};
+use emberwake_rules::unit::gear_effect_source;
 use emberwake_rules::{build_unit, Unit};
 use indexmap::IndexMap;
 use serde_json::{json, Map, Value};
@@ -65,7 +66,8 @@ fn assert_same(a: &Unit, b: &Unit, what: &str) {
 }
 
 // ---- The oracle: the raw-JSON reader as it was before U4.2-S1 (unit.rs, stats.rs), kept verbatim ------------------
-// U3.2-S4 (FB-35) changed its gear branch on purpose, marked below: a worn item's `stat` goes under GEAR_EFFECT_SOURCE,
+// U3.2-S4 (FB-35) changed its gear branch on purpose, marked below: a worn item's `stat` goes under GEAR_EFFECT_SOURCE
+// (AUDIT-05: `gear_effect_source`, naming its item),
 // its `skill` to `gear_skills` (both rebuilt on every sync), and gear applies no `proficiency`. U4.2-S4 (FB-30) adds
 // the source records of the hit-time targets (`old_record`): skill_potency, stagger_taken and forced_move tiles.
 
@@ -101,7 +103,8 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
                     }
                 }
                 let stat = value::string(e, "stat", "");
-                let source = if gear { GEAR_EFFECT_SOURCE.to_string() } else { format!("passive:{id}") };
+                // AUDIT-05 (on purpose): the gear source names its item (`gear_effect:<source>`)
+                let source = if gear { gear_effect_source(&id) } else { format!("passive:{id}") };
                 let mut m = StatModifier::permanent(&stat, value::int(e, "value", 0), &source, &tag);
                 if cat.derived_stats.contains_key(&stat) {
                     m.percent = value::float(e, "percent", 0.0);

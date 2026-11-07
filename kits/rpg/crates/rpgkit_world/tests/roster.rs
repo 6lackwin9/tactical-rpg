@@ -12,6 +12,7 @@
 //! world) with the battle start's `party_min` read in the fight's world.
 
 use rpgkit_battle::encounter::PartyFate;
+use rpgkit_battle::round_intent::{self, RoundIntent};
 use rpgkit_battle::session::{Prebuilt, Session};
 use rpgkit_battle::world::AiProfile;
 use rpgkit_rules::DeckRule;
@@ -75,9 +76,14 @@ fn own(w: &str) -> Value {
 
 /// A classic world `w`, a timeline world `tw` with the deck rule, and `ow` whose class overlay replaces the path.
 fn data() -> Data {
+    data_with(|_, _| {})
+}
+
+/// `data()` with `edit` applied to its catalog and worlds values first.
+fn data_with(edit: impl FnOnce(&mut Value, &mut Value)) -> Data {
     let atk = |id: &str| json!({"id": id, "name": id, "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"});
     let path: serde_json::Map<String, Value> = PATH.iter().map(|f| (f.to_string(), json!(1))).collect();
-    let catalog = json!({
+    let mut catalog = json!({
         "classes": [{"id": "drill", "name": "Drill", "skill_path": path, "base_stats": {"STR": 12, "DEX": 10, "INT": 6, "CONS": 12, "PERC": 10, "KNOW": 10}}],
         "skills": [
             {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"},
@@ -102,7 +108,7 @@ fn data() -> Data {
         "rulesets": [{"id": "timeline", "name": "Timeline", "rules": ["round_intent", "deck"], "basics": ["move", "rest", "strike", "active_guard"],
             "deck_slots": {"active": 1, "passive": 1, "keystone": 1}}]
     });
-    let worlds = json!({
+    let mut worlds = json!({
         "w": {"manifest": {"id": "w"}, "own": own("w")},
         "tw": {"manifest": {"id": "tw", "ruleset": "timeline"}, "own": own("tw")},
         "ow": {"manifest": {"id": "ow", "classes": {"drill": {"name": "Bash-Hand", "skill_path": {PATH[1]: 1}}}}, "own": own("ow")},
@@ -126,6 +132,7 @@ fn data() -> Data {
              "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "flag": "road_held", "then": "capture", "result_line": "{name} held the road."}}
         ]))}}
     });
+    edit(&mut catalog, &mut worlds);
     // a rising XP curve for the join level (BK5)
     Data::from_values(&catalog, &worlds, &json!({"xp_curve": {"xp_to_next": [10, 20, 30, 40]}}))
 }
@@ -244,7 +251,7 @@ fn hero_ends_pair_the_fielded_members_with_the_allies() {
     let mut fielded = Vec::new();
     for m in &members {
         let f = roster::field_unit(&d, &gs_of(&d, "w"), m, "w").unwrap();
-        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone() });
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
         fielded.push((m.id.clone(), f.pouch_unloaded));
     }
     let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", "fight"));
@@ -734,13 +741,35 @@ fn then_capture_and_kill_depart_the_stayer_before_the_table() {
     assert_eq!((gs.party.stash.get("ks_founder"), gs.party.departed_of("founder").map(|r| r.keepsake.as_str())), (Some(&1), Some("ks_founder")));
 }
 
+/// AUDIT-04 (RULESET1 TQ23 (a), U4.2-S3): a fielded member carries its character's `default_intent`, else its base
+/// unit's, and a prebuilt party hero starts a round-intent battle in it as a roster unit does.
+#[test]
+fn a_fielded_hero_starts_in_its_default_intent() {
+    let d = data_with(|catalog, worlds| {
+        catalog["units"][0]["default_intent"] = json!("support");
+        worlds["tw"]["own"]["characters"][0]["default_intent"] = json!("guard");
+    });
+    let gs = gs_of(&d, "tw");
+    let mut party = Vec::new();
+    for (c, want) in [("founder", "guard"), ("second", "support")] {
+        let m = new_game::hero_from_character(&d, "tw", c).unwrap();
+        let f = roster::field_unit(&d, &gs, &m, "tw").unwrap();
+        assert_eq!(f.default_intent, want, "{c}: the character's, else the base unit's");
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
+    }
+    let def = battle::encounter_def(&d, "tw", d.resolve("tw", "encounters", "fight"));
+    let s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: "tw".into() }, party);
+    let intents: Vec<Option<RoundIntent>> = s.w.allies[..2].iter().map(|&a| round_intent::intent_of(&s.w, a)).collect();
+    assert_eq!(intents, [Some(RoundIntent::Guard), Some(RoundIntent::Support)]);
+}
+
 #[test]
 fn fight_end_reads_then_from_the_session() {
     let d = data();
     let party = |w: &str| {
         let m = new_game::hero_from_character(&d, w, "founder").unwrap();
         let f = roster::field_unit(&d, &gs_of(&d, w), &m, w).unwrap();
-        vec![Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone() }]
+        vec![Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent }]
     };
     for (enc, then) in [("winch", "capture"), ("winch_plain", "none"), ("fight", "")] {
         let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", enc));

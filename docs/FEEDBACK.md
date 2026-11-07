@@ -9,8 +9,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 | Task / Sub-block | Stage / Status | Branch / Commit | Notes |
 | --- | --- | --- | --- |
-| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3. |
-| R1 path (READY R1-8..R1-9) | W2-3 slices 1-2 done; slice 3 (`S2.2-S4` break queues stagger) in review | `claude/s22s4-break-stagger` | Then AUDIT-R1 (AUDIT-01..07), the R1 release PR. |
+| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3 and -S4. |
+| R1 path (READY R1-9) | W2-3 done; AUDIT-R1 (AUDIT-01..07) in review | `claude/audit-r1` | Then the R1 release PR. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
@@ -58,6 +58,22 @@ FB-01 to FB-84 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: The `stagger` row's `lock_blocks: [1, 4]` is read as a list since S1.2-S2 (stagger locks blocks 1 and 4; stun 1 and 2), so a staggered unit keeps blocks 2, 3, 5 and 6. S2's wording can read as 1 through 4. S2.2-S4 uses the row as it is.
 - **Recommendation**: (A, default) keep the list reading; (B) read the row as a range (stagger 1-4, stun 1-2): a bigger balance lever that moves `timeline_golden` and `sim_golden` again and needs naming. Either way a balance look at the combined break lever (lost round, stagger next round, 0.5 repeat) after R1.
+
+### FB-90: AUDIT-R1 (AUDIT-01..07) built; checks_golden re-recorded
+
+- **Spec**: `docs/READY.md` AUDIT-R1 (R1-9), AUDIT-01..07
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: AUDIT-01: in a 2H + 1H pair only the ready weapon's effects, tier effects, Level 2 crit and Level 3 passive count (`Inventory::ready_gear`); the Dojo's Switch Weapon resyncs. AUDIT-02: `settle` and `forecast` leave 0 poise and 0 pips on any break, sure breaks included. AUDIT-03: Dojo heroes and the planner partner use the ruleset's wield terms (`UnitBuild::with_wield`). AUDIT-04: `Fielded` / `Prebuilt.default_intent` (character, else unit), seeded by `Session::start_with`. AUDIT-05: worn stat effects are sourced `gear_effect:<grant>`; stat breakdowns name the item, tier or mastery; worn skills show read-only on the classic Skills tab and in the Dojo Deck window. AUDIT-06: the `classes.proficiency` help and the PERC tooltip no longer mention block cost, hard gates or PERC weapons. AUDIT-07: `guard_rounds` is a schema field (int 1-5, DEFEND, guard section, family-wide) and the row-only check is retired; `level2_bonus` / `level3_passive` were already registered (U3.2-S4). Re-recorded (named by the row): `checks_golden`, 19 cases (riposte x9, shield_wall x10) gain "guard rounds must match across all tiers" because the frozen fixture rows lack the key (as `position` already shows); one shield_wall case loses a token error behind it. Every other golden unchanged. 10 new tests, 4 updated.
+- **Recommendation**: HISTORY: "AUDIT-R1: `guard_rounds` schema field (row-only check retired); a stowed 2H-pair weapon grants nothing; re-recorded on purpose: `checks_golden` (19 cases)"; GAME_BRIEF gear: only the ready weapon of a 2H pair counts, Switch Weapon swaps them; GAME_BRIEF poise: a break, sure break included, leaves 0 poise and 0 pips.
+
+### FB-91: AUDIT-01 against OFFHAND1: does a stowed weapon keep its granted skill?
+
+- **Spec**: `docs/READY.md` AUDIT-01; `docs/sessions/U3_GEAR.md` FB-35 ("worn item skills are always active while worn")
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: Built as AUDIT-01 says: a stowed backup weapon in a 2H + 1H pair grants nothing, its `grant_skill` included, until Switch Weapon readies it (the earlier hand-rule test was flipped to match). FB-35 can read as keeping that skill while the weapon is merely carried.
+- **Recommendation**: Confirm (default, as built), or exempt `grant_skill` from AUDIT-01. Also: should the tier comparison read a missing key as its schema default (a one-off checks_golden move of about 73 lines that clears the frozen-fixture `position` and `guard_rounds` artefacts)? Should the Dojo dummy also use the ruleset's wield terms? Also: a stowed weapon's tier `stat_bonuses`, flat stat bonuses, mitigation and burden still apply (only item effects, tier effects and family bonuses read the ready gear): should they follow AUDIT-01 too, or stay as "worn"?
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

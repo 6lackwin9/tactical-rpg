@@ -237,7 +237,7 @@ fn any_unit_npc_included_fights_through_the_one_builder() {
     let template = d.cat.units.values().find(|u| u.side == "enemy" && u.stat_mode == "derived").map(|u| u.id.clone()).expect("an enemy template");
     let fixed = d.cat.units.values().find(|u| u.stat_mode == "fixed").map(|u| u.id.clone()).expect("a fixed unit");
     let built = progression::build_played(&d, &hero, &w).expect("the hero builds");
-    let party = vec![Prebuilt { profile: AiProfile::for_unit(&d.cat, &built.def), unit: built.unit, art: String::new(), palette: String::new(), key: hero.id.clone() }];
+    let party = vec![Prebuilt { profile: AiProfile::for_unit(&d.cat, &built.def), default_intent: built.def.default_intent.clone(), unit: built.unit, art: String::new(), palette: String::new(), key: hero.id.clone() }];
     let mut row = d.own_entries(&w, "encounters").first().expect("an encounter").clone();
     for k in ["phases", "guests", "protect", "waves", "objective", "stay_behind", "party_fates"] {
         row.shift_remove(k);

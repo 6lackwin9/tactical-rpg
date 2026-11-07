@@ -335,6 +335,22 @@ impl Inventory {
         self.equipped.iter().map(|(_, e)| e)
     }
 
+    /// AUDIT-01: the hand of a 2H main + off-hand weapon pair that is not ready (`needs_weapon_switch`): the main hand
+    /// while the off-hand weapon is active, else the off hand. None without a pair.
+    pub fn stowed_slot(&self) -> Option<Slot> {
+        if !self.needs_weapon_switch() {
+            return None;
+        }
+        Some(if self.off_active { Slot::MainHand } else { Slot::OffHand })
+    }
+
+    /// AUDIT-01: worn gear without the stowed weapon of a 2H pair (`stowed_slot`): the gear whose effects, tier
+    /// effects and family bonuses count (a backup weapon grants none of them while it is not ready).
+    pub fn ready_gear(&self) -> impl Iterator<Item = &Equipment> {
+        let stowed = self.stowed_slot();
+        self.equipped.iter().filter(move |(s, _)| Some(*s) != stowed).map(|(_, e)| e)
+    }
+
     pub fn total_flat_mitigation(&self, stats: Option<&CharacterStats>) -> i32 {
         self.gear().map(|e| e.effective_mitigation(stats)).sum()
     }
