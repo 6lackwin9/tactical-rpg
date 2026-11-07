@@ -845,3 +845,26 @@ When `docs/FEEDBACK.md` approaches the 300-line / 25 KB doc limit, the Build Ses
 - **Status**: closed: accepted (@2ad4f524), follow-up `R1-BAL`
 - **Finding**: `tools/fc.sh gate` ALL CHECKS PASSED on develop @709b586b. `tools/fc.sh sim feel` (timeline, 10 seeds per encounter, auto driver): 50 fights, won 72 % (36 won, 13 lost, 1 capped, 0 fled), median 4 rounds, 0 PLAN FAIL, 0 PLAN SKIP; `tl_duel_windup` 20 %, `tl_duel_reach` 60 %, `tl_duel_armour` 100 %, `tl_flank` 100 %, `tl_skirmish` 80 %; 79 breaks (36 chance, 35 poise, 8 sure). The enemy side reports 0 AP per round in every encounter. Release: `main` and `develop` share no history (develop's root `bf026515`, 2026-11-06; main's last release PR #54, 2026-11-03); develop holds everything except 17 `docs/metrics/` files (usage reports, `TASK_LOG.md`) only on main. The release commit takes develop's tree with both main and develop as parents, so later releases merge normally.
 - **Recommendation**: R1-BAL: look at `tl_duel_windup` (20 %) with the crit, potency and break levers (FB-75, FB-76, FB-89). Check whether the enemy's 0 AP per round is a metric gap. Decide whether the `docs/metrics/` files should come back to develop (the Merge & Release logs).
+
+## UN-07, UN-08, UN-09 (answered in READY @13ee4ae3, moved 2026-11-07)
+
+### UN-07: Phase R1.1 dispatch plan and check-in cadence
+
+- **For**: user
+- **Status**: closed: accepted (@13ee4ae3), follow-up `AUDIT-R1b`, `C02-A`, `R1-BAL`
+- **Note**: Build proposes running R1.1 as three steps. (1) `AUDIT-R1b`: three `logic-builder` lanes in parallel worktrees on disjoint files (A: AUDIT-08 + 09 in `rpgkit_rules` `unit.rs` / `gear.rs`; B: AUDIT-11 + 12 in `rpgkit_battle` `skill.rs` / `command.rs` / `dojo.rs`; C: AUDIT-10 in `rpgkit_content` `check/skill.rs`, the only lane that re-records `checks_golden`), merged into one branch with one review, one full gate and one squash commit. (2) `C02-A`: `asset-builder` seeds family Level 2 / Level 3 values, `shd_tower` text and character `temperament` / `default_intent` through `aegis content`, while a `logic-builder` wires sim `character_overrides`; five named re-records in one commit. (3) `R1-BAL`: a `logic-builder` does the feel metric, break-forecast / `BREAK` log and Dojo badge work while the `balance` agent runs the sims. Risks: AUDIT-08 / 09 could move a battle or sim golden if a fixture unit carries a 2H + 1H pair, and AUDIT-11 must tell an authored `mitigation` from the loader's 0.5 default. Either case stops that lane with a limit-blocker FB item, as the Authority Matrix requires.
+- **Ask**: (a) Approve the plan as written? (b) Cadence: run R1.1 straight through and report in this file at the end (default), or stop after each step for a check-in?
+
+### UN-08: Run R2 Wave 1 rows 14-19 in parallel instead of strictly in order
+
+- **For**: both
+- **Status**: closed: accepted (@13ee4ae3), follow-up `A2.2-S1`, `A4.2-K1a`, `I1.2-S1`, `A1.2-S1`, `F1.2-S1`, `P1.2-S1`
+- **Note**: Rows 14-19 all expect 0 battle / sim golden diffs (some re-record only `rules_contract_golden` or `checks_golden`, as each row names), and most touch separate files: 14 `pipeline` damage / heal, 15 `item_ap` + token renderer, 16 IR21 + shapes, 17 `lock_tile` / debt numbers, 18 terrain + schema, 19 `ai.rs`. Running them two or three at a time (each on its own branch, landed one by one with a gate after merging the latest `develop`) would shorten R2 Wave 1 a lot. Rows 15, 17 and 18 each re-record `rules_contract_golden`, so they would land one after another with a re-record on each rebase.
+- **Ask**: Allow parallel dispatch of rows 14-19 after R1.1 lands (default if approved: batches {14, 16, 19} then {15, 17, 18}), or keep the listed order?
+
+### UN-09: R1-BAL tuning numbers need your approval before they land
+
+- **For**: user
+- **Status**: closed: accepted (@13ee4ae3), follow-up `R1-BAL`
+- **Note**: The `R1-BAL` sims (`tl_duel_windup` at a 20 % win rate, warrior / ranger crit shift, `know_potency` weight, `tl_skirmish` seed 7) will produce proposed number changes. These are gameplay decisions, so Build will log them as one FB item with options and sim results, and will not apply any tuning until the answer comes back through `docs/READY.md` section 4. The fixes that change no number (enemy AP metric, forecast and log text, Dojo badge) land without waiting.
+- **Ask**: Confirm this split. Is there a target win-rate band for the timeline duels (for example 40-70 %), so the balance lane can propose against it?
