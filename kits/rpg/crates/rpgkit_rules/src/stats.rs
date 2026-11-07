@@ -1,5 +1,6 @@
 //! StatRules, StatModifier, Proficiency and CharacterStats (scripts/core/specs/).
 
+use rpgkit_data::unit_budget::Shares;
 use rpgkit_data::{Catalog, ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
 
@@ -48,24 +49,31 @@ pub fn know_unlock_reduction(know: i32) -> i32 {
     ((know - KNOW_UNLOCK_BASE) as f64 / KNOW_UNLOCK_STEP as f64).floor().clamp(0.0, MAX_UNLOCK_REDUCTION as f64) as i32
 }
 
-/// `points` spread over the stats in proportion to the class growth weights, heaviest first (the default spend).
-pub fn auto_spend(growth: &IndexMap<String, i32>, points: i32) -> IndexMap<String, i32> {
+/// Shares are weighed in billionths (`unit_budget`'s quota unit), so float noise in a stored share (the writer's 15
+/// digits) never changes an order or a floor.
+const SHARE_TICKS: f64 = 1_000_000_000.0;
+
+/// `points` spread over the stats in proportion to the class growth shares (`ClassDef::unit_shares().growth`: a share
+/// row's `growth_shares`, an integer row's growth / 5; U2.2-S3, FB-46), heaviest first (the default spend). Each stat
+/// with a share gets the floor of its proportional part, the points left go one each in that order; with no share at
+/// all every stat weighs the same.
+pub fn auto_spend(growth: &Shares, points: i32) -> IndexMap<String, i32> {
     let mut spend: IndexMap<String, i32> = IndexMap::new();
     if points <= 0 {
         return spend;
     }
-    let w = |s: &str| growth.get(s).copied().unwrap_or(0);
+    let w = |s: &str| growth.get(s).map(|x| (x * SHARE_TICKS).round() as i64).unwrap_or(0);
     let mut order: Vec<&str> = STATS.iter().copied().filter(|s| w(s) > 0).collect();
     if order.is_empty() {
         order = STATS.to_vec();
     }
     let pos = |s: &str| STATS.iter().position(|x| *x == s).unwrap_or(0);
     order.sort_by(|a, b| w(b).cmp(&w(a)).then(pos(a).cmp(&pos(b))));
-    let weights: Vec<i32> = order.iter().map(|s| w(s).max(1)).collect();
-    let weight_sum: i32 = weights.iter().sum();
+    let weights: Vec<i64> = order.iter().map(|s| w(s).max(1)).collect();
+    let weight_sum: i64 = weights.iter().sum();
     let mut given = 0;
     for (i, s) in order.iter().enumerate() {
-        let share = ((points * weights[i]) as f64 / weight_sum as f64).floor() as i32;
+        let share = (points as i64 * weights[i]).div_euclid(weight_sum) as i32;
         spend.insert(s.to_string(), share);
         given += share;
     }

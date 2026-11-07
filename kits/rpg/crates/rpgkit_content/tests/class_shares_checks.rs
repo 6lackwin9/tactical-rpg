@@ -69,7 +69,14 @@ fn a_share_row_goes_through_the_writer_and_back() {
             assert!((got[k].as_f64().unwrap() - w.as_f64().unwrap()).abs() < 1e-12, "{key} {k}: {} near {w}", got[k]);
         }
     }
-    assert!(stored.get("base_stats").is_none_or(|v| v.as_object().is_some_and(|m| m.is_empty())), "no stats beside the shares: {stored}");
+    // U2.2-S3: the shares are schema fields (`float_stats`) written after `growth`; a share row stores no base_stats or
+    // growth key (the computed view), an integer row no share key
+    assert!(stored.get("base_stats").is_none() && stored.get("growth").is_none(), "no stats beside the shares: {stored}");
+    let keys: Vec<&str> = stored.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(&keys[..6], ["id", "name", "description", "art", "ai_role", "base_shares"], "{keys:?}");
+    assert_eq!(keys[6], "growth_shares");
+    let plain_stored = saved["entries"].as_array().unwrap().iter().find(|e| e["id"] == "plain").unwrap();
+    assert!(plain_stored.get("base_shares").is_none() && plain_stored.get("growth_shares").is_none(), "{plain_stored}");
 
     let v = store::view(&data);
     let (drill, plain) = (&v.typed.classes["drill"], &v.typed.classes["plain"]);

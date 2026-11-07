@@ -108,7 +108,8 @@ pub fn auto_for(d: &Data, state: &mut UnitState) {
     if left <= 0 {
         return;
     }
-    let growth = d.cat.classes.get(&state.class_id(d)).map(|c| c.growth.clone()).unwrap_or_default();
+    // U2.2-S3 (FB-46): the class growth shares (an integer row's growth / 5), not level 2's rounded gain
+    let growth = d.cat.classes.get(&state.class_id(d)).map(|c| c.unit_shares().growth).unwrap_or_default();
     for (k, v) in rpgkit_rules::stats::auto_spend(&growth, left as i32) {
         *state.spend.entry(k).or_insert(0) += v as i64;
     }

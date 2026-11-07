@@ -135,6 +135,10 @@ fn upsert_and_remove_validate_write_and_roll_back() {
     // A ported content rule refuses a catalog write: a class whose base stats miss the class budget.
     let mut class = d.entry("classes", "warrior").clone();
     class.insert("id".into(), json!("test_class"));
+    // the shipped classes are share rows since U2.2-S3: make the copy an integer row
+    class.shift_remove("base_shares");
+    class.shift_remove("growth_shares");
+    class.insert("growth".into(), json!({"STR": 2, "CONS": 2, "PERC": 1}));
     class.insert("base_stats".into(), json!({"STR": 18, "DEX": 18, "INT": 18, "CONS": 18, "PERC": 18, "KNOW": 18}));
     let errors = store::upsert(&tmp, None, "classes", &class, None).err().expect("over budget refused");
     assert!(errors.iter().any(|e| e.contains("Base stats total 108")), "{errors:?}");

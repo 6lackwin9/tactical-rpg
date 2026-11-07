@@ -1077,7 +1077,7 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     let classless = || cat.classes.values().next().cloned().unwrap_or_else(|| ClassDef::from_obj(&Default::default()));
     let mut u = if derived {
         let arch = arch.unwrap();
-        let spend = if e.spend.is_empty() { stats::auto_spend(&arch.growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
+        let spend = if e.spend.is_empty() { stats::auto_spend(&arch.unit_shares().growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
         Unit::blank(&e.name, 1, 1, 1, CharacterStats::new(arch, e.level, &spend))
     } else if let Some(arch) = arch {
         Unit::blank(&e.name, e.hp, e.speed, e.attack_range, CharacterStats::new(arch, e.level, &IndexMap::new()))

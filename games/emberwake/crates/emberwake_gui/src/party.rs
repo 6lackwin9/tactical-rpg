@@ -1000,7 +1000,7 @@ impl Character {
                 let m = self.m(cx);
                 let left = m.unspent(&d) - self.draft.values().sum::<i64>();
                 if let (Some(arch), true) = (d.cat.classes.get(&m.class_id(&d)), left > 0) {
-                    for (k, v) in emberwake_rules::stats::auto_spend(&arch.growth, left as i32) {
+                    for (k, v) in emberwake_rules::stats::auto_spend(&arch.unit_shares().growth, left as i32) {
                         if v > 0 {
                             *self.draft.entry(k).or_insert(0) += v as i64;
                         }
