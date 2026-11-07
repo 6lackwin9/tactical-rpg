@@ -84,6 +84,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         r.rules = kept.to_vec();
         // S2.2-S3: the seed s22s3 set poise_mode pips later
         r.numbers.poise_mode = PoiseMode::Bar;
+        // R1-BAL H6 (FB-98): the seed r1bal set stagger_windup_mult 2.0 -> 1.0 later
+        r.numbers.stagger_windup_mult = 2.0;
     }
     assert_eq!(rows(&tmp), want, "every row reads as before, bar the rules HOOKS1 appended later");
     let file = store::file_of(&tmp, None, ruleset::KIND);
@@ -97,6 +99,9 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in seed_entries("s22s3.json") {
         store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("S2.2-S3 row '{}': {err:?}", json::s(&e, "id")));
     }
-    assert_eq!(rows(&tmp), before, "the HOOKS1-A row, then the S2.2-S3 one, over it is the shipped row");
+    for e in seed_entries("r1bal.json") {
+        store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("R1-BAL row '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3 and R1-BAL rows over it give the shipped row");
     let _ = std::fs::remove_dir_all(&tmp);
 }

@@ -40,7 +40,7 @@
 				"flank_cut"
 			],
 			"poise_stat": "max_poise",
-			"stagger_windup_mult": 2.0,
+			"stagger_windup_mult": 1.0,
 			"stagger_guard_mult": 0.5,
 			"stagger_repeat_mult": 0.5,
 			"flank_stagger_mult": 1.5,

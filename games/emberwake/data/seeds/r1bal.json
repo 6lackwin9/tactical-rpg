@@ -1,0 +1,317 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "tl_enforcer",
+    "name": "Enforcer (test)",
+    "side": "enemy",
+    "description": "Enforcer (test) for the timeline test kit.",
+    "class_id": "tl_drill",
+    "level": 1,
+    "tier": "elite",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 15,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "tl_overhead_smash",
+     "tl_brace_counter"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "tl_overhead_smash",
+      "tl_thrust",
+      "tl_brace_counter"
+     ],
+     "order": {
+      "assault": [
+       "tl_overhead_smash",
+       "tl_thrust"
+      ],
+      "guard": [
+       "tl_brace_counter",
+       "active_guard"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_flanged_mace",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "tl_captain",
+    "name": "Captain (test)",
+    "side": "enemy",
+    "description": "Captain (test) for the timeline test kit.",
+    "class_id": "tl_drill",
+    "level": 2,
+    "tier": "boss",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 50,
+    "poise": 60,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "tl_crushing_judgment",
+     "tl_brace_counter"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "tl_crushing_judgment",
+      "tl_thrust",
+      "tl_brace_counter"
+     ],
+     "keystone": [
+      "tl_anvil_posture"
+     ],
+     "order": {
+      "assault": [
+       "tl_crushing_judgment",
+       "tl_thrust"
+      ],
+      "guard": [
+       "tl_brace_counter",
+       "active_guard"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_claymore",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "tl_footman",
+    "name": "Footman (test)",
+    "side": "enemy",
+    "description": "Footman (test) for the timeline test kit.",
+    "class_id": "tl_drill",
+    "level": 2,
+    "tier": "standard",
+    "spend": {
+     "CONS": 5
+    },
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 40,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "tl_snap_jab",
+     "tl_hook_thrust",
+     "tl_brace_counter"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "tl_snap_jab",
+      "tl_hook_thrust",
+      "tl_brace_counter"
+     ],
+     "order": {
+      "assault": [
+       "tl_snap_jab",
+       "tl_hook_thrust"
+      ],
+      "guard": [
+       "tl_brace_counter",
+       "active_guard"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_shortsword",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "entry": {
+    "id": "tl_skirmish",
+    "name": "Skirmish",
+    "description": "Timeline test: the 4-on-4 loop and the AI table.",
+    "zone": "stone_arena",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [],
+    "arena_hazards": [],
+    "max_rounds": 12,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 12,
+    "start_ap": 10,
+    "rng_seed": 1337,
+    "party": [
+     "tl_vanguard",
+     "tl_halberdier",
+     "tl_spiker",
+     "tl_archer"
+    ],
+    "enemies": [
+     "tl_footman",
+     "tl_footman_b",
+     "tl_enforcer",
+     "tl_crossbowman"
+    ],
+    "phases": [],
+    "script": [],
+    "pace": "auto",
+    "objective": "rout",
+    "objective_text": "",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "purse": {},
+    "guests": [],
+    "protect": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "timeline",
+    "name": "Timeline",
+    "rules": [
+     "round_intent",
+     "enemy_moves",
+     "deck",
+     "poise",
+     "ap_cost",
+     "pierce",
+     "reach",
+     "flank",
+     "plan_badges",
+     "forced_move",
+     "ground_hazards",
+     "arena_hazards",
+     "triggers",
+     "unit_meters",
+     "hp_cost",
+     "ignore_guard",
+     "ai_tactics",
+     "execute"
+    ],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [
+     "move",
+     "rest",
+     "strike",
+     "offhand_jab",
+     "active_guard",
+     "flank_cut"
+    ],
+    "poise_stat": "max_poise",
+    "stagger_windup_mult": 1.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.5,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {
+     "active": 3,
+     "passive": 2,
+     "keystone": 1
+    },
+    "melee_diagonal": "maneuver",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "round_end",
+    "chase": "every_skill",
+    "root_stops_chase": "on",
+    "switch_target_step": "off",
+    "stances": "off",
+    "attack_lock": "none",
+    "poise_mode": "pips"
+   }
+  }
+ ]
+}
