@@ -552,7 +552,10 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     }
     // RULESET1-U slice 5: the poise bar in words (rule poise)
     if let Some(st) = emberwake_battle::poise::state(w, i).filter(|st| st.max > 0 && u.is_active()) {
-        t.push((format!("Poise {}/{}{}", st.value, st.max, if st.broken { "  BROKEN this round" } else if st.broken_last { "  (broke last round: stagger x repeat)" } else { "" }), if st.broken { th().foe } else { POISE }));
+        // S2.2-S3: in pips under poise_mode pips, with the threshold a hit must reach to take one
+        let n = &w.ruleset.numbers;
+        let what = if emberwake_battle::poise::pips_mode(n) { format!("Poise pips {}/{} (T {})", if st.broken { 0 } else { st.pips }, n.poise_pips.max(1), emberwake_battle::poise::threshold(n, st.max)) } else { format!("Poise {}/{}", st.value, st.max) };
+        t.push((format!("{what}{}", if st.broken { "  BROKEN this round" } else if st.broken_last { "  (broke last round: stagger x repeat)" } else { "" }), if st.broken { th().foe } else { POISE }));
     }
     // HOOKS1-UI slice 3: its meters (UM7; none without the rule, a hidden meter left out) and a held guard (8.3)
     if u.is_active() {

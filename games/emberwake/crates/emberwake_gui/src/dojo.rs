@@ -566,8 +566,11 @@ impl Dojo {
             // RULESET1 5 (rule poise): the poise bar under the HP bar
             if self.s.poise_on() {
                 let p = if i == 0 { self.s.poise() } else { self.s.dummy_poise };
-                hp_bar(ui, Rect::new(x, b.y + 18, w, 2), p.value, p.max, th().gold);
-                line2 = format!("{}  poise {}/{}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, p.value, p.max, if p.broken { " BROKEN" } else { "" });
+                // S2.2-S3 (FB-71): the bar's own pips under poise_mode pips
+                let n = &self.s.ruleset.numbers;
+                let (now, full, word) = if emberwake_battle::poise::pips_mode(n) { (p.pips, n.poise_pips.max(1), "pips") } else { (p.value, p.max, "poise") };
+                hp_bar(ui, Rect::new(x, b.y + 18, w, 2), now, full, th().gold);
+                line2 = format!("{}  {word} {now}/{full}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, if p.broken { " BROKEN" } else { "" });
                 if i == 1 && self.s.dummy_windup {
                     line2 += "  windup";
                 }
@@ -775,7 +778,11 @@ impl Dojo {
             y += 8;
         }
         if v.rest_blocks > 0 {
-            let poise = if v.rest_poise > 0 { format!(", {} poise", v.rest_poise) } else { String::new() };
+            let mut poise = if v.rest_poise > 0 { format!(", {} poise", v.rest_poise) } else { String::new() };
+            // S2.2-S3: the pips the Rest restores under poise_mode pips
+            if v.rest_pips > 0 {
+                poise += &format!(", {} pip{}", v.rest_pips, if v.rest_pips == 1 { "" } else { "s" });
+            }
             ui.p.text_fit(x0 as f32, y as f32, &format!("Rest: {} AP{poise} ({} block{})", v.rest_ap, v.rest_blocks, if v.rest_blocks == 1 { "" } else { "s" }), SMALL, fit, th().good);
             y += 9;
         }
@@ -1100,6 +1107,11 @@ impl Screen<GameCx> for Dojo {
                 let (p, d) = (self.s.poise(), self.s.dummy_poise);
                 out["poise"] = json!([p.value, p.max]);
                 out["dummy_poise"] = json!([d.value, d.max, d.broken]);
+                // S2.2-S3: the pips under poise_mode pips
+                if emberwake_battle::poise::pips_mode(&self.s.ruleset.numbers) {
+                    out["pips"] = json!([p.pips, self.s.ruleset.numbers.poise_pips]);
+                    out["dummy_pips"] = json!([d.pips, self.s.ruleset.numbers.poise_pips]);
+                }
                 out["dummy_windup"] = json!(self.s.dummy_windup);
             }
             // the plan as it stands now, the planner window open or not (the window's cache when it is current)
@@ -1115,7 +1127,7 @@ impl Screen<GameCx> for Dojo {
                 let v = &pc.view;
                 out["plan"] = json!({
                     "intent": v.intent, "kind": v.kind, "target": v.target, "refused": v.refused, "ap_before": v.ap_before, "ap_after": v.ap_after,
-                    "rest": [v.rest_ap, v.rest_poise],
+                    "rest": [v.rest_ap, v.rest_poise], "rest_pips": v.rest_pips,
                     "rows": v.rows.iter().map(|r| json!({"skill": r.skill, "start": r.start, "end": r.end, "ap": r.ap, "reason": r.reason, "damage": r.damage, "notes": r.notes})).collect::<Vec<_>>(),
                     "by_intent": pc.by_intent.iter().map(|p| (p.intent.to_lowercase(), json!(plan_line(p)))).collect::<serde_json::Map<String, Value>>(),
                 });

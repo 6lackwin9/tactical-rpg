@@ -3,11 +3,12 @@
 //! `timeline` row (with `round_intent`) reads the round intent rule's choices and the `classic` row the legacy ones
 //! (the built-in classic values). The seed `data/seeds/cln45.json` sets the fields to exactly those values: applied to
 //! a scratch copy of the data, every row reads as before bar the rules HOOKS1-A appended later to `timeline`, and the
-//! file re-saves byte for byte; `data/seeds/hooks1a.json` over it gives the shipped row back.
+//! file re-saves byte for byte; `data/seeds/hooks1a.json` then `data/seeds/s22s3.json` (S2.2-S3: `poise_mode` pips)
+//! over it give the shipped row back.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
-use emberwake_rules::ruleset::{self, Chase, RestAp, Ruleset, AI_TACTICS, ARENA_HAZARDS, BY_RULES_FIELDS, CLASSIC, EXECUTE, FORCED_MOVE, GROUND_HAZARDS, HP_COST, IGNORE_GUARD, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
+use emberwake_rules::ruleset::{self, Chase, PoiseMode, RestAp, Ruleset, AI_TACTICS, ARENA_HAZARDS, BY_RULES_FIELDS, CLASSIC, EXECUTE, FORCED_MOVE, GROUND_HAZARDS, HP_COST, IGNORE_GUARD, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -81,6 +82,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         let (kept, added) = r.rules.split_at(r.rules.len() - HOOKS1_RULES.len());
         assert_eq!(added, HOOKS1_RULES, "ruleset '{id}' ends with what HOOKS1 appends");
         r.rules = kept.to_vec();
+        // S2.2-S3: the seed s22s3 set poise_mode pips later
+        r.numbers.poise_mode = PoiseMode::Bar;
     }
     assert_eq!(rows(&tmp), want, "every row reads as before, bar the rules HOOKS1 appended later");
     let file = store::file_of(&tmp, None, ruleset::KIND);
@@ -91,6 +94,9 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in seed_entries("hooks1a.json") {
         store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("HOOKS1-A row '{}': {err:?}", json::s(&e, "id")));
     }
-    assert_eq!(rows(&tmp), before, "the HOOKS1-A row over it is the shipped row");
+    for e in seed_entries("s22s3.json") {
+        store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("S2.2-S3 row '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the HOOKS1-A row, then the S2.2-S3 one, over it is the shipped row");
     let _ = std::fs::remove_dir_all(&tmp);
 }

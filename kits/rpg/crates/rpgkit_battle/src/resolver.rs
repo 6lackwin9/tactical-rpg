@@ -78,11 +78,14 @@ pub struct Resolver {
     pub triggers: crate::trigger::State,
     /// HOOKS1 HC1: the HP costs paid since the session last took them (rule `hp_cost`; none in classic).
     pub hp_paid: Vec<HpPaid>,
+    /// S2.2-S3 (FB-85, Guard Option 1C): each (unit, block) of this round whose block started guarded (a running Defend,
+    /// a held guard or a `guard` status raised its guard), cleared with the round; the sim's feel mode counts them.
+    pub guarded: Vec<(UnitId, i32)>,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new() }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new(), guarded: Vec::new() }
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -141,6 +144,12 @@ impl Resolver {
         // HOOKS1 8.3, 8.1: held guards, then the Defends' `guard_start` triggers (rule triggers; nothing in classic)
         let costs = self.hp_paid[paid..].to_vec();
         crate::trigger::on_block_start(self, w, block, &costs);
+        // S2.2-S3 (FB-85): the units that start this block guarded (read by the sim's feel mode only)
+        for &c in &self.registered {
+            if w.units[c].is_active() && w.units[c].guard > 0.0 {
+                self.guarded.push((c, block));
+            }
+        }
         let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].impact == block).collect();
         let inits: Vec<i32> = (0..self.scheduled.len()).map(|i| self.scheduled[i].command.initiative(w)).collect();
         godot_sort(&mut resolving, |a, b| inits[*a] > inits[*b]);
@@ -385,6 +394,7 @@ impl Resolver {
             }
         }
         self.scheduled.clear();
+        self.guarded.clear();
         // HOOKS1 AT2: this round's hits become last round's (rules ai_tactics or round_intent, RULESET1-AI2; nothing in classic)
         w.roll_hits();
         self.current_round += 1;

@@ -207,6 +207,8 @@ pub struct PlanView {
     /// RS2, RS3: the AP and poise the Rest blocks would give.
     pub rest_ap: i32,
     pub rest_poise: i32,
+    /// S2.2-S3 (FB-71): the pips the Rest blocks would restore under `poise_mode` pips (0 under `bar`).
+    pub rest_pips: i32,
 }
 
 pub struct DojoSession {
@@ -505,7 +507,7 @@ impl DojoSession {
             v.rows.push(PlanRow { skill: sk.id.clone(), name: sk.name.clone(), start: e.start_block, end: e.end_block(w), ap: e.total_ap(), reason, cell: e.pos_after, damage: e.est_damage, notes });
         }
         let rest = rip::rest_preview(w, &s.plan, c);
-        (v.rest_blocks, v.rest_ap, v.rest_poise) = (rest.blocks, rest.ap, rest.poise);
+        (v.rest_blocks, v.rest_ap, v.rest_poise, v.rest_pips) = (rest.blocks, rest.ap, rest.poise, rest.pips);
         v
     }
 
@@ -1041,11 +1043,12 @@ impl DojoSession {
                 self.rest_blocks += blocks;
                 let mut bar = self.poise();
                 let (before, pips_before) = (bar.value, bar.pips);
-                if self.poise_on() && bar.max > 0 && !bar.broken && bar.value < bar.max {
+                let pips_mode = poise::pips_mode(&self.ruleset.numbers);
+                if self.poise_on() && !pips_mode && bar.max > 0 && !bar.broken && bar.value < bar.max {
                     bar.value = (bar.value + self.ruleset.numbers.rest_poise_per_block * blocks).min(bar.max);
                     self.hero_poise[self.active] = bar;
                 }
-                // S2.2-S2: a pip per 2 Rest blocks under poise_mode pips
+                // S2.2-S2: a pip per 2 Rest blocks under poise_mode pips instead (S2.2-S3: the value mirrors them)
                 if self.poise_on() && poise::pips_mode(&self.ruleset.numbers) && bar.max > 0 && !bar.broken {
                     poise::rest_pips(&self.ruleset.numbers, &mut bar, blocks);
                     self.hero_poise[self.active] = bar;

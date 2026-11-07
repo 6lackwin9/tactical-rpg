@@ -410,7 +410,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { th().good } else { th().foe });
             // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
             if let Some(st) = poise_shown(w, i, &layers) {
-                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st);
+                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st, &w.ruleset.numbers);
             }
         }
         let tip = unit_tip(s, i, sel, tells, rounds, classes);
@@ -807,7 +807,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
-                            poise_bar(&mut ui.p, Rect::new(fx - 12, fy + 6, 24, 2), &st);
+                            poise_bar(&mut ui.p, Rect::new(fx - 12, fy + 6, 24, 2), &st, &w.ruleset.numbers);
                         }
                     }
                 }

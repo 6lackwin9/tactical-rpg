@@ -166,7 +166,10 @@ fn poise_breaks_parts_and_forecasts_follow_the_kit() {
     let w = &s(&b).w;
     let bar = *emberwake_battle::poise::state(w, foe).unwrap();
     let tip = unit_tip(s(&b), foe, Some(h), &[], &[], &[]);
-    assert!(tip.iter().any(|t| t.0.starts_with(&format!("Poise {}/{}", bar.value, bar.max))), "{tip:?}");
+    // S2.2-S3: in pips under poise_mode pips
+    let n = &w.ruleset.numbers;
+    let want = if emberwake_battle::poise::pips_mode(n) { format!("Poise pips {}/{}", bar.pips, n.poise_pips) } else { format!("Poise {}/{}", bar.value, bar.max) };
+    assert!(tip.iter().any(|t| t.0.starts_with(&want)), "{tip:?}");
     assert!(broken_units(w, &Layers::of(&Value::Null)).is_empty(), "nobody broke yet");
     b.host.session.as_mut().unwrap().w.poise.get_mut(&foe).unwrap().broken = true;
     assert_eq!(broken_units(&s(&b).w, &Layers::of(&Value::Null)), vec![foe]);
@@ -198,8 +201,11 @@ fn forecasts_follow_the_kit_hit_by_hit() {
         let want = emberwake_battle::poise::forecast(w, &sess.resolver.scheduled, f, bar, e.end_block(w), &cmd.impact, cmd.block_cost, ri::flank_bonus_from(w, d, strike_tile(e), f), cmd.ignore_guard);
         assert_eq!(h.fc, want, "entry {k}");
         bar.value = want.after;
+        if emberwake_battle::poise::pips_mode(&w.ruleset.numbers) {
+            bar.pips = want.pips_after;
+        }
         if matches!(want.verdict, emberwake_battle::poise::Verdict::Breaks(_)) {
-            (bar.value, bar.broken) = (0, true);
+            (bar.value, bar.pips, bar.broken) = (0, 0, true);
         }
     }
     assert!(hits[0].1.fc.windup, "the first lands in the footman's wind-up");

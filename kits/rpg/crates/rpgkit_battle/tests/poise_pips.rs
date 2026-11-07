@@ -240,7 +240,7 @@ fn guard_halves_the_stagger_before_the_threshold() {
 }
 
 /// FB-49: `windup_poise` grants `roundi(windup_poise / T)` temporary pips (at least 1 above 0), which come off when the
-/// action lands; under bar the value rises and no pip is kept.
+/// action lands (the value mirrors them, S2.2-S3); under bar the value rises and no pip is kept.
 #[test]
 fn windup_poise_grants_temporary_pips() {
     assert_eq!((poise::bonus_pips(0, 12), poise::bonus_pips(1, 12), poise::bonus_pips(5, 12), poise::bonus_pips(20, 12), poise::bonus_pips(30, 12)), (0, 1, 1, 2, 3));
@@ -256,9 +256,11 @@ fn windup_poise_grants_temporary_pips() {
     let mut res = Resolver::new(BLOCKS, 1);
     book(&mut res, FOE, hit(&w, FOE, HERO, "p_smash"), 1);
     run(&mut w, &mut res, 1, 1);
-    assert_eq!((bar(&w, FOE).pips, bar(&w, FOE).value), (n.poise_pips + bonus, TANK + 20), "the windup adds its pips");
+    // S2.2-S3 (FB-71): the value mirrors the pips (pips x T)
+    let t = poise::threshold(&n, TANK);
+    assert_eq!((bar(&w, FOE).pips, bar(&w, FOE).value), (n.poise_pips + bonus, (n.poise_pips + bonus) * t), "the windup adds its pips");
     run(&mut w, &mut res, 2, 3);
-    assert_eq!((bar(&w, FOE).pips, bar(&w, FOE).value), (n.poise_pips, TANK), "landed: back to full");
+    assert_eq!((bar(&w, FOE).pips, bar(&w, FOE).value), (n.poise_pips, n.poise_pips * t), "landed: back to full");
 
     let s = session(timeline(json!({})));
     let mut w = s.w.clone();
@@ -494,4 +496,104 @@ fn bar_mode_ignores_the_pip_numbers() {
     }
     assert_eq!(out[0], out[1], "same records, bars and RNG state");
     assert_eq!(out[0].2, 0, "bar stores no pips");
+}
+
+// ---- S2.2-S3 (FB-71): the value mirrors the pips, the stored bonus count, the Rest preview -----------------------
+
+/// FB-71 (1): under pips the value is `pips x T` after a refill, a hit, a windup bonus, a Rest and a break; under bar the
+/// value keeps its own numbers.
+#[test]
+fn the_value_mirrors_the_pips() {
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    let t = poise::threshold(&n, TANK);
+    let mirrored = |w: &World| {
+        let st = bar(w, FOE);
+        assert_eq!(st.value, st.pips * t, "{st:?}");
+    };
+    let mut w = s.w.clone();
+    mirrored(&w);
+    assert_eq!(bar(&w, FOE).pips, n.poise_pips, "a full bar");
+    let mut res = Resolver::new(BLOCKS, 1);
+    for (b, stagger) in [(1, t - 1), (2, t), (3, 2 * t + 1)] {
+        let st = strike(&mut w, &mut res, "p_jab", stagger, b);
+        assert_eq!((st.after, st.pips_after), (bar(&w, FOE).value, bar(&w, FOE).pips), "the record is the bar");
+        mirrored(&w);
+    }
+    assert_eq!(bar(&w, FOE).pips, n.poise_pips - 3, "a chip, one pip, two pips");
+    poise::restore(&mut w, FOE, 2);
+    assert_eq!(bar(&w, FOE).pips, n.poise_pips - 2, "two Rest blocks: a pip");
+    mirrored(&w);
+    let st = strike(&mut w, &mut res, "p_jab", t * n.max_pip_loss_per_hit, 4);
+    assert!(st.broke.is_some(), "the last pips go");
+    assert_eq!((bar(&w, FOE).value, bar(&w, FOE).pips), (0, 0));
+
+    // a bar with a max that does not divide: still pips x T at the refill
+    let mut odd = PoiseState::default();
+    poise::refill(&n, &mut odd, 23);
+    assert_eq!((odd.pips, odd.value), (n.poise_pips, n.poise_pips * poise::threshold(&n, 23)));
+
+    let s = session(timeline(json!({})));
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    strike(&mut w, &mut res, "p_jab", 7, 1);
+    assert_eq!(bar(&w, FOE).value, TANK - 7, "bar: the value drops by D");
+}
+
+/// FB-71 (1), (2): the windup bonus pips are stored on the command (`poise_bonus_pips`) and come off as stored even when
+/// the max changed meanwhile (a recomputed count would differ); they may sit above `poise_pips`.
+#[test]
+fn drop_bonus_takes_off_the_stored_pips() {
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    let t = poise::threshold(&n, TANK);
+    let bonus = poise::bonus_pips(20, t);
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    let a = book(&mut res, FOE, hit(&w, FOE, HERO, "p_smash"), 1);
+    run(&mut w, &mut res, 1, 1);
+    assert_eq!(res.scheduled[a].command.poise_bonus_pips, bonus, "the count rides on the command");
+    assert!(bar(&w, FOE).pips > n.poise_pips, "above poise_pips while it winds up");
+    // the max shrinks mid-round: a recomputed count would be another number
+    let max = TANK / 3;
+    assert_ne!(poise::bonus_pips(20, poise::threshold(&n, max)), bonus, "the test needs a count that differs");
+    w.poise.get_mut(&FOE).unwrap().max = max;
+    run(&mut w, &mut res, 2, 3);
+    assert_eq!(bar(&w, FOE).pips, n.poise_pips, "the stored count came off");
+    assert_eq!(bar(&w, FOE).value, n.poise_pips * poise::threshold(&n, max), "mirrored on the max now");
+    assert_eq!((res.scheduled[a].command.poise_bonus, res.scheduled[a].command.poise_bonus_pips), (0, 0));
+
+    // a break cancels the windup: its bonus is gone with every pip
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    let a = book(&mut res, FOE, hit(&w, FOE, HERO, "p_smash"), 1);
+    run(&mut w, &mut res, 1, 1);
+    let st = strike(&mut w, &mut res, "p_jab", t * n.max_pip_loss_per_hit, 2);
+    assert!(st.broke.is_none(), "{} pips before, {} lost", st.pips_before, st.pips_before - st.pips_after);
+    poise::break_unit(&mut res, &mut w, FOE, 2, BreakCause::Poise);
+    assert_eq!((bar(&w, FOE).pips, res.scheduled[a].command.poise_bonus_pips), (0, 0));
+}
+
+/// FB-71 (3): the planner's Rest preview shows the pip gain under pips (a pip per 2 Rest blocks, at most `poise_pips`)
+/// and no poise; under bar the poise and no pips; nothing without the rule poise.
+#[test]
+fn the_rest_preview_shows_the_pips() {
+    use rpgkit_battle::round_intent_plan as rip;
+    let s = session(pips_rules());
+    let n = s.w.ruleset.numbers.clone();
+    for blocks in 0..=BLOCKS * 3 {
+        let g = rip::rest_of(&s.w, blocks);
+        assert_eq!((g.blocks, g.poise, g.pips), (blocks, 0, (blocks / 2).min(n.poise_pips)), "{blocks} Rest blocks");
+    }
+    let s = session(timeline(json!({})));
+    let b = s.w.ruleset.numbers.clone();
+    assert_eq!((rip::rest_of(&s.w, 3).poise, rip::rest_of(&s.w, 3).pips), (b.rest_poise_per_block * 3, 0), "bar");
+    let s = session(Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [], "poise_mode": "pips"}).as_object().unwrap()));
+    assert_eq!((rip::rest_of(&s.w, 4).poise, rip::rest_of(&s.w, 4).pips), (0, 0), "no rule poise");
+    // the pips the Rest restores in the battle are the preview's from a fresh round
+    let s = session(pips_rules());
+    let mut w = s.w.clone();
+    w.poise.get_mut(&FOE).unwrap().pips = 0;
+    poise::restore(&mut w, FOE, 4);
+    assert_eq!(bar(&w, FOE).pips, rip::rest_of(&s.w, 4).pips);
 }

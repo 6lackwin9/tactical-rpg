@@ -3,7 +3,7 @@
 use aegis_ui::theme::th;
 use super::board::{cell_rect, draw_flat, draw_stage, hp_bar, note_drawn, with_alpha, Board};
 use super::input::{engage_positions, kind_name, rest_text, target_name, RowAct};
-use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, poise_bar, poise_pips, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
+use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, pip_view, poise_bar, poise_number, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
@@ -464,8 +464,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // RULESET1-U slice 5: the member's poise under its HP bar (rule poise)
         let poise = poise_shown(w, a, &layers);
         if let Some(st) = &poise {
-            poise_bar(&mut ui.p, rows.poise, st);
-            number(&mut ui, rows.poise, &format!("{}/{}", st.value, st.max), if st.broken { th().foe } else { POISE });
+            poise_bar(&mut ui.p, rows.poise, st, &w.ruleset.numbers);
+            // S2.2-S3: in pips under poise_mode pips
+            number(&mut ui, rows.poise, &poise_number(&w.ruleset.numbers, st), if st.broken { th().foe } else { POISE });
         }
         // the pips follow the unit's AP: they drain as moves pay and refill when the round starts
         let k = g.card_ap.iter().position(|c| c.0 == a).unwrap_or_else(|| {
@@ -476,7 +477,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let level = g.card_ap[k].1.level(fx_now);
         draw_ap_pips(&mut ui.p, rows.ap.x, rows.ap.y, level, u.max_ap);
         number(&mut ui, rows.ap, &format!("{}/{}", u.ap, u.max_ap), AP_PIP);
-        cards_shown.push(json!({"unit": a, "ap": u.ap, "ap_shown": level, "poise_pips": poise.as_ref().map(|st| poise_pips(st.value, st.max, st.broken)), "poise": poise.as_ref().map(|st| st.value)}));
+        cards_shown.push(json!({"unit": a, "ap": u.ap, "ap_shown": level, "poise_pips": poise.as_ref().map(|st| pip_view(&w.ruleset.numbers, st).lit), "poise": poise.as_ref().map(|st| st.value)}));
         meter_row(&mut ui.p, Rect::new(r.x + 4, r.y + rows.h - 1, 108, 3), &ms);
         if layers.guard && held_guard(s, a).is_some() {
             ui.p.panel(r.inset(1), rgba(0, 0, 0, 0), HELD, RADIUS);

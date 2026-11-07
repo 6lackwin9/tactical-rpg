@@ -164,6 +164,9 @@ pub struct Command {
     pub impact: crate::poise::Impact,
     /// RULESET1 P11: the windup poise this action added at its start (taken off when it lands or is cancelled).
     pub poise_bonus: i32,
+    /// S2.2-S3 (FB-71): the windup bonus pips this action added at its start under `poise_mode` pips (taken off with
+    /// `poise_bonus`; 0 under `bar`).
+    pub poise_bonus_pips: i32,
     /// RULESET1 P4: the units the last execution damaged, in hit order, each with whether the hit was a flank (MV3).
     pub hits: Vec<(UnitId, bool)>,
     /// RULESET1 P6-P14: what the last execution's hits did to poise (rule `poise` only; see `poise::resolve_hits`).
@@ -256,6 +259,7 @@ impl Command {
             keep_flank: false,
             impact: crate::poise::Impact::default(),
             poise_bonus: 0,
+            poise_bonus_pips: 0,
             hits: Vec::new(),
             staggers: Vec::new(),
             forced: None,

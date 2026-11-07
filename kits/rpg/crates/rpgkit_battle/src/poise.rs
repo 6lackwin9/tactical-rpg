@@ -11,6 +11,10 @@
 //! and trigger `stagger`, the Dojo) settles through `settle`, which removes `clamp(floor(D / T), 0,
 //! max_pip_loss_per_hit)` pips (`pip_loss`) and breaks at 0 pips. Under `bar` (the default) `pips` stays 0 and nothing
 //! reads it: every outcome and draw is the bar's. A break keeps its consequences in both modes (P7).
+//!
+//! S2.2-S3 (FB-71): under pips the continuous `value` mirrors the pips (`value = pips x T`, `mirror`), so every reader
+//! of the value (metrics, the sim, the host) follows the pips; a windup bonus stores its pip count on the command
+//! (`Command::poise_bonus_pips`) and may sit above `poise_pips`.
 
 use crate::command::{CmdKind, Command};
 use crate::resolver::{Resolver, ScheduledAction};
@@ -121,12 +125,22 @@ pub fn pips_now(n: &Numbers, st: &PoiseState) -> i32 {
     }
 }
 
-/// P3, S2.2-S2: `st` refilled to Max Poise `max` (and to `poise_pips` pips under `poise_mode` pips; 0 under `bar`).
+/// S2.2-S3 (FB-71): under `poise_mode` pips the value mirrors the pips: `value = pips x T` (`threshold` of the bar's
+/// max). Nothing under `bar`.
+pub fn mirror(n: &Numbers, st: &mut PoiseState) {
+    if pips_mode(n) {
+        st.value = st.pips.max(0) * threshold(n, st.max);
+    }
+}
+
+/// P3, S2.2-S2: `st` refilled to Max Poise `max` (and to `poise_pips` pips under `poise_mode` pips; 0 under `bar`;
+/// S2.2-S3: the value then mirrors them, `mirror`).
 pub fn refill(n: &Numbers, st: &mut PoiseState, max: i32) {
     st.max = max;
     st.value = max;
     st.pips = if pips_mode(n) && max > 0 { n.poise_pips.max(1) } else { 0 };
     st.rest_blocks = 0;
+    mirror(n, st);
 }
 
 /// Whether the battle plays by poise.
@@ -355,15 +369,20 @@ pub fn on_start(w: &mut World, c: UnitId, cmd: &mut Command) {
         return;
     }
     st.value += cmd.impact.windup_poise;
-    // S2.2-S2 (FB-49): under pips the bonus is temporary pips
+    // S2.2-S2 (FB-49): under pips the bonus is temporary pips (above `poise_pips` too); S2.2-S3 (FB-71): the command
+    // keeps the count for `drop_bonus` and the value mirrors the pips
     if pips_mode(n) {
-        st.pips += bonus_pips(cmd.impact.windup_poise, threshold(n, st.max));
+        let extra = bonus_pips(cmd.impact.windup_poise, threshold(n, st.max));
+        st.pips += extra;
+        cmd.poise_bonus_pips = extra;
+        mirror(n, st);
     }
     cmd.poise_bonus = cmd.impact.windup_poise;
 }
 
 /// P11: the bonus of an action that lands or is cancelled comes off, never below 0 (S2.2-S2: its bonus pips too, under
-/// `poise_mode` pips; the round's Max Poise gives the same count `on_start` added).
+/// `poise_mode` pips; S2.2-S3 (FB-71): the count `on_start` stored on the command, whatever the max is now, and the
+/// value mirrors the pips).
 pub fn drop_bonus(w: &mut World, c: UnitId, cmd: &mut Command) {
     if cmd.poise_bonus <= 0 {
         return;
@@ -372,15 +391,17 @@ pub fn drop_bonus(w: &mut World, c: UnitId, cmd: &mut Command) {
     if let Some(st) = w.poise.get_mut(&c) {
         st.value = (st.value - cmd.poise_bonus).max(0);
         if pips_mode(n) {
-            st.pips = (st.pips - bonus_pips(cmd.poise_bonus, threshold(n, st.max))).max(0);
+            st.pips = (st.pips - cmd.poise_bonus_pips).max(0);
+            mirror(n, st);
         }
     }
     cmd.poise_bonus = 0;
+    cmd.poise_bonus_pips = 0;
 }
 
 /// RS3: landed Rest of `blocks` blocks restores `rest_poise_per_block` poise a block, up to Max Poise (a bar above it
-/// stays). S2.2-S2 (FB-49): under `poise_mode` pips each second Rest block of the round also restores a pip, up to
-/// `poise_pips` (pips above it stay).
+/// stays). S2.2-S2 (FB-49): under `poise_mode` pips each second Rest block of the round restores a pip instead, up to
+/// `poise_pips` (pips above it stay; S2.2-S3: the value mirrors the pips, so `rest_poise_per_block` adds nothing there).
 pub fn restore(w: &mut World, c: UnitId, blocks: i32) {
     if !on(w) || blocks <= 0 {
         return;
@@ -391,24 +412,39 @@ pub fn restore(w: &mut World, c: UnitId, blocks: i32) {
         if st.max <= 0 || st.broken {
             return;
         }
-        if amount > 0 && st.value < st.max {
+        if pips_mode(n) {
+            rest_pips(n, st, blocks);
+        } else if amount > 0 && st.value < st.max {
             st.value = (st.value + amount).min(st.max);
         }
-        rest_pips(n, st, blocks);
     }
 }
 
 /// S2.2-S2 (FB-49): `blocks` more Rest blocks this round on `st` (not broken) under `poise_mode` pips: each second Rest
-/// block of the round restores a pip, up to `poise_pips` (pips above it stay). Nothing under `bar`.
+/// block of the round restores a pip, up to `poise_pips` (pips above it stay; S2.2-S3: the value mirrors the pips).
+/// Nothing under `bar`.
 pub fn rest_pips(n: &Numbers, st: &mut PoiseState, blocks: i32) {
     if !pips_mode(n) || blocks <= 0 || st.max <= 0 || st.broken {
         return;
     }
-    let gain = (st.rest_blocks + blocks) / 2 - st.rest_blocks / 2;
+    st.pips += rest_pip_gain(n, st.pips, st.rest_blocks, blocks);
     st.rest_blocks += blocks;
+    mirror(n, st);
+}
+
+/// S2.2-S3 (FB-71): the pips `blocks` more Rest blocks restore under `poise_mode` pips on `pips` pips with `landed` Rest
+/// blocks already this round: a pip per second Rest block of the round, up to `poise_pips` (none from a count at or
+/// above it); 0 under `bar`. `rest_pips` and the planner's Rest preview (`round_intent_plan::rest_of`) read it.
+pub fn rest_pip_gain(n: &Numbers, pips: i32, landed: i32, blocks: i32) -> i32 {
+    if !pips_mode(n) || blocks <= 0 {
+        return 0;
+    }
+    let gain = (landed.max(0) + blocks) / 2 - landed.max(0) / 2;
     let full = n.poise_pips.max(1);
-    if st.pips < full {
-        st.pips = (st.pips + gain).min(full);
+    if pips >= full {
+        0
+    } else {
+        gain.min(full - pips)
     }
 }
 
@@ -532,9 +568,9 @@ pub struct Settled {
 
 /// P6-P14 and S2.2-S2, the one rule every stagger path settles by (deterministic, no roll): stagger taken `taken` on bar
 /// `st`. Under `bar` the value drops by it, held at 1 by P12, and breaks at 0 (P7); a hit into a windup that leaves poise
-/// may roll `break_chance(taken, before)` (P13). Under `poise_mode` pips the value still drops (shown, never decides) and
-/// the hit removes `pip_loss` pips: held at 1 pip by `unbreakable` or `steadfast`, a break at 0 pips, the chance from pips
-/// lost on pips before. A `sure` break into a windup removes every pip (P14) in both modes.
+/// may roll `break_chance(taken, before)` (P13). Under `poise_mode` pips the hit removes `pip_loss` pips: held at 1 pip
+/// by `unbreakable` or `steadfast`, a break at 0 pips, the chance from pips lost on pips before; the value after is the
+/// pips' mirror (`pips x T`, S2.2-S3). A `sure` break into a windup removes every pip (P14) in both modes.
 pub fn settle(n: &Numbers, st: &PoiseState, taken: i32, h: Terms) -> Settled {
     if st.broken {
         return Settled { after: st.value, pips: st.pips, verdict: Verdict::AlreadyBroken };
@@ -572,7 +608,9 @@ pub fn settle(n: &Numbers, st: &PoiseState, taken: i32, h: Terms) -> Settled {
     } else {
         Verdict::Holds
     };
-    Settled { after: after.max(0), pips: pips.max(0), verdict }
+    // S2.2-S3 (FB-71): the value mirrors the pips (`mirror`)
+    let pips = pips.max(0);
+    Settled { after: pips * threshold(n, st.max), pips, verdict }
 }
 
 /// One planned hit for `forecast_hits`: its target, impact block, the skill's impact, the action's blocks, whether it
@@ -669,6 +707,7 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
         a.cancelled = true;
         a.broken = true;
         a.command.poise_bonus = 0;
+        a.command.poise_bonus_pips = 0;
     }
     // HOOKS1 8.3, S1.2-S4: a break ends the guard: the held guard (a Guard skill's from its wind-up, Option 1C, or a
     // trigger's) and the `guard` status instance

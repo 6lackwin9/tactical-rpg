@@ -832,21 +832,59 @@ pub(super) fn poise_pips(value: i32, max: i32, broken: bool) -> i32 {
     (value.clamp(0, max) * POISE_PIPS + max - 1) / max
 }
 
-/// Pip `k`'s rect in row `r`: relative to the row, so a card's and a token's are the same five with a 1-unit gap.
-pub(super) fn poise_pip_rect(r: Rect, k: i32) -> Rect {
-    let x = |k: i32| r.x + k * (r.w + 1) / POISE_PIPS;
+/// Pip `k`'s rect in row `r` of `total` pips: relative to the row, so a card's and a token's are the same pips with a
+/// 1-unit gap.
+pub(super) fn poise_pip_rect(r: Rect, k: i32, total: i32) -> Rect {
+    let total = total.max(1);
+    let x = |k: i32| r.x + k * (r.w + 1) / total;
     Rect::new(x(k), r.y, x(k + 1) - x(k) - 1, r.h)
 }
 
-/// A poise row in `r`: the pips lit in `POISE` (a windup bonus over the max shows as a gold tip on the last); all five on a
-/// red ground once broken this round.
-pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState) {
-    let lit = poise_pips(st.value, st.max, st.broken);
-    for k in 0..POISE_PIPS {
-        let pip = poise_pip_rect(r, k);
-        p.fill(pip, if st.broken { rgba(120, 30, 34, 255) } else if k < lit { POISE } else { rgb(28, 34, 48) });
+/// S2.2-S3 (FB-71; display only): what a poise row shows of bar `st` under the ruleset's numbers `n`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PipView {
+    /// The pips lit (0 once broken this round).
+    pub(super) lit: i32,
+    /// The row's pips: `POISE_PIPS` under `bar`, the ruleset's `poise_pips` under `poise_mode` pips.
+    pub(super) total: i32,
+    /// A windup bonus holds above the full row (a gold tip on the last pip).
+    pub(super) bonus: bool,
+    /// Under `poise_mode` pips (the numbers and tips speak in pips).
+    pub(super) pips: bool,
+}
+
+/// The pip view of `st`: under `bar` the pips from the value (`poise_pips`), under `poise_mode` pips the bar's own pips
+/// (`PoiseState.pips`, the kit's `poise::pips_now`), a bonus above `poise_pips` showing as the gold tip.
+pub(super) fn pip_view(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_battle::poise::PoiseState) -> PipView {
+    use emberwake_battle::poise;
+    if !poise::pips_mode(n) {
+        return PipView { lit: poise_pips(st.value, st.max, st.broken), total: POISE_PIPS, bonus: !st.broken && st.value > st.max, pips: false };
     }
-    if !st.broken && st.value > st.max {
+    let total = n.poise_pips.max(1);
+    let now = if st.broken || st.max <= 0 { 0 } else { poise::pips_now(n, st) };
+    PipView { lit: now.clamp(0, total), total, bonus: now > total, pips: true }
+}
+
+/// The poise number beside a row: `value/max` under `bar`, `pips/poise_pips` under `poise_mode` pips.
+pub(super) fn poise_number(n: &emberwake_rules::ruleset::Numbers, st: &emberwake_battle::poise::PoiseState) -> String {
+    let v = pip_view(n, st);
+    if v.pips {
+        let now = if st.broken { 0 } else { st.pips };
+        format!("{now}/{}", v.total)
+    } else {
+        format!("{}/{}", st.value, st.max)
+    }
+}
+
+/// A poise row in `r`: the pips lit in `POISE` (a windup bonus over the max, or above `poise_pips`, shows as a gold tip
+/// on the last); every pip on a red ground once broken this round.
+pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState, n: &emberwake_rules::ruleset::Numbers) {
+    let v = pip_view(n, st);
+    for k in 0..v.total {
+        let pip = poise_pip_rect(r, k, v.total);
+        p.fill(pip, if st.broken { rgba(120, 30, 34, 255) } else if k < v.lit { POISE } else { rgb(28, 34, 48) });
+    }
+    if v.bonus {
         p.fill(Rect::new(r.x + r.w - 2, r.y, 2, r.h), th().gold);
     }
 }
@@ -882,6 +920,8 @@ pub(super) struct HitForecast {
     pub(super) fc: emberwake_battle::poise::Forecast,
     flank: bool,
     pierce: bool,
+    /// S2.2-S3: the battle plays poise by pips (the verdict speaks in pips).
+    pips: bool,
 }
 
 impl HitForecast {
@@ -908,15 +948,17 @@ impl HitForecast {
         out
     }
 
-    /// The verdict line ("Breaks: poise 20 -> 0", "May break: 40%", "Poise 40 -> 28").
+    /// The verdict line ("Breaks: poise 20 -> 0", "May break: 40%", "Poise 40 -> 28"; S2.2-S3: under `poise_mode` pips in
+    /// pips, "Pips 5 -> 4", and a hit under the threshold says so: "Pips 5 -> 5 (under T 12)").
     fn verdict(&self) -> (String, Rgba) {
         use emberwake_battle::poise::{BreakCause, Verdict};
-        let (b, a) = (self.fc.before, self.fc.after);
+        let (word, b, a) = if self.pips { ("pips", self.fc.pips_before, self.fc.pips_after) } else { ("poise", self.fc.before, self.fc.after) };
+        let chip = if self.pips && self.fc.taken > 0 && self.fc.taken < self.fc.threshold { format!(" (under T {})", self.fc.threshold) } else { String::new() };
         match self.fc.verdict {
             Verdict::Breaks(BreakCause::Sure) => ("Breaks: a sure break into its wind-up".into(), th().foe),
-            Verdict::Breaks(_) => (format!("Breaks: poise {b} -> 0"), th().foe),
-            Verdict::Chance(c) => (format!("May break: {c}% (poise {b} -> {a})"), th().gold),
-            Verdict::Holds => (format!("Poise {b} -> {a}"), th().text),
+            Verdict::Breaks(_) => (format!("Breaks: {word} {b} -> 0"), th().foe),
+            Verdict::Chance(c) => (format!("May break: {c}% ({word} {b} -> {a})"), th().gold),
+            Verdict::Holds => (format!("{}{} {b} -> {a}{chip}", word[..1].to_uppercase(), &word[1..]), th().text),
             Verdict::AlreadyBroken => ("Already broken this round".into(), th().dim),
         }
     }
@@ -980,7 +1022,7 @@ pub(super) fn hit_forecasts(s: &Session, h: usize) -> Vec<Option<HitForecast>> {
         .map(|(e, p)| {
             let (t, cmd, block, flank) = p.as_ref()?;
             let fc = fcs.next()??;
-            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w) };
+            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w), pips: poise::pips_mode(&w.ruleset.numbers) };
             // a hit with nothing to say (no stagger, no flank, no pierce) has no forecast
             (f.staggers() || f.flank || f.pierce).then_some(f)
         })

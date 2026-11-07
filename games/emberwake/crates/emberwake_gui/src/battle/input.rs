@@ -176,9 +176,13 @@ pub(super) fn target_name(w: &World, t: RoundTarget) -> String {
     }
 }
 
-/// UI2's Rest gain ("Rest: 1 AP, 10 poise"; the poise only under the rule poise).
+/// UI2's Rest gain ("Rest: 1 AP, 10 poise"; the poise only under the rule poise; S2.2-S3: "Rest: 1 AP, 1 pip" under
+/// `poise_mode` pips).
 pub(super) fn rest_text(g: rip::RestGain) -> String {
-    let poise = if g.poise > 0 { format!(", {} poise", g.poise) } else { String::new() };
+    let mut poise = if g.poise > 0 { format!(", {} poise", g.poise) } else { String::new() };
+    if g.pips > 0 {
+        poise += &format!(", {} pip{}", g.pips, if g.pips == 1 { "" } else { "s" });
+    }
     format!("Rest: {} AP{poise}", g.ap)
 }
 

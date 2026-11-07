@@ -7,7 +7,7 @@
 
 use crate::battle::draw::card_rows;
 use crate::battle::flow::next_round_by_itself;
-use crate::battle::marks::{poise_pip_rect, poise_pips, POISE_PIPS};
+use crate::battle::marks::{pip_view, poise_number, poise_pip_rect, poise_pips, PipView, POISE_PIPS};
 use crate::battle::playback::{round_banner_alpha, ROUND_BANNER_MS};
 use crate::battle::tips::{intent_ring_color, pip_fill, ring_intent, ApPips, AP_DRAIN_MS, AP_PIP, AP_PIP_EMPTY, AP_REFILL_MS, REST_BLOCK};
 use crate::battle::{Action, BattleScreen, AP_PIPS, AUTO_CONFIRM, CONFIRM_GUARD_MS, GRID_X, GRID_Y, POISE, TILE};
@@ -19,7 +19,7 @@ use emberwake_battle::grid::{GRID_H, GRID_W};
 use emberwake_battle::intent::Intent;
 use emberwake_battle::round_intent::RoundIntent;
 use emberwake_battle::session::{Phase, Session};
-use emberwake_rules::ruleset::TIMELINE;
+use emberwake_rules::ruleset::{PoiseMode, TIMELINE};
 use serde_json::{json, Value};
 use std::time::Instant;
 
@@ -407,7 +407,7 @@ fn a_card_shows_one_colour_of_pips_and_the_numbers_beside_the_rows() {
     // every number sits to the right of its row, on the row's line, inside the card
     let u = &s(&b).w.units[a];
     let st = emberwake_battle::poise::state(&s(&b).w, a).copied().expect("the timeline ruleset has poise");
-    for (text, row) in [(format!("{}/{}", u.hp, u.max_hp), rows.hp), (format!("{}/{}", st.value, st.max), rows.poise), (format!("{}/{}", u.ap, u.max_ap), rows.ap)] {
+    for (text, row) in [(format!("{}/{}", u.hp, u.max_hp), rows.hp), (poise_number(&s(&b).w.ruleset.numbers, &st), rows.poise), (format!("{}/{}", u.ap, u.max_ap), rows.ap)] {
         let t = recs.iter().find(|t| t.text == text && t.x >= (row.x + row.w) as f32 && t.x < rows.right as f32 && (t.y - row.y as f32).abs() < 8.0).unwrap_or_else(|| panic!("no {text} beside its row"));
         assert!(t.x + t.w <= rows.right as f32 + 0.5, "{text} stays inside the card");
     }
@@ -432,22 +432,24 @@ fn poise_lights_a_pip_per_started_twenty_percent() {
     assert_eq!(poise_pips(0, 0, false), 0, "no poise at all");
     let r = Rect::new(10, 20, 76, 3);
     for k in 0..POISE_PIPS {
-        let p = poise_pip_rect(r, k);
+        let p = poise_pip_rect(r, k, POISE_PIPS);
         assert!(p.w > 0 && p.h == r.h && p.y == r.y, "{p:?}");
         if k > 0 {
-            assert_eq!(p.x, poise_pip_rect(r, k - 1).x + poise_pip_rect(r, k - 1).w + 1, "one unit apart");
+            assert_eq!(p.x, poise_pip_rect(r, k - 1, POISE_PIPS).x + poise_pip_rect(r, k - 1, POISE_PIPS).w + 1, "one unit apart");
         }
     }
-    assert_eq!(poise_pip_rect(r, 0).x, r.x);
-    assert_eq!(poise_pip_rect(r, 4).x + poise_pip_rect(r, 4).w, r.x + r.w, "the row is filled");
+    assert_eq!(poise_pip_rect(r, 0, POISE_PIPS).x, r.x);
+    assert_eq!(poise_pip_rect(r, 4, POISE_PIPS).x + poise_pip_rect(r, 4, POISE_PIPS).w, r.x + r.w, "the row is filled");
 }
 
-/// On the card: as many pips lit as the rule says, and drawing them changes no poise.
+/// On the card: as many pips lit as the rule says, and drawing them changes no poise (the `bar` mode's rule: the pips
+/// from the value).
 #[test]
 fn the_card_draws_the_poise_pips() {
     let (mut cx, mut g, mut b) = arena();
     b.tick(&mut cx);
     let a = b.selected.unwrap();
+    b.host.session.as_mut().unwrap().w.ruleset.numbers.poise_mode = PoiseMode::Bar;
     let st = emberwake_battle::poise::state(&s(&b).w, a).copied().expect("the timeline ruleset has poise");
     let value = st.max / 2;
     b.host.session.as_mut().unwrap().w.poise.get_mut(&a).unwrap().value = value;
@@ -458,11 +460,52 @@ fn the_card_draws_the_poise_pips() {
     assert!((1..5).contains(&lit), "half the poise is some of the pips: {lit}");
     assert_eq!(card(&b, &cx, a)["poise_pips"], json!(lit));
     for k in 0..POISE_PIPS {
-        let pip = poise_pip_rect(rows.poise, k);
+        let pip = poise_pip_rect(rows.poise, k, POISE_PIPS);
         let on = px(&g, pip.x + pip.w / 2, pip.y + pip.h / 2)[..3] == POISE[..3];
         assert_eq!(on, k < lit, "pip {k}, {lit} lit");
     }
     assert_eq!(emberwake_battle::poise::state(&s(&b).w, a).unwrap().value, value, "display only");
+    assert_eq!(b.host.history.len(), before, "no request");
+}
+
+/// S2.2-S3 (FB-71): under `poise_mode` pips the row has `poise_pips` pips lit from the bar's own `pips` (not the value),
+/// a bonus above `poise_pips` shows the gold tip, none once broken; the card's number is pips of `poise_pips`.
+#[test]
+fn pips_mode_draws_the_bar_s_own_pips() {
+    let mut n = emberwake_rules::ruleset::Numbers { poise_mode: PoiseMode::Pips, ..Default::default() };
+    let full = n.poise_pips;
+    let st = |pips: i32, broken: bool| emberwake_battle::poise::PoiseState { max: 60, value: 60, pips, broken, ..Default::default() };
+    assert_eq!(pip_view(&n, &st(2, false)), PipView { lit: 2, total: full, bonus: false, pips: true }, "the value says full, the pips say 2");
+    assert_eq!(pip_view(&n, &st(full + 2, false)), PipView { lit: full, total: full, bonus: true, pips: true }, "windup bonus pips above poise_pips");
+    assert_eq!(pip_view(&n, &st(3, true)).lit, 0, "broken this round");
+    assert_eq!(poise_number(&n, &st(3, false)), format!("3/{full}"));
+    n.poise_pips = 7;
+    assert_eq!(pip_view(&n, &st(7, false)).total, 7, "the row follows poise_pips");
+    let bar = emberwake_rules::ruleset::Numbers::default();
+    assert_eq!(pip_view(&bar, &st(2, false)), PipView { lit: POISE_PIPS, total: POISE_PIPS, bonus: false, pips: false }, "bar: the value decides");
+
+    // on the card, from the state; drawing changes nothing
+    let (mut cx, mut g, mut b) = arena();
+    b.tick(&mut cx);
+    let a = b.selected.unwrap();
+    let sess = b.host.session.as_mut().unwrap();
+    sess.w.ruleset.numbers.poise_mode = PoiseMode::Pips;
+    let full = sess.w.ruleset.numbers.poise_pips;
+    let bar_now = sess.w.poise.get_mut(&a).unwrap();
+    (bar_now.pips, bar_now.broken) = (2, false);
+    let st = *bar_now;
+    let before = b.host.history.len();
+    let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+    let rows = card_rows(widget_rect(&b, &format!("party.{a}")), 0.0);
+    assert_eq!(card(&b, &cx, a)["poise_pips"], json!(2));
+    for k in 0..full {
+        let pip = poise_pip_rect(rows.poise, k, full);
+        let on = px(&g, pip.x + pip.w / 2, pip.y + pip.h / 2)[..3] == POISE[..3];
+        assert_eq!(on, k < 2, "pip {k} of {full}, 2 lit");
+    }
+    let text = format!("2/{full}");
+    assert!(recs.iter().any(|t| t.text == text && (t.y - rows.poise.y as f32).abs() < 8.0), "the number {text} beside the row");
+    assert_eq!(*emberwake_battle::poise::state(&s(&b).w, a).unwrap(), st, "display only");
     assert_eq!(b.host.history.len(), before, "no request");
 }
 

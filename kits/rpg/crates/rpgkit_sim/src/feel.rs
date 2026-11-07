@@ -99,7 +99,8 @@ pub struct Side {
     pub rest_ap: i64,
     /// MV4, MV8: landed commands with a carried move (Engage or Disengage).
     pub carried_moves: i64,
-    /// Blocks of landed Defend commands.
+    /// Blocks a unit started guarded (S2.2-S3, FB-85: under Guard Option 1C a Defend's guard runs from its wind-up start
+    /// to the round's end, so the resolver's `guarded` blocks, not the Defend's own span).
     pub guard_blocks: i64,
     /// OI1: unit-rounds (deck rule) whose intent had no active of that intent.
     pub no_active: i64,
@@ -501,6 +502,10 @@ impl Feel {
                 *side.items_by_id.entry(item.id.clone()).or_default() += 1;
             }
         }
+        // S2.2-S3 (FB-85): the guarded blocks as the resolver saw them (Guard Option 1C holds past the Defend's span)
+        for &(c, _) in &s.resolver.guarded {
+            self.side(s, c).guard_blocks += 1;
+        }
         let pierce_on = w.ruleset.has(ruleset::PIERCE);
         let mut firsts: IndexMap<UnitId, i32> = IndexMap::new();
         let mut actions: Vec<_> = s.resolver.scheduled.iter().filter(|a| a.landed).collect();
@@ -510,11 +515,9 @@ impl Feel {
             let skill_like = matches!(cmd.kind, CmdKind::Attack { .. } | CmdKind::Area { .. } | CmdKind::Support { .. } | CmdKind::Focus { .. } | CmdKind::Defend { .. } | CmdKind::Item { .. });
             let follow = skill_like && *firsts.entry(a.unit).and_modify(|n| *n += 1).or_insert(0) > 0;
             let carried = !matches!(cmd.carry, Carry::None);
-            let guard = if matches!(cmd.kind, CmdKind::Defend { .. }) { (a.end - a.start + 1).max(0) as i64 } else { 0 };
             let side = self.side(s, a.unit);
             side.follow_ups += follow as i64;
             side.carried_moves += carried as i64;
-            side.guard_blocks += guard;
             let c = &mut self.counts;
             // RULESET1_INTENT GD5 only: an ATTACKLOCK1 dodge raises `evaded` too and has its own row
             c.lost_attacks += (cmd.evaded.is_some() && cmd.dodged.is_none()) as i64;
