@@ -64,6 +64,7 @@
     "locked carry.rs::HEAVY_RATIO carry",
     "locked carry.rs::OVERLOAD_STEP carry",
     "locked damage.rs::DEFAULT_UNIT_SCALING damage",
+    "locked pipeline.rs::MIN_POWER damage",
     "locked damage.rs::ARMOR_K damage",
     "locked damage.rs::CRIT_BASE damage",
     "locked damage.rs::CRIT_PER_DEX damage",

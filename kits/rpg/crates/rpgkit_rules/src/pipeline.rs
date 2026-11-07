@@ -144,8 +144,11 @@ pub struct Pipeline {
     pub finish_min: i32,
 }
 
-/// Damage: the attack power rounds (minimum 1), the hit rounds (minimum 1).
-pub const DAMAGE: Pipeline = Pipeline { base_round: Some(1), finish_min: 1 };
+/// U1.2-S2 (FB-45): the attack power's floor at rounding point one: an authored or derived power below it counts as it
+/// before the multipliers (an authored unit `power` of 0 still means "derive it").
+pub const MIN_POWER: i32 = 1;
+/// Damage: the attack power rounds (minimum `MIN_POWER`), the hit rounds (minimum 1).
+pub const DAMAGE: Pipeline = Pipeline { base_round: Some(MIN_POWER), finish_min: 1 };
 /// Poise stagger (RULESET1 P6): one rounding, floor 0.
 pub const STAGGER: Pipeline = Pipeline { base_round: None, finish_min: 0 };
 

@@ -21,7 +21,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `U3.2` (`U3_GEAR`) | slices 1 and 2 done | `develop` | `block_cost` retired (S1); gear rules read the family table (S2, READY row 8): reach and printed check lists held, FB-67. |
 | `U4.2` (`U4_PASSIVES`) | slices 1 and 2 done | `develop` b20511a1 | Typed grant view (S1, FB-62); source gather in the unit builder (S2, FB-63). |
 | `SKILLS1-FB` (READY row 22) | done | `develop` 127f168 | `tools/planner/feedback_check.py`. |
-| R1 path (READY R1-3..R1-8) | rows 8, 11, 12, 13 done; row 21 (`BASERULES1-M2`) in review | `claude/baserules1-m2` | Then W2-1, W2-2, W2-3, then the R1 release PR. |
+| R1 path (READY R1-3..R1-8) | rows 8, 11, 12, 13, 21 done; W2-1 switch 1 (`U1.2-S2`) in review | `claude/u12s2-min-power` | Then W2-1 switches 2-5, W2-2, W2-3, then the R1 release PR. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
@@ -77,6 +77,14 @@ FB-01 to FB-66 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: (1) The sim prints the picked ruleset's notes (`Ruleset::notes`, the text `aegis rules` shows) when the command line gives `ruleset=`, or `rules=` on a run with no world fights (the feel mode's own timeline default prints none, so `sim_golden` holds): `RULES error:` lines, then `RULES warning:` lines, right under ARGS (`rpgkit_sim::args::rule_note_lines`, `SimArgs.rule_notes`); the run still plays. `sim help` adds one line naming it (`RULE_NOTES_USAGE`), apart from `usage`, which `sim_golden` holds. A run that may play world fights (`world=`, `enc=world:...`, campaign) with `rules=` alone prints none: those fights play each world's own row switched, so classic's notes would mislead. (2) Reading taken: no `LOCKED` validation of ruleset rows exists in `ruleset.rs`; the only one is the scan test `rpgkit_rules/tests/locked.rs`, so "recursively scan nested" was built as FB-40's scan gaps: it now recurses into subfolders and reads `pub(<scope>)`, `static`, slice-typed and multi-line declarations (the wider scan found no new constant in today's `src`). `PROMOTED` still matches by name only. Tests: `rpgkit_sim/tests/ruleset_args.rs` (+1), `rpgkit_rules/tests/locked.rs` (+1, a planted nested violation). No golden moved.
 - **Recommendation**: Confirm the reading of (2), or say what a ruleset-row `LOCKED` check should reject. Docs delta: `engine/docs/authoring/rule_library.md` (or the BASERULES notes): "`tools/fc.sh sim` with `ruleset=` or `rules=` prints the ruleset's notes as `RULES error:` / `RULES warning:` lines under ARGS"; `docs/STRUCTURE.md` (rpgkit_rules tests): "`tests/locked.rs`: every numeric public constant or static under `src/` (subfolders included) is in `LOCKED` or `PROMOTED`".
+
+### FB-73: U1.2-S2 (W2-1 switch 1) built: `MIN_POWER = 1` is a named floor; one reading; docs delta
+
+- **Spec**: `docs/READY.md` W2-1 (1); FB-45; `docs/sessions/U1_STATS.md` feasibility item 2
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: The attack power's floor at rounding point one was already 1 in the damage pipeline (FB-45: any power below 1 counts as 1 before the multipliers). It is now the named constant `rpgkit_rules::pipeline::MIN_POWER = 1`, used by `DAMAGE`, and listed in `LOCKED` ("attack power floor at rounding point one"). Reading taken on "schema min": the unit field `power` keeps `min: 0`, since 0 means "derive it" (weapon power + unit power); a schema minimum of 1 would break that default, so the floor is stated in code (FB-45's second option) and the schema is unchanged. The other authored power fields keep `min: 0` for the same reason: `items.base_power` (0 = not offensive: armour, shields; the Dojo tests `base_power > 0`) and `skills.power_mult` (0 = a debuff-only attack); `rulesets.flank_power_mult` already has min 1. No shipped row authors a power below 1. Named golden re-record: `rules_contract_golden` only, +1 line (`locked pipeline.rs::MIN_POWER damage`); rules, timeline, sim, checks, journey, store, rng_hash and PHASEFOLD byte-identical. Test: `rpgkit_rules/tests/damage_pipeline.rs` (+1).
+- **Recommendation**: Confirm the reading (or ask for a schema note on `power`, which would be a schema text change). Docs delta: HISTORY: "2026-11-07 U1.2-S2: `rules_contract_golden` re-recorded on purpose (+1 locked line `pipeline.rs::MIN_POWER`): the attack power floor at rounding point one is the named constant `MIN_POWER = 1`; no behaviour change"; GAME_BRIEF damage: "attack power is floored at `MIN_POWER` (1) at rounding point one; a unit `power` of 0 means derived".
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

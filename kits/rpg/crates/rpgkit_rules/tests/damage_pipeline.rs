@@ -154,3 +154,16 @@ fn a_hit_traces_every_step_in_stage_order() {
     assert_eq!(h.trace.steps[0].id, "authored");
     assert_eq!((h.trace.steps[1].id.as_ref(), h.attack_power), ("round", 23), "an authored power is unscaled");
 }
+
+/// U1.2-S2 (FB-45): an attack power below `MIN_POWER` counts as `MIN_POWER` at rounding point one, before the
+/// multipliers, so a later multiplier scales the floored value.
+#[test]
+fn an_attack_power_below_the_floor_counts_as_min_power() {
+    assert_eq!(pipeline::MIN_POWER, 1);
+    for raw in [-5.0, 0.0, 0.4] {
+        let mods = [Modifier::new("power", Stage::Base, Op::Add(raw)), Modifier::new("amp", Stage::Mult, Op::Mul(3.0))];
+        let out = pipeline::DAMAGE.run(&mods);
+        assert_eq!(out.base, Some(pipeline::MIN_POWER), "raw {raw}");
+        assert_eq!(out.value, 3 * pipeline::MIN_POWER, "raw {raw}: the multiplier scales the floor");
+    }
+}
