@@ -9,8 +9,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 
 | Task / Sub-block | Stage / Status | Branch / Commit | Notes |
 | --- | --- | --- | --- |
-| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 and -S4. |
-| R1 path (READY R1-6..R1-8) | W2-1 done; W2-2 slices 1-2 done; slice 3 (`U3.2-S5`, proposed as covered: FB-82) in review | `claude/u32s5-carry-burden` | Then W2-2 slices 4-5, W2-3, then the R1 release PR. |
+| Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5. |
+| R1 path (READY R1-6..R1-8) | W2-1 done; W2-2 slices 1-3 done; slice 4 (`U4.2-S3` temperament) in review | `claude/u42s3-temperament` | Then W2-2 slice 5, W2-3, then the R1 release PR. |
 | READY rows 14-20 | queued (post-R1) | - | - |
 
 ## 2. Feedback Items (Append-Only)
@@ -116,6 +116,14 @@ FB-01 to FB-66 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: Built before this slice: burden and carry overload lower initiative first, move rate only past its floor (U1.2-S3c); party-wide carry (`carry.rs`: capacity 30 + sum of members' `STR x 3 + CONS`, load = stash + worn + pouches, overload 1 per 10 over). Campaign battles never apply carry (only the kit Dojo calls `carry::apply`), so carry is effectively off in play. Missing: an on/off switch; turning it on needs answers the spec lacks. Build's proposal: treat the slice as covered for R1, pending Design's choice below; `rpgkit_rules/tests/carry.rs` (4) pins the built rule. This corrects FB-36 (d) ("carry is always on today"): it never applied outside the Dojo, where it is always on and not switchable. No golden moved.
 - **Recommendation**: Pick for later: (A, Build's choice) a row-only ruleset field `carry_stat` naming a derived row (formula as data, like `poise_stat`), empty = off; battles apply carry at start with the stash weight; (B) a register rule `carry`, formula in code; (C) nothing until a world wants carry. For A/B: active members only? shown on the party screen? does the Dojo follow the switch? Docs delta: GAME_BRIEF carry line as in the Finding ("today only the Dojo applies it"); STRUCTURE: test `carry.rs`; the party screen's Initiative tooltip mentions carry overload, which applies only in the Dojo; HISTORY: "U3.2-S5: covered by U1.2-S3c and `carry.rs`; switch left to Design".
+
+### FB-83: U4.2-S3 (W2-2 slice 4) built: character temperament, default intent and AI role; none shipped
+
+- **Spec**: `docs/sessions/U4_PASSIVES.md`; FB-29, FB-28, FB-63 (3)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: World `characters` gain `temperament` (an always-on passive), `default_intent` and `ai_role` (the unit field's vocabularies), stored only when set. Gather order: own passives, temperament, faction, disciplines, named items (each id once); heroes too (RECRUIT1), and the hero save leaves the temperament out so every build re-reads it. A character's `ai_role` / `default_intent` override its base unit's (roster entry, AI profile, session start intent; the hero build definition). Checks: a slottable temperament is refused; `default_intent` must be listed by a ruleset. No golden moved. Tests: `rpgkit_world/tests/temperament.rs` (4), `rpgkit_content/tests/temperament.rs` (4).
+- **Recommendation**: Pick temperaments (Build proposes only two from personality text: Tev Quill `keen_senses`, Mara Voss `steady_nerves`). Answer: should a hero's `default_intent` set its battle start intent (no reader today)? Should faction and discipline passives also leave the hero save snapshot? Role warnings for a character's `ai_role`? Follow-up when data sets the AI keys: the balance sim does not apply a character's `ai_role` / `default_intent` (`rpgkit_sim/src/world.rs` `has_extras`, `character_overrides`). Docs delta: GAME_BRIEF passives bullet as above; STRUCTURE: the two tests; HISTORY: "U4.2-S3: character temperament, default_intent, ai_role (FB-29); no golden moved"; PORT_NOTES: `character_passives` includes the temperament.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

@@ -26,6 +26,8 @@ pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both
 /// (FB-34): retired (untrained gear is a soft wield penalty, never refused); nothing reads it, an empty list stores as no
 /// key, and the asset lane drops the last one.
 pub const WEARS_UNTRAINED: &str = "wears_untrained";
+/// U4.2-S3 (FB-29): the character field naming its temperament passive.
+pub const TEMPERAMENT: &str = "temperament";
 
 type Ints = IndexMap<String, i64>;
 
@@ -150,7 +152,8 @@ fn fits_slot(item: &ItemDef, slot: &str) -> bool {
     target == item.slot
 }
 
-/// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each.
+/// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each. U4.2-S3
+/// (FB-29, U4 "Character (drills + temperament)"): its `temperament` comes right after its own passives.
 pub fn character_passives(worlds: &Catalogs, character: &Dict, w: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut add = |raw: &Value| {
@@ -161,6 +164,10 @@ pub fn character_passives(worlds: &Catalogs, character: &Dict, w: &str) -> Vec<S
         }
     };
     add(json::get(character, "passives"));
+    let temperament = json::s(character, TEMPERAMENT);
+    if !temperament.is_empty() {
+        add(&Value::from(vec![temperament]));
+    }
     add(json::get(worlds.resolve(w, "factions", &json::s(character, "faction")), "grants"));
     for r in json::aget(character, "disciplines") {
         add(json::get(worlds.resolve(w, "disciplines", &json::gstr(r)), "passives"));
@@ -338,7 +345,7 @@ pub(crate) fn owned_families(v: &View, e: &Dict) -> Vec<String> {
 
 /// RULESET1 TQ23 (a): a unit's `default_intent` (the schema's enum: "" or one of the four intents) is one a ruleset
 /// row lists among its intents; without ruleset rows only the enum applies.
-fn default_intent_errors(v: &View, e: &Dict) -> Vec<String> {
+pub(crate) fn default_intent_errors(v: &View, e: &Dict) -> Vec<String> {
     let intent = json::s(e, "default_intent");
     let rows = v.entries(ruleset::KIND);
     if intent.is_empty() || !ruleset::DEFAULT_INTENTS.contains(&intent.as_str()) || rows.is_empty() || rows.iter().any(|r| json::sget(r, "intents").contains(&intent)) {

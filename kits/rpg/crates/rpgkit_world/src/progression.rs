@@ -194,6 +194,14 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         def.spend.insert(rpgkit_data::STATS[0].to_string(), 0);
     }
     def.name = display_name(d, &work);
+    // U4.2-S3 (FB-29): the character's AI role and default intent over the base unit's (the fielded hero's AI profile)
+    let character = character_of(d, &work);
+    for (key, field) in [("ai_role", &mut def.ai_role), ("default_intent", &mut def.default_intent)] {
+        let v = json::s(character, key);
+        if !v.is_empty() {
+            *field = v;
+        }
+    }
     let growth = Growth {
         deck: work.deck.clone(),
         learned_skills: work.learned_skills.clone(),

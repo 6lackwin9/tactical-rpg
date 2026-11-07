@@ -26,6 +26,10 @@ pub struct XpCurve {
     pub level_delta_max: f64,
 }
 
+/// U4.2-S3 (FB-29): the character keys that override its base unit's AI defaults (`character_unit_entry`,
+/// `progression::build_as`): `default_intent` (the session's start intent) and `ai_role` (`AiProfile::for_unit`).
+pub const CHARACTER_AI_KEYS: [&str; 2] = ["default_intent", "ai_role"];
+
 #[derive(Debug, Clone)]
 pub struct Data {
     pub cat: Arc<Catalog>,
@@ -306,12 +310,19 @@ impl Data {
         if role == "party" || role == "enemy" {
             entry.insert("side".into(), Value::String(role));
         }
+        // U4.2-S3 (FB-29): the character's default intent and AI role, over its base unit's (empty = the unit's)
+        for key in CHARACTER_AI_KEYS {
+            let v = json::s(character, key);
+            if !v.is_empty() {
+                entry.insert(key.into(), Value::String(v));
+            }
+        }
         let desc = json::s_or(character, "background", &json::s(&entry, "description"));
         entry.insert("description".into(), Value::String(desc));
         entry
     }
 
-    /// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each
+    /// WorldFactory.character_passives: its own, its temperament (U4.2-S3), its faction's, its disciplines' and its named items', once each
     /// (the one list, kept with the content checks that also read it).
     pub fn character_passives(&self, character: &Dict, w: &str) -> Vec<String> {
         rpgkit_content::check::unit::character_passives(&self.catalogs, character, w)
