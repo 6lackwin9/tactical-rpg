@@ -1,5 +1,11 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## R2-CLOSE 2026-11-08 (`CLASS-BASICS` & `R2` close feel pass, `FB-137`)
+
+- **Measured build**: `develop` `@4ed71e44` (40 seeds, `tools/fc.sh sim feel 5 ruleset=timeline seeds=40 counts=on`, auto driver, `0` PLAN FAIL / SKIP).
+- **Baseline (`4ed71e44`)**: **`tl_duel_windup` 65% (`26/14/0`, median 5 rounds), `tl_duel_reach` 62.5% (`25/15/0`), `tl_duel_armour` 65% (`26/14/0`), `tl_flank` 100%, `tl_skirmish` 87.5% (`35/2/3`), overall 76.0%** — all three duels inside the `50–75%` target band and overall `>= 75%`.
+- **Evaluated levers (`know_potency` & `guard_cap`)**: Setting `know_potency` to `1.0` (or `3.0`) on `rulesets.timeline` and `GUARD_CAP` to `0.75` (`rpgkit_rules/src/damage.rs:25`) produced byte-identical results across all 40 seeds (`tl_` fights do not roll status potency via `status::know_bonus` and no guard+cover stack exceeds `0.75`). Decision (`FB-137`): keep `know_potency = 0.0` and `guard_cap = 0.90` for `R2`, and expand `tl_` class-basic feel coverage in `R4-CLOSE`.
+
 ## W2-4 & W2-5 2026-11-08 (`A4.2-K1b` Field intent & `ATTACKLOCK1-O` melee lock feel check, `FB-121`, `FB-128`)
 
 - **`W2-4` Slice 6 (`A4.2-K1b`, `@86ff95d`, 40 seeds)**: `tl_duel_windup` 65%, `tl_duel_reach` 75%, `tl_duel_armour` 65%, `tl_flank` 100%, `tl_skirmish` 87.5% (35 won, 1 lost, 4 capped; was 92.5% before `field_intent` routed `tl_halberdier`'s `tl_sweeping_arc` through `Assault` `area_on` with `+1` wind-up block and `splash_mult` `0.5`), **overall 78.5%** (`>= 75%` target).

@@ -11,8 +11,8 @@ Design record for the Story block (`T1.1` Dialogue, quests, flags & stat rolls, 
 - **Dialogue Stat Check: Threshold Condition or Choice-Time Roll Effect (`U1.1` -> `T1.1`, `C25`, `FB-54`)**:
   - Because `condition_holds` takes `&GameState` and runs on every redraw, a dialogue check reads the **active party's best stat** (`best_stat`, or a named `who` member's stat when specified) and separates pure conditions from seeded rolls:
     1. **Flat threshold condition (`T1.2-S1`, default)**: `stat` condition with `threshold` (alias of `min`) succeeds when `party_best_stat >= threshold` (pure `&GameState` read, preserving existing dialogue checks).
-    2. **Choice-time seeded roll effect (`T1.2-S2`, `U1.1` decision)**: A choice-time `check` effect draws `1..dialogue_roll_die` (`20` default, on a dedicated `dialogue` stream in `GameRolls`) plus `party_best_stat` against `dc` (`roll + stat_value >= dc`) and sets an outcome flag that follow-up node conditions read—never advancing `GameRolls` on redraw and preventing save-scumming.
-    3. **Standing rating reads (`T1.2-S3`, after `U1.2`)**: Extend `best_stat` to read `U1` standing derived ratings in addition to primary stats.
+    2. **Choice-time seeded roll effect (`T1.2-S2`, `U1.1` decision, `FB-139`)**: A choice-only `roll` `{stat, dc, key, who?}` effect draws `1..dialogue_roll_die` (`dialogue_roll_die` on `world.json`, default `20`, `6..100`, on a dedicated saved `dialogue` stream in `GameRolls`) plus `party_best_stat` (or `who`'s stat, reading `0` and still rolling if `who` is not in the active party) against `dc` (`1..999`, `roll + stat_value >= dc`) and sets the boolean outcome flag `key` (`true` or `false`) that follow-up node conditions read—never advancing `GameRolls` on redraw and preventing save-scumming.
+    3. **Standing rating reads (`T1.2-S3`, after `U1.2`, `FB-139`)**: Extend `best_stat` and `roll` stat names to read the 6 primary stats plus `initiative`, `move_rate`, `armor`, and `derived_stats` rows (ratings bar and `dc` up to `999`).
 
 ## 2. `T2.1` — Sequences, vignettes and story fights (`C24`)
 

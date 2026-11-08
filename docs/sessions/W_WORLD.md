@@ -20,7 +20,7 @@ Design record for the World block (`W1.1` Region map & interaction, `W2.1` World
 - **Slices (`FB-50`)**:
   - **`W.2-S1` (`WorldRoster::new` + `finish_world`)**: Replace the 16 `WorldRoster { d, world }` struct literals with `WorldRoster::new` and move runner dispatch / `FIGHT_SOURCE` settlement into kit `finish_world` (`0` golden diffs).
   - **`W.2-S2` (`begin_world` + round-trip test, after `READY` row 10)**: Build party and enemy units in kit `begin_world` (returning units with a callback for GUI-only `Prebuilt` art) and add a headless world-fight round-trip test.
-  - **`W.2-S3` (`stage` from `campaign.act` + `SERVICES1`)**: Wire `stage` from `campaign.act` after mob growth lands, followed by `SERVICES1` (`C22`).
+  - **`W.2-S3` (`stage` from `campaign.act` + `SERVICES1`, `FB-139`)**: Wire `stage` from `campaign.act` (`0` without a campaign) on `WorldRoster.stage` with per-unit `growth_per_stage` (`int`, default `0` on `units.json`) applied in `Roster::entry` to enemies only (`tier != "hero"`, no party guests) so battle level and XP weight read the same `foe_level`, followed by `SERVICES1` (`C22`: `Services` and `ServiceScreen` in `talk.rs`; lore pages stay in `RegionMap`).
 
 ## 4. Fixed vs tunable parameters (`aegis rules --contract`)
 
