@@ -27,7 +27,7 @@ One derivation function in `rpgkit_rules` replaces the three diverging copies (`
   6. **`ATTACK` with `area` shape (`PLUS`, `BURST`, `LINE`, `CONE`, `RING`, `ARC`)**:
      - `RING` -> `Stand`.
      - `ARC`, `LINE`, and `CONE` (without `hazard`), and `BURST` / `PLUS` (with `reach_max > 1` and no `hazard`) -> `Field` and `Assault` (otherwise `Field`, e.g., when a shape places a ground `hazard`).
-     - In `Field` mode, `ARC` and `LINE` are ground-aimed (`WASD` / source tile) and receive the `area` `Field` bonus (`ARC 3 -> 5` wide, `LINE 3 -> 4` long); in `Assault` mode, their direction is locked to the picked enemy target at impact (`IR7`), using base shape size, `foes only` (`IR9`), `splash_mult` off the primary target, and `+assault_shape_blocks` (`+1` wind-up block, capped at `MAX_ACTION_BLOCKS = 6`).
+     - In `Field` mode, `ARC` and `LINE` are ground-aimed (`arrow keys` / source tile, avoiding `A` Autoplay and `S` Self hotkeys per `FB-121`) and receive the `area` `Field` bonus (`ARC 3 -> 5` wide, `LINE 3 -> 4` long); in `Assault` mode, their direction is locked to the picked enemy target at impact (`IR7`), using base shape size, `foes only` (`IR9`), `splash_mult` off the primary target, and `+assault_shape_blocks` (`+1` wind-up block, capped at `MAX_ACTION_BLOCKS = 6`).
   7. **`ATTACK` with `hazard` and no shape (`tripwire_snare`)**: `Field` (must precede the unshaped `Assault` rule, `FB-19`).
   8. **Unshaped `ATTACK`**: `Assault`.
 - **Consumable Item Intent Mapping (`FB-19`)**:

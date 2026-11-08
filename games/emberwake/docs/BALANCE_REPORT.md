@@ -1,5 +1,10 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## W2-4 & W2-5 2026-11-08 (`A4.2-K1b` Field intent & `ATTACKLOCK1-O` melee lock feel check, `FB-121`, `FB-128`)
+
+- **`W2-4` Slice 6 (`A4.2-K1b`, `@86ff95d`, 40 seeds)**: `tl_duel_windup` 65%, `tl_duel_reach` 75%, `tl_duel_armour` 65%, `tl_flank` 100%, `tl_skirmish` 87.5% (35 won, 1 lost, 4 capped; was 92.5% before `field_intent` routed `tl_halberdier`'s `tl_sweeping_arc` through `Assault` `area_on` with `+1` wind-up block and `splash_mult` `0.5`), **overall 78.5%** (`>= 75%` target).
+- **`W2-5` Slices 2–3 (`ATTACKLOCK1-O` + `I1.2-S2/S3`, `@367a6bb` / `@e95171f`, 40 seeds, `attack_lock = melee` on in `timeline`)**: **`tl_duel_windup` 65%, `tl_duel_reach` 62.5% (was 75%; `tl_footman` steps inside `tl_halberdier`'s reach-2 polearm wind-up, dodging 34 locked attacks across 40 seeds), `tl_duel_armour` 65%, `tl_flank` 100%, `tl_skirmish` 87.5%, overall 76.0%** (all three duels inside the `50–75%` band, overall `>= 75%`).
+
 ## R1-BAL 2026-11-07 (post-R1 timeline feel run & H6 tuning options, `FB-98`)
 
 - **Measured build**: `develop` `@af543321` (40 seeds, `tools/fc.sh sim feel 5 ruleset=timeline seeds=40`, auto driver): **67% overall** (`tl_duel_windup` 10%, `tl_duel_reach` 57.5%, `tl_duel_armour` 87.5%, `tl_flank` 100%, `tl_skirmish` 80%; `tl_skirmish` seed 7 ends `fled (round limit)` at round 10).

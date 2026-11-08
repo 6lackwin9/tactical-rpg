@@ -15,7 +15,7 @@ Currently, `ai.rs` checks 8 literal status IDs (`taunt`, `riposte`, `regen`, `ro
     5. **`modifies_rating(Armor | MoveRate | AttackPower)`** (replaces `"slow"`, `"expose"`, `"fortify"` in `ai.rs` — where `fortify` and `expose` map to `Armor`, `slow` and `haste` to `MoveRate`, and `weaken`/`empower` to `AttackPower` per `FB-52`):
        - **Slice 1 (`I1.2-S1`, after `S1.2-S1`)**: Replace the 8 status ID checks in `ai.rs` 1-to-1 with `S1` behaviour predicates (`Armor` for `fortify`/`expose`, `MoveRate` for `slow`) so `timeline_golden` and `sim_golden` remain byte-identical.
        - **Slice 2 (`I1.2-S2`)**: Add a generic rating-modifier scorer behind a ruleset flag (default `off` until balance re-record) so scoring `haste`, `weaken`, and `empower` is opt-in.
-       - **Slice 3 (`I1.2-S3`, after `A3.2`, `A4.2`, `F3`)**: Add `Row Z`, `Maneuver`, `Field`, and `RING` rows to `ROWS` (`ai.rs:1590`) in a named `timeline_golden` and `sim_golden` re-record.
+       - **Slice 3 (`I1.2-S3`, after `A3.2`, `A4.2`, `F3`)**: Add `Row Z` (`Field`), `RING` (`ROW_RING`), and `IntentPick::drop_defend` to `ROWS` (`ai.rs`) in `W2-5`, followed by the role-agnostic `Maneuver` gap-close row in `R2-W2b` (`CLASS-BASICS`, `FB-130` Option A: any unit holding a `Maneuver` gap-close skill such as `lunge`, `pounce`, or `charge_in` picks a `Maneuver` round when a foe is out of normal melee reach, within the gap-closer's reach, and the landing tile is safe).
 - **Role Names (`FB-52`)**:
   - Keep the schema `ai_role` enum (`AGGRESSOR`, `SKIRMISHER`, `SNIPER`, `SUPPORT`) as the canonical role list, with unit rows or `U4` character `temperament` (`FB-29`) overriding role thresholds (`heal_below`, `defend_below`, `flee_ratio`, `reckless`, `TargetPref`).
 
