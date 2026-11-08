@@ -79,67 +79,357 @@ function renderSceneRunner() {
           <span>game.json: <code style="color:var(--gold);">"start_worlds": ["sunk_ward"]</code></span>
           <span>Click any row to launch · [Esc / Right-Click] Close</span>
         </div>
-      `, 'width:100%;height:100%;padding:10px;')}
+      `, 'width:100%;height:100%;padding:10px;display:flex;flex-direction:column;justify-content:space-between;')}
     </div>
   `;
 }
 
 // ============================================================================
-// SCREEN 2: STORY STAGE (`story.rs` — Full-Screen Illustrated Backdrop + Caption Card)
+// SCREEN 2: STORY STAGE (`story.rs` + `vignette.rs` — 1280×720 Native Grid)
+// Interactive comparison of:
+//  - Approach 1 (`vn_stage`): VN Illustrated Backdrop + Dynamic Scene Variants + Staged Character Sprites/Cutouts
+//  - Approach 2 (`map_stage`): Live In-Game Region/Battle Map Stage + On-Tile Unit Reactions + Bottom Dialogue Box
+//  - Cutscene Player (`vignette_reel`): `VignetteScreen` Title / Image / Transition Cards usable by both modes
 // ============================================================================
-function renderStoryStage() {
-  const st = STORIES[STATE.storyId] || STORIES.prologue_intro;
-  const card = st.cards[Math.min(STATE.storyCardIdx, st.cards.length - 1)];
-  const isLastCard = STATE.storyCardIdx >= st.cards.length - 1;
+function renderStoryActorSlot(actor, side) {
+  if (!actor) return `<div style="width:260px;height:310px;pointer-events:none;"></div>`;
+  const style = STATE.storyActorStyle || 'full_sprite';
+  if (style === 'backdrop_only') return `<div style="width:260px;height:310px;pointer-events:none;"></div>`;
+
+  const isActive = !!actor.active;
+  const lungeOffset = actor.lunge ? (side === 'left' ? 'translateX(18px)' : 'translateX(-18px)') : 'translateX(0px)';
+  const scaleStr = isActive ? 'scale(1.05) translateY(-6px)' : 'scale(0.93) translateY(8px)';
+  const filterStr = isActive
+    ? 'brightness(1.06) contrast(1.06) drop-shadow(0 0 18px rgba(245,158,11,0.55)) drop-shadow(0 12px 20px rgba(0,0,0,0.92))'
+    : 'brightness(0.46) saturate(0.65) contrast(0.95) drop-shadow(0 8px 14px rgba(0,0,0,0.85))';
+  const borderCol = isActive ? '#f59e0b' : '#374151';
+
+  if (style === 'bust_cutout') {
+    const portraitSrc = ASSETS.portraits[actor.portrait] || ASSETS.portraits.kaelen;
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;transform:${scaleStr} ${lungeOffset};">
+        <div style="margin-bottom:8px;padding:3px 10px;border-radius:12px;background:${isActive ? 'rgba(24,20,14,0.92)' : 'rgba(12,14,20,0.75)'};border:1px solid ${borderCol};font-size:11px;color:${isActive ? '#fbbf24' : '#9ca3af'};font-weight:700;letter-spacing:0.4px;box-shadow:0 4px 12px rgba(0,0,0,0.7);">
+          ${isActive ? '● Speaking · ' : ''}${actor.emotion || 'Staged'}
+        </div>
+        <div style="width:216px;height:216px;border-radius:10px;overflow:hidden;border:2px solid ${borderCol};background:radial-gradient(circle at 50% 35%, rgba(245,158,11,0.22), rgba(10,12,18,0.95));filter:${filterStr};position:relative;">
+          <img src="${portraitSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
+          <div style="position:absolute;inset:0;box-shadow:inset 0 0 22px rgba(0,0,0,0.75);pointer-events:none;"></div>
+        </div>
+        <div style="margin-top:8px;padding:4px 14px;background:rgba(10,12,18,0.9);border:1px solid ${borderCol};border-radius:4px;text-align:center;">
+          <div class="font-title" style="font-size:13px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</div>
+          <div style="font-size:10px;color:var(--dim);">${actor.title || ''}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Default: `full_sprite` — Full-Body Unit Sprite staged above an atmospheric stone plinth, separated from the background
+  const unitFrames = ASSETS.units[actor.unitKey] || ASSETS.units.kaelen;
+  const unitSrc = actor.lunge ? (unitFrames.atk || unitFrames.idle0) : (isActive ? (unitFrames.idle1 || unitFrames.idle0) : unitFrames.idle0);
+  const flipX = side === 'right' ? 'scaleX(-1)' : 'scaleX(1)';
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;transform:${scaleStr} ${lungeOffset};">
+      <div style="margin-bottom:6px;padding:4px 12px;border-radius:12px;background:${isActive ? 'rgba(28,22,14,0.94)' : 'rgba(12,14,20,0.75)'};border:1px solid ${borderCol};font-size:11px;color:${isActive ? '#fbbf24' : '#9ca3af'};font-weight:700;letter-spacing:0.4px;box-shadow:0 4px 12px rgba(0,0,0,0.75);">
+        ${isActive ? '● ' : ''}${actor.emotion || 'Ready'}${actor.lunge ? ' · [Action Pose]' : ''}
+      </div>
+      <div style="position:relative;width:230px;height:230px;display:flex;align-items:center;justify-content:center;">
+        <!-- Ground plinth & Tallow Amber Rim Aura separating character sprite from background painting -->
+        <div style="position:absolute;bottom:10px;width:180px;height:36px;border-radius:50%;background:${isActive ? 'radial-gradient(ellipse, rgba(245,158,11,0.42) 0%, rgba(10,12,18,0.88) 65%, transparent 100%)' : 'radial-gradient(ellipse, rgba(0,0,0,0.78) 0%, transparent 75%)'};border-bottom:${isActive ? '2px solid rgba(245,158,11,0.65)' : '1px solid rgba(75,85,99,0.4)'};"></div>
+        <img src="${unitSrc}" class="pixel" style="width:196px;height:196px;object-fit:contain;transform:${flipX};filter:${filterStr};position:relative;z-index:2;">
+      </div>
+      <div style="margin-top:2px;padding:4px 14px;background:rgba(10,12,18,0.92);border:1px solid ${borderCol};border-radius:4px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.75);">
+        <div class="font-title" style="font-size:13px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</div>
+        <div style="font-size:10px;color:var(--dim);">${actor.title || ''}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStoryMapBackdrop(st, card) {
+  const enc = ENCOUNTERS[st.encId] || ENCOUNTERS.enc_0a;
+  const horizonStripImg = st.mapBackdrop === 'sluice_hub'
+    ? ASSETS.bg.hearth
+    : (ASSETS.bg[st.mapBackdrop] || ASSETS.bg.alley);
+  const ambientBgImg = ASSETS.bg[st.bg] || ASSETS.bg.intro_1;
+
+  const cols = 12;
+  const rows = 9;
+  const tileW = 76;
+  const tileH = 40;
+  const boardW = cols * tileW; // 912
+  const boardH = rows * tileH; // 360
+  const boardLeft = Math.round((1280 - boardW) / 2); // 184
+  const boardTop = 122;
+
+  let tilesHtml = '';
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const isWall = st.mapBackdrop !== 'sluice_hub' && enc.walls.some(w => w[0] === x && w[1] === y);
+      const isWater = st.mapBackdrop !== 'sluice_hub' && enc.water.some(w => w[0] === x && w[1] === y);
+      const haz = st.mapBackdrop !== 'sluice_hub' ? enc.hazards.find(h => h.x === x && h.y === y) : null;
+      const unitOnTile = (card.mapUnits || []).find(u => u.x === x && u.y === y);
+
+      let bg = ((x + y) % 2 === 0) ? 'rgba(22, 26, 36, 0.82)' : 'rgba(18, 21, 30, 0.82)';
+      let bdr = 'rgba(148, 163, 184, 0.16)';
+      if (isWall) { bg = 'rgba(12, 14, 20, 0.94)'; bdr = 'rgba(75, 85, 99, 0.55)'; }
+      else if (isWater) { bg = 'rgba(12, 74, 110, 0.55)'; bdr = 'rgba(56, 189, 248, 0.38)'; }
+      else if (haz) { bg = 'rgba(180, 83, 9, 0.42)'; bdr = 'rgba(251, 191, 36, 0.7)'; }
+
+      if (unitOnTile && unitOnTile.speaking) {
+        bg = 'rgba(245, 158, 11, 0.32)';
+        bdr = '#fbbf24';
+      }
+
+      tilesHtml += `
+        <div style="position:absolute;left:${x * tileW}px;top:${y * tileH}px;width:${tileW}px;height:${tileH}px;background:${bg};border:1px solid ${bdr};box-sizing:border-box;">
+          ${isWall ? `<div style="position:absolute;inset:3px;background:#1f2430;border-top:2px solid #374151;"></div>` : ''}
+          ${haz ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fbbf24;font-weight:bold;text-shadow:0 1px 3px #000;">🔥 ${haz.type.toUpperCase()}</div>` : ''}
+        </div>
+      `;
+    }
+  }
+
+  const unitsHtml = (card.mapUnits || []).map(u => {
+    const left = u.x * tileW + Math.round(tileW / 2);
+    const top = u.y * tileH + Math.round(tileH / 2);
+    const isSpeaking = !!u.speaking;
+    const ringCol = isSpeaking ? '#fbbf24' : (u.isHero ? '#38bdf8' : '#ef4444');
+    const uFrames = ASSETS.units[u.unitKey] || ASSETS.units.kaelen;
+    const unitImg = isSpeaking ? (uFrames.atk || uFrames.idle0) : uFrames.idle0;
+    const flip = u.isHero ? 'scaleX(1)' : 'scaleX(-1)';
+    return `
+      <div style="position:absolute;left:${left - 40}px;top:${top - 56}px;width:80px;height:80px;pointer-events:none;z-index:${10 + u.y};display:flex;flex-direction:column;align-items:center;">
+        ${u.emote ? `
+          <div style="margin-bottom:2px;padding:2px 8px;border-radius:10px;background:${isSpeaking ? '#fbbf24' : 'rgba(15,18,26,0.92)'};color:${isSpeaking ? '#090b10' : '#f3f4f6'};border:1px solid ${ringCol};font-size:11px;font-weight:800;box-shadow:0 3px 8px rgba(0,0,0,0.85);white-space:nowrap;">
+            ${u.emote} ${isSpeaking ? u.name : ''}
+          </div>
+        ` : ''}
+        <div style="position:relative;width:64px;height:64px;display:flex;align-items:center;justify-content:center;">
+          <!-- Tactical tile ring -->
+          <div style="position:absolute;bottom:4px;width:54px;height:20px;border-radius:50%;border:2px solid ${ringCol};background:${isSpeaking ? 'rgba(251,191,36,0.32)' : 'rgba(0,0,0,0.55)'};box-shadow:${isSpeaking ? '0 0 14px rgba(251,191,36,0.8)' : 'none'};"></div>
+          <img src="${unitImg}" class="pixel" style="width:60px;height:60px;object-fit:contain;transform:${flip} ${isSpeaking ? 'scale(1.14) translateY(-4px)' : 'scale(1)'};filter:${isSpeaking ? 'drop-shadow(0 0 10px rgba(251,191,36,0.75))' : 'brightness(0.88)'};position:relative;z-index:2;">
+        </div>
+      </div>
+    `;
+  }).join('');
 
   return `
-    <div style="width:640px;height:360px;position:relative;overflow:hidden;">
-      <img src="${ASSETS.bg[st.bg] || ASSETS.bg.intro_1}" class="pixel" style="position:absolute;inset:0;width:640px;height:360px;object-fit:cover;">
-      <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(10,11,16,0.35) 0%, rgba(10,11,16,0.15) 50%, rgba(10,11,16,0.88) 100%);"></div>
+    <div style="position:absolute;inset:0;background:#080a0f;overflow:hidden;">
+      <img src="${ambientBgImg}" class="pixel" style="position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;filter:brightness(0.32) blur(2px);">
+      <!-- Cinematic Top & Bottom Letterbox Shading for Map Cutscene Mode -->
+      <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 42%, transparent 35%, rgba(6,8,13,0.82) 92%), linear-gradient(180deg, rgba(6,8,13,0.82) 0%, transparent 16%, transparent 66%, rgba(6,8,13,0.95) 100%);"></div>
 
-      <!-- Top Story Sequence Strip (Decision A2) -->
-      <div class="rust-panel" style="position:absolute;left:12px;top:10px;right:12px;height:22px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;">
-        <div class="font-title" style="font-size:9.5px;color:var(--gold);">${st.title}</div>
-        <div style="display:flex;align-items:center;gap:4px;font-size:6.5px;">
-          <span style="color:var(--dim);">Prologue Chain (A2):</span>
-          <button class="rust-btn ${STATE.storyId==='prologue_intro'?'primary':''}" style="height:13px;font-size:6px;" onclick="STATE.storyId='prologue_intro';STATE.storyCardIdx=0;render();">0a Alley</button>
-          <span style="color:var(--dim);">→</span>
-          <button class="rust-btn ${STATE.storyId==='prologue_0b'?'primary':''}" style="height:13px;font-size:6px;" onclick="STATE.storyId='prologue_0b';STATE.storyCardIdx=0;render();">0b Rooftop</button>
-          <span style="color:var(--dim);">→</span>
-          <button class="rust-btn ${STATE.storyId==='prologue_0c'?'primary':''}" style="height:13px;font-size:6px;" onclick="STATE.storyId='prologue_0c';STATE.storyCardIdx=0;render();">0c Bridge</button>
-          <span style="color:var(--dim);">→</span>
-          <button class="rust-btn ${STATE.storyId==='hearth_arrival'?'primary':''}" style="height:13px;font-size:6px;" onclick="STATE.storyId='hearth_arrival';STATE.storyCardIdx=0;render();">Hearth Hub</button>
+      <!-- Top In-Engine Stage Direction / Camera Focus Strip -->
+      <div style="position:absolute;left:72px;right:72px;top:14px;height:36px;padding:0 16px;background:rgba(12,15,23,0.9);border:1px solid rgba(212,166,74,0.45);border-radius:4px;display:flex;align-items:center;justify-content:space-between;z-index:15;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="padding:2px 8px;background:rgba(245,158,11,0.18);border:1px solid #f59e0b;border-radius:3px;font-size:10px;color:#fbbf24;font-weight:700;letter-spacing:0.5px;">IN-ENGINE MAP STAGE</span>
+          <span class="font-title" style="font-size:13px;color:var(--gold);">${st.title}</span>
+          <span style="font-size:12px;color:var(--dim);">· ${st.subtitle}</span>
+        </div>
+        <div class="font-mono" style="font-size:11px;color:#93c5fd;">
+          🎬 ${card.stageAction}
         </div>
       </div>
 
-      <!-- Bottom Caption Card (story.rs vignette box — Reduced Corner Frame) -->
-      ${ornateCornerBox640('position:absolute;left:40px;right:40px;bottom:16px;min-height:92px;padding:8px 10px;display:flex;gap:10px;align-items:center;', `
-        <div style="display:flex;flex-direction:column;align-items:center;width:68px;flex-shrink:0;">
-          <div class="portrait-box gold-rim" style="width:56px;height:56px;">
-            <img src="${ASSETS.portraits[card.portrait] || ASSETS.portraits.kaelen}" class="pixel">
-          </div>
-          <div class="font-title" style="font-size:8px;color:var(--gold);margin-top:3px;text-align:center;">${card.speaker}</div>
+      <!-- Horizon Backdrop Banner above the 12×9 Tactical Grid (same as BattleScreen stage header) -->
+      <div style="position:absolute;left:${boardLeft}px;top:58px;width:${boardW}px;height:62px;border:1px solid rgba(212,166,74,0.38);border-bottom:none;overflow:hidden;">
+        <img src="${horizonStripImg}" class="pixel" style="width:100%;height:100%;object-fit:cover;filter:brightness(0.85);">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(8,10,15,0.25), rgba(8,10,15,0.75));"></div>
+      </div>
+
+      <!-- 12×9 Live Tactical / Region Map Stage -->
+      <div style="position:absolute;left:${boardLeft}px;top:${boardTop}px;width:${boardW}px;height:${boardH}px;border:2px solid rgba(212,166,74,0.38);box-shadow:0 16px 40px rgba(0,0,0,0.85);background:rgba(10,12,18,0.65);">
+        ${tilesHtml}
+        ${unitsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderStoryVignetteReel(st, card, isLastCard) {
+  const bgSrc = ASSETS.bg[st.bg] || ASSETS.bg.intro_1;
+  return `
+    <div style="position:absolute;inset:0;background:#05060a;overflow:hidden;">
+      <!-- Letterboxed Vignette Plate (vignette.rs Style::Title / Style::Image) -->
+      <div style="position:absolute;left:0;right:0;top:64px;bottom:140px;overflow:hidden;border-top:1px solid rgba(212,166,74,0.45);border-bottom:1px solid rgba(212,166,74,0.45);">
+        <img src="${bgSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;filter:${card.bgFilter || 'brightness(0.9)'};">
+        <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 45%, transparent 40%, rgba(5,6,10,0.82) 95%), linear-gradient(180deg, rgba(5,6,10,0.55) 0%, transparent 25%, transparent 65%, rgba(5,6,10,0.92) 100%);"></div>
+
+        <!-- Centered Act / Scene Title Overlay (Style::Title in vignette.rs) -->
+        <div style="position:absolute;left:120px;right:120px;top:34px;text-align:center;pointer-events:none;">
+          <div class="font-mono" style="font-size:11px;color:#f59e0b;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;">${st.actBanner || 'CHRONICLES OF THE SUNK WARD'}</div>
+          <div class="font-title" style="font-size:32px;color:#fef3c7;letter-spacing:1.5px;text-shadow:0 4px 18px rgba(0,0,0,0.95);">${st.title}</div>
+          <div style="width:220px;height:1px;background:linear-gradient(90deg, transparent, #d4a64a, transparent);margin:10px auto 6px;"></div>
+          <div style="font-size:13px;color:#d1d5db;font-style:italic;">${st.subtitle} · <span style="color:#fbbf24;">${card.bgVariantLabel}</span></div>
         </div>
 
-        <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;min-height:72px;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
-            <div class="font-body" style="font-size:8.5px;line-height:1.45;color:var(--text);padding-right:4px;">
-              ${card.text}
-            </div>
-            ${closeBtn640("STORIES[STATE.storyId].onFinish()", "Skip Vignette [Esc / Right-Click]")}
+        <!-- Bottom-of-plate Stage Direction Caption (Style::Line / Cutscene Narration) -->
+        <div style="position:absolute;left:160px;right:160px;bottom:24px;padding:12px 24px;background:rgba(8,10,15,0.82);border-left:3px solid #f59e0b;border-right:3px solid #f59e0b;text-align:center;">
+          <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-bottom:4px;letter-spacing:0.6px;">VIGNETTE REEL TRANSITION (${card.vignetteStyle.toUpperCase()} CARD · ${card.shake || 'Steady Camera'} · Ash Specks Active)</div>
+          <div style="font-size:14px;color:#e5e7eb;font-style:italic;">"${card.stageAction}"</div>
+        </div>
+      </div>
+
+      <!-- Top Letterbox Bar with Skip [✕] -->
+      <div style="position:absolute;left:32px;right:32px;top:14px;height:36px;display:flex;align-items:center;justify-content:space-between;">
+        <div class="font-mono" style="font-size:11px;color:var(--dim);">
+          <code style="color:var(--gold);">aegis_ui::vignette::VignetteScreen</code> · Plays Act Titles, CG Stills & Transitions before handing off to VN or Map Stage
+        </div>
+        ${closeBtn720("STATE.storySkipConfirmOpen=true;render();", "Skip Scene [Esc / Right-Click]")}
+      </div>
+
+      <!-- Bottom Letterbox Caption Bar -->
+      <div style="position:absolute;left:120px;right:120px;bottom:18px;height:108px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 24px;background:rgba(12,14,20,0.92);border:1px solid rgba(212,166,74,0.4);border-radius:6px;">
+        <div style="display:flex;align-items:center;gap:14px;flex:1;">
+          <div class="portrait-box gold-rim" style="width:74px;height:74px;flex-shrink:0;">
+            <img src="${ASSETS.portraits[card.portrait] || ASSETS.portraits.kaelen}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #2d333f;padding-top:5px;margin-top:6px;">
-            <span class="font-mono" style="font-size:6.5px;color:var(--dim);">Card ${STATE.storyCardIdx + 1} / ${st.cards.length} · Right-Click or [Esc] to Skip</span>
-            <div style="display:flex;gap:5px;">
-              ${!isLastCard ? `
-                <button class="rust-btn primary" onclick="STATE.storyCardIdx++;render();">Continue [Space] ▸</button>
-              ` : `
-                <button class="rust-btn primary" onclick="STORIES[STATE.storyId].onFinish()">${st.nextLabel} ▸</button>
-              `}
+          <div style="flex:1;">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
+              <span class="font-title" style="font-size:16px;color:var(--gold);">${card.speaker}</span>
+              <span style="font-size:11px;color:var(--dim);">· ${card.speakerTitle || ''}</span>
+            </div>
+            <div class="font-body" style="font-size:14.5px;line-height:1.45;color:var(--text);">${card.text}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;height:100%;flex-shrink:0;">
+          <span class="font-mono" style="font-size:11px;color:var(--dim);">Reel Card ${STATE.storyCardIdx + 1} / ${st.cards.length}</span>
+          <div style="display:flex;gap:8px;">
+            ${STATE.storyCardIdx > 0 ? `<button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyCardIdx--;render();">◀ Prev</button>` : ''}
+            ${!isLastCard ? `
+              <button class="rust-btn primary" style="height:30px;padding:0 16px;font-size:12px;" onclick="STATE.storyCardIdx++;render();">Continue [Space] ▸</button>
+            ` : `
+              <button class="rust-btn primary" style="height:30px;padding:0 16px;font-size:12px;" onclick="STORIES[STATE.storyId].onFinish()">${st.nextLabel} ▸</button>
+            `}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStoryStage() {
+  const st = STORIES[STATE.storyId] || STORIES.prologue_intro;
+  const cardIdx = Math.min(STATE.storyCardIdx, st.cards.length - 1);
+  const card = st.cards[cardIdx];
+  const isLastCard = cardIdx >= st.cards.length - 1;
+  const mode = STATE.storyMode || 'vn_stage';
+
+  // Skip confirmation popup (confirm_skip in aegis_ui/src/vignette.rs:171-208)
+  const skipConfirmHtml = STATE.storySkipConfirmOpen ? `
+    <div style="position:absolute;inset:0;background:rgba(6,8,13,0.78);z-index:80;display:flex;align-items:center;justify-content:center;">
+      ${ornateCornerBox(`
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2d333f;padding-bottom:8px;">
+          <div class="font-title" style="font-size:18px;color:var(--gold);">Skip This Story Scene?</div>
+          ${closeBtn720("STATE.storySkipConfirmOpen=false;render();", "Cancel [Esc / Right-Click]")}
+        </div>
+        <div style="font-size:13.5px;color:var(--text);line-height:1.5;margin:12px 0;">
+          Skip the remaining cards in <b>${st.title}</b> and proceed directly to:<br>
+          <span style="color:#fbbf24;font-weight:700;">${st.nextLabel}</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #2d333f;padding-top:10px;">
+          <button class="rust-btn" style="height:32px;padding:0 16px;font-size:12.5px;" onclick="STATE.storySkipConfirmOpen=false;render();">Cancel [Esc]</button>
+          <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:12.5px;" onclick="STATE.storySkipConfirmOpen=false;STORIES[STATE.storyId].onFinish();">Skip Scene [Enter] ▸</button>
+        </div>
+      `, 'width:460px;min-height:185px;padding:18px 22px;background:rgba(14,17,24,0.98);box-shadow:0 20px 50px rgba(0,0,0,0.92);')}
+    </div>
+  ` : '';
+
+  if (mode === 'vignette_reel') {
+    return `
+      <div style="width:1280px;height:720px;position:relative;overflow:hidden;background:#05060a;">
+        ${renderStoryVignetteReel(st, card, isLastCard)}
+        ${skipConfirmHtml}
+      </div>
+    `;
+  }
+
+  return `
+    <div style="width:1280px;height:720px;position:relative;overflow:hidden;background:#080a0f;">
+      ${mode === 'map_stage' ? renderStoryMapBackdrop(st, card) : `
+        <!-- APPROACH 1: VN ILLUSTRATED ARTWORK + SCENE VARIANT FILTER + STAGED CHARACTER SPRITES -->
+        <img src="${ASSETS.bg[st.bg] || ASSETS.bg.intro_1}" class="pixel" style="position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;filter:${card.bgFilter || 'none'};transition:filter 0.3s ease;">
+        <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 38%, rgba(245,158,11,0.08) 0%, rgba(8,10,15,0.52) 70%, rgba(8,10,15,0.88) 100%), linear-gradient(180deg, rgba(8,10,15,0.52) 0%, rgba(8,10,15,0.12) 45%, rgba(8,10,15,0.92) 100%);"></div>
+
+        <!-- Top Location & Artwork Variant Header Strip -->
+        <div style="position:absolute;left:72px;right:72px;top:18px;height:38px;padding:0 16px;background:rgba(12,15,23,0.84);border:1px solid rgba(212,166,74,0.42);border-radius:4px;display:flex;align-items:center;justify-content:space-between;z-index:15;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="padding:2px 8px;background:rgba(212,166,74,0.18);border:1px solid var(--gold);border-radius:3px;font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.5px;">VN ILLUSTRATED STAGE</span>
+            <span class="font-title" style="font-size:14px;color:var(--gold);">${st.title}</span>
+            <span style="font-size:12px;color:var(--dim);">· ${st.subtitle}</span>
+          </div>
+          <div class="font-mono" style="font-size:11px;color:#fbbf24;display:flex;align-items:center;gap:10px;">
+            <span>🎨 ${card.bgVariantLabel || 'Base Artwork'}</span>
+            ${card.shake ? `<span style="padding:1px 7px;background:rgba(220,38,38,0.22);border:1px solid #ef4444;border-radius:3px;color:#fca5a5;">📳 ${card.shake}</span>` : ''}
+          </div>
+        </div>
+
+        <!-- Left & Right Dynamic Character Stage Slots (Separated from background with depth shadow & rim glow) -->
+        <div style="position:absolute;left:110px;right:110px;bottom:212px;height:320px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
+          ${renderStoryActorSlot(card.leftActor, 'left')}
+          ${renderStoryActorSlot(card.rightActor, 'right')}
+        </div>
+      `}
+
+      <!-- Shared Bottom Ornate Dialogue & Reaction Dock (story.rs / talk.rs — Reduced Corner Frame) -->
+      ${ornateCornerBox(`
+        <div style="display:flex;gap:20px;align-items:stretch;height:100%;">
+          <!-- Left Speaker Portrait (PORTRAITFX1 Tallow Amber Rim Light) -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:132px;flex-shrink:0;">
+            <div class="portrait-box gold-rim" style="width:112px;height:112px;box-shadow:0 0 18px rgba(245,158,11,0.32);">
+              <img src="${ASSETS.portraits[card.portrait] || ASSETS.portraits.kaelen}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
+            </div>
+            <div style="margin-top:6px;padding:2px 8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);border-radius:3px;font-size:10px;color:#fbbf24;font-weight:700;">
+              ${card.emotion || 'Speaking'}
+            </div>
+          </div>
+
+          <!-- Right Dialogue Body & Controls -->
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(75,85,99,0.45);padding-bottom:6px;margin-bottom:8px;">
+                <div style="display:flex;align-items:baseline;gap:10px;">
+                  <span class="font-title" style="font-size:19px;color:var(--gold);letter-spacing:0.4px;">${card.speaker}</span>
+                  <span style="font-size:12px;color:var(--dim);">${card.speakerTitle || ''}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span class="font-mono" style="font-size:11px;color:#9ca3af;font-style:italic;">[${card.stageAction}]</span>
+                  ${closeBtn720("STATE.storySkipConfirmOpen=true;render();", "Skip Scene [Esc / Right-Click]")}
+                </div>
+              </div>
+              <div class="font-body" style="font-size:16px;line-height:1.52;color:var(--text);padding-right:12px;">
+                ${card.text}
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(55,65,81,0.6);padding-top:8px;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="font-mono" style="font-size:11.5px;color:var(--dim);">Beat ${cardIdx + 1} of ${st.cards.length}</span>
+                <div style="display:flex;gap:4px;">
+                  ${st.cards.map((_, idx) => `
+                    <span onclick="STATE.storyCardIdx=${idx};render();" style="width:${idx === cardIdx ? '22px' : '8px'};height:6px;border-radius:3px;background:${idx === cardIdx ? '#f59e0b' : '#374151'};cursor:pointer;transition:all 0.2s;"></span>
+                  `).join('')}
+                </div>
+                <span class="font-mono" style="font-size:11px;color:var(--dim);margin-left:6px;">· Right-Click or [Esc] to Skip</span>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${cardIdx > 0 ? `
+                  <button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyCardIdx--;render();">◀ Prev</button>
+                ` : ''}
+                <button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyMode = STATE.storyMode === 'vignette_reel' ? 'vn_stage' : 'vignette_reel';render();" title="Preview this beat inside the VignetteScreen Cutscene/Transition Player">🎬 Vignette Card</button>
+                ${!isLastCard ? `
+                  <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:13px;" onclick="STATE.storyCardIdx++;render();">Continue [Space] ▸</button>
+                ` : `
+                  <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:13px;" onclick="STORIES[STATE.storyId].onFinish()">${st.nextLabel} ▸</button>
+                `}
+              </div>
             </div>
           </div>
         </div>
-      `)}
+      `, 'position:absolute;left:72px;right:72px;bottom:20px;height:176px;padding:16px 22px;background:rgba(12,15,22,0.95);box-shadow:0 16px 42px rgba(0,0,0,0.92);z-index:20;')}
+
+      ${skipConfirmHtml}
     </div>
   `;
 }

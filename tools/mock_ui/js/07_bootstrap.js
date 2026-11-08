@@ -13,7 +13,7 @@ function render() {
   } else if (STATE.screen === 'runner') {
     html = `<div class="legacy-640-stage">${renderSceneRunner()}</div>`;
   } else if (STATE.screen === 'story') {
-    html = `<div class="legacy-640-stage">${renderStoryStage()}</div>`;
+    html = renderStoryStage();
   } else if (STATE.screen === 'region') {
     html = `<div class="legacy-640-stage">${renderRegionScreen()}</div>`;
   } else if (STATE.screen === 'worldmap') {
@@ -78,6 +78,28 @@ function render() {
         <button class="db-btn ${!STATE.newGameModalOpen ? 'active' : ''}" onclick="STATE.newGameModalOpen=false;render();" title="Show the Main Menu Title Screen">View: Title Screen</button>
         <button class="db-btn ${STATE.newGameModalOpen ? 'active' : ''}" onclick="STATE.newGameModalOpen=true;render();" title="Show the New Game Campaign Setup Modal (Difficulty & Ironman)">View: New Game Setup</button>
       `;
+    } else if (STATE.screen === 'story') {
+      const m = STATE.storyMode || 'vn_stage';
+      const a = STATE.storyActorStyle || 'full_sprite';
+      togglesEl.innerHTML = `
+        <span style="color:#fbbf24;font-weight:700;font-size:10px;">StoryStage Mode:</span>
+        <button class="db-btn ${m === 'vn_stage' ? 'active' : ''}" onclick="STATE.storyMode='vn_stage';render();" title="Approach 1: Illustrated Background + Scene Variants + Staged Character Figures">1. VN Illustrated Stage</button>
+        <button class="db-btn ${m === 'map_stage' ? 'active' : ''}" onclick="STATE.storyMode='map_stage';render();" title="Approach 2: Live In-Game Region/Battle Map + On-Tile Unit Reactions + Bottom Dialogue Box">2. In-Game Map Stage</button>
+        <button class="db-btn ${m === 'vignette_reel' ? 'active' : ''}" onclick="STATE.storyMode='vignette_reel';render();" title="VignetteScreen Cutscene/Transition Player (Title Cards & CG Transitions usable by both modes)">3. Vignette Cutscene Player</button>
+        ${m === 'vn_stage' ? `
+          <span style="color:#6b7280;margin:0 2px;">|</span>
+          <span style="color:#9ca3af;font-size:10px;">Actors:</span>
+          <button class="db-btn ${a === 'full_sprite' ? 'active' : ''}" onclick="STATE.storyActorStyle='full_sprite';render();">Full-Body Sprites</button>
+          <button class="db-btn ${a === 'bust_cutout' ? 'active' : ''}" onclick="STATE.storyActorStyle='bust_cutout';render();">Bust Cutouts</button>
+          <button class="db-btn ${a === 'backdrop_only' ? 'active' : ''}" onclick="STATE.storyActorStyle='backdrop_only';render();">Backdrop Only</button>
+        ` : ''}
+        <span style="color:#6b7280;margin:0 2px;">|</span>
+        <span style="color:#9ca3af;font-size:10px;">Scene:</span>
+        <button class="db-btn ${STATE.storyId === 'prologue_intro' ? 'active' : ''}" onclick="STATE.storyId='prologue_intro';STATE.storyCardIdx=0;render();">0a Alley</button>
+        <button class="db-btn ${STATE.storyId === 'prologue_0b' ? 'active' : ''}" onclick="STATE.storyId='prologue_0b';STATE.storyCardIdx=0;render();">0b Rooftop</button>
+        <button class="db-btn ${STATE.storyId === 'prologue_0c' ? 'active' : ''}" onclick="STATE.storyId='prologue_0c';STATE.storyCardIdx=0;render();">0c Bridge</button>
+        <button class="db-btn ${STATE.storyId === 'hearth_arrival' ? 'active' : ''}" onclick="STATE.storyId='hearth_arrival';STATE.storyCardIdx=0;render();">Hearth Hub</button>
+      `;
     } else {
       togglesEl.innerHTML = '';
     }
@@ -90,7 +112,7 @@ function render() {
       main_menu: '<b>MainMenu (1280×720 Native Grid):</b> Cathedral title art with lower-ward mist & toned-down lanterns · <b>Reduced Corner Frame</b> on Hover Peek & New Chronicle Setup · Top-right <code>✕</code> & Right-Click to close.',
       load_slots: '<b>Load / Save Chronicles (1280×720 Native Grid):</b> <b>Full Frame</b> (<code>ornate_full.png</code> tiled iron-and-gold bars) on main screen + <b>Reduced Corner Frame</b> on Delete/Overwrite popups · Top-right <code>✕</code> & Right-Click to close.',
       runner: '<b>SceneRunner (Dev F10):</b> <b>Full Frame</b> (<code>ornate_full.png</code>) + top-right <code>✕</code> & Right-Click to close.',
-      story: '<b>StoryStage (Decision A2):</b> Full-screen <code>backgrounds/story/*.png</code> vignettes + <b>Reduced Corner Frame</b> caption card + top-right <code>✕</code> & Right-Click to skip.',
+      story: '<b>StoryStage (1280×720 Native Grid):</b> Compare <b>1. VN Illustrated Stage</b> (artwork variants + staged sprites), <b>2. In-Game Map Stage</b> (live tactical map + unit emotes), and <b>3. Vignette Cutscene Player</b> (<code>vignette.rs</code> transitions) using the top toggles!',
       region: '<b>RegionMap + TalkBox (Decision A3/A4):</b> Top <code>hud_bar</code>, walkable tile map, and <b>Reduced Corner Frame</b> <code>TalkBox</code> (Right-Click closes active dialogue or returns to Main Menu).',
       worldmap: '<b>WorldMap (Decision A4):</b> Sunk Ward pins & route lines + <b>Reduced Corner Frame</b> District Card with top-right <code>✕</code> & Right-Click back to Sluice Hub.',
       battle: '<b>BattleScreen:</b> <b>Full Frame</b> on Multi-Unit Timeline overlay + <b>Reduced Corner Frame</b> on <code>SkillMenu</code>, Intel card & Victory modal · Top-right <code>✕</code> & Right-Click to close.'
@@ -106,13 +128,20 @@ function render() {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     uiBack();
-  } else if (e.key === 'Enter') {
-    if (STATE.displayConfirmOpen) { confirmDisplaySettings(); }
-    else if (STATE.settingsAskUnapplied !== null) { applyUnappliedAndKeepInSettings(); }
-    else if (STATE.newGameModalOpen) { startNewCampaign(); }
-    else if (STATE.slotAskDelete !== null) { confirmDeleteSlot(); }
-    else if (STATE.slotAskOverwrite !== null) { writeSaveToSlot(STATE.slotAskOverwrite); }
-    else if (STATE.screen === 'load_slots' && !STATE.settingsOpen) { executeSlot(STATE.slotSelected); }
+  } else if (e.key === 'Enter' || e.key === ' ') {
+    if (STATE.displayConfirmOpen && e.key === 'Enter') { confirmDisplaySettings(); }
+    else if (STATE.settingsAskUnapplied !== null && e.key === 'Enter') { applyUnappliedAndKeepInSettings(); }
+    else if (STATE.storySkipConfirmOpen && e.key === 'Enter') { STATE.storySkipConfirmOpen = false; STORIES[STATE.storyId].onFinish(); }
+    else if (STATE.newGameModalOpen && e.key === 'Enter') { startNewCampaign(); }
+    else if (STATE.slotAskDelete !== null && e.key === 'Enter') { confirmDeleteSlot(); }
+    else if (STATE.slotAskOverwrite !== null && e.key === 'Enter') { writeSaveToSlot(STATE.slotAskOverwrite); }
+    else if (STATE.screen === 'load_slots' && !STATE.settingsOpen && e.key === 'Enter') { executeSlot(STATE.slotSelected); }
+    else if (STATE.screen === 'story' && !STATE.settingsOpen && !STATE.storySkipConfirmOpen) {
+      e.preventDefault();
+      const st = STORIES[STATE.storyId] || STORIES.prologue_intro;
+      if (STATE.storyCardIdx < st.cards.length - 1) { STATE.storyCardIdx++; render(); }
+      else { st.onFinish(); }
+    }
   } else if (e.key === 'F10') {
     e.preventDefault();
     STATE.settingsOpen = false;

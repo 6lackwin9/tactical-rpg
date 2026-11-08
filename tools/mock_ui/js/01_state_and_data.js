@@ -731,20 +731,74 @@ const DIALOGUES = {
 };
 
 // ============================================================================
-// STORY STAGE SEQUENCES (`story.rs` — Decision A2 Chained Prologue)
+// STORY STAGE SEQUENCES (`story.rs` + `vignette.rs` — Decision A2 Chained Prologue)
+// Supports both Approach 1 (VN Artwork + Dynamic Actor Stage) and Approach 2 (In-Game Map Stage + Bottom Dialogue)
 // ============================================================================
 const STORIES = {
   prologue_intro: {
-    title: 'Act I · A Scarlet Lullaby',
+    title: 'Prologue 0a · A Scarlet Lullaby',
+    actBanner: 'ACT I · THE SUNK WARD',
+    subtitle: 'Seventh Sluice Tenements · Rain & Tallow-Smoke',
     bg: 'intro_1',
+    mapBackdrop: 'alley',
+    encId: 'enc_0a',
     cards: [
       {
-        speaker: 'Kaelen', portrait: 'kaelen',
+        vignetteStyle: 'Title',
+        speaker: 'Chronicle Narrator',
+        speakerTitle: 'Seventh Sluice · Night of the Red Writ',
+        portrait: 'kaelen',
+        emotion: 'Somber',
+        bgFilter: 'brightness(0.82) contrast(1.08)',
+        bgVariantLabel: 'Variant A · Cold Rain & Distant Foundry Glow',
+        shake: null,
+        stageAction: 'Camera pans down from the rain-swept sluice arches into Kaelen\'s tenement surgery.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Grim' },
+        rightActor: null,
+        mapUnits: [
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: true, emote: '...' },
+          { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 7, y: 4, speaking: false, emote: null },
+          { id: 'w2', unitKey: 'crossbow', name: 'Watch Arbalest', isHero: false, x: 9, y: 3, speaking: false, emote: null }
+        ],
         text: 'The rain in the Sunk Ward never washes anything clean; it only carries the tallow-smoke down from the high foundries into the flooded masonry where the debtors sleep.'
       },
       {
-        speaker: 'Kaelen', portrait: 'kaelen',
-        text: 'When I refused to sign the Red Tithing certificates at the Seventh Sluice, Captain Vane sent two Halberdiers to my surgery with shackles and a bill of execution. They did not expect me to keep my field billhook beside the operating table.'
+        vignetteStyle: 'Image',
+        speaker: 'Watch Halberdier',
+        speakerTitle: 'Castellan Watch · Seventh Sluice Patrol',
+        portrait: 'watchman',
+        emotion: 'Hostile',
+        bgFilter: 'brightness(0.95) contrast(1.12) sepia(0.12)',
+        bgVariantLabel: 'Variant B · Lantern Flare at the Surgery Door (Shake: Light)',
+        shake: 'Light Shake (FX1)',
+        stageAction: 'Iron boots splinter the surgery door; two Castellan Watchmen step into the alley lantern-light.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Wary' },
+        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, emotion: 'Barking Orders' },
+        mapUnits: [
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: false, emote: '!' },
+          { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: true, emote: '⚔' },
+          { id: 'w2', unitKey: 'crossbow', name: 'Watch Arbalest', isHero: false, x: 9, y: 3, speaking: false, emote: '🎯' }
+        ],
+        text: '"Surgeon Kaelen! By writ of Captain Vane, your dispensary is forfeit for refusing to sign the Red Tithing certificates. Lay down your instruments and present your wrists for the iron!"'
+      },
+      {
+        vignetteStyle: 'Image',
+        speaker: 'Kaelen',
+        speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+        portrait: 'kaelen',
+        emotion: 'Steel Drawn',
+        bgFilter: 'brightness(1.04) contrast(1.15)',
+        bgVariantLabel: 'Variant C · Cold Steel & Amber Lamp Rim',
+        shake: 'Medium Pulse (FX1)',
+        stageAction: 'Kaelen lifts his Surgeon\'s Billhook from the operating table and steps into fighting stance at tile (2,4).',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Steel Drawn', lunge: true },
+        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, emotion: 'Braced' },
+        mapUnits: [
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: true, emote: '⚔' },
+          { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: false, emote: '🛡' },
+          { id: 'w2', unitKey: 'crossbow', name: 'Watch Arbalest', isHero: false, x: 9, y: 3, speaking: false, emote: null }
+        ],
+        text: '"You brought shackles to an operating room, halberdier. Come closer—let us see how Castellan mail holds against a bone-saw and a billhook."'
       }
     ],
     nextLabel: 'Fight: Prologue 0a — The Alley (Solo Kaelen)',
@@ -752,11 +806,51 @@ const STORIES = {
   },
   prologue_0b: {
     title: 'Prologue 0b · The Chimney Slate',
+    actBanner: 'PROLOGUE 0B · SLATE RIDGE',
+    subtitle: 'Above the Chained Tenements · Brazier Light',
     bg: 'intro_2',
+    mapBackdrop: 'rooftops',
+    encId: 'enc_0b',
     cards: [
       {
-        speaker: 'Vesper', portrait: 'vesper',
-        text: '"Down here, Doc! The Watch has the lower street chained off, and Captain Vane is mustering crossbowmen along the slate ridge. Give me a boost and I\'ll slit their bowstrings before they lock the windlass."'
+        vignetteStyle: 'Image',
+        speaker: 'Vesper',
+        speakerTitle: 'Cutthroat Scout · Flanker Founder',
+        portrait: 'vesper',
+        emotion: 'Urgent Whisper',
+        bgFilter: 'brightness(0.95) contrast(1.08)',
+        bgVariantLabel: 'Variant A · Chimney Shadows & Brazier Glare',
+        shake: null,
+        stageAction: 'Vesper drops from the slick chimney-stack onto tile (2,2) and signals down to Kaelen.',
+        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: true, emotion: 'Smirking' },
+        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Alert' },
+        mapUnits: [
+          { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 2, y: 2, speaking: true, emote: '💬' },
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 5, speaking: false, emote: null },
+          { id: 'bailiff', unitKey: 'bailiff', name: 'Castellan Bailiff', isHero: false, x: 6, y: 5, speaking: false, emote: '!' },
+          { id: 'xbow1', unitKey: 'crossbow', name: 'Slate Marksman', isHero: false, x: 9, y: 2, speaking: false, emote: null }
+        ],
+        text: '"Down here, Doc! The Watch has the lower street chained off, and a Castellan Bailiff is mustering crossbowmen along the slate ridge. Give me a boost and we\'ll flank them before they lock the windlass."'
+      },
+      {
+        vignetteStyle: 'Image',
+        speaker: 'Castellan Bailiff',
+        speakerTitle: 'Elite Brute · Ridge Warden',
+        portrait: 'bailiff',
+        emotion: 'Enraged',
+        bgFilter: 'brightness(1.05) contrast(1.15) saturate(1.15)',
+        bgVariantLabel: 'Variant B · Tallow Brazier Ignited on the Ridge',
+        shake: 'Light Shake (FX1)',
+        stageAction: 'The Bailiff heft his flanged mace beside the burning Tallow Brazier at (6,4).',
+        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: false, emotion: 'Poised' },
+        rightActor: { unitKey: 'bailiff', portrait: 'bailiff', name: 'Castellan Bailiff', title: 'Ridge Warden', active: true, emotion: 'Roaring', lunge: true },
+        mapUnits: [
+          { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: '🗡' },
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 5, speaking: false, emote: '⚔' },
+          { id: 'bailiff', unitKey: 'bailiff', name: 'Castellan Bailiff', isHero: false, x: 6, y: 5, speaking: true, emote: '💢' },
+          { id: 'xbow1', unitKey: 'crossbow', name: 'Slate Marksman', isHero: false, x: 9, y: 2, speaking: false, emote: '🎯' }
+        ],
+        text: '"Runners on the wet slate! Marksmen, pin their cloaks to the chimney bricks—kick the brazier over if they try to cross the ridge!"'
       }
     ],
     nextLabel: 'Fight: Prologue 0b — The Rooftop (+Vesper Joins)',
@@ -764,11 +858,54 @@ const STORIES = {
   },
   prologue_0c: {
     title: 'Prologue 0c · The Sluice Bridge',
+    actBanner: 'PROLOGUE 0C · SEVENTH SLUICE BRIDGE',
+    subtitle: 'Spillway Cordon · Full 4-Founder Vanguard',
     bg: 'meat_market',
+    mapBackdrop: 'canal',
+    encId: 'enc_0c',
     cards: [
       {
-        speaker: 'Maren', portrait: 'maren',
+        vignetteStyle: 'Image',
+        speaker: 'Maren',
+        speakerTitle: 'Plague Alchemist · Support / DoT Founder',
+        portrait: 'maren',
+        emotion: 'Focused',
+        bgFilter: 'brightness(0.95) contrast(1.1)',
+        bgVariantLabel: 'Variant A · Flooded Spillway & Alchemical Smoke',
+        shake: null,
+        stageAction: 'Maren and Hollis emerge from the lower grate steps at (1,5) and (1,3) as Kaelen & Vesper reach the bridge.',
+        leftActor: { unitKey: 'maren', portrait: 'maren', name: 'Maren', title: 'Plague Alchemist', active: true, emotion: 'Flask Ready' },
+        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: false, emotion: 'Cold Glare' },
+        mapUnits: [
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: null },
+          { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: null },
+          { id: 'maren', unitKey: 'maren', name: 'Maren', isHero: true, x: 1, y: 5, speaking: true, emote: '⚗' },
+          { id: 'hollis', unitKey: 'hollis', name: 'Hollis', isHero: true, x: 1, y: 3, speaking: false, emote: '🏹' },
+          { id: 'vane', unitKey: 'vane', name: 'Captain Vane', isHero: false, x: 8, y: 4, speaking: false, emote: '!' }
+        ],
         text: '"Kaelen! Hollis and I blew the lock on the Undercroft grate, but Captain Vane is standing right on the spillway bridge. Break his line now—before the tide rises!"'
+      },
+      {
+        vignetteStyle: 'Image',
+        speaker: 'Captain Vane',
+        speakerTitle: 'Boss · Castellan Watch Commander',
+        portrait: 'vane',
+        emotion: 'Ruthless',
+        bgFilter: 'brightness(1.05) contrast(1.18)',
+        bgVariantLabel: 'Variant B · Vane\'s Executioner Greatsword Drawn (Shake: Heavy)',
+        shake: 'Heavy Shake (FX1)',
+        stageAction: 'Captain Vane plants his greatsword on the wet spillway stone at (8,4); Halberdiers lock Phalanx shields.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Defiant' },
+        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: true, emotion: 'Executioner\'s Stance', lunge: true },
+        mapUnits: [
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: '⚔' },
+          { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: null },
+          { id: 'maren', unitKey: 'maren', name: 'Maren', isHero: true, x: 1, y: 5, speaking: false, emote: null },
+          { id: 'hollis', unitKey: 'hollis', name: 'Hollis', isHero: true, x: 1, y: 3, speaking: false, emote: null },
+          { id: 'vane', unitKey: 'vane', name: 'Captain Vane', isHero: false, x: 8, y: 4, speaking: true, emote: '💢' },
+          { id: 'w1', unitKey: 'watchman', name: 'Bridge Halberdier', isHero: false, x: 7, y: 3, speaking: false, emote: '🛡' }
+        ],
+        text: '"A disgraced sawbones, a gutter cutthroat, and two deserters. Hold the spillway, Watchmen! The river takes them tonight!"'
       }
     ],
     nextLabel: 'Fight: Prologue 0c — Canal Bridge (Full 4-Founder Squad)',
@@ -776,10 +913,30 @@ const STORIES = {
   },
   hearth_arrival: {
     title: 'Sanctuary · The Sluice Undercroft',
+    actBanner: 'SANCTUARY · THE TALLOW HEARTH',
+    subtitle: 'Below the Seventh Sluice · 18 Days to the Red Tithing',
     bg: 'hearth',
+    mapBackdrop: 'sluice_hub',
+    encId: 'enc_0c',
     cards: [
       {
-        speaker: 'Sister Aline', portrait: 'aline',
+        vignetteStyle: 'Image',
+        speaker: 'Sister Aline',
+        speakerTitle: 'Order of the Ashen Leech · Sanctuary Apothecary',
+        portrait: 'aline',
+        emotion: 'Solemn Welcome',
+        bgFilter: 'brightness(1.0) contrast(1.06)',
+        bgVariantLabel: 'Variant A · Warm Tallow Hearth & Vaulted Sanctuary',
+        shake: null,
+        stageAction: 'The iron grate bars shut behind the squad; Sister Aline stirs the central Tallow Hearth.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Exhausted' },
+        rightActor: { unitKey: 'aline', portrait: 'aline', name: 'Sister Aline', title: 'Sanctuary Apothecary', active: true, emotion: 'Solemn' },
+        mapUnits: [
+          { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 6, y: 5, speaking: false, emote: null },
+          { id: 'aline', unitKey: 'aline', name: 'Sister Aline', isHero: true, x: 4, y: 4, speaking: true, emote: '🔥' },
+          { id: 'bram', unitKey: 'bram', name: 'Bram the Stoker', isHero: true, x: 10, y: 4, speaking: false, emote: '⚒' },
+          { id: 'tess', unitKey: 'tess', name: 'Night-Runner Tess', isHero: true, x: 8, y: 3, speaking: false, emote: '📜' }
+        ],
         text: '"Bar the iron grate and stir the Tallow Hearth. You\'re below the Castellan\'s sightlines now, Kaelen—but Prelate Nemeth has decreed the Red Tithing in eighteen days. If we don\'t break the Fourth Kiln and seize the Crucible Winch, the entire Sunk Ward drowns."'
       }
     ],

@@ -158,7 +158,10 @@ function ornateBox(innerHtml, styleStr = '', extraClass = '') {
 }
 
 // Helper 1b (Full Frame for 640x360 Scaled-by-2x Large Modals/Screens: BoardPane, ShopPane, PartyScreen, Timeline, SceneRunner)
-function ornateBox640(innerHtml, styleStr = '', extraClass = '') {
+function ornateBox640(arg1, arg2 = '', extraClass = '') {
+  const isFirstStyle = typeof arg1 === 'string' && !arg1.trim().startsWith('<') && typeof arg2 === 'string' && arg2.trim().startsWith('<');
+  const innerHtml = isFirstStyle ? arg2 : arg1;
+  const styleStr = isFirstStyle ? arg1 : arg2;
   return `
     <div class="ornate-straddle-640 ${extraClass}" style="${styleStr}">
       <div class="ornate-full-edge-h-640 top" style="background-image:url('${ASSETS.ui.ornate_full_top}');"></div>
@@ -169,9 +172,7 @@ function ornateBox640(innerHtml, styleStr = '', extraClass = '') {
       <img src="${ASSETS.ui.ornate_full_tr}" class="ornate-full-corner-640 tr">
       <img src="${ASSETS.ui.ornate_full_bl}" class="ornate-full-corner-640 bl">
       <img src="${ASSETS.ui.ornate_full_br}" class="ornate-full-corner-640 br">
-      <div style="position:relative;z-index:5;width:100%;height:100%;display:flex;flex-direction:column;justify-content:space-between;">
-        ${innerHtml}
-      </div>
+      ${innerHtml}
     </div>
   `;
 }
@@ -197,16 +198,17 @@ function ornateCornerBox(innerHtml, styleStr = '', extraClass = '') {
 }
 
 // Helper 2b (Reduced Frame with Only Corners for 640x360 Small Popups & Sub-Cards)
-function ornateCornerBox640(innerHtml, styleStr = '', extraClass = '') {
+function ornateCornerBox640(arg1, arg2 = '', extraClass = '') {
+  const isFirstStyle = typeof arg1 === 'string' && !arg1.trim().startsWith('<') && typeof arg2 === 'string' && arg2.trim().startsWith('<');
+  const innerHtml = isFirstStyle ? arg2 : arg1;
+  const styleStr = isFirstStyle ? arg1 : arg2;
   return `
     <div class="ornate-corners-only-640 ${extraClass}" style="${styleStr}">
       <img src="${ASSETS.ui.ornate_tl}" class="ornate-corner-sm-640 tl">
       <img src="${ASSETS.ui.ornate_tr}" class="ornate-corner-sm-640 tr">
       <img src="${ASSETS.ui.ornate_bl}" class="ornate-corner-sm-640 bl">
       <img src="${ASSETS.ui.ornate_br}" class="ornate-corner-sm-640 br">
-      <div style="position:relative;z-index:5;width:100%;height:100%;display:flex;flex-direction:column;justify-content:space-between;">
-        ${innerHtml}
-      </div>
+      ${innerHtml}
     </div>
   `;
 }
@@ -248,6 +250,9 @@ function uiBack() {
   } else if (STATE.slotAskOverwrite !== null) {
     STATE.slotAskOverwrite = null;
     render();
+  } else if (STATE.storySkipConfirmOpen) {
+    STATE.storySkipConfirmOpen = false;
+    render();
   } else if (STATE.settingsOpen) {
     requestCloseSettings('close');
   } else if (STATE.skillMenu) {
@@ -255,6 +260,9 @@ function uiBack() {
     render();
   } else if (STATE.modal) {
     STATE.modal = null;
+    render();
+  } else if (STATE.screen === 'story') {
+    STATE.storySkipConfirmOpen = true;
     render();
   } else if (STATE.screen === 'worldmap') {
     STATE.screen = 'region';
