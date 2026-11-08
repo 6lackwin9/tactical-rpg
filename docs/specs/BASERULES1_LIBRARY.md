@@ -6,11 +6,12 @@ Companion of [BASERULES1.md](BASERULES1.md). Marks: **[V]** verified in code or 
 ## 1. Rules in the register
 
 Each is on when listed in the row's `rules` (`ruleset.rs:64`). Option means an `adjust` refuses it; Extension switches one by one. `classic` lists none and
-`timeline` lists all 18 **[V]**.
+`timeline` lists all 19 **[V]**.
 
 | Rule | Kind | What it does on | Off | Really tested |
 | --- | --- | --- | --- | --- |
 | `round_intent` | Option | One intent and target a round, follow-ups, combined commands, facing, flanks drawn, intent-bound buffs | Classic planning | `round_intent.rs`, golden |
+| `field_intent` | Option | `Field` round intent and `IR21` derivation of allowed intents (`intent::allowed`); requires `round_intent` | Legacy single intent (`IN4`) | `field_intent.rs`, `ir21_intent.rs` |
 | `enemy_moves` | Option | Enemies pay no AP, book `recovery_blocks` | Everyone pays | `timeline_timing.rs`, also without intent |
 | `deck` | Option | Basics open, slots, slottable passives, order lists | 5 + 3 loadout | `deck.rs`, also without intent |
 | `poise` | Extension | Max Poise, stagger, breaks, windup factor, Rest poise | None | `poise.rs`, alone in `battle_talk.rs` |
@@ -54,7 +55,6 @@ Built-in fallback: `Ruleset::classic` (CLN-44). Sim and tools: `rules=+x,-y`, `r
 | Option | Values | From | Requires | Note |
 | --- | --- | --- | --- | --- |
 | `attack_lock` | `none`, `melee`, `all` | ATTACKLOCK1, in lane 1 now; row field, read whatever the rules | Nothing to run; bands from `reach` | Default none |
-| `field_intent` | on | K1 | `round_intent` | Field row, targets, Stand's tile |
 | `shape_anchors` | on | K2 | `field_intent` | Direction, RING, ARC, `affects` |
 | `field_fill_once` | on | K1 | `field_intent` | |
 | `splash_mult`, `assault_shape_blocks`, `field_bonus_values` | numbers | K1, K2 | `shape_anchors` | Skill mult factors |
