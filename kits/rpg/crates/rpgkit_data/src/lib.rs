@@ -108,6 +108,9 @@ pub struct ClassDef {
     pub proficiency: IndexMap<String, ProfEntry>,
     /// Family head id -> unlock level, in entry order.
     pub skill_path: IndexMap<String, i32>,
+    /// CLASS-BASICS (user 2026-11-08): the class's role basics, skill ids open to every unit of the class without a deck
+    /// slot under the rule `deck` (after the ruleset's basics; `DeckRule::with_class`). Empty = none.
+    pub basics: Vec<String>,
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
@@ -153,6 +156,7 @@ impl ClassDef {
             shares,
             proficiency,
             skill_path: int_map(o, "skill_path"),
+            basics: strings(o, "basics"),
             loadout,
             pouch: strings(o, "pouch"),
         }

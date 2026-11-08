@@ -295,7 +295,24 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
         }
     }
     errors.extend(path_errors(v, json::get(e, "skill_path")));
+    errors.extend(class_basics_errors(v, e));
     errors.extend(loadout_errors(v, e));
+    errors
+}
+
+/// CLASS-BASICS (user 2026-11-08): a class's `basics` are skill ids, each a tier 1 skill (an unknown id, an engine skill
+/// and a repeat are the schema's reference, filter and list checks); open without a deck slot under the rule `deck`.
+fn class_basics_errors(v: &View, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for id in json::sget(e, "basics") {
+        let skill = v.get("skills", &id);
+        if skill.is_empty() {
+            continue;
+        }
+        if json::i(skill, "tier", 1) != 1 {
+            errors.push(format!("Class basics: '{id}' is a higher tier; list the tier 1 skill of the family."));
+        }
+    }
     errors
 }
 
@@ -379,7 +396,8 @@ fn repeats(label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec
 
 /// RULESET1 9 D1-D5 (RULESET1_TASKS 1.5; rule deck, read only under timeline): a unit's `deck` is an object with the
 /// keys active, passive, keystone and order (empty or missing = auto). Actives are skill families the unit owns (class
-/// path at its level or extra skills), never a basic (a `basic` skill or a ruleset's basics); passive and keystone hold
+/// path at its level or extra skills), never a basic (a `basic` skill, a ruleset's basics or the unit's class basics,
+/// CLASS-BASICS); passive and keystone hold
 /// passives of that `slot`; the counts fit the `deck_slots` of every ruleset with the deck rule; order maps an intent
 /// to families of that intent among the actives and the basics. Nothing repeats.
 fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
@@ -397,6 +415,10 @@ fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
         if !basics.contains(&b) {
             basics.push(b);
         }
+    }
+    // CLASS-BASICS: the unit's class basics are basics too (open, no slot)
+    if !deck_rows.is_empty() {
+        basics = rpgkit_rules::DeckRule { basics, ..Default::default() }.with_class(&v.typed, &json::s(e, "class_id")).basics;
     }
     let active = deck_list(deck, "active", &mut errors);
     repeats("Deck active", &active, &mut Vec::new(), &mut errors);
@@ -589,7 +611,8 @@ fn skill_loadout_errors(v: &View, e: &Dict, a: &ClassDef) -> Vec<String> {
 }
 
 /// ClassUnitValidator.class_warnings: the gear budget, the path (more families than class slots, none at level 1,
-/// tiers past the level cap, weapon gates the class cannot reach) and the role mismatches.
+/// tiers past the level cap, weapon gates the class cannot reach, a class basic also in the path) and the role
+/// mismatches.
 pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     let class = ClassDef::from_obj(e);
     let mut out = rpgkit_rules::budget::check_class(&class, &v.typed.items);
@@ -597,6 +620,10 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     let families: Vec<String> = path.keys().filter(|k| !v.typed.is_basic_family(k)).cloned().collect();
     if families.len() > MAX_CLASS_SLOTS {
         out.push(format!("The path lists {} families; only the first {MAX_CLASS_SLOTS} (by unlock level, then position) are active by default.", families.len()));
+    }
+    // CLASS-BASICS (FB-123): a class basic is open without a slot, so listing it in the path also spends a path slot
+    for id in json::sget(e, "basics").iter().filter(|id| path.contains_key(id.as_str())) {
+        out.push(format!("Class basic '{id}' is also in the skill path, where it takes a path slot (an auto loadout fills slots in path order)."));
     }
     if !path.is_empty() && !path.values().any(|l| json::is_int(l) && json::to_int(l) == 1) {
         out.push("No path family unlocks at level 1: a level 1 unit of this class has no class skill in its loadout.".into());

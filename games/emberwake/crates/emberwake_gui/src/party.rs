@@ -406,7 +406,8 @@ impl DeckTerms {
 
     /// A party member's terms under `rs`: None unless the ruleset has the deck rule (classic keeps today's tab).
     pub fn for_member(d: &Data, m: &UnitState, world: &str, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
-        let rule = emberwake_rules::DeckRule::of(rs)?;
+        // CLASS-BASICS: the member's class basics are open beside the ruleset's (its class in that world)
+        let rule = emberwake_rules::DeckRule::of(rs)?.with_class(d.cat_in(world), &m.class_id(d));
         let cat = &d.cat;
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
@@ -442,7 +443,7 @@ impl DeckTerms {
     /// passives its deck names (D4), so any catalog passive or keystone may be named; the auto deck is the unit built
     /// with an empty deck.
     pub fn for_unit(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, def: &emberwake_data::UnitDef, u: &emberwake_rules::Unit) -> Option<Self> {
-        let rule = emberwake_rules::DeckRule::of(rs)?;
+        let rule = emberwake_rules::DeckRule::of(rs)?.with_class(cat, &def.class_id);
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let mut actives: Vec<String> = Vec::new();
         for s in cat.skills.iter().filter(|s| !s.system && !s.basic && !emberwake_battle::skill::is_item(s)) {

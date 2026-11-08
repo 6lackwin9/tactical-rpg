@@ -40,7 +40,9 @@ fn class_storage(full: &Dict) -> Dict {
             "base_stats" | "growth" => share_row,
             _ => false,
         };
-        !(dropped && empty(v))
+        // CLASS-BASICS: `basics` is stored only when set, so a class written before it existed re-saves byte for byte
+        let unset_basics = k == "basics" && v.as_array().is_some_and(|a| a.is_empty());
+        !(dropped && empty(v)) && !unset_basics
     });
     row
 }

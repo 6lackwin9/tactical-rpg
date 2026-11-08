@@ -780,6 +780,8 @@ pub fn deck_effect_errors(v: &View, e: &Dict, world: Option<&str>, unit_of: &dyn
             continue;
         }
         let owned = super::unit::owned_families(v, &unit);
+        // CLASS-BASICS: the unit's class basics are basics too
+        let basics = rpgkit_rules::unit::DeckRule { basics: basics.clone(), ..Default::default() }.with_class(&v.typed, &json::s(&unit, "class_id")).basics;
         let deck = json::dget(&unit, "deck");
         let mut actives = json::sget(deck, "active");
         for fam in json::aget(fx, "add").iter().map(gstr) {
@@ -873,8 +875,9 @@ pub fn deck_effect_warnings(v: &View, e: &Dict, world: Option<&str>, unit_of: &d
 fn auto_after_add(v: &View, unit: &Dict, fx: &Dict, r: &Dict) -> (Vec<String>, Vec<String>) {
     let owned = super::unit::owned_families(v, unit);
     let max = json::i(json::dget(r, "deck_slots"), "active", 0).max(0) as usize;
-    let basics = json::sget(r, "basics");
-    let rule = rpgkit_rules::unit::DeckRule::of(&ruleset::Ruleset::from_row(r)).unwrap_or_default();
+    // CLASS-BASICS: with the unit's class basics
+    let rule = rpgkit_rules::unit::DeckRule::of(&ruleset::Ruleset::from_row(r)).unwrap_or_default().with_class(&v.typed, &json::s(unit, "class_id"));
+    let basics = rule.basics.clone();
     let auto = rpgkit_rules::unit::auto_actives(&v.typed, &rpgkit_data::UnitDef::from_obj(unit), &rule);
     let mut new: Vec<String> = Vec::new();
     for f in json::aget(fx, "add").iter().map(gstr) {

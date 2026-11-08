@@ -55,9 +55,15 @@ pub fn family_skill(w: &World, c: UnitId, fam: &str) -> Option<SkillId> {
 /// active slots, RULESET1 9 D2; without a deck: every family the unit can use that is not a basic, in catalog order),
 /// then its meter skills (HOOKS1 UM6, rule unit_meters: in the order the battle gave them) and its worn items' skills
 /// (U3.2-S4, OFFHAND1), then the basics (the
-/// ruleset's `basics` in their order; a row without any: the catalog's basic skills).
+/// ruleset's `basics` in their order; a row without any: the catalog's basic skills), then (CLASS-BASICS) the unit's
+/// class basics its deck rule holds.
 fn auto_families(w: &World, c: UnitId) -> Vec<String> {
-    let basics: Vec<String> = if w.ruleset.numbers.basics.is_empty() { w.cat.basic_ids().iter().map(|id| w.cat.family_of(id).to_string()).collect() } else { w.ruleset.numbers.basics.clone() };
+    let mut basics: Vec<String> = if w.ruleset.numbers.basics.is_empty() { w.cat.basic_ids().iter().map(|id| w.cat.family_of(id).to_string()).collect() } else { w.ruleset.numbers.basics.clone() };
+    for b in w.units[c].deck_rule.iter().flat_map(|r| &r.basics) {
+        if !basics.contains(b) {
+            basics.push(b.clone());
+        }
+    }
     let slots = Some(w.units[c].active_families()).filter(|a| w.units[c].deck_rule.is_some() && !a.is_empty());
     let mut out: Vec<String> = match slots.or_else(|| deck_of(w, c).filter(|d| !d.active.is_empty()).map(|d| d.active.clone())) {
         Some(active) => active,
@@ -1184,7 +1190,8 @@ pub fn pick_name(w: &World, p: &Pick) -> String {
 }
 
 /// INPUT1 HK1: `c`'s hotkey order: its actives in slot order (the deck rule's slots, else the deck's `active`, else
-/// every family it can use that is not a basic, in catalog order), its meter skills, then the ruleset's basics; the row
+/// every family it can use that is not a basic, in catalog order), its meter skills, then the ruleset's basics and its
+/// class basics; the row
 /// of each family it uses now, only skills with an intent (not neutral), each once. The order never changes in a battle.
 pub fn hotkey_skills(w: &World, c: UnitId) -> Vec<SkillId> {
     let mut out: Vec<SkillId> = Vec::new();

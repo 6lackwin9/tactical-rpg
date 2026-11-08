@@ -382,7 +382,8 @@ impl Session {
             // a party member built without the rule (its passives are its builder's: progression::build_in) gets
             // the open basics and its active slots here
             if let (Some(rule), None) = (&deck, &u.deck_rule) {
-                u.deck_rule = Some(rule.clone());
+                // CLASS-BASICS: with its class's role basics (its catalog row's class)
+                u.deck_rule = Some(rule.with_class_of(&cat, &u.catalog_id));
                 u.apply_deck(&cat);
             }
             built.push(u);

@@ -153,6 +153,25 @@ impl DeckRule {
         rs.has(crate::ruleset::DECK).then(|| Self { basics: rs.numbers.basics.clone(), slots: rs.numbers.deck_slots })
     }
 
+    /// CLASS-BASICS (user 2026-11-08): these terms for a unit of class `class_id` (in `cat`): the ruleset's basics, then
+    /// the class's role basics (`ClassDef::basics`, each by its family), a repeat once. They take no deck slot (an
+    /// open basic, `Unit::deck_basic`). An unknown class or one without basics: these terms unchanged.
+    pub fn with_class(&self, cat: &Catalog, class_id: &str) -> Self {
+        let mut out = self.clone();
+        for id in cat.classes.get(class_id).map(|c| c.basics.as_slice()).unwrap_or_default() {
+            let fam = cat.family_of(id).to_string();
+            if !out.basics.contains(&fam) {
+                out.basics.push(fam);
+            }
+        }
+        out
+    }
+
+    /// `with_class` for the unit of catalog row `unit_id` (its `class_id`; an unknown row: unchanged).
+    pub fn with_class_of(&self, cat: &Catalog, unit_id: &str) -> Self {
+        self.with_class(cat, cat.units.get(unit_id).map(|e| e.class_id.as_str()).unwrap_or_default())
+    }
+
     /// The first `n` of `ids`: the slots a deck list fills.
     fn take(ids: &[String], n: i32) -> &[String] {
         &ids[..ids.len().min(n.max(0) as usize)]
@@ -1118,7 +1137,8 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     u.deck = e.deck.clone();
     match (&b.growth, b.deck) {
         (None, Some(rule)) => {
-            u.deck_rule = Some(rule.clone());
+            // CLASS-BASICS: the class's role basics are open beside the ruleset's (no slot)
+            u.deck_rule = Some(rule.with_class(cat, &e.class_id));
             if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
                 u.sync_from_stats_and_gear(cat);
                 u.hp = u.max_hp;
@@ -1130,7 +1150,7 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
             if !g.deck.is_empty() {
                 u.deck = g.deck.clone();
             }
-            u.deck_rule = Some(rule.clone());
+            u.deck_rule = Some(rule.with_class(cat, &e.class_id));
         }
         (_, None) => {}
     }

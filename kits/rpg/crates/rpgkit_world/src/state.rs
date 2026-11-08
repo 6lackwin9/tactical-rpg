@@ -544,7 +544,8 @@ impl UnitState {
     }
 
     /// RULESET1 9 D1-D5 for a member's saved deck (the content check's unit deck rules, ownership from the member):
-    /// actives are owned families, never a basic (a `basic` skill or a deck ruleset's `basics`); passive and keystone
+    /// actives are owned families, never a basic (a `basic` skill, a deck ruleset's `basics` or its class's `basics`,
+    /// CLASS-BASICS); passive and keystone
     /// hold known passives of that `slot` the member owns (its `passives`, D4); the counts fit the `deck_slots` of
     /// every ruleset with the deck rule; order maps an intent to families of that intent among the actives and the
     /// basics. Nothing repeats.
@@ -560,6 +561,10 @@ impl UnitState {
             if !basics.contains(b) {
                 basics.push(b.clone());
             }
+        }
+        // CLASS-BASICS: the member's class basics are basics too (open, no slot)
+        if !rules.is_empty() {
+            basics = rpgkit_rules::DeckRule { basics, ..Default::default() }.with_class(&d.cat, &self.class_id(d)).basics;
         }
         let twice = |label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec<String>| {
             for id in ids {

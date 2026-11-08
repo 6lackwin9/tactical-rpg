@@ -1291,7 +1291,12 @@ pub fn script_problems(v: &View, e: &Dict, unit_of: &dyn Fn(&str) -> Dict) -> Ve
                 }
             };
             // an enemy-side unit's families: its unit row's (none listed: it knows every skill, as in battle) and the basics
-            let owned: Option<Vec<String>> = who.as_ref().filter(|w| w.1).map(|w| super::unit::owned_families(v, &unit_of(&w.2))).filter(|o| !o.is_empty());
+            // (CLASS-BASICS: and its class basics)
+            let owned: Option<Vec<String>> = who.as_ref().filter(|w| w.1).and_then(|w| {
+                let row = unit_of(&w.2);
+                let owned = super::unit::owned_families(v, &row);
+                (!owned.is_empty()).then(|| rpgkit_rules::unit::DeckRule { basics: owned, ..Default::default() }.with_class(&v.typed, &json::s(&row, "class_id")).basics)
+            });
             for (i, p) in parsed.iter().enumerate() {
                 match p {
                     ScriptPick::Skill { family, .. } => {
