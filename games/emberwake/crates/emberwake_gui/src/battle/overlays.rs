@@ -298,7 +298,8 @@ pub(super) fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Opt
     if ri::field_rows(w) {
         for e in st.entries.iter().filter(|e| !e.cells.is_empty() && e.step_index >= 0) {
             let s = &w.cat.skills[e.skill];
-            if emberwake_battle::skill::kind(s) == Kind::Attack && emberwake_battle::skill::is_area(s) {
+            // INTENT2-U: an area item's Field row marks its tiles as a Field skill's
+            if e.item.is_some() || (emberwake_battle::skill::kind(s) == Kind::Attack && emberwake_battle::skill::is_area(s)) {
                 let row = if e.target.is_some() { RoundIntent::Assault } else { intent };
                 o.areas.push((e.cells.clone(), row));
             }

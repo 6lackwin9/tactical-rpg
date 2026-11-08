@@ -154,11 +154,21 @@ pub(super) fn pick_detail(cat: &emberwake_data::Catalog, o: &rip::PickOption) ->
     if let Some(why) = &o.problem {
         return why.clone();
     }
-    let blocks = format!("{} block{}, {} AP", o.blocks, if o.blocks == 1 { "" } else { "s" }, o.ap);
+    with_intent(cat, o, format!("{} block{}, {} AP", o.blocks, if o.blocks == 1 { "" } else { "s" }, o.ap))
+}
+
+/// INTENT2-U (section 6 "Menu"): a live item cell's cost on its card, the kit's trial cost in the spec's order: "<ap> AP,
+/// <blocks> blocks; <Intent>".
+fn item_detail(cat: &emberwake_data::Catalog, o: &rip::PickOption) -> String {
+    with_intent(cat, o, format!("{} AP, {} block{}", o.ap, o.blocks, if o.blocks == 1 { "" } else { "s" }))
+}
+
+/// `cost` with the row's intent ("; <Intent>", a Maneuver row with its kind).
+fn with_intent(cat: &emberwake_data::Catalog, o: &rip::PickOption, cost: String) -> String {
     match (o.intent, o.kind) {
-        (Some(i @ RoundIntent::Maneuver), Some(k)) => format!("{blocks}; {} ({})", i.label(cat), kind_name(k)),
-        (Some(i), _) => format!("{blocks}; {}", i.label(cat)),
-        (None, _) => blocks,
+        (Some(i @ RoundIntent::Maneuver), Some(k)) => format!("{cost}; {} ({})", i.label(cat), kind_name(k)),
+        (Some(i), _) => format!("{cost}; {}", i.label(cat)),
+        (None, _) => cost,
     }
 }
 
@@ -984,7 +994,19 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
         None => o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "),
     };
     let mut tip: Tip = vec![(title, th().gold)];
-    if o.problem.is_none() {
+    // INTENT2-U (section 6 "Menu"): an item cell's card has its cost ("0 AP, <N> blocks": the kit's trial cost with the
+    // row's intent when live, the item's own cost when refused) and an area item's row variant
+    let item = match &o.picks[..] {
+        [rip::Pick::Item(id)] => emberwake_battle::command::pouch_item(w, h, id),
+        _ => None,
+    };
+    if let Some(item) = item {
+        let cost = if o.problem.is_none() { item_detail(&w.cat, o) } else { intent_text::item_cost_line(w, h, item, o.intent) };
+        tip.push((cost, th().gold));
+        if let Some(line) = o.intent.and_then(|i| intent_text::item_variant_line(w, item, i)) {
+            tip.push((line, o.intent.map_or(th().text, super::tips::intent_ring_color)));
+        }
+    } else if o.problem.is_none() {
         tip.push((pick_detail(&w.cat, o), th().gold));
     }
     if o.picks.iter().any(|p| matches!(p, rip::Pick::MoveHere(_) | rip::Pick::StepAfter(_))) && o.picks.len() == 1 {
@@ -1018,10 +1040,15 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
 
 /// A4.2-K1b (INTENT2 IR5, IR17, IR19): while an area row of the skill menu is hovered (rule `field_intent`), the impact
 /// tiles its pick would plan, with the row (Field: the source's marks with the Field bonus; Assault: the shape on the
-/// locked target's tile; Stand: the ring), on copies; empty for any other row or a refused pick.
+/// locked target's tile; Stand: the ring), on copies; empty for any other row or a refused pick. INTENT2-U: an area
+/// item's Field row (the tile command, `PlanStep::use_item_at`) previews its marks the same way.
 pub(super) fn area_preview(s: &Session, h: usize, at: RoundTarget, picks: &[rip::Pick]) -> Vec<(Vec<V2>, RoundIntent)> {
     let w = &s.w;
-    let area = |p: &rip::Pick| matches!(p, rip::Pick::Skill { skill, .. } if emberwake_battle::skill::is_area(&w.cat.skills[*skill]));
+    let area = |p: &rip::Pick| match p {
+        rip::Pick::Skill { skill, .. } => emberwake_battle::skill::is_area(&w.cat.skills[*skill]),
+        rip::Pick::Item(id) => emberwake_battle::command::pouch_item(w, h, id).is_some_and(|i| emberwake_battle::command::item_area_on(w, i)),
+        _ => false,
+    };
     if !ri::field_rows(w) || !picks.iter().any(area) {
         return Vec::new();
     }
@@ -1031,9 +1058,17 @@ pub(super) fn area_preview(s: &Session, h: usize, at: RoundTarget, picks: &[rip:
         rip::Pick::Skill { skill, .. } => Some(*skill),
         _ => None,
     }).collect();
+    let items: Vec<&String> = picks.iter().filter_map(|p| match p {
+        rip::Pick::Item(id) => Some(id),
+        _ => None,
+    }).collect();
+    let picked = |e: &emberwake_battle::plan::PlanEntry| match &e.item {
+        Some(i) => items.contains(&&i.id),
+        None => skills.contains(&e.skill),
+    };
     p2.entries_for(&w2, h)
         .into_iter()
-        .filter(|e| skills.contains(&e.skill) && !e.cells.is_empty())
+        .filter(|e| picked(e) && !e.cells.is_empty())
         .map(|e| (e.cells.clone(), if e.target.is_some() { RoundIntent::Assault } else { intent }))
         .collect()
 }

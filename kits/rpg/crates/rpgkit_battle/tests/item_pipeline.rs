@@ -395,3 +395,28 @@ fn the_ai_drinks_its_own_heal_in_a_stand_round() {
     assert!(drinks, "the potion is planned (intent {intent:?})");
     assert_eq!(intent, Some(RoundIntent::Guard), "a Stand round on itself");
 }
+
+/// INTENT2-U (section 6 "Menu"): under `field_intent` the menu has a cell for an item in each listed row it allows (an
+/// area bomb in Field and Assault, a heal in Support and Stand), each live only on the target its row takes; without the
+/// rule one cell, in the row its target gives.
+#[test]
+fn the_menu_lists_an_item_in_each_row_it_allows() {
+    use rpgkit_battle::round_intent_plan::{menu_options, Pick, PickOption};
+    let cells = |w: &World, at: RoundTarget, id: &str| -> Vec<PickOption> {
+        menu_options(w, &Plan::new(), HERO, at).into_iter().filter(|o| matches!(&o.picks[..], [Pick::Item(x)] if x == id)).collect()
+    };
+    let rows = |c: &[PickOption]| c.iter().map(|o| (o.intent, o.problem.is_none())).collect::<Vec<_>>();
+    let mut w = session(field_on());
+    let (b, p) = (bomb("BURST"), potion());
+    give(&mut w, HERO, &b, 1);
+    give(&mut w, HERO, &p, 1);
+    assert_eq!(rows(&cells(&w, RoundTarget::Unit(FOE), &b.id)), [(Some(RoundIntent::Field), true), (Some(RoundIntent::Assault), true)], "a bomb on an enemy: both rows live");
+    assert_eq!(rows(&cells(&w, RoundTarget::Cell(V2::new(5, 6)), &b.id)), [(Some(RoundIntent::Field), true), (Some(RoundIntent::Assault), false)], "on a tile: Field only");
+    let on_self = cells(&w, RoundTarget::Myself, &p.id);
+    assert_eq!(rows(&on_self), [(Some(RoundIntent::Support), false), (Some(RoundIntent::Guard), true)], "a heal on yourself: Stand");
+    assert_eq!(on_self[0].problem.as_deref(), Some("Target an ally to use this"));
+    assert_eq!(rows(&cells(&w, RoundTarget::Unit(ALLY), &p.id)), [(Some(RoundIntent::Support), true), (Some(RoundIntent::Guard), false)], "on an ally: Support");
+    let mut w = session(intent_only());
+    give(&mut w, HERO, &b, 1);
+    assert_eq!(cells(&w, RoundTarget::Unit(FOE), &b.id).len(), 1, "without field_intent: one cell");
+}

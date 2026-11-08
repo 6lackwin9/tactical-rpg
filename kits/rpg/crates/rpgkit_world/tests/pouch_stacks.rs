@@ -171,3 +171,29 @@ fn the_world_fight_start_auto_fills() {
     assert_eq!(gs.party.members[0].pouch_count("p_bomb"), 1);
     assert_eq!(lines, ["Stash short: m 1 of 2 N_p_bomb"]);
 }
+
+/// INTENT2-U: the slot order is the packed targets' order, then the slots without one; moving a slot keeps its place
+/// (every slot then has a target), taking a slot gives its copies back, and `pack_pouch` gives back the copies above the
+/// new target.
+#[test]
+fn slots_keep_their_order_and_the_slot_edits_return_copies() {
+    let d = data();
+    let mut m = member("m1", &["p_bomb", "p_bomb"]);
+    m.assign_pouch(&d, "p_potion").unwrap();
+    assert_eq!(m.pouch_slots(), ["p_potion", "p_bomb"], "a packed slot first, then the pouch ids without a target");
+    m.move_pouch_slot(&d, 1, 0).unwrap();
+    assert_eq!(m.pouch_slots(), ["p_bomb", "p_potion"], "the moved slot keeps its place");
+    assert_eq!((m.packed("p_bomb"), m.pouch_count("p_bomb")), (2, 2), "a slot without a target takes its count");
+    assert!(m.move_pouch_slot(&d, 1, 1).is_err() && m.move_pouch_slot(&d, 5, 0).is_err(), "nothing to move");
+    m.assign_pouch(&d, "p_salve").unwrap();
+    m.move_pouch_slot(&d, 2, 0).unwrap();
+    assert_eq!(m.pouch_slots(), ["p_salve", "p_bomb", "p_potion"]);
+    let mut stash = indexmap::IndexMap::new();
+    m.pack_pouch(&d, "p_bomb", 1, &mut stash).unwrap();
+    assert_eq!((m.pouch_count("p_bomb"), m.packed("p_bomb"), stash["p_bomb"]), (1, 1, 1), "the copy above 1 back");
+    assert!(m.pack_pouch(&d, "p_bomb", 3, &mut stash).is_err(), "above the stack limit");
+    assert_eq!(m.take_pouch_slot(1, &mut stash).unwrap(), "p_bomb");
+    assert_eq!((m.pouch_count("p_bomb"), stash["p_bomb"]), (0, 2), "its copies back");
+    assert_eq!(m.pouch_slots(), ["p_salve", "p_potion"], "and its target gone");
+    assert!(m.take_pouch_slot(2, &mut stash).is_err(), "no such slot");
+}

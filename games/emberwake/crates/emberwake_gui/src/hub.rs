@@ -422,6 +422,9 @@ pub struct Results {
     /// (member, life).
     wounded: Vec<String>,
     departed: Vec<(String, String)>,
+    /// INTENT2-U (A1.2-K3 "Stacks & Auto-Fill"): the pouch slots the post-battle auto-fill left short (`battle::apply`'s
+    /// `stash_short`: "Stash short: Ash 1 of 3 Fire Flask").
+    stash_short: Vec<String>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -534,6 +537,7 @@ impl Results {
             stay_lines: json::sget(res, "stay_lines"),
             wounded: json::sget(res, "wounded"),
             departed: json::aget(res, "departed").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "life"))).collect(),
+            stash_short: json::sget(res, "stash_short"),
             w: Vec::new(),
         }
     }
@@ -602,6 +606,11 @@ impl Screen<GameCx> for Results {
             ui.p.text(24.0, y as f32, &text, BODY + 1.0, col);
             y += line;
         }
+        // INTENT2-U: the pouches the stash could not top up to their packed count
+        for text in &self.stash_short {
+            ui.p.text(24.0, y as f32, text, BODY + 1.0, th().dim);
+            y += line;
+        }
         let mut prompt = false;
         for m in &gs.party.members {
             let Some(a) = self.award.get(&m.id).and_then(Value::as_object) else { continue };
@@ -648,7 +657,7 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed})
+        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short})
     }
     widget_plumbing!();
 }
@@ -716,6 +725,23 @@ mod tests {
 
     use crate::hud::hud_tests::{frame, game_cx, gfx};
     use emberwake_world::state::RosterCaps;
+
+    /// INTENT2-U: the results draw one line per pouch slot the post-battle auto-fill left short (`stash_short`, the
+    /// kit's "Stash short: <name> <cur> of <packed> <item>"), after the party lines; none without the key.
+    #[test]
+    fn the_results_draw_the_stash_short_lines() {
+        let mut cx = game_cx();
+        let line = "Stash short: Ash 1 of 3 Fire Flask";
+        let res = json::obj([("ok", json!(true)), ("stay_lines", json!(["Held."])), ("stash_short", json!([line]))]);
+        let mut r = Results::new(&res, "won", &Dict::new());
+        let t = texts(&frame(&mut r, &mut cx, &mut gfx(), 1.0));
+        let at = |s: &str| t.iter().position(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        assert!(at("Held.") < at(line), "after the stay-behind lines");
+        assert_eq!(r.state(&cx)["stash_short"], json!([line]));
+        assert_clean(&mut r, &mut cx, "results with a stash short line");
+        let none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
+        assert!(none.stash_short.is_empty());
+    }
 
     /// A game whose party has at least `n` members (copies of the first under new ids, test-only members).
     fn party_of(n: usize) -> Cx {

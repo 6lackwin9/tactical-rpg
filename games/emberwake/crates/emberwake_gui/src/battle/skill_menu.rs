@@ -2,6 +2,8 @@
 //! Move, Rest) on top, then one row per intent the ruleset lists. Every place comes from the menu's anchor and the rows the
 //! kit lists, and that list does not change with the picks, so when an opener fixes the intent the other rows fade where
 //! they stand. Sizes are in the wrapper's units, as the rest of this screen; the measured columns grow with the text size.
+//! INTENT2-U (IR19, Option A): every intent row on one line, no block count on a cell; a pouch item is an icon cell in
+//! each row it allows, after the skills, with its live copies as an `xN` badge in the corner (its card has the cost).
 
 use super::board::with_alpha;
 use super::input::{Popup, Row};
@@ -22,8 +24,6 @@ pub(super) const ICON: i32 = 15;
 const GAP: i32 = 2;
 /// The panel's inner margin.
 const PAD: i32 = 4;
-/// Cells on one line of a row; a row with more goes on under itself.
-pub(super) const MENU_COLS: i32 = 8;
 /// The narrowest panel, so the title has room.
 const MENU_MIN_W: i32 = 170;
 /// A skill cell's edge (the mock's light frame).
@@ -72,7 +72,7 @@ pub(super) struct MenuGrid {
 
 impl MenuGrid {
     /// The layout of `rows` under the rows of `intents` (each with its name; every intent the ruleset lists, so the places
-    /// do not depend on `shown`): a row's place is the next free one in its slot.
+    /// do not depend on `shown`): a row's place is the next free one in its slot, each intent's row on one line.
     pub(super) fn new(intents: &[(RoundIntent, String)], shown: Vec<RoundIntent>, rows: &[Row], fixed: Option<RoundIntent>) -> Self {
         let mut lines = vec![(NEUTRAL_LINE.to_string(), None, 0)];
         let mut places = vec![(0, 0); rows.len()];
@@ -86,11 +86,12 @@ impl MenuGrid {
         for (i, name) in intents {
             lines.push((name.clone(), Some(*i), depth));
             let cells: Vec<usize> = (0..rows.len()).filter(|&k| rows[k].slot == Some(Slot::Intent(*i))).collect();
+            // INTENT2-U (IR19, Option A): a row stays on one line, however many cells it holds
             for (n, k) in cells.iter().enumerate() {
-                places[*k] = (depth + n as i32 / MENU_COLS, n as i32 % MENU_COLS);
-                cols = cols.max(n as i32 % MENU_COLS + 1);
+                places[*k] = (depth, n as i32);
+                cols = cols.max(n as i32 + 1);
             }
-            depth += ((cells.len() as i32 + MENU_COLS - 1) / MENU_COLS).max(1);
+            depth += 1;
         }
         MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, button_w: ICON + 7 }
     }
@@ -185,9 +186,9 @@ pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &
                 }
             }
         }
-        // a pouch item's copies left
+        // a pouch item's copies left (INTENT2-U: the corner `xN` badge)
         if let Some(n) = row.count {
-            let text = n.to_string();
+            let text = format!("x{n}");
             let (tw, lh) = (ui.p.text_w(&text, SMALL), ui.p.line_h(SMALL));
             text_outlined(&mut ui.p, (rr.x + rr.w) as f32 - tw - 1.0, (rr.y + rr.h) as f32 - lh, &text, SMALL, with_alpha(th().text, shows.max(150)), rgba(0, 0, 0, shows));
         }

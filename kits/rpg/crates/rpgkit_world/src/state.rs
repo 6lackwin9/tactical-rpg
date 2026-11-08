@@ -450,10 +450,11 @@ impl UnitState {
         self.pouch.iter().filter(|p| *p == item).count() as i64
     }
 
-    /// A1.2-K3 (INTENT2-K3): the pouch slots in order: the distinct pouch ids, then the packed ids with no copy left.
+    /// A1.2-K3 (INTENT2-K3, INTENT2-U): the pouch slots in order: the slots with a packed target in `pouch_packed`'s key
+    /// order (the order the player set: `move_pouch_slot`), then the distinct pouch ids without one, in pouch order.
     pub fn pouch_slots(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        for id in self.pouch.iter().chain(self.pouch_packed.keys()) {
+        for id in self.pouch_packed.keys().chain(self.pouch.iter()) {
             if !out.contains(id) {
                 out.push(id.clone());
             }
@@ -495,6 +496,50 @@ impl UnitState {
             return Err(format!("Pack 1-{limit} of '{item}'."));
         }
         self.pouch_packed.insert(item.to_string(), n);
+        Ok(())
+    }
+
+    /// INTENT2-U: empties pouch slot `i` (`pouch_slots` order): its copies go to `stash`, its packed target goes.
+    /// Returns the item. Refused for no such slot.
+    pub fn take_pouch_slot(&mut self, i: usize, stash: &mut IndexMap<String, i64>) -> Result<String, String> {
+        let item = self.pouch_slots().get(i).cloned().ok_or("That pouch slot is empty.")?;
+        let n = self.pouch_count(&item);
+        if n > 0 {
+            *stash.entry(item.clone()).or_insert(0) += n;
+        }
+        self.pouch.retain(|p| *p != item);
+        self.pouch_packed.shift_remove(&item);
+        Ok(item)
+    }
+
+    /// INTENT2-U: moves pouch slot `i` to place `j` (`pouch_slots` order, `j` clamped to the last), copies and packed
+    /// target with it. Every slot then has a packed target (one without takes its current count in `1..stack limit`, as
+    /// at combat start), so the order holds. Refused for `i == j` or no slot `i`.
+    pub fn move_pouch_slot(&mut self, d: &Data, i: usize, j: usize) -> Result<(), String> {
+        let mut slots = self.pouch_slots();
+        if i == j || i >= slots.len() {
+            return Err("Nothing to move.".into());
+        }
+        let item = slots.remove(i);
+        slots.insert(j.min(slots.len()), item);
+        let mut pouch = Vec::new();
+        let mut packed = IndexMap::new();
+        for s in &slots {
+            pouch.extend(self.pouch.iter().filter(|p| *p == s).cloned());
+            packed.insert(s.clone(), self.pouch_packed.get(s).copied().unwrap_or_else(|| self.pouch_count(s).clamp(1, stack_limit(d, s))));
+        }
+        self.pouch = pouch;
+        self.pouch_packed = packed;
+        Ok(())
+    }
+
+    /// INTENT2-U: `set_packed`, then the copies above the new target go to `stash`.
+    pub fn pack_pouch(&mut self, d: &Data, item: &str, n: i64, stash: &mut IndexMap<String, i64>) -> Result<(), String> {
+        self.set_packed(d, item, n)?;
+        while self.pouch_count(item) > n {
+            let Some(k) = self.pouch.iter().rposition(|p| p == item) else { break };
+            *stash.entry(self.pouch.remove(k)).or_insert(0) += 1;
+        }
         Ok(())
     }
 

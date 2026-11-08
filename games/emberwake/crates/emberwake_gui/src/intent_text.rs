@@ -140,6 +140,44 @@ pub fn range_line(w: &World, c: usize, s: &emberwake_data::SkillDef) -> String {
     }
 }
 
+/// INTENT2-U (section 6 "Menu"): a refused item cell's cost for its hover card (a live one shows the kit's trial cost),
+/// "<AP> AP, <N> blocks": `command::item_ap`, and the item's `use_blocks` with the Assault row's longer wind-up for an
+/// area item (`command::item_blocks`).
+pub fn item_cost_line(w: &World, c: usize, item: &emberwake_data::ItemDef, intent: Option<emberwake_battle::round_intent::RoundIntent>) -> String {
+    use emberwake_battle::command;
+    let assault = intent == Some(emberwake_battle::round_intent::RoundIntent::Assault) && command::item_area_on(w, item);
+    let blocks = command::item_blocks(w, item, assault, w.total_blocks);
+    format!("{} AP, {blocks} block{}", command::item_ap(w, c), if blocks == 1 { "" } else { "s" })
+}
+
+/// INTENT2-U (section 6, IR17): what an area item does in its `intent` row under the rule `field_intent`, as a skill's
+/// `variant_line`: the Field row (thrown at a tile fixed at planning, full power, its derived reach bonus, the units its
+/// `affects` takes in the marks) or the Assault row (locked on the enemy, `splash_mult` off it, the longer wind-up).
+/// None for any other row or item, and without the rule.
+pub fn item_variant_line(w: &World, item: &emberwake_data::ItemDef, intent: emberwake_battle::round_intent::RoundIntent) -> Option<String> {
+    use emberwake_battle::round_intent::{self, RoundIntent};
+    use emberwake_data::Affects;
+    if !w.ruleset.has(emberwake_rules::ruleset::FIELD_INTENT) || !emberwake_battle::command::item_area_on(w, item) || !round_intent::item_allows(w, item, intent) {
+        return None;
+    }
+    let who = |default: Affects| match item.affects.unwrap_or(default) {
+        Affects::All => "everyone",
+        Affects::Enemies => "foes",
+        Affects::Allies => "allies",
+    };
+    match intent {
+        RoundIntent::Field => {
+            let reach = if emberwake_battle::command::item_field_reach(item) > item.battle_reach() { ", reach +1" } else { "" };
+            Some(format!("Field: thrown at a tile, fixed when planned, full power{reach}; hits {} in the marks", who(Affects::All)))
+        }
+        RoundIntent::Assault => {
+            let n = w.ruleset.numbers.assault_shape_blocks;
+            Some(format!("Assault: locked on the enemy, x{} off it, +{n} wind-up block{}; {} only", w.ruleset.numbers.splash_mult, if n == 1 { "" } else { "s" }, who(Affects::Enemies)))
+        }
+        _ => None,
+    }
+}
+
 /// A4.2-K1b (INTENT2 IR17, IR21; the skill variant previews): what skill `s` does in its `intent` row under `rules`:
 /// the Field row (aimed at a tile fixed at planning, its derived Field bonus, every unit in the marks) or the shaped
 /// Assault row (locked on the enemy, `splash_mult` off it, the longer wind-up, foes only). None for any other row or

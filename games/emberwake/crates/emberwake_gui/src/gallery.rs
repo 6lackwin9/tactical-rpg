@@ -659,7 +659,11 @@ impl Gallery {
                 let level = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.level(&cx.data)).unwrap_or(1);
                 let mut xp = json::Dict::new();
                 xp.insert(member.clone(), json!({"xp": 24, "old_level": level, "new_level": level, "levels_gained": 0, "unspent": 0}));
-                let res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30))]);
+                // INTENT2-U: a sample "Stash short" line, as the kit's post-battle auto-fill writes it (`roster::auto_fill`)
+                let name = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| emberwake_world::progression::display_name(&cx.data, m)).unwrap_or_default();
+                let item = cx.data.cat.items.values().filter(|i| i.offered_in_battle()).map(|i| i.name.clone()).min().unwrap_or_default();
+                let short = format!("Stash short: {name} 1 of 2 {item}");
+                let res = json::obj([("ok", true.into()), ("xp", Value::Object(xp)), ("advanced", json!([])), ("events", json!([])), ("gold", json!(30)), ("stash_short", json!([short]))]);
                 Box::new(crate::hub::Results::new(&res, "won", &json::Dict::new()))
             }
             _ => return None,

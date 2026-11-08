@@ -2273,6 +2273,9 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         let problem = why.unwrap_or_else(|| match want {
             Some(RoundIntent::Field) => "Target a tile (or an enemy's tile) to use this".to_string(),
             Some(RoundIntent::Assault) => "Target an enemy to use this".to_string(),
+            // INTENT2-U: an item's Stand cell is used on yourself, its Support cell on an ally
+            Some(RoundIntent::Guard) => "Target yourself to use this".to_string(),
+            Some(RoundIntent::Support) => "Target an ally to use this".to_string(),
             _ => target_hint(w, c, &p),
         });
         PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), ap_short: None, drops: Vec::new(), at }
@@ -2303,8 +2306,20 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         }
     }
     for id in command::pouch_ids(w, c) {
-        if command::pouch_item(w, c, &id).is_some_and(|i| i.offered_in_battle()) {
-            let same = |r: &Pick| matches!(r, Pick::Item(x) if *x == id);
+        let Some(item) = command::pouch_item(w, c, &id).filter(|i| i.offered_in_battle()) else { continue };
+        let same = |r: &Pick| matches!(r, Pick::Item(x) if *x == id);
+        // INTENT2-U (section 6 "Menu"): under `field_intent` an item has a cell in each listed row it allows, after the
+        // skills (a heal in Support and Stand, a thrown bomb in Field and Assault)
+        let rows: Vec<RoundIntent> = if round_intent::field_rows(w) {
+            round_intent::item_rows(w, item).into_iter().filter_map(RoundIntent::parse).filter(|i| round_intent::listed(w, *i)).collect()
+        } else {
+            Vec::new()
+        };
+        if rows.len() > 1 {
+            for want in rows {
+                out.push(cell_in(Pick::Item(id.clone()), &same, Some(want)));
+            }
+        } else {
             out.push(cell(Pick::Item(id.clone()), &same));
         }
     }
