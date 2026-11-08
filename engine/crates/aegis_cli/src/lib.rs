@@ -253,7 +253,7 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             };
             let patch = json_arg(raw)?;
             let Some(patch) = patch.as_object() else { bail!("the manifest patch is a JSON object") };
-            match Manifest::set(&path, patch) {
+            match aegis_content::store::set_manifest(&hooks, &path, patch) {
                 Ok(_) => Ok(println!("wrote {}", path.display())),
                 Err(e) => fail(e),
             }

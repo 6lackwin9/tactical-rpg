@@ -687,6 +687,12 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     if inherited && SUPPLIES_START > supplies_max {
         errors.push(format!("Start supplies inherit the default {SUPPLIES_START}, above the game's supply cap {supplies_max}; set start_supplies 0..{supplies_max}."));
     }
+    // T1.2-S2 (FB-54b): the die of the dialogue rolls
+    let die = m.get("dialogue_roll_die").cloned().unwrap_or(json::int(-1));
+    let (die_min, die_max) = (rpgkit_data::DIALOGUE_ROLL_DIE_MIN, rpgkit_data::DIALOGUE_ROLL_DIE_MAX);
+    if !json::is_int(&die) || (json::to_int(&die) != -1 && !(die_min..=die_max).contains(&json::to_int(&die))) {
+        errors.push(format!("Dialogue roll die must be -1 (inherited) or {die_min}..{die_max}."));
+    }
     errors.extend(dialogue::service_lines_errors(m.get("service_lines").unwrap_or(&Value::Object(Dict::new())), "Service lines"));
     errors.extend(ruleset_errors(v, m));
     errors.extend(campaign::manifest_errors(v, w, m));

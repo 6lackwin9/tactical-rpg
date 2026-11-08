@@ -67,12 +67,10 @@ use aegis_ui::ui::{Gfx, Widget};
 use emberwake_battle::grid::V2;
 use emberwake_battle::round_intent::{self as ri};
 use emberwake_battle::round_intent_plan as rip;
-use emberwake_battle::session::{Phase, Prebuilt, Session, StartGrant};
+use emberwake_battle::session::{Phase, Session};
 use aegis_core::json::{self, s, Dict};
-use emberwake_world::battle::WorldRoster;
 use emberwake_battle::world::World;
 use emberwake_host::{Battle, Host};
-use emberwake_world::campaign::purse;
 use emberwake_world::story;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -196,19 +194,17 @@ pub enum Action {
     GhostSlot(usize),
 }
 
-/// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and
-/// enemies keep theirs) has `mods.start_ap` AP more in round 1 (never below 0, `purse::start_ap`), and the round's
-/// start snapshot shows it. Nothing when the mods change nothing.
-pub fn lower_start_ap(s: &mut Session, heroes: usize, mods: &purse::BattleMods) {
-    if mods.start_ap == 0 {
-        return;
-    }
-    for u in s.w.units.iter_mut().take(heroes) {
-        u.ap = purse::start_ap(u.ap as i64, mods) as i32;
-    }
-    let start = s.snapshot();
-    if let Some(first) = s.history.last_mut().and_then(|r| r.snapshots.first_mut()) {
-        *first = start;
+/// ASSETORG2: a fielded member's body and palette in world `world` (the kit's `begin_world_with` art callback): its
+/// character's, else its base unit's (its class's body when the unit has none).
+fn member_art(d: &emberwake_world::Data, world: &str, m: &emberwake_world::UnitState) -> (String, String) {
+    let character = d.resolve(world, "characters", &m.lore_ref);
+    if character.is_empty() {
+        let unit = d.entry("units", &m.base_unit);
+        let class = d.entry("classes", &s(unit, "class_id"));
+        (emberwake_content::art::body_of(&Default::default(), unit, class), emberwake_content::art::palette_of(&Default::default(), unit))
+    } else {
+        let (art, palette, _) = crate::screens::character_art(d, character);
+        (art, palette)
     }
 }
 
@@ -660,59 +656,14 @@ impl BattleScreen {
         b
     }
 
-    /// A world fight with the saved party (BattleBridge.encounter_for + GameEncounter).
+    /// A world fight with the saved party (BattleBridge.encounter_for + GameEncounter): the kit's `begin_world` builds
+    /// it (W.2-S2: the fight world, BK6's party_min refusal, the auto-fill, the ruleset, grants, the one hero builder,
+    /// the foes, the start-AP change); the screen gives the heroes their art and logs the start's lines.
     pub fn world(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<Self, String> {
         let d = cx.data.clone();
-        let gs = cx.gs();
-        let enc_ref = s(fight, "encounter");
-        let hit = d.resolve(&gs.world_id, "encounters", &enc_ref);
-        if hit.is_empty() {
-            return Err(format!("Unknown encounter '{enc_ref}'."));
-        }
-        let active = gs.party.active_members();
-        if active.is_empty() {
-            return Err("No active party member to fight.".into());
-        }
-        // the kit's world fight start: the fight's world, BK6's party_min refusal, A1.2-K3's combat-start auto-fill (its
-        // "Stash short" lines are logged below)
-        let (world, stash_short) = emberwake_world::battle::begin_fight(&d, cx.gs_mut(), &enc_ref)?;
-        let gs = cx.gs();
-        let active = gs.party.active_members();
-        let entry = d.resolve(&world, "encounters", &s(hit, "id"));
-        // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter; V3: the world's plan
-        // reveal flag in the game state reveals the enemy plans
-        let mut def = emberwake_world::battle::encounter_def_in(&d, gs, &world, entry);
-        let zone = s(fight, "zone");
-        if !zone.is_empty() {
-            def.zone = zone;
-        }
-        def.id = format!("{world}:{}", s(hit, "id"));
-        // PACE1 rule 7 (GameEncounter): a start_status entry is granted when its requires_flags all hold.
-        let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| emberwake_world::quest::condition_met(gs, json::dict(c)))).collect();
-        def.start_grant = StartGrant::Only(grants);
-        let roster = WorldRoster::new(&d, world.clone());
-        let mut party = Vec::new();
-        let mut members = Vec::new();
-        // ROSTER1-L: the world fields each member (its class path and deck rule in this world, at its stored HP)
-        for m in active {
-            let Some(field) = emberwake_world::roster::field_unit(&d, gs, m, &world) else { continue };
-            // ASSETORG2: the member's character's body and palette (its base unit's, its class's when it has none)
-            let character = d.resolve(&world, "characters", &m.lore_ref);
-            let (art, palette, _) = if character.is_empty() {
-                let unit = d.entry("units", &m.base_unit);
-                let class = d.entry("classes", &s(unit, "class_id"));
-                (emberwake_content::art::body_of(&Default::default(), unit, class), emberwake_content::art::palette_of(&Default::default(), unit), Vec::new())
-            } else {
-                crate::screens::character_art(&d, character)
-            };
-            party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone(), default_intent: field.default_intent });
-            members.push((m.id.clone(), field.pouch_unloaded));
-        }
+        let started = emberwake_world::battle::begin_world_with(&d, cx.gs_mut(), fight, &mut |world, m| member_art(&d, world, m))?;
+        let emberwake_world::battle::WorldFight { session, world, members, stash_short, mods, intro, .. } = started;
         // CAMPAIGN1 P3, W6: at zero upkeep the party starts with less AP (read before the session, logged once)
-        let mods = purse::battle_mods(&d, gs);
-        let heroes = party.len();
-        let mut session = Session::start_with(d.cat.clone(), def, &roster, party);
-        lower_start_ap(&mut session, heroes, &mods);
         if !mods.note.is_empty() {
             cx.log(mods.note.clone());
         }
@@ -720,7 +671,7 @@ impl BattleScreen {
         b.class_world = world;
         b.host.begin(session);
         b.host.restart();
-        b.after_start(&s(entry, "intro"));
+        b.after_start(&intro);
         if !mods.note.is_empty() {
             b.message = format!("{} {}.", b.message, mods.note);
         }

@@ -3,8 +3,8 @@
 //! top, the sections on the left (Main, Jobs, Under way, Locked, Closed; each row the quest's name, its node, the
 //! deadline in Arterial Red and the section's line), the picked quest's detail on the right (description, steps,
 //! rewards with the purse's name, loot picks, reputation, node, deadline), Accept and Close. The rules are the kit's
-//! (`board::view`, `board::detail`, the runner's `accept` and `close_board`); the pane only draws them. `RegionMap`
-//! draws it while its conversation has a board open; the UI Gallery shows it on a fixture board (`BoardSample`).
+//! (`board::view`, `board::detail`, the runner's `accept` and `close_board`); the pane only draws them.
+//! `talk::Services` (SERVICES1) draws it while its conversation has a board open; the UI Gallery shows it on a fixture board (`BoardSample`).
 
 use crate::hud::{purse_word, PurseWord};
 use crate::screens::{Cx, GameCx, Nav, Screen};

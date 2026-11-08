@@ -80,25 +80,38 @@ function render() {
       `;
     } else if (STATE.screen === 'story') {
       const m = STATE.storyMode || 'vn_stage';
-      const a = STATE.storyActorStyle || 'full_sprite';
+      const fx = STATE.storyReactionOverride || 'auto';
       togglesEl.innerHTML = `
         <span style="color:#fbbf24;font-weight:700;font-size:10px;">StoryStage Mode:</span>
-        <button class="db-btn ${m === 'vn_stage' ? 'active' : ''}" onclick="STATE.storyMode='vn_stage';render();" title="Approach 1: Illustrated Background + Scene Variants + Staged Character Figures">1. VN Illustrated Stage</button>
-        <button class="db-btn ${m === 'map_stage' ? 'active' : ''}" onclick="STATE.storyMode='map_stage';render();" title="Approach 2: Live In-Game Region/Battle Map + On-Tile Unit Reactions + Bottom Dialogue Box">2. In-Game Map Stage</button>
-        <button class="db-btn ${m === 'vignette_reel' ? 'active' : ''}" onclick="STATE.storyMode='vignette_reel';render();" title="VignetteScreen Cutscene/Transition Player (Title Cards & CG Transitions usable by both modes)">3. Vignette Cutscene Player</button>
+        <button class="db-btn ${m === 'vn_stage' ? 'active' : ''}" onclick="STATE.storyMode='vn_stage';render();" title="VN Stage: Full-Body Sprite Artwork standing on visible stone floor + Portrait Mood Swaps + Reaction VFX">1. ★ VN Stage (Full-Body + Floor)</button>
+        <button class="db-btn ${m === 'map_stage' ? 'active' : ''}" onclick="STATE.storyMode='map_stage';render();" title="In-Game Map Stage: Live tactical map + unit emotes + bottom dialogue dock">2. In-Game Map Stage</button>
+        <button class="db-btn ${m === 'vignette_reel' ? 'active' : ''}" onclick="STATE.storyMode='vignette_reel';render();" title="Minimal Vignette Cutscene Player (Auto / Log / Skip)">3. Vignette Player (Auto/Log/Skip)</button>
         ${m === 'vn_stage' ? `
           <span style="color:#6b7280;margin:0 2px;">|</span>
-          <span style="color:#9ca3af;font-size:10px;">Actors:</span>
-          <button class="db-btn ${a === 'full_sprite' ? 'active' : ''}" onclick="STATE.storyActorStyle='full_sprite';render();">Full-Body Sprites</button>
-          <button class="db-btn ${a === 'bust_cutout' ? 'active' : ''}" onclick="STATE.storyActorStyle='bust_cutout';render();">Bust Cutouts</button>
-          <button class="db-btn ${a === 'backdrop_only' ? 'active' : ''}" onclick="STATE.storyActorStyle='backdrop_only';render();">Backdrop Only</button>
+          <span style="color:#9ca3af;font-size:10px;">Sprite Reaction VFX:</span>
+          <button class="db-btn ${fx === 'auto' ? 'active' : ''}" onclick="STATE.storyReactionOverride=null;render();">Scene Default</button>
+          <button class="db-btn ${fx === 'steel_flash' ? 'active' : ''}" onclick="STATE.storyReactionOverride='steel_flash';render();">⚔ Steel Lunge</button>
+          <button class="db-btn ${fx === 'anger_burst' ? 'active' : ''}" onclick="STATE.storyReactionOverride='anger_burst';render();">💢 Anger Shake</button>
+          <button class="db-btn ${fx === 'alert_shock' ? 'active' : ''}" onclick="STATE.storyReactionOverride='alert_shock';render();">!! Alert Hop</button>
+          <button class="db-btn ${fx === 'alchemy_flare' ? 'active' : ''}" onclick="STATE.storyReactionOverride='alchemy_flare';render();">⚗ Alchemy Aura</button>
         ` : ''}
         <span style="color:#6b7280;margin:0 2px;">|</span>
         <span style="color:#9ca3af;font-size:10px;">Scene:</span>
-        <button class="db-btn ${STATE.storyId === 'prologue_intro' ? 'active' : ''}" onclick="STATE.storyId='prologue_intro';STATE.storyCardIdx=0;render();">0a Alley</button>
-        <button class="db-btn ${STATE.storyId === 'prologue_0b' ? 'active' : ''}" onclick="STATE.storyId='prologue_0b';STATE.storyCardIdx=0;render();">0b Rooftop</button>
-        <button class="db-btn ${STATE.storyId === 'prologue_0c' ? 'active' : ''}" onclick="STATE.storyId='prologue_0c';STATE.storyCardIdx=0;render();">0c Bridge</button>
-        <button class="db-btn ${STATE.storyId === 'hearth_arrival' ? 'active' : ''}" onclick="STATE.storyId='hearth_arrival';STATE.storyCardIdx=0;render();">Hearth Hub</button>
+        <button class="db-btn ${STATE.storyId === 'prologue_intro' ? 'active' : ''}" onclick="STATE.storyId='prologue_intro';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0a Alley</button>
+        <button class="db-btn ${STATE.storyId === 'prologue_0b' ? 'active' : ''}" onclick="STATE.storyId='prologue_0b';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0b Rooftop</button>
+        <button class="db-btn ${STATE.storyId === 'prologue_0c' ? 'active' : ''}" onclick="STATE.storyId='prologue_0c';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0c Bridge</button>
+        <button class="db-btn ${STATE.storyId === 'hearth_arrival' ? 'active' : ''}" onclick="STATE.storyId='hearth_arrival';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">Hearth Hub</button>
+      `;
+    } else if (STATE.screen === 'battle') {
+      const bm = STATE.battleStageMode || 'active_combat';
+      togglesEl.innerHTML = `
+        <span style="color:#fbbf24;font-weight:700;font-size:10px;">Combat Flow & Scripted Barks:</span>
+        <button class="db-btn ${bm === 'pre_battle' ? 'active' : ''}" onclick="STATE.battleStageMode='pre_battle';render();" title="Step 1: Units on Battle Map + Bottom Dialogue before Combat HUD appears">1. Pre-Battle Map Stage</button>
+        <button class="db-btn ${bm === 'transition_in' ? 'active' : ''}" onclick="engageCombatFromMap();" title="Step 2: Play animated Map → Combat HUD slide-in transition">2. ▶ Animate HUD Slide-In</button>
+        <button class="db-btn ${bm === 'active_combat' ? 'active' : ''}" onclick="STATE.battleStageMode='active_combat';render();" title="Step 3: Active Tactical Planning & Execution HUD">3. ★ Active Combat HUD</button>
+        <button class="db-btn ${bm === 'boss_phase2' ? 'active' : ''}" onclick="STATE.battleStageMode='boss_phase2';render();" title="In-Combat Scripted Bark: Boss Phase 2 Transformation (50% HP)">4. ⚡ Boss Phase 2 Bark</button>
+        <button class="db-btn ${bm === 'elite_intro' ? 'active' : ''}" onclick="STATE.battleStageMode='elite_intro';render();" title="In-Combat Scripted Bark: Before Engaging Elite Unit">5. Pre-Elite Bark</button>
+        <button class="db-btn ${bm === 'elite_aftermath' ? 'active' : ''}" onclick="STATE.battleStageMode='elite_aftermath';render();" title="In-Combat Scripted Bark: After Breaking/Defeating Elite Unit">6. Post-Elite Bark</button>
       `;
     } else {
       togglesEl.innerHTML = '';
@@ -112,10 +125,10 @@ function render() {
       main_menu: '<b>MainMenu (1280×720 Native Grid):</b> Cathedral title art with lower-ward mist & toned-down lanterns · <b>Reduced Corner Frame</b> on Hover Peek & New Chronicle Setup · Top-right <code>✕</code> & Right-Click to close.',
       load_slots: '<b>Load / Save Chronicles (1280×720 Native Grid):</b> <b>Full Frame</b> (<code>ornate_full.png</code> tiled iron-and-gold bars) on main screen + <b>Reduced Corner Frame</b> on Delete/Overwrite popups · Top-right <code>✕</code> & Right-Click to close.',
       runner: '<b>SceneRunner (Dev F10):</b> <b>Full Frame</b> (<code>ornate_full.png</code>) + top-right <code>✕</code> & Right-Click to close.',
-      story: '<b>StoryStage (1280×720 Native Grid):</b> Compare <b>1. VN Illustrated Stage</b> (artwork variants + staged sprites), <b>2. In-Game Map Stage</b> (live tactical map + unit emotes), and <b>3. Vignette Cutscene Player</b> (<code>vignette.rs</code> transitions) using the top toggles!',
+      story: '<b>Hybrid StoryStage (1280×720):</b> <b>1. VN Stage</b> renders full-body pixel-art sprites standing on a clearly visible stone floor with reaction VFX around the sprite & mood portrait expressions (<code>faces/&lt;id&gt;/&lt;mood&gt;.png</code>) in the dialogue dock; <b>3. Vignette Player</b> provides minimal <code>Auto [A]</code>, <code>Log [L]</code> & <code>Skip [✕]</code> controls.',
       region: '<b>RegionMap + TalkBox (Decision A3/A4):</b> Top <code>hud_bar</code>, walkable tile map, and <b>Reduced Corner Frame</b> <code>TalkBox</code> (Right-Click closes active dialogue or returns to Main Menu).',
       worldmap: '<b>WorldMap (Decision A4):</b> Sunk Ward pins & route lines + <b>Reduced Corner Frame</b> District Card with top-right <code>✕</code> & Right-Click back to Sluice Hub.',
-      battle: '<b>BattleScreen:</b> <b>Full Frame</b> on Multi-Unit Timeline overlay + <b>Reduced Corner Frame</b> on <code>SkillMenu</code>, Intel card & Victory modal · Top-right <code>✕</code> & Right-Click to close.'
+      battle: '<b>BattleScreen + Map→Combat Transition & Scripted Barks:</b> Use the top toggles to test <b>1. Pre-Battle Map Confrontation</b> → <b>2. ▶ Animate HUD Slide-In</b> → <b>3. Active Combat HUD</b> → <b>4. ⚡ Boss Phase 2 Transformation</b> & <b>5/6. Pre/Post-Elite Barks</b>!'
     };
     if (STATE.settingsOpen) {
       noteEl.innerHTML = '<b>Settings (1280×720 Native Grid):</b> <b>Full Frame</b> (<code>ornate_full.png</code> tiled iron-and-gold bars) on Settings + <b>Reduced Corner Frame</b> on 15s Revert popup · Top-right <code>✕</code> & Right-Click to close.';
@@ -127,6 +140,7 @@ function render() {
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if (STATE.vignetteLogOpen) { STATE.vignetteLogOpen = false; render(); return; }
     uiBack();
   } else if (e.key === 'Enter' || e.key === ' ') {
     if (STATE.displayConfirmOpen && e.key === 'Enter') { confirmDisplaySettings(); }
@@ -139,13 +153,31 @@ window.addEventListener('keydown', (e) => {
     else if (STATE.screen === 'story' && !STATE.settingsOpen && !STATE.storySkipConfirmOpen) {
       e.preventDefault();
       const st = STORIES[STATE.storyId] || STORIES.prologue_intro;
+      STATE.storyMoodOverride = null;
+      STATE.storyReactionOverride = null;
       if (STATE.storyCardIdx < st.cards.length - 1) { STATE.storyCardIdx++; render(); }
       else { st.onFinish(); }
+    } else if (STATE.screen === 'battle' && !STATE.settingsOpen && !STATE.modal) {
+      e.preventDefault();
+      if (STATE.battleStageMode === 'pre_battle') { engageCombatFromMap(); }
+      else if (STATE.battleStageMode === 'boss_phase2' || STATE.battleStageMode === 'elite_intro') {
+        resumeFromCombatBark();
+      } else if (STATE.battleStageMode === 'elite_aftermath') {
+        transitionOutToExploreMap();
+      } else {
+        executeBattleRound();
+      }
     }
   } else if (e.key === 'F10') {
     e.preventDefault();
     STATE.settingsOpen = false;
     STATE.screen = STATE.screen === 'runner' ? 'main_menu' : 'runner';
+    render();
+  } else if ((e.key === 'a' || e.key === 'A') && STATE.screen === 'story' && STATE.storyMode === 'vignette_reel') {
+    STATE.vignetteAuto = !STATE.vignetteAuto;
+    render();
+  } else if ((e.key === 'l' || e.key === 'L') && STATE.screen === 'story' && STATE.storyMode === 'vignette_reel') {
+    STATE.vignetteLogOpen = !STATE.vignetteLogOpen;
     render();
   } else if ((e.key === 'l' || e.key === 'L') && STATE.screen === 'load_slots' && STATE.slotAskDelete === null && STATE.slotAskOverwrite === null) {
     toggleSlotLock(STATE.slotSelected);

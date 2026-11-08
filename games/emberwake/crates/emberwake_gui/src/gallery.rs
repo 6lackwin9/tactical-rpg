@@ -49,8 +49,8 @@ const ENTRIES: [(&str, &str, &str, &str); 34] = [
     ("save", "Save slots", "Screens", "Saving from the game menu."),
     ("load", "Load slots", "Screens", "Loading from the main menu or the game menu."),
     ("region", "Region map", "Screens", "Walking a location: the map, the Here list, the log."),
-    ("dialogue", "Dialogue", "Screens", "A conversation over the region map (the first person met)."),
-    ("shop", "Shop", "Screens", "A shop counter over the region map (the first trader met)."),
+    ("dialogue", "Dialogue", "Screens", "A conversation on a plain backdrop (the first person met)."),
+    ("shop", "Shop", "Screens", "A shop counter on a plain backdrop (the first trader met)."),
     ("board", "Mission board", "Screens", "The board pane on a sample board: every section, a deadline, the picked quest's detail, Accept."),
     ("hub", "Game menu", "Screens", "The in-game menu over the map."),
     ("journal", "Journal", "Screens", "Quests and notes."),
@@ -672,10 +672,12 @@ impl Gallery {
         Some((screen, steps))
     }
 
-    /// A region map in conversation with the first person here (`shop`: the first who offers a shop).
-    fn talking(cx: &mut Cx, shop: bool) -> crate::region::RegionMap {
-        // a region map first: a new sample game enters its start location there
-        let first = crate::region::RegionMap::new(cx);
+    /// SERVICES1: the services on a plain backdrop (`talk::ServiceScreen`, no map) in conversation with the first
+    /// person here (`shop`: the first who offers a shop); none: the backdrop alone.
+    fn talking(cx: &mut Cx, shop: bool) -> crate::talk::ServiceScreen {
+        // a new sample game enters its start location first (as the region map does)
+        let d = cx.data.clone();
+        let _ = emberwake_world::explore::resume(&d, cx.gs_mut());
         let people: Vec<String> = match cx.game.as_ref() {
             Some(g) => {
                 let loc = cx.data.resolve(&g.gs.world_id, "locations", &g.gs.location_id);
@@ -685,7 +687,7 @@ impl Gallery {
         };
         let mut found = None;
         for who in &people {
-            let mut m = crate::region::RegionMap::new(cx);
+            let mut m = crate::talk::ServiceScreen::default();
             m.talk(cx, who);
             let offers = Self::services(&m.state(cx));
             if !offers.is_empty() && (!shop || offers.iter().any(|c| c == "shop")) {
@@ -695,7 +697,7 @@ impl Gallery {
         }
         // a preview's conversation never ends, so it must not hold the game busy
         cx.set_busy(false);
-        found.unwrap_or(first)
+        found.unwrap_or_default()
     }
 
     /// ENCOUNTER2-C2: the Test Arena's battle with the first dialogue tree of the sample game's world that opens as a
@@ -1315,6 +1317,51 @@ mod tests {
         assert!(!cx.has_game(), "no game needed");
         gallery.act(&mut cx, GAct::Open);
         assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "vignette" && s.state(&cx)["reel"] == json!("tale:v_intro")), "Open plays the picked reel");
+    }
+
+    /// SERVICES1 (SILOS1 T2): the Dialogue and Shop entries show the services on their plain backdrop, no region map:
+    /// a conversation with the first person here who has replies (Shop: the first whose replies offer a shop, opened
+    /// by the scripted click on that reply); the preview holds no game busy. The person is found by rule.
+    #[test]
+    fn the_dialogue_and_shop_entries_open_on_the_plain_backdrop() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        // the entry enters the start location first; so does the expectation
+        let d = cx.data.clone();
+        let _ = emberwake_world::explore::resume(&d, cx.gs_mut());
+        let gs = cx.gs().clone();
+        let loc = cx.data.resolve(&gs.world_id, "locations", &gs.location_id).clone();
+        let people: Vec<String> = emberwake_world::explore::markers_of(&loc).iter().filter(|m| json::s(m, "kind") == "npc").map(|m| json::s(m, "character")).collect();
+        // who offers a shop reply, opened the way the entry opens them (the state put back after)
+        let mut has_shop = false;
+        for who in &people {
+            let mut s = crate::talk::ServiceScreen::default();
+            s.talk(&mut cx, who);
+            has_shop |= Gallery::services(&s.state(&cx)).iter().any(|c| c == "shop");
+        }
+        *cx.gs_mut() = gs;
+        cx.set_busy(false);
+        assert!(!people.is_empty() && has_shop, "the sample start location has someone to talk to and a shop keeper (else this test checks nothing)");
+        for id in ["dialogue", "shop"] {
+            let mut gallery = Gallery::new();
+            let i = ENTRIES.iter().position(|e| e.0 == id).expect("the entry");
+            gallery.act(&mut cx, GAct::Entry(i));
+            for _ in 0..3 {
+                gallery.draw(&mut cx, &mut g, (-500, -500), true);
+            }
+            let sh = gallery.shown.as_ref().expect("the preview is built");
+            assert_eq!(sh.screen.id(), "services", "{id}: the plain-backdrop host, not a region map");
+            assert!(!cx.busy(), "{id}: a preview holds no game busy");
+            let st = sh.screen.state(&cx);
+            let ws = sh.screen.widgets();
+            if id == "dialogue" {
+                assert!(st["dialogue"].is_object() && ws.iter().any(|w| w["id"] == "dialogue"), "{id}: the talk box: {st}");
+            }
+            if id == "shop" {
+                assert!(st["shop"].is_object() && ws.iter().any(|w| w["id"] == "shop"), "{id}: the trade opened by the shop reply: {st}");
+                assert_eq!(sh.steps.len(), 0, "the scripted click is done");
+            }
+        }
     }
 
     /// STORYUI1-U2: with no game, the Mission board entry previews the board pane on its fixture board (every section,

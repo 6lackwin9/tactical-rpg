@@ -26,6 +26,10 @@ pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both
 /// (FB-34): retired (untrained gear is a soft wield penalty, never refused); nothing reads it, an empty list stores as no
 /// key, and the asset lane drops the last one.
 pub const WEARS_UNTRAINED: &str = "wears_untrained";
+/// W.2-S3 (FB-139): the unit field giving the levels an enemy gains per world stage (0 = none, stored as no key).
+pub const GROWTH_PER_STAGE: &str = "growth_per_stage";
+/// The top of `growth_per_stage` (the schema field's `max`).
+pub const GROWTH_PER_STAGE_MAX: i64 = 10;
 /// U4.2-S3 (FB-29): the character field naming its temperament passive.
 pub const TEMPERAMENT: &str = "temperament";
 
@@ -348,6 +352,16 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("Id '{id}' is a roster read word ({}); pick another.", rpgkit_data::ROSTER_WORDS.join(", ")));
     }
     errors
+}
+
+/// W.2-S3 (FB-139): a unit's `growth_per_stage` as written (`raw`, before the schema clamps it): absent, or a whole
+/// number 0-`GROWTH_PER_STAGE_MAX`.
+pub fn growth_per_stage_errors(raw: &Dict) -> Vec<String> {
+    match raw.get(GROWTH_PER_STAGE) {
+        None => Vec::new(),
+        Some(v) if json::is_int(v) && (0..=GROWTH_PER_STAGE_MAX).contains(&json::to_int(v)) => Vec::new(),
+        Some(_) => vec![format!("Growth per stage must be a whole number 0-{GROWTH_PER_STAGE_MAX}.")],
+    }
 }
 
 /// The skill families a unit row owns (its class path up to its level and its extra skills; always-active skills left

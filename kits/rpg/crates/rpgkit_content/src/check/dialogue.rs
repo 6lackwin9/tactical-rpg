@@ -4,12 +4,14 @@
 //! STORYUI1 4.7: every list knows the story effects `vignette`, `sequence` and `open_board`, and a sequence's effects
 //! step is a list of its own (no effect that opens a screen or starts a sequence); the service line `board`.
 //! PORTRAITFX1 7: a node's `expression` (shared with the `line` cards of `check::story`).
+//! T1.2-S2 (FB-54b): the choice effect `roll` (`stat`, `dc`, `key`, optional `who`); T1.2-S3 (FB-54c): a `stat`
+//! condition and a roll name a primary stat or a U1 standing rating (`STANDING_RATINGS` or a derived-stat row id).
 
 use super::quest::{flag_key_ok, flag_value_ok, rep_value_error};
 use super::world::{party_character_errors, ref_errors};
 use super::View;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::STATS;
+use rpgkit_data::{ROLL_EFFECT, STANDING_RATINGS, STATS};
 use indexmap::IndexMap;
 use serde_json::Value;
 
@@ -26,8 +28,13 @@ const QUEST_STATUSES: [&str; 7] = ["locked", "available", "unavailable", "active
 const GOLD_CONDITION_MAX: i64 = 9999999;
 const STAT_MIN: i64 = 1;
 const STAT_MAX: i64 = 30;
+/// T1.2-S3: the bar of a `stat` condition naming a standing rating (ratings run past the primary stats' 30).
+const RATING_BAR_MAX: i64 = 999;
+/// T1.2-S2: a roll's `dc`.
+const ROLL_DC_MIN: i64 = 1;
+const ROLL_DC_MAX: i64 = 999;
 /// Effect -> its keys besides `effect`.
-const EFFECTS: [(&str, &[&str]); 9] = [
+const EFFECTS: [(&str, &[&str]); 10] = [
     ("set_flag", &["key", "value"]),
     ("add_flag", &["key", "delta", "min", "max"]),
     ("start_quest", &["quest"]),
@@ -37,6 +44,7 @@ const EFFECTS: [(&str, &[&str]); 9] = [
     ("open_shop", &["shop"]),
     ("fight", &["encounter"]),
     ("recruit", &["character", "level"]),
+    (ROLL_EFFECT, &rpgkit_data::ROLL_EFFECT_KEYS),
 ];
 const NODE_EFFECTS: [&str; 3] = ["set_flag", "add_flag", "give"];
 /// STORYUI1 4.7: the story effect a node takes besides NODE_EFFECTS (the choice order rules keep NODE_EFFECTS).
@@ -93,6 +101,21 @@ const TEXT_TOKENS: [&str; 2] = ["npc", "gold"];
 
 fn int_in(v: &Value, lo: i64, hi: i64) -> bool {
     json::is_int(v) && (lo..=hi).contains(&json::to_int(v))
+}
+
+/// T1.2-S3 (FB-54c): a name a dialogue stat check reads: a primary stat (true) or a U1 standing rating (false), None
+/// when it is neither (a rating is one of `STANDING_RATINGS` or a derived-stat row id of the catalog).
+fn stat_kind(v: &View, raw: &Value) -> Option<bool> {
+    let name = raw.as_str()?;
+    if STATS.contains(&name) {
+        Some(true)
+    } else {
+        (STANDING_RATINGS.contains(&name) || v.typed.derived_stats.contains_key(name)).then_some(false)
+    }
+}
+
+fn stat_name_error(raw: &Value, label: &str) -> String {
+    format!("{label}: stat '{}' is not one of {} or a standing rating ({} or a derived stat id).", gstr(raw), STATS.join(", "), STANDING_RATINGS.join(", "))
 }
 
 /// DialogueRules.tokens_of: the `{token}` names of `text`, in order (a token holds no braces).
@@ -313,16 +336,19 @@ pub fn conditions_errors(v: &View, w: &str, raw: &Value, label: &str) -> Vec<Str
             }
             _ => {
                 let stat = cond.get("stat").cloned().unwrap_or(Value::from(""));
-                if !stat.is_string() || !STATS.contains(&gstr(&stat).as_str()) {
-                    errors.push(format!("{cl}: stat '{}' is not one of {}.", gstr(&stat), STATS.join(", ")));
+                let primary = stat_kind(v, &stat);
+                if primary.is_none() {
+                    errors.push(stat_name_error(&stat, &cl));
                 }
                 // T1.2-S1 (FB-54a): `threshold` is a pure alias of `min` (one of them, not both)
                 if cond.contains_key("min") && cond.contains_key("threshold") {
                     errors.push(format!("{cl}: give min or threshold (its alias), not both."));
                 }
                 let key = if cond.contains_key("threshold") && !cond.contains_key("min") { "threshold" } else { "min" };
-                if !int_in(json::get(cond, key), STAT_MIN, STAT_MAX) {
-                    errors.push(format!("{cl}: {key} must be a whole number {STAT_MIN}..{STAT_MAX}."));
+                // T1.2-S3: a standing rating's bar runs to RATING_BAR_MAX
+                let max = if primary == Some(false) { RATING_BAR_MAX } else { STAT_MAX };
+                if !int_in(json::get(cond, key), STAT_MIN, max) {
+                    errors.push(format!("{cl}: {key} must be a whole number {STAT_MIN}..{max}."));
                 }
             }
         }
@@ -378,6 +404,11 @@ pub fn list_errors(v: &View, w: &str, raw: &Value, label: &str, kind: EffectList
             errors.push(format!("{el}: {effect} closes the conversation or opens a screen; put it on a choice (node effects: set_flag, add_flag, give, vignette)."));
         } else if kind == EffectList::Node && !NODE_EFFECTS.contains(&effect.as_str()) && !NODE_STORY_EFFECTS.contains(&effect.as_str()) {
             errors.push(format!("{el}: Node effects may only be set_flag, add_flag or give."));
+        }
+        // T1.2-S2: a roll happens when the player picks a choice (a node's list says so above)
+        if effect == ROLL_EFFECT && matches!(kind, EffectList::Campaign | EffectList::Sequence) {
+            errors.push(format!("{el}: roll is a choice effect (it rolls when the player picks the choice)."));
+            continue;
         }
         if kind == EffectList::Campaign && SCREEN_EFFECTS.contains(&effect.as_str()) {
             errors.push(format!("{el}: {effect} opens a screen; queue a battle or a dialogue in then instead."));
@@ -458,6 +489,31 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
             }
         }
         "give" | "take" => errors.extend(goods_errors(v, fx, el)),
+        // T1.2-S2 (FB-54b): the stat or standing rating, the bar, the outcome flag and the optional member
+        ROLL_EFFECT => {
+            let stat = fx.get("stat").cloned().unwrap_or(Value::from(""));
+            if stat_kind(v, &stat).is_none() {
+                errors.push(stat_name_error(&stat, el));
+            }
+            if !int_in(json::get(fx, "dc"), ROLL_DC_MIN, ROLL_DC_MAX) {
+                errors.push(format!("{el}: dc must be a whole number {ROLL_DC_MIN}..{ROLL_DC_MAX}."));
+            }
+            let key = fx.get("key").cloned().unwrap_or(Value::from(""));
+            if !key.is_string() || !flag_key_ok(&gstr(&key)) {
+                errors.push(format!("{el}: flag key '{}' must be non-empty [a-z0-9_.].", gstr(&key)));
+            }
+            // the outcome is true or false, which a reputation key never holds
+            let why = rep_value_error(&gstr(&key), &Value::Bool(true));
+            if !why.is_empty() {
+                errors.push(format!("{el}: {why}"));
+            }
+            errors.extend(reserved_errors(&gstr(&key), el));
+            match fx.get("who").unwrap_or(&Value::from("")) {
+                Value::String(s) if s.is_empty() => {}
+                Value::String(s) => errors.extend(ref_errors(v, w, &format!("{el} who"), "characters", s)),
+                _ => errors.push(format!("{el}: who must be a character ref or \"\".")),
+            }
+        }
         "open_shop" => errors.extend(ref_value_errors(v, w, fx.get("shop").unwrap_or(&Value::from("")), "shops", &format!("{el} shop"))),
         "fight" => errors.extend(ref_value_errors(v, w, fx.get("encounter").unwrap_or(&Value::from("")), "encounters", &format!("{el} encounter"))),
         // STORYUI1 4.7

@@ -21,6 +21,8 @@
 //! REGIONVIEW1: the party's drawn position glides between tiles and the camera follows it in whole physical px, stopped
 //! by the map's edges with a small margin; pans and the talk camera ease (`mapview.rs`). The map's outer wall ring and what
 //! lies past it are the border: flat, under everything, in the location's boundary art when it has one.
+//! SERVICES1 (SILOS1 T2): the conversation, the shop, the board, the turn-in picker and the rest ask are `talk::Services`,
+//! held here and drawn over the map; the map only stops its walk when one of them starts a fight.
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::theme::th;
@@ -32,17 +34,15 @@ use crate::mapview::{self, MapGeom};
 #[cfg(test)]
 use crate::mapview::{CELL_W, FACE_H, SPRITE};
 use crate::props::{Block, Item, PropDraw, ART_TILE, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
-use crate::board::{BoardAct, BoardPane};
 use crate::ground::MapGround;
+#[cfg(test)]
 use crate::portraits::Faces;
-use crate::shop::{ShopAct, ShopPane};
-use crate::talk::{self, talk_layout, TalkAct, TalkBox};
+use crate::talk::{talk_layout, Services, SvcAct};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::painter::View as PView;
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
-use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::explore::{self, Pos};
 use emberwake_world::quest;
 use serde_json::{json, Value};
@@ -63,21 +63,8 @@ pub enum RAct {
     Menu,
     /// A HUD bar button (PLAYUI1-H).
     Hud(Hud),
-    Choose(i64),
-    Advance,
-    Farewell,
-    /// A click in the shop's trade (PLAYUI1-P, `shop.rs`).
-    Shop(ShopAct),
-    /// Leaves the shop for the conversation (the trade is empty or discarded).
-    CloseShop,
-    /// Closes the open board back to the conversation (STORYUI1 B11).
-    CloseBoard,
-    /// A click on the board pane (STORYUI1-U2, `board.rs`).
-    Board(BoardAct),
-    TogglePick(String),
-    PickRecipient(usize),
-    ConfirmTurnIn,
-    CancelTurnIn,
+    /// SERVICES1: a click on the conversation, its shop, its board or the turn-in picker (`talk::Services`).
+    Svc(SvcAct),
     CloseLore,
     /// Fold or open the legend (`map_legend_open`).
     Legend,
@@ -90,20 +77,18 @@ pub enum RAct {
     Lead,
 }
 
+impl From<SvcAct> for RAct {
+    fn from(a: SvcAct) -> Self {
+        RAct::Svc(a)
+    }
+}
+
 pub struct RegionMap {
     w: Vec<Widget<RAct>>,
     mouse: (i32, i32),
     facing: Pos,
-    runner: Option<DialogueRunner>,
-    /// The open shop's trade (PLAYUI1-P).
-    shop: ShopPane,
-    /// The open board's pick and refusals (STORYUI1-U2).
-    board: BoardPane,
-    pending: Option<Dict>,
-    /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
-    rest_ask: Option<i64>,
-    picks: Vec<String>,
-    recipient: usize,
+    /// SERVICES1 (SILOS1 T2): the conversation, its shop, its board and the turn-in picker.
+    pub(crate) svc: Services,
     pub(crate) lore: Option<(String, String)>,
     walk: Vec<Pos>,
     walk_target: Option<String>,
@@ -116,8 +101,6 @@ pub struct RegionMap {
     geo: MapGeom,
     /// The ticker shows the last `LOG_OPEN` events (else only the latest).
     log_open: bool,
-    /// The conversation node shown last ("character/node"): a new node starts its line and replies scrolled to the top.
-    talk_node: String,
     /// PLAYUI1-R: the sprites' animation clock (ms, at the animation speed setting) and when it last advanced.
     anim_ms: f64,
     anim_at: Instant,
@@ -128,8 +111,6 @@ pub struct RegionMap {
     leader_face: Facing,
     /// The sprites drawn last frame (agent link `state.sprites`, tests).
     sprites: Vec<Value>,
-    /// PORTRAITFX1-D: the talk box's animated portrait (its clock moves with the frame's wall time).
-    faces: Faces,
     /// MAPNAV1-U: the tile the camera looks at instead of the party (a legend row or an edge arrow); cleared by the
     /// party's first step (a key step or a walked path's), an arrow key, Esc, an exit or a change of location.
     pan: Option<Pos>,
@@ -255,13 +236,7 @@ impl RegionMap {
             w: Vec::new(),
             mouse: (0, 0),
             facing: (0, 1),
-            runner: None,
-            shop: ShopPane::default(),
-            board: BoardPane::default(),
-            pending: None,
-            rest_ask: None,
-            picks: Vec::new(),
-            recipient: 0,
+            svc: Services::default(),
             lore: None,
             walk: Vec::new(),
             walk_target: None,
@@ -270,14 +245,12 @@ impl RegionMap {
             hold: false,
             geo: MapGeom::default(),
             log_open: false,
-            talk_node: String::new(),
             anim_ms: 0.0,
             anim_at: Instant::now(),
             leader: ClipPlayer::default(),
             moved_at: None,
             leader_face: Facing::default(),
             sprites: Vec::new(),
-            faces: Faces::default(),
             pan: None,
             pan_loc: String::new(),
             arrows: Vec::new(),
@@ -315,22 +288,8 @@ impl RegionMap {
         self.next_walk = at + self.leg.gap();
     }
 
-    fn talking(&self) -> bool {
-        self.runner.as_ref().is_some_and(|r| !r.closed)
-    }
-
-    /// The open shop of the conversation ("" when none).
-    fn shop_qid(&self) -> String {
-        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default()
-    }
-
-    /// The open board of the conversation ("" when none; STORYUI1 B3).
-    fn board_qid(&self) -> String {
-        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.board_qid.clone()).unwrap_or_default()
-    }
-
     fn modal(&self) -> bool {
-        self.talking() || self.lore.is_some()
+        self.svc.talking() || self.lore.is_some()
     }
 
     /// One step; handles fights, world-map exits and the log. False when the walk should stop.
@@ -414,19 +373,18 @@ impl RegionMap {
         self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
-        // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time (at most 100 ms a frame)
-        self.faces.tick();
-        // CAMPAIGN1 W3: a Yes to the ask before a resting reply picks it
-        if cx.take_answer(crate::runover::ASK_TALK_REST) {
-            if let Some(i) = self.rest_ask.take() {
-                self.choose(cx, i);
+        // PORTRAITFX1 4.5: the talk box's portrait clock moves; CAMPAIGN1 W3: a Yes to the ask before a resting reply
+        // picks it (`Services::tick`)
+        if let Some(fought) = self.svc.tick(cx) {
+            if fought {
+                self.walk.clear();
             }
             return;
         }
         // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
         // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
         // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
-        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.play_pending_talk(cx)) {
+        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.svc.open_pending(cx)) {
             self.walk.clear();
             self.walk_target = None;
             return;
@@ -503,111 +461,9 @@ impl RegionMap {
         }
     }
 
-    /// Opens the conversation with `character` (also the UI Gallery's dialogue and shop entries).
+    /// Opens the conversation with `character` (`Services::talk`).
     pub fn talk(&mut self, cx: &mut Cx, character: &str) {
-        let d = cx.data.clone();
-        let r = DialogueRunner::open(&d, cx.gs_mut(), character);
-        if r.closed {
-            for e in &r.errors {
-                cx.log(e.clone());
-            }
-            return;
-        }
-        cx.log(format!("You speak with {}.", r.character_name));
-        cx.set_busy(true);
-        self.runner = Some(r);
-    }
-
-    /// Picks reply `i` of the conversation.
-    fn choose(&mut self, cx: &mut Cx, i: i64) {
-        let d = cx.data.clone();
-        let Some(r) = self.runner.as_mut() else { return };
-        let res = r.choose(&d, cx.gs_mut(), i);
-        self.dialogue_result(cx, res);
-    }
-
-    /// CAMPAIGN1 W3, R3: the question before reply `i` when it rests (the `rest` effect) and the rest's days would end
-    /// the run; None otherwise (also when the rest is refused: the choice says why).
-    fn rest_question(&self, cx: &Cx, i: i64) -> Option<String> {
-        let r = self.runner.as_ref()?;
-        let d = &cx.data;
-        if !r.choice_effects(d, cx.gs(), i).iter().any(|fx| s(fx, "effect") == "rest") || !emberwake_world::campaign::purse::rest_refusal(d, cx.gs()).is_empty() {
-            return None;
-        }
-        let days = emberwake_world::campaign::purse::rest_rule(d, &cx.gs().world_id).days as i64;
-        crate::runover::days_ask(cx, days, "Resting", "Rest")
-    }
-
-    /// CAMPAIGN1 T2: a queued `{dialogue}` scene opens as the conversation (`runover::pending_talk`). True when it did.
-    fn play_pending_talk(&mut self, cx: &mut Cx) -> bool {
-        if cx.busy() || !cx.nav.is_empty() {
-            return false;
-        }
-        let Some(r) = crate::runover::pending_talk(cx) else { return false };
-        cx.set_busy(true);
-        self.runner = Some(r);
-        true
-    }
-
-    fn end_talk(&mut self, cx: &mut Cx) {
-        self.runner = None;
-        self.pending = None;
-        self.rest_ask = None;
-        self.shop = ShopPane::default();
-        self.board = BoardPane::default();
-        cx.set_busy(false);
-    }
-
-    /// Handles a dialogue result: fights, the turn-in picker, notes, the end.
-    fn dialogue_result(&mut self, cx: &mut Cx, res: Dict) {
-        if !json::b(&res, "ok", false) {
-            for e in json::sget(&res, "errors") {
-                cx.log(e);
-            }
-        }
-        crate::runover::take(cx, &res);
-        // CAMPAIGN1 F3: a choice that ended the run ends the talk (the run-over screen follows)
-        if crate::runover::is_over(cx) {
-            self.end_talk(cx);
-            return;
-        }
-        for n in json::sget(&res, "notes") {
-            cx.log(n);
-        }
-        if let Some(g) = res.get("granted").and_then(Value::as_object) {
-            let mut got = Vec::new();
-            if json::i(g, "xp", 0) > 0 {
-                got.push(format!("{} XP", json::i(g, "xp", 0)));
-            }
-            if json::i(g, "gold", 0) > 0 {
-                got.push(format!("{} {}", json::i(g, "gold", 0), purse_word(cx, PurseWord::Currency)));
-            }
-            for (id, n) in json::ints(json::get(g, "items")) {
-                got.push(format!("{} x{n}", cx.data.item_name(&id)));
-            }
-            if !got.is_empty() {
-                cx.log(format!("Quest complete: {}.", got.join(", ")));
-            }
-        }
-        if res.contains_key("pending") {
-            self.picks.clear();
-            self.recipient = 0;
-            self.pending = Some(res);
-            return;
-        }
-        if let Some(f) = res.get("fight").and_then(Value::as_object).cloned() {
-            self.end_talk(cx);
-            cx.set_busy(false);
-            // CAMPAIGN1 W3: a fight that could end the run asks first (No: the talk is over, nothing fought)
-            match crate::runover::fight_ask(cx, &s(&f, "encounter")) {
-                Some(q) => cx.ask_no(q, move |cx| fight_now(cx, &f, "dialogue")),
-                None => self.start_fight(cx, &f, "dialogue"),
-            }
-            return;
-        }
-        if self.runner.as_ref().is_some_and(|r| r.closed) {
-            self.end_talk(cx);
-        }
+        self.svc.talk(cx, character);
     }
 
     /// BFS over open, unblocked tiles to `target` (or next to it); the step directions.
@@ -733,86 +589,10 @@ impl RegionMap {
                 self.walk.clear();
                 hud_open(cx, h, &REGION_HELP);
             }
-            RAct::Choose(i) => {
-                // CAMPAIGN1 W3, R3: a choice whose rest would end the run asks first (No: the talk goes on)
-                if let Some(q) = self.rest_question(cx, i) {
-                    self.rest_ask = Some(i);
-                    cx.ask_tag_no(q, crate::runover::ASK_TALK_REST);
-                    return;
+            RAct::Svc(a) => {
+                if self.svc.act(cx, a) {
+                    self.walk.clear();
                 }
-                self.choose(cx, i);
-            }
-            RAct::Advance => {
-                let Some(r) = self.runner.as_mut() else { return };
-                let res = r.advance(&d, cx.gs_mut());
-                self.dialogue_result(cx, res);
-            }
-            RAct::Farewell => {
-                let Some(r) = self.runner.as_ref() else { return };
-                let view = r.view(&d, cx.gs());
-                let farewell = json::aget(&view, "choices").iter().position(|c| s(json::dict(c), "service") == "farewell");
-                match farewell {
-                    Some(i) => self.act(cx, RAct::Choose(i as i64)),
-                    None => self.end_talk(cx),
-                }
-            }
-            RAct::Shop(a) => {
-                let sq = self.shop_qid();
-                if !sq.is_empty() && self.shop.act(cx, &sq, a) {
-                    self.act(cx, RAct::CloseShop);
-                }
-            }
-            RAct::CloseShop => {
-                self.shop = ShopPane::default();
-                let Some(r) = self.runner.as_mut() else { return };
-                let res = r.close_shop(&d, cx.gs_mut());
-                self.dialogue_result(cx, res);
-            }
-            RAct::CloseBoard => {
-                self.board = BoardPane::default();
-                let Some(r) = self.runner.as_mut() else { return };
-                let res = r.close_board(&d, cx.gs_mut());
-                self.dialogue_result(cx, res);
-            }
-            RAct::Board(a) => match a {
-                BoardAct::Pick(q) => self.board.pick(q),
-                BoardAct::Close => self.act(cx, RAct::CloseBoard),
-                // B8: the runner's `start_quest` path; a refusal stays on the pane, a taken quest is logged
-                BoardAct::Accept(q) => {
-                    let Some(r) = self.runner.as_mut() else { return };
-                    let res = r.accept(&d, cx.gs_mut(), &q);
-                    if json::b(&res, "ok", false) {
-                        self.board.errors.clear();
-                        self.dialogue_result(cx, res);
-                    } else {
-                        self.board.errors = json::sget(&res, "errors");
-                    }
-                }
-            },
-            RAct::TogglePick(id) => {
-                let allowed = self.pending.as_ref().map(|p| json::i(p, "picks_allowed", 0)).unwrap_or(0) as usize;
-                if let Some(i) = self.picks.iter().position(|p| *p == id) {
-                    self.picks.remove(i);
-                } else if self.picks.len() < allowed {
-                    self.picks.push(id);
-                }
-            }
-            RAct::PickRecipient(i) => self.recipient = i,
-            RAct::ConfirmTurnIn => {
-                let rec = cx.gs().party.members.get(self.recipient).map(|m| m.id.clone()).unwrap_or_default();
-                let picks = self.picks.clone();
-                let Some(r) = self.runner.as_mut() else { return };
-                let res = r.confirm_turn_in(&d, cx.gs_mut(), &rec, &picks);
-                if json::b(&res, "ok", false) {
-                    self.pending = None;
-                }
-                self.dialogue_result(cx, res);
-            }
-            RAct::CancelTurnIn => {
-                if let Some(r) = self.runner.as_mut() {
-                    r.cancel();
-                }
-                self.pending = None;
             }
             RAct::CloseLore => self.lore = None,
             RAct::Legend => {
@@ -861,24 +641,20 @@ impl Screen<GameCx> for RegionMap {
             self.pan = None;
         }
         // Yes to "Discard this trade?" (PLAYUI1-P): back to the conversation
-        if cx.take_answer(crate::shop::DISCARD) {
-            self.act(cx, RAct::CloseShop);
+        if self.svc.take_discard(cx) {
+            self.walk.clear();
         }
         let d = cx.data.clone();
         let gs = cx.gs().clone();
-        // the open conversation; a new node starts its line and its replies scrolled to the top
-        let talk_view = self.runner.as_ref().filter(|r| !r.closed).map(|r| r.view(&d, &gs));
-        let node = self.runner.as_ref().filter(|r| !r.closed).map(|r| format!("{}/{}", r.character_qid, r.node_id)).unwrap_or_default();
-        talk::follow_node(g, &mut self.talk_node, node);
+        // the open conversation; a new node starts its line and its replies scrolled to the top; PORTRAITFX1-D: a
+        // portrait left out of the last frame (the conversation ended or hid) is dropped
+        let talk_view = self.svc.begin_frame(g, &d, &gs);
         let mut ui: Ui<RAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), th().game("map_ground", rgb(14, 18, 26)));
-        // PORTRAITFX1-D: a portrait left out of the last frame (the conversation ended or hid) is dropped
-        self.faces.begin();
         let loc = explore::location(&d, &gs);
         let t = explore::template_of(&d, loc);
-        let talking = self.talking();
+        let talking = self.svc.talking();
         let modal = self.modal();
-        let shop_qid = self.shop_qid();
         // measured before the map: the camera keeps both speakers above the box (also while the shop hides it, so the
         // map does not jump when the shop opens or closes)
         let talk_box = talk_view.as_ref().map(|v| talk_layout(&mut ui.p, v));
@@ -1245,24 +1021,9 @@ impl Screen<GameCx> for RegionMap {
             ui.pop_clip();
         }
         // -- The dialogue box (3.1); while the shop is open (3.3) the box hides and the shop sits centred over the dimmed
-        // map; an open board (STORYUI1 B11) takes the shop's place
-        let board_qid = self.board_qid();
+        // map; an open board (STORYUI1 B11) takes the shop's place; the turn-in picker over them (`Services::draw`)
         if let (Some(view), Some(b)) = (talk_view.as_ref(), talk_box.as_ref()) {
-            if !shop_qid.is_empty() {
-                ui.p.fill(map_area, th().game("shop_veil", SHOP_DIM));
-                self.shop.draw(&mut ui, cx, &shop_qid, RAct::Shop);
-            } else if !board_qid.is_empty() {
-                ui.p.fill(map_area, th().game("shop_veil", SHOP_DIM));
-                let bv = emberwake_world::board::view(&d, &gs, &board_qid);
-                let pick = self.board.select(&bv);
-                let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
-                self.board.draw(&mut ui, cx, &bv, &det, RAct::Board);
-            } else {
-                draw_talk(&mut ui, cx, &mut self.faces, view, b, self.pending.is_some());
-            }
-        }
-        if let Some(p) = self.pending.clone().filter(|_| self.talking()) {
-            self.draw_turn_in(&mut ui, cx, &p);
+            self.svc.draw(&mut ui, cx, view, b, map_area);
         }
         if let Some((name, text)) = self.lore.clone() {
             ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
@@ -1291,19 +1052,10 @@ impl Screen<GameCx> for RegionMap {
             }
             return;
         }
-        if let Some(r) = self.runner.as_ref().filter(|r| !r.closed) {
-            if self.pending.is_some() {
-                if k == Key::Enter {
-                    self.act(cx, RAct::ConfirmTurnIn);
-                }
-                return;
-            }
-            if !r.shop_qid.is_empty() || !r.board_qid.is_empty() {
-                return;
-            }
-            let view = r.view(&cx.data, cx.gs());
-            if let Some(a) = talk::talk_key(k, &view) {
-                self.act(cx, talk_act(a));
+        // an open conversation takes the keys (`Services::key`)
+        if let Some(fought) = self.svc.key(cx, k) {
+            if fought {
+                self.walk.clear();
             }
             return;
         }
@@ -1339,14 +1091,11 @@ impl Screen<GameCx> for RegionMap {
     fn back(&mut self, cx: &mut Cx) {
         if self.lore.is_some() {
             self.lore = None;
-        } else if self.pending.is_some() {
-            self.act(cx, RAct::CancelTurnIn);
-        } else if !self.shop_qid().is_empty() {
-            self.act(cx, RAct::Shop(ShopAct::Close));
-        } else if !self.board_qid().is_empty() {
-            self.act(cx, RAct::CloseBoard);
-        } else if self.talking() {
-            self.act(cx, RAct::Farewell);
+        } else if let Some(fought) = self.svc.back(cx) {
+            // the turn-in picker, the shop, the board, then the conversation (`Services::back`)
+            if fought {
+                self.walk.clear();
+            }
         } else if self.pan.is_some() {
             // MAPNAV1-U: Esc first brings the camera back to the party
             self.pan = None;
@@ -1359,35 +1108,31 @@ impl Screen<GameCx> for RegionMap {
     fn state(&self, cx: &Cx) -> Value {
         let gs = cx.gs();
         let feel = mapview::WalkFeel::of(&cx.settings.v);
+        let svc = self.svc.state(cx);
         json!({"location": gs.location_id, "position": [gs.position.0, gs.position.1], "facing": [self.facing.0, self.facing.1],
             // TURNFEEL1: the feel options and the last step's times (wall ms)
             "walk_feel": {"turn_beat": feel.beat, "equal_speed": feel.equal, "corner": feel.corner.name(), "step_at_ms": self.last_step.filter(|_| cx.settings.v["camera_trail"] == json!(true)).map(|t| t.saturating_duration_since(self.opened_at).as_secs_f64() * 1000.0), "glide_ms": self.leg.glide, "delay_ms": self.leg.delay},
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
-            "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
-            "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
+            "dialogue": svc["dialogue"], "turn_in": svc["turn_in"],
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
-            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
-            "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites,
+            "shop": svc["shop"], "board": svc["board"], "board_pane": svc["board_pane"], "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
             // REGIONVIEW1: the camera (physical px of cell (0, 0)), the party's physical px, and the last frames of both
             "camera": {"px": [self.cam.px.0, self.cam.px.1], "party": [self.cam.party.0, self.cam.party.1], "scale": self.cam.scale, "zoom": self.geo.q as f64 / 4.0,
                 "trail": (!self.cam_trail.is_empty()).then(|| self.cam_trail.iter().map(|(t, c)| json!([(t * 100000.0).round() / 100.0, c.px.0, c.px.1, c.party.0, c.party.1])).collect::<Vec<_>>())},
             "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "ground": self.ground.state(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
-            "portraits": if self.talking() && self.shop_qid().is_empty() && self.board_qid().is_empty() { self.faces.state() } else { json!([]) }})
+            "portraits": svc["portraits"]})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
     fn music(&self, cx: &Cx) -> Option<String> {
-        let shop = self.runner.as_ref().is_some_and(|r| !r.closed && !r.shop_qid.is_empty());
+        let shop = !self.svc.shop_qid().is_empty();
         cx.game.as_ref().and_then(|g| music::game_track(cx, music::region_context(&cx.data, &g.gs, shop)))
     }
 
     widget_plumbing!();
 }
-
-/// The dim over the map while the shop is open (spec PLAYUI1 3.3).
-const SHOP_DIM: Rgba = rgba(0, 0, 0, 150);
 
 impl RegionMap {
     /// The tile of the person speaking (the node's speaker, else the one talked to): their marker here that is not
@@ -1405,7 +1150,7 @@ impl RegionMap {
         let t = explore::template_of(d, loc);
         let loc_qid = s(loc, "_qid");
         let steps = gs.explore_int("loc_steps");
-        let talked = self.runner.as_ref().map(|r| r.character_qid.clone()).unwrap_or_default();
+        let talked = self.svc.talked();
         let mut out = Vec::new();
         for who in [s(view, "speaker"), talked] {
             if who.is_empty() {
@@ -1422,39 +1167,6 @@ impl RegionMap {
             }
         }
         out
-    }
-
-    fn draw_turn_in(&mut self, ui: &mut Ui<RAct>, cx: &Cx, p: &Dict) {
-        let d = &cx.data;
-        let gs = cx.gs();
-        let qid = s(p, "quest");
-        let q = quest::resolved(d, gs, &qid);
-        let fr = Rect::new(160, 60, 320, 230);
-        ui.p.fill(Rect::new(0, 0, W, H), th().game("map_veil", rgba(0, 0, 0, 100)));
-        ui.frame(fr, &format!("Turn in: {}", s_or(&q, "name", &qid)), false);
-        let mut y = fr.y + 30;
-        let rewards = crate::hub::reward_lines(cx, json::dget(&q, "rewards"));
-        if !rewards.is_empty() {
-            ui.p.text_fit(fr.x as f32 + 10.0, y as f32, &format!("Rewards: {}", rewards.join(", ")), BODY, (fr.w - 20) as f32, th().text);
-            y += 14;
-        }
-        let allowed = json::i(p, "picks_allowed", 0);
-        let offers = json::sget(p, "offers");
-        if allowed > 0 {
-            ui.p.text(fr.x as f32 + 10.0, y as f32, &format!("Choose {allowed} of:"), BODY, th().gold);
-            y += 13;
-            for lq in offers {
-                let loot = d.resolve(&gs.world_id, "loot", &lq);
-                let on = self.picks.contains(&lq);
-                ui.checkbox(&format!("turn_in.pick.{lq}"), fr.x + 14, y, &s_or(loot, "name", &lq), on, RAct::TogglePick(lq.clone()), true);
-                y += 14;
-            }
-        }
-        let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
-        ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, th().dim);
-        ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, RAct::PickRecipient, gs.party.members.len() > 1, Vec::new());
-        ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", RAct::CancelTurnIn, true);
-        ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", RAct::ConfirmTurnIn, self.picks.len() as i64 <= allowed);
     }
 }
 
@@ -2096,19 +1808,11 @@ pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
     }
 }
 
-/// The talk box over the region map (`talk::draw_talk` in the game in play; its rows act as `RAct::Choose` and
-/// `RAct::Advance`).
-fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, faces: &mut Faces, view: &Dict, b: &TalkBox, busy: bool) {
+/// The talk box over the map as `Services::draw` draws it (the tests draw fixture views).
+#[cfg(test)]
+fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, faces: &mut Faces, view: &Dict, b: &crate::talk::TalkBox, busy: bool) {
     let gs = cx.gs().clone();
-    talk::draw_talk(ui, cx, &gs, faces, view, b, busy, talk_act);
-}
-
-/// The region map's action of a talk box row or key.
-fn talk_act(a: TalkAct) -> RAct {
-    match a {
-        TalkAct::Choose(i) => RAct::Choose(i),
-        TalkAct::Advance => RAct::Advance,
-    }
+    crate::talk::draw_talk(ui, cx, &gs, faces, view, b, busy, crate::talk::svc_talk_act::<RAct>);
 }
 
 /// The region map's controls (the Help button's hover card and popup).
@@ -2228,6 +1932,8 @@ mod tests {
             ["units", _, _, "palettes", f] => f.ends_with(".json"),
             ["portraits", "common" | "heroes" | "npcs" | "elites" | "bosses", f] => face(f),
             ["portraits", "heroes" | "npcs" | "elites" | "bosses", "faces", _, f] => expression(f),
+            // FB-140 (ASSETORG2 section 3): full-body story stage sprites
+            ["portraits", "full_body", f] => png(f),
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             // LOOK1-G1: the theme file and its nine-slice frames (`<role>.png` with a `<role>.json` sidecar)
@@ -2426,11 +2132,11 @@ mod map_tests {
         let people: Vec<String> = cx.data.merged_entries(&world, "characters").iter().map(|c| s(c, "id")).collect();
         for p in people {
             map.talk(&mut cx, &p);
-            if map.talking() {
+            if map.svc.talking() {
                 break;
             }
         }
-        assert!(map.talking(), "someone in the world talks");
+        assert!(map.svc.talking(), "someone in the world talks");
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert!(widget(&map, "log").is_none() && widget(&map, "legend").is_none(), "no ticker or legend in a conversation");
     }
@@ -2607,10 +2313,10 @@ mod talk_tests {
                     let mut map = RegionMap::new(cx);
                     cx.gs_mut().position = p;
                     map.interact(cx, dir);
-                    if map.talking() {
+                    if map.svc.talking() {
                         opened += 1;
                         let go_on = each(&mut map, cx, p, at);
-                        map.end_talk(cx);
+                        map.svc.end(cx);
                         if !go_on {
                             *cx.gs_mut() = start;
                             return opened;
@@ -2699,7 +2405,7 @@ mod talk_tests {
             let choices = json::aget(json::dict(&map.state(cx)["dialogue"]), "choices").to_vec();
             let Some(i) = choices.iter().position(|c| s(json::dict(c), "service") == "farewell").filter(|i| *i < 9) else { return true };
             map.key(cx, Key::Char(char::from(b'1' + i as u8)));
-            assert!(!map.talking(), "key {} (farewell) ends the conversation", i + 1);
+            assert!(!map.svc.talking(), "key {} (farewell) ends the conversation", i + 1);
             checked = true;
             false
         });
@@ -2775,7 +2481,7 @@ mod talk_tests {
             assert!(light(&g) * 10 < before * 7, "the map is dimmed: {} vs {before}", light(&g));
             map.back(cx);
             frame(map, cx, &mut g, 1.0);
-            assert!(map.talking() && widget(map, "dialogue").is_some() && widget(map, "shop").is_none(), "Esc closes the shop, the box comes back");
+            assert!(map.svc.talking() && widget(map, "dialogue").is_some() && widget(map, "shop").is_none(), "Esc closes the shop, the box comes back");
             checked = true;
             false
         });
@@ -2825,9 +2531,9 @@ mod portrait_tests {
 
     /// The talk box portrait composed at clock `t` (one frame of the map).
     fn composed_at(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, key: &str, t: u64) -> Vec<u8> {
-        map.faces.clock = Clock { ms: t as f64, hold: 0.0 };
+        map.svc.faces.clock = Clock { ms: t as f64, hold: 0.0 };
         frame(map, cx, g, 1.0);
-        map.faces.get(key).and_then(|f| f.composed()).map(|i| i.px.clone()).expect("the speaker's portrait composed")
+        map.svc.faces.get(key).and_then(|f| f.composed()).map(|i| i.px.clone()).expect("the speaker's portrait composed")
     }
 
     /// D1 and D5: the talk box portrait changes pixels over 4 s by default (the rim flickers; breath at the full tier);
@@ -2870,7 +2576,7 @@ mod portrait_tests {
             let listed = st["portraits"].as_array().cloned().unwrap_or_default();
             assert!(listed.iter().any(|p| p["key"] == json!(key)), "the speaker's portrait is in the state: {st}");
             assert!(listed.iter().all(|p| p["key"] == json!(key)), "only the speaker's");
-            map.end_talk(cx);
+            map.svc.end(cx);
             frame(map, cx, &mut g, 1.0);
             assert_eq!(map.state(cx)["portraits"], json!([]), "the conversation ended: no portrait");
             checked = true;
@@ -3165,7 +2871,7 @@ mod sprite_tests {
             } else {
                 sides.1 += 1;
             }
-            map.end_talk(cx);
+            map.svc.end(cx);
             frame(map, cx, &mut g, 1.0);
             let after = sprite(map, cx, them["id"].as_str().unwrap_or("")).expect("still drawn");
             // NPCFACE1: out of the conversation back to the row's facing (down by default)

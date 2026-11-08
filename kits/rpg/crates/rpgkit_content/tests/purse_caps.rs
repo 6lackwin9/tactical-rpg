@@ -160,3 +160,28 @@ fn a_chest_holds_no_more_supplies_than_the_cap() {
     assert!(chest_errors(SUPPLIES, low).is_empty(), "at the lower cap");
     assert_eq!(chest_errors(SUPPLIES + 1, low), [format!("Marker 'c1': supplies must be a whole number 0..{SUPPLIES}.")]);
 }
+
+/// E2.2-S2 (FB-110 Option A): `aegis content manifest` writes the caps through the kit's manifest keys: a set of
+/// `supplies_max` round-trips (the loader reads it; the keys are written in `KEYS` order after the engine keys) and
+/// keeps the other keys; a value that is not a whole number 1 or more is refused with the check's own problem and
+/// nothing is written; a null removes the key (back to the default).
+#[test]
+fn the_manifest_writer_sets_and_checks_the_caps() {
+    let (t, data) = scratch("set", Some(game(json!({}))));
+    let path = t.join("game.json");
+    let m = store::set_manifest(&path, &dict(json!({"supplies_max": SUPPLIES}))).unwrap();
+    assert_eq!(m.extra.get("supplies_max"), Some(&json!(SUPPLIES)));
+    assert_eq!(source::load(&data).purse, PurseCaps { supplies_max: SUPPLIES, ..PurseCaps::default() });
+    store::set_manifest(&path, &dict(json!({"purse_gold_cap": GOLD, "title": "Demo Two"}))).unwrap();
+    let back = aegis_content::manifest::Manifest::read(&path).unwrap();
+    assert_eq!((back.title.as_str(), back.extra.keys().cloned().collect::<Vec<_>>()), ("Demo Two", PurseCaps::KEYS.map(String::from).to_vec()), "in KEYS order");
+    assert_eq!(source::load(&data).purse, PurseCaps { supplies_max: SUPPLIES, purse_gold_cap: GOLD });
+    let before = fs::read_to_string(&path).unwrap();
+    for bad in [json!(0), json!(-3), json!(2.5), json!("lots")] {
+        assert_eq!(store::set_manifest(&path, &dict(json!({"supplies_max": bad}))).unwrap_err(), ["game.json: supplies_max must be a whole number 1 or more."], "{bad}");
+    }
+    assert_eq!(fs::read_to_string(&path).unwrap(), before, "nothing written");
+    store::set_manifest(&path, &dict(json!({"supplies_max": null}))).unwrap();
+    assert_eq!(source::load(&data).purse.supplies_max, PurseCaps::SUPPLIES_MAX, "removed: the default");
+    assert!(store::check(&data).iter().all(|l| !l.contains("supplies_max") && !l.contains("purse_gold_cap")));
+}

@@ -158,9 +158,16 @@ const STATE = {
   alertTier: 1,              // 0: Quiet, 1: Stirred, 2: Hunted, 3: Lockdown
   travelMode: 'Stealth',     // 'Stealth' | 'Fast'
 
-  // StoryStage state (`story.rs`)
+  // StoryStage & Vignette state (`story.rs` + `vignette.rs`)
   storyId: 'prologue_intro',
   storyCardIdx: 0,
+  storyMode: 'vn_stage',        // 'vn_stage' | 'map_stage' | 'vignette_reel'
+  storyActorStyle: 'full_sprite', // 'full_sprite' | 'bust_cutout' | 'backdrop_only'
+  storyMoodOverride: null,      // null (use card.mood) | 'neutral' | 'determined' | 'angry' | 'hurt' | 'surprised' | 'afraid'
+  storyReactionOverride: null,  // null (use actor.reactionFx) | 'steel_flash' | 'anger_burst' | 'alert_shock' | 'alchemy_flare' | 'solemn_glow'
+  storySkipConfirmOpen: false,
+  vignetteAuto: false,          // Auto-advance toggle [A] in minimal Vignette player
+  vignetteLogOpen: false,       // Backlog overlay toggle [L] in minimal Vignette player
 
   // RegionMap state (`region.rs` + `talk.rs`)
   regionId: 'sluice_undercroft', // 'sluice_undercroft' | 'corvos_gate'
@@ -330,6 +337,8 @@ const STATE = {
 
   // Battle State (`battle/draw.rs`, `stage.rs`, `skill_menu.rs`)
   encId: 'enc_0c',
+  battleStageMode: 'active_combat', // 'pre_battle' | 'transition_in' | 'active_combat' | 'boss_phase2' | 'elite_intro' | 'elite_aftermath'
+  battleTransitionTimer: null,
   round: 1,
   selectedUnitId: 'kaelen',
   pinnedFoeId: null,
@@ -739,41 +748,44 @@ const STORIES = {
     title: 'Prologue 0a · A Scarlet Lullaby',
     actBanner: 'ACT I · THE SUNK WARD',
     subtitle: 'Seventh Sluice Tenements · Rain & Tallow-Smoke',
-    bg: 'intro_1',
+    bg: 'vn_alley_stage',
+    vignetteBg: 'intro_1',
     mapBackdrop: 'alley',
     encId: 'enc_0a',
     cards: [
       {
         vignetteStyle: 'Title',
-        speaker: 'Chronicle Narrator',
-        speakerTitle: 'Seventh Sluice · Night of the Red Writ',
+        speaker: 'Kaelen',
+        speakerTitle: 'Disgraced Surgeon · Seventh Sluice Dispensary',
         portrait: 'kaelen',
-        emotion: 'Somber',
-        bgFilter: 'brightness(0.82) contrast(1.08)',
-        bgVariantLabel: 'Variant A · Cold Rain & Distant Foundry Glow',
+        mood: 'neutral',
+        emotion: 'Somber Resolve',
+        bgFilter: 'brightness(0.96) contrast(1.04)',
+        bgVariantLabel: 'Stage A · Wet Cobblestone Alley & Distant Foundry Glow',
         shake: null,
-        stageAction: 'Camera pans down from the rain-swept sluice arches into Kaelen\'s tenement surgery.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Grim' },
+        stageAction: 'Camera frames the rain-slicked alley cobblestones outside Kaelen\'s tenement surgery.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Grim Resolve', reactionFx: 'solemn_glow', anim: 'breathe' },
         rightActor: null,
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: true, emote: '...' },
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 7, y: 4, speaking: false, emote: null },
           { id: 'w2', unitKey: 'crossbow', name: 'Watch Arbalest', isHero: false, x: 9, y: 3, speaking: false, emote: null }
         ],
-        text: 'The rain in the Sunk Ward never washes anything clean; it only carries the tallow-smoke down from the high foundries into the flooded masonry where the debtors sleep.'
+        text: 'The rain in the Sunk Ward never washes anything clean; it only carries the tallow-smoke down from the high foundries onto the flooded cobblestones where the debtors sleep.'
       },
       {
         vignetteStyle: 'Image',
         speaker: 'Watch Halberdier',
         speakerTitle: 'Castellan Watch · Seventh Sluice Patrol',
         portrait: 'watchman',
-        emotion: 'Hostile',
-        bgFilter: 'brightness(0.95) contrast(1.12) sepia(0.12)',
-        bgVariantLabel: 'Variant B · Lantern Flare at the Surgery Door (Shake: Light)',
+        mood: 'angry',
+        emotion: 'Hostile Writ',
+        bgFilter: 'brightness(1.02) contrast(1.08) sepia(0.08)',
+        bgVariantLabel: 'Stage B · Lantern Flare on the Alley Stones (Shake: Light)',
         shake: 'Light Shake (FX1)',
-        stageAction: 'Iron boots splinter the surgery door; two Castellan Watchmen step into the alley lantern-light.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Wary' },
-        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, emotion: 'Barking Orders' },
+        stageAction: 'Iron boots splinter the surgery door; a Castellan Watchman plants his halberd on the wet flagstones.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Alert', reactionFx: 'alert_shock', anim: 'breathe' },
+        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, emotion: 'Barking Orders', reactionFx: 'anger_burst', anim: 'shake' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: false, emote: '!' },
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: true, emote: '⚔' },
@@ -786,13 +798,14 @@ const STORIES = {
         speaker: 'Kaelen',
         speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
         portrait: 'kaelen',
+        mood: 'determined',
         emotion: 'Steel Drawn',
-        bgFilter: 'brightness(1.04) contrast(1.15)',
-        bgVariantLabel: 'Variant C · Cold Steel & Amber Lamp Rim',
+        bgFilter: 'brightness(1.06) contrast(1.12)',
+        bgVariantLabel: 'Stage C · Cold Steel Glint & Tallow Lamp Rim',
         shake: 'Medium Pulse (FX1)',
-        stageAction: 'Kaelen lifts his Surgeon\'s Billhook from the operating table and steps into fighting stance at tile (2,4).',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Steel Drawn', lunge: true },
-        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, emotion: 'Braced' },
+        stageAction: 'Kaelen lifts his Surgeon\'s Billhook and lunges forward across the wet stone floor.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Steel Drawn', lunge: true, reactionFx: 'steel_flash', anim: 'lunge' },
+        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, emotion: 'Braced', reactionFx: 'alert_shock', anim: 'breathe' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: true, emote: '⚔' },
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: false, emote: '🛡' },
@@ -801,14 +814,15 @@ const STORIES = {
         text: '"You brought shackles to an operating room, halberdier. Come closer—let us see how Castellan mail holds against a bone-saw and a billhook."'
       }
     ],
-    nextLabel: 'Fight: Prologue 0a — The Alley (Solo Kaelen)',
-    onFinish: () => launchEncounter('enc_0a')
+    nextLabel: 'Transition to Combat: Prologue 0a — The Alley',
+    onFinish: () => launchEncounterWithTransition('enc_0a')
   },
   prologue_0b: {
     title: 'Prologue 0b · The Chimney Slate',
     actBanner: 'PROLOGUE 0B · SLATE RIDGE',
     subtitle: 'Above the Chained Tenements · Brazier Light',
-    bg: 'intro_2',
+    bg: 'vn_rooftop_stage',
+    vignetteBg: 'intro_2',
     mapBackdrop: 'rooftops',
     encId: 'enc_0b',
     cards: [
@@ -817,13 +831,14 @@ const STORIES = {
         speaker: 'Vesper',
         speakerTitle: 'Cutthroat Scout · Flanker Founder',
         portrait: 'vesper',
+        mood: 'determined',
         emotion: 'Urgent Whisper',
-        bgFilter: 'brightness(0.95) contrast(1.08)',
-        bgVariantLabel: 'Variant A · Chimney Shadows & Brazier Glare',
+        bgFilter: 'brightness(0.98) contrast(1.06)',
+        bgVariantLabel: 'Stage A · Slick Slate Ledge & Brazier Glare',
         shake: null,
-        stageAction: 'Vesper drops from the slick chimney-stack onto tile (2,2) and signals down to Kaelen.',
-        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: true, emotion: 'Smirking' },
-        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Alert' },
+        stageAction: 'Vesper drops lightly onto the wet stone ledge and signals down to Kaelen.',
+        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: true, emotion: 'Smirking', reactionFx: 'alert_shock', anim: 'hop' },
+        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Alert', reactionFx: 'solemn_glow', anim: 'breathe' },
         mapUnits: [
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 2, y: 2, speaking: true, emote: '💬' },
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 5, speaking: false, emote: null },
@@ -837,13 +852,14 @@ const STORIES = {
         speaker: 'Castellan Bailiff',
         speakerTitle: 'Elite Brute · Ridge Warden',
         portrait: 'bailiff',
-        emotion: 'Enraged',
-        bgFilter: 'brightness(1.05) contrast(1.15) saturate(1.15)',
-        bgVariantLabel: 'Variant B · Tallow Brazier Ignited on the Ridge',
+        mood: 'angry',
+        emotion: 'Enraged Roar',
+        bgFilter: 'brightness(1.05) contrast(1.12) saturate(1.12)',
+        bgVariantLabel: 'Stage B · Tallow Brazier Ignited on the Ridge',
         shake: 'Light Shake (FX1)',
-        stageAction: 'The Bailiff heft his flanged mace beside the burning Tallow Brazier at (6,4).',
-        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: false, emotion: 'Poised' },
-        rightActor: { unitKey: 'bailiff', portrait: 'bailiff', name: 'Castellan Bailiff', title: 'Ridge Warden', active: true, emotion: 'Roaring', lunge: true },
+        stageAction: 'The Castellan Bailiff slams his spiked club against his shield beside the burning Tallow Brazier.',
+        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: false, emotion: 'Poised', reactionFx: 'steel_flash', anim: 'breathe' },
+        rightActor: { unitKey: 'bailiff', portrait: 'bailiff', name: 'Castellan Bailiff', title: 'Ridge Warden', active: true, emotion: 'Roaring', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
         mapUnits: [
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: '🗡' },
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 5, speaking: false, emote: '⚔' },
@@ -853,14 +869,15 @@ const STORIES = {
         text: '"Runners on the wet slate! Marksmen, pin their cloaks to the chimney bricks—kick the brazier over if they try to cross the ridge!"'
       }
     ],
-    nextLabel: 'Fight: Prologue 0b — The Rooftop (+Vesper Joins)',
-    onFinish: () => launchEncounter('enc_0b')
+    nextLabel: 'Transition to Combat: Prologue 0b — The Rooftop',
+    onFinish: () => launchEncounterWithTransition('enc_0b')
   },
   prologue_0c: {
     title: 'Prologue 0c · The Sluice Bridge',
     actBanner: 'PROLOGUE 0C · SEVENTH SLUICE BRIDGE',
     subtitle: 'Spillway Cordon · Full 4-Founder Vanguard',
-    bg: 'meat_market',
+    bg: 'vn_bridge_stage',
+    vignetteBg: 'meat_market',
     mapBackdrop: 'canal',
     encId: 'enc_0c',
     cards: [
@@ -869,13 +886,14 @@ const STORIES = {
         speaker: 'Maren',
         speakerTitle: 'Plague Alchemist · Support / DoT Founder',
         portrait: 'maren',
-        emotion: 'Focused',
-        bgFilter: 'brightness(0.95) contrast(1.1)',
-        bgVariantLabel: 'Variant A · Flooded Spillway & Alchemical Smoke',
+        mood: 'determined',
+        emotion: 'Alchemical Focus',
+        bgFilter: 'brightness(0.98) contrast(1.06)',
+        bgVariantLabel: 'Stage A · Flooded Bridge Flagstones & Alchemical Vapour',
         shake: null,
-        stageAction: 'Maren and Hollis emerge from the lower grate steps at (1,5) and (1,3) as Kaelen & Vesper reach the bridge.',
-        leftActor: { unitKey: 'maren', portrait: 'maren', name: 'Maren', title: 'Plague Alchemist', active: true, emotion: 'Flask Ready' },
-        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: false, emotion: 'Cold Glare' },
+        stageAction: 'Maren and Hollis emerge onto the wide stone spillway bridge as green alchemical vapour curls from Maren\'s censer.',
+        leftActor: { unitKey: 'maren', portrait: 'maren', name: 'Maren', title: 'Plague Alchemist', active: true, emotion: 'Flask Ready', reactionFx: 'alchemy_flare', anim: 'hop' },
+        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: false, emotion: 'Cold Glare', reactionFx: 'solemn_glow', anim: 'breathe' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: null },
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: null },
@@ -890,13 +908,14 @@ const STORIES = {
         speaker: 'Captain Vane',
         speakerTitle: 'Boss · Castellan Watch Commander',
         portrait: 'vane',
-        emotion: 'Ruthless',
-        bgFilter: 'brightness(1.05) contrast(1.18)',
-        bgVariantLabel: 'Variant B · Vane\'s Executioner Greatsword Drawn (Shake: Heavy)',
+        mood: 'angry',
+        emotion: 'Ruthless Command',
+        bgFilter: 'brightness(1.06) contrast(1.14)',
+        bgVariantLabel: 'Stage B · Vane\'s Halberd Planted on the Bridge Stones (Shake: Heavy)',
         shake: 'Heavy Shake (FX1)',
-        stageAction: 'Captain Vane plants his greatsword on the wet spillway stone at (8,4); Halberdiers lock Phalanx shields.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Defiant' },
-        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: true, emotion: 'Executioner\'s Stance', lunge: true },
+        stageAction: 'Captain Vane slams his gilded halberd into the wet bridge flagstones at (8,4); crimson sparks erupt around his boots.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Defiant', reactionFx: 'steel_flash', anim: 'breathe' },
+        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: true, emotion: 'Executioner\'s Stance', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: '⚔' },
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: null },
@@ -908,14 +927,15 @@ const STORIES = {
         text: '"A disgraced sawbones, a gutter cutthroat, and two deserters. Hold the spillway, Watchmen! The river takes them tonight!"'
       }
     ],
-    nextLabel: 'Fight: Prologue 0c — Canal Bridge (Full 4-Founder Squad)',
-    onFinish: () => launchEncounter('enc_0c')
+    nextLabel: 'Transition to Combat: Prologue 0c — Canal Bridge',
+    onFinish: () => launchEncounterWithTransition('enc_0c')
   },
   hearth_arrival: {
     title: 'Sanctuary · The Sluice Undercroft',
     actBanner: 'SANCTUARY · THE TALLOW HEARTH',
     subtitle: 'Below the Seventh Sluice · 18 Days to the Red Tithing',
-    bg: 'hearth',
+    bg: 'vn_hearth_stage',
+    vignetteBg: 'hearth',
     mapBackdrop: 'sluice_hub',
     encId: 'enc_0c',
     cards: [
@@ -924,13 +944,14 @@ const STORIES = {
         speaker: 'Sister Aline',
         speakerTitle: 'Order of the Ashen Leech · Sanctuary Apothecary',
         portrait: 'aline',
+        mood: 'determined',
         emotion: 'Solemn Welcome',
-        bgFilter: 'brightness(1.0) contrast(1.06)',
-        bgVariantLabel: 'Variant A · Warm Tallow Hearth & Vaulted Sanctuary',
+        bgFilter: 'brightness(1.02) contrast(1.05)',
+        bgVariantLabel: 'Stage A · Warm Tallow Hearth & Dry Sanctuary Flagstones',
         shake: null,
-        stageAction: 'The iron grate bars shut behind the squad; Sister Aline stirs the central Tallow Hearth.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Exhausted' },
-        rightActor: { unitKey: 'aline', portrait: 'aline', name: 'Sister Aline', title: 'Sanctuary Apothecary', active: true, emotion: 'Solemn' },
+        stageAction: 'The iron grate bars shut behind the squad; Sister Aline steps across the dry sanctuary flagstones beside the Tallow Hearth.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Weary', reactionFx: 'solemn_glow', anim: 'breathe' },
+        rightActor: { unitKey: 'aline', portrait: 'aline', name: 'Sister Aline', title: 'Sanctuary Apothecary', active: true, emotion: 'Solemn Welcome', reactionFx: 'solemn_glow', anim: 'hop' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 6, y: 5, speaking: false, emote: null },
           { id: 'aline', unitKey: 'aline', name: 'Sister Aline', isHero: true, x: 4, y: 4, speaking: true, emote: '🔥' },
@@ -947,6 +968,269 @@ const STORIES = {
       STATE.talkNpcId = 'aline';
       STATE.talkNodeId = 'root';
       render();
+    }
+  }
+};
+
+// ============================================================================
+// IN-COMBAT SCRIPTED DIALOGUE & MAP→COMBAT TRANSITION BARKS
+// Covers:
+//  1. `pre_battle`      : Pre-Battle Map Confrontation (Units on tactical map + bottom dialogue box before Combat HUD slides in)
+//  2. `boss_phase2`     : Mid-Combat Boss Phase 2 Transformation (50% HP threshold bark + aura ring + passive activation)
+//  3. `elite_intro`     : Before Encountering / Engaging the Elite Unit
+//  4. `elite_aftermath` : After Breaking / Defeating the Elite Unit
+// ============================================================================
+const COMBAT_BARKS = {
+  enc_0a: {
+    pre_battle: {
+      badge: 'PRE-COMBAT MAP CONFRONTATION',
+      speaker: 'Watch Halberdier',
+      speakerTitle: 'Castellan Watch · Seventh Sluice Patrol',
+      portrait: 'watchman',
+      mood: 'angry',
+      focusUnitId: 'f_watch1',
+      mechanicHint: 'Map → Combat Transition: Units are already in position on the 12×9 Alley grid. Click [Engage Combat] to slide in the Foresight Timeline & Action HUD.',
+      text: '"Crossbowman, cover the rain-trough! If the sawbones raises that billhook, pin him to his own surgery door!"'
+    },
+    boss_phase2: {
+      badge: 'IN-COMBAT SCRIPTED EVENT · LAST STAND',
+      speaker: 'Watch Halberdier',
+      speakerTitle: 'Poise Shattered · Desperate Thrust',
+      portrait: 'watchman',
+      mood: 'hurt',
+      focusUnitId: 'f_watch1',
+      mechanicHint: 'Phase Trigger (≤ 50% HP): Halberdier shifts to Desperate Thrust (+3 Damage, -4 Guard).',
+      text: '"Gah—he hooked the rim of my gorget! Arbalest, reload faster—don\'t let him close the distance!"'
+    },
+    elite_intro: {
+      badge: 'ELITE ENCOUNTER · BEFORE ENGAGING',
+      speaker: 'Kaelen',
+      speakerTitle: 'Disgraced Surgeon · Tactical Assessment',
+      portrait: 'kaelen',
+      mood: 'determined',
+      focusUnitId: 'f_watch1',
+      mechanicHint: 'Elite Trait Preview: Shield Wall grants +4 Guard while adjacent to an ally. Use Billhook Drag to separate them.',
+      text: '"His halberdier mail is thick at the shoulder, but his stance is top-heavy on the wet cobbles. Two Poise strikes will break his guard wide open."'
+    },
+    elite_aftermath: {
+      badge: 'ELITE ENCOUNTER · AFTER BREAKING ELITE',
+      speaker: 'Kaelen',
+      speakerTitle: 'Disgraced Surgeon · Alley Cleared',
+      portrait: 'kaelen',
+      mood: 'neutral',
+      focusUnitId: 'kaelen',
+      mechanicHint: 'Patrol Broken: Path to the Seventh Sluice chimney ladder is clear.',
+      text: '"Stay down in the runoff trough. Your brass writ won\'t staunch a femoral bleed—and I have no bandages to spare for Captain Vane\'s hounds."'
+    }
+  },
+  enc_0b: {
+    pre_battle: {
+      badge: 'PRE-COMBAT MAP CONFRONTATION',
+      speaker: 'Castellan Bailiff',
+      speakerTitle: 'Elite Brute · Ridge Warden',
+      portrait: 'bailiff',
+      mood: 'angry',
+      focusUnitId: 'f_bailiff',
+      mechanicHint: 'Map → Combat Transition: Camera locks onto the 12×9 Rooftop grid before sliding in the Combat HUD.',
+      text: '"Hold the chimney ridge! Whoever brings me the surgeon\'s billhook gets a double ration of tallow and silver!"'
+    },
+    boss_phase2: {
+      badge: 'BOSS / ELITE PHASE TRANSFORMATION (50% HP)',
+      speaker: 'Castellan Bailiff',
+      speakerTitle: 'Iron Collar Unlatched · Brazier Frenzy',
+      portrait: 'bailiff',
+      mood: 'hurt',
+      focusUnitId: 'f_bailiff',
+      mechanicHint: 'Phase 2 Trigger: Bailiff ignites his mace in the Tallow Brazier at (6,4) — Mace Sweep now inflicts +2 Burn!',
+      text: '"Bloody gutter-rats! If cold iron won\'t break you, let\'s see how you like burning tallow across the slate!"'
+    },
+    elite_intro: {
+      badge: 'ELITE ENCOUNTER · BEFORE ENGAGING BAILIFF',
+      speaker: 'Vesper',
+      speakerTitle: 'Cutthroat Scout · Flanker Founder',
+      portrait: 'vesper',
+      mood: 'determined',
+      focusUnitId: 'f_bailiff',
+      mechanicHint: 'Elite Trait [Iron Collar]: Immune to Pull while Guard > 0. Strip his Guard with Kaelen or kick him into the Brazier!',
+      text: '"Careful with the big ugly one in the iron gorget, Doc! You can\'t hook-drag him while his Guard holds—let me slip behind him with Shadow Step first."'
+    },
+    elite_aftermath: {
+      badge: 'ELITE ENCOUNTER · AFTER DEFEATING BAILIFF',
+      speaker: 'Vesper',
+      speakerTitle: 'Cutthroat Scout · Ridge Secured',
+      portrait: 'vesper',
+      mood: 'happy',
+      focusUnitId: 'vesper',
+      mechanicHint: 'Elite Defeated: Remaining Marksmen lose morale (-1 Poise) and drop the Sluice Bridge key.',
+      text: '"Down goes the Bailiff—and look, his belt ring has the brass windlass key for the Sluice Bridge! Move it, Kaelen!"'
+    }
+  },
+  enc_0c: {
+    pre_battle: {
+      badge: 'PRE-COMBAT MAP CONFRONTATION',
+      speaker: 'Captain Vane',
+      speakerTitle: 'Boss · Castellan Watch Commander',
+      portrait: 'vane',
+      mood: 'angry',
+      focusUnitId: 'f_vane',
+      mechanicHint: 'Map → Combat Transition: Confrontation on the live 12×9 Canal Bridge map; clicking [Engage Combat] slides in the Top Timeline & Bottom Action HUD.',
+      text: '"Lock shields across the spillway grate! Neither the surgeon nor his alchemist crosses into the Undercroft alive!"'
+    },
+    boss_phase2: {
+      badge: '⚡ BOSS PHASE 2 TRANSFORMATION · 50% HP THRESHOLD',
+      speaker: 'Captain Vane',
+      speakerTitle: 'Phase 2: "No Quarter" · Crimson Overdrive',
+      portrait: 'vane',
+      mood: 'hurt',
+      focusUnitId: 'f_vane',
+      mechanicHint: 'Boss Phase 2 Activated: Captain Vane gains +4 Might, refreshes +12 Guard, and queues Executioner\'s Cleave (3-tile Arc, 18 dmg)!',
+      text: '"You dare scar Castellan plate?! Sound the red horn! No prisoners—I will carve the Red Tithing out of your hides myself!"'
+    },
+    elite_intro: {
+      badge: 'ELITE ENCOUNTER · BEFORE ENGAGING PHALANX GUARD',
+      speaker: 'Maren',
+      speakerTitle: 'Plague Alchemist · Support / DoT Founder',
+      portrait: 'maren',
+      mood: 'determined',
+      focusUnitId: 'f_w1',
+      mechanicHint: 'Elite Escort [Interpose]: Bridge Halberdier absorbs direct strikes aimed at Captain Vane until displaced or broken.',
+      text: '"Kaelen, don\'t waste a heavy swing on Vane while his Bridge Halberdier is braced beside him! My Volatile Tallow Flask will scorch both of them through the shield wall."'
+    },
+    elite_aftermath: {
+      badge: 'ELITE ENCOUNTER · AFTER BREAKING ESCORT',
+      speaker: 'Kaelen',
+      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      portrait: 'kaelen',
+      mood: 'determined',
+      focusUnitId: 'f_vane',
+      mechanicHint: 'Escort Broken: Captain Vane\'s flank is exposed (+50% Flank Bonus active).',
+      text: '"Your shield-bearer is down, Vane, and the Undercroft grate is open behind you. Yield the bridge or go into the canal!"'
+    }
+  },
+  enc_m2: {
+    pre_battle: {
+      badge: 'PRE-COMBAT MAP CONFRONTATION · PARLEY ESCALATION',
+      speaker: 'Gate-Sergeant Corvo',
+      speakerTitle: 'Mini-Boss · Third Ward Toll Warden',
+      portrait: 'bailiff',
+      mood: 'angry',
+      focusUnitId: 'f_corvo',
+      mechanicHint: 'RegionMap → Combat UI Transition: Escalated directly from Corvo\'s Gate street parley into tactical combat!',
+      text: '"No thirty Scrap? Then my Flayers take thirty ounces of flesh! Drop the portcullis chain and gut them in the mud!"'
+    },
+    boss_phase2: {
+      badge: '⚡ MINI-BOSS PHASE 2 TRANSFORMATION · 50% HP',
+      speaker: 'Gate-Sergeant Corvo',
+      speakerTitle: 'Phase 2: "Extortionist\'s Fury" · Toll Bell Rung',
+      portrait: 'bailiff',
+      mood: 'hurt',
+      focusUnitId: 'f_corvo',
+      mechanicHint: 'Phase 2 Trigger: Corvo drinks a Purifier Tallow Draught (+10 Guard, Unstoppable for 1 Round).',
+      text: '"Purifier! Throw the sanctified tallow on my maul! Nobody crosses the Third Ward gate without paying the butcher\'s bill!"'
+    },
+    elite_intro: {
+      badge: 'ELITE ENCOUNTER · BEFORE ENGAGING PURIFIER',
+      speaker: 'Kaelen',
+      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      portrait: 'kaelen',
+      mood: 'determined',
+      focusUnitId: 'f_purifier',
+      mechanicHint: 'Elite Caster [Inquisitorial Purifier]: Grants +12 Guard & Burn immunity within 2 tiles. Focus-fire or silence early!',
+      text: '"Watch the Inquisitorial Purifier behind the toll chain—as long as he swings that brass censer, Corvo\'s armor won\'t catch Maren\'s alchemical fire."'
+    },
+    elite_aftermath: {
+      badge: 'ELITE ENCOUNTER · AFTER DEFEATING CORVO',
+      speaker: 'Vesper',
+      speakerTitle: 'Cutthroat Scout · Toll Coffer Seized',
+      portrait: 'vesper',
+      mood: 'happy',
+      focusUnitId: 'vesper',
+      mechanicHint: 'Elite Bounty Claimed: +45 Scrap recovered from Corvo\'s iron drumhead.',
+      text: '"Forty-five Scrap in the toll drumhead AND Sister Aline\'s confiscated coagulant crate! Pleasure doing business with you, Sergeant Corvo."'
+    }
+  },
+  enc_m3: {
+    pre_battle: {
+      badge: 'PRE-COMBAT MAP CONFRONTATION · FOURTH KILN',
+      speaker: 'Foreman Grendel',
+      speakerTitle: 'Boss · Bone-Mill Overseer',
+      portrait: 'orlov',
+      mood: 'angry',
+      focusUnitId: 'f_grendel',
+      mechanicHint: 'Map → Combat Transition: Slag Vents at (5,3), (5,5), and (7,4) prime for even-round eruption.',
+      text: '"Intruders on the rendering floor! Open the main furnace dampers—let the Slag Vents roast them in their boots!"'
+    },
+    boss_phase2: {
+      badge: '⚡ BOSS PHASE 2 TRANSFORMATION · OVERPRESSURE',
+      speaker: 'Foreman Grendel',
+      speakerTitle: 'Phase 2: "Kiln Overpressure" · All Vents Active',
+      portrait: 'orlov',
+      mood: 'angry',
+      focusUnitId: 'f_grendel',
+      mechanicHint: 'Boss Phase 2 Activated: Slag Vents now erupt EVERY round for 10 Burn damage & -2 Poise!',
+      text: '"Chain the safety valves shut! If the Fourth Kiln goes down, the whole foundry goes to ash with it!"'
+    },
+    elite_intro: {
+      badge: 'ELITE ENCOUNTER · BEFORE ENGAGING CALCIFIED HUSK',
+      speaker: 'Maren',
+      speakerTitle: 'Plague Alchemist · Support / DoT Founder',
+      portrait: 'maren',
+      mood: 'surprised',
+      focusUnitId: 'f_husk',
+      mechanicHint: 'Elite Brute [Calcified Husk]: 14 Guard, but Brittle Shell shatters all Guard immediately when Poise reaches 0.',
+      text: '"Look at the bone-ash crust on that Husk—blade cuts will bounce off its shell, but a single Poise break will shatter its entire armor layer!"'
+    },
+    elite_aftermath: {
+      badge: 'ELITE ENCOUNTER · AFTER SHATTERING HUSK',
+      speaker: 'Kaelen',
+      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      portrait: 'kaelen',
+      mood: 'determined',
+      focusUnitId: 'kaelen',
+      mechanicHint: 'Husk Shattered: Clear line of sight to hook Foreman Grendel onto the central Slag Vent at (7,4).',
+      text: '"The Husk\'s shell is cracked. Now drag Grendel onto his own furnace grate before the next vent blows!"'
+    }
+  },
+  enc_m5: {
+    pre_battle: {
+      badge: 'PRE-COMBAT MAP CONFRONTATION · CRUCIBLE CLIMAX',
+      speaker: 'Prelate Nemeth',
+      speakerTitle: 'Act I Boss · High Inquisitor of the Rubric',
+      portrait: 'nemeth',
+      mood: 'angry',
+      focusUnitId: 'f_nemeth',
+      mechanicHint: 'Map → Combat Transition: Great Sluice Winch objective active at tile (6,4).',
+      text: '"So the disgraced surgeon climbs out of the sewer at last. Proctor Quell, hold the Great Sluice Winch—in three tolls of the bell, the Undercroft drowns!"'
+    },
+    boss_phase2: {
+      badge: '🔥 ACT I BOSS PHASE 2 TRANSFORMATION · SCARLET CONSECRATION',
+      speaker: 'Prelate Nemeth',
+      speakerTitle: 'Phase 2: "Scarlet Consecration" · Pyres Ignited',
+      portrait: 'nemeth',
+      mood: 'angry',
+      focusUnitId: 'f_nemeth',
+      mechanicHint: 'Boss Phase 2 Activated (50% HP): Nemeth ignites all Sanctified Pyres, gains +2 AP per round, and unlocks Scarlet Edict (Cross AoE)!',
+      text: '"By the Scarlet Rubric, I consecrate this sluice in tallow and flame! Burn the heretics from the winch-wheel!"'
+    },
+    elite_intro: {
+      badge: 'ELITE ENCOUNTER · BEFORE ENGAGING PROCTOR QUELL',
+      speaker: 'Kaelen',
+      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      portrait: 'kaelen',
+      mood: 'determined',
+      focusUnitId: 'f_quell',
+      mechanicHint: 'Elite Sub-Boss [Proctor Quell]: Blocks interaction with the Sluice Winch at (6,4) while adjacent.',
+      text: '"Proctor Quell has his tower shield planted right across the Sluice Winch gear. Displace him from tile (7,4) or break his Poise so Vesper can turn the wheel!"'
+    },
+    elite_aftermath: {
+      badge: 'ELITE ENCOUNTER · AFTER BREAKING PROCTOR QUELL',
+      speaker: 'Vesper',
+      speakerTitle: 'Cutthroat Scout · Winch Unblocked',
+      portrait: 'vesper',
+      mood: 'determined',
+      focusUnitId: 'vesper',
+      mechanicHint: 'Proctor Quell Downed: The Great Sluice Winch at (6,4) is now unlocked for interaction!',
+      text: '"Quell\'s down! The winch ratchet is clear, Kaelen—cover me for two rounds while I jam the floodgate gears!"'
     }
   }
 };

@@ -3,7 +3,7 @@
 
 use crate::data::Data;
 use crate::state::{flag_key_ok, flag_value_ok, GameState};
-use crate::{board, new_game, progression, quest, roster, shop, story, terms};
+use crate::{board, new_game, progression, quest, rolls, roster, shop, story, terms};
 use aegis_core::json::{self, int, Dict};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -164,17 +164,76 @@ pub fn fill(text: &str, values: &IndexMap<String, String>) -> String {
 
 /// The highest effective `stat` among the active members (built with gear and passives). RULESET1 9 D3 (the RULESET1-D
 /// review): built as the world being played fights, so under its deck rule only slotted passives count (classic: the
-/// deck rule is None, `build` exactly).
+/// deck rule is None, `build` exactly). T1.2-S3 (FB-54c): `stat` may also name a U1 standing rating (`member_stat`).
 pub fn best_stat(d: &Data, gs: &GameState, stat: &str) -> i64 {
-    let deck = rpgkit_rules::DeckRule::of(&d.ruleset(&gs.world_id));
-    let mut best = 0;
-    for m in gs.party.active_members() {
-        if let Some(b) = progression::build_in(d, m, &gs.world_id, deck.as_ref()) {
-            let ctx = b.unit.weapon_context();
-            best = best.max(b.unit.stats.effective(stat, ctx.as_deref(), "") as i64);
-        }
+    gs.party.active_members().into_iter().filter_map(|m| member_stat(d, gs, m, stat)).max().unwrap_or(0).max(0)
+}
+
+/// Member `m`'s value of `stat` as built for the world being played (`best_stat`'s build), None when it does not build:
+/// one of the six primary stats (effective in its weapon context), else T1.2-S3 (FB-54c) a U1 standing rating by name,
+/// read as the member stands out of battle: `initiative`, `move_rate`, `armor` (`rpgkit_data::STANDING_RATINGS`) or a
+/// derived-stat row of the world's ruleset (DERIVE1: `composure`, `max_poise`, ...); any other name reads 0.
+pub fn member_stat(d: &Data, gs: &GameState, m: &crate::state::UnitState, stat: &str) -> Option<i64> {
+    let rules = d.ruleset(&gs.world_id);
+    let b = progression::build_in(d, m, &gs.world_id, rpgkit_rules::DeckRule::of(&rules).as_ref())?;
+    let u = &b.unit;
+    let value = match stat {
+        "initiative" => u.initiative_rating(),
+        "move_rate" => u.move_per_block(),
+        "armor" => rpgkit_rules::damage::armor_rating(u),
+        _ if rpgkit_data::STATS.iter().any(|s| s.eq_ignore_ascii_case(stat)) => u.stats.effective(stat, u.weapon_context().as_deref(), ""),
+        _ => rpgkit_rules::derived::value_for(&d.cat, &rules, u, stat).unwrap_or(0),
+    };
+    Some(value as i64)
+}
+
+/// T1.2-S2: the stat a roll reads: the active party's best (`best_stat`), or with `who` (a character ref) that active
+/// member's (`member_stat`); 0 when `who` names no active member.
+pub fn roll_stat(d: &Data, gs: &GameState, stat: &str, who: &str) -> i64 {
+    if who.is_empty() {
+        return best_stat(d, gs, stat);
     }
-    best
+    let c = d.resolve(&gs.world_id, "characters", who);
+    if c.is_empty() {
+        return 0;
+    }
+    let (id, qid) = (json::s(c, "id"), json::s(c, "_qid"));
+    gs.party.active_members().into_iter().find(|m| m.id == id || m.lore_ref == qid).and_then(|m| member_stat(d, gs, m, stat)).unwrap_or(0).max(0)
+}
+
+/// T1.2-S2 (FB-54b): the die of a dialogue roll: the nearest world in the lineage setting `dialogue_roll_die`
+/// (`DIALOGUE_ROLL_DIE_MIN..=MAX`; -1 inherits) wins, else `DIALOGUE_ROLL_DIE` (20).
+pub fn roll_die(d: &Data, world_id: &str) -> i64 {
+    use rpgkit_data::{DIALOGUE_ROLL_DIE, DIALOGUE_ROLL_DIE_MAX, DIALOGUE_ROLL_DIE_MIN};
+    d.lineage(world_id).iter().rev().map(|w| json::i(d.manifest(w), "dialogue_roll_die", -1)).find(|n| (DIALOGUE_ROLL_DIE_MIN..=DIALOGUE_ROLL_DIE_MAX).contains(n)).unwrap_or(DIALOGUE_ROLL_DIE)
+}
+
+/// What one `roll` effect drew: the die face, the stat it added, the bar and the outcome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RollOutcome {
+    pub face: i64,
+    pub stat: i64,
+    pub dc: i64,
+    pub success: bool,
+}
+
+/// T1.2-S2 (FB-54b, C25): the `roll` effect: one draw `1..roll_die` from the save's `dialogue` stream (`GameRolls`, saved
+/// with the game, so a reload draws the same face) plus `roll_stat`, a success when `face + stat >= dc`; flag `key` is
+/// set true or false (the follow-up node's conditions read it). Runs only when the effect is applied (a choice is
+/// chosen), never from a condition or a redraw.
+pub fn roll_effect(d: &Data, gs: &mut GameState, fx: &Dict) -> RollOutcome {
+    let stat = roll_stat(d, gs, &json::s(fx, "stat"), &json::s(fx, "who"));
+    let die = roll_die(d, &gs.world_id);
+    let face = rolls::range_i(gs, rolls::DIALOGUE, 1, die);
+    let dc = json::i(fx, "dc", 0);
+    let success = face + stat >= dc;
+    quest::set_flag(d, gs, &json::s(fx, "key"), Value::Bool(success));
+    RollOutcome { face, stat, dc, success }
+}
+
+/// T1.2-S2: the note of a roll: `Roll: STR 7 + 12 = 19 vs 15: success.`
+pub fn roll_note(fx: &Dict, r: &RollOutcome) -> String {
+    format!("Roll: {} {} + {} = {} vs {}: {}.", json::s(fx, "stat"), r.face, r.stat, r.face + r.stat, r.dc, if r.success { "success" } else { "failure" })
 }
 
 /// T1.2-S1 (FB-54a): the bar of a `stat` condition: its `min`, or `threshold` (a pure alias of `min`, the same
@@ -267,6 +326,11 @@ pub fn stat_prefix(choice: &Dict) -> String {
         }
     }
     out
+}
+
+/// T1.2-S2 (C25): the inline tag of each `roll` effect on a choice row, `[Roll: <Stat> >= <DC>] `.
+pub fn roll_prefix(choice: &Dict) -> String {
+    effects_of(choice).iter().filter(|fx| json::s(fx, "effect") == rpgkit_data::ROLL_EFFECT).map(|fx| format!("[Roll: {} >= {}] ", json::s(fx, "stat"), json::i(fx, "dc", 0))).collect()
 }
 
 pub fn rep_prefix(d: &Data, gs: &GameState, choice: &Dict) -> String {
@@ -566,7 +630,7 @@ impl DialogueRunner {
         let mut choices = Vec::new();
         if !self.closed {
             for (c, locked) in self.visible(d, gs) {
-                let text = rep_prefix(d, gs, &c) + &stat_prefix(&c) + &fill(&json::s(&c, "text"), &self.tokens(d, gs, &c));
+                let text = rep_prefix(d, gs, &c) + &stat_prefix(&c) + &roll_prefix(&c) + &fill(&json::s(&c, "text"), &self.tokens(d, gs, &c));
                 choices.push(Value::Object(json::obj([
                     ("text", text.into()),
                     ("locked", Value::Bool(locked)),
@@ -727,6 +791,15 @@ impl DialogueRunner {
                         out.push(format!("Flag '{}' can't be set.", json::s(fx, "key")));
                     } else if rpgkit_data::reserved_key(&json::s(fx, "key")) {
                         out.push(crate::campaign::reserved_text(&json::s(fx, "key")));
+                    }
+                }
+                // T1.2-S2: the outcome flag is set like set_flag's
+                "roll" => {
+                    let k = json::s(fx, "key");
+                    if !flag_key_ok(&k) {
+                        out.push(format!("Flag '{k}' can't be set."));
+                    } else if rpgkit_data::reserved_key(&k) {
+                        out.push(crate::campaign::reserved_text(&k));
                     }
                 }
                 "add_flag" => {
@@ -990,6 +1063,11 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
             quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
         }
         "recruit" => recruit(d, gs, &json::s(fx, "character"), fx.get("level").unwrap_or(&Value::Null), notes),
+        // T1.2-S2 (FB-54b): the choice-time roll and its note
+        "roll" => {
+            let r = roll_effect(d, gs, fx);
+            notes.push(roll_note(fx, &r));
+        }
         "vignette" => {
             story::queue(d, gs, &json::s(fx, "vignette"));
         }

@@ -300,6 +300,7 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         "classes" => errors.extend(unit::class_errors(v, &e)),
         "units" => {
             errors.extend(unit::unit_errors(v, &e));
+            errors.extend(unit::growth_per_stage_errors(entry));
             errors.extend(assets::body_errors(v, &json::s(&e, "art")));
             errors.extend(reward::loot_errors(v, &e));
         }

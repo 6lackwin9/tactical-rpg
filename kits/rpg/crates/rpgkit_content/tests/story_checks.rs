@@ -370,7 +370,7 @@ fn the_story_effects_and_the_board_line_are_checked_in_dialogue_and_campaign_lis
     // planner ruling 2026-10-26 (4.7): a node queues a vignette, the conversation goes on
     assert!(added(&v, "dialogues", &d, &with(&d, &["nodes", "0", "effects"], json!([{"effect": "vignette", "vignette": "reel_a"}]))).is_empty(), "a vignette on a node");
     let unknown = added(&v, "dialogues", &d, &with(&d, &fx("1", "0"), json!({"effect": "zz"})));
-    assert!(unknown.iter().any(|m| m.contains("recruit, vignette, sequence, open_board, meter_add")), "{unknown:?}");
+    assert!(unknown.iter().any(|m| m.contains("recruit, roll, vignette, sequence, open_board, meter_add")), "{unknown:?}");
     // a campaign trigger may queue a vignette and start a sequence, but opens no board (CAMPAIGN1 T2)
     let trigger = json!({"id": "t_end", "name": "End", "on": "battle", "encounter": "raid", "outcome": "won", "effects": [{"effect": "vignette", "vignette": "reel_a"}, {"effect": "sequence", "sequence": "seq_b"}]});
     assert!(errors_of(&v, "triggers", &trigger).is_empty(), "{:?}", errors_of(&v, "triggers", &trigger));

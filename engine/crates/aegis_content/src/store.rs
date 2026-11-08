@@ -2,9 +2,12 @@
 //! shape, checked by the game, put into its file (replacing the entry with its id, or `replace_id`, else appended)
 //! and kept only when it adds no blocking problem to the data folder, else the file is put back as it was. The game's
 //! `Hooks` say which kinds exist, where they live, how an entry is checked and how a file is written. A world's
-//! manifest (world.json) is written the same way through `set_world` (WORLDW1), its shape given by the game.
+//! manifest (world.json) is written the same way through `set_world` (WORLDW1), its shape given by the game. The game
+//! manifest (game.json) is written through `set_manifest`: the engine keys plus the extra keys the game registers
+//! (FB-110, E2.2-S2), checked by the game.
 
 use crate::file::raw_entries;
+use crate::manifest::Manifest;
 use crate::schema::sget;
 use crate::world::manifest_path;
 use aegis_core::json::{self, Dict};
@@ -41,6 +44,16 @@ pub trait Hooks {
     /// The problems a world manifest write may not add; `blocking` unless the game checks manifests on top.
     fn world_blocking(&self, data_dir: &Path) -> Vec<String> {
         self.blocking(data_dir)
+    }
+    /// FB-110 (E2.2-S2): the keys the game manifest (game.json) may hold beyond the engine's `manifest::KEYS` (the
+    /// game's own game-wide settings), in the order the file holds them after the engine keys; none by default.
+    fn manifest_keys(&self) -> &'static [&'static str] {
+        &[]
+    }
+    /// What keeps those keys from being valid in `manifest` (the game manifest object as it would be written); none by
+    /// default.
+    fn manifest_problems(&self, _manifest: &Dict) -> Vec<String> {
+        Vec::new()
     }
 }
 
@@ -116,6 +129,23 @@ pub fn set_world(hooks: &impl Hooks, data_dir: &Path, world: &str, patch: &Dict,
         }
     })?;
     Ok(Outcome { file: path, replaced: existed })
+}
+
+/// FB-110 (E2.2-S2): merges `patch` into the game manifest at `path` (`Manifest::set_with`): the engine keys and the
+/// game's extra keys (`Hooks::manifest_keys`), checked by the engine and the game (`Hooks::manifest_problems`); nothing
+/// is written when it has problems. An extra key the file holds that the game does not register (a hand-edited typo)
+/// is a problem too, so it is never kept silently; a patch setting it to null removes it.
+pub fn set_manifest(hooks: &impl Hooks, path: &Path, patch: &Dict) -> Result<Manifest, Vec<String>> {
+    let registered = hooks.manifest_keys();
+    Manifest::set_with(path, patch, registered, |m| {
+        let mut problems: Vec<String> = m
+            .keys()
+            .filter(|k| !crate::manifest::KEYS.contains(&k.as_str()) && !registered.contains(&k.as_str()))
+            .map(|k| format!("game.json: key '{k}' is not a game.json key (registered: {}); set it to null to remove it.", if registered.is_empty() { "none".to_string() } else { registered.join(", ") }))
+            .collect();
+        problems.extend(hooks.manifest_problems(m));
+        problems
+    })
 }
 
 /// Writes the file, then checks the data folder again: new problems put the file back.

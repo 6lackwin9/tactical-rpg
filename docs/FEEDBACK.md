@@ -24,14 +24,27 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
 | W2-5 (R2-W2) | done: slices 1-4 (FB-127..129, 131); open FB-128, FB-130 | `develop` | - |
 | R2-W2b CLASS-BASICS | done (FB-132, FB-134, FB-135) | `develop` | - |
-| R2-CLOSE | balance pass (FB-137), audit (FB-138) done; release PR approved (FB-138 (2)): gating | `develop` | Then W2-6 lands. |
-| W2-6 (R3-W2) | built on branches; `growth_per_stage` (FB-139 A) to add; lands after the R2 release | `claude/w26-a`, `claude/w26-c` (on `claude/w26-b`) | Then R3-CLOSE. |
+| R2 release | released: `main` @3cc73f2b ([#56](https://github.com/6lackwin9/tactical-rpg/pull/56), merge commit; tree = develop @f5c6568a) | `main` | - |
+| W2-6 (R3-W2) | done (FB-142); FB-140 A in the landing, develop's gate green again | `develop` | R3 Wave 2 complete. Next: R3-CLOSE. |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
-FB-01 to FB-139 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-08). New items start at FB-140. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+FB-01 to FB-141 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-08). New items start at FB-142. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+
+### FB-142: W2-6 landed (closes R3 Wave 2); docs delta and one nit
+
+- **Spec**: `docs/READY.md` row W2-6 (W.2-S2..S3, E1.2-S1, E2.2-S2, T1.2-S2..S3), FB-139 A, FB-140 A, FB-141
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: W2-6 is squashed onto `develop` (branches `claude/w26`, `-a`, `-b`, `-c`). The full gate passed with 0 warnings, `change-reviewer` found no blockers, and no golden moved: no shipped unit sets `growth_per_stage` yet, so `journey_golden` and `checks_golden` are byte-identical. The landing added the FB-140 arm `["portraits", "full_body", f] => png(f)` to `layout_ok` in `emberwake_gui/src/region.rs` and dropped a stray empty `emberwake_gui/src/lib.rs`. Nit, left as is: `rpgkit_world/src/battle.rs` `roster_at` reads a missing `tier` as `standard` for the XP weight, while `stage_level` reads it as `hero` (the schema default), so a tierless row is never scaled but is weighted as standard. That default predates W2-6, and shipped rows always carry `tier`.
+- **Recommendation**: Design applies this docs delta.
+  - `engine/README.md`: `aegis_content::store::set_manifest`, `Hooks::manifest_keys` / `manifest_problems` (kit-registered `game.json` extra keys; an unregistered key is reported, `null` clears one), `Manifest::set_with` / `extra`.
+  - `kits/rpg/README.md`: `battle::begin_world(_with)`, `WorldFight`, `world_stage`, `foe_level` / `roster_at` / `enemy_levels_at` (`growth_per_stage`, enemies only, capped at `MAX_LEVEL`); `lower_start_ap` moved from the GUI into the kit; unit field `growth_per_stage`; dialogue choice `roll` effect (`dialogue` roll stream, `dialogue_roll_die` on `world.json`); `STANDING_RATINGS` and `member_stat` for dialogue stat reads.
+  - `GAME_BRIEF` / `STRUCTURE`: SERVICES1 (`talk::Services`, `ServiceScreen` on a plain backdrop; lore pages stay in `RegionMap`); `portraits/full_body/<id>.png` in the asset tree (already in ASSETORG2).
+  - `docs/HISTORY.md`: a new `dialogue` roll stream in `GameRolls` (rolls on other streams are unchanged).
+  - Decide on the nit if you want: make `roster_at`'s tier default `hero` to match, or keep it.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

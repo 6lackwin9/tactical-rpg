@@ -8,8 +8,8 @@ Design record for the Economy and Progression block (`E1.1` Levels & XP, `E2.1` 
   - XP curve in data (`games/emberwake/data/progression/`), levels `1..10` (`max_level = 10` tunable).
   - Unit stat spend pool `4 + (level - 1)` spent explicitly on `LevelUpModel` or allocated automatically via `U2`'s `growth_shares` (`FB-10`).
   - Skill path unlocks by level (`family_unlock_level + rank_unlock_offset`, `SK2`); early-unlock passives sit in `U4` (`grant_skill`, `U1.1` move-out).
-- **Stage-Scaled Enemy XP (`FB-13`, `FB-139`)**:
-  - Enemy XP reward weight in `roster()` scales by the stage-resolved enemy level (`base_level + stage * growth_per_stage`, where `stage = campaign.act` in campaign worlds and `0` otherwise, and `growth_per_stage` is a per-unit `int` field on `units.json` defaulting to `0`, applied in `Roster::entry` to enemies only — `tier != "hero"`, excluding party guests).
+- **Stage-Scaled Enemy XP (`FB-13`, `FB-139`, `FB-141`)**:
+  - Enemy XP reward weight in `roster()` scales by the stage-resolved enemy level (`(base_level + stage * growth_per_stage).min(base_level.max(MAX_LEVEL))`, where `stage = campaign.act` in campaign worlds and `0` otherwise, `growth_per_stage` is a per-unit `int` field `0..10` on `units.json` defaulting to `0` and omitted when `0`, capped at `MAX_LEVEL = 10` or `base_level` when higher, and applied in `Roster::entry` / `roster_at` / `enemy_levels_at` to enemies only — `tier != "hero"`, excluding `WorldRoster.allies` `party` / `guests`).
 
 ## 2. `E2.1` — Purse, shop, stash and rewards (`C19`, `C22`)
 

@@ -74,6 +74,7 @@ kits/rpg/
 games/<id>/assets/
   units/<class>/<variant>/...                named bodies; palettes of named characters
   portraits/{heroes,npcs,elites,bosses}/<id>.png   (common/ only to override the kit)
+  portraits/full_body/<id>.png               full-body story stage sprites (FB-140)
   items/<family>/<icon>.png                  named item icons
   skills/<family>.png                        skill family icons
   tilesets/<set>/<tile>/v<n>.png             world tilesets (set = world id)
