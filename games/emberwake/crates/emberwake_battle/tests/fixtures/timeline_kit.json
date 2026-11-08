@@ -18559,6 +18559,7 @@
       "melee_diagonal": "maneuver",
       "flank_protected_cost": "full",
       "poise_mode": "pips",
+      "attack_lock": "melee",
       "origin": "system"
     }
   ],

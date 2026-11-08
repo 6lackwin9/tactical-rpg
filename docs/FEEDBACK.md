@@ -22,7 +22,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | READY row 18 `P1.2-S1` + `P2.2-S1` | done (FB-109) | `develop` | R2 Wave 1 complete. |
 | READY row 20 (R3-W1) | done (FB-111) | `develop` | R3 Wave 1 complete. |
 | W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
-| W2-5 (R2-W2) | slice 1 C09 done (FB-127); next: attack_lock, AI scorer and rows, cell EffectSpec | - | - |
+| W2-5 (R2-W2) | slices 1 C09 (FB-127), 2 attack lock (FB-128) done; next: AI rating scorer + Row Z / RING / Field rows, cell EffectSpec | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -85,6 +85,14 @@ FB-01 to FB-120 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: New `status::raises_rating(id, Rating)` / `lowers_rating(id, Rating)` (`modifies_rating` + `is_buff`) and `Unit::active_magnitude_where` / `has_status_where`. `damage::armor_rating` (fortify / expose), `Unit::move_per_block` (haste / slow), `weaken_factor` and `empower_factor` no longer name status ids; each site selects exactly its old status over every table row, and the arithmetic is unchanged (summed magnitudes with one row each, a flat +1 / -1 move step, factors bit-identical with one row; floors and caps kept). Every golden byte-identical. Test `rpgkit_rules/tests/rating_status_reads.rs` (4: per-row parity, the raise / lower split, the old formulas bit for bit incl. caps, inactive magnitudes ignored). If a later table row adds a second status for the same rating and direction: armour magnitudes add, move stays one step each way, attack factors multiply (in the order statuses were applied). Still a literal: `remove_status("riposte")` in `unit.rs` (~1417), a candidate for a later table read.
 - **Recommendation**: GAME_BRIEF / kit README statuses: "kit rules read rating-modifier statuses through `status::raises_rating` / `lowers_rating`; no rule names fortify, expose, haste, slow, weaken or empower". HISTORY: none (no golden). STRUCTURE: none.
+
+### FB-128: W2-5 slice 2 (ATTACKLOCK1-O) landed: timeline plays `attack_lock = melee`; reach duel 75 -> 62.5 %
+
+- **Spec**: `docs/READY.md` row W2-5 (`ATTACKLOCK1-O`, FB-58a); `docs/sessions/A3_SHAPES.md` section 2; `docs/sessions/F_FIGHT_FLOW.md`
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Seed `games/emberwake/data/seeds/w25lock.json` sets the shipped timeline row's `attack_lock` from `none` to `melee`; the frozen `timeline_kit.json` timeline row gains the same key (as `poise_mode` and `field_intent` were added) so the goldens exercise the lock. Re-recorded (named): `timeline_golden`, 6 of 15 fights (`tl_duel_reach` and `tl_skirmish`, 3 seeds each), first divergence round 1 block 1: the Halberdier's reach-2 Jaw-Breaker Drill locks the Footman's tile at wind-up, the Footman steps one tile in during that block, and the swing is dodged (0 instead of 27); outcomes: reach 1337 won 3 -> won 4, reach 7 won 3 -> lost 4, reach 42 won 3 -> won 5, skirmish 1337 won 7 -> won 8, skirmish 7 fled 8 -> won 3, skirmish 42 fled 8 -> won 4. `sim_golden` and `checks_golden` unchanged (no lock event in the sim's timeline run); `rules`, `phasefold`, `journey`, contract and resave unchanged. `ruleset_switches.rs` replays `w25lock`. Feel (`sim feel 5 ruleset=timeline seeds=40`, 0 plan failures): windup 65, reach 62.5 (was 75), armour 65, flank 100, skirmish 87.5, overall 76 % (was 78.5); with `attack_lock=none` the old numbers return exactly.
+- **Recommendation**: HISTORY: "W2-5 slice 2 (ATTACKLOCK1-O, FB-58a): timeline plays `attack_lock = melee` (seed `w25lock`; frozen kit too); re-recorded on purpose: `timeline_golden` (6 of 15: a reach-2 opener is dodged when its target steps in)". GAME_BRIEF timeline: "`attack_lock = melee`: a melee-band single-target attack with power > 0 locks its target's tile at wind-up; a target that left the tile by its own move before impact dodges". BALANCE_REPORT: the feel numbers above. Question (gameplay): a unit stepping toward its attacker dodges a reach-2 swing aimed at its old tile, which costs the reach duel 12.5 points and the planner does not foresee. (A) accept; R2-CLOSE's balance pass absorbs it; (B) make the planner and AI lock-aware (do not open on a unit scheduled to move in the same block), as an I1.2-S3 AI row; (C) rule change: a target that moved but stayed within the attack's reach is still hit (a spec change).
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

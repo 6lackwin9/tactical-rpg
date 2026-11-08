@@ -64,7 +64,7 @@
 			"root_stops_chase": "on",
 			"switch_target_step": "off",
 			"stances": "off",
-			"attack_lock": "none",
+			"attack_lock": "melee",
 			"move_after_blocks": 3,
 			"item_ap": 0,
 			"poise_mode": "pips",

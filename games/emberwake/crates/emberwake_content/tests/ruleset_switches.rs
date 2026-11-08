@@ -5,11 +5,12 @@
 //! a scratch copy of the data, every row reads as before bar the rules HOOKS1-A appended later to `timeline`, and the
 //! file re-saves byte for byte; `data/seeds/hooks1a.json` then `data/seeds/s22s3.json` (S2.2-S3: `poise_mode` pips)
 //! over it give the shipped row back. The unit deck orders `data/seeds/w24k1b.json` set by derived intent rows (valid
-//! only under `field_intent`) are set aside during the replay and re-applied after `w24s1.json`.
+//! only under `field_intent`) are set aside during the replay and re-applied after `w24s1.json`; `w25lock.json`
+//! (ATTACKLOCK1-O: `attack_lock` melee) replays last.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
-use emberwake_rules::ruleset::{self, Chase, PoiseMode, RestAp, Ruleset, AI_TACTICS, ARENA_HAZARDS, BY_RULES_FIELDS, CLASSIC, EXECUTE, FORCED_MOVE, GROUND_HAZARDS, HP_COST, IGNORE_GUARD, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
+use emberwake_rules::ruleset::{self, AttackLock, Chase, PoiseMode, RestAp, Ruleset, AI_TACTICS, ARENA_HAZARDS, BY_RULES_FIELDS, CLASSIC, EXECUTE, FORCED_MOVE, GROUND_HAZARDS, HP_COST, IGNORE_GUARD, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -117,6 +118,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         r.numbers.item_mitigation = false;
         r.numbers.thrown_miss_spends = false;
         r.numbers.pouch_stacks = false;
+        // ATTACKLOCK1-O (W2-5 slice 2, FB-58a): the seed w25lock set attack_lock none -> melee later
+        r.numbers.attack_lock = AttackLock::None;
     }
     assert_eq!(rows(&tmp), want, "every row reads as before, bar the rules HOOKS1 appended later");
     let file = store::file_of(&tmp, None, ruleset::KIND);
@@ -142,7 +145,10 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in seed_entries("w24k3r.json") {
         store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("A1.2-K3 row '{}': {err:?}", json::s(&e, "id")));
     }
-    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1, W2-4 slice 1 and A1.2-K3 rows over it give the shipped row");
+    for e in seed_entries("w25lock.json") {
+        store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("ATTACKLOCK1-O row '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1, W2-4 slice 1, A1.2-K3 and ATTACKLOCK1-O rows over it give the shipped row");
     // A4.2-K1b: under field_intent the derived-row seed's orders are valid again and give the shipped units back
     for u in &reordered {
         store::upsert(&tmp, None, "units", u, None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));
