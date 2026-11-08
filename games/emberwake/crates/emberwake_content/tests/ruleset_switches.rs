@@ -81,7 +81,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for (id, r) in want.iter_mut().filter(|(id, _)| id == TIMELINE) {
         let (kept, added) = r.rules.split_at(r.rules.len() - HOOKS1_RULES.len());
         assert_eq!(added, HOOKS1_RULES, "ruleset '{id}' ends with what HOOKS1 appends");
-        r.rules = kept.to_vec();
+        // W2-4 slice 1 (FB-106): the seed w24s1 added field_intent later
+        r.rules = kept.iter().filter(|x| **x != ruleset::FIELD_INTENT).cloned().collect();
         // S2.2-S3: the seed s22s3 set poise_mode pips later
         r.numbers.poise_mode = PoiseMode::Bar;
         // R1-BAL H6 (FB-98): the seed r1bal set stagger_windup_mult 2.0 -> 1.0 later
@@ -107,6 +108,9 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in seed_entries("a12s1.json") {
         store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("A1.2-S1 row '{}': {err:?}", json::s(&e, "id")));
     }
-    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL and A1.2-S1 rows over it give the shipped row");
+    for e in seed_entries("w24s1.json") {
+        store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("W2-4 slice 1 row '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1 and W2-4 slice 1 rows over it give the shipped row");
     let _ = std::fs::remove_dir_all(&tmp);
 }

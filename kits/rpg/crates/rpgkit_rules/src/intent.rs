@@ -21,7 +21,7 @@
 //! The legacy `SWEEP` (kept for the frozen kit, A3.2-S1) is not an IR21 shape: it derives by steps 7-8 until the
 //! SWEEP -> ARC/RING data migration (W2-4).
 
-use crate::ruleset::{self, Ruleset, NEUTRAL, ROUND_INTENT};
+use crate::ruleset::{self, Ruleset, FIELD_INTENT, NEUTRAL};
 use aegis_core::json::{self, Dict};
 use rpgkit_data::SkillDef;
 
@@ -117,10 +117,11 @@ fn attack(s: &IntentInput) -> Vec<&'static str> {
     }
 }
 
-/// Rule-gated: IR21's derivation where the battle plays by the round intent (rule `round_intent`), else the legacy
-/// single intent (the row's `round_intent`, else its kind's: RULESET1_INTENT IN4), so classic reads as today.
+/// Rule-gated (FB-106): IR21's derivation where the battle plays the Field intent (rule `field_intent`, which needs
+/// `round_intent`: a row listing it alone is refused), else the legacy single intent (the row's `round_intent`, else
+/// its kind's: RULESET1_INTENT IN4), so classic and a `round_intent`-only row read as today.
 pub fn allowed(rules: &Ruleset, s: &IntentInput, authored: &str) -> Vec<&'static str> {
-    if rules.has(ROUND_INTENT) {
+    if rules.has(FIELD_INTENT) {
         return derive(s);
     }
     let legacy = if authored.is_empty() { ruleset::kind_intent(&s.kind) } else { authored };

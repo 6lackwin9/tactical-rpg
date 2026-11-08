@@ -1,6 +1,6 @@
 {
   "contract": [
-    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute",
+    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute",
     "tunable intents strings default=[\"assault\",\"guard\",\"support\",\"maneuver\"] values=assault|guard|support|maneuver|channel needs=round_intent(refused)",
     "tunable basics refs default=[]",
     "tunable poise_stat string default=\"\"",
@@ -51,6 +51,7 @@
     "rule reach extension system=positioning bundle=positioning requires=- conflicts=-",
     "rule flank extension system=positioning bundle=positioning requires=round_intent conflicts=-",
     "rule plan_badges extension system=tells bundle=tells requires=- conflicts=-",
+    "rule field_intent option system=planning bundle=- requires=round_intent conflicts=-",
     "rule forced_move extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule ground_hazards extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule arena_hazards extension system=hooks bundle=hooks requires=- conflicts=-",

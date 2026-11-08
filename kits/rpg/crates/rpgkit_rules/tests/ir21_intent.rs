@@ -1,9 +1,9 @@
 //! INTENT2-K1a (A4.2, IR21, `docs/sessions/A4_EFFECTS.md` section 2): each precedence step of `intent::derive` on
-//! test-only rows, the first match winning over the later steps, and the rule gate (`round_intent` off = the legacy
-//! single intent, as classic reads today).
+//! test-only rows, the first match winning over the later steps, and the rule gate (`field_intent` off = the legacy
+//! single intent, as classic reads today; FB-106, the gate's own tests: `rpgkit_battle/tests/field_intent.rs`).
 
 use rpgkit_rules::intent::{self, IntentInput, ASSAULT, FIELD, MANEUVER, STAND, SUPPORT};
-use rpgkit_rules::ruleset::{Ruleset, NEUTRAL, ROUND_INTENT};
+use rpgkit_rules::ruleset::{Ruleset, FIELD_INTENT, NEUTRAL, ROUND_INTENT};
 use serde_json::{json, Value};
 
 fn row(v: Value) -> IntentInput {
@@ -80,15 +80,15 @@ fn authored_round_intent_is_not_read() {
 }
 
 #[test]
-fn rule_gate_keeps_the_legacy_single_intent_without_round_intent() {
+fn rule_gate_keeps_the_legacy_single_intent_without_field_intent() {
     let classic = Ruleset::classic();
     assert!(!classic.has(ROUND_INTENT));
     let line = row(json!({"kind": "ATTACK", "area": "LINE"}));
     assert_eq!(intent::allowed(&classic, &line, ""), [ASSAULT], "kind default");
     assert_eq!(intent::allowed(&classic, &line, "maneuver"), [MANEUVER], "authored");
     assert_eq!(intent::allowed(&classic, &row(json!({"kind": "FOCUS"})), ""), [SUPPORT], "classic FOCUS stays support");
-    let on = Ruleset { rules: vec![ROUND_INTENT], ..Ruleset::classic() };
-    assert_eq!(intent::allowed(&on, &line, "maneuver"), [FIELD, ASSAULT], "derived under the rule");
+    let on = Ruleset { rules: vec![ROUND_INTENT, FIELD_INTENT], ..Ruleset::classic() };
+    assert_eq!(intent::allowed(&on, &line, "maneuver"), [FIELD, ASSAULT], "derived under field_intent (FB-106)");
     assert!(intent::row_allows(&intent::derive(&line), ASSAULT));
     assert!(!intent::row_allows(&intent::derive(&line), STAND));
 }

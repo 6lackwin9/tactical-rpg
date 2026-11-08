@@ -33,6 +33,9 @@ pub const PIERCE: &str = "pierce";
 pub const REACH: &str = "reach";
 pub const FLANK: &str = "flank";
 pub const PLAN_BADGES: &str = "plan_badges";
+/// INTENT2-K1 (A4.2-K1b, FB-106): the Field round intent and the IR21 derivation of a skill's allowed intents
+/// (`intent::allowed`); needs `round_intent` (BASERULES1 library 3), on in timeline, off in classic.
+pub const FIELD_INTENT: &str = "field_intent";
 /// HOOKS1 4.1: the combat hooks' rule ids (all extensions, off in classic): forced moves, ground hazards, scheduled
 /// arena hazards, events and triggers (riders, held guard), unit meters, the HP cost of skills, the guard bypass, the
 /// AI tactics and target preferences, and the execute match of an `exploit` entry with `hp_below`.
@@ -78,7 +81,7 @@ const fn rule_of(id: &'static str, kind: RuleKind, system: &'static str, bundle:
 }
 
 /// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order, with its metadata (BASERULES1-M).
-pub const REGISTER: [Rule; 18] = [
+pub const REGISTER: [Rule; 19] = [
     Rule {
         conflicts: &["stances=on", "switch_target_step=on"],
         ..rule_of(ROUND_INTENT, RuleKind::Option, "planning", "intent_core", &["round_intent.rs", "golden"], "one intent and target a round, follow-ups, facing, flanks drawn")
@@ -91,6 +94,7 @@ pub const REGISTER: [Rule; 18] = [
     rule_of(REACH, RuleKind::Extension, "positioning", "positioning", &["reach.rs"], "melee band 1-2 by the family rule"),
     Rule { requires: &[ROUND_INTENT], ..rule_of(FLANK, RuleKind::Extension, "positioning", "positioning", &["round_intent.rs"], "flanked exploit, flank power, no riposte") },
     rule_of(PLAN_BADGES, RuleKind::Extension, "tells", "tells", &["plan_badges.rs"], "impact badges, intents in tells, foresight"),
+    Rule { requires: &[ROUND_INTENT], ..rule_of(FIELD_INTENT, RuleKind::Option, "planning", "", &["field_intent.rs"], "Field intent, intents derived per skill (IR21)") },
     rule_of(FORCED_MOVE, RuleKind::Extension, "hooks", "hooks", &["forced_move.rs"], "push, pull, collision"),
     rule_of(GROUND_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["ground_hazards.rs"], "skill and item hazards on tiles"),
     rule_of(ARENA_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["arena_hazards.rs"], "scheduled hazards"),
@@ -905,10 +909,11 @@ pub fn bundle(id: &str) -> Option<&'static Bundle> {
 
 /// The rule sets kit tests fight (library 4, `[poise, flank]` left out: it is read only, and flank is inert there); a
 /// row listing another set is untested together (a warning).
-pub const TESTED_SETS: [&[&str]; 21] = [
+pub const TESTED_SETS: [&[&str]; 23] = [
     &[],
     &[ROUND_INTENT],
     &[ROUND_INTENT, FLANK],
+    &[ROUND_INTENT, FIELD_INTENT],
     &[ROUND_INTENT, AP_COST],
     &[ROUND_INTENT, AP_COST, FLANK],
     &[ROUND_INTENT, DECK],
@@ -926,9 +931,14 @@ pub const TESTED_SETS: [&[&str]; 21] = [
     &[TRIGGERS],
     &[AI_TACTICS],
     &[GROUND_HAZARDS],
+    // the timeline row until it lists field_intent (W2-4): every rule but it
     &[
         ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS, TRIGGERS,
         UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
+    ],
+    &[
+        ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FIELD_INTENT, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS,
+        TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
     ],
 ];
 
