@@ -17,6 +17,8 @@ pub const INTENT_GUARD: &str = "intent_guard";
 pub const INTENT_SUPPORT: &str = "intent_support";
 pub const INTENT_MANEUVER: &str = "intent_maneuver";
 pub const INTENT_CHANNEL: &str = "intent_channel";
+/// INTENT2 IR2 (A4.2-K1b): the Field intent's term (a tile target; rule `field_intent`).
+pub const INTENT_FIELD: &str = "intent_field";
 
 /// TM1: who names a term.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,7 +47,7 @@ const fn game(id: &'static str, name: &'static str, word: &'static str) -> TermD
 
 /// TM1, TM2: the register (spec section 3). The purse terms point at the purse defaults (CURRENCY_NAME, UPKEEP_NAME
 /// and their tips).
-pub const REGISTER: [TermDef; 7] = [
+pub const REGISTER: [TermDef; 8] = [
     TermDef { id: CURRENCY, name: crate::CURRENCY_NAME, short: crate::CURRENCY_NAME, word: "gold", tip: crate::CURRENCY_TIP, scope: TermScope::World },
     TermDef { id: UPKEEP, name: crate::UPKEEP_NAME, short: crate::UPKEEP_NAME, word: "supplies", tip: crate::UPKEEP_TIP, scope: TermScope::World },
     game(INTENT_ASSAULT, "Assault", "assault"),
@@ -53,6 +55,7 @@ pub const REGISTER: [TermDef; 7] = [
     game(INTENT_SUPPORT, "Support", "support"),
     game(INTENT_MANEUVER, "Maneuver", "maneuver"),
     game(INTENT_CHANNEL, "Channel", "channel"),
+    game(INTENT_FIELD, "Field", "field"),
 ];
 
 /// The register row of `id`, if any.

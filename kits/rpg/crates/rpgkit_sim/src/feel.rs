@@ -475,7 +475,7 @@ impl Feel {
             let changed = self.last_intent.get(&c).is_some_and(|prev| *prev != id);
             // OI1: the deck's actives (their skills now) hold none of the round's intent
             let u = &w.units[c];
-            let no_active = u.deck_rule.is_some() && intent.is_some_and(|i| !u.active_families().iter().any(|f| rip::family_skill(w, c, f).is_some_and(|sid| round_intent::skill_intent(&w.cat.skills[sid]) == i.id())));
+            let no_active = u.deck_rule.is_some() && intent.is_some_and(|i| !u.active_families().iter().any(|f| rip::family_skill(w, c, f).is_some_and(|sid| round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&i.id()))));
             self.ap_planned.insert(c, u.ap);
             let pays = w.pays_ap(c);
             let side = self.side(s, c);

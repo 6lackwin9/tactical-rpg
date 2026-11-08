@@ -240,6 +240,10 @@ fn each_broken_rule_is_one_error_naming_its_field() {
     let mut mend = good_row();
     mend["basics"] = json!(["move", "rest", "strike", "brace", "mend"]);
     mend["intents"] = extra[0].1.clone();
+    // A4.2-K1b: the legacy single intent (support) without field_intent; under it mend's derived rows are Support and
+    // Stand (`guard`, listed), so it passes (below)
+    let derived = mend.clone();
+    mend["rules"] = json!(mend["rules"].as_array().unwrap().iter().filter(|r| *r != ruleset::FIELD_INTENT).cloned().collect::<Vec<_>>());
     runs.push((mend, extra[0].2.to_string()));
     let mut empty = good_row();
     empty["intents"] = json!([]);
@@ -257,6 +261,8 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         assert!(errors[0].contains(&want), "{row}: {errors:?} lacks {want:?}");
         assert_eq!(src.catalog[ruleset::KIND], json!([]), "a row with a problem does not load");
     }
+    write_kind(&data, ruleset::KIND, 1, json!([derived]));
+    assert_eq!(ruleset_errors(&source::load(&data)), Vec::<String>::new(), "field_intent: a basic fits by any derived row");
     write_kind(&data, ruleset::KIND, 1, json!([good_row(), good_row()]));
     let errors = ruleset_errors(&source::load(&data));
     assert_eq!(errors.len(), 1, "{errors:?}");

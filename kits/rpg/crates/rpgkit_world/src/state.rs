@@ -470,11 +470,31 @@ impl UnitState {
                 }
             }
         }
+        // A4.2-K1b (INTENT2 IR15, IR21): under a deck ruleset with `field_intent` the order reads the derived rows
+        // (`intent::allowed`) and may name `field`; else the legacy single intent
+        let field_rules = rules.iter().find(|r| r.has(rpgkit_rules::ruleset::FIELD_INTENT));
+        let rows_of = |fam: &str| -> Vec<String> {
+            match d.cat.tier_one(fam) {
+                None => Vec::new(),
+                Some(s) => match field_rules {
+                    Some(r) => rpgkit_rules::intent::allowed(r, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent).into_iter().map(String::from).collect(),
+                    None => vec![rpgkit_battle::round_intent::skill_intent(s).to_string()],
+                },
+            }
+        };
+        let mut names: Vec<&str> = rpgkit_rules::ruleset::INTENTS.to_vec();
+        if field_rules.is_some() {
+            names.push(rpgkit_rules::intent::FIELD);
+        }
         let mut seen = Vec::new();
         for (intent, list) in &self.deck.order {
-            if !rpgkit_rules::ruleset::INTENTS.contains(&intent.as_str()) {
-                errors.push(format!("{at}: deck order: '{intent}' is not an intent (one of {}).", rpgkit_rules::ruleset::INTENTS.join(", ")));
+            if !names.contains(&intent.as_str()) {
+                errors.push(format!("{at}: deck order: '{intent}' is not an intent (one of {}).", names.join(", ")));
                 continue;
+            }
+            // IR15: under field_intent a skill may stand in each of its rows' lists (once per list)
+            if field_rules.is_some() {
+                seen.clear();
             }
             twice("order", list, &mut seen, &mut errors);
             for fam in list {
@@ -482,15 +502,16 @@ impl UnitState {
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
                     continue;
                 }
-                let of = d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
-                if of != *intent {
+                let rows = rows_of(fam);
+                if !rows.contains(intent) {
+                    let of = rows.join(" or ");
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
                 }
             }
         }
         // INPUT1 FL5: each list follows an opener of the deck (an active or a basic, not neutral) with families of the
         // deck of the opener's intent, none twice (the opener may stand in its own list)
-        let intent_of = |fam: &str| d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
+        let intent_of = |fam: &str| rows_of(fam);
         let in_deck = |fam: &str| self.deck.active.iter().chain(&basics).any(|f| f == fam);
         let label = |id: &str| match rpgkit_battle::round_intent::RoundIntent::parse(id) {
             Some(i) => i.name().to_string(),
@@ -499,7 +520,7 @@ impl UnitState {
         };
         for (key, list) in &self.deck.follow_ups {
             let of = intent_of(key);
-            if !in_deck(key) || of.is_empty() || of == rpgkit_rules::ruleset::NEUTRAL {
+            if !in_deck(key) || of.is_empty() || of.iter().any(|i| i == rpgkit_rules::ruleset::NEUTRAL) {
                 errors.push(format!("{at}: Follow-ups for '{key}': not an opener in the deck."));
                 continue;
             }
@@ -515,8 +536,9 @@ impl UnitState {
                     continue;
                 }
                 let has = intent_of(fam);
-                if has != of {
-                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is {}, not {}.", label(&has), label(&of)));
+                if !has.iter().any(|i| of.contains(i)) {
+                    let text = |rows: &[String]| if rows.is_empty() { label("") } else { rows.iter().map(|r| label(r)).collect::<Vec<_>>().join(" or ") };
+                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is {}, not {}.", text(&has), text(&of)));
                 }
             }
         }

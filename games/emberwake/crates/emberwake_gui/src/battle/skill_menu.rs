@@ -44,9 +44,10 @@ pub(super) enum Slot {
     Intent(RoundIntent),
 }
 
-/// The intents the battle's ruleset lists, in `RoundIntent::ALL`'s order: the menu's rows. A fifth intent costs one entry there.
+/// The intents the battle offers, in `RoundIntent::ALL`'s order: the menu's rows. A fifth intent costs one entry there.
+/// A4.2-K1b: the ruleset's listed intents, and Field under the rule `field_intent` (`round_intent::listed`).
 pub(super) fn menu_intents(w: &World) -> Vec<RoundIntent> {
-    RoundIntent::ALL.into_iter().filter(|i| w.ruleset.numbers.intents.iter().any(|x| x == i.id())).collect()
+    RoundIntent::ALL.into_iter().filter(|i| emberwake_battle::round_intent::listed(w, *i)).collect()
 }
 
 /// The layout of a skill menu. `places[k]`: popup row `k`'s line of cells and column; line 0 is the neutral row.

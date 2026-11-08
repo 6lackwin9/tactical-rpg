@@ -139,3 +139,34 @@ pub fn range_line(w: &World, c: usize, s: &emberwake_data::SkillDef) -> String {
         }
     }
 }
+
+/// A4.2-K1b (INTENT2 IR17, IR21; the skill variant previews): what skill `s` does in its `intent` row under `rules`:
+/// the Field row (aimed at a tile fixed at planning, its derived Field bonus, every unit in the marks) or the shaped
+/// Assault row (locked on the enemy, `splash_mult` off it, the longer wind-up, foes only). None for any other row or
+/// skill, and without the rule `field_intent` (classic and round_intent-only show nothing new).
+pub fn variant_line(rules: &emberwake_rules::ruleset::Ruleset, s: &emberwake_data::SkillDef, intent: emberwake_battle::round_intent::RoundIntent) -> Option<String> {
+    use emberwake_battle::round_intent::RoundIntent;
+    use emberwake_rules::intent::FieldBonus;
+    if !rules.has(emberwake_rules::ruleset::FIELD_INTENT) || !emberwake_battle::skill::is_area(s) {
+        return None;
+    }
+    let rows = emberwake_rules::intent::allowed(rules, &emberwake_rules::intent::IntentInput::of_def(s), &s.round_intent);
+    match intent {
+        RoundIntent::Field if rows.contains(&"field") => {
+            let bonus = match (emberwake_battle::skill::field_bonus(s), emberwake_battle::skill::area(s)) {
+                (Some(FieldBonus::Area), emberwake_battle::skill::Area::Arc) => format!(", {} across", emberwake_battle::skill::FIELD_ARC_WIDTH),
+                (Some(FieldBonus::Area), _) => format!(", {} long", emberwake_battle::skill::FIELD_LINE_LENGTH),
+                (Some(FieldBonus::Reach), _) => ", reach +1".to_string(),
+                (Some(FieldBonus::Lingering), _) => ", hazard +1 round".to_string(),
+                (Some(FieldBonus::Power), _) => format!(", power x{}", emberwake_battle::skill::FIELD_POWER_MULT),
+                _ => String::new(),
+            };
+            Some(format!("Field: aimed at a tile, fixed when planned{bonus}; hits everyone in the marks"))
+        }
+        RoundIntent::Assault if rows.contains(&"assault") => {
+            let n = rules.numbers.assault_shape_blocks;
+            Some(format!("Assault: locked on the enemy, x{} off it, +{n} wind-up block{}; foes only", rules.numbers.splash_mult, if n == 1 { "" } else { "s" }))
+        }
+        _ => None,
+    }
+}

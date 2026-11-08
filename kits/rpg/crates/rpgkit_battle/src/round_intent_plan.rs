@@ -89,16 +89,20 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
 
 /// RULESET1_INTENT FU4: `c`'s order for `intent`: the skills (the row of each family the unit uses now) of its
 /// `deck.order[intent]`, else the auto order (the deck's actives of that intent in slot order, then the basics of that
-/// intent); only skills of the intent the unit can use, each once.
+/// intent); only skills of the intent the unit can use, each once. A4.2-K1b (INTENT2 IR15): the player's order may hold
+/// a skill in any of its rows; the auto order holds only skills whose primary row is the intent (a second row is by
+/// pick or by the player's order).
 pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
-    let fams: Vec<String> = match deck_of(w, c).and_then(|d| d.order.get(intent.id())).filter(|l| !l.is_empty()) {
+    let authored = deck_of(w, c).and_then(|d| d.order.get(intent.id())).filter(|l| !l.is_empty());
+    let fams: Vec<String> = match authored {
         Some(list) => list.clone(),
         None => auto_families(w, c),
     };
+    let fits = |s: &SkillDef| if authored.is_some() { round_intent::skill_rows(w, s).contains(&intent.id()) } else { round_intent::skill_primary(w, s) == intent.id() };
     let mut out: Vec<SkillId> = Vec::new();
     for f in &fams {
         if let Some(sid) = family_skill(w, c, f) {
-            if round_intent::skill_intent(&w.cat.skills[sid]) == intent.id() && !out.contains(&sid) {
+            if fits(&w.cat.skills[sid]) && !out.contains(&sid) {
                 out.push(sid);
             }
         }
@@ -119,7 +123,8 @@ pub fn follow_order(w: &World, c: UnitId, intent: RoundIntent, opener: Option<&O
     let mut out: Vec<SkillId> = Vec::new();
     for f in list.iter().filter(|f| in_deck.contains(f)) {
         if let Some(s) = family_skill(w, c, f) {
-            if round_intent::skill_intent(&w.cat.skills[s]) == intent.id() && !out.contains(&s) {
+            // A4.2-K1b (IR15): a follow-up list may hold a skill in any of its rows
+            if round_intent::skill_rows(w, &w.cat.skills[s]).contains(&intent.id()) && !out.contains(&s) {
                 out.push(s);
             }
         }
@@ -164,7 +169,7 @@ pub fn set_kind(w: &mut World, c: UnitId, kind: Option<ManeuverKind>) -> Result<
 
 /// TG6: the target the planner proposes for `c` under `intent`: the round's set target, else last round's while valid,
 /// else (Assault, Maneuver) the lock, else the nearest active foe (distance, then roster index); Guard and Support:
-/// the unit itself.
+/// the unit itself. A4.2-K1b (IR5): Field, a tile: the lock's tile, else the nearest active foe's.
 pub fn proposed_target(w: &World, c: UnitId, intent: RoundIntent) -> Option<RoundTarget> {
     let rs = w.round_states.get(&c);
     let valid = |t: RoundTarget| round_intent::target_problem(w, c, intent, t).is_empty();
@@ -181,6 +186,14 @@ pub fn proposed_target(w: &World, c: UnitId, intent: RoundIntent) -> Option<Roun
             }
             let here = w.pos(c);
             w.foes_of(c).iter().copied().filter(|&f| valid(RoundTarget::Unit(f))).min_by_key(|&f| (w.pos(f).dist(here), f)).map(RoundTarget::Unit)
+        }
+        RoundIntent::Field => {
+            let on_field = |f: UnitId| w.units[f].is_active() && w.has(f) && !round_intent::hidden(w, f);
+            if let Some(t) = w.units[c].active_target.filter(|&t| w.foes_of(c).contains(&t) && on_field(t)) {
+                return Some(RoundTarget::Cell(w.pos(t)));
+            }
+            let here = w.pos(c);
+            w.foes_of(c).iter().copied().filter(|&f| on_field(f)).min_by_key(|&f| (w.pos(f).dist(here), f)).map(|f| RoundTarget::Cell(w.pos(f)))
         }
         _ => Some(RoundTarget::Myself),
     }
@@ -334,7 +347,7 @@ pub fn fill_rest(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     let b = Builder::new(w, c)?;
     // FL2: the round's opener (set, else the first planned skill of the intent) chooses the follow-up list
     let opener = w.round_states.get(&c).and_then(|r| r.opener.clone()).or_else(|| {
-        plan.steps_of(c).iter().filter_map(|st| st.skill).find(|&sid| sid < w.cat.skills.len() && round_intent::skill_intent(&w.cat.skills[sid]) == b.intent.id()).map(Opener::Skill)
+        plan.steps_of(c).iter().filter_map(|st| st.skill).find(|&sid| sid < w.cat.skills.len() && round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&b.intent.id())).map(Opener::Skill)
     });
     let cause = b.fill(plan, &Reserve::default(), &follow_order(w, c, b.intent, opener.as_ref()));
     b.rest(plan, &cause);
@@ -631,7 +644,7 @@ impl<'a> Builder<'a> {
     fn skill_opener(&self, plan: &Plan, st: &SimState, sid: SkillId) -> Result<Vec<Step>, String> {
         let w = self.w;
         let s = self.skill(sid);
-        if round_intent::skill_intent(s) != self.intent.id() {
+        if !round_intent::skill_rows(w, s).contains(&self.intent.id()) {
             return Err(format!("Only {} skills this round.", self.intent.label(&w.cat)));
         }
         let u = &w.units[self.c];
@@ -639,12 +652,14 @@ impl<'a> Builder<'a> {
         match self.intent {
             RoundIntent::Guard => {
                 let mut steps = Vec::new();
+                let mut at = st.pos;
                 if let RoundTarget::Cell(p) = self.target {
                     if p != st.pos {
                         steps.push(tagged(PlanStep::go_to(self.mv(), p), COVER_TILE, ""));
                     }
+                    at = p;
                 }
-                steps.push(tagged(PlanStep::self_skill(sid), OPENER, ""));
+                steps.push(tagged(self.stand_step(sid, at).ok_or_else(|| format!("{}: no enemy around.", s.name))?, OPENER, ""));
                 Ok(steps)
             }
             RoundIntent::Support => {
@@ -668,7 +683,31 @@ impl<'a> Builder<'a> {
             }
             RoundIntent::Assault | RoundIntent::Maneuver => self.attack_opener(plan, st, sid),
             RoundIntent::Channel => Err("Channel rounds are not planned yet.".into()),
+            RoundIntent::Field => self.field_opener(plan, st, sid),
         }
+    }
+
+    /// A4.2-K1b (INTENT2 IR4, IR5, IR7): a Field opener on the round's source tile (fixed at planning; one source for
+    /// all the round's blocks): a standard approach first when the source is out of the Field band (with the `reach`
+    /// bonus); a shape with a direction needs the source on a neighbouring tile, never the user's own.
+    fn field_opener(&self, plan: &Plan, st: &SimState, sid: SkillId) -> Result<Vec<Step>, String> {
+        let w = self.w;
+        let s = self.skill(sid);
+        let RoundTarget::Cell(source) = self.target else { return Err(format!("{} targets a tile.", self.label())) };
+        if !skill::is_area(s) {
+            return Err(format!("{} needs a tile to aim at.", s.name));
+        }
+        let a = skill::area(s);
+        let band = if skill::from_user(a) { (1, 1) } else { skill::field_reach(s, &w.units[self.c], &w.ruleset) };
+        let d = st.pos.dist(source);
+        let mut steps = Vec::new();
+        let near = if matches!(a, skill::Area::Arc | skill::Area::Cone) { source != st.pos && (source.x - st.pos.x).abs() <= 1 && (source.y - st.pos.y).abs() <= 1 } else { d >= band.0 && d <= band.1 };
+        if !near {
+            let tile = self.approach_tile(plan, st.pos, source, band.0.max(1), band.1).ok_or("No path to get within reach.")?;
+            steps.push(tagged(PlanStep::go_to(self.mv(), tile), APPROACH, ""));
+        }
+        steps.push(tagged(PlanStep::area_at(sid, source), OPENER, ""));
+        Ok(steps)
     }
 
     fn attack_opener(&self, plan: &Plan, st: &SimState, sid: SkillId) -> Result<Vec<Step>, String> {
@@ -688,7 +727,7 @@ impl<'a> Builder<'a> {
                 let tile = self.approach_tile(plan, st.pos, goal, band.0, band.1).ok_or("No path to get within reach.")?;
                 steps.push(tagged(PlanStep::go_to(self.mv(), tile), if maneuver { APPROACH_OUT_OF_RANGE } else { APPROACH }, ""));
             }
-            steps.push(tagged(PlanStep::area_at(sid, goal), OPENER, ""));
+            steps.push(tagged(self.area_step(sid, goal), OPENER, ""));
             return Ok(steps);
         }
         let Some(foe) = self.target_unit().filter(|&t| t != self.c) else { return Err(format!("{} needs an enemy to aim at.", s.name)) };
@@ -803,14 +842,14 @@ impl<'a> Builder<'a> {
         let s = self.skill(sid);
         let k = skill::kind(s);
         match self.intent {
-            RoundIntent::Guard => Some(PlanStep::self_skill(sid)),
+            RoundIntent::Guard => self.stand_step(sid, st.pos),
             RoundIntent::Support => match self.target {
                 RoundTarget::Unit(t) if t != self.c => (s.target_mode != "SELF" && k != Kind::Focus).then(|| PlanStep::ally(sid, t)),
                 _ => (s.target_mode != "ALLY").then(|| PlanStep::self_skill(sid)),
             },
             RoundIntent::Assault | RoundIntent::Maneuver => {
                 if skill::is_area(s) {
-                    return Some(PlanStep::area_at(sid, self.target_pos(st)));
+                    return Some(self.area_step(sid, self.target_pos(st)));
                 }
                 let foe = self.target_unit().filter(|&t| t != self.c)?;
                 let step = PlanStep::engage(sid, foe);
@@ -821,6 +860,36 @@ impl<'a> Builder<'a> {
                 Some(step)
             }
             RoundIntent::Channel => None,
+            // IR4, IR10: every Field block on the round's one source tile
+            RoundIntent::Field => match self.target {
+                RoundTarget::Cell(p) if skill::is_area(s) => Some(PlanStep::area_at(sid, p)),
+                _ => None,
+            },
+        }
+    }
+
+    /// A Stand (`guard`) round's step for skill `sid` from tile `at`: a self cast, or A4.2-K1b (INTENT2 IR5, IR6, IR22)
+    /// for an area attack (IR21: a RING) the area anchored on the user's tile, only while an enemy it hits stands in it
+    /// (None: an empty ring is not cast).
+    fn stand_step(&self, sid: SkillId, at: V2) -> Option<Step> {
+        let w = self.w;
+        let s = self.skill(sid);
+        if skill::kind(s) != Kind::Attack || !skill::is_area(s) {
+            return Some(PlanStep::self_skill(sid));
+        }
+        let affects = skill::affects_by(s, Some(RoundIntent::Guard));
+        let cells = skill::area_cells(s, at, at);
+        let hits = skill::affects_unit(affects, false)
+            && w.foes_of(self.c).iter().any(|&f| w.units[f].is_active() && w.has(f) && !round_intent::hidden(w, f) && w.pos(f) != at && cells.contains(&w.pos(f)));
+        hits.then(|| PlanStep::area_at(sid, at))
+    }
+
+    /// An area step of an Assault or Maneuver round at `goal`: A4.2-K1b (IR17), under `field_intent` an Assault round on
+    /// an enemy is the shaped Assault row (`PlanStep::area_on`), else the area at the tile (classic, the legacy rows).
+    fn area_step(&self, sid: SkillId, goal: V2) -> Step {
+        match self.target {
+            RoundTarget::Unit(t) if self.intent == RoundIntent::Assault && t != self.c && round_intent::field_rows(self.w) => PlanStep::area_on(sid, t, goal),
+            _ => PlanStep::area_at(sid, goal),
         }
     }
 
@@ -844,6 +913,10 @@ impl<'a> Builder<'a> {
             for (k, &sid) in order.iter().enumerate() {
                 let s = self.skill(sid);
                 if k_is_jump(s) {
+                    continue;
+                }
+                // A4.2-K1b (IR10 `field_fill_once`): in a Field round the fill places each family once
+                if self.intent == RoundIntent::Field && st.entries.iter().any(|e| e.step_index >= 0 && self.skill(e.skill).family_id() == s.family_id()) {
                     continue;
                 }
                 let mut why = String::new();
@@ -1105,7 +1178,7 @@ pub fn hotkey_skills(w: &World, c: UnitId) -> Vec<SkillId> {
     for f in auto_families(w, c) {
         if let Some(sid) = family_skill(w, c, &f) {
             let s = &w.cat.skills[sid];
-            if round_intent::skill_intent(s) != rpgkit_rules::ruleset::NEUTRAL && !s.system && !out.contains(&sid) {
+            if !round_intent::skill_rows(w, s).contains(&rpgkit_rules::ruleset::NEUTRAL) && !s.system && !out.contains(&sid) {
                 out.push(sid);
             }
         }
@@ -1130,30 +1203,46 @@ pub fn hotkey_target(w: &World, c: UnitId, skill: SkillId) -> Option<RoundTarget
     w.round_states.get(&c).and_then(|r| r.target).or_else(|| round_intent::intent_of(w, c).and_then(|i| proposed_target(w, c, i)))
 }
 
-/// The intent of a skill or item pick (None: neutral, or an id the ruleset does not know).
-fn pick_intent_of(w: &World, c: UnitId, p: &Pick) -> Option<RoundIntent> {
+/// A4.2-K1b (INTENT2 IR15, IR21): the intent rows of a skill or item pick, the primary first (a skill's
+/// `round_intent::skill_rows`; an item's one intent).
+fn pick_rows(w: &World, c: UnitId, p: &Pick) -> Vec<RoundIntent> {
     match p {
-        Pick::Skill { skill, .. } => RoundIntent::parse(round_intent::skill_intent(&w.cat.skills[*skill])),
-        Pick::Item(id) => command::pouch_item(w, c, id).or_else(|| w.cat.items.get(id)).and_then(|i| RoundIntent::parse(round_intent::item_intent(i))),
-        _ => None,
+        Pick::Skill { skill, .. } => round_intent::skill_rows(w, &w.cat.skills[*skill]).into_iter().filter_map(RoundIntent::parse).collect(),
+        Pick::Item(id) => command::pouch_item(w, c, id).or_else(|| w.cat.items.get(id)).and_then(|i| RoundIntent::parse(round_intent::item_intent(i))).into_iter().collect(),
+        _ => Vec::new(),
     }
 }
 
-/// INPUT1 IF4: the intent `picks` would set for `c` (its first skill or item pick's) when no pick holds the round yet
-/// and that intent is not the current one; None otherwise. The battle sets it first (`Session::pick`, IN6's lines).
-pub fn pick_intent(w: &World, c: UnitId, picks: &[Pick]) -> Option<RoundIntent> {
+/// A4.2-K1b (IR15, IR19): the row a pick aimed at `at` takes: the first of its rows the target fits (a tile the Field
+/// row, an enemy the Assault row), else its primary. IR3 (b), IR15: a self target is always Stand when Stand is one of
+/// its rows (a self-or-ally heal on yourself plans in Stand).
+fn pick_row_at(w: &World, c: UnitId, p: &Pick, at: RoundTarget) -> Option<RoundIntent> {
+    let rows = pick_rows(w, c, p);
+    let at = round_intent::normalize(c, at);
+    // an item keeps its one legacy intent (a self item stays Support on Myself) until K3 gives items their rows
+    if at == RoundTarget::Myself && rows.contains(&RoundIntent::Guard) && round_intent::listed(w, RoundIntent::Guard) {
+        return Some(RoundIntent::Guard);
+    }
+    rows.iter().copied().find(|i| round_intent::listed(w, *i) && round_intent::target_problem(w, c, *i, at).is_empty()).or_else(|| rows.first().copied())
+}
+
+/// INPUT1 IF4: the intent `picks` aimed at `at` would set for `c` (its first skill or item pick's row: A4.2-K1b,
+/// `pick_row_at`) when no pick holds the round yet and that intent is not the current one; None otherwise. The battle
+/// sets it first (`Session::pick`, IN6's lines).
+pub fn pick_intent(w: &World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Option<RoundIntent> {
     if picks_of(w, c).iter().any(Pick::holds_target) {
         return None;
     }
-    let i = picks.iter().find(|p| p.holds_target()).and_then(|p| pick_intent_of(w, c, p))?;
+    let p = picks.iter().find(|p| p.holds_target())?;
+    let i = pick_row_at(w, c, p, pick_target(w, c, at, p))?;
     (round_intent::intent_of(w, c) != Some(i)).then_some(i)
 }
 
 /// The round target a pick acts on when it is aimed at `at`: a Support skill or item picked on a tile (after "Move
-/// here") acts on the unit itself.
+/// here") acts on the unit itself. A4.2-K1b: a pick whose row on that tile is Field (IR5) keeps the tile.
 fn pick_target(w: &World, c: UnitId, at: RoundTarget, p: &Pick) -> RoundTarget {
     let at = round_intent::normalize(c, at);
-    match (pick_intent_of(w, c, p), at) {
+    match (pick_row_at(w, c, p, at), at) {
         (Some(RoundIntent::Support), RoundTarget::Cell(_)) => RoundTarget::Myself,
         _ => at,
     }
@@ -1228,7 +1317,15 @@ fn set_up_picks(w: &mut World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Re
         let t = pick_target(w, c, at, p);
         let holder = all.iter().find(|q| q.holds_target()).cloned();
         if p.holds_target() {
-            let Some(i) = pick_intent_of(w, c, p) else { return Err(format!("{} is not a round skill.", pick_name(w, p))) };
+            // A4.2-K1b (IR15): a pick in a held round takes the round's row when it has it, a first pick the row its
+            // target fits (`pick_row_at`)
+            let cur = round_intent::intent_of(w, c);
+            let rows = pick_rows(w, c, p);
+            let row = match &holder {
+                Some(_) => cur.filter(|i| rows.contains(i)).or_else(|| rows.first().copied()),
+                None => pick_row_at(w, c, p, t),
+            };
+            let Some(i) = row else { return Err(format!("{} is not a round skill.", pick_name(w, p))) };
             match holder {
                 Some(h) => {
                     // IF6 a, b: the pick-set intent and the round target held by a pick
@@ -1237,7 +1334,7 @@ fn set_up_picks(w: &mut World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Re
                         return Err(format!("Only {} skills this round ({} set it)", cur.map_or_else(|| "other".to_string(), |c| c.label(&w.cat)), pick_name(w, &h)));
                     }
                     // IF2: one Maneuver kind a round, as `pick_options` lists them
-                    let (_, kind) = row_meta(w, c, std::slice::from_ref(p));
+                    let (_, kind) = row_meta(w, c, t, std::slice::from_ref(p));
                     let cur_kind = round_intent::maneuver_of(w, c);
                     if kind.is_some_and(|k| k != cur_kind) {
                         return Err(format!("Only {} this round ({} set it)", crate::intent::maneuver_id(cur_kind), pick_name(w, &h)));
@@ -1713,7 +1810,7 @@ impl Builder<'_> {
         match p {
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
-                if round_intent::skill_intent(s) != self.intent.id() {
+                if !round_intent::skill_rows(w, s).contains(&self.intent.id()) {
                     return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
                 let need = s.blocks + w.recovery_of(self.c, s);
@@ -1784,6 +1881,17 @@ impl Builder<'_> {
                 let s = self.skill(*sid);
                 match self.intent {
                     RoundIntent::Guard | RoundIntent::Channel => false,
+                    // A4.2-K1b (IR5, IR7): the source within the Field band, a shape with a direction on a neighbour
+                    RoundIntent::Field => {
+                        let a = skill::area(s);
+                        if matches!(a, skill::Area::Arc | skill::Area::Cone) {
+                            goal == st.pos || (goal.x - st.pos.x).abs() > 1 || (goal.y - st.pos.y).abs() > 1
+                        } else {
+                            let band = if skill::from_user(a) { (1, 1) } else { skill::field_reach(s, &w.units[self.c], &w.ruleset) };
+                            let d = st.pos.dist(goal);
+                            d < band.0 || d > band.1
+                        }
+                    }
                     RoundIntent::Support => match self.target {
                         RoundTarget::Unit(t) if t != self.c => {
                             let band = skill::support_reach(s, &w.units[self.c]);
@@ -1973,7 +2081,7 @@ pub fn pick_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
     let base = picked_cost(w, plan, c);
     let mut out = Vec::new();
     for (picks, row_at) in rows {
-        let (intent, kind) = row_meta(w, c, &picks);
+        let (intent, kind) = row_meta(w, c, row_at, &picks);
         // IF2: after the first pick only the round intent's (and kind's) rows, and no Move here (ET2)
         let other = intent.is_some() && intent != cur;
         let other_kind = intent == Some(RoundIntent::Maneuver) && kind.is_some_and(|k| k != cur_kind);
@@ -1991,7 +2099,8 @@ pub fn pick_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
 /// The picks IF2 lists for `c` on `at` by the target's kind, each with the target it goes on (`pick_options`, `menu_options`).
 fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<Pick>, RoundTarget)> {
     let skills = hotkey_skills(w, c);
-    let intent_is = |s: &SkillDef, i: RoundIntent| round_intent::skill_intent(s) == i.id();
+    // A4.2-K1b (IR15): a skill is listed under each of its rows
+    let intent_is = |s: &SkillDef, i: RoundIntent| round_intent::skill_rows(w, s).contains(&i.id());
     let mut rows: Vec<(Vec<Pick>, RoundTarget)> = Vec::new();
     let skill_row = |sid: SkillId, kind: Option<ManeuverKind>| (vec![Pick::Skill { skill: sid, kind }], at);
     let item_rows = |rows: &mut Vec<(Vec<Pick>, RoundTarget)>, keep: &dyn Fn(&rpgkit_data::ItemDef) -> bool| {
@@ -2018,6 +2127,16 @@ fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<P
                 }
             }
             item_rows(&mut rows, &|i| i.aims_at_foes());
+            // A4.2-K1b (IR19): on an enemy the Field row aims at its tile (a click on a unit means the unit; the Field
+            // row is how to aim at its tile)
+            if round_intent::field_rows(w) && w.has(t) {
+                for &sid in &skills {
+                    let s = &w.cat.skills[sid];
+                    if skill::is_area(s) && intent_is(s, RoundIntent::Field) {
+                        rows.push((vec![Pick::Skill { skill: sid, kind: None }], RoundTarget::Cell(w.pos(t))));
+                    }
+                }
+            }
         }
         RoundTarget::Unit(t) => {
             for &sid in &skills {
@@ -2049,7 +2168,7 @@ fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<P
             }
             for &sid in &skills {
                 let s = &w.cat.skills[sid];
-                if skill::is_area(s) && intent_is(s, RoundIntent::Assault) {
+                if skill::is_area(s) && (intent_is(s, RoundIntent::Assault) || intent_is(s, RoundIntent::Field)) {
                     rows.push(skill_row(sid, None));
                 } else if skill::is_area(s) && intent_is(s, RoundIntent::Maneuver) {
                     rows.push(skill_row(sid, Some(ManeuverKind::Utility)));
@@ -2064,10 +2183,10 @@ fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<P
     rows
 }
 
-/// The intent and Maneuver kind a row's first skill or item pick sets.
-fn row_meta(w: &World, c: UnitId, picks: &[Pick]) -> (Option<RoundIntent>, Option<ManeuverKind>) {
+/// The intent and Maneuver kind a row's first skill or item pick sets aimed at `at` (A4.2-K1b: its row there).
+fn row_meta(w: &World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> (Option<RoundIntent>, Option<ManeuverKind>) {
     let first = picks.iter().find(|p| p.holds_target());
-    let intent = first.and_then(|p| pick_intent_of(w, c, p));
+    let intent = first.and_then(|p| pick_row_at(w, c, p, pick_target(w, c, at, p)));
     let kind = match first {
         Some(Pick::Skill { kind, .. }) if intent == Some(RoundIntent::Maneuver) => *kind,
         Some(Pick::Item(_)) if intent == Some(RoundIntent::Maneuver) => Some(ManeuverKind::Utility),
@@ -2078,7 +2197,7 @@ fn row_meta(w: &World, c: UnitId, picks: &[Pick]) -> (Option<RoundIntent>, Optio
 
 /// One row of a menu: `picks` on `at` tried on copies (`base`: `picked_cost` before them).
 fn option_of(w: &World, plan: &Plan, c: UnitId, picks: Vec<Pick>, at: RoundTarget, base: (i32, i32)) -> PickOption {
-    let (intent, kind) = row_meta(w, c, &picks);
+    let (intent, kind) = row_meta(w, c, at, &picks);
     let held = picks_of(w, c).iter().any(Pick::holds_target);
     let (problem, ap_short, ap, blocks) = match trial(w, plan, c, at, &picks) {
         Ok((w2, p2)) => {
@@ -2109,29 +2228,46 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
     }
     let rows = menu_rows_on(w, c, at, held);
     let base = picked_cost(w, plan, c);
-    let cell = |p: Pick, same: &dyn Fn(&Pick) -> bool| -> PickOption {
-        if let Some((r, t)) = rows.iter().find(|(r, _)| r.last().is_some_and(same) && !(held && r.len() > 1)) {
+    // A4.2-K1b (IR19): `want` names the intent row of a dual skill's cell (None: the row its target gives)
+    let cell_in = |p: Pick, same: &dyn Fn(&Pick) -> bool, want: Option<RoundIntent>| -> PickOption {
+        let fits = |r: &Vec<Pick>, t: RoundTarget| want.is_none_or(|i| row_meta(w, c, t, r).0 == Some(i));
+        if let Some((r, t)) = rows.iter().find(|(r, t)| r.last().is_some_and(same) && !(held && r.len() > 1) && fits(r, *t)) {
             return option_of(w, plan, c, r.clone(), *t, base);
         }
         // no row on this target: after an opener the pick's own refusal ("Only Assault skills"), else what it needs
-        let why = if held { option_of(w, plan, c, vec![p.clone()], at, base).problem } else { None };
-        let (intent, kind) = row_meta(w, c, std::slice::from_ref(&p));
-        let problem = why.unwrap_or_else(|| target_hint(w, c, &p));
+        let why = if held && want.is_none_or(|i| round_intent::intent_of(w, c) == Some(i)) { option_of(w, plan, c, vec![p.clone()], at, base).problem } else { None };
+        let (intent, kind) = row_meta(w, c, at, std::slice::from_ref(&p));
+        let intent = want.or(intent);
+        let problem = why.unwrap_or_else(|| match want {
+            Some(RoundIntent::Field) => "Target a tile (or an enemy's tile) to use this".to_string(),
+            Some(RoundIntent::Assault) => "Target an enemy to use this".to_string(),
+            _ => target_hint(w, c, &p),
+        });
         PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), ap_short: None, drops: Vec::new(), at }
     };
+    let cell = |p: Pick, same: &dyn Fn(&Pick) -> bool| cell_in(p, same, None);
     let mut out = Vec::new();
     for sid in hotkey_skills(w, c) {
         let s = &w.cat.skills[sid];
-        let kinds: &[Option<ManeuverKind>] = match (round_intent::skill_intent(s) == RoundIntent::Maneuver.id(), skill::kind(s)) {
+        let kinds: &[Option<ManeuverKind>] = match (round_intent::skill_rows(w, s).contains(&RoundIntent::Maneuver.id()), skill::kind(s)) {
             (true, Kind::Disengage) => &[Some(ManeuverKind::Disengage)],
             (true, Kind::Attack) if carries(w, s) && !skill::is_area(s) => &[Some(ManeuverKind::Engage), Some(ManeuverKind::Disengage)],
             (true, Kind::Attack) => &[Some(ManeuverKind::Engage)],
             _ => &[None],
         };
+        // A4.2-K1b (IR19): a dual Field / Assault skill has a cell in each row, the same list whatever the target
+        let rows_of = round_intent::skill_rows(w, s);
+        let dual = round_intent::field_rows(w) && rows_of.contains(&RoundIntent::Field.id()) && rows_of.contains(&RoundIntent::Assault.id());
         for &kind in kinds {
             // the kit's row of this cell: the same skill, and for Maneuver the same side of Disengage
             let same = |r: &Pick| matches!(r, Pick::Skill { skill, kind: k } if *skill == sid && (*k == Some(ManeuverKind::Disengage)) == (kind == Some(ManeuverKind::Disengage)));
-            out.push(cell(Pick::Skill { skill: sid, kind }, &same));
+            if dual {
+                for want in [RoundIntent::Assault, RoundIntent::Field] {
+                    out.push(cell_in(Pick::Skill { skill: sid, kind }, &same, Some(want)));
+                }
+            } else {
+                out.push(cell(Pick::Skill { skill: sid, kind }, &same));
+            }
         }
     }
     for id in command::pouch_ids(w, c) {
@@ -2157,7 +2293,8 @@ fn target_hint(w: &World, c: UnitId, p: &Pick) -> String {
     let needs = match p {
         Pick::Skill { skill, .. } => {
             let s = &w.cat.skills[*skill];
-            match round_intent::skill_intent(s) {
+            match round_intent::skill_primary(w, s) {
+                i if i == RoundIntent::Field.id() => "a tile",
                 i if i == RoundIntent::Guard.id() || self_only(s) => "yourself",
                 i if i == RoundIntent::Support.id() && s.target_mode == "ALLY" => "an ally",
                 i if i == RoundIntent::Support.id() => "yourself or an ally",

@@ -42,6 +42,8 @@
     "tunable req_discount_per_level row-only default=2 range=0..4 (no schema entry)",
     "tunable guard_common_mitigation row-only default=0.35 range=0.1..0.9 (no schema entry)",
     "tunable guard_multi_round_mitigation row-only default=0.2 range=0.1..0.9 (no schema entry)",
+    "tunable splash_mult row-only default=0.5 range=0.25..1.0 needs=field_intent (no schema entry)",
+    "tunable assault_shape_blocks row-only default=1 range=0..2 needs=field_intent (no schema entry)",
     "rule round_intent option system=planning bundle=intent_core requires=- conflicts=stances=on, switch_target_step=on",
     "rule enemy_moves option system=timing bundle=windup requires=- conflicts=-",
     "rule deck option system=build bundle=build requires=- conflicts=-",
@@ -120,6 +122,8 @@
     "promoted REQ_DISCOUNT_PER_LEVEL -> req_discount_per_level",
     "promoted GUARD_COMMON_MITIGATION -> guard_common_mitigation",
     "promoted GUARD_MULTI_ROUND_MITIGATION -> guard_multi_round_mitigation",
-    "promoted ITEM_AP -> item_ap"
+    "promoted ITEM_AP -> item_ap",
+    "promoted SPLASH_MULT -> splash_mult",
+    "promoted ASSAULT_SHAPE_BLOCKS -> assault_shape_blocks"
   ]
 }

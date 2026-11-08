@@ -755,6 +755,12 @@ impl BattleScreen {
 }
 
 impl Screen<GameCx> for BattleScreen {
+    /// A4.2-K1b: while the selected hero plans a Field round the arrows aim its source (`field_nudge`), so they do not
+    /// move the keyboard focus then; any other time they do, as before.
+    fn arrow_focus(&self) -> bool {
+        !self.field_aiming()
+    }
+
     /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every
     /// frame. `REST_AFTER` lets the last clips and reactions of a playback run at full rate.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
@@ -972,6 +978,12 @@ impl Screen<GameCx> for BattleScreen {
             // INPUT1 PB3: P cycles the playback speed (1x, 0.5x, Block), N plays the next block (timeline battles)
             Key::Char('p') => self.act(cx, Action::PlaybackSpeed((PlaySpeed::of(&cx.settings.v).index() + 1) % PLAYBACK_SPEEDS.len())),
             Key::Char('n') => self.act(cx, Action::NextBlock),
+            // A4.2-K1b: the arrows (`Key::dir`; the letters W A S D keep their battle keys) move the selected hero's
+            // Field source one tile
+            Key::Up | Key::Down | Key::Left | Key::Right if self.field_aiming() => {
+                let (dx, dy) = k.dir().unwrap_or((0, 0));
+                self.field_nudge(cx, emberwake_battle::grid::V2::new(dx as i32, dy as i32));
+            }
             _ => {}
         }
     }

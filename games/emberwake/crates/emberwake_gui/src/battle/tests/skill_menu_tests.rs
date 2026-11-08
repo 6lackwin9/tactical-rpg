@@ -88,7 +88,8 @@ fn the_rows_are_the_rulesets_intents_under_the_neutral_row() {
     b.act(&mut cx, Action::UnitClick(foe));
     drawn(&mut cx, &mut g, &mut b);
     let listed = menu_intents(&s(&b).w);
-    assert_eq!(listed, RoundIntent::ALL.into_iter().filter(|i| s(&b).w.ruleset.numbers.intents.iter().any(|x| x == i.id())).collect::<Vec<_>>());
+    // A4.2-K1b: the intents the battle offers (the listed ones, and Field under field_intent)
+    assert_eq!(listed, RoundIntent::ALL.into_iter().filter(|i| ri::listed(&s(&b).w, *i)).collect::<Vec<_>>());
     let p = popup(&b);
     let grid = p.grid.as_ref().unwrap();
     assert_eq!(grid.lines.iter().map(|l| l.1).collect::<Vec<_>>(), std::iter::once(None).chain(listed.iter().map(|i| Some(*i))).collect::<Vec<_>>());
@@ -98,8 +99,12 @@ fn the_rows_are_the_rulesets_intents_under_the_neutral_row() {
         if let Some(Slot::Intent(i)) = row.slot {
             let RowAct::Pick(picks) = &row.act else { panic!("a cell is a pick") };
             let first = picks.iter().find(|q| q.holds_target()).unwrap();
+            // A4.2-K1b: the kit's rows (IR21 under field_intent); a cell sits in the row its pick takes on the target
             let want = match first {
-                rip::Pick::Skill { skill, .. } => ri::skill_intent(&s(&b).w.cat.skills[*skill]).to_string(),
+                rip::Pick::Skill { skill, .. } => {
+                    let rows = ri::skill_rows(&s(&b).w, &s(&b).w.cat.skills[*skill]);
+                    rows.iter().find(|r| **r == i.id()).or(rows.first()).unwrap().to_string()
+                }
                 rip::Pick::Item(id) => ri::item_intent(emberwake_battle::command::pouch_item(&s(&b).w, p.menu.unwrap().0, id).unwrap()).to_string(),
                 _ => unreachable!(),
             };
@@ -152,6 +157,8 @@ fn a_fifth_row_holds() {
     let (mut cx, mut g, mut b) = arena();
     let (h, foe) = (b.selected.unwrap(), foe_of(&b));
     let sess = b.host.session.as_mut().unwrap();
+    // A4.2-K1b: an authored round_intent is read only without field_intent (IR21 derives the rows, never Channel)
+    sess.w.ruleset.rules.retain(|r| *r != emberwake_rules::ruleset::FIELD_INTENT);
     let was = menu_intents(&sess.w).len();
     let added = RoundIntent::ALL.into_iter().find(|i| !sess.w.ruleset.numbers.intents.iter().any(|x| x == i.id())).expect("an intent the ruleset does not list");
     sess.w.ruleset.numbers.intents.push(added.id().to_string());

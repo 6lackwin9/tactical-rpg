@@ -815,9 +815,11 @@ pub fn deck_effect_errors(v: &View, e: &Dict, world: Option<&str>, unit_of: &dyn
                     out.push(format!("{tag}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
                     continue;
                 }
+                // A4.2-K1b (IR15): the derived rows under field_intent
                 let head = v.get("skills", &fam);
-                let of = if head.is_empty() { String::new() } else { super::ruleset::intent_of(head) };
-                if of != *intent {
+                let rows = if head.is_empty() { Vec::new() } else { super::ruleset::intent_rows(head, super::ruleset::deck_plays_field(v)) };
+                if !rows.contains(intent) {
+                    let of = super::ruleset::rows_label(&rows);
                     out.push(format!("{tag}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
                 }
             }

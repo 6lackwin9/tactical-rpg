@@ -703,10 +703,22 @@ impl Dojo {
         let mut y = b.y + 2 - off;
         let setup = &self.s.planner;
         let mut x = x0;
+        // A4.2-K1b: with an opener picked (field_intent), only its own rows are open; the others are locked
+        let variants = self.s.plan_variants();
         for (i, it) in intents.iter().enumerate() {
             let name = it.label(&self.s.cat);
             let w = ui.p.text_w(&name, SMALL).ceil() as i32 + 8;
-            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), &name, DAct::PlanIntent(i), true, *it == setup.intent, SMALL, tip(&name, "Plan the hero's round with this intent (the target is the dummy, or the hero for Guard and Support)."));
+            let open = variants.get(i).is_none_or(|v| v.1);
+            let mut card = tip(&name, "Plan the hero's round with this intent (the target is the dummy, the dummy's tile for Field, or the hero for Guard and Support).");
+            if let Some(sk) = setup.opener.as_deref().and_then(|id| self.s.cat.skill(id)) {
+                if let Some(line) = crate::intent_text::variant_line(&self.s.ruleset, sk, *it) {
+                    card.push((line, th().text));
+                }
+                if !open {
+                    card.push((format!("{} has no {name} row.", sk.name), th().foe));
+                }
+            }
+            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), &name, DAct::PlanIntent(i), open, *it == setup.intent, SMALL, card);
             x += w + 2;
         }
         y += 13;
@@ -1315,6 +1327,44 @@ mod tests {
         }
         pick(&mut cx, &mut dojo, CLASSIC);
         assert!(dojo.s.plan_intents().is_empty() && dojo.state(&cx).get("plan").is_none());
+    }
+
+    /// A4.2-K1b (row W2-4: the Dojo Planner shows only the valid IR21 intent variants of the selected skill): under
+    /// `field_intent` the planner offers Field; with a dual opener (a thrown BURST built here on the Dojo's catalog) only
+    /// its rows are open and the others locked, switching between them keeps the opener, and the variant previews are one
+    /// plan per row, each opening with it. Without an opener every intent is open.
+    #[test]
+    fn a_dual_opener_opens_only_its_rows() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut dojo = Dojo::new(&cx);
+        pick(&mut cx, &mut dojo, TIMELINE);
+        assert!(dojo.s.plan_intents().contains(&RoundIntent::Field), "field_intent: the planner offers Field");
+        assert!(dojo.s.plan_variants().iter().all(|v| v.1), "no opener: every intent open");
+        dojo.s.set_plan_intent(RoundIntent::Assault);
+        let id = dojo.s.plan_openers().into_iter().map(|o| o.0).find(|id| dojo.s.cat.skill(id).is_some_and(|s| s.kind == "ATTACK" && !emberwake_battle::skill::is_area(s) && s.position.is_none() && s.dash_tiles == 0 && s.hazard.is_none())).expect("a plain attack opener");
+        {
+            let cat = Arc::make_mut(&mut dojo.s.cat);
+            let k = cat.skills.iter().position(|s| s.id == id).unwrap();
+            let sk = &mut cat.skills[k];
+            sk.area = "BURST".into();
+            sk.reach_min = 2;
+            sk.reach_max = 3;
+            sk.power_mult = sk.power_mult.max(0.5);
+        }
+        dojo.s.planner.opener = Some(id.clone());
+        let open: Vec<RoundIntent> = dojo.s.plan_variants().into_iter().filter(|v| v.1).map(|v| v.0).collect();
+        assert_eq!(open, [RoundIntent::Assault, RoundIntent::Field], "only the opener's rows (in the planner's order)");
+        let views = dojo.s.plans_by_intent();
+        assert_eq!(views.iter().map(|v| v.intent.clone()).collect::<Vec<_>>(), ["Assault", "Field"], "one variant preview per row");
+        dojo.s.set_plan_intent(RoundIntent::Field);
+        assert_eq!(dojo.s.planner.opener.as_deref(), Some(id.as_str()), "switching to another row keeps the skill");
+        dojo.s.set_plan_intent(RoundIntent::Guard);
+        assert_eq!(dojo.s.planner.opener, None, "a row the skill lacks drops it");
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.s.planner.opener = Some(id);
+        dojo.s.planner.intent = RoundIntent::Field;
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(dojo.w.iter().any(|w| w.id == "dojo.plan.intent.field"), "a Field button");
     }
 
     /// RULESET1-G review: a change that logs nothing (the dummy's power) still moves the planner cache's key, and the

@@ -1525,6 +1525,9 @@ pub const ROW_GUARD: &str = "guard";
 pub const ROW_BRACE: &str = "brace";
 pub const ROW_ENGAGE: &str = "engage";
 pub const ROW_ASSAULT: &str = "assault";
+/// A4.2-K1b (INTENT2 matrix row Z, minimal; the full row is W2-5 I1.2-S2): a Field round before row 5 (rule
+/// `field_intent` only).
+pub const ROW_FIELD: &str = "field";
 /// Row 5 with no foe in reach this round: a move toward the first ranked target, then Guard there (front line),
 /// Support on itself or an ally (Support role) or Rest (reckless; also when the other two are not offered).
 pub const ROW_ADVANCE: &str = "advance";
@@ -1557,6 +1560,17 @@ impl IntentPick {
     fn new(intent: RoundIntent, target: RoundTarget) -> Self {
         Self { intent, target, kind: None, opener: None, opener_only: false, advance_to: None, must_act: false }
     }
+}
+
+/// A Guard (Stand) pick on `target`. A4.2-K1b: under `field_intent` the Stand order also holds rings (IR21), so the
+/// pick opens with the first Defend skill of the order when there is one (the AI's Guard rows guard; a ring follows in
+/// the fill when an enemy stands in it). Without the rule: PL3's opener, as before.
+fn stand_pick(w: &World, c: UnitId, target: RoundTarget) -> IntentPick {
+    let mut p = IntentPick::new(RoundIntent::Guard, target);
+    if round_intent::field_rows(w) {
+        p.opener = round_intent_plan::order(w, c, RoundIntent::Guard).into_iter().find(|&sid| skill::kind(&w.cat.skills[sid]) == Kind::Defend).map(Opener::Skill);
+    }
+    p
 }
 
 /// What the round intent AI did for one unit: the row (or tactic) that applied, the pick (None: a Withdraw or a Rest
@@ -1644,7 +1658,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
 }
 
 /// AI1's rows in table order (`table` starts at an index into it).
-const ROWS: [&str; 8] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_ENGAGE, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
+const ROWS: [&str; 9] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_ENGAGE, ROW_FIELD, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
 
 /// AI1 for the enemy side (CombatEncounter.schedule_enemy_ai under `round_intent`): every enemy on the field picks and
 /// plans into the shared `plan` in roster order (earlier plans are claims), broken plans are re-picked, what is still
@@ -1754,6 +1768,12 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
             return Choice::Pick(ROW_ENGAGE, p);
         }
     }
+    // A4.2-K1b (row Z, minimal): under `field_intent`, a Field round on a source that covers enough foes
+    if on(ROW_FIELD) {
+        if let Some(p) = field_pick(w, plan, c, profile) {
+            return Choice::Pick(ROW_FIELD, p);
+        }
+    }
     // 5: Assault, the first ranked target it can reach (ranged units kite: AS2, AS3); none in reach this round: Assault
     // the first ranked target it has a path to and close in with a plain move (IN5), Rest after
     // (the tile ranking, user 2026-10-28: tier 1 the selected target, the first ranked; tier 2 the tile from which it
@@ -1801,7 +1821,7 @@ fn tactic_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, t
             assault_pick(w, plan, c, &foes)
         }
         Tactic::GuardCounter => {
-            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+            let p = stand_pick(w, c, RoundTarget::Myself);
             trial(w, plan, c, &p).then_some(p)
         }
         Tactic::KiteAtRange => {
@@ -1870,6 +1890,20 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
         Vec::new()
     };
     for f in cands {
+        // A4.2-K1b (IR3 b, IR15): under `field_intent` itself is a Stand round with a self-or-ally Support skill as
+        // the opener (then, failing that, the Support round as before: items)
+        if f == c && round_intent::field_rows(w) {
+            for sid in round_intent_plan::order(w, c, RoundIntent::Support) {
+                if !round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&RoundIntent::Guard.id()) {
+                    continue;
+                }
+                let mut p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+                p.opener = Some(Opener::Skill(sid));
+                if trial(w, plan, c, &p) {
+                    return Some(p);
+                }
+            }
+        }
         let mut p = IntentPick::new(RoundIntent::Support, round_intent::normalize(c, RoundTarget::Unit(f)));
         if trial(w, plan, c, &p) {
             return Some(p);
@@ -1888,12 +1922,12 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
 /// else Guard self; None when no Guard skill is usable.
 fn guard_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
     if let Some(cell) = cover_tile(w, plan, c) {
-        let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(cell));
+        let p = stand_pick(w, c, RoundTarget::Cell(cell));
         if trial(w, plan, c, &p) {
             return Some(p);
         }
     }
-    let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+    let p = stand_pick(w, c, RoundTarget::Myself);
     trial(w, plan, c, &p).then_some(p)
 }
 
@@ -1909,13 +1943,13 @@ fn hit_nearby(w: &World, c: UnitId) -> bool {
 fn brace_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
     if w.has_tactic(c, UnitTactic::HoldLine) {
         if let Some(cell) = hold_tile(w, plan, c) {
-            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(cell));
+            let p = stand_pick(w, c, RoundTarget::Cell(cell));
             if trial(w, plan, c, &p) {
                 return Some(p);
             }
         }
     }
-    let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+    let p = stand_pick(w, c, RoundTarget::Myself);
     trial(w, plan, c, &p).then_some(p)
 }
 
@@ -1934,6 +1968,62 @@ pub fn hold_tile(w: &World, plan: &Plan, c: UnitId) -> Option<V2> {
     cands.first().map(|(cell, _)| *cell).filter(|&cell| cell != here)
 }
 
+/// A Field source candidate of `field_pick`: its sort key (foes hit, negated; friends hit; order index; cell index), the
+/// skill and the source.
+type FieldCand = ((i32, usize, usize, i32), SkillId, V2);
+
+/// A4.2-K1b (INTENT2 IR17, matrix row Z; minimal until W2-5 I1.2-S2): under `field_intent`, a Field round when one of
+/// `c`'s Field skills (its Field order) aimed from where it stands covers at least `area_threshold` foes and passes
+/// `friendly_fire_ok`, and `c` did not hold Field last round (it alternates). The source with the most foes first (then
+/// fewer friends, the order, the cell index), the skill its opener. None otherwise: the Assault row decides (IR17:
+/// Assault is the default on one or two).
+fn field_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) -> Option<IntentPick> {
+    if !round_intent::field_rows(w) || round_intent::intent_of(w, c) == Some(RoundIntent::Field) || !w.has(c) {
+        return None;
+    }
+    let order = round_intent_plan::order(w, c, RoundIntent::Field);
+    if order.is_empty() {
+        return None;
+    }
+    let st = plan.compile(w, c);
+    let here = st.pos;
+    // GD5: a hidden foe is not counted (its side cannot see it)
+    let foes: Vec<UnitId> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && !round_intent::hidden(w, f)).collect();
+    let friends: Vec<UnitId> = w.friends_of(c).iter().copied().filter(|&f| f != c && w.units[f].is_active() && w.has(f)).collect();
+    let mut cands: Vec<FieldCand> = Vec::new();
+    for (i, sid) in order.into_iter().enumerate() {
+        let s = &w.cat.skills[sid];
+        if !skill::is_area(s) || !skill::deals_damage(s) {
+            continue;
+        }
+        let band = skill::field_reach(s, &w.units[c], &w.ruleset);
+        let affects = skill::affects_by(s, Some(RoundIntent::Field));
+        for aim in aim_cells(w, here, sid, band) {
+            if !skill::from_user(skill::area(s)) && !(band.0..=band.1).contains(&here.dist(aim)) {
+                continue;
+            }
+            let cells: Vec<V2> = skill::field_cells(s, here, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != here).collect();
+            let hit = foes.iter().filter(|&&f| skill::affects_unit(affects, false) && cells.contains(&w.pos(f))).count() as i32;
+            let hit_friends: Vec<UnitId> = friends.iter().copied().filter(|&f| skill::affects_unit(affects, true) && cells.contains(&plan.planned_position(w, f))).collect();
+            if hit < profile.area_threshold() || !friendly_fire_ok(w, c, sid, &hit_friends, hit) {
+                continue;
+            }
+            cands.push(((-hit, hit_friends.len(), i, aim.y * GRID_W + aim.x), sid, aim));
+        }
+    }
+    cands.sort_by_key(|(k, _, _)| *k);
+    for (_, sid, aim) in cands {
+        let mut p = IntentPick::new(RoundIntent::Field, RoundTarget::Cell(aim));
+        p.opener = Some(Opener::Skill(sid));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// A4.2-K1b (IR2, IR17): under `field_intent` an aim at a tile is a Field round (the Field order, band and tiles), never
+/// an Assault one.
 /// HOOKS1 AT2 `flush_cover`: an area opener's aim from `c`'s tile, scored by foes hit plus 1 per foe hit on a tile with
 /// cover against `c` (`cover_for`), among the aims whose area still holds the first ranked target `t` and hit no more
 /// friends than an aim at `t`'s tile; the Assault order's area skills that reach `t` without a move, in order. Some
@@ -1946,25 +2036,28 @@ fn flush_pick(w: &mut World, plan: &mut Plan, c: UnitId, t: Option<UnitId>) -> O
     let (here, goal) = (w.pos(c), w.pos(t));
     let foes: Vec<V2> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f)).map(|f| w.pos(f)).collect();
     let friends: Vec<V2> = w.friends_of(c).iter().copied().filter(|&f| f != c && w.units[f].is_active() && w.has(f)).map(|f| w.pos(f)).collect();
+    let field = round_intent::field_rows(w);
+    let intent = if field { RoundIntent::Field } else { RoundIntent::Assault };
     // (score, friends hit) of an aim: foes hit plus the covered ones, and the friends it catches
     let score = |s: &rpgkit_data::SkillDef, aim: V2| -> Option<(i32, usize)> {
-        let cells: Vec<V2> = skill::area_cells(s, here, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != here).collect();
+        let shape = if field { skill::field_cells(s, here, aim) } else { skill::area_cells(s, here, aim) };
+        let cells: Vec<V2> = shape.into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != here).collect();
         if !cells.contains(&goal) {
             return None;
         }
-        // A3.2-K2 (IR9): the Assault row's `affects`
-        let affects = skill::affects_by(s, Some(RoundIntent::Assault));
+        // A3.2-K2 (IR9): the round's row's `affects`
+        let affects = skill::affects_by(s, Some(intent));
         let hit: Vec<&V2> = foes.iter().filter(|p| skill::affects_unit(affects, false) && cells.contains(p)).collect();
         let covered = hit.iter().filter(|p| command::cover_for(&w.grid, here, ***p, true) > 0.0).count();
         Some(((hit.len() + covered) as i32, friends.iter().filter(|p| skill::affects_unit(affects, true) && cells.contains(p)).count()))
     };
     let mut cands: Vec<((i32, usize, i32), SkillId, V2)> = Vec::new();
-    for (i, sid) in round_intent_plan::order(w, c, RoundIntent::Assault).into_iter().enumerate() {
+    for (i, sid) in round_intent_plan::order(w, c, intent).into_iter().enumerate() {
         let s = &w.cat.skills[sid];
         if !skill::is_area(s) || !skill::deals_damage(s) {
             continue;
         }
-        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
+        let band = if field { skill::field_reach(s, &w.units[c], &w.ruleset) } else { skill::reach_by(s, &w.units[c], &w.ruleset) };
         let d = here.dist(goal);
         let Some((base, base_friends)) = score(s, goal).filter(|_| d >= band.0 && d <= band.1) else { continue };
         for aim in aim_cells(w, here, sid, band) {
@@ -1981,7 +2074,7 @@ fn flush_pick(w: &mut World, plan: &mut Plan, c: UnitId, t: Option<UnitId>) -> O
     }
     cands.sort_by_key(|(k, _, _)| *k);
     for (_, sid, aim) in cands {
-        let mut p = IntentPick::new(RoundIntent::Assault, RoundTarget::Cell(aim));
+        let mut p = IntentPick::new(intent, RoundTarget::Cell(aim));
         p.opener = Some(Opener::Skill(sid));
         if trial(w, plan, c, &p) {
             return Some(p);
@@ -2175,7 +2268,7 @@ fn advance_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId], pr
                     return Some(p);
                 }
             }
-            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(dest));
+            let p = stand_pick(w, c, RoundTarget::Cell(dest));
             if trial(w, plan, c, &p) {
                 return Some(p);
             }
@@ -2235,7 +2328,7 @@ fn build_pick(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> bool
 
 /// AI1 row 6: Guard self, else a Rest round.
 fn idle(w: &mut World, plan: &mut Plan, c: UnitId) -> Choice {
-    let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+    let p = stand_pick(w, c, RoundTarget::Myself);
     if trial(w, plan, c, &p) {
         return Choice::Pick(ROW_IDLE_GUARD, p);
     }
@@ -2245,7 +2338,7 @@ fn idle(w: &mut World, plan: &mut Plan, c: UnitId) -> Choice {
 /// Whether the planner offers `p` to `c` now (PL7): the pick is set on `c`'s state without IN6's side effects, the round
 /// is built, and `c`'s state, lock and steps are put back.
 fn trial(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> bool {
-    if !w.ruleset.numbers.intents.iter().any(|i| i == p.intent.id()) {
+    if !round_intent::listed(w, p.intent) {
         return false;
     }
     let saved = w.round_states.get(&c).cloned();
@@ -2460,20 +2553,20 @@ fn hold_choice(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<Choice> {
     match hold_part(w, plan, c)? {
         HoldPart::Out => plan.add_step(w, c, PlanStep::withdraw(), true).is_empty().then_some(Choice::Withdrawn(ROW_ESCAPE)),
         HoldPart::Hold(tile) => {
-            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(tile));
+            let p = stand_pick(w, c, RoundTarget::Cell(tile));
             if trial(w, plan, c, &p) {
                 return Some(Choice::Pick(ROW_HOLD, p));
             }
             if tile != w.pos(c) {
                 for dest in hold_walk(w, plan, c) {
-                    let mut p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+                    let mut p = stand_pick(w, c, RoundTarget::Myself);
                     p.advance_to = Some(dest);
                     if trial(w, plan, c, &p) {
                         return Some(Choice::Pick(ROW_HOLD, p));
                     }
                 }
             }
-            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+            let p = stand_pick(w, c, RoundTarget::Myself);
             if trial(w, plan, c, &p) {
                 return Some(Choice::Pick(ROW_HOLD, p));
             }

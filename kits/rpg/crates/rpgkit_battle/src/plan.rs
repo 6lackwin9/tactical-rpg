@@ -125,6 +125,12 @@ impl PlanStep {
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
     }
+    /// A4.2-K1b (INTENT2 IR17): a shaped Assault row on enemy `target` (rule `field_intent`): aimed at its tile `cell`
+    /// at planning, its shape re-read where the target stands at the impact, `splash_mult` off it, one wind-up block more
+    /// (`assault_shape_blocks`).
+    pub fn area_on(skill: SkillId, target: UnitId, cell: V2) -> Step {
+        Self::make(Mode::Area, Some(skill), Some(target), cell)
+    }
     pub fn withdraw() -> Step {
         Self::make(Mode::Withdraw, None, None, NO_CELL)
     }
@@ -240,7 +246,20 @@ impl PlanEntry {
             }
             Kind::Attack => {
                 let mut c = if skill::is_area(s) {
-                    Command::new(actor, 0, s.blocks, CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s), status_rounds: s.status_rounds, affects: skill::affects_by(s, round_intent::intent_of(w, actor)), last_damage: 0, last_hits: 0, crit_hits: Vec::new() })
+                    // A4.2-K1b (IR17): a shaped Assault row (an area entry with a target) is target-locked, with splash
+                    let (target, splash) = match self.target {
+                        Some(t) => (Some(t), w.ruleset.numbers.splash_mult),
+                        None => (None, 1.0),
+                    };
+                    // FB-120: the Field row's derived `power` bonus
+                    let power = if self.target.is_none() && round_intent::intent_of(w, actor) == Some(RoundIntent::Field) { skill::field_power(s) } else { 1.0 };
+                    let band = skill::reach_by(s, u, &w.ruleset);
+                    Command::new(
+                        actor,
+                        0,
+                        blocks,
+                        CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s) * power, status_rounds: s.status_rounds, affects: skill::affects_by(s, round_intent::intent_of(w, actor)), target, splash, shape: skill::area(s), band, last_damage: 0, last_hits: 0, crit_hits: Vec::new() },
+                    )
                 } else {
                     // INPUT1 MR4: a skill with a position hits from the tile next to its target
                     let (lo, hi) = round_intent::hit_band(w, actor, s);
@@ -318,6 +337,18 @@ impl PlanEntry {
             Some(item) => crate::ground::Place::of_item(item),
             None => crate::ground::Place::of_skill(s),
         };
+        if skill::kind(s) == Kind::Attack && skill::is_area(s) && self.item.is_none() {
+            if self.target.is_some() {
+                // A4.2-K1b (IR17): a shaped Assault row leaves no hazard
+                cmd.hazard = None;
+            } else if round_intent::intent_of(w, actor) == Some(RoundIntent::Field) && skill::field_bonus(s) == Some(rpgkit_rules::intent::FieldBonus::Lingering) {
+                // IR21 `lingering`: the Field row's hazard lasts one round more (capped)
+                if let Some(p) = cmd.hazard.as_mut() {
+                    let base = if p.rounds > 0 { p.rounds } else { w.cat.hazards.get(&p.id).map_or(1, |d| d.duration.max(1)) };
+                    p.rounds = (base + 1).min(crate::ground::HAZARD_ROUNDS_CAP);
+                }
+            }
+        }
         cmd.name = s.name.clone();
         if self.item.is_none() {
             cmd.skill = s.id.clone();
@@ -620,7 +651,7 @@ impl Plan {
             Mode::Goto => self.apply_goto(w, c, st, step, index),
             Mode::Withdraw => self.apply_withdraw(w, c, st, index),
             Mode::Engage => self.apply_engage(w, c, st, step, index),
-            Mode::Area => self.apply_area(w, c, st, step.skill.unwrap(), step.cell.get(), index),
+            Mode::Area => self.apply_area(w, c, st, step.skill.unwrap(), step.cell.get(), step.target, index),
             Mode::Item => self.apply_item(w, c, st, step, index),
         }
     }
@@ -637,12 +668,19 @@ impl Plan {
             }
             _ => {
                 let Some(sid) = step.skill else { return String::new() };
-                let target = match step.mode {
-                    Mode::Area => Some(RoundTarget::Cell(step.cell.get())),
-                    Mode::SelfCast => Some(RoundTarget::Myself),
+                let target = match (step.mode, step.target) {
+                    // A4.2-K1b: a shaped Assault row aims at its enemy; a Stand area (IR5: a RING) at the user
+                    (Mode::Area, Some(t)) => Some(RoundTarget::Unit(t)),
+                    (Mode::Area, None) if intent == RoundIntent::Guard => Some(RoundTarget::Myself),
+                    (Mode::Area, None) => Some(RoundTarget::Cell(step.cell.get())),
+                    (Mode::SelfCast, _) => Some(RoundTarget::Myself),
                     _ => step.target.map(RoundTarget::Unit),
                 };
-                (round_intent::skill_intent(&w.cat.skills[sid]), target)
+                // A4.2-K1b (IR15): a skill fits any of its rows (`intent::allowed`)
+                let s = &w.cat.skills[sid];
+                let rows = round_intent::skill_rows(w, s);
+                let of = if rows.contains(&ruleset::NEUTRAL) { ruleset::NEUTRAL } else if rows.contains(&intent.id()) { intent.id() } else { rpgkit_rules::intent::primary(&rows) };
+                (of, target)
             }
         };
         if of == ruleset::NEUTRAL {
@@ -652,7 +690,7 @@ impl Plan {
             return format!("Only {} skills this round.", intent.label(&w.cat));
         }
         let Some(target) = target.map(|t| round_intent::normalize(c, t)) else { return String::new() };
-        let self_only = step.mode == Mode::SelfCast;
+        let self_only = step.mode == Mode::SelfCast || (step.mode == Mode::Area && intent == RoundIntent::Guard);
         let Some(round) = st.round_target else {
             let p = round_intent::target_problem(w, c, intent, target);
             if p.is_empty() {
@@ -898,7 +936,9 @@ impl Plan {
         let sid = step.skill.unwrap();
         let s = &w.cat.skills[sid];
         if skill::is_area(s) {
-            return self.apply_area(w, c, st, sid, w.pos(foe), index);
+            // A4.2-K1b (IR17): under `field_intent` an area aimed at an enemy in an Assault round is its shaped Assault row
+            let locked = (round_intent::field_rows(w) && round_intent::intent_of(w, c) == Some(RoundIntent::Assault)).then_some(foe);
+            return self.apply_area(w, c, st, sid, w.pos(foe), locked, index);
         }
         // RULESET1_INTENT MV4: a Maneuver skill carries its own move in a Maneuver round
         if round_intent::intent_of(w, c) == Some(RoundIntent::Maneuver) && carries(w, s) {
@@ -1301,15 +1341,26 @@ impl Plan {
         p
     }
 
-    fn apply_area(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, aim: V2, index: i32) -> String {
+    /// An area entry aimed at `aim`. A4.2-K1b: in a Field round (IR5, IR21) the band takes the `reach` bonus and the
+    /// tiles the `area` bonus; with `target` (a shaped Assault row, IR17) the aim is the target's tile now, the shape
+    /// base size, the wind-up `assault_shape_blocks` longer (the round's blocks cap it) and the estimate takes
+    /// `splash_mult` off the target.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_area(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, aim: V2, target: Option<UnitId>, index: i32) -> String {
         let s = &w.cat.skills[sid];
         if !skill::is_area(s) {
             return "That isn't an area attack.".into();
         }
+        let aim = match target {
+            Some(t) if w.units[t].is_active() && w.has(t) => w.pos(t),
+            Some(_) => return "That unit is not on the field.".into(),
+            None => aim,
+        };
         if !w.grid.is_valid(aim) {
             return "Aim inside the arena.".into();
         }
-        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
+        let field = target.is_none() && round_intent::intent_of(w, c) == Some(RoundIntent::Field);
+        let band = if field { skill::field_reach(s, &w.units[c], &w.ruleset) } else { skill::reach_by(s, &w.units[c], &w.ruleset) };
         let d = st.pos.dist(aim);
         let a = skill::area(s);
         if a == skill::Area::Line && d != 1 {
@@ -1323,18 +1374,31 @@ impl Plan {
         if !skill::from_user(a) && (d < band.0 || d > band.1) {
             return "Out of reach.".into();
         }
-        let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
-        let p = self.add_entry(w, c, st, sid, index, None, &[], 0, &cells);
+        let shape = if field { skill::field_cells(s, st.pos, aim) } else { skill::area_cells(s, st.pos, aim) };
+        let cells: Vec<V2> = shape.into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
+        // IR17: the shaped Assault row's longer wind-up
+        let blocks = match target {
+            Some(_) => (s.blocks + w.ruleset.numbers.assault_shape_blocks.max(0)).min((w.total_blocks - w.recovery_of(c, s)).max(s.blocks)),
+            None => 0,
+        };
+        let p = self.add_entry(w, c, st, sid, index, target, &[], blocks, &cells);
         if p.is_empty() {
             let stance_before = st.entries.last().unwrap().stance_before;
             let attack_stance = if w.ruleset.stances() { skill::stance_during(s, stance_before) } else { stance_before };
             let pos = st.pos;
             // A3.2-K2 (IR9): the units the area hits by its `affects` in this round's row
             let affects = skill::affects_by(s, round_intent::intent_of(w, c));
+            let splash = w.ruleset.numbers.splash_mult;
             let mut total = 0;
             for &foe in w.foes_of(c) {
                 if skill::affects_unit(affects, false) && w.units[foe].is_active() && w.has(foe) && cells.contains(&w.pos(foe)) {
-                    let hit = self.estimate_hit(w, c, st, sid, attack_stance, foe, pos);
+                    let mut hit = self.estimate_hit(w, c, st, sid, attack_stance, foe, pos);
+                    if target.is_some_and(|t| t != foe) {
+                        hit = (hit as f64 * splash).round() as i32;
+                    }
+                    if field {
+                        hit = (hit as f64 * skill::field_power(s)).round() as i32;
+                    }
                     total += hit;
                     *st.est_hp.entry(foe).or_insert(0) -= hit;
                 }

@@ -6,7 +6,7 @@
 use super::View;
 use aegis_core::json::{self, gstr, Dict};
 use aegis_content::schema::is_id;
-use rpgkit_rules::ruleset::{self, DECK, INTENTS, NEUTRAL, POISE, REGISTER, ROUND_INTENT};
+use rpgkit_rules::ruleset::{self, DECK, FIELD_INTENT, INTENTS, NEUTRAL, POISE, REGISTER, ROUND_INTENT};
 use serde_json::Value;
 
 /// The catalog kind (file data/catalog/rulesets.json).
@@ -18,11 +18,44 @@ const ID_MAX: usize = 24;
 /// The deck slot kinds and their ranges (RULESET1 9 D1).
 const SLOTS: [(&str, i64, i64); 3] = [("active", 1, 8), ("passive", 0, 4), ("keystone", 0, 2)];
 
-/// What a row's checks read from the rest of the catalog: the round intent of a tier-1 skill family (None = no such
-/// family) and the derived-stat ids.
+/// What a row's checks read from the rest of the catalog: the intent rows of a tier-1 skill family under a row with
+/// (true) or without `field_intent` (`intent_rows`; None = no such family) and the derived-stat ids.
 pub struct Refs<'a> {
-    pub skill_intent: &'a dyn Fn(&str) -> Option<String>,
+    pub skill_intent: &'a dyn Fn(&str, bool) -> Option<Vec<String>>,
     pub derived: &'a [String],
+}
+
+/// A4.2-K1b (INTENT2 IR15, IR21): the intent rows of a skill row, the primary first: IR21's derivation where the battle
+/// plays `field_intent` (`field`), else the legacy single intent (`intent_of`).
+pub fn intent_rows(skill: &Dict, field: bool) -> Vec<String> {
+    if field {
+        rpgkit_rules::intent::derive(&rpgkit_rules::intent::IntentInput::of_row(skill)).into_iter().map(String::from).collect()
+    } else {
+        vec![intent_of(skill)]
+    }
+}
+
+/// A4.2-K1b: whether a deck ruleset row (rules `deck`) plays `field_intent`, so deck orders read the derived rows and
+/// may name `field`.
+pub fn deck_plays_field(v: &View) -> bool {
+    v.entries(KIND).iter().any(|r| {
+        let rules = json::sget(r, "rules");
+        rules.iter().any(|x| x == DECK) && rules.iter().any(|x| x == FIELD_INTENT)
+    })
+}
+
+/// The intents a deck order may name: the row-listable ones (`INTENTS`), plus `field` under `field_intent`.
+pub fn order_intents(field: bool) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = INTENTS.to_vec();
+    if field {
+        out.push(rpgkit_rules::intent::FIELD);
+    }
+    out
+}
+
+/// "assault" or "field or assault" (a row list as the deck checks name it; "" for none).
+pub fn rows_label(rows: &[String]) -> String {
+    rows.join(" or ")
 }
 
 /// The intent of a skill row (RULESET1_INTENT IN4): its `round_intent` when set, else its kind's default.
@@ -36,8 +69,8 @@ pub fn intent_of(skill: &Dict) -> String {
 }
 
 /// Refs over loaded catalog rows ({kind: [entry]}): skill families are the tier-1 skill rows.
-pub fn skill_intent_in(skills: &[Value], id: &str) -> Option<String> {
-    skills.iter().map(json::dict).find(|e| json::s(e, "id") == id && json::i(e, "tier", 1) == 1).map(intent_of)
+pub fn skill_intent_in(skills: &[Value], id: &str, field: bool) -> Option<Vec<String>> {
+    skills.iter().map(json::dict).find(|e| json::s(e, "id") == id && json::i(e, "tier", 1) == 1).map(|e| intent_rows(e, field))
 }
 
 fn listed(e: &Dict, key: &str, label: &str, allowed: &[&str], out: &mut Vec<String>) -> Vec<String> {
@@ -87,9 +120,13 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
             out.push(format!("Basics lists '{b}' twice."));
         }
         seen.push(b);
-        match (refs.skill_intent)(b) {
+        // A4.2-K1b: under field_intent a basic's derived rows (one listed, or Field, is enough)
+        let field = has(FIELD_INTENT);
+        match (refs.skill_intent)(b, field) {
             None => out.push(format!("Basics: unknown skill family '{b}'.")),
-            Some(intent) if intent != NEUTRAL && !intents.contains(&intent) => out.push(format!("Basics: '{b}' is of intent {intent}, which Intents does not list.")),
+            Some(rows) if !rows.iter().any(|i| i == NEUTRAL || intents.contains(i) || (field && i == rpgkit_rules::intent::FIELD)) => {
+                out.push(format!("Basics: '{b}' is of intent {}, which Intents does not list.", rows_label(&rows)))
+            }
             Some(_) => {}
         }
     }
@@ -234,7 +271,7 @@ pub fn entry_errors(v: &View, e: &Dict, current_id: &str) -> Vec<String> {
     let mut rows: Vec<Dict> = v.entries(KIND).iter().filter(|r| current_id.is_empty() || json::s(r, "id") != current_id).cloned().collect();
     rows.push(e.clone());
     let skills: Vec<Value> = v.entries("skills").iter().cloned().map(Value::Object).collect();
-    let skill_intent = |id: &str| skill_intent_in(&skills, id);
+    let skill_intent = |id: &str, field: bool| skill_intent_in(&skills, id, field);
     let derived = v.derived_ids();
     check_rows(&rows, &Refs { skill_intent: &skill_intent, derived: &derived }).pop().unwrap_or_default()
 }

@@ -48,6 +48,10 @@ pub enum Shape {
     Arc,
 }
 
+/// The most rounds a placed hazard lasts (a row's `rounds` is clamped to it; A4.2-K1b: the Field row's `lingering`
+/// bonus too).
+pub const HAZARD_ROUNDS_CAP: i32 = 5;
+
 /// GH2: a skill's or consumable's `hazard`, carried by its command (read only under the rule).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Place {
@@ -71,7 +75,7 @@ impl Place {
             "ARC" => Shape::Arc,
             _ => Shape::One,
         };
-        Self { id: p.id.clone(), shape, at_self: p.at == "self", rounds: p.rounds.clamp(0, 5) }
+        Self { id: p.id.clone(), shape, at_self: p.at == "self", rounds: p.rounds.clamp(0, HAZARD_ROUNDS_CAP) }
     }
 
     /// The skill's placement: ATTACK, DEFEND and SUPPORT skills (not an item's synthetic skill); None without the field.

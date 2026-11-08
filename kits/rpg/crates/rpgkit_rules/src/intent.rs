@@ -2,8 +2,8 @@
 //! skill's allowed round intents from its baseline data (decision "Skills hold baseline data": allowed intents are
 //! derived, not authored, so the row's `round_intent` is not read). Up to 2 intents, the first the primary (IR15).
 //!
-//! Neutral slice: nothing calls it yet; the planner, checks and screens still read `ruleset::kind_intent` and the
-//! row's `round_intent` until the row-aware planner (`A4.2-K1b`, W2-4) switches them over.
+//! The row-aware planner (`A4.2-K1b`, W2-4 slice 6a) reads it through `allowed` (`rpgkit_battle::round_intent::
+//! skill_rows`); `field_bonus` names the derived Field bonus of a skill that allows the Field row (IR21).
 //!
 //! The precedence (first match wins):
 //!
@@ -131,4 +131,39 @@ pub fn allowed(rules: &Ruleset, s: &IntentInput, authored: &str) -> Vec<&'static
 /// Whether the derived list allows `intent` (the `row_allows` of the row-aware checks, W2-4).
 pub fn row_allows(intents: &[&str], intent: &str) -> bool {
     intents.contains(&intent)
+}
+
+/// IR21 (A4_EFFECTS section 2): the derived Field bonus of a skill that allows the Field row, not authored per skill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldBonus {
+    /// A `hazard`: the hazard lasts one round more (capped by the battle).
+    Lingering,
+    /// `ARC` or `LINE`: one size up (ARC 3 to 5 across, LINE 3 to 4 long).
+    Area,
+    /// A throw (`reach_max` above 1): `reach_max` + 1.
+    Reach,
+    /// The default (no current skill): power x1.25 (FB-120, `rpgkit_battle::skill::FIELD_POWER_MULT`).
+    Power,
+}
+
+/// IR21: the Field bonus of `s` in precedence order (`lingering` with a hazard, `area` for ARC and LINE, `reach` for a
+/// throw with `reach_max` above 1, else `power`); None when IR21 does not allow it the Field row.
+pub fn field_bonus(s: &IntentInput) -> Option<FieldBonus> {
+    if !derive(s).contains(&FIELD) {
+        return None;
+    }
+    Some(if s.hazard {
+        FieldBonus::Lingering
+    } else if matches!(s.area.as_str(), "ARC" | "LINE") {
+        FieldBonus::Area
+    } else if s.reach_max > 1 {
+        FieldBonus::Reach
+    } else {
+        FieldBonus::Power
+    })
+}
+
+/// IR15: the primary intent of a derived (or legacy) list: its first entry ("" for none).
+pub fn primary<'a>(intents: &[&'a str]) -> &'a str {
+    intents.first().copied().unwrap_or("")
 }

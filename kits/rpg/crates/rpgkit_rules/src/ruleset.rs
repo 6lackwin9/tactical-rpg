@@ -391,6 +391,14 @@ pub const MOVE_AFTER_BLOCKS: i32 = 3;
 /// A1.2-S1 (ITEMUSE1 rule 3): the default of `item_ap` (the AP a consumable use costs); the shipped `timeline` row sets 0 in data.
 pub const ITEM_AP: i32 = 1;
 
+/// A4.2-K1b (INTENT2 IR17, FB-102): the default of `splash_mult`, the factor a shaped Assault row's hits take off its
+/// primary target (rule `field_intent`).
+pub const SPLASH_MULT: f64 = 0.5;
+
+/// A4.2-K1b (INTENT2 IR17, A3.1 section 3): the default of `assault_shape_blocks`, the wind-up blocks a shaped Assault row
+/// takes beyond its Field row (rule `field_intent`; the round's blocks cap it).
+pub const ASSAULT_SHAPE_BLOCKS: i32 = 1;
+
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Numbers {
@@ -469,6 +477,12 @@ pub struct Numbers {
     /// A1.2-S1 (`item_ap`, A1 parameter table): the AP a consumable use costs (AP debt allowed; a unit that pays no AP
     /// pays nothing); by the rules: `ITEM_AP` (classic), 0 under `round_intent`.
     pub item_ap: i32,
+    /// A4.2-K1b (`splash_mult`, IR17): the factor on a shaped Assault row's hits off its primary target (read only under
+    /// `field_intent`).
+    pub splash_mult: f64,
+    /// A4.2-K1b (`assault_shape_blocks`, IR17): the extra wind-up blocks of a shaped Assault row (read only under
+    /// `field_intent`).
+    pub assault_shape_blocks: i32,
 }
 
 impl Default for Numbers {
@@ -514,6 +528,8 @@ impl Default for Numbers {
             guard_common_mitigation: status::GUARD_COMMON_MITIGATION,
             guard_multi_round_mitigation: status::GUARD_MULTI_ROUND_MITIGATION,
             item_ap: ITEM_AP,
+            splash_mult: SPLASH_MULT,
+            assault_shape_blocks: ASSAULT_SHAPE_BLOCKS,
         }
     }
 }
@@ -584,6 +600,8 @@ impl Numbers {
             guard_common_mitigation: value::float(o, "guard_common_mitigation", d.guard_common_mitigation),
             guard_multi_round_mitigation: value::float(o, "guard_multi_round_mitigation", d.guard_multi_round_mitigation),
             item_ap: value::int(o, "item_ap", d.item_ap),
+            splash_mult: value::float(o, "splash_mult", d.splash_mult),
+            assault_shape_blocks: value::int(o, "assault_shape_blocks", d.assault_shape_blocks),
         }
     }
 
@@ -803,7 +821,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 32] = [
+pub const FIELD_RULES: [FieldRule; 34] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -849,6 +867,10 @@ pub const FIELD_RULES: [FieldRule; 32] = [
     // A1.2-S1 (A1 parameter table): the AP of a consumable use (schema int 0..2, which loading clamps to; this range
     // flags a raw row); read whatever the rules
     FieldRule { range: Some((0.0, 2.0)), ..field_rule("item_ap", &[]) },
+    // A4.2-K1b (IR17, A3.1 section 3): the shaped Assault row's splash and wind-up, row-only like the status numbers;
+    // read only under field_intent
+    FieldRule { range: Some((0.25, 1.0)), ..field_rule("splash_mult", &[FIELD_INTENT]) },
+    FieldRule { range: Some((0.0, 2.0)), ..field_rule("assault_shape_blocks", &[FIELD_INTENT]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -1021,7 +1043,7 @@ pub const LOCKED: [Locked; 48] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 12] = [
+pub const PROMOTED: [(&str, &str); 14] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -1034,6 +1056,8 @@ pub const PROMOTED: [(&str, &str); 12] = [
     ("GUARD_COMMON_MITIGATION", "guard_common_mitigation"),
     ("GUARD_MULTI_ROUND_MITIGATION", "guard_multi_round_mitigation"),
     ("ITEM_AP", "item_ap"),
+    ("SPLASH_MULT", "splash_mult"),
+    ("ASSAULT_SHAPE_BLOCKS", "assault_shape_blocks"),
 ];
 
 impl Numbers {
@@ -1087,6 +1111,8 @@ impl Numbers {
             "guard_common_mitigation" => self.guard_common_mitigation.to_string(),
             "guard_multi_round_mitigation" => self.guard_multi_round_mitigation.to_string(),
             "item_ap" => self.item_ap.to_string(),
+            "splash_mult" => self.splash_mult.to_string(),
+            "assault_shape_blocks" => self.assault_shape_blocks.to_string(),
             _ => return None,
         })
     }

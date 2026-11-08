@@ -18523,7 +18523,8 @@
         "pierce",
         "reach",
         "flank",
-        "plan_badges"
+        "plan_badges",
+        "field_intent"
       ],
       "intents": [
         "assault",

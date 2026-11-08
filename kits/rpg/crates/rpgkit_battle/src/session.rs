@@ -1916,7 +1916,7 @@ fn raw_tier(e: &UnitDef) -> String {
 /// `events` as they were. Returns the result and the later members' dropped picks and refusals (PL8).
 pub(crate) fn pick_on(w: &mut World, plan: &mut Plan, events: &mut Vec<String>, c: UnitId, at: round_intent::RoundTarget, picks: &[round_intent::Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
     let (w0, seq0, events0) = (w.clone(), plan.sequences.clone(), events.len());
-    if let Some(i) = crate::round_intent_plan::pick_intent(w, c, picks) {
+    if let Some(i) = crate::round_intent_plan::pick_intent(w, c, at, picks) {
         match crate::round_intent_plan::change_intent(w, plan, c, i) {
             Ok(lines) => events.extend(lines),
             Err(e) => return (Err(e), Vec::new()),

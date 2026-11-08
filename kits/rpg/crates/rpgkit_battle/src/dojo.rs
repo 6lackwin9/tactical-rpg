@@ -390,12 +390,24 @@ impl DojoSession {
 
     // ---- RULESET1_INTENT UI4: the planner view (no resolver: plans compile on a scratch board) ------------------
 
-    /// The intents the Dojo's ruleset offers (none without `round_intent`).
+    /// The intents the Dojo's ruleset offers (none without `round_intent`; A4.2-K1b: Field too under `field_intent`).
     pub fn plan_intents(&self) -> Vec<RoundIntent> {
         if !self.ruleset.has(ruleset::ROUND_INTENT) {
             return Vec::new();
         }
-        self.ruleset.numbers.intents.iter().filter_map(|i| RoundIntent::parse(i)).collect()
+        let mut out: Vec<RoundIntent> = self.ruleset.numbers.intents.iter().filter_map(|i| RoundIntent::parse(i)).collect();
+        if self.ruleset.has(ruleset::FIELD_INTENT) && !out.contains(&RoundIntent::Field) {
+            out.push(RoundIntent::Field);
+        }
+        out
+    }
+
+    /// A4.2-K1b (INTENT2 IR15, IR21; row W2-4 "display only the valid IR21 intent variants for the selected skill"): each
+    /// intent of `plan_intents` with whether it is open now: under `field_intent` with an opener picked, only the
+    /// opener's own rows (`intent::allowed`); else every intent (classic Dojo rules unchanged).
+    pub fn plan_variants(&self) -> Vec<(RoundIntent, bool)> {
+        let rows = self.planner.opener.as_deref().filter(|_| self.ruleset.has(ruleset::FIELD_INTENT)).and_then(|id| self.cat.skill(id)).map(|s| rpgkit_rules::intent::allowed(&self.ruleset, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent));
+        self.plan_intents().into_iter().map(|i| (i, rows.as_ref().is_none_or(|r| r.contains(&i.id())))).collect()
     }
 
     /// The scratch battle the planner plans on: the active hero (as it stands: gear, AP, deck), the second dummy on
@@ -518,9 +530,11 @@ impl DojoSession {
         self.plan_view_of(&self.planner)
     }
 
-    /// UI4: the plan each intent of the ruleset would make now (its kind and opener the planner's).
+    /// UI4: the plan each intent of the ruleset would make now (its kind and opener the planner's). A4.2-K1b (the skill
+    /// variant previews): with an opener picked, one plan per row of that skill, each opening with it.
     pub fn plans_by_intent(&self) -> Vec<PlanView> {
-        self.plan_intents().into_iter().map(|i| self.plan_view_of(&PlanSetup { intent: i, kind: None, opener: None, ..self.planner.clone() })).collect()
+        let opener = self.planner.opener.clone().filter(|_| self.ruleset.has(ruleset::FIELD_INTENT));
+        self.plan_variants().into_iter().filter(|v| v.1).map(|(i, _)| self.plan_view_of(&PlanSetup { intent: i, kind: None, opener: opener.clone(), ..self.planner.clone() })).collect()
     }
 
     /// The openers the hero may pick for the setup's intent: its order for the intent (FU4), as (skill id, name).
@@ -530,14 +544,27 @@ impl DojoSession {
         if round_intent::set_intent(&mut s.w, 0, setup.intent).is_err() {
             return Vec::new();
         }
-        rip::order(&s.w, 0, setup.intent).into_iter().map(|sid| (s.w.cat.skills[sid].id.clone(), s.w.cat.skills[sid].name.clone())).collect()
+        let mut out: Vec<skill::SkillId> = rip::order(&s.w, 0, setup.intent);
+        // A4.2-K1b (IR15): a skill's second row opens by pick: the hero's skills of that row the order leaves out
+        if round_intent::field_rows(&s.w) {
+            for sid in rip::hotkey_skills(&s.w, 0) {
+                if !out.contains(&sid) && round_intent::skill_rows(&s.w, &s.w.cat.skills[sid]).contains(&setup.intent.id()) {
+                    out.push(sid);
+                }
+            }
+        }
+        out.into_iter().map(|sid| (s.w.cat.skills[sid].id.clone(), s.w.cat.skills[sid].name.clone())).collect()
     }
 
-    /// Sets the planner's intent (the kind and opener go back to the planner's pick).
+    /// Sets the planner's intent (the kind and opener go back to the planner's pick; A4.2-K1b: an opener with that row
+    /// stays, so switching between a skill's variants keeps the skill).
     pub fn set_plan_intent(&mut self, intent: RoundIntent) {
+        let keep = self.plan_variants().iter().any(|v| v.0 == intent && v.1) && self.ruleset.has(ruleset::FIELD_INTENT);
         self.planner.intent = intent;
         self.planner.kind = None;
-        self.planner.opener = None;
+        if !keep {
+            self.planner.opener = None;
+        }
     }
 
     /// Moves a planner piece ("hero", "dummy", "partner") to `cell` when it is on the grid and free; "partner" with

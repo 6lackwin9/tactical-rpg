@@ -965,6 +965,22 @@ pub const EXPLOIT_HP_BELOW: &str = "hp_below";
 /// The most blocks an action may take with its recovery (the round's blocks; the schema's `blocks` max).
 const MAX_ACTION_BLOCKS: i64 = 6;
 
+/// A4.2-K1b (A3.1 acceptance 2, FB-20): the most `assault_shape_blocks` a ruleset row that plays the shaped Assault row
+/// (rule `field_intent`) adds (its value, else the default); None when no row lists the rule.
+fn assault_shape_blocks(v: &View) -> Option<i64> {
+    v.entries(ruleset::KIND)
+        .iter()
+        .filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::FIELD_INTENT))
+        .map(|r| json::i(r, "assault_shape_blocks", ruleset::ASSAULT_SHAPE_BLOCKS as i64).max(0))
+        .max()
+}
+
+/// IR21: a shaped skill with both a Field and an Assault row.
+fn is_dual_shape(e: &Dict) -> bool {
+    let rows = rpgkit_rules::intent::derive(&rpgkit_rules::intent::IntentInput::of_row(e));
+    rows.contains(&rpgkit_rules::intent::FIELD) && rows.contains(&rpgkit_rules::intent::ASSAULT)
+}
+
 /// Whether a ruleset row lists `intent` among its intents.
 fn ruleset_lists(v: &View, intent: &str) -> bool {
     v.entries(ruleset::KIND).iter().any(|r| json::sget(r, "intents").iter().any(|i| i == intent))
@@ -999,6 +1015,12 @@ fn timeline_problems(v: &View, e: &Dict, kind: &str) -> Vec<String> {
         let total = json::i(e, "blocks", 1) + json::i(e, "recovery_blocks", 0);
         if total > MAX_ACTION_BLOCKS {
             out.push(format!("Blocks plus recovery blocks is {total} (at most {MAX_ACTION_BLOCKS}: the action must fit the round)."));
+        } else if let Some(extra) = assault_shape_blocks(v).filter(|_| is_dual_shape(e)) {
+            // A4.2-K1b (A3.1 acceptance 2): a dual Field / Assault skill's Assault row, one wind-up block or more longer,
+            // must fit the round too
+            if total + extra > MAX_ACTION_BLOCKS {
+                out.push(format!("Blocks plus recovery blocks plus the Assault row's {extra} wind-up block{} is {} (at most {MAX_ACTION_BLOCKS}: the action must fit the round).", if extra == 1 { "" } else { "s" }, total + extra));
+            }
         }
     }
     if kind == "ATTACK" && json::b(e, "sure_break", false) && json::i(e, "stagger", 0) < 1 {

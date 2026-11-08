@@ -1552,7 +1552,6 @@
 				],
 				"order": {
 					"assault": [
-						"tripwire_snare",
 						"poachers_quarrel",
 						"strike"
 					],
@@ -1561,6 +1560,9 @@
 					],
 					"maneuver": [
 						"flank_cut"
+					],
+					"field": [
+						"tripwire_snare"
 					]
 				},
 				"passive": [
@@ -1835,15 +1837,16 @@
 					"boning_knife_flurry"
 				],
 				"order": {
-					"assault": [
-						"scalding_grease_pot"
-					],
+					"assault": [],
 					"maneuver": [
 						"boning_knife_flurry",
 						"flank_cut"
 					],
 					"guard": [
 						"active_guard"
+					],
+					"field": [
+						"scalding_grease_pot"
 					]
 				}
 			},
@@ -2239,7 +2242,9 @@
 				],
 				"order": {
 					"assault": [
-						"ossified_spine_volley",
+						"ossified_spine_volley"
+					],
+					"guard": [
 						"tendril_flail"
 					]
 				}
@@ -2580,12 +2585,14 @@
 				],
 				"order": {
 					"assault": [
-						"phosphorus_pot",
 						"magnesium_flash_bomb",
 						"strike"
 					],
 					"guard": [
 						"active_guard"
+					],
+					"field": [
+						"phosphorus_pot"
 					]
 				},
 				"passive": [
@@ -2713,11 +2720,13 @@
 				],
 				"order": {
 					"assault": [
-						"pyre_nozzle_sweep",
 						"brand_of_the_heretic"
 					],
 					"guard": [
 						"active_guard"
+					],
+					"field": [
+						"pyre_nozzle_sweep"
 					]
 				}
 			},

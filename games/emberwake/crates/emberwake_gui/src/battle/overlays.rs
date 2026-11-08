@@ -76,6 +76,10 @@ pub(super) struct Overlay {
     /// INPUT1 MR13: while a Maneuver Engage row of the skill menu is hovered, its target's open position tiles (true:
     /// the preferred tier); none when the flank is protected. Planning only, layer `moves`.
     pub(super) positions: Vec<(V2, bool)>,
+    /// A4.2-K1b (INTENT2 IR5, IR17, INTENT2-U "source and impact tiles"): the selected hero's planned area entries under
+    /// `field_intent`: their impact tiles and row (Field: fixed marks with the Field bonus; Assault: locked on the target,
+    /// drawn where it stands now; Stand: the ring around the hero). Planning only, layer `target`.
+    pub(super) areas: Vec<(Vec<V2>, RoundIntent)>,
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows, default);
@@ -231,6 +235,7 @@ impl Overlay {
             veils: if l.veils { self.veils.clone() } else { Vec::new() },
             arrows: self.arrows.iter().filter(|a| alt || Some(a.unit) == sel || Some(a.unit) == inspect).cloned().collect(),
             positions: if l.moves { self.positions.clone() } else { Vec::new() },
+            areas: if l.target { self.areas.clone() } else { Vec::new() },
         }
     }
 }
@@ -290,6 +295,15 @@ pub(super) fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Opt
         }
     }
     let Some(intent) = ri::intent_of(w, h) else { return Some(o) };
+    if ri::field_rows(w) {
+        for e in st.entries.iter().filter(|e| !e.cells.is_empty() && e.step_index >= 0) {
+            let s = &w.cat.skills[e.skill];
+            if emberwake_battle::skill::kind(s) == Kind::Attack && emberwake_battle::skill::is_area(s) {
+                let row = if e.target.is_some() { RoundIntent::Assault } else { intent };
+                o.areas.push((e.cells.clone(), row));
+            }
+        }
+    }
     o.valid = (0..w.units.len())
         .filter(|&u| on_field(u) && Some(ri::normalize(h, RoundTarget::Unit(u))) != target)
         .filter(|&u| ri::target_problem(w, h, intent, RoundTarget::Unit(u)).is_empty())
@@ -333,6 +347,7 @@ pub(super) fn overlay_json(o: &Overlay) -> Value {
         "veils": o.veils.iter().map(|(c, hidden)| json!({"at": cell(c), "hidden": hidden})).collect::<Vec<_>>(),
         "arrows": arrows_json(&o.arrows),
         "positions": o.positions.iter().map(|(c, preferred)| json!({"at": cell(c), "preferred": preferred})).collect::<Vec<_>>(),
+        "areas": o.areas.iter().map(|(cells, row)| json!({"row": row.id(), "cells": cells.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
     })
 }
 
@@ -383,6 +398,14 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
                 View::Flat => geo.cell_rect(*end).inset(3),
             };
             p.panel(r, with_alpha(col, 40), col, 2.0);
+        }
+    }
+    // A4.2-K1b: the planned areas' impact tiles in their row's colour; the Assault row's lighter (it follows its target)
+    for (cells, row) in &o.areas {
+        let col = super::tips::intent_ring_color(*row);
+        let (fill, edge) = if *row == RoundIntent::Assault { (24, 120) } else { (56, 220) };
+        for c in cells {
+            plate(p, plate_of(*c), with_alpha(col, fill), with_alpha(col, edge));
         }
     }
     // INPUT1 MR13: the hovered Engage row's open position tiles: a GOLD ring plate (preferred), a DIM one (fallback)

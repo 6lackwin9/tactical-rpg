@@ -14,7 +14,8 @@ use rpgkit_data::{ItemDef, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, MeleeDiagonal, Numbers};
 use rpgkit_rules::status;
 
-/// RULESET1_INTENT IN1: the intents a unit may hold (`channel` only when the ruleset row lists it).
+/// RULESET1_INTENT IN1: the intents a unit may hold (`channel` only when the ruleset row lists it; INTENT2 IR2 `field`,
+/// a tile target, only under the rule `field_intent`: `listed`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoundIntent {
     Assault,
@@ -22,10 +23,11 @@ pub enum RoundIntent {
     Support,
     Maneuver,
     Channel,
+    Field,
 }
 
 impl RoundIntent {
-    pub const ALL: [RoundIntent; 5] = [RoundIntent::Assault, RoundIntent::Guard, RoundIntent::Support, RoundIntent::Maneuver, RoundIntent::Channel];
+    pub const ALL: [RoundIntent; 6] = [RoundIntent::Assault, RoundIntent::Guard, RoundIntent::Support, RoundIntent::Maneuver, RoundIntent::Channel, RoundIntent::Field];
 
     /// The id (`rpgkit_rules::ruleset::INTENTS`).
     pub fn id(self) -> &'static str {
@@ -35,6 +37,7 @@ impl RoundIntent {
             RoundIntent::Support => "support",
             RoundIntent::Maneuver => "maneuver",
             RoundIntent::Channel => "channel",
+            RoundIntent::Field => "field",
         }
     }
 
@@ -51,6 +54,7 @@ impl RoundIntent {
             RoundIntent::Support => INTENT_SUPPORT,
             RoundIntent::Maneuver => INTENT_MANEUVER,
             RoundIntent::Channel => INTENT_CHANNEL,
+            RoundIntent::Field => INTENT_FIELD,
         }
     }
 
@@ -153,6 +157,37 @@ pub fn intent_of(w: &World, c: UnitId) -> Option<RoundIntent> {
     w.round_states.get(&c).and_then(|r| r.intent)
 }
 
+/// Whether the battle offers `intent` (IN1): the ruleset row lists it; INTENT2 IR2's Field is offered by the rule
+/// `field_intent` instead (no row lists it; classic never has it).
+pub fn listed(w: &World, intent: RoundIntent) -> bool {
+    match intent {
+        RoundIntent::Field => w.ruleset.has(ruleset::FIELD_INTENT),
+        _ => w.ruleset.numbers.intents.iter().any(|i| i == intent.id()),
+    }
+}
+
+/// A4.2-K1b (INTENT2 IR15, IR21): the intent rows a skill is offered in, the primary first: IR21's derivation under the
+/// rule `field_intent`, else the legacy single intent (`skill_intent`), through `rpgkit_rules::intent::allowed`.
+pub fn skill_rows(w: &World, s: &SkillDef) -> Vec<&'static str> {
+    rpgkit_rules::intent::allowed(&w.ruleset, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent)
+}
+
+/// IR15: whether `s` may be used in an `intent` round (any of its rows; neutral skills fit every round).
+pub fn skill_allows(w: &World, s: &SkillDef, intent: RoundIntent) -> bool {
+    let rows = skill_rows(w, s);
+    rows.contains(&intent.id()) || rows.contains(&ruleset::NEUTRAL)
+}
+
+/// IR15: the skill's primary intent id (its first row; "" for none).
+pub fn skill_primary(w: &World, s: &SkillDef) -> &'static str {
+    rpgkit_rules::intent::primary(&skill_rows(w, s))
+}
+
+/// A4.2-K1b: whether the battle plays the Field and shaped Assault rows (rule `field_intent`).
+pub fn field_rows(w: &World) -> bool {
+    w.ruleset.has(ruleset::FIELD_INTENT)
+}
+
 /// RULESET1_INTENT IN4: a skill's intent id (its `round_intent`, else its kind's).
 pub fn skill_intent(s: &SkillDef) -> &str {
     if s.round_intent.is_empty() {
@@ -183,23 +218,31 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
     }
     let fits = match (intent, target) {
         (RoundIntent::Assault | RoundIntent::Maneuver, RoundTarget::Unit(t)) => foe(t),
-        (RoundIntent::Assault | RoundIntent::Maneuver, RoundTarget::Cell(_)) => true,
+        // A4.2-K1b (INTENT2 IR2, IR19): under `field_intent` a tile is Field's (or a Maneuver's), not Assault's
+        (RoundIntent::Assault, RoundTarget::Cell(_)) => !field_rows(w),
+        (RoundIntent::Maneuver, RoundTarget::Cell(_)) => true,
         (RoundIntent::Assault | RoundIntent::Maneuver, RoundTarget::Myself) => false,
         (RoundIntent::Guard, RoundTarget::Myself | RoundTarget::Cell(_)) => true,
         (RoundIntent::Guard, RoundTarget::Unit(t)) => t == c,
+        // kept for items (Support on Myself) until K3 gives items their rows; a skill clicked on itself takes Stand (IR15)
         (RoundIntent::Support, RoundTarget::Myself) => true,
         (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t),
         (RoundIntent::Support, RoundTarget::Cell(_)) => false,
         (RoundIntent::Channel, _) => true,
+        // INTENT2 IR2, IR5: Field aims at a tile (the source); a click on a unit means the unit
+        (RoundIntent::Field, RoundTarget::Cell(_)) => true,
+        (RoundIntent::Field, _) => false,
     };
     if fits {
         return String::new();
     }
     match intent {
+        RoundIntent::Assault if field_rows(w) => format!("{} targets an enemy; aim at a tile with {}.", intent.label(&w.cat), RoundIntent::Field.label(&w.cat)),
         RoundIntent::Assault | RoundIntent::Maneuver => format!("{} targets an enemy or a tile.", intent.label(&w.cat)),
         RoundIntent::Guard => "Guard targets yourself or a tile.".into(),
         RoundIntent::Support => "Support targets yourself or an ally.".into(),
         RoundIntent::Channel => String::new(),
+        RoundIntent::Field => format!("{} targets a tile.", intent.label(&w.cat)),
     }
 }
 
@@ -218,7 +261,7 @@ pub fn set_intent(w: &mut World, c: UnitId, intent: RoundIntent) -> Result<Vec<S
     if !on(w) {
         return Err("This battle has no round intents.".into());
     }
-    if !w.ruleset.numbers.intents.iter().any(|i| i == intent.id()) {
+    if !listed(w, intent) {
         return Err(format!("{} is not an intent of this ruleset.", intent.label(&w.cat)));
     }
     if !w.units[c].is_active() {
@@ -617,7 +660,7 @@ pub fn diagonal(w: &World, c: UnitId, s: Option<&SkillDef>) -> bool {
     };
     match w.ruleset.melee_diagonal() {
         MeleeDiagonal::None => false,
-        MeleeDiagonal::Maneuver => s.is_some_and(|s| skill_intent(s) == "maneuver" && melee_attack(s)),
+        MeleeDiagonal::Maneuver => s.is_some_and(|s| skill_rows(w, s).contains(&"maneuver") && melee_attack(s)),
         MeleeDiagonal::All => s.is_none_or(melee_attack),
     }
 }

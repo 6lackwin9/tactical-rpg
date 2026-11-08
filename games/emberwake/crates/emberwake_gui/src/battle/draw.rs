@@ -684,7 +684,18 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         _ if planning && g.move_aim.is_some() => g.move_tiles.iter().map(|t| (t.cell, true)).collect(),
         _ => Vec::new(),
     };
+    // A4.2-K1b: the hovered area row previews its impact tiles (Field marks or the Assault lock)
+    let previewed = match &hovered_pick {
+        Some(((h, at), row)) if planning => match &row.act {
+            RowAct::Pick(picks) => super::input::area_preview(s, *h, row.at.unwrap_or(*at), picks),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    };
     if let Some(o) = overlay.as_mut() {
+        if !previewed.is_empty() {
+            o.areas = previewed;
+        }
         o.positions = marked.clone();
         // VISCLAR1 AR1-AR3: every unit's target arrow; the board draws the selected and inspected unit's (Alt: all)
         o.arrows = arrows_of(s, &tells, &rounds, &layers, show_tells);

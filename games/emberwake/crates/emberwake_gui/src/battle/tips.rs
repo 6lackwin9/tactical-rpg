@@ -21,7 +21,7 @@ use emberwake_battle::world::World;
 use std::time::Instant;
 
 /// RULESET1_INTENT UI5: a round intent's colour, its commands' colour (Assault an attack's, Guard a Defend's, Support's,
-/// Maneuver a Disengage's, Channel a Focus's).
+/// Maneuver a Disengage's, Channel a Focus's). A4.2-K1b: Field takes the theme's earth tone (`field_color`).
 fn intent_color(i: RoundIntent) -> Rgba {
     kind_color(match i {
         RoundIntent::Assault => "ATTACK",
@@ -29,7 +29,14 @@ fn intent_color(i: RoundIntent) -> Rgba {
         RoundIntent::Support => "SUPPORT",
         RoundIntent::Maneuver => "DISENGAGE",
         RoundIntent::Channel => "FOCUS",
+        RoundIntent::Field => return field_color(),
     })
+}
+
+/// A4.2-K1b (INTENT2-U "Field ring colour"): the Field intent's colour, from the theme palette (the checked box's earth
+/// tone, an amber brown in the game's theme), so a theme retunes it with no new art.
+pub(super) fn field_color() -> Rgba {
+    th().check_on
 }
 
 /// VISCLAR1-D (mock `intent_ring`): the ring under a unit whose intent shows, a brighter cut of the intent's colour, so it
@@ -41,6 +48,12 @@ pub(super) fn intent_ring_color(i: RoundIntent) -> Rgba {
         RoundIntent::Support => rgb(70, 165, 90),
         RoundIntent::Maneuver => rgb(70, 145, 205),
         RoundIntent::Channel => rgb(175, 135, 50),
+        // A4.2-K1b: the Field colour brightened by half (the earth tone kept, apart from Assault's red), as the ground needs
+        RoundIntent::Field => {
+            let c = field_color();
+            let up = |v: u8| (v as u16 * 3 / 2).min(255) as u8;
+            rgb(up(c[0]), up(c[1]), up(c[2]))
+        }
     }
 }
 

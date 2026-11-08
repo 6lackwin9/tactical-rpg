@@ -225,7 +225,7 @@ fn read_rulesets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dic
         }
     }
     let skills = json::arr(json::get(loaded, "skills"));
-    let skill_intent = |id: &str| crate::check::ruleset::skill_intent_in(skills, id);
+    let skill_intent = |id: &str, field: bool| crate::check::ruleset::skill_intent_in(skills, id, field);
     let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
     let checked = crate::check::ruleset::check_rows(&rows, &crate::check::ruleset::Refs { skill_intent: &skill_intent, derived: &derived });
     let mut kept = Vec::new();

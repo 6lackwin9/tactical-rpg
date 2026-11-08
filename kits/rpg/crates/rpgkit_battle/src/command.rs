@@ -45,6 +45,16 @@ pub enum CmdKind {
         status_rounds: i32,
         /// A3.2-K2 (IR9): the units it hits (`skill::affects_by`, the skill's field or its row's default).
         affects: rpgkit_data::Affects,
+        /// A4.2-K1b (INTENT2 IR5, IR17): a shaped Assault row's picked enemy: at the impact the shape is re-read on the
+        /// tile it stands on then (while it is in `band`), it takes the full power and the status, the other tiles
+        /// `splash`. None: the cells are fixed at planning (Field, classic, a legacy area).
+        target: Option<UnitId>,
+        /// IR17: the factor off the primary target (`splash_mult`; 1.0 without a target).
+        splash: f64,
+        /// The shape the impact re-reads (`skill::shape_cells`).
+        shape: skill::Area,
+        /// The band the target must be in at the impact (and the start's chase reaches for).
+        band: (i32, i32),
         last_damage: i32,
         last_hits: i32,
         crit_hits: Vec<(UnitId, bool)>,
@@ -381,6 +391,18 @@ impl Command {
                 }
                 line
             }
+            // A4.2-K1b (IR17): a shaped Assault row chases its target 1 tile when it is out of range at the start (MR16)
+            CmdKind::Area { target: Some(t), band, shape, .. } => {
+                let (t, band, diag) = (*t, *band, skill::diagonal_shape(*shape));
+                if !w.units[t].is_active() || !w.units[src].is_active() || !w.has(t) || round_intent::hidden(w, t) || in_reach(w, src, t, band, diag) {
+                    return String::new();
+                }
+                let line = chase_line(w, src, t, band, diag, 1);
+                if !line.is_empty() {
+                    self.moved = Some(MoveKind::Chase);
+                }
+                line
+            }
             // INPUT1 MR16: a Support command on an ally chases it into its reach as an attack does
             CmdKind::Support { target, skill, .. } if self.follow > 0 => {
                 let (t, sk) = (*target, *skill);
@@ -520,7 +542,7 @@ impl Command {
                 let tu = &w.units[t];
                 self.log = format!("[Attack] {src_name} struck {} for {taken}{}{detail} (HP {}/{})", tu.name, if crit { " CRIT" } else { "" }, tu.hp, tu.max_hp);
             }
-            CmdKind::Area { cells, skill_mult, status_rounds, affects, .. } => {
+            CmdKind::Area { cells, skill_mult, status_rounds, affects, target, splash, shape, band, .. } => {
                 let mut total = 0;
                 let mut hits = 0;
                 let mut crits = Vec::new();
@@ -528,6 +550,19 @@ impl Command {
                     self.failed = true;
                     self.log = format!("[Action Failed] {src_name} cannot act");
                     return;
+                }
+                // A4.2-K1b (IR5, IR7, IR17): a shaped Assault row's shape is centred where its target stands at the
+                // impact, its direction read from the user's tile then; a target gone, hidden or out of range: no tiles
+                let cells: Vec<V2> = match target {
+                    Some(t) if w.units[t].is_active() && w.has(t) && !round_intent::hidden(w, t) && in_reach(w, src, t, band, skill::diagonal_shape(shape)) => {
+                        let from = w.pos(src);
+                        skill::shape_cells(shape, from, w.pos(t)).into_iter().filter(|c| w.grid.is_valid(*c) && *c != from).collect()
+                    }
+                    Some(_) => Vec::new(),
+                    None => cells,
+                };
+                if let CmdKind::Area { cells: kept, .. } = &mut self.kind {
+                    kept.clone_from(&cells);
                 }
                 let mut parts = Vec::new();
                 // HOOKS1 8.4: a unit the area also strikes takes no redirect (rule triggers)
@@ -541,7 +576,10 @@ impl Command {
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
                     let flank = round_intent::flank_bonus(w, src, v);
                     let matched = skill::exploit_match_by(&self.exploit, &w.units[v], &[], flank, &w.ruleset);
-                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, &inside);
+                    // IR17: the hits off the primary target take `splash`
+                    let primary = target.is_none_or(|t| t == v);
+                    let part = if primary { 1.0 } else { splash };
+                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * part * matched.1 * flank_power(w, flank), cover, &inside);
                     self.hits.push((v, flank));
                     self.struck.push(crate::trigger::Struck { target: v, damage: taken, ranged });
                     total += taken;
@@ -550,7 +588,8 @@ impl Command {
                         crits.push((v, !w.units[v].is_alive()));
                     }
                     let mut note = String::new();
-                    if !self.status_effect.is_empty() && w.units[v].is_alive() {
+                    // IR17: a shaped Assault row's status lands on its target only
+                    if !self.status_effect.is_empty() && w.units[v].is_alive() && primary {
                         let st = self.status_effect.clone();
                         let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
                         // A4.2: the skill inflict as an EffectSpec

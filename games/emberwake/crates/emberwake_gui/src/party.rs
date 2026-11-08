@@ -351,8 +351,11 @@ pub(crate) struct DeckTerms {
     pub actives: Vec<String>,
     pub passives: Vec<String>,
     pub keystones: Vec<String>,
-    /// Skill family -> its intent (`round_intent`, else its kind's; actives and basics).
+    /// Skill family -> its intent (`round_intent`, else its kind's; actives and basics). A4.2-K1b: its primary row.
     pub intent_of: IndexMap<String, String>,
+    /// A4.2-K1b (INTENT2 IR15, IR21): skill family -> every intent row it plays in under the ruleset (`intent::allowed`:
+    /// the derived rows under `field_intent`, else the single intent); a family missing here has `intent_of`'s alone.
+    pub rows_of: IndexMap<String, Vec<String>>,
     /// The deck an empty deck plays as (D5 auto: the base unit's deck, else the first class-path families).
     pub auto: Deck,
     /// The actives an empty `active` row plays as in a deck with other keys (the loadout's families).
@@ -361,7 +364,41 @@ pub(crate) struct DeckTerms {
     pub intent_names: IndexMap<String, String>,
 }
 
+/// A4.2-K1b: each family's primary intent and rows under `rs` (`intent::allowed`).
+fn rows_of<'a>(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, fams: impl Iterator<Item = &'a String>) -> (IndexMap<String, String>, IndexMap<String, Vec<String>>) {
+    let mut primary = IndexMap::new();
+    let mut rows = IndexMap::new();
+    for f in fams {
+        if let Some(s) = cat.tier_one(f) {
+            let r: Vec<String> = emberwake_rules::intent::allowed(rs, &emberwake_rules::intent::IntentInput::of_def(s), &s.round_intent).into_iter().map(String::from).collect();
+            primary.insert(f.clone(), r.first().cloned().unwrap_or_else(|| emberwake_battle::round_intent::skill_intent(s).to_string()));
+            rows.insert(f.clone(), r);
+        }
+    }
+    (primary, rows)
+}
+
+/// A4.2-K1b: the intents a deck order lists: the ruleset's, and Field under `field_intent`.
+fn order_intents(rs: &emberwake_rules::ruleset::Ruleset) -> Vec<String> {
+    let mut out = rs.numbers.intents.clone();
+    if rs.has(emberwake_rules::ruleset::FIELD_INTENT) && !out.iter().any(|i| i == "field") {
+        out.push("field".into());
+    }
+    out
+}
+
 impl DeckTerms {
+    /// A4.2-K1b (IR15): the rows family `f` plays in (its `rows_of`, else its one intent).
+    pub fn rows(&self, f: &str) -> Vec<String> {
+        self.rows_of.get(f).cloned().unwrap_or_else(|| self.intent_of.get(f).cloned().into_iter().collect())
+    }
+
+    /// Whether families `a` and `b` share a row (a follow-up joins an opener of one of its rows).
+    fn share_row(&self, a: &str, b: &str) -> bool {
+        let rb = self.rows(b);
+        self.rows(a).iter().any(|r| rb.contains(r))
+    }
+
     /// A party member's terms under `rs`: None unless the ruleset has the deck rule (classic keeps today's tab).
     pub fn for_member(d: &Data, m: &UnitState, world: &str, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
         let rule = emberwake_rules::DeckRule::of(rs)?;
@@ -391,8 +428,8 @@ impl DeckTerms {
             }
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
-        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
+        let (intent_of, rows_of) = rows_of(cat, rs, actives.iter().chain(&basics));
+        Some(Self { slots: rule.slots, intents: order_intents(rs), basics, actives, passives, keystones, intent_of, rows_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
@@ -423,8 +460,8 @@ impl DeckTerms {
             }
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
-        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
+        let (intent_of, rows_of) = rows_of(cat, rs, actives.iter().chain(&basics));
+        Some(Self { slots: rule.slots, intents: order_intents(rs), basics, actives, passives, keystones, intent_of, rows_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// The slots of `kind`.
@@ -490,8 +527,10 @@ impl DeckTerms {
     /// deck), else the deck's actives of the intent in slot order, then the basics of the intent.
     pub fn order(&self, deck: &Deck, intent: &str) -> Vec<String> {
         let of = |f: &&String| self.intent_of.get(*f).is_some_and(|i| i == intent);
+        // A4.2-K1b (IR15): the player's order may hold a skill in any of its rows; the auto order its primary row only
+        let in_row = |f: &&String| self.rows(f).iter().any(|i| i == intent);
         match deck.order.get(intent).filter(|l| !l.is_empty()) {
-            Some(l) => l.iter().filter(|f| of(f) && (deck.active.contains(f) || self.basics.contains(f))).cloned().collect(),
+            Some(l) => l.iter().filter(|f| in_row(f) && (deck.active.contains(f) || self.basics.contains(f))).cloned().collect(),
             None => deck.active.iter().chain(&self.basics).filter(of).cloned().collect(),
         }
     }
@@ -520,24 +559,34 @@ impl DeckTerms {
     /// INPUT1 FL1: the follow-up list of opener `op` as it plays (entries still in the deck, of the opener's intent);
     /// empty when none is set (the fill reads the intent's order).
     pub fn follow_list(&self, deck: &Deck, op: &str) -> Vec<String> {
-        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
-        let ok = |f: &&String| self.intent_of.get(*f) == Some(intent) && (deck.active.contains(f) || self.basics.contains(f));
+        if self.intent_of.get(op).is_none() {
+            return Vec::new();
+        }
+        let ok = |f: &&String| self.share_row(op, f) && (deck.active.contains(f) || self.basics.contains(f));
         deck.follow_ups.get(op).map(|l| l.iter().filter(ok).cloned().collect()).unwrap_or_default()
     }
 
     /// FL3: the skills that can join `op`'s list: its intent's actives and basics in the deck (the order's entries),
     /// those already listed left out.
     pub fn follow_candidates(&self, deck: &Deck, op: &str) -> Vec<String> {
-        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
         let listed = self.follow_list(deck, op);
-        self.order(deck, intent).into_iter().filter(|f| !listed.contains(f)).collect()
+        let mut out: Vec<String> = Vec::new();
+        // A4.2-K1b: the orders of each of the opener's rows
+        for intent in self.rows(op) {
+            for f in self.order(deck, &intent) {
+                if !listed.contains(&f) && !out.contains(&f) {
+                    out.push(f);
+                }
+            }
+        }
+        out
     }
 
     /// The deck a follow-up edit of `op` starts from (it pins the deck as it plays, as an order edit does) and the list
     /// as it plays; refused when `op` is not an opener of the deck (FL5).
     fn follow_base(&self, draft: &Deck, op: &str) -> Result<(Deck, Vec<String>), String> {
         let d = self.shown(draft);
-        let opener = self.intent_of.get(op).is_some_and(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
+        let opener = self.rows(op).iter().any(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
         if !opener {
             return Err(format!("Follow-ups for {op}: not an opener in the deck."));
         }
@@ -562,7 +611,7 @@ impl DeckTerms {
         if !(d.active.iter().any(|f| f == fam) || self.basics.iter().any(|f| f == fam)) {
             return Err(format!("Follow-ups after {op}: {fam} is not in the deck."));
         }
-        if self.intent_of.get(fam) != Some(&intent) {
+        if !self.share_row(op, fam) {
             let has = self.intent_of.get(fam).map(|i| intent_title(&self.intent_names, i)).unwrap_or_else(|| "no intent".into());
             return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&self.intent_names, &intent)));
         }
@@ -2660,10 +2709,29 @@ mod tests {
             passives: strs(&["p1", "p2"]),
             keystones: strs(&["k1"]),
             intent_of: [("cleave", "assault"), ("lunge", "assault"), ("wall", "guard"), ("strike", "assault"), ("hold", "guard")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            rows_of: IndexMap::new(),
             auto: Deck { active: strs(&["cleave", "wall"]), ..Default::default() },
             auto_actives: strs(&["lunge"]),
             intent_names: IndexMap::new(),
         }
+    }
+
+    /// A4.2-K1b (INTENT2 IR15): with derived rows (`rows_of`) a dual skill fits the player's order of either row and the
+    /// auto order of its primary row only; a follow-up joins an opener that shares one of its rows.
+    #[test]
+    fn deck_orders_read_the_derived_rows() {
+        let mut t = terms();
+        t.intents = strs(&["assault", "guard", "field"]);
+        t.intent_of.insert("cleave".into(), "field".into());
+        t.rows_of.insert("cleave".into(), strs(&["field", "assault"]));
+        let mut deck = Deck { active: strs(&["cleave", "lunge"]), ..Default::default() };
+        assert_eq!(t.order(&deck, "field"), strs(&["cleave"]), "auto: the primary row");
+        assert!(!t.order(&deck, "assault").contains(&"cleave".to_string()), "auto: not the second row");
+        deck.order.insert("assault".into(), strs(&["cleave", "lunge", "strike"]));
+        assert_eq!(t.order(&deck, "assault"), strs(&["cleave", "lunge", "strike"]), "the player's order: any row");
+        assert!(t.follow_candidates(&deck, "cleave").contains(&"lunge".to_string()), "lunge shares Assault with cleave");
+        assert!(t.follow_add(&deck, "cleave", "lunge", None).is_ok());
+        assert!(t.follow_add(&deck, "lunge", "cleave", None).is_ok(), "either way round");
     }
 
     /// D5, D6: an empty deck plays as the auto deck; a passive or keystone edit keeps the actives automatic (user

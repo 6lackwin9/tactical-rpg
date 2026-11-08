@@ -69,3 +69,29 @@ fn field_intent_requires_round_intent_by_the_register() {
     assert!(classic.adjust(&format!("+{FIELD_INTENT}")).is_err(), "an option does not switch one by one");
     assert!(!classic.has(FIELD_INTENT));
 }
+
+/// A4.2-K1b (INTENT2 IR17; A3.1 section 3 tunables, FB-102): `splash_mult` (default `SPLASH_MULT`, 0.25..1.00) and
+/// `assault_shape_blocks` (default `ASSAULT_SHAPE_BLOCKS`, 0..2) are row numbers read only under `field_intent`
+/// (row-only: no schema entry yet), promoted from their code defaults.
+#[test]
+fn the_shaped_assault_numbers_are_row_numbers_read_under_field_intent() {
+    assert_eq!(ruleset::SPLASH_MULT, 0.5, "IR17 / FB-102: half splash first");
+    assert_eq!(ruleset::ASSAULT_SHAPE_BLOCKS, 1, "IR17: one block more");
+    let classic = Ruleset::classic();
+    assert_eq!((classic.numbers.splash_mult, classic.numbers.assault_shape_blocks), (ruleset::SPLASH_MULT, ruleset::ASSAULT_SHAPE_BLOCKS));
+    let set = row(json!({"rules": [ROUND_INTENT, FIELD_INTENT], "splash_mult": 0.75, "assault_shape_blocks": 2}));
+    assert_eq!((set.numbers.splash_mult, set.numbers.assault_shape_blocks), (0.75, 2));
+    assert_eq!(set.numbers.field("splash_mult").as_deref(), Some("0.75"));
+    assert_eq!(set.numbers.field("assault_shape_blocks").as_deref(), Some("2"));
+    assert!(set.notes().errors.is_empty() && set.notes().warnings.iter().all(|w| !w.contains("splash_mult") && !w.contains("assault_shape_blocks")), "{:?}", set.notes());
+    for (key, name, range) in [("splash_mult", "SPLASH_MULT", (0.25, 1.0)), ("assault_shape_blocks", "ASSAULT_SHAPE_BLOCKS", (0.0, 2.0))] {
+        let f = ruleset::field_rule_of(key).expect("registered");
+        assert_eq!((f.needs, f.range), (&[FIELD_INTENT][..], Some(range)), "{key}");
+        assert!(ruleset::PROMOTED.contains(&(name, key)));
+    }
+    // set without the rule: a warning (nothing reads it); outside the range: an error
+    let unread = row(json!({"rules": [ROUND_INTENT], "splash_mult": 0.75}));
+    assert!(unread.notes().warnings.contains(&format!("splash_mult is set but read only with {FIELD_INTENT}.")), "{:?}", unread.notes());
+    assert_eq!(row(json!({"rules": [ROUND_INTENT, FIELD_INTENT], "assault_shape_blocks": 3})).notes().errors, ["assault_shape_blocks 3 is outside 0..2."]);
+    assert_eq!(row(json!({"rules": [ROUND_INTENT, FIELD_INTENT], "splash_mult": 0.1})).notes().errors, ["splash_mult 0.1 is outside 0.25..1."]);
+}

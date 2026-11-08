@@ -315,6 +315,13 @@ pub fn from_user(a: Area) -> bool {
     matches!(a, Area::Line | Area::Ring | Area::Arc | Area::Cone)
 }
 
+/// INTENT2 IR7 (A4.2-K1b): the shapes whose band test counts a diagonal neighbour as distance 1 whatever
+/// `melee_diagonal` says, as planning swings them from any of the 8 neighbours (ARC, CONE; a LINE plans from an
+/// orthogonal neighbour).
+pub fn diagonal_shape(a: Area) -> bool {
+    matches!(a, Area::Arc | Area::Cone)
+}
+
 /// A3.2-K2 (IR6, IR7): the shapes that read a direction (from the user's tile toward the source tile).
 pub fn directed(a: Area) -> bool {
     matches!(a, Area::Line | Area::Arc | Area::Cone)
@@ -333,7 +340,7 @@ fn plain_band(c: &Unit, melee: i32) -> (i32, i32) {
 /// `position`, else, in the transition until the data moves (INPUT1-MA), `flank` for one with `dash_tiles` above 0;
 /// None = it hits from where it stands.
 pub fn position_by(s: &SkillDef, rules: &Ruleset) -> Option<Position> {
-    if !rules.has(ruleset::ROUND_INTENT) || kind(s) != Kind::Attack || is_area(s) || intent_id(s) != "maneuver" {
+    if !rules.has(ruleset::ROUND_INTENT) || kind(s) != Kind::Attack || is_area(s) || !rows_by(s, rules).contains(&"maneuver") {
         return None;
     }
     s.position.or((s.dash_tiles > 0).then_some(Position::Flank))
@@ -350,12 +357,68 @@ pub fn dash_range_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> Option<i32> {
     })
 }
 
-/// RULESET1_INTENT IN4: a skill's intent id (its `round_intent`, else its kind's).
-fn intent_id(s: &SkillDef) -> &str {
-    if s.round_intent.is_empty() {
-        ruleset::kind_intent(&s.kind)
+/// RULESET1_INTENT IN4, A4.2-K1b (IR21): a skill's intent rows under `rules` (`rpgkit_rules::intent::allowed`: the
+/// derived rows under `field_intent`, else its `round_intent` or its kind's), so `position_by` reads the derived
+/// Maneuver of a gap-close attack (A4_EFFECTS section 2).
+fn rows_by(s: &SkillDef, rules: &Ruleset) -> Vec<&'static str> {
+    rpgkit_rules::intent::allowed(rules, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent)
+}
+
+/// A4.2-K1b (A4_EFFECTS section 2, IR20 table): the Field row's `area` bonus sizes: LINE 3 to 4 long, ARC 3 to 5 across.
+pub const FIELD_LINE_LENGTH: i32 = 4;
+pub const FIELD_ARC_WIDTH: i32 = 5;
+/// A4.2-K1b (IR20 table, FB-120): the Field row's `power` bonus, the factor on the skill's power.
+pub const FIELD_POWER_MULT: f64 = 1.25;
+
+/// A4.2-K1b (FB-120): the factor a Field row's hits take: `FIELD_POWER_MULT` with the derived `power` bonus, else 1.
+pub fn field_power(s: &SkillDef) -> f64 {
+    if field_bonus(s) == Some(rpgkit_rules::intent::FieldBonus::Power) {
+        FIELD_POWER_MULT
     } else {
-        &s.round_intent
+        1.0
+    }
+}
+
+/// A4.2-K1b (IR21): the derived Field bonus of `s` (None: IR21 gives it no Field row).
+pub fn field_bonus(s: &SkillDef) -> Option<rpgkit_rules::intent::FieldBonus> {
+    rpgkit_rules::intent::field_bonus(&rpgkit_rules::intent::IntentInput::of_def(s))
+}
+
+/// A4.2-K1b (IR21 `reach`): the band of `s`'s Field row: `reach_by`, its far edge one more for a throw with the `reach`
+/// bonus.
+pub fn field_reach(s: &SkillDef, c: &Unit, rules: &Ruleset) -> (i32, i32) {
+    let (lo, hi) = reach_by(s, c, rules);
+    if field_bonus(s) == Some(rpgkit_rules::intent::FieldBonus::Reach) {
+        (lo, hi + 1)
+    } else {
+        (lo, hi)
+    }
+}
+
+/// A4.2-K1b (IR5, IR21 `area`): the tiles `s`'s Field row hits from source `cell`, cast from `from`: the authored shape,
+/// one size up with the `area` bonus (LINE 4 long, ARC 5 across; on the exact diagonal the ARC's L has arms of 2).
+pub fn field_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
+    if field_bonus(s) != Some(rpgkit_rules::intent::FieldBonus::Area) {
+        return area_cells(s, from, cell);
+    }
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    match area(s) {
+        Area::Line => (0..FIELD_LINE_LENGTH).map(|i| cell + d * i).collect(),
+        Area::Arc => {
+            let arm = FIELD_ARC_WIDTH / 2;
+            if d.x != 0 && d.y != 0 {
+                let mut out: Vec<V2> = (1..=arm).rev().map(|i| cell - V2::new(0, d.y) * i).collect();
+                out.push(cell);
+                out.extend((1..=arm).map(|i| cell - V2::new(d.x, 0) * i));
+                return out;
+            }
+            let across = V2::new(d.y, d.x);
+            (-arm..=arm).map(|i| cell + across * i).collect()
+        }
+        _ => area_cells(s, from, cell),
     }
 }
 
@@ -402,7 +465,13 @@ pub fn threat_reach(c: &Unit, rules: &Ruleset) -> i32 {
 
 /// Tiles an area attack aimed at `cell` hits, cast from `from`.
 pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
-    match area(s) {
+    shape_cells(area(s), from, cell)
+}
+
+/// The tiles shape `a` covers aimed at `cell` from `from` (`area_cells`; A4.2-K1b: a shaped Assault row re-reads them
+/// at its impact from where its target stands then).
+pub fn shape_cells(a: Area, from: V2, cell: V2) -> Vec<V2> {
+    match a {
         Area::Plus => vec![cell, cell + V2::new(1, 0), cell + V2::new(-1, 0), cell + V2::new(0, 1), cell + V2::new(0, -1)],
         Area::Burst => {
             let mut out = Vec::new();

@@ -4,7 +4,8 @@
 //! (the built-in classic values). The seed `data/seeds/cln45.json` sets the fields to exactly those values: applied to
 //! a scratch copy of the data, every row reads as before bar the rules HOOKS1-A appended later to `timeline`, and the
 //! file re-saves byte for byte; `data/seeds/hooks1a.json` then `data/seeds/s22s3.json` (S2.2-S3: `poise_mode` pips)
-//! over it give the shipped row back.
+//! over it give the shipped row back. The unit deck orders `data/seeds/w24k1b.json` set by derived intent rows (valid
+//! only under `field_intent`) are set aside during the replay and re-applied after `w24s1.json`.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
@@ -31,10 +32,20 @@ fn rows(dir: &Path) -> Vec<(String, Ruleset)> {
 
 /// The ruleset rows the seed `name` upserts, as given.
 fn seed_entries(name: &str) -> Vec<Dict> {
+    seed_rows(name, ruleset::KIND)
+}
+
+/// The rows of kind `kind` the seed `name` upserts, as given.
+fn seed_rows(name: &str, kind: &str) -> Vec<Dict> {
     let text = std::fs::read_to_string(data_dir().join("seeds").join(name)).expect("the seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
-    json::arr(&seed["steps"]).iter().map(json::dict).filter(|s| json::s(s, "kind") == ruleset::KIND).map(|s| json::dget(s, "entry").clone()).collect()
+    json::arr(&seed["steps"]).iter().map(json::dict).filter(|s| json::s(s, "kind") == kind).map(|s| json::dget(s, "entry").clone()).collect()
 }
+
+/// The unit decks the seed `w24k1b.json` (A4.2-K1b) re-ordered by derived intent rows (a `field` list, a ring in
+/// `guard`): those orders are valid only under `field_intent`, so while the pre-W2-4 ruleset seeds replay they are
+/// set aside (an empty order, valid under either reading) and the seed puts them back after `w24s1.json`.
+const DERIVED_ORDERS_SEED: &str = "w24k1b.json";
 
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
@@ -74,6 +85,19 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
+    // the units the derived-row seed re-ordered, as they stood before it as far as the ruleset rows care: no order
+    let shipped_units = store::view(&data_dir());
+    let reordered = seed_rows(DERIVED_ORDERS_SEED, "units");
+    assert!(!reordered.is_empty(), "the derived-row seed re-orders unit decks");
+    for u in &reordered {
+        let id = json::s(u, "id");
+        let mut e = shipped_units.get("units", &id).clone();
+        assert_eq!(e.get("deck"), u.get("deck"), "unit '{id}' ships with the deck the seed leaves");
+        if let Some(Value::Object(deck)) = e.get_mut("deck") {
+            deck.shift_remove("order");
+        }
+        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("unit '{id}' without its order: {err:?}"));
+    }
     for e in &entries {
         store::upsert(&tmp, None, ruleset::KIND, e, None).unwrap_or_else(|err| panic!("seed row '{}': {err:?}", json::s(e, "id")));
     }
@@ -112,5 +136,14 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("W2-4 slice 1 row '{}': {err:?}", json::s(&e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1 and W2-4 slice 1 rows over it give the shipped row");
+    // A4.2-K1b: under field_intent the derived-row seed's orders are valid again and give the shipped units back
+    for u in &reordered {
+        store::upsert(&tmp, None, "units", u, None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));
+    }
+    let seeded = store::view(&tmp);
+    for u in &reordered {
+        let id = json::s(u, "id");
+        assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
+    }
     let _ = std::fs::remove_dir_all(&tmp);
 }
