@@ -21,7 +21,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | READY row 17 `F1.2-S1` + `F2.2-S1` | done (FB-108) | `develop` | - |
 | READY row 18 `P1.2-S1` + `P2.2-S1` | done (FB-109) | `develop` | R2 Wave 1 complete. |
 | READY row 20 (R3-W1) | done (FB-111) | `develop` | R3 Wave 1 complete. |
-| W2-4 (R2-W2) | slices 1 (FB-115), 2 (FB-112), 3 phase A (FB-113) done; K2 phases B-C building (FB-114 answered) | `claude/w24-k2bc` | Then slices 4 (INTENT2-A seed), 5 (A4.2), 6 (K1b), 7 (K3 + INTENT2-U). |
+| W2-4 (R2-W2) | slices 1, 2, 3A done; K2 phases B-C built, parked on FB-116 (phasefold); slice 5 (A4.2) next | `claude/w24-k2bc` | Then slices 4, 6, 7. |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -36,6 +36,14 @@ FB-01 to FB-114 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: `ruleset::FIELD_INTENT` registered: an Option (the spec is silent on the kind; Option matches `round_intent`, it changes core planning, and is never in classic), requires `round_intent` (alone it is an error note and a content-check error, as `flank` does), system planning, no bundle yet (the library's `field` bundle holds rules that do not exist yet); placed after `plan_badges`, before the hook rules. `intent::allowed()` gates on `field_intent` (round_intent alone keeps the legacy single intent); nothing calls `allowed()` yet (K1b's planner will). Schema rulesets `rules` options and help list it. Data via seed `games/emberwake/data/seeds/w24s1.json` (aegis content apply): timeline `rules` gains `field_intent` after `plan_badges`; classic stays `[]`. Re-recorded (named): `rules_contract_golden` (+ the option value, + the rule line). Every other golden byte-identical (the frozen `timeline_kit.json` does not need the rule while nothing calls `allowed()`). Tests: `rpgkit_battle/tests/field_intent.rs` (3), `ir21_intent.rs` gate row, `rulesets.rs` every-rule row, `ruleset_switches.rs` replays `w24s1`. A tested set of the 18 pre-`field_intent` timeline rules was kept during the build and is now unused (harmless; remove in a cleanup, which shortens `TESTED_SETS`).
 - **Recommendation**: HISTORY: "W2-4 slice 1 (FB-106): rule `field_intent` (option, requires `round_intent`); `intent::allowed()` gated on it; timeline lists it (seed `w24s1`); re-recorded on purpose: `rules_contract_golden`". GAME_BRIEF / BASERULES1 library: `field_intent` moves from coming options to the register. STRUCTURE: test `rpgkit_battle/tests/field_intent.rs`. Confirm Option (not Extension) as the rule kind.
+
+### FB-116: K2 phases B-C move `phasefold_golden` (not named in W2-4): the Goblin Berserker stops planning Sweep Kick
+
+- **Spec**: `docs/READY.md` row W2-4 (named re-records: `checks_golden`, `timeline_golden`, `sim_golden`, `rules_contract_golden`); FB-114 (migrate SWEEP, accept classic kicks firing)
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: Phases B and C are built on `claude/w24-k2bc` (B: seed `w24k2` migrates the 7 shipped SWEEP skills, `tendril_flail` `round_intent` "", the two FB-114 templates, `cast1a3` follows; C: SWEEP removed from `Area`, ground `Shape`, `HAZARD_SHAPES`, the schema and checks, a stored SWEEP is an unknown-area error; the frozen kit's 6 kick rows are RING; `ir21_intent.rs` asserts 26 = 8 + 18 and the primary totals 59 / 23 / 16 / 12 / 14 / 5 on shipped data directly, with `tendril_flail` now Stand). Re-recorded (named): `sim_golden` (12 of 22 runs, 99 lines; the classic brawler kicks now fire, as FB-114 accepts) and `checks_golden` (2 lines; SWEEP leaves the area enum message); `timeline_golden`, `rules_golden`, journey, contract and resave unchanged. But `phasefold_golden` (reads shipped data, not named) moves in 49 of 72 fights, from the phase B data alone (the same 49 with the phase C code removed): first `catalog:goblin_ambush {} balanced seed 1` round 2, the Goblin Berserker planned "Sweep Kick" x3 while the kick was SWEEP and now plans "Body Blow II" x3, because a RING centred on itself scores nothing with no foe adjacent. Build did not re-record it; full gate fails on that test only.
+- **Recommendation**: (A, recommended) accept the move as part of FB-114's migration and name `phasefold_golden` for W2-4 slice 3: re-record it with a HISTORY row (the Berserker's ring kick is only worth using with a foe beside it, so it picks Body Blow II in these openings). (B) treat it as an AI gap: score RING by the foes the user could have adjacent after its move this round (a planner change in `ai.rs`, then re-check the move). Build lands phases B-C as soon as one is chosen; W2-4 slice 5 (A4.2) proceeds meanwhile.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
