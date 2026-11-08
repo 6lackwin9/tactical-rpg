@@ -1,0 +1,12 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_backdrop_mist_v2",
+  "prompt": "Edit this 16:9 dark gothic pixel-art painting of the Sunk Ward cathedral and canal bridge: (1) Light up the dark/unlit cathedral windows on the upper-left wall and lower-left arcade so every gothic window of the cathedral has a warm interior candlelit stained-glass glow from inside, with no dead black empty window openings; (2) Remove the ground-level brazier and its harsh bright orange glow in the lower-left foreground completely, replacing it with dark wet cobblestone steps and archway shadow; (3) Add a moody, atmospheric layer of pale slate-blue and grey canal mist / fog drifting through the lower structures, arches, and canal water along the bottom third of the scene so the unlit lower structures feel shrouded in damp Sunk Ward haze. Keep all the wrought-iron bridge post lanterns, the cathedral architecture, the stone bridge, and the open dark sky on the right identical. No text, no UI.",
+  "reference": "art_src/title_backdrop_clean_gen1793615014_1.png",
+  "time": "2026-11-08T15:48:07Z",
+  "n": 1,
+  "source": "antigravity image tool",
+  "via": "antigravity",
+  "mark_cleared": true,
+  "notes": "Lit upper-left and lower-left cathedral windows, removed foreground ground brazier, and added lower canal mist/haze band."
+}
