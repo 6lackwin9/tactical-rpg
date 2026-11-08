@@ -1,0 +1,344 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "brace",
+    "name": "Brace",
+    "kind": "DEFEND",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 3,
+    "guard_rounds": 2,
+    "mitigation": 0.2,
+    "learned_only": true,
+    "round_intent": "guard",
+    "description": "Stand, Heavy: brace for 2 rounds, -{mitigation} damage this round and next."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "tendril_flail",
+    "name": "Tendril Flail",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 1,
+    "description": "Stand, Standard: Marrow Tendril Flail, a ring of {power} power, {stagger} stagger around you.",
+    "learned_only": true,
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "RING",
+    "power_mult": 0.9,
+    "stagger": 10
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "warrior",
+    "name": "Warrior",
+    "description": "Tank: huge constitution, kite shield and plate; a wall that holds the line and hits lightly.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.112903225806452,
+     "INT": 0.0967741935483871,
+     "CONS": 0.274193548387097,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "CONS": 0.4,
+     "STR": 0.4,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "sword": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "mace": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "axe": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "shield": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "plate": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "taunt_shout": 1,
+     "shield_bash": 3,
+     "riposte": 3,
+     "intimidate": 4,
+     "sunder": 5,
+     "shield_wall": 5,
+     "rend_armor": 6,
+     "brace": 1
+    },
+    "main_hand": "wpn_hand_axe",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_kaelen",
+    "name": "Kaelen",
+    "side": "party",
+    "description": "Founder base unit: Kaelen, a level 1 warrior.",
+    "class_id": "warrior",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "warrior/2h_axe",
+    "palette": "kaelen",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "pommel_strike",
+     "intercepting_hook",
+     "billhook_sunder",
+     "seventh_ward_bulwark",
+     "brace"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "pommel_strike",
+      "intercepting_hook"
+     ],
+     "order": {
+      "assault": [
+       "pommel_strike",
+       "strike"
+      ],
+      "guard": [
+       "intercepting_hook",
+       "active_guard"
+      ],
+      "maneuver": [
+       "flank_cut"
+      ]
+     },
+     "passive": [
+      "braced_poise",
+      "kinetic_leverage"
+     ],
+     "keystone": [
+      "unbroken_phalanx"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "notched_billhook",
+    "off_hand": "none",
+    "head": "",
+    "body": "castellan_breastplate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "con_heal_potion",
+    "name": "Healing Draught",
+    "family": "consumable",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 15,
+    "description": "Herbal restorative that instantly patches wounds for +90 HP.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": true,
+    "consumable_type": "HEALTH_POTION",
+    "heal": 90,
+    "damage": 0,
+    "buff_stat": "",
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 3,
+    "use_reach": 1,
+    "hazard": {},
+    "max_stack": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "sulfur_poultice",
+    "name": "Stitch-Poultice",
+    "family": "consumable",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 15,
+    "description": "Sulfur Stitch-Poultice: a packed dressing that closes wounds for +60 HP.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "HEALTH_POTION",
+    "heal": 60,
+    "damage": 0,
+    "buff_stat": "",
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 2,
+    "use_reach": 1,
+    "hazard": {},
+    "max_stack": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "con_focus_elixir",
+    "name": "Elixir of Focus",
+    "family": "consumable",
+    "rarity": "UNCOMMON",
+    "weight": 0.4,
+    "value": 25,
+    "description": "Distilled ginseng elixir imparting +50% attack power for 2 rounds.",
+    "damage_type": "",
+    "icon_id": "elixir",
+    "starter_stash": true,
+    "consumable_type": "FOCUS_INCENSE",
+    "heal": 0,
+    "damage": 0,
+    "buff_stat": "STR",
+    "buff_pct": 0.5,
+    "duration": 2,
+    "use_blocks": 1,
+    "use_reach": 0,
+    "hazard": {},
+    "max_stack": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "brimstone_draught",
+    "name": "Brimstone Draught",
+    "family": "consumable",
+    "rarity": "COMMON",
+    "weight": 0.4,
+    "value": 25,
+    "description": "Brimstone Tallow Draught: +30% CONS for 3 rounds (steadier poise).",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "FOCUS_INCENSE",
+    "heal": 0,
+    "damage": 0,
+    "buff_stat": "CONS",
+    "buff_pct": 0.3,
+    "duration": 3,
+    "use_blocks": 1,
+    "use_reach": 0,
+    "hazard": {},
+    "max_stack": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "pitch_fire_bomb",
+    "name": "Pitch Fire-Bomb",
+    "family": "consumable",
+    "rarity": "COMMON",
+    "weight": 1.0,
+    "value": 30,
+    "description": "Clay jar of burning pitch, 40 fire damage on impact.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "THROWABLE_BOMB",
+    "heal": 0,
+    "damage": 40,
+    "buff_stat": "",
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 1,
+    "use_reach": 3,
+    "hazard": {},
+    "max_stack": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "con_fire_bomb",
+    "name": "Throwing Fire Bomb",
+    "family": "consumable",
+    "rarity": "UNCOMMON",
+    "weight": 1.0,
+    "value": 30,
+    "description": "Clay vessel of volatile pitch exploding on impact for 45 damage.",
+    "damage_type": "fire",
+    "icon_id": "bomb",
+    "starter_stash": true,
+    "consumable_type": "THROWABLE_BOMB",
+    "heal": 0,
+    "damage": 45,
+    "buff_stat": "",
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 2,
+    "use_reach": 3,
+    "hazard": {},
+    "max_stack": 2
+   }
+  }
+ ]
+}

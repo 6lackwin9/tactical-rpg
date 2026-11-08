@@ -2746,7 +2746,7 @@
 			"level": 1,
 			"blocks": 2,
 			"recovery_blocks": 1,
-			"description": "Assault, Standard: Marrow Tendril Flail, a sweep of {power} power, {stagger} stagger.",
+			"description": "Stand, Standard: Marrow Tendril Flail, a ring of {power} power, {stagger} stagger around you.",
 			"learned_only": true,
 			"reach_min": 1,
 			"reach_max": 1,
@@ -2806,6 +2806,19 @@
 			"status_magnitude": 20,
 			"status_rounds": 2,
 			"stagger": 10
+		},
+		{
+			"id": "brace",
+			"name": "Brace",
+			"kind": "DEFEND",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 3,
+			"description": "Stand, Heavy: brace for 2 rounds, -{mitigation} damage this round and next.",
+			"learned_only": true,
+			"round_intent": "guard",
+			"mitigation": 0.2,
+			"guard_rounds": 2
 		}
 	]
 }

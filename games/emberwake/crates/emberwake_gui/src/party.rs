@@ -3014,6 +3014,10 @@ mod tests {
         let mut c = Character::new(&cx, &member, "skills");
         c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
         let t = c.terms.clone().expect("deck terms");
+        // the worn rows close the owned list, which scrolls past its 7 rows when the member owns more: scroll to the end
+        // (draw clamps it) so the check holds for any owned count
+        c.scroll = usize::MAX;
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
         assert!(c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "the worn skill shows");
         assert!(!t.shown(&c.deck).active.iter().any(|f| f == cx.data.cat.family_of(&skill)), "it takes no active slot");
         assert_laid_out(&c, "worn skills");

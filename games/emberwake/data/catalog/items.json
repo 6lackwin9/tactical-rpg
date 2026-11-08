@@ -483,10 +483,10 @@
 			"buff_stat": "",
 			"buff_pct": 0.0,
 			"duration": 0,
-			"use_blocks": 1,
+			"use_blocks": 3,
 			"use_reach": 1,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "con_focus_elixir",
@@ -508,7 +508,7 @@
 			"use_blocks": 1,
 			"use_reach": 0,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "con_fire_bomb",
@@ -527,10 +527,10 @@
 			"buff_stat": "",
 			"buff_pct": 0.0,
 			"duration": 0,
-			"use_blocks": 1,
+			"use_blocks": 2,
 			"use_reach": 3,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "wpn_hand_axe",
@@ -1725,10 +1725,10 @@
 			"buff_stat": "",
 			"buff_pct": 0.0,
 			"duration": 0,
-			"use_blocks": 1,
+			"use_blocks": 2,
 			"use_reach": 1,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 3
 		},
 		{
 			"id": "pitch_fire_bomb",
@@ -1750,7 +1750,7 @@
 			"use_blocks": 1,
 			"use_reach": 3,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "brimstone_draught",
@@ -1772,7 +1772,7 @@
 			"use_blocks": 1,
 			"use_reach": 0,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "calcified_bone_shard",

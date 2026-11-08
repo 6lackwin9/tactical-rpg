@@ -101,16 +101,18 @@ fn the_fb101_split_ships_with_its_shapes_and_no_sweep_remains() {
 #[test]
 fn shipped_data_gives_26_dual_and_the_intent_totals() {
     let rows = rows();
-    assert_eq!(rows.len(), 129, "IR21 covers all 129 skills");
+    assert_eq!(rows.len(), 130, "IR21 covers all 130 skills (129 + brace, W2-4 slice 4 / FB-119)");
+    let brace = rows.iter().find(|r| id(r) == "brace").expect("brace shipped");
+    assert_eq!(derive(brace), [STAND], "brace (DEFEND, guard) is single-intent Stand: the dual counts stay");
     let ss = ids_with(&rows, &[SUPPORT, STAND]).len();
     let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
     let dual = rows.iter().filter(|r| derive(r).len() == 2).count();
     assert_eq!((dual, ss, fa), (26, 8, 18), "26 = 8 Support,Stand + 18 Field,Assault");
     let totals: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| primary(&rows, i)).collect();
-    assert_eq!(totals, [59, 23, 16, 12, 14, 5], "FB-101 totals by primary intent: Assault, Field, Stand, Support, Maneuver, Neutral");
+    assert_eq!(totals, [59, 23, 17, 12, 14, 5], "FB-101 totals by primary intent (+ brace in Stand): Assault, Field, Stand, Support, Maneuver, Neutral");
     assert_eq!(totals.iter().sum::<usize>(), rows.len(), "every skill has exactly one primary");
     let listed: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| listing(&rows, i)).collect();
-    assert_eq!(listed, [77, 23, 24, 12, 14, 5], "a dual row lists under both intents: 18 Field,Assault add to Assault, 8 Support,Stand to Stand");
+    assert_eq!(listed, [77, 23, 25, 12, 14, 5], "a dual row lists under both intents: 18 Field,Assault add to Assault, 8 Support,Stand to Stand");
     assert_eq!(listed.iter().sum::<usize>(), rows.len() + dual, "each dual row counts twice");
 }
 

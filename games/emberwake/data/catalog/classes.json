@@ -58,7 +58,8 @@
 				"intimidate": 4,
 				"sunder": 5,
 				"shield_wall": 5,
-				"rend_armor": 6
+				"rend_armor": 6,
+				"brace": 1
 			},
 			"main_hand": "wpn_hand_axe",
 			"off_hand": "shd_kite",
