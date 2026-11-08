@@ -209,6 +209,7 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         pouch: work.pouch.iter().filter_map(|id| cat.items.get(id).cloned()).collect(),
         loadout: (!work.loadout_class.is_empty() || !work.loadout_extra.is_empty()).then(|| (work.loadout_class.clone(), work.loadout_extra.clone())),
         ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
+        pouch_stacks: d.ruleset(world).numbers.pouch_stacks,
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms

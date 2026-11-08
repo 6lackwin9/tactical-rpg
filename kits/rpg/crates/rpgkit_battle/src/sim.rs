@@ -265,6 +265,8 @@ pub fn json_close(a: &Value, b: &Value) -> bool {
 pub fn apply_pouch(w: &mut World, ids: &[String]) {
     for a in w.allies.clone() {
         w.units[a].inventory.pouch.clear();
+        // A1.2-K3: the battle's `pouch_stacks` decides the pouch form (stacks, or 3 copies in all)
+        w.units[a].inventory.pouch_stacks = w.ruleset.numbers.pouch_stacks;
         for id in ids {
             if let Some(item) = w.cat.items.get(id).filter(|i| i.is_consumable()).cloned() {
                 w.units[a].inventory.add_to_pouch(&item);

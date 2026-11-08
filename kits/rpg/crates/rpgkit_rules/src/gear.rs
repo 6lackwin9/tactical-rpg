@@ -251,6 +251,27 @@ pub fn trained_for(prof: &Proficiency, item: &ItemDef) -> bool {
     item.item_type == "ACCESSORY" || item.slot.starts_with("ACCESSORY") || item.weapon_type.is_empty() || prof.entries.is_empty() || prof.unrestricted || prof.level_of(&item.weapon_type) >= 1
 }
 
+/// A1.2-K3 (INTENT2-K3): whether one more copy of `id` (stack limit `limit`) fits a pouch holding `ids` (repeated ids)
+/// with `slots` slots: under `stacks` (ruleset `pouch_stacks`) at most `slots` distinct ids, each at most `limit` copies;
+/// otherwise (classic) at most `slots` copies in all.
+pub fn pouch_fits<'a>(ids: impl Iterator<Item = &'a str>, slots: usize, stacks: bool, id: &str, limit: i32) -> bool {
+    let ids: Vec<&str> = ids.collect();
+    if !stacks {
+        return ids.len() < slots;
+    }
+    let held = ids.iter().filter(|x| **x == id).count() as i32;
+    if held > 0 {
+        return held < limit;
+    }
+    let mut distinct: Vec<&str> = Vec::new();
+    for x in ids {
+        if !distinct.contains(&x) {
+            distinct.push(x);
+        }
+    }
+    distinct.len() < slots && limit > 0
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Inventory {
     /// Equipped gear in equip order (Godot iterates its slot dictionary in insertion order).
@@ -260,11 +281,14 @@ pub struct Inventory {
     /// The off-hand weapon is the ready one (Inventory.active_weapon_slot == OFF_HAND); only meaningful while a
     /// two-handed main weapon is paired with an off-hand weapon (`needs_weapon_switch`).
     pub off_active: bool,
+    /// A1.2-K3 (INTENT2-K3, ruleset `pouch_stacks`): the pouch holds `max_pouch_slots` distinct items, each a stack of at
+    /// most its `stack_limit` copies; off (classic): `max_pouch_slots` copies, any mix.
+    pub pouch_stacks: bool,
 }
 
 impl Inventory {
     pub fn new() -> Self {
-        Self { equipped: Vec::new(), pouch: Vec::new(), max_pouch_slots: 3, off_active: false }
+        Self { equipped: Vec::new(), pouch: Vec::new(), max_pouch_slots: 3, off_active: false, pouch_stacks: false }
     }
 
     pub fn equip(&mut self, eq: Equipment, slot: Slot) {
@@ -357,7 +381,7 @@ impl Inventory {
     }
 
     pub fn add_to_pouch(&mut self, item: &ItemDef) -> bool {
-        if self.pouch.len() >= self.max_pouch_slots {
+        if !pouch_fits(self.pouch.iter().map(|p| p.id.as_str()), self.max_pouch_slots, self.pouch_stacks, &item.id, item.stack_limit()) {
             return false;
         }
         self.pouch.push(item.clone());

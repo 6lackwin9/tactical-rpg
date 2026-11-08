@@ -444,6 +444,10 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
         if !settled.wounded.is_empty() {
             out.insert("wounded".into(), json::strs(&settled.wounded));
         }
+        // A1.2-K3 (INTENT2-K3): the pouch slots auto-fill left short (the Results' "Stash short" lines)
+        if !settled.stash_short.is_empty() {
+            out.insert("stash_short".into(), json::strs(&settled.stash_short));
+        }
         if !settled.departed.is_empty() {
             let departed = settled.departed.iter().map(|(m, life)| json::obj([("member", m.clone().into()), ("life", life.clone().into())]).into()).collect();
             out.insert("departed".into(), Value::Array(departed));
@@ -459,6 +463,23 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
         out.insert("stay_lines".into(), json::strs(&lines));
     }
     (out, notes)
+}
+
+/// A world fight's start with the saved party (BattleBridge.encounter_for; the battle screen builds the fight after
+/// it): the world that resolves `encounter_ref` (`fight_world`), refused when the fight world's entry's `party_min`
+/// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`); then A1.2-K3 (INTENT2-K3) the combat-start
+/// auto-fill of the active members' pouches (`roster::auto_fill_at_start`, under the world's `pouch_stacks`). Returns
+/// the fight world and the auto-fill's "Stash short" lines.
+pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<(String, Vec<String>), String> {
+    let world = fight_world(d, gs, encounter_ref);
+    let local = d.resolve(&gs.world_id, "encounters", encounter_ref);
+    let entry = d.resolve(&world, "encounters", &json::s(local, "id"));
+    let short = roster::party_min_refusal(gs, entry);
+    if !short.is_empty() {
+        return Err(short);
+    }
+    let lines = roster::auto_fill_at_start(d, gs, &world);
+    Ok((world, lines))
 }
 
 /// `apply` with `tally`, or with the default tally when the fight was settled without a battle (REWARD1 2.5). ROSTER1
@@ -495,7 +516,7 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
 }
 
 /// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.
-pub const PARTY_KEYS: [&str; 4] = ["party_fates", "stay_lines", "wounded", "departed"];
+pub const PARTY_KEYS: [&str; 5] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

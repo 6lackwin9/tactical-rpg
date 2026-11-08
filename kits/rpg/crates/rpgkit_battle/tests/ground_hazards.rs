@@ -404,7 +404,7 @@ fn an_item_places_at_use() {
     let mut w = s.w.clone();
     let item = flask();
     w.units[HERO].inventory.pouch.push(item.clone());
-    let mut cmd = Command::new(HERO, 0, 1, CmdKind::Item { target: HERO, item: Box::new(item.clone()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0 });
+    let mut cmd = Command::new(HERO, 0, 1, CmdKind::Item { target: HERO, item: Box::new(item.clone()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0, cell: None, struck_units: Vec::new() });
     cmd.name = item.name.clone();
     cmd.hazard = Place::of_item(&item);
     let mut res = Resolver::new(BLOCKS, 1);

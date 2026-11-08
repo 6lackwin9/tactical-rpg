@@ -1256,22 +1256,31 @@ impl DojoSession {
         self.changed();
         let dummy_name = self.dummy.name.clone();
         match item.consumable_type.as_str() {
+            // A1.2-K3 (A1 section 1): the item pipelines and the empower grant, as in battle
             "HEALTH_POTION" => {
                 let before = self.hero().hp;
-                self.hero_mut().heal(item.heal);
+                self.hero_mut().heal(rpgkit_rules::damage::item_heal(item.heal));
                 let healed = self.hero().hp - before;
                 self.log_event("BUFF", &item.name, &format!("Restored {healed} HP"), healed, &format!("+{healed} HP"));
                 self.fx("glow", true, &format!("+{healed} HP"), Tone::Good);
             }
             "THROWABLE_BOMB" => {
-                let dealt = self.dummy.take_damage(item.damage, false);
+                // with item mitigation the dummy's guard and armour run in the pipeline (no cover here); without it the
+                // flat damage meets the dummy's guard as before
+                let dealt = if self.ruleset.numbers.item_mitigation {
+                    let mitigation = Some((self.dummy.guard, rpgkit_rules::damage::armor_rating(&self.dummy)));
+                    let amount = rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit { splash: 1.0, mitigation });
+                    self.dummy.take_damage(amount, true)
+                } else {
+                    self.dummy.take_damage(rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit::default()), false)
+                };
                 let outcome = if self.dummy.is_alive() { "HIT" } else { "DEFEATED" };
                 self.log_action("ATTACK", &item.name, "Explosive damage", dealt, outcome, "", &dummy_name, false);
                 self.fx("strike", true, &format!("-{dealt}"), Tone::Warn);
             }
             _ => {
-                let pct = (item.buff_pct * 100.0).round() as i32;
-                self.hero_mut().apply_attack_boost(1.0 + item.buff_pct, item.duration);
+                let (status_id, pct) = crate::command::item_grant(&item);
+                status::grant_now(self.hero_mut(), status_id, item.duration.max(1), pct, &format!("item:{}", item.id));
                 self.log_event("BUFF", &item.name, &format!("+{pct}% ATK for {} rounds", item.duration), pct, &format!("BUFF +{pct}%"));
                 self.fx("glow", true, "ELIXIR BOOST", Tone::Gold);
             }

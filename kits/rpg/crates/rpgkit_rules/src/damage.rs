@@ -316,6 +316,56 @@ pub fn heal_gain(hp: i32, max_hp: i32, amount: i32) -> i32 {
     pipeline::PASS.run(&[Modifier::new("heal", Stage::Base, Op::Add(amount as f64))]).value.min(max_hp - hp)
 }
 
+/// A1.2-K3 (A1_VALUE section 1, FB-55(2)): the situational terms of an item's damage on one unit: the factor in the
+/// mult stage (`splash_mult` on a shaped Assault row's tile off its target, else 1) and, when the ruleset mitigates
+/// item damage (`Numbers::item_mitigation`), the target's guard plus cover and its armour. `None` mitigation is the
+/// exact port of the pre-K3 flat damage.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ItemHit {
+    pub splash: f64,
+    /// (guard + cover, the armour rating) of the target, or None (no mitigation stage).
+    pub mitigation: Option<(f64, i32)>,
+}
+
+impl Default for ItemHit {
+    fn default() -> Self {
+        Self { splash: 1.0, mitigation: None }
+    }
+}
+
+/// A1.2-K3: the damage pipeline's modifiers of an item hit (the item's flat `damage` in the base stage, the splash in the
+/// mult stage, guard and cover capped at `GUARD_CAP`, then armour in the mitigation stage); the first `n` count.
+pub fn item_damage_modifiers(base: i32, h: ItemHit) -> ([Modifier; 4], usize) {
+    let (guard_cover, rating) = h.mitigation.unwrap_or((0.0, 0));
+    let mods = [
+        Modifier::new("item", Stage::Base, Op::Add(base as f64)),
+        Modifier::new("splash", Stage::Mult, Op::Mul(h.splash)),
+        Modifier::new("guard_cover", Stage::Mitigation, Op::Reduce(GUARD_CAP.min(guard_cover.max(0.0)))),
+        Modifier::new("armour", Stage::Mitigation, Op::Reduce(armor_reduction(rating))),
+    ];
+    (mods, if h.mitigation.is_some() { 4 } else { 2 })
+}
+
+/// A1.2-K3 (A1_VALUE section 1, acceptance 1): the damage an item's flat `base` deals through `pipeline::DAMAGE`
+/// (minimum 1). Without mitigation and splash it is `base` exactly (the exact port of `w.damage(t, damage, true)`).
+pub fn item_damage(base: i32, h: ItemHit) -> i32 {
+    let (mods, n) = item_damage_modifiers(base, h);
+    pipeline::DAMAGE.run(&mods[..n]).value
+}
+
+/// A1.2-K3: `item_damage`, keeping every step.
+pub fn item_damage_traced(base: i32, h: ItemHit) -> (i32, Trace) {
+    let (mods, n) = item_damage_modifiers(base, h);
+    let (out, trace) = pipeline::DAMAGE.run_traced(&mods[..n]);
+    (out.value, trace)
+}
+
+/// A1.2-K3 (A1_VALUE section 1): the heal an item's flat `heal` gives through `pipeline::HEAL` (one rounding, floor 0;
+/// the receiver caps it at its missing HP, `heal_gain`): `heal` exactly.
+pub fn item_heal(heal: i32) -> i32 {
+    pipeline::HEAL.run(&[Modifier::new("item", Stage::Base, Op::Add(heal as f64))]).value
+}
+
 /// A2.2-S2 (FB-56b): ids of the factors a caller multiplies into `HitInput.skill_mult` before the hit (trace only).
 pub const FOLD_SKILL: &str = "fold:skill";
 pub const FOLD_EXPLOIT: &str = "fold:exploit";

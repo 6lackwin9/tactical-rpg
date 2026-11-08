@@ -163,6 +163,68 @@ pub fn field_bonus(s: &IntentInput) -> Option<FieldBonus> {
     })
 }
 
+/// A1.2-K3 (IR11, IR21 item mapping, FB-19): the baseline fields of a consumable the item derivation reads.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ItemInput {
+    pub heal: bool,
+    pub buff: bool,
+    pub damage: bool,
+    /// The item's `area` ("" or "NONE" = single target).
+    pub area: String,
+    /// Its battle reach (0 = self only).
+    pub reach: i32,
+}
+
+impl ItemInput {
+    /// From a loaded item.
+    pub fn of_def(i: &rpgkit_data::ItemDef) -> Self {
+        ItemInput { heal: i.heal > 0, buff: i.buff_pct > 0.0, damage: i.damage > 0, area: i.area.clone(), reach: i.battle_reach() }
+    }
+
+    fn shaped(&self) -> bool {
+        IR21_SHAPES.contains(&self.area.as_str())
+    }
+}
+
+/// A1.2-K3 (IR21 item mapping, FB-19): an item's allowed intents, the primary first: a heal Support and Stand (Stand
+/// alone when it reaches only its user), a buff Stand, a damage item with an area and a reach above 1 Field and
+/// Assault (with reach 1 or less Field), any other damage item Assault. An item lists Maneuver never (IR11: none is
+/// about positioning).
+pub fn derive_item(i: &ItemInput) -> Vec<&'static str> {
+    if i.heal {
+        return if i.reach == 0 { vec![STAND] } else { vec![SUPPORT, STAND] };
+    }
+    if i.buff {
+        return vec![STAND];
+    }
+    if i.damage {
+        if i.shaped() {
+            return if i.reach > 1 { vec![FIELD, ASSAULT] } else { vec![FIELD] };
+        }
+        return vec![ASSAULT];
+    }
+    Vec::new()
+}
+
+/// A1.2-K3: rule-gated like `allowed`: the item derivation under `field_intent`, else `legacy` (the one intent
+/// RULESET1_INTENT IN5 gives an item: foe-aimed Maneuver, else Support).
+pub fn item_allowed(rules: &Ruleset, i: &ItemInput, legacy: &'static str) -> Vec<&'static str> {
+    if rules.has(FIELD_INTENT) {
+        derive_item(i)
+    } else {
+        vec![legacy]
+    }
+}
+
+/// A1.2-K3 (INTENT2 section 6): the derived Field bonus of an item that allows the Field row: `reach` for a throw
+/// (reach above 1), else `power`.
+pub fn item_field_bonus(i: &ItemInput) -> Option<FieldBonus> {
+    if !derive_item(i).contains(&FIELD) {
+        return None;
+    }
+    Some(if i.reach > 1 { FieldBonus::Reach } else { FieldBonus::Power })
+}
+
 /// IR15: the primary intent of a derived (or legacy) list: its first entry ("" for none).
 pub fn primary<'a>(intents: &[&'a str]) -> &'a str {
     intents.first().copied().unwrap_or("")

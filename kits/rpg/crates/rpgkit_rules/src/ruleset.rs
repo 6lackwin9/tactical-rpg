@@ -483,6 +483,16 @@ pub struct Numbers {
     /// A4.2-K1b (`assault_shape_blocks`, IR17): the extra wind-up blocks of a shaped Assault row (read only under
     /// `field_intent`).
     pub assault_shape_blocks: i32,
+    /// A1.2-K3 (`item_mitigation`, A1 section 1, FB-55(2)): whether an item's damage takes the target's guard, cover and
+    /// armour in the pipeline's mitigation stage; a plain tunable, off unless the row sets `on` (off: the flat damage).
+    pub item_mitigation: bool,
+    /// A1.2-K3 (`thrown_miss_spends`, INTENT2 IR12, A1 parameter table): whether a foe or tile item use spends its copy at
+    /// impact when it finds no one; a plain tunable, off unless the row sets `on` (off: a miss keeps the item).
+    pub thrown_miss_spends: bool,
+    /// A1.2-K3 (`pouch_stacks`, INTENT2-K3, A1 parameter table): whether a pouch holds up to 3 distinct items, each a
+    /// stack of at most `min(5, max_stack)` copies; a plain tunable, off unless the row sets `on` (off: 3 copies, any
+    /// mix).
+    pub pouch_stacks: bool,
 }
 
 impl Default for Numbers {
@@ -530,6 +540,9 @@ impl Default for Numbers {
             item_ap: ITEM_AP,
             splash_mult: SPLASH_MULT,
             assault_shape_blocks: ASSAULT_SHAPE_BLOCKS,
+            item_mitigation: false,
+            thrown_miss_spends: false,
+            pouch_stacks: false,
         }
     }
 }
@@ -602,6 +615,9 @@ impl Numbers {
             item_ap: value::int(o, "item_ap", d.item_ap),
             splash_mult: value::float(o, "splash_mult", d.splash_mult),
             assault_shape_blocks: value::int(o, "assault_shape_blocks", d.assault_shape_blocks),
+            item_mitigation: value::string(o, "item_mitigation", "") == "on",
+            thrown_miss_spends: value::string(o, "thrown_miss_spends", "") == "on",
+            pouch_stacks: value::string(o, "pouch_stacks", "") == "on",
         }
     }
 
@@ -821,7 +837,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 34] = [
+pub const FIELD_RULES: [FieldRule; 37] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -871,6 +887,11 @@ pub const FIELD_RULES: [FieldRule; 34] = [
     // read only under field_intent
     FieldRule { range: Some((0.25, 1.0)), ..field_rule("splash_mult", &[FIELD_INTENT]) },
     FieldRule { range: Some((0.0, 2.0)), ..field_rule("assault_shape_blocks", &[FIELD_INTENT]) },
+    // A1.2-K3 (A1 section 1 and parameter table, INTENT2 IR12, INTENT2-K3): the item switches, row-only like the status
+    // numbers (plain tunables: off unless the row sets `on`, whatever the rules; the shipped timeline row sets them)
+    FieldRule { values: &SWITCH_IDS, ..field_rule("item_mitigation", &[]) },
+    FieldRule { values: &SWITCH_IDS, ..field_rule("thrown_miss_spends", &[]) },
+    FieldRule { values: &SWITCH_IDS, ..field_rule("pouch_stacks", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -1113,6 +1134,9 @@ impl Numbers {
             "item_ap" => self.item_ap.to_string(),
             "splash_mult" => self.splash_mult.to_string(),
             "assault_shape_blocks" => self.assault_shape_blocks.to_string(),
+            "item_mitigation" => switch(self.item_mitigation),
+            "thrown_miss_spends" => switch(self.thrown_miss_spends),
+            "pouch_stacks" => switch(self.pouch_stacks),
             _ => return None,
         })
     }

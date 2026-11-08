@@ -1885,13 +1885,19 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
         .collect();
     cands.sort_by(|&a, &b| hp_ratio(w, a).partial_cmp(&hp_ratio(w, b)).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
     let items: Vec<String> = if profile.use_items {
-        w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| round_intent::item_intent(it) == "support")).collect()
+        w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| round_intent::item_rows(w, it).contains(&"support"))).collect()
+    } else {
+        Vec::new()
+    };
+    // A1.2-K3: the pouch heals usable on itself in a Stand round (under `field_intent`)
+    let self_heals: Vec<String> = if profile.use_items {
+        w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| it.heal > 0 && round_intent::item_rows(w, it).contains(&RoundIntent::Guard.id()))).collect()
     } else {
         Vec::new()
     };
     for f in cands {
-        // A4.2-K1b (IR3 b, IR15): under `field_intent` itself is a Stand round with a self-or-ally Support skill as
-        // the opener (then, failing that, the Support round as before: items)
+        // A4.2-K1b (IR3 b, IR15) and K3: under `field_intent` itself is a Stand round, opened by a self-or-ally Support
+        // skill, else by a pouch heal whose rows include Stand; a self Support round is never built under the rule
         if f == c && round_intent::field_rows(w) {
             for sid in round_intent_plan::order(w, c, RoundIntent::Support) {
                 if !round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&RoundIntent::Guard.id()) {
@@ -1903,6 +1909,15 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
                     return Some(p);
                 }
             }
+            // A1.2-K3 (IR15, FB-121): a heal item on itself is a Stand round too (Support on yourself is refused)
+            for id in &self_heals {
+                let mut p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+                p.opener = Some(Opener::Item(id.clone()));
+                if trial(w, plan, c, &p) {
+                    return Some(p);
+                }
+            }
+            continue;
         }
         let mut p = IntentPick::new(RoundIntent::Support, round_intent::normalize(c, RoundTarget::Unit(f)));
         if trial(w, plan, c, &p) {
@@ -1916,6 +1931,33 @@ fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) 
         }
     }
     None
+}
+
+/// A1.2-K3 (IR15, FB-121; K1b did it for skills): under `field_intent` the Stand picks that stand for a self Support:
+/// each Support skill that may land on its user (its rows hold Stand), then each pouch heal whose rows hold Stand (when
+/// the profile uses items). Empty without the rule (a self Support stays a Support round).
+fn self_stand_picks(w: &World, c: UnitId, profile: &AiProfile) -> Vec<IntentPick> {
+    if !round_intent::field_rows(w) {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for sid in round_intent_plan::order(w, c, RoundIntent::Support) {
+        if round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&RoundIntent::Guard.id()) {
+            let mut p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+            p.opener = Some(Opener::Skill(sid));
+            out.push(p);
+        }
+    }
+    if profile.use_items {
+        for id in command::pouch_ids(w, c) {
+            if command::pouch_item(w, c, &id).is_some_and(|it| it.heal > 0 && round_intent::item_rows(w, it).contains(&RoundIntent::Guard.id())) {
+                let mut p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+                p.opener = Some(Opener::Item(id));
+                out.push(p);
+            }
+        }
+    }
+    out
 }
 
 /// AI1 row 3: Guard on the best cover tile in one move when a ranged foe threatens (and a tile beats the unit's own),
@@ -2249,7 +2291,16 @@ fn advance_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId], pr
         if !profile.reckless && profile.role == Role::Support {
             let mut friends: Vec<UnitId> = w.friends_of(c).iter().copied().filter(|&f| f != c && w.has(f)).collect();
             friends.sort_by_key(|&f| (w.pos(f).dist(dest), f));
-            for target in std::iter::once(RoundTarget::Myself).chain(friends.into_iter().map(RoundTarget::Unit)) {
+            // A1.2-K3 (IR15, FB-121): under `field_intent` a self Support is a Stand round with a self-capable opener
+            for mut p in self_stand_picks(w, c, profile) {
+                p.advance_to = Some(dest);
+                p.must_act = true;
+                if trial(w, plan, c, &p) {
+                    return Some(p);
+                }
+            }
+            let me = (!round_intent::field_rows(w)).then_some(RoundTarget::Myself);
+            for target in me.into_iter().chain(friends.into_iter().map(RoundTarget::Unit)) {
                 let mut p = IntentPick::new(RoundIntent::Support, target);
                 p.advance_to = Some(dest);
                 p.must_act = true;
@@ -2261,11 +2312,20 @@ fn advance_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId], pr
             // a ranged unit uses a self skill (a Support or Focus skill on itself) when it has one this round, and
             // Guards only without one (user 2026-10-28)
             if w.units[c].attack_range > 1 {
-                let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Myself);
-                p.advance_to = Some(dest);
-                p.must_act = true;
-                if trial(w, plan, c, &p) {
-                    return Some(p);
+                for mut p in self_stand_picks(w, c, profile) {
+                    p.advance_to = Some(dest);
+                    p.must_act = true;
+                    if trial(w, plan, c, &p) {
+                        return Some(p);
+                    }
+                }
+                if !round_intent::field_rows(w) {
+                    let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Myself);
+                    p.advance_to = Some(dest);
+                    p.must_act = true;
+                    if trial(w, plan, c, &p) {
+                        return Some(p);
+                    }
                 }
             }
             let p = stand_pick(w, c, RoundTarget::Cell(dest));

@@ -605,20 +605,22 @@ fn a_self_target_is_always_stand() {
     assert_eq!(entries_of(&w, &plan, "f_mend").len(), 1, "the heal is planned in the Stand round");
 }
 
-/// IR15 under the rule, kept for items until K3 gives them their rows: a self or ally item used on yourself still plans
-/// as Support on Myself (an item has its one legacy intent; only a skill clicked on itself takes Stand).
+/// IR15 under the rule, for items too since A1.2-K3 (FB-121 retired the K1b exception): a self or ally heal item used
+/// on yourself plans as Stand on Myself (its derived rows are Support, Stand).
 #[test]
-fn an_item_used_on_yourself_stays_support_until_items_get_their_rows() {
+fn an_item_used_on_yourself_plans_in_stand() {
     let mut w = session(field_on());
     let potion = rpgkit_data::ItemDef::from_obj(json!({"id": "f_potion", "name": "Potion", "item_type": "CONSUMABLE", "consumable_type": "HEALTH_POTION", "heal": 20}).as_object().unwrap());
     assert!(w.units[HERO].inventory.add_to_pouch(&potion));
     w.add_item_skills();
     let use_it = vec![Pick::Item("f_potion".into())];
-    assert_eq!(rip::pick_intent(&w, HERO, RoundTarget::Myself, &use_it), Some(RoundIntent::Support));
+    assert_eq!(round_intent::item_rows(&w, &potion), ["support", "guard"]);
+    assert_eq!(rip::pick_intent(&w, HERO, RoundTarget::Myself, &use_it), Some(RoundIntent::Guard));
     let mut plan = Plan::new();
     let (r, _) = rip::pick(&mut w, &mut plan, HERO, RoundTarget::Myself, &use_it);
     assert_eq!(r, Ok(()));
-    assert_eq!((round_intent::intent_of(&w, HERO), w.round_states[&HERO].target), (Some(RoundIntent::Support), Some(RoundTarget::Myself)));
+    assert_eq!((round_intent::intent_of(&w, HERO), w.round_states[&HERO].target), (Some(RoundIntent::Guard), Some(RoundTarget::Myself)));
+    assert!(!round_intent::target_problem(&w, HERO, RoundIntent::Support, RoundTarget::Myself).is_empty(), "Support on yourself is refused under the rule");
     assert!(plan.entries_for(&w, HERO).iter().any(|e| e.item.as_ref().is_some_and(|i| i.id == "f_potion")), "the potion is planned");
 }
 

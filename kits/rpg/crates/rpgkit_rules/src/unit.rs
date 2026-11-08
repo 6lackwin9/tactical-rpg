@@ -1052,6 +1052,8 @@ pub struct Growth {
     pub pouch: Vec<rpgkit_data::ItemDef>,
     pub loadout: Option<(Vec<String>, Vec<String>)>,
     pub ranks: IndexMap<String, i32>,
+    /// A1.2-K3: the played ruleset's `pouch_stacks` (the battle pouch takes stacks; `Inventory::pouch_stacks`).
+    pub pouch_stacks: bool,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1147,6 +1149,7 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
                 }
             }
             u.inventory.pouch.clear();
+            u.inventory.pouch_stacks = g.pouch_stacks;
             for item in g.pouch.iter().filter(|i| i.item_type == "CONSUMABLE") {
                 if !u.inventory.add_to_pouch(item) {
                     pouch_unloaded.push(item.id.clone());

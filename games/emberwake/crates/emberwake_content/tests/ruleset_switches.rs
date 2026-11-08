@@ -113,6 +113,10 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         r.numbers.stagger_windup_mult = 2.0;
         // A1.2-S1 (FB-55): the seed a12s1 set item_ap 0 later
         r.numbers.item_ap = 1;
+        // A1.2-K3 (W2-4 slice 7a): the seed w24k3r set the three item switches on later
+        r.numbers.item_mitigation = false;
+        r.numbers.thrown_miss_spends = false;
+        r.numbers.pouch_stacks = false;
     }
     assert_eq!(rows(&tmp), want, "every row reads as before, bar the rules HOOKS1 appended later");
     let file = store::file_of(&tmp, None, ruleset::KIND);
@@ -135,7 +139,10 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in seed_entries("w24s1.json") {
         store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("W2-4 slice 1 row '{}': {err:?}", json::s(&e, "id")));
     }
-    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1 and W2-4 slice 1 rows over it give the shipped row");
+    for e in seed_entries("w24k3r.json") {
+        store::upsert(&tmp, None, ruleset::KIND, &e, None).unwrap_or_else(|err| panic!("A1.2-K3 row '{}': {err:?}", json::s(&e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the HOOKS1-A, S2.2-S3, R1-BAL, A1.2-S1, W2-4 slice 1 and A1.2-K3 rows over it give the shipped row");
     // A4.2-K1b: under field_intent the derived-row seed's orders are valid again and give the shipped units back
     for u in &reordered {
         store::upsert(&tmp, None, "units", u, None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));

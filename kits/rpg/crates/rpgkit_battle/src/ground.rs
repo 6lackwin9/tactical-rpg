@@ -301,6 +301,7 @@ pub fn after_impact(res: &mut Resolver, w: &mut World, idx: usize) {
         CmdKind::Area { cells, aim, .. } => (Some(*aim), cells.clone()),
         CmdKind::Attack { target, last_target, .. } => (last_target.or(*target).or(w.units[by].active_target).and_then(unit_tile), Vec::new()),
         CmdKind::Support { target, .. } => (unit_tile(*target), Vec::new()),
+        CmdKind::Item { cell: Some(p), used: true, .. } => (Some(*p), Vec::new()),
         CmdKind::Item { target, used: true, .. } => (unit_tile(*target), Vec::new()),
         _ => return,
     };

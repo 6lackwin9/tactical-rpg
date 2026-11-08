@@ -673,13 +673,12 @@ impl BattleScreen {
         if active.is_empty() {
             return Err("No active party member to fight.".into());
         }
-        let world = emberwake_world::battle::fight_world(&d, gs, &enc_ref);
+        // the kit's world fight start: the fight's world, BK6's party_min refusal, A1.2-K3's combat-start auto-fill (its
+        // "Stash short" lines are logged below)
+        let (world, stash_short) = emberwake_world::battle::begin_fight(&d, cx.gs_mut(), &enc_ref)?;
+        let gs = cx.gs();
+        let active = gs.party.active_members();
         let entry = d.resolve(&world, "encounters", &s(hit, "id"));
-        // ROSTER1 BK6: the world refuses a fight its encounter's party_min does not allow (the fight world's entry)
-        let short = emberwake_world::roster::party_min_refusal(gs, entry);
-        if !short.is_empty() {
-            return Err(short);
-        }
         // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter; V3: the world's plan
         // reveal flag in the game state reveals the enemy plans
         let mut def = emberwake_world::battle::encounter_def_in(&d, gs, &world, entry);
@@ -724,6 +723,9 @@ impl BattleScreen {
         b.after_start(&s(entry, "intro"));
         if !mods.note.is_empty() {
             b.message = format!("{} {}.", b.message, mods.note);
+        }
+        for line in stash_short {
+            cx.log(line);
         }
         cx.set_busy(true);
         Ok(b)

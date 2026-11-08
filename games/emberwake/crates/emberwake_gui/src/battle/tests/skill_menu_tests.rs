@@ -295,7 +295,10 @@ fn every_old_action_still_works() {
     b.act(&mut cx, Action::SelfTarget);
     drawn(&mut cx, &mut g, &mut b);
     let k = popup(&b).rows.iter().position(|r| matches!(&r.act, RowAct::Pick(p) if matches!(&p[..], [rip::Pick::Item(id)] if *id == item.id))).expect("the item's cell");
-    assert_eq!(popup(&b).rows[k].slot, RoundIntent::parse(ri::item_intent(&item)).map(Slot::Intent), "the item's intent's row");
+    // A1.2-K3 (IR15, FB-121): an item on yourself takes Stand when its derived rows hold it (field_intent), else its row
+    let rows = ri::item_rows(&b.host.session.as_ref().unwrap().w, &item);
+    let want = if rows.contains(&RoundIntent::Guard.id()) { RoundIntent::Guard.id() } else { rows[0] };
+    assert_eq!(popup(&b).rows[k].slot, RoundIntent::parse(want).map(Slot::Intent), "the item's row on yourself");
     assert!(popup(&b).rows[k].valid, "{}", popup(&b).rows[k].detail);
     // two items can share an icon: the cell has its copies left and the card names it
     let left = s(&b).plan.items_left(&s(&b).w, h, &item.id, -1);

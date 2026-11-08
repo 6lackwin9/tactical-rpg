@@ -530,6 +530,7 @@
 			"use_blocks": 2,
 			"use_reach": 3,
 			"hazard": {},
+			"area": "BURST",
 			"max_stack": 2
 		},
 		{
@@ -1750,6 +1751,7 @@
 			"use_blocks": 1,
 			"use_reach": 3,
 			"hazard": {},
+			"area": "PLUS",
 			"max_stack": 2
 		},
 		{

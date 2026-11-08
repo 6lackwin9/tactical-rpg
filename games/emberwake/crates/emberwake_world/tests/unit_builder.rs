@@ -80,6 +80,8 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
         }
     }
     u.inventory.pouch.clear();
+    // A1.2-K3 (INTENT2-K3): the battle pouch takes stacks under the world's `pouch_stacks` (the one intended difference)
+    u.inventory.pouch_stacks = d.ruleset(world).numbers.pouch_stacks;
     for id in &work.pouch {
         if let Some(item) = cat.items.get(id).filter(|i| i.item_type == "CONSUMABLE") {
             u.inventory.add_to_pouch(item);

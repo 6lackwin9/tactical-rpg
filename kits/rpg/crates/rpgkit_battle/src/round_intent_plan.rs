@@ -767,15 +767,28 @@ impl<'a> Builder<'a> {
     fn item_opener(&self, plan: &Plan, st: &SimState, id: &str) -> Result<Vec<Step>, String> {
         let w = self.w;
         let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", w.units[self.c].name)) };
-        let of = round_intent::item_intent(item);
-        if of != self.intent.id() {
+        // A1.2-K3 (IR11, IR21): an item opens a round of any of its rows
+        if !round_intent::item_allows(w, item, self.intent) {
             return Err(format!("{} is not a {} item.", item.name, self.intent.label(&w.cat)));
         }
         if self.intent == RoundIntent::Maneuver && self.kind != ManeuverKind::Utility {
             return Err(format!("{} opens only a Utility round.", item.name));
         }
-        let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name)) };
         let mut steps = Vec::new();
+        // A1.2-K3 (INTENT2 section 6, IR2): an area item's Field row walks into its Field reach of the source tile
+        if let RoundTarget::Cell(source) = self.target {
+            if !command::item_area_on(w, item) {
+                return Err(format!("{} needs a unit to aim at.", item.name));
+            }
+            let reach = command::item_field_reach(item);
+            if st.pos.dist(source) > reach {
+                let tile = self.approach_tile(plan, st.pos, source, 1, reach.max(1)).ok_or("No path to get within reach.")?;
+                steps.push(tagged(PlanStep::go_to(self.mv(), tile), APPROACH, ""));
+            }
+            steps.push(tagged(PlanStep::use_item_at(id, source), OPENER, ""));
+            return Ok(steps);
+        }
+        let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name)) };
         let reach = item.battle_reach();
         if t != self.c && st.pos.dist(w.pos(t)) > reach {
             let tile = self.approach_tile(plan, st.pos, w.pos(t), 1, reach.max(1)).ok_or("No path to get within reach.")?;
@@ -1208,7 +1221,7 @@ pub fn hotkey_target(w: &World, c: UnitId, skill: SkillId) -> Option<RoundTarget
 fn pick_rows(w: &World, c: UnitId, p: &Pick) -> Vec<RoundIntent> {
     match p {
         Pick::Skill { skill, .. } => round_intent::skill_rows(w, &w.cat.skills[*skill]).into_iter().filter_map(RoundIntent::parse).collect(),
-        Pick::Item(id) => command::pouch_item(w, c, id).or_else(|| w.cat.items.get(id)).and_then(|i| RoundIntent::parse(round_intent::item_intent(i))).into_iter().collect(),
+        Pick::Item(id) => command::pouch_item(w, c, id).or_else(|| w.cat.items.get(id)).map(|i| round_intent::item_rows(w, i).into_iter().filter_map(RoundIntent::parse).collect()).unwrap_or_default(),
         _ => Vec::new(),
     }
 }
@@ -1219,7 +1232,7 @@ fn pick_rows(w: &World, c: UnitId, p: &Pick) -> Vec<RoundIntent> {
 fn pick_row_at(w: &World, c: UnitId, p: &Pick, at: RoundTarget) -> Option<RoundIntent> {
     let rows = pick_rows(w, c, p);
     let at = round_intent::normalize(c, at);
-    // an item keeps its one legacy intent (a self item stays Support on Myself) until K3 gives items their rows
+    // A1.2-K3: items too (a heal on yourself is a Stand round under `field_intent`)
     if at == RoundTarget::Myself && rows.contains(&RoundIntent::Guard) && round_intent::listed(w, RoundIntent::Guard) {
         return Some(RoundIntent::Guard);
     }
@@ -1843,10 +1856,11 @@ impl Builder<'_> {
             }
             Pick::Item(id) => {
                 let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", u.name).into()) };
-                if round_intent::item_intent(item) != self.intent.id() {
+                if !round_intent::item_allows(w, item, self.intent) {
                     return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
-                let need = item.use_blocks.max(1);
+                let assault_area = command::item_area_on(w, item) && !matches!(self.target, RoundTarget::Cell(_));
+                let need = command::item_blocks(w, item, assault_area, w.total_blocks);
                 if !fits_before(st, need, room.limit) {
                     return Err((room.taken)(need).into());
                 }
@@ -1859,6 +1873,11 @@ impl Builder<'_> {
                 }
                 if let Some(e) = self.reach_problem(plan, st, p) {
                     return Err(e.into());
+                }
+                if let RoundTarget::Cell(source) = self.target {
+                    if command::item_area_on(w, item) {
+                        return Ok(vec![tagged(PlanStep::use_item_at(id, source), tag, "")]);
+                    }
                 }
                 let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name).into()) };
                 Ok(vec![tagged(PlanStep::use_item(id, t), tag, "")])
@@ -1874,8 +1893,12 @@ impl Builder<'_> {
         let goal = self.target_pos(st);
         let out = match p {
             Pick::Item(id) => {
-                let t = self.target_unit()?;
-                t != self.c && command::pouch_item(w, self.c, id).is_some_and(|i| st.pos.dist(goal) > i.battle_reach())
+                if let RoundTarget::Cell(_) = self.target {
+                    command::pouch_item(w, self.c, id).is_some_and(|i| st.pos.dist(goal) > command::item_field_reach(i))
+                } else {
+                    let t = self.target_unit()?;
+                    t != self.c && command::pouch_item(w, self.c, id).is_some_and(|i| st.pos.dist(goal) > i.battle_reach())
+                }
             }
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
@@ -1927,7 +1950,8 @@ impl Builder<'_> {
         let goal = self.target_pos(st);
         let (lo, hi, d) = match p {
             Pick::Item(id) => {
-                let reach = command::pouch_item(w, self.c, id).map_or(1, |i| i.battle_reach());
+                let field = matches!(self.target, RoundTarget::Cell(_));
+                let reach = command::pouch_item(w, self.c, id).map_or(1, |i| if field { command::item_field_reach(i) } else { i.battle_reach() });
                 (0, reach, st.pos.dist(goal))
             }
             Pick::Skill { skill: sid, .. } => {
@@ -2136,6 +2160,12 @@ fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<P
                         rows.push((vec![Pick::Skill { skill: sid, kind: None }], RoundTarget::Cell(w.pos(t))));
                     }
                 }
+                // A1.2-K3 (INTENT2 section 6): an area item's Field row on the enemy's tile
+                for id in command::pouch_ids(w, c) {
+                    if command::pouch_item(w, c, &id).is_some_and(|i| i.offered_in_battle() && command::item_area_on(w, i) && round_intent::item_allows(w, i, RoundIntent::Field)) {
+                        rows.push((vec![Pick::Item(id)], RoundTarget::Cell(w.pos(t))));
+                    }
+                }
             }
         }
         RoundTarget::Unit(t) => {
@@ -2174,6 +2204,8 @@ fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<P
                     rows.push(skill_row(sid, Some(ManeuverKind::Utility)));
                 }
             }
+            // A1.2-K3 (INTENT2 section 6, IR2): an area item's Field row on a tile
+            item_rows(&mut rows, &|i| command::item_area_on(w, i) && round_intent::item_allows(w, i, RoundIntent::Field));
             if held {
                 rows.push((vec![Pick::StepAfter(p)], at));
             }
@@ -2302,6 +2334,7 @@ fn target_hint(w: &World, c: UnitId, p: &Pick) -> String {
                 _ => "an enemy",
             }
         }
+        Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| command::item_area_on(w, i)) => "an enemy or a tile",
         Pick::Item(id) if command::pouch_item(w, c, id).is_some_and(|i| i.aims_at_foes()) => "an enemy",
         Pick::Item(_) => "yourself or an ally",
         _ => "a tile",

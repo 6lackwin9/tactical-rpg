@@ -247,7 +247,10 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             let row = content_storage("items", &content("items", &resolve_item(entry, family)));
             // ItemModifiers.stored
             let has_hand = !sget(&row, "hand", "").is_empty();
-            Ok(row.into_iter().filter(|(k, _)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand))).map(|(k, v)| (k, copy(&v))).collect())
+            // A1.2-K3: a consumable's `area` (NONE) and `affects` ("") are stored only when set, so an item written
+            // before they existed re-saves byte for byte
+            let unset_shape = |k: &str, v: &Value| (k == "area" && gstr(v) == rpgkit_data::ITEM_AREA_NONE) || (k == "affects" && gstr(v).is_empty());
+            Ok(row.into_iter().filter(|(k, v)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand) || unset_shape(k, v))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),
         k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),

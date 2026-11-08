@@ -550,8 +550,22 @@ pub struct ItemDef {
     pub level3_passive: String,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
+    /// A1.2-K3 (INTENT2 section 6, INTENT2-K3): a thrown consumable's one authored area shape (`NONE` = single target;
+    /// `PLUS`, `BURST`), the same in its Field and Assault rows.
+    pub area: String,
+    /// A1.2-K3 (A3.1 section 1, IR9): which units the area hits (None = the row's default, as a skill's `affects`).
+    pub affects: Option<Affects>,
+    /// The most copies of the item one stack holds (`max_stack`, 1 when unset).
+    pub max_stack: i32,
     pub raw: Obj,
 }
+
+/// A1.2-K3: the `area` of a single-target consumable (the schema default; the writer stores no key for it).
+pub const ITEM_AREA_NONE: &str = "NONE";
+/// A1.2-K3 (INTENT2 section 6): the area shapes a consumable may author (a bomb is PLUS or BURST).
+pub const ITEM_AREAS: [&str; 3] = [ITEM_AREA_NONE, "PLUS", "BURST"];
+/// INTENT2-K3: the most copies a pouch stack holds whatever an item's `max_stack` (decision "Material stacks").
+pub const POUCH_STACK_CAP: i32 = 5;
 
 /// RULESET1 K1: the resolved item row's key that carried its family's engine rule `reach` before U3.2-S2 (true only
 /// for those families); read now only on a row without `ITEM_FAMILY_RULES`, and the writer leaves it out of the stored
@@ -674,6 +688,9 @@ impl ItemDef {
             level2_bonus: obj(o, ITEM_FAMILY_LEVEL2).map(FamilyBonus::from_obj).unwrap_or_default(),
             level3_passive: string(o, ITEM_FAMILY_LEVEL3, ""),
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
+            area: string(o, "area", ITEM_AREA_NONE),
+            affects: Affects::parse(&string(o, "affects", "")),
+            max_stack: int(o, "max_stack", 1),
             raw: o.clone(),
         }
     }
@@ -714,6 +731,16 @@ impl ItemDef {
     /// ItemCommand.offered: a consumable whose type is offered in battle.
     pub fn offered_in_battle(&self) -> bool {
         self.is_consumable() && self.type_reach() >= 0 && self.battle_reach() >= 0
+    }
+
+    /// A1.2-K3: whether the item hits an area shape (`area` other than `NONE`).
+    pub fn is_area(&self) -> bool {
+        !self.area.is_empty() && self.area != ITEM_AREA_NONE
+    }
+
+    /// INTENT2-K3: the copies one pouch stack of the item holds under `pouch_stacks`: `min(5, max_stack)`, at least 1.
+    pub fn stack_limit(&self) -> i32 {
+        self.max_stack.clamp(1, POUCH_STACK_CAP)
     }
 
     /// ItemCommand.aims_at_foes: damage with no heal or boost.

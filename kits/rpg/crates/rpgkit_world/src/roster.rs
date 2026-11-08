@@ -158,6 +158,8 @@ impl FightEnd {
 pub struct Settled {
     pub wounded: Vec<String>,
     pub departed: Vec<(String, String)>,
+    /// A1.2-K3: the Results lines of the pouch slots auto-fill left short (`auto_fill`).
+    pub stash_short: Vec<String>,
 }
 
 /// ENCOUNTER2 W3, 3.2's first row: the life `then` gives a stayer or stander (`capture`: captured, `kill`: dead) and its
@@ -194,6 +196,88 @@ fn settle_value(r: &RosterRule, f: &FightEnd, e: &HeroEnd) -> (String, &'static 
     }
 }
 
+/// A1.2-K3 (INTENT2-K3, "Stacks & Auto-Fill"): tops the pouches of `members` (party slot order) up from the stash to
+/// each slot's packed target (`UnitState::packed`), under the played world's `pouch_stacks` (classic: nothing). Item by
+/// item in slot order, the copies go one at a time in round-robin passes, each pass ordered by the higher packed
+/// target first (descending, ties by party slot order), until the stash runs out or everyone is full. Returns a
+/// Results line `Stash short: <name> <cur> of <packed> <item>` for each slot still below its target.
+pub fn auto_fill(d: &Data, gs: &mut GameState, world: &str, members: &[String]) -> Vec<String> {
+    if !d.ruleset(world).numbers.pouch_stacks {
+        return Vec::new();
+    }
+    let mut items: Vec<String> = Vec::new();
+    for id in members {
+        for slot in gs.party.member(id).map(UnitState::pouch_slots).unwrap_or_default() {
+            if !items.contains(&slot) {
+                items.push(slot);
+            }
+        }
+    }
+    for item in &items {
+        loop {
+            let mut want: Vec<(usize, i64)> = Vec::new();
+            for (i, id) in members.iter().enumerate() {
+                if let Some(m) = gs.party.member(id) {
+                    if m.pouch_slots().contains(item) && m.pouch_count(item) < m.packed(item) {
+                        want.push((i, m.packed(item)));
+                    }
+                }
+            }
+            // stable: ties keep party slot order
+            want.sort_by_key(|w| std::cmp::Reverse(w.1));
+            let mut moved = false;
+            for (i, packed) in want {
+                if gs.party.stash.get(item).copied().unwrap_or(0) <= 0 {
+                    break;
+                }
+                let Some(m) = gs.party.member_mut(&members[i]) else { continue };
+                if m.pouch_count(item) < packed {
+                    // keep the slot's place: the copy joins its stack
+                    let at = m.pouch.iter().rposition(|p| p == item).map_or(m.pouch.len(), |k| k + 1);
+                    m.pouch.insert(at, item.clone());
+                    gs.party.remove_from_stash(item, 1);
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+    }
+    let mut lines = Vec::new();
+    for id in members {
+        let Some(m) = gs.party.member(id) else { continue };
+        for slot in m.pouch_slots() {
+            let (cur, packed) = (m.pouch_count(&slot), m.packed(&slot));
+            if cur < packed {
+                let name = d.cat.items.get(&slot).map_or(slot.clone(), |i| i.name.clone());
+                lines.push(format!("Stash short: {} {cur} of {packed} {name}", progression::display_name(d, m)));
+            }
+        }
+    }
+    lines
+}
+
+/// A1.2-K3 (INTENT2-K3): combat start: each active member's pouch slots without a packed target take their current
+/// count as one (so the fight's spent copies are refilled after it), then `auto_fill` for the active members.
+pub fn auto_fill_at_start(d: &Data, gs: &mut GameState, world: &str) -> Vec<String> {
+    if !d.ruleset(world).numbers.pouch_stacks {
+        return Vec::new();
+    }
+    let ids: Vec<String> = gs.party.active_members().into_iter().map(|m| m.id.clone()).collect();
+    for id in &ids {
+        if let Some(m) = gs.party.member_mut(id) {
+            for slot in m.pouch_slots() {
+                if !m.pouch_packed.contains_key(&slot) {
+                    let n = m.pouch_count(&slot).clamp(1, crate::state::stack_limit(d, &slot));
+                    m.pouch_packed.insert(slot, n);
+                }
+            }
+        }
+    }
+    auto_fill(d, gs, world, &ids)
+}
+
 /// 3.2: settles the fielded members after the fight `f`. Every outcome: the unused pouch items go back to the saved
 /// pouch, then the ids that found no slot (ITEMUSE1 rule 7, GameEncounter.write_back_pouches). Then (L5) the played
 /// world's rule row in the current act (L6) turns each fate into `classic`, `wounded` (W1: held once), `captured` or
@@ -206,6 +290,16 @@ fn settle_value(r: &RosterRule, f: &FightEnd, e: &HeroEnd) -> (String, &'static 
 /// `battle::apply` calls it first, so every runner's `after_fight` settles the party before the rewards and
 /// CAMPAIGN1's battle tick and its retreat (L5: the retreat then moves a cell that already carries the loss).
 pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Settled {
+    let mut out = settle_fates(d, gs, f, ends);
+    // A1.2-K3 (INTENT2-K3): after every departure, the members who came home top their pouches up from the stash (the
+    // fight's world), so a departing member takes nothing and only survivors are named short
+    let home: Vec<String> = ends.iter().map(|e| e.member.clone()).filter(|m| !out.departed.iter().any(|(x, _)| x == m) && gs.party.member(m).is_some()).collect();
+    out.stash_short = auto_fill(d, gs, &f.world, &home);
+    out
+}
+
+/// `settle_party` before the auto-fill: the pouches written back, the departures and the HP and conditions.
+fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Settled {
     let mut out = Settled::default();
     for e in ends {
         if let Some(m) = gs.party.member_mut(&e.member) {

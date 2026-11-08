@@ -67,7 +67,10 @@
 			"attack_lock": "none",
 			"move_after_blocks": 3,
 			"item_ap": 0,
-			"poise_mode": "pips"
+			"poise_mode": "pips",
+			"item_mitigation": "on",
+			"thrown_miss_spends": "on",
+			"pouch_stacks": "on"
 		},
 		{
 			"id": "classic",

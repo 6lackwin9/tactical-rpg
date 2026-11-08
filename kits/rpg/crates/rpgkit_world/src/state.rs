@@ -28,6 +28,14 @@ pub const EXPLORE_KEYS: [&str; 5] = ["steps", "next_at", "loc_steps", "last_safe
 pub const LEADER_KEY: &str = "leader";
 pub const AUTO_IDS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
 pub const DEFAULT_TACTIC: &str = "balanced";
+/// A1.2-K3 (INTENT2-K3): the copies one pouch stack of catalog item `item` holds: `min(5, max_stack)`, at least 1
+/// (`ItemDef::stack_limit`; 1 for an unknown item).
+pub fn stack_limit(d: &Data, item: &str) -> i64 {
+    d.cat.items.get(item).map_or(1, |i| i.stack_limit() as i64)
+}
+
+/// A1.2-K3 (INTENT2-K3): the saved member key of the pouch's packed targets (`UnitState::pouch_packed`).
+pub const POUCH_PACKED_KEY: &str = "pouch_packed";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -64,6 +72,10 @@ pub struct UnitState {
     /// ROSTER1 W1, 11.4: the member's conditions (`rpgkit_data::MEMBER_CONDITIONS`: `wounded`), each held once. Saved
     /// as `conditions` only when not empty (the unreleased save v13 carries it: a save without it reads none).
     pub conditions: Vec<String>,
+    /// A1.2-K3 (INTENT2-K3, INTENT2-U): item id -> how many copies auto-fill tops that pouch slot up to (`1..min(5,
+    /// max_stack)`; a pouch id without an entry reads its current count). A key with no copy left keeps its slot. Saved
+    /// as `pouch_packed` only when not empty (no save bump: a save without it reads the current pouch).
+    pub pouch_packed: IndexMap<String, i64>,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -264,6 +276,10 @@ impl UnitState {
         if !self.conditions.is_empty() {
             out.insert("conditions".into(), strs(&self.conditions));
         }
+        // A1.2-K3: only a member with a packed target saves `pouch_packed`
+        if !self.pouch_packed.is_empty() {
+            out.insert(POUCH_PACKED_KEY.into(), Value::Object(self.pouch_packed.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         Value::Object(out)
     }
 
@@ -308,6 +324,7 @@ impl UnitState {
             deck,
             deck_problems,
             conditions: json::sget(d, "conditions"),
+            pouch_packed: d.get(POUCH_PACKED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
         }
     }
 
@@ -400,15 +417,85 @@ impl UnitState {
                 errors.push(format!("{at}: unknown carried item '{item}'."));
             }
         }
-        if self.pouch.len() > POUCH_MAX {
-            errors.push(format!("{at}: Pouch holds at most {POUCH_MAX} items."));
+        errors.extend(self.pouch_errors(d, &at));
+        errors
+    }
+
+    /// The pouch rules of a saved member. A1.2-K3 (INTENT2-K3): a pouch is either the classic form (at most POUCH_MAX
+    /// copies) or the stack form (`pouch_stacks`: at most POUCH_MAX distinct items, each at most its stack limit); every
+    /// id is a consumable; a packed target is `1..min(5, max_stack)`.
+    pub fn pouch_errors(&self, d: &Data, at: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        let stacked = self.pouch_slots().len() <= POUCH_MAX && self.pouch_slots().iter().all(|id| self.pouch_count(id) <= stack_limit(d, id));
+        if self.pouch.len() > POUCH_MAX && !stacked {
+            errors.push(format!("{at}: Pouch holds at most {POUCH_MAX} items (or {POUCH_MAX} stacks, each at most its stack limit)."));
         }
         for item in &self.pouch {
             if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
                 errors.push(format!("{at}: Pouch: '{item}' is not a consumable."));
             }
         }
+        for (item, n) in &self.pouch_packed {
+            if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
+                errors.push(format!("{at}: Pouch packed: '{item}' is not a consumable."));
+            } else if *n < 1 || *n > stack_limit(d, item) {
+                errors.push(format!("{at}: Pouch packed: '{item}' packs 1-{}, not {n}.", stack_limit(d, item)));
+            }
+        }
         errors
+    }
+
+    /// A1.2-K3: copies of `item` in the saved pouch.
+    pub fn pouch_count(&self, item: &str) -> i64 {
+        self.pouch.iter().filter(|p| *p == item).count() as i64
+    }
+
+    /// A1.2-K3 (INTENT2-K3): the pouch slots in order: the distinct pouch ids, then the packed ids with no copy left.
+    pub fn pouch_slots(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for id in self.pouch.iter().chain(self.pouch_packed.keys()) {
+            if !out.contains(id) {
+                out.push(id.clone());
+            }
+        }
+        out
+    }
+
+    /// A1.2-K3 (INTENT2-K3): how many copies auto-fill tops slot `item` up to: its `pouch_packed`, else its current count.
+    pub fn packed(&self, item: &str) -> i64 {
+        self.pouch_packed.get(item).copied().unwrap_or_else(|| self.pouch_count(item))
+    }
+
+    /// A1.2-K3 (INTENT2-K3, INTENT2-U): assigns `item` to a pouch slot: its packed target defaults to `min(5,
+    /// max_stack)` even when the stash holds fewer. Refused for a non-consumable, an item already slotted (a second slot
+    /// of the same item is not allowed) or a full pouch (POUCH_MAX slots).
+    pub fn assign_pouch(&mut self, d: &Data, item: &str) -> Result<(), String> {
+        if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
+            return Err(format!("'{item}' is not a consumable."));
+        }
+        let slots = self.pouch_slots();
+        if slots.iter().any(|s| s == item) {
+            return Err(format!("'{item}' already has a pouch slot."));
+        }
+        if slots.len() >= POUCH_MAX {
+            return Err(format!("The pouch holds at most {POUCH_MAX} stacks."));
+        }
+        self.pouch_packed.insert(item.to_string(), stack_limit(d, item));
+        Ok(())
+    }
+
+    /// A1.2-K3 (INTENT2-U): sets slot `item`'s packed target to `n` (`1..min(5, max_stack)`; refused outside it or for
+    /// an item with no slot).
+    pub fn set_packed(&mut self, d: &Data, item: &str, n: i64) -> Result<(), String> {
+        if !self.pouch_slots().iter().any(|s| s == item) {
+            return Err(format!("'{item}' has no pouch slot."));
+        }
+        let limit = stack_limit(d, item);
+        if n < 1 || n > limit {
+            return Err(format!("Pack 1-{limit} of '{item}'."));
+        }
+        self.pouch_packed.insert(item.to_string(), n);
+        Ok(())
     }
 
     /// RULESET1 9 D1-D5 for a member's saved deck (the content check's unit deck rules, ownership from the member):

@@ -549,7 +549,7 @@ fn the_hook_kinds_check_their_rows() {
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f1", "name": "Hot", "from": 1}]}), "Band 'f1': the first band starts at min (0)."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0}, {"id": "f1", "from": 0}]}), "Band 'f1': bands run in ascending from."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "fear"}]}]}), "Band 'f0' status 1: 'fear' is not a status."),
-        (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "empower", "magnitude": 30}]}]}), "Band 'f0' status 1: empower needs a magnitude 1-25."),
+        (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "empower", "magnitude": 60}]}]}), "Band 'f0' status 1: empower needs a magnitude 1-50."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "ap_regen", "value": 1}]}]}), "Band 'f0' effect 1: 'ap_regen' is not one of stat, resist, stagger_taken, skill_potency, status_potency, crit."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "resist", "status": "stun", "value": 0}]}]}), "Band 'f0': Effect 1: resistance is 1-100."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": "f9", "effects": [{"type": "ap", "value": 1}]}]}), "Rule 'full': at must be a band id or a whole number 0-5."),

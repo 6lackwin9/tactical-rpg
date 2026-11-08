@@ -206,6 +206,17 @@ pub fn item_intent(item: &ItemDef) -> &'static str {
     }
 }
 
+/// A1.2-K3 (IR11, IR21 item mapping, FB-19): a pouch item's intent rows, the primary first: derived under
+/// `field_intent` (`rpgkit_rules::intent::derive_item`), else its one legacy intent (`item_intent`).
+pub fn item_rows(w: &World, item: &ItemDef) -> Vec<&'static str> {
+    rpgkit_rules::intent::item_allowed(&w.ruleset, &rpgkit_rules::intent::ItemInput::of_def(item), item_intent(item))
+}
+
+/// A1.2-K3: whether an item may be used in a round of `intent`.
+pub fn item_allows(w: &World, item: &ItemDef, intent: RoundIntent) -> bool {
+    item_rows(w, item).contains(&intent.id())
+}
+
 /// RULESET1_INTENT PL2 (the intent table of section 2): "" when `target` fits `intent` for unit `c`, else the reason.
 pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTarget) -> String {
     let unit_ok = |t: UnitId| w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t);
@@ -224,8 +235,9 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
         (RoundIntent::Assault | RoundIntent::Maneuver, RoundTarget::Myself) => false,
         (RoundIntent::Guard, RoundTarget::Myself | RoundTarget::Cell(_)) => true,
         (RoundIntent::Guard, RoundTarget::Unit(t)) => t == c,
-        // kept for items (Support on Myself) until K3 gives items their rows; a skill clicked on itself takes Stand (IR15)
-        (RoundIntent::Support, RoundTarget::Myself) => true,
+        // A1.2-K3 (IR15, FB-121): under `field_intent` a self target is Stand's, for items too (a heal on yourself is a
+        // Stand round); without it a self item stays Support
+        (RoundIntent::Support, RoundTarget::Myself) => !field_rows(w),
         (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t),
         (RoundIntent::Support, RoundTarget::Cell(_)) => false,
         (RoundIntent::Channel, _) => true,
