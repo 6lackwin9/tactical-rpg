@@ -4,12 +4,13 @@
 //! loot (its unit killed) and the objective reward. The runners apply the defeat and flee rules. Building the battle
 //! itself (GameEncounter) lives with the session.
 
+use crate::campaign::purse as purse_mods;
 use crate::data::Data;
-use crate::state::GameState;
+use crate::state::{GameState, UnitState};
 use crate::{progression, purse, quest, rolls, roster};
 use aegis_core::json::{self, int, Dict};
 use rpgkit_battle::encounter::{PartyFate, StayBehind};
-use rpgkit_battle::session::{EncounterDef, Fate, Session};
+use rpgkit_battle::session::{EncounterDef, Fate, Prebuilt, Session, StartGrant};
 use serde_json::Value;
 
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
@@ -46,19 +47,62 @@ pub fn encounter_def_in(d: &Data, gs: &GameState, world: &str, entry: &Dict) -> 
 pub struct WorldRoster<'a> {
     pub d: &'a Data,
     pub world: String,
+    /// W.2-S3 (FB-13): the world stage the fight is played at (`world_stage`: the campaign's act, 0 without a
+    /// campaign). `new` sets 0 (the host, the sim, previews); `begin_world` sets the game state's stage. A roster
+    /// built with a stage above 0 must also set `allies`, or the party's guests would scale as enemies.
+    pub stage: i64,
+    /// W.2-S3 (FB-139): the refs fighting on the party's side (the encounter's `party` and `guests`), which never scale
+    /// with the stage. `new` sets none; `begin_world` sets the encounter's.
+    pub allies: Vec<String>,
 }
 
 impl<'a> WorldRoster<'a> {
-    /// W.2-S1 (FB-50a): the roster of a battle played in `world` (the one constructor; `begin_world` builds on it).
+    /// W.2-S1 (FB-50a): the roster of a battle played in `world` at stage 0 (the one constructor; `begin_world` builds
+    /// on it and sets the stage and the allies).
     pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
-        Self { d, world: world.into() }
+        Self { d, world: world.into(), stage: 0, allies: Vec::new() }
     }
 }
 
+/// W.2-S3 (FB-13): the world stage of a fight: the campaign's act in a campaign world, 0 in a world with no campaign
+/// (and in the host and the sim, which have no game state: `WorldRoster::new`). Derived, never saved.
+pub fn world_stage(gs: &GameState) -> i64 {
+    gs.campaign.as_ref().map_or(0, |c| c.act)
+}
+
+/// W.2-S3 (FB-13, FB-139): the level a foe of base level `level` and growth `growth` (its unit's `growth_per_stage`)
+/// fights at on world stage `stage`: `level + stage * growth` (E_ECONOMY), never above the top unit level
+/// (`rpgkit_rules::stats::MAX_LEVEL`, or the base level when that is higher) and never below the base level. The
+/// battle (`WorldRoster`'s `entry`) and the XP weight (`roster_at`, `progression::kill_weight`) both read it, so the XP
+/// follows the level fought. Stage 0 or growth 0 returns the base level.
+pub fn foe_level(level: i64, stage: i64, growth: i64) -> i64 {
+    let top = i64::from(rpgkit_rules::stats::MAX_LEVEL).max(level);
+    (level + stage.max(0) * growth.max(0)).min(top)
+}
+
+/// The level roster unit row `entry` (a character's unit entry, `Data::character_unit_entry`) fights at on stage
+/// `stage`: `foe_level` for an enemy (tier other than `hero`), the base level for a hero. A row without `tier` reads
+/// the schema default `hero` (as `UnitDef` does), so it never scales.
+fn stage_level(entry: &Dict, stage: i64) -> i64 {
+    let level = json::i(entry, "level", 1);
+    if json::s_or(entry, "tier", "hero") == "hero" {
+        return level;
+    }
+    foe_level(level, stage, json::i(entry, "growth_per_stage", 0))
+}
+
 impl rpgkit_battle::session::Roster for WorldRoster<'_> {
+    /// The character's unit entry; an enemy (not an ally, not a hero) at its stage level (`stage_level`, FB-139).
     fn entry(&self, _cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
-        (!e.is_empty()).then(|| rpgkit_data::UnitDef::from_obj(&e))
+        if e.is_empty() {
+            return None;
+        }
+        let mut def = rpgkit_data::UnitDef::from_obj(&e);
+        if !self.allies.iter().any(|a| a == r) {
+            def.level = stage_level(&e, self.stage) as i32;
+        }
+        Some(def)
     }
 
     /// U2.2-S2 (FB-12): the character's overrides (`character_overrides`), built from the world's catalog (HOOKS1 CN3:
@@ -142,8 +186,15 @@ pub struct RosterFoe {
 
 /// The encounter's roster seen from `world_id`: `enemies`, then the units of every phase's `wave` effects (phase
 /// order, effect order; the arrival, the reinforcements, comes first: PHASEFOLD 3), keeping only refs that resolve to
-/// a unit (the refs the battle spawns).
+/// a unit (the refs the battle spawns). At stage 0 (`roster_at`).
 pub fn roster(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<RosterFoe> {
+    roster_at(d, world_id, encounter_qid, 0)
+}
+
+/// `roster` on world stage `stage` (W.2-S3, FB-13, FB-139): each foe's level is the one the battle builds it at
+/// (`foe_level` of its base level and its unit's `growth_per_stage`; a hero's base level), and its purse weight follows
+/// that level. `apply` reads it at the game state's `world_stage`.
+pub fn roster_at(d: &Data, world_id: &str, encounter_qid: &str, stage: i64) -> Vec<RosterFoe> {
     let enc = d.resolve(world_id, "encounters", encounter_qid);
     let mut refs = json::sget(enc, "enemies");
     for phase in json::aget(enc, "phases") {
@@ -161,7 +212,7 @@ pub fn roster(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<RosterFoe> {
             continue;
         }
         let n = out.iter().filter(|f| f.unit_ref == r).count();
-        let (level, tier) = (json::i(&entry, "level", 1), json::s_or(&entry, "tier", "standard"));
+        let (level, tier) = (stage_level(&entry, stage), json::s_or(&entry, "tier", "standard"));
         let weight = progression::kill_weight(d, level, &tier);
         out.push(RosterFoe { key: format!("{r}#{n}"), name: json::s(&entry, "name"), unit: json::s(&entry, "id"), unit_ref: r, level, tier, weight });
     }
@@ -170,7 +221,12 @@ pub fn roster(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<RosterFoe> {
 
 /// (level, tier) of the encounter's enemies, reinforcements and phase waves, seen from `world_id` (the roster).
 pub fn enemy_levels(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<(i64, String)> {
-    roster(d, world_id, encounter_qid).into_iter().map(|f| (f.level, f.tier)).collect()
+    enemy_levels_at(d, world_id, encounter_qid, 0)
+}
+
+/// `enemy_levels` on world stage `stage` (`roster_at`).
+pub fn enemy_levels_at(d: &Data, world_id: &str, encounter_qid: &str, stage: i64) -> Vec<(i64, String)> {
+    roster_at(d, world_id, encounter_qid, stage).into_iter().map(|f| (f.level, f.tier)).collect()
 }
 
 /// One roster enemy's fate in a fight (REWARD1 2.4).
@@ -283,7 +339,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let enc_world = json::s_or(&enc, "_world", &world);
     // 1. the party side first (ROSTER1 3.2 and L5, ENCOUNTER2 W1-W4): before the XP, the quest hook and the tick
     let (party_keys, party_notes) = settle_party_side(d, gs, &enc, encounter_qid, outcome, tally);
-    let roster = roster(d, &world, encounter_qid);
+    let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);
     let defeated: Vec<bool> = fates.iter().map(|f| f.defeated()).collect();
@@ -465,8 +521,8 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
     (out, notes)
 }
 
-/// A world fight's start with the saved party (BattleBridge.encounter_for; the battle screen builds the fight after
-/// it): the world that resolves `encounter_ref` (`fight_world`), refused when the fight world's entry's `party_min`
+/// A world fight's start with the saved party (BattleBridge.encounter_for; `begin_world` builds the fight after it):
+/// the world that resolves `encounter_ref` (`fight_world`), refused when the fight world's entry's `party_min`
 /// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`); then A1.2-K3 (INTENT2-K3) the combat-start
 /// auto-fill of the active members' pouches (`roster::auto_fill_at_start`, under the world's `pouch_stacks`). Returns
 /// the fight world and the auto-fill's "Stash short" lines.
@@ -480,6 +536,105 @@ pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<
     }
     let lines = roster::auto_fill_at_start(d, gs, &world);
     Ok((world, lines))
+}
+
+/// A started world fight (W.2-S2, FB-50b, SILOS1 T1): what `begin_world` built for the screen or a headless runner.
+pub struct WorldFight {
+    /// The battle, at its start (the heroes first, in the order fielded; the start-AP change applied).
+    pub session: Session,
+    /// The fight's world (`fight_world`): the world whose class paths, ruleset and characters the battle uses; settle
+    /// with it (`Tally::of_world_fight`).
+    pub world: String,
+    /// The fielded members in battle order: member id and the saved pouch ids that found no battle slot.
+    pub members: Vec<(String, Vec<String>)>,
+    /// The combat-start auto-fill's "Stash short" lines (A1.2-K3).
+    pub stash_short: Vec<String>,
+    /// CAMPAIGN1 P3, W6: the battle start's mods (read before the session; its note is logged once).
+    pub mods: purse_mods::BattleMods,
+    /// The encounter's intro line (as the fight's world sees it).
+    pub intro: String,
+    /// W.2-S3 (FB-13): the world stage the fight is played at (`world_stage`).
+    pub stage: i64,
+}
+
+impl WorldFight {
+    /// The fight's tally from its battle as it now stands (`Tally::of_world_fight`), for `finish_world`.
+    pub fn tally(&self) -> Tally {
+        Tally::of_world_fight(&self.session, &self.members, &self.world)
+    }
+}
+
+/// The body art of a fielded member (`Prebuilt::art`, `Prebuilt::palette`) given the fight's world and the member: the
+/// screen's callback (art is not the kit's); `begin_world` leaves both "".
+pub type MemberArt<'a> = dyn FnMut(&str, &UnitState) -> (String, String) + 'a;
+
+/// `begin_world_with` and no art (a headless runner).
+pub fn begin_world(d: &Data, gs: &mut GameState, fight: &Dict) -> Result<WorldFight, String> {
+    begin_world_with(d, gs, fight, &mut |_, _| (String::new(), String::new()))
+}
+
+/// W.2-S2 (FB-50b, SILOS1 T1): a world fight's start with the saved party (BattleBridge.encounter_for and
+/// GameEncounter), the one start the battle screen and headless runners share. Refused when `fight`'s `encounter` does
+/// not resolve from the played world or no member is active; then `begin_fight` (the fight world, BK6's `party_min`
+/// refusal, the combat-start auto-fill). The battle plays by the fight world's ruleset with the game state's plan
+/// reveal (`encounter_def_in`), in the fight's `zone` when it names one, granting each `start_status` entry whose
+/// `requires_flags` all hold (PACE1 rule 7). Each active member is fielded by the one builder (`roster::field_unit`:
+/// its class path, wounds, AI profile, default intent) wearing the art `art` gives it; the foes come from the world's
+/// characters (`WorldRoster` at the game state's `world_stage`); then the start-AP change (`lower_start_ap` with
+/// `campaign::purse::battle_mods`, read before the session).
+pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut MemberArt) -> Result<WorldFight, String> {
+    let enc_ref = json::s(fight, "encounter");
+    let hit = d.resolve(&gs.world_id, "encounters", &enc_ref);
+    if hit.is_empty() {
+        return Err(format!("Unknown encounter '{enc_ref}'."));
+    }
+    let hit_id = json::s(hit, "id");
+    if gs.party.active_members().is_empty() {
+        return Err("No active party member to fight.".into());
+    }
+    let (world, stash_short) = begin_fight(d, gs, &enc_ref)?;
+    let gs: &GameState = gs;
+    let entry = d.resolve(&world, "encounters", &hit_id);
+    let mut def = encounter_def_in(d, gs, &world, entry);
+    let zone = json::s(fight, "zone");
+    if !zone.is_empty() {
+        def.zone = zone;
+    }
+    def.id = format!("{world}:{hit_id}");
+    let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| quest::condition_met(gs, json::dict(c)))).collect();
+    def.start_grant = StartGrant::Only(grants);
+    let stage = world_stage(gs);
+    let allies = def.party.iter().chain(&def.guests).cloned().collect();
+    let roster = WorldRoster { stage, allies, ..WorldRoster::new(d, world.clone()) };
+    let mut party = Vec::new();
+    let mut members = Vec::new();
+    for m in gs.party.active_members() {
+        let Some(field) = roster::field_unit(d, gs, m, &world) else { continue };
+        let (art, palette) = art(&world, m);
+        party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone(), default_intent: field.default_intent });
+        members.push((m.id.clone(), field.pouch_unloaded));
+    }
+    let mods = purse_mods::battle_mods(d, gs);
+    let heroes = party.len();
+    let mut session = Session::start_with(d.cat.clone(), def, &roster, party);
+    lower_start_ap(&mut session, heroes, &mods);
+    Ok(WorldFight { session, world, members, stash_short, mods, intro: json::s(entry, "intro"), stage })
+}
+
+/// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and
+/// enemies keep theirs) has `mods.start_ap` AP more in round 1 (never below 0, `campaign::purse::start_ap`), and the
+/// round's start snapshot shows it. Nothing when the mods change nothing.
+pub fn lower_start_ap(s: &mut Session, heroes: usize, mods: &purse_mods::BattleMods) {
+    if mods.start_ap == 0 {
+        return;
+    }
+    for u in s.w.units.iter_mut().take(heroes) {
+        u.ap = purse_mods::start_ap(u.ap as i64, mods) as i32;
+    }
+    let start = s.snapshot();
+    if let Some(first) = s.history.last_mut().and_then(|r| r.snapshots.first_mut()) {
+        *first = start;
+    }
 }
 
 /// `apply` with `tally`, or with the default tally when the fight was settled without a battle (REWARD1 2.5). ROSTER1

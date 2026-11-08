@@ -206,6 +206,8 @@ pub struct UnitDef {
     pub side: String,
     pub class_id: String,
     pub level: i32,
+    /// W.2-S3 (FB-139): the levels an enemy gains per world stage (`rpgkit_world::battle::foe_level`; 0 = none).
+    pub growth_per_stage: i32,
     pub tier: String,
     pub spend: IndexMap<String, i32>,
     pub stat_mode: String,
@@ -295,6 +297,7 @@ impl UnitDef {
             side: string(o, "side", "enemy"),
             class_id: string(o, "class_id", ""),
             level: int(o, "level", 1),
+            growth_per_stage: int(o, "growth_per_stage", 0),
             tier: string(o, "tier", "hero"),
             spend: int_map(o, "spend"),
             stat_mode: string(o, "stat_mode", "derived"),
@@ -1461,6 +1464,18 @@ pub const END_TO: [&str; 2] = ["map", "menu"];
 /// 4.7: the story effect kinds and their keys besides `effect`, all three in dialogue choices; meter rules,
 /// checkpoints and triggers take `vignette` and `sequence`; a sequence's effects step takes `vignette` only.
 pub const STORY_EFFECTS: [(&str, &[&str]); 3] = [("vignette", &["vignette"]), ("sequence", &["sequence"]), ("open_board", &["board"])];
+/// T1.2-S2 (FB-54b, C25): the choice-time dialogue roll, `{"effect": "roll", "stat", "dc", "key", "who"}`: on choosing,
+/// one draw `1..dialogue_roll_die` from the save's `dialogue` roll stream plus the stat (the active party's best, or
+/// the active member `who`'s) against `dc`; flag `key` is set true (success) or false. A choice effect only.
+pub const ROLL_EFFECT: &str = "roll";
+pub const ROLL_EFFECT_KEYS: [&str; 4] = ["stat", "dc", "key", "who"];
+/// T1.2-S2: the world manifest's `dialogue_roll_die` (-1: the nearest parent world's): the default and the range.
+pub const DIALOGUE_ROLL_DIE: i64 = 20;
+pub const DIALOGUE_ROLL_DIE_MIN: i64 = 6;
+pub const DIALOGUE_ROLL_DIE_MAX: i64 = 100;
+/// T1.2-S3 (FB-54c): the U1 standing ratings a dialogue stat check reads by name besides `STATS` and the derived-stat
+/// rows of the world's ruleset: Initiative, Move Rate and Armor Rating, as the member stands out of battle.
+pub const STANDING_RATINGS: [&str; 3] = ["initiative", "move_rate", "armor"];
 /// 4.3: the effects a sequence's `effects` step never takes (they open a screen or start a sequence).
 pub const SEQUENCE_BANNED_EFFECTS: [&str; 5] = ["fight", "turn_in", "open_shop", "open_board", "sequence"];
 /// 4.5: a board quest's section.

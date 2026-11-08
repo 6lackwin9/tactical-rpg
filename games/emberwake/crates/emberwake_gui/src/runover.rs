@@ -1181,12 +1181,12 @@ pub(crate) mod tests {
         let s = b.host.session.as_mut().expect("the ambush starts");
         let heroes = s.w.allies.len() - s.guests.len();
         let before: Vec<i32> = s.w.units.iter().map(|u| u.ap).collect();
-        crate::battle::lower_start_ap(s, heroes, &campaign::purse::BattleMods::default());
+        emberwake_world::battle::lower_start_ap(s, heroes, &campaign::purse::BattleMods::default());
         assert_eq!(s.w.units.iter().map(|u| u.ap).collect::<Vec<_>>(), before, "no mods: no change");
         let mods = campaign::purse::BattleMods { start_ap: START_AP, note: String::new() };
         s.w.units[0].ap = 1;
         let before: Vec<i32> = s.w.units.iter().map(|u| u.ap).collect();
-        crate::battle::lower_start_ap(s, heroes, &mods);
+        emberwake_world::battle::lower_start_ap(s, heroes, &mods);
         let want: Vec<i32> = before.iter().enumerate().map(|(i, &ap)| if i < heroes { campaign::purse::start_ap(ap as i64, &mods) as i32 } else { ap }).collect();
         assert_eq!(s.w.units.iter().map(|u| u.ap).collect::<Vec<_>>(), want);
         assert_eq!(s.w.units[0].ap, 0, "not below 0");

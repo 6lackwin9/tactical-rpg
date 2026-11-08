@@ -1,8 +1,9 @@
 //! The shop as a trade (PLAYUI1-P, games/emberwake/docs/specs/PLAYUI1.md 4; it replaces the Buy / Sell tabs ported
-//! from scripts/ui/overworld/shop_panel.gd): three columns over the dimmed region map, the shop's offers, the trade and
+//! from scripts/ui/overworld/shop_panel.gd): three columns over a veil (the dimmed region map, or the plain backdrop of `talk::ServiceScreen`), the shop's offers, the trade and
 //! the party's stash. Clicks only: a row click adds 1, `+5` / `+10` add more (at most what is there), a click on a
 //! trade line puts the whole line back; Confirm settles the trade at once through `shop::trade` (ShopRules), Close or
-//! Esc with lines in the trade asks first. `RegionMap` draws it while its conversation has a shop open.
+//! Esc with lines in the trade asks first. `talk::Services` draws it while its conversation has a shop open (over the
+//! region map, or the plain backdrop of `talk::ServiceScreen`).
 
 use crate::hud::{term_short, term_word, HUD_H};
 use crate::screens::Cx;
@@ -15,8 +16,8 @@ use emberwake_world::shop;
 use emberwake_world::terms::{CURRENCY, UPKEEP};
 use serde_json::{json, Value};
 
-/// The tag of the "Discard this trade?" question (`Cx::ask_tag_no`: No is the default, PLAYUI1 4.3 rule 5); `RegionMap`
-/// takes the Yes and leaves the shop.
+/// The tag of the "Discard this trade?" question (`Cx::ask_tag_no`: No is the default, PLAYUI1 4.3 rule 5);
+/// `talk::Services` takes the Yes and leaves the shop.
 pub const DISCARD: &str = "shop.discard";
 /// The frame at text size Normal (spec 4.2); bigger text grows it, centred, up to `EDGE` from the canvas and the HUD.
 const SHOP_W: i32 = 600;
@@ -469,26 +470,27 @@ impl ShopPane {
 
 /// PLAYUI1-P (spec PLAYUI1 4.2-4.3): the trade screen on a debug game of the first playable world, its shops opened
 /// the way a player opens them (the keeper's shop reply). Gold and the stash are set in memory; expectations come
-/// from the shop's own offers and sell list.
+/// from the shop's own offers and sell list. SERVICES1: the trade opens on the services' plain backdrop
+/// (`talk::ServiceScreen`), no region map (the region map's own shop checks are in `region.rs`).
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
-    use crate::region::RegionMap;
+    use crate::talk::ServiceScreen;
     use crate::screens::{GameCx, Nav};
     use aegis_ui::painter::TextRec;
     use aegis_ui::screen::{Key, Screen, TEXT_SIZES};
     use aegis_ui::ui::Gfx;
 
-    fn widget(map: &RegionMap, id: &str) -> Option<Value> {
+    fn widget(map: &ServiceScreen, id: &str) -> Option<Value> {
         map.widgets().into_iter().find(|w| w["id"] == id)
     }
 
-    fn on(map: &RegionMap, id: &str) -> bool {
+    fn on(map: &ServiceScreen, id: &str) -> bool {
         widget(map, id).is_some_and(|w| w["enabled"] == json!(true))
     }
 
-    fn frame_at(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, at: (i32, i32), scale: f32) -> Vec<TextRec> {
+    fn frame_at(map: &mut ServiceScreen, cx: &mut Cx, g: &mut Gfx, at: (i32, i32), scale: f32) -> Vec<TextRec> {
         g.fonts.scale = scale;
         g.fonts.audit = Some(Vec::new());
         map.draw(cx, g, at, true);
@@ -505,7 +507,7 @@ mod tests {
 
     /// Each shop open in the game, opened through its keeper's shop reply: `each` gets the map (shop open) and the
     /// shop's qid and says whether to go on; the game state is put back after each. The number of shops opened.
-    fn each_shop(cx: &mut Cx, g: &mut Gfx, mut each: impl FnMut(&mut RegionMap, &mut Cx, &mut Gfx, &str) -> bool) -> usize {
+    fn each_shop(cx: &mut Cx, g: &mut Gfx, mut each: impl FnMut(&mut ServiceScreen, &mut Cx, &mut Gfx, &str) -> bool) -> usize {
         let d = cx.data.clone();
         let start = cx.gs().clone();
         let mut opened = 0;
@@ -515,7 +517,7 @@ mod tests {
                 continue;
             }
             *cx.gs_mut() = start.clone();
-            let mut map = RegionMap::new(cx);
+            let mut map = ServiceScreen::default();
             map.talk(cx, &s(sh, "keeper"));
             frame(&mut map, cx, g, 1.0);
             let choices = json::aget(json::dict(&map.state(cx)["dialogue"]), "choices").to_vec();
@@ -533,12 +535,12 @@ mod tests {
         opened
     }
 
-    fn buys(map: &RegionMap, cx: &Cx) -> Vec<(String, String, i64)> {
+    fn buys(map: &ServiceScreen, cx: &Cx) -> Vec<(String, String, i64)> {
         let b = map.state(cx)["shop"]["buys"].clone();
         b.as_array().into_iter().flatten().map(|b| (b[0].as_str().unwrap_or("").to_string(), b[1].as_str().unwrap_or("").to_string(), b[2].as_i64().unwrap_or(0))).collect()
     }
 
-    fn sells(map: &RegionMap, cx: &Cx) -> Vec<(String, i64)> {
+    fn sells(map: &ServiceScreen, cx: &Cx) -> Vec<(String, i64)> {
         let x = map.state(cx)["shop"]["sells"].clone();
         x.as_array().into_iter().flatten().map(|x| (x[0].as_str().unwrap_or("").to_string(), x[1].as_i64().unwrap_or(0))).collect()
     }

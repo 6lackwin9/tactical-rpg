@@ -4,6 +4,9 @@
 //! manifest` (`set`), never by hand. `icon` (ICON1, optional): the window icon, a PNG path over the asset layers.
 //! `canvas` and `window_sizes` (LAYOUT720-E5, optional): how the game's canvas relates to the window and the window sizes
 //! it offers; held as written, as the shell reads them (a bad value is a notice there and the default).
+//! Extra keys (FB-110, E2.2-S2): keys beyond `KEYS` that the game's content hooks register (`store::Hooks::
+//! manifest_keys`, e.g. a kit's game-wide settings) are kept as written after the engine keys, written through
+//! `store::set_manifest` and checked by the hooks (`store::Hooks::manifest_problems`).
 
 use crate::file::{read, stringify};
 use crate::schema::is_id;
@@ -33,6 +36,9 @@ pub struct Manifest {
     pub start_worlds: Vec<String>,
     /// [{"game": "<id>", "version": "<semver range>"}] (reserved; read by nothing yet).
     pub references: Vec<Value>,
+    /// FB-110 (E2.2-S2): every key beyond `KEYS` as written (whole numbers whole), in file order after the engine keys;
+    /// the game's hooks say which ones a write may set and check them. Empty: none.
+    pub extra: Dict,
 }
 
 impl Manifest {
@@ -51,6 +57,7 @@ impl Manifest {
             worlds: json::sget(d, "worlds"),
             start_worlds: json::sget(d, "start_worlds"),
             references: json::aget(d, "references").to_vec(),
+            extra: d.iter().filter(|(k, v)| !KEYS.contains(&k.as_str()) && !v.is_null()).map(|(k, v)| (k.clone(), json::normalize(v))).collect(),
         }
     }
 
@@ -73,6 +80,9 @@ impl Manifest {
         d.insert("worlds".into(), json::strs(&self.worlds));
         d.insert("start_worlds".into(), json::strs(&self.start_worlds));
         d.insert("references".into(), Value::Array(self.references.clone()));
+        for (k, v) in self.extra.iter().filter(|(k, v)| !KEYS.contains(&k.as_str()) && !v.is_null()) {
+            d.insert(k.clone(), v.clone());
+        }
         d
     }
 
@@ -108,18 +118,35 @@ impl Manifest {
     }
 
     /// Merges `patch` (manifest keys only) into the file at `path` (a new manifest when there is none), checks it and
-    /// writes it; nothing is written when it has problems.
+    /// writes it; nothing is written when it has problems. Extra keys already in the file are kept; none may be set
+    /// (`store::set_manifest` sets the ones the game's hooks register).
     pub fn set(path: &Path, patch: &Dict) -> Result<Self, Vec<String>> {
-        let unknown: Vec<String> = patch.keys().filter(|k| !KEYS.contains(&k.as_str())).map(|k| format!("game.json has no key '{k}' (keys: {}).", KEYS.join(", "))).collect();
+        Self::set_with(path, patch, &[], |_| Vec::new())
+    }
+
+    /// `set` that also takes the extra keys `extra_keys` (FB-110: written after the engine keys in this order, then any
+    /// other extra key the file holds; a null value removes the key, any extra key included, so a stray one can be cleared) and checks the merged manifest with
+    /// `extra_problems` (the manifest object as it would be written).
+    pub fn set_with(path: &Path, patch: &Dict, extra_keys: &[&str], extra_problems: impl Fn(&Dict) -> Vec<String>) -> Result<Self, Vec<String>> {
+        let known = || KEYS.iter().chain(extra_keys).copied().collect::<Vec<_>>().join(", ");
+        let unknown: Vec<String> = patch.iter().filter(|(k, v)| !v.is_null() && !KEYS.contains(&k.as_str()) && !extra_keys.contains(&k.as_str())).map(|(k, _)| k).map(|k| format!("game.json has no key '{k}' (keys: {}).", known())).collect();
         if !unknown.is_empty() {
             return Err(unknown);
         }
         let mut d = if path.is_file() { Self::read(path).map_err(|e| vec![e])?.to_dict() } else { Self::default().to_dict() };
         for (k, v) in json::normalize_dict(patch) {
-            d.insert(k, v);
+            if v.is_null() && !KEYS.contains(&k.as_str()) {
+                d.shift_remove(&k);
+            } else {
+                d.insert(k, v);
+            }
         }
-        let m = Self::from_dict(&d);
+        let mut m = Self::from_dict(&d);
+        let mut extra: Dict = extra_keys.iter().filter_map(|k| m.extra.get(*k).map(|v| (k.to_string(), v.clone()))).collect();
+        extra.extend(m.extra.iter().filter(|(k, _)| !extra_keys.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())));
+        m.extra = extra;
         let mut problems = m.problems();
+        problems.extend(extra_problems(&m.to_dict()));
         problems.extend(path.parent().and_then(|g| kit_problem(g, &m.kit)));
         if !problems.is_empty() {
             return Err(problems);
