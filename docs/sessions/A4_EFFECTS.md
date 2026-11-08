@@ -45,7 +45,7 @@ One derivation function in `rpgkit_rules` replaces the three diverging copies (`
 | Parameter | Kind | Default & Range | Notes |
 | --- | --- | --- | --- |
 | `IR21` precedence order, item intent mapping & `EffectSpec` | **Fixed (Locked)** | 7-step precedence in `rpgkit_rules` | Core `A4` contract |
-| `field_bonus_values` (`reach`, `lingering`, `area`, `power`) | **Tunable** | `+1` reach, `+1` round (cap 5), `+1` size, `1.15x` power | Derived Field bonuses |
+| `field_bonus_values` (`reach`, `lingering`, `area`, `power`) | **Fixed / Constant Sizes** | `+1` reach, `+1` round (cap 5), `ARC 3->5` / `LINE 3->4` size, `1.25x` power | Derived Field bonuses (`FB-120`: sizes stay constants in `K1b`) |
 | `field_fill_once` | **Tunable** | `on` | Planner fills a Field skill once per round |
 
 ## 4. Acceptance tests (`A4.2` - `A4.5`)

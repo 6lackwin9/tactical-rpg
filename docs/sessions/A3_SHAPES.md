@@ -28,7 +28,7 @@ Design record for `A3.1` (Area shapes, intent-driven anchors, `affects` filterin
 | Parameter | Kind | Default & Range | Notes |
 | --- | --- | --- | --- |
 | 6 area shapes (`PLUS`, `BURST`, `LINE`, `CONE`, `RING`, `ARC`) & intent anchor rules | **Fixed (Locked)** | `RING`/`ARC` added first; `SWEEP` retired after frozen kit migration | Core `A3` spatial vocabulary |
-| `splash_mult` | **Tunable** | `0.75` (`0.25..1.00`) | Secondary-tile multiplier when a shape is used under `Assault` |
+| `splash_mult` | **Tunable** | `0.50` (`0.25..1.00`) | Secondary-tile multiplier when a shape is used under `Assault` (`IR17`, `FB-120`) |
 | `assault_shape_blocks` | **Tunable** | `1` (`0..2`) | Extra wind-up blocks when aiming a shaped skill at a moving unit (`Assault`) |
 | `attack_lock` | **Tunable** | `melee` (`none` \| `melee` \| `all`) | Unblocks `ATTACKLOCK1-O` switch-on |
 
