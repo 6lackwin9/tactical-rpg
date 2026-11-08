@@ -114,35 +114,54 @@ function renderBattleScreen() {
     }
   }
 
-  // Units on the 12x9 Stage (`stage.rs` sprites + overhead HP/Poise bars)
+  // Determine current Battle Stage Mode (`pre_battle` | `transition_in` | `active_combat` | `boss_phase2` | `elite_intro` | `elite_aftermath`)
+  const stageMode = STATE.battleStageMode || 'active_combat';
+  const isPreBattle = stageMode === 'pre_battle';
+  const isTransitionIn = stageMode === 'transition_in';
+  const encBarks = (typeof COMBAT_BARKS !== 'undefined' && COMBAT_BARKS[b.encId]) ? COMBAT_BARKS[b.encId] : (typeof COMBAT_BARKS !== 'undefined' ? COMBAT_BARKS.enc_0c : null);
+  const activeBark = (encBarks && (stageMode === 'pre_battle' || stageMode === 'boss_phase2' || stageMode === 'elite_intro' || stageMode === 'elite_aftermath'))
+    ? (encBarks[stageMode] || encBarks.pre_battle)
+    : null;
+
+  // Units on the 12x9 Stage (`stage.rs` sprites + overhead HP/Poise bars + Boss Phase 2 / Speaking Aura)
   const stageUnitsHtml = b.units.filter(u => u.hp > 0).map(u => {
     const px = u.x * 32;
     const py = u.y * 24;
     const frames = ASSETS.units[u.unitKey] || ASSETS.units.kaelen;
-    const spriteUri = STATE.playingRound ? frames.atk : frames.idle0;
+    const isBarkFocus = activeBark && activeBark.focusUnitId === u.id;
+    const spriteUri = (STATE.playingRound || isBarkFocus) ? (frames.atk || frames.idle0) : frames.idle0;
     const flip = !u.isHero ? 'transform:scaleX(-1);' : '';
     const hpPct = Math.round((u.hp / u.maxHp) * 100);
 
     return `
       <div onclick="clickBattleTile(${u.x},${u.y},event)"
            style="position:absolute;left:${px - 2}px;top:${py - 14}px;width:36px;height:38px;cursor:pointer;z-index:${10 + u.y};display:flex;flex-direction:column;align-items:center;">
-        <!-- Overhead Micro HP & Poise Bar -->
-        <div style="width:24px;height:3px;background:#08090d;border:0.5px solid #000;margin-bottom:1px;">
-          <div style="width:${hpPct}%;height:100%;background:${u.isHero ? '#10b981' : '#e11d48'};"></div>
-        </div>
-        <div style="display:flex;gap:1px;margin-bottom:-2px;">
-          ${Array.from({ length: u.maxPoise }).map((_, pi) => `
-            <div style="width:3px;height:2px;background:${pi < u.poise ? '#fbbf24' : '#374151'};"></div>
-          `).join('')}
-        </div>
-        <img src="${spriteUri}" class="pixel" style="width:32px;height:32px;${flip}filter:drop-shadow(0 2px 2px rgba(0,0,0,0.9));">
+        ${isBarkFocus ? `
+          <!-- Boss Phase 2 / Scripted Bark Tile Shockwave Ring & Overhead Callout -->
+          <div style="position:absolute;left:50%;top:62%;width:44px;height:44px;border-radius:50%;border:1.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#fbbf24'};animation:vnPulseRing 1.15s ease-out infinite;pointer-events:none;"></div>
+          <div style="position:absolute;top:-11px;padding:0.5px 4px;border-radius:6px;background:${stageMode === 'boss_phase2' ? '#7f1d1d' : '#fbbf24'};color:${stageMode === 'boss_phase2' ? '#fecaca' : '#090b10'};border:0.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#d97706'};font-size:5px;font-weight:800;white-space:nowrap;z-index:25;box-shadow:0 2px 5px #000;">
+            ${stageMode === 'boss_phase2' ? '⚡ PHASE 2' : '💬 SPEAKING'}
+          </div>
+        ` : ''}
+        <!-- Overhead Micro HP & Poise Bar (hidden during pre_battle map confrontation for clean map immersion) -->
+        ${!isPreBattle ? `
+          <div style="width:24px;height:3px;background:#08090d;border:0.5px solid #000;margin-bottom:1px;">
+            <div style="width:${hpPct}%;height:100%;background:${u.isHero ? '#10b981' : '#e11d48'};"></div>
+          </div>
+          <div style="display:flex;gap:1px;margin-bottom:-2px;">
+            ${Array.from({ length: u.maxPoise }).map((_, pi) => `
+              <div style="width:3px;height:2px;background:${pi < u.poise ? '#fbbf24' : '#374151'};"></div>
+            `).join('')}
+          </div>
+        ` : `<div style="height:5px;"></div>`}
+        <img src="${spriteUri}" class="pixel" style="width:32px;height:32px;${flip}filter:${isBarkFocus ? 'drop-shadow(0 0 6px rgba(251,191,36,0.85))' : 'drop-shadow(0 2px 2px rgba(0,0,0,0.9))'};">
       </div>
     `;
   }).join('');
 
   // Icon-Only `SkillMenu` (`battle/skill_menu.rs`: ICON = 15, MENU_MIN_W = 170, clamped beside clicked tile)
   let skillMenuHtml = '';
-  if (STATE.skillMenu) {
+  if (STATE.skillMenu && stageMode === 'active_combat') {
     const sm = STATE.skillMenu;
     const hModel = STATE.roster[selHero.id] || STATE.roster.kaelen;
     const allHeroSkills = [...hModel.basics, ...hModel.actives];
@@ -207,94 +226,182 @@ function renderBattleScreen() {
     `);
   }
 
+  // Scripted Dialogue Dock (rendered during `pre_battle`, `boss_phase2`, `elite_intro`, `elite_aftermath`)
+  let scriptedBarkHtml = '';
+  if (activeBark) {
+    const barkPortrait = getPortraitWithMood(activeBark.portrait, activeBark.mood);
+    const isPhase2 = stageMode === 'boss_phase2';
+    const badgeBg = isPhase2 ? 'rgba(127,29,29,0.9)' : 'rgba(245,158,11,0.18)';
+    const badgeBorder = isPhase2 ? '#ef4444' : '#f59e0b';
+    const badgeColor = isPhase2 ? '#fecaca' : '#fbbf24';
+
+    let primaryBtnHtml = '';
+    if (stageMode === 'pre_battle') {
+      primaryBtnHtml = `
+        <button class="rust-btn primary" style="height:22px;padding:0 12px;font-size:7.5px;" onclick="engageCombatFromMap()">
+          ⚔ Engage Combat (Slide HUD In) [Space] ▸
+        </button>
+      `;
+    } else if (stageMode === 'elite_intro') {
+      primaryBtnHtml = `
+        <button class="rust-btn" style="height:20px;padding:0 8px;font-size:6.8px;" onclick="STATE.battleStageMode='elite_aftermath';render();">
+          Preview Post-Elite Bark ▸
+        </button>
+        <button class="rust-btn primary" style="height:22px;padding:0 12px;font-size:7.5px;" onclick="STATE.battleStageMode='active_combat';render();">
+          Resume Combat [Space] ▸
+        </button>
+      `;
+    } else {
+      primaryBtnHtml = `
+        <button class="rust-btn primary" style="height:22px;padding:0 12px;font-size:7.5px;" onclick="STATE.battleStageMode='active_combat';render();">
+          Resume Combat [Space] ▸
+        </button>
+      `;
+    }
+
+    scriptedBarkHtml = ornateCornerBox640(`position:absolute;left:54px;right:54px;bottom:6px;height:94px;z-index:38;padding:6px 10px;background:rgba(10,12,18,0.97);box-shadow:0 10px 28px rgba(0,0,0,0.95);`, `
+      <div class="hud-slide-up" style="display:flex;gap:10px;align-items:stretch;height:100%;">
+        <!-- Speaker Portrait with Mood Expression (faces/<id>/<mood>.png) -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-between;width:62px;flex-shrink:0;">
+          <div class="portrait-box ${isPhase2 ? 'foe-rim' : 'gold-rim'}" style="width:54px;height:54px;position:relative;box-shadow:0 0 10px ${isPhase2 ? 'rgba(239,68,68,0.45)' : 'rgba(245,158,11,0.35)'};">
+            <img src="${barkPortrait}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
+            <span style="position:absolute;right:1px;bottom:1px;padding:0.5px 3px;background:rgba(8,10,15,0.92);border:0.5px solid ${badgeBorder};font-family:'JetBrainsMono',monospace;font-size:4.8px;color:${badgeColor};text-transform:uppercase;">
+              ${activeBark.mood}
+            </span>
+          </div>
+          <span style="font-size:5.2px;color:${badgeColor};font-weight:700;text-transform:uppercase;">Mood: ${activeBark.mood}</span>
+        </div>
+
+        <!-- Scripted Dialogue Text + Phase/Elite Mechanic Callout + Action Buttons -->
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:0.5px solid #374151;padding-bottom:2px;margin-bottom:3px;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="padding:1px 5px;background:${badgeBg};border:0.5px solid ${badgeBorder};border-radius:2px;font-size:5.5px;color:${badgeColor};font-weight:800;letter-spacing:0.4px;">
+                  ${activeBark.badge}
+                </span>
+                <span class="font-title" style="font-size:9px;color:var(--gold);">${activeBark.speaker}</span>
+                <span style="font-size:6px;color:var(--dim);">· ${activeBark.speakerTitle}</span>
+              </div>
+              ${stageMode !== 'pre_battle' ? closeBtn640("STATE.battleStageMode='active_combat';render();", "Resume Combat [Esc / Right-Click]") : ''}
+            </div>
+            <div style="font-size:7.3px;line-height:1.36;color:var(--text);margin-bottom:3px;">
+              ${activeBark.text}
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;border-top:0.5px solid rgba(55,65,81,0.7);padding-top:3px;">
+            <div class="font-mono" style="font-size:5.6px;color:#93c5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:305px;">
+              ⚙ ${activeBark.mechanicHint}
+            </div>
+            <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+              ${primaryBtnHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+  }
+
   return `
     <div style="width:640px;height:360px;position:relative;background:#0a0b10;overflow:hidden;">
 
-      <!-- TOP 6-BLOCK TIMELINE STRIP (battle/draw.rs: Rect(2, 2, 636, 24)) -->
-      <div class="rust-panel" style="position:absolute;left:2px;top:2px;width:636px;height:25px;padding:2px 5px;display:flex;align-items:center;gap:6px;z-index:25;">
-        <!-- Hero Name + Intent + Class Meter (NAME_W = 104) -->
-        <div style="width:104px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <span class="font-title" style="font-size:8px;color:var(--gold);">${selHero.name} plan</span>
-            <span class="font-mono" style="font-size:5.8px;color:var(--dim);">R${STATE.round}</span>
+      ${isPreBattle ? `
+        <!-- PRE-BATTLE MAP CONFRONTATION HEADER (Before Combat HUD Slides In) -->
+        <div style="position:absolute;left:54px;right:54px;top:4px;height:20px;padding:0 8px;background:rgba(12,15,23,0.92);border:0.5px solid rgba(212,166,74,0.5);border-radius:2px;display:flex;align-items:center;justify-content:space-between;z-index:25;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="padding:1px 4px;background:rgba(245,158,11,0.2);border:0.5px solid #f59e0b;font-size:5.5px;color:#fbbf24;font-weight:700;">ENCOUNTER MAP STAGE</span>
+            <span class="font-title" style="font-size:8px;color:var(--gold);">${tpl.title}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:3px;margin-top:1px;">
-            <span style="font-size:5.5px;color:var(--dim);">${selHero.meterName}:</span>
-            <div style="flex:1;height:4px;background:#08090d;border:0.5px solid #374151;">
-              <div style="width:${selHero.meter}%;height:100%;background:#d97706;"></div>
+          <span class="font-mono" style="font-size:5.8px;color:var(--dim);">Click [⚔ Engage Combat] below to transition into the Combat UI</span>
+        </div>
+      ` : `
+        <!-- TOP 6-BLOCK TIMELINE STRIP (battle/draw.rs: Rect(2, 2, 636, 24)) -->
+        <div class="rust-panel ${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:2px;top:2px;width:636px;height:25px;padding:2px 5px;display:flex;align-items:center;gap:6px;z-index:25;">
+          <!-- Hero Name + Intent + Class Meter (NAME_W = 104) -->
+          <div style="width:104px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span class="font-title" style="font-size:8px;color:var(--gold);">${selHero.name} plan</span>
+              <span class="font-mono" style="font-size:5.8px;color:var(--dim);">R${STATE.round}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:3px;margin-top:1px;">
+              <span style="font-size:5.5px;color:var(--dim);">${selHero.meterName}:</span>
+              <div style="flex:1;height:4px;background:#08090d;border:0.5px solid #374151;">
+                <div style="width:${selHero.meter}%;height:100%;background:#d97706;"></div>
+              </div>
             </div>
           </div>
+
+          <!-- 6 Discrete Block Spans (B1..B6) -->
+          <div style="flex:1;display:flex;gap:2px;">
+            ${blockCellsHtml}
+          </div>
+
+          <!-- Right 12-Pip AP Gauge (AP_W = 86) -->
+          <div style="width:88px;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;">
+            <div style="font-size:6px;color:var(--gold);font-family:'JetBrainsMono',monospace;">AP ${availAp}/${selHero.ap} (Max 12)</div>
+            <div style="display:flex;gap:1.5px;margin-top:2px;">${apPipsHtml}</div>
+          </div>
         </div>
 
-        <!-- 6 Discrete Block Spans (B1..B6) -->
-        <div style="flex:1;display:flex;gap:2px;">
-          ${blockCellsHtml}
-        </div>
-
-        <!-- Right 12-Pip AP Gauge (AP_W = 86) -->
-        <div style="width:88px;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;">
-          <div style="font-size:6px;color:var(--gold);font-family:'JetBrainsMono',monospace;">AP ${availAp}/${selHero.ap} (Max 12)</div>
-          <div style="display:flex;gap:1.5px;margin-top:2px;">${apPipsHtml}</div>
-        </div>
-      </div>
-
-      <!-- LEFT PARTY COLUMN (battle/draw.rs: x=2..124, y=30..318) -->
-      <div style="position:absolute;left:2px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;">
-        ${heroes.map(h => {
-          const isSel = h.id === selHero.id;
-          const hpPct = Math.round((h.hp / h.maxHp) * 100);
-          return `
-            <div class="rust-card ${isSel ? 'selected' : ''}"
-                 style="padding:4px 5px;cursor:pointer;display:flex;flex-direction:column;gap:3px;"
-                 onclick="STATE.selectedUnitId='${h.id}';render();">
-              <div style="display:flex;gap:5px;align-items:center;">
-                <div class="portrait-box gold-rim" style="width:28px;height:28px;">
-                  <img src="${ASSETS.portraits[h.portrait]}" class="pixel">
-                </div>
-                <div style="flex:1;overflow:hidden;">
-                  <div style="display:flex;justify-content:space-between;align-items:baseline;">
-                    <span class="font-title" style="font-size:8px;color:var(--gold);">${h.name}</span>
-                    <span class="font-mono" style="font-size:6px;color:#60a5fa;">G:${h.guard}</span>
+        <!-- LEFT PARTY COLUMN (battle/draw.rs: x=2..124, y=30..318) -->
+        <div class="${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:2px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;opacity:${activeBark ? '0.55' : '1'};transition:opacity 0.2s;">
+          ${heroes.map(h => {
+            const isSel = h.id === selHero.id;
+            const hpPct = Math.round((h.hp / h.maxHp) * 100);
+            return `
+              <div class="rust-card ${isSel ? 'selected' : ''}"
+                   style="padding:4px 5px;cursor:pointer;display:flex;flex-direction:column;gap:3px;"
+                   onclick="STATE.selectedUnitId='${h.id}';render();">
+                <div style="display:flex;gap:5px;align-items:center;">
+                  <div class="portrait-box gold-rim" style="width:28px;height:28px;">
+                    <img src="${ASSETS.portraits[h.portrait]}" class="pixel">
                   </div>
-                  <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
-                    <div style="width:${hpPct}%;height:100%;background:#10b981;"></div>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
-                    <span class="font-mono" style="font-size:5.8px;color:var(--text);">${h.hp}/${h.maxHp} HP</span>
-                    <div style="display:flex;gap:1px;" title="Poise Pips">
-                      ${Array.from({ length: h.maxPoise }).map((_, pi) => `
-                        <div style="width:3.5px;height:3.5px;background:${pi < h.poise ? '#fbbf24' : '#374151'};"></div>
-                      `).join('')}
+                  <div style="flex:1;overflow:hidden;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                      <span class="font-title" style="font-size:8px;color:var(--gold);">${h.name}</span>
+                      <span class="font-mono" style="font-size:6px;color:#60a5fa;">G:${h.guard}</span>
+                    </div>
+                    <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
+                      <div style="width:${hpPct}%;height:100%;background:#10b981;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
+                      <span class="font-mono" style="font-size:5.8px;color:var(--text);">${h.hp}/${h.maxHp} HP</span>
+                      <div style="display:flex;gap:1px;" title="Poise Pips">
+                        ${Array.from({ length: h.maxPoise }).map((_, pi) => `
+                          <div style="width:3.5px;height:3.5px;background:${pi < h.poise ? '#fbbf24' : '#374151'};"></div>
+                        `).join('')}
+                      </div>
                     </div>
                   </div>
                 </div>
+                <!-- 6-pip mini plan preview -->
+                <div style="display:flex;gap:1.5px;">
+                  ${[0,1,2,3,4,5].map(bIdx => {
+                    const has = h.plan.find(p => bIdx >= p.start && bIdx < p.start + p.blocks);
+                    return `<div style="flex:1;height:3px;background:${has ? (has.ghost ? '#6b7280' : '#d97706') : '#1f2430'};"></div>`;
+                  }).join('')}
+                </div>
               </div>
-              <!-- 6-pip mini plan preview -->
-              <div style="display:flex;gap:1.5px;">
-                ${[0,1,2,3,4,5].map(bIdx => {
-                  const has = h.plan.find(p => bIdx >= p.start && bIdx < p.start + p.blocks);
-                  return `<div style="flex:1;height:3px;background:${has ? (has.ghost ? '#6b7280' : '#d97706') : '#1f2430'};"></div>`;
-                }).join('')}
-              </div>
-            </div>
-          `;
-        }).join('')}
+            `;
+          }).join('')}
 
-        <!-- Active Hero Belt Consumables Quick-Use -->
-        <div class="rust-panel" style="padding:4px 5px;margin-top:auto;">
-          <div class="font-title" style="font-size:7px;color:var(--gold);margin-bottom:2px;">${selHero.name}'s 5-Pip Belt (0B Free)</div>
-          ${(STATE.roster[selHero.id]?.pouch || []).map((item, idx) => `
-            <div class="rust-card" style="padding:2.5px 4px;margin-bottom:2px;font-size:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;"
-                 onclick="useBeltItem('${selHero.id}', ${idx})">
-              <span>${item.name}</span>
-              <span class="font-mono" style="color:var(--gold);">${item.pips}p ▸</span>
-            </div>
-          `).join('')}
+          <!-- Active Hero Belt Consumables Quick-Use -->
+          <div class="rust-panel" style="padding:4px 5px;margin-top:auto;">
+            <div class="font-title" style="font-size:7px;color:var(--gold);margin-bottom:2px;">${selHero.name}'s 5-Pip Belt (0B Free)</div>
+            ${(STATE.roster[selHero.id]?.pouch || []).map((item, idx) => `
+              <div class="rust-card" style="padding:2.5px 4px;margin-bottom:2px;font-size:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;"
+                   onclick="useBeltItem('${selHero.id}', ${idx})">
+                <span>${item.name}</span>
+                <span class="font-mono" style="color:var(--gold);">${item.pips}p ▸</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
-      </div>
+      `}
 
       <!-- CENTER BATTLE STAGE (stage.rs: INTERIOR = Rect(128, 30, 384, 288)) -->
-      <div style="position:absolute;left:128px;top:30px;width:384px;height:288px;border:1px solid #374151;background:#08090d;overflow:hidden;">
+      <div style="position:absolute;left:128px;top:${isPreBattle ? '28px' : '30px'};width:384px;height:${isPreBattle ? '230px' : '288px'};border:1px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#374151'};background:#08090d;overflow:hidden;box-shadow:${stageMode === 'boss_phase2' ? '0 0 18px rgba(239,68,68,0.4)' : 'none'};">
         <!-- BACKDROP = Rect(128, 30, 384, 52) -->
         <div style="position:relative;width:384px;height:52px;overflow:hidden;border-bottom:1px solid #4b5563;">
           <img src="${ASSETS.bg[tpl.backdrop] || ASSETS.bg.canal}" class="pixel" style="width:384px;height:52px;object-fit:cover;">
@@ -322,82 +429,94 @@ function renderBattleScreen() {
         </div>
       </div>
 
+      ${isTransitionIn ? `
+        <!-- ANIMATED MAP → COMBAT ENGAGEMENT BANNER -->
+        <div class="combat-banner-flash" style="position:absolute;left:90px;right:90px;top:148px;height:54px;background:linear-gradient(90deg, transparent 0%, rgba(12,15,23,0.96) 18%, rgba(44,18,22,0.98) 50%, rgba(12,15,23,0.96) 82%, transparent 100%);border-top:1.5px solid #fbbf24;border-bottom:1.5px solid #fbbf24;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:42;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,0.9);">
+          <div class="font-title" style="font-size:13px;color:#fef3c7;letter-spacing:2px;text-shadow:0 2px 8px #000;">⚔ ENCOUNTER ENGAGED — FORESIGHT ACTIVE ⚔</div>
+          <div class="font-mono" style="font-size:6.5px;color:#fbbf24;margin-top:2px;">Round 1 · Enemy Intents Telegraphed on 6-Block Timeline</div>
+        </div>
+      ` : ''}
+
       ${skillMenuHtml}
 
-      <!-- RIGHT HOSTILE CARDS + PINNED INTEL PANEL (battle/draw.rs: x=516..638, y=30..318) -->
-      <div style="position:absolute;left:516px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;">
-        <div style="display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:168px;">
-          ${foes.map(f => {
-            const isPinned = pinnedFoe && f.id === pinnedFoe.id;
-            const hpPct = Math.max(0, Math.round((f.hp / f.maxHp) * 100));
-            return `
-              <div class="rust-card ${isPinned ? 'selected' : ''}"
-                   style="padding:4px 5px;cursor:pointer;opacity:${f.hp <= 0 ? '0.4' : '1'};"
-                   onclick="STATE.pinnedFoeId='${f.id}';render();">
-                <div style="display:flex;gap:5px;align-items:center;">
-                  <div class="portrait-box foe-rim" style="width:26px;height:26px;">
-                    <img src="${ASSETS.portraits[f.portrait] || ASSETS.portraits.watchman}" class="pixel">
-                  </div>
-                  <div style="flex:1;overflow:hidden;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                      <span class="font-title" style="font-size:7.5px;color:#fda4af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</span>
-                      <img src="${ASSETS.ui['intent_' + f.intent] || ASSETS.ui.intent_attack}" class="pixel" style="width:10px;height:10px;" title="Foresight Intent">
+      ${!isPreBattle ? `
+        <!-- RIGHT HOSTILE CARDS + PINNED INTEL PANEL (battle/draw.rs: x=516..638, y=30..318) -->
+        <div class="${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:516px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;opacity:${activeBark ? '0.55' : '1'};transition:opacity 0.2s;">
+          <div style="display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:168px;">
+            ${foes.map(f => {
+              const isPinned = pinnedFoe && f.id === pinnedFoe.id;
+              const hpPct = Math.max(0, Math.round((f.hp / f.maxHp) * 100));
+              return `
+                <div class="rust-card ${isPinned ? 'selected' : ''}"
+                     style="padding:4px 5px;cursor:pointer;opacity:${f.hp <= 0 ? '0.4' : '1'};"
+                     onclick="STATE.pinnedFoeId='${f.id}';render();">
+                  <div style="display:flex;gap:5px;align-items:center;">
+                    <div class="portrait-box foe-rim" style="width:26px;height:26px;">
+                      <img src="${ASSETS.portraits[f.portrait] || ASSETS.portraits.watchman}" class="pixel">
                     </div>
-                    <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
-                      <div style="width:${hpPct}%;height:100%;background:#e11d48;"></div>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
-                      <span class="font-mono" style="font-size:5.8px;color:var(--text);">${f.hp}/${f.maxHp} · G:${f.guard}</span>
-                      <div style="display:flex;gap:1px;">
-                        ${Array.from({ length: f.maxPoise }).map((_, pi) => `
-                          <div style="width:3.5px;height:3.5px;background:${pi < f.poise ? '#fbbf24' : '#374151'};"></div>
-                        `).join('')}
+                    <div style="flex:1;overflow:hidden;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="font-title" style="font-size:7.5px;color:#fda4af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</span>
+                        <img src="${ASSETS.ui['intent_' + f.intent] || ASSETS.ui.intent_attack}" class="pixel" style="width:10px;height:10px;" title="Foresight Intent">
+                      </div>
+                      <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
+                        <div style="width:${hpPct}%;height:100%;background:#e11d48;"></div>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
+                        <span class="font-mono" style="font-size:5.8px;color:var(--text);">${f.hp}/${f.maxHp} · G:${f.guard}</span>
+                        <div style="display:flex;gap:1px;">
+                          ${Array.from({ length: f.maxPoise }).map((_, pi) => `
+                            <div style="width:3.5px;height:3.5px;background:${pi < f.poise ? '#fbbf24' : '#374151'};"></div>
+                          `).join('')}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Pinned Enemy Intel Card (battle/draw.rs lower-right inspector — Reduced Corner Frame) -->
+          ${pinnedFoe ? ornateCornerBox640('margin-top:auto;padding:5px 6px;display:flex;flex-direction:column;gap:3px;', `
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="font-title" style="font-size:7.5px;color:var(--gold);">Intel · ${pinnedFoe.name}</span>
+                <img src="${ASSETS.ui.badge_foresight}" class="pixel" style="width:9px;height:9px;">
               </div>
-            `;
-          }).join('')}
+              <div style="font-size:5.8px;color:var(--info);">${pinnedFoe.role}</div>
+              <div style="font-size:6px;color:#fda4af;background:rgba(44,20,24,0.8);padding:2px 4px;border:0.5px solid #991b1b;">
+                <b>Intent:</b> ${pinnedFoe.intentName}
+              </div>
+              <div style="font-size:5.8px;color:var(--dim);line-height:1.3;">
+                <b style="color:var(--text);">Trait:</b> ${pinnedFoe.passive}
+              </div>
+          `) : ''}
         </div>
+      ` : ''}
 
-        <!-- Pinned Enemy Intel Card (battle/draw.rs lower-right inspector — Reduced Corner Frame) -->
-        ${pinnedFoe ? ornateCornerBox640('margin-top:auto;padding:5px 6px;display:flex;flex-direction:column;gap:3px;', `
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span class="font-title" style="font-size:7.5px;color:var(--gold);">Intel · ${pinnedFoe.name}</span>
-              <img src="${ASSETS.ui.badge_foresight}" class="pixel" style="width:9px;height:9px;">
-            </div>
-            <div style="font-size:5.8px;color:var(--info);">${pinnedFoe.role}</div>
-            <div style="font-size:6px;color:#fda4af;background:rgba(44,20,24,0.8);padding:2px 4px;border:0.5px solid #991b1b;">
-              <b>Intent:</b> ${pinnedFoe.intentName}
-            </div>
-            <div style="font-size:5.8px;color:var(--dim);line-height:1.3;">
-              <b style="color:var(--text);">Trait:</b> ${pinnedFoe.passive}
-            </div>
-        `) : ''}
-      </div>
+      ${!activeBark ? `
+        <!-- BOTTOM BAR (battle/draw.rs: Rect(2, 322, 636, 36)) -->
+        <div class="rust-panel ${isTransitionIn ? 'hud-slide-up' : ''}" style="position:absolute;left:2px;top:321px;width:636px;height:37px;padding:3px 6px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:25;">
+          <!-- Combat Log Ticker -->
+          <div class="rust-inset" style="flex:1;height:29px;padding:2px 5px;overflow-y:auto;font-size:6.2px;color:var(--dim);display:flex;flex-direction:column;justify-content:center;">
+            ${STATE.combatLog.slice(0, 2).map((l, i) => `
+              <div style="color:${i===0?'var(--text)':'var(--dim)'};">• ${l}</div>
+            `).join('')}
+          </div>
 
-      <!-- BOTTOM BAR (battle/draw.rs: Rect(2, 322, 636, 36)) -->
-      <div class="rust-panel" style="position:absolute;left:2px;top:321px;width:636px;height:37px;padding:3px 6px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:25;">
-        <!-- Combat Log Ticker -->
-        <div class="rust-inset" style="flex:1;height:29px;padding:2px 5px;overflow-y:auto;font-size:6.2px;color:var(--dim);display:flex;flex-direction:column;justify-content:center;">
-          ${STATE.combatLog.slice(0, 2).map((l, i) => `
-            <div style="color:${i===0?'var(--text)':'var(--dim)'};">• ${l}</div>
-          `).join('')}
+          <!-- Round & Timeline Controls -->
+          <div style="display:flex;align-items:center;gap:4px;">
+            <button class="rust-btn" onclick="clearHeroPlan('${selHero.id}')">Clear [Bksp]</button>
+            <button class="rust-btn" onclick="autoFillHeroPlan('${selHero.id}')">Auto-Fill</button>
+            <button class="rust-btn ${STATE.modal==='timeline'?'primary':''}" onclick="STATE.modal = STATE.modal==='timeline'?null:'timeline';render();">
+              Timeline [T]
+            </button>
+            <button class="rust-btn primary" style="height:22px;padding:0 10px;font-size:8px;" onclick="executeBattleRound()">
+              Confirm Round [Space] ▸
+            </button>
+          </div>
         </div>
-
-        <!-- Round & Timeline Controls -->
-        <div style="display:flex;align-items:center;gap:4px;">
-          <button class="rust-btn" onclick="clearHeroPlan('${selHero.id}')">Clear [Bksp]</button>
-          <button class="rust-btn" onclick="autoFillHeroPlan('${selHero.id}')">Auto-Fill</button>
-          <button class="rust-btn ${STATE.modal==='timeline'?'primary':''}" onclick="STATE.modal = STATE.modal==='timeline'?null:'timeline';render();">
-            Timeline [T]
-          </button>
-          <button class="rust-btn primary" style="height:22px;padding:0 10px;font-size:8px;" onclick="executeBattleRound()">
-            Confirm Round [Space] ▸
-          </button>
-        </div>
-      </div>
+      ` : scriptedBarkHtml}
 
       <!-- Multi-Track Timeline Overlay (timeline_view.rs) -->
       ${STATE.modal === 'timeline' ? renderTimelineOverlay() : ''}
@@ -536,7 +655,17 @@ function executeBattleRound() {
     STATE.modal = 'results';
   } else {
     STATE.round += 1;
-    STATE.combatLog.unshift(`Round ${STATE.round} begins — +6 AP replenished across squad.`);
+    if (!b.phase2Triggered) {
+      b.phase2Triggered = true;
+      if (aliveFoes[0]) {
+        aliveFoes[0].hp = Math.min(aliveFoes[0].hp, Math.ceil(aliveFoes[0].maxHp * 0.48));
+        aliveFoes[0].guard += 10;
+      }
+      STATE.battleStageMode = 'boss_phase2';
+      STATE.combatLog.unshift(`⚡ PHASE 2 TRANSFORMATION! ${aliveFoes[0] ? aliveFoes[0].name : 'Boss'} crosses 50% HP threshold!`);
+    } else {
+      STATE.combatLog.unshift(`Round ${STATE.round} begins — +6 AP replenished across squad.`);
+    }
   }
   render();
 }

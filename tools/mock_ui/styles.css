@@ -712,3 +712,75 @@
   #arch-footer b {
     color: var(--gold);
   }
+
+  /* ==========================================================================
+     VN FULL-BODY SPRITE REACTION ANIMATIONS & COMBAT TRANSITION FX
+     ========================================================================== */
+  @keyframes vnBreathe {
+    0%, 100% { transform: translateY(0px) scale(1); }
+    50%      { transform: translateY(-4px) scale(1.012); }
+  }
+  @keyframes vnLunge {
+    0%   { transform: translateX(0px) translateY(0px) scale(1); }
+    35%  { transform: translateX(22px) translateY(-6px) scale(1.06); }
+    100% { transform: translateX(10px) translateY(-2px) scale(1.03); }
+  }
+  @keyframes vnLungeLeft {
+    0%   { transform: translateX(0px) translateY(0px) scale(1); }
+    35%  { transform: translateX(-22px) translateY(-6px) scale(1.06); }
+    100% { transform: translateX(-10px) translateY(-2px) scale(1.03); }
+  }
+  @keyframes vnShake {
+    0%, 100% { transform: translateX(0px); }
+    20%      { transform: translateX(-6px) rotate(-1deg); }
+    40%      { transform: translateX(6px) rotate(1deg); }
+    60%      { transform: translateX(-4px); }
+    80%      { transform: translateX(4px); }
+  }
+  @keyframes vnHop {
+    0%, 100% { transform: translateY(0px); }
+    30%      { transform: translateY(-16px) scale(1.04); }
+    60%      { transform: translateY(0px); }
+    80%      { transform: translateY(-6px); }
+  }
+  @keyframes vnPulseRing {
+    0%   { transform: scale(0.82); opacity: 0.9; }
+    70%  { transform: scale(1.28); opacity: 0.25; }
+    100% { transform: scale(1.42); opacity: 0; }
+  }
+  @keyframes vnEmotePop {
+    0%   { transform: translateY(10px) scale(0.5); opacity: 0; }
+    50%  { transform: translateY(-6px) scale(1.12); opacity: 1; }
+    100% { transform: translateY(0px) scale(1); opacity: 1; }
+  }
+  @keyframes vnSlashGlint {
+    0%   { opacity: 0; transform: translateX(-60px) rotate(-28deg) scaleX(0.4); }
+    40%  { opacity: 0.95; transform: translateX(0px) rotate(-28deg) scaleX(1.1); }
+    100% { opacity: 0; transform: translateX(60px) rotate(-28deg) scaleX(0.6); }
+  }
+  @keyframes hudSlideDown {
+    0%   { transform: translateY(-48px); opacity: 0; }
+    100% { transform: translateY(0px); opacity: 1; }
+  }
+  @keyframes hudSlideUp {
+    0%   { transform: translateY(64px); opacity: 0; }
+    100% { transform: translateY(0px); opacity: 1; }
+  }
+  @keyframes combatBannerFlash {
+    0%   { transform: scaleX(0.2); opacity: 0; }
+    30%  { transform: scaleX(1.03); opacity: 1; }
+    100% { transform: scaleX(1); opacity: 1; }
+  }
+
+  .vn-anim-breathe    { animation: vnBreathe 3.2s ease-in-out infinite; }
+  .vn-anim-lunge-r    { animation: vnLunge 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .vn-anim-lunge-l    { animation: vnLungeLeft 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .vn-anim-shake      { animation: vnShake 0.5s ease-in-out 2; }
+  .vn-anim-hop        { animation: vnHop 0.6s ease-out 1; }
+  .vn-emote-badge     { animation: vnEmotePop 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .vn-ring-pulse      { animation: vnPulseRing 1.8s ease-out infinite; }
+  .vn-slash-glint     { animation: vnSlashGlint 0.75s ease-out 1; }
+  .hud-slide-down     { animation: hudSlideDown 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .hud-slide-up       { animation: hudSlideUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .combat-banner-anim { animation: combatBannerFlash 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+

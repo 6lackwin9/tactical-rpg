@@ -249,6 +249,9 @@ def build_asset_bundle() -> dict[str, Any]:
         },
         "bg": {
             "title": load_scaled_uri("backgrounds/menu/title.png", (1280, 720), fmt="JPEG"),
+            "vn_alley_stage": load_scaled_uri("backgrounds/story/vn_alley_stage.png", (1280, 720), fmt="JPEG"),
+            "vn_bridge_stage": load_scaled_uri("backgrounds/story/vn_bridge_stage.png", (1280, 720), fmt="JPEG"),
+            "vn_hearth_stage": load_scaled_uri("backgrounds/story/vn_hearth_stage.png", (1280, 720), fmt="JPEG"),
             "sunk_ward": load_scaled_uri("backgrounds/title/sunk_ward.png", (500, 316)),
             "intro_1": load_scaled_uri("backgrounds/story/intro_1.png", (640, 360)),
             "intro_2": load_scaled_uri("backgrounds/story/intro_2.png", (640, 360)),
@@ -285,6 +288,16 @@ def build_asset_bundle() -> dict[str, Any]:
             "crawler": load_scaled_uri("portraits/common/crawler_ash_crawler.png", (120, 120)),
             "beast": load_scaled_uri("portraits/common/beast_render_beast.png", (120, 120)),
         },
+        "fullBody": {
+            "kaelen": load_scaled_uri("portraits/full_body/kaelen.png", (340, 340), False),
+            "vane": load_scaled_uri("portraits/full_body/vane.png", (340, 340), False),
+            "vesper": load_scaled_uri("portraits/full_body/vesper.png", (340, 340), False),
+            "maren": load_scaled_uri("portraits/full_body/maren.png", (340, 340), False),
+            "aline": load_scaled_uri("portraits/full_body/aline.png", (340, 340), False),
+            "watchman": load_scaled_uri("portraits/full_body/watchman.png", (340, 340), False),
+            "bailiff": load_scaled_uri("portraits/full_body/watchman.png", (340, 340), False),
+        },
+        "faces": {},
         "units": {
             "kaelen": extract_unit_frames("warrior/2h_axe", "kaelen"),
             "vesper": extract_unit_frames("rogue/base", "vesper"),
@@ -313,6 +326,30 @@ def build_asset_bundle() -> dict[str, Any]:
         "skills": {},
         "statuses": {},
     }
+
+    # Bundle mood expression portraits (`PORTRAITFX1` faces/<id>/<mood>.png)
+    face_sources = [
+        ("kaelen", "portraits/heroes/faces/kaelen"),
+        ("vesper", "portraits/heroes/faces/vesper"),
+        ("maren", "portraits/heroes/faces/maren"),
+        ("hollis", "portraits/heroes/faces/hollis"),
+        ("dunstan", "portraits/heroes/faces/dunstan"),
+        ("elyse", "portraits/heroes/faces/elyse"),
+        ("aline", "portraits/npcs/faces/aline"),
+        ("bram", "portraits/npcs/faces/bram"),
+        ("tess", "portraits/npcs/faces/tess"),
+        ("vane", "portraits/bosses/faces/captain_vane"),
+        ("quell", "portraits/bosses/faces/proctor_quell"),
+        ("orlov", "portraits/bosses/faces/guild_master_orlov"),
+        ("nemeth", "portraits/bosses/faces/inquisitor_prelate_nemeth"),
+    ]
+    for char_key, rel_dir in face_sources:
+        assets["faces"][char_key] = {}
+        for mood in ("neutral", "angry", "determined", "hurt", "afraid", "sad", "surprised", "happy"):
+            try:
+                assets["faces"][char_key][mood] = load_scaled_uri(f"{rel_dir}/{mood}.png", (120, 120))
+            except FileNotFoundError:
+                pass
 
     skill_names = [
         "move", "rest", "strike", "active_guard", "disengage",

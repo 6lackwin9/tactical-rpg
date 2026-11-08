@@ -85,37 +85,104 @@ function renderSceneRunner() {
 }
 
 // ============================================================================
-// SCREEN 2: STORY STAGE (`story.rs` + `vignette.rs` — 1280×720 Native Grid)
-// Interactive comparison of:
-//  - Approach 1 (`vn_stage`): VN Illustrated Backdrop + Dynamic Scene Variants + Staged Character Sprites/Cutouts
-//  - Approach 2 (`map_stage`): Live In-Game Region/Battle Map Stage + On-Tile Unit Reactions + Bottom Dialogue Box
-//  - Cutscene Player (`vignette_reel`): `VignetteScreen` Title / Image / Transition Cards usable by both modes
+// SCREEN 2: HYBRID STORY STAGE (`story.rs` + `vignette.rs` — 1280×720 Native Grid)
+// Implements the Hybrid Story Architecture:
+//  1. `vn_stage`      : Full-Body Sprite Artwork (ART_PROMPT_TEMPLATES.md) standing on a clearly visible
+//                       stone/cobblestone floor plane + Reaction VFX & animations around the sprite +
+//                       Portrait Mood Expression (`faces/<id>/<mood>.png`) in the bottom dialogue box.
+//  2. `map_stage`     : In-Game Region/Battle Map Stage + On-Tile Unit Reactions + Seamless Transition to Combat UI.
+//  3. `vignette_reel` : Dedicated Cutscene / Transition Player (`vignette.rs`) with minimal UI (`Auto`, `Log`, `Skip`).
 // ============================================================================
+function renderReactionFxOverlay(fxKey, isActive) {
+  if (!fxKey) return '';
+  if (fxKey === 'steel_flash') {
+    return `
+      <!-- Cold Steel Slash Glint + Shockwave Ring -->
+      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
+        <div style="position:absolute;left:50%;top:48%;width:210px;height:210px;border-radius:50%;border:2px solid rgba(251,191,36,0.75);animation:vnPulseRing 1.35s ease-out infinite;"></div>
+        <svg width="260" height="260" viewBox="0 0 260 260" style="position:absolute;left:10px;top:15px;overflow:visible;animation:vnSlashGlint 1.2s ease-out infinite;">
+          <path d="M 35 205 Q 130 95 230 35" stroke="#fef3c7" stroke-width="5" stroke-linecap="round" fill="none" filter="drop-shadow(0 0 8px #f59e0b)"/>
+          <path d="M 55 215 Q 140 115 235 55" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+        </svg>
+        <div style="position:absolute;right:24px;top:14px;padding:2px 8px;border-radius:10px;background:rgba(15,23,42,0.92);border:1.5px solid #fbbf24;color:#fef3c7;font-size:11px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,0.85);animation:vnEmotePop 0.35s ease-out;">
+          ⚔ STEEL DRAWN
+        </div>
+      </div>
+    `;
+  }
+  if (fxKey === 'anger_burst') {
+    return `
+      <!-- Crimson Anger Shockwave + Ember Sparks -->
+      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
+        <div style="position:absolute;left:50%;top:52%;width:220px;height:220px;border-radius:50%;border:2.5px solid rgba(239,68,68,0.8);animation:vnPulseRing 1.1s ease-out infinite;"></div>
+        <div style="position:absolute;left:50%;top:52%;width:165px;height:165px;border-radius:50%;border:1.5px dashed rgba(251,191,36,0.75);transform:translate(-50%,-50%);"></div>
+        <div style="position:absolute;right:22px;top:10px;padding:2px 9px;border-radius:10px;background:rgba(69,10,10,0.95);border:1.5px solid #ef4444;color:#fca5a5;font-size:11px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,0.9);animation:vnEmotePop 0.35s ease-out;">
+          💢 ENRAGED
+        </div>
+      </div>
+    `;
+  }
+  if (fxKey === 'alert_shock') {
+    return `
+      <!-- Alert Exclamation Ripple -->
+      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
+        <div style="position:absolute;left:50%;top:42%;width:190px;height:190px;border-radius:50%;border:2px solid rgba(56,189,248,0.75);animation:vnPulseRing 1.4s ease-out infinite;"></div>
+        <div style="position:absolute;left:50%;top:-4px;transform:translateX(-50%);padding:2px 10px;border-radius:12px;background:rgba(12,74,110,0.95);border:1.5px solid #38bdf8;color:#e0f2fe;font-size:12px;font-weight:900;box-shadow:0 4px 12px rgba(0,0,0,0.85);animation:vnEmotePop 0.35s ease-out;">
+          !! ALERT
+        </div>
+      </div>
+    `;
+  }
+  if (fxKey === 'alchemy_flare') {
+    return `
+      <!-- Alchemical Censer Vapour & Emerald-Amber Sparks -->
+      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
+        <div style="position:absolute;left:50%;top:50%;width:200px;height:200px;border-radius:50%;border:2px solid rgba(52,211,153,0.7);animation:vnPulseRing 1.5s ease-out infinite;"></div>
+        <div style="position:absolute;right:18px;top:12px;padding:2px 8px;border-radius:10px;background:rgba(6,78,59,0.94);border:1.5px solid #34d399;color:#a7f3d0;font-size:11px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,0.85);">
+          ⚗ ALCHEMY READY
+        </div>
+      </div>
+    `;
+  }
+  // Default `solemn_glow`
+  return isActive ? `
+    <div style="position:absolute;inset:-6px;pointer-events:none;z-index:4;">
+      <div style="position:absolute;left:50%;top:52%;width:190px;height:190px;border-radius:50%;border:1.5px solid rgba(245,158,11,0.55);animation:vnPulseRing 2.1s ease-out infinite;"></div>
+    </div>
+  ` : '';
+}
+
 function renderStoryActorSlot(actor, side) {
-  if (!actor) return `<div style="width:260px;height:310px;pointer-events:none;"></div>`;
+  if (!actor) return `<div style="width:310px;height:340px;pointer-events:none;"></div>`;
   const style = STATE.storyActorStyle || 'full_sprite';
-  if (style === 'backdrop_only') return `<div style="width:260px;height:310px;pointer-events:none;"></div>`;
+  if (style === 'backdrop_only') return `<div style="width:310px;height:340px;pointer-events:none;"></div>`;
 
   const isActive = !!actor.active;
-  const lungeOffset = actor.lunge ? (side === 'left' ? 'translateX(18px)' : 'translateX(-18px)') : 'translateX(0px)';
-  const scaleStr = isActive ? 'scale(1.05) translateY(-6px)' : 'scale(0.93) translateY(8px)';
+  const activeFx = isActive && STATE.storyReactionOverride ? STATE.storyReactionOverride : actor.reactionFx;
+  const animType = isActive && STATE.storyReactionOverride
+    ? (STATE.storyReactionOverride === 'steel_flash' ? 'lunge' : STATE.storyReactionOverride === 'anger_burst' ? 'shake' : 'hop')
+    : (actor.anim || 'breathe');
+
+  let animClass = 'vn-anim-breathe';
+  if (isActive) {
+    if (animType === 'lunge') animClass = side === 'left' ? 'vn-anim-lunge-right' : 'vn-anim-lunge-left';
+    else if (animType === 'shake') animClass = 'vn-anim-shake';
+    else if (animType === 'hop') animClass = 'vn-anim-hop';
+  }
+
   const filterStr = isActive
-    ? 'brightness(1.06) contrast(1.06) drop-shadow(0 0 18px rgba(245,158,11,0.55)) drop-shadow(0 12px 20px rgba(0,0,0,0.92))'
-    : 'brightness(0.46) saturate(0.65) contrast(0.95) drop-shadow(0 8px 14px rgba(0,0,0,0.85))';
-  const borderCol = isActive ? '#f59e0b' : '#374151';
+    ? 'brightness(1.06) contrast(1.06) drop-shadow(0 0 16px rgba(245,158,11,0.48)) drop-shadow(0 10px 18px rgba(0,0,0,0.92))'
+    : 'brightness(0.58) saturate(0.75) contrast(0.96) drop-shadow(0 8px 14px rgba(0,0,0,0.88))';
+  const borderCol = isActive ? '#f59e0b' : '#4b5563';
 
   if (style === 'bust_cutout') {
-    const portraitSrc = ASSETS.portraits[actor.portrait] || ASSETS.portraits.kaelen;
+    const portraitSrc = getPortraitWithMood(actor.portrait, isActive ? (STATE.storyMoodOverride || 'determined') : 'neutral');
     return `
-      <div style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;transform:${scaleStr} ${lungeOffset};">
-        <div style="margin-bottom:8px;padding:3px 10px;border-radius:12px;background:${isActive ? 'rgba(24,20,14,0.92)' : 'rgba(12,14,20,0.75)'};border:1px solid ${borderCol};font-size:11px;color:${isActive ? '#fbbf24' : '#9ca3af'};font-weight:700;letter-spacing:0.4px;box-shadow:0 4px 12px rgba(0,0,0,0.7);">
-          ${isActive ? '● Speaking · ' : ''}${actor.emotion || 'Staged'}
-        </div>
-        <div style="width:216px;height:216px;border-radius:10px;overflow:hidden;border:2px solid ${borderCol};background:radial-gradient(circle at 50% 35%, rgba(245,158,11,0.22), rgba(10,12,18,0.95));filter:${filterStr};position:relative;">
+      <div class="${animClass}" style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;">
+        <div style="width:220px;height:220px;border-radius:10px;overflow:hidden;border:2px solid ${borderCol};background:radial-gradient(circle at 50% 35%, rgba(245,158,11,0.22), rgba(10,12,18,0.95));filter:${filterStr};position:relative;">
           <img src="${portraitSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
-          <div style="position:absolute;inset:0;box-shadow:inset 0 0 22px rgba(0,0,0,0.75);pointer-events:none;"></div>
         </div>
-        <div style="margin-top:8px;padding:4px 14px;background:rgba(10,12,18,0.9);border:1px solid ${borderCol};border-radius:4px;text-align:center;">
+        <div style="margin-top:8px;padding:4px 14px;background:rgba(10,12,18,0.92);border:1px solid ${borderCol};border-radius:4px;text-align:center;">
           <div class="font-title" style="font-size:13px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</div>
           <div style="font-size:10px;color:var(--dim);">${actor.title || ''}</div>
         </div>
@@ -123,23 +190,32 @@ function renderStoryActorSlot(actor, side) {
     `;
   }
 
-  // Default: `full_sprite` — Full-Body Unit Sprite staged above an atmospheric stone plinth, separated from the background
-  const unitFrames = ASSETS.units[actor.unitKey] || ASSETS.units.kaelen;
-  const unitSrc = actor.lunge ? (unitFrames.atk || unitFrames.idle0) : (isActive ? (unitFrames.idle1 || unitFrames.idle0) : unitFrames.idle0);
-  const flipX = side === 'right' ? 'scaleX(-1)' : 'scaleX(1)';
+  // Default: `full_sprite` — Full-Body Pixel Art Character Sprite (`ASSETS.fullBody[unitKey]`)
+  // standing directly on the visible stone floor with grounded contact shadow & reaction VFX around the sprite
+  const fullBodySrc = (ASSETS.fullBody && ASSETS.fullBody[actor.unitKey])
+    ? ASSETS.fullBody[actor.unitKey]
+    : ((ASSETS.units[actor.unitKey] || ASSETS.units.kaelen).idle0);
+  // Flip right-side actors if their base sprite faces right (kaelen/vesper/maren/aline face right or 3/4; vane/watchman face left)
+  const nativeFacesLeft = (actor.unitKey === 'vane' || actor.unitKey === 'watchman' || actor.unitKey === 'bailiff');
+  const shouldFlip = (side === 'right' && !nativeFacesLeft) || (side === 'left' && nativeFacesLeft);
+  const flipX = shouldFlip ? 'scaleX(-1)' : 'scaleX(1)';
+
   return `
-    <div style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;transform:${scaleStr} ${lungeOffset};">
-      <div style="margin-bottom:6px;padding:4px 12px;border-radius:12px;background:${isActive ? 'rgba(28,22,14,0.94)' : 'rgba(12,14,20,0.75)'};border:1px solid ${borderCol};font-size:11px;color:${isActive ? '#fbbf24' : '#9ca3af'};font-weight:700;letter-spacing:0.4px;box-shadow:0 4px 12px rgba(0,0,0,0.75);">
-        ${isActive ? '● ' : ''}${actor.emotion || 'Ready'}${actor.lunge ? ' · [Action Pose]' : ''}
+    <div style="display:flex;flex-direction:column;align-items:center;position:relative;width:310px;height:345px;justify-content:flex-end;">
+      <div class="${animClass}" style="position:relative;width:290px;height:305px;display:flex;align-items:flex-end;justify-content:center;">
+        ${renderReactionFxOverlay(activeFx, isActive)}
+
+        <!-- Ground Contact Shadow + Tallow Floor Ring directly on the visible stone floor -->
+        <div style="position:absolute;bottom:2px;width:195px;height:34px;border-radius:50%;background:${isActive ? 'radial-gradient(ellipse, rgba(0,0,0,0.92) 0%, rgba(245,158,11,0.34) 58%, transparent 82%)' : 'radial-gradient(ellipse, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 60%, transparent 82%)'};border-bottom:${isActive ? '2px solid rgba(251,191,36,0.75)' : '1px solid rgba(148,163,184,0.28)'};z-index:1;"></div>
+
+        <!-- Full-Body Pixel Art Sprite Artwork (340×340 native, feet anchored at bottom) -->
+        <img src="${fullBodySrc}" class="pixel" style="width:288px;height:288px;object-fit:contain;object-position:center bottom;transform:${flipX};filter:${filterStr};position:relative;z-index:2;">
       </div>
-      <div style="position:relative;width:230px;height:230px;display:flex;align-items:center;justify-content:center;">
-        <!-- Ground plinth & Tallow Amber Rim Aura separating character sprite from background painting -->
-        <div style="position:absolute;bottom:10px;width:180px;height:36px;border-radius:50%;background:${isActive ? 'radial-gradient(ellipse, rgba(245,158,11,0.42) 0%, rgba(10,12,18,0.88) 65%, transparent 100%)' : 'radial-gradient(ellipse, rgba(0,0,0,0.78) 0%, transparent 75%)'};border-bottom:${isActive ? '2px solid rgba(245,158,11,0.65)' : '1px solid rgba(75,85,99,0.4)'};"></div>
-        <img src="${unitSrc}" class="pixel" style="width:196px;height:196px;object-fit:contain;transform:${flipX};filter:${filterStr};position:relative;z-index:2;">
-      </div>
-      <div style="margin-top:2px;padding:4px 14px;background:rgba(10,12,18,0.92);border:1px solid ${borderCol};border-radius:4px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.75);">
-        <div class="font-title" style="font-size:13px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</div>
-        <div style="font-size:10px;color:var(--dim);">${actor.title || ''}</div>
+
+      <!-- Compact Grounded Nameplate below boots -->
+      <div style="margin-top:4px;padding:3px 14px;background:rgba(10,12,18,0.92);border:1px solid ${borderCol};border-radius:4px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.85);z-index:5;">
+        <span class="font-title" style="font-size:12.5px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</span>
+        <span style="font-size:10px;color:var(--dim);margin-left:6px;">· ${actor.emotion || actor.title || ''}</span>
       </div>
     </div>
   `;
@@ -150,7 +226,7 @@ function renderStoryMapBackdrop(st, card) {
   const horizonStripImg = st.mapBackdrop === 'sluice_hub'
     ? ASSETS.bg.hearth
     : (ASSETS.bg[st.mapBackdrop] || ASSETS.bg.alley);
-  const ambientBgImg = ASSETS.bg[st.bg] || ASSETS.bg.intro_1;
+  const ambientBgImg = ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1;
 
   const cols = 12;
   const rows = 9;
@@ -216,7 +292,6 @@ function renderStoryMapBackdrop(st, card) {
   return `
     <div style="position:absolute;inset:0;background:#080a0f;overflow:hidden;">
       <img src="${ambientBgImg}" class="pixel" style="position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;filter:brightness(0.32) blur(2px);">
-      <!-- Cinematic Top & Bottom Letterbox Shading for Map Cutscene Mode -->
       <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 42%, transparent 35%, rgba(6,8,13,0.82) 92%), linear-gradient(180deg, rgba(6,8,13,0.82) 0%, transparent 16%, transparent 66%, rgba(6,8,13,0.95) 100%);"></div>
 
       <!-- Top In-Engine Stage Direction / Camera Focus Strip -->
@@ -231,7 +306,7 @@ function renderStoryMapBackdrop(st, card) {
         </div>
       </div>
 
-      <!-- Horizon Backdrop Banner above the 12×9 Tactical Grid (same as BattleScreen stage header) -->
+      <!-- Horizon Backdrop Banner above the 12×9 Tactical Grid -->
       <div style="position:absolute;left:${boardLeft}px;top:58px;width:${boardW}px;height:62px;border:1px solid rgba(212,166,74,0.38);border-bottom:none;overflow:hidden;">
         <img src="${horizonStripImg}" class="pixel" style="width:100%;height:100%;object-fit:cover;filter:brightness(0.85);">
         <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(8,10,15,0.25), rgba(8,10,15,0.75));"></div>
@@ -246,64 +321,96 @@ function renderStoryMapBackdrop(st, card) {
   `;
 }
 
+// Minimal Cutscene / Transition Player (`aegis_ui::vignette::VignetteScreen`)
+// Used purely for act openings, transitions, and CG cutscenes with minimal UI: Auto [A], Log [L], and Skip [✕]
 function renderStoryVignetteReel(st, card, isLastCard) {
-  const bgSrc = ASSETS.bg[st.bg] || ASSETS.bg.intro_1;
-  return `
-    <div style="position:absolute;inset:0;background:#05060a;overflow:hidden;">
-      <!-- Letterboxed Vignette Plate (vignette.rs Style::Title / Style::Image) -->
-      <div style="position:absolute;left:0;right:0;top:64px;bottom:140px;overflow:hidden;border-top:1px solid rgba(212,166,74,0.45);border-bottom:1px solid rgba(212,166,74,0.45);">
-        <img src="${bgSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;filter:${card.bgFilter || 'brightness(0.9)'};">
-        <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 45%, transparent 40%, rgba(5,6,10,0.82) 95%), linear-gradient(180deg, rgba(5,6,10,0.55) 0%, transparent 25%, transparent 65%, rgba(5,6,10,0.92) 100%);"></div>
+  const bgKey = st.vignetteBg || st.bg || 'intro_1';
+  const bgSrc = ASSETS.bg[bgKey] || ASSETS.bg.intro_1;
+  const cardIdx = Math.min(STATE.storyCardIdx, st.cards.length - 1);
 
-        <!-- Centered Act / Scene Title Overlay (Style::Title in vignette.rs) -->
-        <div style="position:absolute;left:120px;right:120px;top:34px;text-align:center;pointer-events:none;">
-          <div class="font-mono" style="font-size:11px;color:#f59e0b;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px;">${st.actBanner || 'CHRONICLES OF THE SUNK WARD'}</div>
-          <div class="font-title" style="font-size:32px;color:#fef3c7;letter-spacing:1.5px;text-shadow:0 4px 18px rgba(0,0,0,0.95);">${st.title}</div>
-          <div style="width:220px;height:1px;background:linear-gradient(90deg, transparent, #d4a64a, transparent);margin:10px auto 6px;"></div>
-          <div style="font-size:13px;color:#d1d5db;font-style:italic;">${st.subtitle} · <span style="color:#fbbf24;">${card.bgVariantLabel}</span></div>
-        </div>
-
-        <!-- Bottom-of-plate Stage Direction Caption (Style::Line / Cutscene Narration) -->
-        <div style="position:absolute;left:160px;right:160px;bottom:24px;padding:12px 24px;background:rgba(8,10,15,0.82);border-left:3px solid #f59e0b;border-right:3px solid #f59e0b;text-align:center;">
-          <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-bottom:4px;letter-spacing:0.6px;">VIGNETTE REEL TRANSITION (${card.vignetteStyle.toUpperCase()} CARD · ${card.shake || 'Steady Camera'} · Ash Specks Active)</div>
-          <div style="font-size:14px;color:#e5e7eb;font-style:italic;">"${card.stageAction}"</div>
-        </div>
-      </div>
-
-      <!-- Top Letterbox Bar with Skip [✕] -->
-      <div style="position:absolute;left:32px;right:32px;top:14px;height:36px;display:flex;align-items:center;justify-content:space-between;">
-        <div class="font-mono" style="font-size:11px;color:var(--dim);">
-          <code style="color:var(--gold);">aegis_ui::vignette::VignetteScreen</code> · Plays Act Titles, CG Stills & Transitions before handing off to VN or Map Stage
-        </div>
-        ${closeBtn720("STATE.storySkipConfirmOpen=true;render();", "Skip Scene [Esc / Right-Click]")}
-      </div>
-
-      <!-- Bottom Letterbox Caption Bar -->
-      <div style="position:absolute;left:120px;right:120px;bottom:18px;height:108px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 24px;background:rgba(12,14,20,0.92);border:1px solid rgba(212,166,74,0.4);border-radius:6px;">
-        <div style="display:flex;align-items:center;gap:14px;flex:1;">
-          <div class="portrait-box gold-rim" style="width:74px;height:74px;flex-shrink:0;">
-            <img src="${ASSETS.portraits[card.portrait] || ASSETS.portraits.kaelen}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
+  const logOverlayHtml = STATE.vignetteLogOpen ? `
+    <div style="position:absolute;inset:0;background:rgba(5,6,10,0.86);z-index:60;display:flex;align-items:center;justify-content:center;" onclick="STATE.vignetteLogOpen=false;render();">
+      <div onclick="event.stopPropagation();" style="width:760px;max-height:480px;background:rgba(12,15,22,0.97);border:1px solid rgba(212,166,74,0.55);border-radius:6px;padding:18px 24px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,0.95);">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2d333f;padding-bottom:8px;">
+          <div>
+            <span class="font-title" style="font-size:17px;color:var(--gold);">Cutscene Backlog · ${st.title}</span>
+            <span class="font-mono" style="font-size:11px;color:var(--dim);margin-left:10px;">(${st.cards.length} Cards)</span>
           </div>
-          <div style="flex:1;">
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
-              <span class="font-title" style="font-size:16px;color:var(--gold);">${card.speaker}</span>
-              <span style="font-size:11px;color:var(--dim);">· ${card.speakerTitle || ''}</span>
+          ${closeBtn720("STATE.vignetteLogOpen=false;render();", "Close Log [L / Esc / Right-Click]")}
+        </div>
+        <div style="overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:6px;">
+          ${st.cards.map((c, idx) => `
+            <div onclick="STATE.storyCardIdx=${idx};STATE.vignetteLogOpen=false;render();"
+                 style="padding:10px 14px;border-radius:4px;background:${idx === cardIdx ? 'rgba(245,158,11,0.14)' : 'rgba(18,22,31,0.8)'};border:1px solid ${idx === cardIdx ? '#f59e0b' : '#2d333f'};cursor:pointer;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span class="font-title" style="font-size:13.5px;color:var(--gold);">${idx + 1}. ${c.speaker} <span style="font-size:11px;color:var(--dim);font-family:'Inter',sans-serif;">(${c.emotion || c.mood || 'Narration'})</span></span>
+                <span class="font-mono" style="font-size:10px;color:#9ca3af;">${idx === cardIdx ? '● Current Card' : 'Jump to Card ▸'}</span>
+              </div>
+              <div style="font-size:13px;color:var(--text);line-height:1.45;">${c.text}</div>
             </div>
-            <div class="font-body" style="font-size:14.5px;line-height:1.45;color:var(--text);">${card.text}</div>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;height:100%;flex-shrink:0;">
-          <span class="font-mono" style="font-size:11px;color:var(--dim);">Reel Card ${STATE.storyCardIdx + 1} / ${st.cards.length}</span>
-          <div style="display:flex;gap:8px;">
-            ${STATE.storyCardIdx > 0 ? `<button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyCardIdx--;render();">◀ Prev</button>` : ''}
-            ${!isLastCard ? `
-              <button class="rust-btn primary" style="height:30px;padding:0 16px;font-size:12px;" onclick="STATE.storyCardIdx++;render();">Continue [Space] ▸</button>
-            ` : `
-              <button class="rust-btn primary" style="height:30px;padding:0 16px;font-size:12px;" onclick="STORIES[STATE.storyId].onFinish()">${st.nextLabel} ▸</button>
-            `}
-          </div>
+          `).join('')}
         </div>
       </div>
+    </div>
+  ` : '';
+
+  return `
+    <div style="position:absolute;inset:0;background:#05060a;overflow:hidden;"
+         onclick="${!isLastCard ? 'STATE.storyCardIdx++;render();' : 'STORIES[STATE.storyId].onFinish();'}">
+      <!-- Full-bleed Letterboxed Cutscene Canvas (y: 52..612) -->
+      <div style="position:absolute;left:0;right:0;top:52px;bottom:108px;overflow:hidden;border-top:1px solid rgba(212,166,74,0.35);border-bottom:1px solid rgba(212,166,74,0.35);">
+        <img src="${bgSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;filter:${card.bgFilter || 'brightness(0.92)'};">
+        <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 45%, transparent 45%, rgba(5,6,10,0.78) 96%), linear-gradient(180deg, rgba(5,6,10,0.45) 0%, transparent 22%, transparent 68%, rgba(5,6,10,0.92) 100%);"></div>
+
+        <!-- Centered Act / Chapter Title Overlay on Title Cards -->
+        <div style="position:absolute;left:140px;right:140px;top:28px;text-align:center;pointer-events:none;">
+          <div class="font-mono" style="font-size:11px;color:#f59e0b;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;">${st.actBanner || 'CHRONICLES OF THE SUNK WARD'}</div>
+          <div class="font-title" style="font-size:28px;color:#fef3c7;letter-spacing:1.2px;text-shadow:0 4px 18px rgba(0,0,0,0.95);">${st.title}</div>
+          <div style="width:180px;height:1px;background:linear-gradient(90deg, transparent, #d4a64a, transparent);margin:8px auto 4px;"></div>
+          <div style="font-size:12px;color:#d1d5db;font-style:italic;">${st.subtitle}</div>
+        </div>
+      </div>
+
+      <!-- Minimal Top-Right Cutscene Controls Bar: Auto [A] · Log [L] · Skip [✕] -->
+      <div style="position:absolute;left:32px;right:32px;top:10px;height:32px;display:flex;align-items:center;justify-content:space-between;z-index:20;" onclick="event.stopPropagation();">
+        <div class="font-mono" style="font-size:11px;color:rgba(156,163,175,0.75);display:flex;align-items:center;gap:8px;">
+          <span>VIGNETTE CUTSCENE PLAYER</span>
+          <span>·</span>
+          <span>Card ${cardIdx + 1} / ${st.cards.length}</span>
+          ${STATE.vignetteAuto ? `<span style="color:#34d399;font-weight:700;">● AUTO-PLAYING (3.5s)</span>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="rust-btn ${STATE.vignetteAuto ? 'primary' : ''}" style="height:26px;padding:0 12px;font-size:11.5px;background:rgba(15,18,26,0.78);"
+                  onclick="STATE.vignetteAuto=!STATE.vignetteAuto;render();" title="Toggle Auto-Advance Cutscene">
+            ${STATE.vignetteAuto ? '⏸ Auto: ON [A]' : '▶ Auto [A]'}
+          </button>
+          <button class="rust-btn ${STATE.vignetteLogOpen ? 'primary' : ''}" style="height:26px;padding:0 12px;font-size:11.5px;background:rgba(15,18,26,0.78);"
+                  onclick="STATE.vignetteLogOpen=!STATE.vignetteLogOpen;render();" title="Open Cutscene Transcript Log">
+            ☰ Log [L]
+          </button>
+          <button class="rust-btn" style="height:26px;padding:0 12px;font-size:11.5px;background:rgba(15,18,26,0.78);"
+                  onclick="STATE.storySkipConfirmOpen=true;render();" title="Skip Cutscene [Esc / Right-Click]">
+            Skip ⏭
+          </button>
+          ${closeBtn720("STATE.storySkipConfirmOpen=true;render();", "Skip Cutscene [Esc / Right-Click]")}
+        </div>
+      </div>
+
+      <!-- Minimal Bottom Cinematic Subtitle Bar (Click anywhere or press Space to advance) -->
+      <div style="position:absolute;left:140px;right:140px;bottom:14px;height:82px;display:flex; flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px 28px;z-index:15;" onclick="event.stopPropagation();">
+        <div style="font-size:12px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:0.8px;margin-bottom:4px;">
+          ${card.speaker} <span style="color:var(--dim);font-family:'Inter',sans-serif;font-size:11px;">· ${card.stageAction}</span>
+        </div>
+        <div class="font-body" style="font-size:15.5px;line-height:1.45;color:#f3f4f6;max-width:880px;text-shadow:0 2px 6px #000;">
+          ${card.text}
+        </div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:12px;font-family:'JetBrainsMono',monospace;font-size:10.5px;color:#9ca3af;">
+          ${cardIdx > 0 ? `<span style="cursor:pointer;color:#d1d5db;" onclick="STATE.storyCardIdx--;render();">◀ Prev</span>` : ''}
+          <span>Click or [Space] to ${!isLastCard ? 'Continue ▸' : st.nextLabel + ' ▸'}</span>
+        </div>
+      </div>
+
+      ${logOverlayHtml}
     </div>
   `;
 }
@@ -314,6 +421,9 @@ function renderStoryStage() {
   const card = st.cards[cardIdx];
   const isLastCard = cardIdx >= st.cards.length - 1;
   const mode = STATE.storyMode || 'vn_stage';
+  const activeMood = STATE.storyMoodOverride || card.mood || 'neutral';
+  const portraitSrc = getPortraitWithMood(card.portrait, activeMood);
+  const availMoods = ['neutral', 'determined', 'angry', 'hurt', 'surprised', 'afraid'];
 
   // Skip confirmation popup (confirm_skip in aegis_ui/src/vignette.rs:171-208)
   const skipConfirmHtml = STATE.storySkipConfirmOpen ? `
@@ -347,87 +457,101 @@ function renderStoryStage() {
   return `
     <div style="width:1280px;height:720px;position:relative;overflow:hidden;background:#080a0f;">
       ${mode === 'map_stage' ? renderStoryMapBackdrop(st, card) : `
-        <!-- APPROACH 1: VN ILLUSTRATED ARTWORK + SCENE VARIANT FILTER + STAGED CHARACTER SPRITES -->
-        <img src="${ASSETS.bg[st.bg] || ASSETS.bg.intro_1}" class="pixel" style="position:absolute;inset:0;width:1280px;height:720px;object-fit:cover;filter:${card.bgFilter || 'none'};transition:filter 0.3s ease;">
-        <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 38%, rgba(245,158,11,0.08) 0%, rgba(8,10,15,0.52) 70%, rgba(8,10,15,0.88) 100%), linear-gradient(180deg, rgba(8,10,15,0.52) 0%, rgba(8,10,15,0.12) 45%, rgba(8,10,15,0.92) 100%);"></div>
+        <!-- APPROACH 1: VN ILLUSTRATED STAGE WITH CLEARLY VISIBLE BACKDROP + STONE FLOOR + FULL-BODY SPRITES -->
+        <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+             style="position:absolute;left:0;top:0;width:1280px;height:560px;object-fit:cover;object-position:center bottom;filter:${card.bgFilter || 'none'};transition:filter 0.3s ease;">
+        <!-- Subtle top vignette only — keeps the lower stone/cobblestone floor (y: 330..540) bright and unobstructed! -->
+        <div style="position:absolute;left:0;right:0;top:0;height:560px;background:linear-gradient(180deg, rgba(8,10,15,0.55) 0%, transparent 24%, transparent 82%, rgba(8,10,15,0.65) 100%);pointer-events:none;"></div>
 
-        <!-- Top Location & Artwork Variant Header Strip -->
-        <div style="position:absolute;left:72px;right:72px;top:18px;height:38px;padding:0 16px;background:rgba(12,15,23,0.84);border:1px solid rgba(212,166,74,0.42);border-radius:4px;display:flex;align-items:center;justify-content:space-between;z-index:15;">
+        <!-- Top Location & Stage Floor Indicator Strip -->
+        <div style="position:absolute;left:72px;right:72px;top:16px;height:36px;padding:0 16px;background:rgba(12,15,23,0.84);border:1px solid rgba(212,166,74,0.42);border-radius:4px;display:flex;align-items:center;justify-content:space-between;z-index:15;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <span style="padding:2px 8px;background:rgba(212,166,74,0.18);border:1px solid var(--gold);border-radius:3px;font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.5px;">VN ILLUSTRATED STAGE</span>
+            <span style="padding:2px 8px;background:rgba(212,166,74,0.18);border:1px solid var(--gold);border-radius:3px;font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.5px;">VN STAGE · VISIBLE FLOOR & FULL-BODY SPRITES</span>
             <span class="font-title" style="font-size:14px;color:var(--gold);">${st.title}</span>
             <span style="font-size:12px;color:var(--dim);">· ${st.subtitle}</span>
           </div>
           <div class="font-mono" style="font-size:11px;color:#fbbf24;display:flex;align-items:center;gap:10px;">
-            <span>🎨 ${card.bgVariantLabel || 'Base Artwork'}</span>
+            <span>🎨 ${card.bgVariantLabel || 'Stage Artwork'}</span>
             ${card.shake ? `<span style="padding:1px 7px;background:rgba(220,38,38,0.22);border:1px solid #ef4444;border-radius:3px;color:#fca5a5;">📳 ${card.shake}</span>` : ''}
           </div>
         </div>
 
-        <!-- Left & Right Dynamic Character Stage Slots (Separated from background with depth shadow & rim glow) -->
-        <div style="position:absolute;left:110px;right:110px;bottom:212px;height:320px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
+        <!-- Left & Right Full-Body Character Sprites standing directly on the stone/cobblestone floor (y: 192px above bottom) -->
+        <div style="position:absolute;left:115px;right:115px;bottom:192px;height:345px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
           ${renderStoryActorSlot(card.leftActor, 'left')}
           ${renderStoryActorSlot(card.rightActor, 'right')}
         </div>
       `}
 
-      <!-- Shared Bottom Ornate Dialogue & Reaction Dock (story.rs / talk.rs — Reduced Corner Frame) -->
+      <!-- Shared Bottom Ornate Dialogue & Portrait Mood Dock (story.rs / talk.rs — Reduced Corner Frame) -->
       ${ornateCornerBox(`
-        <div style="display:flex;gap:20px;align-items:stretch;height:100%;">
-          <!-- Left Speaker Portrait (PORTRAITFX1 Tallow Amber Rim Light) -->
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:132px;flex-shrink:0;">
-            <div class="portrait-box gold-rim" style="width:112px;height:112px;box-shadow:0 0 18px rgba(245,158,11,0.32);">
-              <img src="${ASSETS.portraits[card.portrait] || ASSETS.portraits.kaelen}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
+        <div style="display:flex;gap:18px;align-items:stretch;height:100%;">
+          <!-- Left Speaker Portrait — Alters Facial Expression for Mood (faces/<id>/<mood>.png) -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-between;width:136px;flex-shrink:0;">
+            <div class="portrait-box gold-rim" style="width:112px;height:112px;box-shadow:0 0 18px rgba(245,158,11,0.35);position:relative;">
+              <img src="${portraitSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
+              <div style="position:absolute;right:4px;bottom:4px;padding:1px 6px;background:rgba(10,12,18,0.92);border:1px solid #f59e0b;border-radius:3px;font-family:'JetBrainsMono',monospace;font-size:9px;color:#fbbf24;text-transform:uppercase;">
+                ${activeMood}
+              </div>
             </div>
-            <div style="margin-top:6px;padding:2px 8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);border-radius:3px;font-size:10px;color:#fbbf24;font-weight:700;">
-              ${card.emotion || 'Speaking'}
+            <div style="padding:2px 8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);border-radius:3px;font-size:10px;color:#fbbf24;font-weight:700;white-space:nowrap;">
+              Mood: ${card.emotion || activeMood}
             </div>
           </div>
 
-          <!-- Right Dialogue Body & Controls -->
+          <!-- Right Dialogue Body, Portrait Mood Switcher & Navigation Controls -->
           <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;">
             <div>
-              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(75,85,99,0.45);padding-bottom:6px;margin-bottom:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(75,85,99,0.45);padding-bottom:5px;margin-bottom:6px;">
                 <div style="display:flex;align-items:baseline;gap:10px;">
-                  <span class="font-title" style="font-size:19px;color:var(--gold);letter-spacing:0.4px;">${card.speaker}</span>
-                  <span style="font-size:12px;color:var(--dim);">${card.speakerTitle || ''}</span>
+                  <span class="font-title" style="font-size:18.5px;color:var(--gold);letter-spacing:0.4px;">${card.speaker}</span>
+                  <span style="font-size:11.5px;color:var(--dim);">${card.speakerTitle || ''}</span>
                 </div>
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <span class="font-mono" style="font-size:11px;color:#9ca3af;font-style:italic;">[${card.stageAction}]</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <!-- Interactive Portrait Mood Pills so user can test altering portrait mood live -->
+                  <span class="font-mono" style="font-size:10px;color:#9ca3af;">Portrait Mood:</span>
+                  ${availMoods.map(mKey => `
+                    <button class="rust-btn ${activeMood === mKey ? 'primary' : ''}"
+                            style="height:20px;padding:0 6px;font-size:9.5px;text-transform:capitalize;"
+                            onclick="STATE.storyMoodOverride='${mKey}';render();"
+                            title="Switch ${card.speaker}'s portrait expression to ${mKey} (faces/${card.portrait}/${mKey}.png)">
+                      ${mKey}
+                    </button>
+                  `).join('')}
                   ${closeBtn720("STATE.storySkipConfirmOpen=true;render();", "Skip Scene [Esc / Right-Click]")}
                 </div>
               </div>
-              <div class="font-body" style="font-size:16px;line-height:1.52;color:var(--text);padding-right:12px;">
+              <div class="font-body" style="font-size:15.5px;line-height:1.48;color:var(--text);padding-right:12px;">
                 ${card.text}
               </div>
             </div>
 
-            <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(55,65,81,0.6);padding-top:8px;margin-top:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(55,65,81,0.6);padding-top:7px;margin-top:6px;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <span class="font-mono" style="font-size:11.5px;color:var(--dim);">Beat ${cardIdx + 1} of ${st.cards.length}</span>
+                <span class="font-mono" style="font-size:11px;color:var(--dim);">Beat ${cardIdx + 1}/${st.cards.length}</span>
                 <div style="display:flex;gap:4px;">
                   ${st.cards.map((_, idx) => `
-                    <span onclick="STATE.storyCardIdx=${idx};render();" style="width:${idx === cardIdx ? '22px' : '8px'};height:6px;border-radius:3px;background:${idx === cardIdx ? '#f59e0b' : '#374151'};cursor:pointer;transition:all 0.2s;"></span>
+                    <span onclick="STATE.storyCardIdx=${idx};STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();" style="width:${idx === cardIdx ? '22px' : '8px'};height:6px;border-radius:3px;background:${idx === cardIdx ? '#f59e0b' : '#374151'};cursor:pointer;transition:all 0.2s;"></span>
                   `).join('')}
                 </div>
-                <span class="font-mono" style="font-size:11px;color:var(--dim);margin-left:6px;">· Right-Click or [Esc] to Skip</span>
+                <span class="font-mono" style="font-size:10.5px;color:#93c5fd;margin-left:4px;">· ${card.stageAction}</span>
               </div>
 
               <div style="display:flex;align-items:center;gap:8px;">
                 ${cardIdx > 0 ? `
-                  <button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyCardIdx--;render();">◀ Prev</button>
+                  <button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyCardIdx--;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">◀ Prev</button>
                 ` : ''}
-                <button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyMode = STATE.storyMode === 'vignette_reel' ? 'vn_stage' : 'vignette_reel';render();" title="Preview this beat inside the VignetteScreen Cutscene/Transition Player">🎬 Vignette Card</button>
+                <button class="rust-btn" style="height:30px;padding:0 12px;font-size:12px;" onclick="STATE.storyMode = 'vignette_reel';render();" title="Open Minimal Vignette Cutscene Player (Auto / Log / Skip)">🎬 Cutscene Player</button>
                 ${!isLastCard ? `
-                  <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:13px;" onclick="STATE.storyCardIdx++;render();">Continue [Space] ▸</button>
+                  <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:13px;" onclick="STATE.storyCardIdx++;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">Continue [Space] ▸</button>
                 ` : `
-                  <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:13px;" onclick="STORIES[STATE.storyId].onFinish()">${st.nextLabel} ▸</button>
+                  <button class="rust-btn primary" style="height:32px;padding:0 18px;font-size:13px;" onclick="STORIES[STATE.storyId].onFinish()">⚔ ${st.nextLabel} ▸</button>
                 `}
               </div>
             </div>
           </div>
         </div>
-      `, 'position:absolute;left:72px;right:72px;bottom:20px;height:176px;padding:16px 22px;background:rgba(12,15,22,0.95);box-shadow:0 16px 42px rgba(0,0,0,0.92);z-index:20;')}
+      `, 'position:absolute;left:72px;right:72px;bottom:16px;height:172px;padding:14px 20px;background:rgba(12,15,22,0.96);box-shadow:0 16px 42px rgba(0,0,0,0.94);z-index:20;')}
 
       ${skipConfirmHtml}
     </div>

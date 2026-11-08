@@ -61,6 +61,14 @@ function jumpScreen(target) {
   render();
 }
 
+function getPortraitWithMood(portraitKey, moodKey) {
+  const m = moodKey || 'neutral';
+  if (ASSETS.faces && ASSETS.faces[portraitKey] && ASSETS.faces[portraitKey][m]) {
+    return ASSETS.faces[portraitKey][m];
+  }
+  return ASSETS.portraits[portraitKey] || ASSETS.portraits.kaelen;
+}
+
 function selectEncounter(encId) {
   initBattle(encId);
   STATE.screen = 'battle';
@@ -71,10 +79,36 @@ function selectEncounter(encId) {
 
 function launchEncounter(encId) {
   initBattle(encId);
+  STATE.battleStageMode = 'active_combat';
   STATE.screen = 'battle';
   STATE.modal = null;
   STATE.settingsOpen = false;
   render();
+}
+
+function launchEncounterWithTransition(encId) {
+  initBattle(encId);
+  STATE.battleStageMode = 'pre_battle';
+  STATE.screen = 'battle';
+  STATE.modal = null;
+  STATE.settingsOpen = false;
+  render();
+}
+
+function engageCombatFromMap() {
+  if (STATE.battleTransitionTimer) {
+    clearTimeout(STATE.battleTransitionTimer);
+    STATE.battleTransitionTimer = null;
+  }
+  STATE.battleStageMode = 'transition_in';
+  render();
+  STATE.battleTransitionTimer = setTimeout(() => {
+    STATE.battleTransitionTimer = null;
+    if (STATE.battleStageMode === 'transition_in') {
+      STATE.battleStageMode = 'active_combat';
+      render();
+    }
+  }, 1150);
 }
 
 function openShop(keeper) {
@@ -250,6 +284,9 @@ function uiBack() {
   } else if (STATE.slotAskOverwrite !== null) {
     STATE.slotAskOverwrite = null;
     render();
+  } else if (STATE.vignetteLogOpen) {
+    STATE.vignetteLogOpen = false;
+    render();
   } else if (STATE.storySkipConfirmOpen) {
     STATE.storySkipConfirmOpen = false;
     render();
@@ -260,6 +297,9 @@ function uiBack() {
     render();
   } else if (STATE.modal) {
     STATE.modal = null;
+    render();
+  } else if (STATE.screen === 'battle' && (STATE.battleStageMode === 'boss_phase2' || STATE.battleStageMode === 'elite_intro' || STATE.battleStageMode === 'elite_aftermath')) {
+    STATE.battleStageMode = 'active_combat';
     render();
   } else if (STATE.screen === 'story') {
     STATE.storySkipConfirmOpen = true;
