@@ -22,7 +22,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | READY row 18 `P1.2-S1` + `P2.2-S1` | done (FB-109) | `develop` | R2 Wave 1 complete. |
 | READY row 20 (R3-W1) | done (FB-111) | `develop` | R3 Wave 1 complete. |
 | W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
-| W2-5 (R2-W2) | slices 1 C09 (FB-127), 2 attack lock (FB-128) done; next: AI rating scorer + Row Z / RING / Field rows, cell EffectSpec | - | - |
+| W2-5 (R2-W2) | slices 1-3 done (FB-127, 128, 129); Maneuver row question FB-130; next: P1.2-S2 cell EffectSpec | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -94,8 +94,32 @@ FB-01 to FB-120 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Finding**: Seed `games/emberwake/data/seeds/w25lock.json` sets the shipped timeline row's `attack_lock` from `none` to `melee`; the frozen `timeline_kit.json` timeline row gains the same key (as `poise_mode` and `field_intent` were added) so the goldens exercise the lock. Re-recorded (named): `timeline_golden`, 6 of 15 fights (`tl_duel_reach` and `tl_skirmish`, 3 seeds each), first divergence round 1 block 1: the Halberdier's reach-2 Jaw-Breaker Drill locks the Footman's tile at wind-up, the Footman steps one tile in during that block, and the swing is dodged (0 instead of 27); outcomes: reach 1337 won 3 -> won 4, reach 7 won 3 -> lost 4, reach 42 won 3 -> won 5, skirmish 1337 won 7 -> won 8, skirmish 7 fled 8 -> won 3, skirmish 42 fled 8 -> won 4. `sim_golden` and `checks_golden` unchanged (no lock event in the sim's timeline run); `rules`, `phasefold`, `journey`, contract and resave unchanged. `ruleset_switches.rs` replays `w25lock`. Feel (`sim feel 5 ruleset=timeline seeds=40`, 0 plan failures): windup 65, reach 62.5 (was 75), armour 65, flank 100, skirmish 87.5, overall 76 % (was 78.5); with `attack_lock=none` the old numbers return exactly.
 - **Recommendation**: HISTORY: "W2-5 slice 2 (ATTACKLOCK1-O, FB-58a): timeline plays `attack_lock = melee` (seed `w25lock`; frozen kit too); re-recorded on purpose: `timeline_golden` (6 of 15: a reach-2 opener is dodged when its target steps in)". GAME_BRIEF timeline: "`attack_lock = melee`: a melee-band single-target attack with power > 0 locks its target's tile at wind-up; a target that left the tile by its own move before impact dodges". BALANCE_REPORT: the feel numbers above. Question (gameplay): a unit stepping toward its attacker dodges a reach-2 swing aimed at its old tile, which costs the reach duel 12.5 points and the planner does not foresee. (A) accept; R2-CLOSE's balance pass absorbs it; (B) make the planner and AI lock-aware (do not open on a unit scheduled to move in the same block), as an I1.2-S3 AI row; (C) rule change: a target that moved but stayed within the attack's reach is still hit (a spec change).
 
+### FB-129: W2-5 slice 3 (I1.2-S2, I1.2-S3) landed: `ai_rating_scorer` tunable; AI ring row and full row Z
+
+- **Spec**: `docs/READY.md` row W2-5 (I1.2-S2..S3); `docs/sessions/I_AI.md` lines 17-18; `docs/specs/INTENT2.md` INTENT2-AI row; `INTENT2_MATRIX.md`; FB-52 b, c
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: S2: new plain ruleset tunable `ai_rating_scorer` (row-only on / off, default off, no rule turns it on; timeline does not set it); when on, the classic AI gives `weaken` (foes that can reach a friend, strongest first), `empower` (friends that can reach a foe) and `haste` (friends with no foe in reach, nearest a foe first) a target order, read through `status::raises_rating` / `lowers_rating`; off, nothing changes (a probe with it forced on left every golden byte-identical, since only the classic AI reads it). S3 under `field_intent`: `ROW_RING` (before row 4): 2 or more visible foes in a RING of the unit's Stand order give a Stand round on itself opened by the ring; reckless units too, with no Defend skill (`IntentPick::drop_defend`); full row Z (extending K1b's Field row): an elite or boss source must hold its first-ranked foe, a taunted unit's source must cover the taunter, `flush_cover` counts covered foes twice. Re-recorded (mechanical): `rules_contract_golden` (+1 tunable). `timeline_golden`, `sim_golden`, `checks_golden`, phasefold, journey unchanged: no frozen `tl_` deck holds a RING or area skill, so the new rows fire only in the kit unit tests (`ai_rows.rs` 5, `ai_rating_scorer.rs` 5) until a `tl_` area fight exists. Feel 40 unchanged (76 %). Latent: `drop_defend` is not kept in the round state, so a later rebuild of that round (`round_intent_plan::plan_unit`, PL8) would bring the Defend skills back (enemy rounds are only planned by the AI today); if an elite's first-ranked foe is hidden or estimated at 0, the "must cover" constraint is skipped instead of declining Field.
+- **Recommendation**: HISTORY: "W2-5 slice 3 (I1.2-S2, I1.2-S3): tunable `ai_rating_scorer` (default off); AI ring row and full row Z under `field_intent`; re-recorded on purpose: `rules_contract_golden` (+1 tunable); battle goldens unchanged (no frozen `tl_` area deck)". GAME_BRIEF AI: the ring row and row Z rules; kit README: `ROW_RING`, `IntentPick::drop_defend`, `ai_rating_scorer`. STRUCTURE: tests `ai_rows.rs`, `ai_rating_scorer.rs`. Should the timeline AI also get a status-target scorer (its Support row only picks hurt friends, so `empower` / `haste` are used only as fill)?
+
+### FB-130: I1.2-S3 "Maneuver row": I_AI.md adds one, the INTENT2 matrix and the W2-5 row do not
+
+- **Spec**: `docs/sessions/I_AI.md:18` ("Add `Row Z`, `Maneuver`, `Field`, and `RING` rows"); `docs/specs/INTENT2_MATRIX.md:25` (Maneuver's AI row = "row 4", the existing Skirmisher row); `docs/specs/INTENT2.md:126` (INTENT2-AI: Row Z, ring row, row 2's self target, reckless and taunt rules); READY W2-5 ("`Row Z` / `RING` / `Field` AI rows")
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: Slice 3 built Row Z (= the Field row) and the ring row, and no separate Maneuver row, following the matrix and the READY row. Consequence today: under `field_intent` the gap-close moves (`lunge`, `pounce`, `charge_in`) derive Maneuver only, and only Skirmishers use row 4, so a non-Skirmisher enemy holding a gap-closer never uses it. I_AI.md's slice line also expects a named `timeline_golden` / `sim_golden` re-record, which did not happen (no frozen `tl_` deck holds a RING or area skill).
+- **Recommendation**: (A, recommended) add a Maneuver AI row for any role (a gap-close skill when a foe is just out of reach and the landing tile is safe), with its rule written in I_AI.md, as a small follow-up in W2-5 or CLASS-BASICS; (B) confirm row 4 (Skirmishers only) is intended and fix I_AI.md's wording. Separately: a `tl_` area fight in the frozen kit (INTENT2-A's planned one) would let the goldens exercise the Field, ring and Maneuver rows.
+
 ## 3. Notes for the user (non-build, read by the Design Session)
 
 The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
 
 UN-01 to UN-10 are closed and moved to the archive (2026-11-08). New notes start at UN-11.
+
+### UN-11: ten FB items await Design; FEEDBACK.md is over its 25 KB limit
+
+- **For**: design
+- **Status**: open
+- **Note**: FB-121 to FB-130 are open (W2-4 slices 4a-7b and W2-5 slices 1-3 landed meanwhile), so nothing can be archived and `docs/FEEDBACK.md` is 28 KB, above the 25 KB agent-doc limit (`fc.sh docs` warns). Gameplay questions among them: FB-121 (Field aiming on the arrow keys instead of WASD), FB-123 (`brace` takes Grakka's capped path slot), FB-125 (Brimstone's `empower`, classic buff items, Field items always spend), FB-126 (a Party-screen pouch top-up; Assault item preview; Dojo stacks), FB-128 (the attack lock costs the reach duel 12.5 points: accept, lock-aware AI, or rule change), FB-129 (a timeline status-target scorer), FB-130 (a Maneuver AI row: limit-blocker).
+- **Ask**: Answer FB-121..130 in READY section 4 so Build can archive them; W2-5's last slice (P1.2-S2 cell EffectSpec) proceeds meanwhile.
+

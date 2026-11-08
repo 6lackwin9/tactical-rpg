@@ -543,6 +543,7 @@ fn economy_without_an_opener_falls_back_to_the_table() {
         opener_only: true,
         advance_to: Some(V2::new(5, 4)),
         must_act: false,
+        drop_defend: false,
     };
     let mut plan = Plan::new();
     let p = w.profile_of(BRUTE);

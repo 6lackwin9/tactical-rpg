@@ -47,6 +47,7 @@
     "tunable item_mitigation row-only default=off values=on|off (no schema entry)",
     "tunable thrown_miss_spends row-only default=off values=on|off (no schema entry)",
     "tunable pouch_stacks row-only default=off values=on|off (no schema entry)",
+    "tunable ai_rating_scorer row-only default=off values=on|off (no schema entry)",
     "rule round_intent option system=planning bundle=intent_core requires=- conflicts=stances=on, switch_target_step=on",
     "rule enemy_moves option system=timing bundle=windup requires=- conflicts=-",
     "rule deck option system=build bundle=build requires=- conflicts=-",

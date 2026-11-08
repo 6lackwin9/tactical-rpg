@@ -493,6 +493,11 @@ pub struct Numbers {
     /// stack of at most `min(5, max_stack)` copies; a plain tunable, off unless the row sets `on` (off: 3 copies, any
     /// mix).
     pub pouch_stacks: bool,
+    /// W2-5 I1.2-S2 (`ai_rating_scorer`, I_AI section 1 item 5, FB-52b): whether the AI scores every rating modifier
+    /// status generically by its rating and direction (`status::raises_rating` / `lowers_rating`), so `weaken`,
+    /// `empower` and `haste` get target orders too; a plain tunable, off unless the row sets `on` (off: only the Armor
+    /// and Move Rate debuffs and the Armor buff are ordered, as before).
+    pub ai_rating_scorer: bool,
 }
 
 impl Default for Numbers {
@@ -543,6 +548,7 @@ impl Default for Numbers {
             item_mitigation: false,
             thrown_miss_spends: false,
             pouch_stacks: false,
+            ai_rating_scorer: false,
         }
     }
 }
@@ -618,6 +624,7 @@ impl Numbers {
             item_mitigation: value::string(o, "item_mitigation", "") == "on",
             thrown_miss_spends: value::string(o, "thrown_miss_spends", "") == "on",
             pouch_stacks: value::string(o, "pouch_stacks", "") == "on",
+            ai_rating_scorer: value::string(o, "ai_rating_scorer", "") == "on",
         }
     }
 
@@ -837,7 +844,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 37] = [
+pub const FIELD_RULES: [FieldRule; 38] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -892,6 +899,9 @@ pub const FIELD_RULES: [FieldRule; 37] = [
     FieldRule { values: &SWITCH_IDS, ..field_rule("item_mitigation", &[]) },
     FieldRule { values: &SWITCH_IDS, ..field_rule("thrown_miss_spends", &[]) },
     FieldRule { values: &SWITCH_IDS, ..field_rule("pouch_stacks", &[]) },
+    // W2-5 I1.2-S2 (I_AI section 1 item 5): the AI's generic rating-modifier scorer, row-only like the item switches (a
+    // plain tunable: off unless the row sets `on`, whatever the rules)
+    FieldRule { values: &SWITCH_IDS, ..field_rule("ai_rating_scorer", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -1137,6 +1147,7 @@ impl Numbers {
             "item_mitigation" => switch(self.item_mitigation),
             "thrown_miss_spends" => switch(self.thrown_miss_spends),
             "pouch_stacks" => switch(self.pouch_stacks),
+            "ai_rating_scorer" => switch(self.ai_rating_scorer),
             _ => return None,
         })
     }
