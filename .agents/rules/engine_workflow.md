@@ -65,3 +65,11 @@ Whenever creating or modifying markdown files (`README.md`, rules, docs), strict
    - Every file must terminate with a single trailing newline.
 7. **IDE Markdownlint Verification**:
    - Whenever any markdown file (`*.md`) is created or edited, check the IDE Problems tab to ensure **0 markdownlint warnings/errors** remain before concluding the turn or committing.
+
+## 7. Mandatory Post-Generation Image Review Protocol
+
+Whenever generating or editing an image (`generate_image`, `artqueue.py`, or local generation):
+
+1. **Inspect Immediately**: View the generated image and compare it side-by-side against the prompt and any reference images.
+2. **Verify Prompt & Reference Fidelity**: Confirm no requested details are missing (e.g., specific props, weapons, floor planes, lighting, or view angles) and the result is not off-model or drifted from the reference image's identity, palette, or 16-bit pixel-art style.
+3. **Remediate Before Shipping**: If the image has generation errors, missing details, or reference drift, re-generate or fix it before bundling or presenting it to the user.

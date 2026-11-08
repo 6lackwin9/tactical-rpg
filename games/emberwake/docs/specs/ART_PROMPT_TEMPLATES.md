@@ -8,6 +8,14 @@ the character's existing portrait as the reference. The game draws battle bodies
 (`tools/sprites/rig.py`), so the sheet template gives reference art, not shipped sprites. Records of what each run made sit
 beside the images in `art_src/` (`<image>.json`); the Art Prompt Library page holds the user's tweaks and test notes.
 
+## Mandatory post-generation visual review (user 2026-11-08)
+
+Whenever you generate or edit an image (via `generate_image`, the Antigravity queue, or local generation), you **must** view and review the generated image before accepting, slicing, or bundling it:
+
+- **Prompt compliance check**: Verify every explicit detail requested in the prompt is present and accurate (for example: required ground/floor plane, specific weapon or prop, requested view angles such as `front`, `side`, and `back`, lighting direction, and absence of banned UI/text/borders).
+- **Reference fidelity check**: Compare the output directly against the attached reference image(s). Ensure character identity (face, hair, scars, outfit, silhouette, colour palette) and pixel-art style match the reference and have not drifted.
+- **Defect & artifact check**: Inspect for generation errors such as extra or merged limbs, distorted weapons, leftover background islands after cutout, or over-bright bloom obscuring key silhouettes. If the image misses a specified detail or is way off from the reference image, re-generate or correct it before shipping or showing it to the user.
+
 ## 2x2 portrait variations
 
 Four design choices for one character at once. Keep the framing paragraph; change the four bullets (armour, state, age, hood, expression).
