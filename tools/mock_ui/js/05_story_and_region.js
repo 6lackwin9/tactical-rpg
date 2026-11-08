@@ -112,12 +112,18 @@ function renderSceneRunner() {
 const VTUBER_IMAGE_CACHE = {};
 function getVtuberRigImages(rigKey) {
   if (!ASSETS.vtuberRig) return null;
-  const data = ASSETS.vtuberRig[rigKey] || ASSETS.vtuberRig.kaelen;
+  const lookupKey = (rigKey === 'bailiff' && !ASSETS.vtuberRig.bailiff) ? 'watchman' : rigKey;
+  const data = ASSETS.vtuberRig[lookupKey] || ASSETS.vtuberRig.kaelen;
   if (!data) return null;
   if (!VTUBER_IMAGE_CACHE[rigKey]) {
     const bodyImg = new Image();
-    bodyImg.src = data.body;
     const weapImg = new Image();
+    const onDecode = () => {
+      if (typeof startVtuberRigLoop === 'function') startVtuberRigLoop();
+    };
+    bodyImg.onload = onDecode;
+    weapImg.onload = onDecode;
+    bodyImg.src = data.body;
     weapImg.src = data.weapon;
     VTUBER_IMAGE_CACHE[rigKey] = {
       bodyImg,
@@ -306,11 +312,12 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
   // 1. Draw Deformed `body` Layer using 2px horizontal strip mesh slices
   const stripH = 2;
   for (let sy = 0; sy < H; sy += stripH) {
+    const sh = Math.min(stripH + 0.6, H - sy);
     const { dx, dy, sx } = evalStripDeform(sy);
     const destW = W * sx;
     const destX = (W - destW) * 0.5 + dx;
     const destY = sy + dy;
-    ctx.drawImage(rigImgs.bodyImg, 0, sy, W, stripH + 0.6, destX, destY, destW, stripH + 0.6);
+    ctx.drawImage(rigImgs.bodyImg, 0, sy, W, sh, destX, destY, destW, sh);
   }
 
   // 2. Draw Rigid `weapon` Layer rotated around the animated Shoulder/Grip Pivot `(px', py')`
@@ -324,7 +331,9 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
   ctx.save();
   ctx.translate(animPx, animPy);
   ctx.rotate(rad);
-  ctx.drawImage(rigImgs.weapImg, -px, -py);
+  if (rigImgs.weapImg && rigImgs.weapImg.complete) {
+    ctx.drawImage(rigImgs.weapImg, -px, -py);
+  }
 
   // 3. If `weapons_drawn` (or `steel_flash`), draw a crisp blade-aligned specular glint along the weapon itself!
   if (s.pose === 'weapons_drawn' && s.glintProgress >= 0 && s.glintProgress <= 1.0) {

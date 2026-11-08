@@ -41,17 +41,23 @@ def find_asset(rel: str) -> Path:
     raise FileNotFoundError(f"Asset not found in game/kit/engine layers: {rel}")
 
 
-def img_to_data_uri(img: Image.Image, fmt: str = "PNG") -> str:
+def img_to_data_uri(img: Image.Image, fmt: str = "PNG", quantize_colors: int = 48) -> str:
     buf = io.BytesIO()
     if fmt.upper() == "JPEG":
-        img.convert("RGB").save(buf, format="JPEG", quality=92, optimize=True)
+        img.convert("RGB").save(buf, format="JPEG", quality=76, optimize=True)
         return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-    img.save(buf, format="PNG", optimize=True)
+    out_img = img
+    if quantize_colors > 0 and img.mode == "RGBA" and (img.width * img.height >= 2048):
+        try:
+            out_img = img.quantize(colors=quantize_colors, method=Image.Quantize.FASTOCTREE)
+        except Exception:
+            out_img = img
+    out_img.save(buf, format="PNG", optimize=True)
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def png_to_data_uri(img: Image.Image) -> str:
-    return img_to_data_uri(img, "PNG")
+def png_to_data_uri(img: Image.Image, quantize_colors: int = 48) -> str:
+    return img_to_data_uri(img, "PNG", quantize_colors=quantize_colors)
 
 
 def load_scaled_uri(
@@ -353,11 +359,11 @@ def build_asset_bundle() -> dict[str, Any]:
             "vn_rooftop_stage": load_scaled_uri("backgrounds/story/vn_rooftop_stage.png", (1280, 720), fmt="JPEG"),
             "vn_bridge_stage": load_scaled_uri("backgrounds/story/vn_bridge_stage.png", (1280, 720), fmt="JPEG"),
             "vn_hearth_stage": load_scaled_uri("backgrounds/story/vn_hearth_stage.png", (1280, 720), fmt="JPEG"),
-            "sunk_ward": load_scaled_uri("backgrounds/title/sunk_ward.png", (500, 316)),
-            "intro_1": load_scaled_uri("backgrounds/story/intro_1.png", (640, 360)),
-            "intro_2": load_scaled_uri("backgrounds/story/intro_2.png", (640, 360)),
-            "hearth": load_scaled_uri("backgrounds/story/hearth.png", (640, 360)),
-            "meat_market": load_scaled_uri("backgrounds/story/meat_market.png", (640, 360)),
+            "sunk_ward": load_scaled_uri("backgrounds/title/sunk_ward.png", (500, 316), fmt="JPEG"),
+            "intro_1": load_scaled_uri("backgrounds/story/intro_1.png", (640, 360), fmt="JPEG"),
+            "intro_2": load_scaled_uri("backgrounds/story/intro_2.png", (640, 360), fmt="JPEG"),
+            "hearth": load_scaled_uri("backgrounds/story/hearth.png", (640, 360), fmt="JPEG"),
+            "meat_market": load_scaled_uri("backgrounds/story/meat_market.png", (640, 360), fmt="JPEG"),
             "alley": load_scaled_uri("backgrounds/battle/alley.png", (384, 52)),
             "rooftops": load_scaled_uri("backgrounds/battle/rooftops.png", (384, 52)),
             "canal": load_scaled_uri("backgrounds/battle/canal.png", (384, 52)),
@@ -389,18 +395,7 @@ def build_asset_bundle() -> dict[str, Any]:
             "crawler": load_scaled_uri("portraits/common/crawler_ash_crawler.png", (120, 120)),
             "beast": load_scaled_uri("portraits/common/beast_render_beast.png", (120, 120)),
         },
-        "fullBody": {
-            "kaelen": load_scaled_uri("portraits/full_body/kaelen.png", (340, 340), False),
-            "kaelen_side": load_scaled_uri("portraits/full_body/kaelen_side.png", (340, 340), False),
-            "kaelen_front": load_scaled_uri("portraits/full_body/kaelen_front.png", (340, 340), False),
-            "kaelen_back": load_scaled_uri("portraits/full_body/kaelen_back.png", (340, 340), False),
-            "vane": load_scaled_uri("portraits/full_body/vane.png", (340, 340), False),
-            "vesper": load_scaled_uri("portraits/full_body/vesper.png", (340, 340), False),
-            "maren": load_scaled_uri("portraits/full_body/maren.png", (340, 340), False),
-            "aline": load_scaled_uri("portraits/full_body/aline.png", (340, 340), False),
-            "watchman": load_scaled_uri("portraits/full_body/watchman.png", (340, 340), False),
-            "bailiff": load_scaled_uri("portraits/full_body/watchman.png", (340, 340), False),
-        },
+        "fullBody": {},
         "vtuberRig": {
             "kaelen": split_vtuber_layers("kaelen", "portraits/full_body/kaelen.png"),
             "kaelen_side": split_vtuber_layers("kaelen_side", "portraits/full_body/kaelen_side.png"),
@@ -411,7 +406,6 @@ def build_asset_bundle() -> dict[str, Any]:
             "maren": split_vtuber_layers("maren", "portraits/full_body/maren.png"),
             "aline": split_vtuber_layers("aline", "portraits/full_body/aline.png"),
             "watchman": split_vtuber_layers("watchman", "portraits/full_body/watchman.png"),
-            "bailiff": split_vtuber_layers("bailiff", "portraits/full_body/watchman.png"),
         },
         "units3View": {
             "kaelen": {

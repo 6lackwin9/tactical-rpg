@@ -52,19 +52,32 @@ def assemble_html(rebuild_assets: bool = False, cache_path: Path | None = DEFAUL
     js_files = sorted(JS_DIR.glob("*.js"))
     app_js = "\n\n".join(p.read_text(encoding="utf-8") for p in js_files)
 
+    # Do not duplicate the 1.05 MB TTF font data URIs inside `window.ASSETS` since `@font-face` in `styles_css` already embeds them
+    js_bundle = {k: v for k, v in bundle.items() if k != "fonts"}
+
     html = (
         shell_html
         .replace("__STYLES_CSS__", styles_css)
-        .replace("__ASSETS_JSON__", json.dumps(bundle))
+        .replace("__ASSETS_JSON__", json.dumps(js_bundle))
         .replace("__APP_JS__", app_js)
     )
     return html
 
 
 def build(out_path: Path = DEFAULT_OUT, rebuild_assets: bool = False, cache_path: Path | None = DEFAULT_CACHE) -> Path:
+    from datetime import datetime, timezone
+
     html = assemble_html(rebuild_assets=rebuild_assets, cache_path=cache_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
+    meta_path = out_path.with_name(out_path.name + ".metadata.json")
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["updatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        except Exception:
+            pass
     print(f"[mock_ui] Wrote {out_path} ({out_path.stat().st_size / 1024:.1f} KB)")
     return out_path
 
