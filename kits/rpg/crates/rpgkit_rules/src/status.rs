@@ -441,6 +441,17 @@ pub fn is_buff(status: &str) -> bool {
     row_of(status).is_some_and(|r| r.buff)
 }
 
+/// W2-5 (C09): a buff `modifier` row raising `rating` (fortify for Armor, haste for Move Rate, empower for Attack Power).
+pub fn raises_rating(status: &str, rating: Rating) -> bool {
+    modifies_rating(status, rating) && is_buff(status)
+}
+
+/// W2-5 (C09): a debuff `modifier` row lowering `rating` (expose for Armor, slow for Move Rate, weaken for Attack
+/// Power).
+pub fn lowers_rating(status: &str, rating: Rating) -> bool {
+    modifies_rating(status, rating) && !is_buff(status)
+}
+
 /// The chance (0-100) a roll of `potency` lands `status` on `target`: potency less INT resistance and the status's own
 /// resist; S1.2-S3: 100 for a row that is not `resistable` (no roll). No attacker term (hazards, grounds, triggers).
 pub fn apply_chance(target: &Unit, status: &str, potency: i32) -> i32 {

@@ -11,6 +11,7 @@
 use crate::gear::Equipment;
 use crate::pipeline::{self, Modifier, Op, Stage, Trace};
 use crate::stats::roundi;
+use crate::status::{self, Rating};
 use crate::unit::{Stance, Unit};
 
 pub const DEFAULT_UNIT_SCALING: f64 = 1.5;
@@ -160,9 +161,12 @@ pub fn base_armor_rating(u: &Unit) -> i32 {
     u.stats.mitigation_rating(gear, u.weapon_context().as_deref())
 }
 
-/// Base rating + active fortify - active expose, floor 0.
+/// Base rating + the active Armor buffs' magnitudes (fortify) - the active Armor debuffs' (expose), floor 0; W2-5
+/// (C09): the statuses are the table's `modifier` rows with `rating` armor, not named ids.
 pub fn armor_rating(u: &Unit) -> i32 {
-    (base_armor_rating(u) + u.active_magnitude("fortify") - u.active_magnitude("expose")).max(0)
+    let raised = u.active_magnitude_where(|s| status::raises_rating(s, Rating::Armor));
+    let lowered = u.active_magnitude_where(|s| status::lowers_rating(s, Rating::Armor));
+    (base_armor_rating(u) + raised - lowered).max(0)
 }
 
 pub fn armor_reduction(rating: i32) -> f64 {

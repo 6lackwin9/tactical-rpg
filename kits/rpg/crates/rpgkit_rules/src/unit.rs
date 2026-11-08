@@ -427,9 +427,21 @@ impl Unit {
         if self.has_status(s) { self.st.magnitudes.get(s).copied().unwrap_or(0) } else { 0 }
     }
 
+    /// W2-5 (C09): the summed `active_magnitude` of the active statuses passing `read` (a status-table predicate).
+    pub fn active_magnitude_where(&self, read: impl Fn(&str) -> bool) -> i32 {
+        self.st.active.iter().filter(|s| read(s)).map(|s| self.active_magnitude(s)).sum()
+    }
+
+    /// Whether an active status passes `read` (the predicate form of `has_status`).
+    pub fn has_status_where(&self, read: impl Fn(&str) -> bool) -> bool {
+        self.st.active.iter().any(|s| read(s))
+    }
+
+    /// Move Rate +1 under a Move Rate buff (haste), -1 under a Move Rate debuff (slow), floor 1; W2-5 (C09): the
+    /// statuses are the table's `modifier` rows with `rating` move_rate (one step each way however many are active).
     pub fn move_per_block(&self) -> i32 {
-        let hasted = self.has_status("haste") as i32;
-        let slowed = self.has_status("slow") as i32;
+        let hasted = self.has_status_where(|s| crate::status::raises_rating(s, crate::status::Rating::MoveRate)) as i32;
+        let slowed = self.has_status_where(|s| crate::status::lowers_rating(s, crate::status::Rating::MoveRate)) as i32;
         (self.move_rate + hasted - slowed).max(1)
     }
 
@@ -1428,18 +1440,18 @@ impl Unit {
         self.st.magnitudes.get(status).copied().unwrap_or(0).clamp(0, if cap > 0 { cap } else { 100 })
     }
 
+    /// `1 - capped magnitude / 100` per active Attack Power debuff (weaken), 1.0 with none; W2-5 (C09): the statuses
+    /// are the table's `modifier` rows with `rating` attack_power and `kind` debuff.
     pub fn weaken_factor(&self) -> f64 {
-        if !self.has_status("weaken") {
-            return 1.0;
-        }
-        1.0 - self.capped_magnitude("weaken") as f64 / 100.0
+        let lowers = |s: &str| crate::status::lowers_rating(s, crate::status::Rating::AttackPower);
+        self.st.active.iter().filter(|s| lowers(s)).fold(1.0, |f, s| f * (1.0 - self.capped_magnitude(s) as f64 / 100.0))
     }
 
+    /// `1 + capped magnitude / 100` per active Attack Power buff (empower), 1.0 with none; W2-5 (C09): the statuses
+    /// are the table's `modifier` rows with `rating` attack_power and `kind` buff.
     pub fn empower_factor(&self) -> f64 {
-        if !self.has_status("empower") {
-            return 1.0;
-        }
-        1.0 + self.capped_magnitude("empower") as f64 / 100.0
+        let raises = |s: &str| crate::status::raises_rating(s, crate::status::Rating::AttackPower);
+        self.st.active.iter().filter(|s| raises(s)).fold(1.0, |f, s| f * (1.0 + self.capped_magnitude(s) as f64 / 100.0))
     }
 
     pub fn potency_for(&self, family: &str) -> f64 {
