@@ -1617,6 +1617,9 @@ pub const ROW_FIELD: &str = "field";
 /// INTENT2 matrix ring row (W2-5 I1.2-S3): a Stand round opened by a RING on two or more foes, before row 4 (rule
 /// `field_intent` only).
 pub const ROW_RING: &str = "ring";
+/// INTENT2 matrix Maneuver gap-close row (FB-130 Option A, CLASS-BASICS): any role holding a gap-close attack (a
+/// Maneuver attack with `dash_tiles`) dashes at a foe out of its normal reach, before row 5 (rule `field_intent` only).
+pub const ROW_GAP_CLOSE: &str = "gap close";
 /// Row 5 with no foe in reach this round: a move toward the first ranked target, then Guard there (front line),
 /// Support on itself or an ally (Support role) or Rest (reckless; also when the other two are not offered).
 pub const ROW_ADVANCE: &str = "advance";
@@ -1750,7 +1753,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
 }
 
 /// AI1's rows in table order (`table` starts at an index into it).
-const ROWS: [&str; 10] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_RING, ROW_ENGAGE, ROW_FIELD, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
+const ROWS: [&str; 11] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_RING, ROW_ENGAGE, ROW_FIELD, ROW_GAP_CLOSE, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
 
 /// AI1 for the enemy side (CombatEncounter.schedule_enemy_ai under `round_intent`): every enemy on the field picks and
 /// plans into the shared `plan` in roster order (earlier plans are claims), broken plans are re-picked, what is still
@@ -1871,6 +1874,13 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
     if on(ROW_FIELD) {
         if let Some(p) = field_pick(w, plan, c, profile, &ranked) {
             return Choice::Pick(ROW_FIELD, p);
+        }
+    }
+    // gap-close row (FB-130 Option A, CLASS-BASICS): under `field_intent`, no foe in normal reach and a gap-close attack
+    // dashes onto a ranked foe with a safe landing tile: a Maneuver round (the dash replaces row 5's plain close-in)
+    if on(ROW_GAP_CLOSE) {
+        if let Some(p) = gap_close_pick(w, plan, c, &ranked) {
+            return Choice::Pick(ROW_GAP_CLOSE, p);
         }
     }
     // 5: Assault, the first ranked target it can reach (ranged units kite: AS2, AS3); none in reach this round: Assault
@@ -2175,6 +2185,72 @@ fn field_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, ra
         }
     }
     None
+}
+
+/// FB-130 Option A: a gap-close attack: a single-target attack with `dash_tiles` and no `position` field (lunge, pounce,
+/// charge_in; a positioned attack such as flank_cut is row 4's), which `intent::derive` makes a Maneuver skill.
+fn gap_closer(s: &rpgkit_data::SkillDef) -> bool {
+    skill::kind(s) == Kind::Attack && !skill::is_area(s) && s.dash_tiles > 0 && s.position.is_none()
+}
+
+/// INTENT2 matrix Maneuver gap-close row (FB-130 Option A, CLASS-BASICS; role-agnostic): under `field_intent`, when no
+/// visible foe stands within `c`'s normal reach (its basic attack band, `basic_band`) from where it stands, a Maneuver
+/// Engage round opened by a gap-close attack of its Maneuver order (`gap_closer`) on the first ranked visible foe that
+/// attack reaches (`round_intent::engage_reach`: an open position tile within its dash), when the tile the dash lands
+/// on is safe: no harmful ground or due arena hazard on it (`ground::harms`, `arena::due_on`) and the round's likely
+/// incoming damage there (`incoming_damage` over `total_blocks`, the test that flags `ai_pressure`) below `c`'s HP. A
+/// unit whose first ranked foe is a taunter dashes only at it. None otherwise: the Assault row decides.
+fn gap_close_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> Option<IntentPick> {
+    if !round_intent::field_rows(w) || !w.has(c) {
+        return None;
+    }
+    let attacks: Vec<SkillId> = round_intent_plan::order(w, c, RoundIntent::Maneuver).into_iter().filter(|&sid| gap_closer(&w.cat.skills[sid])).collect();
+    if attacks.is_empty() {
+        return None;
+    }
+    let st = plan.compile(w, c);
+    let here = st.pos;
+    // GD5: no dash at a hidden target (and a hidden foe is not counted as in reach)
+    let foes: Vec<UnitId> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && !round_intent::hidden(w, f)).collect();
+    let band = basic_band(w, c);
+    let diag = round_intent::melee_band(band) && round_intent::diagonal(w, c, None);
+    let dist: HashMap<UnitId, i32> = foes.iter().map(|&f| (f, round_intent::band_dist(diag, here, w.pos(f)))).collect();
+    // a foe already in normal reach: the Assault row fights it from here
+    if dist.values().any(|d| (band.0..=band.1).contains(d)) {
+        return None;
+    }
+    let taunted = ranked.first().copied().filter(|&f| foes.contains(&f) && active_with(&w.units[f], pulls_targeting));
+    let targets: Vec<UnitId> = match taunted {
+        Some(f) => vec![f],
+        None => ranked.iter().copied().filter(|f| foes.contains(f)).collect(),
+    };
+    let blocked = plan.blocked_cells(w, c);
+    for t in targets {
+        if dist[&t] <= band.1 {
+            continue;
+        }
+        for &sid in &attacks {
+            if !round_intent::engage_reach(w, c, &w.cat.skills[sid], t, here, &blocked) {
+                continue;
+            }
+            let mut p = IntentPick::new(RoundIntent::Maneuver, RoundTarget::Unit(t));
+            p.kind = Some(ManeuverKind::Engage);
+            p.opener = Some(Opener::Skill(sid));
+            if trial_read(w, plan, c, &p, &|w: &World, plan: &Plan| landing_safe(w, plan, c, sid)) {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// FB-130: whether the tile `c`'s planned `sid` (the gap-close attack) lands on is safe (see `gap_close_pick`); false
+/// when the round does not place it.
+fn landing_safe(w: &World, plan: &Plan, c: UnitId, sid: SkillId) -> bool {
+    let st = plan.compile(w, c);
+    let Some(e) = st.entries.iter().find(|e| e.skill == sid) else { return false };
+    let at = e.pos_after;
+    !crate::ground::harms(w, c, at) && !crate::arena::due_on(w, at) && incoming_damage(w, plan, c, w.total_blocks, at, None) < w.units[c].hp
 }
 
 /// INTENT2 matrix ring row (W2-5 I1.2-S3, IR6, IR22): at least this many foes inside a ring's tiles.
@@ -2569,6 +2645,11 @@ fn idle(w: &mut World, plan: &mut Plan, c: UnitId) -> Choice {
 /// Whether the planner offers `p` to `c` now (PL7): the pick is set on `c`'s state without IN6's side effects, the round
 /// is built, and `c`'s state, lock and steps are put back.
 fn trial(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> bool {
+    trial_read(w, plan, c, p, &|_: &World, _: &Plan| true)
+}
+
+/// `trial`, and `read` must also hold on the built round (before it is put back).
+fn trial_read(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick, read: &dyn Fn(&World, &Plan) -> bool) -> bool {
     if !round_intent::listed(w, p.intent) {
         return false;
     }
@@ -2583,7 +2664,7 @@ fn trial(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> bool {
         rs.maneuver_auto = false;
         rs.opener = p.opener.clone();
     }
-    let ok = round_intent::set_target(w, c, p.target).is_ok() && build_pick(w, plan, c, p);
+    let ok = round_intent::set_target(w, c, p.target).is_ok() && build_pick(w, plan, c, p) && read(w, plan);
     match saved {
         Some(rs) => {
             w.round_states.insert(c, rs);

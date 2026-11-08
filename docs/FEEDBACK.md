@@ -23,7 +23,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | READY row 20 (R3-W1) | done (FB-111) | `develop` | R3 Wave 1 complete. |
 | W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
 | W2-5 (R2-W2) | done: slices 1-4 (FB-127..129, 131); open FB-128, FB-130 | `develop` | - |
-| R2-W2b CLASS-BASICS | logic half done (FB-132); data half held (FB-133) | - | Then R2-CLOSE. |
+| R2-W2b CLASS-BASICS | logic half (FB-132) and Maneuver AI row (FB-134) done; data half held (FB-133) | - | Then R2-CLOSE. |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -46,6 +46,14 @@ FB-01 to FB-131 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: The seed is drafted (skills, classes, units, ruleset in that order) and now also takes FB-123 (A) (`brace` leaves `warrior.skill_path`) and FB-125 (1) (Brimstone's text). Three parts still need Design. (1) The row gives the three new skills in prose; Build's reading: `disengage_step` DISENGAGE, level 1, 1 AP, 1 block, `jump_tiles` 2, `learned_only`, `round_intent` maneuver; `tend_wounds` SUPPORT, level 1, 2 AP, 2 blocks, `heal_base` 15, `heal_stat` KNOW, `heal_mult` 1.0, reach 0-2, `target_mode` ALLY_OR_SELF, `learned_only`; `cinder_spark` ATTACK, level 1, 2 AP, 2 blocks, area PLUS, `power_mult` 0.5, reach 2-3, `learned_only`; names and descriptions are not given. (2) `disengage_step`'s "1b + 1b rec" cannot be stored: the schema allows `recovery_blocks` only on ATTACK, SUPPORT and FOCUS skills. (3) `sweep_kick` is level 2; as the brawler's basic, should it become level 1 (and leave `brawler.skill_path`, as `brace` leaves the warrior's)? Deck orders follow the row: `founder_hollis` (ranger) `maneuver` -> `["disengage_step"]`; `founder_dunstan`, `founder_kaelen`, `founder_maren` drop their `maneuver` key. The Maneuver AI row (FB-130) is pure logic and is being built meanwhile.
 - **Recommendation**: supply the three skill rows (names, descriptions; for `disengage_step` either widen the schema so DISENGAGE may carry `recovery_blocks`, or drop the recovery block) and confirm `sweep_kick`'s level / path. Build then seeds the data and re-records the named `checks_golden`, `sim_golden`, `phasefold_golden`.
+
+### FB-134: CLASS-BASICS Maneuver gap-close AI row landed (FB-130 A); readings to confirm
+
+- **Spec**: `docs/READY.md` row R2-W2b (FB-130 Option A); `docs/specs/INTENT2_MATRIX.md` section 2; `docs/sessions/I_AI.md` section 1
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `ROW_GAP_CLOSE` (under `field_intent`; `ROWS` now 11): any role, reckless included, holding a gap-close attack (single-target, `dash_tiles` > 0, no `position`: `lunge`, `pounce`, `charge_in`; positioned attacks such as `flank_cut` stay with row 4) in its Maneuver order picks a Maneuver Engage round opened by it when no visible foe is inside its basic attack band, a ranked visible foe beyond the band is within the dash (`round_intent::engage_reach`), and the landing tile is safe; taunter-first; hidden foes never targeted. No golden moved (no unit in the golden suites holds a dash skill under `field_intent`); feel unchanged (76 %). Test `rpgkit_battle/tests/gap_close_row.rs` (4). Readings (the spec does not say): (1) position after row Z (Field), before row 5 (Assault) (the other reading: right after row 4; one line in `ROWS`); (2) "safe landing" = no `ground::harms`, no `arena::due_on`, and the round's likely incoming damage below the unit's HP (the existing `ai_pressure` lethal test, not the stricter 0.5 x HP focus test); (3) "out of normal melee reach" = no visible foe inside the basic band at all. Also: under `round_intent` a dash without `position` lands on the target's flank tiles (MR1), so a 3-tile dash reaches a foe 2 tiles away head-on but not 3; intended?
+- **Recommendation**: GAME_BRIEF / kit README AI rows: the gap-close row as above; STRUCTURE: test `gap_close_row.rs`; HISTORY: none (no golden). Confirm readings (1)-(3) and the MR1 dash landing.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
