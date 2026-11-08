@@ -24,14 +24,30 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
 | W2-5 (R2-W2) | done: slices 1-4 (FB-127..129, 131); open FB-128, FB-130 | `develop` | - |
 | R2-W2b CLASS-BASICS | done (FB-132, FB-134, FB-135) | `develop` | - |
-| R2-CLOSE | balance pass (FB-137), audit (FB-138) done; release PR approved (FB-138 (2)): gating | `develop` | Then W2-6 lands. |
-| W2-6 (R3-W2) | built on branches; `growth_per_stage` (FB-139 A) to add; lands after the R2 release | `claude/w26-a`, `claude/w26-c` (on `claude/w26-b`) | Then R3-CLOSE. |
+| R2 release | released: `main` @3cc73f2b ([#56](https://github.com/6lackwin9/tactical-rpg/pull/56), merge commit; tree = develop @f5c6568a) | `main` | - |
+| W2-6 (R3-W2) | built, combined and `growth_per_stage` added (FB-141); landing held: develop's gate is red (FB-140) | `claude/w26` | Then R3-CLOSE. |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
 FB-01 to FB-139 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-08). New items start at FB-140. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+
+### FB-140: develop's gate is red: six full-body portraits sit outside the ASSETORG2 asset tree
+
+- **Spec**: `docs/specs/ASSETORG2.md` section 3 (game asset tree); test `emberwake_gui` `region::tests::the_assets_follow_the_layered_tree` (`region.rs:2143`); develop @60d0dfc7 ("feat(mock_ui,assets): hybrid story full-body sprites ...", a user commit)
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: 60d0dfc7 added `games/emberwake/assets/portraits/full_body/{aline,kaelen,maren,vane,vesper,watchman}.png`. ASSETORG2 section 3 allows only `portraits/{heroes,npcs,elites,bosses}/<id>.png` and `portraits/common/`, so the layered-tree test fails on develop itself (`cargo test -p emberwake_gui the_assets_follow_the_layered_tree`, reproduced at 60d0dfc7 alone). The full gate stops there, so no task can land on develop under the standing rule (push only on a clean gate). W2-6 is ready on `claude/w26` and held. Build cannot fix it: moving the user's assets or widening the layout is a design call.
+- **Recommendation**: A (recommended if full-body story sprites are shipped game art): Design adds a full-body slot to ASSETORG2 section 3 (e.g. `portraits/full_body/<id>.png`, unique tiers only, or `bodies/full/<id>.png`) and Build adds it to the test's tree in the W2-6 landing. B: if they are mock-UI reference art only, move them out of `games/emberwake/assets/` (e.g. under `tools/mock_ui/`), with the user's word. Build default: none; W2-6 waits.
+
+### FB-141: W2-6 growth_per_stage as built; one reading to confirm (the level cap)
+
+- **Spec**: `docs/READY.md` FB-139 Option A; `docs/sessions/E_ECONOMY.md` line 12; `U2_CLASS.md` item 4 (@87fc8197 on `claude/w26`)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: Units field `growth_per_stage` (schema int 0..10, default 0, the writer drops 0; `UnitDef`; content check). `foe_level(level, stage, growth)` = `level + stage x growth`, applied in `Roster::entry` and in `roster_at` / `enemy_levels_at` alike, so battle level and XP weight agree; never applied to tier `hero` or to the encounter's `party` / `guests` refs (`WorldRoster.allies`). No shipped unit sets it, so no golden moved. Not in the spec: the builder caps `foe_level` at `MAX_LEVEL` (10, or the base level when higher), the clamp the sim already uses, because levels above 10 are past the XP curve. The 0..10 schema range is also Build's choice.
+- **Recommendation**: confirm the cap at `MAX_LEVEL` (recommended: an uncapped level leaves the XP curve and the stat budget tables) and the 0..10 range, or name other bounds.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
