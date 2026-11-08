@@ -1,8 +1,8 @@
-//! A3.2-S1 (`docs/sessions/A3_SHAPES.md`, FB-57): the additive area shapes RING and ARC beside the legacy SWEEP. A
-//! skill's `area` reads them; RING covers the 8 tiles around the user whatever the aim; ARC the 3-tile front arc
-//! toward the aim (along an axis: the tile ahead and its two side neighbours; off-axis: SWEEP's quadrant); both are
-//! drawn from the user, so a skill without its own reach keeps the (1, 1) band. SWEEP, PLUS, BURST and LINE are
-//! unchanged. A3.2-K2 draws ARC on the source tile (`shape_direction.rs`).
+//! A3.2-S1 (`docs/sessions/A3_SHAPES.md`, FB-57): the area shapes RING and ARC. A skill's `area` reads them; RING
+//! covers the 8 tiles around the user whatever the aim; ARC the 3-tile front arc toward the aim (along an axis: the
+//! tile ahead and its two side neighbours; off-axis: the L of the user's corner quadrant); both are drawn from the
+//! user, so a skill without its own reach keeps the (1, 1) band. PLUS, BURST and LINE are unchanged. A3.2-K2 draws ARC
+//! on the source tile (`shape_direction.rs`). W2-4 (FB-114) retired the legacy SWEEP: it reads as no area.
 
 use rpgkit_battle::grid::V2;
 use rpgkit_battle::skill::{self, Area};
@@ -24,8 +24,8 @@ fn sorted(mut c: Vec<V2>) -> Vec<(i32, i32)> {
 }
 
 #[test]
-fn area_reads_ring_and_arc_beside_sweep() {
-    for (id, want) in [("RING", Area::Ring), ("ARC", Area::Arc), ("SWEEP", Area::Sweep), ("LINE", Area::Line), ("NONE", Area::None)] {
+fn area_reads_ring_and_arc_and_not_sweep() {
+    for (id, want) in [("RING", Area::Ring), ("ARC", Area::Arc), ("SWEEP", Area::None), ("LINE", Area::Line), ("NONE", Area::None)] {
         let s = skill_with(id);
         assert_eq!(skill::area(&s), want, "{id}");
         assert_eq!(skill::is_area(&s), want != Area::None, "{id} is an area attack");
@@ -50,9 +50,9 @@ fn arc_is_the_front_arc_toward_the_aim() {
     assert_eq!(sorted(skill::area_cells(&s, me, v(5, 4))), [(5, 3), (5, 4), (5, 5)], "east: ahead and both sides");
     // A3.2-K2 (IR6): the arc is drawn on the source tile (S1 drew it beside the user whatever the aim)
     assert_eq!(sorted(skill::area_cells(&s, me, v(4, 1))), [(3, 1), (4, 1), (5, 1)], "north from afar: on the source");
-    let sweep = skill_with("SWEEP");
     for aim in [v(5, 5), v(3, 3), v(5, 3), v(3, 5)] {
-        assert_eq!(skill::area_cells(&s, me, aim), skill::area_cells(&sweep, me, aim), "off-axis as SWEEP's quadrant at {aim:?}");
+        let q = aim - me;
+        assert_eq!(skill::area_cells(&s, me, aim), [me + v(q.x, 0), aim, me + v(0, q.y)], "off-axis: the quadrant's L at {aim:?}");
     }
     assert!(skill::area_cells(&s, me, me).is_empty(), "no direction, no tiles");
 }
@@ -60,7 +60,7 @@ fn arc_is_the_front_arc_toward_the_aim() {
 #[test]
 fn legacy_shapes_unchanged() {
     let me = v(4, 4);
-    assert_eq!(sorted(skill::area_cells(&skill_with("SWEEP"), me, v(5, 5))), [(4, 5), (5, 4), (5, 5)]);
+    assert_eq!(skill::area_cells(&skill_with("SWEEP"), me, v(5, 5)), [v(5, 5)], "a stored SWEEP (retired, W2-4) is one tile");
     assert_eq!(sorted(skill::area_cells(&skill_with("LINE"), me, v(5, 4))), [(5, 4), (6, 4), (7, 4)]);
     assert_eq!(skill::area_cells(&skill_with("PLUS"), me, v(6, 4)).len(), 5);
     assert_eq!(skill::area_cells(&skill_with("BURST"), me, v(6, 4)).len(), 9);

@@ -2,7 +2,8 @@
 //! `affects` ("" = the row's default, `all`, `enemies`, `allies`) is one schema field of ATTACK skills in the `area`
 //! section, loaded into the typed catalog, written only when set (a re-save is byte-identical), and checked: a value
 //! outside the options, or `affects` on a single-target attack, is one error naming the field. The `area` enum offers
-//! the six A3.1 shapes (CONE, RING and ARC new) beside the legacy SWEEP; hazards take RING and ARC.
+//! the six A3.1 shapes (CONE, RING and ARC new); hazards take RING and ARC. W2-4 (FB-114) retired the legacy SWEEP: a
+//! stored one is an unknown-value error like any bad value.
 
 use aegis_content::schema::fields;
 use aegis_core::json::{self, gstr, Dict};
@@ -71,10 +72,11 @@ fn the_schema_names_affects_and_the_six_shapes() {
     for shape in ["NONE", "PLUS", "BURST", "LINE", "CONE", "RING", "ARC"] {
         assert!(area.contains(&shape.to_string()), "area offers {shape}");
     }
-    assert!(area.contains(&"SWEEP".to_string()), "SWEEP stays accepted until the shipped rows migrate (W2-4 phase C)");
+    assert!(!area.contains(&"SWEEP".to_string()), "W2-4 retired SWEEP (the shipped rows are ARC / RING)");
     for shape in ["RING", "ARC"] {
         assert!(rpgkit_data::HAZARD_SHAPES.contains(&shape), "a hazard can take {shape}");
     }
+    assert!(!rpgkit_data::HAZARD_SHAPES.contains(&"SWEEP"), "nor can a hazard take SWEEP");
 }
 
 #[test]
@@ -121,5 +123,25 @@ fn each_broken_rule_is_one_error_naming_affects() {
     let bogus = errors("blast", json!({"affects": "foes"}));
     assert!(bogus.len() == 1 && bogus[0].starts_with("Affects: 'foes'"), "{bogus:?}");
     assert_eq!(errors("strike", json!({"affects": "enemies"})), ["Affects needs an area (it picks which units the shape hits)."]);
+    drop_scratch(&data);
+}
+
+#[test]
+fn a_stored_sweep_is_an_unknown_value_error() {
+    let (_scratch, data) = scratch("sweep");
+    catalog(&data);
+    let v = store::view(&data);
+    let errors = |id: &str, change: Value| {
+        let mut e = v.get("skills", id).clone();
+        for (k, x) in change.as_object().unwrap() {
+            e.insert(k.clone(), x.clone());
+        }
+        check::validate_entry(&v, "skills", &e, id)
+    };
+    let area = errors("kick", json!({"area": "SWEEP"}));
+    assert!(area.len() == 1 && area[0].starts_with("Area: 'SWEEP' is not one of"), "{area:?}");
+    assert!(!area[0].contains("SWEEP.") && !area[0].contains("SWEEP,"), "SWEEP is no longer an option: {area:?}");
+    let hazard = errors("blast", json!({"hazard": {"id": "smoke", "shape": "SWEEP", "at": "target", "rounds": 0}}));
+    assert!(hazard.iter().any(|e| e.contains("'SWEEP'")), "a hazard shape SWEEP is refused: {hazard:?}");
     drop_scratch(&data);
 }

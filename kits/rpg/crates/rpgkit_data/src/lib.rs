@@ -1736,8 +1736,8 @@ pub const FORCED_MOVE_KEYS: [&str; 8] = ["kind", "tiles", "from", "when", "stop_
 pub const FORCED_IMMUNE: [&str; 3] = ["", "always", "guarding"];
 
 /// GH2: the shapes a placed hazard covers (SKILL = the skill's own area cells; the others as `area`, NONE one tile).
-/// A3.2-K2: RING and ARC as the skill shapes; SWEEP is the legacy alias of ARC until W2-4 removes it.
-pub const HAZARD_SHAPES: [&str; 8] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "RING", "ARC", "SWEEP"];
+/// A3.2-K2: RING and ARC as the skill shapes (W2-4 retired the legacy SWEEP alias).
+pub const HAZARD_SHAPES: [&str; 7] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "RING", "ARC"];
 /// GH2: where a hazard is placed.
 pub const HAZARD_AT: [&str; 2] = ["target", "self"];
 /// GH2: the keys of a skill's or item's `hazard`.

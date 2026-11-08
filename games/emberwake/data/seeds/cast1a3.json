@@ -557,7 +557,7 @@
     "stagger": 15,
     "reach_min": 1,
     "reach_max": 1,
-    "area": "SWEEP",
+    "area": "ARC",
     "status_effect": "stun",
     "status_potency": 60,
     "status_rounds": 1
@@ -749,7 +749,7 @@
     "stagger": 20,
     "reach_min": 1,
     "reach_max": 1,
-    "area": "SWEEP",
+    "area": "ARC",
     "unbreakable": true,
     "status_effect": "stun",
     "status_potency": 50,
@@ -1052,7 +1052,7 @@
     "weapon_types": [
      "polearm"
     ],
-    "area": "SWEEP",
+    "area": "ARC",
     "forced_move": {
      "kind": "push",
      "tiles": 1,
@@ -1187,7 +1187,7 @@
     "stagger": 20,
     "reach_min": 1,
     "reach_max": 1,
-    "area": "SWEEP",
+    "area": "ARC",
     "status_effect": "stagger",
     "status_potency": 60,
     "status_rounds": 1
@@ -1346,12 +1346,12 @@
     "recovery_blocks": 1,
     "description": "Assault, Standard: Marrow Tendril Flail, a sweep of {power} power, {stagger} stagger.",
     "learned_only": true,
-    "round_intent": "assault",
+    "round_intent": "",
     "power_mult": 0.9,
     "stagger": 10,
     "reach_min": 1,
     "reach_max": 1,
-    "area": "SWEEP"
+    "area": "RING"
    }
   },
   {

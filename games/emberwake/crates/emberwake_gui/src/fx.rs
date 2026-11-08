@@ -1480,7 +1480,7 @@ mod tests {
         assert_eq!((b.count, b.cols, b.gravity), (5, [ASH, ASH], 160.0));
     }
 
-    /// M1 `sweep_kick`, `cyclone_kick` (SWEEP) and `haymaker`, `crushing_blow` (4.4.3): the sweep's wide Linen trail
+    /// M1 `sweep_kick`, `cyclone_kick` (RING since W2-4) and `haymaker`, `crushing_blow` (4.4.3): the sweep's wide Linen trail
     /// at the actor with the fist's impact; the haymaker's short trail, ring and sparks; the dash rows take the family's.
     #[test]
     fn sweeps_haymakers_and_dashes_take_their_rows() {

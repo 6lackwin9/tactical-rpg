@@ -1321,7 +1321,6 @@ fn friendly_fire_ok(w: &World, actor: UnitId, sid: SkillId, hit_friends: &[UnitI
 fn aim_cells(w: &World, pos: V2, sid: SkillId, band: (i32, i32)) -> Vec<V2> {
     let s = &w.cat.skills[sid];
     match skill::area(s) {
-        skill::Area::Sweep => [V2::new(1, 1), V2::new(1, -1), V2::new(-1, 1), V2::new(-1, -1)].into_iter().map(|d| pos + d).filter(|c| w.grid.is_valid(*c)).collect(),
         skill::Area::Line => DIRS.into_iter().map(|d| pos + d).filter(|c| w.grid.is_valid(*c)).collect(),
         // A3.2-S1: ARC (A3.2-K2: and CONE) toward each neighbouring tile; RING has one aim (the user's tile: the ring is
         // drawn around it).

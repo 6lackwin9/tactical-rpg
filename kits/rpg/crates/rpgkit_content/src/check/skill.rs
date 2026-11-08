@@ -802,9 +802,6 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         if area == "NONE" && !json::s(e, "affects").is_empty() {
             out.push("Affects needs an area (it picks which units the shape hits).".into());
         }
-        if area == "SWEEP" && (dash > 0 || reach_max > 1) {
-            out.push("SWEEP hits the L of tiles around you; leave reach at 0 or 1 and no gap-close.".into());
-        }
         if dash > 0 {
             if area != "NONE" {
                 out.push("An area attack can't be a gap-close.".into());

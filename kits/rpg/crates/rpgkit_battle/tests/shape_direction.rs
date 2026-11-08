@@ -61,22 +61,22 @@ fn cone_is_read_and_drawn_from_the_user() {
     for a in [Area::Line, Area::Arc, Area::Cone] {
         assert!(skill::directed(a) && skill::from_user(a), "{a:?} reads a direction from the user");
     }
-    for a in [Area::Plus, Area::Burst, Area::Ring, Area::None, Area::Sweep] {
+    for a in [Area::Plus, Area::Burst, Area::Ring, Area::None] {
         assert!(!skill::directed(a), "{a:?} reads no direction");
     }
 }
 
 /// The classic guarantee: every adjacent source gives the tiles of the pre-K2 formulas (LINE: from + d x 1..3; ARC:
-/// the tile ahead and its side neighbours, or SWEEP's quadrant on a diagonal).
+/// the tile ahead and its side neighbours, or the retired SWEEP's quadrant on a diagonal).
 #[test]
 fn an_adjacent_source_keeps_the_pre_k2_tiles() {
-    let (line, arc, sweep) = (skill_with("LINE"), skill_with("ARC"), skill_with("SWEEP"));
+    let (line, arc) = (skill_with("LINE"), skill_with("ARC"));
     for d in neighbours() {
         let src = ME + d;
         let old_line: Vec<V2> = (1..4).map(|i| ME + d * i).collect();
         assert_eq!(skill::area_cells(&line, ME, src), old_line, "LINE toward {d:?}");
         let old_arc = if d.x != 0 && d.y != 0 {
-            skill::area_cells(&sweep, ME, src)
+            vec![ME + v(d.x, 0), src, ME + v(0, d.y)]
         } else {
             let across = v(d.y, d.x);
             vec![src - across, src, src + across]

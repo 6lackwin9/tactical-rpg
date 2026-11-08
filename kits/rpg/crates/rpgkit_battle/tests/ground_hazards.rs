@@ -199,11 +199,9 @@ fn placement_shapes_cover_walkable_tiles() {
     assert_eq!((burst.len(), burst.contains(&v(4, 3)), burst.contains(&v(5, 5))), (8, false, true), "3 x 3 around the user but the wall");
     assert_eq!(cells(Shape::Line, false), vec![v(6, 4), v(8, 4)], "from the aim away from the user, the wall left out");
     assert_eq!(cells(Shape::Line, true), vec![v(5, 4), v(6, 4)], "from the tile ahead of the user");
-    assert_eq!(cells(Shape::Sweep, false), vec![v(6, 3), v(6, 4), v(6, 5)], "across the heading at the aim");
-    assert_eq!(cells(Shape::Sweep, true), vec![v(5, 3), v(5, 4), v(5, 5)], "across the heading ahead of the user");
-    // A3.2-S1: ARC covers SWEEP's tiles (the alias it replaces in W2-4); RING the 8 around its centre, never the centre.
-    assert_eq!(cells(Shape::Arc, false), cells(Shape::Sweep, false), "ARC at the aim as SWEEP");
-    assert_eq!(cells(Shape::Arc, true), cells(Shape::Sweep, true), "ARC ahead of the user as SWEEP");
+    // A3.2-S1: ARC three tiles across the heading (the retired SWEEP's tiles, W2-4); RING the 8 around its centre.
+    assert_eq!(cells(Shape::Arc, false), vec![v(6, 3), v(6, 4), v(6, 5)], "ARC across the heading at the aim");
+    assert_eq!(cells(Shape::Arc, true), vec![v(5, 3), v(5, 4), v(5, 5)], "ARC across the heading ahead of the user");
     let ring = cells(Shape::Ring, true);
     assert_eq!((ring.len(), ring.contains(&me), ring.contains(&v(4, 3)), ring.contains(&v(5, 5))), (7, false, false, true), "around the user but the wall");
     let ring = cells(Shape::Ring, false);
@@ -241,8 +239,17 @@ fn hazard_arc_and_line_follow_the_skill_shapes() {
     }
     assert_eq!(cells(Shape::Line, false, me + v(2, 2)), vec![me + v(2, 2), me + v(3, 3), me + v(4, 4)], "LINE on a tie: the diagonal");
     assert_eq!(cells(Shape::Line, true, me + v(2, 1)), vec![me + v(1, 0), me + v(2, 0), me + v(3, 0)], "LINE (2, 1) snaps east");
-    // SWEEP keeps its straight heading (legacy, until W2-4 removes it)
-    assert_eq!(cells(Shape::Sweep, true, me + v(1, 0)), vec![me + v(1, -1), me + v(1, 0), me + v(1, 1)]);
+}
+
+/// W2-4 (FB-114): the hazard shape SWEEP is retired; a stored one reads as any unknown shape (one tile), and the
+/// content checks refuse it (`HAZARD_SHAPES`).
+#[test]
+fn a_stored_sweep_hazard_shape_reads_as_one_tile() {
+    let cat = Catalog::from_value(&json!({"skills": [{"id": "t_sw", "name": "Sw", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0,
+        "hazard": {"id": "g_smoke", "shape": "SWEEP", "at": "target", "rounds": 0}}]}));
+    let pl = Place::of_skill(&cat.skills[0]).expect("the hazard");
+    assert_eq!(pl.shape, Shape::One);
+    assert!(!rpgkit_data::HAZARD_SHAPES.contains(&"SWEEP"));
 }
 
 /// GH3: an ATTACK with power 0 and a hazard is a placement aimed at a tile: no damage, no random draw, its hazard on the

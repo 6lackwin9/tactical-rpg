@@ -63,13 +63,13 @@ fn shaped_attacks_by_shape_reach_and_hazard() {
 }
 
 #[test]
-fn unshaped_attacks_hazard_field_else_assault_and_sweep_is_legacy() {
+fn unshaped_attacks_hazard_field_else_assault_and_unknown_areas_are_unshaped() {
     let hz = json!({"id": "snare", "shape": "NONE", "at": "target", "rounds": 2});
     assert_eq!(derive(json!({"kind": "ATTACK", "hazard": hz})), [FIELD], "step 7 before step 8");
     assert_eq!(derive(json!({"kind": "ATTACK"})), [ASSAULT]);
     assert_eq!(derive(json!({"kind": "ATTACK", "area": "NONE"})), [ASSAULT]);
     assert_eq!(derive(json!({"kind": "ATTACK", "hazard": {}})), [ASSAULT], "an empty hazard places nothing");
-    assert_eq!(derive(json!({"kind": "ATTACK", "area": "SWEEP"})), [ASSAULT], "SWEEP is not an IR21 shape");
+    assert_eq!(derive(json!({"kind": "ATTACK", "area": "SWEEP"})), [ASSAULT], "the retired SWEEP (W2-4) is no IR21 shape");
     assert_eq!(derive(json!({"kind": "ATTACK", "area": "SWEEP", "hazard": hz})), [FIELD]);
 }
 

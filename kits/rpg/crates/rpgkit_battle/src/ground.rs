@@ -41,9 +41,6 @@ pub enum Shape {
     /// Three tiles in a row along the heading: from the anchor (`at` target), from the tile ahead of the user (self).
     /// A3.2-K2: the heading is IR7's snapped direction (`shape_heading`).
     Line,
-    /// Legacy: three tiles across the straight heading, centred on the anchor (target) or the tile ahead of the user
-    /// (self); kept as it was until W2-4 removes SWEEP.
-    Sweep,
     /// A3.2-S1: the 8 tiles around the anchor (target) or the user (self), never the centre.
     Ring,
     /// A3.2-S1: the 3-tile front arc; A3.2-K2 (FB-106): the skill's own ARC cells (`skill::arc_cells`) drawn on the
@@ -70,7 +67,6 @@ impl Place {
             "PLUS" => Shape::Plus,
             "BURST" => Shape::Burst,
             "LINE" => Shape::Line,
-            "SWEEP" => Shape::Sweep,
             "RING" => Shape::Ring,
             "ARC" => Shape::Arc,
             _ => Shape::One,
@@ -197,7 +193,7 @@ impl Ledger {
 
 // ---- Placement (GH2-GH4, GH7) --------------------------------------------------------------------------------------
 
-/// GH2 SWEEP (and LINE / ARC with no aim, `shape_heading`): the user's heading toward `aim`: the dominant axis (a tie on its facing axis, else x); with no aim
+/// GH2 (LINE / ARC with no aim, `shape_heading`): the user's heading toward `aim`: the dominant axis (a tie on its facing axis, else x); with no aim
 /// off its own tile, its straight facing, else toward the other side.
 fn heading(w: &World, by: UnitId, aim: V2) -> V2 {
     let d = crate::forced::direction(w, by, w.pos(by), aim, false);
@@ -246,12 +242,6 @@ pub fn cells(w: &World, by: UnitId, def: &HazardDef, p: &Place, anchor: V2, aim:
             let (pos, d) = (w.pos(by), shape_heading(w, by, aim));
             let source = if p.at_self { pos + d } else { anchor };
             skill::arc_cells(if source == pos { source - d } else { pos }, source)
-        }
-        Shape::Sweep => {
-            let d = heading(w, by, aim);
-            let start = if p.at_self { w.pos(by) + d } else { anchor };
-            let across = V2::new(d.y, d.x);
-            vec![start - across, start, start + across]
         }
     };
     let mut out: Vec<V2> = Vec::new();

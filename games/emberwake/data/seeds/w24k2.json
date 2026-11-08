@@ -1,0 +1,180 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sweep_kick",
+    "name": "Sweep Kick",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power. Ring area around you. Bare hands or feet.",
+    "learned_only": true,
+    "area": "RING",
+    "power_mult": 0.8,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.0
+     },
+     {
+      "level": 4,
+      "power_mult": 1.15
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "cyclone_kick",
+    "name": "Cyclone Kick",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {potency} to Stagger for {rounds} on every enemy hit. Ring area around you. Bare hands or feet.",
+    "learned_only": true,
+    "grade": "advanced",
+    "requires": [
+     "sweep_kick"
+    ],
+    "area": "RING",
+    "power_mult": 0.9,
+    "status_effect": "stagger",
+    "status_potency": 50,
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 1.1,
+      "status_potency": 55
+     },
+     {
+      "level": 5,
+      "power_mult": 1.3,
+      "status_potency": 60
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "foundry_shatter",
+    "name": "Foundry Shatter",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 4,
+    "blocks": 4,
+    "description": "Assault, Heavy: a sweeping blow, {power} power, {stagger} stagger; may stun.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "ARC",
+    "status_effect": "stun",
+    "status_potency": 60,
+    "stagger": 15
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "crushing_judgment",
+    "name": "Judgment",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 4,
+    "recovery_blocks": 1,
+    "description": "Assault, Heavy: Crushing Judgment, a sweep of {power} power, {stagger} stagger that cannot be broken; may stun.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "ARC",
+    "power_mult": 2.2,
+    "status_effect": "stun",
+    "status_potency": 50,
+    "stagger": 20,
+    "unbreakable": true
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "gilded_billhook_sunder",
+    "name": "Gilded Sunder",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 2,
+    "description": "Assault, Heavy: Gilded Billhook Sunder, a sweep of {power} power, {stagger} stagger; exposes, and pushes 1 tile.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "polearm"
+    ],
+    "min_proficiency": 1,
+    "area": "ARC",
+    "power_mult": 2.0,
+    "status_effect": "expose",
+    "status_potency": 90,
+    "status_magnitude": 8,
+    "status_rounds": 2,
+    "stagger": 15,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1,
+     "collide_mult": 0.5,
+     "collide_stagger": 6
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pneumatic_hammer_strike",
+    "name": "Hammer Strike",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 3,
+    "recovery_blocks": 2,
+    "description": "Assault, Heavy: Pneumatic Hammer Strike, a sweep of {power} power, {stagger} stagger; knocks adjacent units down (Staggered).",
+    "learned_only": true,
+    "round_intent": "assault",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "ARC",
+    "power_mult": 2.2,
+    "status_effect": "stagger",
+    "status_potency": 60,
+    "stagger": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "tendril_flail",
+    "name": "Tendril Flail",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "recovery_blocks": 1,
+    "description": "Assault, Standard: Marrow Tendril Flail, a sweep of {power} power, {stagger} stagger.",
+    "learned_only": true,
+    "round_intent": "",
+    "reach_min": 1,
+    "reach_max": 1,
+    "area": "RING",
+    "power_mult": 0.9,
+    "stagger": 10
+   }
+  }
+ ]
+}

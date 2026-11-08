@@ -1315,9 +1315,6 @@ impl Plan {
         if a == skill::Area::Line && d != 1 {
             return "Needs an adjacent tile.".into();
         }
-        if a == skill::Area::Sweep && ((aim.x - st.pos.x).abs() != 1 || (aim.y - st.pos.y).abs() != 1) {
-            return "Needs a diagonal tile.".into();
-        }
         // A3.2-S1: ARC (A3.2-K2: and CONE) swings toward a neighbouring tile; RING is drawn around the user whatever
         // the aim.
         if matches!(a, skill::Area::Arc | skill::Area::Cone) && (aim == st.pos || (aim.x - st.pos.x).abs() > 1 || (aim.y - st.pos.y).abs() > 1) {

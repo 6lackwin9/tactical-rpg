@@ -1,12 +1,9 @@
 //! INTENT2-K1a (A4.2, IR21; READY row 16, FB-57) on the shipped skills: every row derives a 1-or-2 intent list
 //! (`rpgkit_rules::intent::derive`), the same from the raw row and from the loaded skill. The dual-intent rows are the
 //! SUPPORT rows that may target their user (`Support, Stand`) and the IR21-shaped attacks the rule makes dual
-//! (`Field, Assault`). The shipped data had 7 legacy SWEEP rows (the SWEEP -> ARC/RING split is data work for W2-4,
-//! the asset lane after A3.2-K2), which derive as unshaped attacks: 22 = 8 + 14 dual rows raw before the split. FB-101
-//! Option A applies the named split in memory (4 ARC, 3 RING) and checks 26 = 8 + 18 and the per-intent totals. The
-//! raw checks hold before, during and after the shipped migration (each named row is SWEEP or its new shape; each
-//! ARC row still SWEEP is one dual row short of 26). Read-only: the rows are game data, so the test lives in the
-//! game's façade crate.
+//! (`Field, Assault`). W2-4 (FB-114) migrated the 7 legacy SWEEP rows per FB-101 Option A (4 ARC, 3 RING) and retired
+//! SWEEP, so the shipped data has 26 = 8 + 18 dual rows and the FB-101 per-intent totals directly. Read-only: the rows
+//! are game data, so the test lives in the game's façade crate.
 
 use emberwake_data::Catalog;
 use emberwake_rules::intent::{self, IntentInput, ASSAULT, FIELD, MANEUVER, STAND, SUPPORT};
@@ -42,19 +39,6 @@ fn ids_with(rows: &[Value], want: &[&str]) -> Vec<String> {
     rows.iter().filter(|r| derive(r) == want).map(id).collect()
 }
 
-/// The option (c) hook: the rows with the given ids re-shaped (in memory only).
-fn reshaped(rows: &[Value], ids: &[String], shape: &str) -> Vec<Value> {
-    rows.iter()
-        .map(|r| {
-            let mut r = r.clone();
-            if ids.contains(&id(&r)) {
-                r.as_object_mut().unwrap().insert("area".into(), json!(shape));
-            }
-            r
-        })
-        .collect()
-}
-
 #[test]
 fn every_shipped_skill_derives_one_or_two_intents_the_same_from_row_and_def() {
     let rows = rows();
@@ -74,7 +58,6 @@ fn shipped_dual_intent_breakdown_by_rule() {
     let rows = rows();
     let support_stand = ids_with(&rows, &[SUPPORT, STAND]);
     let field_assault = ids_with(&rows, &[FIELD, ASSAULT]);
-    let sweeps: Vec<String> = rows.iter().filter(|r| area(r) == "SWEEP").map(id).collect();
     // The rule's own reading of each dual row (not the derive's code path).
     for r in &rows {
         let o = r.as_object().unwrap();
@@ -84,41 +67,13 @@ fn shipped_dual_intent_breakdown_by_rule() {
         assert_eq!(support_stand.contains(&id(r)), ss, "{}: Support,Stand = SUPPORT that may target its user", id(r));
     }
     assert_eq!(support_stand.len(), 8, "READY row 16: 8 Support,Stand");
-    assert!(sweeps.iter().all(|s| derive(rows.iter().find(|r| id(r) == *s).unwrap()) == [ASSAULT]), "legacy SWEEP derives as an unshaped attack");
     assert!(field_assault.iter().all(|f| ["LINE", "PLUS", "BURST", "ARC", "CONE"].contains(&area(rows.iter().find(|r| id(r) == *f).unwrap()))));
-    assert_eq!(field_assault.len() + arc_ids_still_sweep(&rows), 18, "14 Field,Assault + the 4 ARC rows of the split (FB-101, W2-4), migrated or still SWEEP");
+    assert_eq!(field_assault.len(), 18, "14 Field,Assault + the 4 ARC rows of the SWEEP split (FB-101, W2-4)");
 }
 
-#[test]
-fn sweep_split_hook_moves_rows_by_shape() {
-    let rows = rows();
-    let sweeps: Vec<String> = rows.iter().filter(|r| area(r) == "SWEEP").map(id).collect();
-    let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
-    let stand = ids_with(&rows, &[STAND]).len();
-    let as_arc = reshaped(&rows, &sweeps, "ARC");
-    assert_eq!(ids_with(&as_arc, &[FIELD, ASSAULT]).len(), fa + sweeps.len(), "every SWEEP as ARC turns dual");
-    let as_ring = reshaped(&rows, &sweeps, "RING");
-    assert_eq!(ids_with(&as_ring, &[FIELD, ASSAULT]).len(), fa, "RING is never dual");
-    assert_eq!(ids_with(&as_ring, &[STAND]).len(), stand + sweeps.len(), "every SWEEP as RING turns Stand");
-}
-
-/// FB-101 Option A: the SWEEP rows that become ARC and RING (`INTENT2_SKILLS.md`), applied in memory until W2-4.
-const SWEEP_TO_ARC: [&str; 4] = ["foundry_shatter", "crushing_judgment", "gilded_billhook_sunder", "pneumatic_hammer_strike"];
-const SWEEP_TO_RING: [&str; 3] = ["sweep_kick", "cyclone_kick", "tendril_flail"];
-
-/// The FB-101 ARC rows the shipped data still has as SWEEP (4 before the W2-4 migration, 0 after).
-fn arc_ids_still_sweep(rows: &[Value]) -> usize {
-    rows.iter().filter(|r| SWEEP_TO_ARC.contains(&id(r).as_str()) && area(r) == "SWEEP").count()
-}
-
-fn owned(ids: &[&str]) -> Vec<String> {
-    ids.iter().map(|s| s.to_string()).collect()
-}
-
-/// The shipped rows with the FB-101 split applied (in memory only).
-fn split_rows(rows: &[Value]) -> Vec<Value> {
-    reshaped(&reshaped(rows, &owned(&SWEEP_TO_ARC), "ARC"), &owned(&SWEEP_TO_RING), "RING")
-}
+/// FB-101 Option A: the former SWEEP rows, now ARC and RING (`INTENT2_SKILLS.md`, migrated in W2-4).
+const SPLIT_ARC: [&str; 4] = ["foundry_shatter", "crushing_judgment", "gilded_billhook_sunder", "pneumatic_hammer_strike"];
+const SPLIT_RING: [&str; 3] = ["sweep_kick", "cyclone_kick", "tendril_flail"];
 
 /// How many rows list `intent` (a dual row counts for both of its intents).
 fn listing(rows: &[Value], intent: &str) -> usize {
@@ -131,40 +86,22 @@ fn primary(rows: &[Value], intent: &str) -> usize {
 }
 
 #[test]
-fn raw_shipped_data_has_22_dual_intent_rows() {
+fn the_fb101_split_ships_with_its_shapes_and_no_sweep_remains() {
     let rows = rows();
-    assert_eq!(rows.len(), 129, "IR21 covers all 129 skills");
-    assert_eq!(ids_with(&rows, &[SUPPORT, STAND]).len(), 8);
-    let pending = arc_ids_still_sweep(&rows);
-    assert_eq!(ids_with(&rows, &[FIELD, ASSAULT]).len() + pending, 18, "14 before the SWEEP split, 18 after");
-    assert_eq!(rows.iter().filter(|r| derive(r).len() == 2).count() + pending, 26, "22 = 8 + 14 before the split, 26 = 8 + 18 after");
+    assert!(rows.iter().all(|r| area(r) != "SWEEP"), "W2-4 retired SWEEP");
+    for (ids, shape, want) in [(&SPLIT_ARC[..], "ARC", &[FIELD, ASSAULT][..]), (&SPLIT_RING[..], "RING", &[STAND][..])] {
+        for i in ids {
+            let r = rows.iter().find(|r| id(r) == *i).unwrap_or_else(|| panic!("{i} shipped"));
+            assert_eq!(area(r), shape, "{i}: FB-101 shape");
+            assert_eq!(derive(r), want, "{i}: IR21 by its shape");
+        }
+    }
 }
 
 #[test]
-fn fb101_split_in_memory_gives_26_dual_and_the_intent_totals() {
-    let raw = rows();
-    let sweeps: Vec<String> = raw.iter().filter(|r| area(r) == "SWEEP").map(id).collect();
-    let mut named = owned(&SWEEP_TO_ARC);
-    named.extend(owned(&SWEEP_TO_RING));
-    assert!(sweeps.iter().all(|s| named.contains(s)), "every shipped SWEEP row is an FB-101 id: {sweeps:?}");
-    for (ids, shape) in [(&SWEEP_TO_ARC[..], "ARC"), (&SWEEP_TO_RING[..], "RING")] {
-        for i in ids {
-            let r = raw.iter().find(|r| id(r) == *i).unwrap_or_else(|| panic!("{i} shipped"));
-            assert!(["SWEEP", shape].contains(&area(r)), "{i}: SWEEP before the W2-4 migration, {shape} after, not {}", area(r));
-        }
-    }
-    let rows = split_rows(&raw);
-    assert!(rows.iter().all(|r| area(r) != "SWEEP"));
-    for r in &rows {
-        let want: &[&str] = if SWEEP_TO_ARC.contains(&id(r).as_str()) {
-            &[FIELD, ASSAULT]
-        } else if SWEEP_TO_RING.contains(&id(r).as_str()) {
-            &[STAND]
-        } else {
-            continue;
-        };
-        assert_eq!(derive(r), want, "{} after the split", id(r));
-    }
+fn shipped_data_gives_26_dual_and_the_intent_totals() {
+    let rows = rows();
+    assert_eq!(rows.len(), 129, "IR21 covers all 129 skills");
     let ss = ids_with(&rows, &[SUPPORT, STAND]).len();
     let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
     let dual = rows.iter().filter(|r| derive(r).len() == 2).count();
@@ -179,7 +116,7 @@ fn fb101_split_in_memory_gives_26_dual_and_the_intent_totals() {
 
 #[test]
 fn fb101_confirmations_self_support_and_shaped_attacks_by_rule() {
-    let rows = split_rows(&rows());
+    let rows = rows();
     let taunt = rows.iter().find(|r| id(r) == "taunt_shout").expect("taunt_shout shipped");
     assert_eq!(taunt.get("target_mode").and_then(Value::as_str), Some("SELF"));
     assert_eq!(derive(taunt), [STAND], "a SELF-only SUPPORT derives Stand only");

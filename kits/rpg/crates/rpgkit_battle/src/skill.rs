@@ -64,8 +64,6 @@ pub enum Area {
     Plus,
     Burst,
     Line,
-    /// The legacy quadrant swing (A3.2-S1: kept for the frozen kit until the W2-4 migration to `Arc` / `Ring`).
-    Sweep,
     /// A3.2-S1 (A3.1, FB-57): the hollow ring of the 8 tiles around the user, self-anchored (IR21: Stand).
     Ring,
     /// A3.2-S1 (A3.1, FB-17): the 3-tile front arc toward the aim (IR21: Field and Assault).
@@ -83,7 +81,6 @@ pub fn area(s: &SkillDef) -> Area {
         "PLUS" => Area::Plus,
         "BURST" => Area::Burst,
         "LINE" => Area::Line,
-        "SWEEP" => Area::Sweep,
         "RING" => Area::Ring,
         "ARC" => Area::Arc,
         "CONE" => Area::Cone,
@@ -287,7 +284,7 @@ pub fn reach_for(s: &SkillDef, c: &Unit) -> (i32, i32) {
 }
 
 /// RULESET1 K2: the band of `reach_for` under `rules`. With the rule `reach`, a melee attack without its own
-/// `reach_max` by a unit with a reach weapon uses (1, its melee reach); off-hand jabs, LINE and SWEEP stay (1, 1).
+/// `reach_max` by a unit with a reach weapon uses (1, its melee reach); off-hand jabs and LINE stay (1, 1).
 /// Without the rule (classic) it is `reach_for` exactly.
 pub fn reach_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> (i32, i32) {
     band(s, c, melee_band_max(c, rules))
@@ -312,10 +309,10 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
     (lo, hi + extra)
 }
 
-/// The shapes drawn from the user's own tile (LINE, SWEEP, A3.2-S1's RING and ARC, A3.2-K2's CONE): no spell reach
+/// The shapes drawn from the user's own tile (LINE, A3.2-S1's RING and ARC, A3.2-K2's CONE): no spell reach
 /// bonus, a (1, 1) band without their own reach.
 pub fn from_user(a: Area) -> bool {
-    matches!(a, Area::Line | Area::Sweep | Area::Ring | Area::Arc | Area::Cone)
+    matches!(a, Area::Line | Area::Ring | Area::Arc | Area::Cone)
 }
 
 /// A3.2-K2 (IR6, IR7): the shapes that read a direction (from the user's tile toward the source tile).
@@ -417,10 +414,6 @@ pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
             out
         }
         Area::Line => line_cells(from, cell),
-        Area::Sweep => {
-            let q = V2::new((cell.x - from.x).signum(), (cell.y - from.y).signum());
-            vec![from + V2::new(q.x, 0), from + q, from + V2::new(0, q.y)]
-        }
         Area::Ring => ring_cells(from),
         Area::Arc => arc_cells(from, cell),
         Area::Cone => cone_cells(from, cell),
@@ -458,7 +451,7 @@ pub fn line_cells(from: V2, cell: V2) -> Vec<V2> {
 
 /// A3.2-S1 / A3.2-K2 (IR6) ARC (base size 3), drawn on the source `cell` toward the snapped direction from `from`:
 /// straight, the source and its two neighbours across the direction; on the exact diagonal, the L with the source as
-/// the corner and its arms back toward the user's row and column (an adjacent diagonal source: SWEEP's quadrant).
+/// the corner and its arms back toward the user's row and column (an adjacent diagonal source: the L of tiles around the corner).
 /// Empty when `cell` is `from` (no direction). The hazard shape ARC uses it too (`ground::cells`, FB-106).
 pub fn arc_cells(from: V2, cell: V2) -> Vec<V2> {
     let d = snap(cell - from);

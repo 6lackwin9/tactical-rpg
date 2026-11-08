@@ -18,8 +18,8 @@
 //! 7. `ATTACK` with a `hazard` and no IR21 shape: Field;
 //! 8. any other `ATTACK`: Assault.
 //!
-//! The legacy `SWEEP` (kept for the frozen kit, A3.2-S1) is not an IR21 shape: it derives by steps 7-8 until the
-//! SWEEP -> ARC/RING data migration (W2-4).
+//! An area outside IR21's shapes (W2-4 retired the legacy quadrant swing; the content checks refuse unknown areas)
+//! derives by steps 7-8 as an unshaped attack.
 
 use crate::ruleset::{self, Ruleset, FIELD_INTENT, NEUTRAL};
 use aegis_core::json::{self, Dict};
@@ -32,7 +32,7 @@ pub const SUPPORT: &str = "support";
 pub const MANEUVER: &str = "maneuver";
 pub const FIELD: &str = "field";
 
-/// The area shapes IR21 reads (A3.1's six; `SWEEP` is not one of them).
+/// The area shapes IR21 reads (A3.1's six).
 pub const IR21_SHAPES: [&str; 6] = ["PLUS", "BURST", "LINE", "CONE", "RING", "ARC"];
 
 /// The baseline fields of a skill IR21 reads, from a catalog row (`of_row`) or a loaded skill (`of_def`).
