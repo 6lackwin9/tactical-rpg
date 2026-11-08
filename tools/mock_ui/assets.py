@@ -190,6 +190,106 @@ def extract_unit_frames(body_key: str, palette_id: str = "") -> dict[str, str]:
     return {"idle0": f0, "idle1": f1, "atk": fatk}
 
 
+def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
+    """
+    Splits a 340x340 full-body sprite into Live2D / VTuber-style parts:
+      - `body`: Torso, head, legs, and coat (receives continuous mesh strip deformation:
+                knee flex, hip drop, spine lean, chest breathing, head counter-tilt, coat pendulum).
+      - `weapon`: Weapon & weapon-hand layer (rotates as a rigid body around `pivot = [px, py]`
+                  so polearms/blades never bend when knees flex or when drawing steel).
+    """
+    p = find_asset(rel_path)
+    im = Image.open(p).convert("RGBA")
+    if im.size != (340, 340):
+        im = im.resize((340, 340), Image.Resampling.NEAREST)
+
+    w, h = im.size
+    src_px = im.load()
+    body_im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    weap_im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    body_px = body_im.load()
+    weap_px = weap_im.load()
+
+    pivot = [180, 152]
+    native_left = char_key in ("vane", "watchman", "bailiff")
+
+    for y in range(h):
+        for x in range(w):
+            rgba = src_px[x, y]
+            if rgba[3] == 0:
+                continue
+            is_weap = False
+            if char_key == "kaelen":
+                pivot = [194, 152]
+                if y < 135:
+                    xc = 205
+                elif y < 168:
+                    xc = 192
+                else:
+                    xc = int(196 - (y - 168) * 0.09)
+                is_weap = x >= xc and y < 316
+            elif char_key == "kaelen_side":
+                pivot = [180, 158]
+                if y < 120:
+                    xc = 185
+                elif y < 185:
+                    xc = 194
+                else:
+                    xc = 208
+                is_weap = x >= xc
+            elif char_key == "kaelen_front":
+                pivot = [205, 148]
+                if y < 100:
+                    xc = 192
+                elif y < 195:
+                    xc = 212
+                else:
+                    xc = 220
+                is_weap = x >= xc
+            elif char_key == "kaelen_back":
+                pivot = [205, 148]
+                if y < 95:
+                    xc = 192
+                elif y < 185:
+                    xc = 212
+                else:
+                    xc = 220
+                is_weap = x >= xc
+            elif char_key in ("watchman", "bailiff"):
+                pivot = [124, 155]
+                if y < 135:
+                    xc = 105
+                elif y < 175:
+                    xc = 122
+                else:
+                    xc = int(102 - (y - 175) * 0.14)
+                is_weap = x <= xc
+            elif char_key == "vesper":
+                pivot = [190, 165]
+                is_weap = (x >= 200 and 120 <= y <= 230) or (x <= 116 and 155 <= y <= 225)
+            elif char_key == "maren":
+                pivot = [192, 155]
+                is_weap = x >= 204 and 125 <= y <= 265
+            elif char_key == "vane":
+                pivot = [132, 148]
+                is_weap = x <= 116 and y <= 255
+            elif char_key == "aline":
+                pivot = [192, 160]
+                is_weap = x >= 200 and 120 <= y <= 245
+
+            if is_weap:
+                weap_px[x, y] = rgba
+            else:
+                body_px[x, y] = rgba
+
+    return {
+        "body": png_to_data_uri(body_im),
+        "weapon": png_to_data_uri(weap_im),
+        "pivot": pivot,
+        "nativeLeft": native_left,
+    }
+
+
 def build_asset_bundle() -> dict[str, Any]:
     ui_dict: dict[str, str] = {
         "logo_title": load_scaled_uri("ui/logo_title.png", (470, 124)),
@@ -235,7 +335,7 @@ def build_asset_bundle() -> dict[str, Any]:
         "intent_area": load_scaled_uri("ui/intents/area.png", (12, 12), False),
         "intent_guard": load_scaled_uri("ui/intents/guard.png", (12, 12), False),
         "intent_move": load_scaled_uri("ui/intents/move.png", (12, 12), False),
-        "intent_rest": load_scaled_uri("ui/intents/rest.png", (12, 12), False),
+        "intent_rest": load_scaled_uri("ui/intents/rest.png", (12, 16), False),
         "intent_support": load_scaled_uri("ui/intents/support.png", (12, 12), False),
     }
     ui_dict.update(extract_ornate_corner_pieces())
@@ -291,12 +391,34 @@ def build_asset_bundle() -> dict[str, Any]:
         },
         "fullBody": {
             "kaelen": load_scaled_uri("portraits/full_body/kaelen.png", (340, 340), False),
+            "kaelen_side": load_scaled_uri("portraits/full_body/kaelen_side.png", (340, 340), False),
+            "kaelen_front": load_scaled_uri("portraits/full_body/kaelen_front.png", (340, 340), False),
+            "kaelen_back": load_scaled_uri("portraits/full_body/kaelen_back.png", (340, 340), False),
             "vane": load_scaled_uri("portraits/full_body/vane.png", (340, 340), False),
             "vesper": load_scaled_uri("portraits/full_body/vesper.png", (340, 340), False),
             "maren": load_scaled_uri("portraits/full_body/maren.png", (340, 340), False),
             "aline": load_scaled_uri("portraits/full_body/aline.png", (340, 340), False),
             "watchman": load_scaled_uri("portraits/full_body/watchman.png", (340, 340), False),
             "bailiff": load_scaled_uri("portraits/full_body/watchman.png", (340, 340), False),
+        },
+        "vtuberRig": {
+            "kaelen": split_vtuber_layers("kaelen", "portraits/full_body/kaelen.png"),
+            "kaelen_side": split_vtuber_layers("kaelen_side", "portraits/full_body/kaelen_side.png"),
+            "kaelen_front": split_vtuber_layers("kaelen_front", "portraits/full_body/kaelen_front.png"),
+            "kaelen_back": split_vtuber_layers("kaelen_back", "portraits/full_body/kaelen_back.png"),
+            "vane": split_vtuber_layers("vane", "portraits/full_body/vane.png"),
+            "vesper": split_vtuber_layers("vesper", "portraits/full_body/vesper.png"),
+            "maren": split_vtuber_layers("maren", "portraits/full_body/maren.png"),
+            "aline": split_vtuber_layers("aline", "portraits/full_body/aline.png"),
+            "watchman": split_vtuber_layers("watchman", "portraits/full_body/watchman.png"),
+            "bailiff": split_vtuber_layers("bailiff", "portraits/full_body/watchman.png"),
+        },
+        "units3View": {
+            "kaelen": {
+                "side": load_scaled_uri("portraits/full_body/kaelen_side.png", (64, 64), False),
+                "front": load_scaled_uri("portraits/full_body/kaelen_front.png", (64, 64), False),
+                "back": load_scaled_uri("portraits/full_body/kaelen_back.png", (64, 64), False),
+            },
         },
         "faces": {},
         "units": {

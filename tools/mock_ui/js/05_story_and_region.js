@@ -93,32 +93,412 @@ function renderSceneRunner() {
 //  2. `map_stage`     : In-Game Region/Battle Map Stage + On-Tile Unit Reactions + Seamless Transition to Combat UI.
 //  3. `vignette_reel` : Dedicated Cutscene / Transition Player (`vignette.rs`) with minimal UI (`Auto`, `Log`, `Skip`).
 // ============================================================================
-function renderReactionFxOverlay(fxKey, isActive, side) {
-  if (!fxKey) return { back: '', front: '' };
-  const slashFlip = side === 'right' ? 'scaleX(-1)' : 'scaleX(1)';
+// ============================================================================
+// LIVE2D / VTUBER-STYLE 2D RIG ENGINE (60fps Deformer Mesh + Separated Weapon Joint)
+// Models each full-body sprite like a 2D VTuber model:
+//  - Part Separation: `body` layer (head, torso, legs, coat) vs `weapon` layer (polearm/blade + weapon hand)
+//  - Warp Deformers : Horizontal strip mesh with pinned boots (`y = 336`), knee flex (`y = 278`),
+//                     pelvis crouch drop (`y = 215`), spine lean (`y = 95..215`), chest breathing expansion,
+//                     head counter-tilt (`y < 95` keeps eyes level when crouching!), and coat pendulum lag.
+//  - Rigid Joint    : `weapon` layer rotates cleanly around the animated shoulder/grip joint `(px', py')`
+//                     so polearms and blades never warp when knees bend or when drawing steel!
+//  - Damped Springs : Smooth critically-damped spring interpolation between 3 poses:
+//                     1. `relaxed`       — upright posture, rhythmic breathing, weapon lowered at rest (`-8°`)
+//                     2. `sneaking`      — deep stealth crouch (`+18px` hip drop), forward spine lean (`+13px`),
+//                                          head counter-tilt (`-6px`), weapon tucked low (`-19°`)
+//                     3. `weapons_drawn` — combat guard stance (`+8px` crouch), forward guard lean (`+9px`),
+//                                          weapon swung forward (`+31°`) with blade-aligned specular steel glint
+// ============================================================================
+const VTUBER_IMAGE_CACHE = {};
+function getVtuberRigImages(rigKey) {
+  if (!ASSETS.vtuberRig) return null;
+  const data = ASSETS.vtuberRig[rigKey] || ASSETS.vtuberRig.kaelen;
+  if (!data) return null;
+  if (!VTUBER_IMAGE_CACHE[rigKey]) {
+    const bodyImg = new Image();
+    bodyImg.src = data.body;
+    const weapImg = new Image();
+    weapImg.src = data.weapon;
+    VTUBER_IMAGE_CACHE[rigKey] = {
+      bodyImg,
+      weapImg,
+      pivot: data.pivot || [185, 152],
+      nativeLeft: !!data.nativeLeft
+    };
+  }
+  return VTUBER_IMAGE_CACHE[rigKey];
+}
 
-  if (fxKey === 'steel_flash') {
+const VTUBER_POSE_TARGETS = {
+  relaxed: {
+    label: '1. Relaxed',
+    crouchDrop: 0,
+    kneeFlex: 0,
+    spineLean: -1.5,
+    headTilt: 0,
+    weaponAngle: -7,
+    stanceSpread: 1.00,
+    lungeX: 0,
+    breathAmp: 2.2,
+    breathFreq: 1.85
+  },
+  sneaking: {
+    label: '2. Sneaking',
+    crouchDrop: 18,
+    kneeFlex: 9.5,
+    spineLean: 13.5,
+    headTilt: -6.5,
+    weaponAngle: -19,
+    stanceSpread: 1.07,
+    lungeX: 6,
+    breathAmp: 1.4,
+    breathFreq: 1.35
+  },
+  weapons_drawn: {
+    label: '3. Weapons Drawn',
+    crouchDrop: 8.5,
+    kneeFlex: 5.5,
+    spineLean: 9.5,
+    headTilt: -4.0,
+    weaponAngle: 31,
+    stanceSpread: 1.09,
+    lungeX: 14,
+    breathAmp: 2.7,
+    breathFreq: 2.85
+  }
+};
+
+const VTUBER_SLOT_SPRINGS = {};
+function getVtuberSlotSpring(slotId, targetPose) {
+  const tgt = VTUBER_POSE_TARGETS[targetPose] || VTUBER_POSE_TARGETS.relaxed;
+  if (!VTUBER_SLOT_SPRINGS[slotId]) {
+    VTUBER_SLOT_SPRINGS[slotId] = {
+      pose: targetPose,
+      crouchDrop: tgt.crouchDrop, v_crouchDrop: 0,
+      kneeFlex: tgt.kneeFlex, v_kneeFlex: 0,
+      spineLean: tgt.spineLean, v_spineLean: 0,
+      headTilt: tgt.headTilt, v_headTilt: 0,
+      weaponAngle: tgt.weaponAngle, v_weaponAngle: 0,
+      stanceSpread: tgt.stanceSpread, v_stanceSpread: 0,
+      lungeX: tgt.lungeX, v_lungeX: 0,
+      coatPendulum: 0, v_coatPendulum: 0,
+      glintProgress: targetPose === 'weapons_drawn' ? 0.15 : 1.5
+    };
+  }
+  const s = VTUBER_SLOT_SPRINGS[slotId];
+  if (s.pose !== targetPose) {
+    // Inject a crisp VTuber impulse velocity when switching poses so the transition feels snappy and alive!
+    if (targetPose === 'weapons_drawn') {
+      s.v_weaponAngle += 210; // Snappy weapon draw whip
+      s.v_crouchDrop += 45;
+      s.glintProgress = 0.0;  // Trigger blade-aligned specular glint sweep
+    } else if (targetPose === 'sneaking') {
+      s.v_crouchDrop += 60;
+      s.v_spineLean += 40;
+    } else {
+      s.v_crouchDrop -= 35;
+    }
+    s.pose = targetPose;
+  }
+  return s;
+}
+
+function stepVtuberSpring(s, tgt, dt) {
+  const k = 155;  // Spring stiffness
+  const d = 15.5; // Damping coefficient (slightly underdamped for authentic VTuber follow-through)
+  const keys = ['crouchDrop', 'kneeFlex', 'spineLean', 'headTilt', 'weaponAngle', 'stanceSpread', 'lungeX'];
+  for (const key of keys) {
+    const vKey = 'v_' + key;
+    const force = (tgt[key] - s[key]) * k - s[vKey] * d;
+    s[vKey] += force * dt;
+    s[key] += s[vKey] * dt;
+  }
+  // Secondary physics: coat hem pendulum driven by hip/spine horizontal velocity
+  const hipVel = s.v_spineLean * 0.45 + s.v_lungeX * 0.65;
+  const coatForce = (-hipVel * 0.16 - s.coatPendulum) * 95 - s.v_coatPendulum * 9.5;
+  s.v_coatPendulum += coatForce * dt;
+  s.coatPendulum += s.v_coatPendulum * dt;
+
+  if (s.glintProgress < 1.4) {
+    s.glintProgress += dt * 1.35;
+  } else if (s.pose === 'weapons_drawn' && Math.random() < dt * 0.45) {
+    s.glintProgress = 0.0; // Periodic cold-steel glint along the drawn weapon
+  }
+}
+
+function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const rigKey = canvas.getAttribute('data-rig-key') || 'kaelen';
+  const side = canvas.getAttribute('data-side') || 'left';
+  const isActive = canvas.getAttribute('data-active') === '1';
+  const showDebug = canvas.getAttribute('data-debug') === '1';
+  const rigImgs = getVtuberRigImages(rigKey);
+  if (!rigImgs || !rigImgs.bodyImg.complete) return;
+
+  const W = 340, H = 340;
+  ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = false;
+
+  // Determine facing flip so left-slot faces right (+1) and right-slot faces left (-1)
+  // For front/back views (`kaelen_front`, `kaelen_back`), keep native orientation unless on right slot
+  const isFrontOrBack = rigKey.endsWith('_front') || rigKey.endsWith('_back');
+  const shouldFlip = !isFrontOrBack && ((side === 'right' && !rigImgs.nativeLeft) || (side === 'left' && rigImgs.nativeLeft));
+  const dirSign = rigImgs.nativeLeft ? -1 : 1; // +1 if artwork natively faces right, -1 if left
+
+  // Continuous VTuber secondary motion (chest breathing + subtle speaking cadence + cloak breeze)
+  const phaseOffset = side === 'left' ? 0.0 : 1.7;
+  const breath = Math.sin(tSec * tgt.breathFreq + phaseOffset);
+  const talkBob = isActive ? Math.sin(tSec * 6.5) * 0.85 : 0;
+  const breeze = Math.sin(tSec * 2.4 + phaseOffset) * 1.6;
+
+  // Helper to evaluate the horizontal & vertical mesh warp at any source row `sy` (0..340)
+  const yAnkle = 330;
+  const yKnee = 278;
+  const yHip = 215;
+  const yNeck = 96;
+
+  function evalStripDeform(sy) {
+    let dx = 0;
+    let dy = 0;
+    let sx = 1.0;
+
+    if (sy >= yAnkle) {
+      // Boots pinned firmly to the cobblestone floor!
+      sx = s.stanceSpread;
+    } else if (sy >= yKnee) {
+      // Lower leg: ankle (330) -> knee (278)
+      const u = (yAnkle - sy) / (yAnkle - yKnee);
+      const bend = Math.sin(u * Math.PI * 0.5);
+      dx = dirSign * s.kneeFlex * bend;
+      dy = s.crouchDrop * 0.35 * u;
+      sx = 1.0 + (s.stanceSpread - 1.0) * (1.0 - 0.35 * u);
+    } else if (sy >= yHip) {
+      // Thigh & Coat tails: knee (278) -> hip (215)
+      const u = (sy - yHip) / (yKnee - yHip); // 0 at hip, 1 at knee
+      dx = dirSign * (s.kneeFlex * u + s.spineLean * 0.25 * (1.0 - u)) + (s.coatPendulum + breeze) * u;
+      dy = s.crouchDrop * (1.0 - 0.65 * u);
+      sx = 1.0 + (s.stanceSpread - 1.0) * 0.65;
+    } else if (sy >= yNeck) {
+      // Torso / Spine: neck (96) -> hip (215)
+      const u = (yHip - sy) / (yHip - yNeck); // 0 at hip, 1 at neck
+      dx = dirSign * (s.spineLean * (0.25 + 0.75 * u));
+      dy = s.crouchDrop - breath * tgt.breathAmp * u + talkBob * u;
+      // Chest breathing expansion around y = 115..165
+      const chestBell = Math.max(0, Math.sin(((sy - 96) / 119) * Math.PI));
+      sx = 1.0 + Math.max(0, breath) * 0.022 * chestBell;
+    } else {
+      // Head & Hood: y < 96 (Head counter-tilts so eyes stay locked forward when crouching!)
+      const u = (yNeck - sy) / yNeck;
+      dx = dirSign * (s.spineLean + s.headTilt * u);
+      dy = s.crouchDrop - breath * tgt.breathAmp + talkBob * 1.2;
+    }
+    dx += dirSign * s.lungeX * 0.45;
+    return { dx, dy, sx };
+  }
+
+  ctx.save();
+  if (shouldFlip) {
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+  }
+
+  // 1. Draw Deformed `body` Layer using 2px horizontal strip mesh slices
+  const stripH = 2;
+  for (let sy = 0; sy < H; sy += stripH) {
+    const { dx, dy, sx } = evalStripDeform(sy);
+    const destW = W * sx;
+    const destX = (W - destW) * 0.5 + dx;
+    const destY = sy + dy;
+    ctx.drawImage(rigImgs.bodyImg, 0, sy, W, stripH + 0.6, destX, destY, destW, stripH + 0.6);
+  }
+
+  // 2. Draw Rigid `weapon` Layer rotated around the animated Shoulder/Grip Pivot `(px', py')`
+  const [px, py] = rigImgs.pivot;
+  const pivotDef = evalStripDeform(py);
+  const animPx = px + pivotDef.dx;
+  const animPy = py + pivotDef.dy;
+  const totalWeapDeg = dirSign * (s.weaponAngle + breath * 1.4 + (isActive ? Math.sin(tSec * 5.2) * 1.2 : 0));
+  const rad = (totalWeapDeg * Math.PI) / 180;
+
+  ctx.save();
+  ctx.translate(animPx, animPy);
+  ctx.rotate(rad);
+  ctx.drawImage(rigImgs.weapImg, -px, -py);
+
+  // 3. If `weapons_drawn` (or `steel_flash`), draw a crisp blade-aligned specular glint along the weapon itself!
+  if (s.pose === 'weapons_drawn' && s.glintProgress >= 0 && s.glintProgress <= 1.0) {
+    const g = s.glintProgress;
+    const x0 = dirSign * 6;
+    const y0 = 18;
+    const x1 = dirSign * 44;
+    const y1 = -112;
+    const gx = x0 + (x1 - x0) * g;
+    const gy = y0 + (y1 - y0) * g;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(254, 243, 199, 0.92)';
+    ctx.lineWidth = 3.2;
+    ctx.shadowColor = '#f59e0b';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(gx - dirSign * 8, gy + 22);
+    ctx.lineTo(gx + dirSign * 8, gy - 22);
+    ctx.stroke();
+
+    // Starburst glint at the traveling specular peak
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(gx - 11, gy);
+    ctx.lineTo(gx + 11, gy);
+    ctx.moveTo(gx, gy - 11);
+    ctx.lineTo(gx, gy + 11);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // 4. Optional Live2D / VTuber Deformer Mesh & Joint Skeleton Overlay (`STATE.storyShowRigDebug`)
+  if (showDebug) {
+    ctx.save();
+    // Draw horizontal mesh deformer lines
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.42)';
+    ctx.lineWidth = 1;
+    for (let sy = 40; sy <= 330; sy += 28) {
+      const { dx, dy, sx } = evalStripDeform(sy);
+      const leftX = 95 * sx + (W * (1 - sx)) * 0.5 + dx;
+      const rightX = 245 * sx + (W * (1 - sx)) * 0.5 + dx;
+      ctx.beginPath();
+      ctx.moveTo(leftX, sy + dy);
+      ctx.lineTo(rightX, sy + dy);
+      ctx.stroke();
+    }
+
+    // Draw articulated bone chain: Ankle -> Knee -> Hip -> Spine -> Neck -> Head + Shoulder -> Weapon Pivot
+    const jointRows = [
+      { y: 330, x: 162, name: 'Ankle (Pinned)' },
+      { y: 278, x: 164, name: 'Knee' },
+      { y: 215, x: 160, name: 'Pelvis' },
+      { y: 152, x: 162, name: 'Chest' },
+      { y: 96,  x: 160, name: 'Neck' },
+      { y: 58,  x: 160, name: 'Head' }
+    ];
+    const pts = jointRows.map(j => {
+      const d = evalStripDeform(j.y);
+      return { x: j.x + d.dx, y: j.y + d.dy, name: j.name };
+    });
+
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    pts.forEach((p, idx) => {
+      if (idx === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+
+    // Bone from Chest to Weapon Grip Pivot + Weapon Vector
+    const chestPt = pts[3];
+    const weapTipX = animPx + Math.sin(rad) * 85;
+    const weapTipY = animPy - Math.cos(rad) * 85;
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(chestPt.x, chestPt.y);
+    ctx.lineTo(animPx, animPy);
+    ctx.lineTo(weapTipX, weapTipY);
+    ctx.stroke();
+
+    // Draw joint circles
+    pts.forEach(p => {
+      ctx.fillStyle = '#090d16';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+
+    // Weapon Pivot Joint (Crimson/Gold ring)
+    ctx.fillStyle = '#f43f5e';
+    ctx.strokeStyle = '#fef3c7';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(animPx, animPy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+let _vtuberRafId = null;
+let _vtuberLastTs = 0;
+function startVtuberRigLoop() {
+  if (_vtuberRafId) cancelAnimationFrame(_vtuberRafId);
+  _vtuberLastTs = performance.now();
+
+  function tick(now) {
+    if (STATE.screen !== 'story' || (STATE.storyMode || 'vn_stage') !== 'vn_stage') {
+      _vtuberRafId = null;
+      return;
+    }
+    const dt = Math.min(0.05, Math.max(0.001, (now - _vtuberLastTs) / 1000));
+    _vtuberLastTs = now;
+    const tSec = now / 1000;
+
+    const canvases = document.querySelectorAll('canvas.vn-vtuber-canvas');
+    canvases.forEach(cv => {
+      const slotId = cv.getAttribute('data-slot-id') || 'left';
+      const targetPose = cv.getAttribute('data-pose') || 'relaxed';
+      const tgt = VTUBER_POSE_TARGETS[targetPose] || VTUBER_POSE_TARGETS.relaxed;
+      const spring = getVtuberSlotSpring(slotId, targetPose);
+      stepVtuberSpring(spring, tgt, dt);
+      drawVtuberRigOnCanvas(cv, spring, tgt, tSec);
+    });
+
+    _vtuberRafId = requestAnimationFrame(tick);
+  }
+  _vtuberRafId = requestAnimationFrame(tick);
+}
+
+function renderReactionFxOverlay(fxKey, isActive, side, activePose) {
+  if (!fxKey && activePose !== 'weapons_drawn' && activePose !== 'sneaking') return { back: '', front: '' };
+
+  if (fxKey === 'steel_flash' || activePose === 'weapons_drawn') {
     return {
       back: `
-        <!-- Centered Torso Aura + Floor Impact Ripple behind sprite -->
+        <!-- Centered Torso Aura + Floor Impact Ripple behind rigged sprite -->
         <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
-          <div style="position:absolute;left:50%;top:54%;width:190px;height:190px;border-radius:50%;border:2px solid rgba(251,191,36,0.78);box-shadow:0 0 22px rgba(245,158,11,0.35);animation:vnPulseRing 1.4s ease-out infinite;"></div>
-          <div style="position:absolute;left:50%;bottom:4px;width:210px;height:36px;border-radius:50%;border:2px solid rgba(56,189,248,0.75);animation:vnFloorRipple 1.4s ease-out infinite;"></div>
+          <div style="position:absolute;left:50%;top:56%;width:190px;height:190px;border-radius:50%;border:2px solid rgba(251,191,36,0.75);box-shadow:0 0 22px rgba(245,158,11,0.32);animation:vnPulseRing 1.5s ease-out infinite;"></div>
+          <div style="position:absolute;left:50%;bottom:4px;width:210px;height:36px;border-radius:50%;border:2px solid rgba(56,189,248,0.72);animation:vnFloorRipple 1.5s ease-out infinite;"></div>
         </div>
       `,
       front: `
-        <!-- Centered Cold-Steel Slash Arc across weapon/torso + Overhead Callout -->
         <div style="position:absolute;inset:0;pointer-events:none;z-index:4;">
-          <div style="position:absolute;left:50%;top:50%;width:240px;height:240px;animation:vnSlashGlint 1.8s ease-out infinite;">
-            <svg width="240" height="240" viewBox="0 0 240 240" style="overflow:visible;transform:${slashFlip};">
-              <path d="M 28 196 Q 118 92 214 34" stroke="#fef3c7" stroke-width="5.5" stroke-linecap="round" fill="none" filter="drop-shadow(0 0 8px #f59e0b)"/>
-              <path d="M 48 206 Q 130 112 220 54" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-              <circle cx="146" cy="84" r="4" fill="#fef3c7" filter="drop-shadow(0 0 6px #fbbf24)"/>
-              <path d="M 146 72 L 146 96 M 134 84 L 158 84" stroke="#fef3c7" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
           <div class="vn-emote-badge" style="position:absolute;left:50%;top:-18px;padding:2px 10px;border-radius:10px;background:rgba(15,23,42,0.95);border:1.5px solid #fbbf24;color:#fef3c7;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
-            ⚔ STEEL DRAWN
+            ⚔ WEAPONS DRAWN
+          </div>
+        </div>
+      `
+    };
+  }
+
+  if (activePose === 'sneaking' && fxKey !== 'anger_burst' && fxKey !== 'alchemy_flare') {
+    return {
+      back: `
+        <!-- Stealth Shadow Ripple on the cobblestones -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+          <div style="position:absolute;left:50%;bottom:4px;width:205px;height:34px;border-radius:50%;border:1.5px dashed rgba(56,189,248,0.72);animation:vnFloorRipple 1.8s ease-out infinite;"></div>
+        </div>
+      `,
+      front: `
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:4;">
+          <div class="vn-emote-badge" style="position:absolute;left:50%;top:-14px;padding:2px 10px;border-radius:10px;background:rgba(12,74,110,0.94);border:1.5px solid #38bdf8;color:#e0f2fe;font-size:10.5px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
+            👣 SNEAKING (LOW GUARD)
           </div>
         </div>
       `
@@ -213,33 +593,48 @@ function renderReactionFxOverlay(fxKey, isActive, side) {
   };
 }
 
+function resolveActorPose(actor) {
+  if (STATE.storyRigPose && STATE.storyRigPose !== 'auto') {
+    return STATE.storyRigPose;
+  }
+  if (STATE.storyReactionOverride === 'steel_flash') {
+    return 'weapons_drawn';
+  }
+  if (actor.pose) return actor.pose;
+  if (actor.reactionFx === 'steel_flash' || actor.lunge) return 'weapons_drawn';
+  return 'relaxed';
+}
+
+function resolveActorRigKey(unitKey) {
+  if (unitKey === 'kaelen') {
+    const v = STATE.storyTurnaroundView || 'side';
+    if (v === 'front') return 'kaelen_front';
+    if (v === 'back') return 'kaelen_back';
+    if (v === 'side_sheet') return 'kaelen_side';
+    return 'kaelen';
+  }
+  return unitKey;
+}
+
 function renderStoryActorSlot(actor, side) {
   if (!actor) return `<div style="width:310px;height:345px;pointer-events:none;"></div>`;
   const style = STATE.storyActorStyle || 'full_sprite';
   if (style === 'backdrop_only') return `<div style="width:310px;height:345px;pointer-events:none;"></div>`;
 
   const isActive = !!actor.active;
+  const activePose = resolveActorPose(actor);
   const activeFx = isActive && STATE.storyReactionOverride ? STATE.storyReactionOverride : actor.reactionFx;
-  const animType = isActive && STATE.storyReactionOverride
-    ? (STATE.storyReactionOverride === 'steel_flash' ? 'lunge' : STATE.storyReactionOverride === 'anger_burst' ? 'shake' : 'hop')
-    : (actor.anim || 'breathe');
-
-  let animClass = 'vn-anim-breathe';
-  if (isActive) {
-    if (animType === 'lunge') animClass = side === 'left' ? 'vn-anim-lunge-right' : 'vn-anim-lunge-left';
-    else if (animType === 'shake') animClass = 'vn-anim-shake';
-    else if (animType === 'hop') animClass = 'vn-anim-hop';
-  }
+  const rigKey = resolveActorRigKey(actor.unitKey);
 
   const filterStr = isActive
     ? 'brightness(1.06) contrast(1.06) drop-shadow(0 0 14px rgba(245,158,11,0.45)) drop-shadow(0 10px 18px rgba(0,0,0,0.92))'
-    : 'brightness(0.58) saturate(0.75) contrast(0.96) drop-shadow(0 8px 14px rgba(0,0,0,0.88))';
+    : 'brightness(0.62) saturate(0.78) contrast(0.96) drop-shadow(0 8px 14px rgba(0,0,0,0.88))';
   const borderCol = isActive ? '#f59e0b' : '#4b5563';
 
   if (style === 'bust_cutout') {
     const portraitSrc = getPortraitWithMood(actor.portrait, isActive ? (STATE.storyMoodOverride || 'determined') : 'neutral');
     return `
-      <div class="${animClass}" style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;">
+      <div style="display:flex;flex-direction:column;align-items:center;transition:all 0.22s ease;">
         <div style="width:220px;height:220px;border-radius:10px;overflow:hidden;border:2px solid ${borderCol};background:radial-gradient(circle at 50% 35%, rgba(245,158,11,0.22), rgba(10,12,18,0.95));filter:${filterStr};position:relative;">
           <img src="${portraitSrc}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
         </div>
@@ -251,35 +646,74 @@ function renderStoryActorSlot(actor, side) {
     `;
   }
 
-  // Default: `full_sprite` — Full-Body Pixel Art Character Sprite (`ASSETS.fullBody[unitKey]`)
-  // standing directly on the visible stone floor with grounded contact shadow & aligned reaction VFX around the sprite
-  const fullBodySrc = (ASSETS.fullBody && ASSETS.fullBody[actor.unitKey])
-    ? ASSETS.fullBody[actor.unitKey]
-    : ((ASSETS.units[actor.unitKey] || ASSETS.units.kaelen).idle0);
-  const nativeFacesLeft = (actor.unitKey === 'vane' || actor.unitKey === 'watchman' || actor.unitKey === 'bailiff');
-  const shouldFlip = (side === 'right' && !nativeFacesLeft) || (side === 'left' && nativeFacesLeft);
-  const flipX = shouldFlip ? 'scaleX(-1)' : 'scaleX(1)';
-  const fxLayers = renderReactionFxOverlay(activeFx, isActive, side);
+  const fxLayers = renderReactionFxOverlay(activeFx, isActive, side, activePose);
+  const poseMeta = VTUBER_POSE_TARGETS[activePose] || VTUBER_POSE_TARGETS.relaxed;
+  const poseBadgeCol = activePose === 'weapons_drawn' ? '#fbbf24' : (activePose === 'sneaking' ? '#38bdf8' : '#9ca3af');
 
   return `
     <div style="display:flex;flex-direction:column;align-items:center;position:relative;width:310px;height:345px;justify-content:flex-end;">
-      <div class="${animClass}" style="position:relative;width:288px;height:288px;display:flex;align-items:flex-end;justify-content:center;">
+      <div style="position:relative;width:288px;height:288px;display:flex;align-items:flex-end;justify-content:center;">
         <!-- Ground Contact Shadow + Tallow Floor Ring directly on the visible stone floor -->
         <div style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:195px;height:34px;border-radius:50%;background:${isActive ? 'radial-gradient(ellipse, rgba(0,0,0,0.92) 0%, rgba(245,158,11,0.34) 58%, transparent 82%)' : 'radial-gradient(ellipse, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 60%, transparent 82%)'};border-bottom:${isActive ? '2px solid rgba(251,191,36,0.78)' : '1px solid rgba(148,163,184,0.28)'};z-index:0;"></div>
 
         ${fxLayers.back}
 
-        <!-- Full-Body Pixel Art Sprite Artwork (340×340 native, feet anchored at bottom) -->
-        <img src="${fullBodySrc}" class="pixel" style="width:288px;height:288px;object-fit:contain;object-position:center bottom;transform:${flipX};filter:${filterStr};position:relative;z-index:2;">
+        <!-- 60fps Live2D / VTuber-Style Deformer & Joint Rig Canvas (340×340 internal resolution) -->
+        <canvas class="vn-vtuber-canvas pixel"
+                width="340" height="340"
+                data-slot-id="${side}_${actor.unitKey}"
+                data-rig-key="${rigKey}"
+                data-side="${side}"
+                data-pose="${activePose}"
+                data-active="${isActive ? '1' : '0'}"
+                data-debug="${STATE.storyShowRigDebug ? '1' : '0'}"
+                style="width:288px;height:288px;filter:${filterStr};position:relative;z-index:2;"></canvas>
 
         ${fxLayers.front}
       </div>
 
-      <!-- Compact Grounded Nameplate below boots -->
-      <div style="margin-top:4px;padding:3px 14px;background:rgba(10,12,18,0.92);border:1px solid ${borderCol};border-radius:4px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.85);z-index:5;">
+      <!-- Compact Grounded Nameplate + Active VTuber Rig Pose Tag below boots -->
+      <div style="margin-top:4px;padding:3px 12px;background:rgba(10,12,18,0.92);border:1px solid ${borderCol};border-radius:4px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.85);z-index:5;display:flex;align-items:center;gap:6px;">
         <span class="font-title" style="font-size:12.5px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</span>
-        <span style="font-size:10px;color:var(--dim);margin-left:6px;">· ${actor.emotion || actor.title || ''}</span>
+        <span style="font-size:10px;color:var(--dim);">· ${actor.emotion || actor.title || ''}</span>
+        <span class="font-mono" style="padding:1px 5px;border-radius:3px;background:rgba(17,24,39,0.95);border:1px solid ${poseBadgeCol};color:${poseBadgeCol};font-size:8.5px;">
+          ${poseMeta.label}
+        </span>
       </div>
+    </div>
+  `;
+}
+
+// 3-View Turnaround Showcase Mode (`sheet_3view` — renders Front [Down], Side [Profile], and Back [Up] simultaneously with the 60fps VTuber rig!)
+function renderThreeViewTurnaroundShowcase() {
+  const activePose = (STATE.storyRigPose && STATE.storyRigPose !== 'auto') ? STATE.storyRigPose : 'weapons_drawn';
+  const views = [
+    { key: 'kaelen_front', title: '1. FRONT VIEW (Down / South)', sub: 'DIR4: idle_down / walk_down / attack_down' },
+    { key: 'kaelen_side',  title: '2. SIDE VIEW (Profile / East-West)', sub: 'VN Stage Default & DIR4 Side Profile (Mirrored)' },
+    { key: 'kaelen_back',  title: '3. BACK VIEW (Up / North)', sub: 'DIR4: idle_up / walk_up / attack_up' }
+  ];
+  return `
+    <div style="position:absolute;left:72px;right:72px;bottom:192px;height:345px;display:flex;align-items:flex-end;justify-content:space-around;z-index:12;pointer-events:none;">
+      ${views.map((v, idx) => `
+        <div style="display:flex;flex-direction:column;align-items:center;position:relative;width:300px;height:340px;justify-content:flex-end;">
+          <div style="position:relative;width:268px;height:268px;display:flex;align-items:flex-end;justify-content:center;">
+            <div style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:185px;height:32px;border-radius:50%;background:radial-gradient(ellipse, rgba(0,0,0,0.92) 0%, rgba(245,158,11,0.34) 58%, transparent 82%);border-bottom:2px solid rgba(251,191,36,0.78);z-index:0;"></div>
+            <canvas class="vn-vtuber-canvas pixel"
+                    width="340" height="340"
+                    data-slot-id="turnaround_${idx}"
+                    data-rig-key="${v.key}"
+                    data-side="left"
+                    data-pose="${activePose}"
+                    data-active="1"
+                    data-debug="${STATE.storyShowRigDebug ? '1' : '0'}"
+                    style="width:268px;height:268px;filter:brightness(1.06) contrast(1.06) drop-shadow(0 0 12px rgba(245,158,11,0.38)) drop-shadow(0 10px 18px rgba(0,0,0,0.92));position:relative;z-index:2;"></canvas>
+          </div>
+          <div style="margin-top:4px;padding:4px 12px;background:rgba(10,12,18,0.94);border:1px solid #f59e0b;border-radius:4px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
+            <div class="font-title" style="font-size:11.5px;color:var(--gold);">${v.title}</div>
+            <div class="font-mono" style="font-size:9px;color:#93c5fd;">${v.sub}</div>
+          </div>
+        </div>
+      `).join('')}
     </div>
   `;
 }
@@ -529,21 +963,27 @@ function renderStoryStage() {
         <!-- Top Location & Stage Floor Indicator Strip -->
         <div style="position:absolute;left:72px;right:72px;top:16px;height:36px;padding:0 16px;background:rgba(12,15,23,0.84);border:1px solid rgba(212,166,74,0.42);border-radius:4px;display:flex;align-items:center;justify-content:space-between;z-index:15;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <span style="padding:2px 8px;background:rgba(212,166,74,0.18);border:1px solid var(--gold);border-radius:3px;font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.5px;">VN STAGE · VISIBLE FLOOR & FULL-BODY SPRITES</span>
+            <span style="padding:2px 8px;background:rgba(212,166,74,0.18);border:1px solid var(--gold);border-radius:3px;font-size:10px;color:var(--gold);font-weight:700;letter-spacing:0.5px;">VN STAGE · 60FPS VTUBER 2D RIG & VISIBLE FLOOR</span>
             <span class="font-title" style="font-size:14px;color:var(--gold);">${st.title}</span>
             <span style="font-size:12px;color:var(--dim);">· ${st.subtitle}</span>
           </div>
           <div class="font-mono" style="font-size:11px;color:#fbbf24;display:flex;align-items:center;gap:10px;">
+            <span>🦴 Rig Pose: <b>${STATE.storyRigPose === 'auto' ? 'Beat Default' : STATE.storyRigPose.toUpperCase()}</b></span>
+            <span>·</span>
             <span>🎨 ${card.bgVariantLabel || 'Stage Artwork'}</span>
             ${card.shake ? `<span style="padding:1px 7px;background:rgba(220,38,38,0.22);border:1px solid #ef4444;border-radius:3px;color:#fca5a5;">📳 ${card.shake}</span>` : ''}
           </div>
         </div>
 
-        <!-- Left & Right Full-Body Character Sprites standing directly on the stone/cobblestone floor (y: 192px above bottom) -->
-        <div style="position:absolute;left:115px;right:115px;bottom:192px;height:345px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
-          ${renderStoryActorSlot(card.leftActor, 'left')}
-          ${renderStoryActorSlot(card.rightActor, 'right')}
-        </div>
+        ${STATE.storyTurnaroundView === 'sheet_3view'
+          ? renderThreeViewTurnaroundShowcase()
+          : `
+            <!-- Left & Right Full-Body Character Sprites standing directly on the stone/cobblestone floor (y: 192px above bottom) -->
+            <div style="position:absolute;left:115px;right:115px;bottom:192px;height:345px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
+              ${renderStoryActorSlot(card.leftActor, 'left')}
+              ${renderStoryActorSlot(card.rightActor, 'right')}
+            </div>
+          `}
       `}
 
       <!-- Shared Bottom Ornate Dialogue & Portrait Mood Dock (story.rs / talk.rs — Reduced Corner Frame) -->
