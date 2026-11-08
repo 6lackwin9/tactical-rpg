@@ -680,11 +680,21 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
 }
 
 fn consumable_problems(e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
     if json::i(e, "heal", 0) == 0 && json::i(e, "damage", 0) == 0 && json::f(e, "buff_pct", 0.0) == 0.0 {
-        vec!["A consumable should heal, damage or buff.".into()]
-    } else {
-        Vec::new()
+        out.push("A consumable should heal, damage or buff.".into());
     }
+    // A1.2-K3 (INTENT2 section 6, IR9): only a damage item thrown at foes hits an area, and `affects` needs one
+    let area = json::s(e, "area");
+    let shaped = !area.is_empty() && area != rpgkit_data::ITEM_AREA_NONE;
+    let foe_aimed = json::i(e, "damage", 0) > 0 && json::i(e, "heal", 0) <= 0 && json::f(e, "buff_pct", 0.0) <= 0.0;
+    if shaped && !foe_aimed {
+        out.push(format!("Area: only a damage item (no heal or buff) hits an area ({area})."));
+    }
+    if !shaped && !json::s(e, "affects").is_empty() {
+        out.push("Affects: a single-target item has no area to affect.".into());
+    }
+    out
 }
 
 /// ItemValidator._legacy_errors: the pre-family rules of a flat row (no item families in the catalog).

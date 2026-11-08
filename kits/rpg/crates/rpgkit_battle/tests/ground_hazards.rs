@@ -199,8 +199,13 @@ fn placement_shapes_cover_walkable_tiles() {
     assert_eq!((burst.len(), burst.contains(&v(4, 3)), burst.contains(&v(5, 5))), (8, false, true), "3 x 3 around the user but the wall");
     assert_eq!(cells(Shape::Line, false), vec![v(6, 4), v(8, 4)], "from the aim away from the user, the wall left out");
     assert_eq!(cells(Shape::Line, true), vec![v(5, 4), v(6, 4)], "from the tile ahead of the user");
-    assert_eq!(cells(Shape::Sweep, false), vec![v(6, 3), v(6, 4), v(6, 5)], "across the heading at the aim");
-    assert_eq!(cells(Shape::Sweep, true), vec![v(5, 3), v(5, 4), v(5, 5)], "across the heading ahead of the user");
+    // A3.2-S1: ARC three tiles across the heading (the retired SWEEP's tiles, W2-4); RING the 8 around its centre.
+    assert_eq!(cells(Shape::Arc, false), vec![v(6, 3), v(6, 4), v(6, 5)], "ARC across the heading at the aim");
+    assert_eq!(cells(Shape::Arc, true), vec![v(5, 3), v(5, 4), v(5, 5)], "ARC across the heading ahead of the user");
+    let ring = cells(Shape::Ring, true);
+    assert_eq!((ring.len(), ring.contains(&me), ring.contains(&v(4, 3)), ring.contains(&v(5, 5))), (7, false, false, true), "around the user but the wall");
+    let ring = cells(Shape::Ring, false);
+    assert_eq!((ring.len(), ring.contains(&aim), ring.contains(&v(7, 4)), ring.contains(&v(5, 3))), (7, false, false, true), "around the aim but the wall");
     let area = [v(6, 4), v(7, 4), v(6, 5)];
     let p = Place { id: "g_smoke".into(), shape: Shape::Skill, at_self: false, rounds: 0 };
     assert_eq!(ground::cells(&w, HERO, &smoke, &p, aim, aim, &area), vec![v(6, 4), v(6, 5)], "SKILL: the skill's cells");
@@ -211,6 +216,40 @@ fn placement_shapes_cover_walkable_tiles() {
     let pl = Place::of_skill(&w.cat.skills[sid(&w, "g_fade")]).expect("a Defend's hazard");
     assert_eq!((pl.shape, pl.at_self, pl.rounds), (Shape::Burst, true, 2));
     assert!(Place::of_skill(&w.cat.skills[sid(&w, "g_plain")]).is_none());
+}
+
+/// A3.2-K2 (FB-106, INTENT2 IR7): a hazard ARC covers the skill's own ARC tiles (`skill::arc_cells`) at the aim, off-axis
+/// and diagonal included; at the user's tile, the arc on the snapped tile ahead toward the aim. A hazard LINE takes the
+/// snapped direction too (a tie is the diagonal). An open board (no walls), the trap-free smoke.
+#[test]
+fn hazard_arc_and_line_follow_the_skill_shapes() {
+    let s = session(rules());
+    let w = s.w.clone();
+    let smoke = w.cat.hazards["g_smoke"].clone();
+    let me = w.pos(HERO);
+    let cells = |shape: Shape, at_self: bool, aim: V2| {
+        let p = Place { id: "g_smoke".into(), shape, at_self, rounds: 0 };
+        ground::cells(&w, HERO, &smoke, &p, if at_self { me } else { aim }, aim, &[])
+    };
+    for d in [v(1, 0), v(0, -1), v(1, 1), v(-1, 1), v(2, 0), v(2, 1), v(2, 2), v(-1, -3)] {
+        let aim = me + d;
+        assert_eq!(cells(Shape::Arc, false, aim), skill::arc_cells(me, aim), "ARC at the aim {d:?} as the skill's ARC");
+        let ahead = me + skill::snap(d);
+        assert_eq!(cells(Shape::Arc, true, aim), skill::arc_cells(me, ahead), "ARC ahead of the user toward {d:?}");
+    }
+    assert_eq!(cells(Shape::Line, false, me + v(2, 2)), vec![me + v(2, 2), me + v(3, 3), me + v(4, 4)], "LINE on a tie: the diagonal");
+    assert_eq!(cells(Shape::Line, true, me + v(2, 1)), vec![me + v(1, 0), me + v(2, 0), me + v(3, 0)], "LINE (2, 1) snaps east");
+}
+
+/// W2-4 (FB-114): the hazard shape SWEEP is retired; a stored one reads as any unknown shape (one tile), and the
+/// content checks refuse it (`HAZARD_SHAPES`).
+#[test]
+fn a_stored_sweep_hazard_shape_reads_as_one_tile() {
+    let cat = Catalog::from_value(&json!({"skills": [{"id": "t_sw", "name": "Sw", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0,
+        "hazard": {"id": "g_smoke", "shape": "SWEEP", "at": "target", "rounds": 0}}]}));
+    let pl = Place::of_skill(&cat.skills[0]).expect("the hazard");
+    assert_eq!(pl.shape, Shape::One);
+    assert!(!rpgkit_data::HAZARD_SHAPES.contains(&"SWEEP"));
 }
 
 /// GH3: an ATTACK with power 0 and a hazard is a placement aimed at a tile: no damage, no random draw, its hazard on the
@@ -365,7 +404,7 @@ fn an_item_places_at_use() {
     let mut w = s.w.clone();
     let item = flask();
     w.units[HERO].inventory.pouch.push(item.clone());
-    let mut cmd = Command::new(HERO, 0, 1, CmdKind::Item { target: HERO, item: Box::new(item.clone()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0 });
+    let mut cmd = Command::new(HERO, 0, 1, CmdKind::Item { target: HERO, item: Box::new(item.clone()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0, cell: None, struck_units: Vec::new() });
     cmd.name = item.name.clone();
     cmd.hazard = Place::of_item(&item);
     let mut res = Resolver::new(BLOCKS, 1);

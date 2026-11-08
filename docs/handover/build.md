@@ -1,6 +1,6 @@
 # Build Session handover (cloud)
 
-Updated 2026-11-07 by the cloud Build Session after W2-1. Read this, then run `/build-session`.
+Updated 2026-11-07 by the cloud Build Session after the R1 release. Read this, then run `/build-session`.
 
 ## Goal of the session
 
@@ -10,24 +10,20 @@ gate and a `sim feel` sanity check. Rows `14-20` are post-`R1`.
 
 ## Queue position
 
-- Done (all on `develop`): Wave 1 R1 rows 8, 11, 12, 13, 21, 22; W2-1 complete: U1.2-S2 (4f84b780), U2.2-S3
-  (ecf83501), U1.2-S3a crit from PERC (8bf4be58), U1.2-S3b know_potency at 0 (1bf30ee6), U1.2-S3c speed split
-  (b4f11aa8), U1.2-S4 tier table, HP form held (28a5308b), U1.2-S5 data pools + inert Composure (e5201625).
-- Next: W2-2 (R1-7, the Unit half): U3.2-S3 soft wield penalty + `state.rs:180` equip check and deck ownership on
-  `progression::member_passives` + party-screen penalty summary in FEEDBACK; U3.2-S4 reversible item grants, OFFHAND1,
-  level 2-3 bonuses, `shd_tower` / `wpn_glass_wand` notes; U3.2-S5 carry/burden; U4.2-S3 temperament; U4.2-S4 U4
-  evaluators on the U1 pipeline. One builder run and commit per slice, each with its named golden re-records.
-- Then W2-3 (R1-8), then the full gate + `sim feel` sanity check and the `develop -> main` release PR.
+- R1 is released: `main` @98ab973a (PR #55, 2026-11-07), tree = develop @f7f5cb71. Every R1 row (Wave 1, W2-1..W2-3,
+  AUDIT-R1) is on develop. main now has develop as an ancestor (the two histories were unrelated before the release
+  merge commit), so later releases are plain develop -> main merges.
+- Next: nothing ready-to-build for R1. Post-R1 rows wait in READY (C02-A, R1-BAL, U2.3-TIERS, BASERULES1-PP, rows
+  14-20, W2-4..W2-6) until Design promotes them; fetch READY at each start.
 
 ## In flight
 
-Nothing. All task branches are squash-landed and closed for branch-cleanup.
+Nothing. All task branches are squash-landed and closed; the release branch `claude/release-batch-vmj4rj` is merged.
 
-## Open with Design (none blocks R1)
+## Open with Design
 
-FB-67, FB-69 to FB-79 (FEEDBACK.md; FB-67/69/70/71 full text in the archive). User decisions this session: R1 keeps
-today's tier HP formula as a temporary measure (FB-78; the user wants stat-based units by one rule); the KNOW potency
-weight is 0 until chosen (FB-76).
+FB-85 to FB-92 in FEEDBACK.md (FB-87 asks Design to ratify the earlier PHASEFOLD re-records under the Authority
+Matrix; FB-92 holds the sim feel numbers and the dropped `docs/metrics/` files).
 
 ## Working notes
 

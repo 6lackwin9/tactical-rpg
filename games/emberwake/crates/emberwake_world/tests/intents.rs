@@ -11,7 +11,7 @@ use std::path::Path;
 
 fn session(d: &Data, world: &str, encounter: &str) -> Session {
     let def = EncounterDef::from_obj(d.resolve(world, "encounters", encounter));
-    Session::start(d.cat.clone(), def, &WorldRoster { d, world: world.into() })
+    Session::start(d.cat.clone(), def, &WorldRoster::new(d, world))
 }
 
 fn data() -> Data {

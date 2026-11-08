@@ -83,6 +83,10 @@ fn chase_kind(w: &World, a: &ScheduledAction) -> Option<ChaseKind> {
 pub struct Side {
     /// Units planned, summed over rounds (the denominator of the per-round numbers).
     pub unit_rounds: i64,
+    /// R1-BAL (FB-97 (1)(A)): unit-rounds of a unit that pays no AP (`World::pays_ap` false: enemies under the
+    /// timeline's `enemy_moves`). When every unit-round is one, the human line prints "no AP (enemy_moves)" instead of
+    /// a 0 AP/round that reads like a metric gap.
+    pub unpaid_rounds: i64,
     /// AP paid (a unit's AP when the round was planned less its AP at the round's end).
     pub ap_paid: i64,
     /// Each unit-round's intent ("none" without one).
@@ -113,6 +117,7 @@ pub struct Side {
 impl Side {
     fn add(&mut self, o: &Side) {
         self.unit_rounds += o.unit_rounds;
+        self.unpaid_rounds += o.unpaid_rounds;
         self.ap_paid += o.ap_paid;
         for (k, v) in &o.intents {
             *self.intents.entry(k.clone()).or_default() += v;
@@ -176,11 +181,21 @@ impl Side {
         })
     }
 
+    /// R1-BAL (FB-97 (1)(A)): the AP/round text: "no AP (enemy_moves)" when every unit-round paid no AP by rule, else
+    /// the number.
+    fn ap_text(&self) -> String {
+        if self.unit_rounds > 0 && self.unpaid_rounds >= self.unit_rounds {
+            "no AP (enemy_moves)".to_string()
+        } else {
+            round2(ratio(self.ap_paid, self.unit_rounds)).to_string()
+        }
+    }
+
     fn line(&self, name: &str) -> String {
         let share: Vec<String> = self.intents.iter().map(|(k, v)| format!("{k} {}%", round1(pct(*v, self.unit_rounds)))).collect();
         format!(
             "  {name}: AP/round {}, intents {}, changes {}, buffs dropped {}, follow-ups {}, Rest blocks {} (AP {}), carried moves {}, guard blocks {}, no-active rounds {}",
-            round2(ratio(self.ap_paid, self.unit_rounds)),
+            self.ap_text(),
             if share.is_empty() { "-".to_string() } else { share.join(" ") },
             self.intent_changes,
             self.buffs_dropped,
@@ -460,10 +475,12 @@ impl Feel {
             let changed = self.last_intent.get(&c).is_some_and(|prev| *prev != id);
             // OI1: the deck's actives (their skills now) hold none of the round's intent
             let u = &w.units[c];
-            let no_active = u.deck_rule.is_some() && intent.is_some_and(|i| !u.active_families().iter().any(|f| rip::family_skill(w, c, f).is_some_and(|sid| round_intent::skill_intent(&w.cat.skills[sid]) == i.id())));
+            let no_active = u.deck_rule.is_some() && intent.is_some_and(|i| !u.active_families().iter().any(|f| rip::family_skill(w, c, f).is_some_and(|sid| round_intent::skill_rows(w, &w.cat.skills[sid]).contains(&i.id()))));
             self.ap_planned.insert(c, u.ap);
+            let pays = w.pays_ap(c);
             let side = self.side(s, c);
             side.unit_rounds += 1;
+            side.unpaid_rounds += (!pays) as i64;
             *side.intents.entry(id.clone()).or_default() += 1;
             side.intent_changes += changed as i64;
             side.no_active += no_active as i64;

@@ -2,6 +2,14 @@
 
 Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves from options are preferences unless the choice came from him (2026-10-18 08:37). Format: preference (date, source).
 
+## Core UI principle: subtractive layout and visual-first encoding (user 2026-11-08)
+
+- **Debug vs player-facing surfaces**: Debug and test surfaces (Dojo, Forge, `ComputeTrace`, `T` timeline inspector) should expose rich, explicit telemetry and numbers. For actual player-facing interfaces, always ask **what can be removed from the layout while still conveying the same information**.
+- **Visual-first over long text or duplicate figures**: Replace long text strings and redundant counters with scannable visual representations whenever possible:
+  - **Small discrete caps (`<= 5`, e.g., Poise pips, Party Pouch stacks)**: Use visual pips with distinct fill/geometry states (solid filled = held now, hollow outline = `packed` target limit / unfilled, dimmed dot = unused capacity above `packed`) and drop redundant `"3/5 (packed 4)"` text labels. Above `5` (or on tiny `15x15` combat icons and `x30` stash stacks), use a compact numeral (`x3`, `x30`) rather than crowding pips.
+  - **Already-visualized costs (e.g., Combat Skill Menu vs Timeline Strip)**: Do not repeat block/AP costs on skill row buttons when the 6-beat timeline strip and hover preview already show the exact block span and AP drain.
+  - **Structured, scannable hover/detail panes**: Moving details to hover must not turn the detail pane into a wall of prose. Keep hover cards visual-first too: a scannable header row of compact tags (`0 AP · 2 Blocks · Reach 1..4`), one short effect line, and a highlighted 1-line intent delta (`Field: +1 Reach` vs `Assault: +1 Block, 50% splash`).
+
 ## Navigation and popups
 
 - Right-click goes back or closes on most settings and UI popups; an X button for back (2026-10-18 playtest).

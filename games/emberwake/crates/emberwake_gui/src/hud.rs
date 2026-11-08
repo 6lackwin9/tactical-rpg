@@ -218,7 +218,6 @@ pub(crate) mod hud_tests {
     use aegis_core::json::{self, s, s_or};
     use aegis_ui::ui::{Gfx, H};
     use emberwake_world::explore;
-    use emberwake_world::state::SUPPLIES_MAX;
     use serde_json::{json, Value};
     use aegis_ui::painter::{Fonts, TextRec, View};
     use aegis_ui::screen::{Settings, TEXT_SIZES};
@@ -315,7 +314,7 @@ pub(crate) mod hud_tests {
         let top: Vec<&TextRec> = recs.iter().filter(|r| r.y + r.h / 2.0 < HUD_H as f32).collect();
         let at = |t: &str| top.iter().find(|r| r.text == t).map(|r| r.x);
         assert!(!name.is_empty() && at(&name).is_some_and(|x| x < 10.0), "the location name at the top left: {top:?}");
-        let (gold, supplies) = (at(&gs.party.gold.to_string()), at(&format!("{}/{SUPPLIES_MAX}", gs.party.supplies)));
+        let (gold, supplies) = (at(&gs.party.gold.to_string()), at(&format!("{}/{}", gs.party.supplies, gs.party.purse.supplies_max)));
         assert!(gold.zip(supplies).is_some_and(|(g, s)| g < s && g > W as f32 / 2.0), "gold, then supplies at the right: {top:?}");
         assert!(!recs.iter().any(|r| r.text.contains("WASD") || r.text.starts_with("Supplies")), "the help line and the supplies text left the top left");
         let widgets = map.widgets();

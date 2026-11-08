@@ -43,6 +43,18 @@ pub enum CmdKind {
         aim: V2,
         skill_mult: f64,
         status_rounds: i32,
+        /// A3.2-K2 (IR9): the units it hits (`skill::affects_by`, the skill's field or its row's default).
+        affects: rpgkit_data::Affects,
+        /// A4.2-K1b (INTENT2 IR5, IR17): a shaped Assault row's picked enemy: at the impact the shape is re-read on the
+        /// tile it stands on then (while it is in `band`), it takes the full power and the status, the other tiles
+        /// `splash`. None: the cells are fixed at planning (Field, classic, a legacy area).
+        target: Option<UnitId>,
+        /// IR17: the factor off the primary target (`splash_mult`; 1.0 without a target).
+        splash: f64,
+        /// The shape the impact re-reads (`skill::shape_cells`).
+        shape: skill::Area,
+        /// The band the target must be in at the impact (and the start's chase reaches for).
+        band: (i32, i32),
         last_damage: i32,
         last_hits: i32,
         crit_hits: Vec<(UnitId, bool)>,
@@ -52,6 +64,8 @@ pub enum CmdKind {
         mitigation: f64,
         /// S1.2-S4: the rounds the guard lasts; 2 or more queues the `guard` status for the later rounds at the impact.
         guard_rounds: i32,
+        /// AUDIT-11 (FB-85): the fraction of the queued Round 2+ `guard` status (`skill::guard_later_mitigation`).
+        later_mitigation: f64,
         grant_status: String,
         status_rounds: i32,
         extra_grants: Vec<Value>,
@@ -86,6 +100,11 @@ pub enum CmdKind {
         last_heal: i32,
         last_damage: i32,
         last_boost: f64,
+        /// A1.2-K3 (INTENT2 section 6, IR2): a Field row's source tile (an area item aimed at the ground; `target` is
+        /// then the user); None = aimed at `target`.
+        cell: Option<V2>,
+        /// A1.2-K3: the units an area item struck at its last execution (empty for a single-target use).
+        struck_units: Vec<UnitId>,
     },
     Walk {
         path: Vec<V2>,
@@ -296,8 +315,10 @@ impl Command {
         self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
 
+    /// F1.2-S1: the within-block resolution key, `priority * 1000 + initiative` (Defend 1, Target 2, others 0), the
+    /// initiative being the source's U1 rating (`Unit::initiative_rating`).
     pub fn initiative(&self, w: &World) -> i32 {
-        self.priority * 1000 + w.units[self.source].initiative
+        self.priority * 1000 + w.units[self.source].initiative_rating()
     }
 
     pub fn is_defend(&self) -> bool {
@@ -313,9 +334,13 @@ impl Command {
     /// unit and its tile; out of reach it takes no lock, and the band test decides at impact. `opening`: the tiles the
     /// block's dashes started from (decision "Attack lock answers": a dash on the same tick leaves the locked tile, for
     /// both sides), else the tile now. A melee band is `round_intent::melee_band`; an area aims at tiles and never locks.
+    /// F1.2-S1 (FB-58a): an attack with no power (`intimidate`, `tripwire_snare`) never locks.
     pub(crate) fn lock_tile(&mut self, w: &World, opening: Option<&[Option<V2>]>) {
         self.locked = None;
-        let CmdKind::Attack { target, min_range, max_range, .. } = &self.kind else { return };
+        let CmdKind::Attack { target, min_range, max_range, skill_mult, .. } = &self.kind else { return };
+        if *skill_mult <= 0.0 {
+            return;
+        }
         let band = reach_band(w, self.source, *min_range, *max_range);
         if !w.ruleset.attack_lock().locks(round_intent::melee_band(band)) {
             return;
@@ -371,6 +396,18 @@ impl Command {
                 }
                 line
             }
+            // A4.2-K1b (IR17): a shaped Assault row chases its target 1 tile when it is out of range at the start (MR16)
+            CmdKind::Area { target: Some(t), band, shape, .. } => {
+                let (t, band, diag) = (*t, *band, skill::diagonal_shape(*shape));
+                if !w.units[t].is_active() || !w.units[src].is_active() || !w.has(t) || round_intent::hidden(w, t) || in_reach(w, src, t, band, diag) {
+                    return String::new();
+                }
+                let line = chase_line(w, src, t, band, diag, 1);
+                if !line.is_empty() {
+                    self.moved = Some(MoveKind::Chase);
+                }
+                line
+            }
             // INPUT1 MR16: a Support command on an ally chases it into its reach as an attack does
             CmdKind::Support { target, skill, .. } if self.follow > 0 => {
                 let (t, sk) = (*target, *skill);
@@ -391,11 +428,9 @@ impl Command {
                 let name = w.units[src].name.clone();
                 let u = &mut w.units[src];
                 if !grant_status.is_empty() {
-                    if status::defend_buffs().contains(&grant_status.as_str()) {
-                        status::grant_now(u, grant_status, *status_rounds, self.status_magnitude, &name);
-                    } else {
-                        status::queue(u, grant_status, *status_rounds, self.status_magnitude, &name);
-                    }
+                    // A4.2: the skill grant as an EffectSpec (never rolled; a DEFEND buff lands now)
+                    let spec = status::EffectSpec::grant(grant_status, *status_rounds, self.status_magnitude, &name);
+                    status::apply_effect(u, &spec, status::grant_timing(grant_status, true), 0.0, None);
                 }
                 let mut granted = status::grant_extras(u, extra_grants, true, &name);
                 // RULESET1_INTENT IN6: intent-bound grants carry the unit's intent
@@ -492,7 +527,9 @@ impl Command {
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
                     // U1.2-S3b: the actor's KNOW term (ruleset `know_potency`; 0 = potency off)
                     let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
-                    let ok = status::try_inflict_with(&mut w.units[t], &self.status_effect.clone(), self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name);
+                    // A4.2: the skill inflict as an EffectSpec (the row's resistable decides the roll)
+                    let spec = status::EffectSpec::inflict(&self.status_effect, self.status_potency, status_rounds, self.status_magnitude, &src_name);
+                    let ok = status::apply_effect(&mut w.units[t], &spec, status::Timing::Next, bonus, Some(rng));
                     detail = format!(" ({} {})", if ok { "inflicts" } else { "resisted" }, self.status_effect);
                 }
                 if !damaging {
@@ -510,7 +547,7 @@ impl Command {
                 let tu = &w.units[t];
                 self.log = format!("[Attack] {src_name} struck {} for {taken}{}{detail} (HP {}/{})", tu.name, if crit { " CRIT" } else { "" }, tu.hp, tu.max_hp);
             }
-            CmdKind::Area { cells, skill_mult, status_rounds, .. } => {
+            CmdKind::Area { cells, skill_mult, status_rounds, affects, target, splash, shape, band, .. } => {
                 let mut total = 0;
                 let mut hits = 0;
                 let mut crits = Vec::new();
@@ -519,19 +556,35 @@ impl Command {
                     self.log = format!("[Action Failed] {src_name} cannot act");
                     return;
                 }
+                // A4.2-K1b (IR5, IR7, IR17): a shaped Assault row's shape is centred where its target stands at the
+                // impact, its direction read from the user's tile then; a target gone, hidden or out of range: no tiles
+                let cells: Vec<V2> = match target {
+                    Some(t) if w.units[t].is_active() && w.has(t) && !round_intent::hidden(w, t) && in_reach(w, src, t, band, skill::diagonal_shape(shape)) => {
+                        let from = w.pos(src);
+                        skill::shape_cells(shape, from, w.pos(t)).into_iter().filter(|c| w.grid.is_valid(*c) && *c != from).collect()
+                    }
+                    Some(_) => Vec::new(),
+                    None => cells,
+                };
+                if let CmdKind::Area { cells: kept, .. } = &mut self.kind {
+                    kept.clone_from(&cells);
+                }
                 let mut parts = Vec::new();
                 // HOOKS1 8.4: a unit the area also strikes takes no redirect (rule triggers)
                 let inside: Vec<UnitId> = if self.ally.is_some() { cells.iter().filter_map(|c| w.occupant(*c)).collect() } else { Vec::new() };
                 for cell in cells {
                     let Some(v) = w.occupant(cell) else { continue };
-                    if v == src || skill_mult <= 0.0 {
+                    if v == src || skill_mult <= 0.0 || !skill::affects_unit(affects, w.friends_of(src).contains(&v)) {
                         continue;
                     }
                     let ranged = w.units[src].attack_range > 1;
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
                     let flank = round_intent::flank_bonus(w, src, v);
                     let matched = skill::exploit_match_by(&self.exploit, &w.units[v], &[], flank, &w.ruleset);
-                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, &inside);
+                    // IR17: the hits off the primary target take `splash`
+                    let primary = target.is_none_or(|t| t == v);
+                    let part = if primary { 1.0 } else { splash };
+                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * part * matched.1 * flank_power(w, flank), cover, &inside);
                     self.hits.push((v, flank));
                     self.struck.push(crate::trigger::Struck { target: v, damage: taken, ranged });
                     total += taken;
@@ -540,11 +593,14 @@ impl Command {
                         crits.push((v, !w.units[v].is_alive()));
                     }
                     let mut note = String::new();
-                    if !self.status_effect.is_empty() && w.units[v].is_alive() {
+                    // IR17: a shaped Assault row's status lands on its target only
+                    if !self.status_effect.is_empty() && w.units[v].is_alive() && primary {
                         let st = self.status_effect.clone();
                         let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
-                        let chance = status::apply_chance_with(&w.units[v], &st, self.status_potency, bonus);
-                        note = if status::try_inflict_with(&mut w.units[v], &st, self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name) {
+                        // A4.2: the skill inflict as an EffectSpec
+                        let spec = status::EffectSpec::inflict(&st, self.status_potency, status_rounds, self.status_magnitude, &src_name);
+                        let chance = spec.chance(&w.units[v], bonus);
+                        note = if status::apply_effect(&mut w.units[v], &spec, status::Timing::Next, bonus, Some(rng)) {
                             format!(" [{} next round ({chance}%)]", status::display_name(&st))
                         } else {
                             format!(" [resisted {} ({chance}%)]", status::display_name(&st).to_lowercase())
@@ -581,7 +637,7 @@ impl Command {
                     format!("[Attack] {src_name}'s {} hit {hits} unit{} for {total} damage ({})", self.name, if hits == 1 { "" } else { "s" }, parts.join(", "))
                 };
             }
-            CmdKind::Defend { mitigation, guard_rounds, guard_broken, .. } => {
+            CmdKind::Defend { mitigation, guard_rounds, later_mitigation, guard_broken, .. } => {
                 if !w.units[src].is_alive() {
                     self.failed = true;
                     return;
@@ -595,13 +651,7 @@ impl Command {
                 let u = &mut w.units[src];
                 u.guard = u.guard.max(mitigation);
                 self.log = if mitigation > 0.0 { format!("[Defend] {src_name} raises guard ({}% less damage)", (mitigation * 100.0).round() as i32) } else { format!("[Defend] {src_name} holds a defensive stance") };
-                // S1.2-S4: a multi-round guard queues the full-round `guard` status for its later rounds, at its fraction
-                // in percent capped at the row's maximum; a fraction below the row's minimum queues nothing (it is not
-                // raised to the minimum)
-                let row = status::row_of(status::GUARD);
-                let pct = roundi(mitigation * 100.0).min(row.map_or(0, |r| r.magnitude_max));
-                if guard_rounds >= 2 && row.is_some_and(|r| pct >= r.magnitude_min) {
-                    status::queue(&mut w.units[src], status::GUARD, guard_rounds - 1, pct, &src_name);
+                if queue_later_guard(&mut w.units[src], guard_rounds, later_mitigation, &src_name) {
                     self.log += &format!("; guard holds {} more round{}", guard_rounds - 1, if guard_rounds == 2 { "" } else { "s" });
                 }
             }
@@ -680,34 +730,71 @@ impl Command {
                     (*last_heal, *last_status, *last_cleansed) = (done.healed, done.status, done.cleansed);
                 }
             }
-            CmdKind::Item { target, item, .. } => {
+            CmdKind::Item { target, item, cell, .. } => {
+                // A1.2-K3 (INTENT2 section 6, IR17): an area item's Field or Assault row
+                if item_area_on(w, &item) {
+                    self.exec_item_area(w, src, target, cell, &item);
+                    return;
+                }
                 let problem = item_problem(w, src, target, &item);
                 if !problem.is_empty() {
+                    // INTENT2 IR12 (`thrown_miss_spends`): a foe use whose foe is down, out of reach or hidden at impact
+                    // is a miss that spends its copy; a friend use (nothing poured) or a down user keeps it
+                    if item_miss_spends(w, src, &item) {
+                        take_from_pouch(w, src, &item.id);
+                        if let CmdKind::Item { used, .. } = &mut self.kind {
+                            *used = true;
+                        }
+                        self.log = format!("[Item] {src_name} threw {} and missed: {problem}.", item.name);
+                        return;
+                    }
                     self.failed = true;
                     self.log = format!("[Item] {} not used: {problem}.", item.name);
                     return;
                 }
-                let idx = w.units[src].inventory.pouch.iter().position(|p| p.id == item.id).unwrap();
-                w.units[src].inventory.pouch.remove(idx);
+                if item.aims_at_foes() && round_intent::hidden(w, target) {
+                    // INTENT2 IR12 with GD5 (whatever the spend switch): a hidden foe is not found (`evaded`, as an
+                    // attack's); the throw spends its copy under `thrown_miss_spends`, else it is not used
+                    self.evaded = Some(target);
+                    let name = w.units[target].name.clone();
+                    if w.ruleset.numbers.thrown_miss_spends {
+                        take_from_pouch(w, src, &item.id);
+                        if let CmdKind::Item { used, .. } = &mut self.kind {
+                            *used = true;
+                        }
+                        self.log = format!("[Item] {src_name} threw {} and missed: {name} is hidden.", item.name);
+                    } else {
+                        self.failed = true;
+                        self.log = format!("[Item] {} not used: {name} is hidden.", item.name);
+                    }
+                    return;
+                }
+                take_from_pouch(w, src, &item.id);
                 let mut parts = Vec::new();
                 let (mut heal, mut dmg, mut boost) = (0, 0, 0.0);
                 if item.heal > 0 {
+                    // A1.2-K3 (A1 section 1): the heal pipeline (the item's flat heal), capped at the missing HP
                     let before = w.units[target].hp;
-                    w.heal(target, item.heal);
+                    w.heal(target, damage::item_heal(item.heal));
                     let t = &w.units[target];
                     heal = t.hp - before;
                     parts.push(format!("healed {heal} (HP {}/{})", t.hp, t.max_hp));
                 }
                 if item.damage > 0 {
-                    dmg = w.damage(target, item.damage, true);
+                    // A1.2-K3 (A1 section 1, FB-55(2)): the damage pipeline (flat base, mitigation by the ruleset)
+                    let amount = damage::item_damage(item.damage, item_hit(w, src, target, 1.0));
+                    dmg = w.damage(target, amount, true);
                     let t = &w.units[target];
                     parts.push(format!("{dmg} damage (HP {}/{}){}", t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
                 }
                 let t = &mut w.units[target];
                 if item.buff_pct > 0.0 {
-                    boost = 1.0 + item.buff_pct;
-                    t.apply_attack_boost(boost, item.duration);
-                    parts.push(format!("+{}% attack for {} rounds", roundi(item.buff_pct * 100.0), item.duration));
+                    // A1.2-K3 (A1 section 1, FB-55(1), C07): a buff item grants its S1 status now (`item_grant`); no
+                    // stat or pool is changed mid-fight
+                    let (status_id, magnitude) = item_grant(&item);
+                    boost = 1.0 + magnitude as f64 / 100.0;
+                    status::grant_now(t, status_id, item.duration.max(1), magnitude, &format!("item:{}", item.id));
+                    parts.push(format!("+{magnitude}% attack for {} rounds", item.duration));
                 }
                 let who = if target == src { "themselves".to_string() } else { t.name.clone() };
                 if let CmdKind::Item { used, last_heal, last_damage, last_boost, .. } = &mut self.kind {
@@ -782,6 +869,82 @@ impl Command {
                     self.log += &format!(" {note}");
                 }
             }
+        }
+    }
+
+    /// A1.2-K3 (INTENT2 section 6, IR12, IR17): an area item at its impact. The Field row (`cell`) lands its shape on the
+    /// source tile at full power on every unit its `affects` takes (default all but the user); the Assault row is
+    /// target-locked: its shape is centred where the target stands at impact and the hits off the target take
+    /// `splash_mult` (default foes only), and a target down, hidden or out of reach finds no tiles. Either spends the
+    /// copy at impact whether or not it finds anyone (IR12, `thrown_miss_spends`; off: an Assault miss keeps it). Each
+    /// hit runs the item damage pipeline (`damage::item_damage`).
+    fn exec_item_area(&mut self, w: &mut World, src: UnitId, target: UnitId, cell: Option<V2>, item: &ItemDef) {
+        let src_name = w.units[src].name.clone();
+        if !w.units[src].is_active() || pouch_item(w, src, &item.id).is_none() {
+            self.failed = true;
+            self.log = format!("[Item] {} not used: {} can't act or has none left.", item.name, src_name);
+            return;
+        }
+        let shape = item_shape(item);
+        let from = w.pos(src);
+        // IR12: a Field row aims at the tile, so it always lands (and spends) at impact
+        let (centre, primary, miss) = match cell {
+            Some(p) => (Some(p), None, String::new()),
+            None => {
+                let t = &w.units[target];
+                let reach = item.battle_reach();
+                if !t.is_active() || !w.has(target) {
+                    (None, Some(target), format!("{} is down", t.name))
+                } else if round_intent::hidden(w, target) {
+                    (None, Some(target), format!("{} is hidden", t.name))
+                } else if w.dist(src, target) > reach {
+                    (None, Some(target), format!("{} is out of reach", t.name))
+                } else {
+                    (Some(w.pos(target)), Some(target), String::new())
+                }
+            }
+        };
+        let Some(centre) = centre else {
+            // GD5: only a hidden target counts as evading (as an attack's); a down or far one is a plain miss
+            if primary.is_some_and(|t| w.units[t].is_active() && w.has(t) && round_intent::hidden(w, t)) {
+                self.evaded = primary;
+            }
+            if !w.ruleset.numbers.thrown_miss_spends {
+                self.failed = true;
+                self.log = format!("[Item] {} not used: {miss}.", item.name);
+                return;
+            }
+            take_from_pouch(w, src, &item.id);
+            if let CmdKind::Item { used, .. } = &mut self.kind {
+                *used = true;
+            }
+            self.log = format!("[Item] {src_name} threw {} and missed: {miss}.", item.name);
+            return;
+        };
+        take_from_pouch(w, src, &item.id);
+        let field = cell.is_some();
+        let affects = item.affects.unwrap_or(if field { rpgkit_data::Affects::All } else { rpgkit_data::Affects::Enemies });
+        let splash = if field { 1.0 } else { w.ruleset.numbers.splash_mult };
+        let cells: Vec<V2> = skill::shape_cells(shape, from, centre).into_iter().filter(|c| w.grid.is_valid(*c) && *c != from).collect();
+        let (mut total, mut struck, mut parts) = (0, Vec::new(), Vec::new());
+        for c in cells {
+            let Some(v) = w.occupant(c) else { continue };
+            if v == src || !skill::affects_unit(affects, w.friends_of(src).contains(&v)) {
+                continue;
+            }
+            let part = if primary.is_none_or(|t| t == v) { 1.0 } else { splash };
+            let amount = damage::item_damage(item.damage, item_hit(w, src, v, part));
+            let dealt = w.damage(v, amount, true);
+            self.struck.push(crate::trigger::Struck { target: v, damage: dealt, ranged: true });
+            total += dealt;
+            struck.push(v);
+            let t = &w.units[v];
+            parts.push(format!("{} {dealt} (HP {}/{}){}", t.name, t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
+        }
+        let at = if field { format!("{centre}") } else { w.units[target].name.clone() };
+        self.log = format!("[Item] {src_name} threw {} at {at}: {}", item.name, if parts.is_empty() { "hit no one".to_string() } else { parts.join(", ") });
+        if let CmdKind::Item { used, last_damage, struck_units, .. } = &mut self.kind {
+            (*used, *last_damage, *struck_units) = (true, total, struck);
         }
     }
 
@@ -871,7 +1034,7 @@ impl Command {
     pub fn acted_on(&self, w: &World) -> Option<UnitId> {
         let t = match &self.kind {
             CmdKind::Attack { target, .. } => effective_target(w, self.source, *target),
-            CmdKind::Support { target, .. } | CmdKind::Item { target, .. } => Some(*target),
+            CmdKind::Support { target, .. } | CmdKind::Item { target, cell: None, .. } => Some(*target),
             _ => None,
         };
         t.filter(|t| *t != self.source)
@@ -914,6 +1077,20 @@ impl Command {
             status::remove_active(&mut w.units[t], &matched.0);
         }
     }
+}
+
+/// S1.2-S4: a multi-round guard (`guard_rounds` 2 or more) queues the full-round `guard` status for its later rounds at
+/// `fraction` (AUDIT-11: `skill::guard_later_mitigation`) in percent capped at the row's maximum; a fraction below the
+/// row's minimum queues nothing (it is not raised to the minimum). True when it queued. The battle's Defend impact and
+/// the Dojo's Guard (AUDIT-12) share it.
+pub fn queue_later_guard(u: &mut Unit, guard_rounds: i32, fraction: f64, source: &str) -> bool {
+    let row = status::row_of(status::GUARD);
+    let pct = roundi(fraction * 100.0).min(row.map_or(0, |r| r.magnitude_max));
+    if guard_rounds < 2 || !row.is_some_and(|r| pct >= r.magnitude_min) {
+        return false;
+    }
+    status::queue(u, status::GUARD, guard_rounds - 1, pct, source);
+    true
 }
 
 /// One hit with a crit roll drawn from the battle RNG (DamageCalculator.compute with the resolver's rng).
@@ -1350,9 +1527,11 @@ pub fn hazard_on_enter(w: &mut World, rng: &mut GodotRng, u: UnitId, cells: &[V2
     lines
 }
 
-/// HazardRules._roll: the unit rolls the hazard's status; the note when it lands.
+/// HazardRules._roll: the unit rolls the hazard's status; the note when it lands. P1.2-S2 (FB-51d): through S1 as the
+/// terrain row's EffectSpec (`grid::effect_of`; one draw when rolled, a dead unit takes nothing, lands next round).
 fn hazard_roll(w: &mut World, rng: &mut GodotRng, u: UnitId, h: &crate::grid::Hazard, cell: V2) -> Option<String> {
-    if !status::try_inflict(&mut w.units[u], &h.status, h.potency, Some(rng), h.rounds, h.magnitude, "terrain") {
+    let spec = crate::grid::effect_of(h);
+    if !status::apply_effect(&mut w.units[u], &spec, status::Timing::Next, 0.0, Some(rng)) {
         return None;
     }
     Some(format!("[Hazard] {} is {} by {}", w.units[u].name, status::display_name(&h.status), terrain_name(w, cell)))
@@ -1465,8 +1644,79 @@ pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Opti
 
 // ---- ItemCommand shared rules (planner, AI, command) --------------------------------------------------------
 
-/// ITEMUSE1 rule 3: every item use costs 1 AP (AP debt allowed).
-pub const ITEM_AP: i32 = 1;
+/// ITEMUSE1 rule 3 (A1.2-S1): the AP an item use costs `c`: the ruleset's `item_ap` (AP debt allowed); nothing for a
+/// unit that pays no AP (RULESET1 T11).
+pub fn item_ap(w: &World, c: UnitId) -> i32 {
+    if w.pays_ap(c) {
+        w.ruleset.numbers.item_ap
+    } else {
+        0
+    }
+}
+
+/// A1.2-K3 (A1 section 1, FB-55(2)): the situational terms of an item hit by `src` on `target`: `splash` in the mult
+/// stage, and under `item_mitigation` the target's guard plus the cover between them (a throw is ranged) and its
+/// armour rating.
+pub fn item_hit(w: &World, src: UnitId, target: UnitId, splash: f64) -> damage::ItemHit {
+    let mitigation = w.ruleset.numbers.item_mitigation.then(|| (w.units[target].guard + cover_between(w, src, target, true), damage::armor_rating(&w.units[target])));
+    damage::ItemHit { splash, mitigation }
+}
+
+/// A1.2-K3 (A1 section 1, FB-55(1)): the S1 status and magnitude a buff item grants: `empower` at its `buff_pct` in
+/// percent (the status row caps it at 50, so item buffs of 50 % and 30 % are not clipped).
+pub fn item_grant(item: &ItemDef) -> (&'static str, i32) {
+    ("empower", roundi(item.buff_pct * 100.0))
+}
+
+/// INTENT2 IR12: whether a foe use of `item` by `src` that finds no one at impact still spends its copy (rule value
+/// `thrown_miss_spends`): only a foe-aimed item, and only while its user can act.
+fn item_miss_spends(w: &World, src: UnitId, item: &ItemDef) -> bool {
+    w.ruleset.numbers.thrown_miss_spends && item.aims_at_foes() && w.units[src].is_active() && pouch_item(w, src, &item.id).is_some()
+}
+
+/// A1.2-K3 (INTENT2 section 6): whether `item` plays as an area item in this battle: it has an `area` and the battle
+/// plays the Field intent (rule `field_intent`); otherwise (classic, a `round_intent`-only row) it hits its one target.
+pub fn item_area_on(w: &World, item: &ItemDef) -> bool {
+    item.is_area() && round_intent::field_rows(w)
+}
+
+/// A1.2-K3: the area shape of an area item (PLUS or BURST; a single target reads as PLUS's centre only through
+/// `item_area_on`, never here).
+pub fn item_shape(item: &ItemDef) -> skill::Area {
+    match item.area.as_str() {
+        "BURST" => skill::Area::Burst,
+        _ => skill::Area::Plus,
+    }
+}
+
+/// A1.2-K3 (INTENT2 section 6, IR17, IR21 Field bonus `reach`): the band an item reaches in a Field row: its battle
+/// reach, +1 for a throw (reach above 1).
+pub fn item_field_reach(item: &ItemDef) -> i32 {
+    let r = item.battle_reach();
+    if r > 1 {
+        r + 1
+    } else {
+        r
+    }
+}
+
+/// A1.2-K3 (IR11, IR17): the blocks one use of `item` takes: its `use_blocks`, plus `assault_shape_blocks` for an area
+/// item's Assault row (`assault_area`), at most `max_blocks`.
+pub fn item_blocks(w: &World, item: &ItemDef, assault_area: bool, max_blocks: i32) -> i32 {
+    let base = item.use_blocks.max(1);
+    if assault_area {
+        (base + w.ruleset.numbers.assault_shape_blocks).min(max_blocks.max(base))
+    } else {
+        base
+    }
+}
+
+/// Removes one copy of `item_id` from `c`'s battle pouch (the caller checked it holds one).
+fn take_from_pouch(w: &mut World, c: UnitId, item_id: &str) {
+    if let Some(idx) = w.units[c].inventory.pouch.iter().position(|p| p.id == item_id) {
+        w.units[c].inventory.pouch.remove(idx);
+    }
+}
 
 /// ItemCommand.pouch_item: the first consumable with `item_id` in the unit's battle pouch.
 pub fn pouch_item<'a>(w: &'a World, c: UnitId, item_id: &str) -> Option<&'a ItemDef> {
@@ -1561,7 +1811,9 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
     }
     let name = w.units[caster].name.clone();
     if !s.grant_status.is_empty() {
-        status::queue(&mut w.units[target], &s.grant_status, s.status_rounds, s.status_magnitude, &name);
+        // A4.2: the support grant as an EffectSpec (never rolled; next round)
+        let spec = status::EffectSpec::grant(&s.grant_status, s.status_rounds, s.status_magnitude, &name);
+        status::apply_effect(&mut w.units[target], &spec, status::grant_timing(&s.grant_status, false), 0.0, None);
     }
     let extras = status::grant_extras(&mut w.units[target], &s.extra_grants, false, &name);
     Supported { healed, status: s.grant_status.clone(), cleansed, extras }

@@ -114,7 +114,7 @@ fn crit_on(line: &str, name: &str) -> bool {
 }
 
 /// Whether `line` is the break line of the unit named `name` (`[Break] <name> is broken` or `[Break] <name>'s
-/// <action> is broken`, `poise::break_line`).
+/// <action> is broken`, `poise::break_line`; either may end with " (Stagger queued)", R1-BAL).
 fn break_on(line: &str, name: &str) -> bool {
     let rest = line.strip_prefix("[Break] ").and_then(|r| r.strip_prefix(name));
     !name.is_empty() && rest.is_some_and(|r| r.starts_with(" is broken") || r.starts_with("'s "))

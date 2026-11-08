@@ -1,6 +1,6 @@
 {
   "contract": [
-    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute",
+    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute",
     "tunable intents strings default=[\"assault\",\"guard\",\"support\",\"maneuver\"] values=assault|guard|support|maneuver|channel needs=round_intent(refused)",
     "tunable basics refs default=[]",
     "tunable poise_stat string default=\"\"",
@@ -24,11 +24,14 @@
     "tunable switch_target_step enum default=\"\" values=\"\"|on|off",
     "tunable stances enum default=\"\" values=\"\"|on|off",
     "tunable attack_lock enum default=\"none\" values=none|melee|all untested_with=chase=classic",
-    "tunable move_after_blocks row-only default=3 needs=round_intent (no schema entry)",
+    "tunable move_after_blocks int default=3 range=1..4 needs=round_intent",
+    "tunable item_ap int default=1 range=0..2",
     "tunable bleed_pct row-only default=0.06 range=0.01..0.25 (no schema entry)",
     "tunable counter_mult row-only default=0.5 range=0.1..1.5 (no schema entry)",
     "tunable debt_stagger row-only default=3 range=1..10 (no schema entry)",
     "tunable debt_stun row-only default=5 range=1..10 (no schema entry)",
+    "tunable debt_stagger_status row-only default=stagger (no schema entry)",
+    "tunable debt_stun_status row-only default=stun (no schema entry)",
     "tunable poise_mode row-only default=bar values=bar|pips needs=poise (no schema entry)",
     "tunable poise_pips row-only default=5 range=3..8 needs=poise+poise_mode=pips (no schema entry)",
     "tunable max_pip_loss_per_hit row-only default=3 range=1..5 needs=poise+poise_mode=pips (no schema entry)",
@@ -39,6 +42,12 @@
     "tunable req_discount_per_level row-only default=2 range=0..4 (no schema entry)",
     "tunable guard_common_mitigation row-only default=0.35 range=0.1..0.9 (no schema entry)",
     "tunable guard_multi_round_mitigation row-only default=0.2 range=0.1..0.9 (no schema entry)",
+    "tunable splash_mult row-only default=0.5 range=0.25..1.0 needs=field_intent (no schema entry)",
+    "tunable assault_shape_blocks row-only default=1 range=0..2 needs=field_intent (no schema entry)",
+    "tunable item_mitigation row-only default=off values=on|off (no schema entry)",
+    "tunable thrown_miss_spends row-only default=off values=on|off (no schema entry)",
+    "tunable pouch_stacks row-only default=off values=on|off (no schema entry)",
+    "tunable ai_rating_scorer row-only default=off values=on|off (no schema entry)",
     "rule round_intent option system=planning bundle=intent_core requires=- conflicts=stances=on, switch_target_step=on",
     "rule enemy_moves option system=timing bundle=windup requires=- conflicts=-",
     "rule deck option system=build bundle=build requires=- conflicts=-",
@@ -48,6 +57,7 @@
     "rule reach extension system=positioning bundle=positioning requires=- conflicts=-",
     "rule flank extension system=positioning bundle=positioning requires=round_intent conflicts=-",
     "rule plan_badges extension system=tells bundle=tells requires=- conflicts=-",
+    "rule field_intent option system=planning bundle=- requires=round_intent conflicts=-",
     "rule forced_move extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule ground_hazards extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule arena_hazards extension system=hooks bundle=hooks requires=- conflicts=-",
@@ -115,6 +125,9 @@
     "promoted UNTRAINED_BURDEN_ADD -> untrained_burden_add",
     "promoted REQ_DISCOUNT_PER_LEVEL -> req_discount_per_level",
     "promoted GUARD_COMMON_MITIGATION -> guard_common_mitigation",
-    "promoted GUARD_MULTI_ROUND_MITIGATION -> guard_multi_round_mitigation"
+    "promoted GUARD_MULTI_ROUND_MITIGATION -> guard_multi_round_mitigation",
+    "promoted ITEM_AP -> item_ap",
+    "promoted SPLASH_MULT -> splash_mult",
+    "promoted ASSAULT_SHAPE_BLOCKS -> assault_shape_blocks"
   ]
 }

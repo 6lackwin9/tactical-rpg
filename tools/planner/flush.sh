@@ -9,6 +9,7 @@
 root="${1:-C:/dev/tactical-rpg}"; stage="$(dirname "$root")/tactical-rpg-stage"; log="${TMPDIR:-/tmp}/flush.log"
 cd "$stage" || exit 1
 git fetch -q origin
+python tools/planner/feedback_check.py lease check --no-fetch || { echo "LEASE CONFLICT"; exit 1; }
 git rebase -q origin/develop || { echo "REBASE CONFLICT"; exit 1; }
 n=$(git rev-list --count origin/develop..HEAD) || { echo "GIT FAILED (rev-list), nothing flushed"; exit 1; }
 [ -n "$n" ] || { echo "GIT FAILED (no count), nothing flushed"; exit 1; }

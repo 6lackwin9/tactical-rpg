@@ -1,5 +1,23 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## R2-CLOSE 2026-11-08 (`CLASS-BASICS` & `R2` close feel pass, `FB-137`)
+
+- **Measured build**: `develop` `@4ed71e44` (40 seeds, `tools/fc.sh sim feel 5 ruleset=timeline seeds=40 counts=on`, auto driver, `0` PLAN FAIL / SKIP).
+- **Baseline (`4ed71e44`)**: **`tl_duel_windup` 65% (`26/14/0`, median 5 rounds), `tl_duel_reach` 62.5% (`25/15/0`), `tl_duel_armour` 65% (`26/14/0`), `tl_flank` 100%, `tl_skirmish` 87.5% (`35/2/3`), overall 76.0%** — all three duels inside the `50–75%` target band and overall `>= 75%`.
+- **Evaluated levers (`know_potency` & `guard_cap`)**: Setting `know_potency` to `1.0` (or `3.0`) on `rulesets.timeline` and `GUARD_CAP` to `0.75` (`rpgkit_rules/src/damage.rs:25`) produced byte-identical results across all 40 seeds (`tl_` fights do not roll status potency via `status::know_bonus` and no guard+cover stack exceeds `0.75`). Decision (`FB-137`): keep `know_potency = 0.0` and `guard_cap = 0.90` for `R2`, and expand `tl_` class-basic feel coverage in `R4-CLOSE`.
+
+## W2-4 & W2-5 2026-11-08 (`A4.2-K1b` Field intent & `ATTACKLOCK1-O` melee lock feel check, `FB-121`, `FB-128`)
+
+- **`W2-4` Slice 6 (`A4.2-K1b`, `@86ff95d`, 40 seeds)**: `tl_duel_windup` 65%, `tl_duel_reach` 75%, `tl_duel_armour` 65%, `tl_flank` 100%, `tl_skirmish` 87.5% (35 won, 1 lost, 4 capped; was 92.5% before `field_intent` routed `tl_halberdier`'s `tl_sweeping_arc` through `Assault` `area_on` with `+1` wind-up block and `splash_mult` `0.5`), **overall 78.5%** (`>= 75%` target).
+- **`W2-5` Slices 2–3 (`ATTACKLOCK1-O` + `I1.2-S2/S3`, `@367a6bb` / `@e95171f`, 40 seeds, `attack_lock = melee` on in `timeline`)**: **`tl_duel_windup` 65%, `tl_duel_reach` 62.5% (was 75%; `tl_footman` steps inside `tl_halberdier`'s reach-2 polearm wind-up, dodging 34 locked attacks across 40 seeds), `tl_duel_armour` 65%, `tl_flank` 100%, `tl_skirmish` 87.5%, overall 76.0%** (all three duels inside the `50–75%` band, overall `>= 75%`).
+
+## R1-BAL 2026-11-07 (post-R1 timeline feel run & H6 tuning options, `FB-98`)
+
+- **Measured build**: `develop` `@af543321` (40 seeds, `tools/fc.sh sim feel 5 ruleset=timeline seeds=40`, auto driver): **67% overall** (`tl_duel_windup` 10%, `tl_duel_reach` 57.5%, `tl_duel_armour` 87.5%, `tl_flank` 100%, `tl_skirmish` 80%; `tl_skirmish` seed 7 ends `fled (round limit)` at round 10).
+- **Finding**: `tl_duel_windup` is a damage/HP gap against the armour-35 elite `tl_enforcer`; `know_potency` (`0.5 / 1.0 / 2.0`) is inert on the five `tl_` fights (kept at `0.0` until `R2` status-heavy fights).
+- **Approved `H6` Tuning (`FB-98` Option A & C, landed via `games/emberwake/data/seeds/r1bal.json` @ `7d67fbe9`, `FB-103`)**: `units.json` `tl_enforcer` armour `35 -> 15`, `tl_captain` level `1 -> 2`, `tl_footman` armour `25 -> 40`; `encounters.json` `tl_skirmish` `max_rounds` `10 -> 12`; `rulesets.json` `timeline` `stagger_windup_mult` `2.0 -> 1.0` (`know_potency` stays `0.0`).
+- **Measured Result at 40 seeds (`H6`, `@7d67fbe9`)**: **`tl_duel_windup` 65%, `tl_duel_reach` 75%, `tl_duel_armour` 65%, `tl_flank` 100%, `tl_skirmish` 92.5% (37 won, 1 lost, 2 capped), overall 79.5%** (all three duels inside the `50-75%` band, overall `>= 75%`; `0` golden diffs on frozen fixtures).
+
 ## INPUT1-MB 2026-11-02 (feel run after the Maneuver rework, against RULESET1-A3)
 
 Measured build: `develop` a39ccb56 (checkout `C:/dev/tactical-rpg-dev`), no code, data or tuning changed. Jitter on, preset `balanced`, tactic `balanced`, seed i = 11 + 12 i, 100 seeds, 0 PLAN FAIL and 0 PLAN SKIP. Commands: `tools/fc.sh sim feel seeds=100 party=both` (five `tl_` fights), the same with `enc=tl_flank_elite`, and `enc=tl_flank,tl_skirmish melee_diagonal=none|all|maneuver` (`maneuver` is the shipped value and reproduces the main run exactly). Attribution builds came from a throwaway worktree of the same repo (removed afterwards): 7e3a09d0 (INPUT1-MA), 1cda9103 (INPUT1-L), 0a668f8d^ (just before INPUT2), and a39ccb56 with the six `tl_` `start_ap` values set to 12 (a no-op start, "start 12" below). Scratch outputs: `mb_*.txt` and `logs/` in the session scratchpad.

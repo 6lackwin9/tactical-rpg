@@ -68,7 +68,7 @@ A catalog row of kind `hazards` (`data/catalog/hazards.json`) is a timed tile ov
 | `hazards` row | `cover_guard` 0-0.5, `move_cost` 0-3 | cover (the larger of terrain and hazard); added path cost |
 | `hazards` row | `affects` all, foes, friends (of the placer); `trap`; `hidden` (foes only); `stop_moves` | who it touches; a trap springs once and stops the move; a hidden hazard is unseen by the other side |
 | `hazards` row | `duration` 1-5, `tint`, `glyph` | rounds; the board look |
-| skill (ATTACK, DEFEND, SUPPORT) or consumable | `hazard` | `{id, shape, at, rounds}`: `shape` SKILL (the skill's own area), NONE, PLUS, BURST, LINE, SWEEP; `at` target or self; `rounds` 0 = the row's `duration` |
+| skill (ATTACK, DEFEND, SUPPORT) or consumable | `hazard` | `{id, shape, at, rounds}`: `shape` SKILL (the skill's own area), NONE, PLUS, BURST, LINE, RING, ARC; `at` target or self; `rounds` 0 = the row's `duration` |
 
 - Attack, area and support skills place at impact, a Defend at its start, an item at use; only walkable tiles, a trap
   only on an empty tile. An ATTACK with `power_mult` 0 and a `hazard` is a pure placement: it aims at a tile, deals no

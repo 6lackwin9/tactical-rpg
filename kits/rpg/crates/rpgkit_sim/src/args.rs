@@ -745,8 +745,17 @@ impl SimArgs {
             }
             "pouch" => {
                 let ids = list(value);
-                if ids.is_empty() || ids.len() > POUCH_MAX {
-                    return Err(format!("pouch must list 1..{POUCH_MAX} consumable ids (got '{value}')"));
+                // A1.2-K3 (INTENT2-K3): the classic form (1..POUCH_MAX copies) or the stack form (at most POUCH_MAX
+                // distinct ids, each at most its stack limit; the battle loads it under `pouch_stacks`)
+                let mut distinct: Vec<&String> = Vec::new();
+                for id in &ids {
+                    if !distinct.contains(&id) {
+                        distinct.push(id);
+                    }
+                }
+                let stacked = distinct.len() <= POUCH_MAX && distinct.iter().all(|id| ids.iter().filter(|x| x == id).count() as i64 <= rpgkit_world::state::stack_limit(d, id));
+                if ids.is_empty() || (ids.len() > POUCH_MAX && !stacked) {
+                    return Err(format!("pouch must list 1..{POUCH_MAX} consumable ids, or {POUCH_MAX} stacks each within its stack limit (got '{value}')"));
                 }
                 for id in &ids {
                     if aegis_core::json::s(d.entry("items", id), "item_type") != "CONSUMABLE" {

@@ -4,10 +4,11 @@
 
 | Release | Silos / Blocks | Scope & Ship Gate |
 | --- | --- | --- |
-| **`R1`** | **Unit & Status Foundation** (`U1-U4`, `S1-S2`, `C01-C05`) | Unified 5-stage pipeline, Pool/Rating classes, `unit_budget` shares, `item_families` rules, 5 passive grant kinds, 18 data-driven statuses (`Option 1C` Guard), and 5-pip Poise threshold (`Option 2A`). |
-| **`R2`** | **Action & Combat Engine** (`A1-A4`, `F1-F4`, `P1-P2`, `I1`, `C06-C17`) | Consumables in pipeline, dynamic re-derivation triggers, `RING`/`ARC` shapes, `EffectSpec`, `IR21` intent derivation, `ATTACKLOCK1-O` on, data-driven terrain `walkable`, AI behaviour predicates + **consolidated user Arena/Dojo visual & feel review (`UN-02`)**. |
-| **`R3`** | **World, Economy & Story Loop** (`E1-E3`, `W1-W3`, `T1-T2`, `C18-C28`) | `PurseCaps` in `game.json`, stage-scaled enemy XP, `WORLDFIGHT1` (`begin_world`/`finish_world`), `SERVICES1`, and seeded dialogue stat rolls. |
-| **`R4`** | **Final Shells & Ship Gate** (`X1-X8`) | Reactive 1280x720 layouts (`LAYOUT720`, `LAYOUTDATA1`), stage/region grounds, portraits/FX, content checks, saves, sim/tools, and full scenario gate. |
+| **`R1`** | **Unit & Status Foundation** (`U1-U4`, `S1-S2`, `C01-C05`) | Unified 5-stage pipeline, Pool/Rating classes, `unit_budget` shares, `item_families` rules, 5 passive grant kinds, 18 data-driven statuses (`Option 1C` Guard), and 5-pip Poise threshold (`Option 2A`). (**Released to `main` @ `98ab973a`; `R1.1` polish in progress**) |
+| **`R2`** | **Action & Combat Engine** (`A1-A4`, `F1-F4`, `P1-P2`, `I1`, `C06-C17`) | Consumables in pipeline + pip/round-robin auto-fill, dynamic re-derivation triggers, `RING`/`ARC` shapes, `EffectSpec`, `IR21` intent derivation (`26` dual-intent skills), `ATTACKLOCK1-O` on, data-driven terrain `walkable`, and AI behaviour predicates (`sim feel` + backend `audit-build` gate). |
+| **`R3`** | **World, Economy & Story Loop** (`E1-E3`, `W1-W3`, `T1-T2`, `C18-C28`) | `PurseCaps` in `game.json`, stage-scaled enemy XP, `WORLDFIGHT1` (`begin_world`/`finish_world`), `SERVICES1`, and seeded dialogue stat rolls (`journey_golden` + backend `audit-build` gate). |
+| **`R4`** | **Final Shells & Ship Gate** (`X1-X8`) | Engine foundation & mechanics finalized across all 9 Masterplan blocks (`U, S, A, F, P, I, E, W, T`); content checks, saves, sim/tools, and full backend scenario gate. |
+| **`Post-R4`** | **Interactive Story, Game UI Polish & Web/itch.io Release** (user 2026-11-08) | Interactive user + design sessions to flesh out the story, transform the engine debug UI into the polished player-facing game interface (`preferences/ui.md`: subtractive layouts & visual-first encoding, `UN-02`), and publish the Web/WASM deployment to itch.io (replacing the legacy Godot web build). |
 
 ## Historical Slice Milestones (Reference Mapping)
 

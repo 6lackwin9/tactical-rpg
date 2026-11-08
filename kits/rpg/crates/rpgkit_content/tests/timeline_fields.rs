@@ -361,13 +361,13 @@ fn range_and_position_tokens_render_the_dash() {
         r
     };
     let flank = row(json!({"position": "flank", "reach_max": 2}));
-    assert_eq!(source::render("Dashes up to {range} {position}, then hits.", "ATTACK", &flank, 1), "Dashes up to 2 to a flank, then hits.");
+    assert_eq!(source::render("Dashes up to {range} {position}, then hits.", "ATTACK", &flank, 1, true), "Dashes up to 2 to a flank, then hits.");
     let behind = row(json!({"position": "behind", "reach_max": 3}));
-    assert_eq!(source::render("Dashes up to {range} {position}.", "ATTACK", &behind, 1), "Dashes up to 3 behind the target.");
+    assert_eq!(source::render("Dashes up to {range} {position}.", "ATTACK", &behind, 1, true), "Dashes up to 3 behind the target.");
     let transition = row(json!({"dash_tiles": 2}));
-    assert_eq!(source::render("Dashes up to {dash} {position}; {range}.", "ATTACK", &transition, 1), "Dashes up to 2 tiles to a flank; 2.");
+    assert_eq!(source::render("Dashes up to {dash} {position}; {range}.", "ATTACK", &transition, 1, true), "Dashes up to 2 tiles to a flank; 2.");
     let band = dict(json!({"id": "y", "name": "Y", "kind": "ATTACK", "reach_min": 2, "reach_max": 4}));
-    assert_eq!(source::render("Range {range}{position}.", "ATTACK", &band, 1), "Range 2-4.");
+    assert_eq!(source::render("Range {range}{position}.", "ATTACK", &band, 1, true), "Range 2-4.");
 }
 
 /// The writer stores the timeline fields as every skill field (family fields once, rank fields as rank modifiers when
@@ -455,5 +455,67 @@ fn the_writer_keeps_only_set_follow_up_lists() {
     let typed = rpgkit_data::Deck::from_value(&stored["entries"][0]["deck"]);
     assert_eq!(typed.follow_ups_of("thrust"), Some(&vec!["strike".to_string(), "thrust".to_string()]));
     assert!(typed.follow_ups_of("brace").is_none());
+    drop_scratch(&data);
+}
+
+/// A4.2-K1b (A3_SHAPES acceptance 2, FB-20): a dual Field / Assault skill's Assault row winds up
+/// `assault_shape_blocks` longer, so `blocks + recovery_blocks + assault_shape_blocks` must fit the round (6) once a
+/// ruleset plays the shaped Assault row (`field_intent`); a ring (Stand only) or a hazard throw (Field only) has no
+/// Assault row, and without the rule nothing changes.
+#[test]
+fn a_dual_shaped_skill_must_fit_its_assault_rows_wind_up() {
+    let (_scratch, data) = scratch("assault_blocks");
+    catalog(&data);
+    let no_rule = store::view(&data);
+    let burst = json!({"area": "BURST", "reach_min": 2, "reach_max": 3, "blocks": 4, "recovery_blocks": 2});
+    assert_eq!(errors_of(&no_rule, "skills", "thrust", &burst), Vec::<String>::new(), "no ruleset plays the Assault row");
+    for (extra, want) in [(json!({}), 1), (json!({"assault_shape_blocks": 2}), 2), (json!({"assault_shape_blocks": 0}), 0)] {
+        let mut row = json!({"id": "timeline", "name": "Timeline", "rules": [ruleset::ROUND_INTENT, ruleset::FIELD_INTENT]});
+        row.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        write_kind(&data, ruleset::KIND, 1, json!([row]));
+        let v = store::view(&data);
+        let errors = errors_of(&v, "skills", "thrust", &burst);
+        if want == 0 {
+            assert_eq!(errors, Vec::<String>::new(), "assault_shape_blocks 0: 6 fits");
+        } else {
+            assert_eq!(errors.len(), 1, "{errors:?}");
+            assert!(errors[0].contains(&format!("is {} (at most 6", 6 + want)), "{errors:?}");
+        }
+        // 6 - assault_shape_blocks fits; Stand-only rings and Field-only hazard throws have no Assault row
+        let fits = json!({"area": "BURST", "reach_min": 2, "reach_max": 3, "blocks": 4 - want.min(4), "recovery_blocks": 2});
+        assert_eq!(errors_of(&v, "skills", "thrust", &fits), Vec::<String>::new());
+        assert_eq!(errors_of(&v, "skills", "thrust", &json!({"area": "RING", "blocks": 4, "recovery_blocks": 2})), Vec::<String>::new(), "RING: Stand");
+        assert_eq!(errors_of(&v, "skills", "thrust", &json!({"area": "BURST", "reach_max": 1, "blocks": 4, "recovery_blocks": 2})), Vec::<String>::new(), "a reach-1 BURST: Field only");
+    }
+    drop_scratch(&data);
+}
+
+/// A4.2-K1b (INTENT2 IR15, IR21): under a deck ruleset that plays `field_intent`, a deck's `order` and `follow_ups`
+/// read the derived rows (a skill fits any of its rows) and the order may name `field`; without the rule the legacy
+/// single intent holds.
+#[test]
+fn deck_orders_read_the_derived_rows_under_field_intent() {
+    let (_scratch, data) = scratch("derived_rows");
+    catalog(&data);
+    let legacy = store::view(&data);
+    let row = json!({"id": "timeline", "name": "Timeline", "rules": ["round_intent", "deck", "poise", ruleset::FIELD_INTENT], "basics": ["move", "rest", "strike", "flank_cut"], "poise_stat": "max_poise",
+        "deck_slots": {"active": 2, "passive": 1, "keystone": 1}});
+    write_kind(&data, ruleset::KIND, 1, json!([row]));
+    let v = store::view(&data);
+    let mend_in_guard = json!({"deck": {"active": ["thrust", "mend"], "order": {"guard": ["mend"]}}});
+    assert_eq!(errors_of(&legacy, "units", "drillman", &mend_in_guard), ["Deck order guard: 'mend' is of intent support."], "legacy: the single intent");
+    assert_eq!(errors_of(&v, "units", "drillman", &mend_in_guard), Vec::<String>::new(), "derived: Support or Stand");
+    assert_eq!(errors_of(&v, "units", "drillman", &json!({"deck": good_deck()})), Vec::<String>::new());
+    let both = json!({"deck": {"active": ["thrust", "mend"], "order": {"support": ["mend"], "guard": ["mend"]}}});
+    assert_eq!(errors_of(&v, "units", "drillman", &both), Vec::<String>::new(), "IR15: a skill in each of its rows' lists");
+    assert_eq!(errors_of(&v, "units", "drillman", &json!({"deck": {"active": ["thrust"], "order": {"field": ["thrust"]}}})), ["Deck order field: 'thrust' is of intent assault."], "field is an order key");
+    let unknown = errors_of(&v, "units", "drillman", &json!({"deck": {"order": {"dance": ["strike"]}}}));
+    assert_eq!(unknown, ["Deck order: 'dance' is not an intent (one of assault, guard, support, maneuver, channel, field)."]);
+    let legacy_unknown = errors_of(&legacy, "units", "drillman", &json!({"deck": {"order": {"field": ["strike"]}}}));
+    assert_eq!(legacy_unknown, ["Deck order: 'field' is not an intent (one of assault, guard, support, maneuver, channel)."]);
+    // a follow-up shares one of the opener's rows
+    let follow = json!({"deck": {"active": ["mend", "brace"], "follow_ups": {"mend": ["brace"]}}});
+    assert_eq!(errors_of(&v, "units", "drillman", &follow), Vec::<String>::new(), "Stand is one of mend's rows");
+    assert_eq!(errors_of(&legacy, "units", "drillman", &follow), ["Follow-ups after 'mend': 'brace' is Guard, not Support."]);
     drop_scratch(&data);
 }

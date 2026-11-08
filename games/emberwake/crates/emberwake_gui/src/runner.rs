@@ -476,7 +476,7 @@ impl DebugFight {
                 let d = cx.data.clone();
                 let gs = cx.gs_mut();
                 // no battle: the default tally (a skip = every enemy killed, REWARD1 2.5)
-                let res = crate::battle::after_fight(&d, gs, &self.runner, &self.fight, outcome, None);
+                let res = emberwake_world::battle::finish_world(&d, gs, &self.runner, &self.fight, outcome, None);
                 cx.set_busy(false);
                 crate::battle::log_settled(cx, &self.runner, &res);
                 cx.nav.push(Nav::Push(Box::new(crate::hub::Results::new(&res, outcome, &self.fight))));

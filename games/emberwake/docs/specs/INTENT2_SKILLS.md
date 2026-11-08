@@ -17,7 +17,7 @@ Skills checked: 129 (the catalog holds 129). Consumables checked: 6 (every item 
 
 Skills that change primary intent: 31 (`lunge`, `pounce`, and `charge_in` move from `assault` to `maneuver` via `dash_tiles` in `IR21`, `FB-17`).
 
-Allowed intents (`IR21` derived): 19 skills list two: 8 `SUPPORT` with `target_mode` `ALLY_OR_SELF` (`support, guard`) and 11 thrown area skills (`field, assault`, including `volley` and 6 enemy bursts); the other 110 list one. Allowed lists the primary first; the row a skill is picked from sets its behaviour.
+Allowed intents (`IR21` derived): 26 skills list two: 8 `SUPPORT` with `target_mode` `ALLY_OR_SELF` (`support, guard`) and 18 non-hazard directional/thrown area skills (`field, assault`, including the 7 `ARC`/`LINE` directional swings plus `volley` and 10 `BURST` skills); the other 103 list one. Allowed lists the primary first; the row a skill is picked from sets its behaviour (`Field` ground-aimed with `Field` bonus vs `Assault` target-locked with `splash_mult` and `+1` wind-up block).
 
 Flags: 31 `rule` (fits with a named rule), 9 `feel` (fits, but would feel wrong or needs tuning), 10 `unclear` (the test gives no one clear answer). A row with no flag fits cleanly.
 
@@ -91,24 +91,24 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 
 | Id | Kind | Now | Shape | Primary | Allowed | Bonus | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `shockwave` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
+| `shockwave` | ATTACK | assault | LINE | field | field, assault | area | tile | rule: Field drawn (`LINE 3 -> 4`), Assault target-locked (`LINE 3`, half splash, +1b) |
 | `volley` | ATTACK | assault | PLUS | field | field, assault | reach | tile | feel: ranger keeps Volley-then-shots mix via Assault half-splash row |
 | `firebomb` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
-| `arc_lance` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
+| `arc_lance` | ATTACK | assault | LINE | field | field, assault | area | tile | rule: Field drawn (`LINE 3 -> 4`), Assault target-locked (`LINE 3`, half splash, +1b) |
 | `inferno` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `glacial_burst` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `tripwire_snare` | ATTACK | assault | one tile | field | field | lingering | tile | feel: then Rest unless the pouch fills; wasted on a unit target today |
-| `foundry_shatter` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
+| `foundry_shatter` | ATTACK | assault | SWEEP to ARC | field | field, assault | area | arc | rule: ARC; Field `ARC 3 -> 5`, Assault target-locked `ARC 3` |
 | `phosphorus_pot` | ATTACK | assault | BURST | field | field | lingering | tile |  |
 | `magnesium_flash_bomb` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
 | `choke_gas` | ATTACK | assault | BURST | field | field | lingering | tile |  |
-| `crushing_judgment` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
+| `crushing_judgment` | ATTACK | assault | SWEEP to ARC | field | field, assault | area | arc | rule: ARC; Field `ARC 3 -> 5`, Assault target-locked `ARC 3` |
 | `pyre_nozzle_sweep` | ATTACK | assault | BURST | field | field | lingering | tile | feel: Purifier loses its Nozzle-then-Brand mix |
 | `scalding_grease_pot` | ATTACK | assault | PLUS | field | field | lingering | tile | feel: Dredger has no Assault skill left |
-| `gilded_billhook_sunder` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today; Assault list left empty |
-| `execution_wall` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
+| `gilded_billhook_sunder` | ATTACK | assault | SWEEP to ARC | field | field, assault | area | arc | rule: ARC; dual-row keeps Assault non-empty |
+| `execution_wall` | ATTACK | assault | LINE | field | field, assault | area | tile | rule: Field drawn (`LINE 3 -> 4`), Assault target-locked (`LINE 3`, half splash, +1b) |
 | `transfusion_pulse` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |
-| `pneumatic_hammer_strike` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
+| `pneumatic_hammer_strike` | ATTACK | assault | SWEEP to ARC | field | field, assault | area | arc | rule: ARC; Field `ARC 3 -> 5`, Assault target-locked `ARC 3` |
 | `bone_mill_pulverizer` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |
 | `pressurized_lard_spray` | ATTACK | assault | BURST | field | field, assault | reach | tile | feel: `IR21` dual row; alternates with Hook Drag |
 | `scalding_cataclysm` | ATTACK | assault | BURST | field | field, assault | reach | tile | unclear: reach 1, reads as around you (`IR21` dual row) |

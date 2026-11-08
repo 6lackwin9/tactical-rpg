@@ -248,7 +248,7 @@ fn the_fields_load_into_the_typed_catalog_and_default_to_nothing() {
     assert!(!off.has(ruleset::EXECUTE) && !off.has(ruleset::FORCED_MOVE) && off.has(ruleset::TRIGGERS), "they switch one by one");
     // the description token of an execute entry
     let carver = cat.skill("carver").unwrap();
-    assert_eq!(source::render("{exploit}", "ATTACK", &carver.raw, 1), "x1.5 vs Exposed, x2.0 at 35% HP or less");
+    assert_eq!(source::render("{exploit}", "ATTACK", &carver.raw, 1, true), "x1.5 vs Exposed, x2.0 at 35% HP or less");
     drop_scratch(&data);
 }
 
@@ -324,7 +324,10 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         ("skills", "sweep", json!({"hazard": {"id": "lava"}}), "Leaves hazard: unknown hazard 'lava'."),
         ("skills", "sweep", json!({"hazard": {"shape": "BURST"}}), "Leaves hazard: id is required"),
         ("skills", "slam", json!({"hazard": {"id": "fire", "shape": "SKILL"}}), "Leaves hazard: shape SKILL needs an area attack"),
-        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "RING"}}), "Leaves hazard: shape 'RING' is not one of"),
+        // A3.2-K2: RING and ARC are hazard shapes (as the skill shapes); CONE is not (no hazard wants it yet)
+        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "CONE"}}), "Leaves hazard: shape 'CONE' is not one of"),
+        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "RING"}}), ""),
+        ("skills", "sweep", json!({"hazard": {"id": "fire", "shape": "ARC"}}), ""),
         ("skills", "sweep", json!({"hazard": {"id": "fire", "at": "near"}}), "Leaves hazard: at 'near' is not one of target, self."),
         ("skills", "sweep", json!({"hazard": {"id": "fire", "rounds": 6}}), "Leaves hazard: rounds must be a whole number 0-5."),
         ("skills", "snare", json!({"hazard": {}}), "A skill with no damage needs a status"),
@@ -410,7 +413,7 @@ fn item_and_encounter_rules_each_report_one_error() {
     let v = store::view(&data);
     let item = |hazard: Value| errors_of(&v, "items", "pot", &json!({"hazard": hazard}));
     assert_eq!(item(json!({})), Vec::<String>::new());
-    assert_eq!(item(json!({"id": "fire", "shape": "SKILL"})), ["Leaves hazard: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE or SWEEP)."]);
+    assert_eq!(item(json!({"id": "fire", "shape": "SKILL"})), ["Leaves hazard: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE, RING or ARC)."]);
     assert_eq!(item(json!({"id": "smog"})), ["Leaves hazard: unknown hazard 'smog'."]);
     let vents = |patch: Value| {
         let mut h = json!({"id": "vents", "name": "Slag Vents", "columns": [7, 8], "blocks": [3, 6], "effect": {"damage_pct": 12}});
@@ -546,7 +549,7 @@ fn the_hook_kinds_check_their_rows() {
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f1", "name": "Hot", "from": 1}]}), "Band 'f1': the first band starts at min (0)."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0}, {"id": "f1", "from": 0}]}), "Band 'f1': bands run in ascending from."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "fear"}]}]}), "Band 'f0' status 1: 'fear' is not a status."),
-        (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "empower", "magnitude": 30}]}]}), "Band 'f0' status 1: empower needs a magnitude 1-25."),
+        (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "empower", "magnitude": 60}]}]}), "Band 'f0' status 1: empower needs a magnitude 1-50."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "ap_regen", "value": 1}]}]}), "Band 'f0' effect 1: 'ap_regen' is not one of stat, resist, stagger_taken, skill_potency, status_potency, crit."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "resist", "status": "stun", "value": 0}]}]}), "Band 'f0': Effect 1: resistance is 1-100."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": "f9", "effects": [{"type": "ap", "value": 1}]}]}), "Rule 'full': at must be a band id or a whole number 0-5."),

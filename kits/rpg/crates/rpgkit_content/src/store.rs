@@ -40,16 +40,28 @@ fn class_storage(full: &Dict) -> Dict {
             "base_stats" | "growth" => share_row,
             _ => false,
         };
-        !(dropped && empty(v))
+        // CLASS-BASICS: `basics` is stored only when set, so a class written before it existed re-saves byte for byte
+        let unset_basics = k == "basics" && v.as_array().is_some_and(|a| a.is_empty());
+        !(dropped && empty(v)) && !unset_basics
     });
     row
 }
 
 /// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the
-/// same value when read), so a row written before the switches were fields re-saves byte for byte.
+/// same value when read), so a row written before the switches were fields re-saves byte for byte. P1.2-S2 (FB-109):
+/// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it).
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
     to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
+}
+
+/// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
+/// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for
+/// byte until the data re-save writes them.
+fn terrain_storage(entry: &Dict, full: &Dict) -> Dict {
+    let mut row = content_storage("terrain", full);
+    row.retain(|k, _| !source::TERRAIN_FALLBACK_KEYS.contains(&k.as_str()) || entry.contains_key(k));
+    row
 }
 
 /// U3.2-S4: a family row stores its Level-2 bonus and Level-3 passive as no key while they are empty (the defaults), so a
@@ -175,15 +187,20 @@ fn skill_storage(entry: &Dict) -> Dict {
     let base_template = if template.is_empty() { sget(first, "description", "").replace('{', "{{").replace('}', "}}") } else { template };
     let schema = fields("content", "skills");
     let rank_fields: Vec<String> = schema.iter().map(|f| json::s(json::dict(f), "key")).filter(|k| RANK_KEYS.contains(&k.as_str()) && skill_has_field(&kind, k)).collect();
+    // AUDIT-11 (FB-94): a DEFEND entry's authored `mitigation` (entry or rank modifier) is kept even at the schema
+    // default or rank 1's value, since the loader tells authored from unauthored (`source::unset_default_mitigation`).
+    let raw_mods: Vec<Dict> = json::aget(entry, "ranks").iter().map(|r| r.as_object().cloned().unwrap_or_default()).collect();
+    let authored = |k: &str, raw: &Dict| kind == "DEFEND" && k == "mitigation" && raw.contains_key(k);
     let mut mods = Vec::new();
     for (i, row) in rows.iter().enumerate().skip(1) {
         let mut m = Dict::new();
+        let raw = raw_mods.get(i - 1).cloned().unwrap_or_default();
         for k in &rank_fields {
-            if !json::deep_equal(json::get(row, k), json::get(first, k)) {
+            if authored(k, &raw) || !json::deep_equal(json::get(row, k), json::get(first, k)) {
                 m.insert(k.clone(), json::get(row, k).clone());
             }
         }
-        if sget(row, "description", "") != source::render(&base_template, &kind, row, i + 1) {
+        if sget(row, "description", "") != source::render(&base_template, &kind, row, i + 1, true) {
             m.insert("description".into(), Value::from(sget(row, "description", "")));
         }
         mods.push(Value::Object(m));
@@ -200,7 +217,7 @@ fn skill_storage(entry: &Dict) -> Dict {
             "description" => Value::from(base_template.clone()),
             _ => json::get(first, &key).clone(),
         };
-        if !CORE.contains(&key.as_str()) && json::deep_equal(&value, json::get(f, "default")) {
+        if !CORE.contains(&key.as_str()) && !authored(&key, entry) && json::deep_equal(&value, json::get(f, "default")) {
             continue;
         }
         out.insert(key, value);
@@ -227,11 +244,15 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             let row = content_storage("items", &content("items", &resolve_item(entry, family)));
             // ItemModifiers.stored
             let has_hand = !sget(&row, "hand", "").is_empty();
-            Ok(row.into_iter().filter(|(k, _)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand))).map(|(k, v)| (k, copy(&v))).collect())
+            // A1.2-K3: a consumable's `area` (NONE) and `affects` ("") are stored only when set, so an item written
+            // before they existed re-saves byte for byte
+            let unset_shape = |k: &str, v: &Value| (k == "area" && gstr(v) == rpgkit_data::ITEM_AREA_NONE) || (k == "affects" && gstr(v).is_empty());
+            Ok(row.into_iter().filter(|(k, v)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand) || unset_shape(k, v))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),
         k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
         k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
+        "terrain" => Ok(terrain_storage(entry, &content(kind, entry))),
         "classes" => Ok(class_storage(&content(kind, entry))),
         k if k == rpgkit_data::UNIT_METERS_KIND => Ok(meter_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
@@ -472,6 +493,7 @@ fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, data_dir.parent().map(aegis_core::assets::Layers::for_game).unwrap_or_default());
     view.terrain_file = data_dir.join("catalog/terrain.json").is_file();
     view.load_errors = src.errors.clone();
+    view.purse = src.purse;
     view
 }
 
@@ -537,6 +559,10 @@ fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
         Err(e) => return vec![e],
     };
     let mut out = m.problems();
+    // E2.2-S1 (FB-53): the game-wide purse caps, when the manifest sets them
+    if let Some(Value::Object(raw)) = read(&path, &mut Vec::new()) {
+        out.extend(source::PurseCaps::problems(&raw));
+    }
     let folders: Vec<String> = worlds.as_object().map(|w| w.keys().cloned().collect()).unwrap_or_default();
     for w in m.worlds.iter().filter(|w| !folders.contains(w)) {
         out.push(format!("game.json: world '{w}' has no folder in data/worlds/."));

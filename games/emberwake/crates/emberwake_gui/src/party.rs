@@ -15,7 +15,7 @@ use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
 use emberwake_rules::gear::TIER_SOURCE;
 use emberwake_rules::unit::GEAR_EFFECT_SOURCE;
 use emberwake_rules::Unit;
-use emberwake_world::state::{off_hand_ok, UnitState, LOADOUT_SLOTS, POUCH_MAX};
+use emberwake_world::state::{off_hand_ok, stack_limit, UnitState, LOADOUT_SLOTS, POUCH_MAX};
 use emberwake_world::{progression, Data};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
@@ -61,6 +61,8 @@ pub enum PAct {
     Equip(String),
     PouchAdd(String),
     PouchRemove(usize),
+    /// INTENT2-U (`pouch_stacks`): set pouch slot item's packed count (`UnitState::set_packed`, `1..min(5, max_stack)`).
+    PouchPack(String, i64),
     ResetGear,
     ConfirmGear,
     /// RULESET1 9 D6 (deck rule): slot an owned (kind, id) in the first free slot of its bucket.
@@ -96,6 +98,9 @@ pub struct Character {
     mouse: (i32, i32),
     skills_loaded: bool,
     gear: Option<(UnitState, IndexMap<String, i64>)>,
+    /// INTENT2-U: the gear draft's world plays `pouch_stacks` (the pouch holds stacks with packed counts; set with the
+    /// draft).
+    gear_stacks: bool,
     pending_switch: Option<(Option<String>, Option<&'static str>)>,
     /// First family row shown on the Skills tab (the wheel scrolls).
     scroll: usize,
@@ -351,8 +356,11 @@ pub(crate) struct DeckTerms {
     pub actives: Vec<String>,
     pub passives: Vec<String>,
     pub keystones: Vec<String>,
-    /// Skill family -> its intent (`round_intent`, else its kind's; actives and basics).
+    /// Skill family -> its intent (`round_intent`, else its kind's; actives and basics). A4.2-K1b: its primary row.
     pub intent_of: IndexMap<String, String>,
+    /// A4.2-K1b (INTENT2 IR15, IR21): skill family -> every intent row it plays in under the ruleset (`intent::allowed`:
+    /// the derived rows under `field_intent`, else the single intent); a family missing here has `intent_of`'s alone.
+    pub rows_of: IndexMap<String, Vec<String>>,
     /// The deck an empty deck plays as (D5 auto: the base unit's deck, else the first class-path families).
     pub auto: Deck,
     /// The actives an empty `active` row plays as in a deck with other keys (the loadout's families).
@@ -361,10 +369,45 @@ pub(crate) struct DeckTerms {
     pub intent_names: IndexMap<String, String>,
 }
 
+/// A4.2-K1b: each family's primary intent and rows under `rs` (`intent::allowed`).
+fn rows_of<'a>(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, fams: impl Iterator<Item = &'a String>) -> (IndexMap<String, String>, IndexMap<String, Vec<String>>) {
+    let mut primary = IndexMap::new();
+    let mut rows = IndexMap::new();
+    for f in fams {
+        if let Some(s) = cat.tier_one(f) {
+            let r: Vec<String> = emberwake_rules::intent::allowed(rs, &emberwake_rules::intent::IntentInput::of_def(s), &s.round_intent).into_iter().map(String::from).collect();
+            primary.insert(f.clone(), r.first().cloned().unwrap_or_else(|| emberwake_battle::round_intent::skill_intent(s).to_string()));
+            rows.insert(f.clone(), r);
+        }
+    }
+    (primary, rows)
+}
+
+/// A4.2-K1b: the intents a deck order lists: the ruleset's, and Field under `field_intent`.
+fn order_intents(rs: &emberwake_rules::ruleset::Ruleset) -> Vec<String> {
+    let mut out = rs.numbers.intents.clone();
+    if rs.has(emberwake_rules::ruleset::FIELD_INTENT) && !out.iter().any(|i| i == "field") {
+        out.push("field".into());
+    }
+    out
+}
+
 impl DeckTerms {
+    /// A4.2-K1b (IR15): the rows family `f` plays in (its `rows_of`, else its one intent).
+    pub fn rows(&self, f: &str) -> Vec<String> {
+        self.rows_of.get(f).cloned().unwrap_or_else(|| self.intent_of.get(f).cloned().into_iter().collect())
+    }
+
+    /// Whether families `a` and `b` share a row (a follow-up joins an opener of one of its rows).
+    fn share_row(&self, a: &str, b: &str) -> bool {
+        let rb = self.rows(b);
+        self.rows(a).iter().any(|r| rb.contains(r))
+    }
+
     /// A party member's terms under `rs`: None unless the ruleset has the deck rule (classic keeps today's tab).
     pub fn for_member(d: &Data, m: &UnitState, world: &str, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
-        let rule = emberwake_rules::DeckRule::of(rs)?;
+        // CLASS-BASICS: the member's class basics are open beside the ruleset's (its class in that world)
+        let rule = emberwake_rules::DeckRule::of(rs)?.with_class(d.cat_in(world), &m.class_id(d));
         let cat = &d.cat;
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
@@ -391,8 +434,8 @@ impl DeckTerms {
             }
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
-        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
+        let (intent_of, rows_of) = rows_of(cat, rs, actives.iter().chain(&basics));
+        Some(Self { slots: rule.slots, intents: order_intents(rs), basics, actives, passives, keystones, intent_of, rows_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
@@ -400,7 +443,7 @@ impl DeckTerms {
     /// passives its deck names (D4), so any catalog passive or keystone may be named; the auto deck is the unit built
     /// with an empty deck.
     pub fn for_unit(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, def: &emberwake_data::UnitDef, u: &emberwake_rules::Unit) -> Option<Self> {
-        let rule = emberwake_rules::DeckRule::of(rs)?;
+        let rule = emberwake_rules::DeckRule::of(rs)?.with_class(cat, &def.class_id);
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
         let mut actives: Vec<String> = Vec::new();
         for s in cat.skills.iter().filter(|s| !s.system && !s.basic && !emberwake_battle::skill::is_item(s)) {
@@ -423,8 +466,8 @@ impl DeckTerms {
             }
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
-        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
+        let (intent_of, rows_of) = rows_of(cat, rs, actives.iter().chain(&basics));
+        Some(Self { slots: rule.slots, intents: order_intents(rs), basics, actives, passives, keystones, intent_of, rows_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// The slots of `kind`.
@@ -490,8 +533,10 @@ impl DeckTerms {
     /// deck), else the deck's actives of the intent in slot order, then the basics of the intent.
     pub fn order(&self, deck: &Deck, intent: &str) -> Vec<String> {
         let of = |f: &&String| self.intent_of.get(*f).is_some_and(|i| i == intent);
+        // A4.2-K1b (IR15): the player's order may hold a skill in any of its rows; the auto order its primary row only
+        let in_row = |f: &&String| self.rows(f).iter().any(|i| i == intent);
         match deck.order.get(intent).filter(|l| !l.is_empty()) {
-            Some(l) => l.iter().filter(|f| of(f) && (deck.active.contains(f) || self.basics.contains(f))).cloned().collect(),
+            Some(l) => l.iter().filter(|f| in_row(f) && (deck.active.contains(f) || self.basics.contains(f))).cloned().collect(),
             None => deck.active.iter().chain(&self.basics).filter(of).cloned().collect(),
         }
     }
@@ -520,24 +565,34 @@ impl DeckTerms {
     /// INPUT1 FL1: the follow-up list of opener `op` as it plays (entries still in the deck, of the opener's intent);
     /// empty when none is set (the fill reads the intent's order).
     pub fn follow_list(&self, deck: &Deck, op: &str) -> Vec<String> {
-        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
-        let ok = |f: &&String| self.intent_of.get(*f) == Some(intent) && (deck.active.contains(f) || self.basics.contains(f));
+        if self.intent_of.get(op).is_none() {
+            return Vec::new();
+        }
+        let ok = |f: &&String| self.share_row(op, f) && (deck.active.contains(f) || self.basics.contains(f));
         deck.follow_ups.get(op).map(|l| l.iter().filter(ok).cloned().collect()).unwrap_or_default()
     }
 
     /// FL3: the skills that can join `op`'s list: its intent's actives and basics in the deck (the order's entries),
     /// those already listed left out.
     pub fn follow_candidates(&self, deck: &Deck, op: &str) -> Vec<String> {
-        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
         let listed = self.follow_list(deck, op);
-        self.order(deck, intent).into_iter().filter(|f| !listed.contains(f)).collect()
+        let mut out: Vec<String> = Vec::new();
+        // A4.2-K1b: the orders of each of the opener's rows
+        for intent in self.rows(op) {
+            for f in self.order(deck, &intent) {
+                if !listed.contains(&f) && !out.contains(&f) {
+                    out.push(f);
+                }
+            }
+        }
+        out
     }
 
     /// The deck a follow-up edit of `op` starts from (it pins the deck as it plays, as an order edit does) and the list
     /// as it plays; refused when `op` is not an opener of the deck (FL5).
     fn follow_base(&self, draft: &Deck, op: &str) -> Result<(Deck, Vec<String>), String> {
         let d = self.shown(draft);
-        let opener = self.intent_of.get(op).is_some_and(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
+        let opener = self.rows(op).iter().any(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
         if !opener {
             return Err(format!("Follow-ups for {op}: not an opener in the deck."));
         }
@@ -562,7 +617,7 @@ impl DeckTerms {
         if !(d.active.iter().any(|f| f == fam) || self.basics.iter().any(|f| f == fam)) {
             return Err(format!("Follow-ups after {op}: {fam} is not in the deck."));
         }
-        if self.intent_of.get(fam) != Some(&intent) {
+        if !self.share_row(op, fam) {
             let has = self.intent_of.get(fam).map(|i| intent_title(&self.intent_names, i)).unwrap_or_else(|| "no intent".into());
             return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&self.intent_names, &intent)));
         }
@@ -757,7 +812,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -906,6 +961,7 @@ impl Character {
     fn load_gear(&mut self, cx: &Cx) {
         if self.gear.is_none() {
             self.gear = Some((self.m(cx).clone(), cx.gs().party.stash.clone()));
+            self.gear_stacks = cx.data.ruleset(&cx.gs().world_id).numbers.pouch_stacks;
         }
     }
 
@@ -1152,8 +1208,15 @@ impl Character {
             }
             PAct::Unequip(slot) => self.gear_move(cx, |d, work, stash| take_off(d, work, stash, &slot)),
             PAct::Equip(item) => self.gear_move(cx, |d, work, stash| equip(d, work, stash, &item, None)),
-            PAct::PouchAdd(item) => self.gear_move(cx, |d, work, stash| pouch_put(d, work, stash, &item, None)),
-            PAct::PouchRemove(i) => self.gear_move(cx, |_, work, stash| pouch_take(work, stash, i)),
+            PAct::PouchAdd(item) => {
+                let stacks = self.stacks_on(cx);
+                self.gear_move(cx, |d, work, stash| pouch_put(d, work, stash, &item, None, stacks))
+            }
+            PAct::PouchRemove(i) => {
+                let stacks = self.stacks_on(cx);
+                self.gear_move(cx, |_, work, stash| pouch_take(work, stash, i, stacks))
+            }
+            PAct::PouchPack(item, n) => self.gear_move(cx, |d, work, stash| work.pack_pouch(d, &item, n, stash).map_err(|e| named(d, &item, e))),
             PAct::ResetGear => self.gear = None,
             PAct::ConfirmGear => {
                 let Some((work, stash)) = self.gear.clone() else { return };
@@ -1167,6 +1230,7 @@ impl Character {
                 if let Some(m) = gs.party.member_mut(&id) {
                     m.equipment = work.equipment;
                     m.pouch = work.pouch;
+                    m.pouch_packed = work.pouch_packed;
                 }
                 gs.party.stash = stash;
                 self.gear = None;
@@ -1186,7 +1250,8 @@ impl Character {
         }
     }
 
-    /// One gear move on the draft (loaded first); a refused move shows its reason.
+    /// One gear move on the draft (loaded first); a refused move shows its reason. INTENT2-U: under `pouch_stacks` the
+    /// pouch is not topped up here: only the kit's auto-fill at combat start and after a fight moves copies in.
     fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &mut UnitState, &mut Stash) -> Result<(), String>) {
         self.load_gear(cx);
         let d = cx.data.clone();
@@ -1196,10 +1261,16 @@ impl Character {
         }
     }
 
+    /// INTENT2-U: whether the gear draft (loaded first) plays `pouch_stacks`.
+    fn stacks_on(&mut self, cx: &Cx) -> bool {
+        self.load_gear(cx);
+        self.gear_stacks
+    }
+
     /// The draft after the drop of payload `from` on target `to` (GEARUI1 drag and drop), or why it can't be done.
     fn after_drop(&self, d: &Data, from: &str, to: &str) -> Result<(UnitState, Stash), String> {
         let (mut work, mut stash) = self.gear.clone().ok_or("No gear draft.")?;
-        drop_move(d, &mut work, &mut stash, from, to)?;
+        drop_move(d, &mut work, &mut stash, from, to, self.gear_stacks)?;
         Ok((work, stash))
     }
 }
@@ -1311,8 +1382,9 @@ fn move_slot(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: 
 }
 
 /// Puts a consumable from the stash in the pouch: in place of pouch slot `at` when it is filled (that item goes back),
-/// else at the end while there is room.
-fn pouch_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: Option<usize>) -> Result<(), String> {
+/// else at the end while there is room. INTENT2-U: under `pouch_stacks` (`stacks`) it assigns the item a stack slot
+/// instead (`stack_put`).
+fn pouch_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: Option<usize>, stacks: bool) -> Result<(), String> {
     let def = d.cat.items.get(item).ok_or_else(|| format!("Unknown item '{item}'."))?;
     if def.item_type != "CONSUMABLE" {
         return Err(format!("{} can't go in the battle pouch.", def.name));
@@ -1322,6 +1394,9 @@ fn pouch_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: 
     }
     if stash.get(item).copied().unwrap_or(0) < 1 {
         return Err(format!("There is no {} in the stash.", def.name));
+    }
+    if stacks {
+        return stack_put(d, work, stash, item, at);
     }
     match at.filter(|&i| i < work.pouch.len()) {
         Some(i) => {
@@ -1335,7 +1410,10 @@ fn pouch_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: 
     Ok(())
 }
 
-fn pouch_take(work: &mut UnitState, stash: &mut Stash, i: usize) -> Result<(), String> {
+fn pouch_take(work: &mut UnitState, stash: &mut Stash, i: usize, stacks: bool) -> Result<(), String> {
+    if stacks {
+        return work.take_pouch_slot(i, stash).map(|_| ());
+    }
     if i >= work.pouch.len() {
         return Err("That pouch slot is empty.".into());
     }
@@ -1343,17 +1421,63 @@ fn pouch_take(work: &mut UnitState, stash: &mut Stash, i: usize) -> Result<(), S
     Ok(())
 }
 
-/// A drop: payload `stash.<item>`, `equip.<slot>` or `pouch.<i>` on target `slot.<slot>`, `pouch.<i>` or `stash`.
-fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str) -> Result<(), String> {
+/// INTENT2-U ("Stacks & Auto-Fill"): gives `item` a stack slot (the kit's `assign_pouch`: packed to `min(5,
+/// max_stack)`, a second slot of the same item refused), in place of stack slot `at` when that holds another item (its
+/// copies go back to the stash) and moved to that place (`UnitState::move_pouch_slot`). Dropped on its own slot it is a
+/// no-op. No copy moves now: the kit's auto-fill fills the slot at combat start and after a fight.
+fn stack_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: Option<usize>) -> Result<(), String> {
+    let slots = work.pouch_slots();
+    if at.is_some_and(|i| slots.get(i).is_some_and(|s| s == item)) {
+        return Ok(());
+    }
+    if let Some(i) = at.filter(|&i| i < slots.len() && !slots.iter().any(|s| s == item)) {
+        work.take_pouch_slot(i, stash)?;
+    }
+    work.assign_pouch(d, item).map_err(|e| named(d, item, e))?;
+    // the new slot's place: not always the last (a key-less slot, copies with no packed target, sorts after it)
+    if let (Some(i), Some(now)) = (at, work.pouch_slots().iter().position(|s| s == item)) {
+        if i < now {
+            work.move_pouch_slot(d, now, i)?;
+        }
+    }
+    Ok(())
+}
+
+/// A kit refusal with the item's name for its id (`'con_x' already has a pouch slot.` reads `Fire Flask already ...`).
+fn named(d: &Data, item: &str, e: String) -> String {
+    e.replace(&format!("'{item}'"), &d.item_name(item))
+}
+
+/// INTENT2-U: one pip of a pouch stack on the Party Screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pip {
+    /// A copy in the pouch.
+    Filled,
+    /// Packed but missing (spent, or the stash is short).
+    Hollow,
+    /// Above the packed count, up to the stack limit.
+    Dim,
+}
+
+/// INTENT2-U ("Stacks & Auto-Fill"): a stack slot's pips, visual only: one per copy the stack can hold (`limit`, capped at
+/// 5), filled for the `cur` copies in the pouch, hollow up to the `packed` count, dimmed above it.
+pub(crate) fn pouch_pips(cur: i64, packed: i64, limit: i64) -> Vec<Pip> {
+    (0..limit.min(5)).map(|k| if k < cur { Pip::Filled } else if k < packed { Pip::Hollow } else { Pip::Dim }).collect()
+}
+
+/// A drop: payload `stash.<item>`, `equip.<slot>` or `pouch.<i>` on target `slot.<slot>`, `pouch.<i>` or `stash`
+/// (INTENT2-U: under `pouch_stacks`, `stacks`, a pouch index names a stack slot).
+fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str, stacks: bool) -> Result<(), String> {
     let (kind, what) = from.split_once('.').unwrap_or((from, ""));
     let (target, at) = to.split_once('.').unwrap_or((to, ""));
     let index = |s: &str| s.parse::<usize>().map_err(|_| format!("Bad pouch slot '{s}'."));
     match (kind, target) {
         ("stash", "slot") => equip(d, work, stash, what, Some(at)),
-        ("stash", "pouch") => pouch_put(d, work, stash, what, Some(index(at)?)),
+        ("stash", "pouch") => pouch_put(d, work, stash, what, Some(index(at)?), stacks),
         ("equip", "stash") => take_off(d, work, stash, what),
         ("equip", "slot") => move_slot(d, work, stash, what, at),
-        ("pouch", "stash") => pouch_take(work, stash, index(what)?),
+        ("pouch", "stash") => pouch_take(work, stash, index(what)?, stacks),
+        ("pouch", "pouch") if stacks => work.move_pouch_slot(d, index(what)?, index(at)?),
         ("pouch", "pouch") => {
             let (i, j) = (index(what)?, index(at)?);
             if i == j || i >= work.pouch.len() {
@@ -1678,6 +1802,8 @@ impl Character {
         let cat = &d.cat;
         let Some(b) = progression::build_with(d, m, &cx.gs().world_id, false) else { return };
         let u = &b.unit;
+        // FB-107: skill text as the world's ruleset shows it (no stance tokens with stances off)
+        let stances = d.ruleset(&cx.gs().world_id).stances();
         let fam_name = |f: &str| cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
         let row_of = |f: &str, rank: i32| cat.family_rows(f).into_iter().find(|s| s.tier == rank);
         let path = self.path_families(cx);
@@ -1708,7 +1834,7 @@ impl Character {
                 let at = ranks.iter().position(|&x| x == rank).unwrap_or(0);
                 let row = row_of(f, rank);
                 let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
-                let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+                let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
                 ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
                 ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, th().text);
                 let card = vec![(fam_name(f), th().gold), (desc.clone(), th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)];
@@ -1760,7 +1886,7 @@ impl Character {
             let top = u.selectable_ranks(cat, &f).last().copied().unwrap_or(1);
             let row = row_of(&f, top).or_else(|| cat.tier_one(&f));
             let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
-            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
             ui.button(&format!("skills.slot.worn.{id}"), Rect::new(310, y, 50, 16), "Worn", PAct::Slot(f.clone()), false);
             ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  {ap} AP  from worn gear", fam_name(&f)), BODY, 238.0, th().gold);
             ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
@@ -1776,7 +1902,7 @@ impl Character {
             let full = !slotted && self.extra_slots.len() >= max_extra && (!on_path || self.class_slots.len() >= max_class);
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
-            let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
+            let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
             ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, th().text);
             ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
             ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
@@ -1822,7 +1948,7 @@ impl Character {
             let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
             let intent = intent_name(t.intent_of.get(f).map(String::as_str).unwrap_or(""));
             match row {
-                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, json::s(&s.raw, "description")),
+                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, emberwake_content::source::skill_description(&s.raw, rs.stances())),
                 None => (name, intent, 0, top, String::new()),
             }
         };
@@ -2100,22 +2226,26 @@ impl Character {
             ui.drop_target(format!("slot.{slot}"));
         }
         ui.p.text(mx as f32 + 2.0, 210.0, "Battle pouch", head, th().info);
-        for i in 0..POUCH_MAX {
-            let y = 224 + i as i32 * 15;
-            let item = work.pouch.get(i);
-            let label = match item {
-                Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
-                None => format!("{}. Empty", i + 1),
-            };
-            let card = match item {
-                Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
-                None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
-            };
-            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
-            if item.is_some() {
-                ui.draggable(format!("pouch.{i}"));
+        if self.gear_stacks {
+            self.draw_stacks(ui, d, &work, &stash, mx, mw);
+        } else {
+            for i in 0..POUCH_MAX {
+                let y = 224 + i as i32 * 15;
+                let item = work.pouch.get(i);
+                let label = match item {
+                    Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
+                    None => format!("{}. Empty", i + 1),
+                };
+                let card = match item {
+                    Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
+                    None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
+                };
+                ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
+                if item.is_some() {
+                    ui.draggable(format!("pouch.{i}"));
+                }
+                ui.drop_target(format!("pouch.{i}"));
             }
-            ui.drop_target(format!("pouch.{i}"));
         }
         // Right: the party stash (the whole column takes items dropped back).
         let (sx, sw) = (436, 179);
@@ -2189,6 +2319,56 @@ impl Character {
 }
 
 impl Character {
+    /// INTENT2-U ("Stacks & Auto-Fill", `pouch_stacks`): the battle pouch as up to POUCH_MAX stack slots. Each slot: the
+    /// item's name (a click or a drag to the stash empties it; a drag onto another slot moves it), its pips (visual only,
+    /// no counter: `pouch_pips`), and lower / raise buttons for its packed count (`1..min(5, max_stack)`). The numbers
+    /// are on the hover card.
+    fn draw_stacks(&self, ui: &mut Ui<PAct>, d: &Data, work: &UnitState, stash: &Stash, mx: i32, mw: i32) {
+        const PIP: i32 = 7;
+        const BTN: i32 = 11;
+        let slots = work.pouch_slots();
+        for i in 0..POUCH_MAX {
+            let y = 224 + i as i32 * 15;
+            let item = slots.get(i);
+            let pips_w = 5 * PIP;
+            let name_w = mw - 2 * (BTN + 2) - pips_w - 2;
+            let label = match item {
+                Some(item) => format!("{}. {}", i + 1, d.item_name(item)),
+                None => format!("{}. Empty", i + 1),
+            };
+            let card = match item {
+                Some(item) => {
+                    let (cur, packed, left) = (work.pouch_count(item), work.packed(item), stash.get(item).copied().unwrap_or(0));
+                    let short = if cur < packed { " Hollow pips: copies still to come from the stash." } else { "" };
+                    item_tip(d, item, &format!("In the pouch: {cur}; packs {packed} (stash {left}). Auto-fill tops it up to {packed} from the stash when a fight starts while this hero is active, and after each fight this hero comes home from.{short} Click or drag it to the stash to empty the slot; drag it onto another slot to move it; - and + set how many it packs."))
+                }
+                None => tip(&label, "Drag a consumable from the stash here (or click it in the stash): the slot packs as many as its stack holds."),
+            };
+            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, name_w, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card.clone());
+            if item.is_some() {
+                ui.draggable(format!("pouch.{i}"));
+            }
+            ui.drop_target(format!("pouch.{i}"));
+            let Some(item) = item else { continue };
+            let (cur, packed, limit) = (work.pouch_count(item), work.packed(item), stack_limit(d, item));
+            let pips = pouch_pips(cur, packed, limit);
+            let px = mx + name_w + 2 + (5 - pips.len() as i32) * PIP;
+            for (k, pip) in pips.iter().enumerate() {
+                let (cx, cy) = ((px + k as i32 * PIP) as f32 + PIP as f32 / 2.0, y as f32 + 7.0);
+                match pip {
+                    Pip::Filled => ui.p.ellipse(cx, cy, 2.6, 2.6, th().gold),
+                    Pip::Hollow => ui.p.ellipse_ring(cx, cy, 2.5, 2.5, th().gold),
+                    Pip::Dim => ui.p.ellipse_ring(cx, cy, 2.5, 2.5, { let c = th().dim; [c[0], c[1], c[2], 110] }),
+                }
+            }
+            // the pips' state for the agent link and the tests (filled / packed / limit; nothing drawn)
+            ui.push(format!("gear.pouch.{i}.pips"), "pips", format!("{cur}/{packed}/{limit}"), Rect::new(mx + name_w + 2, y, pips_w, 14), true, false, None, card);
+            let bx = mx + mw - 2 * BTN - 2;
+            ui.button_full(&format!("gear.pouch.{i}.less"), Rect::new(bx, y + 1, BTN, 12), "-", PAct::PouchPack(item.clone(), packed - 1), packed > 1, false, SMALL, tip("Pack fewer", "Packs one copy less (a copy above the new count goes back to the stash now)."));
+            ui.button_full(&format!("gear.pouch.{i}.more"), Rect::new(bx + BTN + 2, y + 1, BTN, 12), "+", PAct::PouchPack(item.clone(), packed + 1), packed < limit, false, SMALL, tip("Pack more", "Packs one copy more: auto-fill brings it from the stash when a fight starts or ends."));
+        }
+    }
+
     /// The draft a hovered or dragged item would make (UIR-3B stat change): a drag over a target it can drop on, else
     /// a hovered stash item worn in its first slot, else a hovered worn item taken off; None otherwise.
     fn gear_preview(&self, ui: &Ui<PAct>, d: &Data, work: &UnitState, stash: &Stash) -> Option<UnitState> {
@@ -2196,7 +2376,7 @@ impl Character {
         let mouse = ui.mouse;
         if let Some(from) = ui.dragging() {
             let to = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mouse.0, mouse.1))?.drop.clone()?;
-            return drop_move(d, &mut w, &mut st, from, &to).ok().map(|_| w);
+            return drop_move(d, &mut w, &mut st, from, &to, self.gear_stacks).ok().map(|_| w);
         }
         let hovered = ui.widgets.iter().rev().find(|x| x.action.is_some() && ui.hover(x.rect))?;
         let ok = if let Some(item) = hovered.id.strip_prefix("gear.stash.") {
@@ -2232,7 +2412,7 @@ fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
 /// U3.2-S3 (FB-34, mock): the wield penalty `unit` wears `item` under (the rules' reading, `Equipment::wield_penalty`:
 /// the stat-deficit ramp and proficiency 0, stacking) as a badge (the power and armour factor, "x0.75") and a card
 /// sentence; None for an item it wears free, or no unit.
-fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -> Option<(String, String)> {
+pub(crate) fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -> Option<(String, String)> {
     let u = unit.filter(|_| item.is_equipment())?;
     let pen = emberwake_rules::gear::Equipment::new(item).wield_penalty(&u.stats);
     if !pen.penalized {
@@ -2354,12 +2534,12 @@ mod tests {
     fn a_stash_item_dropped_on_a_slot_it_fits_is_worn_and_the_old_one_returns() {
         let (d, mut m, mut st) = setup();
         let (a, sword) = (first(&d, "accessory_1"), first(&d, "main_hand"));
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
         assert_eq!(m.equipment.get("accessory_1"), Some(&a));
         assert_eq!(st[&a], 1);
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
         assert_eq!(st[&a], 1, "the replaced copy came back");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{sword}"), "slot.body").is_err(), "a weapon is not body armour");
+        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{sword}"), "slot.body", false).is_err(), "a weapon is not body armour");
     }
 
     #[test]
@@ -2367,21 +2547,21 @@ mod tests {
         let (d, mut m, mut st) = setup();
         let a = first(&d, "accessory_1");
         let before = st[&a];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
-        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash", false).unwrap();
         assert!(!m.equipment.contains_key("accessory_1"));
         assert_eq!(st[&a], before);
-        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash").is_err(), "a class default can't come off");
+        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash", false).is_err(), "a class default can't come off");
     }
 
     #[test]
     fn a_worn_item_moves_to_another_slot_it_fits() {
         let (d, mut m, mut st) = setup();
         let a = first(&d, "accessory_1");
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1").unwrap();
-        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "slot.accessory_2").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "slot.accessory_2", false).unwrap();
         assert_eq!((m.equipment.get("accessory_1"), m.equipment.get("accessory_2")), (None, Some(&a)));
-        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_2", "slot.body").is_err());
+        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_2", "slot.body", false).is_err());
     }
 
     #[test]
@@ -2390,20 +2570,20 @@ mod tests {
         m.pouch.clear();
         let c = consumables(&d);
         let wear = first(&d, "main_hand");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{wear}"), "pouch.0").is_err(), "gear is not a consumable");
+        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{wear}"), "pouch.0", false).is_err(), "gear is not a consumable");
         st.insert(c[0].clone(), 10);
         for _ in 0..POUCH_MAX {
-            pouch_put(&d, &mut m, &mut st, &c[0], None).unwrap();
+            pouch_put(&d, &mut m, &mut st, &c[0], None, false).unwrap();
         }
-        assert!(pouch_put(&d, &mut m, &mut st, &c[0], None).is_err(), "a full pouch");
+        assert!(pouch_put(&d, &mut m, &mut st, &c[0], None, false).is_err(), "a full pouch");
         let other = c.last().unwrap().clone();
         let n = st[&c[0]];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{other}"), "pouch.1").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{other}"), "pouch.1", false).unwrap();
         assert_eq!(m.pouch[1], other);
         assert_eq!(st[&c[0]], n + 1, "the replaced one came back");
-        drop_move(&d, &mut m, &mut st, "pouch.1", "pouch.0").unwrap();
+        drop_move(&d, &mut m, &mut st, "pouch.1", "pouch.0", false).unwrap();
         assert_eq!(m.pouch[0], other);
-        drop_move(&d, &mut m, &mut st, "pouch.0", "stash").unwrap();
+        drop_move(&d, &mut m, &mut st, "pouch.0", "stash", false).unwrap();
         assert_eq!(m.pouch.len(), POUCH_MAX - 1);
     }
 
@@ -2417,7 +2597,7 @@ mod tests {
         let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
         untrained.sort();
         let item = untrained.into_iter().find(|id| !m.trains(&d, id)).expect("a weapon this member has no training in").to_string();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).unwrap();
         assert_eq!(m.equipment.get("main_hand"), Some(&item));
         assert!(m.validate(&d).is_empty(), "Confirm takes it: {:?}", m.validate(&d));
         let built = progression::build_with(&d, &m, "", false).unwrap();
@@ -2435,12 +2615,12 @@ mod tests {
             ids.first().map(|s| s.to_string())
         };
         let (Some(great), Some(shield)) = (pick(&m, "main_hand", true, "WEAPON"), pick(&m, "off_hand", false, "SHIELD")) else { panic!("a 2H weapon and a shield this class can wear") };
-        drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap();
         let shields = st[&shield];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the shield is stowed");
         assert_eq!(st[&shield], shields + 1);
-        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand").unwrap_err();
+        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap_err();
         assert!(err.contains("both hands"), "{err}");
         let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none_or(|o| off_hand_ok(Some(&d.cat.items[&great]), &o.item)), "no default shield under the 2H weapon");
@@ -2462,10 +2642,10 @@ mod tests {
         };
         let staff = wear(&m, "main_hand", &|i| i.two_handed && i.item_type == "WEAPON").expect("a 2H weapon a mage can wear");
         let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
-        drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand").unwrap();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand").unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
+        drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand").unwrap_err().contains("both hands"));
+        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap_err().contains("both hands"));
         let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none(), "no default orb under the staff");
         m.equipment.insert("off_hand".into(), focus);
@@ -2658,10 +2838,29 @@ mod tests {
             passives: strs(&["p1", "p2"]),
             keystones: strs(&["k1"]),
             intent_of: [("cleave", "assault"), ("lunge", "assault"), ("wall", "guard"), ("strike", "assault"), ("hold", "guard")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            rows_of: IndexMap::new(),
             auto: Deck { active: strs(&["cleave", "wall"]), ..Default::default() },
             auto_actives: strs(&["lunge"]),
             intent_names: IndexMap::new(),
         }
+    }
+
+    /// A4.2-K1b (INTENT2 IR15): with derived rows (`rows_of`) a dual skill fits the player's order of either row and the
+    /// auto order of its primary row only; a follow-up joins an opener that shares one of its rows.
+    #[test]
+    fn deck_orders_read_the_derived_rows() {
+        let mut t = terms();
+        t.intents = strs(&["assault", "guard", "field"]);
+        t.intent_of.insert("cleave".into(), "field".into());
+        t.rows_of.insert("cleave".into(), strs(&["field", "assault"]));
+        let mut deck = Deck { active: strs(&["cleave", "lunge"]), ..Default::default() };
+        assert_eq!(t.order(&deck, "field"), strs(&["cleave"]), "auto: the primary row");
+        assert!(!t.order(&deck, "assault").contains(&"cleave".to_string()), "auto: not the second row");
+        deck.order.insert("assault".into(), strs(&["cleave", "lunge", "strike"]));
+        assert_eq!(t.order(&deck, "assault"), strs(&["cleave", "lunge", "strike"]), "the player's order: any row");
+        assert!(t.follow_candidates(&deck, "cleave").contains(&"lunge".to_string()), "lunge shares Assault with cleave");
+        assert!(t.follow_add(&deck, "cleave", "lunge", None).is_ok());
+        assert!(t.follow_add(&deck, "lunge", "cleave", None).is_ok(), "either way round");
     }
 
     /// D5, D6: an empty deck plays as the auto deck; a passive or keystone edit keeps the actives automatic (user
@@ -2944,6 +3143,10 @@ mod tests {
         let mut c = Character::new(&cx, &member, "skills");
         c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
         let t = c.terms.clone().expect("deck terms");
+        // the worn rows close the owned list, which scrolls past its 7 rows when the member owns more: scroll to the end
+        // (draw clamps it) so the check holds for any owned count
+        c.scroll = usize::MAX;
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
         assert!(c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "the worn skill shows");
         assert!(!t.shown(&c.deck).active.iter().any(|f| f == cx.data.cat.family_of(&skill)), "it takes no active slot");
         assert_laid_out(&c, "worn skills");
@@ -3200,5 +3403,166 @@ mod portrait_tests {
         draw_at(&mut c, &mut cx, 3000);
         assert_eq!(c.member, first, "Q goes back");
         assert!(c.faces.get(&key).is_some(), "the first member's portrait again");
+    }
+}
+
+/// INTENT2-U (W2-4 slice 7b; INTENT2 section 6 "Stacks & Auto-Fill"): the Gear tab's battle pouch under the played
+/// world's `pouch_stacks` (switched on here in memory, with a stack limit of 5 on a catalog consumable: no shipped
+/// numbers): stack slots with pips only (filled, hollow up to the packed count, dimmed above it; no counter), lower and
+/// raise buttons, the draft topped up from the stash, a second slot of the same item refused, the packed counts saved on
+/// Confirm. With the switch off the classic pouch is unchanged.
+#[cfg(test)]
+mod pouch_stack_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+
+    /// A game whose world plays `pouch_stacks` as `on`, a battle consumable with stack limit 5 and `stash` copies of it
+    /// in the stash, the first member's pouch empty. Returns (cx, member, item).
+    fn stack_cx(on: bool, stash: i64) -> (Cx, String, String) {
+        let mut cx = game_cx();
+        let world = cx.gs().world_id.clone();
+        let mut data = (*cx.app.data).clone();
+        let rid = data.ruleset_id(&world);
+        let item = data.cat.items.values().filter(|i| i.offered_in_battle()).map(|i| i.id.clone()).min().expect("a battle consumable");
+        data.edit_cat(|cat| {
+            let rid = if cat.rulesets.contains_key(&rid) { rid.clone() } else { emberwake_rules::ruleset::CLASSIC.to_string() };
+            cat.rulesets.entry(rid.clone()).or_insert_with(|| json!({"id": rid}).as_object().unwrap().clone()).insert("pouch_stacks".into(), json!(if on { "on" } else { "off" }));
+            cat.items.get_mut(&item).unwrap().max_stack = 5;
+        });
+        cx.app.data = std::sync::Arc::new(data);
+        assert_eq!(cx.data.ruleset(&world).numbers.pouch_stacks, on);
+        let member = cx.gs().party.members[0].id.clone();
+        let gs = cx.gs_mut();
+        let m = gs.party.member_mut(&member).unwrap();
+        m.pouch.clear();
+        m.pouch_packed.clear();
+        gs.party.stash.shift_remove(&item);
+        if stash > 0 {
+            gs.party.stash.insert(item.clone(), stash);
+        }
+        (cx, member, item)
+    }
+
+    /// TEXTFIT1: no text leaves the canvas, overlaps another or runs out of its control, at every text size.
+    fn assert_clean(screen: &mut dyn Screen<GameCx>, cx: &mut Cx, what: &str) {
+        let mut g = gfx();
+        for (size, scale) in aegis_ui::screen::TEXT_SIZES {
+            let recs = frame(screen, cx, &mut g, scale as f32);
+            let boxes: Vec<(String, f32, f32, f32, f32)> = screen.widgets().into_iter().map(|w| {
+                let (x, y, ww, h) = crate::hud::hud_tests::rect(&w);
+                (w["id"].as_str().unwrap_or("").to_string(), x as f32, y as f32, ww as f32, h as f32)
+            }).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            for k in ["edge", "overlap", "spill"] {
+                assert_eq!(v["counts"][k], json!(0), "{what} at {size}: {v}");
+            }
+        }
+    }
+
+    fn draft(c: &Character) -> &(UnitState, Stash) {
+        c.gear.as_ref().expect("the gear draft")
+    }
+
+    fn widget<'a>(c: &'a Character, id: &str) -> Option<&'a Widget<PAct>> {
+        c.w.iter().find(|w| w.id == id)
+    }
+
+    #[test]
+    fn the_pips_are_filled_hollow_to_the_packed_count_then_dimmed_capped_at_5() {
+        use Pip::*;
+        assert_eq!(pouch_pips(2, 4, 5), [Filled, Filled, Hollow, Hollow, Dim]);
+        assert_eq!(pouch_pips(3, 3, 3), [Filled, Filled, Filled], "one pip per copy the stack holds");
+        assert_eq!(pouch_pips(0, 1, 9), [Hollow, Dim, Dim, Dim, Dim], "capped at 5 pips");
+    }
+
+    /// Assigning a slot packs `min(5, max_stack)` even when the stash holds fewer, and moves no copy (the Party Screen
+    /// does not top up: the kit's auto-fill does at combat start and after a fight), so its pips are hollow; the slot
+    /// shows pips and no counter text; - and + set the packed count in its range (a lower count gives the copies above it
+    /// back to the stash); a second slot of the same item is refused; Confirm saves the packed count with the pouch.
+    #[test]
+    fn a_stack_slot_packs_its_limit_shows_pips_and_saves_the_packed_count() {
+        let (mut cx, member, item) = stack_cx(true, 2);
+        let mut c = Character::new(&cx, &member, "gear");
+        frame(&mut c, &mut cx, &mut gfx(), 1.0);
+        c.act(&mut cx, PAct::PouchAdd(item.clone()));
+        let (work, stash) = draft(&c).clone();
+        assert_eq!((work.pouch_count(&item), work.packed(&item), stash[&item]), (0, 5, 2), "packs 5 though the stash has 2; no copy moves here");
+        let texts: Vec<String> = frame(&mut c, &mut cx, &mut gfx(), 1.0).iter().map(|r| r.text.clone()).collect();
+        assert_eq!(widget(&c, "gear.pouch.0.pips").expect("the slot's pips").text, "0/5/5", "filled / packed / limit: all hollow");
+        assert!(!texts.iter().any(|t| t.contains("0/5") || t.contains("of 5") || t == "0" || t == "5"), "no counter text: {texts:?}");
+        assert!(widget(&c, "gear.pouch.0.more").is_some_and(|w| !w.enabled), "+ is off at the stack limit");
+        c.act(&mut cx, PAct::PouchAdd(item.clone()));
+        assert_eq!(draft(&c).0.pouch_slots(), std::slice::from_ref(&item), "a second slot of the same item is refused");
+        c.act(&mut cx, PAct::PouchPack(item.clone(), 0));
+        assert_eq!(draft(&c).0.packed(&item), 5, "below 1 refused");
+        c.act(&mut cx, PAct::PouchPack(item.clone(), 3));
+        c.act(&mut cx, PAct::ConfirmGear);
+        let m = cx.gs().party.member(&member).unwrap();
+        assert_eq!((m.pouch_count(&item), m.packed(&item), cx.gs().party.stash[&item]), (0, 3, 2), "saved with the packed count");
+        assert!(m.validate(&cx.data).is_empty(), "{:?}", m.validate(&cx.data));
+        // copies in the pouch (as auto-fill leaves them): a lower count gives the extra back
+        let gs = cx.gs_mut();
+        gs.party.member_mut(&member).unwrap().pouch = vec![item.clone(); 3];
+        let mut c = Character::new(&cx, &member, "gear");
+        frame(&mut c, &mut cx, &mut gfx(), 1.0);
+        assert_eq!(widget(&c, "gear.pouch.0.pips").unwrap().text, "3/3/5");
+        c.act(&mut cx, PAct::PouchPack(item.clone(), 1));
+        let (work, stash) = draft(&c).clone();
+        assert_eq!((work.pouch_count(&item), work.packed(&item), stash[&item]), (1, 1, 4), "the copies above 1 go back");
+        frame(&mut c, &mut cx, &mut gfx(), 1.0);
+        assert!(widget(&c, "gear.pouch.0.less").is_some_and(|w| !w.enabled), "- is off at 1");
+        assert_clean(&mut c, &mut cx, "the gear tab with a stack slot");
+        c.act(&mut cx, PAct::PouchRemove(0));
+        let (work, stash) = draft(&c).clone();
+        assert!(work.pouch_slots().is_empty() && work.pouch_packed.is_empty(), "the slot empties");
+        assert_eq!(stash[&item], 5, "its copies go back");
+    }
+
+    /// Drops under `pouch_stacks`: an item dropped on its own slot is a no-op; one dropped on another item's slot takes
+    /// that place (the old one's copies back); a slot dragged to another place keeps it.
+    #[test]
+    fn stack_slot_drops_keep_their_places() {
+        let (cx, member, a) = stack_cx(true, 2);
+        let d = &cx.data;
+        let others: Vec<String> = d.cat.items.values().filter(|i| i.offered_in_battle() && i.id != a).map(|i| i.id.clone()).collect();
+        let (b, c) = (others[0].clone(), others[1].clone());
+        let mut m = cx.gs().party.member(&member).unwrap().clone();
+        let mut st: Stash = [(a.clone(), 2), (b.clone(), 1), (c.clone(), 1)].into_iter().collect();
+        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
+        let before = (m.clone(), st.clone());
+        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        assert_eq!((m.clone(), st.clone()), before, "its own slot: nothing changes");
+        drop_move(d, &mut m, &mut st, "pouch.1", "pouch.0", true).unwrap();
+        assert_eq!(m.pouch_slots(), [b.clone(), a.clone()], "the moved slot keeps its place");
+        // a copy in the slot, as the kit's auto-fill would have put there at a fight's start
+        m.pouch.push(a.clone());
+        drop_move(d, &mut m, &mut st, &format!("stash.{c}"), "pouch.1", true).unwrap();
+        assert_eq!(m.pouch_slots(), [b.clone(), c.clone()], "the dropped item takes that place");
+        assert_eq!(st[&a], 3, "the replaced slot's copy came back");
+        // a key-less slot (copies with no packed target, as an old save before its first fight) sorts after the keyed
+        // ones: a drop on slot 0 puts the new item there and leaves the key-less slot where it is
+        let k = others[2].clone();
+        let mut m = cx.gs().party.member(&member).unwrap().clone();
+        m.pouch = vec![k.clone()];
+        m.pouch_packed.clear();
+        drop_move(d, &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
+        assert_eq!(m.pouch_slots(), [b.clone(), k.clone()], "the keyed slot first, the key-less one after it");
+        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        assert_eq!(m.pouch_slots(), [a.clone(), k.clone()], "the new item in slot 0; the key-less slot not moved");
+        assert!(!m.pouch_packed.contains_key(&k), "the key-less slot untouched");
+    }
+
+    /// The classic pouch (switch off): copies, no pips, no packed counts.
+    #[test]
+    fn without_pouch_stacks_the_classic_pouch_is_unchanged() {
+        let (mut cx, member, item) = stack_cx(false, 2);
+        let mut c = Character::new(&cx, &member, "gear");
+        frame(&mut c, &mut cx, &mut gfx(), 1.0);
+        c.act(&mut cx, PAct::PouchAdd(item.clone()));
+        let (work, stash) = draft(&c).clone();
+        assert_eq!((work.pouch.len(), work.pouch_packed.len(), stash[&item]), (1, 0, 1), "one copy a click");
+        frame(&mut c, &mut cx, &mut gfx(), 1.0);
+        assert!(widget(&c, "gear.pouch.0").is_some() && widget(&c, "gear.pouch.0.pips").is_none(), "the classic rows");
     }
 }

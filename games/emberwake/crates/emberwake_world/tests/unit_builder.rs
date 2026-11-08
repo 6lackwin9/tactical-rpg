@@ -24,6 +24,18 @@ fn same(a: &Unit, b: &Unit) -> bool {
     format!("{a:?}") == format!("{b:?}")
 }
 
+/// U4.2-S3 (FB-29): a save leaves its character's temperament out (`new_game::hero_from_character`) and every build
+/// reads it from the character, so the saved passive snapshot the old path applied is the snapshot with the
+/// temperament back in its gathered place (`Data::character_passives` order; the save's other ids after, in order).
+fn saved_with_temperament(d: &Data, state: &UnitState) -> Vec<String> {
+    let character = progression::character_of(d, state);
+    let temperament = json::s(character, "temperament");
+    let world = aegis_content::split_qid(&state.lore_ref).map(|(w, _)| w).unwrap_or_default();
+    let mut out: Vec<String> = d.character_passives(character, &world).into_iter().filter(|p| state.passives.contains(p) || (!temperament.is_empty() && *p == temperament)).collect();
+    out.extend(state.passives.iter().filter(|p| !out.contains(p)).cloned().collect::<Vec<_>>());
+    out
+}
+
 /// The member build before U2.2-S2 (`progression::build_as`): the row alone, then the saved passive snapshot, skills,
 /// gear, pouch, vitals, loadout, deck and ranks.
 fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>) -> Option<Unit> {
@@ -45,9 +57,10 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
         if !work.deck.is_empty() {
             u.deck = work.deck.clone();
         }
-        u.deck_rule = Some(rule.clone());
+        // CLASS-BASICS (R2-W2b): the deck terms carry the class's role basics, as every build gives them since
+        u.deck_rule = Some(rule.with_class(cat, &def.class_id));
     }
-    for id in &work.passives {
+    for id in &saved_with_temperament(d, &work) {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);
         }
@@ -68,6 +81,8 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
         }
     }
     u.inventory.pouch.clear();
+    // A1.2-K3 (INTENT2-K3): the battle pouch takes stacks under the world's `pouch_stacks` (the one intended difference)
+    u.inventory.pouch_stacks = d.ruleset(world).numbers.pouch_stacks;
     for id in &work.pouch {
         if let Some(item) = cat.items.get(id).filter(|i| i.item_type == "CONSUMABLE") {
             u.inventory.add_to_pouch(item);
@@ -167,7 +182,7 @@ fn every_hero_and_world_character_builds_as_before() {
     }
     let mut npcs = 0;
     for w in d.world_ids() {
-        let roster = WorldRoster { d: &d, world: w.clone() };
+        let roster = WorldRoster::new(&d, w.clone());
         let rule = progression::deck_rule(&d, &w);
         for c in d.own_entries(&w, "characters") {
             let r = json::s(c, "id");
@@ -209,7 +224,10 @@ fn a_fixed_unit_with_its_class_has_the_stats_the_classless_fallback_gave() {
 fn every_shipped_hero_regathers_its_new_game_passives() {
     let d = data();
     for (w, h) in heroes(&d) {
-        assert_eq!(progression::member_passives(&d, &h), h.passives, "hero {w}:{} (a save made now builds as before)", h.id);
+        // U4.2-S3: the new-game list leaves the temperament out; the build gathers it back from the character
+        assert_eq!(progression::member_passives(&d, &h), saved_with_temperament(&d, &h), "hero {w}:{} (a save made now builds as before)", h.id);
+        let temperament = json::s(progression::character_of(&d, &h), "temperament");
+        assert!(temperament.is_empty() || !h.passives.contains(&temperament), "hero {w}:{}: the save leaves the temperament out", h.id);
     }
 }
 
@@ -230,7 +248,7 @@ impl Roster for AnyUnit<'_> {
 fn any_unit_npc_included_fights_through_the_one_builder() {
     let d = data();
     let (w, hero) = heroes(&d).into_iter().next().expect("a party hero");
-    let roster = AnyUnit(WorldRoster { d: &d, world: w.clone() });
+    let roster = AnyUnit(WorldRoster::new(&d, w.clone()));
     // the world character with the most overrides, a derived enemy template, a fixed unit
     let sources = |c: &Dict| d.character_passives(c, &w).len() + json::aget(c, "named_items").len() + json::dget(c, "tuning").len();
     let npc = d.own_entries(&w, "characters").iter().filter(|c| json::s(c, "role") != "party" && roster.0.entry(&d.cat, &json::s(c, "id")).is_some()).max_by_key(|c| sources(c)).map(|c| json::s(c, "id")).expect("a world character");

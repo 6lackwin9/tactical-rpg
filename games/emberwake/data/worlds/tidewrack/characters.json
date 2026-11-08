@@ -19,6 +19,8 @@
 				"ember_blade"
 			],
 			"passives": [],
+			"temperament": "calcified_frame",
+			"default_intent": "support",
 			"named_items": [
 				"ember_brigandine"
 			],
@@ -46,6 +48,8 @@
 				"cinder_archery"
 			],
 			"passives": [],
+			"temperament": "cinder_childs_reflex",
+			"default_intent": "maneuver",
 			"named_items": [],
 			"keepsake": "",
 			"tuning": {},

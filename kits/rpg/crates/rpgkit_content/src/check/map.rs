@@ -22,7 +22,6 @@ const STEPS_HI: i64 = 99;
 const MAX_CHEST_KEYS: usize = 8;
 const CHEST_COUNT_MAX: i64 = 99;
 const CHEST_GOLD_MAX: i64 = 9999;
-const CHEST_SUPPLIES_MAX: i64 = 99;
 const BINDING_KEYS: [&str; 5] = ["encounters", "elites", "elite_pct", "steps_min", "steps_max"];
 const MARKER_COMMON: [&str; 8] = ["id", "kind", "anchor", "requires_flags", "unless_flags", "sets_flags", "label", "note"];
 const LABEL_MAX: usize = 32;
@@ -425,8 +424,10 @@ fn chest_errors(v: &View, w: &str, mid: &str, m: &Dict) -> Vec<String> {
         errors.push(format!("Marker '{mid}': gold must be a whole number 0..{CHEST_GOLD_MAX}."));
     }
     let supplies = m.get("supplies").cloned().unwrap_or(json::int(0));
-    if !int_in(&supplies, 0, CHEST_SUPPLIES_MAX) {
-        errors.push(format!("Marker '{mid}': supplies must be a whole number 0..{CHEST_SUPPLIES_MAX}."));
+    // E2.2-S1 (FB-53b): a chest holds no more supplies than the party can carry
+    let supplies_max = v.purse.supplies_max;
+    if !int_in(&supplies, 0, supplies_max) {
+        errors.push(format!("Marker '{mid}': supplies must be a whole number 0..{supplies_max}."));
     }
     if items.is_empty() && loot.is_empty() && json::to_int(&m["gold"]) <= 0 && json::to_int(&supplies) <= 0 {
         errors.push(format!("Chest '{mid}' holds nothing."));

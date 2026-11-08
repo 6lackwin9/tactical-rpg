@@ -48,6 +48,13 @@ pub struct WorldRoster<'a> {
     pub world: String,
 }
 
+impl<'a> WorldRoster<'a> {
+    /// W.2-S1 (FB-50a): the roster of a battle played in `world` (the one constructor; `begin_world` builds on it).
+    pub fn new(d: &'a Data, world: impl Into<String>) -> Self {
+        Self { d, world: world.into() }
+    }
+}
+
 impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     fn entry(&self, _cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
@@ -437,6 +444,10 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
         if !settled.wounded.is_empty() {
             out.insert("wounded".into(), json::strs(&settled.wounded));
         }
+        // A1.2-K3 (INTENT2-K3): the pouch slots auto-fill left short (the Results' "Stash short" lines)
+        if !settled.stash_short.is_empty() {
+            out.insert("stash_short".into(), json::strs(&settled.stash_short));
+        }
         if !settled.departed.is_empty() {
             let departed = settled.departed.iter().map(|(m, life)| json::obj([("member", m.clone().into()), ("life", life.clone().into())]).into()).collect();
             out.insert("departed".into(), Value::Array(departed));
@@ -452,6 +463,23 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
         out.insert("stay_lines".into(), json::strs(&lines));
     }
     (out, notes)
+}
+
+/// A world fight's start with the saved party (BattleBridge.encounter_for; the battle screen builds the fight after
+/// it): the world that resolves `encounter_ref` (`fight_world`), refused when the fight world's entry's `party_min`
+/// is above the active members (ROSTER1 BK6, `roster::party_min_refusal`); then A1.2-K3 (INTENT2-K3) the combat-start
+/// auto-fill of the active members' pouches (`roster::auto_fill_at_start`, under the world's `pouch_stacks`). Returns
+/// the fight world and the auto-fill's "Stash short" lines.
+pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<(String, Vec<String>), String> {
+    let world = fight_world(d, gs, encounter_ref);
+    let local = d.resolve(&gs.world_id, "encounters", encounter_ref);
+    let entry = d.resolve(&world, "encounters", &json::s(local, "id"));
+    let short = roster::party_min_refusal(gs, entry);
+    if !short.is_empty() {
+        return Err(short);
+    }
+    let lines = roster::auto_fill_at_start(d, gs, &world);
+    Ok((world, lines))
 }
 
 /// `apply` with `tally`, or with the default tally when the fight was settled without a battle (REWARD1 2.5). ROSTER1
@@ -472,8 +500,23 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
     }
 }
 
+/// W.2-S1 (FB-50a): the settle of a world fight by the runner that started it (BattleBridge's after_fight by the
+/// fight's source): `travel`, `dialogue`, `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts),
+/// `trigger` (CAMPAIGN1 T2: a queued battle, settled like a dialogue fight), else `explore`. Each runner settles the
+/// party side first, then the rewards, then its clock tick (`apply`). The battle screen and the debug fight popup both
+/// settle through it.
+pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&Tally>) -> Dict {
+    match runner {
+        "travel" => crate::travel::after_fight(d, gs, fight, outcome, tally),
+        "dialogue" => crate::dialogue::after_fight(d, gs, fight, outcome, tally),
+        crate::story::FIGHT_SOURCE => crate::story::after_fight(d, gs, fight, outcome, tally),
+        crate::campaign::trigger::FIGHT_SOURCE => crate::campaign::trigger::after_fight(d, gs, fight, outcome, tally),
+        _ => crate::explore::after_fight(d, gs, fight, outcome, tally),
+    }
+}
+
 /// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.
-pub const PARTY_KEYS: [&str; 4] = ["party_fates", "stay_lines", "wounded", "departed"];
+pub const PARTY_KEYS: [&str; 5] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

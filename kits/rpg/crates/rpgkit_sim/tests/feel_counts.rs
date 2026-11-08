@@ -329,7 +329,7 @@ fn items_used_count_by_id_and_only_when_used() {
             s.w.units[MATE].inventory.pouch.push(item.clone());
         }
         confirm(&mut s);
-        let cmd = Command::new(MATE, 0, 1, CmdKind::Item { target: MATE, item: Box::new(item), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0 });
+        let cmd = Command::new(MATE, 0, 1, CmdKind::Item { target: MATE, item: Box::new(item), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0, cell: None, struck_units: Vec::new() });
         assert!(s.resolver.schedule(MATE, cmd, 1));
         play_out(&mut s);
         observed(&s).party

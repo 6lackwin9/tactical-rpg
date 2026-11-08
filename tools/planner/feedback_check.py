@@ -4,6 +4,7 @@
 Usage (from anywhere; paths default to this checkout):
   python3 tools/planner/feedback_check.py [check] [--pending-ok]
   python3 tools/planner/feedback_check.py archive [--commit <sha>] [--dry-run]
+  python3 tools/planner/feedback_check.py lease [check|claim|release] [--window-minutes 20] [--session auto|cloud|desktop] [--force] [--no-fetch]
   common options: --feedback <path> --ready <path> --closed <path>
 
 check (exit 0 = FEEDBACK.md and READY.md match, 1 = a mismatch, 2 = a file could not be read or parsed):
@@ -25,9 +26,11 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,6 +41,8 @@ HEADER = re.compile(r"^### ((?:FB|UN)-\d+)\b")
 STATUS = re.compile(r"^- \*\*Status\*\*:\s*(.*)$")
 TICKED = re.compile(r"`([^`]+)`")
 RANGE = re.compile(r"^(.*-[A-Z]+)(\d+)\.\.[A-Z]*(\d+)$")  # U4.2-S3..S4 -> U4.2-S3, U4.2-S4
+CLOSED_SUBJECT = re.compile(r"^Close .*squash-landed on develop", re.IGNORECASE)
+BUILDING_STATUS = re.compile(r"\b(building|in-progress|in progress|running)\b", re.IGNORECASE)
 
 
 class ParseError(Exception):
@@ -267,16 +272,167 @@ def archive(feedback: str, closed: str, items: list[Item], answers: dict[str, An
     return new_fb, new_closed
 
 
+def parse_building_rows(feedback_text: str) -> list[str]:
+    """Finds rows in FEEDBACK.md Section 1 whose Stage / Status cell indicates an active build."""
+    in_sec1 = False
+    rows: list[str] = []
+    for line in feedback_text.splitlines():
+        if line.startswith("## 1."):
+            in_sec1 = True
+            continue
+        if in_sec1 and line.startswith("## "):
+            break
+        if not in_sec1 or not line.strip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or cells[0].lower().startswith("task") or all(set(c) <= {"-", ":"} for c in cells):
+            continue
+        if BUILDING_STATUS.search(cells[1]):
+            rows.append(f"{cells[0]} ({cells[1]})")
+    return rows
+
+
+LEASE_REF = "refs/heads/build-lease"
+LEASE_SUBJ = re.compile(r"^BUILD-LEASE:\s*(cloud|desktop)\b", re.IGNORECASE)
+
+
+def check_lease(action: str, window_minutes: float, session: str, force: bool, no_fetch: bool) -> int:
+    """Checks, claims, or releases the remote Build Session lease (`refs/heads/build-lease` + branch/FEEDBACK check)."""
+    def git_out(*args: str) -> str:
+        r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            raise ParseError(f"git {' '.join(args)} failed: {r.stderr.strip()}")
+        return r.stdout
+
+    if session == "auto":
+        session = "cloud" if os.environ.get("CLAUDE_CODE_REMOTE", "").lower() == "true" else "desktop"
+    if not no_fetch:
+        git_out("fetch", "-p", "-q", "origin")
+    now = int(time.time())
+
+    # 1. Explicit remote lease ref (`origin/build-lease`)
+    lease_owner = ""
+    lease_age = 999999.0
+    lease_subj = ""
+    r_lease = subprocess.run(
+        ["git", "log", "-1", "--format=%h|%ct|%s", "origin/build-lease"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if r_lease.returncode == 0 and r_lease.stdout.strip():
+        _, l_ts, lease_subj = r_lease.stdout.strip().split("|", 2)
+        lease_age = max(0.0, (now - int(l_ts)) / 60.0)
+        m = LEASE_SUBJ.match(lease_subj)
+        if m:
+            lease_owner = m.group(1).lower()
+
+    if action == "release":
+        subprocess.run(["git", "push", "-q", "origin", f":{LEASE_REF}"], cwd=ROOT, capture_output=True)
+        print(f"[build-lease] released origin/build-lease (session={session})")
+        return 0
+
+    # 2. Unmerged remote claude/* task branches
+    merged = {
+        b.strip()
+        for b in git_out("branch", "-r", "--merged", "origin/develop").splitlines()
+        if b.strip() and "->" not in b
+    }
+    ref_out = git_out(
+        "for-each-ref",
+        "--format=%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(subject)",
+        "refs/remotes/origin/claude/",
+    )
+    active_branches: list[tuple[str, str, float, str]] = []
+    for raw in ref_out.splitlines():
+        parts = raw.split("|", 3)
+        if len(parts) < 4:
+            continue
+        branch, sha, ts_str, subject = parts[0], parts[1], parts[2], parts[3]
+        if branch in merged or CLOSED_SUBJECT.search(subject) or branch.startswith("origin/claude/release-batch"):
+            continue
+        age_min = max(0.0, (now - int(ts_str)) / 60.0)
+        active_branches.append((branch, sha, age_min, subject))
+
+    # 3. origin/develop FEEDBACK.md heartbeat
+    log_line = (
+        git_out("log", "-1", "--format=%h|%ct|%s", "origin/develop", "--", "docs/FEEDBACK.md").strip()
+        or git_out("log", "-1", "--format=%h|%ct|%s", "origin/develop").strip()
+    )
+    dev_sha, dev_ts, dev_subj = log_line.split("|", 2)
+    dev_age = max(0.0, (now - int(dev_ts)) / 60.0)
+    building = parse_building_rows(git_out("show", "origin/develop:docs/FEEDBACK.md"))
+
+    print(f"[build-lease] session={session} | origin/develop={dev_sha} ({dev_age:.1f}m ago) '{dev_subj}'")
+    if lease_owner:
+        print(f"[build-lease] lease-owner={lease_owner} ({lease_age:.1f}m ago) '{lease_subj}'")
+    if building:
+        print(f"[build-lease] FEEDBACK.md active rows: {', '.join(building)}")
+    for b, sha, age, subj in active_branches:
+        print(f"[build-lease] unmerged branch: {b} ({sha}, {age:.1f}m ago) '{subj}'")
+
+    conflicts: list[str] = []
+    if lease_owner and lease_owner != session:
+        conflicts.append(
+            f"remote lease `origin/build-lease` is owned by `{lease_owner}` ({lease_age:.1f}m ago): {lease_subj}"
+        )
+    if not force and lease_owner != session:
+        for b, sha, age, subj in active_branches:
+            if age <= window_minutes:
+                conflicts.append(f"unmerged task branch `{b}` ({sha}, {age:.1f}m ago <= {window_minutes:.0f}m): {subj}")
+        if dev_age <= window_minutes and building:
+            conflicts.append(
+                f"origin/develop FEEDBACK.md updated {dev_age:.1f}m ago ({dev_sha}) with active build status: {', '.join(building)}"
+            )
+
+    if conflicts and not force:
+        print("[build-lease] CONFLICT: another Build Session holds the lease or is active within the window:")
+        for c in conflicts:
+            print(f"  - {c}")
+        print("[build-lease] HALT: do not build or push. Pass `lease claim --force` only when the user confirms takeover.")
+        return 1
+
+    if action == "claim":
+        tree = git_out("rev-parse", "origin/develop^{tree}").strip()
+        parent = git_out("rev-parse", "origin/develop").strip()
+        msg = f"BUILD-LEASE: {session} claimed build lease at {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        commit = subprocess.run(
+            ["git", "commit-tree", tree, "-p", parent, "-m", msg],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        git_out("push", "-f", "-q", "origin", f"{commit}:{LEASE_REF}")
+        print(f"[build-lease] claimed `origin/build-lease` for session={session} (@{commit[:8]})")
+        return 0
+
+    print("[build-lease] ok: no conflicting active Build Session.")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("command", nargs="?", default="check", choices=("check", "archive"))
+    p.add_argument("command", nargs="?", default="check", choices=("check", "archive", "lease"))
+    p.add_argument("lease_action", nargs="?", default="check", choices=("check", "claim", "release"))
     p.add_argument("--feedback", type=Path, default=ROOT / "docs/FEEDBACK.md")
     p.add_argument("--ready", type=Path, default=ROOT / "docs/READY.md")
     p.add_argument("--closed", type=Path, default=ROOT / "docs/archive/FEEDBACK_CLOSED.md")
     p.add_argument("--pending-ok", action="store_true", help="open items with no section 4 row yet are not a failure")
     p.add_argument("--commit", help="archive: the commit recorded as @<commit> (default: last commit of READY.md)")
     p.add_argument("--dry-run", action="store_true", help="archive: print what would move, change nothing")
+    p.add_argument("--window-minutes", type=float, default=20.0, help="lease: activity window in minutes (default: 20)")
+    p.add_argument("--session", default="auto", choices=("auto", "cloud", "desktop"))
+    p.add_argument("--force", action="store_true", help="lease claim: force takeover from the other session")
+    p.add_argument("--no-fetch", action="store_true", help="lease: skip git fetch -p origin")
     args = p.parse_args(argv)
+    if args.command == "lease":
+        try:
+            return check_lease(args.lease_action, args.window_minutes, args.session, args.force, args.no_fetch)
+        except ParseError as e:
+            print(f"[build-lease] ERROR: {e}")
+            return 2
     try:
         texts = [f.read_text(encoding="utf-8") for f in (args.feedback, args.ready, args.closed)]
         rep, items, answers = check(*texts, pending_ok=args.pending_ok or args.command == "archive")

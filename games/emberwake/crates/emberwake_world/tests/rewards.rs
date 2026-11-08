@@ -116,7 +116,7 @@ fn session(d: &Data, encounter: &str, enemies: Option<Value>) -> Session {
     if let Some(e) = enemies {
         entry.insert("enemies".into(), e);
     }
-    let roster = WorldRoster { d, world: "ashlands".into() };
+    let roster = WorldRoster::new(d, "ashlands");
     Session::start_with(d.cat.clone(), EncounterDef::from_obj(&entry), &roster, Vec::new())
 }
 
@@ -425,7 +425,7 @@ fn a_won_hold_battle_captures_the_holder_and_names_it_in_the_flag() {
         members.push((m.id.clone(), f.pouch_unloaded));
     }
     assert!(members.len() >= 2, "a holder and someone to escape: {members:?}");
-    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: world.clone() }, party);
+    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, world.clone()), party);
     assert!(s.stay.is_some(), "the scratch row is a hold escape");
     // the hold's end (H4): the first hero holds the winch, every other hero withdrew through an exit
     let heroes: Vec<usize> = s.w.allies.iter().copied().take(members.len()).collect();

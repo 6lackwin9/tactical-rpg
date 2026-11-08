@@ -113,7 +113,7 @@ fn play_all(follow: Option<bool>) -> Vec<(Session, Value)> {
     for e in d.own_entries("ashlands", "encounters") {
         let id = aegis_core::json::s(e, "id");
         let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", &id));
-        let mut s = Session::start(d.cat.clone(), def, &WorldRoster { d: &d, world: "ashlands".into() });
+        let mut s = Session::start(d.cat.clone(), def, &WorldRoster::new(&d, "ashlands"));
         if let Some(live) = follow {
             s.attach_metrics(BattleMetrics::new(), live);
         }
@@ -159,7 +159,7 @@ fn combos_and_regen_are_credited() {
     let d = Data::open(&dir).expect("data").0;
     let pick = d.own_entries("ashlands", "encounters").iter().find_map(|e| {
         let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", &aegis_core::json::s(e, "id")));
-        let s = Session::start(d.cat.clone(), def, &WorldRoster { d: &d, world: "ashlands".into() });
+        let s = Session::start(d.cat.clone(), def, &WorldRoster::new(&d, "ashlands"));
         (s.w.enemies.iter().filter(|&&e| s.w.has(e)).count() >= 2).then_some(s)
     });
     let mut s = pick.expect("an ashlands encounter with two enemies on the field");

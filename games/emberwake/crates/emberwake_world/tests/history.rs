@@ -14,7 +14,7 @@ fn sessions() -> Vec<Session> {
         .map(|e| {
             let id = aegis_core::json::s(e, "id");
             let def = EncounterDef::from_obj(d.resolve("ashlands", "encounters", &id));
-            Session::start(d.cat.clone(), def, &WorldRoster { d: &d, world: "ashlands".into() })
+            Session::start(d.cat.clone(), def, &WorldRoster::new(&d, "ashlands"))
         })
         .collect()
 }

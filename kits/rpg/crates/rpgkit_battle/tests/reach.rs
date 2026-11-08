@@ -1,6 +1,6 @@
 //! RULESET1-K (docs/specs/RULESET1.md 8, K1-K6) on a scratch catalog built here (no shipped data): under the rule
 //! `reach` a melee unit whose main weapon's family has the engine rule `reach` attacks in the band (1, 2); its
-//! `attack_range` stays 1; off-hand jabs, LINE and SWEEP stay (1, 1) and a skill's own `reach_max` wins (K2); distance is
+//! `attack_range` stays 1; off-hand jabs, LINE and RING stay (1, 1) and a skill's own `reach_max` wins (K2); distance is
 //! Manhattan with nothing in the way counted (K3); approaches, dashes and the chase stop at the band's far edge (K4);
 //! riposte answers only at distance 1 (K5); a reach hit is a melee hit (no cover term, the same damage as from 1 tile,
 //! K6); the band bounds "engaged" (RULESET1_INTENT MV2) and the threat measure (PL4). Classic, and the rule switched off,
@@ -39,7 +39,7 @@ fn weapon(id: &str, family: &str, base_range: i32, reach: bool) -> Value {
     row
 }
 
-/// Engine skills, a plain cut, an off-hand jab, LINE and SWEEP areas, a lunge with its own reach (1-3) and a dash;
+/// Engine skills, a plain cut, an off-hand jab, LINE and RING areas, a lunge with its own reach (1-3) and a dash;
 /// a lancer with a reach weapon, a swordsman with a plain one, two foes.
 fn catalog() -> Catalog {
     let skills = vec![
@@ -53,7 +53,7 @@ fn catalog() -> Catalog {
         json!({"id": "t_cut", "name": "Cut", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0}),
         json!({"id": "t_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.5, "weapon_hand": "off"}),
         json!({"id": "t_line", "name": "Pierce Line", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.8, "area": "LINE"}),
-        json!({"id": "t_sweep", "name": "Sweep", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.8, "area": "SWEEP"}),
+        json!({"id": "t_ring", "name": "Ring", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.8, "area": "RING"}),
         json!({"id": "t_lunge", "name": "Lunge", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0, "reach_min": 1, "reach_max": 3}),
         json!({"id": "t_rush", "name": "Rush", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0, "dash_tiles": 3}),
     ];
@@ -111,7 +111,7 @@ fn commit(w: &World, plan: &Plan) -> Resolver {
 }
 
 /// K1, K2: under the rule a reach weapon gives a plain melee attack the band (1, 2); `attack_range` stays 1 (melee:
-/// no kiting, riposte and cover as melee); off-hand jabs, LINE and SWEEP stay (1, 1); a skill's own `reach_max` wins;
+/// no kiting, riposte and cover as melee); off-hand jabs, LINE and RING stay (1, 1); a skill's own `reach_max` wins;
 /// a plain weapon, or a ranged unit holding the reach weapon, keeps today's band. Classic and the rule switched off:
 /// `reach_by` is `reach_for` for every unit and skill.
 #[test]
@@ -125,7 +125,7 @@ fn a_reach_weapon_widens_the_melee_band_under_the_rule() {
     assert_eq!(band("t_cut", LANCER), (1, REACH_WEAPON_REACH), "K1: melee reach 2");
     assert_eq!(band("strike", LANCER), (1, REACH_WEAPON_REACH));
     assert_eq!(band("t_rush", LANCER), (1, REACH_WEAPON_REACH), "a dash attack strikes from the band too");
-    for id in ["t_jab", "t_line", "t_sweep"] {
+    for id in ["t_jab", "t_line", "t_ring"] {
         assert_eq!(band(id, LANCER), (1, 1), "K2: {id} stays (1, 1)");
     }
     assert_eq!(band("t_lunge", LANCER), (1, 3), "the skill's own reach");

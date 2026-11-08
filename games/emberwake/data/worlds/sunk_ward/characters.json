@@ -19,6 +19,8 @@
 			"passives": [
 				"polearm_drill"
 			],
+			"temperament": "traitors_discipline",
+			"default_intent": "guard",
 			"named_items": [],
 			"keepsake": "keepsake_kaelen",
 			"tuning": {},
@@ -43,6 +45,8 @@
 			"passives": [
 				"censer_drill"
 			],
+			"temperament": "marrow_valve",
+			"default_intent": "support",
 			"named_items": [],
 			"keepsake": "keepsake_maren",
 			"tuning": {},
@@ -67,6 +71,8 @@
 			"passives": [
 				"sprayer_drill"
 			],
+			"temperament": "vat_masters_grease",
+			"default_intent": "assault",
 			"named_items": [],
 			"keepsake": "keepsake_elyse",
 			"tuning": {},

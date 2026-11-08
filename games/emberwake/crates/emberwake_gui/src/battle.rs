@@ -2,9 +2,9 @@
 //! panels, text, hover cards and menus are drawn smooth at the window's real resolution (painter.rs). Every change goes
 //! through the command API (emberwake_host on aegis_host), the same one `aegis serve` and the agent link use.
 //! Two modes: the Test Arena (a catalog encounter, Restart / Play again) and a world battle (GameEncounter: the saved
-//! party at its stored HP against a world encounter; on Continue the runner's after_fight settles the battle's tally
-//! (the kit settles the party: HP, the stay-behind and roster rules; then the rewards) and the results popup opens
-//! over the map).
+//! party at its stored HP against a world encounter; on Continue the kit's `finish_world` (the runner's after_fight)
+//! settles the battle's tally (the kit settles the party: HP, the stay-behind and roster rules; then the rewards) and
+//! the results popup opens over the map).
 //! Mouse: click a hero to select; click a foe, an ally, the hero itself or a tile for its options; hover anything for
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
@@ -72,8 +72,8 @@ use aegis_core::json::{self, s, Dict};
 use emberwake_world::battle::WorldRoster;
 use emberwake_battle::world::World;
 use emberwake_host::{Battle, Host};
-use emberwake_world::campaign::{purse, trigger};
-use emberwake_world::{dialogue, explore, story, travel};
+use emberwake_world::campaign::purse;
+use emberwake_world::story;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -194,19 +194,6 @@ pub enum Action {
     /// INPUT2: a click on a strip block showing a ghost entry (the entry's index in the plan): the ghost up to it becomes
     /// picks, so that command is the hero's latest pick.
     GhostSlot(usize),
-}
-
-/// The runner's settle of a world fight (BattleBridge's after_fight by the fight's source): `travel`, `dialogue`,
-/// `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts), `trigger` (CAMPAIGN1 T2: a queued battle,
-/// settled like a dialogue fight), else `explore`. The battle screen and the debug fight popup both settle through it.
-pub fn after_fight(d: &emberwake_world::Data, gs: &mut emberwake_world::GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&emberwake_world::battle::Tally>) -> Dict {
-    match runner {
-        "travel" => travel::after_fight(d, gs, fight, outcome, tally),
-        "dialogue" => dialogue::after_fight(d, gs, fight, outcome, tally),
-        story::FIGHT_SOURCE => story::after_fight(d, gs, fight, outcome, tally),
-        trigger::FIGHT_SOURCE => trigger::after_fight(d, gs, fight, outcome, tally),
-        _ => explore::after_fight(d, gs, fight, outcome, tally),
-    }
 }
 
 /// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and
@@ -686,13 +673,12 @@ impl BattleScreen {
         if active.is_empty() {
             return Err("No active party member to fight.".into());
         }
-        let world = emberwake_world::battle::fight_world(&d, gs, &enc_ref);
+        // the kit's world fight start: the fight's world, BK6's party_min refusal, A1.2-K3's combat-start auto-fill (its
+        // "Stash short" lines are logged below)
+        let (world, stash_short) = emberwake_world::battle::begin_fight(&d, cx.gs_mut(), &enc_ref)?;
+        let gs = cx.gs();
+        let active = gs.party.active_members();
         let entry = d.resolve(&world, "encounters", &s(hit, "id"));
-        // ROSTER1 BK6: the world refuses a fight its encounter's party_min does not allow (the fight world's entry)
-        let short = emberwake_world::roster::party_min_refusal(gs, entry);
-        if !short.is_empty() {
-            return Err(short);
-        }
         // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter; V3: the world's plan
         // reveal flag in the game state reveals the enemy plans
         let mut def = emberwake_world::battle::encounter_def_in(&d, gs, &world, entry);
@@ -704,7 +690,7 @@ impl BattleScreen {
         // PACE1 rule 7 (GameEncounter): a start_status entry is granted when its requires_flags all hold.
         let grants: Vec<bool> = def.start_status.iter().map(|sb| json::aget(json::dict(sb), "requires_flags").iter().all(|c| emberwake_world::quest::condition_met(gs, json::dict(c)))).collect();
         def.start_grant = StartGrant::Only(grants);
-        let roster = WorldRoster { d: &d, world: world.clone() };
+        let roster = WorldRoster::new(&d, world.clone());
         let mut party = Vec::new();
         let mut members = Vec::new();
         // ROSTER1-L: the world fields each member (its class path and deck rule in this world, at its stored HP)
@@ -738,6 +724,9 @@ impl BattleScreen {
         if !mods.note.is_empty() {
             b.message = format!("{} {}.", b.message, mods.note);
         }
+        for line in stash_short {
+            cx.log(line);
+        }
         cx.set_busy(true);
         Ok(b)
     }
@@ -768,6 +757,12 @@ impl BattleScreen {
 }
 
 impl Screen<GameCx> for BattleScreen {
+    /// A4.2-K1b: while the selected hero plans a Field round the arrows aim its source (`field_nudge`), so they do not
+    /// move the keyboard focus then; any other time they do, as before.
+    fn arrow_focus(&self) -> bool {
+        !self.field_aiming()
+    }
+
     /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every
     /// frame. `REST_AFTER` lets the last clips and reactions of a playback run at full rate.
     fn frame_need(&self, _cx: &Cx) -> FrameNeed {
@@ -985,6 +980,12 @@ impl Screen<GameCx> for BattleScreen {
             // INPUT1 PB3: P cycles the playback speed (1x, 0.5x, Block), N plays the next block (timeline battles)
             Key::Char('p') => self.act(cx, Action::PlaybackSpeed((PlaySpeed::of(&cx.settings.v).index() + 1) % PLAYBACK_SPEEDS.len())),
             Key::Char('n') => self.act(cx, Action::NextBlock),
+            // A4.2-K1b: the arrows (`Key::dir`; the letters W A S D keep their battle keys) move the selected hero's
+            // Field source one tile
+            Key::Up | Key::Down | Key::Left | Key::Right if self.field_aiming() => {
+                let (dx, dy) = k.dir().unwrap_or((0, 0));
+                self.field_nudge(cx, emberwake_battle::grid::V2::new(dx as i32, dy as i32));
+            }
             _ => {}
         }
     }

@@ -236,7 +236,7 @@ fn world_fight(d: &Data, id: &str, seed: i64, ruleset: &Ruleset) -> Value {
     def.id = format!("{INERT_WORLD}:{id}");
     def.rng_seed = seed;
     def.ruleset = ruleset.clone();
-    let roster = WorldRoster { d, world: INERT_WORLD.to_string() };
+    let roster = WorldRoster::new(d, INERT_WORLD);
     let mut s = Session::start(d.cat.clone(), def, &roster);
     let start = units_state(&s);
     s.attach_metrics(BattleMetrics::new(), false);

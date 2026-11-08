@@ -32,7 +32,7 @@ def asset(rel: str) -> str:
 
 def backdrop(src: str) -> None:
     w, h = Image.open(asset("backgrounds/menu/main_menu.png")).size
-    b = Image.open(os.path.join(src, "title_backdrop_clean_gen1793615014_1.png")).convert("RGB")
+    b = Image.open(os.path.join(src, "title_backdrop_mist_v2_gen1794152884_1.png")).convert("RGB")
     k = max(w / b.width, h / b.height)
     sw, sh = w / k, h / k
     x0, y0 = (b.width - sw) / 2, (b.height - sh) / 2

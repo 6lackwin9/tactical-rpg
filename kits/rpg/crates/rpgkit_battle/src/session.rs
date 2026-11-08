@@ -382,7 +382,8 @@ impl Session {
             // a party member built without the rule (its passives are its builder's: progression::build_in) gets
             // the open basics and its active slots here
             if let (Some(rule), None) = (&deck, &u.deck_rule) {
-                u.deck_rule = Some(rule.clone());
+                // CLASS-BASICS: with its class's role basics (its catalog row's class)
+                u.deck_rule = Some(rule.with_class_of(&cat, &u.catalog_id));
                 u.apply_deck(&cat);
             }
             built.push(u);
@@ -962,7 +963,8 @@ impl Session {
             let mut granted = false;
             for c in self.units_of_ref(&value::string(fx, "unit", "")) {
                 if self.w.has(c) && !self.is_reserved(c) {
-                    status::grant_now(&mut self.w.units[c], &st, value::int(fx, "rounds", 2), value::int(fx, "magnitude", 0), &format!("phase:{id}"));
+                    // A4.2: the phase status effect as an EffectSpec (never rolled, FB-58; lands now)
+                    status::apply_effect(&mut self.w.units[c], &crate::encounter::phase_effect(fx, id), status::Timing::Now, 0.0, None);
                     granted = true;
                 }
             }
@@ -1915,7 +1917,7 @@ fn raw_tier(e: &UnitDef) -> String {
 /// `events` as they were. Returns the result and the later members' dropped picks and refusals (PL8).
 pub(crate) fn pick_on(w: &mut World, plan: &mut Plan, events: &mut Vec<String>, c: UnitId, at: round_intent::RoundTarget, picks: &[round_intent::Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
     let (w0, seq0, events0) = (w.clone(), plan.sequences.clone(), events.len());
-    if let Some(i) = crate::round_intent_plan::pick_intent(w, c, picks) {
+    if let Some(i) = crate::round_intent_plan::pick_intent(w, c, at, picks) {
         match crate::round_intent_plan::change_intent(w, plan, c, i) {
             Ok(lines) => events.extend(lines),
             Err(e) => return (Err(e), Vec::new()),

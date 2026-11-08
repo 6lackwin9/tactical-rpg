@@ -153,6 +153,25 @@ impl DeckRule {
         rs.has(crate::ruleset::DECK).then(|| Self { basics: rs.numbers.basics.clone(), slots: rs.numbers.deck_slots })
     }
 
+    /// CLASS-BASICS (user 2026-11-08): these terms for a unit of class `class_id` (in `cat`): the ruleset's basics, then
+    /// the class's role basics (`ClassDef::basics`, each by its family), a repeat once. They take no deck slot (an
+    /// open basic, `Unit::deck_basic`). An unknown class or one without basics: these terms unchanged.
+    pub fn with_class(&self, cat: &Catalog, class_id: &str) -> Self {
+        let mut out = self.clone();
+        for id in cat.classes.get(class_id).map(|c| c.basics.as_slice()).unwrap_or_default() {
+            let fam = cat.family_of(id).to_string();
+            if !out.basics.contains(&fam) {
+                out.basics.push(fam);
+            }
+        }
+        out
+    }
+
+    /// `with_class` for the unit of catalog row `unit_id` (its `class_id`; an unknown row: unchanged).
+    pub fn with_class_of(&self, cat: &Catalog, unit_id: &str) -> Self {
+        self.with_class(cat, cat.units.get(unit_id).map(|e| e.class_id.as_str()).unwrap_or_default())
+    }
+
     /// The first `n` of `ids`: the slots a deck list fills.
     fn take(ids: &[String], n: i32) -> &[String] {
         &ids[..ids.len().min(n.max(0) as usize)]
@@ -380,9 +399,10 @@ impl Unit {
         }
     }
 
-    /// The main weapon's type (the stat context of weapon-conditional modifiers).
+    /// The ready weapon's type (the stat context of weapon-conditional modifiers); AUDIT-09: the off-hand backup's
+    /// while it is the ready one of a 2H pair (`Inventory::active_weapon`).
     pub fn weapon_context(&self) -> Option<String> {
-        self.inventory.main_weapon().map(|w| w.weapon_type().to_string())
+        self.inventory.active_weapon().map(|w| w.weapon_type().to_string())
     }
 
     pub fn min_attack_range(&self) -> i32 {
@@ -394,10 +414,10 @@ impl Unit {
     }
 
     /// RULESET1 K1, K2: whether the unit is melee (`attack_range` at most 1, which the rule leaves as it is) with a
-    /// main weapon whose family has the engine rule `reach`. A gear fact: the battle reads it only under the rule
-    /// `reach` (`rpgkit_battle::skill::melee_reach`).
+    /// ready weapon (AUDIT-09: `Inventory::active_weapon`) whose family has the engine rule `reach`. A gear fact: the
+    /// battle reads it only under the rule `reach` (`rpgkit_battle::skill::melee_reach`).
     pub fn has_reach_weapon(&self) -> bool {
-        self.attack_range <= 1 && self.inventory.main_weapon().is_some_and(|w| w.has_reach())
+        self.attack_range <= 1 && self.inventory.active_weapon().is_some_and(|w| w.has_reach())
     }
 
     /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the
@@ -412,6 +432,12 @@ impl Unit {
         self.passive_triggers.iter().chain(&self.gear_triggers)
     }
 
+    /// F1.2-S1 (FB-58c): the U1 Initiative rating the within-block order reads (`priority * 1000 + initiative`); the one
+    /// read point the burden change (FB-07) moves.
+    pub fn initiative_rating(&self) -> i32 {
+        self.initiative
+    }
+
     pub fn has_status(&self, s: &str) -> bool {
         self.st.active.contains(s)
     }
@@ -420,9 +446,21 @@ impl Unit {
         if self.has_status(s) { self.st.magnitudes.get(s).copied().unwrap_or(0) } else { 0 }
     }
 
+    /// W2-5 (C09): the summed `active_magnitude` of the active statuses passing `read` (a status-table predicate).
+    pub fn active_magnitude_where(&self, read: impl Fn(&str) -> bool) -> i32 {
+        self.st.active.iter().filter(|s| read(s)).map(|s| self.active_magnitude(s)).sum()
+    }
+
+    /// Whether an active status passes `read` (the predicate form of `has_status`).
+    pub fn has_status_where(&self, read: impl Fn(&str) -> bool) -> bool {
+        self.st.active.iter().any(|s| read(s))
+    }
+
+    /// Move Rate +1 under a Move Rate buff (haste), -1 under a Move Rate debuff (slow), floor 1; W2-5 (C09): the
+    /// statuses are the table's `modifier` rows with `rating` move_rate (one step each way however many are active).
     pub fn move_per_block(&self) -> i32 {
-        let hasted = self.has_status("haste") as i32;
-        let slowed = self.has_status("slow") as i32;
+        let hasted = self.has_status_where(|s| crate::status::raises_rating(s, crate::status::Rating::MoveRate)) as i32;
+        let slowed = self.has_status_where(|s| crate::status::lowers_rating(s, crate::status::Rating::MoveRate)) as i32;
         (self.move_rate + hasted - slowed).max(1)
     }
 
@@ -446,12 +484,14 @@ impl Unit {
     }
 
     /// Gear stat bonuses -> tier stat bonuses (read without tier modifiers) -> gear effects -> derived numbers.
+    /// AUDIT-08/09: from the ready gear (`Inventory::ready_gear`; a stowed backup weapon adds only its burden) and the
+    /// ready weapon's range and type; call it again after `Inventory::toggle_active_weapon`.
     pub fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
         self.stats.remove_modifier("gear");
         // U3.2-S4 (FB-35): what the worn items' effects added goes first (tier criteria never read it)
         self.stats.modifiers.retain(|m| !is_gear_effect_source(&m.source));
         let bonuses: Vec<(String, i32)> =
-            self.inventory.gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
+            self.inventory.ready_gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
         for (k, v) in bonuses {
             if v != 0 {
                 self.stats.modifiers.push(StatModifier::permanent(&k, v, "gear", "always"));
@@ -460,7 +500,7 @@ impl Unit {
         self.rebuild_gear_tier_stats();
         self.rebuild_gear_effects(cat);
         let burden = self.worn_burden();
-        let (base_rng, ctx) = match self.inventory.main_weapon() {
+        let (base_rng, ctx) = match self.inventory.active_weapon() {
             Some(w) => (w.item.base_range, Some(w.weapon_type().to_string())),
             None => (1, None),
         };
@@ -476,7 +516,7 @@ impl Unit {
     fn rebuild_gear_tier_stats(&mut self) {
         self.stats.remove_modifier(TIER_SOURCE);
         let mut totals: IndexMap<String, i32> = IndexMap::new();
-        for eq in self.inventory.gear() {
+        for eq in self.inventory.ready_gear() {
             for (k, v) in eq.tier_stat_bonuses(&self.stats) {
                 *totals.entry(k).or_insert(0) += v;
             }
@@ -1043,6 +1083,8 @@ pub struct Growth {
     pub pouch: Vec<rpgkit_data::ItemDef>,
     pub loadout: Option<(Vec<String>, Vec<String>)>,
     pub ranks: IndexMap<String, i32>,
+    /// A1.2-K3: the played ruleset's `pouch_stacks` (the battle pouch takes stacks; `Inventory::pouch_stacks`).
+    pub pouch_stacks: bool,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1095,7 +1137,8 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     u.deck = e.deck.clone();
     match (&b.growth, b.deck) {
         (None, Some(rule)) => {
-            u.deck_rule = Some(rule.clone());
+            // CLASS-BASICS: the class's role basics are open beside the ruleset's (no slot)
+            u.deck_rule = Some(rule.with_class(cat, &e.class_id));
             if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
                 u.sync_from_stats_and_gear(cat);
                 u.hp = u.max_hp;
@@ -1107,7 +1150,7 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
             if !g.deck.is_empty() {
                 u.deck = g.deck.clone();
             }
-            u.deck_rule = Some(rule.clone());
+            u.deck_rule = Some(rule.with_class(cat, &e.class_id));
         }
         (_, None) => {}
     }
@@ -1138,6 +1181,7 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
                 }
             }
             u.inventory.pouch.clear();
+            u.inventory.pouch_stacks = g.pouch_stacks;
             for item in g.pouch.iter().filter(|i| i.item_type == "CONSUMABLE") {
                 if !u.inventory.add_to_pouch(item) {
                     pouch_unloaded.push(item.id.clone());
@@ -1369,19 +1413,18 @@ impl Unit {
         self.is_alive() && !self.is_withdrawn
     }
 
-    /// Combatant.take_damage: `mitigated` false applies the unit's guard first. Returns the damage dealt.
+    /// Combatant.take_damage: `mitigated` false applies the unit's guard first. Returns the damage dealt. A2.2-S1
+    /// (FB-43): through the pipeline (`damage::take_damage`; floor 1 only when the guard applies, as before).
     pub fn take_damage(&mut self, amount: i32, mitigated: bool) -> i32 {
-        let mut dmg = amount;
-        if !mitigated && self.guard > 0.0 {
-            dmg = roundi(amount as f64 * (1.0 - self.guard)).max(1);
-        }
+        let dmg = crate::damage::take_damage(amount, self.guard, mitigated);
         self.hp = (self.hp - dmg).max(0);
         dmg
     }
 
+    /// Combatant.heal. A2.2-S1: through the pipeline (`damage::heal_gain`; capped at max HP, as before).
     pub fn heal(&mut self, amount: i32) {
         if self.is_alive() {
-            self.hp = self.max_hp.min(self.hp + amount);
+            self.hp += crate::damage::heal_gain(self.hp, self.max_hp, amount);
         }
     }
 
@@ -1417,18 +1460,18 @@ impl Unit {
         self.st.magnitudes.get(status).copied().unwrap_or(0).clamp(0, if cap > 0 { cap } else { 100 })
     }
 
+    /// `1 - capped magnitude / 100` per active Attack Power debuff (weaken), 1.0 with none; W2-5 (C09): the statuses
+    /// are the table's `modifier` rows with `rating` attack_power and `kind` debuff.
     pub fn weaken_factor(&self) -> f64 {
-        if !self.has_status("weaken") {
-            return 1.0;
-        }
-        1.0 - self.capped_magnitude("weaken") as f64 / 100.0
+        let lowers = |s: &str| crate::status::lowers_rating(s, crate::status::Rating::AttackPower);
+        self.st.active.iter().filter(|s| lowers(s)).fold(1.0, |f, s| f * (1.0 - self.capped_magnitude(s) as f64 / 100.0))
     }
 
+    /// `1 + capped magnitude / 100` per active Attack Power buff (empower), 1.0 with none; W2-5 (C09): the statuses
+    /// are the table's `modifier` rows with `rating` attack_power and `kind` buff.
     pub fn empower_factor(&self) -> f64 {
-        if !self.has_status("empower") {
-            return 1.0;
-        }
-        1.0 + self.capped_magnitude("empower") as f64 / 100.0
+        let raises = |s: &str| crate::status::raises_rating(s, crate::status::Rating::AttackPower);
+        self.st.active.iter().filter(|s| raises(s)).fold(1.0, |f, s| f * (1.0 + self.capped_magnitude(s) as f64 / 100.0))
     }
 
     pub fn potency_for(&self, family: &str) -> f64 {
@@ -1518,6 +1561,8 @@ impl Unit {
     }
 
     /// The weapon type that counts for skill gating in `hand` ("main", "off"): "unarmed" when that hand is empty.
+    /// AUDIT-09: "main" is the ready weapon (`Inventory::active_weapon`: the off-hand backup while it is ready in a 2H
+    /// pair); a 2H pair shares one ready slot, so its "off" hand is empty either way.
     pub fn wielded_type(&self, hand: &str) -> String {
         let main = self.inventory.main_weapon();
         let weapon = if hand == "off" {
@@ -1527,7 +1572,7 @@ impl Unit {
                 self.inventory.offhand_weapon()
             }
         } else {
-            main
+            self.inventory.active_weapon()
         };
         weapon.map(|w| w.weapon_type().to_string()).unwrap_or_else(|| "unarmed".into())
     }

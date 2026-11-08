@@ -228,7 +228,7 @@ impl Battle {
             Err(e) => return err(e),
         }
         def.id = format!("{world}:{local}");
-        let roster = rpgkit_world::battle::WorldRoster { d: &d, world: world.to_string() };
+        let roster = rpgkit_world::battle::WorldRoster::new(&d, world);
         let s = Session::start(d.cat.clone(), def, &roster);
         let state = state_of(&s);
         self.begin(s);
@@ -554,8 +554,17 @@ fn items_of(s: &Session, u: UnitId, target: Option<UnitId>) -> Vec<Value> {
         if left <= 0 || !con.offered_in_battle() || target.is_some_and(|t| !command::item_side_problem(&s.w, u, con, Some(t)).is_empty()) {
             continue;
         }
-        out.push(json!({"item": id, "name": con.name, "left": left, "heal": con.heal, "damage": con.damage, "buff_pct": con.buff_pct, "rounds": con.duration,
-            "reach": con.battle_reach(), "blocks": con.use_blocks.max(1), "ap": command::ITEM_AP, "at_foes": con.aims_at_foes(), "description": con.raw.get("description")}));
+        let mut row = json!({"item": id, "name": con.name, "left": left, "heal": con.heal, "damage": con.damage, "buff_pct": con.buff_pct, "rounds": con.duration,
+            "reach": con.battle_reach(), "blocks": con.use_blocks.max(1), "ap": command::item_ap(&s.w, u), "at_foes": con.aims_at_foes(), "description": con.raw.get("description")});
+        // A1.2-K3 (INTENT2 section 6, IR17): an area item's shape, rows, Field reach and its Assault row's longer wind-up
+        // (only for an area item in a Field battle, so other rows keep their shape)
+        if command::item_area_on(&s.w, con) {
+            row["area"] = json!(con.area);
+            row["rows"] = json!(rpgkit_battle::round_intent::item_rows(&s.w, con));
+            row["field_reach"] = json!(command::item_field_reach(con));
+            row["assault_blocks"] = json!(command::item_blocks(&s.w, con, true, s.w.total_blocks));
+        }
+        out.push(row);
     }
     out
 }
@@ -571,7 +580,7 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
                 continue;
             }
             let reach = if k == Kind::Support { skill::support_reach(sk, &w.units[u]) } else { skill::reach_by(sk, &w.units[u], &w.ruleset) };
-            let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": sk.raw.get("description")});
+            let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": rpgkit_content::source::skill_description(&sk.raw, w.ruleset.stances())});
             // HOOKS1 HC1 (HOOKS1-UI slice 3): the HP the skill costs, priced from the battle's own catalog as the planner
             // does, only when it costs some (rule hp_cost; classic rows keep their shape)
             let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_of(w, k));
@@ -604,6 +613,8 @@ fn step_from(s: &Session, v: &Value) -> Result<Step, String> {
             PlanStep::mv(book.lowest(Kind::Move), d, v.get("tiles").and_then(Value::as_i64).unwrap_or(1) as i32)
         }
         "withdraw" => PlanStep::withdraw(),
+        // A1.2-K3: an item step with a `cell` and no `target` is an area item's Field row on that tile
+        "item" if v.get("target").is_none() && v.get("cell").is_some() => PlanStep::use_item_at(v.get("item").and_then(Value::as_str).ok_or("item step needs an item id")?, cell()?),
         "item" => PlanStep::use_item(v.get("item").and_then(Value::as_str).ok_or("item step needs an item id")?, target()?),
         _ => return Err(format!("unknown step mode '{mode}'")),
     })

@@ -662,10 +662,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    const SWEEP: (i32, i32) = (48, 30);
+    const SPAN: (i32, i32) = (48, 30);
 
     fn cells() -> impl Iterator<Item = (i32, i32)> {
-        (0..SWEEP.1).flat_map(|y| (0..SWEEP.0).map(move |x| (x, y)))
+        (0..SPAN.1).flat_map(|y| (0..SPAN.0).map(move |x| (x, y)))
     }
 
     /// The origins the sweeps run at: negative, zero and positive, even and odd.

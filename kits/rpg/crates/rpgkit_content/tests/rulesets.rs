@@ -51,7 +51,7 @@ fn base_catalog(data: &Path) {
 fn good_row() -> Value {
     json!({
         "id": "timeline", "name": "Timeline",
-        "rules": ["round_intent", "enemy_moves", "deck", "poise", "ap_cost", "pierce", "reach", "flank", "plan_badges",
+        "rules": ["round_intent", "enemy_moves", "deck", "poise", "ap_cost", "pierce", "reach", "flank", "plan_badges", "field_intent",
                   "forced_move", "ground_hazards", "arena_hazards", "triggers", "unit_meters", "hp_cost", "ignore_guard", "ai_tactics", "execute"],
         "intents": ["assault", "guard", "support", "maneuver"],
         "basics": ["move", "rest", "strike", "brace"],
@@ -240,6 +240,10 @@ fn each_broken_rule_is_one_error_naming_its_field() {
     let mut mend = good_row();
     mend["basics"] = json!(["move", "rest", "strike", "brace", "mend"]);
     mend["intents"] = extra[0].1.clone();
+    // A4.2-K1b: the legacy single intent (support) without field_intent; under it mend's derived rows are Support and
+    // Stand (`guard`, listed), so it passes (below)
+    let derived = mend.clone();
+    mend["rules"] = json!(mend["rules"].as_array().unwrap().iter().filter(|r| *r != ruleset::FIELD_INTENT).cloned().collect::<Vec<_>>());
     runs.push((mend, extra[0].2.to_string()));
     let mut empty = good_row();
     empty["intents"] = json!([]);
@@ -257,6 +261,8 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         assert!(errors[0].contains(&want), "{row}: {errors:?} lacks {want:?}");
         assert_eq!(src.catalog[ruleset::KIND], json!([]), "a row with a problem does not load");
     }
+    write_kind(&data, ruleset::KIND, 1, json!([derived]));
+    assert_eq!(ruleset_errors(&source::load(&data)), Vec::<String>::new(), "field_intent: a basic fits by any derived row");
     write_kind(&data, ruleset::KIND, 1, json!([good_row(), good_row()]));
     let errors = ruleset_errors(&source::load(&data));
     assert_eq!(errors.len(), 1, "{errors:?}");
@@ -279,8 +285,8 @@ fn numbers_past_their_range_load_at_the_schema_bounds() {
         row[&key] = json!(if below { lo - 5.0 } else { hi + 5.0 });
         want.push((key, if below { lo } else { hi }));
     }
-    // RULESET1_TASKS 1.2's ten numbers and INPUT1 1.7's `flank_protected_ap`
-    assert_eq!(want.len(), 11, "every number of 1.2 (and INPUT1 1.7) has its range in the schema");
+    // RULESET1_TASKS 1.2's ten numbers, INPUT1 1.7's `flank_protected_ap`, A1.2-S1's `item_ap` and P2.2-S1's `move_after_blocks`
+    assert_eq!(want.len(), 13, "every number of 1.2 (and INPUT1 1.7, A1.2-S1, P2.2-S1) has its range in the schema");
     write_kind(&data, ruleset::KIND, 1, json!([row]));
     let src = source::load(&data);
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());

@@ -155,7 +155,7 @@ fn world_characters_fight_with_their_world_path() {
     let d = data();
     let foe = |w: &str| {
         let def = battle::encounter_def(&d, w, d.resolve(w, "encounters", "fight"));
-        let s = Session::start(d.cat.clone(), def, &WorldRoster { d: &d, world: w.to_string() });
+        let s = Session::start(d.cat.clone(), def, &WorldRoster::new(&d, w));
         let id = s.units_by_ref["foe"][0];
         let founder = s.units_by_ref["founder"][0];
         (s.w.units[id].clone(), s.w.units[founder].known_skills.clone())

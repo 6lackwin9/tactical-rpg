@@ -951,6 +951,142 @@
 				}
 			],
 			"slot": "keystone"
+		},
+		{
+			"id": "mastery_poise_ward",
+			"name": "Poise Ward",
+			"description": "Steadies the stance: 15% resistance to Stagger.",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "stagger",
+					"value": 15
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_bleed_edge",
+			"name": "Cruel Edge",
+			"description": "Wounds run deeper: +5 status potency.",
+			"effects": [
+				{
+					"type": "status_potency",
+					"value": 5
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_heavy_impact",
+			"name": "Heavy Impact",
+			"description": "Blows drive foes further: +1 tile of forced movement.",
+			"effects": [
+				{
+					"type": "forced_move",
+					"bonus_tiles": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_agile_step",
+			"name": "Agile Step",
+			"description": "Light on the feet: +1 DEX.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "DEX",
+					"value": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_arcane_focus",
+			"name": "Arcane Focus",
+			"description": "Sharper casting: +10% spell potency.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "spell",
+					"value": 0.1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_sacred_censer",
+			"name": "Sacred Censer",
+			"description": "Soothing smoke: +10% healing potency.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "heal",
+					"value": 0.1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_bulwark_stance",
+			"name": "Bulwark Stance",
+			"description": "Planted behind the shield: cannot be moved while guarding.",
+			"effects": [
+				{
+					"type": "forced_move",
+					"immune": "guarding"
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_woven_ward",
+			"name": "Woven Ward",
+			"description": "Warded threads: +3 status potency.",
+			"effects": [
+				{
+					"type": "status_potency",
+					"value": 3
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_bow",
+			"name": "Pinning Mastery",
+			"description": "Unlocks Pinning Shot.",
+			"effects": [
+				{
+					"type": "skill",
+					"skill": "pinning_shot"
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_crossbow",
+			"name": "Sniper's Mastery",
+			"description": "Unlocks Aimed Shot.",
+			"effects": [
+				{
+					"type": "skill",
+					"skill": "aimed_shot"
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "mastery_fist",
+			"name": "Brawler's Mastery",
+			"description": "Unlocks Body Blow.",
+			"effects": [
+				{
+					"type": "skill",
+					"skill": "body_blow"
+				}
+			],
+			"slot": ""
 		}
 	]
 }

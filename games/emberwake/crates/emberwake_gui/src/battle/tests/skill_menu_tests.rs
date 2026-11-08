@@ -4,7 +4,7 @@
 //! ruleset (or built here); expectations come from these rules, never shipped numbers.
 
 use crate::battle::input::{Popup, Row, RowAct};
-use crate::battle::skill_menu::{menu_intents, MenuGrid, Slot, ICON, MENU_COLS};
+use crate::battle::skill_menu::{menu_intents, MenuGrid, Slot, ICON};
 use crate::battle::{Action, BattleScreen};
 use crate::screens::{Cx, Key, Screen};
 use aegis_ui::canvas::Rect;
@@ -88,7 +88,8 @@ fn the_rows_are_the_rulesets_intents_under_the_neutral_row() {
     b.act(&mut cx, Action::UnitClick(foe));
     drawn(&mut cx, &mut g, &mut b);
     let listed = menu_intents(&s(&b).w);
-    assert_eq!(listed, RoundIntent::ALL.into_iter().filter(|i| s(&b).w.ruleset.numbers.intents.iter().any(|x| x == i.id())).collect::<Vec<_>>());
+    // A4.2-K1b: the intents the battle offers (the listed ones, and Field under field_intent)
+    assert_eq!(listed, RoundIntent::ALL.into_iter().filter(|i| ri::listed(&s(&b).w, *i)).collect::<Vec<_>>());
     let p = popup(&b);
     let grid = p.grid.as_ref().unwrap();
     assert_eq!(grid.lines.iter().map(|l| l.1).collect::<Vec<_>>(), std::iter::once(None).chain(listed.iter().map(|i| Some(*i))).collect::<Vec<_>>());
@@ -98,8 +99,12 @@ fn the_rows_are_the_rulesets_intents_under_the_neutral_row() {
         if let Some(Slot::Intent(i)) = row.slot {
             let RowAct::Pick(picks) = &row.act else { panic!("a cell is a pick") };
             let first = picks.iter().find(|q| q.holds_target()).unwrap();
+            // A4.2-K1b: the kit's rows (IR21 under field_intent); a cell sits in the row its pick takes on the target
             let want = match first {
-                rip::Pick::Skill { skill, .. } => ri::skill_intent(&s(&b).w.cat.skills[*skill]).to_string(),
+                rip::Pick::Skill { skill, .. } => {
+                    let rows = ri::skill_rows(&s(&b).w, &s(&b).w.cat.skills[*skill]);
+                    rows.iter().find(|r| **r == i.id()).or(rows.first()).unwrap().to_string()
+                }
                 rip::Pick::Item(id) => ri::item_intent(emberwake_battle::command::pouch_item(&s(&b).w, p.menu.unwrap().0, id).unwrap()).to_string(),
                 _ => unreachable!(),
             };
@@ -152,6 +157,8 @@ fn a_fifth_row_holds() {
     let (mut cx, mut g, mut b) = arena();
     let (h, foe) = (b.selected.unwrap(), foe_of(&b));
     let sess = b.host.session.as_mut().unwrap();
+    // A4.2-K1b: an authored round_intent is read only without field_intent (IR21 derives the rows, never Channel)
+    sess.w.ruleset.rules.retain(|r| *r != emberwake_rules::ruleset::FIELD_INTENT);
     let was = menu_intents(&sess.w).len();
     let added = RoundIntent::ALL.into_iter().find(|i| !sess.w.ruleset.numbers.intents.iter().any(|x| x == i.id())).expect("an intent the ruleset does not list");
     sess.w.ruleset.numbers.intents.push(added.id().to_string());
@@ -189,23 +196,23 @@ fn row_in(slot: Slot) -> Row {
     Row { label: "x".into(), detail: String::new(), valid: true, act: RowAct::Pick(vec![rip::Pick::Item("x".into())]), tip: Vec::new(), warn: false, ap_short: None, slot: Some(slot), icon: Vec::new(), at: None, count: None }
 }
 
-/// A row's place comes from its slot alone: a pouch item or a skill may sit in any intent's row, a row wraps at its width,
-/// and an empty row keeps its line.
+/// A row's place comes from its slot alone: a pouch item or a skill may sit in any intent's row, a row stays on one line
+/// however long (INTENT2-U, IR19 Option A), and an empty row keeps its line.
 #[test]
-fn any_row_takes_a_cell_and_a_long_row_wraps() {
+fn any_row_takes_a_cell_and_a_long_row_stays_on_one_line() {
     let intents: Vec<(RoundIntent, String)> = RoundIntent::ALL.into_iter().map(|i| (i, i.name().to_string())).collect();
     for (at, (i, _)) in intents.iter().enumerate() {
         let g = MenuGrid::new(&intents, intents.iter().map(|x| x.0).collect(), &[row_in(Slot::Intent(*i))], None);
         assert_eq!(g.places[0], (at as i32 + 1, 0), "the item in {}'s row", i.id());
         assert_eq!(g.depth, intents.len() as i32 + 1, "an empty row keeps its line");
     }
-    let n = MENU_COLS as usize + 1;
+    let n = 12;
     let rows = vec![row_in(Slot::Intent(RoundIntent::Guard)); n];
     let g = MenuGrid::new(&intents, intents.iter().map(|x| x.0).collect(), &rows, None);
-    assert_eq!(g.places[n - 1], (3, 0), "the row goes on under itself");
-    assert_eq!(g.places[n - 2], (2, MENU_COLS - 1));
-    assert_eq!(g.depth, intents.len() as i32 + 2);
-    assert_eq!(g.lines[3].2, 4, "the row under it moves down for the extra line");
+    let guard = intents.iter().position(|x| x.0 == RoundIntent::Guard).unwrap() as i32 + 1;
+    assert_eq!(g.places, (0..n as i32).map(|c| (guard, c)).collect::<Vec<_>>(), "one line, a column per cell");
+    assert_eq!((g.depth, g.cols), (intents.len() as i32 + 1, n as i32), "no extra line; the panel widens");
+    assert!(g.lines.iter().skip(1).enumerate().all(|(k, l)| l.2 == k as i32 + 1), "every row on its own line");
 }
 
 /// The row list is one input: a subset keeps every place, and a row left out draws nothing and takes no hover or click.
@@ -287,8 +294,12 @@ fn every_old_action_still_works() {
     world.add_item_skills();
     b.act(&mut cx, Action::SelfTarget);
     drawn(&mut cx, &mut g, &mut b);
-    let k = popup(&b).rows.iter().position(|r| matches!(&r.act, RowAct::Pick(p) if matches!(&p[..], [rip::Pick::Item(id)] if *id == item.id))).expect("the item's cell");
-    assert_eq!(popup(&b).rows[k].slot, RoundIntent::parse(ri::item_intent(&item)).map(Slot::Intent), "the item's intent's row");
+    // INTENT2-U: an item with two rows has a cell in each; on yourself the live one
+    let k = popup(&b).rows.iter().position(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if matches!(&p[..], [rip::Pick::Item(id)] if *id == item.id))).expect("the item's cell");
+    // A1.2-K3 (IR15, FB-121): an item on yourself takes Stand when its derived rows hold it (field_intent), else its row
+    let rows = ri::item_rows(&b.host.session.as_ref().unwrap().w, &item);
+    let want = if rows.contains(&RoundIntent::Guard.id()) { RoundIntent::Guard.id() } else { rows[0] };
+    assert_eq!(popup(&b).rows[k].slot, RoundIntent::parse(want).map(Slot::Intent), "the item's row on yourself");
     assert!(popup(&b).rows[k].valid, "{}", popup(&b).rows[k].detail);
     // two items can share an icon: the cell has its copies left and the card names it
     let left = s(&b).plan.items_left(&s(&b).w, h, &item.id, -1);

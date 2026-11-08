@@ -125,6 +125,12 @@ impl PlanStep {
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
     }
+    /// A4.2-K1b (INTENT2 IR17): a shaped Assault row on enemy `target` (rule `field_intent`): aimed at its tile `cell`
+    /// at planning, its shape re-read where the target stands at the impact, `splash_mult` off it, one wind-up block more
+    /// (`assault_shape_blocks`).
+    pub fn area_on(skill: SkillId, target: UnitId, cell: V2) -> Step {
+        Self::make(Mode::Area, Some(skill), Some(target), cell)
+    }
     pub fn withdraw() -> Step {
         Self::make(Mode::Withdraw, None, None, NO_CELL)
     }
@@ -135,6 +141,11 @@ impl PlanStep {
         Self::make(Mode::SelfCast, Some(skill), None, NO_CELL)
     }
     /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
+    /// A1.2-K3 (INTENT2 section 6, IR2): an area item's Field row aimed at the source tile `cell`.
+    pub fn use_item_at(item_id: &str, cell: V2) -> Step {
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+    }
+
     pub fn use_item(item_id: &str, target: UnitId) -> Step {
         Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
     }
@@ -236,11 +247,24 @@ impl PlanEntry {
         let mut cmd = match skill::kind(s) {
             // ItemCommand: the SupportCommand slot (priority 0), `blocks` long
             _ if self.item.is_some() => {
-                Command::new(actor, 0, blocks, CmdKind::Item { target: self.target.unwrap_or(actor), item: Box::new(self.item.clone().unwrap()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0 })
+                Command::new(actor, 0, blocks, CmdKind::Item { target: self.target.unwrap_or(actor), item: Box::new(self.item.clone().unwrap()), used: false, last_heal: 0, last_damage: 0, last_boost: 0.0, cell: (self.target.is_none() && self.aim != NO_CELL).then_some(self.aim), struck_units: Vec::new() })
             }
             Kind::Attack => {
                 let mut c = if skill::is_area(s) {
-                    Command::new(actor, 0, s.blocks, CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s), status_rounds: s.status_rounds, last_damage: 0, last_hits: 0, crit_hits: Vec::new() })
+                    // A4.2-K1b (IR17): a shaped Assault row (an area entry with a target) is target-locked, with splash
+                    let (target, splash) = match self.target {
+                        Some(t) => (Some(t), w.ruleset.numbers.splash_mult),
+                        None => (None, 1.0),
+                    };
+                    // FB-120: the Field row's derived `power` bonus
+                    let power = if self.target.is_none() && round_intent::intent_of(w, actor) == Some(RoundIntent::Field) { skill::field_power(s) } else { 1.0 };
+                    let band = skill::reach_by(s, u, &w.ruleset);
+                    Command::new(
+                        actor,
+                        0,
+                        blocks,
+                        CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s) * power, status_rounds: s.status_rounds, affects: skill::affects_by(s, round_intent::intent_of(w, actor)), target, splash, shape: skill::area(s), band, last_damage: 0, last_hits: 0, crit_hits: Vec::new() },
+                    )
                 } else {
                     // INPUT1 MR4: a skill with a position hits from the tile next to its target
                     let (lo, hi) = round_intent::hit_band(w, actor, s);
@@ -271,7 +295,7 @@ impl PlanEntry {
             Kind::Status => Command::new(actor, 0, 1, CmdKind::StatusBlock { status: self.status_name.clone() }),
             Kind::Support => Command::new(actor, 0, s.blocks, CmdKind::Support { target: self.target.unwrap_or(actor), skill: self.skill, last_heal: 0, last_status: String::new(), last_cleansed: Vec::new() }),
             Kind::Defend => {
-                let mut c = Command::new(actor, 1, s.blocks, CmdKind::Defend { mitigation: skill::guard_mitigation(s, &w.ruleset.numbers), guard_rounds: s.guard_rounds, grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
+                let mut c = Command::new(actor, 1, s.blocks, CmdKind::Defend { mitigation: skill::guard_mitigation(s, &w.ruleset.numbers), guard_rounds: s.guard_rounds, later_mitigation: skill::guard_later_mitigation(s, &w.ruleset.numbers), grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
                 c.status_magnitude = s.status_magnitude;
                 c
             }
@@ -318,6 +342,18 @@ impl PlanEntry {
             Some(item) => crate::ground::Place::of_item(item),
             None => crate::ground::Place::of_skill(s),
         };
+        if skill::kind(s) == Kind::Attack && skill::is_area(s) && self.item.is_none() {
+            if self.target.is_some() {
+                // A4.2-K1b (IR17): a shaped Assault row leaves no hazard
+                cmd.hazard = None;
+            } else if round_intent::intent_of(w, actor) == Some(RoundIntent::Field) && skill::field_bonus(s) == Some(rpgkit_rules::intent::FieldBonus::Lingering) {
+                // IR21 `lingering`: the Field row's hazard lasts one round more (capped)
+                if let Some(p) = cmd.hazard.as_mut() {
+                    let base = if p.rounds > 0 { p.rounds } else { w.cat.hazards.get(&p.id).map_or(1, |d| d.duration.max(1)) };
+                    p.rounds = (base + 1).min(crate::ground::HAZARD_ROUNDS_CAP);
+                }
+            }
+        }
         cmd.name = s.name.clone();
         if self.item.is_none() {
             cmd.skill = s.id.clone();
@@ -620,7 +656,7 @@ impl Plan {
             Mode::Goto => self.apply_goto(w, c, st, step, index),
             Mode::Withdraw => self.apply_withdraw(w, c, st, index),
             Mode::Engage => self.apply_engage(w, c, st, step, index),
-            Mode::Area => self.apply_area(w, c, st, step.skill.unwrap(), step.cell.get(), index),
+            Mode::Area => self.apply_area(w, c, st, step.skill.unwrap(), step.cell.get(), step.target, index),
             Mode::Item => self.apply_item(w, c, st, step, index),
         }
     }
@@ -633,16 +669,31 @@ impl Plan {
             Mode::Move | Mode::Goto | Mode::Withdraw => return String::new(),
             Mode::Item => {
                 let Some(item) = command::pouch_item(w, c, &step.item_id).or_else(|| w.cat.items.get(&step.item_id)) else { return String::new() };
-                (round_intent::item_intent(item), step.target.map(RoundTarget::Unit))
+                // A1.2-K3 (IR11, IR21): an item fits any of its rows; a Field row's item aims at its tile
+                let rows = round_intent::item_rows(w, item);
+                let of = if rows.contains(&intent.id()) { intent.id() } else { rpgkit_rules::intent::primary(&rows) };
+                let target = match step.target {
+                    Some(t) => Some(RoundTarget::Unit(t)),
+                    None if step.cell.get() != NO_CELL => Some(RoundTarget::Cell(step.cell.get())),
+                    None => None,
+                };
+                (of, target)
             }
             _ => {
                 let Some(sid) = step.skill else { return String::new() };
-                let target = match step.mode {
-                    Mode::Area => Some(RoundTarget::Cell(step.cell.get())),
-                    Mode::SelfCast => Some(RoundTarget::Myself),
+                let target = match (step.mode, step.target) {
+                    // A4.2-K1b: a shaped Assault row aims at its enemy; a Stand area (IR5: a RING) at the user
+                    (Mode::Area, Some(t)) => Some(RoundTarget::Unit(t)),
+                    (Mode::Area, None) if intent == RoundIntent::Guard => Some(RoundTarget::Myself),
+                    (Mode::Area, None) => Some(RoundTarget::Cell(step.cell.get())),
+                    (Mode::SelfCast, _) => Some(RoundTarget::Myself),
                     _ => step.target.map(RoundTarget::Unit),
                 };
-                (round_intent::skill_intent(&w.cat.skills[sid]), target)
+                // A4.2-K1b (IR15): a skill fits any of its rows (`intent::allowed`)
+                let s = &w.cat.skills[sid];
+                let rows = round_intent::skill_rows(w, s);
+                let of = if rows.contains(&ruleset::NEUTRAL) { ruleset::NEUTRAL } else if rows.contains(&intent.id()) { intent.id() } else { rpgkit_rules::intent::primary(&rows) };
+                (of, target)
             }
         };
         if of == ruleset::NEUTRAL {
@@ -652,7 +703,7 @@ impl Plan {
             return format!("Only {} skills this round.", intent.label(&w.cat));
         }
         let Some(target) = target.map(|t| round_intent::normalize(c, t)) else { return String::new() };
-        let self_only = step.mode == Mode::SelfCast;
+        let self_only = step.mode == Mode::SelfCast || (step.mode == Mode::Area && intent == RoundIntent::Guard);
         let Some(round) = st.round_target else {
             let p = round_intent::target_problem(w, c, intent, target);
             if p.is_empty() {
@@ -696,7 +747,7 @@ impl Plan {
         idx
     }
 
-    /// ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. 1 AP, `use_blocks` blocks at the lowest free blocks
+    /// ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. `item_ap` AP, `use_blocks` blocks at the lowest free blocks
     /// like a SELF step, no auto-move: the target must stand within the item's reach of the user's planned tile when the
     /// step starts. Earlier ITEM steps of this round use up copies (nothing leaves the pouch before the command resolves).
     fn apply_item(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
@@ -707,6 +758,10 @@ impl Plan {
         };
         if !con.offered_in_battle() {
             return format!("{item_name} can't be used in battle.");
+        }
+        // A1.2-K3 (INTENT2 section 6, IR17): an area item aimed at a tile is its Field row (full power, reach +1)
+        if step.target.is_none() && step.cell.get() != NO_CELL {
+            return self.apply_item_at(w, c, st, step, index, con);
         }
         let target = step.target.unwrap_or(c);
         let side = command::item_side_problem(w, c, con, Some(target));
@@ -722,16 +777,19 @@ impl Plan {
         let Some(sid) = w.book().find(&skill::item_skill_id(&con.id)) else {
             return format!("{item_name} can't be used in battle.");
         };
-        let problem = self.add_entry(w, c, st, sid, index, Some(target), &[], 0, &[]);
+        // A1.2-K3 (IR17): an area item aimed at an enemy is its Assault row: `assault_shape_blocks` more wind-up
+        let blocks = if command::item_area_on(w, con) { command::item_blocks(w, con, true, st.total_blocks) } else { 0 };
+        let problem = self.add_entry(w, c, st, sid, index, Some(target), &[], blocks, &[]);
         if !problem.is_empty() {
             return problem;
         }
         let last = st.entries.len() - 1;
         let e = &mut st.entries[last];
         e.item = Some(con.clone());
-        // add_entry charged the skill's AP; an item costs ITEM_AP (RULESET1 T11: nothing for a unit that pays no AP)
+        // add_entry charged the skill's AP; an item costs the ruleset's item_ap (RULESET1 T11: nothing for a unit that
+        // pays no AP)
         let charged = e.skill_ap;
-        e.skill_ap = if w.pays_ap(c) { command::ITEM_AP } else { 0 };
+        e.skill_ap = command::item_ap(w, c);
         st.ap_left += charged - e.skill_ap;
         if st.dry_entry == last as i32 && st.ap_left >= 0 {
             st.dry_entry = -1;
@@ -741,9 +799,47 @@ impl Plan {
             st.entries[last].est_heal = con.heal.min((tu.max_hp - tu.hp).max(0));
         }
         if con.damage > 0 {
-            st.entries[last].est_damage = con.damage;
+            // A1.2-K3: the item damage pipeline's value (the flat damage unless the ruleset mitigates item damage)
+            let est = damage::item_damage(con.damage, command::item_hit(w, c, target, 1.0));
+            st.entries[last].est_damage = est;
             let hp = st.est_hp.get(&target).copied().unwrap_or(tu.hp);
-            st.est_hp.insert(target, (hp - con.damage).max(0));
+            st.est_hp.insert(target, (hp - est).max(0));
+        }
+        String::new()
+    }
+
+    /// A1.2-K3 (INTENT2 section 6, IR2, IR12, IR17): an area item's Field row on the source tile `step.cell`: the tile
+    /// within the item's Field reach (`command::item_field_reach`) of the user's planned tile, `use_blocks` blocks, the
+    /// item's AP; the shape's tiles are fixed now (marked like a Field skill's).
+    fn apply_item_at(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32, con: &ItemDef) -> String {
+        let cell = step.cell.get();
+        if !command::item_area_on(w, con) {
+            return format!("{} needs a unit to aim at.", con.name);
+        }
+        if !w.grid.is_valid(cell) {
+            return "Aim inside the arena.".into();
+        }
+        if st.pos.dist(cell) > command::item_field_reach(con) {
+            return format!("Out of reach for {}.", con.name);
+        }
+        let Some(sid) = w.book().find(&skill::item_skill_id(&con.id)) else {
+            return format!("{} can't be used in battle.", con.name);
+        };
+        let cells: Vec<V2> = skill::shape_cells(command::item_shape(con), st.pos, cell).into_iter().filter(|p| w.grid.is_valid(*p) && *p != st.pos).collect();
+        let problem = self.add_entry(w, c, st, sid, index, None, &[], 0, &[]);
+        if !problem.is_empty() {
+            return problem;
+        }
+        let last = st.entries.len() - 1;
+        let e = &mut st.entries[last];
+        e.item = Some(con.clone());
+        e.aim = cell;
+        e.cells = cells;
+        let charged = e.skill_ap;
+        e.skill_ap = command::item_ap(w, c);
+        st.ap_left += charged - e.skill_ap;
+        if st.dry_entry == last as i32 && st.ap_left >= 0 {
+            st.dry_entry = -1;
         }
         String::new()
     }
@@ -897,7 +993,9 @@ impl Plan {
         let sid = step.skill.unwrap();
         let s = &w.cat.skills[sid];
         if skill::is_area(s) {
-            return self.apply_area(w, c, st, sid, w.pos(foe), index);
+            // A4.2-K1b (IR17): under `field_intent` an area aimed at an enemy in an Assault round is its shaped Assault row
+            let locked = (round_intent::field_rows(w) && round_intent::intent_of(w, c) == Some(RoundIntent::Assault)).then_some(foe);
+            return self.apply_area(w, c, st, sid, w.pos(foe), locked, index);
         }
         // RULESET1_INTENT MV4: a Maneuver skill carries its own move in a Maneuver round
         if round_intent::intent_of(w, c) == Some(RoundIntent::Maneuver) && carries(w, s) {
@@ -1300,43 +1398,71 @@ impl Plan {
         p
     }
 
-    fn apply_area(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, aim: V2, index: i32) -> String {
+    /// An area entry aimed at `aim`. A4.2-K1b: in a Field round (IR5, IR21) the band takes the `reach` bonus and the
+    /// tiles the `area` bonus; with `target` (a shaped Assault row, IR17) the aim is the target's tile now, the shape
+    /// base size, the wind-up `assault_shape_blocks` longer (the round's blocks cap it) and the estimate takes
+    /// `splash_mult` off the target.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_area(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, aim: V2, target: Option<UnitId>, index: i32) -> String {
         let s = &w.cat.skills[sid];
         if !skill::is_area(s) {
             return "That isn't an area attack.".into();
         }
+        let aim = match target {
+            Some(t) if w.units[t].is_active() && w.has(t) => w.pos(t),
+            Some(_) => return "That unit is not on the field.".into(),
+            None => aim,
+        };
         if !w.grid.is_valid(aim) {
             return "Aim inside the arena.".into();
         }
-        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
+        let field = target.is_none() && round_intent::intent_of(w, c) == Some(RoundIntent::Field);
+        let band = if field { skill::field_reach(s, &w.units[c], &w.ruleset) } else { skill::reach_by(s, &w.units[c], &w.ruleset) };
         let d = st.pos.dist(aim);
         let a = skill::area(s);
         if a == skill::Area::Line && d != 1 {
             return "Needs an adjacent tile.".into();
         }
-        if a == skill::Area::Sweep && ((aim.x - st.pos.x).abs() != 1 || (aim.y - st.pos.y).abs() != 1) {
-            return "Needs a diagonal tile.".into();
+        // A3.2-S1: ARC (A3.2-K2: and CONE) swings toward a neighbouring tile; RING is drawn around the user whatever
+        // the aim.
+        if matches!(a, skill::Area::Arc | skill::Area::Cone) && (aim == st.pos || (aim.x - st.pos.x).abs() > 1 || (aim.y - st.pos.y).abs() > 1) {
+            return "Needs a neighbouring tile.".into();
         }
-        if a != skill::Area::Line && a != skill::Area::Sweep && (d < band.0 || d > band.1) {
+        if !skill::from_user(a) && (d < band.0 || d > band.1) {
             return "Out of reach.".into();
         }
-        let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
-        let p = self.add_entry(w, c, st, sid, index, None, &[], 0, &cells);
+        let shape = if field { skill::field_cells(s, st.pos, aim) } else { skill::area_cells(s, st.pos, aim) };
+        let cells: Vec<V2> = shape.into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
+        // IR17: the shaped Assault row's longer wind-up
+        let blocks = match target {
+            Some(_) => (s.blocks + w.ruleset.numbers.assault_shape_blocks.max(0)).min((w.total_blocks - w.recovery_of(c, s)).max(s.blocks)),
+            None => 0,
+        };
+        let p = self.add_entry(w, c, st, sid, index, target, &[], blocks, &cells);
         if p.is_empty() {
             let stance_before = st.entries.last().unwrap().stance_before;
             let attack_stance = if w.ruleset.stances() { skill::stance_during(s, stance_before) } else { stance_before };
             let pos = st.pos;
+            // A3.2-K2 (IR9): the units the area hits by its `affects` in this round's row
+            let affects = skill::affects_by(s, round_intent::intent_of(w, c));
+            let splash = w.ruleset.numbers.splash_mult;
             let mut total = 0;
             for &foe in w.foes_of(c) {
-                if w.units[foe].is_active() && w.has(foe) && cells.contains(&w.pos(foe)) {
-                    let hit = self.estimate_hit(w, c, st, sid, attack_stance, foe, pos);
+                if skill::affects_unit(affects, false) && w.units[foe].is_active() && w.has(foe) && cells.contains(&w.pos(foe)) {
+                    let mut hit = self.estimate_hit(w, c, st, sid, attack_stance, foe, pos);
+                    if target.is_some_and(|t| t != foe) {
+                        hit = (hit as f64 * splash).round() as i32;
+                    }
+                    if field {
+                        hit = (hit as f64 * skill::field_power(s)).round() as i32;
+                    }
                     total += hit;
                     *st.est_hp.entry(foe).or_insert(0) -= hit;
                 }
             }
             let mut friends_hit = 0;
             for &f in w.friends_of(c) {
-                if f != c && w.units[f].is_active() && cells.contains(&self.planned_position(w, f)) {
+                if f != c && skill::affects_unit(affects, true) && w.units[f].is_active() && cells.contains(&self.planned_position(w, f)) {
                     friends_hit += 1;
                 }
             }
@@ -1553,7 +1679,7 @@ impl Plan {
                     if m.to != NO_CELL {
                         blocked.insert(m.to);
                     }
-                    let leaves_first = m.leave == 1 && w.units[other].initiative > w.units[c].initiative;
+                    let leaves_first = m.leave == 1 && w.units[other].initiative_rating() > w.units[c].initiative_rating();
                     if !leaves_first {
                         blocked.insert(start);
                     }
@@ -1581,7 +1707,7 @@ impl Plan {
             }
         }
         godot_sort(&mut units, |a, b| {
-            let (sa, sb) = (w.units[*a].initiative, w.units[*b].initiative);
+            let (sa, sb) = (w.units[*a].initiative_rating(), w.units[*b].initiative_rating());
             sa > sb || (sa == sb && order[a] < order[b])
         });
         for &unit in &units {

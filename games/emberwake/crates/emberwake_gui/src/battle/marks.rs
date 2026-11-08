@@ -938,6 +938,12 @@ impl HitForecast {
         if self.staggers() {
             out.push((format!("Stagger {}{why} = {}", self.stagger, self.fc.taken), th().text));
             out.push(self.verdict());
+            // R1-BAL (FB-88): a break under pips (not on a steadfast unit) queues Stagger for the next round
+            if matches!(self.fc.verdict, emberwake_battle::poise::Verdict::Breaks(_) | emberwake_battle::poise::Verdict::Chance(_)) {
+                if let Some(note) = emberwake_battle::poise::break_stagger_note(&w.ruleset.numbers, &w.units[self.target]) {
+                    out.push((note, th().foe));
+                }
+            }
         }
         if self.flank {
             out.push(("Flank".into(), th().good));

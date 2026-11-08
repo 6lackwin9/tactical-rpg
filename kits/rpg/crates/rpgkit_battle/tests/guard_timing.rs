@@ -13,6 +13,7 @@ use rpgkit_battle::session::{EncounterDef, Session};
 use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::Catalog;
 use rpgkit_rules::ruleset::{Numbers, Ruleset, POISE, TIMELINE};
+use rpgkit_rules::stats::roundi;
 use rpgkit_rules::status;
 use rpgkit_rules::unit::HeldGuard;
 use serde_json::json;
@@ -39,6 +40,7 @@ fn catalog() -> Catalog {
         json!({"id": "t_brace", "name": "Brace", "kind": "DEFEND", "level": 1, "blocks": 2, "guard_rounds": 3}),
         json!({"id": "t_thin", "name": "Thin Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "mitigation": 0.05, "guard_rounds": 2}),
         json!({"id": "t_wall", "name": "Wall", "kind": "DEFEND", "level": 1, "blocks": 2, "mitigation": 0.95, "guard_rounds": 2}),
+        json!({"id": "t_tower", "name": "Tower", "kind": "DEFEND", "level": 1, "blocks": 2, "mitigation": 0.4, "guard_rounds": 2}),
         json!({"id": "t_crush", "name": "Crush", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.1, "stagger": 400, "target_mode": "ENEMY"}),
     ];
     let unit = |id: &str, side: &str, speed: i32| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 5000, "power": 100, "armor": 0, "speed": speed, "attack_range": 1, "skill_cap": 5, "poise": 40});
@@ -239,4 +241,34 @@ fn the_held_guard_is_the_authored_fraction() {
     book(&mut res, HERO, own(w, HERO, "t_wall"), 1);
     assert_eq!(run(w, &mut res, 1, BLOCKS), [0.95; 6], "0.95 after its own blocks too, as the running Defend gives");
     assert_eq!(w.units[HERO].st.pending_magnitudes.get(status::GUARD).copied(), Some(90), "capped at the row's maximum");
+}
+
+/// AUDIT-11 (FB-85): the queued Round 2+ `guard` status takes the ruleset's `guard_multi_round_mitigation` unless the
+/// skill authors its own `mitigation`: a ruleset row that moves the multi-round fraction moves an unauthored brace's
+/// later rounds and leaves an authored multi-round guard (0.4) at its own fraction.
+#[test]
+fn later_rounds_take_the_multi_round_fraction_unless_authored() {
+    let mut s = session();
+    let w = &mut s.w;
+    let mut row = json!({"id": TIMELINE, "name": "Timeline", "rules": [POISE], "guard_multi_round_mitigation": 0.25});
+    w.ruleset = Ruleset::from_row(row.as_object_mut().unwrap());
+    let skill = |w: &World, id: &str| w.cat.skills[w.book().find(id).unwrap()].clone();
+    let n = w.ruleset.numbers.clone();
+    let (brace, tower) = (skill(w, "t_brace"), skill(w, "t_tower"));
+    assert!(!rpgkit_battle::skill::mitigation_authored(&brace) && rpgkit_battle::skill::mitigation_authored(&tower));
+    assert_eq!([rpgkit_battle::skill::guard_later_mitigation(&brace, &n), rpgkit_battle::skill::guard_later_mitigation(&tower, &n)], [0.25, 0.4]);
+    let mut res = resolver();
+    book(&mut res, HERO, own(w, HERO, "t_brace"), 1);
+    run(w, &mut res, 1, BLOCKS);
+    let queued = |w: &World| (w.units[HERO].st.pending_rounds.get(status::GUARD).copied(), w.units[HERO].st.pending_magnitudes.get(status::GUARD).copied());
+    assert_eq!(queued(w), (Some(2), Some(roundi(n.guard_multi_round_mitigation * 100.0))), "unauthored: the ruleset's multi-round fraction");
+    for _ in 0..3 {
+        next_round(w, &mut res);
+    }
+    assert!(!w.units[HERO].st.has_any(status::GUARD));
+    book(&mut res, HERO, own(w, HERO, "t_tower"), 1);
+    assert_eq!(run(w, &mut res, 1, BLOCKS), [0.4; 6], "round 1: the authored fraction");
+    assert_eq!(queued(w), (Some(1), Some(40)), "authored: its own fraction for round 2, not the ruleset's");
+    next_round(w, &mut res);
+    assert_eq!(run(w, &mut res, 1, BLOCKS), [0.4; 6], "round 2: the status at the authored fraction");
 }

@@ -2135,6 +2135,7 @@ dependencies = [
  "aegis_host",
  "indexmap",
  "rpgkit_battle",
+ "rpgkit_content",
  "rpgkit_data",
  "rpgkit_rules",
  "rpgkit_world",

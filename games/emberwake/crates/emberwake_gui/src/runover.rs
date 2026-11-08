@@ -957,7 +957,7 @@ pub(crate) mod tests {
         assert_eq!(campaign::pending_head(cx.gs()).map(|h| s(h, "dialogue")), Some("bunk".to_string()), "the battle left the queue");
         let d = cx.data.clone();
         let fight = json::dict(&st).clone();
-        let res = crate::battle::after_fight(&d, cx.gs_mut(), trigger::FIGHT_SOURCE, &fight, "won", None);
+        let res = emberwake_world::battle::finish_world(&d, cx.gs_mut(), trigger::FIGHT_SOURCE, &fight, "won", None);
         assert!(json::b(&res, "ok", false), "{res:?}");
         assert_eq!(cx.gs().campaign.as_ref().unwrap().value("alert", cx.gs().time), LOUD_WON, "settled as a battle: the loud win's input");
         map.tick(&mut cx);

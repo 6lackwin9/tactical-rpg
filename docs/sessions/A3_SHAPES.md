@@ -28,11 +28,11 @@ Design record for `A3.1` (Area shapes, intent-driven anchors, `affects` filterin
 | Parameter | Kind | Default & Range | Notes |
 | --- | --- | --- | --- |
 | 6 area shapes (`PLUS`, `BURST`, `LINE`, `CONE`, `RING`, `ARC`) & intent anchor rules | **Fixed (Locked)** | `RING`/`ARC` added first; `SWEEP` retired after frozen kit migration | Core `A3` spatial vocabulary |
-| `splash_mult` | **Tunable** | `0.75` (`0.25..1.00`) | Secondary-tile multiplier when a shape is used under `Assault` |
+| `splash_mult` | **Tunable** | `0.50` (`0.25..1.00`) | Secondary-tile multiplier when a shape is used under `Assault` (`IR17`, `FB-120`) |
 | `assault_shape_blocks` | **Tunable** | `1` (`0..2`) | Extra wind-up blocks when aiming a shaped skill at a moving unit (`Assault`) |
 | `attack_lock` | **Tunable** | `melee` (`none` \| `melee` \| `all`) | Unblocks `ATTACKLOCK1-O` switch-on |
 
 ## 4. Acceptance tests (`A3.2` - `A3.5`)
 
-1. **Additive `RING` and `ARC` migration (`INTENT2-K2`, `FB-57`)**: All 7 former `SWEEP` skills in shipped data and `HAZARD_SHAPES` resolve as `ARC` or `RING` with `affects` filtering while `classic` goldens remain byte-identical; named `checks_golden` re-record (`2` `area` enum cases).
+1. **Additive `RING` and `ARC` migration (`INTENT2-K2`, `FB-57`, `FB-114`)**: Phase A lands `affects`, `IR7` snap, `CONE`, and `RING`/`ARC` in the schema with `0` battle/sim golden diffs (`checks_golden` re-recorded for 2 `area` enum cases); Phases B-C migrate the 7 `SWEEP` skills in both `skills.json` and `timeline_kit.json` (plus `cast1a3.json`), retire `SWEEP`, and re-record `sim_golden` (as brawler kicks `sweep_kick` / `cyclone_kick` become playable in `classic` too) and `checks_golden`.
 2. **Block-limit check (`FB-20`)**: `check/skill.rs` verifies that `blocks + recovery_blocks + assault_shape_blocks <= MAX_ACTION_BLOCKS (6)` across every rank row of dual `Field`/`Assault` skills (`Pulverizer`, `Cataclysm`, `Bloom`).

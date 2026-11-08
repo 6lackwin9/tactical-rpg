@@ -74,3 +74,70 @@ fn guard_rounds_is_a_schema_field_stored_only_off_its_default() {
     assert_eq!(stored["guard_rounds"], json!(3));
     assert_eq!(at("guard_rounds"), at("mitigation") + 1, "stored at its schema place, after mitigation: {keys:?}");
 }
+
+/// AUDIT-11 (S1.2-S4, FB-85): the loader tells an authored `mitigation` from the schema default: a DEFEND entry that
+/// authors none (neither the entry nor the rank's modifier) loads without the key, so the battle takes the ruleset's
+/// `guard_common_mitigation` (1-round) or `guard_multi_round_mitigation` (multi-round) for it; an authored value (the
+/// schema default's value included) and a rank modifier's value stay; non-DEFEND rows keep the normalised key; the
+/// writer leaves an unauthored key out (`an_authored_default_mitigation_survives_a_resave` covers the authored one).
+#[test]
+fn an_unauthored_mitigation_loads_as_the_ruleset_default() {
+    let (_t, data) = scratch();
+    let default = source::schema()["content"]["skills"].as_array().unwrap().iter().find(|f| f["key"] == "mitigation").and_then(|f| f["default"].as_f64()).expect("the schema default");
+    let skills = json!([
+        {"id": "t_stand", "name": "Stand", "kind": "DEFEND", "level": 1, "blocks": 1, "description": "Stands.", "ranks": []},
+        {"id": "t_brace", "name": "Brace", "kind": "DEFEND", "level": 1, "blocks": 2, "guard_rounds": 3, "description": "Braces.", "ranks": []},
+        {"id": "t_plain", "name": "Plain", "kind": "DEFEND", "level": 1, "blocks": 1, "mitigation": default, "description": "Plain.", "ranks": []},
+        {"id": "t_climb", "name": "Climb", "kind": "DEFEND", "level": 1, "blocks": 1, "description": "Climbs.", "ranks": [{"mitigation": 0.4}, {"blocks": 2}]},
+        {"id": "t_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "description": "Jabs.", "ranks": []},
+    ]);
+    fs::write(data.join("catalog/skills.json"), json!({"kind": "skills", "version": 2, "entries": skills}).to_string()).unwrap();
+    let src = source::load(&data);
+    let rows: Vec<&Dict> = src.catalog["skills"].as_array().unwrap().iter().filter_map(Value::as_object).collect();
+    let has = |id: &str| rows.iter().find(|r| r["id"] == id).unwrap_or_else(|| panic!("{id}")).contains_key("mitigation");
+    assert_eq!(
+        ["t_stand", "t_brace", "t_plain", "t_climb", "t_climb_2", "t_climb_3", "t_jab"].map(has),
+        [false, false, true, false, true, false, true],
+        "authored keys stay (entry or the rank's own modifier); rank 3 inherits no rank 2 modifier"
+    );
+    let cat = rpgkit_data::Catalog::from_value(&src.catalog);
+    let n = rpgkit_rules::ruleset::Numbers::default();
+    let fraction = |id: &str| rpgkit_battle::skill::guard_mitigation(cat.skills.iter().find(|s| s.id == id).unwrap(), &n);
+    let later = |id: &str| rpgkit_battle::skill::guard_later_mitigation(cat.skills.iter().find(|s| s.id == id).unwrap(), &n);
+    assert_eq!(
+        [fraction("t_stand"), fraction("t_brace"), fraction("t_plain"), fraction("t_climb"), fraction("t_climb_2")],
+        [n.guard_common_mitigation, n.guard_multi_round_mitigation, default, n.guard_common_mitigation, 0.4]
+    );
+    assert_eq!([later("t_brace"), later("t_plain")], [n.guard_multi_round_mitigation, default], "Round 2+: the ruleset's unless authored");
+    let entry = skills[0].as_object().unwrap();
+    assert!(!store::catalog_storage("skills", entry, &[]).unwrap().contains_key("mitigation"), "no key when none was authored");
+}
+
+/// AUDIT-11 addition (FB-94): the writer keeps a DEFEND row's authored `mitigation` even at the schema default (and a
+/// rank modifier's even at rank 1's value), so an authored default saves with the key and loads back as itself, not as
+/// the ruleset's guard fraction; an unauthored row still saves and loads without it; non-DEFEND rows are unchanged.
+#[test]
+fn an_authored_default_mitigation_survives_a_resave() {
+    let (_t, data) = scratch();
+    let default = source::schema()["content"]["skills"].as_array().unwrap().iter().find(|f| f["key"] == "mitigation").and_then(|f| f["default"].as_f64()).expect("the schema default");
+    let skills = json!([
+        {"id": "t_stand", "name": "Stand", "kind": "DEFEND", "level": 1, "blocks": 1, "description": "Stands.", "ranks": []},
+        {"id": "t_plain", "name": "Plain", "kind": "DEFEND", "level": 1, "blocks": 1, "mitigation": default, "description": "Plain.", "ranks": []},
+        {"id": "t_step", "name": "Step", "kind": "DEFEND", "level": 1, "blocks": 1, "mitigation": 0.3, "description": "Steps.", "ranks": [{"mitigation": 0.3}]},
+        {"id": "t_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "mitigation": default, "description": "Jabs.", "ranks": []},
+    ]);
+    fs::write(data.join("catalog/skills.json"), json!({"kind": "skills", "version": 2, "entries": skills}).to_string()).unwrap();
+    let saved = store::resave_text(&data, None, "skills").unwrap();
+    fs::write(data.join("catalog/skills.json"), &saved).unwrap();
+    let doc: Value = serde_json::from_str(&saved).unwrap();
+    let stored = |id: &str| doc["entries"].as_array().unwrap().iter().find(|e| e["id"] == id).unwrap_or_else(|| panic!("{id}")).clone();
+    assert_eq!(stored("t_plain")["mitigation"], json!(default), "the authored default is saved");
+    assert!(stored("t_stand").get("mitigation").is_none(), "an unauthored row saves no key");
+    assert!(stored("t_jab").get("mitigation").is_none(), "non-DEFEND rows: no key at the default");
+    assert_eq!(stored("t_step")["ranks"][0]["mitigation"], json!(0.3), "a rank modifier's authored value stays");
+    let cat = rpgkit_data::Catalog::from_value(&source::load(&data).catalog);
+    let n = rpgkit_rules::ruleset::Numbers::default();
+    let fraction = |id: &str| rpgkit_battle::skill::guard_mitigation(cat.skills.iter().find(|s| s.id == id).unwrap(), &n);
+    assert_eq!([fraction("t_plain"), fraction("t_stand"), fraction("t_step_2")], [default, n.guard_common_mitigation, 0.3]);
+    assert_eq!(store::resave_text(&data, None, "skills").unwrap(), saved, "the saved form re-saves byte for byte");
+}

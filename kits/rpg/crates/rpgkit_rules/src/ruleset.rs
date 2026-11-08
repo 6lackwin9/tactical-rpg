@@ -33,6 +33,9 @@ pub const PIERCE: &str = "pierce";
 pub const REACH: &str = "reach";
 pub const FLANK: &str = "flank";
 pub const PLAN_BADGES: &str = "plan_badges";
+/// INTENT2-K1 (A4.2-K1b, FB-106): the Field round intent and the IR21 derivation of a skill's allowed intents
+/// (`intent::allowed`); needs `round_intent` (BASERULES1 library 3), on in timeline, off in classic.
+pub const FIELD_INTENT: &str = "field_intent";
 /// HOOKS1 4.1: the combat hooks' rule ids (all extensions, off in classic): forced moves, ground hazards, scheduled
 /// arena hazards, events and triggers (riders, held guard), unit meters, the HP cost of skills, the guard bypass, the
 /// AI tactics and target preferences, and the execute match of an `exploit` entry with `hp_below`.
@@ -78,7 +81,7 @@ const fn rule_of(id: &'static str, kind: RuleKind, system: &'static str, bundle:
 }
 
 /// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order, with its metadata (BASERULES1-M).
-pub const REGISTER: [Rule; 18] = [
+pub const REGISTER: [Rule; 19] = [
     Rule {
         conflicts: &["stances=on", "switch_target_step=on"],
         ..rule_of(ROUND_INTENT, RuleKind::Option, "planning", "intent_core", &["round_intent.rs", "golden"], "one intent and target a round, follow-ups, facing, flanks drawn")
@@ -91,6 +94,7 @@ pub const REGISTER: [Rule; 18] = [
     rule_of(REACH, RuleKind::Extension, "positioning", "positioning", &["reach.rs"], "melee band 1-2 by the family rule"),
     Rule { requires: &[ROUND_INTENT], ..rule_of(FLANK, RuleKind::Extension, "positioning", "positioning", &["round_intent.rs"], "flanked exploit, flank power, no riposte") },
     rule_of(PLAN_BADGES, RuleKind::Extension, "tells", "tells", &["plan_badges.rs"], "impact badges, intents in tells, foresight"),
+    Rule { requires: &[ROUND_INTENT], ..rule_of(FIELD_INTENT, RuleKind::Option, "planning", "", &["field_intent.rs"], "Field intent, intents derived per skill (IR21)") },
     rule_of(FORCED_MOVE, RuleKind::Extension, "hooks", "hooks", &["forced_move.rs"], "push, pull, collision"),
     rule_of(GROUND_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["ground_hazards.rs"], "skill and item hazards on tiles"),
     rule_of(ARENA_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["arena_hazards.rs"], "scheduled hazards"),
@@ -384,6 +388,17 @@ pub struct DeckSlots {
 /// VISCLAR1-D: the default of `move_after_blocks`.
 pub const MOVE_AFTER_BLOCKS: i32 = 3;
 
+/// A1.2-S1 (ITEMUSE1 rule 3): the default of `item_ap` (the AP a consumable use costs); the shipped `timeline` row sets 0 in data.
+pub const ITEM_AP: i32 = 1;
+
+/// A4.2-K1b (INTENT2 IR17, FB-102): the default of `splash_mult`, the factor a shaped Assault row's hits take off its
+/// primary target (rule `field_intent`).
+pub const SPLASH_MULT: f64 = 0.5;
+
+/// A4.2-K1b (INTENT2 IR17, A3.1 section 3): the default of `assault_shape_blocks`, the wind-up blocks a shaped Assault row
+/// takes beyond its Field row (rule `field_intent`; the round's blocks cap it).
+pub const ASSAULT_SHAPE_BLOCKS: i32 = 1;
+
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Numbers {
@@ -431,6 +446,10 @@ pub struct Numbers {
     pub debt_stagger: i32,
     /// S1.2-S3 (`debt_stun`): the AP debt at a round start that stuns.
     pub debt_stun: i32,
+    /// F2.2-S1 (`debt_stagger_status`, FB-58b): the status a `debt_stagger` debt puts in `st.active` (default `stagger`).
+    pub debt_stagger_status: String,
+    /// F2.2-S1 (`debt_stun_status`, FB-58b): the status a `debt_stun` debt puts in `st.active` (default `stun`).
+    pub debt_stun_status: String,
     /// S2.2-S1 (`poise_pips`, S2 section 3): the pips of a full bar under `poise_mode` pips.
     pub poise_pips: i32,
     /// S2.2-S1 (`max_pip_loss_per_hit`, S2 section 3): the most pips one hit removes under `poise_mode` pips.
@@ -455,6 +474,30 @@ pub struct Numbers {
     /// S1.2-S4 (`guard_multi_round_mitigation`, S1 section 3): the guard fraction of a multi-round Guard skill
     /// (`guard_rounds` 2 or more) that authors none, lower than the 1-round one (FB-48).
     pub guard_multi_round_mitigation: f64,
+    /// A1.2-S1 (`item_ap`, A1 parameter table): the AP a consumable use costs (AP debt allowed; a unit that pays no AP
+    /// pays nothing); by the rules: `ITEM_AP` (classic), 0 under `round_intent`.
+    pub item_ap: i32,
+    /// A4.2-K1b (`splash_mult`, IR17): the factor on a shaped Assault row's hits off its primary target (read only under
+    /// `field_intent`).
+    pub splash_mult: f64,
+    /// A4.2-K1b (`assault_shape_blocks`, IR17): the extra wind-up blocks of a shaped Assault row (read only under
+    /// `field_intent`).
+    pub assault_shape_blocks: i32,
+    /// A1.2-K3 (`item_mitigation`, A1 section 1, FB-55(2)): whether an item's damage takes the target's guard, cover and
+    /// armour in the pipeline's mitigation stage; a plain tunable, off unless the row sets `on` (off: the flat damage).
+    pub item_mitigation: bool,
+    /// A1.2-K3 (`thrown_miss_spends`, INTENT2 IR12, A1 parameter table): whether a foe or tile item use spends its copy at
+    /// impact when it finds no one; a plain tunable, off unless the row sets `on` (off: a miss keeps the item).
+    pub thrown_miss_spends: bool,
+    /// A1.2-K3 (`pouch_stacks`, INTENT2-K3, A1 parameter table): whether a pouch holds up to 3 distinct items, each a
+    /// stack of at most `min(5, max_stack)` copies; a plain tunable, off unless the row sets `on` (off: 3 copies, any
+    /// mix).
+    pub pouch_stacks: bool,
+    /// W2-5 I1.2-S2 (`ai_rating_scorer`, I_AI section 1 item 5, FB-52b): whether the AI scores every rating modifier
+    /// status generically by its rating and direction (`status::raises_rating` / `lowers_rating`), so `weaken`,
+    /// `empower` and `haste` get target orders too; a plain tunable, off unless the row sets `on` (off: only the Armor
+    /// and Move Rate debuffs and the Armor buff are ordered, as before).
+    pub ai_rating_scorer: bool,
 }
 
 impl Default for Numbers {
@@ -487,6 +530,8 @@ impl Default for Numbers {
             counter_mult: status::COUNTER_MULT,
             debt_stagger: status::DEBT_STAGGER,
             debt_stun: status::DEBT_STUN,
+            debt_stagger_status: status::DEBT_STAGGER_STATUS.to_string(),
+            debt_stun_status: status::DEBT_STUN_STATUS.to_string(),
             poise_pips: 5,
             max_pip_loss_per_hit: 3,
             poise_mode: PoiseMode::Bar,
@@ -497,6 +542,13 @@ impl Default for Numbers {
             req_discount_per_level: crate::stats::REQ_DISCOUNT_PER_LEVEL,
             guard_common_mitigation: status::GUARD_COMMON_MITIGATION,
             guard_multi_round_mitigation: status::GUARD_MULTI_ROUND_MITIGATION,
+            item_ap: ITEM_AP,
+            splash_mult: SPLASH_MULT,
+            assault_shape_blocks: ASSAULT_SHAPE_BLOCKS,
+            item_mitigation: false,
+            thrown_miss_spends: false,
+            pouch_stacks: false,
+            ai_rating_scorer: false,
         }
     }
 }
@@ -554,6 +606,8 @@ impl Numbers {
             counter_mult: value::float(o, "counter_mult", d.counter_mult),
             debt_stagger: value::int(o, "debt_stagger", d.debt_stagger),
             debt_stun: value::int(o, "debt_stun", d.debt_stun),
+            debt_stagger_status: Some(value::string(o, "debt_stagger_status", "")).filter(|v| !v.is_empty()).unwrap_or(d.debt_stagger_status),
+            debt_stun_status: Some(value::string(o, "debt_stun_status", "")).filter(|v| !v.is_empty()).unwrap_or(d.debt_stun_status),
             poise_pips: value::int(o, "poise_pips", d.poise_pips),
             max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
             poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
@@ -564,6 +618,13 @@ impl Numbers {
             req_discount_per_level: value::int(o, "req_discount_per_level", d.req_discount_per_level),
             guard_common_mitigation: value::float(o, "guard_common_mitigation", d.guard_common_mitigation),
             guard_multi_round_mitigation: value::float(o, "guard_multi_round_mitigation", d.guard_multi_round_mitigation),
+            item_ap: value::int(o, "item_ap", d.item_ap),
+            splash_mult: value::float(o, "splash_mult", d.splash_mult),
+            assault_shape_blocks: value::int(o, "assault_shape_blocks", d.assault_shape_blocks),
+            item_mitigation: value::string(o, "item_mitigation", "") == "on",
+            thrown_miss_spends: value::string(o, "thrown_miss_spends", "") == "on",
+            pouch_stacks: value::string(o, "pouch_stacks", "") == "on",
+            ai_rating_scorer: value::string(o, "ai_rating_scorer", "") == "on",
         }
     }
 
@@ -783,7 +844,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 29] = [
+pub const FIELD_RULES: [FieldRule; 38] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -800,11 +861,15 @@ pub const FIELD_RULES: [FieldRule; 29] = [
     field_rule("rest_poise_per_block", &[POISE]),
     FieldRule { untested_with: &["chase=classic"], ..field_rule("attack_lock", &[]) },
     // S1.2-S3 (S1 section 3; the debt ranges S2 section 3): the status numbers, row-only until a schema entry with a
-    // data re-save (like move_after_blocks); read whatever the rules
+    // data re-save (as move_after_blocks got in P2.2-S1); read whatever the rules
     FieldRule { range: Some((0.01, 0.25)), ..field_rule("bleed_pct", &[]) },
     FieldRule { range: Some((0.10, 1.50)), ..field_rule("counter_mult", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stagger", &[]) },
     FieldRule { range: Some((1.0, 10.0)), ..field_rule("debt_stun", &[]) },
+    // F2.2-S1 (F section 2, FB-58b): the statuses the debt thresholds impose, row-only like the status numbers; read
+    // whatever the rules (a status id no status row has is an error)
+    field_rule("debt_stagger_status", &[]),
+    field_rule("debt_stun_status", &[]),
     // S2.2-S1/S2 (S2 section 3): the poise pip numbers and the bar-or-pips switch, row-only like the status numbers; the
     // pip numbers are read only under poise_mode pips
     FieldRule { values: &PoiseMode::IDS, ..field_rule("poise_mode", &[POISE]) },
@@ -822,6 +887,21 @@ pub const FIELD_RULES: [FieldRule; 29] = [
     // numbers; read whatever the rules
     FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_common_mitigation", &[]) },
     FieldRule { range: Some((0.10, 0.90)), ..field_rule("guard_multi_round_mitigation", &[]) },
+    // A1.2-S1 (A1 parameter table): the AP of a consumable use (schema int 0..2, which loading clamps to; this range
+    // flags a raw row); read whatever the rules
+    FieldRule { range: Some((0.0, 2.0)), ..field_rule("item_ap", &[]) },
+    // A4.2-K1b (IR17, A3.1 section 3): the shaped Assault row's splash and wind-up, row-only like the status numbers;
+    // read only under field_intent
+    FieldRule { range: Some((0.25, 1.0)), ..field_rule("splash_mult", &[FIELD_INTENT]) },
+    FieldRule { range: Some((0.0, 2.0)), ..field_rule("assault_shape_blocks", &[FIELD_INTENT]) },
+    // A1.2-K3 (A1 section 1 and parameter table, INTENT2 IR12, INTENT2-K3): the item switches, row-only like the status
+    // numbers (plain tunables: off unless the row sets `on`, whatever the rules; the shipped timeline row sets them)
+    FieldRule { values: &SWITCH_IDS, ..field_rule("item_mitigation", &[]) },
+    FieldRule { values: &SWITCH_IDS, ..field_rule("thrown_miss_spends", &[]) },
+    FieldRule { values: &SWITCH_IDS, ..field_rule("pouch_stacks", &[]) },
+    // W2-5 I1.2-S2 (I_AI section 1 item 5): the AI's generic rating-modifier scorer, row-only like the item switches (a
+    // plain tunable: off unless the row sets `on`, whatever the rules)
+    FieldRule { values: &SWITCH_IDS, ..field_rule("ai_rating_scorer", &[]) },
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -882,10 +962,11 @@ pub fn bundle(id: &str) -> Option<&'static Bundle> {
 
 /// The rule sets kit tests fight (library 4, `[poise, flank]` left out: it is read only, and flank is inert there); a
 /// row listing another set is untested together (a warning).
-pub const TESTED_SETS: [&[&str]; 21] = [
+pub const TESTED_SETS: [&[&str]; 23] = [
     &[],
     &[ROUND_INTENT],
     &[ROUND_INTENT, FLANK],
+    &[ROUND_INTENT, FIELD_INTENT],
     &[ROUND_INTENT, AP_COST],
     &[ROUND_INTENT, AP_COST, FLANK],
     &[ROUND_INTENT, DECK],
@@ -903,9 +984,14 @@ pub const TESTED_SETS: [&[&str]; 21] = [
     &[TRIGGERS],
     &[AI_TACTICS],
     &[GROUND_HAZARDS],
+    // the timeline row until it lists field_intent (W2-4): every rule but it
     &[
         ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS, TRIGGERS,
         UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
+    ],
+    &[
+        ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FIELD_INTENT, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS,
+        TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
     ],
 ];
 
@@ -988,7 +1074,7 @@ pub const LOCKED: [Locked; 48] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 11] = [
+pub const PROMOTED: [(&str, &str); 14] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -1000,6 +1086,9 @@ pub const PROMOTED: [(&str, &str); 11] = [
     ("REQ_DISCOUNT_PER_LEVEL", "req_discount_per_level"),
     ("GUARD_COMMON_MITIGATION", "guard_common_mitigation"),
     ("GUARD_MULTI_ROUND_MITIGATION", "guard_multi_round_mitigation"),
+    ("ITEM_AP", "item_ap"),
+    ("SPLASH_MULT", "splash_mult"),
+    ("ASSAULT_SHAPE_BLOCKS", "assault_shape_blocks"),
 ];
 
 impl Numbers {
@@ -1040,6 +1129,8 @@ impl Numbers {
             "counter_mult" => self.counter_mult.to_string(),
             "debt_stagger" => self.debt_stagger.to_string(),
             "debt_stun" => self.debt_stun.to_string(),
+            "debt_stagger_status" => self.debt_stagger_status.clone(),
+            "debt_stun_status" => self.debt_stun_status.clone(),
             "poise_pips" => self.poise_pips.to_string(),
             "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
             "poise_mode" => self.poise_mode.id().to_string(),
@@ -1050,6 +1141,13 @@ impl Numbers {
             "req_discount_per_level" => self.req_discount_per_level.to_string(),
             "guard_common_mitigation" => self.guard_common_mitigation.to_string(),
             "guard_multi_round_mitigation" => self.guard_multi_round_mitigation.to_string(),
+            "item_ap" => self.item_ap.to_string(),
+            "splash_mult" => self.splash_mult.to_string(),
+            "assault_shape_blocks" => self.assault_shape_blocks.to_string(),
+            "item_mitigation" => switch(self.item_mitigation),
+            "thrown_miss_spends" => switch(self.thrown_miss_spends),
+            "pouch_stacks" => switch(self.pouch_stacks),
+            "ai_rating_scorer" => switch(self.ai_rating_scorer),
             _ => return None,
         })
     }
@@ -1112,6 +1210,12 @@ impl Ruleset {
         let (stagger, stun) = (self.numbers.debt_stagger, self.numbers.debt_stun);
         if stagger > stun {
             n.errors.push(format!("debt_stagger {stagger} is above debt_stun {stun}: a debt stuns first, so it never staggers."));
+        }
+        // F2.2-S1: a debt status names a status row
+        for (key, id) in [("debt_stagger_status", &self.numbers.debt_stagger_status), ("debt_stun_status", &self.numbers.debt_stun_status)] {
+            if status::row_of(id).is_none() {
+                n.errors.push(format!("{key} '{id}' is not a status."));
+            }
         }
         for b in BUNDLES.iter().filter(|b| b.kind == BundleKind::MustShip && b.anchor.iter().all(|t| self.holds(t))) {
             for t in b.holds.iter().filter(|t| !self.holds(t)) {

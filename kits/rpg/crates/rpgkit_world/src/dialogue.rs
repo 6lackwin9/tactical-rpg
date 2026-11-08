@@ -177,6 +177,13 @@ pub fn best_stat(d: &Data, gs: &GameState, stat: &str) -> i64 {
     best
 }
 
+/// T1.2-S1 (FB-54a): the bar of a `stat` condition: its `min`, or `threshold` (a pure alias of `min`, the same
+/// `best_stat >= bar` test; the check refuses both on one condition); 0 when neither is set.
+pub fn stat_threshold(cond: &Dict) -> i64 {
+    let key = if cond.contains_key("min") { "min" } else { "threshold" };
+    json::i(cond, key, 0)
+}
+
 pub fn condition_holds(d: &Data, gs: &GameState, raw: &Dict) -> bool {
     let cond = json::normalize_dict(raw);
     match json::s_or(&cond, "kind", "flag").as_str() {
@@ -184,7 +191,7 @@ pub fn condition_holds(d: &Data, gs: &GameState, raw: &Dict) -> bool {
         "quest" => quest::status(d, gs, &json::s(&cond, "quest")) == json::s(&cond, "status"),
         "items" => gs.party.stash.get(&json::s(&cond, "item")).copied().unwrap_or(0) >= json::i(&cond, "count", 1),
         "gold" => gs.party.gold >= json::i(&cond, "min", 0),
-        "stat" => best_stat(d, gs, &json::s(&cond, "stat")) >= json::i(&cond, "min", 0),
+        "stat" => best_stat(d, gs, &json::s(&cond, "stat")) >= stat_threshold(&cond),
         _ => false,
     }
 }
@@ -228,7 +235,7 @@ fn needs_text(d: &Data, gs: &GameState, cond: &Dict) -> String {
             format!("Needs {} {}", json::i(cond, "count", 1), d.item_name(&item))
         }
         "gold" => terms::needs_currency(d, &gs.world_id, json::i(cond, "min", 0)),
-        "stat" => format!("Needs {} {}", json::s(cond, "stat"), json::i(cond, "min", 0)),
+        "stat" => format!("Needs {} {}", json::s(cond, "stat"), stat_threshold(cond)),
         "quest" => {
             let q = json::s(cond, "quest");
             format!("Needs {} ({})", json::s_or(&quest::resolved(d, gs, &q), "name", &q), json::s(cond, "status"))
@@ -256,7 +263,7 @@ pub fn stat_prefix(choice: &Dict) -> String {
     for c in json::arr(&json::normalize(json::get(choice, "requires"))) {
         let cond = json::dict(c);
         if json::s_or(cond, "kind", "flag") == "stat" {
-            out += &format!("[{} {}] ", json::s(cond, "stat"), json::i(cond, "min", 0));
+            out += &format!("[{} {}] ", json::s(cond, "stat"), stat_threshold(cond));
         }
     }
     out

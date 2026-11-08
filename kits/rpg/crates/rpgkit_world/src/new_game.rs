@@ -64,6 +64,9 @@ pub fn create(d: &Data, world_id: &str, ids: &[String], seed: i64) -> Result<Gam
     state.campaign = crate::campaign::Campaign::fresh(d, world_id, state.rng_seed);
     state.party.gold = dialogue::start_gold(d, world_id);
     state.party.supplies = travel::start_supplies(d, world_id);
+    // E2.2-S1 (FB-53a): the start purse fits the game's caps (the load path's clamp; the world check flags a start
+    // value above them)
+    state.party.apply_purse(state.party.purse);
     // STORYUI1 5.4: the world's start sequence runs (its leading effects steps at once); the game opens on it
     let seq = crate::story::start_sequence(d, world_id);
     if !seq.is_empty() {

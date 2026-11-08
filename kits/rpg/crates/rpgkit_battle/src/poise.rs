@@ -41,12 +41,28 @@ pub const BREAK_STATUS: &str = "stagger";
 /// next round (the row's default rounds and stacking), unless it holds `steadfast`. True when it queued. Nothing under
 /// `bar`.
 pub fn break_queues_stagger(n: &Numbers, u: &mut rpgkit_rules::Unit) -> bool {
-    if !pips_mode(n) || u.has_status(STEADFAST) {
+    if !break_would_queue_stagger(n, u) {
         return false;
     }
     let rounds = rpgkit_rules::status::row_of(BREAK_STATUS).map_or(1, |r| r.default_rounds);
     rpgkit_rules::status::queue(u, BREAK_STATUS, rounds, 0, "");
     true
+}
+
+/// R1-BAL (FB-88): whether a break of `u` now would queue `stagger` (`break_queues_stagger` without queueing it):
+/// `poise_mode` pips and `u` not `steadfast`.
+pub fn break_would_queue_stagger(n: &Numbers, u: &rpgkit_rules::Unit) -> bool {
+    pips_mode(n) && !u.has_status(STEADFAST)
+}
+
+/// R1-BAL (FB-88): the break forecast's note when a break of `u` would queue `stagger` ("queues Stagger next round
+/// (locks B1, B4)", the blocks from the status row's `lock_blocks`); None when it would not (`bar`, `steadfast`).
+pub fn break_stagger_note(n: &Numbers, u: &rpgkit_rules::Unit) -> Option<String> {
+    if !break_would_queue_stagger(n, u) {
+        return None;
+    }
+    let locks: Vec<String> = rpgkit_rules::status::blocked_blocks(BREAK_STATUS).iter().map(|b| format!("B{b}")).collect();
+    Some(if locks.is_empty() { "queues Stagger next round".to_string() } else { format!("queues Stagger next round (locks {})", locks.join(", ")) })
 }
 
 /// What a skill does to poise and armour (RULESET1 tasks 1.3), carried by its command; read only under the rules
@@ -345,6 +361,9 @@ impl BreakCause {
 pub struct Break {
     pub cause: BreakCause,
     pub skill: String,
+    /// R1-BAL (FB-88, FB-97 (2b)(A)): the break queued `stagger` for the unit's next round (`break_queues_stagger`);
+    /// the log line ends with "(Stagger queued)".
+    pub stagger_queued: bool,
 }
 
 /// What one hit did to poise.
@@ -368,12 +387,17 @@ pub struct StaggerHit {
     pub broke: Option<Break>,
 }
 
-/// P9: the log line of a break.
+/// P9: the log line of a break; R1-BAL (FB-97 (2b)(A)): " (Stagger queued)" when the break queued `stagger`.
 pub fn break_line(w: &World, t: UnitId, b: &Break) -> String {
-    if b.skill.is_empty() {
+    let base = if b.skill.is_empty() {
         format!("[Break] {} is broken", w.units[t].name)
     } else {
         format!("[Break] {}'s {} is broken", w.units[t].name, b.skill)
+    };
+    if b.stagger_queued {
+        format!("{base} (Stagger queued)")
+    } else {
+        base
     }
 }
 
@@ -717,7 +741,7 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
     st.broken = true;
     // S2.2-S4: under pips the break queues `stagger` for next round (not on a `steadfast` unit)
     let n = w.ruleset.numbers.clone();
-    break_queues_stagger(&n, &mut w.units[t]);
+    let stagger_queued = break_queues_stagger(&n, &mut w.units[t]);
     let mut named: Option<(u8, String)> = None;
     for a in res.scheduled.iter_mut().filter(|a| a.unit == t && !a.cancelled) {
         if a.landed {
@@ -748,7 +772,7 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
     // HOOKS1 8.3, S1.2-S4: a break ends the guard: the held guard (a Guard skill's from its wind-up, Option 1C, or a
     // trigger's) and the `guard` status instance
     crate::trigger::end_guard(w, t);
-    let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default() };
+    let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default(), stagger_queued };
     res.log.push(break_line(w, t, &b));
     b
 }

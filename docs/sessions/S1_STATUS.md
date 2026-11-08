@@ -20,7 +20,7 @@ Instead of hardcoding `ROWS: [StatusRow; 17]` and per-status branches across `st
      - `poison` (`flat` HP at round end), `burn` (`pct_max_hp` at round end), `regen` (`+pct_max_hp` heal at round end), `bleed` (`6% max_hp` on move/action or round end).
      - **Pipeline rule**: Status ticks bypass Armor and Situational Guard, respecting only `min 1`.
   3. **`block_lock` (`C10`)**:
-     - `stagger` (locks timeline blocks `[1, 4]`), `stun` (locks timeline blocks `[1, 2]`), `root` (blocks `Move` commands and stops chase when `root_stops_chase` is on).
+     - `stagger` (locks timeline blocks `1` and `4` — discrete block list `[1, 4]`, leaving blocks `2, 3, 5, 6` open), `stun` (locks timeline blocks `1` and `2` — discrete list `[1, 2]`), `root` (blocks `Move` commands and stops chase when `root_stops_chase` is on).
   4. **`targeting` (`C16`)**:
      - `taunt` (biases enemy AI targeting toward the taunting unit), `stealth` (`intent_bound: true`, untargetable by single-target enemy skills; breaks on attacking or taking direct damage).
   5. **`reactive` (`A4` trigger)**:

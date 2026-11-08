@@ -116,6 +116,7 @@ pub fn command_target(c: UnitId, cmd: &Command) -> Option<RoundTarget> {
             }
             RoundTarget::Cell(p)
         }
+        CmdKind::Item { cell: Some(p), .. } => RoundTarget::Cell(*p),
         CmdKind::Support { target, .. } | CmdKind::Item { target, .. } => RoundTarget::Unit(*target),
         CmdKind::Defend { .. } | CmdKind::Focus { .. } => RoundTarget::Myself,
         _ => return None,

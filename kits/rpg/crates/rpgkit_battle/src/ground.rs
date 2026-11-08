@@ -39,10 +39,18 @@ pub enum Shape {
     /// The 3 x 3 square around the anchor.
     Burst,
     /// Three tiles in a row along the heading: from the anchor (`at` target), from the tile ahead of the user (self).
+    /// A3.2-K2: the heading is IR7's snapped direction (`shape_heading`).
     Line,
-    /// Three tiles across the heading, centred on the anchor (target) or the tile ahead of the user (self).
-    Sweep,
+    /// A3.2-S1: the 8 tiles around the anchor (target) or the user (self), never the centre.
+    Ring,
+    /// A3.2-S1: the 3-tile front arc; A3.2-K2 (FB-106): the skill's own ARC cells (`skill::arc_cells`) drawn on the
+    /// anchor (target) or the tile ahead of the user (self), so a hazard and the skill's ARC cover the same tiles.
+    Arc,
 }
+
+/// The most rounds a placed hazard lasts (a row's `rounds` is clamped to it; A4.2-K1b: the Field row's `lingering`
+/// bonus too).
+pub const HAZARD_ROUNDS_CAP: i32 = 5;
 
 /// GH2: a skill's or consumable's `hazard`, carried by its command (read only under the rule).
 #[derive(Debug, Clone, PartialEq)]
@@ -63,10 +71,11 @@ impl Place {
             "PLUS" => Shape::Plus,
             "BURST" => Shape::Burst,
             "LINE" => Shape::Line,
-            "SWEEP" => Shape::Sweep,
+            "RING" => Shape::Ring,
+            "ARC" => Shape::Arc,
             _ => Shape::One,
         };
-        Self { id: p.id.clone(), shape, at_self: p.at == "self", rounds: p.rounds.clamp(0, 5) }
+        Self { id: p.id.clone(), shape, at_self: p.at == "self", rounds: p.rounds.clamp(0, HAZARD_ROUNDS_CAP) }
     }
 
     /// The skill's placement: ATTACK, DEFEND and SUPPORT skills (not an item's synthetic skill); None without the field.
@@ -188,7 +197,7 @@ impl Ledger {
 
 // ---- Placement (GH2-GH4, GH7) --------------------------------------------------------------------------------------
 
-/// GH2 LINE, SWEEP: the user's heading toward `aim`: the dominant axis (a tie on its facing axis, else x); with no aim
+/// GH2 (LINE / ARC with no aim, `shape_heading`): the user's heading toward `aim`: the dominant axis (a tie on its facing axis, else x); with no aim
 /// off its own tile, its straight facing, else toward the other side.
 fn heading(w: &World, by: UnitId, aim: V2) -> V2 {
     let d = crate::forced::direction(w, by, w.pos(by), aim, false);
@@ -207,6 +216,17 @@ fn heading(w: &World, by: UnitId, aim: V2) -> V2 {
     }
 }
 
+/// A3.2-K2 (INTENT2 IR7): the direction of a LINE or ARC placement: from the user toward `aim`, snapped
+/// (`skill::snap`: a tie is the exact diagonal); with no aim off its own tile, `heading`'s fallback (its facing).
+fn shape_heading(w: &World, by: UnitId, aim: V2) -> V2 {
+    let d = skill::snap(aim - w.pos(by));
+    if d != ZERO {
+        d
+    } else {
+        heading(w, by, aim)
+    }
+}
+
 /// GH2: the tiles `p` covers from `by` (anchor: the aim or target tile, or the user's; `area`: the skill's own cells):
 /// on the board and walkable, a trap only where no active unit stands, each once.
 pub fn cells(w: &World, by: UnitId, def: &HazardDef, p: &Place, anchor: V2, aim: V2, area: &[V2]) -> Vec<V2> {
@@ -215,15 +235,17 @@ pub fn cells(w: &World, by: UnitId, def: &HazardDef, p: &Place, anchor: V2, aim:
         Shape::Skill | Shape::One => vec![anchor],
         Shape::Plus => vec![anchor, anchor + V2::new(1, 0), anchor + V2::new(-1, 0), anchor + V2::new(0, 1), anchor + V2::new(0, -1)],
         Shape::Burst => (-1..=1).flat_map(|dx| (-1..=1).map(move |dy| anchor + V2::new(dx, dy))).collect(),
-        Shape::Line | Shape::Sweep => {
-            let d = heading(w, by, aim);
+        Shape::Ring => skill::ring_cells(if p.at_self { w.pos(by) } else { anchor }),
+        Shape::Line => {
+            let d = shape_heading(w, by, aim);
             let start = if p.at_self { w.pos(by) + d } else { anchor };
-            if p.shape == Shape::Line {
-                (0..3).map(|i| start + d * i).collect()
-            } else {
-                let across = V2::new(d.y, d.x);
-                vec![start - across, start, start + across]
-            }
+            (0..3).map(|i| start + d * i).collect()
+        }
+        Shape::Arc => {
+            // FB-106: drawn as the skill's ARC from the user's tile; a source on the user's own tile reads the heading
+            let (pos, d) = (w.pos(by), shape_heading(w, by, aim));
+            let source = if p.at_self { pos + d } else { anchor };
+            skill::arc_cells(if source == pos { source - d } else { pos }, source)
         }
     };
     let mut out: Vec<V2> = Vec::new();
@@ -279,6 +301,7 @@ pub fn after_impact(res: &mut Resolver, w: &mut World, idx: usize) {
         CmdKind::Area { cells, aim, .. } => (Some(*aim), cells.clone()),
         CmdKind::Attack { target, last_target, .. } => (last_target.or(*target).or(w.units[by].active_target).and_then(unit_tile), Vec::new()),
         CmdKind::Support { target, .. } => (unit_tile(*target), Vec::new()),
+        CmdKind::Item { cell: Some(p), used: true, .. } => (Some(*p), Vec::new()),
         CmdKind::Item { target, used: true, .. } => (unit_tile(*target), Vec::new()),
         _ => return,
     };
@@ -336,6 +359,12 @@ pub fn enter(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, seen: &mut 
     Some(line)
 }
 
+/// A4.2 (C08): a ground hazard row's status as an EffectSpec: an inflict (rolled when its row is `resistable`) carrying
+/// the row's `potency`, `status_rounds` and `magnitude`, with `source` (the placer's name).
+pub fn effect_of(def: &HazardDef, source: &str) -> status::EffectSpec {
+    status::EffectSpec::inflict(&def.status, def.potency, def.status_rounds, def.magnitude, source)
+}
+
 /// GH5, GH6: the hazard on `cell` acts on `u`: its flat damage through guard (not armour), then its status roll (one
 /// draw, the placer as the source); a trap entered is removed. None when nothing happened (a resisted roll alone).
 fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool) -> Option<Hit> {
@@ -350,8 +379,9 @@ fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool
     let lost = before - w.units[u].hp;
     let mut landed = String::new();
     if !p.def.status.is_empty() && w.units[u].is_alive() {
-        let source = w.units[p.by].name.clone();
-        if status::try_inflict(&mut w.units[u], &p.def.status, p.def.potency, Some(rng), p.def.status_rounds, p.def.magnitude, &source) {
+        // A4.2: the hazard row as an EffectSpec (the placer as the source)
+        let spec = effect_of(&p.def, &w.units[p.by].name);
+        if status::apply_effect(&mut w.units[u], &spec, status::Timing::Next, 0.0, Some(rng)) {
             landed = p.def.status.clone();
         }
     }

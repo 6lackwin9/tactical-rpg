@@ -24,7 +24,8 @@ const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max", "position"]),
-    ("area", &["area"]),
+    // A3.2-K2: `affects` (IR9) beside the shape it filters
+    ("area", &["area", "affects"]),
     ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
@@ -296,7 +297,7 @@ pub fn fold(head: &str, family_rows: &[Dict]) -> Result<Dict, Vec<String>> {
                 m.insert(k.clone(), json::get(row, k).clone());
             }
         }
-        if json::s(row, "description") != render(&base_template, &kind, row, rank) {
+        if json::s(row, "description") != render(&base_template, &kind, row, rank, true) {
             m.insert("description".into(), Value::from(json::s(row, "description")));
         }
         modifiers.push(Value::Object(m));
@@ -477,12 +478,12 @@ fn validate_template(template: &str, entry: &Dict) -> Vec<String> {
         let row = effective(entry, rank);
         for raw in &usable {
             let (token, suffix) = raw.split_once(':').map_or((raw.as_str(), ""), |(a, b)| (a, b.split(':').next().unwrap_or("")));
-            if token_value(token, suffix, &row, rank).is_empty() {
+            if token_value(token, suffix, &row, rank, true).is_empty() {
                 errors.push(format!("Rank {rank} ({}): token {{{raw}}} resolves to nothing (the field is empty or 0 for that rank).", json::s(&row, "name")));
             }
         }
         if errors.is_empty() {
-            let text = render(template, &kind, &row, rank);
+            let text = render(template, &kind, &row, rank, true);
             if chars_len(&text) > MAX_LENGTH {
                 errors.push(format!("Rank {rank} ({}): the rendered description is {} characters (max {MAX_LENGTH}).", json::s(&row, "name"), chars_len(&text)));
             }
@@ -513,9 +514,9 @@ fn template_warnings(template: &str, entry: &Dict) -> Vec<String> {
                 .into_iter()
                 .filter(|t| *t != "name")
                 .find(|t| {
-                    let plain = token_value(t, "", &first, 1);
+                    let plain = token_value(t, "", &first, 1, true);
                     let plain = plain.strip_suffix('%').unwrap_or(&plain);
-                    token_value(t, "n", &first, 1) == d || plain.strip_suffix(" AP").unwrap_or(plain) == d
+                    token_value(t, "n", &first, 1, true) == d || plain.strip_suffix(" AP").unwrap_or(plain) == d
                 })
                 .map(|t| format!(" Use {{{t}}}."))
                 .unwrap_or_default();
@@ -636,7 +637,11 @@ fn family_errors(v: &View, e: &Dict) -> Vec<String> {
             if DERIVED_KEYS.contains(&key.as_str()) || RANK_KEYS.contains(&key.as_str()) || key == "basic" || key == "kind" || !has_field(&kind, &key) {
                 continue;
             }
-            if !json::deep_equal(json::get(other, &key), json::get(e, &key)) {
+            // AUDIT-10: a missing key reads as the field's schema default (frozen rows predate later fields).
+            let default = json::get(f, "default");
+            let (a, b) = (json::get(other, &key), json::get(e, &key));
+            let (a, b) = (if a.is_null() { default } else { a }, if b.is_null() { default } else { b });
+            if !json::deep_equal(a, b) {
                 errors.push(format!("Family '{head}': {} must match across all tiers ({other_id} differs).", json::s_or(f, "label", &key).to_lowercase()));
             }
         }
@@ -793,8 +798,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
                 out.push("A skill with no damage can't be an area attack.".into());
             }
         }
-        if area == "SWEEP" && (dash > 0 || reach_max > 1) {
-            out.push("SWEEP hits the L of tiles around you; leave reach at 0 or 1 and no gap-close.".into());
+        // A3.2-K2 (IR9): `affects` filters an area's units; a single-target attack has none to filter
+        if area == "NONE" && !json::s(e, "affects").is_empty() {
+            out.push("Affects needs an area (it picks which units the shape hits).".into());
         }
         if dash > 0 {
             if area != "NONE" {
@@ -959,6 +965,22 @@ pub const EXPLOIT_HP_BELOW: &str = "hp_below";
 /// The most blocks an action may take with its recovery (the round's blocks; the schema's `blocks` max).
 const MAX_ACTION_BLOCKS: i64 = 6;
 
+/// A4.2-K1b (A3.1 acceptance 2, FB-20): the most `assault_shape_blocks` a ruleset row that plays the shaped Assault row
+/// (rule `field_intent`) adds (its value, else the default); None when no row lists the rule.
+fn assault_shape_blocks(v: &View) -> Option<i64> {
+    v.entries(ruleset::KIND)
+        .iter()
+        .filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::FIELD_INTENT))
+        .map(|r| json::i(r, "assault_shape_blocks", ruleset::ASSAULT_SHAPE_BLOCKS as i64).max(0))
+        .max()
+}
+
+/// IR21: a shaped skill with both a Field and an Assault row.
+fn is_dual_shape(e: &Dict) -> bool {
+    let rows = rpgkit_rules::intent::derive(&rpgkit_rules::intent::IntentInput::of_row(e));
+    rows.contains(&rpgkit_rules::intent::FIELD) && rows.contains(&rpgkit_rules::intent::ASSAULT)
+}
+
 /// Whether a ruleset row lists `intent` among its intents.
 fn ruleset_lists(v: &View, intent: &str) -> bool {
     v.entries(ruleset::KIND).iter().any(|r| json::sget(r, "intents").iter().any(|i| i == intent))
@@ -993,6 +1015,12 @@ fn timeline_problems(v: &View, e: &Dict, kind: &str) -> Vec<String> {
         let total = json::i(e, "blocks", 1) + json::i(e, "recovery_blocks", 0);
         if total > MAX_ACTION_BLOCKS {
             out.push(format!("Blocks plus recovery blocks is {total} (at most {MAX_ACTION_BLOCKS}: the action must fit the round)."));
+        } else if let Some(extra) = assault_shape_blocks(v).filter(|_| is_dual_shape(e)) {
+            // A4.2-K1b (A3.1 acceptance 2): a dual Field / Assault skill's Assault row, one wind-up block or more longer,
+            // must fit the round too
+            if total + extra > MAX_ACTION_BLOCKS {
+                out.push(format!("Blocks plus recovery blocks plus the Assault row's {extra} wind-up block{} is {} (at most {MAX_ACTION_BLOCKS}: the action must fit the round).", if extra == 1 { "" } else { "s" }, total + extra));
+            }
         }
     }
     if kind == "ATTACK" && json::b(e, "sure_break", false) && json::i(e, "stagger", 0) < 1 {

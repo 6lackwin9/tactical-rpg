@@ -14,7 +14,7 @@ use rpgkit_data::{Catalog, Deck, STATS};
 use rpgkit_rules::gear::{Equipment, Slot};
 use rpgkit_rules::ruleset::{Ruleset, AP_COST, CLASSIC, DECK, POISE, ROUND_INTENT, TIMELINE};
 use rpgkit_rules::stats::roundi;
-use rpgkit_rules::build_unit;
+use rpgkit_rules::{build_unit, status};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -284,4 +284,84 @@ fn the_dojo_builds_its_heroes_under_its_rulesets_wield_terms() {
     for h in &s.heroes {
         assert_eq!(h.stats.proficiency.wield, want, "{}", h.name);
     }
+    // AUDIT-12: the dummy too
+    assert_eq!(s.dummy.stats.proficiency.wield, want, "the dummy");
+}
+
+/// AUDIT-12 (S1.2-S4): a multi-round Guard in the Dojo queues the `guard` status for its later rounds as in battle
+/// (`command::queue_later_guard`: the ruleset's multi-round fraction unless the skill authors its own), and the next
+/// round's guard is that status's fraction while it lasts; a 1-round Guard drops at the next round.
+#[test]
+fn a_multi_round_guard_holds_through_the_dojos_later_rounds() {
+    let mut raw = catalog_value();
+    let skills = raw["skills"].as_array_mut().unwrap();
+    skills.push(json!({"id": "t_wall", "name": "Wall", "kind": "DEFEND", "level": 1, "blocks": 2, "guard_rounds": 3}));
+    skills.push(json!({"id": "t_tower", "name": "Tower", "kind": "DEFEND", "level": 1, "blocks": 2, "mitigation": 0.4, "guard_rounds": 2}));
+    let mut s = DojoSession::new(Arc::new(Catalog::from_value(&raw)));
+    let low = s.ruleset.numbers.guard_multi_round_mitigation;
+    let pct = |f: f64| roundi(f * 100.0) as f64 / 100.0;
+    s.use_skill(Some("t_wall"));
+    assert_eq!(s.hero().guard, low, "round 1: the unauthored multi-round fraction");
+    let st = &s.hero().st;
+    assert_eq!((st.pending_rounds.get(status::GUARD).copied(), st.pending_magnitudes.get(status::GUARD).copied()), (Some(2), Some(roundi(low * 100.0))), "rounds 2-3 queued");
+    for round in 2..=3 {
+        s.next_round();
+        assert_eq!(s.hero().guard, pct(low), "round {round}: the guard status holds");
+    }
+    s.next_round();
+    assert_eq!(s.hero().guard, 0.0, "round 4: over");
+    assert!(!s.hero().st.has_any(status::GUARD));
+    s.use_skill(Some("t_tower"));
+    assert_eq!(s.hero().st.pending_magnitudes.get(status::GUARD).copied(), Some(40), "authored: its own fraction");
+    s.next_round();
+    assert_eq!(s.hero().guard, 0.4);
+    s.next_round();
+    assert_eq!(s.hero().guard, 0.0);
+    s.use_skill(Some("guard"));
+    assert_eq!(s.hero().guard, 0.3);
+    assert!(!s.hero().st.has_any(status::GUARD), "a 1-round Guard queues nothing");
+    s.next_round();
+    assert_eq!(s.hero().guard, 0.0, "and drops at the next round");
+}
+
+/// AUDIT-12 addition (FB-94): a Poise break in the Dojo ends the broken side's guard as in battle
+/// (`trigger::end_unit_guard`, the helper `poise::break_unit`'s `end_guard` uses): the guard drops to 0 and the `guard`
+/// status goes (the queued later-round instance too); on the dummy, its raised guard drops.
+#[test]
+fn a_poise_break_in_the_dojo_ends_the_broken_sides_guard() {
+    let mut raw = catalog_value();
+    raw["skills"].as_array_mut().unwrap().push(json!({"id": "t_wall", "name": "Wall", "kind": "DEFEND", "level": 1, "blocks": 2, "guard_rounds": 3}));
+    let mut s = DojoSession::new(Arc::new(Catalog::from_value(&raw)));
+    s.set_ruleset(timeline());
+    s.use_skill(Some("t_wall"));
+    assert!(s.hero().guard > 0.0 && s.hero().st.has_any(status::GUARD), "the hero guards, later rounds queued");
+    s.select_dummy_skill("t_heavy");
+    let active = s.active;
+    for _ in 0..20 {
+        if s.hero_poise[active].broken || !s.hero().is_alive() {
+            break;
+        }
+        s.dummy_attack();
+    }
+    assert!(s.hero_poise[active].broken, "the heavy strikes break the guarding hero");
+    assert_eq!(s.hero().guard, 0.0, "the break drops the hero's guard");
+    assert!(!s.hero().st.has_any(status::GUARD), "and its guard status, queued rounds included");
+    let hit = s.log.iter().rev().find(|e| e.by_dummy && e.breakdown.contains("BREAK")).expect("the breaking hit");
+    assert!(hit.breakdown.contains("guard broken"), "{}", hit.breakdown);
+    s.next_round();
+    assert_eq!(s.hero().guard, 0.0, "no queued guard returns next round");
+
+    let mut s = dojo(Some(timeline()));
+    s.toggle_dummy_windup();
+    s.toggle_dummy_defense();
+    assert!(s.dummy.guard > 0.0, "the dummy guards");
+    for _ in 0..20 {
+        if s.dummy_poise.broken {
+            break;
+        }
+        s.heal_dummy();
+        s.use_skill(Some("t_heavy"));
+    }
+    assert!(s.dummy_poise.broken, "heavy hits into the windup break the dummy");
+    assert_eq!(s.dummy.guard, 0.0, "the break drops the dummy's guard");
 }

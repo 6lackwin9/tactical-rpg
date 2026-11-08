@@ -1,0 +1,78 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "timeline",
+    "name": "Timeline",
+    "rules": [
+     "round_intent",
+     "enemy_moves",
+     "deck",
+     "poise",
+     "ap_cost",
+     "pierce",
+     "reach",
+     "flank",
+     "plan_badges",
+     "field_intent",
+     "forced_move",
+     "ground_hazards",
+     "arena_hazards",
+     "triggers",
+     "unit_meters",
+     "hp_cost",
+     "ignore_guard",
+     "ai_tactics",
+     "execute"
+    ],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [
+     "move",
+     "rest",
+     "strike",
+     "offhand_jab",
+     "active_guard",
+     "flank_cut"
+    ],
+    "poise_stat": "max_poise",
+    "stagger_windup_mult": 1.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.5,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {
+     "active": 3,
+     "passive": 2,
+     "keystone": 1
+    },
+    "melee_diagonal": "maneuver",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "round_end",
+    "chase": "every_skill",
+    "root_stops_chase": "on",
+    "switch_target_step": "off",
+    "stances": "off",
+    "attack_lock": "none",
+    "move_after_blocks": 3,
+    "item_ap": 0,
+    "poise_mode": "pips",
+    "item_mitigation": "on",
+    "thrown_miss_spends": "on",
+    "pouch_stacks": "on"
+   }
+  }
+ ]
+}

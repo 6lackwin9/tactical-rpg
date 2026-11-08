@@ -53,6 +53,40 @@ impl Position {
     }
 }
 
+/// A3.2-K2 (INTENT2 IR9, A3.1): which units an area shape hits. The skill field `affects`; its `""` takes the row's
+/// default (`rpgkit_battle::skill::affects_by`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Affects {
+    /// Every unit on the shape's tiles but the user (the classic area, "hits allies too").
+    All,
+    /// The user's foes only.
+    Enemies,
+    /// The user's friends only (never the user).
+    Allies,
+}
+
+impl Affects {
+    /// The field values (`""` is the row's default).
+    pub const IDS: [&'static str; 3] = ["all", "enemies", "allies"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "all" => Some(Affects::All),
+            "enemies" => Some(Affects::Enemies),
+            "allies" => Some(Affects::Allies),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Affects::All => "all",
+            Affects::Enemies => "enemies",
+            Affects::Allies => "allies",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProfEntry {
     pub level: i32,
@@ -74,6 +108,9 @@ pub struct ClassDef {
     pub proficiency: IndexMap<String, ProfEntry>,
     /// Family head id -> unlock level, in entry order.
     pub skill_path: IndexMap<String, i32>,
+    /// CLASS-BASICS (user 2026-11-08): the class's role basics, skill ids open to every unit of the class without a deck
+    /// slot under the rule `deck` (after the ruleset's basics; `DeckRule::with_class`). Empty = none.
+    pub basics: Vec<String>,
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
@@ -119,6 +156,7 @@ impl ClassDef {
             shares,
             proficiency,
             skill_path: int_map(o, "skill_path"),
+            basics: strings(o, "basics"),
             loadout,
             pouch: strings(o, "pouch"),
         }
@@ -309,6 +347,8 @@ pub struct SkillDef {
     pub reach_min: i32,
     pub reach_max: i32,
     pub area: String,
+    /// A3.2-K2 (IR9): the units the area hits as written; None (`""`) = the row's default.
+    pub affects: Option<Affects>,
     pub power_mult: f64,
     pub weapon_hand: String,
     pub dash_tiles: i32,
@@ -405,6 +445,7 @@ impl SkillDef {
             reach_min: int(o, "reach_min", 0),
             reach_max: int(o, "reach_max", 0),
             area: string(o, "area", "NONE"),
+            affects: Affects::parse(&string(o, "affects", "")),
             power_mult: float(o, "power_mult", 1.0),
             weapon_hand: string(o, "weapon_hand", "main"),
             dash_tiles: int(o, "dash_tiles", 0),
@@ -513,8 +554,22 @@ pub struct ItemDef {
     pub level3_passive: String,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
+    /// A1.2-K3 (INTENT2 section 6, INTENT2-K3): a thrown consumable's one authored area shape (`NONE` = single target;
+    /// `PLUS`, `BURST`), the same in its Field and Assault rows.
+    pub area: String,
+    /// A1.2-K3 (A3.1 section 1, IR9): which units the area hits (None = the row's default, as a skill's `affects`).
+    pub affects: Option<Affects>,
+    /// The most copies of the item one stack holds (`max_stack`, 1 when unset).
+    pub max_stack: i32,
     pub raw: Obj,
 }
+
+/// A1.2-K3: the `area` of a single-target consumable (the schema default; the writer stores no key for it).
+pub const ITEM_AREA_NONE: &str = "NONE";
+/// A1.2-K3 (INTENT2 section 6): the area shapes a consumable may author (a bomb is PLUS or BURST).
+pub const ITEM_AREAS: [&str; 3] = [ITEM_AREA_NONE, "PLUS", "BURST"];
+/// INTENT2-K3: the most copies a pouch stack holds whatever an item's `max_stack` (decision "Material stacks").
+pub const POUCH_STACK_CAP: i32 = 5;
 
 /// RULESET1 K1: the resolved item row's key that carried its family's engine rule `reach` before U3.2-S2 (true only
 /// for those families); read now only on a row without `ITEM_FAMILY_RULES`, and the writer leaves it out of the stored
@@ -637,6 +692,9 @@ impl ItemDef {
             level2_bonus: obj(o, ITEM_FAMILY_LEVEL2).map(FamilyBonus::from_obj).unwrap_or_default(),
             level3_passive: string(o, ITEM_FAMILY_LEVEL3, ""),
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
+            area: string(o, "area", ITEM_AREA_NONE),
+            affects: Affects::parse(&string(o, "affects", "")),
+            max_stack: int(o, "max_stack", 1),
             raw: o.clone(),
         }
     }
@@ -677,6 +735,16 @@ impl ItemDef {
     /// ItemCommand.offered: a consumable whose type is offered in battle.
     pub fn offered_in_battle(&self) -> bool {
         self.is_consumable() && self.type_reach() >= 0 && self.battle_reach() >= 0
+    }
+
+    /// A1.2-K3: whether the item hits an area shape (`area` other than `NONE`).
+    pub fn is_area(&self) -> bool {
+        !self.area.is_empty() && self.area != ITEM_AREA_NONE
+    }
+
+    /// INTENT2-K3: the copies one pouch stack of the item holds under `pouch_stacks`: `min(5, max_stack)`, at least 1.
+    pub fn stack_limit(&self) -> i32 {
+        self.max_stack.clamp(1, POUCH_STACK_CAP)
     }
 
     /// ItemCommand.aims_at_foes: damage with no heal or boost.
@@ -1699,7 +1767,8 @@ pub const FORCED_MOVE_KEYS: [&str; 8] = ["kind", "tiles", "from", "when", "stop_
 pub const FORCED_IMMUNE: [&str; 3] = ["", "always", "guarding"];
 
 /// GH2: the shapes a placed hazard covers (SKILL = the skill's own area cells; the others as `area`, NONE one tile).
-pub const HAZARD_SHAPES: [&str; 6] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "SWEEP"];
+/// A3.2-K2: RING and ARC as the skill shapes (W2-4 retired the legacy SWEEP alias).
+pub const HAZARD_SHAPES: [&str; 7] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "RING", "ARC"];
 /// GH2: where a hazard is placed.
 pub const HAZARD_AT: [&str; 2] = ["target", "self"];
 /// GH2: the keys of a skill's or item's `hazard`.

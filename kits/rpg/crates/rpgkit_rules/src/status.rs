@@ -67,6 +67,62 @@ impl Primitive {
     }
 }
 
+/// I1.2-S1 (docs/sessions/I_AI.md section 1 item 5): the rating a `modifier` row changes (the table's `rating` word;
+/// S1 section 1 `modifier`): outgoing attack (weaken, empower), Armor Rating (fortify, expose), Move Rate (haste, slow)
+/// or situational guard (guard).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rating {
+    AttackPower,
+    Armor,
+    MoveRate,
+    Guard,
+}
+
+impl Rating {
+    /// The table's `rating` word: `attack_power`, `armor`, `move_rate`, `guard`.
+    pub fn id(self) -> &'static str {
+        match self {
+            Rating::AttackPower => "attack_power",
+            Rating::Armor => "armor",
+            Rating::MoveRate => "move_rate",
+            Rating::Guard => "guard",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Rating> {
+        [Rating::AttackPower, Rating::Armor, Rating::MoveRate, Rating::Guard].into_iter().find(|r| r.id() == id)
+    }
+}
+
+/// I1.2-S1: what a `targeting` row does to enemy targeting (the table's `targeting` word; S1 section 1 `targeting`):
+/// `pull` draws enemy targeting toward the unit (taunt), `hide` makes it untargetable by single-target skills
+/// (stealth).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Targeting {
+    Pull,
+    Hide,
+}
+
+impl Targeting {
+    pub fn id(self) -> &'static str {
+        match self {
+            Targeting::Pull => "pull",
+            Targeting::Hide => "hide",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Targeting> {
+        [Targeting::Pull, Targeting::Hide].into_iter().find(|t| t.id() == id)
+    }
+}
+
+/// I1.2-S1: a `tick` row heals (a buff: regen) or damages (a debuff: bleed, poison, burn) at its tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tick {
+    Heal,
+    Damage,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct StatusRow {
     pub id: &'static str,
@@ -89,6 +145,10 @@ pub struct StatusRow {
     /// S1.2-S2: the timeline blocks a `block_lock` row locks (stagger 1 and 4, stun 1 and 2; root locks Move, not
     /// blocks); empty on every other row.
     pub lock_blocks: &'static [i32],
+    /// I1.2-S1: the rating a `modifier` row changes (`Some` on every `modifier` row, `None` elsewhere).
+    pub rating: Option<Rating>,
+    /// I1.2-S1: what a `targeting` row does (`Some` on every `targeting` row, `None` elsewhere).
+    pub targeting: Option<Targeting>,
     /// S1 behaviour primitives (at least one), see [`Primitive`].
     pub primitives: &'static [Primitive],
 }
@@ -144,6 +204,16 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
     let blocks = field("lock_blocks").as_array().unwrap_or_else(|| panic!("statuses.json row {i}: `lock_blocks` is not a list"));
     let lock_blocks: Vec<i32> = blocks.iter().map(|b| b.as_i64().unwrap_or_else(|| panic!("statuses.json row {i}: lock block {b} is not an integer")) as i32).collect();
     assert!(lock_blocks.is_empty() || primitives.contains(&Primitive::BlockLock), "statuses.json row {i}: lock_blocks on a block_lock row only");
+    let rating = match text("rating") {
+        "" => Option::None,
+        w => Some(Rating::from_id(w).unwrap_or_else(|| panic!("statuses.json row {i}: unknown rating `{w}`"))),
+    };
+    assert_eq!(rating.is_some(), primitives.contains(&Primitive::Modifier), "statuses.json row {i}: a rating on every modifier row and only there");
+    let targeting = match text("targeting") {
+        "" => Option::None,
+        w => Some(Targeting::from_id(w).unwrap_or_else(|| panic!("statuses.json row {i}: unknown targeting `{w}`"))),
+    };
+    assert_eq!(targeting.is_some(), primitives.contains(&Primitive::Targeting), "statuses.json row {i}: a targeting word on every targeting row and only there");
     StatusRow {
         id: text("id"),
         buff,
@@ -159,6 +229,8 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
         intent_bound: flag("intent_bound"),
         // Loaded once per process into a static table, so the lists live as long as the rows.
         lock_blocks: Box::leak(lock_blocks.into_boxed_slice()),
+        rating,
+        targeting,
         primitives: Box::leak(primitives.into_boxed_slice()),
     }
 }
@@ -169,6 +241,10 @@ pub const BLEED_PCT: f64 = 0.06;
 pub const DEBT_STAGGER: i32 = 3;
 /// S1.2-S3: the default of `debt_stun` (the AP debt at a round start that stuns).
 pub const DEBT_STUN: i32 = 5;
+/// F2.2-S1: the default of `debt_stagger_status` (the status a `debt_stagger` debt imposes).
+pub const DEBT_STAGGER_STATUS: &str = "stagger";
+/// F2.2-S1: the default of `debt_stun_status` (the status a `debt_stun` debt imposes).
+pub const DEBT_STUN_STATUS: &str = "stun";
 /// S1.2-S3: the default of `counter_mult` (riposte's counter damage multiplier; was `rpgkit_battle::command`'s const).
 pub const COUNTER_MULT: f64 = 0.5;
 /// S1.2-S4: the default of `guard_common_mitigation` (the guard fraction of a 1-round Guard skill that authors none).
@@ -330,6 +406,52 @@ pub fn blocked_blocks(status: &str) -> &'static [i32] {
     row_of(status).filter(|r| r.has_primitive(Primitive::BlockLock)).map_or(&[], |r| r.lock_blocks)
 }
 
+/// I1.2-S1 (I_AI section 1 item 1): whether `status` is a `targeting` row that pulls enemy targeting toward its holder
+/// (false for an unknown id).
+pub fn has_targeting_pull(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Targeting) && r.targeting == Some(Targeting::Pull))
+}
+
+/// I1.2-S1 (item 2): whether `status` is a `reactive` row (a counter while active).
+pub fn has_reactive_counter(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Reactive))
+}
+
+/// I1.2-S1 (item 3): whether `status` is a `tick` row that heals (`Tick::Heal`, a buff) or damages (`Tick::Damage`, a
+/// debuff).
+pub fn has_tick(status: &str, tick: Tick) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Tick) && r.buff == (tick == Tick::Heal))
+}
+
+/// I1.2-S1 (item 4): whether `status` stops its holder moving this round: a `block_lock` row that locks the Move
+/// command itself (no `lock_blocks`: root) or every one of the round's `move_blocks` opening blocks (1 to
+/// `move_blocks`: stun with 2 move blocks; stagger leaves block 2 open).
+pub fn locks_movement(status: &str, move_blocks: usize) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::BlockLock) && (r.lock_blocks.is_empty() || (1..=move_blocks as i32).all(|b| r.lock_blocks.contains(&b))))
+}
+
+/// I1.2-S1 (item 5): whether `status` is a `modifier` row changing `rating` (either direction; a row's `kind` says
+/// which).
+pub fn modifies_rating(status: &str, rating: Rating) -> bool {
+    row_of(status).is_some_and(|r| r.has_primitive(Primitive::Modifier) && r.rating == Some(rating))
+}
+
+/// Whether `status` is a buff row (false for an unknown id).
+pub fn is_buff(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.buff)
+}
+
+/// W2-5 (C09): a buff `modifier` row raising `rating` (fortify for Armor, haste for Move Rate, empower for Attack Power).
+pub fn raises_rating(status: &str, rating: Rating) -> bool {
+    modifies_rating(status, rating) && is_buff(status)
+}
+
+/// W2-5 (C09): a debuff `modifier` row lowering `rating` (expose for Armor, slow for Move Rate, weaken for Attack
+/// Power).
+pub fn lowers_rating(status: &str, rating: Rating) -> bool {
+    modifies_rating(status, rating) && !is_buff(status)
+}
+
 /// The chance (0-100) a roll of `potency` lands `status` on `target`: potency less INT resistance and the status's own
 /// resist; S1.2-S3: 100 for a row that is not `resistable` (no roll). No attacker term (hazards, grounds, triggers).
 pub fn apply_chance(target: &Unit, status: &str, potency: i32) -> i32 {
@@ -387,6 +509,84 @@ pub fn try_inflict_with(target: &mut Unit, status: &str, potency: i32, bonus: f6
     }
     queue(target, status, rounds, magnitude, source);
     true
+}
+
+/// A4.2 (C08): when an effect that is not rolled lands, S1's round-granular timing: `Now` (`grant_now`, lasting
+/// `rounds` counting the current round) or `Next` (`queue`, the target's next round). A rolled effect always lands next
+/// round (`try_inflict`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Timing {
+    Now,
+    Next,
+}
+
+/// A4.2 (C08, FB-57(5), FB-58): one status application, the form the 5 vocabularies (skill `inflict` / `grant`,
+/// trigger `inflict` / `grant`, ground hazard rows, arena hazard effects, encounter phase `status` effects) normalize
+/// into at execution before `apply_effect` routes it through S1. The stored data keeps its own vocabularies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectSpec {
+    pub status_id: String,
+    /// The roll's potency (unused when the effect is not rolled).
+    pub potency: i32,
+    pub rounds: i32,
+    pub magnitude: i32,
+    /// Whether the effect is rolled against resistance: `None` takes the status row's `resistable` (inflicts: skills,
+    /// triggers, hazards); `Some(false)` never rolls (grants; encounter phase `status` effects, FB-58: no extra draw).
+    pub resistable: Option<bool>,
+    /// The source name the landed status carries (empty: none).
+    pub source: String,
+}
+
+impl EffectSpec {
+    /// An inflict (skill `status_effect`, trigger `inflict`, ground and arena hazards): rolled when its row is
+    /// `resistable`.
+    pub fn inflict(status: &str, potency: i32, rounds: i32, magnitude: i32, source: &str) -> Self {
+        EffectSpec { status_id: status.to_string(), potency, rounds, magnitude, resistable: Option::None, source: source.to_string() }
+    }
+
+    /// A grant (skill `grant_status` / `extra_grants`, trigger `grant`, encounter phase `status`): never rolled.
+    pub fn grant(status: &str, rounds: i32, magnitude: i32, source: &str) -> Self {
+        EffectSpec { status_id: status.to_string(), potency: 0, rounds, magnitude, resistable: Some(false), source: source.to_string() }
+    }
+
+    /// Whether `resistable` resolves true (the row's `resistable` when unset): the effect goes through `try_inflict`.
+    pub fn rolled(&self) -> bool {
+        self.resistable.unwrap_or_else(|| resistable(&self.status_id))
+    }
+
+    /// The chance (0-100) the effect lands on `target` with the attacker term `bonus`: 100 when it is not rolled.
+    pub fn chance(&self, target: &Unit, bonus: f64) -> i32 {
+        if self.rolled() {
+            apply_chance_with(target, &self.status_id, self.potency, bonus)
+        } else {
+            100
+        }
+    }
+}
+
+/// A4.2 (C08): applies `spec` to `target` through S1. When `resistable` resolves true: `try_inflict_with` (one draw
+/// from `rng` with the attacker term `bonus`; a dead target takes nothing; lands next round). Otherwise no draw: `Now`
+/// calls `grant_now`, `Next` calls `queue`. True when the status landed.
+pub fn apply_effect(target: &mut Unit, spec: &EffectSpec, timing: Timing, bonus: f64, rng: Option<&mut GodotRng>) -> bool {
+    // An inflict (`resistable` unset) always goes through `try_inflict_with`, which skips a dead target and queues a
+    // non-resistable row without a draw; only an explicit grant (`Some(false)`) takes the grant-now / queue path.
+    if spec.resistable.is_none() || spec.rolled() {
+        return try_inflict_with(target, &spec.status_id, spec.potency, bonus, rng, spec.rounds, spec.magnitude, &spec.source);
+    }
+    match timing {
+        Timing::Now => grant_now(target, &spec.status_id, spec.rounds, spec.magnitude, &spec.source),
+        Timing::Next => queue(target, &spec.status_id, spec.rounds, spec.magnitude, &spec.source),
+    }
+    true
+}
+
+/// A skill grant's timing: `Now` for a DEFEND buff (`defend`, a `defend` grant row such as riposte), else `Next`.
+pub fn grant_timing(status: &str, defend: bool) -> Timing {
+    if defend && defend_buffs().contains(&status) {
+        Timing::Now
+    } else {
+        Timing::Next
+    }
 }
 
 /// Queues `status` for the target's next round (stacking rule and cap; the newer source wins).
@@ -486,13 +686,9 @@ pub fn grant_extras(target: &mut Unit, extras: &[Value], defend: bool, source: &
         if status.is_empty() {
             continue;
         }
-        let rounds = aegis_core::value::int(o, "rounds", 1);
-        let magnitude = aegis_core::value::int(o, "magnitude", 0);
-        if defend && defend_buffs().contains(&status.as_str()) {
-            grant_now(target, &status, rounds, magnitude, source);
-        } else {
-            queue(target, &status, rounds, magnitude, source);
-        }
+        // A4.2: a skill grant row as an EffectSpec (never rolled)
+        let spec = EffectSpec::grant(&status, aegis_core::value::int(o, "rounds", 1), aegis_core::value::int(o, "magnitude", 0), source);
+        apply_effect(target, &spec, grant_timing(&status, defend), 0.0, Option::None);
         granted.push(status);
     }
     granted
@@ -520,13 +716,13 @@ pub fn remove_active(target: &mut Unit, status: &str) -> bool {
     found
 }
 
-/// The status an AP debt of `debt` at a round start imposes: stun from `debt_stun`, stagger from `debt_stagger` (ruleset
-/// numbers, S1.2-S3; the AP debt rule names its statuses), else none.
-pub fn debt_status(debt: i32, n: &Numbers) -> &'static str {
+/// The status an AP debt of `debt` at a round start imposes: `debt_stun_status` from `debt_stun`, `debt_stagger_status`
+/// from `debt_stagger` (ruleset numbers, S1.2-S3, F2.2-S1), else none.
+pub fn debt_status(debt: i32, n: &Numbers) -> &str {
     if debt >= n.debt_stun {
-        "stun"
+        &n.debt_stun_status
     } else if debt >= n.debt_stagger {
-        "stagger"
+        &n.debt_stagger_status
     } else {
         ""
     }
@@ -596,9 +792,12 @@ pub fn roll_over(c: &mut Unit, ap_regen: i32, n: &Numbers) -> Vec<String> {
     let (active, intents) = (&st.active, &mut st.intents);
     intents.retain(|k, _| active.contains(k));
     c.riposted.clear();
+    // F2.2-S1 (FB-58b): the debt status goes straight into `st.active` for the coming round, with the round count of
+    // a 1-round instance (an instance already there keeps its longer count)
     let penalty = debt_status((-c.ap).max(0), n);
     if !penalty.is_empty() {
         c.st.active.insert(penalty.to_string());
+        c.st.rounds_left.entry(penalty.to_string()).or_insert(1);
     }
     c.ap = regen_ap(c, c.ap, ap_regen);
     c.st.active.iter().cloned().collect()

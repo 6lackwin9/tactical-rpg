@@ -20,7 +20,62 @@ pub struct Source {
     pub catalog: Value,
     pub worlds: Value,
     pub game: Value,
+    /// E2.2-S1 (FB-53): the game-wide purse caps, from the game's manifest beside the data folder.
+    pub purse: PurseCaps,
     pub errors: Vec<String>,
+}
+
+/// The supplies a new game starts with when no world in the lineage sets `start_supplies` (E2.2-S1: the world check
+/// flags it when the game's `supplies_max` is lower).
+pub const SUPPLIES_START: i64 = 10;
+/// The highest `start_gold` a world may author (E2.2-S1: lower when the game's `purse_gold_cap` is).
+pub const START_GOLD_MAX: i64 = 99999;
+
+/// E2.2-S1 (FB-53a,b): the game-wide purse caps (the party and its purse are shared by every world, so one per game):
+/// `supplies_max` and `purse_gold_cap`, optional keys of the game's manifest (`game.json`). A missing key, or one that is
+/// not a whole number 1 or more (`PurseCaps::problems`), reads the default: today's caps. Read by the party (gold and
+/// supply grants, the save check, a save loaded under lower caps is clamped to them) and the world checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PurseCaps {
+    pub supplies_max: i64,
+    pub purse_gold_cap: i64,
+}
+
+impl PurseCaps {
+    /// The manifest keys, in this order.
+    pub const KEYS: [&'static str; 2] = ["supplies_max", "purse_gold_cap"];
+    pub const SUPPLIES_MAX: i64 = 99;
+    pub const PURSE_GOLD_CAP: i64 = 9_999_999;
+
+    /// The caps of a game manifest object (`game.json`), each key its default when missing or not valid.
+    pub fn from_manifest(m: &Dict) -> Self {
+        let cap = |key: &str, default: i64| m.get(key).map(json::normalize).filter(|v| json::is_int(v) && json::to_int(v) >= 1).map_or(default, |v| json::to_int(&v));
+        Self { supplies_max: cap("supplies_max", Self::SUPPLIES_MAX), purse_gold_cap: cap("purse_gold_cap", Self::PURSE_GOLD_CAP) }
+    }
+
+    /// The caps of the manifest beside `data_dir` (the game folder's `game.json`); the defaults when there is none.
+    pub fn beside(data_dir: &Path) -> Self {
+        let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| p.is_file()) else { return Self::default() };
+        match read(&path, &mut Vec::new()) {
+            Some(Value::Object(m)) => Self::from_manifest(&m),
+            _ => Self::default(),
+        }
+    }
+
+    /// What keeps a manifest's purse caps from being valid: a key present that is not a whole number 1 or more.
+    pub fn problems(m: &Dict) -> Vec<String> {
+        Self::KEYS
+            .iter()
+            .filter(|k| m.get(**k).map(json::normalize).is_some_and(|v| !json::is_int(&v) || json::to_int(&v) < 1))
+            .map(|k| format!("game.json: {k} must be a whole number 1 or more."))
+            .collect()
+    }
+}
+
+impl Default for PurseCaps {
+    fn default() -> Self {
+        Self { supplies_max: Self::SUPPLIES_MAX, purse_gold_cap: Self::PURSE_GOLD_CAP }
+    }
 }
 
 /// Catalog kinds in the order the catalog export lists them (item families go with the game data).
@@ -79,12 +134,30 @@ pub fn load(data_dir: &Path) -> Source {
     game.insert("item_families".into(), catalog["item_families"].clone());
     let mut cat = catalog.as_object().cloned().unwrap_or_default();
     cat.shift_remove("item_families");
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), errors }
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.
 pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
+    if kind == "terrain" {
+        return normalize(fields("content", kind), &terrain_fallbacks(entry), false);
+    }
     normalize(fields("content", kind), entry, false)
+}
+
+/// P1.2-S1 (FB-51): the terrain keys a row may leave out (the frozen kit's rows, a row written before they existed)
+/// take their type's fallback, not the schema default: `walkable` its type's (`grid::terrain_walkable`), then
+/// `stops_forced_move` not walkable. P1.2-S2 (FB-109): the rule is `grid::terrain_walk_keys`, which the battle's
+/// `TerrainTable` reads too.
+pub const TERRAIN_FALLBACK_KEYS: [&str; 2] = ["walkable", "stops_forced_move"];
+
+fn terrain_fallbacks(entry: &Dict) -> Dict {
+    let mut out = entry.clone();
+    let given = |key: &str| entry.get(key).map(json::to_bool);
+    let (walkable, stops) = rpgkit_battle::grid::terrain_walk_keys(&sget(entry, "id", ""), given(TERRAIN_FALLBACK_KEYS[0]), given(TERRAIN_FALLBACK_KEYS[1]));
+    out.entry(TERRAIN_FALLBACK_KEYS[0]).or_insert(Value::Bool(walkable));
+    out.entry(TERRAIN_FALLBACK_KEYS[1]).or_insert(Value::Bool(stops));
+    out
 }
 
 // ---- ContentCatalog --------------------------------------------------------------------------------------------
@@ -151,7 +224,7 @@ fn read_rulesets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dic
         }
     }
     let skills = json::arr(json::get(loaded, "skills"));
-    let skill_intent = |id: &str| crate::check::ruleset::skill_intent_in(skills, id);
+    let skill_intent = |id: &str, field: bool| crate::check::ruleset::skill_intent_in(skills, id, field);
     let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
     let checked = crate::check::ruleset::check_rows(&rows, &crate::check::ruleset::Refs { skill_intent: &skill_intent, derived: &derived });
     let mut kept = Vec::new();
@@ -379,11 +452,24 @@ fn ranked_skills(list: &[Value], at: &str, errors: &mut Vec<String>) -> Vec<Dict
         if bad {
             continue;
         }
-        for (i, row) in expand(d).into_iter().enumerate() {
+        let mods = rank_mods(d);
+        for (i, mut row) in expand(d).into_iter().enumerate() {
+            unset_default_mitigation(&mut row, d, &mods, i);
             by_rank[i.min(4)].push(row);
         }
     }
     by_rank.into_iter().flatten().collect()
+}
+
+/// AUDIT-11 (S1.2-S4, FB-85): a loaded DEFEND rank row whose entry authors no `mitigation` (neither the entry nor this
+/// rank's modifier) loses the schema default the normalisation filled, so the battle takes the ruleset's guard fraction
+/// for it (`rpgkit_battle::skill::guard_mitigation`). Only the loader drops it: the writer (`store`) expands the same
+/// entries with the default kept, so a resave is unchanged. `index` is the rank row's 0-based position.
+fn unset_default_mitigation(row: &mut Dict, entry: &Dict, mods: &[Dict], index: usize) {
+    let authored = entry.contains_key("mitigation") || index.checked_sub(1).and_then(|m| mods.get(m)).is_some_and(|m| m.contains_key("mitigation"));
+    if !authored && sget(row, "kind", "") == "DEFEND" {
+        row.shift_remove("mitigation");
+    }
 }
 
 fn rank_mods(e: &Dict) -> Vec<Dict> {
@@ -425,7 +511,8 @@ pub(crate) fn expand(e: &Dict) -> Vec<Dict> {
         // SkillRanks.resolve
         let literal = if rank >= 2 { mods[rank - 2].get("description").filter(|v| !v.is_null()).map(gstr) } else { None };
         let kind = sget(&row, "kind", "");
-        let text = literal.unwrap_or_else(|| render(&template, &kind, &row, rank));
+        // A1.2-S2: the catalog text is ruleset-free, so it renders the stance tokens (stances on)
+        let text = literal.unwrap_or_else(|| render(&template, &kind, &row, rank, true));
         row.insert("description".into(), Value::from(text));
         rows.push(row);
     }
@@ -457,10 +544,70 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-/// SkillText.render: literal parts as they are, valid tokens by the rank's effective row.
-pub fn render(template: &str, kind: &str, row: &Dict, rank: usize) -> String {
-    render_tokens(template, |token, suffix| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind)).then(|| token_value(token, suffix, row, rank)))
+/// SkillText.render: literal parts as they are, valid tokens by the rank's effective row; `stances` (A1.2-S2: the
+/// ruleset's `stances`) off renders the stance tokens (`STANCE_TOKENS`) as nothing.
+/// FB-107 (W2-4): a suppressed stance token takes its separator with it (`"power, {flow}."` reads `"power."`, see
+/// `drop_suppressed`); with stances on the text is exactly as before.
+pub fn render(template: &str, kind: &str, row: &Dict, rank: usize, stances: bool) -> String {
+    let valid = |token: &str| token_kinds(token).is_some_and(|k| k.contains(&"ALL") || k.contains(&kind));
+    let text = render_tokens(template, |token, suffix| {
+        valid(token).then(|| if !stances && STANCE_TOKENS.contains(&token) { SUPPRESSED.to_string() } else { token_value(token, suffix, row, rank, stances) })
+    });
+    if stances { text } else { drop_suppressed(&text) }
 }
+
+/// FB-107: a skill row's description as a ruleset shows it. Stances on: the stored (catalog) text. Stances off: the
+/// rank's template re-rendered without the stance tokens, when the stored text is that template's render (a rank's
+/// literal text, or a template without stance tokens, is shown as stored).
+pub fn skill_description(row: &Dict, stances: bool) -> String {
+    let stored = sget(row, "description", "");
+    let template = sget(row, "template", "");
+    if stances || !STANCE_TOKENS.iter().any(|t| template.contains(&format!("{{{t}"))) {
+        return stored;
+    }
+    let kind = sget(row, "kind", "");
+    let rank = usize::try_from(to_int_or(json::get(row, "tier"), 1)).unwrap_or(1).max(1);
+    if render(&template, &kind, row, rank, true) == stored { render(&template, &kind, row, rank, false) } else { stored }
+}
+
+/// The marker a suppressed stance token renders as before `drop_suppressed` removes it (never in a template).
+const SUPPRESSED: char = '\u{0}';
+
+/// FB-107: removes each run of suppressed tokens (`SUPPRESSED`) with one separator: the preceding `", "` / `"; "` when
+/// there is one (`"a, {flow}, b"` -> `"a, b"`, `"a, {flow}."` -> `"a."`), else the following one (`"{flow}, b"` -> `"b"`);
+/// a bare space before punctuation or a doubled space is dropped too (`"a {flow}."` -> `"a."`).
+fn drop_suppressed(text: &str) -> String {
+    let mut parts = text.split(SUPPRESSED);
+    let mut out = parts.next().unwrap_or("").to_string();
+    let rest: Vec<&str> = parts.collect();
+    let last = rest.len();
+    for (i, next) in rest.into_iter().enumerate() {
+        if next.is_empty() && i + 1 < last {
+            continue; // another suppressed token follows: one run, one separator
+        }
+        let head = out.trim_end();
+        if head.ends_with([',', ';']) {
+            out = head[..head.len() - 1].trim_end().to_string();
+            out.push_str(next);
+            continue;
+        }
+        let mut n = next.trim_start();
+        if let Some(after) = n.strip_prefix([',', ';']) {
+            n = after.trim_start();
+        }
+        if n.is_empty() || n.starts_with(['.', ',', ';', ':', '!', '?', ')']) {
+            out.truncate(out.trim_end().len());
+        } else if !out.is_empty() && !out.ends_with(char::is_whitespace) && next.starts_with(char::is_whitespace) {
+            out.push(' ');
+        }
+        out.push_str(n);
+    }
+    out
+}
+
+/// A1.2-S2 (A1 "Retire orphaned stance fields"): the skill tokens only the classic stance machinery reads; they render
+/// as nothing when a ruleset's `stances` is off.
+pub const STANCE_TOKENS: [&str; 2] = ["flow", "disrupt"];
 
 /// SkillText.parse as used by render: `{{` and `}}` are literal braces, `{token}` or `{token:suffix}` is filled by
 /// `value` (None, an empty or an unclosed token renders as nothing or as written).
@@ -571,8 +718,11 @@ fn maneuver_dash(row: &Dict) -> Option<i64> {
     (maneuver && dash > 0).then_some(dash)
 }
 
-/// SkillText.token_value.
-pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
+/// SkillText.token_value; `stances` off: a stance token (`STANCE_TOKENS`) is "" (A1.2-S2).
+pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize, stances: bool) -> String {
+    if !stances && STANCE_TOKENS.contains(&token) {
+        return String::new();
+    }
     let bare = suffix == "n";
     let i = |k: &str, fb: i64| to_int_or(json::get(row, k), fb);
     let f = |k: &str, fb: f64| to_float_or(json::get(row, k), fb);

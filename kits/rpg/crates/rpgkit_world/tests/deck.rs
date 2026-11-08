@@ -40,7 +40,8 @@ fn data() -> Data {
     let atk = |id: &str| json!({"id": id, "name": id, "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"});
     let path: serde_json::Map<String, Value> = PATH.iter().map(|f| (f.to_string(), json!(1))).collect();
     let catalog = json!({
-        "classes": [{"id": "drill", "name": "Drill", "skill_path": path}],
+        // CLASS-BASICS: the second class's basic is the learned-only attack
+        "classes": [{"id": "drill", "name": "Drill", "skill_path": path}, {"id": "drill_cut", "name": "Drill Cut", "skill_path": path, "basics": ["d_far"]}],
         "skills": [
             {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"},
             {"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "basic": true},
@@ -59,7 +60,8 @@ fn data() -> Data {
         ],
         "units": [
             {"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1},
-            {"id": "hero_decked", "name": "Decked", "side": "party", "class_id": "drill", "level": 1, "deck": {"active": ["d_three"]}}
+            {"id": "hero_decked", "name": "Decked", "side": "party", "class_id": "drill", "level": 1, "deck": {"active": ["d_three"]}},
+            {"id": "hero_cut", "name": "Cut", "side": "party", "class_id": "drill_cut", "level": 1}
         ],
         "rulesets": [{"id": "timeline", "name": "Timeline", "rules": ["round_intent", "deck"], "basics": ["move", "rest", "strike", "active_guard"],
             "deck_slots": {"active": SLOTS.0, "passive": SLOTS.1, "keystone": SLOTS.2}}]
@@ -275,4 +277,24 @@ fn the_deck_rules_refuse_a_follow_up_list_of_another_intent_or_outside_the_deck(
     let mut m = member("hero");
     m.deck = deck(json!({"active": ["d_one", "d_ward"], "follow_ups": {"d_one": ["strike", "d_one"], "d_ward": ["active_guard"]}}));
     assert!(m.validate(&d).is_empty(), "{:?}", m.validate(&d));
+}
+
+/// CLASS-BASICS (R2-W2b): a member's class basics are basics of its deck: never an active, orderable, open without a
+/// slot in the member build; a member of another class may not order them.
+#[test]
+fn a_members_class_basics_are_open_basics_of_its_deck() {
+    let d = data();
+    let mut m = member("hero_cut");
+    m.deck = deck(json!({"active": ["d_far"]}));
+    assert_eq!(m.validate(&d), ["Unit 'hero': deck active: 'd_far' is a basic (open to every unit, no slot)."]);
+    m.deck = deck(json!({"order": {"assault": ["d_far", "strike"]}}));
+    assert!(m.validate(&d).is_empty(), "{:?}", m.validate(&d));
+    let mut other = member("hero");
+    other.deck = deck(json!({"order": {"assault": ["d_far"]}}));
+    assert_eq!(other.validate(&d), ["Unit 'hero': deck order assault: 'd_far' is neither an active of the deck nor a basic."]);
+    let u = progression::build_in(&d, &member("hero_cut"), "", Some(&rule(&d))).expect("built").unit;
+    assert_eq!(u.active_families(), strings(&PATH[..SLOTS.0 as usize]), "the class basic takes no slot");
+    assert!(u.can_use(&d.cat, d.cat.skill("d_far").unwrap()), "open");
+    let plain = progression::build_in(&d, &member("hero"), "", Some(&rule(&d))).expect("built").unit;
+    assert!(!plain.can_use(&d.cat, d.cat.skill("d_far").unwrap()), "closed for another class");
 }

@@ -4,6 +4,14 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 
 **Current direction:** [docs/ENGINE_SPEC.md](docs/ENGINE_SPEC.md) (draft, 2026-10-18): headless deterministic sim, one command API shared by GUI and CLI, feel as data, engine goldens recorded on frozen fixtures (the Godot parity retired 2026-11-01). All engine work stays under `engine/`; `.gdignore` keeps Godot from scanning it.
 
+### Vision & Trajectory: Agent-Native Spec-Driven Game Development
+
+The core goal of moving from Godot to the custom **Aegis Engine** (`engine/` -> `kits/<genre>/` -> `games/<id>/`) is to establish an **agent-native, spec-driven game engine** where games are created, iterated on, and updated rapidly through written specs and interactive sessions with AI agents:
+
+1. **Stage 1 — Engine & Kit Capability Foundation (`R1–R4`, current):** Build out the deterministic simulation core, rule contracts (`aegis rules --contract`), data-driven pipelines (`kits/rpg/schema.json`), and headless verification tools (`sim feel`, `audit-build`, `scenario`).
+2. **Stage 2 — Streamlined Game-Building Workflow (`Post-R4`, next):** Shift focus from raw engine capabilities to streamlining the **end-to-end game-creation and update workflow** itself—turning specs and interactive human + agent design sessions directly into story content, polished player-facing UI (replacing debug chrome via subtractive layout), visual/scenario verification, and a web-based deployment pipeline (e.g., itch.io web builds).
+3. **Stage 3 — Multi-Genre Expansion (Future):** As new games and genres are explored beyond tactical RPGs, use the same spec + interactive agent workflow to author new genre kits (`kits/<genre>/`) and games (`games/<id>/`), using each new genre as an opportunity to organically expand the core `engine/` scope.
+
 * **Original proposal (Markdown-as-language, superseded by the spec):** [ENGINE_PROPOSAL.md](ENGINE_PROPOSAL.md)
 * **Active Branch:** `engine`
 * **Toolchain:** Rust `stable-x86_64-pc-windows-gnullvm`, pinned in `rust-toolchain.toml`. The MinGW on PATH is llvm-mingw, and the plain `gnu` toolchain fails to link against it (`unable to find library -lgcc_eh`).

@@ -483,10 +483,10 @@
 			"buff_stat": "",
 			"buff_pct": 0.0,
 			"duration": 0,
-			"use_blocks": 1,
+			"use_blocks": 3,
 			"use_reach": 1,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "con_focus_elixir",
@@ -508,7 +508,7 @@
 			"use_blocks": 1,
 			"use_reach": 0,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "con_fire_bomb",
@@ -527,10 +527,11 @@
 			"buff_stat": "",
 			"buff_pct": 0.0,
 			"duration": 0,
-			"use_blocks": 1,
+			"use_blocks": 2,
 			"use_reach": 3,
 			"hazard": {},
-			"max_stack": 5
+			"area": "BURST",
+			"max_stack": 2
 		},
 		{
 			"id": "wpn_hand_axe",
@@ -713,7 +714,7 @@
 			"rarity": "UNCOMMON",
 			"weight": 8.0,
 			"value": 90,
-			"description": "A wall of iron. Superb protection, but heavy and slow to raise.",
+			"description": "A wall of iron. Superb protection, but heavy.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1725,10 +1726,10 @@
 			"buff_stat": "",
 			"buff_pct": 0.0,
 			"duration": 0,
-			"use_blocks": 1,
+			"use_blocks": 2,
 			"use_reach": 1,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 3
 		},
 		{
 			"id": "pitch_fire_bomb",
@@ -1750,7 +1751,8 @@
 			"use_blocks": 1,
 			"use_reach": 3,
 			"hazard": {},
-			"max_stack": 5
+			"area": "PLUS",
+			"max_stack": 2
 		},
 		{
 			"id": "brimstone_draught",
@@ -1759,7 +1761,7 @@
 			"rarity": "COMMON",
 			"weight": 0.4,
 			"value": 25,
-			"description": "Brimstone Tallow Draught: +30% CONS for 3 rounds (steadier poise).",
+			"description": "+30% attack power (Empower) for 2 rounds",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1772,7 +1774,7 @@
 			"use_blocks": 1,
 			"use_reach": 0,
 			"hazard": {},
-			"max_stack": 5
+			"max_stack": 2
 		},
 		{
 			"id": "calcified_bone_shard",

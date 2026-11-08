@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Emberwake: A Scarlet Lullaby — Playable Pixel-Art Screen & Game Loop Preview</title>
+<style>
+__STYLES_CSS__
+</style>
+</head>
+<body>
+
+<!-- Top Design Session Inspector & Direct Screen Jump Bar -->
+<div id="design-bar">
+  <div class="db-group">
+    <span class="db-label">EMBERWAKE (1280×720)</span>
+    <button class="db-btn active" data-jump="main_menu" onclick="jumpScreen('main_menu')">1a. MainMenu</button>
+    <button class="db-btn" data-jump="load_slots" onclick="jumpScreen('load_slots')">1b. Load / Save</button>
+    <button class="db-btn" data-jump="settings" onclick="jumpScreen('settings')">1c. Settings</button>
+    <button class="db-btn" data-jump="story" onclick="jumpScreen('story')">2. StoryStage</button>
+    <button class="db-btn" data-jump="region_hub" onclick="jumpScreen('region_hub')">3. Hub: Undercroft</button>
+    <button class="db-btn" data-jump="board" onclick="jumpScreen('board')">4a. BoardPane</button>
+    <button class="db-btn" data-jump="shop" onclick="jumpScreen('shop')">4b. ShopPane</button>
+    <button class="db-btn" data-jump="party" onclick="jumpScreen('party')">6. Character</button>
+    <button class="db-btn" data-jump="worldmap" onclick="jumpScreen('worldmap')">5. WorldMap</button>
+    <button class="db-btn" data-jump="region_corvo" onclick="jumpScreen('region_corvo')">Street: Corvo's Gate</button>
+    <button class="db-btn" data-jump="battle" onclick="jumpScreen('battle')">7. BattleScreen</button>
+  </div>
+  <!-- Screen-Specific Comparison Toggles (kept outside the in-game 1280x720 canvas so the game pane stays 100% pure player UI) -->
+  <div class="db-group" id="screen-toggles"></div>
+  <div class="db-group">
+    <button class="db-btn" data-jump="runner" onclick="jumpScreen('runner')" title="Dev-only SceneRunner (hidden from player MainMenu, opened via F10 in debug builds)" style="border-color:#4b5563;color:#9ca3af;">
+      [Dev F10: Tools]
+    </button>
+    <button class="db-btn" id="atlas-toggle-btn" onclick="toggleAtlasDrawer()" style="border-color:#d97706;color:#fbbf24;">
+      ▸ Screen & Art Atlas
+    </button>
+    <span class="db-pill" id="encounter-selector-wrap">
+      Battle:
+      <select id="enc-select" onchange="selectEncounter(this.value)" style="background:#0a0b10;color:#fbbf24;border:1px solid #4b5563;font-size:10px;font-family:'JetBrainsMono',monospace;">
+        <option value="enc_0a">0a: The Alley (Kaelen Solo)</option>
+        <option value="enc_0b">0b: The Rooftop (+Vesper)</option>
+        <option value="enc_0c">0c: Canal Bridge (Full 4-Squad)</option>
+        <option value="enc_m2">M2: Corvo's Gate (Tallow Ambush)</option>
+        <option value="enc_m3">M3: The Bone-Mill (Slag Vents + Grendel)</option>
+        <option value="enc_m5">M5: Crucible Watchpost (Nemeth Boss)</option>
+      </select>
+    </span>
+  </div>
+</div>
+
+<!-- 1280x720 Game Window (Dynamically Resized to Browser Window) -->
+<div id="viewport-wrap">
+  <div id="stage-root"></div>
+</div>
+
+<!-- Architecture Decisions Status Footer -->
+<div id="arch-footer">
+  <div id="arch-note">
+    <b>MainMenu:</b> 1280×720 native grid · <i>Emberwake: A Scarlet Lullaby</i> · Centered menu column · Hover Peek on Continue with <i>Act I · Chronicles of the Sunk Ward</i>.
+  </div>
+  <div style="font-family:'JetBrainsMono',monospace;font-size:10px;color:#9ca3af;">
+    1280×720p Base Grid · Dynamic Browser Auto-Resize
+  </div>
+</div>
+
+<!-- Collapsible Screen Build & 3-Layer Art Sourcing Atlas Drawer (SCREEN_ATLAS.md + ASSETORG3.md) -->
+<div id="atlas-drawer" style="width:1280px;max-width:98vw;background:#0e1016;border:1px solid #374151;border-top:2px solid #d97706;padding:10px 14px;margin-bottom:16px;font-size:11px;display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div>
+      <span class="font-title" style="font-size:13px;color:var(--gold);">SCREEN_ATLAS.md & ASSETORG3.md — Live Screen Build & 3-Layer Art Sourcing Tracker</span>
+      <span style="color:var(--dim);margin-left:8px;">Layer 1: <b style="color:#93c5fd;">E = engine/assets/</b> (Base Templates) · Layer 2: <b style="color:#fcd34d;">K = kits/rpg/assets/</b> (Genre Kit) · Layer 3: <b style="color:#fca5a5;">G = games/emberwake/assets/</b> (Sunk Ward)</span>
+    </div>
+    <span class="db-pill">Single Source of Truth for Rust GUI + HTML Mockups</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;">
+    <div style="background:#14171f;border:1px solid #374151;padding:8px;">
+      <div class="font-title" style="color:#93c5fd;font-size:12px;margin-bottom:4px;">Layer 1: Engine Base Templates (engine/assets/)</div>
+      <div style="color:var(--text);line-height:1.45;font-size:10.5px;">
+        • <b>Fonts:</b> <code>fonts/OpenSans-SemiBold.ttf</code> (Body), <code>fonts/JetBrainsMono-Bold.ttf</code> (Mono promoted from game)<br>
+        • <b>Base 9-Slice Frames (ASSETORG3-E):</b> <code>ui/frames/{panel,ornate,card,button,inset,tab,tip,parchment}.{png,json}</code><br>
+        • <b>Toolkit Glyphs:</b> <code>ui/{chevron,delete,help,lock,unlock}.png</code><br>
+        • <b>Fallback Terrain:</b> <code>tilesets/common/*</code> (32×32) & <code>tilesets/common_stage/*</code> (64×48 tilted)
+      </div>
+    </div>
+    <div style="background:#14171f;border:1px solid #374151;padding:8px;">
+      <div class="font-title" style="color:#fcd34d;font-size:12px;margin-bottom:4px;">Layer 2: RPG Kit Templates (kits/rpg/assets/)</div>
+      <div style="color:var(--text);line-height:1.45;font-size:10.5px;">
+        • <b>Consolidated UI Icons (ASSETORG3-K):</b> <code>ui/{hud,pins,markers,services,badges,chips,intents}/*.png</code> (retires duplicate <code>map/markers/</code>)<br>
+        • <b>Class Rigs & Grip Looks:</b> <code>units/&lt;class&gt;/{base,1h_buckler,2h_axe,2h_hammer,2h_sword}/{sheet.png,clips.json}</code><br>
+        • <b>Common Mob Portraits:</b> <code>portraits/common/{warrior,ranger,rogue,priest,brawler,mage}_base.png</code><br>
+        • <b>Base Items/Skills/Statuses:</b> <code>items/&lt;family&gt;/base.png</code>, <code>skills/kinds/*.png</code>, <code>statuses/*.png</code>
+      </div>
+    </div>
+    <div style="background:#14171f;border:1px solid #374151;padding:8px;">
+      <div class="font-title" style="color:#fca5a5;font-size:12px;margin-bottom:4px;">Layer 3: Emberwake Sunk Ward (games/emberwake/assets/)</div>
+      <div style="color:var(--text);line-height:1.45;font-size:10.5px;">
+        • <b>Ashlands Archive (ASSETORG3-G):</b> Retires 8 Ashlands heroes & 9 goblin/bandit portraits/bodies out of active Sunk Ward tree<br>
+        • <b>Sunk Ward Portraits:</b> <code>portraits/heroes/{kaelen,vesper,maren,hollis,dunstan,elyse}.png</code> (+8 faces each), <code>npcs/{aline,bram,tess}.png</code>, <code>bosses/{captain_vane,proctor_quell,guild_master_orlov,inquisitor_prelate_nemeth}.png</code><br>
+        • <b>Backdrops & Palettes:</b> <code>backgrounds/{menu,title,story,battle}/*.png</code>, <code>units/*/*/palettes/*.json</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ASSETS = __ASSETS_JSON__;
+
+__APP_JS__
+</script>
+</body>
+</html>

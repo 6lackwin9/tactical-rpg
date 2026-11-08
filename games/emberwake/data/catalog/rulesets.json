@@ -15,6 +15,7 @@
 				"reach",
 				"flank",
 				"plan_badges",
+				"field_intent",
 				"forced_move",
 				"ground_hazards",
 				"arena_hazards",
@@ -36,11 +37,10 @@
 				"rest",
 				"strike",
 				"offhand_jab",
-				"active_guard",
-				"flank_cut"
+				"active_guard"
 			],
 			"poise_stat": "max_poise",
-			"stagger_windup_mult": 2.0,
+			"stagger_windup_mult": 1.0,
 			"stagger_guard_mult": 0.5,
 			"stagger_repeat_mult": 0.5,
 			"flank_stagger_mult": 1.5,
@@ -63,8 +63,13 @@
 			"root_stops_chase": "on",
 			"switch_target_step": "off",
 			"stances": "off",
-			"attack_lock": "none",
-			"poise_mode": "pips"
+			"attack_lock": "melee",
+			"move_after_blocks": 3,
+			"item_ap": 0,
+			"poise_mode": "pips",
+			"item_mitigation": "on",
+			"thrown_miss_spends": "on",
+			"pouch_stacks": "on"
 		},
 		{
 			"id": "classic",
@@ -97,7 +102,9 @@
 			"root_stops_chase": "off",
 			"switch_target_step": "on",
 			"stances": "on",
-			"attack_lock": "none"
+			"attack_lock": "none",
+			"move_after_blocks": 3,
+			"item_ap": 1
 		}
 	]
 }

@@ -271,7 +271,9 @@ impl DojoSession {
             hero_ids.push(id.to_string());
         }
         let n = heroes.len();
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None)).unit);
+        // AUDIT-12: the dummy under the same wield terms as the heroes
+        let wield = ruleset.numbers.wield();
+        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None).with_wield(wield)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None).with_wield(wield)).unit);
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;
@@ -388,12 +390,24 @@ impl DojoSession {
 
     // ---- RULESET1_INTENT UI4: the planner view (no resolver: plans compile on a scratch board) ------------------
 
-    /// The intents the Dojo's ruleset offers (none without `round_intent`).
+    /// The intents the Dojo's ruleset offers (none without `round_intent`; A4.2-K1b: Field too under `field_intent`).
     pub fn plan_intents(&self) -> Vec<RoundIntent> {
         if !self.ruleset.has(ruleset::ROUND_INTENT) {
             return Vec::new();
         }
-        self.ruleset.numbers.intents.iter().filter_map(|i| RoundIntent::parse(i)).collect()
+        let mut out: Vec<RoundIntent> = self.ruleset.numbers.intents.iter().filter_map(|i| RoundIntent::parse(i)).collect();
+        if self.ruleset.has(ruleset::FIELD_INTENT) && !out.contains(&RoundIntent::Field) {
+            out.push(RoundIntent::Field);
+        }
+        out
+    }
+
+    /// A4.2-K1b (INTENT2 IR15, IR21; row W2-4 "display only the valid IR21 intent variants for the selected skill"): each
+    /// intent of `plan_intents` with whether it is open now: under `field_intent` with an opener picked, only the
+    /// opener's own rows (`intent::allowed`); else every intent (classic Dojo rules unchanged).
+    pub fn plan_variants(&self) -> Vec<(RoundIntent, bool)> {
+        let rows = self.planner.opener.as_deref().filter(|_| self.ruleset.has(ruleset::FIELD_INTENT)).and_then(|id| self.cat.skill(id)).map(|s| rpgkit_rules::intent::allowed(&self.ruleset, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent));
+        self.plan_intents().into_iter().map(|i| (i, rows.as_ref().is_none_or(|r| r.contains(&i.id())))).collect()
     }
 
     /// The scratch battle the planner plans on: the active hero (as it stands: gear, AP, deck), the second dummy on
@@ -516,9 +530,11 @@ impl DojoSession {
         self.plan_view_of(&self.planner)
     }
 
-    /// UI4: the plan each intent of the ruleset would make now (its kind and opener the planner's).
+    /// UI4: the plan each intent of the ruleset would make now (its kind and opener the planner's). A4.2-K1b (the skill
+    /// variant previews): with an opener picked, one plan per row of that skill, each opening with it.
     pub fn plans_by_intent(&self) -> Vec<PlanView> {
-        self.plan_intents().into_iter().map(|i| self.plan_view_of(&PlanSetup { intent: i, kind: None, opener: None, ..self.planner.clone() })).collect()
+        let opener = self.planner.opener.clone().filter(|_| self.ruleset.has(ruleset::FIELD_INTENT));
+        self.plan_variants().into_iter().filter(|v| v.1).map(|(i, _)| self.plan_view_of(&PlanSetup { intent: i, kind: None, opener: opener.clone(), ..self.planner.clone() })).collect()
     }
 
     /// The openers the hero may pick for the setup's intent: its order for the intent (FU4), as (skill id, name).
@@ -528,14 +544,27 @@ impl DojoSession {
         if round_intent::set_intent(&mut s.w, 0, setup.intent).is_err() {
             return Vec::new();
         }
-        rip::order(&s.w, 0, setup.intent).into_iter().map(|sid| (s.w.cat.skills[sid].id.clone(), s.w.cat.skills[sid].name.clone())).collect()
+        let mut out: Vec<skill::SkillId> = rip::order(&s.w, 0, setup.intent);
+        // A4.2-K1b (IR15): a skill's second row opens by pick: the hero's skills of that row the order leaves out
+        if round_intent::field_rows(&s.w) {
+            for sid in rip::hotkey_skills(&s.w, 0) {
+                if !out.contains(&sid) && round_intent::skill_rows(&s.w, &s.w.cat.skills[sid]).contains(&setup.intent.id()) {
+                    out.push(sid);
+                }
+            }
+        }
+        out.into_iter().map(|sid| (s.w.cat.skills[sid].id.clone(), s.w.cat.skills[sid].name.clone())).collect()
     }
 
-    /// Sets the planner's intent (the kind and opener go back to the planner's pick).
+    /// Sets the planner's intent (the kind and opener go back to the planner's pick; A4.2-K1b: an opener with that row
+    /// stays, so switching between a skill's variants keeps the skill).
     pub fn set_plan_intent(&mut self, intent: RoundIntent) {
+        let keep = self.plan_variants().iter().any(|v| v.0 == intent && v.1) && self.ruleset.has(ruleset::FIELD_INTENT);
         self.planner.intent = intent;
         self.planner.kind = None;
-        self.planner.opener = None;
+        if !keep {
+            self.planner.opener = None;
+        }
     }
 
     /// Moves a planner piece ("hero", "dummy", "partner") to `cell` when it is on the grid and free; "partner" with
@@ -938,6 +967,12 @@ impl DojoSession {
             if queued {
                 line += ", staggered next round";
             }
+            // AUDIT-12 (FB-94): a break ends the broken side's guard, as in battle (`poise::break_unit`)
+            let side = if on_dummy { &mut self.dummy } else { self.hero_mut() };
+            let guarded = side.guard > 0.0;
+            if crate::trigger::end_unit_guard(side) || guarded {
+                line += ", guard broken";
+            }
         }
         if on_dummy {
             self.dummy_poise = bar;
@@ -1018,9 +1053,10 @@ impl DojoSession {
                     let potency = s.status_potency + self.hero().status_potency_bonus();
                     // U1.2-S3b: the hero's KNOW term (ruleset `know_potency`; 0 = potency off), shown and rolled alike
                     let bonus = status::know_bonus(self.hero(), self.ruleset.numbers.know_potency);
-                    let chance = status::apply_chance_with(&self.dummy, &s.status_effect, potency, bonus);
-                    let source = self.hero().name.clone();
-                    let landed = status::try_inflict_with(&mut self.dummy, &s.status_effect, potency, bonus, Some(&mut self.rng), 1, s.status_magnitude, &source);
+                    // A4.2: the skill inflict as an EffectSpec, shown and rolled alike
+                    let spec = status::EffectSpec::inflict(&s.status_effect, potency, 1, s.status_magnitude, &self.hero().name);
+                    let chance = spec.chance(&self.dummy, bonus);
+                    let landed = status::apply_effect(&mut self.dummy, &spec, status::Timing::Next, bonus, Some(&mut self.rng));
                     detail += &format!(" • {} {} ({chance}%)", status::display_name(&s.status_effect), if landed { "next round" } else { "resisted" });
                 }
                 let (dmg, outcome, breakdown) = hit.as_ref().map(|h| (h.dmg, h.outcome, h.breakdown.clone())).unwrap_or((0, "STATUS", String::new()));
@@ -1033,7 +1069,15 @@ impl DojoSession {
                 let mitigation = skill::guard_mitigation(&s, &self.ruleset.numbers);
                 self.hero_mut().guard = mitigation;
                 let pct = (mitigation * 100.0).round() as i32;
-                self.log_event("DEFEND", &s.name, &format!("Guard -{pct}% until the next round • {ap_note}"), pct, "GUARD");
+                // AUDIT-12 (S1.2-S4): a multi-round guard queues the `guard` status for its later rounds, as in battle
+                let later = skill::guard_later_mitigation(&s, &self.ruleset.numbers);
+                let hero_name = self.hero().name.clone();
+                let more = if crate::command::queue_later_guard(self.hero_mut(), s.guard_rounds, later, &hero_name) {
+                    format!("; guard holds {} more round{}", s.guard_rounds - 1, if s.guard_rounds == 2 { "" } else { "s" })
+                } else {
+                    String::new()
+                };
+                self.log_event("DEFEND", &s.name, &format!("Guard -{pct}% until the next round{more} • {ap_note}"), pct, "GUARD");
                 self.fx("glow", true, &format!("{} -{pct}%", s.name), Tone::Info);
             }
             "FOCUS" => {
@@ -1155,7 +1199,9 @@ impl DojoSession {
                 notes.push(format!("{} {}", c.name, status::display_name(&st).to_lowercase()));
             }
         }
-        self.hero_mut().guard = 0.0;
+        // AUDIT-12: the skill's guard drops; a queued later-round `guard` status that just took effect holds instead
+        let held = status::guard_status_mitigation(self.hero());
+        self.hero_mut().guard = held;
         // RULESET1_INTENT RS2: the Rest gain of the round that ended (`rest_ap` round_end, CLN-45); RULESET1 P3: the
         // bars refill (poise)
         let mut extra = String::new();
@@ -1210,22 +1256,31 @@ impl DojoSession {
         self.changed();
         let dummy_name = self.dummy.name.clone();
         match item.consumable_type.as_str() {
+            // A1.2-K3 (A1 section 1): the item pipelines and the empower grant, as in battle
             "HEALTH_POTION" => {
                 let before = self.hero().hp;
-                self.hero_mut().heal(item.heal);
+                self.hero_mut().heal(rpgkit_rules::damage::item_heal(item.heal));
                 let healed = self.hero().hp - before;
                 self.log_event("BUFF", &item.name, &format!("Restored {healed} HP"), healed, &format!("+{healed} HP"));
                 self.fx("glow", true, &format!("+{healed} HP"), Tone::Good);
             }
             "THROWABLE_BOMB" => {
-                let dealt = self.dummy.take_damage(item.damage, false);
+                // with item mitigation the dummy's guard and armour run in the pipeline (no cover here); without it the
+                // flat damage meets the dummy's guard as before
+                let dealt = if self.ruleset.numbers.item_mitigation {
+                    let mitigation = Some((self.dummy.guard, rpgkit_rules::damage::armor_rating(&self.dummy)));
+                    let amount = rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit { splash: 1.0, mitigation });
+                    self.dummy.take_damage(amount, true)
+                } else {
+                    self.dummy.take_damage(rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit::default()), false)
+                };
                 let outcome = if self.dummy.is_alive() { "HIT" } else { "DEFEATED" };
                 self.log_action("ATTACK", &item.name, "Explosive damage", dealt, outcome, "", &dummy_name, false);
                 self.fx("strike", true, &format!("-{dealt}"), Tone::Warn);
             }
             _ => {
-                let pct = (item.buff_pct * 100.0).round() as i32;
-                self.hero_mut().apply_attack_boost(1.0 + item.buff_pct, item.duration);
+                let (status_id, pct) = crate::command::item_grant(&item);
+                status::grant_now(self.hero_mut(), status_id, item.duration.max(1), pct, &format!("item:{}", item.id));
                 self.log_event("BUFF", &item.name, &format!("+{pct}% ATK for {} rounds", item.duration), pct, &format!("BUFF +{pct}%"));
                 self.fx("glow", true, "ELIXIR BOOST", Tone::Gold);
             }

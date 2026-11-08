@@ -865,7 +865,6 @@
 			"loadout": [
 				"body_blow",
 				"lunge",
-				"sweep_kick",
 				"hamstring",
 				"haymaker"
 			],
@@ -1156,7 +1155,7 @@
 			"stat_mode": "derived",
 			"ap": 0,
 			"power": 0,
-			"armor": 25,
+			"armor": 40,
 			"poise": -1,
 			"art": "",
 			"palette": "",
@@ -1277,7 +1276,7 @@
 			"stat_mode": "derived",
 			"ap": 0,
 			"power": 0,
-			"armor": 35,
+			"armor": 15,
 			"poise": -1,
 			"art": "",
 			"palette": "",
@@ -1330,7 +1329,7 @@
 			"side": "enemy",
 			"description": "Captain (test) for the timeline test kit.",
 			"class_id": "tl_drill",
-			"level": 1,
+			"level": 2,
 			"tier": "boss",
 			"spend": {},
 			"stat_mode": "derived",
@@ -1552,7 +1551,6 @@
 				],
 				"order": {
 					"assault": [
-						"tripwire_snare",
 						"poachers_quarrel",
 						"strike"
 					],
@@ -1560,7 +1558,10 @@
 						"active_guard"
 					],
 					"maneuver": [
-						"flank_cut"
+						"disengage_step"
+					],
+					"field": [
+						"tripwire_snare"
 					]
 				},
 				"passive": [
@@ -1835,15 +1836,16 @@
 					"boning_knife_flurry"
 				],
 				"order": {
-					"assault": [
-						"scalding_grease_pot"
-					],
+					"assault": [],
 					"maneuver": [
 						"boning_knife_flurry",
 						"flank_cut"
 					],
 					"guard": [
 						"active_guard"
+					],
+					"field": [
+						"scalding_grease_pot"
 					]
 				}
 			},
@@ -2239,7 +2241,9 @@
 				],
 				"order": {
 					"assault": [
-						"ossified_spine_volley",
+						"ossified_spine_volley"
+					],
+					"guard": [
 						"tendril_flail"
 					]
 				}
@@ -2370,9 +2374,6 @@
 					],
 					"guard": [
 						"active_guard"
-					],
-					"maneuver": [
-						"flank_cut"
 					]
 				},
 				"passive": [
@@ -2426,7 +2427,8 @@
 				"pommel_strike",
 				"intercepting_hook",
 				"billhook_sunder",
-				"seventh_ward_bulwark"
+				"seventh_ward_bulwark",
+				"brace"
 			],
 			"loadout": [],
 			"deck": {
@@ -2442,9 +2444,6 @@
 					"guard": [
 						"intercepting_hook",
 						"active_guard"
-					],
-					"maneuver": [
-						"flank_cut"
 					]
 				},
 				"passive": [
@@ -2515,9 +2514,6 @@
 					],
 					"guard": [
 						"active_guard"
-					],
-					"maneuver": [
-						"flank_cut"
 					]
 				},
 				"passive": [
@@ -2580,12 +2576,14 @@
 				],
 				"order": {
 					"assault": [
-						"phosphorus_pot",
 						"magnesium_flash_bomb",
 						"strike"
 					],
 					"guard": [
 						"active_guard"
+					],
+					"field": [
+						"phosphorus_pot"
 					]
 				},
 				"passive": [
@@ -2713,11 +2711,13 @@
 				],
 				"order": {
 					"assault": [
-						"pyre_nozzle_sweep",
 						"brand_of_the_heretic"
 					],
 					"guard": [
 						"active_guard"
+					],
+					"field": [
+						"pyre_nozzle_sweep"
 					]
 				}
 			},

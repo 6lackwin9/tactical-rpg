@@ -10,3 +10,4 @@ Owner: Design thread. Firm rules: `docs/decisions/`. Format: preference (date, s
 - Bosses, elites and reckless units ignore morale; ending a fight by routing the stragglers is welcome, and enemies who flee count against their group (2026-10-18 09:02-09:20, MORALE1).
 - Hide engine detail from the player (AI behaviour text, multipliers, coordinates) to cut information bloat (2026-10-18 10:05, combat UI feedback).
 - Light-touch battle tuning: the fewest data changes that hit the bands (2026-10-18, DR1/DR2).
+- Three-stage engine & game trajectory: (1) build engine/kit capabilities and finalize mechanics across `R1–R4` headless milestones first; (2) in `Post-R4`, focus on streamlining the spec-driven interactive agent workflow for authoring story, polishing player-facing UI, and shipping web builds to itch.io; (3) expand `engine/` scope organically as we explore new game genres via new `kits/<genre>/` and `games/<id>/` packages (2026-11-08, roadmap & engine vision).

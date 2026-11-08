@@ -495,11 +495,16 @@ impl Dojo {
             let label = format!("{}: {}", key.replace('_', " "), worn.as_ref().map(|w| w.name.clone()).unwrap_or_else(|| "empty".into()));
             // While a stash item is dragged, the slots it fits are named in gold.
             let fits = dragging.as_deref().and_then(|d| d.strip_prefix("stash.")).is_some_and(|id| self.s.eligible(key).iter().any(|e| e == id));
+            // R1-BAL (FB-80): the worn item's wield penalty (untrained or a stat deficit), as on the party screen
+            let badge = worn.as_ref().and_then(|w| crate::party::wield_badge(Some(self.s.hero()), w));
             let card = match &worn {
-                Some(w) => tip(&w.name, "Click to unequip, or drag it to the stash."),
+                Some(w) => tip(&w.name, &format!("Click to unequip, or drag it to the stash.{}", badge.as_ref().map(|(_, n)| format!(" {n}")).unwrap_or_default())),
                 None => tip(key, "Drag an item from the stash here."),
             };
             ui.row(&format!("dojo.slot.{key}"), Rect::new(b.x + 1, y, b.w - 2, 12), &label, if fits { th().gold } else if worn.is_some() { th().text } else { th().dim }, worn.as_ref().map(|_| DAct::Unequip(key)), false, card);
+            if let Some((text, _)) = &badge {
+                ui.p.text_right((b.x + b.w - 4) as f32, y as f32 + 1.0, text, SMALL, th().foe);
+            }
             if worn.is_some() {
                 ui.draggable(format!("equip.{key}"));
             }
@@ -698,10 +703,22 @@ impl Dojo {
         let mut y = b.y + 2 - off;
         let setup = &self.s.planner;
         let mut x = x0;
+        // A4.2-K1b: with an opener picked (field_intent), only its own rows are open; the others are locked
+        let variants = self.s.plan_variants();
         for (i, it) in intents.iter().enumerate() {
             let name = it.label(&self.s.cat);
             let w = ui.p.text_w(&name, SMALL).ceil() as i32 + 8;
-            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), &name, DAct::PlanIntent(i), true, *it == setup.intent, SMALL, tip(&name, "Plan the hero's round with this intent (the target is the dummy, or the hero for Guard and Support)."));
+            let open = variants.get(i).is_none_or(|v| v.1);
+            let mut card = tip(&name, "Plan the hero's round with this intent (the target is the dummy, the dummy's tile for Field, or the hero for Guard and Support).");
+            if let Some(sk) = setup.opener.as_deref().and_then(|id| self.s.cat.skill(id)) {
+                if let Some(line) = crate::intent_text::variant_line(&self.s.ruleset, sk, *it) {
+                    card.push((line, th().text));
+                }
+                if !open {
+                    card.push((format!("{} has no {name} row.", sk.name), th().foe));
+                }
+            }
+            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), &name, DAct::PlanIntent(i), open, *it == setup.intent, SMALL, card);
             x += w + 2;
         }
         y += 13;
@@ -1191,6 +1208,41 @@ mod tests {
         assert!(!dojo.s.hero().deck.follow_ups.contains_key(&op), "Use the order empties it");
     }
 
+    /// R1-BAL (FB-80): a worn item the hero wears under a wield penalty (here a stat deficit, on a test-only copy of a
+    /// weapon that asks for more than any stat holds) gets the party screen's red "x0.75"-style badge right-aligned in
+    /// its gear slot row and the penalty sentence on its card; a copy with no requirement and no weapon type shows none.
+    #[test]
+    fn a_penalized_worn_item_shows_the_wield_badge_in_the_gear_slot() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut weapons: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| item_fits_slot(i, "main_hand") && i.item_type == "WEAPON").map(|(id, _)| id.clone()).collect();
+        weapons.sort();
+        let base = cx.data.cat.items[&weapons[0]].clone();
+        for penalized in [true, false] {
+            let mut dojo = Dojo::new(&cx);
+            let mut item = base.clone();
+            item.required_stats.clear();
+            if penalized {
+                item.required_stats.insert(STATS[0].to_string(), 999);
+            } else {
+                item.weapon_type.clear();
+            }
+            let cat = dojo.s.cat.clone();
+            let a = dojo.s.active;
+            dojo.s.heroes[a].inventory.equip(emberwake_rules::gear::Equipment::new(&item), emberwake_rules::gear::Slot::MainHand);
+            dojo.s.heroes[a].sync_from_stats_and_gear(&cat);
+            let pen = emberwake_rules::gear::Equipment::new(&item).wield_penalty(&dojo.s.hero().stats);
+            assert_eq!(pen.untrained || pen.deficit > 0, penalized, "the fixture's penalty");
+            let badge = format!("x{:.2}", pen.factor());
+            let recs = crate::hud::hud_tests::frame(&mut dojo, &mut cx, &mut crate::hud::hud_tests::gfx(), 1.0);
+            let slot = dojo.w.iter().find(|w| w.id == "dojo.slot.main_hand").expect("the main hand slot row");
+            let card: String = slot.tip.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join(" ");
+            let r = slot.rect;
+            let drawn = recs.iter().find(|t| t.text == badge && t.y >= r.y as f32 && t.y < (r.y + r.h) as f32 && t.x + t.w <= (r.x + r.w) as f32 && t.x > (r.x + r.w / 2) as f32);
+            assert_eq!(drawn.is_some(), penalized, "the badge {badge} in the slot row {r:?}");
+            assert_eq!(card.contains("Wield penalty"), penalized, "the card: {card}");
+        }
+    }
+
     /// AUDIT-05 (OFFHAND1): the Deck window lists the hero's worn items' skills read-only (no slot action) after the
     /// owned list. The skill effect is test-only, on this test's own data.
     #[test]
@@ -1275,6 +1327,44 @@ mod tests {
         }
         pick(&mut cx, &mut dojo, CLASSIC);
         assert!(dojo.s.plan_intents().is_empty() && dojo.state(&cx).get("plan").is_none());
+    }
+
+    /// A4.2-K1b (row W2-4: the Dojo Planner shows only the valid IR21 intent variants of the selected skill): under
+    /// `field_intent` the planner offers Field; with a dual opener (a thrown BURST built here on the Dojo's catalog) only
+    /// its rows are open and the others locked, switching between them keeps the opener, and the variant previews are one
+    /// plan per row, each opening with it. Without an opener every intent is open.
+    #[test]
+    fn a_dual_opener_opens_only_its_rows() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut dojo = Dojo::new(&cx);
+        pick(&mut cx, &mut dojo, TIMELINE);
+        assert!(dojo.s.plan_intents().contains(&RoundIntent::Field), "field_intent: the planner offers Field");
+        assert!(dojo.s.plan_variants().iter().all(|v| v.1), "no opener: every intent open");
+        dojo.s.set_plan_intent(RoundIntent::Assault);
+        let id = dojo.s.plan_openers().into_iter().map(|o| o.0).find(|id| dojo.s.cat.skill(id).is_some_and(|s| s.kind == "ATTACK" && !emberwake_battle::skill::is_area(s) && s.position.is_none() && s.dash_tiles == 0 && s.hazard.is_none())).expect("a plain attack opener");
+        {
+            let cat = Arc::make_mut(&mut dojo.s.cat);
+            let k = cat.skills.iter().position(|s| s.id == id).unwrap();
+            let sk = &mut cat.skills[k];
+            sk.area = "BURST".into();
+            sk.reach_min = 2;
+            sk.reach_max = 3;
+            sk.power_mult = sk.power_mult.max(0.5);
+        }
+        dojo.s.planner.opener = Some(id.clone());
+        let open: Vec<RoundIntent> = dojo.s.plan_variants().into_iter().filter(|v| v.1).map(|v| v.0).collect();
+        assert_eq!(open, [RoundIntent::Assault, RoundIntent::Field], "only the opener's rows (in the planner's order)");
+        let views = dojo.s.plans_by_intent();
+        assert_eq!(views.iter().map(|v| v.intent.clone()).collect::<Vec<_>>(), ["Assault", "Field"], "one variant preview per row");
+        dojo.s.set_plan_intent(RoundIntent::Field);
+        assert_eq!(dojo.s.planner.opener.as_deref(), Some(id.as_str()), "switching to another row keeps the skill");
+        dojo.s.set_plan_intent(RoundIntent::Guard);
+        assert_eq!(dojo.s.planner.opener, None, "a row the skill lacks drops it");
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.s.planner.opener = Some(id);
+        dojo.s.planner.intent = RoundIntent::Field;
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(dojo.w.iter().any(|w| w.id == "dojo.plan.intent.field"), "a Field button");
     }
 
     /// RULESET1-G review: a change that logs nothing (the dummy's power) still moves the planner cache's key, and the

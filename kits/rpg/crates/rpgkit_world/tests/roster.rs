@@ -255,7 +255,7 @@ fn hero_ends_pair_the_fielded_members_with_the_allies() {
         fielded.push((m.id.clone(), f.pouch_unloaded));
     }
     let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", "fight"));
-    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: "w".into() }, party);
+    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, "w"), party);
     assert_eq!(s.w.allies.len(), 3, "two heroes and the guest");
     let (first, second) = (s.w.allies[0], s.w.allies[1]);
     s.w.units[first].hp = 0;
@@ -464,7 +464,7 @@ fn hp_after_full_brings_everyone_home_at_full() {
 fn fight_end_reads_the_session() {
     let d = data();
     let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", "fight"));
-    let s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: "w".into() }, Vec::new());
+    let s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, "w"), Vec::new());
     let f = FightEnd::of(&s, "w");
     assert_eq!((f.encounter.as_str(), f.world.as_str(), f.escape, f.outcome.clone()), (s.def.id.as_str(), "w", false, s.final_outcome()));
 }
@@ -758,7 +758,7 @@ fn a_fielded_hero_starts_in_its_default_intent() {
         party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
     }
     let def = battle::encounter_def(&d, "tw", d.resolve("tw", "encounters", "fight"));
-    let s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: "tw".into() }, party);
+    let s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, "tw"), party);
     let intents: Vec<Option<RoundIntent>> = s.w.allies[..2].iter().map(|&a| round_intent::intent_of(&s.w, a)).collect();
     assert_eq!(intents, [Some(RoundIntent::Guard), Some(RoundIntent::Support)]);
 }
@@ -773,7 +773,7 @@ fn fight_end_reads_then_from_the_session() {
     };
     for (enc, then) in [("winch", "capture"), ("winch_plain", "none"), ("fight", "")] {
         let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", enc));
-        let s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: "w".into() }, party("w"));
+        let s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, "w"), party("w"));
         assert_eq!(FightEnd::of(&s, "w").then, then, "{enc}");
     }
 }

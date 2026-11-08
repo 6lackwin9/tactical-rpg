@@ -80,7 +80,7 @@ fn a_fielded_characters_ai_role_and_default_intent_override_its_base_unit() {
         character("calm", "enemy", json!({"ai_role": "SUPPORT", "default_intent": "guard"})),
         character("plain_npc", "enemy", json!({}))
     ]));
-    let roster = WorldRoster { d: &d, world: "w".into() };
+    let roster = WorldRoster::new(&d, "w");
     let calm = roster.entry(&d.cat, "calm").expect("the entry");
     assert_eq!((calm.ai_role.as_str(), calm.default_intent.as_str()), ("SUPPORT", "guard"));
     assert_eq!(AiProfile::for_unit(&d.cat, &calm).role, Role::Support);

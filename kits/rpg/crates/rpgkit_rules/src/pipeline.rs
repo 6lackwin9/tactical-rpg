@@ -173,6 +173,12 @@ pub const DAMAGE: Pipeline = Pipeline { base_round: Some(MIN_POWER), finish_min:
 pub const STAGGER: Pipeline = Pipeline { base_round: None, finish_min: 0 };
 /// U4.2-S4: a heal (SupportRules.heal_amount): the heal base, the skill potency, one rounding, floor 0.
 pub const HEAL: Pipeline = Pipeline { base_round: None, finish_min: 0 };
+/// A2.2-S1 (FB-43, FB-56a): damage a unit takes with its guard applied (Combatant.take_damage, `mitigated` false and
+/// guard > 0): the amount, the guard as a mitigation ratio, one rounding, floor 1 (the floor only on this path).
+pub const TAKE_GUARDED: Pipeline = Pipeline { base_round: None, finish_min: 1 };
+/// A2.2-S1: an integer amount applied as it is (damage taken without a guard, the HP a heal adds): its one rounding
+/// keeps the integer exactly and there is no floor, so the value is the amount.
+pub const PASS: Pipeline = Pipeline { base_round: None, finish_min: i32::MIN };
 
 impl Pipeline {
     /// Runs `mods` (the value starts at 0).

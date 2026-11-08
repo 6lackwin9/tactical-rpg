@@ -100,8 +100,12 @@ pub(super) fn pick_json(w: &World, p: &rip::Pick) -> Value {
 }
 
 /// INPUT1 GH2 b: the intents a round target of this kind tries, in order (an enemy: Assault, else Maneuver; an ally:
-/// Support; the unit itself: Guard, else Support; a tile: Guard, else Assault, else Maneuver).
+/// Support; the unit itself: Guard, else Support; a tile: Guard, else Assault, else Maneuver). A4.2-K1b (IR19): under
+/// `field_intent` a tile tries Field first (Assault takes no tile there).
 fn intents_for(w: &World, h: usize, at: RoundTarget) -> &'static [RoundIntent] {
+    if matches!(at, RoundTarget::Cell(_)) && ri::field_rows(w) {
+        return &[RoundIntent::Field, RoundIntent::Guard, RoundIntent::Maneuver];
+    }
     match at {
         RoundTarget::Unit(t) if w.foes_of(h).contains(&t) => &[RoundIntent::Assault, RoundIntent::Maneuver],
         RoundTarget::Unit(_) => &[RoundIntent::Support],
@@ -112,7 +116,7 @@ fn intents_for(w: &World, h: usize, at: RoundTarget) -> &'static [RoundIntent] {
 
 /// Whether `intent` on `at` plans a round for `h` (GH2 b: "when it can act on that target"), on copies.
 fn plans_on(s: &Session, h: usize, intent: RoundIntent, at: RoundTarget) -> bool {
-    if !s.w.ruleset.numbers.intents.iter().any(|i| i == intent.id()) || !ri::target_problem(&s.w, h, intent, at).is_empty() {
+    if !ri::listed(&s.w, intent) || !ri::target_problem(&s.w, h, intent, at).is_empty() {
         return false;
     }
     let mut w2 = s.w.clone();
@@ -150,11 +154,21 @@ pub(super) fn pick_detail(cat: &emberwake_data::Catalog, o: &rip::PickOption) ->
     if let Some(why) = &o.problem {
         return why.clone();
     }
-    let blocks = format!("{} block{}, {} AP", o.blocks, if o.blocks == 1 { "" } else { "s" }, o.ap);
+    with_intent(cat, o, format!("{} block{}, {} AP", o.blocks, if o.blocks == 1 { "" } else { "s" }, o.ap))
+}
+
+/// INTENT2-U (section 6 "Menu"): a live item cell's cost on its card, the kit's trial cost in the spec's order: "<ap> AP,
+/// <blocks> blocks; <Intent>".
+fn item_detail(cat: &emberwake_data::Catalog, o: &rip::PickOption) -> String {
+    with_intent(cat, o, format!("{} AP, {} block{}", o.ap, o.blocks, if o.blocks == 1 { "" } else { "s" }))
+}
+
+/// `cost` with the row's intent ("; <Intent>", a Maneuver row with its kind).
+fn with_intent(cat: &emberwake_data::Catalog, o: &rip::PickOption, cost: String) -> String {
     match (o.intent, o.kind) {
-        (Some(i @ RoundIntent::Maneuver), Some(k)) => format!("{blocks}; {} ({})", i.label(cat), kind_name(k)),
-        (Some(i), _) => format!("{blocks}; {}", i.label(cat)),
-        (None, _) => blocks,
+        (Some(i @ RoundIntent::Maneuver), Some(k)) => format!("{cost}; {} ({})", i.label(cat), kind_name(k)),
+        (Some(i), _) => format!("{cost}; {}", i.label(cat)),
+        (None, _) => cost,
     }
 }
 
@@ -634,6 +648,61 @@ impl BattleScreen {
         }
     }
 
+    /// Whether the selected hero is planning a Field round on a tile (the arrows aim it then).
+    pub(super) fn field_aiming(&self) -> bool {
+        let Some(s) = self.host.session.as_ref() else { return false };
+        let w = &s.w;
+        self.planning() && self.selected.is_some_and(|h| w.allies.contains(&h) && ri::intent_of(w, h) == Some(RoundIntent::Field) && matches!(w.round_states.get(&h).and_then(|r| r.target), Some(RoundTarget::Cell(_))))
+    }
+
+    /// A4.2-K1b (INTENT2 IR5, row W2-4 "Field ground-aimed with WASD/tile"): an arrow key moves the selected hero's Field
+    /// source one tile (the arrows: A and S already name Autoplay and the Self target here, so WASD stays the letters').
+    /// With no pick the round target moves (the ghost re-plans there); with picks they are taken up and made again on the
+    /// new source, refused (the round as it was) when they no longer fit there;
+    /// with none a tile where no Field round plans is refused too (the intent never changes under the arrows).
+    pub(super) fn field_nudge(&mut self, cx: &Cx, d: V2) {
+        let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) else { return };
+        let s = self.session();
+        let w = &s.w;
+        if !w.allies.contains(&h) || ri::intent_of(w, h) != Some(RoundIntent::Field) {
+            return;
+        }
+        let Some(RoundTarget::Cell(from)) = w.round_states.get(&h).and_then(|r| r.target) else { return };
+        let to = from + d;
+        let name = w.units[h].name.clone();
+        if !w.grid.is_valid(to) {
+            self.message = format!("{name}: the source stays inside the arena.");
+            return;
+        }
+        let picks = rip::picks_of(w, h);
+        if !picks.iter().any(|p| p.holds_target()) {
+            if !plans_on(s, h, RoundIntent::Field, RoundTarget::Cell(to)) {
+                self.message = format!("{name}: no Field round plans on {}, {}.", to.x, to.y);
+                return;
+            }
+            self.apply_target(cx, h, RoundTarget::Cell(to));
+            self.reghost_after(cx, h);
+            self.message = format!("{name}: Field source {}, {}.", to.x, to.y);
+            return;
+        }
+        // the held picks again on the new source, tried on copies first
+        let mut w2 = w.clone();
+        let mut p2 = rip::copy_plan(&s.plan);
+        let _ = rip::clear_picks(&mut w2, &mut p2, h);
+        if let Err(e) = rip::pick(&mut w2, &mut p2, h, RoundTarget::Cell(to), &picks).0 {
+            self.message = format!("{name}: the source can't move there: {e}");
+            return;
+        }
+        if self.send(cx, json!({"cmd": "clear", "unit": h}))["ok"] != json!(true) {
+            return;
+        }
+        for p in &picks {
+            let label = rip::pick_name(&self.session().w, p);
+            self.choose_pick(cx, h, RoundTarget::Cell(to), std::slice::from_ref(p), &label);
+        }
+        self.message = format!("{name}: Field source {}, {}.", to.x, to.y);
+    }
+
     /// IF7: undo (Z, a right click) takes `h`'s last pick back, Clear (`all`) every pick; with none left the hero shows
     /// its ghost again (GH2 a or b).
     pub(super) fn unpick(&mut self, cx: &Cx, h: usize, all: bool) {
@@ -925,7 +994,19 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
         None => o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "),
     };
     let mut tip: Tip = vec![(title, th().gold)];
-    if o.problem.is_none() {
+    // INTENT2-U (section 6 "Menu"): an item cell's card has its cost ("0 AP, <N> blocks": the kit's trial cost with the
+    // row's intent when live, the item's own cost when refused) and an area item's row variant
+    let item = match &o.picks[..] {
+        [rip::Pick::Item(id)] => emberwake_battle::command::pouch_item(w, h, id),
+        _ => None,
+    };
+    if let Some(item) = item {
+        let cost = if o.problem.is_none() { item_detail(&w.cat, o) } else { intent_text::item_cost_line(w, h, item, o.intent) };
+        tip.push((cost, th().gold));
+        if let Some(line) = o.intent.and_then(|i| intent_text::item_variant_line(w, item, i)) {
+            tip.push((line, o.intent.map_or(th().text, super::tips::intent_ring_color)));
+        }
+    } else if o.problem.is_none() {
         tip.push((pick_detail(&w.cat, o), th().gold));
     }
     if o.picks.iter().any(|p| matches!(p, rip::Pick::MoveHere(_) | rip::Pick::StepAfter(_))) && o.picks.len() == 1 {
@@ -933,10 +1014,16 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
     }
     if let Some(rip::Pick::Skill { skill, .. }) = o.picks.iter().find(|p| matches!(p, rip::Pick::Skill { .. })) {
         let sk = &w.cat.skills[*skill];
-        if let Some(d) = sk.raw.get("description").and_then(Value::as_str).filter(|d| !d.is_empty()) {
-            tip.push((d.to_string(), th().text));
+        // FB-107: the description as the battle's ruleset shows it (no stance tokens with stances off)
+        let d = emberwake_content::source::skill_description(&sk.raw, w.ruleset.stances());
+        if !d.is_empty() {
+            tip.push((d, th().text));
         }
         tip.push((intent_text::range_line(w, h, sk), th().dim));
+        // A4.2-K1b: a dual skill's row variant (Field bonus, or the Assault row's lock, splash and wind-up)
+        if let Some(line) = o.intent.and_then(|i| intent_text::variant_line(&w.ruleset, sk, i)) {
+            tip.push((line, o.intent.map_or(th().text, super::tips::intent_ring_color)));
+        }
         // INPUT2: the row's hotkey (the label's digit) is Shift with that digit
         if let Some(k) = rip::hotkey_skills(w, h).iter().position(|x| x == skill).filter(|k| *k < 9) {
             tip.push((format!("Key: Shift+{}", k + 1), th().dim));
@@ -949,6 +1036,41 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
         tip.push((format!("Changing loses {}.", o.drops.join(", ")), th().foe));
     }
     tip
+}
+
+/// A4.2-K1b (INTENT2 IR5, IR17, IR19): while an area row of the skill menu is hovered (rule `field_intent`), the impact
+/// tiles its pick would plan, with the row (Field: the source's marks with the Field bonus; Assault: the shape on the
+/// locked target's tile; Stand: the ring), on copies; empty for any other row or a refused pick. INTENT2-U: an area
+/// item's Field row (the tile command, `PlanStep::use_item_at`) previews its marks the same way.
+pub(super) fn area_preview(s: &Session, h: usize, at: RoundTarget, picks: &[rip::Pick]) -> Vec<(Vec<V2>, RoundIntent)> {
+    let w = &s.w;
+    let area = |p: &rip::Pick| match p {
+        rip::Pick::Skill { skill, .. } => emberwake_battle::skill::is_area(&w.cat.skills[*skill]),
+        rip::Pick::Item(id) => emberwake_battle::command::pouch_item(w, h, id).is_some_and(|i| emberwake_battle::command::item_area_on(w, i)),
+        _ => false,
+    };
+    if !ri::field_rows(w) || !picks.iter().any(area) {
+        return Vec::new();
+    }
+    let Ok((w2, p2)) = rip::preview_plan(w, &s.plan, h, at, picks) else { return Vec::new() };
+    let Some(intent) = ri::intent_of(&w2, h) else { return Vec::new() };
+    let skills: Vec<usize> = picks.iter().filter_map(|p| match p {
+        rip::Pick::Skill { skill, .. } => Some(*skill),
+        _ => None,
+    }).collect();
+    let items: Vec<&String> = picks.iter().filter_map(|p| match p {
+        rip::Pick::Item(id) => Some(id),
+        _ => None,
+    }).collect();
+    let picked = |e: &emberwake_battle::plan::PlanEntry| match &e.item {
+        Some(i) => items.contains(&&i.id),
+        None => skills.contains(&e.skill),
+    };
+    p2.entries_for(&w2, h)
+        .into_iter()
+        .filter(|e| picked(e) && !e.cells.is_empty())
+        .map(|e| (e.cells.clone(), if e.target.is_some() { RoundIntent::Assault } else { intent }))
+        .collect()
 }
 
 /// INPUT1 MR13: the open position tiles of a Maneuver Engage pick of `h` on the unit `at` (true: the preferred tier),

@@ -16,7 +16,8 @@ pub fn terrain_errors(e: &Dict) -> Vec<String> {
         errors.push(format!("Unknown terrain type '{id}'."));
         return errors;
     }
-    let walkable = terrain_walkable(&id);
+    // P1.2-S1: the row's `walkable`, else its missing-key fallback
+    let walkable = e.get("walkable").map_or_else(|| terrain_walkable(&id), json::to_bool);
     let cost = json::i(e, "move_cost", 1);
     if walkable && !(1..=3).contains(&cost) {
         errors.push("Move cost must be 1-3.".into());

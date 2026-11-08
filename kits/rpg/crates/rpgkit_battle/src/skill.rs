@@ -2,7 +2,7 @@
 //! skill_catalog.gd, scripts/content/skill_kinds.gd). Skills are referenced by their index in `Catalog::skills`.
 
 use crate::grid::{V2, DIRS};
-use rpgkit_data::{Catalog, Position, SkillDef};
+use rpgkit_data::{Affects, Catalog, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::unit::{skill_in_group, BASE_AP, REACH_WEAPON_REACH};
 use rpgkit_rules::{Stance, Unit};
@@ -64,7 +64,12 @@ pub enum Area {
     Plus,
     Burst,
     Line,
-    Sweep,
+    /// A3.2-S1 (A3.1, FB-57): the hollow ring of the 8 tiles around the user, self-anchored (IR21: Stand).
+    Ring,
+    /// A3.2-S1 (A3.1, FB-17): the 3-tile front arc toward the aim (IR21: Field and Assault).
+    Arc,
+    /// A3.2-K2 (IR6): the source, then the 3 tiles across one step on (defined now, built when a skill wants it).
+    Cone,
 }
 
 pub fn kind(s: &SkillDef) -> Kind {
@@ -76,7 +81,9 @@ pub fn area(s: &SkillDef) -> Area {
         "PLUS" => Area::Plus,
         "BURST" => Area::Burst,
         "LINE" => Area::Line,
-        "SWEEP" => Area::Sweep,
+        "RING" => Area::Ring,
+        "ARC" => Area::Arc,
+        "CONE" => Area::Cone,
         _ => Area::None,
     }
 }
@@ -190,17 +197,32 @@ pub fn deals_damage(s: &SkillDef) -> bool {
     kind(s) != Kind::Attack || s.power_mult > 0.0
 }
 
-/// S1.2-S4 (S1 section 3, FB-48): a Guard skill's guard fraction, for every round of its guard: its own `mitigation` (0 =
+/// S1.2-S4 (S1 section 3, FB-48): a Guard skill's guard fraction for the round it is used in: its own `mitigation` (0 =
 /// no guard, as riposte's third rank), or for a row without the key the ruleset's `guard_common_mitigation` (1-round)
-/// or `guard_multi_round_mitigation` (`guard_rounds` 2 or more). A row the content loader resolved always has the key
-/// (the schema default fills it), so the ruleset numbers reach only rows built without it.
+/// or `guard_multi_round_mitigation` (`guard_rounds` 2 or more). AUDIT-11: the content loader leaves the key off a
+/// DEFEND row that does not author it (`mitigation_authored`), so the ruleset numbers reach loaded rows too.
 pub fn guard_mitigation(s: &SkillDef, n: &ruleset::Numbers) -> f64 {
-    if s.raw.contains_key("mitigation") {
+    if mitigation_authored(s) {
         s.mitigation
     } else if s.guard_rounds >= 2 {
         n.guard_multi_round_mitigation
     } else {
         n.guard_common_mitigation
+    }
+}
+
+/// AUDIT-11: whether the skill row authors its own `mitigation` (a row the loader resolved keeps the key only then).
+pub fn mitigation_authored(s: &SkillDef) -> bool {
+    s.raw.contains_key("mitigation")
+}
+
+/// AUDIT-11 (S1.2-S4, FB-85): the fraction of the `guard` status a multi-round Guard skill queues for its Round 2+:
+/// its own `mitigation` when it authors one, else the ruleset's `guard_multi_round_mitigation`.
+pub fn guard_later_mitigation(s: &SkillDef, n: &ruleset::Numbers) -> f64 {
+    if mitigation_authored(s) {
+        s.mitigation
+    } else {
+        n.guard_multi_round_mitigation
     }
 }
 
@@ -262,7 +284,7 @@ pub fn reach_for(s: &SkillDef, c: &Unit) -> (i32, i32) {
 }
 
 /// RULESET1 K2: the band of `reach_for` under `rules`. With the rule `reach`, a melee attack without its own
-/// `reach_max` by a unit with a reach weapon uses (1, its melee reach); off-hand jabs, LINE and SWEEP stay (1, 1).
+/// `reach_max` by a unit with a reach weapon uses (1, its melee reach); off-hand jabs and LINE stay (1, 1).
 /// Without the rule (classic) it is `reach_for` exactly.
 pub fn reach_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> (i32, i32) {
     band(s, c, melee_band_max(c, rules))
@@ -276,15 +298,33 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
         return (1, 1);
     }
     let a = area(s);
-    let extra = if skill_in_group(s, "spell") && a != Area::Line && a != Area::Sweep { c.spell_reach_bonus() } else { 0 };
+    let extra = if skill_in_group(s, "spell") && !from_user(a) { c.spell_reach_bonus() } else { 0 };
     if s.reach_max > 0 {
         return (s.reach_min, s.reach_max + extra);
     }
-    if is_off_hand(s) || a == Area::Line || a == Area::Sweep {
+    if is_off_hand(s) || from_user(a) {
         return (1, 1);
     }
     let (lo, hi) = plain_band(c, melee);
     (lo, hi + extra)
+}
+
+/// The shapes drawn from the user's own tile (LINE, A3.2-S1's RING and ARC, A3.2-K2's CONE): no spell reach
+/// bonus, a (1, 1) band without their own reach.
+pub fn from_user(a: Area) -> bool {
+    matches!(a, Area::Line | Area::Ring | Area::Arc | Area::Cone)
+}
+
+/// INTENT2 IR7 (A4.2-K1b): the shapes whose band test counts a diagonal neighbour as distance 1 whatever
+/// `melee_diagonal` says, as planning swings them from any of the 8 neighbours (ARC, CONE; a LINE plans from an
+/// orthogonal neighbour).
+pub fn diagonal_shape(a: Area) -> bool {
+    matches!(a, Area::Arc | Area::Cone)
+}
+
+/// A3.2-K2 (IR6, IR7): the shapes that read a direction (from the user's tile toward the source tile).
+pub fn directed(a: Area) -> bool {
+    matches!(a, Area::Line | Area::Arc | Area::Cone)
 }
 
 /// The band of a plain attack (no own reach, no area, no spell bonus): ranged (2, max(3, range)), melee (1, `melee`).
@@ -300,7 +340,7 @@ fn plain_band(c: &Unit, melee: i32) -> (i32, i32) {
 /// `position`, else, in the transition until the data moves (INPUT1-MA), `flank` for one with `dash_tiles` above 0;
 /// None = it hits from where it stands.
 pub fn position_by(s: &SkillDef, rules: &Ruleset) -> Option<Position> {
-    if !rules.has(ruleset::ROUND_INTENT) || kind(s) != Kind::Attack || is_area(s) || intent_id(s) != "maneuver" {
+    if !rules.has(ruleset::ROUND_INTENT) || kind(s) != Kind::Attack || is_area(s) || !rows_by(s, rules).contains(&"maneuver") {
         return None;
     }
     s.position.or((s.dash_tiles > 0).then_some(Position::Flank))
@@ -317,12 +357,68 @@ pub fn dash_range_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> Option<i32> {
     })
 }
 
-/// RULESET1_INTENT IN4: a skill's intent id (its `round_intent`, else its kind's).
-fn intent_id(s: &SkillDef) -> &str {
-    if s.round_intent.is_empty() {
-        ruleset::kind_intent(&s.kind)
+/// RULESET1_INTENT IN4, A4.2-K1b (IR21): a skill's intent rows under `rules` (`rpgkit_rules::intent::allowed`: the
+/// derived rows under `field_intent`, else its `round_intent` or its kind's), so `position_by` reads the derived
+/// Maneuver of a gap-close attack (A4_EFFECTS section 2).
+fn rows_by(s: &SkillDef, rules: &Ruleset) -> Vec<&'static str> {
+    rpgkit_rules::intent::allowed(rules, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent)
+}
+
+/// A4.2-K1b (A4_EFFECTS section 2, IR20 table): the Field row's `area` bonus sizes: LINE 3 to 4 long, ARC 3 to 5 across.
+pub const FIELD_LINE_LENGTH: i32 = 4;
+pub const FIELD_ARC_WIDTH: i32 = 5;
+/// A4.2-K1b (IR20 table, FB-120): the Field row's `power` bonus, the factor on the skill's power.
+pub const FIELD_POWER_MULT: f64 = 1.25;
+
+/// A4.2-K1b (FB-120): the factor a Field row's hits take: `FIELD_POWER_MULT` with the derived `power` bonus, else 1.
+pub fn field_power(s: &SkillDef) -> f64 {
+    if field_bonus(s) == Some(rpgkit_rules::intent::FieldBonus::Power) {
+        FIELD_POWER_MULT
     } else {
-        &s.round_intent
+        1.0
+    }
+}
+
+/// A4.2-K1b (IR21): the derived Field bonus of `s` (None: IR21 gives it no Field row).
+pub fn field_bonus(s: &SkillDef) -> Option<rpgkit_rules::intent::FieldBonus> {
+    rpgkit_rules::intent::field_bonus(&rpgkit_rules::intent::IntentInput::of_def(s))
+}
+
+/// A4.2-K1b (IR21 `reach`): the band of `s`'s Field row: `reach_by`, its far edge one more for a throw with the `reach`
+/// bonus.
+pub fn field_reach(s: &SkillDef, c: &Unit, rules: &Ruleset) -> (i32, i32) {
+    let (lo, hi) = reach_by(s, c, rules);
+    if field_bonus(s) == Some(rpgkit_rules::intent::FieldBonus::Reach) {
+        (lo, hi + 1)
+    } else {
+        (lo, hi)
+    }
+}
+
+/// A4.2-K1b (IR5, IR21 `area`): the tiles `s`'s Field row hits from source `cell`, cast from `from`: the authored shape,
+/// one size up with the `area` bonus (LINE 4 long, ARC 5 across; on the exact diagonal the ARC's L has arms of 2).
+pub fn field_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
+    if field_bonus(s) != Some(rpgkit_rules::intent::FieldBonus::Area) {
+        return area_cells(s, from, cell);
+    }
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    match area(s) {
+        Area::Line => (0..FIELD_LINE_LENGTH).map(|i| cell + d * i).collect(),
+        Area::Arc => {
+            let arm = FIELD_ARC_WIDTH / 2;
+            if d.x != 0 && d.y != 0 {
+                let mut out: Vec<V2> = (1..=arm).rev().map(|i| cell - V2::new(0, d.y) * i).collect();
+                out.push(cell);
+                out.extend((1..=arm).map(|i| cell - V2::new(d.x, 0) * i));
+                return out;
+            }
+            let across = V2::new(d.y, d.x);
+            (-arm..=arm).map(|i| cell + across * i).collect()
+        }
+        _ => area_cells(s, from, cell),
     }
 }
 
@@ -369,7 +465,13 @@ pub fn threat_reach(c: &Unit, rules: &Ruleset) -> i32 {
 
 /// Tiles an area attack aimed at `cell` hits, cast from `from`.
 pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
-    match area(s) {
+    shape_cells(area(s), from, cell)
+}
+
+/// The tiles shape `a` covers aimed at `cell` from `from` (`area_cells`; A4.2-K1b: a shaped Assault row re-reads them
+/// at its impact from where its target stands then).
+pub fn shape_cells(a: Area, from: V2, cell: V2) -> Vec<V2> {
+    match a {
         Area::Plus => vec![cell, cell + V2::new(1, 0), cell + V2::new(-1, 0), cell + V2::new(0, 1), cell + V2::new(0, -1)],
         Area::Burst => {
             let mut out = Vec::new();
@@ -380,15 +482,98 @@ pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
             }
             out
         }
-        Area::Line => {
-            let dir = cell - from;
-            (1..4).map(|i| from + dir * i).collect()
-        }
-        Area::Sweep => {
-            let q = V2::new((cell.x - from.x).signum(), (cell.y - from.y).signum());
-            vec![from + V2::new(q.x, 0), from + q, from + V2::new(0, q.y)]
-        }
+        Area::Line => line_cells(from, cell),
+        Area::Ring => ring_cells(from),
+        Area::Arc => arc_cells(from, cell),
+        Area::Cone => cone_cells(from, cell),
         Area::None => vec![cell],
+    }
+}
+
+/// A3.2-S1 RING: the 8 tiles around `from` (row by row), never `from` itself.
+pub fn ring_cells(from: V2) -> Vec<V2> {
+    (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| V2::new(dx, dy))).filter(|d| *d != V2::new(0, 0)).map(|d| from + d).collect()
+}
+
+/// A3.2-K2 (INTENT2 IR7): the direction of `d` (source minus the user's tile), snapped: |dx| > |dy| left or right,
+/// |dy| > |dx| up or down, |dx| = |dy| the exact diagonal; (0, 0) for no offset (a directed shape is then refused).
+pub fn snap(d: V2) -> V2 {
+    let (ax, ay) = (d.x.abs(), d.y.abs());
+    if ax > ay {
+        V2::new(d.x.signum(), 0)
+    } else if ay > ax {
+        V2::new(0, d.y.signum())
+    } else {
+        V2::new(d.x.signum(), d.y.signum())
+    }
+}
+
+/// A3.2-K2 (IR6) LINE: 3 tiles from the source `cell` onward along the snapped direction from `from`. Empty when
+/// `cell` is `from`. An adjacent source gives the 3 tiles from the neighbour on, as before K2.
+pub fn line_cells(from: V2, cell: V2) -> Vec<V2> {
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    (0..3).map(|i| cell + d * i).collect()
+}
+
+/// A3.2-S1 / A3.2-K2 (IR6) ARC (base size 3), drawn on the source `cell` toward the snapped direction from `from`:
+/// straight, the source and its two neighbours across the direction; on the exact diagonal, the L with the source as
+/// the corner and its arms back toward the user's row and column (an adjacent diagonal source: the L of tiles around the corner).
+/// Empty when `cell` is `from` (no direction). The hazard shape ARC uses it too (`ground::cells`, FB-106).
+pub fn arc_cells(from: V2, cell: V2) -> Vec<V2> {
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    if d.x != 0 && d.y != 0 {
+        return vec![cell - V2::new(0, d.y), cell, cell - V2::new(d.x, 0)];
+    }
+    let across = V2::new(d.y, d.x);
+    vec![cell - across, cell, cell + across]
+}
+
+/// A3.2-K2 (IR6) CONE: the source `cell`, then the 3 tiles across one step on along the snapped direction; on the
+/// exact diagonal, the source and its 3 neighbours away from the user. Empty when `cell` is `from`.
+pub fn cone_cells(from: V2, cell: V2) -> Vec<V2> {
+    let d = snap(cell - from);
+    if d == V2::new(0, 0) {
+        return Vec::new();
+    }
+    if d.x != 0 && d.y != 0 {
+        return vec![cell, cell + V2::new(d.x, 0), cell + d, cell + V2::new(0, d.y)];
+    }
+    let (on, across) = (cell + d, V2::new(d.y, d.x));
+    vec![cell, on - across, on, on + across]
+}
+
+/// A3.2-K2 (INTENT2 IR9, A3.1): the units an area of `s` hits in a round of row `row` (None: no round intents, the
+/// classic battle). The skill's own `affects` wins; else a skill that leaves a hazard hits all (its tiles are marked,
+/// as a Field row's); else by row: Assault and Stand (`Guard`) hit enemies, Support allies, any other row (Field,
+/// Maneuver) and the classic battle all, as before K2.
+pub fn affects_by(s: &SkillDef, row: Option<crate::round_intent::RoundIntent>) -> Affects {
+    use crate::round_intent::RoundIntent;
+    if let Some(a) = s.affects {
+        return a;
+    }
+    if crate::ground::Place::of_skill(s).is_some() {
+        return Affects::All;
+    }
+    match row {
+        Some(RoundIntent::Assault | RoundIntent::Guard) => Affects::Enemies,
+        Some(RoundIntent::Support) => Affects::Allies,
+        _ => Affects::All,
+    }
+}
+
+/// A3.2-K2 (IR9): whether an area under `affects` hits a unit that is (`friend`) or is not one of the user's friends;
+/// the user itself is never hit (callers skip it).
+pub fn affects_unit(affects: Affects, friend: bool) -> bool {
+    match affects {
+        Affects::All => true,
+        Affects::Enemies => !friend,
+        Affects::Allies => friend,
     }
 }
 
@@ -496,16 +681,19 @@ impl<'a> Book<'a> {
         self.available(Kind::Support, cap, c).into_iter().filter(|&i| cleanses(self.get(i)) && !heals(self.get(i))).collect()
     }
 
-    pub fn granting(&self, k: Kind, status: &str, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
-        self.available(k, cap, c).into_iter().filter(|&i| self.get(i).grant_status == status && !heals(self.get(i))).collect()
+    /// The available `k` skills whose granted status passes `grants` (I1.2-S1: a status behaviour predicate), no heals.
+    pub fn granting(&self, k: Kind, grants: fn(&str) -> bool, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
+        self.available(k, cap, c).into_iter().filter(|&i| grants(&self.get(i).grant_status) && !heals(self.get(i))).collect()
     }
 
-    pub fn ally_buffs(&self, except: &str, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
+    /// The available Support skills granting a status that does not pass `except` (I1.2-S1: a behaviour predicate), no
+    /// heals.
+    pub fn ally_buffs(&self, except: fn(&str) -> bool, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {
         self.available(Kind::Support, cap, c)
             .into_iter()
             .filter(|&i| {
                 let s = self.get(i);
-                !s.grant_status.is_empty() && s.grant_status != except && !heals(s)
+                !s.grant_status.is_empty() && !except(&s.grant_status) && !heals(s)
             })
             .collect()
     }

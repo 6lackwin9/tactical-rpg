@@ -230,7 +230,12 @@ pub fn hold_defend(w: &mut World, c: UnitId, mitigation: f64, block: i32) {
 /// S1.2-S4: `c`'s guard ends (a Poise break, a stun, the `end_guard` effect): the held guard and the `guard` status instance
 /// (active and queued) go and this block's guard drops to 0. True when it held one.
 pub fn end_guard(w: &mut World, c: UnitId) -> bool {
-    let u = &mut w.units[c];
+    end_unit_guard(&mut w.units[c])
+}
+
+/// `end_guard` on a bare unit (the Dojo's Poise break, AUDIT-12 / FB-94): the held guard, the `guard` status instance
+/// (active and queued) and the current guard go. True when it held one.
+pub fn end_unit_guard(u: &mut rpgkit_rules::unit::Unit) -> bool {
     let had = u.held_guard.take().is_some() | status::remove(u, status::GUARD);
     u.guard = 0.0;
     had
@@ -690,6 +695,27 @@ pub(crate) fn line(w: &World, h: &Holder, what: &str) -> String {
     format!("[{tag}] {}'s {}: {what}", w.units[h.unit].name, h.source)
 }
 
+/// A4.2 (C08): a trigger effect's status as an EffectSpec and its timing, `source` the holder's name. `grant`: never
+/// rolled, lands now, `rounds` (default 1) at least 1 and a negative value the whole battle (`BATTLE_ROUNDS`).
+/// `inflict`: rolled when its row is `resistable` (`potency` default 100, `rounds` default 1), lands next round. None for
+/// another effect type or an empty `status`.
+pub fn effect_of(e: &Obj, source: &str) -> Option<(status::EffectSpec, status::Timing)> {
+    let st = value::string(e, "status", "");
+    if st.is_empty() {
+        return None;
+    }
+    let magnitude = value::int(e, "magnitude", 0);
+    match value::string(e, "type", "").as_str() {
+        "grant" => {
+            let rounds = value::int(e, "rounds", 1);
+            let rounds = if rounds < 0 { BATTLE_ROUNDS } else { rounds.max(1) };
+            Some((status::EffectSpec::grant(&st, rounds, magnitude, source), status::Timing::Now))
+        }
+        "inflict" => Some((status::EffectSpec::inflict(&st, value::int(e, "potency", 100), value::int(e, "rounds", 1), magnitude, source), status::Timing::Next)),
+        _ => None,
+    }
+}
+
 /// 8.2: runs `effects` of the holder `h` for `ev` in list order (a `redirect` outside `ally_hit` does nothing). One log
 /// line per effect that did something. A `meter` effect (and a meter rule's `meter_set`, UM5) moves `to`'s meter
 /// (`meter::from_effect`, its band and rule lines follow); with `rules` false (a meter rule's own effects) it crosses no
@@ -719,14 +745,10 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 format!("{name} gains {} AP ({}/{})", u.ap - before, u.ap, u.max_ap)
             }
             "grant" => {
-                let st = value::string(e, "status", "");
-                if st.is_empty() {
-                    continue;
-                }
-                let rounds = value::int(e, "rounds", 1);
-                let rounds = if rounds < 0 { BATTLE_ROUNDS } else { rounds.max(1) };
                 let src = w.units[h.unit].name.clone();
-                status::grant_now(&mut w.units[to], &st, rounds, value::int(e, "magnitude", 0), &src);
+                let Some((spec, timing)) = effect_of(e, &src) else { continue };
+                let st = spec.status_id.clone();
+                status::apply_effect(&mut w.units[to], &spec, timing, 0.0, None);
                 let until = value::string(e, "until", "") == "guard_end";
                 if until {
                     res.triggers.until_guard.push((to, st.clone()));
@@ -734,12 +756,10 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 format!("{name} gains {}{}", status::display_name(&st), if until { " while guarding" } else { "" })
             }
             "inflict" => {
-                let st = value::string(e, "status", "");
-                if st.is_empty() {
-                    continue;
-                }
                 let src = w.units[h.unit].name.clone();
-                let ok = status::try_inflict(&mut w.units[to], &st, value::int(e, "potency", 100), Some(&mut res.rng), value::int(e, "rounds", 1), value::int(e, "magnitude", 0), &src);
+                let Some((spec, timing)) = effect_of(e, &src) else { continue };
+                let st = spec.status_id.clone();
+                let ok = status::apply_effect(&mut w.units[to], &spec, timing, 0.0, Some(&mut res.rng));
                 format!("{} {}", if ok { "inflicts" } else { "resisted" }, status::display_name(&st)) + &format!(" on {name}")
             }
             "guard" => {

@@ -12,9 +12,12 @@ use indexmap::IndexMap;
 pub use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for};
 use serde_json::Value;
 
-pub const GOLD_MAX: i64 = 9_999_999;
-pub const SUPPLIES_MAX: i64 = 99;
-pub const SUPPLIES_START: i64 = 10;
+pub use rpgkit_content::source::PurseCaps;
+/// The default purse gold cap (E2.2-S1: a game's `purse_gold_cap` replaces it; read `PartyState::purse`).
+pub const GOLD_MAX: i64 = PurseCaps::PURSE_GOLD_CAP;
+/// The default supply cap (E2.2-S1: a game's `supplies_max` replaces it; read `PartyState::purse`).
+pub const SUPPLIES_MAX: i64 = PurseCaps::SUPPLIES_MAX;
+pub const SUPPLIES_START: i64 = rpgkit_content::source::SUPPLIES_START;
 pub const SEED_MAX: i64 = 2_147_483_647;
 pub const POUCH_MAX: usize = 3;
 pub const NO_POSITION: (i64, i64) = (-1, -1);
@@ -25,6 +28,14 @@ pub const EXPLORE_KEYS: [&str; 5] = ["steps", "next_at", "loc_steps", "last_safe
 pub const LEADER_KEY: &str = "leader";
 pub const AUTO_IDS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
 pub const DEFAULT_TACTIC: &str = "balanced";
+/// A1.2-K3 (INTENT2-K3): the copies one pouch stack of catalog item `item` holds: `min(5, max_stack)`, at least 1
+/// (`ItemDef::stack_limit`; 1 for an unknown item).
+pub fn stack_limit(d: &Data, item: &str) -> i64 {
+    d.cat.items.get(item).map_or(1, |i| i.stack_limit() as i64)
+}
+
+/// A1.2-K3 (INTENT2-K3): the saved member key of the pouch's packed targets (`UnitState::pouch_packed`).
+pub const POUCH_PACKED_KEY: &str = "pouch_packed";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -61,6 +72,10 @@ pub struct UnitState {
     /// ROSTER1 W1, 11.4: the member's conditions (`rpgkit_data::MEMBER_CONDITIONS`: `wounded`), each held once. Saved
     /// as `conditions` only when not empty (the unreleased save v13 carries it: a save without it reads none).
     pub conditions: Vec<String>,
+    /// A1.2-K3 (INTENT2-K3, INTENT2-U): item id -> how many copies auto-fill tops that pouch slot up to (`1..min(5,
+    /// max_stack)`; a pouch id without an entry reads its current count). A key with no copy left keeps its slot. Saved
+    /// as `pouch_packed` only when not empty (no save bump: a save without it reads the current pouch).
+    pub pouch_packed: IndexMap<String, i64>,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -261,6 +276,10 @@ impl UnitState {
         if !self.conditions.is_empty() {
             out.insert("conditions".into(), strs(&self.conditions));
         }
+        // A1.2-K3: only a member with a packed target saves `pouch_packed`
+        if !self.pouch_packed.is_empty() {
+            out.insert(POUCH_PACKED_KEY.into(), Value::Object(self.pouch_packed.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         Value::Object(out)
     }
 
@@ -305,6 +324,7 @@ impl UnitState {
             deck,
             deck_problems,
             conditions: json::sget(d, "conditions"),
+            pouch_packed: d.get(POUCH_PACKED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
         }
     }
 
@@ -397,19 +417,135 @@ impl UnitState {
                 errors.push(format!("{at}: unknown carried item '{item}'."));
             }
         }
-        if self.pouch.len() > POUCH_MAX {
-            errors.push(format!("{at}: Pouch holds at most {POUCH_MAX} items."));
+        errors.extend(self.pouch_errors(d, &at));
+        errors
+    }
+
+    /// The pouch rules of a saved member. A1.2-K3 (INTENT2-K3): a pouch is either the classic form (at most POUCH_MAX
+    /// copies) or the stack form (`pouch_stacks`: at most POUCH_MAX distinct items, each at most its stack limit); every
+    /// id is a consumable; a packed target is `1..min(5, max_stack)`.
+    pub fn pouch_errors(&self, d: &Data, at: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        let stacked = self.pouch_slots().len() <= POUCH_MAX && self.pouch_slots().iter().all(|id| self.pouch_count(id) <= stack_limit(d, id));
+        if self.pouch.len() > POUCH_MAX && !stacked {
+            errors.push(format!("{at}: Pouch holds at most {POUCH_MAX} items (or {POUCH_MAX} stacks, each at most its stack limit)."));
         }
         for item in &self.pouch {
             if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
                 errors.push(format!("{at}: Pouch: '{item}' is not a consumable."));
             }
         }
+        for (item, n) in &self.pouch_packed {
+            if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
+                errors.push(format!("{at}: Pouch packed: '{item}' is not a consumable."));
+            } else if *n < 1 || *n > stack_limit(d, item) {
+                errors.push(format!("{at}: Pouch packed: '{item}' packs 1-{}, not {n}.", stack_limit(d, item)));
+            }
+        }
         errors
     }
 
+    /// A1.2-K3: copies of `item` in the saved pouch.
+    pub fn pouch_count(&self, item: &str) -> i64 {
+        self.pouch.iter().filter(|p| *p == item).count() as i64
+    }
+
+    /// A1.2-K3 (INTENT2-K3, INTENT2-U): the pouch slots in order: the slots with a packed target in `pouch_packed`'s key
+    /// order (the order the player set: `move_pouch_slot`), then the distinct pouch ids without one, in pouch order.
+    pub fn pouch_slots(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for id in self.pouch_packed.keys().chain(self.pouch.iter()) {
+            if !out.contains(id) {
+                out.push(id.clone());
+            }
+        }
+        out
+    }
+
+    /// A1.2-K3 (INTENT2-K3): how many copies auto-fill tops slot `item` up to: its `pouch_packed`, else its current count.
+    pub fn packed(&self, item: &str) -> i64 {
+        self.pouch_packed.get(item).copied().unwrap_or_else(|| self.pouch_count(item))
+    }
+
+    /// A1.2-K3 (INTENT2-K3, INTENT2-U): assigns `item` to a pouch slot: its packed target defaults to `min(5,
+    /// max_stack)` even when the stash holds fewer. Refused for a non-consumable, an item already slotted (a second slot
+    /// of the same item is not allowed) or a full pouch (POUCH_MAX slots).
+    pub fn assign_pouch(&mut self, d: &Data, item: &str) -> Result<(), String> {
+        if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
+            return Err(format!("'{item}' is not a consumable."));
+        }
+        let slots = self.pouch_slots();
+        if slots.iter().any(|s| s == item) {
+            return Err(format!("'{item}' already has a pouch slot."));
+        }
+        if slots.len() >= POUCH_MAX {
+            return Err(format!("The pouch holds at most {POUCH_MAX} stacks."));
+        }
+        self.pouch_packed.insert(item.to_string(), stack_limit(d, item));
+        Ok(())
+    }
+
+    /// A1.2-K3 (INTENT2-U): sets slot `item`'s packed target to `n` (`1..min(5, max_stack)`; refused outside it or for
+    /// an item with no slot).
+    pub fn set_packed(&mut self, d: &Data, item: &str, n: i64) -> Result<(), String> {
+        if !self.pouch_slots().iter().any(|s| s == item) {
+            return Err(format!("'{item}' has no pouch slot."));
+        }
+        let limit = stack_limit(d, item);
+        if n < 1 || n > limit {
+            return Err(format!("Pack 1-{limit} of '{item}'."));
+        }
+        self.pouch_packed.insert(item.to_string(), n);
+        Ok(())
+    }
+
+    /// INTENT2-U: empties pouch slot `i` (`pouch_slots` order): its copies go to `stash`, its packed target goes.
+    /// Returns the item. Refused for no such slot.
+    pub fn take_pouch_slot(&mut self, i: usize, stash: &mut IndexMap<String, i64>) -> Result<String, String> {
+        let item = self.pouch_slots().get(i).cloned().ok_or("That pouch slot is empty.")?;
+        let n = self.pouch_count(&item);
+        if n > 0 {
+            *stash.entry(item.clone()).or_insert(0) += n;
+        }
+        self.pouch.retain(|p| *p != item);
+        self.pouch_packed.shift_remove(&item);
+        Ok(item)
+    }
+
+    /// INTENT2-U: moves pouch slot `i` to place `j` (`pouch_slots` order, `j` clamped to the last), copies and packed
+    /// target with it. Every slot then has a packed target (one without takes its current count in `1..stack limit`, as
+    /// at combat start), so the order holds. Refused for `i == j` or no slot `i`.
+    pub fn move_pouch_slot(&mut self, d: &Data, i: usize, j: usize) -> Result<(), String> {
+        let mut slots = self.pouch_slots();
+        if i == j || i >= slots.len() {
+            return Err("Nothing to move.".into());
+        }
+        let item = slots.remove(i);
+        slots.insert(j.min(slots.len()), item);
+        let mut pouch = Vec::new();
+        let mut packed = IndexMap::new();
+        for s in &slots {
+            pouch.extend(self.pouch.iter().filter(|p| *p == s).cloned());
+            packed.insert(s.clone(), self.pouch_packed.get(s).copied().unwrap_or_else(|| self.pouch_count(s).clamp(1, stack_limit(d, s))));
+        }
+        self.pouch = pouch;
+        self.pouch_packed = packed;
+        Ok(())
+    }
+
+    /// INTENT2-U: `set_packed`, then the copies above the new target go to `stash`.
+    pub fn pack_pouch(&mut self, d: &Data, item: &str, n: i64, stash: &mut IndexMap<String, i64>) -> Result<(), String> {
+        self.set_packed(d, item, n)?;
+        while self.pouch_count(item) > n {
+            let Some(k) = self.pouch.iter().rposition(|p| p == item) else { break };
+            *stash.entry(self.pouch.remove(k)).or_insert(0) += 1;
+        }
+        Ok(())
+    }
+
     /// RULESET1 9 D1-D5 for a member's saved deck (the content check's unit deck rules, ownership from the member):
-    /// actives are owned families, never a basic (a `basic` skill or a deck ruleset's `basics`); passive and keystone
+    /// actives are owned families, never a basic (a `basic` skill, a deck ruleset's `basics` or its class's `basics`,
+    /// CLASS-BASICS); passive and keystone
     /// hold known passives of that `slot` the member owns (its `passives`, D4); the counts fit the `deck_slots` of
     /// every ruleset with the deck rule; order maps an intent to families of that intent among the actives and the
     /// basics. Nothing repeats.
@@ -425,6 +561,10 @@ impl UnitState {
             if !basics.contains(b) {
                 basics.push(b.clone());
             }
+        }
+        // CLASS-BASICS: the member's class basics are basics too (open, no slot)
+        if !rules.is_empty() {
+            basics = rpgkit_rules::DeckRule { basics, ..Default::default() }.with_class(&d.cat, &self.class_id(d)).basics;
         }
         let twice = |label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec<String>| {
             for id in ids {
@@ -467,11 +607,31 @@ impl UnitState {
                 }
             }
         }
+        // A4.2-K1b (INTENT2 IR15, IR21): under a deck ruleset with `field_intent` the order reads the derived rows
+        // (`intent::allowed`) and may name `field`; else the legacy single intent
+        let field_rules = rules.iter().find(|r| r.has(rpgkit_rules::ruleset::FIELD_INTENT));
+        let rows_of = |fam: &str| -> Vec<String> {
+            match d.cat.tier_one(fam) {
+                None => Vec::new(),
+                Some(s) => match field_rules {
+                    Some(r) => rpgkit_rules::intent::allowed(r, &rpgkit_rules::intent::IntentInput::of_def(s), &s.round_intent).into_iter().map(String::from).collect(),
+                    None => vec![rpgkit_battle::round_intent::skill_intent(s).to_string()],
+                },
+            }
+        };
+        let mut names: Vec<&str> = rpgkit_rules::ruleset::INTENTS.to_vec();
+        if field_rules.is_some() {
+            names.push(rpgkit_rules::intent::FIELD);
+        }
         let mut seen = Vec::new();
         for (intent, list) in &self.deck.order {
-            if !rpgkit_rules::ruleset::INTENTS.contains(&intent.as_str()) {
-                errors.push(format!("{at}: deck order: '{intent}' is not an intent (one of {}).", rpgkit_rules::ruleset::INTENTS.join(", ")));
+            if !names.contains(&intent.as_str()) {
+                errors.push(format!("{at}: deck order: '{intent}' is not an intent (one of {}).", names.join(", ")));
                 continue;
+            }
+            // IR15: under field_intent a skill may stand in each of its rows' lists (once per list)
+            if field_rules.is_some() {
+                seen.clear();
             }
             twice("order", list, &mut seen, &mut errors);
             for fam in list {
@@ -479,15 +639,16 @@ impl UnitState {
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
                     continue;
                 }
-                let of = d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
-                if of != *intent {
+                let rows = rows_of(fam);
+                if !rows.contains(intent) {
+                    let of = rows.join(" or ");
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
                 }
             }
         }
         // INPUT1 FL5: each list follows an opener of the deck (an active or a basic, not neutral) with families of the
         // deck of the opener's intent, none twice (the opener may stand in its own list)
-        let intent_of = |fam: &str| d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
+        let intent_of = |fam: &str| rows_of(fam);
         let in_deck = |fam: &str| self.deck.active.iter().chain(&basics).any(|f| f == fam);
         let label = |id: &str| match rpgkit_battle::round_intent::RoundIntent::parse(id) {
             Some(i) => i.name().to_string(),
@@ -496,7 +657,7 @@ impl UnitState {
         };
         for (key, list) in &self.deck.follow_ups {
             let of = intent_of(key);
-            if !in_deck(key) || of.is_empty() || of == rpgkit_rules::ruleset::NEUTRAL {
+            if !in_deck(key) || of.is_empty() || of.iter().any(|i| i == rpgkit_rules::ruleset::NEUTRAL) {
                 errors.push(format!("{at}: Follow-ups for '{key}': not an opener in the deck."));
                 continue;
             }
@@ -512,8 +673,9 @@ impl UnitState {
                     continue;
                 }
                 let has = intent_of(fam);
-                if has != of {
-                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is {}, not {}.", label(&has), label(&of)));
+                if !has.iter().any(|i| of.contains(i)) {
+                    let text = |rows: &[String]| if rows.is_empty() { label("") } else { rows.iter().map(|r| label(r)).collect::<Vec<_>>().join(" or ") };
+                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is {}, not {}.", text(&has), text(&of)));
                 }
             }
         }
@@ -636,6 +798,8 @@ pub struct PartyState {
     pub max_active: i64,
     /// ROSTER1 BK7: the world's roster settings (never saved).
     pub roster: RosterCaps,
+    /// E2.2-S1 (FB-53a): the game's purse caps (never saved; set at create and load from `Data::purse`).
+    pub purse: PurseCaps,
     pub stash: IndexMap<String, i64>,
     pub gold: i64,
     pub supplies: i64,
@@ -646,7 +810,7 @@ pub struct PartyState {
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
+        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
     }
 }
 
@@ -694,13 +858,13 @@ impl PartyState {
 
     pub fn add_gold(&mut self, amount: i64) -> i64 {
         let before = self.gold;
-        self.gold = (self.gold + amount.max(0)).clamp(0, GOLD_MAX);
+        self.gold = (self.gold + amount.max(0)).clamp(0, self.purse.purse_gold_cap);
         self.gold - before
     }
 
     pub fn add_supplies(&mut self, n: i64) -> i64 {
         let before = self.supplies;
-        self.supplies = (self.supplies + n.max(0)).clamp(0, SUPPLIES_MAX);
+        self.supplies = (self.supplies + n.max(0)).clamp(0, self.purse.supplies_max);
         (self.supplies - before).max(0)
     }
 
@@ -712,6 +876,14 @@ impl PartyState {
         let spent = Self::supplies_cost(self.supplies, n);
         self.supplies -= spent;
         spent
+    }
+
+    /// E2.2-S1 (FB-53a): takes the game's purse caps, lowering gold and supplies above them to them (a save made under
+    /// higher caps loads, never fails the check); a damaged value (below 0) is left for `validate`.
+    pub fn apply_purse(&mut self, caps: PurseCaps) {
+        self.purse = caps;
+        self.gold = self.gold.min(caps.purse_gold_cap);
+        self.supplies = self.supplies.min(caps.supplies_max);
     }
 
     pub fn apply_cap(&mut self, cap: i64) {
@@ -757,6 +929,7 @@ impl PartyState {
             active_ids: json::sget(d, "active_ids"),
             max_active: PARTY_MAX,
             roster: RosterCaps::default(),
+            purse: PurseCaps::default(),
             stash: d.get("stash").map(json::ints).unwrap_or_default(),
             gold: whole("gold"),
             supplies: whole("supplies"),
@@ -817,11 +990,12 @@ impl PartyState {
                 errors.push(format!("Stash count of '{k}' must be >= 1."));
             }
         }
-        if self.gold < 0 || self.gold > GOLD_MAX {
-            errors.push(format!("gold must be 0..{GOLD_MAX}."));
+        let PurseCaps { supplies_max, purse_gold_cap } = self.purse;
+        if self.gold < 0 || self.gold > purse_gold_cap {
+            errors.push(format!("gold must be 0..{purse_gold_cap}."));
         }
-        if self.supplies < 0 || self.supplies > SUPPLIES_MAX {
-            errors.push(format!("supplies must be 0..{SUPPLIES_MAX}."));
+        if self.supplies < 0 || self.supplies > supplies_max {
+            errors.push(format!("supplies must be 0..{supplies_max}."));
         }
         errors
     }
@@ -916,6 +1090,7 @@ impl GameState {
         let mut g = Self { world_id: world_id.into(), party, ..Default::default() };
         g.party.apply_cap(d.party_max(world_id));
         g.party.roster = crate::roster::caps(d, world_id);
+        g.party.apply_purse(d.purse);
         g.campaign = crate::campaign::Campaign::fresh(d, world_id, g.rng_seed);
         g
     }
@@ -1035,6 +1210,7 @@ impl GameState {
         g.party = PartyState::from_dict(json::dget(d, "party"));
         g.party.apply_cap(data.party_max(&g.world_id));
         g.party.roster = crate::roster::caps(data, &g.world_id);
+        g.party.apply_purse(data.purse);
         for (k, v) in json::dict(&json::normalize(d.get("flags").unwrap_or(&Value::Null))) {
             g.flags.insert(k.clone(), v.clone());
         }

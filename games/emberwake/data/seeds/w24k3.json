@@ -1,0 +1,58 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "con_fire_bomb",
+    "name": "Throwing Fire Bomb",
+    "family": "consumable",
+    "rarity": "UNCOMMON",
+    "weight": 1.0,
+    "value": 30,
+    "description": "Clay vessel of volatile pitch exploding on impact for 45 damage.",
+    "damage_type": "fire",
+    "icon_id": "bomb",
+    "starter_stash": true,
+    "consumable_type": "THROWABLE_BOMB",
+    "heal": 0,
+    "damage": 45,
+    "buff_stat": "",
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 2,
+    "use_reach": 3,
+    "hazard": {},
+    "max_stack": 2,
+    "area": "BURST"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "pitch_fire_bomb",
+    "name": "Pitch Fire-Bomb",
+    "family": "consumable",
+    "rarity": "COMMON",
+    "weight": 1.0,
+    "value": 30,
+    "description": "Clay jar of burning pitch, 40 fire damage on impact.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "THROWABLE_BOMB",
+    "heal": 0,
+    "damage": 40,
+    "buff_stat": "",
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 1,
+    "use_reach": 3,
+    "hazard": {},
+    "max_stack": 2,
+    "area": "PLUS"
+   }
+  }
+ ]
+}

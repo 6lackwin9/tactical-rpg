@@ -11,6 +11,7 @@
 use crate::gear::Equipment;
 use crate::pipeline::{self, Modifier, Op, Stage, Trace};
 use crate::stats::roundi;
+use crate::status::{self, Rating};
 use crate::unit::{Stance, Unit};
 
 pub const DEFAULT_UNIT_SCALING: f64 = 1.5;
@@ -160,9 +161,12 @@ pub fn base_armor_rating(u: &Unit) -> i32 {
     u.stats.mitigation_rating(gear, u.weapon_context().as_deref())
 }
 
-/// Base rating + active fortify - active expose, floor 0.
+/// Base rating + the active Armor buffs' magnitudes (fortify) - the active Armor debuffs' (expose), floor 0; W2-5
+/// (C09): the statuses are the table's `modifier` rows with `rating` armor, not named ids.
 pub fn armor_rating(u: &Unit) -> i32 {
-    (base_armor_rating(u) + u.active_magnitude("fortify") - u.active_magnitude("expose")).max(0)
+    let raised = u.active_magnitude_where(|s| status::raises_rating(s, Rating::Armor));
+    let lowered = u.active_magnitude_where(|s| status::lowers_rating(s, Rating::Armor));
+    (base_armor_rating(u) + raised - lowered).max(0)
 }
 
 pub fn armor_reduction(rating: i32) -> f64 {
@@ -274,6 +278,115 @@ pub fn heal(caster: &Unit, skill: &rpgkit_data::SkillDef) -> i32 {
 pub fn heal_traced(caster: &Unit, skill: &rpgkit_data::SkillDef) -> (i32, Trace) {
     let (out, trace) = pipeline::HEAL.run_traced(&heal_modifiers(caster, skill, true));
     (out.value, trace)
+}
+
+/// A2.2-S1 (FB-43, FB-56a): the pipeline and modifiers of damage a unit takes (Combatant.take_damage): with the guard
+/// applied (`mitigated` false and `guard` > 0) the amount, then the guard as a mitigation ratio, rounded once with
+/// floor 1 (`TAKE_GUARDED`: `max(1, roundi(amount x (1 - guard)))`, as before); otherwise the amount as it is (`PASS`).
+/// The modifiers are the first `n` of the array.
+pub fn take_damage_modifiers(amount: i32, guard: f64, mitigated: bool) -> (pipeline::Pipeline, [Modifier; 2], usize) {
+    let amount = Modifier::new("amount", Stage::Base, Op::Add(amount as f64));
+    let guard_mod = Modifier::new("guard", Stage::Mitigation, Op::Reduce(guard));
+    if !mitigated && guard > 0.0 {
+        (pipeline::TAKE_GUARDED, [amount, guard_mod], 2)
+    } else {
+        (pipeline::PASS, [amount, guard_mod], 1)
+    }
+}
+
+/// A2.2-S1: the damage a unit with `guard` takes from `amount` (no trace; `Unit::take_damage` applies it).
+pub fn take_damage(amount: i32, guard: f64, mitigated: bool) -> i32 {
+    let (pipe, mods, n) = take_damage_modifiers(amount, guard, mitigated);
+    pipe.run(&mods[..n]).value
+}
+
+/// A2.2-S1: `take_damage`, keeping every step.
+pub fn take_damage_traced(amount: i32, guard: f64, mitigated: bool) -> (i32, Trace) {
+    let (pipe, mods, n) = take_damage_modifiers(amount, guard, mitigated);
+    let (out, trace) = pipe.run_traced(&mods[..n]);
+    (out.value, trace)
+}
+
+/// A2.2-S1 (FB-56a): the HP a heal of `amount` adds to a unit at `hp` of `max_hp` (Combatant.heal): the amount through
+/// `PASS` (the value is the amount), then capped at the missing HP (`hp + gain = min(max_hp, hp + amount)`, as before;
+/// the pipeline has no ceiling stage, so the cap is the integer step after it). Returns the gain and the trace.
+pub fn heal_gain_traced(hp: i32, max_hp: i32, amount: i32) -> (i32, Trace) {
+    let (out, trace) = pipeline::PASS.run_traced(&[Modifier::new("heal", Stage::Base, Op::Add(amount as f64))]);
+    (out.value.min(max_hp - hp), trace)
+}
+
+/// A2.2-S1: `heal_gain_traced` without the trace.
+pub fn heal_gain(hp: i32, max_hp: i32, amount: i32) -> i32 {
+    pipeline::PASS.run(&[Modifier::new("heal", Stage::Base, Op::Add(amount as f64))]).value.min(max_hp - hp)
+}
+
+/// A1.2-K3 (A1_VALUE section 1, FB-55(2)): the situational terms of an item's damage on one unit: the factor in the
+/// mult stage (`splash_mult` on a shaped Assault row's tile off its target, else 1) and, when the ruleset mitigates
+/// item damage (`Numbers::item_mitigation`), the target's guard plus cover and its armour. `None` mitigation is the
+/// exact port of the pre-K3 flat damage.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ItemHit {
+    pub splash: f64,
+    /// (guard + cover, the armour rating) of the target, or None (no mitigation stage).
+    pub mitigation: Option<(f64, i32)>,
+}
+
+impl Default for ItemHit {
+    fn default() -> Self {
+        Self { splash: 1.0, mitigation: None }
+    }
+}
+
+/// A1.2-K3: the damage pipeline's modifiers of an item hit (the item's flat `damage` in the base stage, the splash in the
+/// mult stage, guard and cover capped at `GUARD_CAP`, then armour in the mitigation stage); the first `n` count.
+pub fn item_damage_modifiers(base: i32, h: ItemHit) -> ([Modifier; 4], usize) {
+    let (guard_cover, rating) = h.mitigation.unwrap_or((0.0, 0));
+    let mods = [
+        Modifier::new("item", Stage::Base, Op::Add(base as f64)),
+        Modifier::new("splash", Stage::Mult, Op::Mul(h.splash)),
+        Modifier::new("guard_cover", Stage::Mitigation, Op::Reduce(GUARD_CAP.min(guard_cover.max(0.0)))),
+        Modifier::new("armour", Stage::Mitigation, Op::Reduce(armor_reduction(rating))),
+    ];
+    (mods, if h.mitigation.is_some() { 4 } else { 2 })
+}
+
+/// A1.2-K3 (A1_VALUE section 1, acceptance 1): the damage an item's flat `base` deals through `pipeline::DAMAGE`
+/// (minimum 1). Without mitigation and splash it is `base` exactly (the exact port of `w.damage(t, damage, true)`).
+pub fn item_damage(base: i32, h: ItemHit) -> i32 {
+    let (mods, n) = item_damage_modifiers(base, h);
+    pipeline::DAMAGE.run(&mods[..n]).value
+}
+
+/// A1.2-K3: `item_damage`, keeping every step.
+pub fn item_damage_traced(base: i32, h: ItemHit) -> (i32, Trace) {
+    let (mods, n) = item_damage_modifiers(base, h);
+    let (out, trace) = pipeline::DAMAGE.run_traced(&mods[..n]);
+    (out.value, trace)
+}
+
+/// A1.2-K3 (A1_VALUE section 1): the heal an item's flat `heal` gives through `pipeline::HEAL` (one rounding, floor 0;
+/// the receiver caps it at its missing HP, `heal_gain`): `heal` exactly.
+pub fn item_heal(heal: i32) -> i32 {
+    pipeline::HEAL.run(&[Modifier::new("item", Stage::Base, Op::Add(heal as f64))]).value
+}
+
+/// A2.2-S2 (FB-56b): ids of the factors a caller multiplies into `HitInput.skill_mult` before the hit (trace only).
+pub const FOLD_SKILL: &str = "fold:skill";
+pub const FOLD_EXPLOIT: &str = "fold:exploit";
+pub const FOLD_FLANK: &str = "fold:flank";
+pub const FOLD_SPLASH: &str = "fold:splash";
+pub const FOLD_COUNTER: &str = "fold:counter";
+pub const FOLD_WEAKEN: &str = "fold:weaken";
+pub const FOLD_EMPOWER: &str = "fold:empower";
+
+/// A2.2-S2 (FB-56b): `compute_traced` (or `compute_traced_skill` when `skill` is given) with the factors the caller
+/// already multiplied into `h.skill_mult` named as trace-only parts of the `skill` step, after the skill's grant
+/// sources: `folded` lists them as `(id, factor)` in the caller's order (`FOLD_*`). The step's op stays
+/// `Mul(h.skill_mult)`, so the f64 multiplication order and every number are unchanged.
+pub fn compute_traced_folded(attacker: &Unit, target: &Unit, h: HitInput, skill: Option<&rpgkit_data::SkillDef>, folded: &[(&'static str, f64)]) -> Hit {
+    let mut parts = skill.map(|s| attacker.potency_parts(s)).unwrap_or_default();
+    parts.extend(folded.iter().map(|&(id, value)| pipeline::Part { source: std::borrow::Cow::Borrowed(id), value }));
+    hit(attacker, target, h, true, parts)
 }
 
 fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool, skill_parts: Vec<pipeline::Part>) -> Hit {
