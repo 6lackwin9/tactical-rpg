@@ -250,6 +250,7 @@ def build_asset_bundle() -> dict[str, Any]:
         "bg": {
             "title": load_scaled_uri("backgrounds/menu/title.png", (1280, 720), fmt="JPEG"),
             "vn_alley_stage": load_scaled_uri("backgrounds/story/vn_alley_stage.png", (1280, 720), fmt="JPEG"),
+            "vn_rooftop_stage": load_scaled_uri("backgrounds/story/vn_rooftop_stage.png", (1280, 720), fmt="JPEG"),
             "vn_bridge_stage": load_scaled_uri("backgrounds/story/vn_bridge_stage.png", (1280, 720), fmt="JPEG"),
             "vn_hearth_stage": load_scaled_uri("backgrounds/story/vn_hearth_stage.png", (1280, 720), fmt="JPEG"),
             "sunk_ward": load_scaled_uri("backgrounds/title/sunk_ward.png", (500, 316)),

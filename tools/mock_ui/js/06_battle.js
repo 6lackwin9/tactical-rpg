@@ -62,18 +62,115 @@ function renderBattleScreen() {
     apPipsHtml += `<div style="width:4px;height:8px;background:${col};border:0.5px solid #374151;"></div>`;
   }
 
-  // Build 12x9 Stage Board (`BOARD = Rect(128, 82, 384, 216)`, cell = 32x24 px)
+  // Determine current Battle Stage Mode (`pre_battle` | `transition_in` | `active_combat` | `boss_phase2` | `elite_intro` | `elite_aftermath`)
+  const stageMode = STATE.battleStageMode || 'active_combat';
+  const isPreBattle = stageMode === 'pre_battle';
+  const isTransitionIn = stageMode === 'transition_in';
+  const encBarks = (typeof COMBAT_BARKS !== 'undefined' && COMBAT_BARKS[b.encId]) ? COMBAT_BARKS[b.encId] : (typeof COMBAT_BARKS !== 'undefined' ? COMBAT_BARKS.enc_0c : null);
+  const activeBark = (encBarks && (stageMode === 'pre_battle' || stageMode === 'boss_phase2' || stageMode === 'elite_intro' || stageMode === 'elite_aftermath'))
+    ? (encBarks[stageMode] || encBarks.pre_battle)
+    : null;
+
+  // Dynamic Stage Geometry:
+  // - In `active_combat` / `transition_in`: tileH = 24px (9 rows = 216px), backdrop = 52px, lip = 14px -> total 282px (y: 30..312), above 37px bottom bar (y: 321..358).
+  // - When `activeBark` is open (`pre_battle`, `boss_phase2`, `elite_intro`, `elite_aftermath`):
+  //   The stage smoothly transitions to Map-Stage Framing: top = 26px, backdrop = 26px, tileH = 22px (9 rows = 198px), lip = 8px -> total 232px (y: 26..258).
+  //   The bottom bark dock sits at y: 264..354 (height 90px), so ALL 9 ROWS (including rows 6, 7, 8) are 100% visible above the bark dock with zero rows covered!
+  const tileW = 32;
+  const tileH = activeBark ? 22 : 24;
+  const boardH = 9 * tileH; // 198px during bark, 216px in active combat
+  const backdropH = activeBark ? 26 : 52;
+  const lipH = activeBark ? 8 : 14;
+  const stageTop = activeBark ? 26 : 30;
+  const stageTotalH = backdropH + boardH + lipH; // 232px during bark (ends at y=258), 282px in active combat
+
+  // Compute dynamic unit positions & reposition trails for Phase 2 / Pre-Elite / Post-Elite (Combat End)
+  // Ensures units actively reposition into clear center rows (y: 2..5) during phase shifts and combat end
+  const heroList = b.units.filter(u => u.isHero && u.hp > 0);
+  const foeList = b.units.filter(u => !u.isHero && u.hp > 0);
+  function getStageUnitPos(u) {
+    let x = u.x;
+    let y = u.y;
+    let fromX = null;
+    let fromY = null;
+    let tag = null;
+    let downed = false;
+
+    if (stageMode === 'boss_phase2') {
+      if (!u.isHero) {
+        const fIdx = foeList.findIndex(f => f.id === u.id);
+        if (fIdx === 0) {
+          fromX = u.x; fromY = u.y;
+          x = 6; y = 3; // Boss leaps to central command tile (6,3)
+          tag = '⚡ PHASE 2 LEAP';
+        } else if (fIdx === 1) {
+          x = 7; y = 2;
+        } else {
+          x = 7; y = 4;
+        }
+      } else {
+        const hIdx = heroList.findIndex(h => h.id === u.id);
+        const phase2HeroSlots = [[3, 3], [3, 2], [2, 4], [2, 2]];
+        const slot = phase2HeroSlots[hIdx % phase2HeroSlots.length];
+        if (hIdx === 0 && (u.x !== slot[0] || u.y !== slot[1])) {
+          fromX = u.x; fromY = u.y;
+          tag = '↩ KNOCKBACK';
+        }
+        x = slot[0]; y = slot[1];
+      }
+    } else if (stageMode === 'elite_intro') {
+      const isFocus = activeBark && activeBark.focusUnitId === u.id;
+      if (!u.isHero && isFocus) {
+        fromX = u.x; fromY = u.y;
+        x = 6; y = 3;
+        tag = '🛡 ELITE ADVANCE';
+      } else if (u.isHero && u.id === heroList[0]?.id) {
+        x = 4; y = 3;
+      } else if (u.y >= 6) {
+        y = 4; // Pull any bottom-row unit into middle row
+      }
+    } else if (stageMode === 'elite_aftermath') {
+      // Combat End / Post-Elite Regroup: Founders advance into clean center Explore Formation (rows 2..4)
+      if (u.isHero) {
+        const hIdx = heroList.findIndex(h => h.id === u.id);
+        const regroupSlots = [[5, 3], [4, 2], [4, 4], [3, 3]];
+        const slot = regroupSlots[hIdx % regroupSlots.length];
+        fromX = u.x; fromY = u.y;
+        x = slot[0]; y = slot[1];
+        if (hIdx === 0) tag = '✓ REGROUPED';
+      } else {
+        const fIdx = foeList.findIndex(f => f.id === u.id);
+        x = 7 + fIdx;
+        y = fIdx === 0 ? 3 : (2 + fIdx);
+        downed = true;
+        if (fIdx === 0) tag = '⚔ BROKEN';
+      }
+    }
+    return { x, y, fromX, fromY, tag, downed };
+  }
+
+  const unitPositions = new Map();
+  b.units.filter(u => u.hp > 0).forEach(u => {
+    unitPositions.set(u.id, getStageUnitPos(u));
+  });
+
+  // Build 12x9 Stage Board (`BOARD = 384 x boardH`, cell = 32 x tileH px)
   let boardCellsHtml = '';
   for (let y = 0; y < 9; y++) {
     for (let x = 0; x < 12; x++) {
       const isWall = tpl.walls.some(([wx, wy]) => wx === x && wy === y);
       const isWater = tpl.water.some(([wx, wy]) => wx === x && wy === y);
       const haz = tpl.hazards.find(h => h.x === x && h.y === y);
-      const unitOnTile = b.units.find(u => u.x === x && u.y === y && u.hp > 0);
+      const unitOnTile = b.units.find(u => {
+        if (u.hp <= 0) return false;
+        const pos = unitPositions.get(u.id);
+        return pos && pos.x === x && pos.y === y;
+      });
       const isSelTile = unitOnTile && (unitOnTile.id === selHero.id || unitOnTile.id === pinnedFoe?.id);
 
       // Highlight range when a skill is active or SkillMenu is open
-      const distFromHero = Math.abs(x - selHero.x) + Math.abs(y - selHero.y);
+      const selPos = unitPositions.get(selHero.id) || selHero;
+      const distFromHero = Math.abs(x - selPos.x) + Math.abs(y - selPos.y);
       const activeSk = STATE.activeSkillId ? SKILLS[STATE.activeSkillId] : null;
       const inRange = activeSk && !isWall && distFromHero <= (activeSk.range || 1);
 
@@ -105,7 +202,7 @@ function renderBattleScreen() {
 
       boardCellsHtml += `
         <div onclick="clickBattleTile(${x},${y},event)"
-             style="position:absolute;left:${x * 32}px;top:${y * 24}px;width:32px;height:24px;background:${tileBg};border:0.5px solid ${tileBorder};cursor:pointer;">
+             style="position:absolute;left:${x * tileW}px;top:${y * tileH}px;width:${tileW}px;height:${tileH}px;background:${tileBg};border:0.5px solid ${tileBorder};cursor:pointer;">
           ${isWall ? `<div style="position:absolute;left:0;right:0;top:-5px;height:9px;background:#313744;border-top:1px solid #6b7280;border-bottom:1px solid #111827;"></div>` : ''}
           ${haz ? `<div style="position:absolute;left:2px;bottom:1px;font-size:5px;color:var(--gold);pointer-events:none;">${haz.type.toUpperCase()}</div>` : ''}
           ${isSelTile ? `<div style="position:absolute;inset:1px;border:1px solid var(--gold);pointer-events:none;"></div>` : ''}
@@ -114,33 +211,55 @@ function renderBattleScreen() {
     }
   }
 
-  // Determine current Battle Stage Mode (`pre_battle` | `transition_in` | `active_combat` | `boss_phase2` | `elite_intro` | `elite_aftermath`)
-  const stageMode = STATE.battleStageMode || 'active_combat';
-  const isPreBattle = stageMode === 'pre_battle';
-  const isTransitionIn = stageMode === 'transition_in';
-  const encBarks = (typeof COMBAT_BARKS !== 'undefined' && COMBAT_BARKS[b.encId]) ? COMBAT_BARKS[b.encId] : (typeof COMBAT_BARKS !== 'undefined' ? COMBAT_BARKS.enc_0c : null);
-  const activeBark = (encBarks && (stageMode === 'pre_battle' || stageMode === 'boss_phase2' || stageMode === 'elite_intro' || stageMode === 'elite_aftermath'))
-    ? (encBarks[stageMode] || encBarks.pre_battle)
-    : null;
+  // Reposition Trail SVG Overlay (shows Phase-2 Boss Leap / Hero Knockback / Post-Combat Regrouping paths)
+  let repositionTrailsSvg = '';
+  if (stageMode === 'boss_phase2' || stageMode === 'elite_intro' || stageMode === 'elite_aftermath') {
+    const paths = [];
+    b.units.filter(u => u.hp > 0).forEach(u => {
+      const pos = unitPositions.get(u.id);
+      if (pos && pos.fromX !== null && (pos.fromX !== pos.x || pos.fromY !== pos.y)) {
+        const x1 = pos.fromX * tileW + 16;
+        const y1 = pos.fromY * tileH + Math.round(tileH / 2);
+        const x2 = pos.x * tileW + 16;
+        const y2 = pos.y * tileH + Math.round(tileH / 2);
+        const strokeCol = u.isHero ? '#38bdf8' : '#ef4444';
+        paths.push(`
+          <circle cx="${x1}" cy="${y1}" r="3" fill="none" stroke="${strokeCol}" stroke-width="1" stroke-dasharray="1.5 1.5" opacity="0.75"/>
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${strokeCol}" stroke-width="1.4" stroke-dasharray="3 2" opacity="0.85"/>
+        `);
+      }
+    });
+    if (paths.length > 0) {
+      repositionTrailsSvg = `
+        <svg width="384" height="${boardH}" viewBox="0 0 384 ${boardH}" style="position:absolute;inset:0;pointer-events:none;z-index:8;">
+          ${paths.join('')}
+        </svg>
+      `;
+    }
+  }
 
-  // Units on the 12x9 Stage (`stage.rs` sprites + overhead HP/Poise bars + Boss Phase 2 / Speaking Aura)
+  // Units on the 12x9 Stage (`stage.rs` sprites + overhead HP/Poise bars + Centered Boss Phase 2 / Speaking Aura)
   const stageUnitsHtml = b.units.filter(u => u.hp > 0).map(u => {
-    const px = u.x * 32;
-    const py = u.y * 24;
+    const pos = unitPositions.get(u.id) || { x: u.x, y: u.y, tag: null, downed: false };
+    const px = pos.x * tileW;
+    const py = pos.y * tileH;
     const frames = ASSETS.units[u.unitKey] || ASSETS.units.kaelen;
     const isBarkFocus = activeBark && activeBark.focusUnitId === u.id;
     const spriteUri = (STATE.playingRound || isBarkFocus) ? (frames.atk || frames.idle0) : frames.idle0;
-    const flip = !u.isHero ? 'transform:scaleX(-1);' : '';
-    const hpPct = Math.round((u.hp / u.maxHp) * 100);
+    const flip = !u.isHero ? 'transform:scaleX(-1)' + (pos.downed ? ' rotate(18deg) translateY(3px)' : '') + ';' : '';
+    const hpPct = pos.downed ? 0 : Math.round((u.hp / u.maxHp) * 100);
+    const badgeLabel = pos.tag || (isBarkFocus ? (stageMode === 'boss_phase2' ? '⚡ PHASE 2' : '💬 SPEAKING') : null);
 
     return `
-      <div onclick="clickBattleTile(${u.x},${u.y},event)"
-           style="position:absolute;left:${px - 2}px;top:${py - 14}px;width:36px;height:38px;cursor:pointer;z-index:${10 + u.y};display:flex;flex-direction:column;align-items:center;">
+      <div onclick="clickBattleTile(${pos.x},${pos.y},event)"
+           style="position:absolute;left:${px - 2}px;top:${py - 14}px;width:36px;height:38px;cursor:pointer;z-index:${10 + pos.y};display:flex;flex-direction:column;align-items:center;transition:left 0.32s cubic-bezier(0.22,1,0.36,1), top 0.32s cubic-bezier(0.22,1,0.36,1);opacity:${pos.downed ? '0.58' : '1'};">
         ${isBarkFocus ? `
-          <!-- Boss Phase 2 / Scripted Bark Tile Shockwave Ring & Overhead Callout -->
-          <div style="position:absolute;left:50%;top:62%;width:44px;height:44px;border-radius:50%;border:1.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#fbbf24'};animation:vnPulseRing 1.15s ease-out infinite;pointer-events:none;"></div>
-          <div style="position:absolute;top:-11px;padding:0.5px 4px;border-radius:6px;background:${stageMode === 'boss_phase2' ? '#7f1d1d' : '#fbbf24'};color:${stageMode === 'boss_phase2' ? '#fecaca' : '#090b10'};border:0.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#d97706'};font-size:5px;font-weight:800;white-space:nowrap;z-index:25;box-shadow:0 2px 5px #000;">
-            ${stageMode === 'boss_phase2' ? '⚡ PHASE 2' : '💬 SPEAKING'}
+          <!-- Centered Boss Phase 2 / Scripted Bark Tile Shockwave Ring (uses vnPulseRing with translate(-50%,-50%)) -->
+          <div style="position:absolute;left:50%;top:64%;width:38px;height:38px;border-radius:50%;border:1.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#fbbf24'};animation:vnPulseRing 1.15s ease-out infinite;pointer-events:none;"></div>
+        ` : ''}
+        ${badgeLabel ? `
+          <div style="position:absolute;left:50%;top:-10px;transform:translateX(-50%);padding:0.5px 4px;border-radius:6px;background:${stageMode === 'boss_phase2' && !u.isHero ? '#7f1d1d' : (pos.downed ? '#1f2937' : '#fbbf24')};color:${(stageMode === 'boss_phase2' && !u.isHero) || pos.downed ? '#fecaca' : '#090b10'};border:0.5px solid ${stageMode === 'boss_phase2' && !u.isHero ? '#ef4444' : '#d97706'};font-size:4.8px;font-weight:800;white-space:nowrap;z-index:25;box-shadow:0 2px 5px #000;">
+            ${badgeLabel}
           </div>
         ` : ''}
         <!-- Overhead Micro HP & Poise Bar (hidden during pre_battle map confrontation for clean map immersion) -->
@@ -150,7 +269,7 @@ function renderBattleScreen() {
           </div>
           <div style="display:flex;gap:1px;margin-bottom:-2px;">
             ${Array.from({ length: u.maxPoise }).map((_, pi) => `
-              <div style="width:3px;height:2px;background:${pi < u.poise ? '#fbbf24' : '#374151'};"></div>
+              <div style="width:3px;height:2px;background:${!pos.downed && pi < u.poise ? '#fbbf24' : '#374151'};"></div>
             `).join('')}
           </div>
         ` : `<div style="height:5px;"></div>`}
@@ -227,6 +346,7 @@ function renderBattleScreen() {
   }
 
   // Scripted Dialogue Dock (rendered during `pre_battle`, `boss_phase2`, `elite_intro`, `elite_aftermath`)
+  // Sits at bottom: 6px, height: 88px (y: 266..354), completely below the reframed 12x9 stage (y: 26..258)!
   let scriptedBarkHtml = '';
   if (activeBark) {
     const barkPortrait = getPortraitWithMood(activeBark.portrait, activeBark.mood);
@@ -238,60 +358,69 @@ function renderBattleScreen() {
     let primaryBtnHtml = '';
     if (stageMode === 'pre_battle') {
       primaryBtnHtml = `
-        <button class="rust-btn primary" style="height:22px;padding:0 12px;font-size:7.5px;" onclick="engageCombatFromMap()">
+        <button class="rust-btn primary" style="height:21px;padding:0 10px;font-size:7.2px;" onclick="engageCombatFromMap()">
           ⚔ Engage Combat (Slide HUD In) [Space] ▸
         </button>
       `;
     } else if (stageMode === 'elite_intro') {
       primaryBtnHtml = `
-        <button class="rust-btn" style="height:20px;padding:0 8px;font-size:6.8px;" onclick="STATE.battleStageMode='elite_aftermath';render();">
-          Preview Post-Elite Bark ▸
+        <button class="rust-btn" style="height:20px;padding:0 8px;font-size:6.5px;" onclick="STATE.battleStageMode='elite_aftermath';render();">
+          Preview Post-Elite / End ▸
         </button>
-        <button class="rust-btn primary" style="height:22px;padding:0 12px;font-size:7.5px;" onclick="STATE.battleStageMode='active_combat';render();">
-          Resume Combat [Space] ▸
+        <button class="rust-btn primary" style="height:21px;padding:0 10px;font-size:7.2px;" onclick="resumeFromCombatBark()">
+          Resume Combat (Slide HUD In) [Space] ▸
+        </button>
+      `;
+    } else if (stageMode === 'elite_aftermath') {
+      primaryBtnHtml = `
+        <button class="rust-btn" style="height:20px;padding:0 8px;font-size:6.5px;" onclick="resumeFromCombatBark()">
+          Resume Combat HUD
+        </button>
+        <button class="rust-btn primary" style="height:21px;padding:0 10px;font-size:7.2px;" onclick="transitionOutToExploreMap()">
+          Return to Explore Map ▸
         </button>
       `;
     } else {
       primaryBtnHtml = `
-        <button class="rust-btn primary" style="height:22px;padding:0 12px;font-size:7.5px;" onclick="STATE.battleStageMode='active_combat';render();">
-          Resume Combat [Space] ▸
+        <button class="rust-btn primary" style="height:21px;padding:0 10px;font-size:7.2px;" onclick="resumeFromCombatBark()">
+          Resume Combat (Slide HUD In) [Space] ▸
         </button>
       `;
     }
 
-    scriptedBarkHtml = ornateCornerBox640(`position:absolute;left:54px;right:54px;bottom:6px;height:94px;z-index:38;padding:6px 10px;background:rgba(10,12,18,0.97);box-shadow:0 10px 28px rgba(0,0,0,0.95);`, `
+    scriptedBarkHtml = ornateCornerBox640(`position:absolute;left:54px;right:54px;bottom:6px;height:88px;z-index:38;padding:5px 10px;background:rgba(10,12,18,0.97);box-shadow:0 10px 28px rgba(0,0,0,0.95);`, `
       <div class="hud-slide-up" style="display:flex;gap:10px;align-items:stretch;height:100%;">
         <!-- Speaker Portrait with Mood Expression (faces/<id>/<mood>.png) -->
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-between;width:62px;flex-shrink:0;">
-          <div class="portrait-box ${isPhase2 ? 'foe-rim' : 'gold-rim'}" style="width:54px;height:54px;position:relative;box-shadow:0 0 10px ${isPhase2 ? 'rgba(239,68,68,0.45)' : 'rgba(245,158,11,0.35)'};">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:space-between;width:58px;flex-shrink:0;">
+          <div class="portrait-box ${isPhase2 ? 'foe-rim' : 'gold-rim'}" style="width:50px;height:50px;position:relative;box-shadow:0 0 10px ${isPhase2 ? 'rgba(239,68,68,0.45)' : 'rgba(245,158,11,0.35)'};">
             <img src="${barkPortrait}" class="pixel" style="width:100%;height:100%;object-fit:cover;">
-            <span style="position:absolute;right:1px;bottom:1px;padding:0.5px 3px;background:rgba(8,10,15,0.92);border:0.5px solid ${badgeBorder};font-family:'JetBrainsMono',monospace;font-size:4.8px;color:${badgeColor};text-transform:uppercase;">
+            <span style="position:absolute;right:1px;bottom:1px;padding:0.5px 3px;background:rgba(8,10,15,0.92);border:0.5px solid ${badgeBorder};font-family:'JetBrainsMono',monospace;font-size:4.6px;color:${badgeColor};text-transform:uppercase;">
               ${activeBark.mood}
             </span>
           </div>
-          <span style="font-size:5.2px;color:${badgeColor};font-weight:700;text-transform:uppercase;">Mood: ${activeBark.mood}</span>
+          <span style="font-size:5px;color:${badgeColor};font-weight:700;text-transform:uppercase;">Mood: ${activeBark.mood}</span>
         </div>
 
         <!-- Scripted Dialogue Text + Phase/Elite Mechanic Callout + Action Buttons -->
         <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;">
           <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:0.5px solid #374151;padding-bottom:2px;margin-bottom:3px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:0.5px solid #374151;padding-bottom:2px;margin-bottom:2px;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <span style="padding:1px 5px;background:${badgeBg};border:0.5px solid ${badgeBorder};border-radius:2px;font-size:5.5px;color:${badgeColor};font-weight:800;letter-spacing:0.4px;">
+                <span style="padding:1px 5px;background:${badgeBg};border:0.5px solid ${badgeBorder};border-radius:2px;font-size:5.3px;color:${badgeColor};font-weight:800;letter-spacing:0.4px;">
                   ${activeBark.badge}
                 </span>
-                <span class="font-title" style="font-size:9px;color:var(--gold);">${activeBark.speaker}</span>
-                <span style="font-size:6px;color:var(--dim);">· ${activeBark.speakerTitle}</span>
+                <span class="font-title" style="font-size:8.8px;color:var(--gold);">${activeBark.speaker}</span>
+                <span style="font-size:5.8px;color:var(--dim);">· ${activeBark.speakerTitle}</span>
               </div>
-              ${stageMode !== 'pre_battle' ? closeBtn640("STATE.battleStageMode='active_combat';render();", "Resume Combat [Esc / Right-Click]") : ''}
+              ${stageMode !== 'pre_battle' ? closeBtn640("resumeFromCombatBark()", "Resume Combat [Esc / Right-Click]") : ''}
             </div>
-            <div style="font-size:7.3px;line-height:1.36;color:var(--text);margin-bottom:3px;">
+            <div style="font-size:7.1px;line-height:1.34;color:var(--text);margin-bottom:2px;">
               ${activeBark.text}
             </div>
           </div>
 
-          <div style="display:flex;justify-content:space-between;align-items:center;border-top:0.5px solid rgba(55,65,81,0.7);padding-top:3px;">
-            <div class="font-mono" style="font-size:5.6px;color:#93c5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:305px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-top:0.5px solid rgba(55,65,81,0.7);padding-top:2px;">
+            <div class="font-mono" style="font-size:5.4px;color:#93c5fd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:295px;">
               ⚙ ${activeBark.mechanicHint}
             </div>
             <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
@@ -306,14 +435,18 @@ function renderBattleScreen() {
   return `
     <div style="width:640px;height:360px;position:relative;background:#0a0b10;overflow:hidden;">
 
-      ${isPreBattle ? `
-        <!-- PRE-BATTLE MAP CONFRONTATION HEADER (Before Combat HUD Slides In) -->
-        <div style="position:absolute;left:54px;right:54px;top:4px;height:20px;padding:0 8px;background:rgba(12,15,23,0.92);border:0.5px solid rgba(212,166,74,0.5);border-radius:2px;display:flex;align-items:center;justify-content:space-between;z-index:25;">
+      ${activeBark ? `
+        <!-- MAP-STAGE / IN-COMBAT BARK HEADER (HUD Sidebars & Bottom Action Bar slid out so all 9 rows are 100% uncovered) -->
+        <div style="position:absolute;left:54px;right:54px;top:3px;height:20px;padding:0 8px;background:rgba(12,15,23,0.92);border:0.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : 'rgba(212,166,74,0.5)'};border-radius:2px;display:flex;align-items:center;justify-content:space-between;z-index:25;">
           <div style="display:flex;align-items:center;gap:6px;">
-            <span style="padding:1px 4px;background:rgba(245,158,11,0.2);border:0.5px solid #f59e0b;font-size:5.5px;color:#fbbf24;font-weight:700;">ENCOUNTER MAP STAGE</span>
+            <span style="padding:1px 4px;background:${stageMode === 'boss_phase2' ? 'rgba(127,29,29,0.85)' : 'rgba(245,158,11,0.2)'};border:0.5px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#f59e0b'};font-size:5.3px;color:${stageMode === 'boss_phase2' ? '#fecaca' : '#fbbf24'};font-weight:700;">
+              ${stageMode === 'pre_battle' ? 'EXPLORE / ENCOUNTER MAP STAGE' : stageMode === 'boss_phase2' ? '⚡ PHASE CHANGE · UNITS REPOSITIONED' : stageMode === 'elite_aftermath' ? '✓ COMBAT END · SQUAD REGROUPED' : '💬 IN-COMBAT BARK · MAP STAGE'}
+            </span>
             <span class="font-title" style="font-size:8px;color:var(--gold);">${tpl.title}</span>
           </div>
-          <span class="font-mono" style="font-size:5.8px;color:var(--dim);">Click [⚔ Engage Combat] below to transition into the Combat UI</span>
+          <span class="font-mono" style="font-size:5.5px;color:#93c5fd;">
+            All 9 rows visible above bark dock · Dashed lines show unit repositioning
+          </span>
         </div>
       ` : `
         <!-- TOP 6-BLOCK TIMELINE STRIP (battle/draw.rs: Rect(2, 2, 636, 24)) -->
@@ -343,89 +476,92 @@ function renderBattleScreen() {
             <div style="display:flex;gap:1.5px;margin-top:2px;">${apPipsHtml}</div>
           </div>
         </div>
-
-        <!-- LEFT PARTY COLUMN (battle/draw.rs: x=2..124, y=30..318) -->
-        <div class="${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:2px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;opacity:${activeBark ? '0.55' : '1'};transition:opacity 0.2s;">
-          ${heroes.map(h => {
-            const isSel = h.id === selHero.id;
-            const hpPct = Math.round((h.hp / h.maxHp) * 100);
-            return `
-              <div class="rust-card ${isSel ? 'selected' : ''}"
-                   style="padding:4px 5px;cursor:pointer;display:flex;flex-direction:column;gap:3px;"
-                   onclick="STATE.selectedUnitId='${h.id}';render();">
-                <div style="display:flex;gap:5px;align-items:center;">
-                  <div class="portrait-box gold-rim" style="width:28px;height:28px;">
-                    <img src="${ASSETS.portraits[h.portrait]}" class="pixel">
-                  </div>
-                  <div style="flex:1;overflow:hidden;">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
-                      <span class="font-title" style="font-size:8px;color:var(--gold);">${h.name}</span>
-                      <span class="font-mono" style="font-size:6px;color:#60a5fa;">G:${h.guard}</span>
-                    </div>
-                    <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
-                      <div style="width:${hpPct}%;height:100%;background:#10b981;"></div>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
-                      <span class="font-mono" style="font-size:5.8px;color:var(--text);">${h.hp}/${h.maxHp} HP</span>
-                      <div style="display:flex;gap:1px;" title="Poise Pips">
-                        ${Array.from({ length: h.maxPoise }).map((_, pi) => `
-                          <div style="width:3.5px;height:3.5px;background:${pi < h.poise ? '#fbbf24' : '#374151'};"></div>
-                        `).join('')}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <!-- 6-pip mini plan preview -->
-                <div style="display:flex;gap:1.5px;">
-                  ${[0,1,2,3,4,5].map(bIdx => {
-                    const has = h.plan.find(p => bIdx >= p.start && bIdx < p.start + p.blocks);
-                    return `<div style="flex:1;height:3px;background:${has ? (has.ghost ? '#6b7280' : '#d97706') : '#1f2430'};"></div>`;
-                  }).join('')}
-                </div>
-              </div>
-            `;
-          }).join('')}
-
-          <!-- Active Hero Belt Consumables Quick-Use -->
-          <div class="rust-panel" style="padding:4px 5px;margin-top:auto;">
-            <div class="font-title" style="font-size:7px;color:var(--gold);margin-bottom:2px;">${selHero.name}'s 5-Pip Belt (0B Free)</div>
-            ${(STATE.roster[selHero.id]?.pouch || []).map((item, idx) => `
-              <div class="rust-card" style="padding:2.5px 4px;margin-bottom:2px;font-size:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;"
-                   onclick="useBeltItem('${selHero.id}', ${idx})">
-                <span>${item.name}</span>
-                <span class="font-mono" style="color:var(--gold);">${item.pips}p ▸</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
       `}
 
-      <!-- CENTER BATTLE STAGE (stage.rs: INTERIOR = Rect(128, 30, 384, 288)) -->
-      <div style="position:absolute;left:128px;top:${isPreBattle ? '28px' : '30px'};width:384px;height:${isPreBattle ? '230px' : '288px'};border:1px solid ${stageMode === 'boss_phase2' ? '#ef4444' : '#374151'};background:#08090d;overflow:hidden;box-shadow:${stageMode === 'boss_phase2' ? '0 0 18px rgba(239,68,68,0.4)' : 'none'};">
-        <!-- BACKDROP = Rect(128, 30, 384, 52) -->
-        <div style="position:relative;width:384px;height:52px;overflow:hidden;border-bottom:1px solid #4b5563;">
-          <img src="${ASSETS.bg[tpl.backdrop] || ASSETS.bg.canal}" class="pixel" style="width:384px;height:52px;object-fit:cover;">
-          <div style="position:absolute;inset:0;background:linear-gradient(90deg, rgba(10,11,16,0.75) 0%, rgba(10,11,16,0.2) 50%, rgba(10,11,16,0.75) 100%);padding:4px 8px;display:flex;justify-content:space-between;align-items:flex-start;">
-            <div>
-              <div class="font-title" style="font-size:9px;color:var(--gold);text-shadow:0 1px 2px #000;">${tpl.title}</div>
-              <div style="font-size:6px;color:var(--text);text-shadow:0 1px 2px #000;">${tpl.subtitle}</div>
+      <!-- LEFT PARTY COLUMN (slides in during combat; slides out during map-stage / scripted bark) -->
+      <div class="${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:2px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;opacity:${activeBark ? '0' : '1'};transform:${activeBark ? 'translateX(-24px)' : 'translateX(0)'};pointer-events:${activeBark ? 'none' : 'auto'};transition:opacity 0.25s ease, transform 0.25s ease;">
+        ${heroes.map(h => {
+          const isSel = h.id === selHero.id;
+          const hpPct = Math.round((h.hp / h.maxHp) * 100);
+          return `
+            <div class="rust-card ${isSel ? 'selected' : ''}"
+                 style="padding:4px 5px;cursor:pointer;display:flex;flex-direction:column;gap:3px;"
+                 onclick="STATE.selectedUnitId='${h.id}';render();">
+              <div style="display:flex;gap:5px;align-items:center;">
+                <div class="portrait-box gold-rim" style="width:28px;height:28px;">
+                  <img src="${ASSETS.portraits[h.portrait]}" class="pixel">
+                </div>
+                <div style="flex:1;overflow:hidden;">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                    <span class="font-title" style="font-size:8px;color:var(--gold);">${h.name}</span>
+                    <span class="font-mono" style="font-size:6px;color:#60a5fa;">G:${h.guard}</span>
+                  </div>
+                  <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
+                    <div style="width:${hpPct}%;height:100%;background:#10b981;"></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
+                    <span class="font-mono" style="font-size:5.8px;color:var(--text);">${h.hp}/${h.maxHp} HP</span>
+                    <div style="display:flex;gap:1px;" title="Poise Pips">
+                      ${Array.from({ length: h.maxPoise }).map((_, pi) => `
+                        <div style="width:3.5px;height:3.5px;background:${pi < h.poise ? '#fbbf24' : '#374151'};"></div>
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 6-pip mini plan preview -->
+              <div style="display:flex;gap:1.5px;">
+                ${[0,1,2,3,4,5].map(bIdx => {
+                  const has = h.plan.find(p => bIdx >= p.start && bIdx < p.start + p.blocks);
+                  return `<div style="flex:1;height:3px;background:${has ? (has.ghost ? '#6b7280' : '#d97706') : '#1f2430'};"></div>`;
+                }).join('')}
+              </div>
             </div>
-            <span class="font-mono" style="font-size:6px;background:rgba(10,11,16,0.85);padding:1px 4px;border:0.5px solid #d97706;color:var(--gold);">
+          `;
+        }).join('')}
+
+        <!-- Active Hero Belt Consumables Quick-Use -->
+        <div class="rust-panel" style="padding:4px 5px;margin-top:auto;">
+          <div class="font-title" style="font-size:7px;color:var(--gold);margin-bottom:2px;">${selHero.name}'s 5-Pip Belt (0B Free)</div>
+          ${(STATE.roster[selHero.id]?.pouch || []).map((item, idx) => `
+            <div class="rust-card" style="padding:2.5px 4px;margin-bottom:2px;font-size:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;"
+                 onclick="useBeltItem('${selHero.id}', ${idx})">
+              <span>${item.name}</span>
+              <span class="font-mono" style="color:var(--gold);">${item.pips}p ▸</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- CENTER BATTLE STAGE (smoothly reframes between Map-Stage Bark View [y:26..258, 0 rows covered] and Active Combat View [y:30..312]) -->
+      <div class="stage-pan-transition" style="position:absolute;left:128px;top:${stageTop}px;width:384px;height:${stageTotalH}px;border:1px solid ${stageMode === 'boss_phase2' ? '#ef4444' : (activeBark ? '#d4a64a' : '#374151')};background:#08090d;overflow:hidden;box-shadow:${stageMode === 'boss_phase2' ? '0 0 18px rgba(239,68,68,0.4)' : '0 8px 24px rgba(0,0,0,0.85)'};">
+        <!-- BACKDROP (26px in Bark/Map frame, 52px in Active Combat frame) -->
+        <div style="position:relative;width:384px;height:${backdropH}px;overflow:hidden;border-bottom:1px solid #4b5563;transition:height 0.28s ease;">
+          <img src="${ASSETS.bg[tpl.backdrop] || ASSETS.bg.canal}" class="pixel" style="width:384px;height:100%;object-fit:cover;">
+          <div style="position:absolute;inset:0;background:linear-gradient(90deg, rgba(10,11,16,0.75) 0%, rgba(10,11,16,0.2) 50%, rgba(10,11,16,0.75) 100%);padding:3px 8px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div class="font-title" style="font-size:${activeBark ? '8px' : '9px'};color:var(--gold);text-shadow:0 1px 2px #000;">${tpl.title}</div>
+              ${!activeBark ? `<div style="font-size:6px;color:var(--text);text-shadow:0 1px 2px #000;">${tpl.subtitle}</div>` : ''}
+            </div>
+            <span class="font-mono" style="font-size:5.6px;background:rgba(10,11,16,0.85);padding:1px 4px;border:0.5px solid #d97706;color:var(--gold);">
               ${tpl.objective}
             </span>
           </div>
         </div>
 
-        <!-- BOARD = 12x9 tiles (384x216 px) -->
-        <div style="position:relative;width:384px;height:216px;">
+        <!-- BOARD = 12x9 tiles (384 x boardH px — all 9 rows completely visible above the bark dock!) -->
+        <div style="position:relative;width:384px;height:${boardH}px;">
           ${boardCellsHtml}
+          ${repositionTrailsSvg}
           ${stageUnitsHtml}
         </div>
 
-        <!-- FRONT_FACE = 384x12 px stone lip (stage.rs STAGE_LIP = 12) -->
-        <div style="width:384px;height:14px;background:linear-gradient(180deg, #262b38 0%, #11141c 100%);border-top:1px solid #4b5563;display:flex;align-items:center;justify-content:space-between;padding:0 8px;font-size:5.8px;color:var(--dim);">
-          <span>Click any tile or unit to open the icon-only <b>SkillMenu</b> (skill_menu.rs)</span>
-          <span>12×9 Tactical Grid · 6 Blocks / Round</span>
+        <!-- FRONT_FACE stone lip -->
+        <div style="width:384px;height:${lipH}px;background:linear-gradient(180deg, #262b38 0%, #11141c 100%);border-top:1px solid #4b5563;display:flex;align-items:center;justify-content:space-between;padding:0 8px;font-size:5.4px;color:var(--dim);">
+          ${!activeBark ? `
+            <span>Click any tile or unit to open the icon-only <b>SkillMenu</b> (skill_menu.rs)</span>
+            <span>12×9 Tactical Grid · 6 Blocks / Round</span>
+          ` : ''}
         </div>
       </div>
 
@@ -433,66 +569,64 @@ function renderBattleScreen() {
         <!-- ANIMATED MAP → COMBAT ENGAGEMENT BANNER -->
         <div class="combat-banner-flash" style="position:absolute;left:90px;right:90px;top:148px;height:54px;background:linear-gradient(90deg, transparent 0%, rgba(12,15,23,0.96) 18%, rgba(44,18,22,0.98) 50%, rgba(12,15,23,0.96) 82%, transparent 100%);border-top:1.5px solid #fbbf24;border-bottom:1.5px solid #fbbf24;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:42;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,0.9);">
           <div class="font-title" style="font-size:13px;color:#fef3c7;letter-spacing:2px;text-shadow:0 2px 8px #000;">⚔ ENCOUNTER ENGAGED — FORESIGHT ACTIVE ⚔</div>
-          <div class="font-mono" style="font-size:6.5px;color:#fbbf24;margin-top:2px;">Round 1 · Enemy Intents Telegraphed on 6-Block Timeline</div>
+          <div class="font-mono" style="font-size:6.5px;color:#fbbf24;margin-top:2px;">Round ${STATE.round} · Combat HUD Slid In & Enemy Intents Telegraphed</div>
         </div>
       ` : ''}
 
       ${skillMenuHtml}
 
-      ${!isPreBattle ? `
-        <!-- RIGHT HOSTILE CARDS + PINNED INTEL PANEL (battle/draw.rs: x=516..638, y=30..318) -->
-        <div class="${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:516px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;opacity:${activeBark ? '0.55' : '1'};transition:opacity 0.2s;">
-          <div style="display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:168px;">
-            ${foes.map(f => {
-              const isPinned = pinnedFoe && f.id === pinnedFoe.id;
-              const hpPct = Math.max(0, Math.round((f.hp / f.maxHp) * 100));
-              return `
-                <div class="rust-card ${isPinned ? 'selected' : ''}"
-                     style="padding:4px 5px;cursor:pointer;opacity:${f.hp <= 0 ? '0.4' : '1'};"
-                     onclick="STATE.pinnedFoeId='${f.id}';render();">
-                  <div style="display:flex;gap:5px;align-items:center;">
-                    <div class="portrait-box foe-rim" style="width:26px;height:26px;">
-                      <img src="${ASSETS.portraits[f.portrait] || ASSETS.portraits.watchman}" class="pixel">
+      <!-- RIGHT HOSTILE CARDS + PINNED INTEL PANEL (slides out during map-stage / scripted bark) -->
+      <div class="${isTransitionIn ? 'hud-slide-down' : ''}" style="position:absolute;left:516px;top:30px;width:122px;height:288px;display:flex;flex-direction:column;gap:4px;opacity:${activeBark ? '0' : '1'};transform:${activeBark ? 'translateX(24px)' : 'translateX(0)'};pointer-events:${activeBark ? 'none' : 'auto'};transition:opacity 0.25s ease, transform 0.25s ease;">
+        <div style="display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:168px;">
+          ${foes.map(f => {
+            const isPinned = pinnedFoe && f.id === pinnedFoe.id;
+            const hpPct = Math.max(0, Math.round((f.hp / f.maxHp) * 100));
+            return `
+              <div class="rust-card ${isPinned ? 'selected' : ''}"
+                   style="padding:4px 5px;cursor:pointer;opacity:${f.hp <= 0 ? '0.4' : '1'};"
+                   onclick="STATE.pinnedFoeId='${f.id}';render();">
+                <div style="display:flex;gap:5px;align-items:center;">
+                  <div class="portrait-box foe-rim" style="width:26px;height:26px;">
+                    <img src="${ASSETS.portraits[f.portrait] || ASSETS.portraits.watchman}" class="pixel">
+                  </div>
+                  <div style="flex:1;overflow:hidden;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                      <span class="font-title" style="font-size:7.5px;color:#fda4af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</span>
+                      <img src="${ASSETS.ui['intent_' + f.intent] || ASSETS.ui.intent_attack}" class="pixel" style="width:10px;height:10px;" title="Foresight Intent">
                     </div>
-                    <div style="flex:1;overflow:hidden;">
-                      <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span class="font-title" style="font-size:7.5px;color:#fda4af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</span>
-                        <img src="${ASSETS.ui['intent_' + f.intent] || ASSETS.ui.intent_attack}" class="pixel" style="width:10px;height:10px;" title="Foresight Intent">
-                      </div>
-                      <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
-                        <div style="width:${hpPct}%;height:100%;background:#e11d48;"></div>
-                      </div>
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
-                        <span class="font-mono" style="font-size:5.8px;color:var(--text);">${f.hp}/${f.maxHp} · G:${f.guard}</span>
-                        <div style="display:flex;gap:1px;">
-                          ${Array.from({ length: f.maxPoise }).map((_, pi) => `
-                            <div style="width:3.5px;height:3.5px;background:${pi < f.poise ? '#fbbf24' : '#374151'};"></div>
-                          `).join('')}
-                        </div>
+                    <div style="width:100%;height:4px;background:#08090d;border:0.5px solid #374151;margin-top:2px;">
+                      <div style="width:${hpPct}%;height:100%;background:#e11d48;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
+                      <span class="font-mono" style="font-size:5.8px;color:var(--text);">${f.hp}/${f.maxHp} · G:${f.guard}</span>
+                      <div style="display:flex;gap:1px;">
+                        ${Array.from({ length: f.maxPoise }).map((_, pi) => `
+                          <div style="width:3.5px;height:3.5px;background:${pi < f.poise ? '#fbbf24' : '#374151'};"></div>
+                        `).join('')}
                       </div>
                     </div>
                   </div>
                 </div>
-              `;
-            }).join('')}
-          </div>
-
-          <!-- Pinned Enemy Intel Card (battle/draw.rs lower-right inspector — Reduced Corner Frame) -->
-          ${pinnedFoe ? ornateCornerBox640('margin-top:auto;padding:5px 6px;display:flex;flex-direction:column;gap:3px;', `
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="font-title" style="font-size:7.5px;color:var(--gold);">Intel · ${pinnedFoe.name}</span>
-                <img src="${ASSETS.ui.badge_foresight}" class="pixel" style="width:9px;height:9px;">
               </div>
-              <div style="font-size:5.8px;color:var(--info);">${pinnedFoe.role}</div>
-              <div style="font-size:6px;color:#fda4af;background:rgba(44,20,24,0.8);padding:2px 4px;border:0.5px solid #991b1b;">
-                <b>Intent:</b> ${pinnedFoe.intentName}
-              </div>
-              <div style="font-size:5.8px;color:var(--dim);line-height:1.3;">
-                <b style="color:var(--text);">Trait:</b> ${pinnedFoe.passive}
-              </div>
-          `) : ''}
+            `;
+          }).join('')}
         </div>
-      ` : ''}
+
+        <!-- Pinned Enemy Intel Card (battle/draw.rs lower-right inspector — Reduced Corner Frame) -->
+        ${pinnedFoe ? ornateCornerBox640('margin-top:auto;padding:5px 6px;display:flex;flex-direction:column;gap:3px;', `
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="font-title" style="font-size:7.5px;color:var(--gold);">Intel · ${pinnedFoe.name}</span>
+              <img src="${ASSETS.ui.badge_foresight}" class="pixel" style="width:9px;height:9px;">
+            </div>
+            <div style="font-size:5.8px;color:var(--info);">${pinnedFoe.role}</div>
+            <div style="font-size:6px;color:#fda4af;background:rgba(44,20,24,0.8);padding:2px 4px;border:0.5px solid #991b1b;">
+              <b>Intent:</b> ${pinnedFoe.intentName}
+            </div>
+            <div style="font-size:5.8px;color:var(--dim);line-height:1.3;">
+              <b style="color:var(--text);">Trait:</b> ${pinnedFoe.passive}
+            </div>
+        `) : ''}
+      </div>
 
       ${!activeBark ? `
         <!-- BOTTOM BAR (battle/draw.rs: Rect(2, 322, 636, 36)) -->

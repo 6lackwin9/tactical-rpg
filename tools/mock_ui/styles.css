@@ -720,43 +720,57 @@
     0%, 100% { transform: translateY(0px) scale(1); }
     50%      { transform: translateY(-4px) scale(1.012); }
   }
-  @keyframes vnLunge {
-    0%   { transform: translateX(0px) translateY(0px) scale(1); }
-    35%  { transform: translateX(22px) translateY(-6px) scale(1.06); }
-    100% { transform: translateX(10px) translateY(-2px) scale(1.03); }
+  @keyframes vnLungeRight {
+    0%, 100% { transform: translateX(0px) translateY(0px) scale(1); }
+    18%      { transform: translateX(24px) translateY(-6px) scale(1.05); }
+    45%      { transform: translateX(12px) translateY(-2px) scale(1.025); }
+    75%      { transform: translateX(12px) translateY(-2px) scale(1.025); }
   }
   @keyframes vnLungeLeft {
-    0%   { transform: translateX(0px) translateY(0px) scale(1); }
-    35%  { transform: translateX(-22px) translateY(-6px) scale(1.06); }
-    100% { transform: translateX(-10px) translateY(-2px) scale(1.03); }
+    0%, 100% { transform: translateX(0px) translateY(0px) scale(1); }
+    18%      { transform: translateX(-24px) translateY(-6px) scale(1.05); }
+    45%      { transform: translateX(-12px) translateY(-2px) scale(1.025); }
+    75%      { transform: translateX(-12px) translateY(-2px) scale(1.025); }
   }
   @keyframes vnShake {
-    0%, 100% { transform: translateX(0px); }
-    20%      { transform: translateX(-6px) rotate(-1deg); }
-    40%      { transform: translateX(6px) rotate(1deg); }
-    60%      { transform: translateX(-4px); }
-    80%      { transform: translateX(4px); }
+    0%, 55%, 100% { transform: translateX(0px) rotate(0deg); }
+    8%            { transform: translateX(-7px) rotate(-1.2deg); }
+    16%           { transform: translateX(7px) rotate(1.2deg); }
+    24%           { transform: translateX(-5px) rotate(-0.8deg); }
+    32%           { transform: translateX(5px) rotate(0.8deg); }
+    40%           { transform: translateX(-3px) rotate(0deg); }
   }
   @keyframes vnHop {
-    0%, 100% { transform: translateY(0px); }
-    30%      { transform: translateY(-16px) scale(1.04); }
-    60%      { transform: translateY(0px); }
-    80%      { transform: translateY(-6px); }
+    0%, 55%, 100% { transform: translateY(0px) scale(1); }
+    15%           { transform: translateY(-16px) scale(1.035); }
+    30%           { transform: translateY(0px) scale(0.99); }
+    42%           { transform: translateY(-7px) scale(1.015); }
   }
   @keyframes vnPulseRing {
-    0%   { transform: scale(0.82); opacity: 0.9; }
-    70%  { transform: scale(1.28); opacity: 0.25; }
-    100% { transform: scale(1.42); opacity: 0; }
+    0%   { transform: translate(-50%, -50%) scale(0.72); opacity: 0.92; }
+    70%  { transform: translate(-50%, -50%) scale(1.16); opacity: 0.28; }
+    100% { transform: translate(-50%, -50%) scale(1.30); opacity: 0; }
+  }
+  @keyframes vnFloorRipple {
+    0%   { transform: translateX(-50%) scale(0.82); opacity: 0.85; }
+    70%  { transform: translateX(-50%) scale(1.22); opacity: 0.28; }
+    100% { transform: translateX(-50%) scale(1.35); opacity: 0; }
   }
   @keyframes vnEmotePop {
-    0%   { transform: translateY(10px) scale(0.5); opacity: 0; }
-    50%  { transform: translateY(-6px) scale(1.12); opacity: 1; }
-    100% { transform: translateY(0px) scale(1); opacity: 1; }
+    0%   { transform: translateX(-50%) translateY(8px) scale(0.6); opacity: 0; }
+    45%  { transform: translateX(-50%) translateY(-4px) scale(1.08); opacity: 1; }
+    100% { transform: translateX(-50%) translateY(0px) scale(1); opacity: 1; }
   }
   @keyframes vnSlashGlint {
-    0%   { opacity: 0; transform: translateX(-60px) rotate(-28deg) scaleX(0.4); }
-    40%  { opacity: 0.95; transform: translateX(0px) rotate(-28deg) scaleX(1.1); }
-    100% { opacity: 0; transform: translateX(60px) rotate(-28deg) scaleX(0.6); }
+    0%        { opacity: 0; transform: translate(-50%, -50%) scale(0.75) rotate(-12deg); }
+    20%       { opacity: 1; transform: translate(-50%, -50%) scale(1.04) rotate(0deg); }
+    50%       { opacity: 0.85; transform: translate(-50%, -50%) scale(1.08) rotate(4deg); }
+    75%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.12) rotate(6deg); }
+  }
+  @keyframes vnFloatSparks {
+    0%   { opacity: 0; transform: translate(-50%, -42%) scale(0.88); }
+    30%  { opacity: 0.95; }
+    100% { opacity: 0; transform: translate(-50%, -62%) scale(1.08); }
   }
   @keyframes hudSlideDown {
     0%   { transform: translateY(-48px); opacity: 0; }
@@ -772,15 +786,17 @@
     100% { transform: scaleX(1); opacity: 1; }
   }
 
-  .vn-anim-breathe    { animation: vnBreathe 3.2s ease-in-out infinite; }
-  .vn-anim-lunge-r    { animation: vnLunge 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .vn-anim-lunge-l    { animation: vnLungeLeft 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .vn-anim-shake      { animation: vnShake 0.5s ease-in-out 2; }
-  .vn-anim-hop        { animation: vnHop 0.6s ease-out 1; }
-  .vn-emote-badge     { animation: vnEmotePop 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .vn-ring-pulse      { animation: vnPulseRing 1.8s ease-out infinite; }
-  .vn-slash-glint     { animation: vnSlashGlint 0.75s ease-out 1; }
-  .hud-slide-down     { animation: hudSlideDown 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .hud-slide-up       { animation: hudSlideUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-  .combat-banner-anim { animation: combatBannerFlash 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .vn-anim-breathe      { animation: vnBreathe 3.2s ease-in-out infinite; }
+  .vn-anim-lunge-right  { animation: vnLungeRight 2.1s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  .vn-anim-lunge-left   { animation: vnLungeLeft 2.1s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  .vn-anim-shake        { animation: vnShake 1.8s ease-in-out infinite; }
+  .vn-anim-hop          { animation: vnHop 1.9s ease-out infinite; }
+  .vn-emote-badge       { animation: vnEmotePop 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .vn-ring-pulse        { animation: vnPulseRing 1.8s ease-out infinite; }
+  .vn-slash-glint       { animation: vnSlashGlint 2.1s ease-out infinite; }
+  .hud-slide-down       { animation: hudSlideDown 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .hud-slide-up         { animation: hudSlideUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .combat-banner-flash  { animation: combatBannerFlash 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .stage-pan-transition { transition: top 0.32s cubic-bezier(0.22, 1, 0.36, 1), height 0.32s cubic-bezier(0.22, 1, 0.36, 1), left 0.32s cubic-bezier(0.22, 1, 0.36, 1), width 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+
 

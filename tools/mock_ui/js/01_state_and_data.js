@@ -821,7 +821,7 @@ const STORIES = {
     title: 'Prologue 0b · The Chimney Slate',
     actBanner: 'PROLOGUE 0B · SLATE RIDGE',
     subtitle: 'Above the Chained Tenements · Brazier Light',
-    bg: 'vn_alley_stage',
+    bg: 'vn_rooftop_stage',
     vignetteBg: 'intro_2',
     mapBackdrop: 'rooftops',
     encId: 'enc_0b',

@@ -160,9 +160,10 @@ window.addEventListener('keydown', (e) => {
     } else if (STATE.screen === 'battle' && !STATE.settingsOpen && !STATE.modal) {
       e.preventDefault();
       if (STATE.battleStageMode === 'pre_battle') { engageCombatFromMap(); }
-      else if (STATE.battleStageMode === 'boss_phase2' || STATE.battleStageMode === 'elite_intro' || STATE.battleStageMode === 'elite_aftermath') {
-        STATE.battleStageMode = 'active_combat';
-        render();
+      else if (STATE.battleStageMode === 'boss_phase2' || STATE.battleStageMode === 'elite_intro') {
+        resumeFromCombatBark();
+      } else if (STATE.battleStageMode === 'elite_aftermath') {
+        transitionOutToExploreMap();
       } else {
         executeBattleRound();
       }

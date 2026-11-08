@@ -111,6 +111,26 @@ function engageCombatFromMap() {
   }, 1150);
 }
 
+function resumeFromCombatBark() {
+  engageCombatFromMap();
+}
+
+function transitionOutToExploreMap() {
+  const b = BATTLE;
+  const nextStory = b && b.tpl && b.tpl.nextStory;
+  if (nextStory && STORIES[nextStory]) {
+    STATE.screen = 'story';
+    STATE.storyId = nextStory;
+    STATE.storyCardIdx = 0;
+    STATE.storyMode = 'map_stage';
+    render();
+  } else {
+    STATE.screen = 'region';
+    STATE.regionId = 'sluice_undercroft';
+    render();
+  }
+}
+
 function openShop(keeper) {
   STATE.shopKeeper = keeper;
   STATE.shopSelIdx = 0;

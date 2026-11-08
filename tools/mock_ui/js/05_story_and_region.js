@@ -93,69 +93,130 @@ function renderSceneRunner() {
 //  2. `map_stage`     : In-Game Region/Battle Map Stage + On-Tile Unit Reactions + Seamless Transition to Combat UI.
 //  3. `vignette_reel` : Dedicated Cutscene / Transition Player (`vignette.rs`) with minimal UI (`Auto`, `Log`, `Skip`).
 // ============================================================================
-function renderReactionFxOverlay(fxKey, isActive) {
-  if (!fxKey) return '';
+function renderReactionFxOverlay(fxKey, isActive, side) {
+  if (!fxKey) return { back: '', front: '' };
+  const slashFlip = side === 'right' ? 'scaleX(-1)' : 'scaleX(1)';
+
   if (fxKey === 'steel_flash') {
-    return `
-      <!-- Cold Steel Slash Glint + Shockwave Ring -->
-      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
-        <div style="position:absolute;left:50%;top:48%;width:210px;height:210px;border-radius:50%;border:2px solid rgba(251,191,36,0.75);animation:vnPulseRing 1.35s ease-out infinite;"></div>
-        <svg width="260" height="260" viewBox="0 0 260 260" style="position:absolute;left:10px;top:15px;overflow:visible;animation:vnSlashGlint 1.2s ease-out infinite;">
-          <path d="M 35 205 Q 130 95 230 35" stroke="#fef3c7" stroke-width="5" stroke-linecap="round" fill="none" filter="drop-shadow(0 0 8px #f59e0b)"/>
-          <path d="M 55 215 Q 140 115 235 55" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-        </svg>
-        <div style="position:absolute;right:24px;top:14px;padding:2px 8px;border-radius:10px;background:rgba(15,23,42,0.92);border:1.5px solid #fbbf24;color:#fef3c7;font-size:11px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,0.85);animation:vnEmotePop 0.35s ease-out;">
-          ⚔ STEEL DRAWN
+    return {
+      back: `
+        <!-- Centered Torso Aura + Floor Impact Ripple behind sprite -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+          <div style="position:absolute;left:50%;top:54%;width:190px;height:190px;border-radius:50%;border:2px solid rgba(251,191,36,0.78);box-shadow:0 0 22px rgba(245,158,11,0.35);animation:vnPulseRing 1.4s ease-out infinite;"></div>
+          <div style="position:absolute;left:50%;bottom:4px;width:210px;height:36px;border-radius:50%;border:2px solid rgba(56,189,248,0.75);animation:vnFloorRipple 1.4s ease-out infinite;"></div>
         </div>
-      </div>
-    `;
+      `,
+      front: `
+        <!-- Centered Cold-Steel Slash Arc across weapon/torso + Overhead Callout -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:4;">
+          <div style="position:absolute;left:50%;top:50%;width:240px;height:240px;animation:vnSlashGlint 1.8s ease-out infinite;">
+            <svg width="240" height="240" viewBox="0 0 240 240" style="overflow:visible;transform:${slashFlip};">
+              <path d="M 28 196 Q 118 92 214 34" stroke="#fef3c7" stroke-width="5.5" stroke-linecap="round" fill="none" filter="drop-shadow(0 0 8px #f59e0b)"/>
+              <path d="M 48 206 Q 130 112 220 54" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+              <circle cx="146" cy="84" r="4" fill="#fef3c7" filter="drop-shadow(0 0 6px #fbbf24)"/>
+              <path d="M 146 72 L 146 96 M 134 84 L 158 84" stroke="#fef3c7" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="vn-emote-badge" style="position:absolute;left:50%;top:-18px;padding:2px 10px;border-radius:10px;background:rgba(15,23,42,0.95);border:1.5px solid #fbbf24;color:#fef3c7;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
+            ⚔ STEEL DRAWN
+          </div>
+        </div>
+      `
+    };
   }
+
   if (fxKey === 'anger_burst') {
-    return `
-      <!-- Crimson Anger Shockwave + Ember Sparks -->
-      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
-        <div style="position:absolute;left:50%;top:52%;width:220px;height:220px;border-radius:50%;border:2.5px solid rgba(239,68,68,0.8);animation:vnPulseRing 1.1s ease-out infinite;"></div>
-        <div style="position:absolute;left:50%;top:52%;width:165px;height:165px;border-radius:50%;border:1.5px dashed rgba(251,191,36,0.75);transform:translate(-50%,-50%);"></div>
-        <div style="position:absolute;right:22px;top:10px;padding:2px 9px;border-radius:10px;background:rgba(69,10,10,0.95);border:1.5px solid #ef4444;color:#fca5a5;font-size:11px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,0.9);animation:vnEmotePop 0.35s ease-out;">
-          💢 ENRAGED
+    return {
+      back: `
+        <!-- Centered Crimson Shockwave Rings behind torso + Floor Tremor Ring -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+          <div style="position:absolute;left:50%;top:54%;width:205px;height:205px;border-radius:50%;border:2.5px solid rgba(239,68,68,0.85);box-shadow:0 0 26px rgba(220,38,38,0.45);animation:vnPulseRing 1.15s ease-out infinite;"></div>
+          <div style="position:absolute;left:50%;top:54%;width:162px;height:162px;border-radius:50%;border:1.5px dashed rgba(251,191,36,0.78);transform:translate(-50%,-50%);"></div>
+          <div style="position:absolute;left:50%;bottom:4px;width:215px;height:38px;border-radius:50%;border:2px solid rgba(239,68,68,0.82);animation:vnFloorRipple 1.15s ease-out infinite;"></div>
         </div>
-      </div>
-    `;
+      `,
+      front: `
+        <!-- Centered Crimson Burst Spokes & Overhead Enraged Badge -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:4;">
+          <svg width="240" height="240" viewBox="0 0 240 240" style="position:absolute;left:50%;top:52%;width:240px;height:240px;overflow:visible;animation:vnFloatSparks 1.4s ease-out infinite;">
+            <path d="M 46 66 L 26 48 M 194 66 L 214 48 M 36 126 L 14 122 M 204 126 L 226 122" stroke="#ef4444" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="52" cy="96" r="3.5" fill="#fbbf24"/>
+            <circle cx="188" cy="88" r="3.5" fill="#ef4444"/>
+            <circle cx="68" cy="48" r="2.5" fill="#fca5a5"/>
+            <circle cx="174" cy="52" r="3" fill="#fbbf24"/>
+          </svg>
+          <div class="vn-emote-badge" style="position:absolute;left:50%;top:-18px;padding:2px 10px;border-radius:10px;background:rgba(69,10,10,0.96);border:1.5px solid #ef4444;color:#fecaca;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
+            💢 ENRAGED
+          </div>
+        </div>
+      `
+    };
   }
+
   if (fxKey === 'alert_shock') {
-    return `
-      <!-- Alert Exclamation Ripple -->
-      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
-        <div style="position:absolute;left:50%;top:42%;width:190px;height:190px;border-radius:50%;border:2px solid rgba(56,189,248,0.75);animation:vnPulseRing 1.4s ease-out infinite;"></div>
-        <div style="position:absolute;left:50%;top:-4px;transform:translateX(-50%);padding:2px 10px;border-radius:12px;background:rgba(12,74,110,0.95);border:1.5px solid #38bdf8;color:#e0f2fe;font-size:12px;font-weight:900;box-shadow:0 4px 12px rgba(0,0,0,0.85);animation:vnEmotePop 0.35s ease-out;">
-          !! ALERT
+    return {
+      back: `
+        <!-- Centered Cyan Sonar Ring around upper torso -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+          <div style="position:absolute;left:50%;top:48%;width:185px;height:185px;border-radius:50%;border:2px solid rgba(56,189,248,0.82);box-shadow:0 0 20px rgba(56,189,248,0.32);animation:vnPulseRing 1.35s ease-out infinite;"></div>
+          <div style="position:absolute;left:50%;bottom:4px;width:195px;height:34px;border-radius:50%;border:1.5px solid rgba(56,189,248,0.68);animation:vnFloorRipple 1.35s ease-out infinite;"></div>
         </div>
-      </div>
-    `;
+      `,
+      front: `
+        <!-- Classic Tactical RPG Comic Reaction Rays & Overhead !! ALERT -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:4;">
+          <svg width="180" height="70" viewBox="0 0 180 70" style="position:absolute;left:50%;top:-6px;transform:translateX(-50%);overflow:visible;">
+            <path d="M 45 42 L 26 24 M 65 30 L 54 8 M 115 30 L 126 8 M 135 42 L 154 24" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="vn-emote-badge" style="position:absolute;left:50%;top:-20px;padding:2px 11px;border-radius:12px;background:rgba(12,74,110,0.96);border:1.5px solid #38bdf8;color:#e0f2fe;font-size:11.5px;font-weight:900;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
+            !! ALERT
+          </div>
+        </div>
+      `
+    };
   }
+
   if (fxKey === 'alchemy_flare') {
-    return `
-      <!-- Alchemical Censer Vapour & Emerald-Amber Sparks -->
-      <div style="position:absolute;inset:-10px;pointer-events:none;z-index:4;">
-        <div style="position:absolute;left:50%;top:50%;width:200px;height:200px;border-radius:50%;border:2px solid rgba(52,211,153,0.7);animation:vnPulseRing 1.5s ease-out infinite;"></div>
-        <div style="position:absolute;right:18px;top:12px;padding:2px 8px;border-radius:10px;background:rgba(6,78,59,0.94);border:1.5px solid #34d399;color:#a7f3d0;font-size:11px;font-weight:800;box-shadow:0 4px 12px rgba(0,0,0,0.85);">
-          ⚗ ALCHEMY READY
+    return {
+      back: `
+        <!-- Centered Alchemical Vapour Ring + Emerald Floor Halo -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+          <div style="position:absolute;left:50%;top:54%;width:192px;height:192px;border-radius:50%;border:2px solid rgba(52,211,153,0.78);box-shadow:0 0 24px rgba(16,185,129,0.35);animation:vnPulseRing 1.5s ease-out infinite;"></div>
+          <div style="position:absolute;left:50%;bottom:4px;width:205px;height:36px;border-radius:50%;border:2px dashed rgba(52,211,153,0.8);animation:vnFloorRipple 1.5s ease-out infinite;"></div>
         </div>
-      </div>
-    `;
+      `,
+      front: `
+        <!-- Rising Alchemical Motes + Centered Overhead Badge -->
+        <div style="position:absolute;inset:0;pointer-events:none;z-index:4;">
+          <svg width="220" height="220" viewBox="0 0 220 220" style="position:absolute;left:50%;top:54%;width:220px;height:220px;overflow:visible;animation:vnFloatSparks 1.8s ease-out infinite;">
+            <circle cx="52" cy="128" r="4" fill="#34d399"/>
+            <circle cx="168" cy="114" r="3.5" fill="#fbbf24"/>
+            <circle cx="68" cy="76" r="3" fill="#a7f3d0"/>
+            <circle cx="154" cy="68" r="4" fill="#34d399"/>
+          </svg>
+          <div class="vn-emote-badge" style="position:absolute;left:50%;top:-18px;padding:2px 10px;border-radius:10px;background:rgba(6,78,59,0.96);border:1.5px solid #34d399;color:#a7f3d0;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.9);">
+            ⚗ ALCHEMY READY
+          </div>
+        </div>
+      `
+    };
   }
+
   // Default `solemn_glow`
-  return isActive ? `
-    <div style="position:absolute;inset:-6px;pointer-events:none;z-index:4;">
-      <div style="position:absolute;left:50%;top:52%;width:190px;height:190px;border-radius:50%;border:1.5px solid rgba(245,158,11,0.55);animation:vnPulseRing 2.1s ease-out infinite;"></div>
-    </div>
-  ` : '';
+  return {
+    back: isActive ? `
+      <div style="position:absolute;inset:0;pointer-events:none;z-index:1;">
+        <div style="position:absolute;left:50%;top:54%;width:180px;height:180px;border-radius:50%;border:1.5px solid rgba(245,158,11,0.55);animation:vnPulseRing 2.1s ease-out infinite;"></div>
+      </div>
+    ` : '',
+    front: ''
+  };
 }
 
 function renderStoryActorSlot(actor, side) {
-  if (!actor) return `<div style="width:310px;height:340px;pointer-events:none;"></div>`;
+  if (!actor) return `<div style="width:310px;height:345px;pointer-events:none;"></div>`;
   const style = STATE.storyActorStyle || 'full_sprite';
-  if (style === 'backdrop_only') return `<div style="width:310px;height:340px;pointer-events:none;"></div>`;
+  if (style === 'backdrop_only') return `<div style="width:310px;height:345px;pointer-events:none;"></div>`;
 
   const isActive = !!actor.active;
   const activeFx = isActive && STATE.storyReactionOverride ? STATE.storyReactionOverride : actor.reactionFx;
@@ -171,7 +232,7 @@ function renderStoryActorSlot(actor, side) {
   }
 
   const filterStr = isActive
-    ? 'brightness(1.06) contrast(1.06) drop-shadow(0 0 16px rgba(245,158,11,0.48)) drop-shadow(0 10px 18px rgba(0,0,0,0.92))'
+    ? 'brightness(1.06) contrast(1.06) drop-shadow(0 0 14px rgba(245,158,11,0.45)) drop-shadow(0 10px 18px rgba(0,0,0,0.92))'
     : 'brightness(0.58) saturate(0.75) contrast(0.96) drop-shadow(0 8px 14px rgba(0,0,0,0.88))';
   const borderCol = isActive ? '#f59e0b' : '#4b5563';
 
@@ -191,25 +252,27 @@ function renderStoryActorSlot(actor, side) {
   }
 
   // Default: `full_sprite` — Full-Body Pixel Art Character Sprite (`ASSETS.fullBody[unitKey]`)
-  // standing directly on the visible stone floor with grounded contact shadow & reaction VFX around the sprite
+  // standing directly on the visible stone floor with grounded contact shadow & aligned reaction VFX around the sprite
   const fullBodySrc = (ASSETS.fullBody && ASSETS.fullBody[actor.unitKey])
     ? ASSETS.fullBody[actor.unitKey]
     : ((ASSETS.units[actor.unitKey] || ASSETS.units.kaelen).idle0);
-  // Flip right-side actors if their base sprite faces right (kaelen/vesper/maren/aline face right or 3/4; vane/watchman face left)
   const nativeFacesLeft = (actor.unitKey === 'vane' || actor.unitKey === 'watchman' || actor.unitKey === 'bailiff');
   const shouldFlip = (side === 'right' && !nativeFacesLeft) || (side === 'left' && nativeFacesLeft);
   const flipX = shouldFlip ? 'scaleX(-1)' : 'scaleX(1)';
+  const fxLayers = renderReactionFxOverlay(activeFx, isActive, side);
 
   return `
     <div style="display:flex;flex-direction:column;align-items:center;position:relative;width:310px;height:345px;justify-content:flex-end;">
-      <div class="${animClass}" style="position:relative;width:290px;height:305px;display:flex;align-items:flex-end;justify-content:center;">
-        ${renderReactionFxOverlay(activeFx, isActive)}
-
+      <div class="${animClass}" style="position:relative;width:288px;height:288px;display:flex;align-items:flex-end;justify-content:center;">
         <!-- Ground Contact Shadow + Tallow Floor Ring directly on the visible stone floor -->
-        <div style="position:absolute;bottom:2px;width:195px;height:34px;border-radius:50%;background:${isActive ? 'radial-gradient(ellipse, rgba(0,0,0,0.92) 0%, rgba(245,158,11,0.34) 58%, transparent 82%)' : 'radial-gradient(ellipse, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 60%, transparent 82%)'};border-bottom:${isActive ? '2px solid rgba(251,191,36,0.75)' : '1px solid rgba(148,163,184,0.28)'};z-index:1;"></div>
+        <div style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);width:195px;height:34px;border-radius:50%;background:${isActive ? 'radial-gradient(ellipse, rgba(0,0,0,0.92) 0%, rgba(245,158,11,0.34) 58%, transparent 82%)' : 'radial-gradient(ellipse, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 60%, transparent 82%)'};border-bottom:${isActive ? '2px solid rgba(251,191,36,0.78)' : '1px solid rgba(148,163,184,0.28)'};z-index:0;"></div>
+
+        ${fxLayers.back}
 
         <!-- Full-Body Pixel Art Sprite Artwork (340×340 native, feet anchored at bottom) -->
         <img src="${fullBodySrc}" class="pixel" style="width:288px;height:288px;object-fit:contain;object-position:center bottom;transform:${flipX};filter:${filterStr};position:relative;z-index:2;">
+
+        ${fxLayers.front}
       </div>
 
       <!-- Compact Grounded Nameplate below boots -->
