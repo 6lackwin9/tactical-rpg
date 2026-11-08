@@ -865,7 +865,6 @@
 			"loadout": [
 				"body_blow",
 				"lunge",
-				"sweep_kick",
 				"hamstring",
 				"haymaker"
 			],
@@ -1559,7 +1558,7 @@
 						"active_guard"
 					],
 					"maneuver": [
-						"flank_cut"
+						"disengage_step"
 					],
 					"field": [
 						"tripwire_snare"
@@ -2375,9 +2374,6 @@
 					],
 					"guard": [
 						"active_guard"
-					],
-					"maneuver": [
-						"flank_cut"
 					]
 				},
 				"passive": [
@@ -2448,9 +2444,6 @@
 					"guard": [
 						"intercepting_hook",
 						"active_guard"
-					],
-					"maneuver": [
-						"flank_cut"
 					]
 				},
 				"passive": [
@@ -2521,9 +2514,6 @@
 					],
 					"guard": [
 						"active_guard"
-					],
-					"maneuver": [
-						"flank_cut"
 					]
 				},
 				"passive": [

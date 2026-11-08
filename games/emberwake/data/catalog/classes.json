@@ -58,9 +58,11 @@
 				"intimidate": 4,
 				"sunder": 5,
 				"shield_wall": 5,
-				"rend_armor": 6,
-				"brace": 1
+				"rend_armor": 6
 			},
+			"basics": [
+				"brace"
+			],
 			"main_hand": "wpn_hand_axe",
 			"off_hand": "shd_kite",
 			"head": "",
@@ -125,6 +127,9 @@
 				"focus": 5,
 				"crippling_shot": 6
 			},
+			"basics": [
+				"disengage_step"
+			],
 			"main_hand": "wpn_shortbow",
 			"off_hand": "",
 			"head": "",
@@ -189,13 +194,15 @@
 			"skill_path": {
 				"body_blow": 1,
 				"lunge": 3,
-				"sweep_kick": 3,
 				"hamstring": 4,
 				"haymaker": 5,
 				"charge_in": 5,
 				"cyclone_kick": 5,
 				"crushing_blow": 6
 			},
+			"basics": [
+				"sweep_kick"
+			],
 			"main_hand": "",
 			"off_hand": "",
 			"head": "",
@@ -266,6 +273,9 @@
 				"aegis": 6,
 				"rejuvenate": 6
 			},
+			"basics": [
+				"tend_wounds"
+			],
 			"main_hand": "wpn_cleric_mace",
 			"off_hand": "wpn_tome",
 			"head": "",
@@ -332,6 +342,9 @@
 				"feint": 6,
 				"opportunist": 7
 			},
+			"basics": [
+				"flank_cut"
+			],
 			"main_hand": "wpn_stiletto",
 			"off_hand": "",
 			"head": "",
@@ -395,6 +408,9 @@
 				"glacial_burst": 5,
 				"inferno": 7
 			},
+			"basics": [
+				"cinder_spark"
+			],
 			"main_hand": "wpn_wand",
 			"off_hand": "wpn_orb",
 			"head": "",
@@ -455,6 +471,9 @@
 			"skill_path": {
 				"tl_thrust": 1
 			},
+			"basics": [
+				"flank_cut"
+			],
 			"main_hand": "",
 			"off_hand": "",
 			"head": "",

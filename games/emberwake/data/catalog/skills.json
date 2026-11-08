@@ -639,7 +639,7 @@
 			"id": "sweep_kick",
 			"name": "Sweep Kick",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
 			"blocks": 2,
 			"description": "{name}: {power} power. Ring area around you. Bare hands or feet.",
 			"learned_only": true,
@@ -1055,9 +1055,6 @@
 			"description": "{name}: {power} power, {potency} to Stagger for {rounds} on every enemy hit. Ring area around you. Bare hands or feet.",
 			"learned_only": true,
 			"grade": "advanced",
-			"requires": [
-				"sweep_kick"
-			],
 			"area": "RING",
 			"power_mult": 0.9,
 			"status_effect": "stagger",
@@ -2819,6 +2816,46 @@
 			"round_intent": "guard",
 			"mitigation": 0.2,
 			"guard_rounds": 2
+		},
+		{
+			"id": "disengage_step",
+			"name": "Disengage Step",
+			"kind": "DISENGAGE",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: jump up to {jump} away from the nearest enemy (or a chosen one) to break melee contact. Your move for the round: it comes first, leaps over units but not walls, and a rooted unit can't.",
+			"learned_only": true,
+			"round_intent": "maneuver",
+			"jump_tiles": 2
+		},
+		{
+			"id": "tend_wounds",
+			"name": "Tend Wounds",
+			"kind": "SUPPORT",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: heals {heal}. A friendly unit within {range}, or yourself.",
+			"learned_only": true,
+			"reach_max": 2,
+			"heal_stat": "KNOW",
+			"heal_base": 15,
+			"heal_mult": 1.0
+		},
+		{
+			"id": "cinder_spark",
+			"name": "Cinder Spark",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power in a cross at {range}.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 3,
+			"area": "PLUS",
+			"power_mult": 0.5
 		}
 	]
 }

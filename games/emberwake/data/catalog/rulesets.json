@@ -37,8 +37,7 @@
 				"rest",
 				"strike",
 				"offhand_jab",
-				"active_guard",
-				"flank_cut"
+				"active_guard"
 			],
 			"poise_stat": "max_poise",
 			"stagger_windup_mult": 1.0,

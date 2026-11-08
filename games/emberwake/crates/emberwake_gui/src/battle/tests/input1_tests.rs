@@ -386,10 +386,26 @@ fn an_empty_tile_offers_move_here_first() {
     assert_eq!(row.label, "Move here");
 }
 
+/// CLASS-BASICS (R2-W2b): the `timeline` basics no longer hold a positioned Engage (`flank_cut` became the Rogue's
+/// class basic), so the selected hero gets the first catalog family with a position (tier 1, not a system skill) as
+/// an open basic of its deck terms, whatever the party's classes.
+fn open_a_positioned_basic(cx: &Cx, b: &mut BattleScreen) {
+    let h = hero(b);
+    let s = b.host.session.as_mut().unwrap();
+    let fam = s.w.cat.skills.iter().find(|sk| !sk.system && sk.level <= 1 && sk.id == sk.family_id() && ri::position_of(&s.w, sk).is_some()).map(|sk| sk.id.clone()).expect("a catalog skill with a position");
+    let rule = s.w.units[h].deck_rule.as_mut().expect("the timeline deck terms");
+    if !rule.basics.contains(&fam) {
+        rule.basics.push(fam);
+    }
+    b.after_change(cx);
+}
+
 /// MR13: hovering a Maneuver Engage row marks its target's open position tiles (the kit's `positions`).
 #[test]
 fn hovering_an_engage_row_marks_the_position_tiles() {
     let (mut cx, mut g, mut b) = planning();
+    open_a_positioned_basic(&cx, &mut b);
+    drawn(&mut cx, &mut g, &mut b);
     let (h, f) = (hero(&b), foes_on_field(&b)[0]);
     b.run(&mut cx, Action::UnitClick(f));
     drawn(&mut cx, &mut g, &mut b);

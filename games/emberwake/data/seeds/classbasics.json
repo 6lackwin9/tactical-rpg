@@ -1,0 +1,1066 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "disengage_step",
+    "name": "Disengage Step",
+    "kind": "DISENGAGE",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "jump_tiles": 2,
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "description": "{name}: jump up to {jump} away from the nearest enemy (or a chosen one) to break melee contact. Your move for the round: it comes first, leaps over units but not walls, and a rooted unit can't."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "tend_wounds",
+    "name": "Tend Wounds",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "target_mode": "ALLY_OR_SELF",
+    "reach_min": 0,
+    "reach_max": 2,
+    "heal_stat": "KNOW",
+    "heal_base": 15,
+    "heal_mult": 1.0,
+    "learned_only": true,
+    "description": "{name}: heals {heal}. A friendly unit within {range}, or yourself."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "cinder_spark",
+    "name": "Cinder Spark",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "area": "PLUS",
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 0.5,
+    "learned_only": true,
+    "description": "{name}: {power} power in a cross at {range}."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sweep_kick",
+    "name": "Sweep Kick",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "description": "{name}: {power} power. Ring area around you. Bare hands or feet.",
+    "learned_only": true,
+    "area": "RING",
+    "power_mult": 0.8,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.0
+     },
+     {
+      "level": 4,
+      "power_mult": 1.15
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "cyclone_kick",
+    "name": "Cyclone Kick",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {potency} to Stagger for {rounds} on every enemy hit. Ring area around you. Bare hands or feet.",
+    "learned_only": true,
+    "grade": "advanced",
+    "area": "RING",
+    "power_mult": 0.9,
+    "status_effect": "stagger",
+    "status_potency": 50,
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 1.1,
+      "status_potency": 55
+     },
+     {
+      "level": 5,
+      "power_mult": 1.3,
+      "status_potency": 60
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "brimstone_draught",
+    "name": "Brimstone Draught",
+    "family": "consumable",
+    "rarity": "COMMON",
+    "weight": 0.4,
+    "value": 25,
+    "description": "+30% attack power (Empower) for 2 rounds",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "FOCUS_INCENSE",
+    "heal": 0,
+    "damage": 0,
+    "buff_stat": "CONS",
+    "buff_pct": 0.3,
+    "duration": 3,
+    "use_blocks": 1,
+    "use_reach": 0,
+    "hazard": {},
+    "max_stack": 2
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "brawler",
+    "name": "Brawler",
+    "side": "party",
+    "description": "Skirmish party member: a level 5 Brawler.",
+    "class_id": "brawler",
+    "level": 5,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [],
+    "loadout": [
+     "body_blow",
+     "lunge",
+     "hamstring",
+     "haymaker"
+    ],
+    "deck": {},
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "",
+    "off_hand": "",
+    "head": "",
+    "body": "",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "warrior",
+    "name": "Warrior",
+    "description": "Tank: huge constitution, kite shield and plate; a wall that holds the line and hits lightly.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.112903225806452,
+     "INT": 0.0967741935483871,
+     "CONS": 0.274193548387097,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "CONS": 0.4,
+     "STR": 0.4,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "sword": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "mace": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "axe": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "shield": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "plate": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "taunt_shout": 1,
+     "shield_bash": 3,
+     "riposte": 3,
+     "intimidate": 4,
+     "sunder": 5,
+     "shield_wall": 5,
+     "rend_armor": 6
+    },
+    "main_hand": "wpn_hand_axe",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "brace"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "brawler",
+    "name": "Brawler",
+    "description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
+    "art": "brawler",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.225806451612903,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.241935483870968,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "fist": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "mace": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "axe": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "plate": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "shield": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "sword": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "body_blow": 1,
+     "lunge": 3,
+     "hamstring": 4,
+     "haymaker": 5,
+     "charge_in": 5,
+     "cyclone_kick": 5,
+     "crushing_blow": 6
+    },
+    "main_hand": "",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "sweep_kick"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "rogue",
+    "name": "Rogue",
+    "description": "Fast skirmisher: daggers and speed; dashes in, cuts and slips away.",
+    "art": "rogue",
+    "ai_role": "SKIRMISHER",
+    "base_shares": {
+     "STR": 0.145161290322581,
+     "DEX": 0.258064516129032,
+     "INT": 0.145161290322581,
+     "CONS": 0.129032258064516,
+     "PERC": 0.193548387096774,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "dagger": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "cloth": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "sword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "fist": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "quick_stab": 1,
+     "pounce": 3,
+     "bleeding_cut": 3,
+     "backflip": 4,
+     "hamstring": 5,
+     "lacerate": 5,
+     "assassinate": 7,
+     "envenom": 6,
+     "feint": 6,
+     "opportunist": 7
+    },
+    "main_hand": "wpn_stiletto",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "flank_cut"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "ranger",
+    "name": "Ranger",
+    "description": "Ranged skirmisher: dexterity and perception, bows and light armor.",
+    "art": "ranger",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.129032258064516,
+     "DEX": 0.241935483870968,
+     "INT": 0.145161290322581,
+     "CONS": 0.145161290322581,
+     "PERC": 0.225806451612903,
+     "KNOW": 0.112903225806452
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "bow": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "crossbow": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "sword": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "leather": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "cloth": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "aimed_shot": 1,
+     "pinning_shot": 3,
+     "leap_back": 3,
+     "barbed_arrow": 5,
+     "volley": 5,
+     "deadeye": 5,
+     "focus": 5,
+     "crippling_shot": 6
+    },
+    "main_hand": "wpn_shortbow",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "disengage_step"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "priest",
+    "name": "Priest",
+    "description": "Support: heals and rallies allies; knowledge, maces and cloth.",
+    "art": "priest",
+    "ai_role": "SUPPORT",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.129032258064516,
+     "INT": 0.17741935483871,
+     "CONS": 0.193548387096774,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.241935483870968
+    },
+    "growth_shares": {
+     "KNOW": 0.4,
+     "CONS": 0.2,
+     "INT": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "mace": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "staff": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "cloth": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "tome": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "orb": {
+      "level": 2,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "smite": 1,
+     "rally": 1,
+     "mend": 3,
+     "purify": 3,
+     "hex": 5,
+     "greater_mend": 5,
+     "renewal": 5,
+     "judgement": 7,
+     "aegis": 6,
+     "rejuvenate": 6
+    },
+    "main_hand": "wpn_cleric_mace",
+    "off_hand": "wpn_tome",
+    "head": "",
+    "body": "arm_cleric_vestment",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "tend_wounds"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "mage",
+    "name": "Mage",
+    "description": "Glass caster: intelligence and area damage from range.",
+    "art": "mage",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.145161290322581,
+     "INT": 0.274193548387097,
+     "CONS": 0.129032258064516,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.193548387096774
+    },
+    "growth_shares": {
+     "INT": 0.4,
+     "CONS": 0.2,
+     "KNOW": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "staff": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "wand": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "orb": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "tome": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "cloth": {
+      "level": 3,
+      "scaling": 1.5
+     }
+    },
+    "skill_path": {
+     "arcane_bolt": 1,
+     "arc_lance": 3,
+     "hex": 3,
+     "focus": 4,
+     "firebomb": 5,
+     "glacial_burst": 5,
+     "inferno": 7
+    },
+    "main_hand": "wpn_wand",
+    "off_hand": "wpn_orb",
+    "head": "",
+    "body": "arm_mage_robe",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "cinder_spark"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "tl_drill",
+    "name": "Drill (test)",
+    "description": "Test class for the timeline test kit.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.209677419354839,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "sword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "mace": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "polearm": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "shield": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "plate": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 2,
+      "scaling": 1.5
+     }
+    },
+    "skill_path": {
+     "tl_thrust": 1
+    },
+    "main_hand": "",
+    "off_hand": "",
+    "head": "",
+    "body": "",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "basics": [
+     "flank_cut"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_hollis",
+    "name": "Hollis",
+    "side": "party",
+    "description": "Founder base unit: Hollis, a level 1 ranger.",
+    "class_id": "ranger",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "ranger/base",
+    "palette": "hollis",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "poachers_quarrel",
+     "tripwire_snare",
+     "heavy_winch_sunder"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "poachers_quarrel",
+      "tripwire_snare"
+     ],
+     "order": {
+      "assault": [
+       "poachers_quarrel",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "maneuver": [
+       "disengage_step"
+      ],
+      "field": [
+       "tripwire_snare"
+      ]
+     },
+     "passive": [
+      "high_ground_traverse",
+      "cover_breaker"
+     ],
+     "keystone": [
+      "dead_eye_discipline"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "winch_arbalest",
+    "off_hand": "none",
+    "head": "",
+    "body": "poachers_brigandine",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_dunstan",
+    "name": "Dunstan",
+    "side": "party",
+    "description": "Founder base unit: Dunstan, a level 1 brawler.",
+    "class_id": "brawler",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "brawler/base",
+    "palette": "dunstan",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "shackle_pummel_slam",
+     "slag_slam_throw",
+     "foundry_shatter"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "shackle_pummel_slam",
+      "slag_slam_throw"
+     ],
+     "order": {
+      "assault": [
+       "slag_slam_throw",
+       "shackle_pummel_slam",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "hypertrophy",
+      "anvil_posture"
+     ],
+     "keystone": [
+      "unbroken_iron"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "penal_shackles",
+    "off_hand": "none",
+    "head": "",
+    "body": "penal_foundry_apron",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_kaelen",
+    "name": "Kaelen",
+    "side": "party",
+    "description": "Founder base unit: Kaelen, a level 1 warrior.",
+    "class_id": "warrior",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "warrior/2h_axe",
+    "palette": "kaelen",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "pommel_strike",
+     "intercepting_hook",
+     "billhook_sunder",
+     "seventh_ward_bulwark",
+     "brace"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "pommel_strike",
+      "intercepting_hook"
+     ],
+     "order": {
+      "assault": [
+       "pommel_strike",
+       "strike"
+      ],
+      "guard": [
+       "intercepting_hook",
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "braced_poise",
+      "kinetic_leverage"
+     ],
+     "keystone": [
+      "unbroken_phalanx"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "notched_billhook",
+    "off_hand": "none",
+    "head": "",
+    "body": "castellan_breastplate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_maren",
+    "name": "Maren",
+    "side": "party",
+    "description": "Founder base unit: Maren, a level 1 priest.",
+    "class_id": "priest",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "priest/base",
+    "palette": "maren",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "brimstone_cauterize",
+     "tourniquet_tonic",
+     "resilience_ward"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "brimstone_cauterize",
+      "tourniquet_tonic"
+     ],
+     "order": {
+      "support": [
+       "tourniquet_tonic",
+       "brimstone_cauterize"
+      ],
+      "assault": [
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "anatomical_precision",
+      "triage_efficiency"
+     ],
+     "keystone": [
+      "pure_hippocratic_oath"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "bronze_censer",
+    "off_hand": "copied_psalter",
+    "head": "",
+    "body": "embalmers_habit",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "timeline",
+    "name": "Timeline",
+    "rules": [
+     "round_intent",
+     "enemy_moves",
+     "deck",
+     "poise",
+     "ap_cost",
+     "pierce",
+     "reach",
+     "flank",
+     "plan_badges",
+     "field_intent",
+     "forced_move",
+     "ground_hazards",
+     "arena_hazards",
+     "triggers",
+     "unit_meters",
+     "hp_cost",
+     "ignore_guard",
+     "ai_tactics",
+     "execute"
+    ],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [
+     "move",
+     "rest",
+     "strike",
+     "offhand_jab",
+     "active_guard"
+    ],
+    "poise_stat": "max_poise",
+    "stagger_windup_mult": 1.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.5,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {
+     "active": 3,
+     "passive": 2,
+     "keystone": 1
+    },
+    "melee_diagonal": "maneuver",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "round_end",
+    "chase": "every_skill",
+    "root_stops_chase": "on",
+    "switch_target_step": "off",
+    "stances": "off",
+    "attack_lock": "melee",
+    "move_after_blocks": 3,
+    "item_ap": 0,
+    "poise_mode": "pips",
+    "item_mitigation": "on",
+    "thrown_miss_spends": "on",
+    "pouch_stacks": "on"
+   }
+  }
+ ]
+}

@@ -1761,7 +1761,7 @@
 			"rarity": "COMMON",
 			"weight": 0.4,
 			"value": 25,
-			"description": "Brimstone Tallow Draught: +30% CONS for 3 rounds (steadier poise).",
+			"description": "+30% attack power (Empower) for 2 rounds",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,

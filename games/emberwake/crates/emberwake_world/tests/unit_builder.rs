@@ -57,7 +57,8 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
         if !work.deck.is_empty() {
             u.deck = work.deck.clone();
         }
-        u.deck_rule = Some(rule.clone());
+        // CLASS-BASICS (R2-W2b): the deck terms carry the class's role basics, as every build gives them since
+        u.deck_rule = Some(rule.with_class(cat, &def.class_id));
     }
     for id in &saved_with_temperament(d, &work) {
         if let Some(p) = cat.passives.get(id) {
