@@ -364,6 +364,12 @@ pub fn enter(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, seen: &mut 
     Some(line)
 }
 
+/// A4.2 (C08): a ground hazard row's status as an EffectSpec: an inflict (rolled when its row is `resistable`) carrying
+/// the row's `potency`, `status_rounds` and `magnitude`, with `source` (the placer's name).
+pub fn effect_of(def: &HazardDef, source: &str) -> status::EffectSpec {
+    status::EffectSpec::inflict(&def.status, def.potency, def.status_rounds, def.magnitude, source)
+}
+
 /// GH5, GH6: the hazard on `cell` acts on `u`: its flat damage through guard (not armour), then its status roll (one
 /// draw, the placer as the source); a trap entered is removed. None when nothing happened (a resisted roll alone).
 fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool) -> Option<Hit> {
@@ -378,8 +384,9 @@ fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool
     let lost = before - w.units[u].hp;
     let mut landed = String::new();
     if !p.def.status.is_empty() && w.units[u].is_alive() {
-        let source = w.units[p.by].name.clone();
-        if status::try_inflict(&mut w.units[u], &p.def.status, p.def.potency, Some(rng), p.def.status_rounds, p.def.magnitude, &source) {
+        // A4.2: the hazard row as an EffectSpec (the placer as the source)
+        let spec = effect_of(&p.def, &w.units[p.by].name);
+        if status::apply_effect(&mut w.units[u], &spec, status::Timing::Next, 0.0, Some(rng)) {
             landed = p.def.status.clone();
         }
     }

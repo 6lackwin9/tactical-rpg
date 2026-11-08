@@ -345,6 +345,12 @@ pub struct TalkCue {
     pub block: i32,
 }
 
+/// A4.2 (C08, FB-58): an encounter phase `status` effect as an EffectSpec: a grant (never rolled, so a phase draws no
+/// extra RNG) of `status` for `rounds` (default 2) at `magnitude`, the source `phase:<id>`.
+pub fn phase_effect(fx: &Obj, phase_id: &str) -> rpgkit_rules::status::EffectSpec {
+    rpgkit_rules::status::EffectSpec::grant(&value::string(fx, "status", ""), value::int(fx, "rounds", 2), value::int(fx, "magnitude", 0), &format!("phase:{phase_id}"))
+}
+
 impl PhaseDef {
     pub fn effects_of<'a>(&'a self, kind: &'a str) -> impl Iterator<Item = &'a Obj> + 'a {
         self.effects.iter().filter(move |fx| value::string(fx, "type", "") == kind)

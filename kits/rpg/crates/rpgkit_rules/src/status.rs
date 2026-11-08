@@ -500,6 +500,84 @@ pub fn try_inflict_with(target: &mut Unit, status: &str, potency: i32, bonus: f6
     true
 }
 
+/// A4.2 (C08): when an effect that is not rolled lands, S1's round-granular timing: `Now` (`grant_now`, lasting
+/// `rounds` counting the current round) or `Next` (`queue`, the target's next round). A rolled effect always lands next
+/// round (`try_inflict`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Timing {
+    Now,
+    Next,
+}
+
+/// A4.2 (C08, FB-57(5), FB-58): one status application, the form the 5 vocabularies (skill `inflict` / `grant`,
+/// trigger `inflict` / `grant`, ground hazard rows, arena hazard effects, encounter phase `status` effects) normalize
+/// into at execution before `apply_effect` routes it through S1. The stored data keeps its own vocabularies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectSpec {
+    pub status_id: String,
+    /// The roll's potency (unused when the effect is not rolled).
+    pub potency: i32,
+    pub rounds: i32,
+    pub magnitude: i32,
+    /// Whether the effect is rolled against resistance: `None` takes the status row's `resistable` (inflicts: skills,
+    /// triggers, hazards); `Some(false)` never rolls (grants; encounter phase `status` effects, FB-58: no extra draw).
+    pub resistable: Option<bool>,
+    /// The source name the landed status carries (empty: none).
+    pub source: String,
+}
+
+impl EffectSpec {
+    /// An inflict (skill `status_effect`, trigger `inflict`, ground and arena hazards): rolled when its row is
+    /// `resistable`.
+    pub fn inflict(status: &str, potency: i32, rounds: i32, magnitude: i32, source: &str) -> Self {
+        EffectSpec { status_id: status.to_string(), potency, rounds, magnitude, resistable: Option::None, source: source.to_string() }
+    }
+
+    /// A grant (skill `grant_status` / `extra_grants`, trigger `grant`, encounter phase `status`): never rolled.
+    pub fn grant(status: &str, rounds: i32, magnitude: i32, source: &str) -> Self {
+        EffectSpec { status_id: status.to_string(), potency: 0, rounds, magnitude, resistable: Some(false), source: source.to_string() }
+    }
+
+    /// Whether `resistable` resolves true (the row's `resistable` when unset): the effect goes through `try_inflict`.
+    pub fn rolled(&self) -> bool {
+        self.resistable.unwrap_or_else(|| resistable(&self.status_id))
+    }
+
+    /// The chance (0-100) the effect lands on `target` with the attacker term `bonus`: 100 when it is not rolled.
+    pub fn chance(&self, target: &Unit, bonus: f64) -> i32 {
+        if self.rolled() {
+            apply_chance_with(target, &self.status_id, self.potency, bonus)
+        } else {
+            100
+        }
+    }
+}
+
+/// A4.2 (C08): applies `spec` to `target` through S1. When `resistable` resolves true: `try_inflict_with` (one draw
+/// from `rng` with the attacker term `bonus`; a dead target takes nothing; lands next round). Otherwise no draw: `Now`
+/// calls `grant_now`, `Next` calls `queue`. True when the status landed.
+pub fn apply_effect(target: &mut Unit, spec: &EffectSpec, timing: Timing, bonus: f64, rng: Option<&mut GodotRng>) -> bool {
+    // An inflict (`resistable` unset) always goes through `try_inflict_with`, which skips a dead target and queues a
+    // non-resistable row without a draw; only an explicit grant (`Some(false)`) takes the grant-now / queue path.
+    if spec.resistable.is_none() || spec.rolled() {
+        return try_inflict_with(target, &spec.status_id, spec.potency, bonus, rng, spec.rounds, spec.magnitude, &spec.source);
+    }
+    match timing {
+        Timing::Now => grant_now(target, &spec.status_id, spec.rounds, spec.magnitude, &spec.source),
+        Timing::Next => queue(target, &spec.status_id, spec.rounds, spec.magnitude, &spec.source),
+    }
+    true
+}
+
+/// A skill grant's timing: `Now` for a DEFEND buff (`defend`, a `defend` grant row such as riposte), else `Next`.
+pub fn grant_timing(status: &str, defend: bool) -> Timing {
+    if defend && defend_buffs().contains(&status) {
+        Timing::Now
+    } else {
+        Timing::Next
+    }
+}
+
 /// Queues `status` for the target's next round (stacking rule and cap; the newer source wins).
 pub fn queue(target: &mut Unit, status: &str, rounds: i32, magnitude: i32, source: &str) {
     let magnitude = magnitude_or_min(status, magnitude);
@@ -597,13 +675,9 @@ pub fn grant_extras(target: &mut Unit, extras: &[Value], defend: bool, source: &
         if status.is_empty() {
             continue;
         }
-        let rounds = aegis_core::value::int(o, "rounds", 1);
-        let magnitude = aegis_core::value::int(o, "magnitude", 0);
-        if defend && defend_buffs().contains(&status.as_str()) {
-            grant_now(target, &status, rounds, magnitude, source);
-        } else {
-            queue(target, &status, rounds, magnitude, source);
-        }
+        // A4.2: a skill grant row as an EffectSpec (never rolled)
+        let spec = EffectSpec::grant(&status, aegis_core::value::int(o, "rounds", 1), aegis_core::value::int(o, "magnitude", 0), source);
+        apply_effect(target, &spec, grant_timing(&status, defend), 0.0, Option::None);
         granted.push(status);
     }
     granted

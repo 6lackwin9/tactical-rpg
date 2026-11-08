@@ -214,6 +214,12 @@ pub fn block_end(res: &mut Resolver, w: &mut World, round: i32, block: i32, rese
     out
 }
 
+/// A4.2 (C08): an arena hazard effect's status as an EffectSpec: an inflict (rolled when its row is `resistable`)
+/// carrying the effect's `potency`, `status_rounds` and `magnitude`, with `source` (the hazard's name).
+pub fn effect_of(e: &Effect, source: &str) -> status::EffectSpec {
+    status::EffectSpec::inflict(&e.status, e.potency, e.status_rounds, e.magnitude, source)
+}
+
 /// AH2: `hz` strikes `u`: damage through guard (not armour), the status roll (one draw), stagger through P6, then the
 /// push (its tiles roll their ground hazards; the ground settles after it).
 fn strike_unit(res: &mut Resolver, w: &mut World, hz: &Hazard, u: UnitId, block: i32) -> Hit {
@@ -233,7 +239,8 @@ fn strike_unit(res: &mut Resolver, w: &mut World, hz: &Hazard, u: UnitId, block:
     let journal = w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default();
     let lost = before - w.units[u].hp;
     let mut landed = String::new();
-    if !e.status.is_empty() && w.units[u].is_alive() && status::try_inflict(&mut w.units[u], &e.status, e.potency, Some(&mut res.rng), e.status_rounds, e.magnitude, &hz.name) {
+    // A4.2: the arena effect as an EffectSpec (the hazard's name as the source)
+    if !e.status.is_empty() && w.units[u].is_alive() && status::apply_effect(&mut w.units[u], &effect_of(e, &hz.name), status::Timing::Next, 0.0, Some(&mut res.rng)) {
         landed = e.status.clone();
     }
     let stagger = if e.stagger > 0 && w.units[u].is_alive() {

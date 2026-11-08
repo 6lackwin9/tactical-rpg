@@ -962,7 +962,8 @@ impl Session {
             let mut granted = false;
             for c in self.units_of_ref(&value::string(fx, "unit", "")) {
                 if self.w.has(c) && !self.is_reserved(c) {
-                    status::grant_now(&mut self.w.units[c], &st, value::int(fx, "rounds", 2), value::int(fx, "magnitude", 0), &format!("phase:{id}"));
+                    // A4.2: the phase status effect as an EffectSpec (never rolled, FB-58; lands now)
+                    status::apply_effect(&mut self.w.units[c], &crate::encounter::phase_effect(fx, id), status::Timing::Now, 0.0, None);
                     granted = true;
                 }
             }

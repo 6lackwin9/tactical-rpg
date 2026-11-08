@@ -1026,9 +1026,10 @@ impl DojoSession {
                     let potency = s.status_potency + self.hero().status_potency_bonus();
                     // U1.2-S3b: the hero's KNOW term (ruleset `know_potency`; 0 = potency off), shown and rolled alike
                     let bonus = status::know_bonus(self.hero(), self.ruleset.numbers.know_potency);
-                    let chance = status::apply_chance_with(&self.dummy, &s.status_effect, potency, bonus);
-                    let source = self.hero().name.clone();
-                    let landed = status::try_inflict_with(&mut self.dummy, &s.status_effect, potency, bonus, Some(&mut self.rng), 1, s.status_magnitude, &source);
+                    // A4.2: the skill inflict as an EffectSpec, shown and rolled alike
+                    let spec = status::EffectSpec::inflict(&s.status_effect, potency, 1, s.status_magnitude, &self.hero().name);
+                    let chance = spec.chance(&self.dummy, bonus);
+                    let landed = status::apply_effect(&mut self.dummy, &spec, status::Timing::Next, bonus, Some(&mut self.rng));
                     detail += &format!(" • {} {} ({chance}%)", status::display_name(&s.status_effect), if landed { "next round" } else { "resisted" });
                 }
                 let (dmg, outcome, breakdown) = hit.as_ref().map(|h| (h.dmg, h.outcome, h.breakdown.clone())).unwrap_or((0, "STATUS", String::new()));

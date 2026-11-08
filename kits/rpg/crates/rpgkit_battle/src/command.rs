@@ -401,11 +401,9 @@ impl Command {
                 let name = w.units[src].name.clone();
                 let u = &mut w.units[src];
                 if !grant_status.is_empty() {
-                    if status::defend_buffs().contains(&grant_status.as_str()) {
-                        status::grant_now(u, grant_status, *status_rounds, self.status_magnitude, &name);
-                    } else {
-                        status::queue(u, grant_status, *status_rounds, self.status_magnitude, &name);
-                    }
+                    // A4.2: the skill grant as an EffectSpec (never rolled; a DEFEND buff lands now)
+                    let spec = status::EffectSpec::grant(grant_status, *status_rounds, self.status_magnitude, &name);
+                    status::apply_effect(u, &spec, status::grant_timing(grant_status, true), 0.0, None);
                 }
                 let mut granted = status::grant_extras(u, extra_grants, true, &name);
                 // RULESET1_INTENT IN6: intent-bound grants carry the unit's intent
@@ -502,7 +500,9 @@ impl Command {
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
                     // U1.2-S3b: the actor's KNOW term (ruleset `know_potency`; 0 = potency off)
                     let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
-                    let ok = status::try_inflict_with(&mut w.units[t], &self.status_effect.clone(), self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name);
+                    // A4.2: the skill inflict as an EffectSpec (the row's resistable decides the roll)
+                    let spec = status::EffectSpec::inflict(&self.status_effect, self.status_potency, status_rounds, self.status_magnitude, &src_name);
+                    let ok = status::apply_effect(&mut w.units[t], &spec, status::Timing::Next, bonus, Some(rng));
                     detail = format!(" ({} {})", if ok { "inflicts" } else { "resisted" }, self.status_effect);
                 }
                 if !damaging {
@@ -553,8 +553,10 @@ impl Command {
                     if !self.status_effect.is_empty() && w.units[v].is_alive() {
                         let st = self.status_effect.clone();
                         let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
-                        let chance = status::apply_chance_with(&w.units[v], &st, self.status_potency, bonus);
-                        note = if status::try_inflict_with(&mut w.units[v], &st, self.status_potency, bonus, Some(rng), status_rounds, self.status_magnitude, &src_name) {
+                        // A4.2: the skill inflict as an EffectSpec
+                        let spec = status::EffectSpec::inflict(&st, self.status_potency, status_rounds, self.status_magnitude, &src_name);
+                        let chance = spec.chance(&w.units[v], bonus);
+                        note = if status::apply_effect(&mut w.units[v], &spec, status::Timing::Next, bonus, Some(rng)) {
                             format!(" [{} next round ({chance}%)]", status::display_name(&st))
                         } else {
                             format!(" [resisted {} ({chance}%)]", status::display_name(&st).to_lowercase())
@@ -1586,7 +1588,9 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
     }
     let name = w.units[caster].name.clone();
     if !s.grant_status.is_empty() {
-        status::queue(&mut w.units[target], &s.grant_status, s.status_rounds, s.status_magnitude, &name);
+        // A4.2: the support grant as an EffectSpec (never rolled; next round)
+        let spec = status::EffectSpec::grant(&s.grant_status, s.status_rounds, s.status_magnitude, &name);
+        status::apply_effect(&mut w.units[target], &spec, status::grant_timing(&s.grant_status, false), 0.0, None);
     }
     let extras = status::grant_extras(&mut w.units[target], &s.extra_grants, false, &name);
     Supported { healed, status: s.grant_status.clone(), cleansed, extras }
