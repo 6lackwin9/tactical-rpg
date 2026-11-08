@@ -100,6 +100,9 @@ pub const TERMS_KIND: &str = crate::check::terms::KIND;
 /// REGIONGROUND1 KT 1.1: the ground rows, loaded into the catalog beside CATALOG_KINDS after the terms (Godot had no
 /// such kind).
 pub const GROUNDS_KIND: &str = crate::check::ground::KIND;
+/// R4-1 (`U2.3-TIERS`): the role template rows, loaded into the catalog beside CATALOG_KINDS after the grounds (Godot
+/// had no such kind).
+pub const UNIT_TEMPLATES_KIND: &str = crate::check::unit_template::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -186,6 +189,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     }
     out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert(GROUNDS_KIND.into(), Value::Array(read_grounds(&dir, errors).into_iter().map(Value::Object).collect()));
+    out.insert(UNIT_TEMPLATES_KIND.into(), Value::Array(read_unit_templates(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -312,6 +316,31 @@ fn read_terms(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: term '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// R4-1 (engine-only, beside CATALOG_KINDS): the role template rows that pass their checks (`check::unit_template`), in
+/// file order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_unit_templates(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{UNIT_TEMPLATES_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(UNIT_TEMPLATES_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::unit_template::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: unit template '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

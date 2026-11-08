@@ -17,8 +17,10 @@ use serde_json::Value;
 
 pub mod terms;
 pub mod unit_budget;
+pub mod unit_template;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
+pub use unit_template::{UnitTemplate, UNIT_TEMPLATES_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -880,6 +882,9 @@ pub struct Catalog {
     /// Ground rows of a region map's picture (REGIONGROUND1 KT 1.1, kind `grounds`; engine-only; presentation only: no
     /// rule reads them).
     pub grounds: IndexMap<String, GroundDef>,
+    /// R4-1 (`U2.3-TIERS`, FB-78): the role templates (kind `unit_templates`; engine-only), keyed by role (the first
+    /// row of a role wins; the content check refuses a second). No row for a role = its units keep their class's stats.
+    pub unit_templates: IndexMap<String, UnitTemplate>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -932,6 +937,9 @@ impl Catalog {
         cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
         cat.terms = rows(TERMS_KIND).iter().map(TermRow::from_obj).map(|t| (t.id.clone(), t)).collect();
         cat.grounds = rows(GROUNDS_KIND).iter().map(GroundDef::from_obj).map(|g| (g.id.clone(), g)).collect();
+        for t in rows(UNIT_TEMPLATES_KIND).iter().map(UnitTemplate::from_obj) {
+            cat.unit_templates.entry(t.role.clone()).or_insert(t);
+        }
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -1862,7 +1870,7 @@ fn objs(o: &Obj, key: &str) -> Vec<Obj> {
 }
 
 /// The numeric values of an object as floats, in its key order (other values left out).
-fn float_map(m: &Obj) -> IndexMap<String, f64> {
+pub(crate) fn float_map(m: &Obj) -> IndexMap<String, f64> {
     m.iter().filter_map(|(k, v)| v.as_f64().map(|x| (k.clone(), x))).collect()
 }
 

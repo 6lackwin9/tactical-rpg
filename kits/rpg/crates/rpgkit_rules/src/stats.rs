@@ -18,6 +18,9 @@ pub const MAX_UNLOCK_REDUCTION: i32 = 2;
 pub const ADVANCED_UNLOCK_FLOOR: i32 = 3;
 pub const KNOW_UNLOCK_BASE: i32 = 12;
 pub const KNOW_UNLOCK_STEP: i32 = 4;
+/// The flat base of the max HP formulas (`CharacterStats::max_hp`, `max_hp_scaled`; private, so the BASERULES1 `LOCKED`
+/// table and the rules contract are unchanged).
+const HP_BASE: i32 = 60;
 pub const HP_PER_CONS: i32 = 8;
 pub const RANGE_PERC_THRESHOLD: i32 = 18;
 
@@ -307,10 +310,24 @@ impl CharacterStats {
         self.effective(stat, weapon, "")
     }
 
-    /// `round((60 + CONS x 8 + STR x 2) x tier_hp)` (U1.2-S4: `tier_hp` from the tier table; the old hp scale). The
-    /// spec's base-only form, `60 x tier_hp + CONS x 8 + STR x 2`, waits for the user's confirmation as its own change.
+    /// `round((60 + CONS x 8 + STR x 2) x tier_hp)` (U1.2-S4: `tier_hp` from the tier table; the old hp scale). Every
+    /// unit without a role template (R4-1: `max_hp_scaled` for a templated unit, `Unit::tier_scaled`).
     pub fn max_hp(&self, tier_hp: f64, weapon: Option<&str>) -> i32 {
-        roundi((60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2) as f64 * tier_hp)
+        roundi((HP_BASE + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2) as f64 * tier_hp)
+    }
+
+    /// R4-1 (`U2.3-TIERS`, FB-78): `round(60 x tier_hp) + CONS x 8 + STR x 2`, the max HP of a unit whose stats are
+    /// already tier-scaled (`scale_core`): the tier scales the base 60 only, so CONS and STR are not scaled twice.
+    pub fn max_hp_scaled(&self, tier_hp: f64, weapon: Option<&str>) -> i32 {
+        roundi(HP_BASE as f64 * tier_hp) + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2
+    }
+
+    /// R4-1: every base stat at level set to `round(stat x factor)` (a role-templated unit's stats by its tier's
+    /// `tier_hp`); the stats are not floored here (the 6-18 check reads the template row, not the scaled unit).
+    pub fn scale_core(&mut self, factor: f64) {
+        for v in self.core.values_mut() {
+            *v = roundi(*v as f64 * factor);
+        }
     }
 
     /// U1.2-S3c: initiative, `8 + DEX - burden`, at least 1 (the old speed formula; the unit takes carry overload off

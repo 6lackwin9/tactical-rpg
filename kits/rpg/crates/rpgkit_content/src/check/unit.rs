@@ -70,7 +70,7 @@ fn validate_base(base: &Ints) -> Vec<String> {
 /// U2.2-S1: a class row given as shares (`base_shares`, `growth_shares`): both vectors sum to 1, each share is 0-1,
 /// no `base_stats` or `growth` beside them, and the stats the unit budget gives keep the integer row's limits (base
 /// 6-18 at level 1, 0-3 gained per stat at every level).
-fn validate_shares(e: &Dict) -> Vec<String> {
+pub(crate) fn validate_shares(e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     for (key, label) in [("base_shares", "Base shares"), ("growth_shares", "Growth shares")] {
         let raw = json::get(e, key).as_object().cloned().unwrap_or_default();

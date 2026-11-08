@@ -26,6 +26,7 @@ pub mod story;
 pub mod terms;
 pub mod travel;
 pub mod unit;
+pub mod unit_template;
 pub mod world;
 
 /// The catalog kinds the checks cover so far.
@@ -267,6 +268,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if kind == terms::KIND {
         // TERMS1-L: the row checks the loader applies (a game-scope term id, the lengths, unique ids)
         return terms::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == unit_template::KIND {
+        // R4-1: the row checks the loader applies (the role, the share vectors and their stats, unique ids and roles)
+        return unit_template::entry_errors(v, &content(kind, entry), current_id);
     }
     if kind == ground::KIND {
         // REGIONGROUND1 KT 1.3: the row checks the loader applies (the fields' limits, unknown keys, unique ids and orders)
