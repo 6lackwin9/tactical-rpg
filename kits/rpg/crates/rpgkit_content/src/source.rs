@@ -147,17 +147,16 @@ pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
 
 /// P1.2-S1 (FB-51): the terrain keys a row may leave out (the frozen kit's rows, a row written before they existed)
 /// take their type's fallback, not the schema default: `walkable` its type's (`grid::terrain_walkable`), then
-/// `stops_forced_move` not walkable.
+/// `stops_forced_move` not walkable. P1.2-S2 (FB-109): the rule is `grid::terrain_walk_keys`, which the battle's
+/// `TerrainTable` reads too.
 pub const TERRAIN_FALLBACK_KEYS: [&str; 2] = ["walkable", "stops_forced_move"];
 
 fn terrain_fallbacks(entry: &Dict) -> Dict {
     let mut out = entry.clone();
-    let walkable = match entry.get(TERRAIN_FALLBACK_KEYS[0]) {
-        Some(v) => json::to_bool(v),
-        None => rpgkit_battle::grid::terrain_walkable(&sget(entry, "id", "")),
-    };
+    let given = |key: &str| entry.get(key).map(json::to_bool);
+    let (walkable, stops) = rpgkit_battle::grid::terrain_walk_keys(&sget(entry, "id", ""), given(TERRAIN_FALLBACK_KEYS[0]), given(TERRAIN_FALLBACK_KEYS[1]));
     out.entry(TERRAIN_FALLBACK_KEYS[0]).or_insert(Value::Bool(walkable));
-    out.entry(TERRAIN_FALLBACK_KEYS[1]).or_insert(Value::Bool(!walkable));
+    out.entry(TERRAIN_FALLBACK_KEYS[1]).or_insert(Value::Bool(stops));
     out
 }
 

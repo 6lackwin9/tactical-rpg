@@ -8,6 +8,7 @@
 use aegis_core::rng::GodotRng;
 use aegis_core::value::Obj;
 use rpgkit_battle::trigger::BATTLE_ROUNDS;
+use rpgkit_battle::grid::{self, Hazard, TerrainTable, TERRAIN_SOURCE};
 use rpgkit_battle::{arena, encounter, ground, trigger};
 use rpgkit_data::{Catalog, HazardDef};
 use rpgkit_rules::status::{self, EffectSpec, Stacking, Timing};
@@ -141,6 +142,51 @@ fn ground_hazard_rows_route_through_effect_spec() {
         let y = status::try_inflict(&mut b, st, POTENCY, Some(&mut rb), 2, 3, "Placer");
         assert_eq!((x, outcome(&a, &mut ra)), (y, outcome(&b, &mut rb)), "seed {seed}");
     }
+}
+
+/// P1.2-S2 (FB-51d): terrain hazard rows (`hazard_status` / `hazard_potency` / `hazard_rounds` / `hazard_magnitude`)
+/// share the vocabulary: `grid::effect_of` is an inflict with the row's numbers and the source "terrain", landing like
+/// the direct `try_inflict` the terrain roll made before (same draws, same stacking, one resistance formula), a
+/// non-resistable row with no draw, and nothing on a dead unit.
+#[test]
+fn terrain_hazard_rows_route_through_effect_spec() {
+    let st = stacking_debuff();
+    let row = json!({"id": "burning_ground", "name": "Burning", "hazard_status": st, "hazard_potency": POTENCY, "hazard_rounds": 2, "hazard_magnitude": 3, "hazard_on": "enter"});
+    let table = TerrainTable::from_catalog(&Catalog::from_value(&json!({"terrain": [row]})));
+    let i = grid::TERRAIN_IDS.iter().position(|t| *t == "burning_ground").unwrap();
+    let h = table.rows[i].hazard.clone().expect("the row's hazard");
+    let spec = grid::effect_of(&h);
+    assert_eq!(spec, EffectSpec::inflict(st, POTENCY, 2, 3, TERRAIN_SOURCE));
+    assert_eq!(TERRAIN_SOURCE, "terrain", "the source the terrain roll always carried");
+    assert_eq!(spec.chance(&unit(), 0.0), status::apply_chance(&unit(), st, POTENCY), "one resistance formula");
+    let mut landed = Vec::new();
+    for seed in 0..20 {
+        let (mut a, mut ra) = (unit(), GodotRng::new(seed));
+        let (mut b, mut rb) = (unit(), GodotRng::new(seed));
+        for _ in 0..3 {
+            let x = status::apply_effect(&mut a, &spec, Timing::Next, 0.0, Some(&mut ra));
+            let y = status::try_inflict(&mut b, st, POTENCY, Some(&mut rb), 2, 3, "terrain");
+            assert_eq!(x, y, "seed {seed}");
+            landed.push(x);
+        }
+        assert_eq!(outcome(&a, &mut ra), outcome(&b, &mut rb), "seed {seed}");
+    }
+    assert!(landed.contains(&true) && landed.contains(&false), "potency {POTENCY} both lands and is resisted");
+    // A non-resistable row: queued with no draw on a living unit; nothing and no draw on a dead one.
+    let free = other_buff();
+    let h = Hazard { status: free.into(), potency: POTENCY, magnitude: 0, rounds: 1, on: "both".into() };
+    let spec = grid::effect_of(&h);
+    let (mut a, mut ra) = (unit(), GodotRng::new(SEED));
+    let (mut b, mut rb) = (unit(), GodotRng::new(SEED));
+    assert!(status::apply_effect(&mut a, &spec, Timing::Next, 0.0, Some(&mut ra)));
+    assert!(status::try_inflict(&mut b, free, POTENCY, Some(&mut rb), 1, 0, "terrain"));
+    assert_eq!(outcome(&a, &mut ra), outcome(&b, &mut rb), "queued with no draw");
+    let (mut dead, mut rng) = (unit(), GodotRng::new(SEED));
+    dead.hp = 0;
+    let before = format!("{:?}", dead.st);
+    assert!(!status::apply_effect(&mut dead, &spec, Timing::Next, 0.0, Some(&mut rng)), "a dead unit takes nothing");
+    assert_eq!(format!("{:?}", dead.st), before);
+    assert_eq!(rng.randi_range(1, 1_000_000), GodotRng::new(SEED).randi_range(1, 1_000_000), "no draw spent");
 }
 
 /// Arena hazard effects: `arena::effect_of` is an inflict with the effect's numbers and the hazard's name as the source,

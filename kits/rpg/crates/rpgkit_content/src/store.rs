@@ -46,17 +46,12 @@ fn class_storage(full: &Dict) -> Dict {
 }
 
 /// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the
-/// same value when read), so a row written before the switches were fields re-saves byte for byte. P2.2-S1 (FB-40b):
-/// `move_after_blocks` is stored only when the row gives it (`entry`, the stored shape), so a row written before it
-/// had a schema entry re-saves byte for byte until the data re-save writes it.
-fn ruleset_storage(entry: &Dict, full: &Dict) -> Dict {
+/// same value when read), so a row written before the switches were fields re-saves byte for byte. P1.2-S2 (FB-109):
+/// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it).
+fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
-    let unset = |key: &str| key == RULESET_GIVEN_ONLY && !entry.contains_key(key);
-    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v) || unset(key))
+    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
 }
-
-/// P2.2-S1: the ruleset schema field a row stores only when it gives it (`ruleset_storage`).
-const RULESET_GIVEN_ONLY: &str = "move_after_blocks";
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for
@@ -254,7 +249,7 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),
         k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
-        k if k == source::RULESET_KIND => Ok(ruleset_storage(entry, &content(kind, entry))),
+        k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
         "terrain" => Ok(terrain_storage(entry, &content(kind, entry))),
         "classes" => Ok(class_storage(&content(kind, entry))),
         k if k == rpgkit_data::UNIT_METERS_KIND => Ok(meter_storage(&content(kind, entry))),

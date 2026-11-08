@@ -75,8 +75,29 @@ const BLOCKED: [usize; 4] = [7, 9, 10, 11]; // deep water, lava, wall, tree
 pub fn terrain_walkable(id: &str) -> bool {
     TERRAIN_IDS.iter().position(|t| *t == id).is_none_or(|i| !BLOCKED.contains(&i))
 }
+
+/// P1.2-S2 (FB-109): the missing-key rule of a terrain row's `walkable` and `stops_forced_move`, shared by the loader
+/// (`rpgkit_content` `source`) and `TerrainTable`: `walkable` as given, else its type's (`terrain_walkable`);
+/// `stops_forced_move` as given, else not walkable. `(walkable, stops_forced_move)`.
+pub fn terrain_walk_keys(id: &str, walkable: Option<bool>, stops_forced_move: Option<bool>) -> (bool, bool) {
+    let walkable = walkable.unwrap_or_else(|| terrain_walkable(id));
+    (walkable, stops_forced_move.unwrap_or(!walkable))
+}
+
+/// A row's boolean `key` as `value::boolean` reads it, None when it is missing or not a boolean or number (the
+/// missing-key rule applies).
+fn given_bool(r: &value::Obj, key: &str) -> Option<bool> {
+    match r.get(key) {
+        Some(serde_json::Value::Bool(b)) => Some(*b),
+        Some(serde_json::Value::Number(n)) => n.as_f64().map(|f| f != 0.0),
+        _ => None,
+    }
+}
 /// The move cost of a type with no catalog row (a row's `move_cost` is read from the row).
 const SLOW: [usize; 5] = [4, 5, 6, 8, 13]; // sand, snow, shallow water, mud, rubble
+
+/// The source name a terrain hazard's status carries.
+pub const TERRAIN_SOURCE: &str = "terrain";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hazard {
@@ -86,6 +107,13 @@ pub struct Hazard {
     pub rounds: i32,
     /// "enter", "round_end" or "both".
     pub on: String,
+}
+
+/// P1.2-S2 (FB-51d, A4.2 C08): a terrain row's hazard status as an EffectSpec, the cell vocabulary's converter (as
+/// `ground::effect_of` for ground hazard rows): an inflict (rolled when its status row is `resistable`) carrying the row's
+/// `hazard_potency`, `hazard_rounds` and `hazard_magnitude`, with the source `TERRAIN_SOURCE`.
+pub fn effect_of(h: &Hazard) -> rpgkit_rules::status::EffectSpec {
+    rpgkit_rules::status::EffectSpec::inflict(&h.status, h.potency, h.rounds, h.magnitude, TERRAIN_SOURCE)
 }
 
 #[derive(Debug, Clone)]
@@ -112,12 +140,12 @@ impl TerrainTable {
             .map(|(i, id)| {
                 let default_cost = if SLOW.contains(&i) { 2 } else { 1 };
                 let Some(r) = cat.terrain.get(*id) else {
-                    let walkable = !BLOCKED.contains(&i);
-                    return TerrainRow { walkable, stops_forced_move: !walkable, move_cost: if walkable { default_cost } else { 1 }, cover_guard: 0.0, hazard: None };
+                    let (walkable, stops_forced_move) = terrain_walk_keys(id, None, None);
+                    return TerrainRow { walkable, stops_forced_move, move_cost: if walkable { default_cost } else { 1 }, cover_guard: 0.0, hazard: None };
                 };
-                // P1.2-S1: the row's own `walkable` and `stops_forced_move`, else their missing-key fallbacks
-                let walkable = value::boolean(r, "walkable", !BLOCKED.contains(&i));
-                let stops_forced_move = value::boolean(r, "stops_forced_move", !walkable);
+                // P1.2-S1: the row's own `walkable` and `stops_forced_move`, else their missing-key fallbacks (P1.2-S2: the
+                // loader's rule, `terrain_walk_keys`)
+                let (walkable, stops_forced_move) = terrain_walk_keys(id, given_bool(r, "walkable"), given_bool(r, "stops_forced_move"));
                 let status = value::string(r, "hazard_status", "");
                 let hazard = (!status.is_empty() && walkable).then(|| Hazard {
                     status,

@@ -1527,9 +1527,11 @@ pub fn hazard_on_enter(w: &mut World, rng: &mut GodotRng, u: UnitId, cells: &[V2
     lines
 }
 
-/// HazardRules._roll: the unit rolls the hazard's status; the note when it lands.
+/// HazardRules._roll: the unit rolls the hazard's status; the note when it lands. P1.2-S2 (FB-51d): through S1 as the
+/// terrain row's EffectSpec (`grid::effect_of`; one draw when rolled, a dead unit takes nothing, lands next round).
 fn hazard_roll(w: &mut World, rng: &mut GodotRng, u: UnitId, h: &crate::grid::Hazard, cell: V2) -> Option<String> {
-    if !status::try_inflict(&mut w.units[u], &h.status, h.potency, Some(rng), h.rounds, h.magnitude, "terrain") {
+    let spec = crate::grid::effect_of(h);
+    if !status::apply_effect(&mut w.units[u], &spec, status::Timing::Next, 0.0, Some(rng)) {
         return None;
     }
     Some(format!("[Hazard] {} is {} by {}", w.units[u].name, status::display_name(&h.status), terrain_name(w, cell)))

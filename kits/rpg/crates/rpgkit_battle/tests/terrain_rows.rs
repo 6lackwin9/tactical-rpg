@@ -7,7 +7,9 @@
 
 use indexmap::IndexMap;
 use rpgkit_battle::command::Command;
-use rpgkit_battle::grid::{terrain_walkable, Grid, TerrainTable, TERRAIN_IDS, V2};
+use aegis_core::rng::GodotRng;
+use rpgkit_battle::command::{hazard_on_enter, hazard_round_end};
+use rpgkit_battle::grid::{terrain_walk_keys, terrain_walkable, Grid, TerrainTable, TERRAIN_IDS, V2};
 use rpgkit_battle::path::{self, Cells, Hooks};
 use rpgkit_battle::plan::{Plan, PlanStep};
 use rpgkit_battle::resolver::Resolver;
@@ -15,6 +17,7 @@ use rpgkit_battle::session::{EncounterDef, Session};
 use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::Catalog;
 use rpgkit_rules::ruleset::{Ruleset, FORCED_MOVE, TIMELINE};
+use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -142,4 +145,68 @@ fn forced_moves_read_stops_forced_move() {
     let mut open = bare_rows();
     open[index("wall")]["walkable"] = json!(true);
     assert_eq!(push_into(open, "wall"), (V2::new(7, 4), String::new()), "a walkable wall that does not stop them");
+}
+
+/// P1.2-S2 (FB-109): the missing-key rule is one helper (`grid::terrain_walk_keys`) the loader and `TerrainTable` both
+/// read: a given value wins, `walkable` falls back to its type's and `stops_forced_move` to not walkable; the table built
+/// from rows with any mix of given and missing keys agrees with it.
+#[test]
+fn one_missing_key_rule() {
+    for id in TERRAIN_IDS.iter().copied().chain(["t_unknown"]) {
+        assert_eq!(terrain_walk_keys(id, None, None), (terrain_walkable(id), !terrain_walkable(id)), "{id}: both missing");
+        for w in [false, true] {
+            assert_eq!(terrain_walk_keys(id, Some(w), None), (w, !w), "{id}: walkable given");
+            for f in [false, true] {
+                assert_eq!(terrain_walk_keys(id, Some(w), Some(f)), (w, f), "{id}: both given");
+                assert_eq!(terrain_walk_keys(id, None, Some(f)), (terrain_walkable(id), f), "{id}: stops given");
+            }
+        }
+    }
+    let given = [None, Some(false), Some(true)];
+    for gw in given {
+        for gf in given {
+            let mut rows = bare_rows();
+            for r in rows.iter_mut() {
+                if let Some(w) = gw {
+                    r["walkable"] = json!(w);
+                }
+                if let Some(f) = gf {
+                    r["stops_forced_move"] = json!(f);
+                }
+            }
+            let t = table(rows);
+            for (i, id) in TERRAIN_IDS.iter().enumerate() {
+                assert_eq!((t.rows[i].walkable, t.rows[i].stops_forced_move), terrain_walk_keys(id, gw, gf), "{id} {gw:?} {gf:?}");
+            }
+        }
+    }
+}
+
+/// P1.2-S2 (FB-51d): a terrain hazard rolled in battle (on enter and at round end) lands exactly as the direct
+/// `try_inflict` with the row's numbers and the source "terrain" did: the same status state and the same RNG draws on a
+/// twin unit. The row's status is picked by rule (a resistable row), its numbers built here.
+#[test]
+fn terrain_hazard_rolls_match_the_direct_call() {
+    let st = status::ROWS.iter().find(|r| r.resistable).expect("a resistable row").id;
+    let (potency, rounds, magnitude) = (60, 2, 0);
+    let mut rows = bare_rows();
+    let bog = index("toxic_bog");
+    rows[bog] = json!({"id": "toxic_bog", "name": "Bog", "hazard_status": st, "hazard_potency": potency, "hazard_rounds": rounds, "hazard_magnitude": magnitude, "hazard_on": "both"});
+    let cell = V2::new(4, 4);
+    let mut landed = Vec::new();
+    for seed in 0..12 {
+        for enter in [false, true] {
+            let mut s = session(rows.clone());
+            s.w.grid.terrain[(cell.y * rpgkit_battle::grid::GRID_W + cell.x) as usize] = bog;
+            let mut twin = s.w.units[HERO].clone();
+            let (mut rng, mut twin_rng) = (GodotRng::new(seed), GodotRng::new(seed));
+            let lines = if enter { hazard_on_enter(&mut s.w, &mut rng, HERO, &[cell]) } else { hazard_round_end(&mut s.w, &mut rng, &[HERO]) };
+            let want = status::try_inflict(&mut twin, st, potency, Some(&mut twin_rng), rounds, magnitude, "terrain");
+            assert_eq!(!lines.is_empty(), want, "seed {seed} enter {enter}: a note when it lands");
+            assert_eq!(format!("{:?}", s.w.units[HERO].st), format!("{:?}", twin.st), "seed {seed} enter {enter}");
+            assert_eq!(rng.randi_range(1, 1_000_000), twin_rng.randi_range(1, 1_000_000), "seed {seed} enter {enter}: same draws");
+            landed.push(want);
+        }
+    }
+    assert!(landed.contains(&true) && landed.contains(&false), "potency {potency} both lands and is resisted");
 }

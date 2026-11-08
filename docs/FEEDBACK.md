@@ -22,7 +22,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | READY row 18 `P1.2-S1` + `P2.2-S1` | done (FB-109) | `develop` | R2 Wave 1 complete. |
 | READY row 20 (R3-W1) | done (FB-111) | `develop` | R3 Wave 1 complete. |
 | W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
-| W2-5 (R2-W2) | slices 1-3 done (FB-127, 128, 129); Maneuver row question FB-130; next: P1.2-S2 cell EffectSpec | - | - |
+| W2-5 (R2-W2) | done: slices 1-4 (FB-127..129, 131); open FB-128, FB-130 | `develop` | Next: R2-W2b CLASS-BASICS, then R2-CLOSE. |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -109,6 +109,14 @@ FB-01 to FB-120 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: Slice 3 built Row Z (= the Field row) and the ring row, and no separate Maneuver row, following the matrix and the READY row. Consequence today: under `field_intent` the gap-close moves (`lunge`, `pounce`, `charge_in`) derive Maneuver only, and only Skirmishers use row 4, so a non-Skirmisher enemy holding a gap-closer never uses it. I_AI.md's slice line also expects a named `timeline_golden` / `sim_golden` re-record, which did not happen (no frozen `tl_` deck holds a RING or area skill).
 - **Recommendation**: (A, recommended) add a Maneuver AI row for any role (a gap-close skill when a foe is just out of reach and the landing tile is safe), with its rule written in I_AI.md, as a small follow-up in W2-5 or CLASS-BASICS; (B) confirm row 4 (Skirmishers only) is intended and fix I_AI.md's wording. Separately: a `tl_` area fight in the frozen kit (INTENT2-A's planned one) would let the goldens exercise the Field, ring and Maneuver rows.
+
+### FB-131: W2-5 slice 4 (P1.2-S2) landed: terrain hazards on `EffectSpec`, one terrain missing-key rule, `move_after_blocks` always written; W2-5 complete
+
+- **Spec**: `docs/READY.md` row W2-5 (P1.2-S2, FB-51 d, FB-109); `docs/sessions/P_SPACE.md` acceptance 2; FB-117
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Terrain hazard rows use the A4.2 vocabulary: `grid::effect_of(&Hazard)` (source `grid::TERRAIN_SOURCE` "terrain"); `command::hazard_roll` applies it with `status::apply_effect` (the same `try_inflict_with` call and draws as before; hazard damage unchanged). `grid::terrain_walk_keys` is the one missing-key rule for terrain, used by `TerrainTable::from_catalog` and the content loader (the two still parse a given value differently: the loader's `json::to_bool` reads "true" / "1" / "yes", the battle reads bools and numbers only; writer-produced data is always bool). `store.rs`'s given-only rule for ruleset `move_after_blocks` is retired (both shipped rows carry it; the shipped re-save stays byte-identical). No golden moved. Tests: `effect_spec.rs` (+1 terrain parity), `terrain_rows.rs` (+2), `terrain_fields.rs` (updated). With slices 1-4 landed, W2-5 is complete (open: FB-128 attack-lock feel, FB-130 Maneuver row).
+- **Recommendation**: GAME_BRIEF / kit README: terrain hazards share `EffectSpec` (`grid::effect_of`); STRUCTURE (`grid.rs`): `effect_of`, `terrain_walk_keys`; PORT_NOTES (HazardRules._roll): routed through `status::apply_effect`; HISTORY: "W2-5 slice 4 (P1.2-S2, FB-109): terrain hazards through `EffectSpec`; the writer always stores ruleset `move_after_blocks` (given-only rule retired); no golden moved".
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

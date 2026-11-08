@@ -3,7 +3,7 @@
 //! (`grid::terrain_walkable`, then not walkable), not the schema default; a row with them loads them as given; the
 //! terrain checks read the row's `walkable`. The writer stores the keys only when the row gives them, so a file written
 //! before they existed re-saves byte for byte and an explicit value is kept. `move_after_blocks` has the code default
-//! (`ruleset::MOVE_AFTER_BLOCKS`) and the spec's range 1..4, reads as set, and is stored only when given.
+//! (`ruleset::MOVE_AFTER_BLOCKS`) and the spec's range 1..4, reads as set, and is always stored (P1.2-S2, FB-109).
 
 use aegis_content::schema::fields;
 use aegis_core::json::{self, Dict};
@@ -114,7 +114,7 @@ fn the_writer_stores_the_keys_only_when_given() {
 }
 
 /// `move_after_blocks`: the schema's default is the code's and its range the spec's (1..4); a row reads it as set; the
-/// writer stores it only when the row gives it.
+/// writer always stores it (P1.2-S2, FB-109: P2.2-S1's given-only rule retired), the default for a row without it.
 #[test]
 fn move_after_blocks_is_a_schema_field() {
     let f = field("content", ruleset::KIND, "move_after_blocks");
@@ -127,8 +127,10 @@ fn move_after_blocks_is_a_schema_field() {
     write_kind(&data, ruleset::KIND, json!([{"id": "classic", "name": "Classic"}]));
     let file = data.join("catalog").join(format!("{}.json", ruleset::KIND));
     let text = store::resave_text(&data, None, ruleset::KIND).unwrap();
-    assert!(!text.contains("move_after_blocks"), "a row without it is stored without it");
+    let resaved: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(resaved["entries"][0]["move_after_blocks"], json!(MOVE_AFTER_BLOCKS), "a row without it is stored with the default");
     fs::write(&file, &text).unwrap();
+    assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "stable once written");
     store::upsert(&data, None, ruleset::KIND, &dict(json!({"id": "classic", "name": "Classic", "move_after_blocks": 2})), None).unwrap();
     let stored: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(stored["entries"][0]["move_after_blocks"], json!(2), "a given value is stored");
