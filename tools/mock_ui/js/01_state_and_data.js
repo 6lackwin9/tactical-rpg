@@ -164,6 +164,7 @@ const STATE = {
   storyMode: 'vn_stage',        // 'vn_stage' | 'map_stage' | 'vignette_reel'
   storyActorStyle: 'full_sprite', // 'full_sprite' | 'bust_cutout' | 'backdrop_only'
   storyRigPose: 'auto',         // 'auto' (use actor.pose) | 'relaxed' | 'sneaking' | 'weapons_drawn'
+  storyRigEngine: 'atlas_b',    // 'atlas_b' (Exploded 13-Part Spine2D Atlas) | 'pose_c' (3-Pose Sheet + Idle Rig) | 'slice_a' (Single-Sprite 10-Part Auto-Slice) | 'compare_bc' (Side-by-Side Compare)
   storyTurnaroundView: 'side',  // 'side' | 'front' | 'back' | 'sheet_3view' (3-View Full-Body Turnaround per ART_PROMPT_TEMPLATES.md)
   storyShowRigDebug: false,     // Toggle Live2D / VTuber mesh deformer grid & joint skeleton overlay
   storyMoodOverride: null,      // null (use card.mood) | 'neutral' | 'determined' | 'angry' | 'hurt' | 'surprised' | 'afraid'

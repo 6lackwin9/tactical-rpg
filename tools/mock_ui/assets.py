@@ -225,50 +225,41 @@ def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
             if rgba[3] == 0:
                 continue
             is_weap = False
-            if char_key == "kaelen":
-                pivot = [194, 152]
-                if y < 135:
+            if char_key in ("kaelen", "kaelen_side"):
+                pivot = [220, 156]
+                if y < 138:
                     xc = 205
-                elif y < 168:
-                    xc = 192
+                elif y < 172:
+                    xc = 215
                 else:
-                    xc = int(196 - (y - 168) * 0.09)
-                is_weap = x >= xc and y < 316
-            elif char_key == "kaelen_side":
-                pivot = [180, 158]
-                if y < 120:
-                    xc = 185
-                elif y < 185:
-                    xc = 194
-                else:
-                    xc = 208
-                is_weap = x >= xc
+                    xc = int(round(210 - (y - 172) * 0.17))
+                is_weap = x >= xc and y <= 309
             elif char_key == "kaelen_front":
-                pivot = [205, 148]
-                if y < 100:
-                    xc = 192
-                elif y < 195:
-                    xc = 212
-                else:
+                pivot = [228, 156]
+                if y < 138:
+                    xc = 210
+                elif y < 175:
                     xc = 220
+                else:
+                    xc = 201
                 is_weap = x >= xc
             elif char_key == "kaelen_back":
-                pivot = [205, 148]
-                if y < 95:
-                    xc = 192
-                elif y < 185:
-                    xc = 212
+                pivot = [110, 156]
+                if y < 138:
+                    xc = 118
+                elif y < 175:
+                    xc = 108
                 else:
-                    xc = 220
-                is_weap = x >= xc
+                    xc = 136
+                is_weap = x <= xc
             elif char_key in ("watchman", "bailiff"):
                 pivot = [124, 155]
                 if y < 135:
-                    xc = 105
+                    xc = 135
                 elif y < 175:
                     xc = 122
                 else:
-                    xc = int(102 - (y - 175) * 0.14)
+                    xc = int(120 + (y - 175) * 0.11)
                 is_weap = x <= xc
             elif char_key == "vesper":
                 pivot = [190, 165]
@@ -277,8 +268,8 @@ def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
                 pivot = [192, 155]
                 is_weap = x >= 204 and 125 <= y <= 265
             elif char_key == "vane":
-                pivot = [132, 148]
-                is_weap = x <= 116 and y <= 255
+                pivot = [132, 162]
+                is_weap = x <= 122 and 140 <= y <= 305
             elif char_key == "aline":
                 pivot = [192, 160]
                 is_weap = x >= 200 and 120 <= y <= 245
@@ -406,6 +397,16 @@ def build_asset_bundle() -> dict[str, Any]:
             "maren": split_vtuber_layers("maren", "portraits/full_body/maren.png"),
             "aline": split_vtuber_layers("aline", "portraits/full_body/aline.png"),
             "watchman": split_vtuber_layers("watchman", "portraits/full_body/watchman.png"),
+        },
+        "partsAtlas": {
+            "kaelen": load_scaled_uri("portraits/full_body/kaelen_parts_atlas.png", (495, 276), True),
+        },
+        "poseSheets": {
+            "kaelen": {
+                "relaxed": load_scaled_uri("portraits/full_body/kaelen_pose_relaxed.png", (340, 340), True),
+                "sneaking": load_scaled_uri("portraits/full_body/kaelen_pose_sneaking.png", (340, 340), True),
+                "weapons_drawn": load_scaled_uri("portraits/full_body/kaelen_pose_drawn.png", (340, 340), True),
+            },
         },
         "units3View": {
             "kaelen": {
