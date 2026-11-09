@@ -1761,7 +1761,7 @@
 			"rarity": "COMMON",
 			"weight": 0.4,
 			"value": 25,
-			"description": "+30% attack power (Empower) for 2 rounds",
+			"description": "Brimstone Tallow Draught: +30% attack power (Empower) for 3 rounds.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,

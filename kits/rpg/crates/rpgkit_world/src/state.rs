@@ -550,9 +550,36 @@ impl UnitState {
     /// every ruleset with the deck rule; order maps an intent to families of that intent among the actives and the
     /// basics. Nothing repeats.
     pub fn deck_errors(&self, d: &Data, at: &str) -> Vec<String> {
+        self.deck_pass(d, at, false).0
+    }
+
+    /// R4-2 M1 (FB-138): drops the saved deck entries the current data disallows (`deck_errors`' rules: an entry with
+    /// a problem is not kept, a list past a deck ruleset's slots is cut to them, an order or follow-up list is read
+    /// against the entries kept) and returns one load warning per problem. A valid deck (or one with shape problems,
+    /// `deck_problems`, which stay errors) is untouched; a deck still invalid after the drop is reset to the automatic
+    /// deck with a warning.
+    pub fn sanitize_deck(&mut self, d: &Data) -> Vec<String> {
+        let at = format!("Unit '{}'", self.id);
+        if self.deck.is_empty() || !self.deck_problems.is_empty() || d.entry("units", &self.base_unit).is_empty() || self.deck_errors(d, &at).is_empty() {
+            return Vec::new();
+        }
+        let (dropped, kept) = self.deck_pass(d, &at, true);
+        self.deck = kept;
+        let mut warnings: Vec<String> = dropped.into_iter().map(|e| format!("{e} Dropped from the saved deck (the data no longer allows it).")).collect();
+        if !self.deck_errors(d, &at).is_empty() {
+            self.deck = Deck::default();
+            warnings.push(format!("{at}: the saved deck no longer fits the data; it is reset to the automatic deck."));
+        }
+        warnings
+    }
+
+    /// The deck rules over the saved deck: (problems, the deck of the entries without one). `clean` false reads every
+    /// list against the deck as saved (`deck_errors`); true reads the order and follow-ups against the kept entries and
+    /// cuts a list past a ruleset's slots (`sanitize_deck`).
+    fn deck_pass(&self, d: &Data, at: &str, clean: bool) -> (Vec<String>, Deck) {
         let mut errors = Vec::new();
         if self.deck.is_empty() {
-            return errors;
+            return (errors, self.deck.clone());
         }
         let rules: Vec<rpgkit_rules::ruleset::Ruleset> =
             d.cat.rulesets.values().map(rpgkit_rules::ruleset::Ruleset::from_row).filter(|r| r.has(rpgkit_rules::ruleset::DECK)).collect();
@@ -566,19 +593,27 @@ impl UnitState {
         if !rules.is_empty() {
             basics = rpgkit_rules::DeckRule { basics, ..Default::default() }.with_class(&d.cat, &self.class_id(d)).basics;
         }
-        let twice = |label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec<String>| {
+        // each repeat is a problem; the flags mark the repeats (the first one stands)
+        let twice = |label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec<String>| -> Vec<bool> {
+            let mut flags = Vec::new();
             for id in ids {
-                if seen.contains(id) {
+                let again = seen.contains(id);
+                if again {
                     errors.push(format!("{at}: deck {label} lists '{id}' twice."));
                 }
+                flags.push(again);
                 seen.push(id.clone());
             }
+            flags
         };
+        let keep = |ids: &[String], bad: &[bool]| -> Vec<String> { ids.iter().zip(bad).filter(|(_, b)| !**b).map(|(id, _)| id.clone()).collect() };
+        let mut kept = Deck::default();
         let owned = self.owned_families_anywhere(d);
         // U3.2-S3 (FB-63 (2)): the passives it owns as a build gathers them (character sources now, then saved ids)
         let owned_passives = progression::member_passives(d, self);
-        twice("active", &self.deck.active, &mut Vec::new(), &mut errors);
-        for fam in &self.deck.active {
+        let mut bad = twice("active", &self.deck.active, &mut Vec::new(), &mut errors);
+        for (i, fam) in self.deck.active.iter().enumerate() {
+            let before = errors.len();
             if d.cat.tier_one(fam).is_none() {
                 errors.push(format!("{at}: deck active: unknown skill family '{fam}'."));
             } else if d.cat.is_basic_family(fam) || basics.contains(fam) || d.cat.is_system(fam) {
@@ -586,27 +621,43 @@ impl UnitState {
             } else if !owned.contains(fam) {
                 errors.push(format!("{at}: deck active: family '{fam}' is not owned."));
             }
+            bad[i] |= errors.len() > before;
         }
+        kept.active = keep(&self.deck.active, &bad);
         let mut seen_passives = Vec::new();
         for (slot, ids) in [("passive", &self.deck.passive), ("keystone", &self.deck.keystone)] {
-            twice(slot, ids, &mut seen_passives, &mut errors);
-            for id in ids {
+            let mut bad = twice(slot, ids, &mut seen_passives, &mut errors);
+            for (i, id) in ids.iter().enumerate() {
+                let before = errors.len();
                 match d.cat.passives.get(id) {
                     None => errors.push(format!("{at}: deck {slot}: unknown passive '{id}'.")),
                     Some(p) if p.slot != slot => errors.push(format!("{at}: deck {slot}: '{id}' does not take the {slot} slot.")),
                     Some(_) if !owned_passives.contains(id) => errors.push(format!("{at}: deck {slot}: passive '{id}' is not owned.")),
                     Some(_) => {}
                 }
+                bad[i] |= errors.len() > before;
             }
+            *(if slot == "passive" { &mut kept.passive } else { &mut kept.keystone }) = keep(ids, &bad);
         }
         for r in &rules {
             let s = r.numbers.deck_slots;
-            for (slot, n, max) in [("active", self.deck.active.len(), s.active), ("passive", self.deck.passive.len(), s.passive), ("keystone", self.deck.keystone.len(), s.keystone)] {
+            let counted = if clean { &kept } else { &self.deck };
+            let lens = [counted.active.len(), counted.passive.len(), counted.keystone.len()];
+            for ((slot, max), n) in [("active", s.active), ("passive", s.passive), ("keystone", s.keystone)].into_iter().zip(lens) {
                 if n as i64 > max as i64 {
                     errors.push(format!("{at}: deck: {n} {slot} entries (the {} ruleset's deck slots allow {max}).", r.name));
+                    if clean {
+                        let list = match slot {
+                            "active" => &mut kept.active,
+                            "passive" => &mut kept.passive,
+                            _ => &mut kept.keystone,
+                        };
+                        list.truncate(usize::try_from(max).unwrap_or(0));
+                    }
                 }
             }
         }
+        let actives = if clean { kept.active.clone() } else { self.deck.active.clone() };
         // A4.2-K1b (INTENT2 IR15, IR21): under a deck ruleset with `field_intent` the order reads the derived rows
         // (`intent::allowed`) and may name `field`; else the legacy single intent
         let field_rules = rules.iter().find(|r| r.has(rpgkit_rules::ruleset::FIELD_INTENT));
@@ -633,23 +684,29 @@ impl UnitState {
             if field_rules.is_some() {
                 seen.clear();
             }
-            twice("order", list, &mut seen, &mut errors);
-            for fam in list {
-                if !self.deck.active.contains(fam) && !basics.contains(fam) {
+            let mut bad = twice("order", list, &mut seen, &mut errors);
+            for (i, fam) in list.iter().enumerate() {
+                if !actives.contains(fam) && !basics.contains(fam) {
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
+                    bad[i] = true;
                     continue;
                 }
                 let rows = rows_of(fam);
                 if !rows.contains(intent) {
                     let of = rows.join(" or ");
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
+                    bad[i] = true;
                 }
+            }
+            let list_kept = keep(list, &bad);
+            if !list_kept.is_empty() || list.is_empty() {
+                kept.order.insert(intent.clone(), list_kept);
             }
         }
         // INPUT1 FL5: each list follows an opener of the deck (an active or a basic, not neutral) with families of the
         // deck of the opener's intent, none twice (the opener may stand in its own list)
         let intent_of = |fam: &str| rows_of(fam);
-        let in_deck = |fam: &str| self.deck.active.iter().chain(&basics).any(|f| f == fam);
+        let in_deck = |fam: &str| actives.iter().chain(&basics).any(|f| f == fam);
         let label = |id: &str| match rpgkit_battle::round_intent::RoundIntent::parse(id) {
             Some(i) => i.name().to_string(),
             None if id.is_empty() => "no intent".into(),
@@ -662,6 +719,7 @@ impl UnitState {
                 continue;
             }
             let mut seen: Vec<&String> = Vec::new();
+            let mut list_kept = Vec::new();
             for fam in list {
                 if seen.contains(&fam) {
                     errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' twice."));
@@ -676,10 +734,15 @@ impl UnitState {
                 if !has.iter().any(|i| of.contains(i)) {
                     let text = |rows: &[String]| if rows.is_empty() { label("") } else { rows.iter().map(|r| label(r)).collect::<Vec<_>>().join(" or ") };
                     errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is {}, not {}.", text(&has), text(&of)));
+                    continue;
                 }
+                list_kept.push(fam.clone());
+            }
+            if !list_kept.is_empty() {
+                kept.follow_ups.insert(key.clone(), list_kept);
             }
         }
-        errors
+        (errors, kept)
     }
 
     pub fn loadout_errors(&self, d: &Data, at: &str) -> Vec<String> {

@@ -38,7 +38,7 @@ fn base_formula(u: &Unit, h: &damage::Hit) -> i32 {
     if u.power_override > 0 {
         return u.power_override;
     }
-    roundi((h.power.weapon_power + h.power.unit_power) * u.tier_power).max(1)
+    roundi((h.power.weapon_power + h.power.unit_power) * u.tier_mult).max(1)
 }
 
 const STANCES: [Stance; 4] = [Stance::Neutral, Stance::Offensive, Stance::Defensive, Stance::Tactical];
@@ -98,7 +98,7 @@ fn compute_is_the_formula_in_its_order() {
                             for crit in [false, true] {
                                 for skill in [0.2, 0.5, 0.75, 1.0, 1.25, 1.6] {
                                     let mut a = base.clone();
-                                    (a.tier_power, a.power_override, a.attack_boost) = (scale, authored, boost);
+                                    (a.tier_mult, a.power_override, a.attack_boost) = (scale, authored, boost);
                                     let mut t = base.clone();
                                     (t.guard, t.armor_override, t.stance) = (guard, armour, target_stance);
                                     for (cover, pierce) in [(0.0, false), (0.2, false), (0.3, true)] {
@@ -130,7 +130,7 @@ fn compute_is_the_formula_in_its_order() {
 #[test]
 fn a_hit_traces_every_step_in_stage_order() {
     let mut a = probe();
-    a.tier_power = 0.8;
+    a.tier_mult = 0.8;
     let t = probe();
     let h = damage::compute_traced(&a, &t, HitInput { skill_mult: 1.25, force_crit: true, cover: 0.2, ..HitInput::default() });
     let ids: Vec<&str> = h.trace.steps.iter().map(|s| s.id.as_ref()).collect();

@@ -17,13 +17,24 @@ use serde_json::Value;
 
 pub mod terms;
 pub mod unit_budget;
+pub mod unit_template;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
+pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 /// Unit slot value meaning "leave this slot empty" (no class fallback).
 pub const NO_ITEM: &str = "none";
+/// AUDIT-01 (FB-143): the tier of a unit row without `tier` (the schema default). Every reader of a unit row's tier
+/// (`UnitDef`, the world roster's stage level, XP weight and morale tier, the loot check, the sim) goes through
+/// `unit_tier`, so a tierless row reads the same tier everywhere.
+pub const DEFAULT_TIER: &str = "hero";
+
+/// AUDIT-01: unit row `o`'s tier, `DEFAULT_TIER` when the row has none.
+pub fn unit_tier(o: &Obj) -> String {
+    string(o, "tier", DEFAULT_TIER)
+}
 
 /// INPUT1 MR1-MR2 (rule round_intent): the spot a Maneuver attack with a `position` dashes to by its target and hits
 /// from: `flank` (beside it) or `behind`. The skill field's "" is no position.
@@ -222,6 +233,9 @@ pub struct UnitDef {
     pub extra_skills: Vec<String>,
     pub loadout: Vec<String>,
     pub ai_role: String,
+    /// R4-1 slice 2 (`U2.3-TIERS`, FB-144): the role template the unit takes (`rpgkit_rules::unit::template_for`):
+    /// "" = by its AI role, `TEMPLATE_CLASS` = none (it keeps its class's shares), else a template role or id.
+    pub template: String,
     pub target_pref: String,
     pub flee_ratio: f64,
     pub defend_below: f64,
@@ -298,7 +312,7 @@ impl UnitDef {
             class_id: string(o, "class_id", ""),
             level: int(o, "level", 1),
             growth_per_stage: int(o, "growth_per_stage", 0),
-            tier: string(o, "tier", "hero"),
+            tier: unit_tier(o),
             spend: int_map(o, "spend"),
             stat_mode: string(o, "stat_mode", "derived"),
             hp: int(o, "hp", 50),
@@ -311,6 +325,7 @@ impl UnitDef {
             extra_skills: strings(o, "extra_skills"),
             loadout: strings(o, "loadout"),
             ai_role: string(o, "ai_role", ""),
+            template: string(o, "template", ""),
             target_pref: string(o, "target_pref", "ROLE"),
             flee_ratio: float(o, "flee_ratio", 0.25),
             defend_below: float(o, "defend_below", 0.4),
@@ -770,10 +785,18 @@ pub const LEVEL_INPUT: &str = "level";
 /// RULESET1 P1 (tasks 1.7): the formula input of the summed `effective_mitigation` of the unit's worn gear (reserved
 /// like `level`: no row id or constant takes it).
 pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
-/// U1.2-S4 (U1_STATS feasibility 6): the formula inputs of the unit's tier factors, its row in the kit's tier table
-/// (`hp`, `power`); reserved like `level`.
+/// R4-1 (user 2026-11-09): the formula input of the unit's tier factor, its row's `mult` in the kit's tier table;
+/// reserved like `level`.
+pub const TIER_MULT_INPUT: &str = "tier_mult";
+/// U1.2-S4: the old tier inputs, deprecated aliases of `tier_mult` since R4-1 (one factor per tier); still reserved
+/// and read, so a formula written with them keeps working.
 pub const TIER_HP_INPUT: &str = "tier_hp";
 pub const TIER_POWER_INPUT: &str = "tier_power";
+
+/// A formula name that reads the unit's tier factor: `tier_mult` or a deprecated alias.
+pub fn is_tier_input(name: &str) -> bool {
+    name == TIER_MULT_INPUT || name == TIER_HP_INPUT || name == TIER_POWER_INPUT
+}
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]
@@ -880,6 +903,9 @@ pub struct Catalog {
     /// Ground rows of a region map's picture (REGIONGROUND1 KT 1.1, kind `grounds`; engine-only; presentation only: no
     /// rule reads them).
     pub grounds: IndexMap<String, GroundDef>,
+    /// R4-1 (`U2.3-TIERS`, FB-78): the role templates (kind `unit_templates`; engine-only), keyed by role (the first
+    /// row of a role wins; the content check refuses a second). No row for a role = its units keep their class's stats.
+    pub unit_templates: IndexMap<String, UnitTemplate>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -932,6 +958,9 @@ impl Catalog {
         cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
         cat.terms = rows(TERMS_KIND).iter().map(TermRow::from_obj).map(|t| (t.id.clone(), t)).collect();
         cat.grounds = rows(GROUNDS_KIND).iter().map(GroundDef::from_obj).map(|g| (g.id.clone(), g)).collect();
+        for t in rows(UNIT_TEMPLATES_KIND).iter().map(UnitTemplate::from_obj) {
+            cat.unit_templates.entry(t.role.clone()).or_insert(t);
+        }
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -1862,7 +1891,7 @@ fn objs(o: &Obj, key: &str) -> Vec<Obj> {
 }
 
 /// The numeric values of an object as floats, in its key order (other values left out).
-fn float_map(m: &Obj) -> IndexMap<String, f64> {
+pub(crate) fn float_map(m: &Obj) -> IndexMap<String, f64> {
     m.iter().filter_map(|(k, v)| v.as_f64().map(|x| (k.clone(), x))).collect()
 }
 

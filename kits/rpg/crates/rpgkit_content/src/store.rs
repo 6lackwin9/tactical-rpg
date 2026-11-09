@@ -20,12 +20,18 @@ pub use aegis_content::store::Outcome;
 // ---- Storage forms -----------------------------------------------------------------------------------------------
 
 /// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false, `origin` system and an empty
-/// `wears_untrained` (UNITDRILL1: a row without the exception reads as before) and a 0 `growth_per_stage` (W.2-S3,
-/// FB-139: a unit written before the field existed re-saves byte for byte) left out; unknown keys kept.
+/// `wears_untrained` (UNITDRILL1: a row without the exception reads as before), a 0 `growth_per_stage` (W.2-S3,
+/// FB-139: a unit written before the field existed re-saves byte for byte) and an empty unit `template` (R4-1 slice 2,
+/// FB-144: the schema's `omit_default`) left out; unknown keys kept.
 fn content_storage(kind: &str, full: &Dict) -> Dict {
     use crate::check::unit::{GROWTH_PER_STAGE, WEARS_UNTRAINED};
+    use rpgkit_data::TEMPLATE_FIELD;
     to_storage(source::schema(), "content", kind, full, |key, v| {
-        (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || (key == WEARS_UNTRAINED && json::strings(v).is_empty()) || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
+        (key == "system" && !json::to_bool(v))
+            || (key == "origin" && gstr(v) == "system")
+            || (key == WEARS_UNTRAINED && json::strings(v).is_empty())
+            || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
+            || (kind == "units" && key == TEMPLATE_FIELD && gstr(v).is_empty())
     })
 }
 
@@ -283,9 +289,9 @@ pub const GAME_KINDS: [GameKind; 3] = [
 
 /// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1), the
 /// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the expression effects (PORTRAITFX1-EX), the combat hook
-/// kinds (HOOKS1), the terms (TERMS1), the grounds (REGIONGROUND1), game-data kinds).
-const BASE_KINDS: [&str; 20] = [
-    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, source::GROUNDS_KIND, "maps", "quests", "services",
+/// kinds (HOOKS1), the terms (TERMS1), the grounds (REGIONGROUND1), the role templates (R4-1), game-data kinds).
+const BASE_KINDS: [&str; 21] = [
+    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, source::GROUNDS_KIND, source::UNIT_TEMPLATES_KIND, "maps", "quests", "services",
 ];
 
 fn game_kind(kind: &str) -> Option<GameKind> {
@@ -576,8 +582,9 @@ fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
         Err(e) => return vec![e],
     };
     let mut out = m.problems();
-    // E2.2-S1 (FB-53): the game-wide purse caps, when the manifest sets them (E2.2-S2: the kit's manifest keys)
-    out.extend(RpgContent.manifest_problems(&m.to_dict()));
+    // E2.2-S1 (FB-53): the game-wide purse caps, when the manifest sets them (E2.2-S2: the kit's manifest keys);
+    // AUDIT-04 (FB-143): and every key the kit does not register, as `set_manifest` reports it
+    out.extend(aegis_content::store::manifest_key_problems(&RpgContent, &m.to_dict()));
     let folders: Vec<String> = worlds.as_object().map(|w| w.keys().cloned().collect()).unwrap_or_default();
     for w in m.worlds.iter().filter(|w| !folders.contains(w)) {
         out.push(format!("game.json: world '{w}' has no folder in data/worlds/."));

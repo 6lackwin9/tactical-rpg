@@ -2218,6 +2218,7 @@
 			"class_id": "mage",
 			"level": 5,
 			"tier": "boss",
+			"template": "class",
 			"spend": {},
 			"stat_mode": "derived",
 			"ap": 0,
@@ -2427,8 +2428,7 @@
 				"pommel_strike",
 				"intercepting_hook",
 				"billhook_sunder",
-				"seventh_ward_bulwark",
-				"brace"
+				"seventh_ward_bulwark"
 			],
 			"loadout": [],
 			"deck": {
@@ -2689,6 +2689,7 @@
 			"class_id": "mage",
 			"level": 3,
 			"tier": "elite",
+			"template": "class",
 			"spend": {},
 			"stat_mode": "derived",
 			"ap": 0,

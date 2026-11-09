@@ -18,6 +18,12 @@ pub const MAX_UNLOCK_REDUCTION: i32 = 2;
 pub const ADVANCED_UNLOCK_FLOOR: i32 = 3;
 pub const KNOW_UNLOCK_BASE: i32 = 12;
 pub const KNOW_UNLOCK_STEP: i32 = 4;
+/// The flat base of the max HP formulas (`CharacterStats::max_hp`, `max_hp_scaled`; private, so the BASERULES1 `LOCKED`
+/// table and the rules contract are unchanged).
+const HP_BASE: i32 = 60;
+/// R4-1 slice 2 (`U2.3-TIERS`, FB-144): the least a role-templated unit's tier-scaled base stat can be (`scale_core`;
+/// private, so the BASERULES1 `LOCKED` table and the rules contract are unchanged).
+const TEMPLATE_STAT_FLOOR: i32 = 6;
 pub const HP_PER_CONS: i32 = 8;
 pub const RANGE_PERC_THRESHOLD: i32 = 18;
 
@@ -27,14 +33,13 @@ pub fn roundi(x: f64) -> i32 {
 }
 
 /// U1.2-S4 (U1_STATS feasibility 6, U2_CLASS feasibility 2): one row of the kit's tier table `tiers.json` (beside this
-/// file, embedded at build time; StatRules.TIERS before): `hp` is the formula input `tier_hp` (it multiplies the
-/// whole max HP for now; the `60 x tier_hp + stats` form is held, FB-78), `power` is `tier_power` (attack power's base-stage multiplier), `skill_cap` the default AI skill cap
-/// (0 = none).
+/// file, embedded at build time; StatRules.TIERS before): `mult` is the tier's one factor, the formula input
+/// `tier_mult` (R4-1, user 2026-11-09: it replaced `tier_hp` and `tier_power`; it scales max HP, attack power's base
+/// stage and a templated unit's stats), `skill_cap` the default AI skill cap (0 = none).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TierRow {
     pub id: String,
-    pub hp: f64,
-    pub power: f64,
+    pub mult: f64,
     pub skill_cap: i32,
 }
 
@@ -52,7 +57,7 @@ pub static TIERS: LazyLock<Vec<TierRow>> = LazyLock::new(|| {
         .map(|(i, r)| {
             let num = |k: &str| r.get(k).and_then(Value::as_f64).unwrap_or_else(|| panic!("tiers.json row {i}: `{k}` is not a number"));
             let id = r.get("id").and_then(Value::as_str).unwrap_or_else(|| panic!("tiers.json row {i}: `id` is not a string"));
-            TierRow { id: id.to_string(), hp: num("hp"), power: num("power"), skill_cap: num("skill_cap") as i32 }
+            TierRow { id: id.to_string(), mult: num("mult"), skill_cap: num("skill_cap") as i32 }
         })
         .collect()
 });
@@ -264,6 +269,10 @@ pub struct CharacterStats {
     pub level: i32,
     pub unallocated: i32,
     pub core: IndexMap<String, i32>,
+    /// R4-1 slice 2 (FB-144): a role-templated unit's stats at level before its tier scaled them (`scale_core`), the
+    /// stats its gear requirements and stat skill unlocks read (`requirement_base`, `requirement_stat`); None for every
+    /// other unit (those read `core`).
+    pub unscaled: Option<IndexMap<String, i32>>,
     pub proficiency: Proficiency,
     pub modifiers: Vec<StatModifier>,
 }
@@ -279,15 +288,34 @@ impl CharacterStats {
             *core.get_mut(s).unwrap() += pts;
             spent += pts;
         }
-        Self { level: target, unallocated: (spend_pool(target) - spent).max(0), core, proficiency: Proficiency::from_class(class), modifiers: Vec::new() }
+        Self { level: target, unallocated: (spend_pool(target) - spent).max(0), core, unscaled: None, proficiency: Proficiency::from_class(class), modifiers: Vec::new() }
     }
 
     pub fn base(&self, stat: &str) -> i32 {
         self.core.get(&stat.to_uppercase()).copied().unwrap_or(10)
     }
 
+    /// R4-1 slice 2 (FB-144): the base stat a requirement reads: a templated unit's unscaled stat at level
+    /// (`unscaled`), else `base`.
+    pub fn requirement_base(&self, stat: &str) -> i32 {
+        match &self.unscaled {
+            Some(m) => m.get(&stat.to_uppercase()).copied().unwrap_or(10),
+            None => self.base(stat),
+        }
+    }
+
+    /// R4-1 slice 2 (FB-144): `stat` on the requirement base (`requirement_base`) plus the matching modifiers (gear
+    /// bonuses included, unscaled), minimum 1: what gear requirements check. Equal to `stat` for an unscaled unit.
+    pub fn requirement_stat(&self, stat: &str, weapon: Option<&str>) -> i32 {
+        self.effective_on(self.requirement_base(stat), stat, weapon, "")
+    }
+
     /// Base + matching modifiers (flat then percent), minimum 1. `exclude_source` leaves one source out.
     pub fn effective(&self, stat: &str, weapon: Option<&str>, exclude_source: &str) -> i32 {
+        self.effective_on(self.base(stat), stat, weapon, exclude_source)
+    }
+
+    fn effective_on(&self, base: i32, stat: &str, weapon: Option<&str>, exclude_source: &str) -> i32 {
         let clean = stat.to_uppercase();
         let mut flat = 0;
         let mut pct = 0.0;
@@ -300,17 +328,35 @@ impl CharacterStats {
                 pct += m.percent;
             }
         }
-        roundi((self.base(&clean) + flat) as f64 * (1.0 + pct)).max(1)
+        roundi((base + flat) as f64 * (1.0 + pct)).max(1)
     }
 
     pub fn stat(&self, stat: &str, weapon: Option<&str>) -> i32 {
         self.effective(stat, weapon, "")
     }
 
-    /// `round((60 + CONS x 8 + STR x 2) x tier_hp)` (U1.2-S4: `tier_hp` from the tier table; the old hp scale). The
-    /// spec's base-only form, `60 x tier_hp + CONS x 8 + STR x 2`, waits for the user's confirmation as its own change.
-    pub fn max_hp(&self, tier_hp: f64, weapon: Option<&str>) -> i32 {
-        roundi((60 + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2) as f64 * tier_hp)
+    /// `round((60 + CONS x 8 + STR x 2) x tier_mult)` (the tier table's factor). Every unit without a role template
+    /// (R4-1: `max_hp_scaled` for a templated unit, `Unit::tier_scaled`).
+    pub fn max_hp(&self, tier_mult: f64, weapon: Option<&str>) -> i32 {
+        roundi((HP_BASE + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2) as f64 * tier_mult)
+    }
+
+    /// R4-1 (`U2.3-TIERS`, FB-78): `round(60 x tier_mult) + CONS x 8 + STR x 2`, the max HP of a unit whose stats are
+    /// already tier-scaled (`scale_core`): the tier scales the base 60 only, so CONS and STR are not scaled twice.
+    pub fn max_hp_scaled(&self, tier_mult: f64, weapon: Option<&str>) -> i32 {
+        roundi(HP_BASE as f64 * tier_mult) + self.stat("CONS", weapon) * HP_PER_CONS + self.stat("STR", weapon) * 2
+    }
+
+    /// R4-1 slice 2 (FB-144): every base stat at level set to `max(6, round(stat x factor))` (a role-templated unit's
+    /// stats by its tier's `tier_mult`; gear modifiers are not base stats, so they stay unscaled). The stats before
+    /// the first scaling are kept in `unscaled` (the requirement stats).
+    pub fn scale_core(&mut self, factor: f64) {
+        if self.unscaled.is_none() {
+            self.unscaled = Some(self.core.clone());
+        }
+        for v in self.core.values_mut() {
+            *v = roundi(*v as f64 * factor).max(TEMPLATE_STAT_FLOOR);
+        }
     }
 
     /// U1.2-S3c: initiative, `8 + DEX - burden`, at least 1 (the old speed formula; the unit takes carry overload off

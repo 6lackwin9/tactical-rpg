@@ -3,7 +3,8 @@
 
 use rpgkit_battle::grid::{Grid, V2, GRID_H, GRID_W};
 use rpgkit_battle::world::{UnitId, World};
-use rpgkit_data::Catalog;
+use indexmap::IndexMap;
+use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_rules::stats::{spend_pool, MAX_CLASS_SLOTS};
 use serde_json::{json, Map, Value};
 
@@ -38,8 +39,17 @@ pub fn is_area_family(cat: &Catalog, family: &str) -> bool {
 
 /// 3.2: the unit `spend` of variant `variant` for `class_id` at `level` (empty = class weights).
 pub fn spend_for(cat: &Catalog, variant: &str, class_id: &str, level: i32) -> Map<String, Value> {
+    spend_by(variant, primary_stat(cat, class_id), level)
+}
+
+/// 3.2 for catalog unit `e` at its level: its primary stat read through its role template (`primary_stat_of`; R4-1
+/// slice 2, FB-144), so a templated unit spends by its template's growth identity.
+pub fn spend_for_unit(cat: &Catalog, variant: &str, e: &UnitDef) -> Map<String, Value> {
+    spend_by(variant, primary_stat_of(cat, e), e.level)
+}
+
+fn spend_by(variant: &str, primary: String, level: i32) -> Map<String, Value> {
     let pool = spend_pool(level);
-    let primary = primary_stat(cat, class_id);
     let mut m = Map::new();
     match variant {
         "cons" => {
@@ -65,12 +75,20 @@ pub fn spend_for(cat: &Catalog, variant: &str, class_id: &str, level: i32) -> Ma
 /// The stat of the largest class growth share (U2.2: the growth identity, not one level's rounded gain; an integer row
 /// reads as growth / 5, so the same stat as before; ties: the first in the class's growth order).
 pub fn primary_stat(cat: &Catalog, class_id: &str) -> String {
+    cat.classes.get(class_id).map(|cls| largest(&cls.unit_shares().growth)).unwrap_or_default()
+}
+
+/// R4-1 slice 2 (FB-144): `primary_stat` of catalog unit `e` read through its role template
+/// (`rpgkit_rules::unit::spend_growth`, `template_for`): a templated unit's template growth shares, else its class's.
+pub fn primary_stat_of(cat: &Catalog, e: &UnitDef) -> String {
+    largest(&rpgkit_rules::unit::spend_growth(cat, e))
+}
+
+fn largest(growth: &IndexMap<String, f64>) -> String {
     let mut best = (String::new(), -1.0);
-    if let Some(cls) = cat.classes.get(class_id) {
-        for (k, &v) in &cls.unit_shares().growth {
-            if v > best.1 {
-                best = (k.clone(), v);
-            }
+    for (k, &v) in growth {
+        if v > best.1 {
+            best = (k.clone(), v);
         }
     }
     best.0

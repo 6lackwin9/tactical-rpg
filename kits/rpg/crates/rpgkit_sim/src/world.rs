@@ -126,7 +126,7 @@ fn map_ref(r: &mut Runner, ctx: &Ctx, id: &str) -> String {
     let e = d.entry("units", &base_id);
     let copy = format!("simw_{}", json::s_or(character, "_qid", id).replace(':', "_"));
     let level = if ctx.shifted { ctx.level } else { json::i(e, "level", 1) as i32 };
-    let def = Def { copy_of: base_id.clone(), character: Some((ctx.world.clone(), id.to_string())), ..Def::new(&json::s(e, "class_id"), level, &json::s_or(e, "tier", "standard"), false) };
+    let def = Def { copy_of: base_id.clone(), character: Some((ctx.world.clone(), id.to_string())), ..Def::new(&json::s(e, "class_id"), level, &rpgkit_data::unit_tier(e), false) };
     r.define(&copy, def);
     copy
 }

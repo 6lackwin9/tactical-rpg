@@ -63,8 +63,11 @@ pub struct AttackPower {
     pub stat_val: i32,
     pub unit_scaling: f64,
     /// The tier power scale the base stage multiplies by (unused by an authored power).
-    /// U1.2-S4: the attacker's `tier_power` (the base stage's `Mul`).
-    pub tier_power: f64,
+    /// R4-1: the attacker's `tier_mult` (the base stage's `Mul`).
+    pub tier_mult: f64,
+    /// R4-1 slice 2 (FB-144): the attacker is role-templated (`Unit::tier_scaled`): its stats already carry
+    /// `tier_mult`, so the tier scales the weapon power only, not the unit (stat) power.
+    pub tier_scaled: bool,
 }
 
 pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
@@ -126,7 +129,7 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
             res.unit_power = res.stat_val as f64 * scaling;
         }
     }
-    res.tier_power = u.tier_power;
+    (res.tier_mult, res.tier_scaled) = (u.tier_mult, u.tier_scaled);
     let (base, n) = res.base_modifiers();
     res.attack_power = pipeline::DAMAGE.run(&base[..n]).base.unwrap_or(1);
     res
@@ -134,16 +137,19 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
 
 impl AttackPower {
     /// The base stage's modifiers and how many of them count: the authored power alone (unscaled), else weapon power
-    /// and unit power added, then the tier power scale. A fixed array, so a hit allocates nothing.
+    /// and unit power added, then the tier power scale. A fixed array, so a hit allocates nothing. R4-1 slice 2
+    /// (FB-144): for a templated attacker (`tier_scaled`) the tier scales the weapon power alone (its stat, and so its
+    /// unit power, is tier-scaled already) and the tier term is 1.
     pub fn base_modifiers(&self) -> ([Modifier; 3], usize) {
         if self.authored {
             let unused = || Modifier::new("unused", Stage::Base, Op::Add(0.0));
             return ([Modifier::new("authored", Stage::Base, Op::Add(self.attack_power as f64)), unused(), unused()], 1);
         }
+        let (weapon, tier) = if self.tier_scaled { (self.weapon_power * self.tier_mult, 1.0) } else { (self.weapon_power, self.tier_mult) };
         let mods = [
-            Modifier::new("weapon", Stage::Base, Op::Add(self.weapon_power)),
+            Modifier::new("weapon", Stage::Base, Op::Add(weapon)),
             Modifier::new("unit", Stage::Base, Op::Add(self.unit_power)),
-            Modifier::new("tier", Stage::Base, Op::Mul(self.tier_power)),
+            Modifier::new("tier", Stage::Base, Op::Mul(tier)),
         ];
         (mods, 3)
     }

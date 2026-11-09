@@ -103,19 +103,34 @@ fn int_in(v: &Value, lo: i64, hi: i64) -> bool {
     json::is_int(v) && (lo..=hi).contains(&json::to_int(v))
 }
 
-/// T1.2-S3 (FB-54c): a name a dialogue stat check reads: a primary stat (true) or a U1 standing rating (false), None
-/// when it is neither (a rating is one of `STANDING_RATINGS` or a derived-stat row id of the catalog).
-fn stat_kind(v: &View, raw: &Value) -> Option<bool> {
+/// T1.2-S3 (FB-54c): a name a dialogue stat check in world `w` reads: a primary stat (true) or a U1 standing rating
+/// (false), None when it is neither (a rating is one of `STANDING_RATINGS` or a derived-stat row id). AUDIT-05
+/// (FB-143): a derived stat counts only when the world's ruleset keeps the row (`rpgkit_rules::derived::row`, the
+/// lookup `rpgkit_world::dialogue::member_stat` evaluates through), so a row its `rulesets` leaves out is refused
+/// rather than read as 0.
+fn stat_kind(v: &View, w: &str, raw: &Value) -> Option<bool> {
     let name = raw.as_str()?;
     if STATS.contains(&name) {
         Some(true)
     } else {
-        (STANDING_RATINGS.contains(&name) || v.typed.derived_stats.contains_key(name)).then_some(false)
+        (STANDING_RATINGS.contains(&name) || rpgkit_rules::derived::row(&v.typed, &world_ruleset_id(v, w), name).is_some()).then_some(false)
+    }
+}
+
+/// AUDIT-05: the id of the ruleset world `w` plays by, as the run time reads it (`Data::ruleset`): its lineage's nearest
+/// `ruleset`, classic when that names no ruleset row.
+fn world_ruleset_id(v: &View, w: &str) -> String {
+    use rpgkit_rules::ruleset::{world_ruleset, CLASSIC};
+    let id = world_ruleset(v.worlds.lineage(w).iter().rev().map(|lw| v.worlds.manifest(lw)));
+    if v.typed.rulesets.contains_key(&id) {
+        id
+    } else {
+        CLASSIC.to_string()
     }
 }
 
 fn stat_name_error(raw: &Value, label: &str) -> String {
-    format!("{label}: stat '{}' is not one of {} or a standing rating ({} or a derived stat id).", gstr(raw), STATS.join(", "), STANDING_RATINGS.join(", "))
+    format!("{label}: stat '{}' is not one of {} or a standing rating ({} or a derived stat id of the world's ruleset).", gstr(raw), STATS.join(", "), STANDING_RATINGS.join(", "))
 }
 
 /// DialogueRules.tokens_of: the `{token}` names of `text`, in order (a token holds no braces).
@@ -336,7 +351,7 @@ pub fn conditions_errors(v: &View, w: &str, raw: &Value, label: &str) -> Vec<Str
             }
             _ => {
                 let stat = cond.get("stat").cloned().unwrap_or(Value::from(""));
-                let primary = stat_kind(v, &stat);
+                let primary = stat_kind(v, w, &stat);
                 if primary.is_none() {
                     errors.push(stat_name_error(&stat, &cl));
                 }
@@ -492,7 +507,7 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
         // T1.2-S2 (FB-54b): the stat or standing rating, the bar, the outcome flag and the optional member
         ROLL_EFFECT => {
             let stat = fx.get("stat").cloned().unwrap_or(Value::from(""));
-            if stat_kind(v, &stat).is_none() {
+            if stat_kind(v, w, &stat).is_none() {
                 errors.push(stat_name_error(&stat, el));
             }
             if !int_in(json::get(fx, "dc"), ROLL_DC_MIN, ROLL_DC_MAX) {
@@ -721,7 +736,7 @@ fn guarded(edges: &Edges, by_id: &IndexMap<String, &Dict>, nid: &str) -> bool {
     true
 }
 
-/// DialogueRules.tree_warnings: unreachable nodes, and unguarded `give` nodes on a cycle.
+/// DialogueRules.tree_warnings: unreachable nodes, and unguarded `give` nodes and `roll` choices (AUDIT-03) on a cycle.
 fn tree_warnings(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     let nodes = json::normalize(json::get(e, "nodes"));
@@ -745,6 +760,33 @@ fn tree_warnings(e: &Dict) -> Vec<String> {
             continue;
         }
         out.push(format!("Node '{nid}' gives items or gold and sits on a dialogue cycle (it can be shown again and again); guard every way in with unless + set_flag."));
+    }
+    for (nid, node) in &by_id {
+        if reach(&edges, nid).contains(nid) {
+            out.extend(roll_loop_warnings(nid, node));
+        }
+    }
+    out
+}
+
+/// AUDIT-03 (FB-143, T_STORY 1.1 anti-save-scum): the `roll` choices of node `nid`, which sits on a dialogue cycle (it
+/// can be shown again), that nothing hides once picked: a roll choice is guarded when its `unless` holds a flag
+/// condition that a `set_flag` of the choice or the node sets (as a `give` node's way in). An `unless` on the roll's
+/// own `key` is no guard, nor is a `set_flag` of that key (R4-2 AUDIT-06): the roll sets `key` false on a failure and an
+/// unset flag reads false, so the choice stays open after a failed roll. An unguarded one can be picked again and again until the roll succeeds.
+fn roll_loop_warnings(nid: &str, node: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    for (j, c) in json::aget(node, "choices").iter().enumerate() {
+        let choice = json::dict(c);
+        let sets: Vec<&Dict> = json::aget(node, "effects").iter().chain(json::aget(choice, "effects")).map(json::dict).collect();
+        let unless: Vec<&Dict> = json::aget(choice, "unless").iter().map(json::dict).filter(|c| json::s_or(c, "kind", "flag") == "flag").collect();
+        for fx in json::aget(choice, "effects").iter().map(json::dict).filter(|fx| json::s(fx, "effect") == "roll") {
+            let key = json::s(fx, "key");
+            let guarded = unless.iter().any(|cond| sets.iter().any(|f| json::s(f, "effect") == "set_flag" && json::s(f, "key") != key && same_condition(f, cond)));
+            if !guarded {
+                out.push(format!("Node '{nid}' choice {} rolls '{key}' and sits on a dialogue cycle (it can be picked again until the roll succeeds); guard it with a set_flag the choice sets and an unless on that flag.", j + 1));
+            }
+        }
     }
     out
 }

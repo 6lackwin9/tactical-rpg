@@ -154,6 +154,11 @@ impl Forge {
                 if let Some(def) = cat.units.get(id) {
                     let u = emberwake_rules::build_unit(cat, def, 0);
                     line(format!("{}  Lv {} {}", u.name, def.level, def.tier), th().gold);
+                    // R4-1 slice 2 (FB-144): a role-templated unit shows its template and its tier-scaled stats
+                    if let Some(t) = cat.classes.get(&def.class_id).and_then(|c| emberwake_rules::unit::template_for(cat, def, c)) {
+                        let stats: Vec<String> = u.stats.core.iter().map(|(k, v)| format!("{k} {v}")).collect();
+                        line(format!("Template {} ({}): {}", t.id, t.role, stats.join(", ")), th().text);
+                    }
                     line(format!("HP {}   Initiative {}   Reach {}   AP {}", u.max_hp, u.initiative, u.attack_range, u.max_ap), th().text);
                     line(format!("Power {} melee / {} ranged", emberwake_rules::damage::power_of(&u, false, false), emberwake_rules::damage::power_of(&u, true, false)), th().text);
                     line(format!("Armor rating {}   Crit {:.0}%", emberwake_rules::damage::armor_rating(&u), emberwake_rules::damage::crit_chance(&u)), th().text);

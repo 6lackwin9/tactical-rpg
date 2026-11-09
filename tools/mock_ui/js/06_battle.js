@@ -245,10 +245,40 @@ function renderBattleScreen() {
     const py = pos.y * tileH;
     const frames = ASSETS.units[u.unitKey] || ASSETS.units.kaelen;
     const isBarkFocus = activeBark && activeBark.focusUnitId === u.id;
-    const spriteUri = (STATE.playingRound || isBarkFocus) ? (frames.atk || frames.idle0) : frames.idle0;
-    const flip = !u.isHero ? 'transform:scaleX(-1)' + (pos.downed ? ' rotate(18deg) translateY(3px)' : '') + ';' : '';
+
+    // 3-View Full-Body Turnaround Combat Sprite (`ASSETS.units3View[unitKey]`: `side` | `front` [down] | `back` [up])
+    const use3View = (STATE.battleSpriteMode || '3view_fullbody') === '3view_fullbody' && ASSETS.units3View && ASSETS.units3View[u.unitKey];
+    let facingDir = 'side';
+    if (use3View) {
+      if (STATE.battleFacingOverride && STATE.battleFacingOverride !== 'auto') {
+        facingDir = STATE.battleFacingOverride;
+      } else {
+        // Infer facing direction from first planned targeted action or nearest opponent (`DIR4.md`)
+        const stepWithTile = (u.plan || []).find(p => typeof p.tx === 'number' && typeof p.ty === 'number');
+        const refTarget = stepWithTile
+          ? { x: stepWithTile.tx, y: stepWithTile.ty }
+          : (foeList[0] ? (unitPositions.get(foeList[0].id) || foeList[0]) : { x: pos.x + 1, y: pos.y });
+        const dx = refTarget.x - pos.x;
+        const dy = refTarget.y - pos.y;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          facingDir = dy > 0 ? 'front' : 'back';
+        } else {
+          facingDir = 'side';
+        }
+      }
+    }
+
+    const spriteUri = use3View
+      ? (ASSETS.units3View[u.unitKey][facingDir] || ASSETS.units3View[u.unitKey].side)
+      : ((STATE.playingRound || isBarkFocus) ? (frames.atk || frames.idle0) : frames.idle0);
+    const flip = (!u.isHero && facingDir === 'side')
+      ? 'transform:scaleX(-1)' + (pos.downed ? ' rotate(18deg) translateY(3px)' : '') + ';'
+      : '';
     const hpPct = pos.downed ? 0 : Math.round((u.hp / u.maxHp) * 100);
-    const badgeLabel = pos.tag || (isBarkFocus ? (stageMode === 'boss_phase2' ? '⚡ PHASE 2' : '💬 SPEAKING') : null);
+    const dirTag = (use3View && STATE.battleFacingOverride && STATE.battleFacingOverride !== 'auto')
+      ? `3V: ${facingDir.toUpperCase()}`
+      : null;
+    const badgeLabel = pos.tag || dirTag || (isBarkFocus ? (stageMode === 'boss_phase2' ? '⚡ PHASE 2' : '💬 SPEAKING') : null);
 
     return `
       <div onclick="clickBattleTile(${pos.x},${pos.y},event)"
@@ -273,7 +303,7 @@ function renderBattleScreen() {
             `).join('')}
           </div>
         ` : `<div style="height:5px;"></div>`}
-        <img src="${spriteUri}" class="pixel" style="width:32px;height:32px;${flip}filter:${isBarkFocus ? 'drop-shadow(0 0 6px rgba(251,191,36,0.85))' : 'drop-shadow(0 2px 2px rgba(0,0,0,0.9))'};">
+        <img src="${spriteUri}" class="pixel" style="width:${use3View ? '34px' : '32px'};height:${use3View ? '34px' : '32px'};${flip}filter:${isBarkFocus ? 'drop-shadow(0 0 6px rgba(251,191,36,0.85))' : 'drop-shadow(0 2px 2px rgba(0,0,0,0.9))'};">
       </div>
     `;
   }).join('');

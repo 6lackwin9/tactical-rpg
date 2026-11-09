@@ -94,7 +94,7 @@ pub fn loot_warnings(v: &View, e: &Dict) -> Vec<String> {
         }
         ev_x100 += json::i(row, "chance", 0) * json::i(item, "value", 0) * json::i(row, "count", 1);
     }
-    let tier = json::s_or(e, "tier", "standard");
+    let tier = rpgkit_data::unit_tier(e);
     let (ev, soft) = (ev_x100 / 100, loot_ev_soft(&tier));
     if ev > soft {
         out.push(format!("Loot is worth {ev} gold per defeat on average (soft cap {soft} for {tier})."));

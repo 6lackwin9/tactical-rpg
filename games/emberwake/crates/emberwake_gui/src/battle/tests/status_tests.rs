@@ -49,7 +49,8 @@ fn play(cx: &mut Cx, b: &mut BattleScreen, mut before: impl FnMut(&mut BattleScr
 /// The first step whose action lands on another unit that still stands, and that unit.
 fn hit_step() -> (usize, usize) {
     let (mut cx, _g, mut b) = ambush(json!("stage"));
-    let lands = |b: &BattleScreen| b.impacts.last().and_then(|i| i.target.filter(|&u| u != i.actor && i.after.get(u).is_some_and(|a| a.alive)));
+    // the target stands after the step, on the board (a unit that flees leaves it, and a burst needs its tile)
+    let lands = |b: &BattleScreen| b.impacts.last().and_then(|i| i.target.filter(|&u| u != i.actor && i.after.get(u).is_some_and(|a| a.alive) && b.host.session.as_ref().unwrap().w.grid.pos(u).is_some()));
     let k = play(&mut cx, &mut b, |_, _| {}, |b, _| lands(b).is_some()).expect("the ambush has an action landing on a unit");
     (k, lands(&b).unwrap())
 }

@@ -120,7 +120,8 @@ impl Equipment {
 
     pub fn meets_requirements(&self, stats: &CharacterStats) -> bool {
         let discount = self.discount(&stats.proficiency);
-        self.item.required_stats.iter().all(|(s, req)| stats.stat(s, Some(&self.item.weapon_type)) + discount >= *req)
+        // R4-1 slice 2 (FB-144): a templated unit's requirements read its unscaled stats (`requirement_stat`)
+        self.item.required_stats.iter().all(|(s, req)| stats.requirement_stat(s, Some(&self.item.weapon_type)) + discount >= *req)
     }
 
     /// U3.2-S3 (FB-33): the stat-deficit ramp (the largest missing point count after the requirement discount) and the
@@ -131,7 +132,7 @@ impl Equipment {
             let discount = self.discount(&stats.proficiency);
             let mut deficit = 0;
             for (s, req) in &self.item.required_stats {
-                let eff = stats.stat(s, Some(&self.item.weapon_type)) + discount;
+                let eff = stats.requirement_stat(s, Some(&self.item.weapon_type)) + discount;
                 if eff < *req {
                     deficit = deficit.max(req - eff);
                 }

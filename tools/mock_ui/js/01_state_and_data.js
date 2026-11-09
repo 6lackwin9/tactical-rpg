@@ -163,11 +163,19 @@ const STATE = {
   storyCardIdx: 0,
   storyMode: 'vn_stage',        // 'vn_stage' | 'map_stage' | 'vignette_reel'
   storyActorStyle: 'full_sprite', // 'full_sprite' | 'bust_cutout' | 'backdrop_only'
+  storyRigPose: 'auto',         // 'auto' (use actor.pose) | 'relaxed' | 'sneaking' | 'weapons_drawn'
+  storyRigEngine: 'atlas_b',    // 'atlas_b' (Exploded 13-Part Spine2D Atlas) | 'pose_c' (3-Pose Sheet + Idle Rig) | 'slice_a' (Single-Sprite 10-Part Auto-Slice) | 'compare_bc' (Side-by-Side Compare)
+  storyTurnaroundView: 'side',  // 'side' | 'front' | 'back' | 'sheet_3view' (3-View Full-Body Turnaround per ART_PROMPT_TEMPLATES.md)
+  storyShowRigDebug: false,     // Toggle Live2D / VTuber mesh deformer grid & joint skeleton overlay
   storyMoodOverride: null,      // null (use card.mood) | 'neutral' | 'determined' | 'angry' | 'hurt' | 'surprised' | 'afraid'
   storyReactionOverride: null,  // null (use actor.reactionFx) | 'steel_flash' | 'anger_burst' | 'alert_shock' | 'alchemy_flare' | 'solemn_glow'
   storySkipConfirmOpen: false,
   vignetteAuto: false,          // Auto-advance toggle [A] in minimal Vignette player
   vignetteLogOpen: false,       // Backlog overlay toggle [L] in minimal Vignette player
+
+  // Battle 3-View Full-Body Sprite evaluation state
+  battleSpriteMode: '3view_fullbody', // '3view_fullbody' | 'procedural_rig'
+  battleFacingOverride: 'auto',       // 'auto' | 'side' | 'front' | 'back'
 
   // RegionMap state (`region.rs` + `talk.rs`)
   regionId: 'sluice_undercroft', // 'sluice_undercroft' | 'corvos_gate'
@@ -764,7 +772,7 @@ const STORIES = {
         bgVariantLabel: 'Stage A · Wet Cobblestone Alley & Distant Foundry Glow',
         shake: null,
         stageAction: 'Camera frames the rain-slicked alley cobblestones outside Kaelen\'s tenement surgery.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Grim Resolve', reactionFx: 'solemn_glow', anim: 'breathe' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, pose: 'relaxed', emotion: 'Grim Resolve', reactionFx: 'solemn_glow', anim: 'breathe' },
         rightActor: null,
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: true, emote: '...' },
@@ -784,8 +792,8 @@ const STORIES = {
         bgVariantLabel: 'Stage B · Lantern Flare on the Alley Stones (Shake: Light)',
         shake: 'Light Shake (FX1)',
         stageAction: 'Iron boots splinter the surgery door; a Castellan Watchman plants his halberd on the wet flagstones.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Alert', reactionFx: 'alert_shock', anim: 'breathe' },
-        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, emotion: 'Barking Orders', reactionFx: 'anger_burst', anim: 'shake' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'sneaking', emotion: 'Low Guard / Alert', reactionFx: 'alert_shock', anim: 'breathe' },
+        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, pose: 'weapons_drawn', emotion: 'Barking Orders', reactionFx: 'anger_burst', anim: 'shake' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: false, emote: '!' },
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: true, emote: '⚔' },
@@ -799,13 +807,13 @@ const STORIES = {
         speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
         portrait: 'kaelen',
         mood: 'determined',
-        emotion: 'Steel Drawn',
+        emotion: 'Weapons Drawn',
         bgFilter: 'brightness(1.06) contrast(1.12)',
         bgVariantLabel: 'Stage C · Cold Steel Glint & Tallow Lamp Rim',
         shake: 'Medium Pulse (FX1)',
-        stageAction: 'Kaelen lifts his Surgeon\'s Billhook and lunges forward across the wet stone floor.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, emotion: 'Steel Drawn', lunge: true, reactionFx: 'steel_flash', anim: 'lunge' },
-        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, emotion: 'Braced', reactionFx: 'alert_shock', anim: 'breathe' },
+        stageAction: 'Kaelen swings his Surgeon\'s Billhook forward into combat guard stance across the wet stone floor.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, pose: 'weapons_drawn', emotion: 'Weapons Drawn', lunge: true, reactionFx: 'steel_flash', anim: 'lunge' },
+        rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, pose: 'weapons_drawn', emotion: 'Braced', reactionFx: 'alert_shock', anim: 'breathe' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: true, emote: '⚔' },
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: false, emote: '🛡' },
@@ -832,20 +840,20 @@ const STORIES = {
         speakerTitle: 'Cutthroat Scout · Flanker Founder',
         portrait: 'vesper',
         mood: 'determined',
-        emotion: 'Urgent Whisper',
+        emotion: 'Stealth Crouch',
         bgFilter: 'brightness(0.98) contrast(1.06)',
         bgVariantLabel: 'Stage A · Slick Slate Ledge & Brazier Glare',
         shake: null,
-        stageAction: 'Vesper drops lightly onto the wet stone ledge and signals down to Kaelen.',
-        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: true, emotion: 'Smirking', reactionFx: 'alert_shock', anim: 'hop' },
-        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Alert', reactionFx: 'solemn_glow', anim: 'breathe' },
+        stageAction: 'Vesper and Kaelen crouch low in a stealth stance along the wet stone roof ridge.',
+        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: true, pose: 'sneaking', emotion: 'Sneaking', reactionFx: 'alert_shock', anim: 'hop' },
+        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'sneaking', emotion: 'Sneaking', reactionFx: 'solemn_glow', anim: 'breathe' },
         mapUnits: [
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 2, y: 2, speaking: true, emote: '💬' },
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 5, speaking: false, emote: null },
           { id: 'bailiff', unitKey: 'bailiff', name: 'Castellan Bailiff', isHero: false, x: 6, y: 5, speaking: false, emote: '!' },
           { id: 'xbow1', unitKey: 'crossbow', name: 'Slate Marksman', isHero: false, x: 9, y: 2, speaking: false, emote: null }
         ],
-        text: '"Down here, Doc! The Watch has the lower street chained off, and a Castellan Bailiff is mustering crossbowmen along the slate ridge. Give me a boost and we\'ll flank them before they lock the windlass."'
+        text: '"Stay low, Doc! The Watch has the lower street chained off, and a Castellan Bailiff is mustering crossbowmen along the slate ridge. Keep to the chimney shadows and we\'ll flank them before they lock the windlass."'
       },
       {
         vignetteStyle: 'Image',
@@ -857,9 +865,9 @@ const STORIES = {
         bgFilter: 'brightness(1.05) contrast(1.12) saturate(1.12)',
         bgVariantLabel: 'Stage B · Tallow Brazier Ignited on the Ridge',
         shake: 'Light Shake (FX1)',
-        stageAction: 'The Castellan Bailiff slams his spiked club against his shield beside the burning Tallow Brazier.',
-        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: false, emotion: 'Poised', reactionFx: 'steel_flash', anim: 'breathe' },
-        rightActor: { unitKey: 'bailiff', portrait: 'bailiff', name: 'Castellan Bailiff', title: 'Ridge Warden', active: true, emotion: 'Roaring', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
+        stageAction: 'The Castellan Bailiff levels his weapon beside the burning Tallow Brazier as Vesper draws her twin knives.',
+        leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: false, pose: 'weapons_drawn', emotion: 'Knives Drawn', reactionFx: 'steel_flash', anim: 'breathe' },
+        rightActor: { unitKey: 'bailiff', portrait: 'bailiff', name: 'Castellan Bailiff', title: 'Ridge Warden', active: true, pose: 'weapons_drawn', emotion: 'Roaring', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
         mapUnits: [
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: '🗡' },
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 5, speaking: false, emote: '⚔' },
@@ -892,8 +900,8 @@ const STORIES = {
         bgVariantLabel: 'Stage A · Flooded Bridge Flagstones & Alchemical Vapour',
         shake: null,
         stageAction: 'Maren and Hollis emerge onto the wide stone spillway bridge as green alchemical vapour curls from Maren\'s censer.',
-        leftActor: { unitKey: 'maren', portrait: 'maren', name: 'Maren', title: 'Plague Alchemist', active: true, emotion: 'Flask Ready', reactionFx: 'alchemy_flare', anim: 'hop' },
-        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: false, emotion: 'Cold Glare', reactionFx: 'solemn_glow', anim: 'breathe' },
+        leftActor: { unitKey: 'maren', portrait: 'maren', name: 'Maren', title: 'Plague Alchemist', active: true, pose: 'sneaking', emotion: 'Flask Ready', reactionFx: 'alchemy_flare', anim: 'hop' },
+        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: false, pose: 'relaxed', emotion: 'Cold Glare', reactionFx: 'solemn_glow', anim: 'breathe' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: null },
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: null },
@@ -913,9 +921,9 @@ const STORIES = {
         bgFilter: 'brightness(1.06) contrast(1.14)',
         bgVariantLabel: 'Stage B · Vane\'s Halberd Planted on the Bridge Stones (Shake: Heavy)',
         shake: 'Heavy Shake (FX1)',
-        stageAction: 'Captain Vane slams his gilded halberd into the wet bridge flagstones at (8,4); crimson sparks erupt around his boots.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Defiant', reactionFx: 'steel_flash', anim: 'breathe' },
-        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: true, emotion: 'Executioner\'s Stance', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
+        stageAction: 'Captain Vane swings his gilded halberd into executioner\'s guard at (8,4) as Kaelen raises his billhook.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'weapons_drawn', emotion: 'Weapons Drawn', reactionFx: 'steel_flash', anim: 'breathe' },
+        rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: true, pose: 'weapons_drawn', emotion: 'Executioner\'s Stance', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: '⚔' },
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 3, y: 2, speaking: false, emote: null },
@@ -950,8 +958,8 @@ const STORIES = {
         bgVariantLabel: 'Stage A · Warm Tallow Hearth & Dry Sanctuary Flagstones',
         shake: null,
         stageAction: 'The iron grate bars shut behind the squad; Sister Aline steps across the dry sanctuary flagstones beside the Tallow Hearth.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, emotion: 'Weary', reactionFx: 'solemn_glow', anim: 'breathe' },
-        rightActor: { unitKey: 'aline', portrait: 'aline', name: 'Sister Aline', title: 'Sanctuary Apothecary', active: true, emotion: 'Solemn Welcome', reactionFx: 'solemn_glow', anim: 'hop' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'relaxed', emotion: 'Relaxed / Weary', reactionFx: 'solemn_glow', anim: 'breathe' },
+        rightActor: { unitKey: 'aline', portrait: 'aline', name: 'Sister Aline', title: 'Sanctuary Apothecary', active: true, pose: 'relaxed', emotion: 'Solemn Welcome', reactionFx: 'solemn_glow', anim: 'hop' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 6, y: 5, speaking: false, emote: null },
           { id: 'aline', unitKey: 'aline', name: 'Sister Aline', isHero: true, x: 4, y: 4, speaking: true, emote: '🔥' },

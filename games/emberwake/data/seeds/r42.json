@@ -1,0 +1,103 @@
+{
+  "steps": [
+    {
+      "op": "upsert",
+      "kind": "items",
+      "entry": {
+        "id": "brimstone_draught",
+        "name": "Brimstone Draught",
+        "family": "consumable",
+        "rarity": "COMMON",
+        "weight": 0.4,
+        "value": 25,
+        "description": "Brimstone Tallow Draught: +30% attack power (Empower) for 3 rounds.",
+        "damage_type": "",
+        "icon_id": "",
+        "starter_stash": false,
+        "consumable_type": "FOCUS_INCENSE",
+        "heal": 0,
+        "damage": 0,
+        "buff_stat": "CONS",
+        "buff_pct": 0.3,
+        "duration": 3,
+        "use_blocks": 1,
+        "use_reach": 0,
+        "hazard": {},
+        "max_stack": 2
+      }
+    },
+    {
+      "op": "upsert",
+      "kind": "units",
+      "entry": {
+        "id": "founder_kaelen",
+        "name": "Kaelen",
+        "side": "party",
+        "description": "Founder base unit: Kaelen, a level 1 warrior.",
+        "class_id": "warrior",
+        "level": 1,
+        "tier": "hero",
+        "spend": {},
+        "stat_mode": "derived",
+        "ap": 0,
+        "power": 0,
+        "armor": -1,
+        "poise": -1,
+        "art": "warrior/2h_axe",
+        "palette": "kaelen",
+        "portrait_tier": "",
+        "skill_cap": 0,
+        "extra_skills": [
+          "pommel_strike",
+          "intercepting_hook",
+          "billhook_sunder",
+          "seventh_ward_bulwark"
+        ],
+        "loadout": [],
+        "deck": {
+          "active": [
+            "pommel_strike",
+            "intercepting_hook"
+          ],
+          "order": {
+            "assault": [
+              "pommel_strike",
+              "strike"
+            ],
+            "guard": [
+              "intercepting_hook",
+              "active_guard"
+            ]
+          },
+          "passive": [
+            "braced_poise",
+            "kinetic_leverage"
+          ],
+          "keystone": [
+            "unbroken_phalanx"
+          ]
+        },
+        "default_intent": "",
+        "ai_role": "",
+        "target_pref": "ROLE",
+        "flee_ratio": 0.25,
+        "defend_below": 0.4,
+        "prefer_level": 0,
+        "status_resist": {},
+        "reckless": false,
+        "heal_below": 0.7,
+        "tactics": [],
+        "main_hand": "notched_billhook",
+        "off_hand": "none",
+        "head": "",
+        "body": "castellan_breastplate",
+        "accessory_1": "",
+        "accessory_2": "",
+        "pouch": [
+          "sulfur_poultice"
+        ],
+        "loot": []
+      }
+    }
+  ]
+}

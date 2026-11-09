@@ -302,21 +302,22 @@ impl BattleScreen {
         let from = s.w.grid.pos(act.unit)?;
         let at = |i: usize| s.w.grid.pos(i).or(t.anims[i].seen.pos);
         let (mut on_self, mut harms, mut target, mut cells) = (false, false, None, Vec::new());
-        let (kind, aim) = match &act.command.kind {
+        let kind = fx::act_kind(&act.command.kind);
+        let aim = match &act.command.kind {
             CmdKind::Attack { target: tg, .. } => {
                 target = *tg;
-                ("attack", tg.and_then(at))
+                tg.and_then(at)
             }
             CmdKind::Area { aim, cells: c, .. } => {
                 cells = c.iter().copied().filter(|c| s.w.grid.is_valid(*c)).collect();
-                ("area", Some(*aim))
+                Some(*aim)
             }
-            CmdKind::Support { target, .. } => ("support", at(*target)),
+            CmdKind::Support { target, .. } => at(*target),
             CmdKind::Item { target, item, .. } => {
                 (on_self, harms) = (*target == act.unit, item.damage > 0);
-                ("item", at(*target))
+                at(*target)
             }
-            _ => ("", None),
+            _ => None,
         };
         let to = aim.filter(|c| *c != emberwake_battle::grid::NO_CELL).unwrap_or(from);
         let def = s.w.cat.skills.iter().find(|k| k.name == act.command.name);

@@ -70,7 +70,7 @@ fn validate_base(base: &Ints) -> Vec<String> {
 /// U2.2-S1: a class row given as shares (`base_shares`, `growth_shares`): both vectors sum to 1, each share is 0-1,
 /// no `base_stats` or `growth` beside them, and the stats the unit budget gives keep the integer row's limits (base
 /// 6-18 at level 1, 0-3 gained per stat at every level).
-fn validate_shares(e: &Dict) -> Vec<String> {
+pub(crate) fn validate_shares(e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     for (key, label) in [("base_shares", "Base shares"), ("growth_shares", "Growth shares")] {
         let raw = json::get(e, key).as_object().cloned().unwrap_or_default();
@@ -342,6 +342,7 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.extend(skill_loadout_errors(v, e, a));
     }
     errors.extend(requires_errors(v, e, arch));
+    errors.extend(template_errors(v, e));
     errors.extend(deck_errors(v, e));
     errors.extend(default_intent_errors(v, e));
     // HOOKS1 AT2: the unit's AI tactics
@@ -352,6 +353,16 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("Id '{id}' is a roster read word ({}); pick another.", rpgkit_data::ROSTER_WORDS.join(", ")));
     }
     errors
+}
+
+/// R4-1 slice 2 (`U2.3-TIERS`, FB-144): a unit's `template` is "" (by its AI role), `class` (its class's shares) or
+/// the role or id of a `unit_templates` row.
+pub fn template_errors(v: &View, e: &Dict) -> Vec<String> {
+    let key = json::s(e, rpgkit_data::TEMPLATE_FIELD);
+    if key.is_empty() || key == rpgkit_data::TEMPLATE_CLASS || rpgkit_data::unit_template::lookup(&v.typed.unit_templates, &key).is_some() {
+        return Vec::new();
+    }
+    vec![format!("Stat template '{key}' is not a unit template role or id (leave it empty for the AI role's, or '{}' for the class's).", rpgkit_data::TEMPLATE_CLASS)]
 }
 
 /// W.2-S3 (FB-139): a unit's `growth_per_stage` as written (`raw`, before the schema clamps it): absent, or a whole
@@ -627,6 +638,16 @@ fn skill_loadout_errors(v: &View, e: &Dict, a: &ClassDef) -> Vec<String> {
 /// ClassUnitValidator.class_warnings: the gear budget, the path (more families than class slots, none at level 1,
 /// tiers past the level cap, weapon gates the class cannot reach, a class basic also in the path) and the role
 /// mismatches.
+/// CLASS-BASICS (FB-123): a class basic of class row `e` is open without a slot, so listing it in skill path `path` (the
+/// row's own, or L3 (FB-138) a world overlay's: `hooks::classes_warnings`) also spends a path slot.
+pub fn basics_in_path_warnings(e: &Dict, path: &Dict) -> Vec<String> {
+    json::sget(e, "basics")
+        .iter()
+        .filter(|id| path.contains_key(id.as_str()))
+        .map(|id| format!("Class basic '{id}' is also in the skill path, where it takes a path slot (an auto loadout fills slots in path order)."))
+        .collect()
+}
+
 pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     let class = ClassDef::from_obj(e);
     let mut out = rpgkit_rules::budget::check_class(&class, &v.typed.items);
@@ -635,10 +656,7 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     if families.len() > MAX_CLASS_SLOTS {
         out.push(format!("The path lists {} families; only the first {MAX_CLASS_SLOTS} (by unlock level, then position) are active by default.", families.len()));
     }
-    // CLASS-BASICS (FB-123): a class basic is open without a slot, so listing it in the path also spends a path slot
-    for id in json::sget(e, "basics").iter().filter(|id| path.contains_key(id.as_str())) {
-        out.push(format!("Class basic '{id}' is also in the skill path, where it takes a path slot (an auto loadout fills slots in path order)."));
-    }
+    out.extend(basics_in_path_warnings(e, path));
     if !path.is_empty() && !path.values().any(|l| json::is_int(l) && json::to_int(l) == 1) {
         out.push("No path family unlocks at level 1: a level 1 unit of this class has no class skill in its loadout.".into());
     }

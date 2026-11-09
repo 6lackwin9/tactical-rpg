@@ -29,6 +29,8 @@ function render() {
 
   if (STATE.screen === 'main_menu') {
     startTitleFxCanvas();
+  } else if (STATE.screen === 'story' && (STATE.storyMode || 'vn_stage') === 'vn_stage') {
+    startVtuberRigLoop();
   }
 
   // Update active state on top Design Session Inspector buttons
@@ -80,38 +82,63 @@ function render() {
       `;
     } else if (STATE.screen === 'story') {
       const m = STATE.storyMode || 'vn_stage';
-      const fx = STATE.storyReactionOverride || 'auto';
+      const rp = STATE.storyRigPose || 'auto';
+      const re = STATE.storyRigEngine || 'atlas_b';
+      const tv = STATE.storyTurnaroundView || 'side';
       togglesEl.innerHTML = `
-        <span style="color:#fbbf24;font-weight:700;font-size:10px;">StoryStage Mode:</span>
-        <button class="db-btn ${m === 'vn_stage' ? 'active' : ''}" onclick="STATE.storyMode='vn_stage';render();" title="VN Stage: Full-Body Sprite Artwork standing on visible stone floor + Portrait Mood Swaps + Reaction VFX">1. ★ VN Stage (Full-Body + Floor)</button>
-        <button class="db-btn ${m === 'map_stage' ? 'active' : ''}" onclick="STATE.storyMode='map_stage';render();" title="In-Game Map Stage: Live tactical map + unit emotes + bottom dialogue dock">2. In-Game Map Stage</button>
-        <button class="db-btn ${m === 'vignette_reel' ? 'active' : ''}" onclick="STATE.storyMode='vignette_reel';render();" title="Minimal Vignette Cutscene Player (Auto / Log / Skip)">3. Vignette Player (Auto/Log/Skip)</button>
+        <span style="color:#fbbf24;font-weight:700;font-size:10px;">StoryStage:</span>
+        <button class="db-btn ${m === 'vn_stage' ? 'active' : ''}" onclick="STATE.storyMode='vn_stage';render();" title="VN Stage: 60fps Live2D/VTuber Rigged Full-Body Sprites on visible stone floor">1. ★ VN Stage</button>
+        <button class="db-btn ${m === 'map_stage' ? 'active' : ''}" onclick="STATE.storyMode='map_stage';render();" title="In-Game Map Stage: Live tactical map + unit emotes + bottom dialogue dock">2. Map Stage</button>
+        <button class="db-btn ${m === 'vignette_reel' ? 'active' : ''}" onclick="STATE.storyMode='vignette_reel';render();" title="Minimal Vignette Cutscene Player (Auto / Log / Skip)">3. Vignette</button>
         ${m === 'vn_stage' ? `
-          <span style="color:#6b7280;margin:0 2px;">|</span>
-          <span style="color:#9ca3af;font-size:10px;">Sprite Reaction VFX:</span>
-          <button class="db-btn ${fx === 'auto' ? 'active' : ''}" onclick="STATE.storyReactionOverride=null;render();">Scene Default</button>
-          <button class="db-btn ${fx === 'steel_flash' ? 'active' : ''}" onclick="STATE.storyReactionOverride='steel_flash';render();">⚔ Steel Lunge</button>
-          <button class="db-btn ${fx === 'anger_burst' ? 'active' : ''}" onclick="STATE.storyReactionOverride='anger_burst';render();">💢 Anger Shake</button>
-          <button class="db-btn ${fx === 'alert_shock' ? 'active' : ''}" onclick="STATE.storyReactionOverride='alert_shock';render();">!! Alert Hop</button>
-          <button class="db-btn ${fx === 'alchemy_flare' ? 'active' : ''}" onclick="STATE.storyReactionOverride='alchemy_flare';render();">⚗ Alchemy Aura</button>
+          <span style="color:#6b7280;margin:0 1px;">|</span>
+          <span style="color:#34d399;font-size:10px;font-weight:700;">Rig Engine:</span>
+          <button class="db-btn ${re === 'atlas_b' ? 'active' : ''}" onclick="STATE.storyRigEngine='atlas_b';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach B: Exploded 13-Part Spine2D Cutout Atlas driven by 16-joint 2-Bone IK / FK skeleton">🧩 Atlas Parts (B)</button>
+          <button class="db-btn ${re === 'pose_c' ? 'active' : ''}" onclick="STATE.storyRigEngine='pose_c';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach C: Dedicated 3-Pose Keyframe Sheet (Relaxed / Sneaking / Drawn) + Live Idle Rig & Squash/Stretch Transition">🎬 Pose Sheet (C)</button>
+          <button class="db-btn ${re === 'slice_a' ? 'active' : ''}" onclick="STATE.storyRigEngine='slice_a';render();" title="Approach A: Single Neutral Sprite auto-sliced into 10 limbs with circular joint caps">✂️ Auto-Slice (A)</button>
+          <button class="db-btn ${re === 'compare_bc' ? 'active' : ''}" onclick="STATE.storyRigEngine='compare_bc';if(STATE.storyRigPose==='auto')STATE.storyRigPose='weapons_drawn';render();" title="Side-by-Side Live Comparison of Approach B (Exploded Atlas Rig), Approach C (3-Pose Sheet + Rig), and Approach A (Auto-Slice Rig)">⇄ Compare B vs C</button>
+          <span style="color:#6b7280;margin:0 1px;">|</span>
+          <span style="color:#fbbf24;font-size:10px;font-weight:700;">Pose:</span>
+          <button class="db-btn ${rp === 'auto' ? 'active' : ''}" onclick="STATE.storyRigPose='auto';render();" title="Use each dialogue beat's authored pose">Beat Auto</button>
+          <button class="db-btn ${rp === 'relaxed' ? 'active' : ''}" onclick="STATE.storyRigPose='relaxed';STATE.storyReactionOverride=null;render();" title="Pose 1: Relaxed (Upright stance, one-handed vertical billhook)">1. Relaxed</button>
+          <button class="db-btn ${rp === 'sneaking' ? 'active' : ''}" onclick="STATE.storyRigPose='sneaking';STATE.storyReactionOverride=null;render();" title="Pose 2: Sneaking (Deep knee flex crouch, two-handed horizontal billhook parallel to ground)">2. 👣 Sneaking</button>
+          <button class="db-btn ${rp === 'weapons_drawn' ? 'active' : ''}" onclick="STATE.storyRigPose='weapons_drawn';render();" title="Pose 3: Weapons Drawn (Combat guard crouch, two-handed diagonal billhook across chest)">3. ⚔ Weapons Drawn</button>
+          <button class="db-btn ${STATE.storyShowRigDebug ? 'active' : ''}" onclick="STATE.storyShowRigDebug=!STATE.storyShowRigDebug;render();" title="Show 16-Joint 2-Bone IK / FK Skeleton & Limb Deformer Boxes">🦴 Rig Mesh</button>
+          <span style="color:#6b7280;margin:0 1px;">|</span>
+          <span style="color:#93c5fd;font-size:10px;">3-View:</span>
+          <button class="db-btn ${tv === 'side' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='side';render();" title="Side Profile (VN Default)">Side</button>
+          <button class="db-btn ${tv === 'front' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='front';if(STATE.storyRigEngine!=='slice_a')STATE.storyRigEngine='slice_a';render();" title="Front View (Down / South facing from 3-View Sheet)">Front</button>
+          <button class="db-btn ${tv === 'back' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='back';if(STATE.storyRigEngine!=='slice_a')STATE.storyRigEngine='slice_a';render();" title="Back View (Up / North facing from 3-View Sheet)">Back</button>
+          <button class="db-btn ${tv === 'sheet_3view' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='sheet_3view';if(STATE.storyRigEngine==='compare_bc')STATE.storyRigEngine='slice_a';render();" title="Inspect all 3 Turnaround Views (Front, Side, Back) rigged simultaneously at 60fps!">★ 3-View Sheet</button>
         ` : ''}
-        <span style="color:#6b7280;margin:0 2px;">|</span>
-        <span style="color:#9ca3af;font-size:10px;">Scene:</span>
+        <span style="color:#6b7280;margin:0 1px;">|</span>
         <button class="db-btn ${STATE.storyId === 'prologue_intro' ? 'active' : ''}" onclick="STATE.storyId='prologue_intro';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0a Alley</button>
         <button class="db-btn ${STATE.storyId === 'prologue_0b' ? 'active' : ''}" onclick="STATE.storyId='prologue_0b';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0b Rooftop</button>
         <button class="db-btn ${STATE.storyId === 'prologue_0c' ? 'active' : ''}" onclick="STATE.storyId='prologue_0c';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0c Bridge</button>
-        <button class="db-btn ${STATE.storyId === 'hearth_arrival' ? 'active' : ''}" onclick="STATE.storyId='hearth_arrival';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">Hearth Hub</button>
+        <button class="db-btn ${STATE.storyId === 'hearth_arrival' ? 'active' : ''}" onclick="STATE.storyId='hearth_arrival';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">Hearth</button>
       `;
     } else if (STATE.screen === 'battle') {
       const bm = STATE.battleStageMode || 'active_combat';
+      const sm = STATE.battleSpriteMode || '3view_fullbody';
+      const bf = STATE.battleFacingOverride || 'auto';
       togglesEl.innerHTML = `
-        <span style="color:#fbbf24;font-weight:700;font-size:10px;">Combat Flow & Scripted Barks:</span>
-        <button class="db-btn ${bm === 'pre_battle' ? 'active' : ''}" onclick="STATE.battleStageMode='pre_battle';render();" title="Step 1: Units on Battle Map + Bottom Dialogue before Combat HUD appears">1. Pre-Battle Map Stage</button>
-        <button class="db-btn ${bm === 'transition_in' ? 'active' : ''}" onclick="engageCombatFromMap();" title="Step 2: Play animated Map → Combat HUD slide-in transition">2. ▶ Animate HUD Slide-In</button>
-        <button class="db-btn ${bm === 'active_combat' ? 'active' : ''}" onclick="STATE.battleStageMode='active_combat';render();" title="Step 3: Active Tactical Planning & Execution HUD">3. ★ Active Combat HUD</button>
-        <button class="db-btn ${bm === 'boss_phase2' ? 'active' : ''}" onclick="STATE.battleStageMode='boss_phase2';render();" title="In-Combat Scripted Bark: Boss Phase 2 Transformation (50% HP)">4. ⚡ Boss Phase 2 Bark</button>
-        <button class="db-btn ${bm === 'elite_intro' ? 'active' : ''}" onclick="STATE.battleStageMode='elite_intro';render();" title="In-Combat Scripted Bark: Before Engaging Elite Unit">5. Pre-Elite Bark</button>
-        <button class="db-btn ${bm === 'elite_aftermath' ? 'active' : ''}" onclick="STATE.battleStageMode='elite_aftermath';render();" title="In-Combat Scripted Bark: After Breaking/Defeating Elite Unit">6. Post-Elite Bark</button>
+        <span style="color:#fbbf24;font-weight:700;font-size:10px;">Combat Flow:</span>
+        <button class="db-btn ${bm === 'pre_battle' ? 'active' : ''}" onclick="STATE.battleStageMode='pre_battle';render();">1. Pre-Battle</button>
+        <button class="db-btn ${bm === 'transition_in' ? 'active' : ''}" onclick="engageCombatFromMap();">2. ▶ Slide-In</button>
+        <button class="db-btn ${bm === 'active_combat' ? 'active' : ''}" onclick="STATE.battleStageMode='active_combat';render();">3. ★ Active HUD</button>
+        <button class="db-btn ${bm === 'boss_phase2' ? 'active' : ''}" onclick="STATE.battleStageMode='boss_phase2';render();">4. ⚡ Phase 2</button>
+        <button class="db-btn ${bm === 'elite_intro' ? 'active' : ''}" onclick="STATE.battleStageMode='elite_intro';render();">5. Pre-Elite</button>
+        <button class="db-btn ${bm === 'elite_aftermath' ? 'active' : ''}" onclick="STATE.battleStageMode='elite_aftermath';render();">6. Post-Elite</button>
+        <span style="color:#6b7280;margin:0 1px;">|</span>
+        <span style="color:#93c5fd;font-size:10px;">Combat Sprites:</span>
+        <button class="db-btn ${sm === '3view_fullbody' ? 'active' : ''}" onclick="STATE.battleSpriteMode='3view_fullbody';render();" title="Use 3-View Full-Body Turnaround Sprites (Front / Side / Back) on Kaelen">★ 3-View Full-Body</button>
+        <button class="db-btn ${sm === 'procedural_rig' ? 'active' : ''}" onclick="STATE.battleSpriteMode='procedural_rig';render();" title="Use 48x48 Procedural Rig Sheets">48px Sheet</button>
+        ${sm === '3view_fullbody' ? `
+          <button class="db-btn ${bf === 'auto' ? 'active' : ''}" onclick="STATE.battleFacingOverride='auto';render();" title="Auto-select Front/Side/Back based on target direction">Dir: Auto</button>
+          <button class="db-btn ${bf === 'side' ? 'active' : ''}" onclick="STATE.battleFacingOverride='side';render();">Side</button>
+          <button class="db-btn ${bf === 'front' ? 'active' : ''}" onclick="STATE.battleFacingOverride='front';render();">Front (Down)</button>
+          <button class="db-btn ${bf === 'back' ? 'active' : ''}" onclick="STATE.battleFacingOverride='back';render();">Back (Up)</button>
+        ` : ''}
       `;
     } else {
       togglesEl.innerHTML = '';
@@ -125,10 +152,10 @@ function render() {
       main_menu: '<b>MainMenu (1280×720 Native Grid):</b> Cathedral title art with lower-ward mist & toned-down lanterns · <b>Reduced Corner Frame</b> on Hover Peek & New Chronicle Setup · Top-right <code>✕</code> & Right-Click to close.',
       load_slots: '<b>Load / Save Chronicles (1280×720 Native Grid):</b> <b>Full Frame</b> (<code>ornate_full.png</code> tiled iron-and-gold bars) on main screen + <b>Reduced Corner Frame</b> on Delete/Overwrite popups · Top-right <code>✕</code> & Right-Click to close.',
       runner: '<b>SceneRunner (Dev F10):</b> <b>Full Frame</b> (<code>ornate_full.png</code>) + top-right <code>✕</code> & Right-Click to close.',
-      story: '<b>Hybrid StoryStage (1280×720):</b> <b>1. VN Stage</b> renders full-body pixel-art sprites standing on a clearly visible stone floor with reaction VFX around the sprite & mood portrait expressions (<code>faces/&lt;id&gt;/&lt;mood&gt;.png</code>) in the dialogue dock; <b>3. Vignette Player</b> provides minimal <code>Auto [A]</code>, <code>Log [L]</code> & <code>Skip [✕]</code> controls.',
+      story: '<b>60fps Live2D / VTuber-Style 2D Rig + 3-View Turnaround (1280×720):</b> Separated <code>body</code> + rigid <code>weapon</code> layers with spring-damped deformers for <b>1. Relaxed</b>, <b>2. Sneaking</b>, and <b>3. Weapons Drawn</b>, plus <b>3-View Sheet (Front | Side | Back)</b> & <b>🦴 Rig Mesh</b> inspector.',
       region: '<b>RegionMap + TalkBox (Decision A3/A4):</b> Top <code>hud_bar</code>, walkable tile map, and <b>Reduced Corner Frame</b> <code>TalkBox</code> (Right-Click closes active dialogue or returns to Main Menu).',
       worldmap: '<b>WorldMap (Decision A4):</b> Sunk Ward pins & route lines + <b>Reduced Corner Frame</b> District Card with top-right <code>✕</code> & Right-Click back to Sluice Hub.',
-      battle: '<b>BattleScreen + Map→Combat Transition & Scripted Barks:</b> Use the top toggles to test <b>1. Pre-Battle Map Confrontation</b> → <b>2. ▶ Animate HUD Slide-In</b> → <b>3. Active Combat HUD</b> → <b>4. ⚡ Boss Phase 2 Transformation</b> & <b>5/6. Pre/Post-Elite Barks</b>!'
+      battle: '<b>BattleScreen + 3-View Full-Body Combat Sprites & Scripted Barks:</b> Toggle <b>★ 3-View Full-Body (Side / Front / Back)</b> vs <b>48px Sheet</b>, and test <b>Pre-Battle → Slide-In → Phase 2 → Post-Elite</b>!'
     };
     if (STATE.settingsOpen) {
       noteEl.innerHTML = '<b>Settings (1280×720 Native Grid):</b> <b>Full Frame</b> (<code>ornate_full.png</code> tiled iron-and-gold bars) on Settings + <b>Reduced Corner Frame</b> on 15s Revert popup · Top-right <code>✕</code> & Right-Click to close.';

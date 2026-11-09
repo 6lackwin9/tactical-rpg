@@ -8,6 +8,15 @@ the character's existing portrait as the reference. The game draws battle bodies
 (`tools/sprites/rig.py`), so the sheet template gives reference art, not shipped sprites. Records of what each run made sit
 beside the images in `art_src/` (`<image>.json`); the Art Prompt Library page holds the user's tweaks and test notes.
 
+## Mandatory post-generation visual review & chroma-key background rule (user 2026-11-08)
+
+Whenever you generate or edit an image (via `generate_image`, the Antigravity queue, or local generation), you **must** view and review the generated image before accepting, slicing, or bundling it:
+
+- **High-contrast chroma-key background for cutout assets (`#FF00FF` or `#00FF00`)**: Whenever generating sprites, full-body turnarounds, pose sheets, exploded Spine2D/Live2D rig parts, props, or UI frame parts that require transparent cutouts, always specify a **flat, solid pure magenta (`#FF00FF`) or bright green (`#00FF00`) chroma-key background** (edge-to-edge, no gradient, no vignette, no cast ground shadow, and no magenta/green inside the subject) just like `PROPS1_PROMPTS.md` and the ornate UI frame sheets. Never use black (`#000000`) or white (`#FFFFFF`) backgrounds for cutout sprites, as black merges with dark outlines/hair/iron and white merges with highlights/linen.
+- **Prompt compliance check**: Verify every explicit detail requested in the prompt is present and accurate (for example: required ground/floor plane on stage backdrops, specific weapon or two-handed grip, requested view angles such as `front`, `side`, and `back`, separated limb segments without mannequin pegs, lighting direction, and absence of banned UI/text/borders).
+- **Reference fidelity check**: Compare the output directly against the attached reference image(s). Ensure character identity (face, hair colour, scars, outfit, silhouette, colour palette) and pixel-art style match the reference and have not drifted.
+- **Defect & artifact check**: Inspect for generation errors such as extra or merged limbs, distorted weapons, leftover background islands after chroma-keying, or over-bright bloom obscuring key silhouettes. If the image misses a specified detail or is way off from the reference image, re-generate or correct it before shipping or showing it to the user.
+
 ## 2x2 portrait variations
 
 Four design choices for one character at once. Keep the framing paragraph; change the four bullets (armour, state, age, hood, expression).

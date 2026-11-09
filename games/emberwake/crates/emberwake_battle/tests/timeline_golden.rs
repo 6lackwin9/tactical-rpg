@@ -1,6 +1,8 @@
 //! RULESET1-X (docs/specs/RULESET1_TASKS.md 4.2): the timeline golden traces and the inert-extensions check.
 //!
-//! Golden: the five `tl_` encounters (RULESET1-A's timeline test fights) for seeds 1337, 7 and 42, each fought by
+//! Golden: the five `tl_` encounters (RULESET1-A's timeline test fights) and R4-2 M2's class-unit fight
+//! `goblin_skirmish` (warrior and ranger against goblins of four classes, every side with its class basics: FB-138 M2)
+//! for seeds 1337, 7 and 42, each fought by
 //! `sim::fight` with its authored party, board and round limit under the `timeline` ruleset row, on a frozen copy of
 //! the catalog (`tests/fixtures/timeline_kit.json`), compared step for step with `tests/fixtures/timeline_golden.json`
 //! (start, schedule, tells, every step, then outcome, rounds, log, metrics and report). The golden is the engine-only
@@ -30,8 +32,9 @@ use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The timeline test encounters (RULESET1_TASKS 2.7) and the golden's seeds (4.2).
-const ENCOUNTERS: [&str; 5] = ["tl_duel_windup", "tl_duel_reach", "tl_duel_armour", "tl_flank", "tl_skirmish"];
+/// The timeline test encounters (RULESET1_TASKS 2.7), then R4-2 M2's class-unit fight (FB-138 M2: class units with
+/// their class basics under the deck rule), and the golden's seeds (4.2).
+const ENCOUNTERS: [&str; 6] = ["tl_duel_windup", "tl_duel_reach", "tl_duel_armour", "tl_flank", "tl_skirmish", "goblin_skirmish"];
 const SEEDS: [i64; 3] = [1337, 7, 42];
 /// The party AI preset of the golden (the sim's default).
 const PRESET: &str = "balanced";

@@ -4,7 +4,7 @@ use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_core::value::to_int;
-use rpgkit_data::{Catalog, ClassDef, Deck, UnitDef, NO_ITEM};
+use rpgkit_data::{Catalog, ClassDef, Deck, UnitDef, UnitTemplate, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
@@ -221,10 +221,14 @@ pub struct Unit {
     pub name: String,
     pub catalog_id: String,
     pub tier: String,
-    /// U1.2-S4: the tier's HP factor (`stats::TierRow::hp`; the formula input `tier_hp`).
-    pub tier_hp: f64,
-    /// U1.2-S4: the tier's power factor (`stats::TierRow::power`; `tier_power`), attack power's base-stage multiplier.
-    pub tier_power: f64,
+    /// R4-1 (user 2026-11-09): the tier's one factor (`stats::TierRow::mult`; the formula input `tier_mult`, which
+    /// replaced `tier_hp` and `tier_power`): max HP and attack power's base-stage multiplier.
+    pub tier_mult: f64,
+    /// R4-1 (`U2.3-TIERS`, FB-78): the unit took a role template (`template_for`): its stats at level are the
+    /// template's scaled by `tier_mult`, floor 6 (slice 2, FB-144; attack power does not scale them again), and its
+    /// max HP is `CharacterStats::max_hp_scaled` (the tier scales the 60 only).
+    /// False for every other unit (heroes, allies, a role without a template row): the old formula.
+    pub tier_scaled: bool,
     pub max_hp: i32,
     pub hp: i32,
     /// U1.2-S3c: initiative (the old speed): action order; a fixed-stat row's `speed`.
@@ -332,8 +336,8 @@ impl Unit {
             name: name.into(),
             catalog_id: String::new(),
             tier: "hero".into(),
-            tier_hp: 1.0,
-            tier_power: 1.0,
+            tier_mult: 1.0,
+            tier_scaled: false,
             max_hp: hp,
             hp,
             initiative,
@@ -505,7 +509,7 @@ impl Unit {
             None => (1, None),
         };
         let ctx = ctx.as_deref();
-        self.max_hp = self.stats.max_hp(self.tier_hp, ctx).max(1);
+        self.max_hp = if self.tier_scaled { self.stats.max_hp_scaled(self.tier_mult, ctx) } else { self.stats.max_hp(self.tier_mult, ctx) }.max(1);
         self.hp = self.hp.min(self.max_hp);
         self.initiative = (self.stats.initiative(burden, ctx) - self.carry_penalty).max(1);
         self.move_rate = self.stats.move_rate(burden + self.carry_penalty, ctx);
@@ -941,9 +945,10 @@ impl Unit {
         self.refresh_path_skills(cat);
     }
 
-    /// KNOW for unlocks: base + permanent flat modifiers that apply in every context.
+    /// KNOW for unlocks: base + permanent flat modifiers that apply in every context. R4-1 slice 2 (FB-144): a
+    /// templated unit's base is its unscaled KNOW (`CharacterStats::requirement_base`).
     pub fn unlock_know(&self) -> i32 {
-        self.stats.base("KNOW")
+        self.stats.requirement_base("KNOW")
             + self.stats.modifiers.iter().filter(|m| m.stat == "KNOW" && m.duration < 0 && m.matches(None)).map(|m| m.flat).sum::<i32>()
     }
 
@@ -1026,6 +1031,50 @@ pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
         "spell" => s.kind == "ATTACK" && s.spell_source,
         "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0),
         _ => false,
+    }
+}
+
+/// The side whose units are the player's (heroes and allies): never templated.
+pub const PARTY_SIDE: &str = "party";
+
+/// R4-1 (`U2.3-TIERS`, FB-78, `docs/sessions/U2_CLASS.md` item 2): the role template catalog unit `e` of class `class`
+/// takes its reference stats from: a derived unit that is not the party's (`PARTY_SIDE`) and whose tier is not the hero
+/// tier (an unknown tier reads as the hero's, `stats::tier_row`) takes the `unit_templates` row of its AI role (its own
+/// `ai_role`, else its class's). None for every other unit, and when the table has no row for the role (the kind ships
+/// empty until the asset lane fills it, so the goldens hold). Slice 2 (FB-144): the unit's `template` overrides the
+/// role: `TEMPLATE_CLASS` = none (the class's shares), a template role or id = that row (None when no row matches).
+pub fn template_for<'c>(cat: &'c Catalog, e: &UnitDef, class: &ClassDef) -> Option<&'c UnitTemplate> {
+    if e.stat_mode != "derived" || e.side == PARTY_SIDE || stats::tier_row(&e.tier).id == stats::HERO_TIER {
+        return None;
+    }
+    match e.template.as_str() {
+        "" => cat.unit_templates.get(if e.ai_role.is_empty() { &class.ai_role } else { &e.ai_role }),
+        rpgkit_data::TEMPLATE_CLASS => None,
+        key => rpgkit_data::unit_template::lookup(&cat.unit_templates, key),
+    }
+}
+
+/// R4-1 slice 2 (FB-144): the growth shares catalog unit `e` spends its free points by: its role template's
+/// (`template_for`), else its class's; empty without a class.
+pub fn spend_growth(cat: &Catalog, e: &UnitDef) -> IndexMap<String, f64> {
+    let Some(class) = class_for(cat, e) else { return IndexMap::new() };
+    template_for(cat, e, class).map(|t| t.over(class)).as_ref().unwrap_or(class).unit_shares().growth
+}
+
+/// AUDIT-02 (FB-143): catalog unit row `e` raised to level `level` (a stage-scaled foe, `foe_level`). A row with an
+/// explicit `spend` keeps it and auto-spends the extra pool (`spend_pool(level) - spend_pool(base level)`, one point a
+/// level) by its growth shares (`spend_growth`, `stats::auto_spend`), so the raise leaves no point unallocated; a row
+/// without `spend` auto-spends its whole pool at the level it is built at anyway. A level at or below the base only
+/// sets the level.
+pub fn raise_level(cat: &Catalog, e: &mut UnitDef, level: i32) {
+    let base = e.level;
+    e.level = level;
+    if e.spend.is_empty() || level <= base {
+        return;
+    }
+    let extra = stats::spend_pool(level) - stats::spend_pool(base);
+    for (stat, points) in stats::auto_spend(&spend_growth(cat, e), extra) {
+        *e.spend.entry(stat).or_insert(0) += points;
     }
 }
 
@@ -1248,8 +1297,19 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32, wield: crate:
     let classless = || cat.classes.values().next().cloned().unwrap_or_else(|| ClassDef::from_obj(&Default::default()));
     let mut u = if derived {
         let arch = arch.unwrap();
-        let spend = if e.spend.is_empty() { stats::auto_spend(&arch.unit_shares().growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
-        Unit::blank(&e.name, 1, 1, 1, CharacterStats::new(arch, e.level, &spend))
+        // R4-1: a templated unit reads the template's shares (the class keeps its gear, path and loadout), and its
+        // stats at level (spend included) are scaled by its tier's factor `tier_mult`, floor 6 (slice 2, FB-144)
+        let template = template_for(cat, e, arch);
+        let basis = template.map(|t| t.over(arch));
+        let src = basis.as_ref().unwrap_or(arch);
+        let spend = if e.spend.is_empty() { stats::auto_spend(&src.unit_shares().growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
+        let mut cs = CharacterStats::new(src, e.level, &spend);
+        if template.is_some() {
+            cs.scale_core(stats::tier_row(&e.tier).mult);
+        }
+        let mut u = Unit::blank(&e.name, 1, 1, 1, cs);
+        u.tier_scaled = template.is_some();
+        u
     } else if let Some(arch) = arch {
         Unit::blank(&e.name, e.hp, e.initiative, e.attack_range, CharacterStats::new(arch, e.level, &IndexMap::new()))
     } else {
@@ -1264,8 +1324,7 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32, wield: crate:
     if derived {
         let arch = arch.unwrap();
         u.tier = e.tier.clone();
-        let row = stats::tier_row(&u.tier);
-        (u.tier_hp, u.tier_power) = (row.hp, row.power);
+        u.tier_mult = stats::tier_row(&u.tier).mult;
         u.sync_from_stats_and_gear(cat);
         u.hp = u.max_hp;
         let mut extras: Vec<String> = Vec::new();

@@ -60,7 +60,11 @@ fn data_with(manifest: Value, dc: i64, who: &str) -> Data {
             {"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1},
             {"id": "mate", "name": "Mate", "side": "party", "class_id": "scout", "level": 3}
         ],
-        "derived_stats": [{"id": "grit", "name": "Grit", "formula": "CONS * 2 + 1", "min": 0, "max": 999}]
+        "rulesets": [{"id": "timeline", "name": "Timeline"}],
+        "derived_stats": [
+            {"id": "grit", "name": "Grit", "formula": "CONS * 2 + 1", "min": 0, "max": 999},
+            {"id": "tl_grit", "name": "Timeline Grit", "formula": "CONS * 2 + 1", "min": 0, "max": 999, "rulesets": ["timeline"]}
+        ]
     });
     Data::from_values(&catalog, &worlds, &json!({}))
 }
@@ -198,4 +202,16 @@ fn a_stat_check_reads_the_standing_ratings_by_name() {
         assert_eq!(dialogue::condition_holds(&d, &gs, &cond), want);
     }
     assert_eq!(gs, before);
+}
+
+/// R4-2 (FB-143) AUDIT-05: a derived row limited by its `rulesets` is read in a world of that ruleset, exactly like a
+/// row of every ruleset, and reads 0 (as an unknown name) elsewhere: the content check refuses the name there.
+#[test]
+fn a_ruleset_limited_derived_row_is_read_only_in_its_ruleset() {
+    let timeline = data_with(json!({"ruleset": "timeline"}), 1, "");
+    let gs = state(&timeline);
+    assert_eq!(dialogue::best_stat(&timeline, &gs, "tl_grit"), dialogue::best_stat(&timeline, &gs, "grit"), "the same formula, read in its ruleset");
+    assert!(dialogue::best_stat(&timeline, &gs, "tl_grit") > 0);
+    let classic = data(1);
+    assert_eq!(dialogue::best_stat(&classic, &state(&classic), "tl_grit"), 0, "left out of classic: reads 0 (the check refuses it)");
 }

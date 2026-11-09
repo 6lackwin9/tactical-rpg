@@ -55,4 +55,4 @@ Engine goldens (the Godot parity suites were retired 2026-11-01, CLN-36..42; `le
 
 ## Feedback rule
 
-Look up the failure in the known-issues table first; after two failed targeted fixes, stop and ask the user (state findings + options). Always ask before design/gameplay decisions. Add new recurring failure causes to the known-issues table.
+Look up the failure in the known-issues table first; after two failed targeted fixes, stop and ask the user (state findings + options). Always ask before design/gameplay decisions. Add new recurring failure causes to the known-issues table. Whenever generating or editing an image asset, immediately view and review the result against both the prompt and any reference image (checking for missing requested details, generation errors, or drift from the reference) and re-roll or fix it before accepting it (see `games/emberwake/docs/specs/ART_PROMPT_TEMPLATES.md` and `games/emberwake/docs/preferences/assets-world.md`).
