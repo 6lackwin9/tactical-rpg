@@ -10,6 +10,7 @@
     "drawn_kf_cleave": {"butt": [98, 171], "socket": [280, 232], "tip": [330, 247], "grip_front": [230, 214], "grip_back": [126, 183]},
     "drawn_kf_midswing": {"butt": [90, 162], "socket": [278, 223], "tip": [331, 235], "grip_front": [228, 207], "grip_back": [122, 173]},
     "drawn_kf_halfdraw": {"butt": [102, 222], "socket": [257, 120], "tip": [304, 82], "grip_front": [232, 137], "grip_back": [135, 202]},
-    "drawn_kf_halfdraw_r2": {"butt": [88, 230], "socket": [250, 103], "tip": [290, 59], "grip_front": [218, 124], "grip_back": [124, 204]}
+    "drawn_kf_halfdraw_r2": {"butt": [88, 230], "socket": [250, 103], "tip": [290, 59], "grip_front": [218, 124], "grip_back": [124, 204]},
+    "sheet_draw_f6": {"butt": [82, 205], "socket": [230, 120], "tip": [285, 83], "grip_front": [205, 143], "grip_back": [118, 183]}
   }
 }

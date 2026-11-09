@@ -199,14 +199,20 @@ def strip_weapon(f: np.ndarray, lm: dict) -> np.ndarray:
 class Halberd:
     """The canonical halberd: blade pixels sampled from the canonical keyframe, shaft drawn from a colour profile."""
 
-    def __init__(self, canon: np.ndarray, lm: dict):
+    def __init__(self, canon: np.ndarray, lm: dict, clean_back: bool = False, outline: bool = False):
+        """``clean_back`` keeps only the shaft band behind the socket (drops hand or sleeve outline caught next to
+        the collar); ``outline`` draws a 1 px dark edge along the shaft like the painted one. Both default off so
+        the clips built before them stay byte for byte the same."""
         self.img = canon
         self.ax = Axis(lm)
+        self.outline = outline
         h, w = canon.shape[:2]
         ys, xs = np.mgrid[0:h, 0:w].astype(float)
         u, v = self.ax.local(xs, ys)
         hands = _hand_mask(canon, [lm["grip_front"], lm["grip_back"]])
         self.blade_mask = (u >= BLADE_BACK) & (np.abs(v) <= BLADE_HALF) & (u <= 90) & (canon[..., 3] > 0) & ~hands
+        if clean_back:
+            self.blade_mask &= (u >= 0) | (np.abs(v) <= SHAFT_HALF + 1.5)
         # Shaft profile across the shaft: median colour per whole-pixel offset, sampled where no hand covers it.
         prof = {}
         free = (u > -self.ax.length + 4) & (u < BLADE_BACK - 2) & ~_hand_mask(canon, [lm["grip_front"], lm["grip_back"]])
@@ -231,6 +237,10 @@ class Halberd:
         px, py = xs - socket[0], ys - socket[1]
         u, v = px * d[0] + py * d[1], px * n[0] + py * n[1]
         out = canvas.copy()
+        if self.outline:
+            edge = (u >= -length - 1) & (u < BLADE_BACK + 2) & (np.abs(v) <= SHAFT_HALF + 1.5)
+            out[edge, :3] = (26, 19, 17)
+            out[edge, 3] = 255
         # shaft
         shaft = (u >= -length) & (u < BLADE_BACK + 2) & (np.abs(v) <= SHAFT_HALF + 0.5)
         vr = np.clip(np.rint(v), -3, 3).astype(int)
@@ -490,6 +500,50 @@ def passive_frames(keys: dict):
     return frames
 
 
+CODE_GUARD = "sheet_draw_f6"   # the signed-off draw ends here, so code attacks start from it
+HIP_Y = 205                    # rows below stay planted when the upper body leans
+# (lean px at the head, slide px along the shaft, turn deg, ms): wind-up, thrust, hold, recover
+POKE_PLAN = [(0, 0, 0, 500), (-2, -5, -1, 60), (-4, -10, -2, 60), (-5, -12, -2, 140),
+             (3, 12, 1, 35), (9, 30, 2, 35), (10, 34, 2, 260),
+             (7, 22, 1, 60), (4, 12, 0, 60), (1, 4, 0, 60), (0, 0, 0, 400)]
+
+
+def code_poke(keys: dict, landmarks: dict):
+    """A poke from one guard frame by code only: the upper body leans from the hips (boots planted) and the rigid
+    halberd, lifted out of the frame, slides along its own axis through both hands, which are laid back over it.
+    No generated attack keys (ART_UI_STUDIO 3.5: small attacks by code, arcs by sprites)."""
+    f = keys[CODE_GUARD]
+    lm = refine_landmarks(f, landmarks["keys"][CODE_GUARD])
+    body = strip_weapon(f, lm)
+    hal = Halberd(f, lm, clean_back=True, outline=True)
+    ax = Axis(lm)
+    top = int(np.nonzero(f[..., 3].any(axis=1))[0][0])
+
+    def shift(y: float, lean: float) -> float:
+        return 0.0 if y >= HIP_Y else lean * (HIP_Y - y) / (HIP_Y - top)
+
+    def leaned(img: np.ndarray, lean: float) -> np.ndarray:
+        out = np.zeros_like(img)
+        for y in range(SIZE):
+            dx = int(round(shift(y, lean)))
+            if dx >= 0:
+                out[y, dx:] = img[y, :SIZE - dx]
+            else:
+                out[y, :SIZE + dx] = img[y, -dx:]
+        return out
+
+    frames = []
+    for lean, slide, turn, ms in POKE_PLAN:
+        b = leaned(body, lean)
+        g = ax.proj(lm["grip_front"])
+        g = g + np.array([shift(g[1], lean), 0.0]) + slide * ax.d
+        img = hal.draw(b, g, ax.angle + math.radians(turn))
+        hands = _hand_mask(b, [np.array(lm[k], float) + [shift(lm[k][1], lean), 0.0] for k in ("grip_front", "grip_back")])
+        img[hands] = b[hands]
+        frames.append((img, ms))
+    return frames
+
+
 # ---------------------------------------------------------------- output
 
 def to_uri(rgba: np.ndarray) -> str:
@@ -532,6 +586,9 @@ def build(out: Path, gif_dir: Path | None) -> None:
             fr = clip_frames(m, c["plan"], keys, hyb, flow_cache)
             rows.append({"method": m, "frames": [[add(img), ms] for img, ms in fr]})
         data["clips"].append({"id": cid, "label": c["label"], "note": c["note"], "rows": rows})
+    data["clips"].append({"id": "poke_code", "label": "Drawn: poke by code only, from the sheet's guard",
+                          "note": "Hip lean plus the rigid halberd sliding through the hands; no generated attack keys.",
+                          "rows": [{"method": "code", "frames": [[add(img), ms] for img, ms in code_poke(keys, landmarks)]}]})
     data["images"] = [to_uri(im) for im in images]
     html = (HERE / "tween_template.html").read_text(encoding="utf-8").replace("__TWEEN_JSON__", json.dumps(data))
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -556,6 +613,10 @@ REFS = {  # reference image name -> aligned key, for generated breakdown keys (a
     "kaelen_ref_halfdraw_r2": "drawn_kf_halfdraw_r2",
     "kaelen_ref_sheet_f1": "sheet_draw_f1",
     "kaelen_ref_sheet_f2": "sheet_draw_f2",
+    "kaelen_ref_sheet_f6": "sheet_draw_f6",
+    "kaelen_ref_walk_1h": "walk_1h_kf0",
+    "kaelen_ref_sneak": "active_sneak",
+    "kaelen_ref_drawn_poke": "drawn_kf_poke",
 }
 
 
