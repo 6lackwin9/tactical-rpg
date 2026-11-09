@@ -12,7 +12,7 @@ fn stats(perc: i32, dex: i32) -> CharacterStats {
     let mut core: IndexMap<String, i32> = STATS.iter().map(|s| (s.to_string(), 10)).collect();
     core.insert("PERC".into(), perc);
     core.insert("DEX".into(), dex);
-    CharacterStats { level: 1, unallocated: 0, core, proficiency: Proficiency::default(), modifiers: Vec::new() }
+    CharacterStats { level: 1, unallocated: 0, core, unscaled: None, proficiency: Proficiency::default(), modifiers: Vec::new() }
 }
 
 fn rule(perc: i32) -> f64 {

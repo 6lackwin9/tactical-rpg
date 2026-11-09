@@ -349,8 +349,11 @@ fn tokens_follow_the_battle_step_by_step() {
             let attack = matches!(act.command.kind, emberwake_battle::command::CmdKind::Attack { .. } | emberwake_battle::command::CmdKind::Area { .. });
             if attack && !act.cancelled && s.w.units[act.unit].is_alive() {
                 attacks += 1;
-                let want = t.anims[act.unit].want.as_ref().expect("the attacker queues its clip");
-                assert_eq!(want.1, now);
+                let a = &t.anims[act.unit];
+                let want = a.want.as_ref().expect("the attacker queues its clip");
+                // FX1 4.2 step 1: an attacker that moved in this step (a dash, a charge, an Engage carry) strikes after its slide
+                let at = if a.slide.is_some_and(|(_, t0)| t0 == now) { now + a.slide_ms(300) } else { now };
+                assert_eq!(want.1, at);
                 assert!(want.0.last() == Some(&"attack"), "{:?} ends with the generic attack", want.0);
             }
         }
@@ -1046,7 +1049,9 @@ fn pixel(g: &aegis_ui::ui::Gfx, x: i32, y: i32) -> [u8; 4] {
 fn an_action_pushes_its_delivery_at_the_pop_and_its_impact_effects_at_the_impact() {
     for view in ["stage", "flat"] {
         let (mut cx, mut g, mut b) = ambush(json!(view));
-        assert!(step_until(&mut cx, &mut b, |_, i| i.hit() && (i.style.swing.is_some() || i.style.shot.is_some())), "{view}: a hit with a delivery");
+        // every struck unit stands after it, so no fall effect (its ring) lands with the hit's own
+        let standing = |i: &crate::fx::Impact| i.struck.iter().all(|&u| i.after.get(u).is_some_and(|a| a.alive));
+        assert!(step_until(&mut cx, &mut b, |_, i| i.hit() && (i.style.swing.is_some() || i.style.shot.is_some()) && standing(i)), "{view}: a hit with a delivery");
         b.resolve_impacts(&mut cx);
         let i = b.impacts[0].clone();
         let at = i.at.unwrap();
@@ -1184,7 +1189,10 @@ fn mend_motes_rise_at_the_targets_foot_and_its_float_waits_for_the_impact() {
 #[test]
 fn a_missed_target_sidesteps_unless_reduce_motion() {
     let (mut cx, mut g, mut b) = ambush(json!("stage"));
-    assert!(step_until(&mut cx, &mut b, |b, i| !i.area && i.target.is_some_and(|u| b.host.session.as_ref().unwrap().w.units[u].is_alive() && u != i.actor)), "an attack on a standing unit");
+    // standing after the blow too (`Impact::after`), on the board: a target the attack fells or that flees does not
+    // sidestep
+    let on_board = |b: &BattleScreen, u: usize| b.host.session.as_ref().unwrap().w.grid.pos(u).is_some();
+    assert!(step_until(&mut cx, &mut b, |b, i| !i.area && i.target.is_some_and(|u| i.after.get(u).is_some_and(|a| a.alive) && on_board(b, u) && u != i.actor)), "an attack on a standing unit");
     b.resolve_impacts(&mut cx);
     let mut i = b.impacts.remove(0);
     i.mods = fx::Mods { miss: true, ..fx::Mods::default() };

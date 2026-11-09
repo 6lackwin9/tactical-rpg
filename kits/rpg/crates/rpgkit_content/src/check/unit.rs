@@ -342,6 +342,7 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.extend(skill_loadout_errors(v, e, a));
     }
     errors.extend(requires_errors(v, e, arch));
+    errors.extend(template_errors(v, e));
     errors.extend(deck_errors(v, e));
     errors.extend(default_intent_errors(v, e));
     // HOOKS1 AT2: the unit's AI tactics
@@ -352,6 +353,16 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("Id '{id}' is a roster read word ({}); pick another.", rpgkit_data::ROSTER_WORDS.join(", ")));
     }
     errors
+}
+
+/// R4-1 slice 2 (`U2.3-TIERS`, FB-144): a unit's `template` is "" (by its AI role), `class` (its class's shares) or
+/// the role or id of a `unit_templates` row.
+pub fn template_errors(v: &View, e: &Dict) -> Vec<String> {
+    let key = json::s(e, rpgkit_data::TEMPLATE_FIELD);
+    if key.is_empty() || key == rpgkit_data::TEMPLATE_CLASS || rpgkit_data::unit_template::lookup(&v.typed.unit_templates, &key).is_some() {
+        return Vec::new();
+    }
+    vec![format!("Stat template '{key}' is not a unit template role or id (leave it empty for the AI role's, or '{}' for the class's).", rpgkit_data::TEMPLATE_CLASS)]
 }
 
 /// W.2-S3 (FB-139): a unit's `growth_per_stage` as written (`raw`, before the schema clamps it): absent, or a whole

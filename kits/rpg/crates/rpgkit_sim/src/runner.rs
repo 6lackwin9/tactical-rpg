@@ -248,7 +248,9 @@ impl<'a> Runner<'a> {
             entry.insert("loadout".into(), json!(def.loadout));
         }
         if def.party && !def.plain {
-            entry.insert("spend".into(), Value::Object(variants::spend_for(&self.d.cat, &variant, &def.class_id, def.level)));
+            // R4-1 slice 2 (FB-144): the spend reads the unit's role template (a party unit never has one)
+            let spend = variants::spend_for_unit(&self.d.cat, &variant, &UnitDef::from_obj(&entry));
+            entry.insert("spend".into(), Value::Object(spend));
             if def.loadout.is_empty() && self.args.loadout == "newest" {
                 entry.insert("loadout".into(), json!(variants::newest_loadout(&self.d.cat, &def.class_id, def.level)));
             } else if def.loadout.is_empty() && self.args.loadout == "role" {

@@ -10,9 +10,20 @@
 use crate::unit_budget::ClassShares;
 use crate::{float_map, ClassDef};
 use aegis_core::value::*;
+use indexmap::IndexMap;
 
 /// The catalog kind (file data/catalog/unit_templates.json; a missing file is an empty table).
 pub const UNIT_TEMPLATES_KIND: &str = "unit_templates";
+/// R4-1 slice 2 (FB-144): the unit field naming the template a unit takes (`UnitDef::template`; "" = by AI role).
+pub const TEMPLATE_FIELD: &str = "template";
+/// R4-1 slice 2 (FB-144): the `template` value that keeps the class's shares (no template).
+pub const TEMPLATE_CLASS: &str = "class";
+
+/// R4-1 slice 2 (FB-144): the row of `table` (keyed by role) that `key` names: its role, else a row id; None when
+/// neither matches.
+pub fn lookup<'t>(table: &'t IndexMap<String, UnitTemplate>, key: &str) -> Option<&'t UnitTemplate> {
+    table.get(key).or_else(|| table.values().find(|t| t.id == key))
+}
 
 /// One role template row.
 #[derive(Debug, Clone, PartialEq)]

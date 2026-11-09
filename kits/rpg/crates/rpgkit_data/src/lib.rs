@@ -20,7 +20,7 @@ pub mod unit_budget;
 pub mod unit_template;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
-pub use unit_template::{UnitTemplate, UNIT_TEMPLATES_KIND};
+pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -224,6 +224,9 @@ pub struct UnitDef {
     pub extra_skills: Vec<String>,
     pub loadout: Vec<String>,
     pub ai_role: String,
+    /// R4-1 slice 2 (`U2.3-TIERS`, FB-144): the role template the unit takes (`rpgkit_rules::unit::template_for`):
+    /// "" = by its AI role, `TEMPLATE_CLASS` = none (it keeps its class's shares), else a template role or id.
+    pub template: String,
     pub target_pref: String,
     pub flee_ratio: f64,
     pub defend_below: f64,
@@ -313,6 +316,7 @@ impl UnitDef {
             extra_skills: strings(o, "extra_skills"),
             loadout: strings(o, "loadout"),
             ai_role: string(o, "ai_role", ""),
+            template: string(o, "template", ""),
             target_pref: string(o, "target_pref", "ROLE"),
             flee_ratio: float(o, "flee_ratio", 0.25),
             defend_below: float(o, "defend_below", 0.4),
@@ -772,10 +776,18 @@ pub const LEVEL_INPUT: &str = "level";
 /// RULESET1 P1 (tasks 1.7): the formula input of the summed `effective_mitigation` of the unit's worn gear (reserved
 /// like `level`: no row id or constant takes it).
 pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
-/// U1.2-S4 (U1_STATS feasibility 6): the formula inputs of the unit's tier factors, its row in the kit's tier table
-/// (`hp`, `power`); reserved like `level`.
+/// R4-1 (user 2026-11-09): the formula input of the unit's tier factor, its row's `mult` in the kit's tier table;
+/// reserved like `level`.
+pub const TIER_MULT_INPUT: &str = "tier_mult";
+/// U1.2-S4: the old tier inputs, deprecated aliases of `tier_mult` since R4-1 (one factor per tier); still reserved
+/// and read, so a formula written with them keeps working.
 pub const TIER_HP_INPUT: &str = "tier_hp";
 pub const TIER_POWER_INPUT: &str = "tier_power";
+
+/// A formula name that reads the unit's tier factor: `tier_mult` or a deprecated alias.
+pub fn is_tier_input(name: &str) -> bool {
+    name == TIER_MULT_INPUT || name == TIER_HP_INPUT || name == TIER_POWER_INPUT
+}
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]

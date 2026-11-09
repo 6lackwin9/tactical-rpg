@@ -2,6 +2,8 @@
 //! row's checks (role, id, origin, both share vectors as a class's: totalling 1, the level 1 stats 6-18, 0-3 gained per
 //! level) and across rows (unique ids, one row per role); the loader keeps the rows that pass; the writer takes a valid
 //! row, re-saves it byte for byte and refuses a bad one; the loaded row reaches `Catalog::unit_templates` by role.
+//! Slice 2 (FB-144): the optional unit field `template` ("" = by AI role, `class`, or a row's role or id; stored as no
+//! key when empty) and its check.
 
 use aegis_core::json::{self, Dict};
 use rpgkit_content::check::unit_template::{options, NO_SHARES};
@@ -120,5 +122,51 @@ fn the_writer_takes_a_row_and_refuses_a_bad_one() {
     assert_eq!(cat.unit_templates["AGGRESSOR"].id, "brute");
     store::remove(&data, None, UNIT_TEMPLATES_KIND, "brute").unwrap();
     assert!(Catalog::from_value(&source::load(&data).catalog).unit_templates.is_empty());
+    drop_scratch(&data);
+}
+
+// ---- R4-1 slice 2 (FB-144): the unit field `template` --------------------------------------------------------------
+
+fn unit_with_template(template: Option<&str>) -> Dict {
+    let mut row = dict(json!({"id": "wolf", "name": "Wolf", "side": "enemy", "class_id": "drill", "level": 2, "tier": "standard"}));
+    if let Some(t) = template {
+        row.insert(rpgkit_data::TEMPLATE_FIELD.into(), json!(t));
+    }
+    row
+}
+
+#[test]
+fn the_units_table_has_an_optional_template_field() {
+    let f = source::schema()["content"]["units"].as_array().unwrap().iter().map(json::dict).find(|f| json::s(f, "key") == rpgkit_data::TEMPLATE_FIELD).cloned().expect("units.template");
+    assert_eq!((json::s(&f, "type"), json::s(&f, "default")), ("string".to_string(), String::new()));
+    assert!(json::b(&f, "omit_default", false));
+    assert_eq!(rpgkit_data::UnitDef::from_obj(&unit_with_template(None)).template, "");
+    assert_eq!(rpgkit_data::UnitDef::from_obj(&unit_with_template(Some("class"))).template, "class");
+}
+
+#[test]
+fn the_writer_stores_an_empty_template_as_no_key() {
+    for t in [None, Some("")] {
+        let row = store::catalog_storage("units", &unit_with_template(t), &[]).unwrap();
+        assert!(!row.contains_key(rpgkit_data::TEMPLATE_FIELD), "{t:?}: stored as no key");
+    }
+    let row = store::catalog_storage("units", &unit_with_template(Some("class")), &[]).unwrap();
+    assert_eq!(row.get(rpgkit_data::TEMPLATE_FIELD), Some(&json!("class")));
+}
+
+#[test]
+fn the_template_must_be_empty_class_or_a_row() {
+    let (_scratch, data) = scratch("unit_field");
+    let base = json!({"STR": 12, "DEX": 10, "INT": 8, "CONS": 13, "PERC": 9, "KNOW": 10});
+    fs::write(data.join("catalog").join("classes.json"), json!({"kind": "classes", "version": 1, "entries": [{"id": "drill", "name": "Drill", "base_stats": base, "growth": {"STR": 2, "CONS": 2, "DEX": 1}}]}).to_string()).unwrap();
+    write_rows(&data, json!([brute("brute", "AGGRESSOR")]));
+    let v = store::view(&data);
+    let template_errors = |t: &str| -> Vec<String> { check::validate_entry(&v, "units", &unit_with_template(Some(t)), "").into_iter().filter(|e| e.starts_with("Stat template")).collect() };
+    for ok in ["", "class", "AGGRESSOR", "brute"] {
+        assert_eq!(template_errors(ok), Vec::<String>::new(), "{ok} is allowed");
+    }
+    for bad in ["SNIPER", "bogus"] {
+        assert_eq!(template_errors(bad).len(), 1, "{bad}: no such row");
+    }
     drop_scratch(&data);
 }

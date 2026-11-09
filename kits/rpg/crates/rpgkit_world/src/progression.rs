@@ -108,8 +108,12 @@ pub fn auto_for(d: &Data, state: &mut UnitState) {
     if left <= 0 {
         return;
     }
-    // U2.2-S3 (FB-46): the class growth shares (an integer row's growth / 5), not level 2's rounded gain
-    let growth = d.cat.classes.get(&state.class_id(d)).map(|c| c.unit_shares().growth).unwrap_or_default();
+    // U2.2-S3 (FB-46): the class growth shares (an integer row's growth / 5), not level 2's rounded gain; R4-1 slice 2
+    // (FB-144): read through the base unit's role template (`spend_growth`; a party member never has one)
+    let growth = match d.cat.units.get(&state.base_unit) {
+        Some(def) => rpgkit_rules::unit::spend_growth(&d.cat, def),
+        None => d.cat.classes.get(&state.class_id(d)).map(|c| c.unit_shares().growth).unwrap_or_default(),
+    };
     for (k, v) in rpgkit_rules::stats::auto_spend(&growth, left as i32) {
         *state.spend.entry(k).or_insert(0) += v as i64;
     }

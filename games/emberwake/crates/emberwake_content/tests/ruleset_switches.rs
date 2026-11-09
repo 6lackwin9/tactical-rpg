@@ -7,7 +7,8 @@
 //! over it give the shipped row back. The unit deck orders `data/seeds/w24k1b.json` set by derived intent rows (valid
 //! only under `field_intent`) are set aside during the replay and re-applied after `w24s1.json`; `w25lock.json`
 //! (ATTACKLOCK1-O: `attack_lock` melee) replays next, then `classbasics.json` (R2-W2b CLASS-BASICS: role basics move
-//! to the classes, `flank_cut` leaves the `timeline` basics, four founder deck orders change) replays last, in its order.
+//! to the classes, `flank_cut` leaves the `timeline` basics, four founder deck orders change) replays next, in its
+//! order, and the unit steps of `r41s2.json` (R4-1 slice 2: `template` on the caster units) last.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
@@ -52,6 +53,9 @@ const DERIVED_ORDERS_SEED: &str = "w24k1b.json";
 /// R2-W2b CLASS-BASICS: the seed that moved the role basics to the classes; it re-orders some decks the derived-row
 /// seed set, so those units ship with its deck.
 const CLASS_BASICS_SEED: &str = "classbasics.json";
+
+/// R4-1 slice 2 (FB-144): the seed that set `template` on the caster units (after the class-basics seed).
+const TEMPLATES_SEED: &str = "r41s2.json";
 
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
@@ -182,6 +186,10 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, kind, e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the CLASS-BASICS seed over it gives the shipped rows");
+    // R4-1 slice 2: the template seed's units (their stat template; no ruleset row changes)
+    for e in seed_rows(TEMPLATES_SEED, "units") {
+        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("R4-1 unit '{}': {err:?}", json::s(&e, "id")));
+    }
     let seeded = store::view(&tmp);
     let units = reordered.iter().map(|u| json::s(u, "id")).chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")));
     for id in units {

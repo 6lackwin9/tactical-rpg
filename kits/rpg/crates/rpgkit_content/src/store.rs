@@ -20,12 +20,18 @@ pub use aegis_content::store::Outcome;
 // ---- Storage forms -----------------------------------------------------------------------------------------------
 
 /// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false, `origin` system and an empty
-/// `wears_untrained` (UNITDRILL1: a row without the exception reads as before) and a 0 `growth_per_stage` (W.2-S3,
-/// FB-139: a unit written before the field existed re-saves byte for byte) left out; unknown keys kept.
+/// `wears_untrained` (UNITDRILL1: a row without the exception reads as before), a 0 `growth_per_stage` (W.2-S3,
+/// FB-139: a unit written before the field existed re-saves byte for byte) and an empty unit `template` (R4-1 slice 2,
+/// FB-144: the schema's `omit_default`) left out; unknown keys kept.
 fn content_storage(kind: &str, full: &Dict) -> Dict {
     use crate::check::unit::{GROWTH_PER_STAGE, WEARS_UNTRAINED};
+    use rpgkit_data::TEMPLATE_FIELD;
     to_storage(source::schema(), "content", kind, full, |key, v| {
-        (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || (key == WEARS_UNTRAINED && json::strings(v).is_empty()) || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
+        (key == "system" && !json::to_bool(v))
+            || (key == "origin" && gstr(v) == "system")
+            || (key == WEARS_UNTRAINED && json::strings(v).is_empty())
+            || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
+            || (kind == "units" && key == TEMPLATE_FIELD && gstr(v).is_empty())
     })
 }
 
