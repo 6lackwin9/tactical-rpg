@@ -451,11 +451,37 @@ def build(out: Path, gif_dir: Path | None) -> None:
         print(f"GIFs -> {gif_dir}")
 
 
+REFS = {  # reference image name -> aligned key, for generated breakdown keys (art_src/vn_stage/prompts/)
+    "kaelen_ref_passive_relaxed": "passive_relaxed",
+    "kaelen_ref_active_drawn": "active_drawn",
+    "kaelen_ref_drawn_windup": "drawn_kf_windup",
+    "kaelen_ref_drawn_cleave": "drawn_kf_cleave",
+}
+
+
+def export_refs(out_dir: Path) -> None:
+    """The aligned 340 px keys on flat #FF00FF with one shared 96-colour palette, as image-model references.
+    Rebuilt from kaelen_4pose_uris.json, so no binary needs to travel through git or Drive by hand."""
+    keys = load_keys()
+    pal = build_palette([keys[k] for k in REFS.values()], colours=96)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, key in REFS.items():
+        bg = Image.new("RGBA", (SIZE, SIZE), (255, 0, 255, 255))
+        bg.alpha_composite(Image.fromarray(snap(keys[key], pal)))
+        bg.convert("RGB").quantize(colors=128, dither=Image.Dither.NONE).save(out_dir / f"{name}.png", optimize=True)
+    print(f"{len(REFS)} references -> {out_dir}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the keyframe in-betweening comparison lab.")
     ap.add_argument("--out", type=Path, default=HERE.parent.parent.parent / "kaelen_tween_lab.html")
     ap.add_argument("--gif-dir", type=Path, default=None, help="Also write one GIF per clip and method here.")
+    ap.add_argument("--export-refs", type=Path, default=None, metavar="DIR",
+                    help="Only write the breakdown-key reference PNGs into DIR (no lab).")
     args = ap.parse_args()
+    if args.export_refs:
+        export_refs(args.export_refs)
+        return
     build(args.out, args.gif_dir)
 
 

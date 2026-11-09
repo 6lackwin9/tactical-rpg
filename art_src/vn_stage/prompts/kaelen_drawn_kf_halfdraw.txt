@@ -1,0 +1,7 @@
+Edit this pixel-art character sprite into a new animation keyframe. Image 1 is the relaxed standing pose and image 2 is the weapon-drawn guard pose of the same character; draw the in-between pose halfway from image 1 to image 2, as he brings the halberd down into guard.
+
+Character (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. Face calm and composed, mouth closed.
+
+Pose: the feet are halfway between the two references: the left foot steps out to the left so the stance is wider than image 1 but narrower than image 2, knees slightly bent, boots flat on the ground line of the references. The torso turns a little toward the right. The halberd tips forward from upright: the shaft leans at about 45 degrees, blade up and to the right above shoulder height, butt end near the left knee. Both hands are on the shaft, the right hand at chest height and the left hand at the hip.
+
+Framing and style: same canvas, same character size and position as the references, one character only, full body, three-quarter view facing right. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.

@@ -112,6 +112,7 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   - Flow in-betweens work when the moving part travels a short way (guard, wind-up, poke, recover). They fail when a limb travels far (the cleave's front hand, about 90 px) or when legs swap front and back (walk passing frames break up).
   - Large pose changes (passive to drawn) need a generated breakdown key or local video in-betweening (Wan 2.2 first-last-frame on the PC, untested); code alone doubles the weapon.
 - **Masters**: the keyframe masters are JPEGs; their magenta fringe survives keying. Generate future keys as PNG.
+- **Breakdown keys through the Drive queue (2026-11-09)**: references are the aligned lab frames at 340 px on `#FF00FF` with a shared palette, rebuilt byte for byte from `kaelen_4pose_uris.json` by `python3 -m tools.mock_ui.anim_lab.tween --export-refs <dir>` (no binary in git: the cloud session's LFS push is refused); prompts in `art_src/vn_stage/prompts/`. `kaelen_drawn_kf_midswing` (wind-up to cleave) was queued on Drive from the cloud session; `kaelen_drawn_kf_halfdraw` (relaxed to drawn) is queued from the PC with `artqueue.py text`, which copies its references into `refs/`. A cloud session can write small text files to Drive reliably, but relaying binary images by hand as base64 corrupted one upload, so references are exported locally and queued with `artqueue.py`.
 
 ---
 

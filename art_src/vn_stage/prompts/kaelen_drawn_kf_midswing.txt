@@ -1,0 +1,7 @@
+Edit this pixel-art character sprite into a new animation keyframe. Image 1 is the wind-up pose and image 2 is the cleave pose of the same character; draw the in-between pose halfway through the swing from image 1 to image 2.
+
+Character (keep exactly as in image 1): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. Face calm and composed, mouth closed.
+
+Pose: both boots stay planted exactly where they are in image 1, same stance width, same ground line. The torso leans slightly forward and twists toward the right. The halberd is mid-swing: the shaft runs nearly level across the body at belt height, the blade out to the right at about hip height, blade edge leading downward. The front (right) hand grips the shaft between the chest and the right hip, the back (left) hand stays near the left hip on the shaft end. Both hands on the shaft.
+
+Framing and style: same canvas, same character size and position as image 1, one character only, full body, facing right in three-quarter view. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.
