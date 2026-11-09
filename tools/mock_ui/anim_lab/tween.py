@@ -1013,7 +1013,7 @@ def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source:
     sheet.save(path, optimize=True)
     meta = {"frame_w": w, "frame_h": h, "frames": len(frames), "cols": cols, "fps": fps, "ground_y": GROUND_Y,
             "loop": True, "source": source}
-    path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"sprite sheet {len(frames)} frames {w}x{h} @ {fps} fps -> {path}")
 
 
