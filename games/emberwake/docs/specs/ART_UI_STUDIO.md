@@ -192,6 +192,11 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   - Props from the portrait leak into the body (Hollis's shoulder-rested arbalest became a second crossbow behind his shoulder): say "one arbalest" and remove the extra.
   - Small facial details at full-body scale cannot be placed by edits (Hollis's scar landed on the wrong eye, then both eyes glowed): fix them in the portrait, where the face is large, by image side ("the eye on the right side of the image, the one with the red pupil"), in two steps (remove, then add), then attach the portrait to the turnaround so they carry over.
   - Name sides by the image, never the character's left and right, and check pauldrons, scars and held items in every view.
+- **CG tests (2026-11-10, Flow main prompt box, characters by `@`, 16:9)**: identity holds and nobody mixes, from one character to all four.
+  - Test 1 (Vesper on a chimney, searchlight): both takes on-model and in the game's style; take 2 kept (beam from the tower, both daggers reversed). Drift: bare sooty forearms where her art has long sleeves; "dark long sleeves down to her fingerless gloves" fixed it in later scenes.
+  - Test 2 (Kaelen strikes the cart's padlock, Vesper throws the ash flask): no mixing, all story beats read; take 2 kept (calm face; take 1 snarled and added rain). Drift: Kaelen gains polished shoulder and arm plates in action poses; pinned with "only his dull dark-grey scarred breastplate, no shoulder plates, no arm plates". Edits fixed the incoherent bridge (one deck, parapets on both sides, arches under it) and the armour, but did not move the crossbowman off the parapet (edits keep figure positions).
+  - Test 3 (all four at the drainage grate): all four recognisable with no mixing; take 2 is the better one (Vesper hooded, Hollis's scar and single red eye on the correct eye, Maren without a veil). Drift at scene scale: rain added unasked (in take 1 of each test as well), Maren's censer dropped from her crook staff and a nun's veil in take 1, Hollis's horn pauldron grows spikes and his hair an undercut, gloves turn brown.
+  - Conclusion: Flow characters by `@` are good enough for story CGs; small props and costume details need naming in each scene prompt ("no rain"; the censer on Maren's crook; a smooth pauldron), and per-scene fixes take one edit each.
 
 ---
 
