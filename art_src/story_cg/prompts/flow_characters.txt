@@ -1,0 +1,30 @@
+Flow character setup (one character per entry; images from image_pipeline/flow/characters/<name>/).
+Use exactly these names, so the CG prompts can call them by name.
+
+Kaelen
+  Images: kaelen_full_body_kaelen.png, kaelen_full_body_kaelen_front.png, kaelen_heroes_kaelen.png
+  Description: young male militia deserter, 21; shoulder-length golden-blonde hair; scarred steel breastplate over a
+  cream quilted gambeson; spiked brown leather bracers; olive trousers, dark brown boots; carries a halberd with a dark
+  wooden shaft and a crescent axe blade. Calm, stoic face.
+
+Vesper
+  Images: vesper_full_body_vesper.png, vesper_heroes_vesper.png
+  Description: young woman, 18, rooftop runner and thief; long straight black hair; chimney soot smeared across her
+  cheeks; shredded charcoal cowl and cloak; dark slate-scale leather jerkin; twin matte-black daggers held reversed;
+  black mist drifting from her fingertips. Wry, watchful.
+
+Maren
+  Images: maren_full_body_maren.png, maren_heroes_maren.png
+  Description: young woman, 23, runaway scribe and field medic; long wavy red hair; round wire spectacles; dark torn
+  scribe's habit with a brown leather apron and belts of vials; a bronze censer on a crook staff, an embalmer's
+  bone-saw. Serious, sharp.
+
+Hollis
+  Images: hollis_heroes_hollis.png (portrait only: identity may hold less well in wide shots)
+  Description: young man, 20, hunter; short dark messy hair, stubble; a scar over his left eye, which glows red; stiff
+  hunting brigandine with a heavy horn pauldron on the right shoulder; a large steel crossbow (arbalest) and a quiver
+  of bone bolts. Tired, guarded.
+
+Sister Aline
+  Images: aline_full_body_aline.png
+  Description: hub apothecary; pale woman with short black hair; dark habit under a long rust-brown leather apron.

@@ -171,6 +171,13 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   - Slash re-run set up (Tushar chose 720p, about 9 credits): `--export-video-start-tall DIR --action slash` writes `kaelen_video_start_slash_720tall.png` (1280 by 720, the key at 1x, boots at y 690, about 365 px of headroom); prompt `video_kaelen_slash_720tall.txt` adds "no slash trails, no swoosh arcs, no afterimages or speed lines" and "the whole halberd stays inside the frame". `--video-action ... --tall` reads such a clip at native size (no halving, so the sprite stays 1x), and the crop now grows upward as well as sideways; the sheet's JSON carries `box_x`, `box_y` and the ground row. The ingest reports how many frames touch the video's top edge (the 360p slash: 8). Checked on a synthetic tall clip; the 360p poke cut is unchanged.
 - **Watch for**: the camera or the figure drifting (the drift numbers), the background leaving flat magenta, identity or halberd drift over 8 s, and soft non-pixel frames (the palette snap restores the pixel look, not the shapes).
 
+### 3.7 Experiment 7: Story CGs from Google Flow character references (in setup, 2026-11-10)
+
+- **Question (Tushar)**: Flow has a character setup (register a character from reference images, then compose images that name it); can it make cutscene CGs with the cast kept on-model?
+- **Kit on Drive** `image_pipeline/flow/`: `README.txt`; `characters/<name>/` holds the game's art at 3x nearest on light grey (Kaelen: full body, front, portrait; Vesper, Maren: full body, portrait; Hollis: portrait only; Sister Aline: full body); `cg_prompts/` holds `flow_characters.txt` (the exact Flow names, the images per character, descriptions) and three test CGs, also in `art_src/story_cg/prompts/`. The descriptions follow the approved art where it differs from the dossiers (`lore/narrative/prologue_and_starter_squad_lore.md`): Kaelen has no kettle helm and carries the halberd; Maren wears round spectacles in her portrait.
+- **Tests (prologue beats, rising difficulty)**: `cg_test1_vesper_rooftop` (one character, 0b), `cg_test2_bridge_padlock` (Kaelen and Vesper in action, 0c), `cg_test3_escape_grate` (all four founders, 0c escape). Each names its characters on the first line and ends with the house story-scene style block (`ART_PROMPT_TEMPLATES.md` "Story scene": 16:9 pixel-art story illustration, no text or UI).
+- **Checks**: identity per character (hair, face, outfit, weapon), mixing between characters, pixel-art match with the game's art, layout followed. Hollis is the weak case (portrait only, no full body).
+
 ---
 
 ## 4. Screen-by-Screen UI Decisions Summary (`emberwake_screen_flow.html`)

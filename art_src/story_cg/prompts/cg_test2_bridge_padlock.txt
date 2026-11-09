@@ -1,0 +1,5 @@
+Characters: Kaelen, Vesper.
+
+Night at the crown of a narrow stone bridge over a sewer canal: Kaelen brings his halberd down on the iron padlock of a heavy iron-barred mortuary cart, sparks flying from the lock. Behind him Vesper, crouched on the bridge parapet, has just thrown a clay ash flask: a grey cloud bursts over a masked crossbowman on the far side of the bridge. Chained hands reach through the cart's bars. Wet cobblestones, a cold searchlight beam in the mist, dark water below.
+
+Style: pixel art story illustration for a dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, a 16:9 wide image. Clear dark outlines, hand-placed pixel clusters, limited palette, light dithering. Characters exactly as their character references (faces, hair, outfits, weapons). No text, no UI, no border, no logo.
