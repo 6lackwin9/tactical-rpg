@@ -419,33 +419,46 @@ function getVtuberRigImages(rigKey) {
 // ============================================================================
 const ATLAS_ANATOMY_CONFIG = {
   kaelen: {
-    head: [158, 52], neck: [158, 90], chest: [157, 136], pelvis: [156, 178],
-    shoulderL: [114, 108], elbowL: [108, 152], handL: [118, 198],
-    shoulderR: [182, 108], elbowR: [190, 152], handR: [198, 194],
-    hipL: [134, 184], kneeL: [132, 244], ankleL: [128, 294], toeL: [124, 324],
-    hipR: [172, 184], kneeR: [178, 244], ankleR: [180, 294], toeR: [198, 324],
-    weaponPivot: [198, 180]
+    head: [160, 52], neck: [160, 90], chest: [159, 136], pelvis: [158, 178],
+    shoulderL: [120, 106], elbowL: [110, 148], handL: [121, 198],
+    shoulderR: [182, 106], elbowR: [192, 148], handR: [202, 198],
+    hipL: [142, 184], kneeL: [134, 244], ankleL: [126, 294], toeL: [120, 324],
+    mirrorHipL: [142, 184], mirrorKneeL: [134, 244], mirrorAnkleL: [132, 294],
+    hipR: [168, 184], kneeR: [176, 244], ankleR: [178, 294], toeR: [196, 324],
+    weaponPivot: [202, 198]
   }
 };
 
 const ATLAS_POSE_TARGETS = {
   relaxed: {
-    pelvisDx: 0, pelvisDy: 0, torsoAngle: 0, headAngle: 0,
-    armL_upperAngle: 4, armL_lowerAngle: -10,
-    armR_upperAngle: -24, armR_lowerAngle: -42, weaponWorldAngle: 8, weapSlide: 0,
-    footLDx: 0, footRDx: 0
+    pelvisDx: 4, pelvisDy: 0, torsoAngle: 0, headAngle: 0,
+    armL_upperAngle: 2, armL_lowerAngle: -6,
+    armR_upperAngle: -8, armR_lowerAngle: -66,
+    weaponWorldAngle: 9, weapSlide: 44,
+    footLDx: 0, footRDx: 6,
+    kneeBendL: -1, kneeBendR: 2,
+    bootLAngle: 0, bootRAngle: 0,
+    mirrorLegL: 0
   },
   sneaking: {
-    pelvisDx: -6, pelvisDy: 32, torsoAngle: 18, headAngle: -14,
-    armL_upperAngle: -22, armL_lowerAngle: -45,
-    armR_upperAngle: -34, armR_lowerAngle: -38, weaponWorldAngle: 90, weapSlide: 38,
-    footLDx: -24, footRDx: 10
+    pelvisDx: 8, pelvisDy: 14, torsoAngle: 14, headAngle: -12,
+    armL_upperAngle: 10, armL_lowerAngle: -32,
+    armR_upperAngle: -2, armR_lowerAngle: -34,
+    weaponWorldAngle: 90, weapSlide: 72,
+    footLDx: -26, footRDx: 14,
+    kneeBendL: 2, kneeBendR: 11,
+    bootLAngle: 12, bootRAngle: 0,
+    mirrorLegL: 0
   },
   weapons_drawn: {
-    pelvisDx: -6, pelvisDy: 22, torsoAngle: 12, headAngle: -10,
-    armL_upperAngle: -28, armL_lowerAngle: -58,
-    armR_upperAngle: -48, armR_lowerAngle: -52, weaponWorldAngle: 58, weapSlide: 34,
-    footLDx: -24, footRDx: 12
+    pelvisDx: 8, pelvisDy: 16, torsoAngle: 8, headAngle: -7,
+    armL_upperAngle: 8, armL_lowerAngle: -42,
+    armR_upperAngle: -4, armR_lowerAngle: -102,
+    weaponWorldAngle: 57, weapSlide: 78,
+    footLDx: -24, footRDx: 34,
+    kneeBendL: -12, kneeBendR: 12,
+    bootLAngle: 0, bootRAngle: 0,
+    mirrorLegL: 1
   }
 };
 
@@ -458,7 +471,7 @@ function extractAtlasPartsForCharacter(atlasImg) {
   if (!srcCtx) return null;
   srcCtx.drawImage(atlasImg, 0, 0, W_A, H_A);
 
-  // Split torso box (2..109, 90..270) into back `cloak` vs front `torso` (breastplate + belt + quilted tunic skirt)
+  // Split torso box (2..109, 90..270) into upper shoulder `cloak` vs front `torso` (breastplate + belt + quilted tunic skirt)
   const tx0 = 2, ty0 = 90, tw = 107, th = 180;
   let torsoData;
   try {
@@ -482,10 +495,11 @@ function extractAtlasPartsForCharacter(atlasImg) {
       if (sPx[idx + 3] === 0) continue;
       const r = sPx[idx], g = sPx[idx + 1], b = sPx[idx + 2];
       const isCloak = (y > 119) || (x < 24 && y > 19) || (g > r + 6 && g > b + 12 && y > 25);
-      if (isCloak) {
+      // Keep only the upper shoulder/back mantle (y <= 110) so the leg silhouette matches the 3-pose sheet cleanly
+      if (isCloak && y <= 110) {
         cPx[idx] = r; cPx[idx + 1] = g; cPx[idx + 2] = b; cPx[idx + 3] = sPx[idx + 3];
       }
-      if (!(isCloak && y > 116)) {
+      if (!(isCloak && y > 115)) {
         tPx[idx] = r; tPx[idx + 1] = g; tPx[idx + 2] = b; tPx[idx + 3] = sPx[idx + 3];
       }
     }
@@ -493,32 +507,44 @@ function extractAtlasPartsForCharacter(atlasImg) {
   cloakCtx.putImageData(cloakId, 0, 0);
   torsoCtx.putImageData(torsoId, 0, 0);
 
-  function makePlacedPart(srcSource, sx, sy, sw, sh, dstX, dstY, scale) {
+  function makePlacedPart(srcSource, sx, sy, sw, sh, dstX, dstY, scale, flipX = false) {
     const cv = document.createElement('canvas');
     cv.width = 340; cv.height = 340;
     const c = cv.getContext('2d');
     c.imageSmoothingEnabled = true;
     const dw = Math.round(sw * scale);
     const dh = Math.round(sh * scale);
-    c.drawImage(srcSource, sx, sy, sw, sh, dstX, dstY, dw, dh);
+    if (flipX) {
+      c.save();
+      c.translate(dstX + dw, dstY);
+      c.scale(-1, 1);
+      c.drawImage(srcSource, sx, sy, sw, sh, 0, 0, dw, dh);
+      c.restore();
+    } else {
+      c.drawImage(srcSource, sx, sy, sw, sh, dstX, dstY, dw, dh);
+    }
     return cv;
   }
 
   return {
-    head:       makePlacedPart(srcCv,   27,   5,  70,  73, 122,  26, 0.94),
-    cloak:      makePlacedPart(cloakCv,  0,   0,  tw,  th,  96,  82, 0.95),
-    torso:      makePlacedPart(torsoCv,  0,   0,  tw,  th,  96,  82, 0.95),
-    armL_upper: makePlacedPart(srcCv,  130,  11,  47,  71,  92,  92, 0.90),
-    armL_lower: makePlacedPart(srcCv,  134, 152,  45,  87,  90, 138, 0.88),
-    armR_upper: makePlacedPart(srcCv,  193,  11,  49,  74, 160,  92, 0.90),
-    armR_lower: makePlacedPart(srcCv,  201, 152,  42,  88, 172, 138, 0.88),
-    legL_thigh: makePlacedPart(srcCv,  278,  10,  48, 106, 110, 168, 0.86),
-    legL_shin:  makePlacedPart(srcCv,  270, 128,  45,  78, 108, 230, 0.86),
-    legL_boot:  makePlacedPart(srcCv,  273, 215,  31,  61, 112, 276, 0.88),
-    legR_thigh: makePlacedPart(srcCv,  346,  10,  49, 103, 148, 168, 0.86),
-    legR_shin:  makePlacedPart(srcCv,  359, 123,  36,  81, 160, 230, 0.86),
-    legR_boot:  makePlacedPart(srcCv,  362, 216,  48,  54, 162, 278, 0.88),
-    weapon:     makePlacedPart(srcCv,  435,   3,  38, 273, 180,  22, 1.04)
+    head:              makePlacedPart(srcCv,   27,   5,  70,  73, 124,  26, 0.94),
+    cloak:             makePlacedPart(cloakCv,  0,   0,  tw,  th,  98,  82, 0.95),
+    torso:             makePlacedPart(torsoCv,  0,   0,  tw,  th,  98,  82, 0.95),
+    armL_upper:        makePlacedPart(srcCv,  130,  11,  47,  71,  95,  92, 0.90),
+    armL_lower:        makePlacedPart(srcCv,  134, 152,  45,  87,  95, 136, 0.88),
+    armR_upper:        makePlacedPart(srcCv,  130,  11,  47,  71, 165,  92, 0.90, true),
+    armR_lower:        makePlacedPart(srcCv,  201, 152,  42,  88, 178, 136, 0.88),
+    legL_thigh:        makePlacedPart(srcCv,  278,  10,  48, 106, 120, 168, 0.86),
+    legL_shin:         makePlacedPart(srcCv,  270, 128,  45,  78, 111, 226, 0.86),
+    legL_boot:         makePlacedPart(srcCv,  273, 215,  31,  61, 113, 276, 0.88),
+    // Mirrored left-leg parts (100% horizontal mirror of legR across x=155 for wide spread combat stance in weapons_drawn)
+    legL_mirror_thigh: makePlacedPart(srcCv,  346,  10,  49, 103, 120, 168, 0.86, true),
+    legL_mirror_shin:  makePlacedPart(srcCv,  359, 123,  36,  81, 118, 226, 0.86, true),
+    legL_mirror_boot:  makePlacedPart(srcCv,  362, 216,  48,  54, 103, 278, 0.88, true),
+    legR_thigh:        makePlacedPart(srcCv,  346,  10,  49, 103, 148, 168, 0.86),
+    legR_shin:         makePlacedPart(srcCv,  359, 123,  36,  81, 161, 226, 0.86),
+    legR_boot:         makePlacedPart(srcCv,  362, 216,  48,  54, 165, 278, 0.88),
+    weapon:            makePlacedPart(srcCv,  435,   3,  38, 273, 180,  20, 1.04)
   };
 }
 
@@ -775,6 +801,19 @@ function drawBonePartAtoB(ctx, partCv, restA, restB, animA, animB) {
   drawArticulatedPart(ctx, partCv, restA, animA, deltaRad);
 }
 
+function computeAtlasKneeWithBend(hip, ankle, kneeBendPx) {
+  const dx = ankle[0] - hip[0];
+  const dy = ankle[1] - hip[1];
+  const dist = Math.max(1.0, Math.hypot(dx, dy));
+  const mx = hip[0] + dx * 0.54;
+  const my = hip[1] + dy * 0.54;
+  // Normal pointing to the RIGHT of the downward hip->ankle vector: (dy/dist, -dx/dist)
+  // Positive kneeBendPx bends knee to the right; negative kneeBendPx bends knee outward to the left!
+  const nx = dy / dist;
+  const ny = -dx / dist;
+  return [mx + nx * kneeBendPx, my + ny * kneeBendPx];
+}
+
 // ============================================================================
 // RENDERER FOR APPROACH B: EXPLODED 13-PART SPINE2D ATLAS (`drawAtlasRigOnCanvas`)
 // ============================================================================
@@ -797,11 +836,11 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   const pPrev = ATLAS_POSE_TARGETS[s.prevPose] || pTgt;
   const blend = Math.min(1.0, Math.max(0.0, 1.0 - Math.pow(1.0 - (s.poseTransitionT ?? 1.0), 3)));
   function lerpP(key) {
-    return pPrev[key] + (pTgt[key] - pPrev[key]) * blend;
+    return (pPrev[key] ?? 0) + ((pTgt[key] ?? 0) - (pPrev[key] ?? 0)) * blend;
   }
 
   const pelvisDx = lerpP('pelvisDx');
-  const pelvisDy = lerpP('pelvisDy') + Math.max(0, (s.crouchDrop - tgt.crouchDrop) * 0.35);
+  const pelvisDy = lerpP('pelvisDy') + Math.max(0, (s.crouchDrop - tgt.crouchDrop) * 0.25);
   const torsoDeg = lerpP('torsoAngle') + breath * 1.1;
   const headDeg  = lerpP('headAngle') + talkBob * 1.3;
   const torsoRad = (torsoDeg * Math.PI) / 180;
@@ -831,25 +870,26 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   const animElbowR = rotatePtAround(elR_b, animShoulderR, (lerpP('armR_upperAngle') * Math.PI) / 180);
   const animHandR  = rotatePtAround([animElbowR[0] + (cfg.handR[0] - cfg.elbowR[0]), animElbowR[1] + (cfg.handR[1] - cfg.elbowR[1])], animElbowR, aRL_rad);
 
-  const wp_b = rotatePtAround([cfg.weaponPivot[0] + pelvisDx, cfg.weaponPivot[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, torsoRad);
-  const wp_e = rotatePtAround(wp_b, animShoulderR, (lerpP('armR_upperAngle') * Math.PI) / 180);
-  const wp   = rotatePtAround(wp_e, animElbowR, (lerpP('armR_lowerAngle') * Math.PI) / 180);
+  // Lock weapon grip pivot directly to the animated right hand (`animHandR`) so the shaft never separates from the glove
+  const wp = animHandR;
 
-  const animHipL = rotatePtAround([cfg.hipL[0] + pelvisDx, cfg.hipL[1] + pelvisDy], animPelvis, torsoRad * 0.35);
+  const useMirroredLeftLeg = lerpP('mirrorLegL') >= 0.5;
+  const restHipL   = useMirroredLeftLeg ? cfg.mirrorHipL   : cfg.hipL;
+  const restKneeL  = useMirroredLeftLeg ? cfg.mirrorKneeL  : cfg.kneeL;
+  const restAnkleL = useMirroredLeftLeg ? cfg.mirrorAnkleL : cfg.ankleL;
+
+  const animHipL = rotatePtAround([restHipL[0] + pelvisDx, restHipL[1] + pelvisDy], animPelvis, torsoRad * 0.35);
   const animHipR = rotatePtAround([cfg.hipR[0] + pelvisDx, cfg.hipR[1] + pelvisDy], animPelvis, torsoRad * 0.35);
-  const animAnkleL = [cfg.ankleL[0] + lerpP('footLDx'), cfg.ankleL[1]];
+  const animAnkleL = [restAnkleL[0] + lerpP('footLDx'), restAnkleL[1]];
   const animAnkleR = [cfg.ankleR[0] + lerpP('footRDx'), cfg.ankleR[1]];
   const animToeL   = [cfg.toeL[0]   + lerpP('footLDx'), cfg.toeL[1]];
   const animToeR   = [cfg.toeR[0]   + lerpP('footRDx'), cfg.toeR[1]];
 
-  const L1_L = Math.hypot(cfg.kneeL[0] - cfg.hipL[0], cfg.kneeL[1] - cfg.hipL[1]);
-  const L2_L = Math.hypot(cfg.ankleL[0] - cfg.kneeL[0], cfg.ankleL[1] - cfg.kneeL[1]);
-  const L1_R = Math.hypot(cfg.kneeR[0] - cfg.hipR[0], cfg.kneeR[1] - cfg.hipR[1]);
-  const L2_R = Math.hypot(cfg.ankleR[0] - cfg.kneeR[0], cfg.ankleR[1] - cfg.kneeR[1]);
-
-  // Note: solveTwoBoneIK uses `baseAngle - bendSign * alpha`; passing +1 bends knees forward-right!
-  const animKneeL = solveTwoBoneIK(animHipL, animAnkleL, L1_L, L2_L, 1);
-  const animKneeR = solveTwoBoneIK(animHipR, animAnkleR, L1_R, L2_R, 1);
+  // Signed perpendicular knee bend:
+  // - In `sneaking`: minimal bend on trailing leg (`kneeBendL: +2`), gentle bend on leading leg (`kneeBendR: +11`)
+  // - In `weapons_drawn`: left leg is mirrored and bends outward-left (`kneeBendL: -12`), right leg bends outward-right (`kneeBendR: +12`)
+  const animKneeL = computeAtlasKneeWithBend(animHipL, animAnkleL, lerpP('kneeBendL'));
+  const animKneeR = computeAtlasKneeWithBend(animHipR, animAnkleR, lerpP('kneeBendR'));
 
   const weapDeg = lerpP('weaponWorldAngle') + breath * 0.9;
   const weapRad = (weapDeg * Math.PI) / 180;
@@ -864,9 +904,9 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   }
 
   // Painter's order for 13-part Spine2D Atlas:
-  // 1. Back Cloak (`cloak`)
+  // 1. Back Shoulder Mantle (`cloak`)
   // 2. Far Upper Arm (`armR_upper`)
-  // 3. Left & Right Legs (`thigh -> shin -> boot`)
+  // 3. Left & Right Legs (`thigh -> shin -> boot`, using mirrored left leg in wide combat stance)
   // 4. Unoccluded Torso & Tunic Skirt (`torso`)
   // 5. Head (`head`)
   // 6. Near Upper Arm (`armL_upper`) covering left breastplate armhole
@@ -875,13 +915,17 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   drawArticulatedPart(ctx, parts.cloak, cfg.pelvis, animPelvis, torsoRad * 0.55);
   drawArticulatedPart(ctx, parts.armR_upper, cfg.shoulderR, animShoulderR, aRU_rad);
 
-  drawBonePartAtoB(ctx, parts.legL_thigh, cfg.hipL,  cfg.kneeL,  animHipL,  animKneeL);
-  drawBonePartAtoB(ctx, parts.legL_shin,  cfg.kneeL, cfg.ankleL, animKneeL, animAnkleL);
-  drawArticulatedPart(ctx, parts.legL_boot, cfg.ankleL, animAnkleL, 0);
+  const thighLPart = useMirroredLeftLeg ? parts.legL_mirror_thigh : parts.legL_thigh;
+  const shinLPart  = useMirroredLeftLeg ? parts.legL_mirror_shin  : parts.legL_shin;
+  const bootLPart  = useMirroredLeftLeg ? parts.legL_mirror_boot  : parts.legL_boot;
+
+  drawBonePartAtoB(ctx, thighLPart, restHipL,  restKneeL,  animHipL,  animKneeL);
+  drawBonePartAtoB(ctx, shinLPart,  restKneeL, restAnkleL, animKneeL, animAnkleL);
+  drawArticulatedPart(ctx, bootLPart, restAnkleL, animAnkleL, (lerpP('bootLAngle') * Math.PI) / 180);
 
   drawBonePartAtoB(ctx, parts.legR_thigh, cfg.hipR,  cfg.kneeR,  animHipR,  animKneeR);
   drawBonePartAtoB(ctx, parts.legR_shin,  cfg.kneeR, cfg.ankleR, animKneeR, animAnkleR);
-  drawArticulatedPart(ctx, parts.legR_boot, cfg.ankleR, animAnkleR, 0);
+  drawArticulatedPart(ctx, parts.legR_boot, cfg.ankleR, animAnkleR, (lerpP('bootRAngle') * Math.PI) / 180);
 
   const chestScaleX = 1.0 + Math.max(0, breath) * 0.018;
   const chestScaleY = 1.0 + Math.max(0, breath) * 0.012;
