@@ -537,6 +537,8 @@ function extractAtlasPartsForCharacter(atlasImg) {
     legL_thigh:        makePlacedPart(srcCv,  278,  10,  48, 106, 120, 168, 0.86),
     legL_shin:         makePlacedPart(srcCv,  270, 128,  45,  78, 111, 226, 0.86),
     legL_boot:         makePlacedPart(srcCv,  273, 215,  31,  61, 113, 276, 0.88),
+    // Forward-pointing left boot for walking in Relaxed/Sneaking (uses right boot profile aligned to left ankle so left foot points in walk direction!)
+    legL_walk_boot:    makePlacedPart(srcCv,  362, 216,  48,  54, 113, 278, 0.88, false),
     // Mirrored left-leg parts (100% horizontal mirror of legR across x=155 for wide spread combat stance in weapons_drawn)
     legL_mirror_thigh: makePlacedPart(srcCv,  346,  10,  49, 103, 120, 168, 0.86, true),
     legL_mirror_shin:  makePlacedPart(srcCv,  359, 123,  36,  81, 118, 226, 0.86, true),
@@ -645,10 +647,13 @@ function splitPoseSpriteUpperLower(img, poseName) {
   torsoCtx.drawImage(img, 0, 0, W, hipY + 8, 0, 0, W, hipY + 8);
   torsoCtx.clearRect(hx0, hy0, hx1 - hx0, (neckY - 3) - hy0);
 
-  // Keep any weapon shaft/tip pixels that dip below hipY on `torsoOnly` (and clear from `lower`) so the polearm stays 100% rigid!
+  // Keep any weapon shaft/tip/ferrule pixels that dip below hipY on `torsoOnly` (and clear from `lower`) so the polearm stays 100% rigid!
   if (poseName === 'relaxed') {
-    torsoCtx.drawImage(img, 194, hipY, W - 194, 314 - hipY, 194, hipY, W - 194, 314 - hipY);
-    loCtx.clearRect(194, hipY - 6, W - 194, 314 - (hipY - 6));
+    for (let y = hipY - 6; y <= 315; y++) {
+      const cutX = y <= 308 ? 191 : 193;
+      if (y >= hipY) torsoCtx.drawImage(img, cutX, y, W - cutX, 1, cutX, y, W - cutX, 1);
+      loCtx.clearRect(cutX, y, W - cutX, 1);
+    }
   } else if (poseName === 'sneaking') {
     torsoCtx.drawImage(img, 214, hipY, W - 214, 216 - hipY, 214, hipY, W - 214, 216 - hipY);
     loCtx.clearRect(214, hipY - 6, W - 214, 216 - (hipY - 6));
@@ -666,6 +671,38 @@ function splitPoseSpriteUpperLower(img, poseName) {
         : 167);
     legLCtx.drawImage(loCv, 0, y, sx, 1, 0, y, sx, 1);
     legRCtx.drawImage(loCv, sx, y, W - sx, 1, sx, y, W - sx, 1);
+  }
+
+  // For `relaxed` and `sneaking` (keeping `weapons_drawn` as-is for strafing):
+  // Replace the front-facing left boot on `legLCv` (used only while walking) with a forward-facing copy of `legRCv`'s boot
+  // aligned seamlessly to the left ankle/cuff so both feet face the direction of the walk!
+  if (poseName === 'relaxed' || poseName === 'sneaking') {
+    const bootStartY = poseName === 'relaxed' ? 274 : 288;
+    legLCtx.clearRect(0, bootStartY, W, H - bootStartY);
+    for (let y = bootStartY; y < H; y++) {
+      const sx = poseName === 'relaxed'
+        ? Math.round(154 - Math.max(0, y - 218) * 0.08)
+        : Math.round(170 - Math.max(0, y - 230) * 0.20);
+      let shiftX = -54;
+      if (poseName === 'sneaking') {
+        const t = Math.min(1.0, Math.max(0.0, (y - 288) / 14.0));
+        shiftX = Math.round(-86 * (1.0 - t) + (-95) * t);
+      }
+      legLCtx.drawImage(legRCv, sx, y, W - sx, 1, sx + shiftX, y, W - sx, 1);
+    }
+    // Subtle 0.92x depth shading on the replaced back boot so it sits naturally behind the front leg
+    if (typeof legLCtx.getImageData === 'function') {
+      const bootImgData = legLCtx.getImageData(0, bootStartY, W, H - bootStartY);
+      const bPx = bootImgData.data;
+      for (let i = 0; i < bPx.length; i += 4) {
+        if (bPx[i + 3] > 0) {
+          bPx[i]     = Math.round(bPx[i]     * 0.92);
+          bPx[i + 1] = Math.round(bPx[i + 1] * 0.92);
+          bPx[i + 2] = Math.round(bPx[i + 2] * 0.92);
+        }
+      }
+      legLCtx.putImageData(bootImgData, 0, bootStartY);
+    }
   }
 
   // 4. Independent Head + Straw-Blond Hair (with 5px collar overlap down to neckY + 5)
@@ -927,7 +964,7 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
     return (pPrev[key] ?? 0) + ((pTgt[key] ?? 0) - (pPrev[key] ?? 0)) * blend;
   }
 
-  const isWalking = (typeof STATE !== 'undefined' && STATE.storyWalkMode && STATE.storyWalkMode !== 'off') && (side === 'left' || STATE.storyWalkMode === 'scroll_bg');
+  const isWalking = typeof isStorySlotActivelyWalking === 'function' ? isStorySlotActivelyWalking(side) : false;
   const walkFreq = s.pose === 'sneaking' ? 4.4 : 5.5;
   const phiL = tSec * walkFreq + phaseOffset;
   const phiR = phiL + Math.PI;
@@ -968,7 +1005,8 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   // Lock weapon grip pivot directly to the animated right hand (`animHandR`) so the shaft never separates from the glove
   const wp = animHandR;
 
-  const useMirroredLeftLeg = !isWalking && (lerpP('mirrorLegL') >= 0.5);
+  // Keep `weapons_drawn` mirrored left leg as-is (strafing stance) even when walking
+  const useMirroredLeftLeg = lerpP('mirrorLegL') >= 0.5;
   const restHipL   = useMirroredLeftLeg ? cfg.mirrorHipL   : cfg.hipL;
   const restKneeL  = useMirroredLeftLeg ? cfg.mirrorKneeL  : cfg.kneeL;
   const restAnkleL = useMirroredLeftLeg ? cfg.mirrorAnkleL : cfg.ankleL;
@@ -988,7 +1026,7 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   const animToeR   = [cfg.toeR[0]   + lerpP('footRDx') * (isWalking ? 0.35 : 1.0) + walkDxR, cfg.toeR[1]   + walkLiftR];
 
   // Signed perpendicular knee bend (with dynamic forward knee bend during walking leg lift!)
-  const walkKneeBendL = isWalking ? (4.0 + Math.max(0, Math.cos(phiL)) * 12.0) : lerpP('kneeBendL');
+  const walkKneeBendL = isWalking ? (useMirroredLeftLeg ? (-8.0 - Math.max(0, Math.cos(phiL)) * 8.0) : (4.0 + Math.max(0, Math.cos(phiL)) * 12.0)) : lerpP('kneeBendL');
   const walkKneeBendR = isWalking ? (5.0 + Math.max(0, Math.cos(phiR)) * 12.0) : lerpP('kneeBendR');
   const animKneeL = computeAtlasKneeWithBend(animHipL, animAnkleL, walkKneeBendL);
   const animKneeR = computeAtlasKneeWithBend(animHipR, animAnkleR, walkKneeBendR);
@@ -1008,7 +1046,7 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   // Painter's order for 13-part Spine2D Atlas:
   // 1. Back Shoulder Mantle (`cloak`)
   // 2. Far Upper Arm (`armR_upper`)
-  // 3. Left & Right Legs (`thigh -> shin -> boot`, using mirrored left leg in wide combat stance)
+  // 3. Left & Right Legs (`thigh -> shin -> boot`, using forward-facing boot in relaxed/sneaking walk and mirrored left leg in weapons_drawn)
   // 4. Unoccluded Torso & Tunic Skirt (`torso`)
   // 5. Head (`head`)
   // 6. Near Upper Arm (`armL_upper`) covering left breastplate armhole
@@ -1019,7 +1057,7 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
 
   const thighLPart = useMirroredLeftLeg ? parts.legL_mirror_thigh : parts.legL_thigh;
   const shinLPart  = useMirroredLeftLeg ? parts.legL_mirror_shin  : parts.legL_shin;
-  const bootLPart  = useMirroredLeftLeg ? parts.legL_mirror_boot  : parts.legL_boot;
+  const bootLPart  = useMirroredLeftLeg ? parts.legL_mirror_boot  : (isWalking && parts.legL_walk_boot ? parts.legL_walk_boot : parts.legL_boot);
 
   const bootLPitch = isWalking ? (Math.sin(phiL) * 10 - Math.max(0, Math.cos(phiL)) * 12) : lerpP('bootLAngle');
   const bootRPitch = isWalking ? (Math.sin(phiR) * 10 - Math.max(0, Math.cos(phiR)) * 12) : lerpP('bootRAngle');
@@ -1091,7 +1129,7 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
   const shouldFlip = side === 'right';
   const phaseOffset = side === 'left' ? 0.0 : 1.7;
   const boost = (typeof STATE !== 'undefined' && STATE.storyDeformerBoost) ? STATE.storyDeformerBoost : 1.0;
-  const isWalking = (typeof STATE !== 'undefined' && STATE.storyWalkMode && STATE.storyWalkMode !== 'off') && (side === 'left' || STATE.storyWalkMode === 'scroll_bg');
+  const isWalking = typeof isStorySlotActivelyWalking === 'function' ? isStorySlotActivelyWalking(side) : false;
   const walkScale = Math.min(1.65, 0.82 + boost * 0.22);
 
   // Walking / Sneak-Walking gait phase (Left Leg `phiL`, Right Leg `phiR` 180° opposite)
@@ -1519,7 +1557,7 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
   const breath = Math.sin(tSec * tgt.breathFreq + phaseOffset);
   const talkBob = isActive ? Math.sin(tSec * 6.5) * 0.9 : 0;
 
-  const isWalking = (typeof STATE !== 'undefined' && STATE.storyWalkMode && STATE.storyWalkMode !== 'off') && (side === 'left' || STATE.storyWalkMode === 'scroll_bg');
+  const isWalking = typeof isStorySlotActivelyWalking === 'function' ? isStorySlotActivelyWalking(side) : false;
   const walkFreq = s.pose === 'sneaking' ? 4.4 : 5.5;
   const phiL = tSec * walkFreq + phaseOffset;
   const phiR = phiL + Math.PI;
@@ -1798,10 +1836,20 @@ let _vtuberRafId = null;
 let _vtuberLastTs = 0;
 let _storyBgScrollPx = 0;
 let _storyCameraPanProgress = 0;
+let _storyHeroIsStepping = false;
+
+// Returns true ONLY for the moving Hero (`side === 'left'`) when actively walking.
+// The Encounter / Gate-Guard NPC (`side === 'right'`) starts outside the right frame and remains 100% static relative to the background!
+function isStorySlotActivelyWalking(side) {
+  if (typeof STATE === 'undefined' || !STATE.storyWalkMode || STATE.storyWalkMode === 'off') return false;
+  if (side !== 'left') return false;
+  return _storyHeroIsStepping;
+}
 
 function resetStoryCameraPan() {
   _storyCameraPanProgress = 0;
   _storyBgScrollPx = 0;
+  _storyHeroIsStepping = true;
 }
 
 function startVtuberRigLoop() {
@@ -1818,44 +1866,111 @@ function startVtuberRigLoop() {
     const tSec = now / 1000;
 
     // 1. Update 60fps Stage Walk Motion (`scroll_bg` Treadmill vs `pan_camera` Follow Hero)
+    // Both modes:
+    //  - Hero (`#vn-left-actor-wrap`) enters from off-screen LEFT (`-460px`) and leaves off-screen RIGHT (`+1180px`).
+    //  - Encounter NPC / Gate Guard (`#vn-right-actor-wrap`) starts OUTSIDE the right frame (`+540..580px`) and moves 1:1 with `bgOffsetX`
+    //    (`npcScreenX = npcWorldX + bgOffsetX`), staying 100% static relative to the background cobblestones!
     const walkMode = STATE.storyWalkMode || 'off';
     const isSneak = STATE.storyRigPose === 'sneaking';
-    const bgStripEl   = document.getElementById('vn-bg-strip');
+    const bgStripEl    = document.getElementById('vn-bg-strip');
     const fgParallaxEl = document.getElementById('vn-fg-parallax');
-    const leftWrapEl  = document.getElementById('vn-left-actor-wrap');
-    const rightWrapEl = document.getElementById('vn-right-actor-wrap');
-    const telemEl     = document.getElementById('vn-walk-telemetry');
+    const leftWrapEl   = document.getElementById('vn-left-actor-wrap');
+    const rightWrapEl  = document.getElementById('vn-right-actor-wrap');
+    const telemEl      = document.getElementById('vn-walk-telemetry');
 
     if (walkMode === 'scroll_bg') {
-      // Mode 1: Hero stays in place; seamless 3-tile background & 1.48x foreground mist/cobblestones scroll past
-      const speedPxPerSec = isSneak ? 64 : 98;
-      _storyBgScrollPx = (_storyBgScrollPx + speedPxPerSec * dt) % 2560;
-      const fgScrollPx = (_storyBgScrollPx * 1.48) % 2560;
-      if (bgStripEl)    bgStripEl.style.transform    = `translate3d(${-_storyBgScrollPx.toFixed(1)}px, 0, 0)`;
-      if (fgParallaxEl) fgParallaxEl.style.transform = `translate3d(${-fgScrollPx.toFixed(1)}px, 0, 0)`;
-      if (leftWrapEl)   leftWrapEl.style.transform   = 'translate3d(0px, 0, 0)';
-      if (rightWrapEl)  rightWrapEl.style.transform  = 'translate3d(0px, 0, 0)';
-      if (telemEl)      telemEl.textContent          = `🔄 TREADMILL SCROLL · BG: -${Math.round(_storyBgScrollPx)}px · FG: -${Math.round(fgScrollPx)}px (${speedPxPerSec}px/s)`;
-    } else if (walkMode === 'pan_camera') {
-      // Mode 2: Wide 2160px stage; Kaelen walks across the stage while the camera pans smoothly to follow him
-      const panRate = isSneak ? 0.085 : 0.125;
-      _storyCameraPanProgress = (_storyCameraPanProgress + panRate * dt) % 1.0;
-      // Smooth ease-in-out camera follow curve across the 720px wide-stage pan range
+      // Mode 1 (`🔄 Scroll BG`):
+      //  - Phase A (0.00..0.18): Hero enters from off-screen left (-460px -> 0px); Encounter NPC waits outside right frame (+540px).
+      //  - Phase B (0.18..0.74): Hero walks in place on treadmill (0px) while BG scrolls (-860px); Encounter NPC (static relative to BG at `540 + bgOffsetX`)
+      //    enters from outside the right frame and scrolls past as Kaelen sneaks/walks by!
+      //  - Phase C (0.74..1.00): Hero walks off the treadmill across the stage (0px -> +1180px) to exit off-screen right.
+      const cycleRate = isSneak ? 0.068 : 0.092;
+      _storyCameraPanProgress = (_storyCameraPanProgress + cycleRate * dt) % 1.0;
       const p = _storyCameraPanProgress;
-      const camEase = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-      const camPanX = -camEase * 680;
-      const fgPanX  = camPanX * 1.42;
-      // Hero physically advances across the screen (-90px -> +190px) while camera pans (-680px)
-      const heroScreenX = -90 + p * 280;
-      // Right-side NPC is anchored in world space ahead in the alley and pans into the right slot (+240px -> 0px)
-      const npcScreenX  = (1.0 - camEase) * 240;
+      _storyHeroIsStepping = true;
+
+      let heroScreenX = 0;
+      let bgOffsetX = 0;
+      let phaseTag = 'TREADMILL';
+
+      if (p < 0.18) {
+        const u = p / 0.18;
+        heroScreenX = -460 + u * 460;
+        bgOffsetX = 0;
+        phaseTag = 'ENTER LEFT';
+      } else if (p < 0.74) {
+        const u = (p - 0.18) / (0.74 - 0.18);
+        heroScreenX = 0;
+        bgOffsetX = -u * 860;
+        phaseTag = isSneak ? 'SNEAK PAST GUARD' : 'SCROLL BG';
+      } else {
+        const u = (p - 0.74) / (1.0 - 0.74);
+        heroScreenX = u * 1180;
+        bgOffsetX = -860;
+        phaseTag = 'EXIT RIGHT';
+      }
+
+      _storyBgScrollPx = -bgOffsetX;
+      const fgOffsetX = bgOffsetX * 1.48;
+      // Encounter NPC starts outside right frame (+540px -> screen x=1365px) and is 100% static relative to background (`540 + bgOffsetX`)
+      const npcScreenX = 540 + bgOffsetX;
+
+      if (bgStripEl)    bgStripEl.style.transform    = `translate3d(${bgOffsetX.toFixed(1)}px, 0, 0)`;
+      if (fgParallaxEl) fgParallaxEl.style.transform = `translate3d(${fgOffsetX.toFixed(1)}px, 0, 0)`;
+      if (leftWrapEl)   leftWrapEl.style.transform   = `translate3d(${heroScreenX.toFixed(1)}px, 0, 0)`;
+      if (rightWrapEl)  rightWrapEl.style.transform  = `translate3d(${npcScreenX.toFixed(1)}px, 0, 0)`;
+      if (telemEl)      telemEl.textContent          = `🔄 ${phaseTag} · BG: ${Math.round(bgOffsetX)}px · HeroX: ${heroScreenX >= 0 ? '+' : ''}${Math.round(heroScreenX)}px · NPC(Static-BG): ${npcScreenX >= 0 ? '+' : ''}${Math.round(npcScreenX)}px`;
+    } else if (walkMode === 'pan_camera') {
+      // Mode 2 (`🎥 Pan Camera`):
+      //  - Phase A (0.00..0.18): Hero enters from off-screen left (-460px -> -40px); Camera at 0px; Encounter NPC outside right frame (+580px).
+      //  - Phase B (0.18..0.62): Camera pans (-580px) following Hero (-40px -> +140px); Encounter NPC (static relative to BG at `580 + camPanX`)
+      //    glides in from outside the right frame to 0px.
+      //  - Phase C/D (0.62..1.00): If Sneaking, Hero creeps continuously past the Guard and exits right (+1180px);
+      //    otherwise Hero pauses briefly at the rendezvous (0.62..0.74, planting left foot) before walking out the right frame (0.74..1.00).
+      const panRate = isSneak ? 0.068 : 0.092;
+      _storyCameraPanProgress = (_storyCameraPanProgress + panRate * dt) % 1.0;
+      const p = _storyCameraPanProgress;
+
+      let camPanX = 0;
+      let heroScreenX = 0;
+      let phaseTag = 'CAMERA PAN';
+      _storyHeroIsStepping = true;
+
+      if (p < 0.18) {
+        const u = p / 0.18;
+        camPanX = 0;
+        heroScreenX = -460 + u * 420;
+        phaseTag = 'ENTER LEFT';
+      } else if (p < 0.62) {
+        const u = (p - 0.18) / (0.62 - 0.18);
+        const camEase = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+        camPanX = -camEase * 580;
+        heroScreenX = -40 + u * 180;
+        phaseTag = 'PAN TO ENCOUNTER';
+      } else if (!isSneak && p < 0.74) {
+        camPanX = -580;
+        heroScreenX = 140;
+        _storyHeroIsStepping = false;
+        phaseTag = 'MEETUP PAUSE';
+      } else {
+        const uStart = isSneak ? 0.62 : 0.74;
+        const u = (p - uStart) / (1.0 - uStart);
+        camPanX = -580;
+        heroScreenX = 140 + u * 1040;
+        phaseTag = isSneak ? 'SNEAK PAST & EXIT RIGHT' : 'EXIT RIGHT';
+      }
+
+      const fgPanX = camPanX * 1.42;
+      // Encounter NPC starts outside right frame (+580px -> screen x=1405px) and is 100% static relative to background (`580 + camPanX`)
+      const npcScreenX = 580 + camPanX;
 
       if (bgStripEl)    bgStripEl.style.transform    = `translate3d(${camPanX.toFixed(1)}px, 0, 0)`;
       if (fgParallaxEl) fgParallaxEl.style.transform = `translate3d(${fgPanX.toFixed(1)}px, 0, 0)`;
       if (leftWrapEl)   leftWrapEl.style.transform   = `translate3d(${heroScreenX.toFixed(1)}px, 0, 0)`;
       if (rightWrapEl)  rightWrapEl.style.transform  = `translate3d(${npcScreenX.toFixed(1)}px, 0, 0)`;
-      if (telemEl)      telemEl.textContent          = `🎥 CAMERA FOLLOW · CamPan: ${Math.round(camPanX)}px · HeroX: ${heroScreenX >= 0 ? '+' : ''}${Math.round(heroScreenX)}px (${Math.round(p * 100)}%)`;
+      if (telemEl)      telemEl.textContent          = `🎥 ${phaseTag} · CamPan: ${Math.round(camPanX)}px · HeroX: ${heroScreenX >= 0 ? '+' : ''}${Math.round(heroScreenX)}px · NPC(Static-BG): ${npcScreenX >= 0 ? '+' : ''}${Math.round(npcScreenX)}px`;
     } else {
+      _storyHeroIsStepping = false;
       if (bgStripEl)    bgStripEl.style.transform    = 'translate3d(0px, 0, 0)';
       if (fgParallaxEl) fgParallaxEl.style.transform = 'translate3d(0px, 0, 0)';
       if (leftWrapEl)   leftWrapEl.style.transform   = 'translate3d(0px, 0, 0)';
@@ -2428,19 +2543,13 @@ function renderStoryStage() {
         <!-- APPROACH 1: VN ILLUSTRATED STAGE WITH MULTI-LAYER PARALLAX SCROLL / WIDE CAMERA PAN + STONE FLOOR + FULL-BODY SPRITES -->
         <div style="position:absolute;left:0;top:0;width:1280px;height:560px;overflow:hidden;">
           <div id="vn-bg-strip" style="position:absolute;left:0;top:0;width:3840px;height:560px;display:flex;will-change:transform;filter:${card.bgFilter || 'none'};">
-            ${STATE.storyWalkMode === 'pan_camera' ? `
-              <!-- Wide 1960×560 Panoramic Stage for Camera-Follow Mode (pans smoothly up to -680px as Kaelen walks across the stage) -->
-              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
-                   style="width:1960px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
-            ` : `
-              <!-- Seamless 3-Tile [Normal | Mirrored | Normal] Strip (Repeats every 2560px with zero seam at tile borders!) -->
-              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
-                   style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
-              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
-                   style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;transform:scaleX(-1);">
-              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
-                   style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
-            `}
+            <!-- Seamless 3-Tile [Normal | Mirrored | Normal] Strip (Repeats every 2560px with zero seam at tile borders for both Scroll BG & Pan Camera!) -->
+            <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                 style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
+            <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                 style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;transform:scaleX(-1);">
+            <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                 style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
           </div>
 
           <!-- 2.5D Foreground Parallax Layer (1.45× Speed): Passing Tallow Lantern Light Shafts, Low Sunk-Ward Mist & Cobblestone Floor Markers -->
@@ -2471,9 +2580,7 @@ function renderStoryStage() {
               <span id="vn-walk-telemetry" style="padding:2px 8px;background:rgba(12,74,110,0.88);border:1px solid #38bdf8;border-radius:3px;color:#e0f2fe;font-size:10px;font-weight:700;">
                 ${STATE.storyWalkMode === 'scroll_bg' ? '🔄 TREADMILL SCROLL ACTIVE' : '🎥 CAMERA FOLLOW ACTIVE'}
               </span>
-              ${STATE.storyWalkMode === 'pan_camera' ? `
-                <button class="rust-btn" style="height:20px;padding:0 7px;font-size:9.5px;" onclick="resetStoryCameraPan();" title="Restart Camera Pan & Hero Walk from Left Edge">↺ Reset Pan</button>
-              ` : ''}
+              <button class="rust-btn" style="height:20px;padding:0 7px;font-size:9.5px;" onclick="resetStoryCameraPan();" title="Restart Walk Traversal (Hero Enters Left -> Encounter Static on BG -> Leaves Right)">↺ Restart Walk</button>
               <span>·</span>
             ` : ''}
             <span>⚙️ Engine: <b>${STATE.storyRigEngine === 'atlas_b' ? 'B: 13-Part Atlas' : STATE.storyRigEngine === 'pose_c' ? 'C: 3-Pose Sheet' : STATE.storyRigEngine === 'slice_a' ? 'A: Auto-Slice' : 'C vs B vs A Compare'}</b></span>
@@ -2490,10 +2597,10 @@ function renderStoryStage() {
             : `
               <!-- Left & Right Full-Body Character Sprites standing/walking directly on the stone/cobblestone floor (y: 192px above bottom) -->
               <div style="position:absolute;left:115px;right:115px;bottom:192px;height:345px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
-                <div id="vn-left-actor-wrap" style="will-change:transform;">
+                <div id="vn-left-actor-wrap" style="will-change:transform;position:relative;z-index:2;transform:${STATE.storyWalkMode && STATE.storyWalkMode !== 'off' ? 'translate3d(-460px, 0, 0)' : 'translate3d(0px, 0, 0)'};">
                   ${renderStoryActorSlot(card.leftActor, 'left')}
                 </div>
-                <div id="vn-right-actor-wrap" style="will-change:transform;">
+                <div id="vn-right-actor-wrap" style="will-change:transform;position:relative;z-index:1;transform:${STATE.storyWalkMode && STATE.storyWalkMode !== 'off' ? 'translate3d(560px, 0, 0)' : 'translate3d(0px, 0, 0)'};">
                   ${renderStoryActorSlot(card.rightActor, 'right')}
                 </div>
               </div>
