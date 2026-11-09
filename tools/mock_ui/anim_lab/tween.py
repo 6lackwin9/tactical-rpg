@@ -1001,7 +1001,76 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, 
     return held
 
 
-def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source: str = "") -> None:
+def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int = 900, settle: int = 4):
+    """A one-shot action (poke, slash) cut from a video clip: from just before the figure leaves its starting guard
+    to a few frames after it is back, at the source fps. Frames are denoised, keyed, planted on GROUND_Y and given a
+    temporal colour hold, then snapped to the lab palette. The crop is the union of every frame's figure (a thrust
+    or an overhead wind-up reaches past the 340 px box), so the frames are wider than 340; ``box_x`` is where the
+    standard 340 px box (the start key's place) sits inside them. Returns (frames, box_x)."""
+    keys = load_keys()
+    pal = build_palette([keys[k] for k in keys
+                         if (not k.startswith("drawn_") or k.startswith("drawn_kf")) and not k.startswith("sheet_")])
+    _, x = VIDEO_STARTS[action]
+    bx, by = x // VIDEO_SCALE, VIDEO_GROUND // VIDEO_SCALE - (GROUND_Y + 1)
+    cap = cv2.VideoCapture(str(mp4))
+    full = []
+    while True:
+        ok, bgr = cap.read()
+        if not ok:
+            break
+        f = cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), (VIDEO_W // VIDEO_SCALE, VIDEO_H // VIDEO_SCALE),
+                       interpolation=cv2.INTER_AREA)
+        a = cv2.bilateralFilter(f, 5, 24, 5)[by:by + SIZE].astype(int)
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        bg = (r > 130) & (b > 130) & (g < 120) & (np.abs(r - b) < 110)
+        full.append(clean(np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8)))
+    cap.release()
+    sil = [f[..., 3] > 0 for f in full]
+    away = [int((s != sil[0]).sum()) for s in sil]           # how far each frame is from the opening guard
+    peak = int(np.argmax(away))
+    # the idle guard alone (breathing, compression) moves 1,000 to 4,000 px; the action peaks far higher, so the
+    # action is what rises above a fifth of the peak, and it ends when the figure is back within a tenth of it
+    level = max(thresh, 0.2 * away[peak])
+    active = [t for t, d in enumerate(away) if d > level]
+    if not active:
+        raise SystemExit(f"{mp4.name}: no action found (largest change {max(away)} px)")
+    back = next((t for t in range(peak, len(away)) if away[t] < 0.1 * away[peak]), active[-1])
+    t0, t1 = max(0, active[0] - 2), min(len(full) - 1, back + settle)
+    seg = full[t0:t1 + 1]
+    cols = np.nonzero(np.any([f[..., 3] > 0 for f in seg], axis=0).any(axis=0))[0]
+    x0, x1 = max(0, int(cols.min()) - 4), min(full[0].shape[1], int(cols.max()) + 5)
+    x0 = min(x0, bx)                                         # keep the standard box inside the crop
+    planted = []
+    for f in seg:
+        c = f[:, x0:x1]
+        low = int(np.nonzero((c[..., 3] > 0).any(axis=1))[0].max())
+        o = np.zeros_like(c)
+        dy = GROUND_Y - low
+        o[max(0, dy):SIZE + min(0, dy)] = c[max(0, -dy):SIZE - max(0, dy)]
+        planted.append(o)
+    held = [snap(f, pal) for f in planted]
+    for t in range(1, len(held)):
+        same = (np.abs(planted[t][..., :3].astype(int) - planted[t - 1][..., :3].astype(int)).sum(-1) < hold) \
+            & (planted[t][..., 3] > 0) & (held[t - 1][..., 3] > 0)
+        held[t][same] = held[t - 1][same]
+    print(f"{mp4.name}: action frames {t0}..{t1} of {len(full)} ({len(seg)} frames, {len(seg) / 24:.2f} s), "
+          f"largest change from guard {max(away)} px at frame {int(np.argmax(away))}, crop {x1 - x0} px wide, "
+          f"box at x {bx - x0}; back to guard at the end: {away[t1]} px from the opening")
+
+    def on_bg_w(f):
+        im = Image.new("RGBA", (f.shape[1], f.shape[0]), BG + (255,))
+        im.alpha_composite(Image.fromarray(f))
+        return im.convert("RGB")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for fps in (24, 12):
+        seq = [on_bg_w(f) for f in held[::24 // fps]]
+        seq[0].save(f"{out}_{fps}fps.gif", save_all=True, append_images=seq[1:], duration=round(1000 / fps),
+                    loop=0, disposal=1)
+    return held, bx - x0
+
+
+def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source: str = "", loop: bool = True,
+                      box_x: int = 0) -> None:
     """Frames on a transparent grid, ``cols`` per row in play order, plus <path>.json with the frame size, count,
     fps and source, the form an approved animation is kept in (art_src/vn_stage/)."""
     h, w = frames[0].shape[:2]
@@ -1012,7 +1081,7 @@ def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source:
     path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(path, optimize=True)
     meta = {"frame_w": w, "frame_h": h, "frames": len(frames), "cols": cols, "fps": fps, "ground_y": GROUND_Y,
-            "loop": True, "source": source}
+            "loop": loop, "box_x": box_x, "source": source}
     path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"sprite sheet {len(frames)} frames {w}x{h} @ {fps} fps -> {path}")
 
@@ -1045,6 +1114,8 @@ def main() -> None:
     ap.add_argument("--loop-range", default="auto",
                     help="Loop length range in source frames, or auto (default): two steps found from the legs.")
     ap.add_argument("--width", type=int, default=SIZE, help="Crop width for --video-loop (wider keeps a long blade).")
+    ap.add_argument("--video-action", type=Path, default=None, metavar="MP4",
+                    help="Cut a one-shot action (poke, slash) from a video (with --action, --out prefix, --sheet).")
     ap.add_argument("--sheet", type=Path, default=None,
                     help="With --video-loop: also keep the loop as a transparent sprite sheet PNG (+ .json) here.")
     ap.add_argument("--stage-refs", action="store_true",
@@ -1064,6 +1135,12 @@ def main() -> None:
         frames = video_loop(args.video_loop, args.action, args.out, lo, hi, args.width)
         if args.sheet:
             save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_loop.name}")
+        return
+    if args.video_action:
+        frames, box_x = video_action(args.video_action, args.action, args.out)
+        if args.sheet:
+            save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_action.name}",
+                              loop=False, box_x=box_x)
         return
     if args.frame:
         add_to_bundle({args.key: single_frame(args.frame, args.x_shift)})
