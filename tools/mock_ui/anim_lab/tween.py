@@ -777,6 +777,80 @@ def export_refs(out_dir: Path) -> None:
 
 PIPELINE = Path("G:/My Drive/image_pipeline")  # tools/portraits/artqueue.json's Drive queue
 
+# Video experiment (ART_UI_STUDIO 3.6): start frame per action for an image-to-video model run by hand in the Gemini
+# app or Flow. 1280 x 720 (16:9), flat #FF00FF, the 340 px key scaled 2x nearest (pixels stay crisp), boots on a
+# ground line at y 680; x leaves room ahead for the walk direction or the blade.
+VIDEO_STARTS = {"walk": ("sheet_walk2_f1", 300), "sneak": ("sheet_sneak2_f1", 300),
+                "poke": ("sheet_poke_f1", 220), "slash": ("sheet_slash_f1", 260)}
+VIDEO_W, VIDEO_H, VIDEO_SCALE, VIDEO_GROUND = 1280, 720, 2, 680
+
+
+def export_video_starts(out_dir: Path) -> None:
+    keys = load_keys()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for action, (key, x) in VIDEO_STARTS.items():
+        canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (255, 0, 255, 255))
+        sprite = Image.fromarray(keys[key]).resize((SIZE * VIDEO_SCALE, SIZE * VIDEO_SCALE), Image.NEAREST)
+        canvas.alpha_composite(sprite, (x, VIDEO_GROUND - (GROUND_Y + 1) * VIDEO_SCALE))
+        canvas.convert("RGB").save(out_dir / f"kaelen_video_start_{action}.png", optimize=True)
+    print(f"{len(VIDEO_STARTS)} video start frames -> {out_dir}")
+
+
+def video_preview(mp4: Path, action: str, out_gif: Path, fps: int = 12, strip: Path | None = None) -> None:
+    """Turn an image-to-video result back into lab frames: sample at ``fps``, undo the 2x start-frame scale, crop the
+    340 px box where the start frame put the key, key out magenta (video compression makes it noisy, so the test is
+    looser than for stills), snap to the lab palette and write a GIF. Prints how far the ground line and the figure's
+    centre drift from the first frame, the first thing a video model gets wrong for sprites."""
+    keys = load_keys()
+    pal = build_palette([keys[k] for k in keys
+                         if (not k.startswith("drawn_") or k.startswith("drawn_kf")) and not k.startswith("sheet_")])
+    _, x = VIDEO_STARTS[action]
+    bx, by = x // VIDEO_SCALE, VIDEO_GROUND // VIDEO_SCALE - (GROUND_Y + 1)
+    cap = cv2.VideoCapture(str(mp4))
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+    step = max(1, round(src_fps / fps))
+    frames, i = [], 0
+    while True:
+        ok, bgr = cap.read()
+        if not ok:
+            break
+        if i % step == 0:
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            # any output resolution (720p, 1080p) maps onto the start frame's 1280 x 720, then the 2x is undone
+            small = cv2.resize(rgb, (VIDEO_W // VIDEO_SCALE, VIDEO_H // VIDEO_SCALE),
+                               interpolation=cv2.INTER_AREA).astype(int)
+            r, g, b = small[..., 0], small[..., 1], small[..., 2]
+            bg = (r > 130) & (b > 130) & (g < 120) & (np.abs(r - b) < 110)
+            rgba = np.dstack([small, np.where(bg, 0, 255)]).astype(np.uint8)
+            box = np.zeros((SIZE, SIZE, 4), np.uint8)
+            crop = rgba[max(0, by):by + SIZE, max(0, bx):bx + SIZE]
+            box[:crop.shape[0], :crop.shape[1]] = crop
+            frames.append(snap(clean(box), pal))
+        i += 1
+    cap.release()
+    if not frames:
+        raise SystemExit(f"no frames read from {mp4}")
+
+    def stats(f):
+        m = f[..., 3] > 0
+        ys, xs = np.nonzero(m)
+        return int(ys.max()), float(xs.mean())
+    g0, c0 = stats(frames[0])
+    drift = [stats(f) for f in frames]
+    print(f"{mp4.name}: {i} source frames at {src_fps:.0f} fps -> {len(frames)} at {fps} fps; "
+          f"ground y {min(d[0] for d in drift) - g0:+d}..{max(d[0] for d in drift) - g0:+d} px, "
+          f"centre x {min(d[1] for d in drift) - c0:+.0f}..{max(d[1] for d in drift) - c0:+.0f} px")
+    seq = [on_bg(f) for f in frames]
+    out_gif.parent.mkdir(parents=True, exist_ok=True)
+    seq[0].save(out_gif, save_all=True, append_images=seq[1:], duration=round(1000 / fps), loop=0, disposal=1)
+    if strip:
+        pick = [round(j * (len(frames) - 1) / 11) for j in range(12)]
+        st = Image.new("RGB", (SIZE * 12, SIZE), BG)
+        for n, j in enumerate(pick):
+            st.paste(seq[j], (n * SIZE, 0))
+        st.save(strip)
+    print(f"GIF -> {out_gif}")
+
 
 def stage_refs(pipeline: Path = PIPELINE) -> None:
     """Refresh <pipeline>/refs/_active/ with copies of exactly the references the requests waiting in queue/ need,
@@ -813,11 +887,23 @@ def main() -> None:
                     help="Add one generated keyframe to the key bundle (with --key and --x-shift).")
     ap.add_argument("--key", default=None, help="Bundle key for --frame.")
     ap.add_argument("--x-shift", type=int, default=0, help="The x_shift of the references the frame was made on.")
+    ap.add_argument("--export-video-starts", type=Path, default=None, metavar="DIR",
+                    help="Write the 1280x720 start frame per action for the image-to-video test into DIR.")
+    ap.add_argument("--video", type=Path, default=None, metavar="MP4",
+                    help="Turn an image-to-video result into a lab GIF (with --action, --out; --strip for 12 stills).")
+    ap.add_argument("--action", default=None, help="walk, sneak, poke or slash: which start frame the video used.")
+    ap.add_argument("--strip", type=Path, default=None, help="With --video: also write 12 evenly spaced frames here.")
     ap.add_argument("--stage-refs", action="store_true",
                     help="Copy the references the queued requests need into the queue's refs/_active/ folder.")
     args = ap.parse_args()
     if args.stage_refs:
         stage_refs()
+        return
+    if args.export_video_starts:
+        export_video_starts(args.export_video_starts)
+        return
+    if args.video:
+        video_preview(args.video, args.action, args.out, strip=args.strip)
         return
     if args.frame:
         add_to_bundle({args.key: single_frame(args.frame, args.x_shift)})

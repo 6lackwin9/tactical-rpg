@@ -148,6 +148,13 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   - **Next (Tushar, 2026-11-09)**: once Kaelen's set (draw, poke, slash, walk, sneak) is through, generate Vesper's with the same recipe. Vesper has a different body type and fights with daggers, so her sheets need their own reference set (full-body `art_src/vn_stage/vn_vesper_fullbody.jpg`, portrait `games/emberwake/assets/portraits/heroes/vesper.png`) and dagger actions in place of the halberd ones.
 - **Review format**: the tween lab is now about 4 MB, too large to render inline in the desktop app; send the per-clip GIFs (`--gif-dir`, under 200 KB each) for review.
 
+### 3.6 Experiment 6: Image-to-video for the actions (Google Veo, in setup, 2026-11-09)
+
+- **Question (Tushar)**: the generated sheets' movements "don't look that great"; can Google's video model animate the actions instead?
+- **Setup**: Veo runs by hand in the Gemini app or Flow (no API access from the session). Drive `image_pipeline/video/` holds `README.txt`, `in/` (per action a 1280 by 720 start frame `kaelen_video_start_<action>.png` and a prompt `video_kaelen_<action>.txt`, copied from `art_src/vn_stage/prompts/`) and `out/` (`kaelen_video_<action>.mp4`). Start frames come from `tween.py --export-video-starts DIR`: flat `#FF00FF`, the approved key at 2x nearest (walk `sheet_walk2_f1`, sneak `sheet_sneak2_f1`, poke `sheet_poke_f1`, slash `sheet_slash_f1`), boots at y 680, room ahead (`VIDEO_STARTS`). Prompts ask for an in-place (treadmill) cycle or one attack and back to guard, a locked camera, the magenta background throughout, the same size and halberd, and name the start frame by file.
+- **Back into the lab**: `tween.py --video MP4 --action A --out GIF [--strip PNG]` samples 12 fps, maps any resolution onto 1280 by 720, undoes the 2x, crops the start frame's 340 px box, keys magenta with a looser test (compression noise), snaps to the lab palette and prints the ground-line and centre drift. Checked on a synthetic 1080p MP4 built from the walk frames: clean frames, ground drift 0.
+- **Watch for**: the camera or the figure drifting (the drift numbers), the background leaving flat magenta, identity or halberd drift over 8 s, and soft non-pixel frames (the palette snap restores the pixel look, not the shapes).
+
 ---
 
 ## 4. Screen-by-Screen UI Decisions Summary (`emberwake_screen_flow.html`)
