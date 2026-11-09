@@ -642,7 +642,7 @@ def build(out: Path, gif_dir: Path | None) -> None:
         print(f"GIFs -> {gif_dir}")
 
 
-def slice_sheet(sheet: Path, cols: int, rows: int, prefix: str, size_like: str) -> dict:
+def slice_sheet(sheet: Path, cols: int, rows: int, prefix: str, size_like: str, x_shift: int = 0) -> dict:
     """Cut a generated sprite sheet (flat #FF00FF, uniform cells) into aligned 340 px frames for the key bundle.
 
     One scale for every frame: frame 1's height matches the ``size_like`` key's height. Every frame is planted on
@@ -690,7 +690,8 @@ def slice_sheet(sheet: Path, cols: int, rows: int, prefix: str, size_like: str) 
     rt, rl, rx0, rx1 = extent(ref)
     t0, l0, x0, x1 = extent(cells[0])
     s = (rl - rt) / (l0 - t0)
-    dx = int(round((rx0 + rx1) / 2 - (x0 + x1) / 2 * s))
+    # x_shift moves every frame left (negative) or right: a canvas for a reference that must not clip a long blade
+    dx = int(round((rx0 + rx1) / 2 - (x0 + x1) / 2 * s)) + x_shift
     W, H = round(cw * s), round(ch * s)
     out = {}
     for i, c in enumerate(cells, 1):
