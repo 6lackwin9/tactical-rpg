@@ -755,6 +755,29 @@ def export_refs(out_dir: Path) -> None:
     print(f"{len(REFS)} references -> {out_dir}")
 
 
+PIPELINE = Path("G:/My Drive/image_pipeline")  # tools/portraits/artqueue.json's Drive queue
+
+
+def stage_refs(pipeline: Path = PIPELINE) -> None:
+    """Refresh <pipeline>/refs/_active/ with copies of exactly the references the requests waiting in queue/ need,
+    so the web-app run can attach the whole folder. The folder only ever holds these copies; it is emptied first."""
+    import shutil
+    active = pipeline / "refs" / "_active"
+    active.mkdir(parents=True, exist_ok=True)
+    for old in active.iterdir():
+        if old.is_file():
+            old.unlink()
+    need = {}
+    for q in sorted((pipeline / "queue").glob("*.json")):
+        req = json.loads(q.read_text(encoding="utf-8"))
+        for ref in req.get("references", []):
+            need.setdefault(Path(ref).name, Path(ref))
+        print(f"{req['metadata']['asset_id']}: {', '.join(Path(r).name for r in req.get('references', []))}")
+    for name, src in sorted(need.items()):
+        shutil.copy2(src, active / name)
+    print(f"{len(need)} references -> {active}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the keyframe in-betweening comparison lab.")
     ap.add_argument("--out", type=Path, default=HERE.parent.parent.parent / "kaelen_tween_lab.html")
@@ -766,7 +789,12 @@ def main() -> None:
     ap.add_argument("--grid", default="3x2", help="Columns x rows of the sheet (default 3x2).")
     ap.add_argument("--prefix", default=None, help="Bundle key prefix, frames become <prefix>_f1.._fN.")
     ap.add_argument("--size-like", default="sheet_draw_f6", help="Bundle key whose height frame 1 is scaled to.")
+    ap.add_argument("--stage-refs", action="store_true",
+                    help="Copy the references the queued requests need into the queue's refs/_active/ folder.")
     args = ap.parse_args()
+    if args.stage_refs:
+        stage_refs()
+        return
     if args.slice:
         cols, rows = (int(x) for x in args.grid.lower().split("x"))
         add_to_bundle(slice_sheet(args.slice, cols, rows, args.prefix, args.size_like))

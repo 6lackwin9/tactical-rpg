@@ -34,6 +34,7 @@ Every `/art-ui-session` must follow these five standing rules established by Tus
      - **Clipping, Seam Gaps, or Stray Neighbor Pixels** (verify bounding boxes and alpha masks across all frames).
 4. **Name References by File Name in Prompts (Tushar, 2026-11-09)**:
    - Image prompts cite every reference by its file name (`kaelen_ref_sheet_f6.png`), never as "image 1" or "image 2", and open with one line listing the references in their attach order with each one's role, so the order can never be misread. The request's `references` follow the same order.
+   - After queueing, run `python3 -m tools.mock_ui.anim_lab.tween --stage-refs` (on the PC `py -3.12`): it empties the queue's `refs/_active/` and copies in exactly the references the waiting requests need, so the web-app run attaches that one folder (Tushar, 2026-11-09).
 5. **Layout & Look Before UX/Behavior**:
    - For any new screen or visual element, align on the **static visual look and layout** first before wiring complex UX/state behavior.
 
