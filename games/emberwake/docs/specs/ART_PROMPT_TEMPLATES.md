@@ -17,7 +17,6 @@ Whenever you generate or edit an image (via `generate_image`, the Antigravity qu
 - **Reference fidelity check**: Compare the output directly against the attached reference image(s). Ensure character identity (face, hair colour, scars, outfit, silhouette, colour palette) and pixel-art style match the reference and have not drifted.
 - **Defect & artifact check**: Inspect for generation errors such as extra or merged limbs, distorted weapons, leftover background islands after chroma-keying, or over-bright bloom obscuring key silhouettes. If the image misses a specified detail or is way off from the reference image, re-generate or correct it before shipping or showing it to the user.
 
-
 ## 2x2 portrait variations
 
 Four design choices for one character at once. Keep the framing paragraph; change the four bullets (armour, state, age, hood, expression).
