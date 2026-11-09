@@ -1,5 +1,15 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## R4-1 (`U2.3-TIERS` Slice 2) 2026-11-08 (single `tier_mult` `0.4 / 0.825 / 1.25 / 2.0`, `FB-145`)
+
+- **Measured build**: `develop` `@858eaab` (`unit_templates.json` 4 role rows seeded in `r41s2.json`, `template: "class"` on `calcified_amalgam` and `inquisitorial_purifier`, single `tier_mult` `{hero: 1.0, minion: 0.4, standard: 0.825, elite: 1.25, boss: 2.0}`, core stat floor `6`).
+- **40-seed `sim feel` (`0.4 / 0.825 / 1.25 / 2.0`)**: **`tl_duel_windup` 17.5% (`1v1` vs `elite`), `tl_duel_reach` 95% (`1v1` vs `standard`), `tl_duel_armour` 0% (`1v1` vs `boss`), `tl_flank` 100%, `tl_skirmish` 92.5%, overall 61.0%** (`0` PLAN FAIL / SKIP).
+- **Sim party & campaign clears (`0.4 / 0.825 / 1.25 / 2.0`)**: **Party `92% / 92% / 92%` (`3/6, 5/6` campaign clears)**.
+- **`FB-145` Rulings for `R4-CLOSE` (`R4-2`, user 2026-11-08)**:
+  1. Keep `tier_mult` at `0.4 / 0.825 / 1.25 / 2.0` as landed in `858eaab`; treat 1v1 solo-vs-`elite` (`tl_duel_windup`, `17.5%`) and solo-vs-`boss` (`tl_duel_armour`, `0%`) as intended losses when `elite >= 1.25` and `boss >= 2.0`, and update `R4-CLOSE` feel/party target bands to match (`~61%` feel overall, `~92%` party, `3/6` & `5/6` campaign clears).
+  2. Keep `minion = 0.4` and scaled stat floor `6` as landed in `858eaab` (zero further golden churn).
+  3. Keep `Equipment::tier_met` reading scaled stats and generic sim caster foes (`sime_<class>_<tier>`) on role templates as landed in `858eaab`.
+
 ## R2-CLOSE 2026-11-08 (`CLASS-BASICS` & `R2` close feel pass, `FB-137`)
 
 - **Measured build**: `develop` `@4ed71e44` (40 seeds, `tools/fc.sh sim feel 5 ruleset=timeline seeds=40 counts=on`, auto driver, `0` PLAN FAIL / SKIP).
