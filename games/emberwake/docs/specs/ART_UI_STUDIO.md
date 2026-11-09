@@ -199,6 +199,12 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   - Archived on Drive `image_pipeline/flow/out/` (Flow's bulk download is a ZIP; extracted with Flow's hash suffix dropped): `characters/<Name>_{portrait,body}.jpg` for the four founders and `cg_prologue/` for the three kept CGs (`Vesper_crouching_on_chimney_stack`, `Kaelen_smashing_padlock_on_cart`, `Characters_escaping_through_drain`), all 1376 by 768. The test 3 CG got a last edit pass (no rain, Maren's censer on the forward side of a straight staff, no collar, Hollis's smooth pauldron and messy hair, Vesper's black gloves). Not in the repo: these are Flow outputs for review, not game assets yet.
   - Conclusion: Flow characters by `@` are good enough for story CGs; small props and costume details need naming in each scene prompt ("no rain"; the censer on Maren's crook; a smooth pauldron), and per-scene fixes take one edit each.
 
+### 3.8 Session close and next step (2026-11-10)
+
+- **Settled this session (Tushar)**: the pipelines for image generation and review (Drive queue, prompts naming references by file, `--stage-refs`), story CGs (Flow characters by `@`, 3.7) and animation (360p image-to-video, `--video-loop` for cycles, `--video-action [--tall] [--no-trail]` for attacks, 3.6).
+- **Asset state**: Kaelen's draw/put-away (sheet, 3.5), walk and sneak loops (video, `art_src/vn_stage/kaelen_{walk,sneak}_loop_sheet.png`) are signed off. Poke (360p video) and slash (720p tall video, trail removed) are cut and reviewed but not yet approved or kept as sprite sheets; once approved, Kaelen's set is complete and `develop` gets the gate and the push (git cadence, 3.5). Four founders' Flow portraits and three-view bodies plus three prologue CGs are on Drive (`image_pipeline/flow/out/`).
+- **Next session (Tushar)**: go over the screens in the mock UI using today's assets before anything goes to the builder: the founders' portraits and bodies, the prologue CGs in the story stage, and Kaelen's animations, starting with the look (rule 5: look and layout before UX). Start in a focused standalone preview per screen (rule 1), integrate into `tools/mock_ui` only after sign-off, and record the per-screen decisions in section 4 and `SCREEN_ATLAS.md`. Only signed-off screens go to the Design Session for `READY.md`, then to the Build Session.
+
 ---
 
 ## 4. Screen-by-Screen UI Decisions Summary (`emberwake_screen_flow.html`)
