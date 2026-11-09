@@ -878,6 +878,87 @@ def stage_refs(pipeline: Path = PIPELINE) -> None:
     print(f"{len(need)} references -> {active}")
 
 
+def video_loop(mp4: Path, action: str, out: Path, pmin: int, pmax: int, width: int = SIZE, hold: int = 22) -> list:
+    """A seamless cycle (walk, sneak) cut from a video clip, as lab frames ``width`` x 340 at the source fps.
+
+    Each frame is denoised (bilateral) and keyed; the loop (start, length in [pmin, pmax]) is the pair of frames
+    most alike over the whole figure; every frame's feet are planted on GROUND_Y and the leftover sideways drift is
+    spread evenly over the loop; a circular temporal hold keeps a pixel's colour when it barely changed, which stops
+    compression shimmer after the palette snap; if the wrap is still bigger than a normal step, flow in-betweens
+    bridge it. Writes <out>_24fps.gif and <out>_12fps.gif and returns the frames (ART_UI_STUDIO 3.6)."""
+    keys = load_keys()
+    pal = build_palette([keys[k] for k in keys
+                         if (not k.startswith("drawn_") or k.startswith("drawn_kf")) and not k.startswith("sheet_")])
+    _, x = VIDEO_STARTS[action]
+    bx, by = x // VIDEO_SCALE, VIDEO_GROUND // VIDEO_SCALE - (GROUND_Y + 1)
+    cap = cv2.VideoCapture(str(mp4))
+    frames = []
+    while True:
+        ok, bgr = cap.read()
+        if not ok:
+            break
+        f = cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), (VIDEO_W // VIDEO_SCALE, VIDEO_H // VIDEO_SCALE),
+                       interpolation=cv2.INTER_AREA)
+        a = cv2.bilateralFilter(f, 5, 24, 5)[by:by + SIZE, bx:bx + width].astype(int)
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        bg = (r > 130) & (b > 130) & (g < 120) & (np.abs(r - b) < 110)
+        frames.append(clean(np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8)))
+    cap.release()
+
+    def score(p, q):
+        mp, mq = p[..., 3] > 0, q[..., 3] > 0
+        both = mp & mq
+        return float((mp != mq).sum()) / 100 + float(np.abs(p[..., :3].astype(int) - q[..., :3].astype(int))[both].mean())
+
+    def step(p, q):
+        return int(((p[..., 3] > 0) != (q[..., 3] > 0)).sum())
+
+    def shifted(f, dx, dy):
+        o = np.zeros_like(f)
+        h, w = f.shape[:2]
+        o[max(0, dy):min(h, h + dy), max(0, dx):min(w, w + dx)] = \
+            f[max(0, -dy):min(h, h - dy), max(0, -dx):min(w, w - dx)]
+        return o
+
+    def head_x(f):
+        return float(np.nonzero(f[:120, :, 3] > 0)[1].mean())
+
+    n = len(frames)
+    _, s0, length = min((score(frames[i], frames[i + p]), i, p)
+                        for p in range(pmin, min(pmax, n - 1) + 1) for i in range(n - p))
+    drift = head_x(frames[s0 + length]) - head_x(frames[s0])
+    aligned = []
+    for t, f in enumerate(frames[s0:s0 + length]):
+        low = int(np.nonzero((f[..., 3] > 0).any(axis=1))[0].max())
+        aligned.append(shifted(f, -int(round(drift * t / length)), GROUND_Y - low))
+    held = [snap(f, pal) for f in aligned]
+    for _ in range(2):  # circular, so the colours carry across the wrap too
+        for t in range(length):
+            p = (t - 1) % length
+            same = (np.abs(aligned[t][..., :3].astype(int) - aligned[p][..., :3].astype(int)).sum(-1) < hold) \
+                & (aligned[t][..., 3] > 0) & (held[p][..., 3] > 0)
+            held[t][same] = held[p][same]
+    steps = [step(held[i], held[i + 1]) for i in range(length - 1)]
+    nb = max(0, round(step(held[-1], held[0]) / max(1, int(np.median(steps)))) - 1)
+    if nb:
+        fl = _flows(held[-1], held[0])
+        held += [snap(flow_tween(held[length - 1], held[0], (k + 1) / (nb + 1), fl), pal) for k in range(nb)]
+    ring = [step(held[i], held[(i + 1) % len(held)]) for i in range(len(held))]
+    print(f"{mp4.name}: loop frames {s0}..{s0 + length - 1} ({length} frames, {length / 24:.2f} s), drift {drift:+.1f} px "
+          f"spread, {nb} bridge frame(s); largest step around the loop {max(ring)} px, median {int(np.median(ring))}")
+
+    def on_bg_w(f):
+        im = Image.new("RGBA", (f.shape[1], f.shape[0]), BG + (255,))
+        im.alpha_composite(Image.fromarray(f))
+        return im.convert("RGB")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for fps in (24, 12):
+        seq = [on_bg_w(f) for f in held[::24 // fps]]
+        seq[0].save(f"{out}_{fps}fps.gif", save_all=True, append_images=seq[1:], duration=round(1000 / fps),
+                    loop=0, disposal=1)
+    return held
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the keyframe in-betweening comparison lab.")
     ap.add_argument("--out", type=Path, default=HERE.parent.parent.parent / "kaelen_tween_lab.html")
@@ -901,6 +982,10 @@ def main() -> None:
                     help="Turn an image-to-video result into a lab GIF (with --action, --out; --strip for 12 stills).")
     ap.add_argument("--action", default=None, help="walk, sneak, poke or slash: which start frame the video used.")
     ap.add_argument("--strip", type=Path, default=None, help="With --video: also write 12 evenly spaced frames here.")
+    ap.add_argument("--video-loop", type=Path, default=None, metavar="MP4",
+                    help="Cut a seamless cycle from a video (with --action, --out prefix, --loop-range, --width).")
+    ap.add_argument("--loop-range", default="24-60", help="Loop length range in source frames (default 24-60).")
+    ap.add_argument("--width", type=int, default=SIZE, help="Crop width for --video-loop (wider keeps a long blade).")
     ap.add_argument("--stage-refs", action="store_true",
                     help="Copy the references the queued requests need into the queue's refs/_active/ folder.")
     args = ap.parse_args()
@@ -912,6 +997,10 @@ def main() -> None:
         return
     if args.video:
         video_preview(args.video, args.action, args.out, strip=args.strip)
+        return
+    if args.video_loop:
+        lo, hi = (int(v) for v in args.loop_range.split("-"))
+        video_loop(args.video_loop, args.action, args.out, lo, hi, args.width)
         return
     if args.frame:
         add_to_bundle({args.key: single_frame(args.frame, args.x_shift)})
