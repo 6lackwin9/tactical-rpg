@@ -187,6 +187,11 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   - The Format option made the body a front, three-quarter and back turnaround; leave Format off for a single-figure body. A turnaround needs smaller figures and a top margin, or the halberd is cut off.
   - A generation failed with "unusual activity … browser extensions that modify the page" while a Claude in Chrome tab sat on the same character page: the session opens Flow only to check a finished result, then closes the tab.
   - Final: portrait (body turned with the face, halberd behind the shoulder, muted style) and a matching three-view body (warm cream gambeson, golden hair, full halberds in frame). Duplicate `Kaelen_test` to delete or rename, so `@Kaelen` stays unambiguous.
+- **All four founders set up (2026-11-10)**: Kaelen, Vesper, Maren and Hollis each have a portrait and a three-view body in one style (prompts in `art_src/story_cg/prompts/flow_maren_hollis.txt` for the last two). Turnarounds made with `@Kaelen`'s as the layout guide matched the set in one pass; the follow-ups were all props and sides:
+  - Back views mirror the hands: an item held in the image-right hand in the front view sits in the image-left hand from behind. Turnarounds got this wrong first (Vesper's arms raised, Maren with two bone-saws and a floating staff, Hollis with no crossbow); a back-view-only edit naming image sides fixed each.
+  - Props from the portrait leak into the body (Hollis's shoulder-rested arbalest became a second crossbow behind his shoulder): say "one arbalest" and remove the extra.
+  - Small facial details at full-body scale cannot be placed by edits (Hollis's scar landed on the wrong eye, then both eyes glowed): fix them in the portrait, where the face is large, by image side ("the eye on the right side of the image, the one with the red pupil"), in two steps (remove, then add), then attach the portrait to the turnaround so they carry over.
+  - Name sides by the image, never the character's left and right, and check pauldrons, scars and held items in every view.
 
 ---
 
