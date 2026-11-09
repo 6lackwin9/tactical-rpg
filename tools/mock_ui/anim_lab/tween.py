@@ -411,11 +411,12 @@ def tweens(n: int, ms: int, eased=True):
     return [((ease if eased else (lambda x: x))(i / (n + 1)), ms) for i in range(1, n + 1)]
 
 
-def sheet_plan(prefix: str, n: int, step_ms: int, hold_ms: int = 0, cycle: bool = False):
-    """Plan through <prefix>_f1.._fN with one flow in-between per gap. ``cycle`` loops back from fN to f1 (walk,
-    sneak); otherwise the action holds on f1 for ``hold_ms`` and returns to f1 at the end (attacks)."""
+def sheet_plan(prefix, n: int, step_ms: int, hold_ms: int = 0, cycle: bool = False):
+    """Plan through <prefix>_f1.._fN (or through an explicit key list given as ``prefix``) with one flow in-between
+    per gap. ``cycle`` loops back from the last key to the first (walk, sneak); otherwise the action holds on the
+    first key for ``hold_ms`` and returns to it at the end (attacks)."""
     half = step_ms // 2
-    keys = [f"{prefix}_f{i}" for i in range(1, n + 1)]
+    keys = list(prefix) if isinstance(prefix, (list, tuple)) else [f"{prefix}_f{i}" for i in range(1, n + 1)]
     pairs = list(zip(keys, keys[1:] + ([keys[0]] if cycle else [])))
     plan = [(a, b, [(0, half), (0.5, half)]) for a, b in pairs]
     if not cycle:
@@ -501,27 +502,29 @@ CLIPS = {
     },
     "slash_sheet": {
         "label": "Drawn: slash from the generated 6-frame sheet",
-        "note": "kaelen_slash_sheet_6frame: guard, raise, wind-up, (mid-swing), cleave, recover. Frame 4 came out as a second wind-up, so frame 4 to 5 is a 180 degree jump.",
+        "note": "kaelen_slash_sheet_6frame (guard, raise, wind-up, late wind-up, cleave, recover) plus the generated mid-swing (kaelen_slash_midswing) between the late wind-up and the cleave.",
         "methods": ["keys", "flow"],
-        "plan": sheet_plan("sheet_slash", 6, 110, hold_ms=500),
+        "plan": sheet_plan(["sheet_slash_f1", "sheet_slash_f2", "sheet_slash_f3", "sheet_slash_f4", "sheet_slash_mid",
+                            "sheet_slash_f5", "sheet_slash_f6"], 0, 110, hold_ms=500),
     },
     "poke_sheet": {
         "label": "Drawn: poke from the generated 6-frame sheet",
-        "note": "kaelen_poke_sheet_6frame: guard, chamber, drive, full thrust, retract, recover.",
+        "note": "kaelen_poke_sheet_6frame (guard, chamber, drive, retract, recover) with the compact thrust retake (kaelen_poke_thrust_r2) in place of the sheet's stretched lunge.",
         "methods": ["keys", "flow"],
-        "plan": sheet_plan("sheet_poke", 6, 110, hold_ms=500),
+        "plan": sheet_plan(["sheet_poke_f1", "sheet_poke_f2", "sheet_poke_f3", "sheet_poke_f4b", "sheet_poke_f5",
+                            "sheet_poke_f6"], 0, 110, hold_ms=500),
     },
     "walk_sheet": {
         "label": "Walk from the generated 8-frame sheet",
-        "note": "kaelen_walk_sheet_8frame: contact, down, passing, up and their mirrors, looped.",
+        "note": "kaelen_walk_sheet_8frame_r2: contact, down, passing, up and their mirrors, looped (the first take repeated one stride).",
         "methods": ["keys", "flow"],
-        "plan": sheet_plan("sheet_walk", 8, 110, cycle=True),
+        "plan": sheet_plan("sheet_walk2", 8, 110, cycle=True),
     },
     "sneak_sheet": {
         "label": "Sneak from the generated 6-frame sheet",
-        "note": "kaelen_sneak_sheet_6frame: three crouched steps and their mirrors, looped.",
+        "note": "kaelen_sneak_sheet_6frame_r2: came back as 9 frames in 3 by 3 (6 asked), looped as drawn (the first take repeated one pose).",
         "methods": ["keys", "flow"],
-        "plan": sheet_plan("sheet_sneak", 6, 180, cycle=True),
+        "plan": sheet_plan("sheet_sneak2", 9, 180, cycle=True),
     },
 }
 
@@ -712,6 +715,23 @@ def slice_sheet(sheet: Path, cols: int, rows: int, prefix: str, size_like: str, 
     return out
 
 
+def single_frame(path: Path, x_shift: int = 0) -> np.ndarray:
+    """A generated single keyframe (flat #FF00FF) made on a 340 px reference canvas: keyed, scaled to 340 px and moved
+    back by the reference's x_shift (a reference cut with x_shift=-45 gives a result that moves 45 px right)."""
+    a = np.asarray(Image.open(path).convert("RGB")).astype(int)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    bg = (r > 150) & (b > 150) & (g < 110) & (np.abs(r - b) < 90)
+    f = clean(np.array(Image.fromarray(np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8))
+                       .resize((SIZE, SIZE), Image.LANCZOS)))
+    dx = -x_shift
+    out = np.zeros_like(f)
+    if dx >= 0:
+        out[:, dx:] = f[:, :SIZE - dx]
+    else:
+        out[:, :SIZE + dx] = f[:, -dx:]
+    return out
+
+
 def add_to_bundle(frames: dict) -> None:
     """Write frames into kaelen_4pose_uris.json as PNG data URIs, keeping every existing entry as it is."""
     p = HERE / "kaelen_4pose_uris.json"
@@ -789,11 +809,18 @@ def main() -> None:
     ap.add_argument("--grid", default="3x2", help="Columns x rows of the sheet (default 3x2).")
     ap.add_argument("--prefix", default=None, help="Bundle key prefix, frames become <prefix>_f1.._fN.")
     ap.add_argument("--size-like", default="sheet_draw_f6", help="Bundle key whose height frame 1 is scaled to.")
+    ap.add_argument("--frame", type=Path, default=None, metavar="IMG",
+                    help="Add one generated keyframe to the key bundle (with --key and --x-shift).")
+    ap.add_argument("--key", default=None, help="Bundle key for --frame.")
+    ap.add_argument("--x-shift", type=int, default=0, help="The x_shift of the references the frame was made on.")
     ap.add_argument("--stage-refs", action="store_true",
                     help="Copy the references the queued requests need into the queue's refs/_active/ folder.")
     args = ap.parse_args()
     if args.stage_refs:
         stage_refs()
+        return
+    if args.frame:
+        add_to_bundle({args.key: single_frame(args.frame, args.x_shift)})
         return
     if args.slice:
         cols, rows = (int(x) for x in args.grid.lower().split("x"))

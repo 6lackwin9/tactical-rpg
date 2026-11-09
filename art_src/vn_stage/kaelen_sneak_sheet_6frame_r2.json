@@ -1,0 +1,39 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_sneak_sheet_6frame_r2",
+  "prompt": "Reference images, attached in this order and named here by file name: kaelen_ref_sneak.png (his crouched sneaking posture and the way he holds the halberd; not a leg pose to copy); kaelen_ref_sheet_f1.png (the same character standing: the size to draw him at).\n\nMake a pixel-art animation sprite sheet of one character sneaking to the right, one full crouched stealth walk cycle as 6 frames in a grid of 3 columns and 2 rows, read left to right, top row first. Draw him at exactly the size of kaelen_ref_sheet_f1.png in every frame (same head size and proportions; he is lower only because he crouches). The legs must clearly change from every frame to the next: this is a step cycle, not one pose repeated.\n\nLegs, frame by frame (\"near leg\" is the leg closer to the viewer, \"far leg\" the one behind it; he faces right; knees deeply bent in every frame):\n1. Reach: near foot placed far ahead, only the toe touching down; far leg bent behind carrying the weight.\n2. Shift: the near foot flat, the weight moving onto it, both knees deeply bent, the far heel lifting behind.\n3. Pass: the far leg lifted and swinging forward low under the body, its foot just above the ground beside the near ankle; the legs close together.\n4. Reach: far foot placed far ahead, only the toe touching down; near leg bent behind carrying the weight. The legs swapped from frame 1.\n5. Shift: the far foot flat, the weight moving onto it, the near heel lifting behind.\n6. Pass: the near leg lifted and swinging forward low under the body, its foot just above the ground beside the far ankle; the legs close together.\n\nHold (every frame): crouched low, back bent forward, the halberd held level at hip height in both hands as in kaelen_ref_sneak.png, blade forward to the right, steady through the cycle; the head stays at the same low height.\n\nCharacter (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and alert, mouth closed.\n\nLayout and style: every frame is the same size, with the character at the same scale and his feet on the same ground line in each cell. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_sneak.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_sneak_sheet_6frame_r2.txt",
+  "time": "2026-11-09T17:53:13Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sneak.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_sneak_sheet_6frame_r2_q1794246380",
+  "metadata": {
+    "asset_id": "kaelen_sneak_sheet_6frame_r2",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_sneak_sheet_6frame_r2.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_sneak_sheet_6frame_r2.txt",
+      "kind": "vn_keyframe_sheet",
+      "retake_of": "kaelen_sneak_sheet_6frame",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sneak.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe_sheet",
+  "retake_of": "kaelen_sneak_sheet_6frame",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sneak.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png"
+  ],
+  "notes": "Verified resolution (1200x896, long edge >= 1024px) and aspect ratio (4:3, 0.45% deviation) within 3% tolerance."
+}
