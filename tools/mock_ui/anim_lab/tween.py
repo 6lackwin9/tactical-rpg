@@ -878,7 +878,8 @@ def stage_refs(pipeline: Path = PIPELINE) -> None:
     print(f"{len(need)} references -> {active}")
 
 
-def video_loop(mp4: Path, action: str, out: Path, pmin: int, pmax: int, width: int = SIZE, hold: int = 22) -> list:
+def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, width: int = SIZE, hold: int = 22,
+               steps: int = 2) -> list:
     """A seamless cycle (walk, sneak) cut from a video clip, as lab frames ``width`` x 340 at the source fps.
 
     Each frame is denoised (bilateral) and keyed; the loop (start, length in [pmin, pmax]) is the pair of frames
@@ -923,8 +924,19 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int, pmax: int, width: i
     def head_x(f):
         return float(np.nonzero(f[:120, :, 3] > 0)[1].mean())
 
+    def upper(p, q):  # torso, arms and the carried halberd: the parts a leg-only match misses
+        return float(np.abs(p[100:260, ..., :3].astype(int) - q[100:260, ..., :3].astype(int)).mean())
+
     n = len(frames)
-    _, s0, length = min((score(frames[i], frames[i + p]), i, p)
+    if not pmin:
+        # One step repeats with the near and far legs swapped, which looks alike, so a loop chosen on looks alone
+        # can stop after one step. Find the step from the legs and ask for ``steps`` of them.
+        legs = [f[230:335, ..., :3].astype(int) for f in frames]
+        period = min(range(10, n // 2), key=lambda p: np.mean([np.abs(legs[i] - legs[i + p]).mean()
+                                                               for i in range(n - p)]))
+        pmin, pmax = steps * period - 4, steps * period + 4
+        print(f"  step {period} frames; loop of {steps} steps: {pmin}..{pmax} frames")
+    _, s0, length = min((score(frames[i], frames[i + p]) + 1.5 * upper(frames[i], frames[i + p]), i, p)
                         for p in range(pmin, min(pmax, n - 1) + 1) for i in range(n - p))
     drift = head_x(frames[s0 + length]) - head_x(frames[s0])
     aligned = []
@@ -938,14 +950,21 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int, pmax: int, width: i
             same = (np.abs(aligned[t][..., :3].astype(int) - aligned[p][..., :3].astype(int)).sum(-1) < hold) \
                 & (aligned[t][..., 3] > 0) & (held[p][..., 3] > 0)
             held[t][same] = held[p][same]
-    steps = [step(held[i], held[i + 1]) for i in range(length - 1)]
-    nb = max(0, round(step(held[-1], held[0]) / max(1, int(np.median(steps)))) - 1)
+    sil = [step(held[i], held[i + 1]) for i in range(length - 1)]
+    up = [upper(held[i], held[i + 1]) for i in range(length - 1)]
+    # bridge enough frames that neither the silhouette nor the halberd changes more per frame than normal
+    ratio = max(step(held[-1], held[0]) / max(1.0, float(np.median(sil))),
+                upper(held[-1], held[0]) / max(0.1, float(np.median(up))))
+    nb = max(0, int(np.ceil(ratio)) - 1)
     if nb:
         fl = _flows(held[-1], held[0])
         held += [snap(flow_tween(held[length - 1], held[0], (k + 1) / (nb + 1), fl), pal) for k in range(nb)]
     ring = [step(held[i], held[(i + 1) % len(held)]) for i in range(len(held))]
+    ring_up = [upper(held[i], held[(i + 1) % len(held)]) for i in range(len(held))]
     print(f"{mp4.name}: loop frames {s0}..{s0 + length - 1} ({length} frames, {length / 24:.2f} s), drift {drift:+.1f} px "
-          f"spread, {nb} bridge frame(s); largest step around the loop {max(ring)} px, median {int(np.median(ring))}")
+          f"spread, {nb} bridge frame(s); silhouette step max {max(ring)} median {int(np.median(ring))}, "
+          f"upper-body step max {max(ring_up):.1f} median {np.median(ring_up):.1f}, wrap steps "
+          f"{[round(v, 1) for v in ring_up[length - 1:]]}")
 
     def on_bg_w(f):
         im = Image.new("RGBA", (f.shape[1], f.shape[0]), BG + (255,))
@@ -984,7 +1003,8 @@ def main() -> None:
     ap.add_argument("--strip", type=Path, default=None, help="With --video: also write 12 evenly spaced frames here.")
     ap.add_argument("--video-loop", type=Path, default=None, metavar="MP4",
                     help="Cut a seamless cycle from a video (with --action, --out prefix, --loop-range, --width).")
-    ap.add_argument("--loop-range", default="24-60", help="Loop length range in source frames (default 24-60).")
+    ap.add_argument("--loop-range", default="auto",
+                    help="Loop length range in source frames, or auto (default): two steps found from the legs.")
     ap.add_argument("--width", type=int, default=SIZE, help="Crop width for --video-loop (wider keeps a long blade).")
     ap.add_argument("--stage-refs", action="store_true",
                     help="Copy the references the queued requests need into the queue's refs/_active/ folder.")
@@ -999,7 +1019,7 @@ def main() -> None:
         video_preview(args.video, args.action, args.out, strip=args.strip)
         return
     if args.video_loop:
-        lo, hi = (int(v) for v in args.loop_range.split("-"))
+        lo, hi = (0, 0) if args.loop_range == "auto" else (int(v) for v in args.loop_range.split("-"))
         video_loop(args.video_loop, args.action, args.out, lo, hi, args.width)
         return
     if args.frame:
