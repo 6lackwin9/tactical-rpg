@@ -411,6 +411,19 @@ def tweens(n: int, ms: int, eased=True):
     return [((ease if eased else (lambda x: x))(i / (n + 1)), ms) for i in range(1, n + 1)]
 
 
+def sheet_plan(prefix: str, n: int, step_ms: int, hold_ms: int = 0, cycle: bool = False):
+    """Plan through <prefix>_f1.._fN with one flow in-between per gap. ``cycle`` loops back from fN to f1 (walk,
+    sneak); otherwise the action holds on f1 for ``hold_ms`` and returns to f1 at the end (attacks)."""
+    half = step_ms // 2
+    keys = [f"{prefix}_f{i}" for i in range(1, n + 1)]
+    pairs = list(zip(keys, keys[1:] + ([keys[0]] if cycle else [])))
+    plan = [(a, b, [(0, half), (0.5, half)]) for a, b in pairs]
+    if not cycle:
+        plan[0] = (keys[0], keys[1], [(0, hold_ms), (0.5, half)])
+        plan.append((keys[-1], keys[0], [(0, half), (0.5, half)]))
+    return plan
+
+
 GUARD, WIND, POKE, CLEAVE = "active_drawn", "drawn_kf_windup", "drawn_kf_poke", "drawn_kf_cleave"
 # generated breakdown keys (ART_UI_STUDIO 3.5); drawn_kf_halfdraw (first take) copied the guard stance, the retake r2 is used
 MID, HALF = "drawn_kf_midswing", "drawn_kf_halfdraw_r2"
@@ -485,6 +498,30 @@ CLIPS = {
             + [("sheet_draw_f2", "sheet_draw_lift", [(0, 45), (0.5, 45)]),
                ("sheet_draw_lift", "sheet_draw_f1", [(0, 45), (0.5, 45)])]
         ),
+    },
+    "slash_sheet": {
+        "label": "Drawn: slash from the generated 6-frame sheet",
+        "note": "kaelen_slash_sheet_6frame: guard, raise, wind-up, (mid-swing), cleave, recover. Frame 4 came out as a second wind-up, so frame 4 to 5 is a 180 degree jump.",
+        "methods": ["keys", "flow"],
+        "plan": sheet_plan("sheet_slash", 6, 110, hold_ms=500),
+    },
+    "poke_sheet": {
+        "label": "Drawn: poke from the generated 6-frame sheet",
+        "note": "kaelen_poke_sheet_6frame: guard, chamber, drive, full thrust, retract, recover.",
+        "methods": ["keys", "flow"],
+        "plan": sheet_plan("sheet_poke", 6, 110, hold_ms=500),
+    },
+    "walk_sheet": {
+        "label": "Walk from the generated 8-frame sheet",
+        "note": "kaelen_walk_sheet_8frame: contact, down, passing, up and their mirrors, looped.",
+        "methods": ["keys", "flow"],
+        "plan": sheet_plan("sheet_walk", 8, 110, cycle=True),
+    },
+    "sneak_sheet": {
+        "label": "Sneak from the generated 6-frame sheet",
+        "note": "kaelen_sneak_sheet_6frame: three crouched steps and their mirrors, looped.",
+        "methods": ["keys", "flow"],
+        "plan": sheet_plan("sheet_sneak", 6, 180, cycle=True),
     },
 }
 
@@ -605,6 +642,87 @@ def build(out: Path, gif_dir: Path | None) -> None:
         print(f"GIFs -> {gif_dir}")
 
 
+def slice_sheet(sheet: Path, cols: int, rows: int, prefix: str, size_like: str) -> dict:
+    """Cut a generated sprite sheet (flat #FF00FF, uniform cells) into aligned 340 px frames for the key bundle.
+
+    One scale for every frame: frame 1's height matches the ``size_like`` key's height. Every frame is planted on
+    GROUND_Y and keeps its x inside its cell, shifted so frame 1's boots centre on the ``size_like`` key's boots, so
+    steps and stance changes survive. Returns {f"{prefix}_f{i}": rgba} in reading order."""
+    a = np.asarray(Image.open(sheet).convert("RGB")).astype(int)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    bg = (r > 150) & (b > 150) & (g < 110) & (np.abs(r - b) < 90)
+    rgba = np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8)
+    h, w = rgba.shape[:2]
+    cw, ch = w // cols, h // rows
+    # A halberd may reach past its cell edge, so frames are cut by connected pieces, not by cell lines: every piece
+    # (8-connected after a small dilation, so a thin shaft stays joined) belongs to the cell holding its centroid,
+    # and each frame is read from a padded window around its cell holding only its own pieces.
+    fg = (rgba[..., 3] > 0).astype(np.uint8)
+    n, labels, _, cents = cv2.connectedComponentsWithStats(cv2.dilate(fg, np.ones((3, 3), np.uint8)), connectivity=8)
+    labels = np.where(fg > 0, labels, 0)
+    owner = np.full(n, -1)
+    for i in range(1, n):
+        cx, cy = cents[i]
+        owner[i] = min(int(cy) // ch, rows - 1) * cols + min(int(cx) // cw, cols - 1)
+    px, py = cw // 2, ch // 4
+    cells = []
+    for idx in range(rows * cols):
+        y, x = divmod(idx, cols)
+        y0, y1 = max(0, y * ch - py), min(h, (y + 1) * ch + py)
+        x0, x1 = max(0, x * cw - px), min(w, (x + 1) * cw + px)
+        win = rgba[y0:y1, x0:x1].copy()
+        mine = owner[labels[y0:y1, x0:x1]] == idx
+        win[~mine] = 0
+        pad = np.zeros(((ch + 2 * py), (cw + 2 * px), 4), np.uint8)  # same size for every frame, cell at the same spot
+        oy, ox = y0 - (y * ch - py), x0 - (x * cw - px)
+        pad[oy:oy + win.shape[0], ox:ox + win.shape[1]] = win
+        cells.append(pad)
+    cw, ch = cw + 2 * px, ch + 2 * py
+
+    def extent(img):
+        m = img[..., 3] > 0
+        ys = np.nonzero(m.any(axis=1))[0]
+        low = int(ys.max())
+        xs = np.nonzero(m[max(0, low - 12):low + 1].any(axis=0))[0]
+        return int(ys.min()), low, int(xs.min()), int(xs.max())
+
+    ref = load_keys()[size_like]
+    rt, rl, rx0, rx1 = extent(ref)
+    t0, l0, x0, x1 = extent(cells[0])
+    s = (rl - rt) / (l0 - t0)
+    dx = int(round((rx0 + rx1) / 2 - (x0 + x1) / 2 * s))
+    W, H = round(cw * s), round(ch * s)
+    out = {}
+    for i, c in enumerate(cells, 1):
+        im = clean(np.array(Image.fromarray(c).resize((W, H), Image.LANCZOS)))
+        m = im[..., 3] > 0
+        dy = GROUND_Y - int(np.nonzero(m.any(axis=1))[0].max())
+        frame = np.zeros((SIZE, SIZE, 4), np.uint8)
+        for yy in range(H):
+            ty = yy + dy
+            if 0 <= ty < SIZE:
+                xa, xb = max(0, -dx), min(W, SIZE - dx)
+                frame[ty, xa + dx:xb + dx] = im[yy, xa:xb]
+        lost = int(m.sum()) - int((frame[..., 3] > 0).sum())
+        if lost:
+            print(f"  {prefix}_f{i}: {lost} px fall outside the 340 px frame")
+        out[f"{prefix}_f{i}"] = frame
+    print(f"{sheet.name}: {len(out)} frames, scale {s:.4f}, x shift {dx}")
+    return out
+
+
+def add_to_bundle(frames: dict) -> None:
+    """Write frames into kaelen_4pose_uris.json as PNG data URIs, keeping every existing entry as it is."""
+    p = HERE / "kaelen_4pose_uris.json"
+    raw = p.read_text(encoding="utf-8")
+    d = json.loads(raw)
+    for k, f in frames.items():
+        buf = io.BytesIO()
+        Image.fromarray(f).save(buf, format="PNG", optimize=True)
+        d[k] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    p.write_text(json.dumps(d) + ("\n" if raw.endswith("\n") else ""), encoding="utf-8", newline="\n")
+
+
 REFS = {  # reference image name -> aligned key, for generated breakdown keys (art_src/vn_stage/prompts/)
     "kaelen_ref_passive_relaxed": "passive_relaxed",
     "kaelen_ref_active_drawn": "active_drawn",
@@ -642,7 +760,16 @@ def main() -> None:
     ap.add_argument("--gif-dir", type=Path, default=None, help="Also write one GIF per clip and method here.")
     ap.add_argument("--export-refs", type=Path, default=None, metavar="DIR",
                     help="Only write the breakdown-key reference PNGs into DIR (no lab).")
+    ap.add_argument("--slice", type=Path, default=None, metavar="SHEET",
+                    help="Cut a generated sprite sheet into the key bundle (with --grid, --prefix, --size-like).")
+    ap.add_argument("--grid", default="3x2", help="Columns x rows of the sheet (default 3x2).")
+    ap.add_argument("--prefix", default=None, help="Bundle key prefix, frames become <prefix>_f1.._fN.")
+    ap.add_argument("--size-like", default="sheet_draw_f6", help="Bundle key whose height frame 1 is scaled to.")
     args = ap.parse_args()
+    if args.slice:
+        cols, rows = (int(x) for x in args.grid.lower().split("x"))
+        add_to_bundle(slice_sheet(args.slice, cols, rows, args.prefix, args.size_like))
+        return
     if args.export_refs:
         export_refs(args.export_refs)
         return

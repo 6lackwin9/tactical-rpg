@@ -1,0 +1,37 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_walk_sheet_8frame",
+  "prompt": "Reference images, attached in this order and named here by file name: kaelen_ref_walk_1h.png (the walking pose and carry, frame 1); kaelen_ref_sheet_f1.png (the character standing, the size for every frame).\n\nMake a pixel-art animation sprite sheet of one character walking to the right, one full walk cycle as 8 frames in a grid of 4 columns and 2 rows, read left to right, top row first. kaelen_ref_walk_1h.png shows the walking pose and the way he carries the halberd: frame 1 copies kaelen_ref_walk_1h.png as closely as possible. kaelen_ref_sheet_f1.png shows the same character standing; draw him at exactly the size of kaelen_ref_sheet_f1.png in every frame (same head size, same height when upright).\n\nCharacter (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, carrying a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and composed, mouth closed.\n\nCarry (every frame): the halberd is held low in both hands as in kaelen_ref_walk_1h.png, the blade forward and down to the right, the shaft end behind him. The carry stays steady through the whole cycle; only a slight natural bob.\n\nWalk cycle (he walks in place, facing right, torso and head turned into the walk direction):\n1. Contact: front (right) heel touching down ahead, back (left) toe pushing off behind (as kaelen_ref_walk_1h.png).\n2. Down: weight settles on the front foot, knee slightly bent, body at its lowest.\n3. Passing: the back leg swings forward past the standing leg, body rising.\n4. Up: the standing leg straight, body at its highest, the swinging foot about to reach forward.\n5. Contact: the other foot now in front, mirror of frame 1 (left heel down ahead, right toe behind).\n6. Down: mirror of frame 2.\n7. Passing: mirror of frame 3.\n8. Up: mirror of frame 4.\n\nThe head stays almost level through the cycle (at most a small bob). Boots land flat on the same ground line in every cell.\n\nLayout and style: every frame is the same size, with the character at the same scale and on the same ground line in each cell. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.\n",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_walk_1h.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_walk_sheet_8frame.txt",
+  "time": "2026-11-09T17:34:55Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_walk_1h.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_walk_sheet_8frame_q1794245193",
+  "metadata": {
+    "asset_id": "kaelen_walk_sheet_8frame",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_walk_sheet_8frame.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_walk_sheet_8frame.txt",
+      "kind": "vn_keyframe_sheet",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_walk_1h.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe_sheet",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_walk_1h.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png"
+  ],
+  "notes": "Verified resolution (1376x768, long edge >= 1024px) and aspect ratio (16:9, 0.78% deviation) within 3% tolerance."
+}
