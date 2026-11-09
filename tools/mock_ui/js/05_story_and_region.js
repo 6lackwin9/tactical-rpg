@@ -611,16 +611,46 @@ function getPoseSheetEntry(rigKey) {
 function splitPoseSpriteUpperLower(img, poseName) {
   if (typeof document === 'undefined' || !document.createElement) return null;
   const W = 340, H = 340;
-  const hipY = poseName === 'relaxed' ? 196 : 218;
+  // Per-pose anatomical deformer anchors & non-overlapping head bounding boxes on the 340x340 pose sprites
+  const meta = poseName === 'relaxed'
+    ? { hipX: 162, hipY: 196, neckX: 160, neckY: 92,  headBox: [115, 24, 195, 96],  kneeY: 262 }
+    : (poseName === 'sneaking'
+      ? { hipX: 168, hipY: 214, neckX: 186, neckY: 134, headBox: [135, 68, 225, 138], kneeY: 266 }
+      : { hipX: 172, hipY: 214, neckX: 178, neckY: 128, headBox: [135, 66, 212, 132], kneeY: 266 });
+
+  const { hipX, hipY, neckX, neckY, headBox, kneeY } = meta;
+  const [hx0, hy0, hx1, hy1] = headBox;
+
   const upCv = document.createElement('canvas'); upCv.width = W; upCv.height = H;
   const loCv = document.createElement('canvas'); loCv.width = W; loCv.height = H;
+  const torsoCv = document.createElement('canvas'); torsoCv.width = W; torsoCv.height = H;
+  const headCv = document.createElement('canvas'); headCv.width = W; headCv.height = H;
+
   const upCtx = upCv.getContext('2d');
   const loCtx = loCv.getContext('2d');
-  if (!upCtx || !loCtx) return null;
-  // Upper body includes 6px overlap across hipY so breathing/sway never opens a seam
-  upCtx.drawImage(img, 0, 0, W, hipY + 6, 0, 0, W, hipY + 6);
-  loCtx.drawImage(img, 0, hipY - 4, W, H - (hipY - 4), 0, hipY - 4, W, H - (hipY - 4));
-  return { upper: upCv, lower: loCv, hipY };
+  const torsoCtx = torsoCv.getContext('2d');
+  const headCtx = headCv.getContext('2d');
+  if (!upCtx || !loCtx || !torsoCtx || !headCtx) return null;
+
+  // 1. Full upper body (with 8px waist overlap across hipY)
+  upCtx.drawImage(img, 0, 0, W, hipY + 8, 0, 0, W, hipY + 8);
+  // 2. Lower body (with 6px waist overlap above hipY for seamless scanline strip-mesh warping)
+  loCtx.drawImage(img, 0, hipY - 6, W, H - (hipY - 6), 0, hipY - 6, W, H - (hipY - 6));
+
+  // 3. Torso + Arms + Weapon (head region above neckY - 3 cleared so independent head nod/stabilizer never ghosts)
+  torsoCtx.drawImage(img, 0, 0, W, hipY + 8, 0, 0, W, hipY + 8);
+  torsoCtx.clearRect(hx0, hy0, hx1 - hx0, (neckY - 3) - hy0);
+
+  // 4. Independent Head + Straw-Blond Hair (with 5px collar overlap down to neckY + 5)
+  headCtx.drawImage(img, hx0, hy0, hx1 - hx0, (neckY + 5) - hy0, hx0, hy0, hx1 - hx0, (neckY + 5) - hy0);
+
+  return {
+    upper: upCv,
+    lower: loCv,
+    torsoOnly: torsoCv,
+    headOnly: headCv,
+    hipX, hipY, neckX, neckY, kneeY, headBox
+  };
 }
 
 // Pose targets for all 4 limbs + spine + head + 2-handed polearm grip:
@@ -644,6 +674,8 @@ const VTUBER_POSE_TARGETS = {
     elbowRAngle: -4.0,
     weaponAngle: -2.0,
     weapSlide: 0.0,
+    lungeOffset: 0.0,
+    flinchOffset: 0.0,
     breathAmp: 2.0,
     breathFreq: 1.85
   },
@@ -661,6 +693,8 @@ const VTUBER_POSE_TARGETS = {
     elbowRAngle: 16.0,
     weaponAngle: 80.0,      // 80° + 10° rest shaft angle = 90.0° (100% horizontal / parallel to ground!)
     weapSlide: 18.0,        // Slides shaft back through both gripping hands
+    lungeOffset: 0.0,
+    flinchOffset: 0.0,
     breathAmp: 1.3,
     breathFreq: 1.35
   },
@@ -678,6 +712,8 @@ const VTUBER_POSE_TARGETS = {
     elbowRAngle: -28.0,
     weaponAngle: 48.0,      // 48° + 10° rest shaft angle = 58.0° two-handed diagonal combat guard!
     weapSlide: 26.0,        // Slides shaft diagonally through both gripping hands
+    lungeOffset: 0.0,
+    flinchOffset: 0.0,
     breathAmp: 2.6,
     breathFreq: 2.85
   }
@@ -688,7 +724,8 @@ const VTUBER_SPRING_KEYS = [
   'backStepX', 'frontStepX',
   'shoulderLAngle', 'elbowLAngle',
   'shoulderRAngle', 'elbowRAngle',
-  'weaponAngle', 'weapSlide'
+  'weaponAngle', 'weapSlide',
+  'lungeOffset', 'flinchOffset'
 ];
 
 const VTUBER_SLOT_SPRINGS = {};
@@ -702,7 +739,7 @@ function getVtuberSlotSpring(slotId, targetPose) {
       glintProgress: targetPose === 'weapons_drawn' ? 0.15 : 1.5
     };
     for (const k of VTUBER_SPRING_KEYS) {
-      init[k] = tgt[k];
+      init[k] = tgt[k] ?? 0;
       init['v_' + k] = 0;
     }
     VTUBER_SLOT_SPRINGS[slotId] = init;
@@ -711,36 +748,58 @@ function getVtuberSlotSpring(slotId, targetPose) {
   if (s.pose !== targetPose) {
     s.prevPose = s.pose;
     s.poseTransitionT = 0.0;
-    // Inject crisp physical limb impulses when transitioning between stances
+    // Inject crisp physical limb & deformer impulses when transitioning between stances
     if (targetPose === 'weapons_drawn') {
       s.v_weaponAngle += 220;
       s.v_shoulderLAngle -= 90;
-      s.v_crouchDrop += 65;
+      s.v_crouchDrop += 95;
+      s.v_lungeOffset += 165;
       s.glintProgress = 0.0;
     } else if (targetPose === 'sneaking') {
-      s.v_crouchDrop += 85;
+      s.v_crouchDrop += 110;
       s.v_weaponAngle += 180;
       s.v_spineAngle += 70;
+      s.v_lungeOffset += 95;
       s.glintProgress = 0.0;
     } else {
-      s.v_crouchDrop -= 55;
+      s.v_crouchDrop -= 75;
     }
     s.pose = targetPose;
   }
   return s;
 }
 
+// Interactive Limit-Test Impulse Trigger (`'lunge'` | `'flinch'`) for testing Deformer Rig physical extremes
+function triggerStoryRigAction(actionType) {
+  Object.values(VTUBER_SLOT_SPRINGS).forEach(s => {
+    if (!s) return;
+    if (actionType === 'lunge') {
+      s.v_lungeOffset = (s.v_lungeOffset || 0) + 360;
+      s.v_crouchDrop  = (s.v_crouchDrop  || 0) + 140;
+      s.v_spineAngle  = (s.v_spineAngle  || 0) + 120;
+      s.poseTransitionT = 0.05;
+      s.glintProgress = 0.0;
+    } else if (actionType === 'flinch') {
+      s.v_flinchOffset = (s.v_flinchOffset || 0) + 380;
+      s.v_crouchDrop   = (s.v_crouchDrop   || 0) + 95;
+      s.v_spineAngle   = (s.v_spineAngle   || 0) - 140;
+      s.poseTransitionT = 0.05;
+    }
+  });
+}
+
 function stepVtuberSpring(s, tgt, dt) {
   const k = 150;  // Spring stiffness
-  const d = 15.2; // Damping coefficient
+  const d = 14.2; // Damping coefficient (allows crisp spring overshoot on lunges/flinches)
   for (const key of VTUBER_SPRING_KEYS) {
     const vKey = 'v_' + key;
-    const force = (tgt[key] - s[key]) * k - s[vKey] * d;
-    s[vKey] += force * dt;
-    s[key] += s[vKey] * dt;
+    const targetVal = tgt[key] ?? 0;
+    const force = (targetVal - (s[key] ?? 0)) * k - (s[vKey] ?? 0) * d;
+    s[vKey] = (s[vKey] ?? 0) + force * dt;
+    s[key]  = (s[key]  ?? 0) + s[vKey] * dt;
   }
   if (s.poseTransitionT < 1.0) {
-    s.poseTransitionT = Math.min(1.0, s.poseTransitionT + dt * 5.2);
+    s.poseTransitionT = Math.min(1.0, s.poseTransitionT + dt * 4.8);
   }
   if (s.glintProgress < 1.4) {
     s.glintProgress += dt * 1.35;
@@ -971,7 +1030,7 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
 }
 
 // ============================================================================
-// RENDERER FOR APPROACH C: 3-POSE KEYFRAME SHEET + LIVE RIG (`drawPoseSheetRigOnCanvas`)
+// RENDERER FOR APPROACH C: 3-POSE KEYFRAME SHEET + MULTI-ZONE DEFORMER RIG (`drawPoseSheetRigOnCanvas`)
 // ============================================================================
 function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, showDebug) {
   const W = 340, H = 340;
@@ -985,15 +1044,26 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
 
   const shouldFlip = side === 'right';
   const phaseOffset = side === 'left' ? 0.0 : 1.7;
-  const breath = Math.sin(tSec * tgt.breathFreq + phaseOffset);
-  const talkBob = isActive ? Math.sin(tSec * 6.5) * 0.85 : 0;
+  const boost = (typeof STATE !== 'undefined' && STATE.storyDeformerBoost) ? STATE.storyDeformerBoost : 1.0;
+
+  // Multi-harmonic physiological waveforms (breathing + 2.5D weight shift + speaking cadence + hair breeze)
+  const breath   = Math.sin(tSec * tgt.breathFreq + phaseOffset);
+  const swayWave = Math.sin(tSec * (tgt.breathFreq * 0.55) + phaseOffset + 0.8);
+  const hairWave = Math.sin(tSec * 3.4 + phaseOffset + 1.4);
+  const talkBob  = isActive ? Math.sin(tSec * 6.8) * 1.15 : 0;
+
+  // Live physical spring impulses from stance transitions, Combat Lunge (`⚔️ Lunge`), and Hit Flinch (`💥 Flinch`)
+  const crouchSpringDelta = (s.crouchDrop ?? tgt.crouchDrop) - tgt.crouchDrop;
+  const lungePx  = (s.lungeOffset  ?? 0) * (0.28 * Math.min(1.8, boost * 0.75));
+  const flinchPx = (s.flinchOffset ?? 0) * (0.28 * Math.min(1.8, boost * 0.75));
 
   // Snappy anticipation squash-and-stretch impulse when switching between keyframe poses!
   const transT = s.poseTransitionT ?? 1.0;
   const squashWave = transT < 1.0 ? Math.sin(transT * Math.PI) : 0.0;
-  const squashX = 1.0 + squashWave * 0.08;
-  const squashY = 1.0 - squashWave * 0.07;
-  const hopY    = -squashWave * 6.0;
+  const squashScale = Math.min(2.2, 0.85 + boost * 0.35);
+  const squashX = 1.0 + squashWave * 0.075 * squashScale;
+  const squashY = 1.0 - squashWave * 0.068 * squashScale;
+  const hopY    = -squashWave * 5.0 * squashScale;
 
   ctx.save();
   if (shouldFlip) {
@@ -1006,23 +1076,208 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
   ctx.scale(squashX, squashY);
   ctx.translate(-170, -325);
 
-  if (layer) {
-    // 1. Lower body (planted boots + subtle knee suspension flex)
-    ctx.drawImage(layer.lower, 0, 0);
+  // 0. Cross-pose directional motion smear ghost (`prevPose`) during the first 50% of a stance change
+  if (transT < 0.52 && s.prevPose && s.prevPose !== activePose) {
+    const prevImg = poseEntry.images[s.prevPose];
+    if (prevImg && prevImg.complete) {
+      ctx.save();
+      ctx.globalAlpha = (1.0 - transT / 0.52) * 0.36;
+      const smearShiftX = activePose === 'relaxed' ? -10 : 12;
+      ctx.transform(1, 0, smearShiftX * 0.012, 1, -smearShiftX * (1.0 - transT), 0);
+      ctx.drawImage(prevImg, 0, 0);
+      ctx.restore();
+    }
+  }
 
-    // 2. Upper body (pivots at waist `hipY` with rhythmic breathing, chest expansion, and micro spine sway)
-    const hipX = 165, hipY = layer.hipY;
-    const swayRad = ((breath * 0.85 + talkBob * 0.6) * Math.PI) / 180;
-    const breathDy = -breath * tgt.breathAmp * 0.85 + talkBob * 0.5;
-    const chestScaleX = 1.0 + Math.max(0, breath) * 0.015;
-    const chestScaleY = 1.0 + Math.max(0, breath) * 0.012;
+  if (layer) {
+    const hipX  = layer.hipX  || 166;
+    const hipY  = layer.hipY  || 210;
+    const neckX = layer.neckX || 174;
+    const neckY = layer.neckY || 120;
+    const footY = 325;
+
+    // Waist displacement: breathing suspension + 2.5D weight shift + crouch spring overshoot + lunge/flinch impulse
+    const breathCrouchDy = (activePose === 'relaxed' ? -breath * 1.6 : (0.9 - breath) * 2.2) * boost;
+    const waistDy = Math.max(-14, Math.min(22,
+      breathCrouchDy + crouchSpringDelta * 0.32 * Math.min(2.0, boost * 0.85) + Math.abs(lungePx) * 0.18 + Math.abs(flinchPx) * 0.12
+    ));
+    const waistDx = (swayWave * (activePose === 'relaxed' ? 1.8 : 2.8) * boost) + lungePx - flinchPx * 0.85;
+
+    // Mid-leg knee bulge & wide-stance knee spread driven by waist crouch suspension
+    const kneeFlexSign = activePose === 'weapons_drawn' ? 0.35 : 1.0;
+    const kneeBulgeX = (waistDy * 0.62 + Math.max(0, -breath) * (activePose === 'sneaking' ? 3.2 : 1.8) * boost) * kneeFlexSign + lungePx * 0.35;
+    const kneeSpreadScale = activePose === 'weapons_drawn'
+      ? (waistDy * 0.0055 + Math.max(0, -breath) * 0.016 * boost + Math.abs(lungePx) * 0.0025)
+      : (waistDy * 0.0022);
+
+    // ========================================================================
+    // ZONE 1: LOWER BODY 2px SCANLINE STRIP-MESH WARP (Feet Planted + Knee Flex)
+    // ========================================================================
+    const stripStep = 2;
+    const yStart = hipY - 4;
+    const totalLegH = Math.max(1, footY - hipY);
+    for (let sy = yStart; sy < H; sy += stripStep) {
+      const sh = Math.min(stripStep, H - sy);
+      // Normalized height `u`: 0.0 at planted boot sole (`footY = 325`), 1.0 at waist (`hipY`)
+      const u = Math.max(0.0, Math.min(1.0, (footY - sy) / totalLegH));
+      const kneeArch = Math.sin(u * Math.PI); // Peaks at 1.0 right at knee height (`u = 0.5`)!
+
+      // Horizontal displacement: 0px at planted boots -> knee bulge at mid-leg -> `waistDx` at pelvis
+      const rowDx = waistDx * Math.pow(u, 1.15) + kneeBulgeX * kneeArch;
+      // Vertical compression: 0px at planted boots -> `waistDy` at pelvis (compressing thigh/shin around bending knee)
+      const rowDy = waistDy * u + (sy + stripStep <= footY ? 0 : 0);
+      // Horizontal straddle spread around `hipX` (widens outward `/` `\` at the knees in `weapons_drawn`!)
+      const rowScaleX = 1.0 + kneeSpreadScale * kneeArch;
+
+      const destX = hipX * (1.0 - rowScaleX) + rowDx;
+      const destY = sy + rowDy;
+      // Stretch strip height slightly by `1.0 + Math.abs(waistDy) / totalLegH * 0.35` so sub-pixel compression never leaves gaps
+      const destH = sh + 0.65;
+      ctx.drawImage(layer.lower, 0, sy, W, sh, destX, destY, W * rowScaleX, destH);
+    }
+
+    // ========================================================================
+    // ZONE 2: TORSO + ARMS + 2H BILLHOOK DEFORMER (Waist Pivot + 2.5D Twist/Shear + Ribcage Breath)
+    // ========================================================================
+    const posePitchBias = activePose === 'sneaking' ? 1.35 : (activePose === 'weapons_drawn' ? 1.15 : 0.85);
+    const swayDeg = (breath * 1.15 * posePitchBias + swayWave * 0.65) * boost + talkBob * 0.75 + lungePx * 0.45 - flinchPx * 0.65;
+    const swayRad = (swayDeg * Math.PI) / 180;
+    const breathLiftDy = (-breath * tgt.breathAmp * 0.75 * boost) + talkBob * 0.45;
+    const chestScaleX = 1.0 + Math.max(0, breath) * 0.018 * boost + Math.abs(lungePx) * 0.002;
+    const chestScaleY = 1.0 + Math.max(0, breath) * 0.014 * boost;
+    // 2.5D horizontal parallax shear (`shearX`) tilts shoulders/polearm forward on inhale & lunge, backward on flinch
+    const torsoShearX = (swayWave * 0.014 * boost) + (lungePx * 0.0045) - (flinchPx * 0.0055);
+
+    const waistPivotX = hipX + waistDx;
+    const waistPivotY = hipY + waistDy + breathLiftDy;
+
+    // Helper mapping any rest upper-body point `(px, py)` through the active Torso affine deformer
+    function mapTorsoPoint(px, py) {
+      const dx0 = (px - hipX) * chestScaleX;
+      const dy0 = (py - hipY) * chestScaleY;
+      // Apply horizontal shear (`x' = x + shearX * y`) then rotate by `swayRad`
+      const sx = dx0 + torsoShearX * dy0;
+      const sy = dy0;
+      const c = Math.cos(swayRad), sn = Math.sin(swayRad);
+      return [
+        waistPivotX + sx * c - sy * sn,
+        waistPivotY + sx * sn + sy * c
+      ];
+    }
 
     ctx.save();
-    ctx.translate(hipX, hipY + breathDy);
+    ctx.translate(waistPivotX, waistPivotY);
     ctx.rotate(swayRad);
-    ctx.scale(chestScaleX, chestScaleY);
-    ctx.drawImage(layer.upper, -hipX, -hipY);
+    ctx.transform(chestScaleX, 0, torsoShearX, chestScaleY, 0, 0);
+    ctx.drawImage(layer.torsoOnly || layer.upper, -hipX, -hipY);
     ctx.restore();
+
+    // ========================================================================
+    // ZONE 3: INDEPENDENT NECK-PIVOTED HEAD STABILIZER + SPEAKING NOD + HAIR BREEZE
+    // ========================================================================
+    if (layer.headOnly) {
+      const [animNeckX, animNeckY] = mapTorsoPoint(neckX, neckY);
+      // Gaze counter-stabilization keeps Kaelen's eyes locked on his target (`-swayRad * 0.68`) while adding expressive speaking nod!
+      const headCounterRad = -swayRad * 0.68 + ((talkBob * 1.65 + Math.sin(tSec * 2.1 + phaseOffset) * 0.75 * boost - flinchPx * 0.35) * Math.PI) / 180;
+      const hairShearX = hairWave * 0.018 * boost;
+
+      ctx.save();
+      ctx.translate(animNeckX, animNeckY);
+      ctx.rotate(swayRad + headCounterRad);
+      ctx.transform(1.0, 0, hairShearX, 1.0, 0, 0);
+      ctx.drawImage(layer.headOnly, -neckX, -neckY);
+      ctx.restore();
+    }
+
+    // ========================================================================
+    // LIVE DEFORMING 2D STRIP-MESH & ZONE CAGE OVERLAY (`🦴 Rig Mesh`)
+    // ========================================================================
+    if (showDebug) {
+      ctx.save();
+      // 1. Lower-body deforming scanline lattice (`#38bdf8` cyan) showing pinned boots + flexing knee curve
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.72)';
+      ctx.lineWidth = 1.15;
+      const leftRail = [], rightRail = [], midRail = [];
+      for (let sy = hipY; sy <= footY; sy += 13) {
+        const u = Math.max(0.0, Math.min(1.0, (footY - sy) / totalLegH));
+        const kneeArch = Math.sin(u * Math.PI);
+        const rowDx = waistDx * Math.pow(u, 1.15) + kneeBulgeX * kneeArch;
+        const rowDy = waistDy * u;
+        const rowScaleX = 1.0 + kneeSpreadScale * kneeArch;
+        const lx = hipX + (96 - hipX) * rowScaleX + rowDx;
+        const rx = hipX + (246 - hipX) * rowScaleX + rowDx;
+        const mx = hipX + rowDx;
+        const wy = sy + rowDy;
+        leftRail.push([lx, wy]);
+        rightRail.push([rx, wy]);
+        midRail.push([mx, wy]);
+        ctx.beginPath();
+        ctx.moveTo(lx, wy);
+        ctx.lineTo(rx, wy);
+        ctx.stroke();
+      }
+      [leftRail, rightRail, midRail].forEach((rail, rIdx) => {
+        ctx.strokeStyle = rIdx === 2 ? '#fbbf24' : 'rgba(56, 189, 248, 0.88)';
+        ctx.lineWidth = rIdx === 2 ? 2.0 : 1.4;
+        ctx.beginPath();
+        rail.forEach((pt, i) => { if (i === 0) ctx.moveTo(pt[0], pt[1]); else ctx.lineTo(pt[0], pt[1]); });
+        ctx.stroke();
+      });
+
+      // 2. Torso 2.5D Shear & Breathing Warp Cage (`#34d399` emerald)
+      const tCorners = [
+        mapTorsoPoint(82, neckY - 6),
+        mapTorsoPoint(268, neckY - 6),
+        mapTorsoPoint(268, hipY),
+        mapTorsoPoint(82, hipY)
+      ];
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      tCorners.forEach((pt, i) => { if (i === 0) ctx.moveTo(pt[0], pt[1]); else ctx.lineTo(pt[0], pt[1]); });
+      ctx.closePath();
+      ctx.stroke();
+
+      // 3. Head Stabilizer Box (`#c084fc` purple)
+      const [hx0, hy0, hx1, hy1] = layer.headBox || [130, 50, 215, 130];
+      const [animNeckX, animNeckY] = mapTorsoPoint(neckX, neckY);
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.9)';
+      ctx.strokeRect(hx0 + (animNeckX - neckX), hy0 + (animNeckY - neckY), hx1 - hx0, hy1 - hy0);
+      ctx.setLineDash([]);
+
+      // 4. Anatomical Deformer Pivots (Planted Ankles, Flexing Knees, Waist Hinge, Chest, Neck Stabilizer, Weapon Shaft)
+      const uKnee = 0.5;
+      const kDx = waistDx * Math.pow(uKnee, 1.15) + kneeBulgeX;
+      const kDy = waistDy * uKnee;
+      const kSpread = 1.0 + kneeSpreadScale;
+      const restPts = activePose === 'relaxed'
+        ? { kl: 142, kr: 188, al: [134, 318], ar: [196, 318], w0: [224, 162], w1: [248, 28] }
+        : (activePose === 'sneaking'
+          ? { kl: 144, kr: 204, al: [122, 318], ar: [202, 318], w0: [82, 190], w1: [288, 190] }
+          : { kl: 138, kr: 216, al: [122, 318], ar: [228, 318], w0: [104, 216], w1: [276, 108] });
+
+      const animKL = [hipX + (restPts.kl - hipX) * kSpread + kDx, (hipY + footY) * 0.5 + kDy];
+      const animKR = [hipX + (restPts.kr - hipX) * kSpread + kDx, (hipY + footY) * 0.5 + kDy];
+      const animChest = mapTorsoPoint(hipX + 4, (hipY + neckY) * 0.52);
+      const animW0 = mapTorsoPoint(restPts.w0[0], restPts.w0[1]);
+      const animW1 = mapTorsoPoint(restPts.w1[0], restPts.w1[1]);
+
+      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.3;
+      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animKL[0], animKL[1]); ctx.lineTo(restPts.al[0], restPts.al[1]); ctx.stroke();
+      ctx.strokeStyle = '#34d399';
+      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animKR[0], animKR[1]); ctx.lineTo(restPts.ar[0], restPts.ar[1]); ctx.stroke();
+      ctx.strokeStyle = '#fbbf24';
+      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animChest[0], animChest[1]); ctx.lineTo(animNeckX, animNeckY); ctx.stroke();
+      ctx.strokeStyle = '#fb7185';
+      ctx.beginPath(); ctx.moveTo(animW0[0], animW0[1]); ctx.lineTo(animW1[0], animW1[1]); ctx.stroke();
+
+      [[waistPivotX, waistPivotY], animChest, [animNeckX, animNeckY], animKL, animKR, restPts.al, restPts.ar, animW0, animW1].forEach(pt => {
+        ctx.fillStyle = '#090d16'; ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(pt[0], pt[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    }
   } else {
     ctx.drawImage(rawImg, 0, 0);
   }
@@ -1048,37 +1303,6 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
       ctx.lineTo(gx + 12, gy - 12);
     }
     ctx.stroke();
-    ctx.restore();
-  }
-
-  if (showDebug) {
-    const hipY = layer ? layer.hipY : 210;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(52, 211, 153, 0.75)';
-    ctx.lineWidth = 1.4;
-    ctx.setLineDash([4, 3]);
-    ctx.strokeRect(72, 24, 196, hipY - 24);
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
-    ctx.strokeRect(72, hipY, 196, 325 - hipY);
-    ctx.setLineDash([]);
-    // Draw waist deformer hinge + active pose skeleton markers
-    const pts = activePose === 'relaxed'
-      ? { p: [165, 196], c: [165, 140], n: [168, 92], h: [170, 50], kl: [142, 266], kr: [188, 266], al: [134, 316], ar: [196, 316], w0: [224, 162], w1: [248, 28] }
-      : (activePose === 'sneaking'
-        ? { p: [165, 218], c: [174, 166], n: [186, 126], h: [192, 92], kl: [144, 272], kr: [204, 268], al: [122, 316], ar: [202, 316], w0: [82, 190], w1: [288, 190] }
-        : { p: [172, 218], c: [176, 166], n: [182, 124], h: [186, 90], kl: [138, 268], kr: [216, 268], al: [122, 316], ar: [228, 316], w0: [104, 216], w1: [276, 108] });
-    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2.4;
-    ctx.beginPath(); ctx.moveTo(pts.p[0], pts.p[1]); ctx.lineTo(pts.c[0], pts.c[1]); ctx.lineTo(pts.n[0], pts.n[1]); ctx.lineTo(pts.h[0], pts.h[1]); ctx.stroke();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.beginPath(); ctx.moveTo(pts.p[0], pts.p[1]); ctx.lineTo(pts.kl[0], pts.kl[1]); ctx.lineTo(pts.al[0], pts.al[1]); ctx.stroke();
-    ctx.strokeStyle = '#34d399';
-    ctx.beginPath(); ctx.moveTo(pts.p[0], pts.p[1]); ctx.lineTo(pts.kr[0], pts.kr[1]); ctx.lineTo(pts.ar[0], pts.ar[1]); ctx.stroke();
-    ctx.strokeStyle = '#fb7185';
-    ctx.beginPath(); ctx.moveTo(pts.w0[0], pts.w0[1]); ctx.lineTo(pts.w1[0], pts.w1[1]); ctx.stroke();
-    [pts.p, pts.c, pts.n, pts.h, pts.kl, pts.kr, pts.al, pts.ar, pts.w0, pts.w1].forEach(pt => {
-      ctx.fillStyle = '#090d16'; ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(pt[0], pt[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    });
     ctx.restore();
   }
 
@@ -1713,23 +1937,23 @@ function renderStoryActorSlot(actor, side) {
   `;
 }
 
-// Side-by-Side Rig Engine Comparison Showcase (`compare_bc` — renders Approach B [Exploded 13-Part Spine2D Atlas], Approach C [3-Pose Keyframe Sheet + Idle Rig], and Approach A [Single-Sprite 10-Part Auto-Slice] simultaneously at 60fps!)
+// Side-by-Side Rig Engine Comparison Showcase (`compare_bc` — renders Approach C [3-Pose Keyframe Sheet + Multi-Zone Deformer], Approach B [Exploded 13-Part Spine2D Atlas], and Approach A [Single-Sprite 10-Part Auto-Slice] simultaneously at 60fps!)
 function renderRigEngineComparisonShowcase() {
   const activePose = (STATE.storyRigPose && STATE.storyRigPose !== 'auto') ? STATE.storyRigPose : 'weapons_drawn';
   const engines = [
     {
-      engine: 'atlas_b',
-      badge: '🧩 APPROACH B · EXPLODED 13-PART ATLAS',
-      title: '1. Spine2D Cutout Atlas + 2-Bone IK/FK',
-      sub: 'Unoccluded chest + separate cloak + rounded limb caps',
-      col: '#34d399'
+      engine: 'pose_c',
+      badge: '🎬 APPROACH C · 3-POSE SHEET + DEFORMER (PRIMARY)',
+      title: '1. Hand-Drawn Keyframe Poses + Multi-Zone Deformer',
+      sub: 'Strip-mesh knee flex + 2.5D torso twist + head stabilizer',
+      col: '#fbbf24'
     },
     {
-      engine: 'pose_c',
-      badge: '🎬 APPROACH C · 3-POSE SHEET + IDLE RIG',
-      title: '2. Hand-Drawn Keyframe Poses + Deformer',
-      sub: 'True 2H grip anatomy + waist breathing + squash/stretch',
-      col: '#fbbf24'
+      engine: 'atlas_b',
+      badge: '🧩 APPROACH B · EXPLODED 13-PART ATLAS',
+      title: '2. Spine2D Cutout Atlas + 2-Bone IK/FK',
+      sub: 'Unoccluded chest + separate cloak + mirrored wide leg',
+      col: '#34d399'
     },
     {
       engine: 'slice_a',
