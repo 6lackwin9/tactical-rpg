@@ -1,5 +1,12 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## R4-CLOSE (`R4-2`) 2026-11-08 (Final Backend & Golden Lock balance pass, `FB-146`)
+
+- **Measured build**: `develop` `@3353e62b` (`r42.json`, `CLASS-BASICS` rows in frozen `timeline_kit.json`, `goblin_skirmish` in `timeline_golden` and run via `enc=` outside the default 5-fight feel set).
+- **40-seed `sim feel` (5 `tl_` fights, `0` PLAN FAIL / SKIP)**: **`tl_duel_windup` 17.5% (`1v1` vs `elite`, intended loss), `tl_duel_reach` 100%, `tl_duel_armour` 0% (`1v1` vs `boss`, intended loss), `tl_flank` 100%, `tl_skirmish` 87.5%, overall 61.0%** — inside the `FB-145` target bands, zero regression vs `R4-1`.
+- **12-seed `sim party` & `sim campaign`**: **Party `mob` 100%, `line` 92%, `wave` 100%, `elite` 92%, `boss` 92% (party HP after boss `0.31`); Campaign `arms` `3/6` (boss HP `21%`), `gate` `5/6` (boss HP `57%`)** — all inside the `FB-145` target bands.
+- **`goblin_skirmish` diagnostic (`enc=goblin_skirmish`, 40 seeds)**: `17.5%` won (`20/40` capped at round limit, `5` fled due to goblin kite/flee behaviour against the 6/8 round cap; queued for `Post-R4` full playthrough review).
+
 ## R4-1 (`U2.3-TIERS` Slice 2) 2026-11-08 (single `tier_mult` `0.4 / 0.825 / 1.25 / 2.0`, `FB-145`)
 
 - **Measured build**: `develop` `@858eaab` (`unit_templates.json` 4 role rows seeded in `r41s2.json`, `template: "class"` on `calcified_amalgam` and `inquisitorial_purifier`, single `tier_mult` `{hero: 1.0, minion: 0.4, standard: 0.825, elite: 1.25, boss: 2.0}`, core stat floor `6`).
