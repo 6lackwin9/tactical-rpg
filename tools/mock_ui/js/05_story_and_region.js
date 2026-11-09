@@ -644,7 +644,9 @@ function splitPoseSpriteUpperLower(img, poseName) {
   loCtx.drawImage(img, 0, hipY - 6, W, H - (hipY - 6), 0, hipY - 6, W, H - (hipY - 6));
 
   // 3. Torso + Arms + Weapon (head region above neckY - 3 cleared so independent head nod/stabilizer never ghosts)
-  torsoCtx.drawImage(img, 0, 0, W, hipY + 8, 0, 0, W, hipY + 8);
+  // In `relaxed`, include the full white padded tunic skirt down to `y = 216` on `torsoOnly` so both thighs can swing freely from the hip sockets underneath!
+  const torsoBottomY = poseName === 'relaxed' ? 217 : (hipY + 8);
+  torsoCtx.drawImage(img, 0, 0, W, torsoBottomY, 0, 0, W, torsoBottomY);
   torsoCtx.clearRect(hx0, hy0, hx1 - hx0, (neckY - 3) - hy0);
 
   // Keep any weapon shaft/tip/ferrule pixels that dip below hipY on `torsoOnly` (and clear from `lower`) so the polearm stays 100% rigid!
@@ -674,23 +676,43 @@ function splitPoseSpriteUpperLower(img, poseName) {
   }
 
   // For `relaxed` and `sneaking` (keeping `weapons_drawn` as-is for strafing):
-  // Replace the front-facing left boot on `legLCv` (used only while walking) with a forward-facing copy of `legRCv`'s boot
-  // aligned seamlessly to the left ankle/cuff so both feet face the direction of the walk!
-  if (poseName === 'relaxed' || poseName === 'sneaking') {
-    const bootStartY = poseName === 'relaxed' ? 274 : 288;
-    legLCtx.clearRect(0, bootStartY, W, H - bootStartY);
-    for (let y = bootStartY; y < H; y++) {
-      const sx = poseName === 'relaxed'
-        ? Math.round(154 - Math.max(0, y - 218) * 0.08)
-        : Math.round(170 - Math.max(0, y - 230) * 0.20);
-      let shiftX = -54;
-      if (poseName === 'sneaking') {
-        const t = Math.min(1.0, Math.max(0.0, (y - 288) / 14.0));
-        shiftX = Math.round(-86 * (1.0 - t) + (-95) * t);
-      }
+  //  - In `relaxed`: replace the ENTIRE left leg below the tunic skirt (`y = 206..H`) with a continuous forward-facing copy of `legRCv`
+  //    (thigh + knee + shin + boot cuff + boot) so there is zero disconnect between the upper leg and boot, and the upper thigh faces forward!
+  //  - In `sneaking`: replace the lower boot (`y = 288..H`) below the angled cuff with `legRCv`'s forward-pointing boot.
+  if (poseName === 'relaxed') {
+    // Extend `legRCv`'s upper thigh (`y = 218`) upward into `y = 206..217` so lifting/swinging under the tunic skirt (`y <= 216`) never exposes a gap
+    for (let y = 206; y <= 217; y++) {
+      legRCtx.clearRect(0, y, W, 1);
+      legRCtx.drawImage(loCv, 154, 218, 191 - 154, 1, 154, y, 191 - 154, 1);
+    }
+    legLCtx.clearRect(0, 0, W, H);
+    for (let y = 206; y < H; y++) {
+      const sx = Math.round(154 - Math.max(0, y - 218) * 0.08);
+      const t = Math.min(1.0, Math.max(0.0, (y - 218) / (282 - 218)));
+      const shiftX = Math.round(-38 * (1.0 - t) + (-44) * t);
       legLCtx.drawImage(legRCv, sx, y, W - sx, 1, sx + shiftX, y, W - sx, 1);
     }
-    // Subtle 0.92x depth shading on the replaced back boot so it sits naturally behind the front leg
+    if (typeof legLCtx.getImageData === 'function') {
+      const legImgData = legLCtx.getImageData(0, 206, W, H - 206);
+      const bPx = legImgData.data;
+      for (let i = 0; i < bPx.length; i += 4) {
+        if (bPx[i + 3] > 0) {
+          bPx[i]     = Math.round(bPx[i]     * 0.91);
+          bPx[i + 1] = Math.round(bPx[i + 1] * 0.91);
+          bPx[i + 2] = Math.round(bPx[i + 2] * 0.91);
+        }
+      }
+      legLCtx.putImageData(legImgData, 0, 206);
+    }
+  } else if (poseName === 'sneaking') {
+    const bootStartY = 288;
+    legLCtx.clearRect(0, bootStartY, W, H - bootStartY);
+    for (let y = bootStartY; y < H; y++) {
+      const sx = Math.round(170 - Math.max(0, y - 230) * 0.20);
+      const t = Math.min(1.0, Math.max(0.0, (y - 288) / 14.0));
+      const shiftX = Math.round(-86 * (1.0 - t) + (-95) * t);
+      legLCtx.drawImage(legRCv, sx, y, W - sx, 1, sx + shiftX, y, W - sx, 1);
+    }
     if (typeof legLCtx.getImageData === 'function') {
       const bootImgData = legLCtx.getImageData(0, bootStartY, W, H - bootStartY);
       const bPx = bootImgData.data;
@@ -1220,19 +1242,30 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
         { cv: layer.legL, phi: phiL },
         { cv: layer.legR, phi: phiR }
       ];
+      const walkStartY = activePose === 'relaxed' ? 206 : yStart;
+      const walkLegTopY = activePose === 'relaxed' ? 216 : hipY;
+      const walkLegH = Math.max(1, footY - walkLegTopY);
       for (const leg of legsToDraw) {
         const strideSwing = Math.sin(leg.phi);              // -1 (back push-off) .. +1 (forward step)
         const liftWave    = Math.max(0, Math.cos(leg.phi)); // >0 during forward swing in air, 0 during grounded stance
-        for (let sy = yStart; sy < H; sy += stripStep) {
+        for (let sy = walkStartY; sy < H; sy += stripStep) {
           const sh = Math.min(stripStep, H - sy);
-          const u = Math.max(0.0, Math.min(1.0, (footY - sy) / totalLegH));
+          const u = Math.max(0.0, Math.min(1.0, (footY - sy) / walkLegH));
           const kneeArch = Math.sin(u * Math.PI);
-          // Smoothly lock the top 16% pelvis/tunic band (`u > 0.86`) to `(waistDx, waistDy)` so the waist never splits!
-          const splitBlend = Math.max(0.0, Math.min(1.0, (0.88 - u) / 0.16));
-
-          const rowDx = waistDx * Math.pow(u, 1.15)
-            + (strideSwing * strideAmp * Math.pow(1.0 - u, 1.05) + (kneeBulgeX + liftWave * stepKneeBulge) * kneeArch) * splitBlend;
-          const rowDy = waistDy * u - (liftWave * liftHeight * Math.pow(1.0 - u, 1.25)) * splitBlend;
+          let rowDx, rowDy;
+          if (activePose === 'relaxed') {
+            // In `relaxed`, `torsoOnly` covers the full white tunic skirt (`y <= 216`), so both thighs pivot inside the pelvis
+            // and already carry 26% of the stride as they emerge from under the tunic hem (`u = 1.0`) down to 100% at the boot (`u = 0.0`)!
+            const swingT = 0.26 + 0.74 * (1.0 - u);
+            rowDx = waistDx * Math.pow(u, 1.1) + strideSwing * strideAmp * swingT + (kneeBulgeX + liftWave * stepKneeBulge) * kneeArch;
+            rowDy = waistDy * u - liftWave * liftHeight * Math.pow(1.0 - u, 1.2);
+          } else {
+            // Smoothly lock the top 16% pelvis/tunic band (`u > 0.86`) to `(waistDx, waistDy)` so the waist never splits!
+            const splitBlend = Math.max(0.0, Math.min(1.0, (0.88 - u) / 0.16));
+            rowDx = waistDx * Math.pow(u, 1.15)
+              + (strideSwing * strideAmp * Math.pow(1.0 - u, 1.05) + (kneeBulgeX + liftWave * stepKneeBulge) * kneeArch) * splitBlend;
+            rowDy = waistDy * u - (liftWave * liftHeight * Math.pow(1.0 - u, 1.25)) * splitBlend;
+          }
 
           ctx.drawImage(leg.cv, 0, sy, W, sh, rowDx, sy + rowDy, W, sh + 0.65);
         }
