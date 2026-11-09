@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Kaelen 4-Pose & Generated Keyframe Animation Lab</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --panel: #151922;
+    --panel-alt: #1b202c;
+    --border: #2a3142;
+    --gold: #e6b86a;
+    --cyan: #5ce1e6;
+    --crimson: #ff5c77;
+    --emerald: #4ade80;
+    --text: #e6e9f0;
+    --muted: #939bb2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px 24px 40px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 6px;
+    color: var(--gold);
+    letter-spacing: 0.4px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 18px;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 1100px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gold);
+  }
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+    background: rgba(92,225,230,0.12);
+    color: var(--cyan);
+    border: 1px solid rgba(92,225,230,0.3);
+  }
+  .badge.passive {
+    background: rgba(74,222,128,0.12);
+    color: var(--emerald);
+    border-color: rgba(74,222,128,0.3);
+  }
+  .badge.combat {
+    background: rgba(255,92,119,0.12);
+    color: var(--crimson);
+    border-color: rgba(255,92,119,0.3);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  button {
+    background: var(--panel-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  button:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  button.active {
+    background: rgba(230,184,106,0.16);
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 10px rgba(230,184,106,0.2);
+  }
+  button.combat-btn.active {
+    background: rgba(255,92,119,0.18);
+    border-color: var(--crimson);
+    color: #ff8fa3;
+  }
+  button.engine-btn.active {
+    background: rgba(92,225,230,0.16);
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  .stage-wrap {
+    position: relative;
+    background: radial-gradient(circle at 50% 65%, #232a3b 0%, #10131b 75%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    display: block;
+    max-width: 100%;
+  }
+  .pose-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .pose-cell {
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .pose-cell img {
+    width: 100%;
+    max-width: 165px;
+    height: auto;
+    display: block;
+    margin: 0 auto 6px;
+    filter: drop-shadow(0 6px 10px rgba(0,0,0,0.6));
+  }
+  .pose-cell .p-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 3px;
+  }
+  .pose-cell .p-desc {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.35;
+  }
+  .status-bar {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    background: var(--panel-alt);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .status-bar strong { color: var(--gold); }
+</style>
+</head>
+<body>
+  <h1>⚔️ Kaelen 4-Pose Architecture: Directly Generated Keyframes vs. Procedural Rig Lab</h1>
+  <div class="subtitle">
+    Compare <strong>🎞️ Directly Generated Keyframe Sprite Animation</strong> (hand-drawn passing/contact walk steps &amp; dedicated Windup, Poke, and Cleave combat keyframes) with <strong>🦴 Procedural Bone/Shear Rigging</strong>.
+  </div>
+
+  <div class="grid-2">
+    <!-- SANDBOX 1: LOCOMOTION & STOP-FRAME TRANSITION -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">1. Locomotion Sandbox: Walk / Sneak → Passive Relaxed Stop</div>
+        <span class="badge passive" id="locoBadge">🎞️ Generated 4-Frame Cycle</span>
+      </div>
+      <div class="controls" id="loco-engine-controls" style="margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px;">Animation Engine:</span>
+        <button class="engine-btn active" onclick="setLocoEngine('keyframes', this)">🎞️ Generated Keyframe Sprites (Recommended)</button>
+        <button class="engine-btn" onclick="setLocoEngine('procedural', this)">🦴 Procedural Shear Rig</button>
+      </div>
+      <div class="controls" id="loco-controls">
+        <button class="active" onclick="setLocoMode('walk_1h', this)">🚶 Active Walk (1H Travel Carry)</button>
+        <button onclick="setLocoMode('walk_2h', this)">🚶 Active Walk (2H Patrol Carry)</button>
+        <button onclick="setLocoMode('sneak', this)">🕵️ Active Sneak (Crouched)</button>
+        <button onclick="setLocoMode('stop_relaxed', this)">⏹ Stop → Passive Relaxed</button>
+        <button onclick="triggerWalkThenStop()">🎬 Demo: Walk In → Stop in Relaxed</button>
+      </div>
+      <div class="stage-wrap">
+        <canvas id="locoCanvas" width="560" height="360"></canvas>
+      </div>
+      <div class="status-bar" id="locoStatus">
+        <span>Active Pose: <strong>Active Walk (1H Travel Carry)</strong></span>
+        <span>Engine: <strong>4 Generated Keyframe Sprites (Contact → Passing)</strong></span>
+      </div>
+    </div>
+
+    <!-- SANDBOX 2: ACTIVE DRAWN COMBAT KEYFRAMES + WEAPON ACTIONS -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">2. Combat Sandbox: Drawn Weapon Actions &amp; Expression FX</div>
+        <span class="badge combat" id="combatBadge">🎞️ Generated Combat Keyframes</span>
+      </div>
+      <div class="controls" id="combat-engine-controls" style="margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px;">Animation Engine:</span>
+        <button class="engine-btn active" onclick="setCombatEngine('keyframes', this)">🎞️ Generated Keyframe Sprites (Recommended)</button>
+        <button class="engine-btn" onclick="setCombatEngine('procedural', this)">🦴 Procedural Hip/Torso Rig</button>
+      </div>
+      <div class="controls" id="drawn-controls">
+        <button class="combat-btn active" onclick="triggerWeaponAction('poke', this)">⚡ Polearm Poke / Thrust</button>
+        <button class="combat-btn" onclick="triggerWeaponAction('cleave', this)">🪓 Billhook Cleave / Swing</button>
+        <button class="combat-btn" onclick="triggerWeaponAction('brandish', this)">🛡️ Threat Brandish</button>
+        <button class="combat-btn" onclick="triggerWeaponAction('guard', this)">🎯 Guard Ready</button>
+        <button id="loopToggleBtn" class="active" onclick="toggleLoopAction(this)">🔁 Auto-Repeat: ON</button>
+      </div>
+      <div class="controls" id="expr-controls" style="margin-top:-4px;">
+        <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px;">Expression Overlay:</span>
+        <button class="active" onclick="setExprFx('none', this)">😐 Calm Stoic (No FX)</button>
+        <button onclick="setExprFx('vein', this)">💢 Threat Vein + Dark Aura</button>
+        <button onclick="setExprFx('glint', this)">✨ Cold Steel Tip Glint (One-Shot)</button>
+        <button onclick="setExprFx('alert', this)">❗ Combat Alert</button>
+        <button onclick="setExprFx('sweat', this)">💧 Tense Sweat</button>
+      </div>
+      <div class="stage-wrap">
+        <canvas id="drawnCanvas" width="560" height="360"></canvas>
+      </div>
+      <div class="status-bar" id="drawnStatus">
+        <span>Engine: <strong>Generated Keyframes (Guard → Windup → Strike)</strong></span>
+        <span>Weapon Action: <strong id="weaponActionLabel">Polearm Poke / Thrust</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: GENERATED KEYFRAME SPRITE SHEETS -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">3. Directly Generated Keyframes for Active Walk &amp; Active Drawn Combat (Aligned 340×340)</div>
+      <span class="badge">Chroma-Keyed from #FF00FF Magenta</span>
+    </div>
+    <div class="pose-strip">
+      <div class="pose-cell">
+        <img id="ref_wk0" alt="Walk Frame 1" />
+        <div class="p-name">Walk Frame 1: Contact A</div>
+        <div class="p-desc">Right foot planted flat forward, left foot pushing off behind.</div>
+      </div>
+      <div class="pose-cell">
+        <img id="ref_wk1" alt="Walk Frame 2" />
+        <div class="p-name">Walk Frame 2: Passing A</div>
+        <div class="p-desc">Planted foot flat under hip, right knee bent in passing step.</div>
+      </div>
+      <div class="pose-cell">
+        <img id="ref_wk2" alt="Walk Frame 3" />
+        <div class="p-name">Walk Frame 3: Contact B</div>
+        <div class="p-desc">Opposite contact stride with flat front sole and balanced torso.</div>
+      </div>
+      <div class="pose-cell">
+        <img id="ref_wk3" alt="Walk Frame 4" />
+        <div class="p-name">Walk Frame 4: Passing B</div>
+        <div class="p-desc">Planted foot flat under hip, trailing foot passing behind ankle.</div>
+      </div>
+    </div>
+    <div class="pose-strip" style="margin-bottom:0;">
+      <div class="pose-cell">
+        <img id="ref_dk0" alt="Drawn Guard" />
+        <div class="p-name">Drawn Keyframe 1: Guard Ready</div>
+        <div class="p-desc">Balanced wide stance, billhook held across chest at 30° guard.</div>
+      </div>
+      <div class="pose-cell">
+        <img id="ref_dk1" alt="Drawn Windup" />
+        <div class="p-name">Drawn Keyframe 2: Windup / Brandish</div>
+        <div class="p-desc">Torso coiled slightly, billhook raised to 48° high guard.</div>
+      </div>
+      <div class="pose-cell">
+        <img id="ref_dk2" alt="Drawn Poke" />
+        <div class="p-name">Drawn Keyframe 3: Polearm Poke</div>
+        <div class="p-desc">Torso leaning into thrust, arms extending spike tip forward.</div>
+      </div>
+      <div class="pose-cell">
+        <img id="ref_dk3" alt="Drawn Cleave" />
+        <div class="p-name">Drawn Keyframe 4: Billhook Cleave</div>
+        <div class="p-desc">Knees flexed &amp; torso leaning forward into low downward slash.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const URIS = __URIS_JSON__;
+
+document.getElementById('ref_wk0').src = URIS.walk_1h_kf0;
+document.getElementById('ref_wk1').src = URIS.walk_1h_kf1;
+document.getElementById('ref_wk2').src = URIS.walk_1h_kf2;
+document.getElementById('ref_wk3').src = URIS.walk_1h_kf3;
+
+document.getElementById('ref_dk0').src = URIS.active_drawn;
+document.getElementById('ref_dk1').src = URIS.drawn_kf_windup;
+document.getElementById('ref_dk2').src = URIS.drawn_kf_poke;
+document.getElementById('ref_dk3').src = URIS.drawn_kf_cleave;
+
+const loadedImgs = {};
+const walkRigs = {};
+
+function loadAllImages(cb) {
+  const keys = Object.keys(URIS);
+  let remaining = keys.length;
+  keys.forEach(k => {
+    const img = new Image();
+    img.onload = () => {
+      loadedImgs[k] = img;
+      remaining--;
+      if (remaining === 0) cb();
+    };
+    img.src = URIS[k];
+  });
+}
+
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+function buildWalkRig(img, mode) {
+  const W = 340, H = 340;
+  const srcC = makeCanvas(W, H);
+  const sctx = srcC.getContext('2d');
+  sctx.drawImage(img, 0, 0);
+  const srcData = sctx.getImageData(0, 0, W, H);
+  const d = srcData.data;
+
+  const upperData = sctx.createImageData(W, H);
+  const legLData  = sctx.createImageData(W, H);
+  const legRData  = sctx.createImageData(W, H);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (d[i + 3] === 0) continue;
+
+      let part = 'upper';
+      if (mode === 'sneak') {
+        if (y >= 232 && x >= 80 && x <= 238) {
+          const splitX = 172 - (y - 232) * 0.22;
+          part = (x < splitX) ? 'legL' : 'legR';
+        }
+      } else {
+        if (y >= 224) {
+          if ((y < 246 && x > 195) || (y < 236 && x < 85)) {
+            part = 'upper';
+          } else {
+            part = (x < 145) ? 'legL' : 'legR';
+          }
+        }
+      }
+
+      const target = (part === 'upper') ? upperData.data : (part === 'legL' ? legLData.data : legRData.data);
+      target[i]   = d[i];
+      target[i+1] = d[i+1];
+      target[i+2] = d[i+2];
+      target[i+3] = d[i+3];
+    }
+  }
+
+  function toCanvas(imgData) {
+    const c = makeCanvas(W, H);
+    c.getContext('2d').putImageData(imgData, 0, 0);
+    return c;
+  }
+
+  return {
+    upper: toCanvas(upperData),
+    legL: toCanvas(legLData),
+    legR: toCanvas(legRData)
+  };
+}
+
+function drawShearedPart(ctx, partCanvas, anchorY, refH, dxAtRef, dyAtRef, offsetY) {
+  const kx = dxAtRef / refH;
+  const sy = (refH + dyAtRef) / refH;
+  ctx.save();
+  ctx.translate(0, anchorY + (offsetY || 0));
+  ctx.transform(1, 0, kx, sy, 0, 0);
+  ctx.translate(0, -anchorY);
+  ctx.drawImage(partCanvas, 0, 0);
+  ctx.restore();
+}
+
+function drawBlendedKeyframes(ctx, imgA, imgB, blendAlpha, dx, dy) {
+  if (blendAlpha <= 0.02) {
+    ctx.drawImage(imgA, dx || 0, dy || 0);
+    return;
+  }
+  if (blendAlpha >= 0.98) {
+    ctx.drawImage(imgB, dx || 0, dy || 0);
+    return;
+  }
+  ctx.save();
+  ctx.globalAlpha = 1 - blendAlpha;
+  ctx.drawImage(imgA, dx || 0, dy || 0);
+  ctx.globalAlpha = blendAlpha;
+  ctx.drawImage(imgB, dx || 0, dy || 0);
+  ctx.restore();
+}
+
+// ============================================================================
+// SANDBOX 1: LOCOMOTION & STOP-FRAME TRANSITION
+// ============================================================================
+let locoEngine = 'keyframes';
+let locoMode = 'walk_1h';
+let demoSequenceActive = false;
+let demoStartTime = 0;
+
+function setLocoEngine(eng, btn) {
+  locoEngine = eng;
+  document.querySelectorAll('#loco-engine-controls button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('locoBadge').textContent = eng === 'keyframes' ? '🎞️ Generated 4-Frame Cycle' : '🦴 Procedural Shear Rig';
+  updateLocoStatus();
+}
+
+function setLocoMode(mode, btn) {
+  demoSequenceActive = false;
+  locoMode = mode;
+  if (btn) {
+    document.querySelectorAll('#loco-controls button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  updateLocoStatus();
+}
+
+function triggerWalkThenStop() {
+  demoSequenceActive = true;
+  demoStartTime = performance.now();
+  locoMode = 'walk_1h';
+  document.querySelectorAll('#loco-controls button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#loco-controls button')[4].classList.add('active');
+}
+
+function updateLocoStatus() {
+  const bar = document.getElementById('locoStatus');
+  const engLabel = locoEngine === 'keyframes' ? '4 Generated Keyframes (Contact → Passing)' : 'Procedural Non-Crossing Shear Rig';
+  if (locoMode === 'walk_1h') {
+    bar.innerHTML = `<span>Active Pose: <strong>Active Walk (1H Carry)</strong></span><span>Engine: <strong>${engLabel}</strong></span>`;
+  } else if (locoMode === 'walk_2h') {
+    bar.innerHTML = `<span>Active Pose: <strong>Active Walk (2H Carry)</strong></span><span>Engine: <strong>${engLabel}</strong></span>`;
+  } else if (locoMode === 'sneak') {
+    bar.innerHTML = `<span>Active Pose: <strong>Active Sneak (Crouched)</strong></span><span>Engine: <strong>${engLabel}</strong></span>`;
+  } else {
+    bar.innerHTML = '<span>Passive Pose: <strong>Passive Relaxed (Neutral Stop Frame)</strong></span><span>Transition: <strong>Exact Height Match (Zero Bounce)</strong></span>';
+  }
+}
+
+function renderLocoSandbox(now) {
+  const canvas = document.getElementById('locoCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  let effectiveMode = locoMode;
+  let charX = W * 0.5;
+  let bgScroll = 0;
+
+  if (demoSequenceActive) {
+    const elapsed = (now - demoStartTime) * 0.001;
+    if (elapsed < 2.4) {
+      effectiveMode = 'walk_1h';
+      const p = elapsed / 2.4;
+      charX = 130 + p * 170;
+      bgScroll = elapsed * 90;
+    } else if (elapsed < 4.5) {
+      if (locoMode !== 'stop_relaxed') {
+        locoMode = 'stop_relaxed';
+        updateLocoStatus();
+      }
+      effectiveMode = 'stop_relaxed';
+      charX = 300;
+      bgScroll = 2.4 * 90;
+    } else {
+      demoStartTime = now;
+      locoMode = 'walk_1h';
+      updateLocoStatus();
+    }
+  } else if (effectiveMode !== 'stop_relaxed') {
+    bgScroll = now * 0.09;
+  }
+
+  // Draw scrolling cobblestone ground & background pillars
+  ctx.save();
+  const pillarSpacing = 140;
+  const offset = bgScroll % pillarSpacing;
+  for (let x = -offset; x < W + pillarSpacing; x += pillarSpacing) {
+    ctx.fillStyle = 'rgba(255,255,255,0.025)';
+    ctx.fillRect(x, 20, 28, H - 65);
+  }
+  const floorY = 322;
+  ctx.fillStyle = '#141821';
+  ctx.fillRect(0, floorY, W, H - floorY);
+  ctx.strokeStyle = '#2e374a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, floorY);
+  ctx.lineTo(W, floorY);
+  ctx.stroke();
+
+  const tileSpacing = 48;
+  const tileOff = bgScroll % tileSpacing;
+  ctx.strokeStyle = 'rgba(230,184,106,0.18)';
+  for (let x = -tileOff; x < W + tileSpacing; x += tileSpacing) {
+    ctx.beginPath();
+    ctx.moveTo(x, floorY);
+    ctx.lineTo(x - 18, H);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Ground shadow
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.48)';
+  ctx.beginPath();
+  ctx.ellipse(charX, floorY + 2, 54, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Render character
+  ctx.save();
+  ctx.translate(charX - 170, floorY - 324);
+
+  if (effectiveMode === 'stop_relaxed') {
+    const breathY = Math.sin(now * 0.0028) * 1.2;
+    ctx.drawImage(loadedImgs.passive_relaxed, 0, breathY);
+  } else if (locoEngine === 'keyframes') {
+    // Directly Generated Keyframe Sprite Sheet playback!
+    if (effectiveMode === 'sneak') {
+      const seq = [loadedImgs.active_sneak, loadedImgs.sneak_kf_passing];
+      const cyclePos = (now * 0.0032) % 2;
+      const idx = Math.floor(cyclePos);
+      const frac = cyclePos - idx;
+      const blend = frac > 0.72 ? (frac - 0.72) / 0.28 : 0;
+      drawBlendedKeyframes(ctx, seq[idx], seq[(idx + 1) % 2], blend, 0, 0);
+    } else {
+      const prefix = effectiveMode === 'walk_2h' ? 'walk_2h_kf' : 'walk_1h_kf';
+      const seq = [
+        loadedImgs[prefix + '0'],
+        loadedImgs[prefix + '1'],
+        loadedImgs[prefix + '2'],
+        loadedImgs[prefix + '3']
+      ];
+      // 4 steps per full stride cycle (~4.8 steps/sec) with smooth 22% cross-dissolve on frame edges
+      const cyclePos = (now * 0.0046) % 4;
+      const idx = Math.floor(cyclePos);
+      const frac = cyclePos - idx;
+      const blend = frac > 0.78 ? (frac - 0.78) / 0.22 : 0;
+      drawBlendedKeyframes(ctx, seq[idx], seq[(idx + 1) % 4], blend, 0, 0);
+    }
+  } else {
+    // Procedural Shear Rig fallback
+    const rig = walkRigs[effectiveMode];
+    const isSneak = (effectiveMode === 'sneak');
+    const speed = isSneak ? 0.0058 : 0.0082;
+    const phase = now * speed;
+    const hipY  = isSneak ? 232 : 224;
+    const legH  = 322 - hipY;
+    const dxL   = isSneak ? (5.0 + 10.0 * Math.sin(phase))           : (12.0 * Math.sin(phase));
+    const dxR   = isSneak ? (-5.0 + 10.0 * Math.sin(phase + Math.PI)) : (12.0 * Math.sin(phase + Math.PI));
+    const liftL = Math.max(0, Math.cos(phase)) * (isSneak ? 5.5 : 4.5);
+    const liftR = Math.max(0, Math.cos(phase + Math.PI)) * (isSneak ? 5.5 : 4.5);
+    const bobY  = Math.abs(Math.cos(phase)) * (isSneak ? 2.8 : 3.0);
+    const swayRot = Math.sin(phase) * 0.012;
+
+    drawShearedPart(ctx, rig.legL, hipY, legH, dxL, -liftL, bobY);
+    drawShearedPart(ctx, rig.legR, hipY, legH, dxR, -liftR, bobY);
+    ctx.save();
+    ctx.translate(160, hipY + bobY);
+    ctx.rotate(swayRot);
+    ctx.translate(-160, -hipY);
+    ctx.drawImage(rig.upper, 0, 0);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+// ============================================================================
+// SANDBOX 2: ACTIVE DRAWN KEYFRAMES vs PROCEDURAL RIG + WEAPON ACTIONS
+// ============================================================================
+let combatEngine = 'keyframes';
+let weaponAction = 'poke';
+let actionStartTime = performance.now();
+let autoLoopAction = true;
+let exprFx = 'none';
+let glintTriggerTime = -99999;
+
+function setCombatEngine(eng, btn) {
+  combatEngine = eng;
+  document.querySelectorAll('#combat-engine-controls button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('combatBadge').textContent = eng === 'keyframes' ? '🎞️ Generated Combat Keyframes' : '🦴 Procedural Hip/Torso Rig';
+  actionStartTime = performance.now();
+}
+
+function triggerWeaponAction(action, btn) {
+  weaponAction = action;
+  actionStartTime = performance.now();
+  if (btn) {
+    document.querySelectorAll('#drawn-controls .combat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  const labels = {
+    guard: 'Guard Ready (Breathing)',
+    poke: 'Polearm Poke / Thrust (Guard → Windup → Poke Keyframe)',
+    cleave: 'Billhook Cleave / Swing (Guard → High Windup → Downward Cleave)',
+    brandish: 'Threat Brandish (Guard → High Brandish Keyframe + Tip Glint)'
+  };
+  document.getElementById('weaponActionLabel').textContent = labels[action] || action;
+}
+
+function toggleLoopAction(btn) {
+  autoLoopAction = !autoLoopAction;
+  btn.classList.toggle('active', autoLoopAction);
+  btn.textContent = autoLoopAction ? '🔁 Auto-Repeat: ON' : '🔁 Auto-Repeat: OFF';
+  if (autoLoopAction) actionStartTime = performance.now();
+}
+
+function setExprFx(fx, btn) {
+  exprFx = fx;
+  if (fx === 'glint') {
+    glintTriggerTime = performance.now();
+  }
+  if (btn) {
+    document.querySelectorAll('#expr-controls button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+}
+
+function drawCompactStarGlint(ctx, x, y, radius, alpha) {
+  if (alpha <= 0.01) return;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = Math.min(1, alpha);
+  ctx.strokeStyle = '#ffffff';
+  ctx.shadowColor = '#5ce1e6';
+  ctx.shadowBlur = 6;
+  ctx.lineWidth = 2.0;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-radius, 0); ctx.lineTo(radius, 0);
+  ctx.moveTo(0, -radius); ctx.lineTo(0, radius);
+  const d = radius * 0.45;
+  ctx.lineWidth = 1.2;
+  ctx.moveTo(-d, -d); ctx.lineTo(d, d);
+  ctx.moveTo(-d, d);  ctx.lineTo(d, -d);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderDrawnSandbox(now) {
+  const canvas = document.getElementById('drawnCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const floorY = 322;
+  ctx.fillStyle = '#141821';
+  ctx.fillRect(0, floorY, W, H - floorY);
+  ctx.strokeStyle = '#2e374a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, floorY);
+  ctx.lineTo(W, floorY);
+  ctx.stroke();
+
+  const charX = W * 0.48;
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.beginPath();
+  ctx.ellipse(charX, floorY + 2, 62, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(charX - 170, floorY - 324);
+
+  const elapsed = (now - actionStartTime) * 0.001;
+
+  if (exprFx === 'vein') {
+    ctx.save();
+    const pulse = 0.7 + 0.3 * Math.sin(now * 0.008);
+    const grad = ctx.createRadialGradient(173, 165, 20, 173, 175, 135);
+    grad.addColorStop(0, `rgba(220, 38, 68, ${0.28 * pulse})`);
+    grad.addColorStop(1, 'rgba(220, 38, 68, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(173, 175, 135, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  let headOffsetX = 0, headOffsetY = 0;
+  let activeTipCoords = [274, 114];
+  let brandishGlintAlpha = 0;
+
+  if (combatEngine === 'keyframes') {
+    // ========================================================================
+    // ENGINE A: DIRECTLY GENERATED COMBAT KEYFRAMES (Guard, Windup, Poke, Cleave)
+    // ========================================================================
+    if (weaponAction === 'guard') {
+      const breathY = Math.sin(now * 0.003) * 1.0;
+      ctx.drawImage(loadedImgs.active_drawn, 0, breathY);
+      headOffsetY = breathY;
+      activeTipCoords = [274, 114 + breathY];
+    } else if (weaponAction === 'poke') {
+      const dur = 1.0;
+      const t = autoLoopAction ? (elapsed % 1.35) : elapsed;
+      if (t >= dur) {
+        ctx.drawImage(loadedImgs.active_drawn, 0, 0);
+      } else if (t < 0.22) {
+        // Coil back into generated Windup keyframe
+        const p = t / 0.22;
+        drawBlendedKeyframes(ctx, loadedImgs.active_drawn, loadedImgs.drawn_kf_windup, Math.min(1, p * 1.3), -2 * p, 0);
+        headOffsetX = -2 * p;
+        activeTipCoords = [274, 98];
+      } else if (t < 0.62) {
+        // Snap into generated Poke keyframe + subtle forward lunge (+5px -> +2px)
+        const p = (t - 0.22) / 0.40;
+        const lungeX = p < 0.35 ? (p / 0.35) * 6 : 6 * (1 - (p - 0.35) * 0.7);
+        const blendIn = Math.min(1, p / 0.18);
+        drawBlendedKeyframes(ctx, loadedImgs.drawn_kf_windup, loadedImgs.drawn_kf_poke, blendIn, lungeX, 0);
+        headOffsetX = lungeX;
+        activeTipCoords = [312 + lungeX, 98];
+
+        // Crisp thrust streak along the spike tip during peak lunge
+        if (p < 0.55) {
+          ctx.save();
+          ctx.globalAlpha = Math.sin((p / 0.55) * Math.PI) * 0.85;
+          const grad = ctx.createLinearGradient(220, 142, 326 + lungeX, 92);
+          grad.addColorStop(0, 'rgba(92, 225, 230, 0)');
+          grad.addColorStop(0.7, 'rgba(230, 245, 255, 0.85)');
+          grad.addColorStop(1, '#ffffff');
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(220, 142);
+          ctx.lineTo(326 + lungeX, 92);
+          ctx.stroke();
+          ctx.restore();
+        }
+      } else {
+        // Recover cleanly to Guard Ready
+        const p = (t - 0.62) / (dur - 0.62);
+        drawBlendedKeyframes(ctx, loadedImgs.drawn_kf_poke, loadedImgs.active_drawn, Math.min(1, p * 1.2), 2 * (1 - p), 0);
+      }
+    } else if (weaponAction === 'cleave') {
+      const dur = 1.08;
+      const t = autoLoopAction ? (elapsed % 1.45) : elapsed;
+      if (t >= dur) {
+        ctx.drawImage(loadedImgs.active_drawn, 0, 0);
+      } else if (t < 0.32) {
+        // High Windup keyframe
+        const p = t / 0.32;
+        drawBlendedKeyframes(ctx, loadedImgs.active_drawn, loadedImgs.drawn_kf_windup, Math.min(1, p * 1.4), -2 * p, -1 * p);
+        headOffsetX = -2 * p;
+        activeTipCoords = [274, 98];
+      } else if (t < 0.72) {
+        // Heavy Downward Cleave keyframe!
+        const p = (t - 0.32) / 0.40;
+        const blendIn = Math.min(1, p / 0.16);
+        const driveX = p < 0.3 ? 4 : 4 * (1 - (p - 0.3) * 0.8);
+        drawBlendedKeyframes(ctx, loadedImgs.drawn_kf_windup, loadedImgs.drawn_kf_cleave, blendIn, driveX, 0);
+        headOffsetX = driveX;
+        headOffsetY = 3 * blendIn;
+        activeTipCoords = [312 + driveX, 228];
+
+        // Slash arc trail connecting high windup tip (274, 98) to low cleave tip (312, 228)
+        if (p < 0.50) {
+          ctx.save();
+          ctx.globalAlpha = Math.sin((p / 0.50) * Math.PI) * 0.85;
+          ctx.strokeStyle = 'rgba(235, 245, 255, 0.85)';
+          ctx.shadowColor = '#5ce1e6';
+          ctx.shadowBlur = 12;
+          ctx.lineWidth = 7;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(172, 168, 138, -0.52, 0.42);
+          ctx.stroke();
+          ctx.restore();
+        }
+      } else {
+        // Recover to Guard Ready
+        const p = (t - 0.72) / (dur - 0.72);
+        drawBlendedKeyframes(ctx, loadedImgs.drawn_kf_cleave, loadedImgs.active_drawn, Math.min(1, p * 1.25), 0, 0);
+      }
+    } else if (weaponAction === 'brandish') {
+      const dur = 1.15;
+      const t = autoLoopAction ? (elapsed % 1.55) : elapsed;
+      if (t >= dur) {
+        ctx.drawImage(loadedImgs.active_drawn, 0, 0);
+      } else if (t < 0.25) {
+        const p = t / 0.25;
+        drawBlendedKeyframes(ctx, loadedImgs.active_drawn, loadedImgs.drawn_kf_windup, p, 0, -2 * p);
+        activeTipCoords = [274, 96];
+      } else if (t < 0.78) {
+        const p = (t - 0.25) / 0.53;
+        const checkY = -2 + Math.sin(p * Math.PI * 2) * 2.0;
+        ctx.drawImage(loadedImgs.drawn_kf_windup, 0, checkY);
+        activeTipCoords = [274, 98 + checkY];
+        if (p >= 0.12 && p <= 0.75) {
+          brandishGlintAlpha = Math.sin(((p - 0.12) / 0.63) * Math.PI);
+        }
+      } else {
+        const p = (t - 0.78) / (dur - 0.78);
+        drawBlendedKeyframes(ctx, loadedImgs.drawn_kf_windup, loadedImgs.active_drawn, p, 0, -2 * (1 - p));
+      }
+    }
+  } else {
+    // ========================================================================
+    // ENGINE B: PROCEDURAL 3-LAYER HIP + TORSO + WEAPON RIG
+    // ========================================================================
+    const shaftCos = 0.870, shaftSin = -0.493;
+    let hipDx = 0, hipDy = 0, torsoRot = 0;
+    let wExDx = 0, wExDy = 0, wExRot = 0;
+
+    if (weaponAction === 'guard') {
+      const pulse = Math.sin(now * 0.0035);
+      hipDx = pulse * 1.2; hipDy = Math.abs(pulse) * 0.8;
+      torsoRot = pulse * 0.01;
+      wExDx = pulse * 2.0 * shaftCos; wExDy = pulse * 2.0 * shaftSin;
+    } else if (weaponAction === 'poke') {
+      const dur = 0.95;
+      const t = autoLoopAction ? (elapsed % 1.35) : elapsed;
+      if (t < dur) {
+        let f = 0;
+        if (t < 0.22) f = -0.38 * Math.sin((t / 0.22) * Math.PI * 0.5);
+        else if (t < 0.38) f = -0.38 + 1.38 * (1 - Math.pow(1 - (t - 0.22) / 0.16, 3));
+        else if (t < 0.55) f = 1.0 - ((t - 0.38) / 0.17) * 0.12;
+        else { const p = (t - 0.55) / (dur - 0.55); f = 0.88 * (1 - (3 * p * p - 2 * p * p * p)); }
+        hipDx = f * 11.0; hipDy = f * -2.5; torsoRot = f * 0.055;
+        wExDx = f * 12.5 * shaftCos; wExDy = f * 12.5 * shaftSin; wExRot = f * -0.018;
+      }
+    } else if (weaponAction === 'cleave') {
+      const dur = 1.05;
+      const t = autoLoopAction ? (elapsed % 1.45) : elapsed;
+      if (t < dur) {
+        if (t < 0.30) {
+          const e = Math.sin((t / 0.30) * Math.PI * 0.5);
+          hipDx = -4.5 * e; hipDy = -2.0 * e; torsoRot = -0.13 * e;
+          wExDx = -2.5 * e; wExDy = -4.0 * e; wExRot = -0.085 * e;
+        } else if (t < 0.48) {
+          const e = 1 - Math.pow(1 - (t - 0.30) / 0.18, 3);
+          hipDx = -4.5 + 13.0 * e; hipDy = -2.0 + 7.0 * e; torsoRot = -0.13 + 0.32 * e;
+          wExDx = -2.5 + 8.0 * e; wExDy = -4.0 + 7.5 * e; wExRot = -0.085 + 0.19 * e;
+        } else {
+          const p = (t - 0.48) / (dur - 0.48);
+          const s = 1 - (3 * p * p - 2 * p * p * p);
+          hipDx = 8.5 * s; hipDy = 5.0 * s; torsoRot = 0.19 * s;
+          wExDx = 5.5 * s; wExDy = 3.5 * s; wExRot = 0.105 * s;
+        }
+      }
+    } else if (weaponAction === 'brandish') {
+      const dur = 1.15;
+      const t = autoLoopAction ? (elapsed % 1.55) : elapsed;
+      if (t < dur) {
+        const s = t < 0.25 ? (t / 0.25) : (t < 0.72 ? 1.0 : 1 - (t - 0.72) / (dur - 0.72));
+        hipDx = 3.0 * s; hipDy = -2.0 * s; torsoRot = -0.03 * s;
+        wExDx = 3.0 * s; wExDy = -7.5 * s; wExRot = -0.09 * s;
+        if (t >= 0.30 && t <= 0.68) brandishGlintAlpha = Math.sin(((t - 0.30) / 0.38) * Math.PI);
+      }
+    }
+
+    drawShearedPart(ctx, loadedImgs.drawn_legs, 324, -110, hipDx, hipDy, 0);
+    const hipX = 168, hipY = 214;
+    ctx.save();
+    ctx.translate(hipX + hipDx, hipY + hipDy);
+    ctx.rotate(torsoRot);
+    ctx.translate(-hipX, -hipY);
+    ctx.drawImage(loadedImgs.drawn_torso, 0, 0);
+    ctx.restore();
+
+    const ct = Math.cos(torsoRot), st = Math.sin(torsoRot);
+    const gx1 = hipX + hipDx + ((165 - hipX) * ct - (162 - hipY) * st) + wExDx;
+    const gy1 = hipY + hipDy + ((165 - hipX) * st + (162 - hipY) * ct) + wExDy;
+    const totR = torsoRot + wExRot;
+    ctx.save();
+    ctx.translate(gx1, gy1);
+    ctx.rotate(totR);
+    ctx.translate(-165, -162);
+    ctx.drawImage(loadedImgs.drawn_weapon, 0, 0);
+    ctx.restore();
+
+    const cw = Math.cos(totR), sw = Math.sin(totR);
+    activeTipCoords = [
+      gx1 + ((274 - 165) * cw - (114 - 162) * sw),
+      gy1 + ((274 - 165) * sw + (114 - 162) * cw)
+    ];
+    headOffsetX = hipDx;
+    headOffsetY = hipDy;
+  }
+
+  // Compact One-Shot Weapon-Tip Glint
+  let tipGlintAlpha = brandishGlintAlpha;
+  if (exprFx === 'glint') {
+    const sinceGlint = (now - glintTriggerTime) * 0.001;
+    if (sinceGlint >= 0 && sinceGlint <= 0.42) {
+      tipGlintAlpha = Math.max(tipGlintAlpha, Math.sin((sinceGlint / 0.42) * Math.PI));
+    }
+  }
+  if (tipGlintAlpha > 0.01) {
+    drawCompactStarGlint(ctx, activeTipCoords[0], activeTipCoords[1], 5.8 * (0.6 + 0.4 * tipGlintAlpha), tipGlintAlpha);
+  }
+
+  // Expression FX Overlays
+  if (exprFx === 'vein') {
+    const s = 0.85 + 0.2 * Math.sin(now * 0.012);
+    ctx.save();
+    ctx.translate(194 + headOffsetX, 80 + headOffsetY);
+    ctx.scale(s, s);
+    ctx.strokeStyle = '#ff3b5c';
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-7, -2); ctx.quadraticCurveTo(-2, -2, -2, -7);
+    ctx.moveTo(7, -2);  ctx.quadraticCurveTo(2, -2, 2, -7);
+    ctx.moveTo(-7, 2);  ctx.quadraticCurveTo(-2, 2, -2, 7);
+    ctx.moveTo(7, 2);   ctx.quadraticCurveTo(2, 2, 2, 7);
+    ctx.stroke();
+    ctx.restore();
+  } else if (exprFx === 'glint') {
+    const sinceGlint = (now - glintTriggerTime) * 0.001;
+    if (sinceGlint >= 0 && sinceGlint <= 0.42) {
+      const a = Math.sin((sinceGlint / 0.42) * Math.PI);
+      drawCompactStarGlint(ctx, 182 + headOffsetX, 95 + headOffsetY, 4.5, a * 0.9);
+    }
+  } else if (exprFx === 'alert') {
+    const bounce = Math.abs(Math.sin(now * 0.008)) * 4;
+    ctx.save();
+    ctx.translate(173 + headOffsetX, 46 + headOffsetY - bounce);
+    ctx.fillStyle = '#ff5c77';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.font = '900 22px system-ui';
+    ctx.textAlign = 'center';
+    ctx.strokeText('!', 0, 0);
+    ctx.fillText('!', 0, 0);
+    ctx.restore();
+  } else if (exprFx === 'sweat') {
+    const dropY = ((now * 0.015) % 10);
+    ctx.save();
+    ctx.translate(154 + headOffsetX, 82 + headOffsetY + dropY * 0.6);
+    ctx.fillStyle = '#60a5fa';
+    ctx.strokeStyle = '#1e3a8a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.quadraticCurveTo(5, 2, 0, 6);
+    ctx.quadraticCurveTo(-5, 2, 0, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function tick(now) {
+  renderLocoSandbox(now);
+  renderDrawnSandbox(now);
+  requestAnimationFrame(tick);
+}
+
+loadAllImages(() => {
+  walkRigs.walk_1h = buildWalkRig(loadedImgs.active_walk_1h, 'walk_1h');
+  walkRigs.walk_2h = buildWalkRig(loadedImgs.active_walk_2h, 'walk_2h');
+  walkRigs.sneak   = buildWalkRig(loadedImgs.active_sneak, 'sneak');
+  requestAnimationFrame(tick);
+});
+</script>
+</body>
+</html>
+

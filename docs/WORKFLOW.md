@@ -125,3 +125,12 @@ You are the Build Session under the two-session split (`docs/decisions/workflow.
 2. Build ONLY items in `docs/READY.md` Section 1 (`ready-to-build`) in order, and run read-only feasibility audits on items in Section 2 (`feasibility-check`).
 3. You are the sole writer of `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (move answered/closed `FB-nn` items or long audit write-ups into `docs/archive/FEEDBACK_CLOSED.md` to keep `docs/FEEDBACK.md` under 25 KB). Never edit `docs/READY.md` or shared docs—file `docs-delta` items in `docs/FEEDBACK.md` instead.
 ```
+
+### 3. Artwork & Mock UI Session Handover (`/art-ui-session`)
+
+```text
+You are the Artwork, Animation & Mock UI Session (`/art-ui-session`, agent `art-ui-studio`), isolated from the locked Design and Build Sessions.
+1. Read `games/emberwake/docs/specs/ART_UI_STUDIO.md`, `games/emberwake/docs/specs/SCREEN_ATLAS.md`, and `tools/mock_ui/README.md`.
+2. Iterate on UI layouts, artwork, and character pose/keyframe animations using lightweight focused HTML labs (`python3 -m tools.mock_ui.anim_lab --out <path>`) or animated GIFs FIRST before touching the full `tools/mock_ui` bundle (`python3 -m tools.mock_ui --out <path>`).
+3. Reference images, 4-pose sheets, keyframes, stage backdrops, and GIF previews live in `art_src/vn_stage/`. Never edit `docs/READY.md`, `docs/FEEDBACK.md`, or Rust crates (`engine/`, `kits/`, `games/emberwake/crates/`).
+```

@@ -1,6 +1,6 @@
 # CAST1 assets: placeholders from existing art, and new art for the user to approve
 
-Status: proposed (2026-10-25; CAST1-R the same day: the hook skills, hazards, vents and zones); part of
+Status: active (updated 2026-11-08 for [ASSETORG3.md](../../../../docs/specs/ASSETORG3.md) and [SCREEN_ATLAS.md](SCREEN_ATLAS.md)); part of
 [CAST1.md](CAST1.md). User rule (2026-10-25): every unit, founder, boss, item,
 skill icon, status and prop the cast needs takes the best-matching existing asset as its placeholder; recolouring an
 existing rig body with a new palette file is a placeholder, not new art; every poor match is listed in section 7 for
@@ -17,20 +17,20 @@ art. Quality: good (reads right at token size), fair (right role, a visible diff
 
 ## 1. Founders
 
-| Entity | Placeholder | Match | What is off | Brief for new art |
+| Entity | Asset / Placeholder | Match | What is off | Brief for new art |
 | --- | --- | --- | --- | --- |
 | Kaelen body | `warrior/2h_axe` + palette `kaelen` (05 iron, 13 tabard, 07 linen arm wrap) | fair | an axe head, not a notched billhook; no linen-wrapped forearm | - |
-| Kaelen portrait | `games/emberwake/assets/portraits/heroes/bryn_hale.png` | fair | another man's face; plate and red tabard fit | - |
+| Kaelen portrait | `games/emberwake/assets/portraits/heroes/kaelen.png` (+ 8 `faces/kaelen/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 | Vesper body | `rogue/base` + palette `vesper` (08 soot, 04 timber, 12 accents) | good | no smoke at the fingertips | - |
-| Vesper portrait | `games/emberwake/assets/portraits/heroes/kit_vane.png` | good | hood and mask fit; another face | - |
+| Vesper portrait | `games/emberwake/assets/portraits/heroes/vesper.png` (+ 8 `faces/vesper/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 | Maren body | `priest/base` + palette `maren` (02 robe, 07 apron, 14 throat veins) | fair | the rig holds a staff or mace, not a censer; no veins drawn | - |
-| Maren portrait | `games/emberwake/assets/portraits/heroes/alda_wren.png` | fair | a white hood; Maren is defrocked (darker cloth, ink veins) | - |
+| Maren portrait | `games/emberwake/assets/portraits/heroes/maren.png` (+ 8 `faces/maren/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 | Hollis body | `ranger/base` + palette `hollis` (09 brigandine, 05 iron) | fair | a bow, not a winch arbalest; no eye graft | - |
-| Hollis portrait | `games/emberwake/assets/portraits/heroes/tev_quill.png` | fair | a green hood; no left-eye graft | - |
+| Hollis portrait | `games/emberwake/assets/portraits/heroes/hollis.png` (+ 8 `faces/hollis/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 | Dunstan body | `brawler/base` + palette `dunstan` (09 apron, 05 shackles, 10 slag burns) | good | no wired jaw | - |
-| Dunstan portrait | `games/emberwake/assets/portraits/heroes/dagny_coal.png` | fair | a headband brawler; no scrap-wired jaw | - |
+| Dunstan portrait | `games/emberwake/assets/portraits/heroes/dunstan.png` (+ 8 `faces/dunstan/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 | Elyse body | `ranger/wenn_tallow` + palette `elyse` (04 coat, 10 retorts) | fair | a bow in hand, no sprayer; cap and coat fit a hedge chemist | - |
-| Elyse portrait | `games/emberwake/assets/portraits/heroes/sella_marsh.png` | fair | a hooded archer; no bandolier of retorts | - |
+| Elyse portrait | `games/emberwake/assets/portraits/heroes/elyse.png` (+ 8 `faces/elyse/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 
 ## 2. Act 1 enemies
 
@@ -46,34 +46,34 @@ art. Quality: good (reads right at token size), fair (right role, a visible diff
 | Mortuary Flagellant body | `brawler/base` + palette `flagellant` (07 vestments, 12 blood, 05 wire) | fair | bare-chested fits; empty hands, no scourge | - |
 | Mortuary Flagellant portrait | `kits/rpg/assets/portraits/common/brawler_base.png` | fair | no barbed wire or mortuary vestments | - |
 | Purifier body | `priest/base` + palette `purifier` (05 warded iron apron, 10 canister) | fair | a robe, no bird-beak mask or nozzle | - |
-| Purifier portrait | `kits/rpg/assets/portraits/common/priest_base.png` | poor | a gentle hooded priestess; the unit is a gas-masked burner | section 7, N4 |
+| Purifier portrait | `games/emberwake/assets/portraits/elites/inquisitorial_purifier.png` | good | dedicated ART3 portrait on disk | section 7, N4 (done) |
 | Tallow Dredger body | `ranger/wenn_tallow` + palette `tallow_guild` (09 grease-stained apron, 10 goggles) | fair | a bow, not a boning knife and lard pots | - |
 | Tallow Dredger portrait | `games/emberwake/assets/portraits/npcs/wenn_tallow.png` | fair | no goggles | - |
-| Render-Beast body | `beast/render_beast` (CREATURE1, the rig's quadruped; base palette baked in) | fair | a code creature body; was `rogue/goblin_scout` + palette `render_beast` | section 7, N1 (portrait only) |
-| Render-Beast portrait | `kits/rpg/assets/portraits/common/rogue_goblin_scout.png` | poor | a goblin face | section 7, N1 |
-| Ash-Crawler body | `crawler/ash_crawler` (CREATURE1, the rig's segmented crawler, with a `spit` clip; base palette baked in) | fair | a code creature body; was `rogue/goblin` + palette `ash_crawler` | section 7, N2 (portrait only) |
-| Ash-Crawler portrait | `kits/rpg/assets/portraits/common/rogue_goblin.png` | poor | a goblin face | section 7, N2 |
+| Render-Beast body | `beast/render_beast` (CREATURE1, the rig's quadruped; base palette baked in) | fair | a code creature body; was `rogue/goblin_scout` + palette `render_beast` | section 7, N1 (done) |
+| Render-Beast portrait | `games/emberwake/assets/portraits/common/beast_render_beast.png` | good | dedicated ART3 portrait on disk | section 7, N1 (done) |
+| Ash-Crawler body | `crawler/ash_crawler` (CREATURE1, the rig's segmented crawler, with a `spit` clip; base palette baked in) | fair | a code creature body; was `rogue/goblin` + palette `ash_crawler` | section 7, N2 (done) |
+| Ash-Crawler portrait | `games/emberwake/assets/portraits/common/crawler_ash_crawler.png` | good | dedicated ART3 portrait on disk | section 7, N2 (done) |
 | Calcified Husk body | `brawler/base` + palette `calcified` (01 black bone, 08 ash skin) | fair | a whole body; the jutting bone is not drawn | - |
-| Calcified Husk portrait | `kits/rpg/assets/portraits/common/priest_goblin.png` | poor | a living goblin shaman, not a petrified corpse | section 7, N5 |
+| Calcified Husk portrait | `games/emberwake/assets/portraits/elites/calcified_husk.png` | good | dedicated ART3 portrait on disk | section 7, N5 (done) |
 | Caged Unsealed (M2 captives) | `rogue/base` + palette `captive` (07 rags, 08 soot) | fair | the rig draws a hood and a dagger on an unarmed captive | - |
 | Caged Unsealed portrait | `kits/rpg/assets/portraits/common/rogue_base.png` | fair | masked | - |
 
 ## 3. Bosses
 
-| Entity | Placeholder | Match | What is off | Brief for new art |
+| Entity | Asset / Placeholder | Match | What is off | Brief for new art |
 | --- | --- | --- | --- | --- |
 | Captain Vane body | `warrior/2h_axe` + palette `vane` (11 gilding, 05 plate) | fair | an axe, no pavise (the pavise is his drop) | - |
-| Captain Vane portrait | `games/emberwake/assets/portraits/npcs/brask_toller.png` | fair | an older officer in plate fits; another face | - |
+| Captain Vane portrait | `games/emberwake/assets/portraits/bosses/captain_vane.png` (+ 4 `faces/captain_vane/*.png`) | good | dedicated Sunk Ward portrait on disk | - |
 | Proctor Quell body | `warrior/2h_sword` + palette `quell` (07 white linen, 14 black marrow stains) | fair | a greatsword, not twin bone-saws | - |
-| Proctor Quell portrait | `kits/rpg/assets/portraits/common/mage_base.png` | poor | a kindly old mage; Quell is a vivisector with a neck valve | section 7, N6 |
+| Proctor Quell portrait | `games/emberwake/assets/portraits/bosses/proctor_quell.png` (+ 4 `faces/proctor_quell/*.png`) | good | dedicated ART3 portrait on disk | section 7, N6 (done) |
 | Overseer Grendel body | `warrior/2h_hammer` + palette `grendel` (04 soot, 10 slag glow) | fair | plate, not a stoker's leathers | - |
 | Overseer Grendel portrait | `kits/rpg/assets/portraits/common/brawler_base.png` | fair | a bald brawler fits a slaver-stoker | - |
 | Orlov body | `brawler/base` + palette `orlov` (05 harness, 09 butcher leather) | fair | no lard cannon or hooks | - |
-| Orlov portrait | `kits/rpg/assets/portraits/common/brawler_base.png` | poor | the same face as Grendel and the Flagellants: the vendetta boss needs his own | section 7, N7 |
+| Orlov portrait | `games/emberwake/assets/portraits/bosses/guild_master_orlov.png` (+ 4 `faces/guild_master_orlov/*.png`) | good | dedicated ART3 portrait on disk | section 7, N7 (done) |
 | The Amalgam body | `brawler/base` + palette `amalgam` (01 bone, 14 marrow tendrils) at 1 cell | poor | one humanoid stands in for a fused mass on 2 x 2 cells (BIGUNIT1) | section 7, N3 |
 | The Amalgam portrait | `kits/rpg/assets/portraits/common/brawler_goblin.png` | poor | a goblin face | section 7, N3 |
 | Nemeth body | `warrior/2h_sword` + palette `nemeth` (05 mirror plate, 13 cassock, 14 infusion) | fair | no crimson cassock over the plate | - |
-| Nemeth portrait | `kits/rpg/assets/portraits/common/warrior_base.png` | poor | the Footman's face: the Act 1 climax villain who returns in Act 3 needs his own | section 7, N8 |
+| Nemeth portrait | `games/emberwake/assets/portraits/bosses/inquisitor_prelate_nemeth.png` (+ 4 `faces/inquisitor_prelate_nemeth/*.png`) | good | dedicated ART3 portrait on disk | section 7, N8 (done) |
 
 ## 4. Item icons
 

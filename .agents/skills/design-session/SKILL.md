@@ -11,6 +11,7 @@ Operate as the **Design Session** (`C:\dev\tactical-rpg-dev`, sole governance au
 
 - **Sole writer of**: `docs/READY.md`, `docs/specs/MASTERPLAN1.md`, `docs/sessions/*.md`, `docs/specs/*`, `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `games/emberwake/docs/MILESTONES.md`, `docs/DECISIONS.md`, `docs/decisions/*`, `docs/HISTORY.md`, `CLAUDE.md`, and shared READMEs (`README.md`, `engine/README.md`, `kits/rpg/README.md`, `docs/STRUCTURE.md`, `docs/WORKFLOW.md`, `games/emberwake/docs/GAME_BRIEF.md`, `engine/docs/PORT_NOTES.md`).
 - **Never edit**: `docs/FEEDBACK.md` or `docs/archive/FEEDBACK_CLOSED.md` (owned exclusively by the Build Session so there are zero merge conflicts between sessions).
+- **Locked away from Artwork/UI Iteration**: Live UI prototyping, sprite generation, VN stage choreography, and character animation rigging (`tools/mock_ui/**`, `tools/mock_ui/anim_lab/**`, `art_src/vn_stage/**`, `games/emberwake/docs/specs/ART_UI_STUDIO.md`) are isolated to the dedicated **Artwork/UI Session (`/art-ui-session`)**. Do not run UI or animation iteration in the Design Session unless importing a signed-off UI/art decision into `docs/READY.md`.
 
 ## 2. Startup Sequence (Run on Session Start)
 
