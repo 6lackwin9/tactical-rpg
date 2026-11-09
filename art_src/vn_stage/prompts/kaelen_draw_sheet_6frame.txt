@@ -1,0 +1,15 @@
+Make a pixel-art animation sprite sheet of one character drawing his weapon, as 6 frames in a grid of 3 columns and 2 rows, read left to right, top row first. Image 1 is the relaxed standing pose (frame 1), image 2 is the half-drawn pose (frame 4) and image 3 is the weapon-drawn guard pose (frame 6) of the same character. Frames 1, 4 and 6 copy those three references as closely as possible; frames 2, 3 and 5 are new in-between poses.
+
+Character (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and composed, mouth closed.
+
+Frames:
+1. Relaxed (as image 1): standing upright, halberd held upright at his right side in the right hand, butt on the ground, left hand at the left hip.
+2. Lift: same upright stance as frame 1. The right hand lifts the halberd off the ground and starts tipping it forward, the shaft leaning about 70 degrees, blade up and to the right. The left hand comes forward toward the shaft.
+3. Grip: stance still nearly as frame 1, knees just starting to bend. Both hands now on the shaft, right hand at upper chest height, left hand reaching the shaft low at the left hip; the shaft leans about 58 degrees.
+4. Half-draw (as image 2): back boot stepped out, front boot halfway, knees slightly bent, shaft at about 45 degrees, right hand at chest height, left hand at the hip.
+5. Settle: front boot sliding out toward the guard stance, body lowering a little more, shaft at about 35 degrees.
+6. Guard (as image 3): wide braced stance, halberd held across the body, blade forward and up to the right.
+
+The right forearm and hand move together with the shaft in every frame; the hands always hold the shaft (except the left hand in frames 1 and 2).
+
+Layout and style: every frame is the same size, with the character at the same scale and his boots on the same ground line in each cell, facing right in three-quarter view. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.

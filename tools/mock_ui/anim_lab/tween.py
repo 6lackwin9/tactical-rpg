@@ -273,7 +273,45 @@ class Hybrid:
     def _length(self, k: str) -> float:
         return Axis(self.lm[k]).length if k in self.own else self.halberd.ax.length
 
-    def frame(self, ka: str, kb: str, t: float) -> np.ndarray:
+    def _transplant_hand(self, body: np.ndarray, ka: str, kb: str, t: float, grip, ang: float) -> np.ndarray:
+        """Erase the front hand wherever flow left it (near either key's grip) and inpaint, so the nearer key's
+        painted hand can be laid back on the rigid shaft afterwards."""
+        la, lb = self.lm[ka], self.lm[kb]
+        h, w = body.shape[:2]
+        ys, xs = np.mgrid[0:h, 0:w]
+        rgb = body[..., :3].astype(np.int16)
+        skin_or_bracer = (rgb[..., 0] - rgb[..., 2] > 50) & (rgb[..., 0] - rgb[..., 1] > 22) & (body[..., 3] > 0)
+        near = np.zeros((h, w), bool)
+        for c in (la["grip_front"], lb["grip_front"], grip):
+            near |= (xs - c[0]) ** 2 + (ys - c[1]) ** 2 <= (HAND_R + 5) ** 2
+        m = (near & skin_or_bracer).astype(np.uint8) * 255
+        out = body.copy()
+        out[..., :3] = cv2.inpaint(np.ascontiguousarray(body[..., :3]), m, 3, cv2.INPAINT_TELEA)
+        return out
+
+    def _hand_patch(self, canvas: np.ndarray, k: str, grip, ang: float) -> np.ndarray:
+        """Lay key k's painted front hand onto the drawn shaft: rotate it about its grip by the shaft's turn and move
+        its grip onto ``grip`` (inverse mapping, nearest sample)."""
+        lm, key = self.lm[k], self.keys[k]
+        ax = Axis(lm)
+        src = ax.proj(lm["grip_front"])
+        mask = _hand_mask(key, [lm["grip_front"]])
+        da = ang - ax.angle
+        c, s = math.cos(-da), math.sin(-da)
+        h, w = canvas.shape[:2]
+        r = HAND_R + 3
+        out = canvas.copy()
+        for ty in range(int(grip[1]) - r - 2, int(grip[1]) + r + 3):
+            for tx in range(int(grip[0]) - r - 2, int(grip[0]) + r + 3):
+                if not (0 <= tx < w and 0 <= ty < h):
+                    continue
+                dx, dy = tx - grip[0], ty - grip[1]
+                sx, sy = int(round(src[0] + c * dx - s * dy)), int(round(src[1] + s * dx + c * dy))
+                if 0 <= sx < w and 0 <= sy < h and mask[sy, sx]:
+                    out[ty, tx] = key[sy, sx]
+        return out
+
+    def frame(self, ka: str, kb: str, t: float, hand: bool = False) -> np.ndarray:
         if t <= 0 and ka in self.own:
             return self.keys[ka]
         if t >= 1 and kb in self.own:
@@ -291,7 +329,14 @@ class Hybrid:
         axa, axb = Axis(la), Axis(lb)
         grip = _lerp(axa.proj(la["grip_front"]), axb.proj(lb["grip_front"]), t)
         ang = _lerp_angle(axa.angle, axb.angle, t)
-        withw = self.halberd.draw(body, grip, ang, (1 - t) * self._length(ka) + t * self._length(kb))
+        length = (1 - t) * self._length(ka) + t * self._length(kb)
+        if hand and 0 < t < 1:
+            body = self._transplant_hand(body, ka, kb, t, grip, ang)
+            withw = self.halberd.draw(body, grip, ang, length)
+            back = _hand_mask(body, [_lerp(la["grip_back"], lb["grip_back"], t)])
+            withw[back] = body[back]
+            return self._hand_patch(withw, ka if t < 0.5 else kb, grip, ang)
+        withw = self.halberd.draw(body, grip, ang, length)
         hands = _hand_mask(body, [_lerp(la["grip_front"], lb["grip_front"], t), _lerp(la["grip_back"], lb["grip_back"], t)])
         withw[hands] = body[hands]
         return withw
@@ -338,8 +383,8 @@ def clip_frames(method: str, plan: list, keys: dict, hyb: Hybrid, flow_cache: di
                 else:
                     out.append((keys[k], ms, k))
                 continue
-            if method == "hybrid":
-                img = hyb.frame(ka, kb, t)
+            if method in ("hybrid", "hybrid_hand"):
+                img = hyb.frame(ka, kb, t, hand=method == "hybrid_hand")
             elif t <= 0:
                 img = keys[ka]
             elif t >= 1:
@@ -408,14 +453,28 @@ CLIPS = {
     },
     "draw_weapon_bd": {
         "label": "Passive to drawn with the generated half-draw breakdown key",
-        "note": "Same timing as above, through drawn_kf_halfdraw_r2: head a little lower, back boot already out, front boot halfway.",
-        "methods": ["keys", "flow", "hybrid"],
+        "note": "Same timing as above, through drawn_kf_halfdraw_r2: head a little lower, back boot already out, front boot halfway. hybrid_hand lays the nearer key's painted front hand back on the rigid shaft.",
+        "methods": ["keys", "flow", "hybrid", "hybrid_hand"],
         "plan": [
             ("passive_relaxed", HALF, [(0, 700)] + tweens(1, 90)),
             (HALF, GUARD, [(0, 90)] + tweens(1, 90)),
             (GUARD, HALF, [(0, 700)] + tweens(1, 90)),
             (HALF, "passive_relaxed", [(0, 90)] + tweens(1, 90)),
         ],
+    },
+    "draw_weapon_sheet": {
+        "label": "Passive to drawn from one generated 6-frame sheet",
+        "note": "The six frames of kaelen_draw_sheet_6frame (one scale, planted on the ground line) plus the generated lift frame (kaelen_draw_sheet_lift_r2) between frames 1 and 2: one halberd, hands on the shaft.",
+        "methods": ["keys", "flow"],
+        "plan": (
+            [("sheet_draw_f1", "sheet_draw_lift", [(0, 700), (0.5, 45)]),
+             ("sheet_draw_lift", "sheet_draw_f2", [(0, 45), (0.5, 45)])]
+            + [(f"sheet_draw_f{i}", f"sheet_draw_f{i + 1}", [(0, 45), (0.5, 45)]) for i in range(2, 6)]
+            + [("sheet_draw_f6", "sheet_draw_f5", [(0, 700), (0.5, 45)])]
+            + [(f"sheet_draw_f{i}", f"sheet_draw_f{i - 1}", [(0, 45), (0.5, 45)]) for i in range(5, 2, -1)]
+            + [("sheet_draw_f2", "sheet_draw_lift", [(0, 45), (0.5, 45)]),
+               ("sheet_draw_lift", "sheet_draw_f1", [(0, 45), (0.5, 45)])]
+        ),
     },
 }
 
@@ -449,7 +508,9 @@ def build(out: Path, gif_dir: Path | None) -> None:
     keys = load_keys()
     landmarks = json.loads((HERE / "tween_landmarks.json").read_text(encoding="utf-8"))
     hyb = Hybrid(keys, landmarks)
-    pal = build_palette([keys[k] for k in keys if not k.startswith("drawn_") or k.startswith("drawn_kf")])
+    # sheet_* frames snap to the palette but do not shape it, so adding a sheet leaves every other clip unchanged
+    pal = build_palette([keys[k] for k in keys
+                         if (not k.startswith("drawn_") or k.startswith("drawn_kf")) and not k.startswith("sheet_")])
     flow_cache = {}
     images, index = [], {}
 
@@ -492,6 +553,9 @@ REFS = {  # reference image name -> aligned key, for generated breakdown keys (a
     "kaelen_ref_active_drawn": "active_drawn",
     "kaelen_ref_drawn_windup": "drawn_kf_windup",
     "kaelen_ref_drawn_cleave": "drawn_kf_cleave",
+    "kaelen_ref_halfdraw_r2": "drawn_kf_halfdraw_r2",
+    "kaelen_ref_sheet_f1": "sheet_draw_f1",
+    "kaelen_ref_sheet_f2": "sheet_draw_f2",
 }
 
 
@@ -499,7 +563,10 @@ def export_refs(out_dir: Path) -> None:
     """The aligned 340 px keys on flat #FF00FF with one shared 96-colour palette, as image-model references.
     Rebuilt from kaelen_4pose_uris.json, so no binary needs to travel through git or Drive by hand."""
     keys = load_keys()
-    pal = build_palette([keys[k] for k in REFS.values()], colours=96)
+    # The palette comes from the first four references only, so adding a reference never changes the ones already
+    # on Drive (the halfdraw_r2 reference is snapped to the same palette).
+    basis = ["passive_relaxed", "active_drawn", "drawn_kf_windup", "drawn_kf_cleave"]
+    pal = build_palette([keys[k] for k in basis], colours=96)
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, key in REFS.items():
         bg = Image.new("RGBA", (SIZE, SIZE), (255, 0, 255, 255))
