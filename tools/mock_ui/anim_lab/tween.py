@@ -785,6 +785,23 @@ VIDEO_STARTS = {"walk": ("sheet_walk2_f1", 300), "sneak": ("sheet_sneak2_f1", 30
 VIDEO_W, VIDEO_H, VIDEO_SCALE, VIDEO_GROUND = 1280, 720, 2, 680
 
 
+# Tall layout for overhead attacks: the key at 1x on a 1280 x 720 canvas, boots at y 690, so about 365 px of headroom
+# above the head (the 360p slash ran its wind-up off the top). The video is then read at native size, not halved,
+# so the sprite stays at the same 1x size as every other action.
+TALL_X, TALL_GROUND = 470, 690
+
+
+def export_video_start_tall(action: str, out_dir: Path) -> Path:
+    key, _ = VIDEO_STARTS[action]
+    canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (255, 0, 255, 255))
+    canvas.alpha_composite(Image.fromarray(load_keys()[key]), (TALL_X, TALL_GROUND - GROUND_Y))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    p = out_dir / f"kaelen_video_start_{action}_720tall.png"
+    canvas.convert("RGB").save(p, optimize=True)
+    print(f"tall start frame ({VIDEO_W} x {VIDEO_H}, key 1x, boots at y {TALL_GROUND}) -> {p}")
+    return p
+
+
 def export_video_starts(out_dir: Path, scale: int = VIDEO_SCALE) -> None:
     """Start frames at 720p (scale 2: the key at 2x on 1280 x 720) or 360p (scale 1: the key at 1x on 640 x 360,
     the sprites' own resolution). Both put the key in the same place relative to the frame, so video_preview reads
@@ -1001,26 +1018,34 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, 
     return held
 
 
-def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int = 900, settle: int = 4):
+def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int = 900, settle: int = 4,
+                 tall: bool = False):
     """A one-shot action (poke, slash) cut from a video clip: from just before the figure leaves its starting guard
-    to a few frames after it is back, at the source fps. Frames are denoised, keyed, planted on GROUND_Y and given a
-    temporal colour hold, then snapped to the lab palette. The crop is the union of every frame's figure (a thrust
-    or an overhead wind-up reaches past the 340 px box), so the frames are wider than 340; ``box_x`` is where the
-    standard 340 px box (the start key's place) sits inside them. Returns (frames, box_x)."""
+    to a few frames after it is back, at the source fps. Frames are denoised, keyed, planted on the ground line and
+    given a temporal colour hold, then snapped to the lab palette. The crop is the union of every frame's figure (a
+    thrust or an overhead wind-up reaches past the 340 px box), so frames are wider, and for ``tall`` clips taller,
+    than 340; ``box`` is (x, y) of the standard 340 px box (the start key's place) inside them and ``ground`` the
+    ground row. ``tall`` reads a clip made from export_video_start_tall at native 1280 x 720 instead of halving it.
+    Returns (frames, box, ground)."""
     keys = load_keys()
     pal = build_palette([keys[k] for k in keys
                          if (not k.startswith("drawn_") or k.startswith("drawn_kf")) and not k.startswith("sheet_")])
-    _, x = VIDEO_STARTS[action]
-    bx, by = x // VIDEO_SCALE, VIDEO_GROUND // VIDEO_SCALE - (GROUND_Y + 1)
+    if tall:
+        size, bx, top = (VIDEO_W, VIDEO_H), TALL_X, TALL_GROUND - GROUND_Y
+    else:
+        _, x = VIDEO_STARTS[action]
+        size, bx, top = (VIDEO_W // VIDEO_SCALE, VIDEO_H // VIDEO_SCALE), x // VIDEO_SCALE, \
+            VIDEO_GROUND // VIDEO_SCALE - (GROUND_Y + 1)
+    ground = top + GROUND_Y                               # the boots' row in the video frame
+    bottom = top + SIZE                                   # the standard box's bottom edge
     cap = cv2.VideoCapture(str(mp4))
     full = []
     while True:
         ok, bgr = cap.read()
         if not ok:
             break
-        f = cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), (VIDEO_W // VIDEO_SCALE, VIDEO_H // VIDEO_SCALE),
-                       interpolation=cv2.INTER_AREA)
-        a = cv2.bilateralFilter(f, 5, 24, 5)[by:by + SIZE].astype(int)
+        f = cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), size, interpolation=cv2.INTER_AREA)
+        a = cv2.bilateralFilter(f, 5, 24, 5)[:bottom].astype(int)
         r, g, b = a[..., 0], a[..., 1], a[..., 2]
         bg = (r > 130) & (b > 130) & (g < 120) & (np.abs(r - b) < 110)
         full.append(clean(np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8)))
@@ -1037,16 +1062,21 @@ def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int 
     back = next((t for t in range(peak, len(away)) if away[t] < 0.1 * away[peak]), active[-1])
     t0, t1 = max(0, active[0] - 2), min(len(full) - 1, back + settle)
     seg = full[t0:t1 + 1]
-    cols = np.nonzero(np.any([f[..., 3] > 0 for f in seg], axis=0).any(axis=0))[0]
-    x0, x1 = max(0, int(cols.min()) - 4), min(full[0].shape[1], int(cols.max()) + 5)
-    x0 = min(x0, bx)                                         # keep the standard box inside the crop
+    union = np.any([f[..., 3] > 0 for f in seg], axis=0)
+    cols, rows = np.nonzero(union.any(axis=0))[0], np.nonzero(union.any(axis=1))[0]
+    # the standard box stays inside the crop; the crop grows sideways and, for an overhead weapon, upward
+    x0 = min(max(0, int(cols.min()) - 4), bx)
+    x1 = max(min(union.shape[1], int(cols.max()) + 5), bx + SIZE)
+    y0 = min(max(0, int(rows.min()) - 4), top)
+    g_row = ground - y0
     planted = []
     for f in seg:
-        c = f[:, x0:x1]
+        c = f[y0:bottom, x0:x1]
         low = int(np.nonzero((c[..., 3] > 0).any(axis=1))[0].max())
         o = np.zeros_like(c)
-        dy = GROUND_Y - low
-        o[max(0, dy):SIZE + min(0, dy)] = c[max(0, -dy):SIZE - max(0, dy)]
+        dy = g_row - low
+        h = c.shape[0]
+        o[max(0, dy):h + min(0, dy)] = c[max(0, -dy):h - max(0, dy)]
         planted.append(o)
     held = [snap(f, pal) for f in planted]
     for t in range(1, len(held)):
@@ -1054,8 +1084,9 @@ def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int 
             & (planted[t][..., 3] > 0) & (held[t - 1][..., 3] > 0)
         held[t][same] = held[t - 1][same]
     print(f"{mp4.name}: action frames {t0}..{t1} of {len(full)} ({len(seg)} frames, {len(seg) / 24:.2f} s), "
-          f"largest change from guard {max(away)} px at frame {int(np.argmax(away))}, crop {x1 - x0} px wide, "
-          f"box at x {bx - x0}; back to guard at the end: {away[t1]} px from the opening")
+          f"largest change from guard {max(away)} px at frame {int(np.argmax(away))}, crop {x1 - x0} x "
+          f"{bottom - y0} px, box at ({bx - x0}, {top - y0}); back to guard at the end: {away[t1]} px from the "
+          f"opening; figure touches the video's top edge on {sum(int(f[0, ..., 3].any()) for f in seg)} frame(s)")
 
     def on_bg_w(f):
         im = Image.new("RGBA", (f.shape[1], f.shape[0]), BG + (255,))
@@ -1066,11 +1097,11 @@ def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int 
         seq = [on_bg_w(f) for f in held[::24 // fps]]
         seq[0].save(f"{out}_{fps}fps.gif", save_all=True, append_images=seq[1:], duration=round(1000 / fps),
                     loop=0, disposal=1)
-    return held, bx - x0
+    return held, (bx - x0, top - y0), g_row
 
 
 def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source: str = "", loop: bool = True,
-                      box_x: int = 0) -> None:
+                      box: tuple = (0, 0), ground_y: int = GROUND_Y) -> None:
     """Frames on a transparent grid, ``cols`` per row in play order, plus <path>.json with the frame size, count,
     fps and source, the form an approved animation is kept in (art_src/vn_stage/)."""
     h, w = frames[0].shape[:2]
@@ -1080,8 +1111,8 @@ def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source:
         sheet.paste(Image.fromarray(f), ((i % cols) * w, (i // cols) * h))
     path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(path, optimize=True)
-    meta = {"frame_w": w, "frame_h": h, "frames": len(frames), "cols": cols, "fps": fps, "ground_y": GROUND_Y,
-            "loop": loop, "box_x": box_x, "source": source}
+    meta = {"frame_w": w, "frame_h": h, "frames": len(frames), "cols": cols, "fps": fps, "ground_y": ground_y,
+            "loop": loop, "box_x": box[0], "box_y": box[1], "source": source}
     path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"sprite sheet {len(frames)} frames {w}x{h} @ {fps} fps -> {path}")
 
@@ -1116,6 +1147,10 @@ def main() -> None:
     ap.add_argument("--width", type=int, default=SIZE, help="Crop width for --video-loop (wider keeps a long blade).")
     ap.add_argument("--video-action", type=Path, default=None, metavar="MP4",
                     help="Cut a one-shot action (poke, slash) from a video (with --action, --out prefix, --sheet).")
+    ap.add_argument("--tall", action="store_true",
+                    help="With --video-action: the clip was made from the tall 720p start frame (read it at native size).")
+    ap.add_argument("--export-video-start-tall", type=Path, default=None, metavar="DIR",
+                    help="Write the tall 720p start frame (key 1x, headroom for overhead attacks) for --action into DIR.")
     ap.add_argument("--sheet", type=Path, default=None,
                     help="With --video-loop: also keep the loop as a transparent sprite sheet PNG (+ .json) here.")
     ap.add_argument("--stage-refs", action="store_true",
@@ -1137,10 +1172,13 @@ def main() -> None:
             save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_loop.name}")
         return
     if args.video_action:
-        frames, box_x = video_action(args.video_action, args.action, args.out)
+        frames, box, ground = video_action(args.video_action, args.action, args.out, tall=args.tall)
         if args.sheet:
             save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_action.name}",
-                              loop=False, box_x=box_x)
+                              loop=False, box=box, ground_y=ground)
+        return
+    if args.export_video_start_tall:
+        export_video_start_tall(args.action, args.export_video_start_tall)
         return
     if args.frame:
         add_to_bundle({args.key: single_frame(args.frame, args.x_shift)})
