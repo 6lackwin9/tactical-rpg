@@ -1,0 +1,10 @@
+{
+  "frame_w": 340,
+  "frame_h": 340,
+  "frames": 37,
+  "cols": 8,
+  "fps": 24,
+  "ground_y": 324,
+  "loop": true,
+  "source": "image_pipeline/video/out/kaelen_video_walk.mp4"
+}

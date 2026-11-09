@@ -1001,6 +1001,22 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, 
     return held
 
 
+def save_sprite_sheet(frames: list, path: Path, fps: int, cols: int = 8, source: str = "") -> None:
+    """Frames on a transparent grid, ``cols`` per row in play order, plus <path>.json with the frame size, count,
+    fps and source, the form an approved animation is kept in (art_src/vn_stage/)."""
+    h, w = frames[0].shape[:2]
+    rows = -(-len(frames) // cols)
+    sheet = Image.new("RGBA", (w * cols, h * rows), (0, 0, 0, 0))
+    for i, f in enumerate(frames):
+        sheet.paste(Image.fromarray(f), ((i % cols) * w, (i // cols) * h))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(path, optimize=True)
+    meta = {"frame_w": w, "frame_h": h, "frames": len(frames), "cols": cols, "fps": fps, "ground_y": GROUND_Y,
+            "loop": True, "source": source}
+    path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    print(f"sprite sheet {len(frames)} frames {w}x{h} @ {fps} fps -> {path}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the keyframe in-betweening comparison lab.")
     ap.add_argument("--out", type=Path, default=HERE.parent.parent.parent / "kaelen_tween_lab.html")
@@ -1029,6 +1045,8 @@ def main() -> None:
     ap.add_argument("--loop-range", default="auto",
                     help="Loop length range in source frames, or auto (default): two steps found from the legs.")
     ap.add_argument("--width", type=int, default=SIZE, help="Crop width for --video-loop (wider keeps a long blade).")
+    ap.add_argument("--sheet", type=Path, default=None,
+                    help="With --video-loop: also keep the loop as a transparent sprite sheet PNG (+ .json) here.")
     ap.add_argument("--stage-refs", action="store_true",
                     help="Copy the references the queued requests need into the queue's refs/_active/ folder.")
     args = ap.parse_args()
@@ -1043,7 +1061,9 @@ def main() -> None:
         return
     if args.video_loop:
         lo, hi = (0, 0) if args.loop_range == "auto" else (int(v) for v in args.loop_range.split("-"))
-        video_loop(args.video_loop, args.action, args.out, lo, hi, args.width)
+        frames = video_loop(args.video_loop, args.action, args.out, lo, hi, args.width)
+        if args.sheet:
+            save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_loop.name}")
         return
     if args.frame:
         add_to_bundle({args.key: single_frame(args.frame, args.x_shift)})

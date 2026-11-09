@@ -1,0 +1,10 @@
+{
+  "frame_w": 420,
+  "frame_h": 340,
+  "frames": 71,
+  "cols": 8,
+  "fps": 24,
+  "ground_y": 324,
+  "loop": true,
+  "source": "image_pipeline/video/out/kaelen_video_sneak.mp4"
+}
