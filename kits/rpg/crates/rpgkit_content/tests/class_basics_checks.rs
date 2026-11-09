@@ -119,3 +119,24 @@ fn under_a_deck_ruleset_a_class_basic_takes_no_slot_and_may_be_ordered() {
     let other = deck_errors(unit("plain", json!({"order": {"maneuver": ["flank_cut"]}})));
     assert!(other.iter().any(|e| e.contains("flank_cut")), "another class may not order it: {other:?}");
 }
+
+/// R4-2 (FB-138) L3: a world overlay's `skill_path` that lists a class basic is warned like the class row's own path
+/// (the world's units are built from the overlay path), once, by the world that sets it.
+#[test]
+fn a_class_basic_in_a_world_overlay_path_is_warned() {
+    let overlay = |path: Value| json!({"name": "Drill", "skill_path": path});
+    let worlds = json!({
+        "w": {"manifest": {"id": "w", "name": "W", "classes": {"drill": overlay(json!({"slash": 1, "brace": 1}))}}, "own": {}},
+        "ok": {"manifest": {"id": "ok", "name": "Ok", "classes": {"drill": overlay(json!({"slash": 1}))}}, "own": {}}
+    });
+    let row = class("drill", json!({"basics": ["brace"]}));
+    let catalog = json!({"skills": skills(), "classes": [Value::Object(row.clone())]});
+    let v = check::View::new(&catalog, &worlds, &json!({}), Default::default());
+    let mut on_path = row.clone();
+    on_path.insert("skill_path".into(), json!({"slash": 1, "brace": 1}));
+    let own: Vec<String> = check::warnings_for(&v, "classes", &on_path).into_iter().filter(|w| w.starts_with("Class basic ")).collect();
+    assert_eq!(own.len(), 1, "the class row's own warning: {own:?}");
+    let class_lines = |w: &str| check::world::world_warnings(&v, w).into_iter().filter(|l| l.contains("Class basic ")).collect::<Vec<_>>();
+    assert_eq!(class_lines("w"), [format!("w/world: Class names 'drill': {}", own[0])], "the overlay path's basic");
+    assert!(class_lines("ok").is_empty(), "an overlay path without the basic");
+}

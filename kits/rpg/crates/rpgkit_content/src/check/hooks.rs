@@ -931,6 +931,20 @@ pub fn deck_shape_errors(tag: &str, fx: &Dict) -> Vec<String> {
 
 // ---- World manifest (1.2, CN1) -----------------------------------------------------------------------------------
 
+/// L3 (FB-138): the warnings of world `w`'s own `classes` overlays, as "<w>/world: Class names '<class>': ...": a class
+/// basic of the base class row listed in the overlay's `skill_path` (`unit::basics_in_path_warnings`, the class row's
+/// own warning), since the world's units are built from that path (`Data::cat_in`).
+pub fn classes_warnings(v: &View, w: &str) -> Vec<String> {
+    let Some(o) = json::get(v.worlds.manifest(w), "classes").as_object() else { return Vec::new() };
+    let mut out = Vec::new();
+    for (class_id, raw) in o {
+        let Some(path) = raw.as_object().and_then(|c| c.get("skill_path")).and_then(Value::as_object) else { continue };
+        let row = v.get("classes", class_id);
+        out.extend(super::unit::basics_in_path_warnings(row, path).into_iter().map(|m| format!("{w}/world: Class names '{class_id}': {m}")));
+    }
+    out
+}
+
 /// CN1: a manifest's `classes`: base class ids, each {name 1-32, description 0-240, skill_path absent or {family:
 /// level 1-30}}.
 pub fn classes_errors(v: &View, m: &Dict) -> Vec<String> {

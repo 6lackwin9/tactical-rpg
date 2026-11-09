@@ -26,6 +26,15 @@ pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 /// Unit slot value meaning "leave this slot empty" (no class fallback).
 pub const NO_ITEM: &str = "none";
+/// AUDIT-01 (FB-143): the tier of a unit row without `tier` (the schema default). Every reader of a unit row's tier
+/// (`UnitDef`, the world roster's stage level, XP weight and morale tier, the loot check, the sim) goes through
+/// `unit_tier`, so a tierless row reads the same tier everywhere.
+pub const DEFAULT_TIER: &str = "hero";
+
+/// AUDIT-01: unit row `o`'s tier, `DEFAULT_TIER` when the row has none.
+pub fn unit_tier(o: &Obj) -> String {
+    string(o, "tier", DEFAULT_TIER)
+}
 
 /// INPUT1 MR1-MR2 (rule round_intent): the spot a Maneuver attack with a `position` dashes to by its target and hits
 /// from: `flank` (beside it) or `behind`. The skill field's "" is no position.
@@ -303,7 +312,7 @@ impl UnitDef {
             class_id: string(o, "class_id", ""),
             level: int(o, "level", 1),
             growth_per_stage: int(o, "growth_per_stage", 0),
-            tier: string(o, "tier", "hero"),
+            tier: unit_tier(o),
             spend: int_map(o, "spend"),
             stat_mode: string(o, "stat_mode", "derived"),
             hp: int(o, "hp", 50),

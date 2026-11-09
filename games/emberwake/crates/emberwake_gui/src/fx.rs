@@ -55,6 +55,20 @@ pub struct Act<'a> {
     pub harms: bool,
 }
 
+/// R4-2 (3), C28: the `Act` kind of a popped command (the battle's step -> FX seam, `BattleScreen::popped_impact`):
+/// `attack`, `area`, `support` or `item`; "" for every other command (a move, a guard, a rest, a focus, a status
+/// block, a target switch), which has no effect (`style` gives no delivery).
+pub fn act_kind(kind: &emberwake_battle::command::CmdKind) -> &'static str {
+    use emberwake_battle::command::CmdKind;
+    match kind {
+        CmdKind::Attack { .. } => "attack",
+        CmdKind::Area { .. } => "area",
+        CmdKind::Support { .. } => "support",
+        CmdKind::Item { .. } => "item",
+        _ => "",
+    }
+}
+
 /// A projectile's flight over `px` at `speed` px/s in clock ms, clamped to the tuning's travel range (4.2 step 2).
 pub fn travel_ms(px: f32, speed: f32, t: &Tuning) -> u64 {
     let ms = if speed > 0.0 { (px.max(0.0) / speed * 1000.0).round() as u64 } else { t.travel_max_ms };
@@ -1774,5 +1788,63 @@ mod tests {
         assert_eq!(e.prim, Prim::Ring(Ring { at: slot_anchor(&geo, foot, Slot::Body), r0: 3.0, r1: 10.0, ms: 220, col: [VIOLET[0], VIOLET[1], VIOLET[2], 200], squash: 0.75 }));
         assert!(matches!(apply_burst(status_look("weaken").unwrap(), &geo, &t, foot, 0).unwrap().prim, Prim::Ring(r) if r.col == alpha(ASH, 200)));
         assert!(apply_burst(status_look("stealth").unwrap(), &geo, &t, foot, 0).is_none());
+    }
+
+    /// R4-2 (3), C28 (battle -> X4): over a whole timeline fight of the frozen catalog (the class-unit fight of the
+    /// timeline golden, `emberwake_battle/tests/fixtures/timeline_kit.json`), every action a step pops gets its look as
+    /// `BattleScreen::popped_impact` reads it (`act_kind`, the skill row, the actor's main weapon, the distance): an
+    /// attack, area, support or item has a delivery, any other command none. The step stream itself (a pop per step,
+    /// its log cell, no effect skipped) is `emberwake_battle/tests/step_events.rs`.
+    #[test]
+    fn every_popped_effect_of_a_timeline_fight_has_a_delivery() {
+        use emberwake_battle::session::{EncounterDef, Phase, Session};
+        use emberwake_rules::ruleset::{Ruleset, TIMELINE};
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../emberwake_battle/tests/fixtures/timeline_kit.json");
+        let raw: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).expect("the frozen timeline catalog")).unwrap();
+        let cat = std::sync::Arc::new(emberwake_data::Catalog::from_value(&raw));
+        let entry = raw["encounters"].as_array().unwrap().iter().filter_map(serde_json::Value::as_object).find(|e| e["id"] == "goblin_skirmish").expect("the class-unit fight").clone();
+        let def = EncounterDef::from_obj_with(&entry, Ruleset::of(&cat, TIMELINE).expect("the timeline row"));
+        let mut s = Session::start(cat, def, &indexmap::IndexMap::<String, emberwake_data::UnitDef>::new());
+        let (mut effects, mut others) = (0, 0);
+        for _ in 0..s.def.max_rounds.max(1) {
+            if s.combat_over {
+                break;
+            }
+            s.auto_draft("balanced");
+            assert!(s.confirm_plan());
+            while s.phase != Phase::Replay && !s.combat_over {
+                let before = s.last_popped;
+                s.step_next();
+                let Some((_, _, idx)) = s.last_popped.filter(|p| Some(*p) != before) else { continue };
+                let a = &s.resolver.scheduled[idx];
+                let u = &s.w.units[a.unit];
+                let kind = act_kind(&a.command.kind);
+                let skill = s.w.cat.skills.iter().find(|k| k.name == a.command.name).map_or("", |k| k.id.as_str());
+                let weapon = u.inventory.main_weapon();
+                let (family, ranged) = (weapon.map_or("", |w| w.weapon_type()), weapon.is_some_and(|w| w.is_ranged_weapon()));
+                let to = match &a.command.kind {
+                    emberwake_battle::command::CmdKind::Attack { target: Some(t), .. } => s.w.grid.pos(*t),
+                    emberwake_battle::command::CmdKind::Area { aim, .. } => Some(*aim),
+                    _ => None,
+                };
+                let dist = match (s.w.grid.pos(a.unit), to) {
+                    (Some(f), Some(t)) => f.dist(t),
+                    _ => 0,
+                };
+                let d = delivery(Act { kind, skill, family, ranged, magic: false, dist, on_self: false, harms: false });
+                if kind.is_empty() {
+                    others += 1;
+                    assert_eq!(d, Delivery::None, "{} ({}): no effect", a.command.name, u.name);
+                } else {
+                    effects += 1;
+                    assert_ne!(d, Delivery::None, "{} ({}, {kind}): an effect has a delivery", a.command.name, u.name);
+                }
+            }
+            if s.combat_over || !s.can_advance_round() {
+                break;
+            }
+            s.advance_round();
+        }
+        assert!(effects > 0 && others > 0, "the fight popped both kinds ({effects} effects, {others} others)");
     }
 }

@@ -185,3 +185,20 @@ fn the_manifest_writer_sets_and_checks_the_caps() {
     assert_eq!(source::load(&data).purse.supplies_max, PurseCaps::SUPPLIES_MAX, "removed: the default");
     assert!(store::check(&data).iter().all(|l| !l.contains("supplies_max") && !l.contains("purse_gold_cap")));
 }
+
+/// R4-2 (FB-143) AUDIT-04: a key the kit does not register (a hand-edited typo of a cap) is a problem of the whole-folder
+/// check, the very line the manifest writer refuses every write with; nulling it through the writer clears both.
+#[test]
+fn an_unregistered_manifest_key_is_a_problem_of_the_data_check() {
+    let typo = "supply_max";
+    assert!(!PurseCaps::KEYS.contains(&typo) && !aegis_content::manifest::KEYS.contains(&typo), "not a registered key");
+    let (t, data) = scratch("stray", Some(game(json!({typo: SUPPLIES}))));
+    let path = t.join("game.json");
+    let refused = store::set_manifest(&path, &dict(json!({"title": "Demo Two"}))).unwrap_err();
+    let stray: Vec<String> = refused.into_iter().filter(|l| l.contains(&format!("'{typo}'"))).collect();
+    assert_eq!(stray.len(), 1, "the writer names the stray key once: {stray:?}");
+    let lines = store::check(&data);
+    assert!(lines.contains(&stray[0]), "the check reports the writer's line: {lines:?}");
+    store::set_manifest(&path, &dict(json!({typo: null}))).unwrap();
+    assert!(store::check(&data).iter().all(|l| !l.contains(typo)), "removed: no problem");
+}

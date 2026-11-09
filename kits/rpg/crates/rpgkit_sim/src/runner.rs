@@ -413,7 +413,7 @@ impl<'a> Runner<'a> {
             let def = self.defs.get(id);
             let entry = d.entry("units", id);
             let level = def.map_or_else(|| json::i(entry, "level", 1), |x| x.level as i64);
-            let tier = def.map_or_else(|| json::s_or(entry, "tier", "standard"), |x| x.tier.clone());
+            let tier = def.map_or_else(|| rpgkit_data::unit_tier(entry), |x| x.tier.clone());
             let weight = rpgkit_world::progression::kill_weight(d, level, &tier);
             rec.roster += 1;
             rec.total += weight;

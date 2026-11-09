@@ -134,7 +134,9 @@ const GROWTH: i64 = 2;
 /// the hero (level 3) and the rat (an enemy at level 1, a world character); the encounter `brawl` (tagged fight, one
 /// rat) and the gauge `alert` moved by every battle outcome of a fight-tagged encounter (`FIGHT_DELTA`). FB-139: the
 /// encounter `pack` fights the wolf (a standard enemy) and the rival (a hero-tier enemy) beside the guest squire (a
-/// standard party-side unit), all three at `GROW_BASE` with `GROWTH` per stage.
+/// standard party-side unit), all three at `GROW_BASE` with `GROWTH` per stage. AUDIT-01: `haunt` fights the shade (an
+/// enemy row without `tier`); AUDIT-02: `pit` fights the brute (a standard enemy with an explicit `spend`), both growing
+/// like the wolf.
 fn fight_data() -> Data {
     let inputs: Vec<Value> = FIGHT_DELTA.iter().map(|(o, d)| json!({"on": "battle", "tags": ["fight"], "outcomes": [o], "delta": d})).collect();
     let meters = json!([{"id": "alert", "name": "Alert", "max": 100, "bands": [{"id": "calm", "name": "Calm", "from": 0, "tone": "calm"}], "inputs": inputs}]);
@@ -143,13 +145,17 @@ fn fight_data() -> Data {
             "locations": with_ids(w, json!([{"id": "hub", "name": "Hub"}])),
             "encounters": with_ids(w, json!([
                 {"id": "brawl", "name": "Brawl", "tags": ["fight"], "enemies": ["rat"], "intro": "A rat."},
-                {"id": "pack", "name": "Pack", "enemies": ["wolf", "rival"], "guests": ["squire"]}
+                {"id": "pack", "name": "Pack", "enemies": ["wolf", "rival"], "guests": ["squire"]},
+                {"id": "haunt", "name": "Haunt", "enemies": ["shade"]},
+                {"id": "pit", "name": "Pit", "enemies": ["brute"]}
             ])),
             "characters": with_ids(w, json!([
                 {"id": "rat", "name": "Rat", "role": "npc", "base_unit": "rat"},
                 {"id": "wolf", "name": "Wolf", "role": "npc", "base_unit": "wolf"},
                 {"id": "rival", "name": "Rival", "role": "npc", "base_unit": "rival"},
-                {"id": "squire", "name": "Squire", "role": "npc", "base_unit": "squire"}
+                {"id": "squire", "name": "Squire", "role": "npc", "base_unit": "squire"},
+                {"id": "shade", "name": "Shade", "role": "npc", "base_unit": "shade"},
+                {"id": "brute", "name": "Brute", "role": "npc", "base_unit": "brute"}
             ])),
             "meters": with_ids(w, meters.clone())
         })
@@ -174,7 +180,9 @@ fn fight_data() -> Data {
             {"id": "rat", "name": "Rat", "side": "enemy", "class_id": "drill", "level": 1},
             {"id": "wolf", "name": "Wolf", "side": "enemy", "class_id": "drill", "level": GROW_BASE, "tier": "standard", "growth_per_stage": GROWTH},
             {"id": "rival", "name": "Rival", "side": "enemy", "class_id": "drill", "level": GROW_BASE, "tier": "hero", "growth_per_stage": GROWTH},
-            {"id": "squire", "name": "Squire", "side": "party", "class_id": "drill", "level": GROW_BASE, "tier": "standard", "growth_per_stage": GROWTH}
+            {"id": "squire", "name": "Squire", "side": "party", "class_id": "drill", "level": GROW_BASE, "tier": "standard", "growth_per_stage": GROWTH},
+            {"id": "shade", "name": "Shade", "side": "enemy", "class_id": "drill", "level": GROW_BASE, "growth_per_stage": GROWTH},
+            {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": GROW_BASE, "tier": "standard", "growth_per_stage": GROWTH, "spend": brute_spend()}
         ]
     });
     Data::from_values(&catalog, &worlds, &json!({}))
@@ -195,6 +203,11 @@ fn fight_state(d: &Data, w: &str) -> GameState {
 
 fn brawl(w: &str) -> Dict {
     json::dict(&json!({"source": trigger::FIGHT_SOURCE, "encounter": format!("{w}:brawl")})).clone()
+}
+
+/// AUDIT-02: the brute's explicit spend: its whole pool at `GROW_BASE`, every point on STR.
+fn brute_spend() -> Value {
+    json!({"STR": rpgkit_rules::stats::spend_pool(GROW_BASE as i32)})
 }
 
 /// The auto driver (every side drafted by the balanced preset) plays `s` to its end; the session's final outcome.
@@ -330,4 +343,51 @@ fn an_enemy_grows_with_the_stage_in_the_battle_and_its_xp_weight_alike() {
     assert_eq!(seen, want, "each foe's level and weight as the battle builds it");
     assert_ne!(want[0].2, progression::kill_weight(&d, GROW_BASE, "standard"), "the grown wolf weighs more than at its base");
     assert_eq!(battle::enemy_levels_at(&d, "fw", "fw:pack", stage), [(grown, "standard".to_string()), (GROW_BASE, "hero".to_string())]);
+}
+
+// ---- R4-2 (FB-143): AUDIT-01 one missing-`tier` default, AUDIT-02 a stage raise spends its extra points -------------
+
+#[test]
+fn a_tierless_row_reads_the_schema_default_tier_everywhere() {
+    let d = fight_data();
+    let cat = d.cat.clone();
+    let tier = rpgkit_data::DEFAULT_TIER.to_string();
+    let row = d.character_unit_entry(d.resolve("fw", "characters", "shade"));
+    assert!(!row.contains_key("tier"), "the fixture row has no tier");
+    assert_eq!(rpgkit_data::UnitDef::from_obj(&row).tier, tier, "UnitDef");
+    let stage = 3;
+    let roster = WorldRoster { stage, ..WorldRoster::new(&d, "fw") };
+    assert_eq!(roster.tier(&cat, "shade"), tier, "WorldRoster::tier (morale)");
+    assert_eq!(roster.entry(&cat, "shade").map(|u| (u.tier, i64::from(u.level))), Some((tier.clone(), GROW_BASE)), "the battle entry: a hero never scales");
+    let foes = battle::roster_at(&d, "fw", "fw:haunt", stage);
+    let seen: Vec<(i64, String, i64)> = foes.iter().map(|f| (f.level, f.tier.clone(), f.weight)).collect();
+    assert_eq!(seen, [(GROW_BASE, tier.clone(), progression::kill_weight(&d, GROW_BASE, &tier))], "roster_at: stage level, tier and XP weight");
+}
+
+#[test]
+fn a_stage_raised_enemy_with_an_explicit_spend_spends_the_extra_points() {
+    let d = fight_data();
+    let cat = d.cat.clone();
+    let mut gs = fight_state(&d, "fw");
+    gs.campaign.as_mut().unwrap().act = 3;
+    let stage = battle::world_stage(&gs);
+    let grown = GROW_BASE + stage * GROWTH;
+    let pool = |level: i64| i64::from(rpgkit_rules::stats::spend_pool(level as i32));
+    // the entry: the authored spend kept, the extra pool spent on top
+    let def = WorldRoster { stage, ..WorldRoster::new(&d, "fw") }.entry(&cat, "brute").expect("the brute resolves");
+    assert_eq!(i64::from(def.level), grown);
+    assert!(def.spend.get("STR").copied().unwrap_or(0) >= rpgkit_rules::stats::spend_pool(GROW_BASE as i32), "the authored spend is kept");
+    assert_eq!(def.spend.values().map(|v| i64::from(*v)).sum::<i64>(), pool(grown), "the whole pool at the grown level");
+    // the battle: the grown brute has no unallocated point
+    let f = battle::begin_world(&d, &mut gs, &json::dict(&json!({"source": trigger::FIGHT_SOURCE, "encounter": "fw:pit"})).clone())
+        .unwrap_or_else(|e| panic!("the fight starts: {e}"));
+    let brute = f.session.w.units.iter().find(|u| u.name == "Brute").expect("the brute is in the battle");
+    assert_eq!((i64::from(brute.stats.level), brute.stats.unallocated), (grown, 0), "grown, every point spent");
+    // stage 0 changes nothing: the authored spend as written
+    let base = WorldRoster::new(&d, "fw").entry(&cat, "brute").expect("the brute resolves");
+    assert_eq!(base.spend, rpgkit_data::UnitDef::from_obj(&d.character_unit_entry(d.resolve("fw", "characters", "brute"))).spend);
+    // the rule alone: no raise or no explicit spend leaves the spend as it is
+    let mut plain = rpgkit_data::UnitDef::from_obj(&d.character_unit_entry(d.resolve("fw", "characters", "wolf")));
+    rpgkit_rules::unit::raise_level(&cat, &mut plain, grown as i32);
+    assert!(plain.spend.is_empty(), "a row without spend auto-spends at build time");
 }

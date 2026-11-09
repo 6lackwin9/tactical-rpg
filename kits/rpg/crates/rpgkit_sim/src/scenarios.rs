@@ -177,7 +177,7 @@ pub fn catalog_ids(r: &mut Runner, ids: &[String], level: i32, shifted: bool) ->
             }
             let e = r.d.entry("units", id).clone();
             let copy = format!("simc_{id}");
-            let def = Def { copy_of: id.clone(), ..Def::new(&json::s(&e, "class_id"), level, &json::s_or(&e, "tier", "standard"), false) };
+            let def = Def { copy_of: id.clone(), ..Def::new(&json::s(&e, "class_id"), level, &rpgkit_data::unit_tier(&e), false) };
             r.define(&copy, def);
             copy
         })

@@ -8,7 +8,8 @@
 //! only under `field_intent`) are set aside during the replay and re-applied after `w24s1.json`; `w25lock.json`
 //! (ATTACKLOCK1-O: `attack_lock` melee) replays next, then `classbasics.json` (R2-W2b CLASS-BASICS: role basics move
 //! to the classes, `flank_cut` leaves the `timeline` basics, four founder deck orders change) replays next, in its
-//! order, and the unit steps of `r41s2.json` (R4-1 slice 2: `template` on the caster units) last.
+//! order, then the unit steps of `r41s2.json` (R4-1 slice 2: `template` on the caster units) and `r42.json` (R4-2 L2:
+//! `brace` leaves `founder_kaelen`'s extra skills) last.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
@@ -56,6 +57,8 @@ const CLASS_BASICS_SEED: &str = "classbasics.json";
 
 /// R4-1 slice 2 (FB-144): the seed that set `template` on the caster units (after the class-basics seed).
 const TEMPLATES_SEED: &str = "r41s2.json";
+/// R4-2 (FB-138 L2): the seed that drops the duplicate class basic `brace` from `founder_kaelen.extra_skills`.
+const R42_SEED: &str = "r42.json";
 
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
@@ -189,6 +192,9 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     // R4-1 slice 2: the template seed's units (their stat template; no ruleset row changes)
     for e in seed_rows(TEMPLATES_SEED, "units") {
         store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("R4-1 unit '{}': {err:?}", json::s(&e, "id")));
+    }
+    for e in seed_rows(R42_SEED, "units") {
+        store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("R4-2 unit '{}': {err:?}", json::s(&e, "id")));
     }
     let seeded = store::view(&tmp);
     let units = reordered.iter().map(|u| json::s(u, "id")).chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")));

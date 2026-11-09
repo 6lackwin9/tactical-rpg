@@ -82,25 +82,26 @@ pub fn foe_level(level: i64, stage: i64, growth: i64) -> i64 {
 
 /// The level roster unit row `entry` (a character's unit entry, `Data::character_unit_entry`) fights at on stage
 /// `stage`: `foe_level` for an enemy (tier other than `hero`), the base level for a hero. A row without `tier` reads
-/// the schema default `hero` (as `UnitDef` does), so it never scales.
+/// the schema default `hero` (`rpgkit_data::unit_tier`, AUDIT-01), so it never scales.
 fn stage_level(entry: &Dict, stage: i64) -> i64 {
     let level = json::i(entry, "level", 1);
-    if json::s_or(entry, "tier", "hero") == "hero" {
+    if rpgkit_data::unit_tier(entry) == rpgkit_data::DEFAULT_TIER {
         return level;
     }
     foe_level(level, stage, json::i(entry, "growth_per_stage", 0))
 }
 
 impl rpgkit_battle::session::Roster for WorldRoster<'_> {
-    /// The character's unit entry; an enemy (not an ally, not a hero) at its stage level (`stage_level`, FB-139).
-    fn entry(&self, _cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
+    /// The character's unit entry; an enemy (not an ally, not a hero) at its stage level (`stage_level`, FB-139), an
+    /// explicit `spend` topped up by the raise's extra points (`rpgkit_rules::unit::raise_level`, AUDIT-02).
+    fn entry(&self, cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         if e.is_empty() {
             return None;
         }
         let mut def = rpgkit_data::UnitDef::from_obj(&e);
         if !self.allies.iter().any(|a| a == r) {
-            def.level = stage_level(&e, self.stage) as i32;
+            rpgkit_rules::unit::raise_level(cat, &mut def, stage_level(&e, self.stage) as i32);
         }
         Some(def)
     }
@@ -115,7 +116,7 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
 
     fn tier(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
-        json::s_or(&e, "tier", "standard")
+        rpgkit_data::unit_tier(&e)
     }
 
     /// WorldFactory: lore_ref = the character's qualified id, else its id.
@@ -212,7 +213,7 @@ pub fn roster_at(d: &Data, world_id: &str, encounter_qid: &str, stage: i64) -> V
             continue;
         }
         let n = out.iter().filter(|f| f.unit_ref == r).count();
-        let (level, tier) = (stage_level(&entry, stage), json::s_or(&entry, "tier", "standard"));
+        let (level, tier) = (stage_level(&entry, stage), rpgkit_data::unit_tier(&entry));
         let weight = progression::kill_weight(d, level, &tier);
         out.push(RosterFoe { key: format!("{r}#{n}"), name: json::s(&entry, "name"), unit: json::s(&entry, "id"), unit_ref: r, level, tier, weight });
     }

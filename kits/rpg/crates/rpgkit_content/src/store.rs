@@ -582,8 +582,9 @@ fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
         Err(e) => return vec![e],
     };
     let mut out = m.problems();
-    // E2.2-S1 (FB-53): the game-wide purse caps, when the manifest sets them (E2.2-S2: the kit's manifest keys)
-    out.extend(RpgContent.manifest_problems(&m.to_dict()));
+    // E2.2-S1 (FB-53): the game-wide purse caps, when the manifest sets them (E2.2-S2: the kit's manifest keys);
+    // AUDIT-04 (FB-143): and every key the kit does not register, as `set_manifest` reports it
+    out.extend(aegis_content::store::manifest_key_problems(&RpgContent, &m.to_dict()));
     let folders: Vec<String> = worlds.as_object().map(|w| w.keys().cloned().collect()).unwrap_or_default();
     for w in m.worlds.iter().filter(|w| !folders.contains(w)) {
         out.push(format!("game.json: world '{w}' has no folder in data/worlds/."));

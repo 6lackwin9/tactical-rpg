@@ -136,16 +136,22 @@ pub fn set_world(hooks: &impl Hooks, data_dir: &Path, world: &str, patch: &Dict,
 /// is written when it has problems. An extra key the file holds that the game does not register (a hand-edited typo)
 /// is a problem too, so it is never kept silently; a patch setting it to null removes it.
 pub fn set_manifest(hooks: &impl Hooks, path: &Path, patch: &Dict) -> Result<Manifest, Vec<String>> {
+    Manifest::set_with(path, patch, hooks.manifest_keys(), |m| manifest_key_problems(hooks, m))
+}
+
+/// FB-110, AUDIT-04 (FB-143): the problems of game manifest object `m` beyond `Manifest::problems`: every key that is
+/// neither an engine key nor one the game's hooks register (`Hooks::manifest_keys`), then the hooks' own checks
+/// (`Hooks::manifest_problems`). `set_manifest` refuses a write with any; the game's whole-folder check reports the
+/// same lines, so a typo in the file fails the check before it blocks the next manifest write.
+pub fn manifest_key_problems(hooks: &impl Hooks, m: &Dict) -> Vec<String> {
     let registered = hooks.manifest_keys();
-    Manifest::set_with(path, patch, registered, |m| {
-        let mut problems: Vec<String> = m
-            .keys()
-            .filter(|k| !crate::manifest::KEYS.contains(&k.as_str()) && !registered.contains(&k.as_str()))
-            .map(|k| format!("game.json: key '{k}' is not a game.json key (registered: {}); set it to null to remove it.", if registered.is_empty() { "none".to_string() } else { registered.join(", ") }))
-            .collect();
-        problems.extend(hooks.manifest_problems(m));
-        problems
-    })
+    let mut problems: Vec<String> = m
+        .keys()
+        .filter(|k| !crate::manifest::KEYS.contains(&k.as_str()) && !registered.contains(&k.as_str()))
+        .map(|k| format!("game.json: key '{k}' is not a game.json key (registered: {}); set it to null to remove it.", if registered.is_empty() { "none".to_string() } else { registered.join(", ") }))
+        .collect();
+    problems.extend(hooks.manifest_problems(m));
+    problems
 }
 
 /// Writes the file, then checks the data folder again: new problems put the file back.

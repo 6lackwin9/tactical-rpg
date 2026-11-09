@@ -298,3 +298,54 @@ fn a_members_class_basics_are_open_basics_of_its_deck() {
     let plain = progression::build_in(&d, &member("hero"), "", Some(&rule(&d))).expect("built").unit;
     assert!(!plain.can_use(&d.cat, d.cat.skill("d_far").unwrap()), "closed for another class");
 }
+
+/// R4-2 M1 (FB-138): a fixture save whose member decks hold entries the current data disallows (a skill that became
+/// the class's basic, an unowned family, an unknown passive, more actives than the slots, order and follow-up entries
+/// outside the kept deck, an unknown intent) loads: each bad entry is dropped with a load warning, the order and
+/// follow-ups are read against the kept entries, a list past the slots is cut to them, and the re-save loads clean. A
+/// valid deck and a damaged one (`a_damaged_deck_is_refused`) are untouched by the drop.
+#[test]
+fn a_saved_deck_the_data_no_longer_allows_loads_without_the_bad_entries() {
+    let d = data();
+    let mut hero = member("hero");
+    hero.deck = deck(json!({
+        "active": ["d_one", "strike", "d_far", "d_two", "d_three", "d_four"],
+        "passive": ["d_braced", "d_ghost"],
+        "order": {"assault": ["d_one", "d_four", "strike"], "dance": ["strike"]},
+        "follow_ups": {"d_far": ["strike"], "d_one": ["d_two", "d_four"]}
+    }));
+    let mut cut = UnitState::create("cut", "hero_cut");
+    cut.deck = deck(json!({"active": ["d_far", "d_one"], "order": {"assault": ["d_far", "d_one"]}}));
+    let mut gs = state(&d, hero);
+    gs.party.members.push(cut);
+    let text = envelope(save::VERSION, &gs.to_value());
+    let loaded = save::decode(&d, &text).unwrap_or_else(|e| panic!("the save loads: {e:?}"));
+    let (hero, cut) = (&loaded.state.party.members[0], &loaded.state.party.members[1]);
+    assert_eq!(SLOTS.0, 3, "the cut below assumes three active slots");
+    assert_eq!(hero.deck, deck(json!({"active": ["d_one", "d_two", "d_three"], "passive": ["d_braced"], "order": {"assault": ["d_one", "strike"]}, "follow_ups": {"d_one": ["d_two"]}})));
+    assert_eq!(cut.deck, deck(json!({"active": ["d_one"], "order": {"assault": ["d_far", "d_one"]}})), "the class basic leaves the actives and stays orderable");
+    assert!(hero.validate(&d).is_empty() && cut.validate(&d).is_empty(), "valid after the drop");
+    let dropped = |unit: &str, problem: &str| format!("Unit '{unit}': {problem} Dropped from the saved deck (the data no longer allows it).");
+    for want in [
+        dropped("hero", "deck active: 'strike' is a basic (open to every unit, no slot)."),
+        dropped("hero", "deck active: family 'd_far' is not owned."),
+        dropped("hero", "deck passive: unknown passive 'd_ghost'."),
+        dropped("hero", "deck: 4 active entries (the Timeline ruleset's deck slots allow 3)."),
+        dropped("hero", "deck order assault: 'd_four' is neither an active of the deck nor a basic."),
+        dropped("hero", "deck order: 'dance' is not an intent (one of assault, guard, support, maneuver, channel)."),
+        dropped("hero", "Follow-ups for 'd_far': not an opener in the deck."),
+        dropped("hero", "Follow-ups after 'd_one': 'd_four' is not in the deck."),
+        dropped("cut", "deck active: 'd_far' is a basic (open to every unit, no slot)."),
+    ] {
+        assert!(loaded.warnings.contains(&want), "warned: {want}\n{:#?}", loaded.warnings);
+    }
+    assert!(loaded.warnings.iter().all(|w| w.ends_with("Dropped from the saved deck (the data no longer allows it).")), "{:#?}", loaded.warnings);
+    let again = save::decode(&d, &envelope(save::VERSION, &loaded.state.to_value())).expect("the re-save loads");
+    assert!(again.warnings.is_empty(), "{:?}", again.warnings);
+    assert_eq!(again.state.party.members[0].deck, hero.deck);
+    // a valid deck loads as saved, without a warning
+    let mut ok = member("hero");
+    ok.deck = deck(json!({"active": ["d_four", "d_ward", "d_two"], "passive": ["d_braced"], "order": {"assault": ["d_two", "strike"]}}));
+    let kept = save::decode(&d, &envelope(save::VERSION, &state(&d, ok.clone()).to_value())).expect("loads");
+    assert!(kept.warnings.is_empty() && kept.state.party.members[0].deck == ok.deck);
+}

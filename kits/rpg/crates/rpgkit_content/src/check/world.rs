@@ -932,6 +932,7 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(super::assets::ground_warnings(v, w));
     out.extend(campaign::warnings(v, w));
     out.extend(story::warnings(v, w));
+    out.extend(super::hooks::classes_warnings(v, w));
     out
 }
 

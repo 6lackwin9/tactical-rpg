@@ -1061,6 +1061,23 @@ pub fn spend_growth(cat: &Catalog, e: &UnitDef) -> IndexMap<String, f64> {
     template_for(cat, e, class).map(|t| t.over(class)).as_ref().unwrap_or(class).unit_shares().growth
 }
 
+/// AUDIT-02 (FB-143): catalog unit row `e` raised to level `level` (a stage-scaled foe, `foe_level`). A row with an
+/// explicit `spend` keeps it and auto-spends the extra pool (`spend_pool(level) - spend_pool(base level)`, one point a
+/// level) by its growth shares (`spend_growth`, `stats::auto_spend`), so the raise leaves no point unallocated; a row
+/// without `spend` auto-spends its whole pool at the level it is built at anyway. A level at or below the base only
+/// sets the level.
+pub fn raise_level(cat: &Catalog, e: &mut UnitDef, level: i32) {
+    let base = e.level;
+    e.level = level;
+    if e.spend.is_empty() || level <= base {
+        return;
+    }
+    let extra = stats::spend_pool(level) - stats::spend_pool(base);
+    for (stat, points) in stats::auto_spend(&spend_growth(cat, e), extra) {
+        *e.spend.entry(stat).or_insert(0) += points;
+    }
+}
+
 fn class_for<'a>(cat: &'a Catalog, e: &UnitDef) -> Option<&'a ClassDef> {
     if e.class_id.is_empty() {
         None

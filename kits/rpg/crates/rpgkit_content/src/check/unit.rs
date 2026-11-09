@@ -638,6 +638,16 @@ fn skill_loadout_errors(v: &View, e: &Dict, a: &ClassDef) -> Vec<String> {
 /// ClassUnitValidator.class_warnings: the gear budget, the path (more families than class slots, none at level 1,
 /// tiers past the level cap, weapon gates the class cannot reach, a class basic also in the path) and the role
 /// mismatches.
+/// CLASS-BASICS (FB-123): a class basic of class row `e` is open without a slot, so listing it in skill path `path` (the
+/// row's own, or L3 (FB-138) a world overlay's: `hooks::classes_warnings`) also spends a path slot.
+pub fn basics_in_path_warnings(e: &Dict, path: &Dict) -> Vec<String> {
+    json::sget(e, "basics")
+        .iter()
+        .filter(|id| path.contains_key(id.as_str()))
+        .map(|id| format!("Class basic '{id}' is also in the skill path, where it takes a path slot (an auto loadout fills slots in path order)."))
+        .collect()
+}
+
 pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     let class = ClassDef::from_obj(e);
     let mut out = rpgkit_rules::budget::check_class(&class, &v.typed.items);
@@ -646,10 +656,7 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     if families.len() > MAX_CLASS_SLOTS {
         out.push(format!("The path lists {} families; only the first {MAX_CLASS_SLOTS} (by unlock level, then position) are active by default.", families.len()));
     }
-    // CLASS-BASICS (FB-123): a class basic is open without a slot, so listing it in the path also spends a path slot
-    for id in json::sget(e, "basics").iter().filter(|id| path.contains_key(id.as_str())) {
-        out.push(format!("Class basic '{id}' is also in the skill path, where it takes a path slot (an auto loadout fills slots in path order)."));
-    }
+    out.extend(basics_in_path_warnings(e, path));
     if !path.is_empty() && !path.values().any(|l| json::is_int(l) && json::to_int(l) == 1) {
         out.push("No path family unlocks at level 1: a level 1 unit of this class has no class skill in its loadout.".into());
     }
