@@ -623,14 +623,18 @@ function splitPoseSpriteUpperLower(img, poseName) {
 
   const upCv = document.createElement('canvas'); upCv.width = W; upCv.height = H;
   const loCv = document.createElement('canvas'); loCv.width = W; loCv.height = H;
+  const legLCv = document.createElement('canvas'); legLCv.width = W; legLCv.height = H;
+  const legRCv = document.createElement('canvas'); legRCv.width = W; legRCv.height = H;
   const torsoCv = document.createElement('canvas'); torsoCv.width = W; torsoCv.height = H;
   const headCv = document.createElement('canvas'); headCv.width = W; headCv.height = H;
 
   const upCtx = upCv.getContext('2d');
   const loCtx = loCv.getContext('2d');
+  const legLCtx = legLCv.getContext('2d');
+  const legRCtx = legRCv.getContext('2d');
   const torsoCtx = torsoCv.getContext('2d');
   const headCtx = headCv.getContext('2d');
-  if (!upCtx || !loCtx || !torsoCtx || !headCtx) return null;
+  if (!upCtx || !loCtx || !legLCtx || !legRCtx || !torsoCtx || !headCtx) return null;
 
   // 1. Full upper body (with 8px waist overlap across hipY)
   upCtx.drawImage(img, 0, 0, W, hipY + 8, 0, 0, W, hipY + 8);
@@ -641,12 +645,37 @@ function splitPoseSpriteUpperLower(img, poseName) {
   torsoCtx.drawImage(img, 0, 0, W, hipY + 8, 0, 0, W, hipY + 8);
   torsoCtx.clearRect(hx0, hy0, hx1 - hx0, (neckY - 3) - hy0);
 
+  // Keep any weapon shaft/tip pixels that dip below hipY on `torsoOnly` (and clear from `lower`) so the polearm stays 100% rigid!
+  if (poseName === 'relaxed') {
+    torsoCtx.drawImage(img, 194, hipY, W - 194, 314 - hipY, 194, hipY, W - 194, 314 - hipY);
+    loCtx.clearRect(194, hipY - 6, W - 194, 314 - (hipY - 6));
+  } else if (poseName === 'sneaking') {
+    torsoCtx.drawImage(img, 214, hipY, W - 214, 216 - hipY, 214, hipY, W - 214, 216 - hipY);
+    loCtx.clearRect(214, hipY - 6, W - 214, 216 - (hipY - 6));
+  } else if (poseName === 'weapons_drawn') {
+    torsoCtx.drawImage(img, 0, hipY, 113, 234 - hipY, 0, hipY, 113, 234 - hipY);
+    loCtx.clearRect(0, hipY - 6, 113, 234 - (hipY - 6));
+  }
+
+  // Split `loCv` into Left Leg (`legLCv`) and Right Leg (`legRCv`) along the zero-collision air gap between the legs
+  for (let y = hipY - 6; y < H; y++) {
+    const sx = poseName === 'relaxed'
+      ? Math.round(154 - Math.max(0, y - 218) * 0.08)
+      : (poseName === 'sneaking'
+        ? Math.round(170 - Math.max(0, y - 230) * 0.20)
+        : 167);
+    legLCtx.drawImage(loCv, 0, y, sx, 1, 0, y, sx, 1);
+    legRCtx.drawImage(loCv, sx, y, W - sx, 1, sx, y, W - sx, 1);
+  }
+
   // 4. Independent Head + Straw-Blond Hair (with 5px collar overlap down to neckY + 5)
   headCtx.drawImage(img, hx0, hy0, hx1 - hx0, (neckY + 5) - hy0, hx0, hy0, hx1 - hx0, (neckY + 5) - hy0);
 
   return {
     upper: upCv,
     lower: loCv,
+    legL: legLCv,
+    legR: legRCv,
     torsoOnly: torsoCv,
     headOnly: headCv,
     hipX, hipY, neckX, neckY, kneeY, headBox
@@ -898,10 +927,17 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
     return (pPrev[key] ?? 0) + ((pTgt[key] ?? 0) - (pPrev[key] ?? 0)) * blend;
   }
 
-  const pelvisDx = lerpP('pelvisDx');
-  const pelvisDy = lerpP('pelvisDy') + Math.max(0, (s.crouchDrop - tgt.crouchDrop) * 0.25);
-  const torsoDeg = lerpP('torsoAngle') + breath * 1.1;
-  const headDeg  = lerpP('headAngle') + talkBob * 1.3;
+  const isWalking = (typeof STATE !== 'undefined' && STATE.storyWalkMode && STATE.storyWalkMode !== 'off') && (side === 'left' || STATE.storyWalkMode === 'scroll_bg');
+  const walkFreq = s.pose === 'sneaking' ? 4.4 : 5.5;
+  const phiL = tSec * walkFreq + phaseOffset;
+  const phiR = phiL + Math.PI;
+  const walkBobDy = isWalking ? Math.sin(phiL * 2 - 0.5) * 3.0 : 0;
+  const walkArmSwing = isWalking && s.pose === 'relaxed' ? Math.sin(phiR) * 11.0 : (isWalking ? Math.sin(phiR) * 3.5 : 0);
+
+  const pelvisDx = lerpP('pelvisDx') + (isWalking ? Math.cos(phiL * 2) * 1.5 : 0);
+  const pelvisDy = lerpP('pelvisDy') + Math.max(0, (s.crouchDrop - tgt.crouchDrop) * 0.25) + walkBobDy;
+  const torsoDeg = lerpP('torsoAngle') + breath * 1.1 + (isWalking ? Math.cos(phiL * 2) * 1.4 : 0);
+  const headDeg  = lerpP('headAngle') + talkBob * 1.3 - (isWalking ? Math.cos(phiL * 2) * 1.1 : 0);
   const torsoRad = (torsoDeg * Math.PI) / 180;
   const headRad  = ((torsoDeg + headDeg) * Math.PI) / 180;
 
@@ -912,9 +948,9 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   const animShoulderL = rotatePtAround([cfg.shoulderL[0] + pelvisDx, cfg.shoulderL[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, torsoRad);
   const animShoulderR = rotatePtAround([cfg.shoulderR[0] + pelvisDx, cfg.shoulderR[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, torsoRad);
 
-  const aLU_deg = torsoDeg + lerpP('armL_upperAngle') + breath * 1.0;
+  const aLU_deg = torsoDeg + lerpP('armL_upperAngle') + breath * 1.0 + walkArmSwing;
   const aLL_deg = aLU_deg  + lerpP('armL_lowerAngle');
-  const aRU_deg = torsoDeg + lerpP('armR_upperAngle') - breath * 1.0;
+  const aRU_deg = torsoDeg + lerpP('armR_upperAngle') - breath * 1.0 - walkArmSwing * 0.65;
   const aRL_deg = aRU_deg  + lerpP('armR_lowerAngle');
   const aLU_rad = (aLU_deg * Math.PI) / 180;
   const aLL_rad = (aLL_deg * Math.PI) / 180;
@@ -922,35 +958,42 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   const aRL_rad = (aRL_deg * Math.PI) / 180;
 
   const elL_b = rotatePtAround([cfg.elbowL[0] + pelvisDx, cfg.elbowL[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, torsoRad);
-  const animElbowL = rotatePtAround(elL_b, animShoulderL, (lerpP('armL_upperAngle') * Math.PI) / 180);
+  const animElbowL = rotatePtAround(elL_b, animShoulderL, ((lerpP('armL_upperAngle') + walkArmSwing) * Math.PI) / 180);
   const animHandL  = rotatePtAround([animElbowL[0] + (cfg.handL[0] - cfg.elbowL[0]), animElbowL[1] + (cfg.handL[1] - cfg.elbowL[1])], animElbowL, aLL_rad);
 
   const elR_b = rotatePtAround([cfg.elbowR[0] + pelvisDx, cfg.elbowR[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, torsoRad);
-  const animElbowR = rotatePtAround(elR_b, animShoulderR, (lerpP('armR_upperAngle') * Math.PI) / 180);
+  const animElbowR = rotatePtAround(elR_b, animShoulderR, ((lerpP('armR_upperAngle') - walkArmSwing * 0.65) * Math.PI) / 180);
   const animHandR  = rotatePtAround([animElbowR[0] + (cfg.handR[0] - cfg.elbowR[0]), animElbowR[1] + (cfg.handR[1] - cfg.elbowR[1])], animElbowR, aRL_rad);
 
   // Lock weapon grip pivot directly to the animated right hand (`animHandR`) so the shaft never separates from the glove
   const wp = animHandR;
 
-  const useMirroredLeftLeg = lerpP('mirrorLegL') >= 0.5;
+  const useMirroredLeftLeg = !isWalking && (lerpP('mirrorLegL') >= 0.5);
   const restHipL   = useMirroredLeftLeg ? cfg.mirrorHipL   : cfg.hipL;
   const restKneeL  = useMirroredLeftLeg ? cfg.mirrorKneeL  : cfg.kneeL;
   const restAnkleL = useMirroredLeftLeg ? cfg.mirrorAnkleL : cfg.ankleL;
 
+  const strideAmp = s.pose === 'sneaking' ? 14.0 : 17.5;
+  const liftAmp   = s.pose === 'sneaking' ? 7.5  : 9.5;
+  const walkDxL   = isWalking ? Math.sin(phiL) * strideAmp : 0;
+  const walkDxR   = isWalking ? Math.sin(phiR) * strideAmp : 0;
+  const walkLiftL = isWalking ? -Math.max(0, Math.cos(phiL)) * liftAmp : 0;
+  const walkLiftR = isWalking ? -Math.max(0, Math.cos(phiR)) * liftAmp : 0;
+
   const animHipL = rotatePtAround([restHipL[0] + pelvisDx, restHipL[1] + pelvisDy], animPelvis, torsoRad * 0.35);
   const animHipR = rotatePtAround([cfg.hipR[0] + pelvisDx, cfg.hipR[1] + pelvisDy], animPelvis, torsoRad * 0.35);
-  const animAnkleL = [restAnkleL[0] + lerpP('footLDx'), restAnkleL[1]];
-  const animAnkleR = [cfg.ankleR[0] + lerpP('footRDx'), cfg.ankleR[1]];
-  const animToeL   = [cfg.toeL[0]   + lerpP('footLDx'), cfg.toeL[1]];
-  const animToeR   = [cfg.toeR[0]   + lerpP('footRDx'), cfg.toeR[1]];
+  const animAnkleL = [restAnkleL[0] + lerpP('footLDx') * (isWalking ? 0.35 : 1.0) + walkDxL, restAnkleL[1] + walkLiftL];
+  const animAnkleR = [cfg.ankleR[0] + lerpP('footRDx') * (isWalking ? 0.35 : 1.0) + walkDxR, cfg.ankleR[1] + walkLiftR];
+  const animToeL   = [cfg.toeL[0]   + lerpP('footLDx') * (isWalking ? 0.35 : 1.0) + walkDxL, cfg.toeL[1]   + walkLiftL];
+  const animToeR   = [cfg.toeR[0]   + lerpP('footRDx') * (isWalking ? 0.35 : 1.0) + walkDxR, cfg.toeR[1]   + walkLiftR];
 
-  // Signed perpendicular knee bend:
-  // - In `sneaking`: minimal bend on trailing leg (`kneeBendL: +2`), gentle bend on leading leg (`kneeBendR: +11`)
-  // - In `weapons_drawn`: left leg is mirrored and bends outward-left (`kneeBendL: -12`), right leg bends outward-right (`kneeBendR: +12`)
-  const animKneeL = computeAtlasKneeWithBend(animHipL, animAnkleL, lerpP('kneeBendL'));
-  const animKneeR = computeAtlasKneeWithBend(animHipR, animAnkleR, lerpP('kneeBendR'));
+  // Signed perpendicular knee bend (with dynamic forward knee bend during walking leg lift!)
+  const walkKneeBendL = isWalking ? (4.0 + Math.max(0, Math.cos(phiL)) * 12.0) : lerpP('kneeBendL');
+  const walkKneeBendR = isWalking ? (5.0 + Math.max(0, Math.cos(phiR)) * 12.0) : lerpP('kneeBendR');
+  const animKneeL = computeAtlasKneeWithBend(animHipL, animAnkleL, walkKneeBendL);
+  const animKneeR = computeAtlasKneeWithBend(animHipR, animAnkleR, walkKneeBendR);
 
-  const weapDeg = lerpP('weaponWorldAngle') + breath * 0.9;
+  const weapDeg = lerpP('weaponWorldAngle') + breath * 0.9 - walkArmSwing * 0.35;
   const weapRad = (weapDeg * Math.PI) / 180;
   const weapSlide = lerpP('weapSlide');
   const animPx = wp[0] - Math.sin(weapRad) * weapSlide;
@@ -978,13 +1021,16 @@ function drawAtlasRigOnCanvas(ctx, atlasEntry, s, tgt, tSec, side, isActive, sho
   const shinLPart  = useMirroredLeftLeg ? parts.legL_mirror_shin  : parts.legL_shin;
   const bootLPart  = useMirroredLeftLeg ? parts.legL_mirror_boot  : parts.legL_boot;
 
+  const bootLPitch = isWalking ? (Math.sin(phiL) * 10 - Math.max(0, Math.cos(phiL)) * 12) : lerpP('bootLAngle');
+  const bootRPitch = isWalking ? (Math.sin(phiR) * 10 - Math.max(0, Math.cos(phiR)) * 12) : lerpP('bootRAngle');
+
   drawBonePartAtoB(ctx, thighLPart, restHipL,  restKneeL,  animHipL,  animKneeL);
   drawBonePartAtoB(ctx, shinLPart,  restKneeL, restAnkleL, animKneeL, animAnkleL);
-  drawArticulatedPart(ctx, bootLPart, restAnkleL, animAnkleL, (lerpP('bootLAngle') * Math.PI) / 180);
+  drawArticulatedPart(ctx, bootLPart, restAnkleL, animAnkleL, (bootLPitch * Math.PI) / 180);
 
   drawBonePartAtoB(ctx, parts.legR_thigh, cfg.hipR,  cfg.kneeR,  animHipR,  animKneeR);
   drawBonePartAtoB(ctx, parts.legR_shin,  cfg.kneeR, cfg.ankleR, animKneeR, animAnkleR);
-  drawArticulatedPart(ctx, parts.legR_boot, cfg.ankleR, animAnkleR, (lerpP('bootRAngle') * Math.PI) / 180);
+  drawArticulatedPart(ctx, parts.legR_boot, cfg.ankleR, animAnkleR, (bootRPitch * Math.PI) / 180);
 
   const chestScaleX = 1.0 + Math.max(0, breath) * 0.018;
   const chestScaleY = 1.0 + Math.max(0, breath) * 0.012;
@@ -1045,6 +1091,15 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
   const shouldFlip = side === 'right';
   const phaseOffset = side === 'left' ? 0.0 : 1.7;
   const boost = (typeof STATE !== 'undefined' && STATE.storyDeformerBoost) ? STATE.storyDeformerBoost : 1.0;
+  const isWalking = (typeof STATE !== 'undefined' && STATE.storyWalkMode && STATE.storyWalkMode !== 'off') && (side === 'left' || STATE.storyWalkMode === 'scroll_bg');
+  const walkScale = Math.min(1.65, 0.82 + boost * 0.22);
+
+  // Walking / Sneak-Walking gait phase (Left Leg `phiL`, Right Leg `phiR` 180° opposite)
+  const walkFreq = activePose === 'sneaking' ? 4.4 : 5.5;
+  const phiL = tSec * walkFreq + phaseOffset;
+  const phiR = phiL + Math.PI;
+  const walkBobDy   = isWalking ? Math.sin(phiL * 2 - 0.45) * 3.1 * walkScale : 0;
+  const walkSurgeDx = isWalking ? Math.cos(phiL * 2) * 1.6 * walkScale : 0;
 
   // Multi-harmonic physiological waveforms (breathing + 2.5D weight shift + speaking cadence + hair breeze)
   const breath   = Math.sin(tSec * tgt.breathFreq + phaseOffset);
@@ -1096,12 +1151,12 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
     const neckY = layer.neckY || 120;
     const footY = 325;
 
-    // Waist displacement: breathing suspension + 2.5D weight shift + crouch spring overshoot + lunge/flinch impulse
+    // Waist displacement: breathing suspension + 2.5D weight shift + walking gait bounce + lunge/flinch impulse
     const breathCrouchDy = (activePose === 'relaxed' ? -breath * 1.6 : (0.9 - breath) * 2.2) * boost;
     const waistDy = Math.max(-14, Math.min(22,
-      breathCrouchDy + crouchSpringDelta * 0.32 * Math.min(2.0, boost * 0.85) + Math.abs(lungePx) * 0.18 + Math.abs(flinchPx) * 0.12
+      breathCrouchDy + walkBobDy + crouchSpringDelta * 0.32 * Math.min(2.0, boost * 0.85) + Math.abs(lungePx) * 0.18 + Math.abs(flinchPx) * 0.12
     ));
-    const waistDx = (swayWave * (activePose === 'relaxed' ? 1.8 : 2.8) * boost) + lungePx - flinchPx * 0.85;
+    const waistDx = (swayWave * (activePose === 'relaxed' ? 1.8 : 2.8) * boost) + walkSurgeDx + lungePx - flinchPx * 0.85;
 
     // Mid-leg knee bulge & wide-stance knee spread driven by waist crouch suspension
     const kneeFlexSign = activePose === 'weapons_drawn' ? 0.35 : 1.0;
@@ -1111,42 +1166,73 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
       : (waistDy * 0.0022);
 
     // ========================================================================
-    // ZONE 1: LOWER BODY 2px SCANLINE STRIP-MESH WARP (Feet Planted + Knee Flex)
+    // ZONE 1: LOWER BODY 2px SCANLINE STRIP-MESH WARP (Stationary Knee Flex OR 180° Alternating Walking Stride!)
     // ========================================================================
     const stripStep = 2;
     const yStart = hipY - 4;
     const totalLegH = Math.max(1, footY - hipY);
-    for (let sy = yStart; sy < H; sy += stripStep) {
-      const sh = Math.min(stripStep, H - sy);
-      // Normalized height `u`: 0.0 at planted boot sole (`footY = 325`), 1.0 at waist (`hipY`)
-      const u = Math.max(0.0, Math.min(1.0, (footY - sy) / totalLegH));
-      const kneeArch = Math.sin(u * Math.PI); // Peaks at 1.0 right at knee height (`u = 0.5`)!
 
-      // Horizontal displacement: 0px at planted boots -> knee bulge at mid-leg -> `waistDx` at pelvis
-      const rowDx = waistDx * Math.pow(u, 1.15) + kneeBulgeX * kneeArch;
-      // Vertical compression: 0px at planted boots -> `waistDy` at pelvis (compressing thigh/shin around bending knee)
-      const rowDy = waistDy * u + (sy + stripStep <= footY ? 0 : 0);
-      // Horizontal straddle spread around `hipX` (widens outward `/` `\` at the knees in `weapons_drawn`!)
-      const rowScaleX = 1.0 + kneeSpreadScale * kneeArch;
+    const strideAmp     = isWalking ? (activePose === 'sneaking' ? 12.5 : (activePose === 'weapons_drawn' ? 11.0 : 14.5)) * walkScale : 0;
+    const liftHeight    = isWalking ? (activePose === 'sneaking' ? 7.5  : 9.5) * walkScale : 0;
+    const stepKneeBulge = isWalking ? (activePose === 'sneaking' ? 8.5  : 7.5) * walkScale : 0;
 
-      const destX = hipX * (1.0 - rowScaleX) + rowDx;
-      const destY = sy + rowDy;
-      // Stretch strip height slightly by `1.0 + Math.abs(waistDy) / totalLegH * 0.35` so sub-pixel compression never leaves gaps
-      const destH = sh + 0.65;
-      ctx.drawImage(layer.lower, 0, sy, W, sh, destX, destY, W * rowScaleX, destH);
+    if (isWalking && layer.legL && layer.legR) {
+      // Render Left Leg (`legL`) and Right Leg (`legR`) with 180°-out-of-phase stride & foot-lift trajectories
+      const legsToDraw = [
+        { cv: layer.legL, phi: phiL },
+        { cv: layer.legR, phi: phiR }
+      ];
+      for (const leg of legsToDraw) {
+        const strideSwing = Math.sin(leg.phi);              // -1 (back push-off) .. +1 (forward step)
+        const liftWave    = Math.max(0, Math.cos(leg.phi)); // >0 during forward swing in air, 0 during grounded stance
+        for (let sy = yStart; sy < H; sy += stripStep) {
+          const sh = Math.min(stripStep, H - sy);
+          const u = Math.max(0.0, Math.min(1.0, (footY - sy) / totalLegH));
+          const kneeArch = Math.sin(u * Math.PI);
+          // Smoothly lock the top 16% pelvis/tunic band (`u > 0.86`) to `(waistDx, waistDy)` so the waist never splits!
+          const splitBlend = Math.max(0.0, Math.min(1.0, (0.88 - u) / 0.16));
+
+          const rowDx = waistDx * Math.pow(u, 1.15)
+            + (strideSwing * strideAmp * Math.pow(1.0 - u, 1.05) + (kneeBulgeX + liftWave * stepKneeBulge) * kneeArch) * splitBlend;
+          const rowDy = waistDy * u - (liftWave * liftHeight * Math.pow(1.0 - u, 1.25)) * splitBlend;
+
+          ctx.drawImage(leg.cv, 0, sy, W, sh, rowDx, sy + rowDy, W, sh + 0.65);
+        }
+      }
+    } else {
+      for (let sy = yStart; sy < H; sy += stripStep) {
+        const sh = Math.min(stripStep, H - sy);
+        // Normalized height `u`: 0.0 at planted boot sole (`footY = 325`), 1.0 at waist (`hipY`)
+        const u = Math.max(0.0, Math.min(1.0, (footY - sy) / totalLegH));
+        const kneeArch = Math.sin(u * Math.PI); // Peaks at 1.0 right at knee height (`u = 0.5`)!
+
+        // Horizontal displacement: 0px at planted boots -> knee bulge at mid-leg -> `waistDx` at pelvis
+        const rowDx = waistDx * Math.pow(u, 1.15) + kneeBulgeX * kneeArch;
+        // Vertical compression: 0px at planted boots -> `waistDy` at pelvis (compressing thigh/shin around bending knee)
+        const rowDy = waistDy * u;
+        // Horizontal straddle spread around `hipX` (widens outward `/` `\` at the knees in `weapons_drawn`!)
+        const rowScaleX = 1.0 + kneeSpreadScale * kneeArch;
+
+        const destX = hipX * (1.0 - rowScaleX) + rowDx;
+        const destY = sy + rowDy;
+        const destH = sh + 0.65;
+        ctx.drawImage(layer.lower, 0, sy, W, sh, destX, destY, W * rowScaleX, destH);
+      }
     }
 
     // ========================================================================
     // ZONE 2: TORSO + ARMS + 2H BILLHOOK DEFORMER (Waist Pivot + 2.5D Twist/Shear + Ribcage Breath)
     // ========================================================================
     const posePitchBias = activePose === 'sneaking' ? 1.35 : (activePose === 'weapons_drawn' ? 1.15 : 0.85);
-    const swayDeg = (breath * 1.15 * posePitchBias + swayWave * 0.65) * boost + talkBob * 0.75 + lungePx * 0.45 - flinchPx * 0.65;
+    const walkPitchDeg = isWalking ? (Math.cos(phiL * 2) * 1.6 + (activePose === 'sneaking' ? 2.2 : 1.2)) * walkScale : 0;
+    const swayDeg = (breath * 1.15 * posePitchBias + swayWave * 0.65) * boost + walkPitchDeg + talkBob * 0.75 + lungePx * 0.45 - flinchPx * 0.65;
     const swayRad = (swayDeg * Math.PI) / 180;
     const breathLiftDy = (-breath * tgt.breathAmp * 0.75 * boost) + talkBob * 0.45;
     const chestScaleX = 1.0 + Math.max(0, breath) * 0.018 * boost + Math.abs(lungePx) * 0.002;
     const chestScaleY = 1.0 + Math.max(0, breath) * 0.014 * boost;
-    // 2.5D horizontal parallax shear (`shearX`) tilts shoulders/polearm forward on inhale & lunge, backward on flinch
-    const torsoShearX = (swayWave * 0.014 * boost) + (lungePx * 0.0045) - (flinchPx * 0.0055);
+    // 2.5D horizontal parallax shear (`shearX`) tilts shoulders/polearm forward on inhale & lunge, and counter-swings with walking stride
+    const walkCounterShear = isWalking ? -Math.sin(phiR) * 0.016 * walkScale : 0;
+    const torsoShearX = (swayWave * 0.014 * boost) + walkCounterShear + (lungePx * 0.0045) - (flinchPx * 0.0055);
 
     const waistPivotX = hipX + waistDx;
     const waistPivotY = hipY + waistDy + breathLiftDy;
@@ -1179,7 +1265,7 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
       const [animNeckX, animNeckY] = mapTorsoPoint(neckX, neckY);
       // Gaze counter-stabilization keeps Kaelen's eyes locked on his target (`-swayRad * 0.68`) while adding expressive speaking nod!
       const headCounterRad = -swayRad * 0.68 + ((talkBob * 1.65 + Math.sin(tSec * 2.1 + phaseOffset) * 0.75 * boost - flinchPx * 0.35) * Math.PI) / 180;
-      const hairShearX = hairWave * 0.018 * boost;
+      const hairShearX = (hairWave * 0.018 + (isWalking ? -0.022 : 0)) * boost;
 
       ctx.save();
       ctx.translate(animNeckX, animNeckY);
@@ -1194,7 +1280,7 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
     // ========================================================================
     if (showDebug) {
       ctx.save();
-      // 1. Lower-body deforming scanline lattice (`#38bdf8` cyan) showing pinned boots + flexing knee curve
+      // 1. Lower-body deforming scanline lattice (`#38bdf8` cyan) showing pinned/stepping boots + flexing knee curve
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.72)';
       ctx.lineWidth = 1.15;
       const leftRail = [], rightRail = [], midRail = [];
@@ -1246,7 +1332,7 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
       ctx.strokeRect(hx0 + (animNeckX - neckX), hy0 + (animNeckY - neckY), hx1 - hx0, hy1 - hy0);
       ctx.setLineDash([]);
 
-      // 4. Anatomical Deformer Pivots (Planted Ankles, Flexing Knees, Waist Hinge, Chest, Neck Stabilizer, Weapon Shaft)
+      // 4. Anatomical Deformer Pivots (Planted/Stepping Ankles, Flexing Knees, Waist Hinge, Chest, Neck Stabilizer, Weapon Shaft)
       const uKnee = 0.5;
       const kDx = waistDx * Math.pow(uKnee, 1.15) + kneeBulgeX;
       const kDy = waistDy * uKnee;
@@ -1257,22 +1343,29 @@ function drawPoseSheetRigOnCanvas(ctx, poseEntry, s, tgt, tSec, side, isActive, 
           ? { kl: 144, kr: 204, al: [122, 318], ar: [202, 318], w0: [82, 190], w1: [288, 190] }
           : { kl: 138, kr: 216, al: [122, 318], ar: [228, 318], w0: [104, 216], w1: [276, 108] });
 
-      const animKL = [hipX + (restPts.kl - hipX) * kSpread + kDx, (hipY + footY) * 0.5 + kDy];
-      const animKR = [hipX + (restPts.kr - hipX) * kSpread + kDx, (hipY + footY) * 0.5 + kDy];
+      const liftL = isWalking ? Math.max(0, Math.cos(phiL)) : 0;
+      const liftR = isWalking ? Math.max(0, Math.cos(phiR)) : 0;
+      const strideL = isWalking ? Math.sin(phiL) * strideAmp : 0;
+      const strideR = isWalking ? Math.sin(phiR) * strideAmp : 0;
+
+      const animKL = [hipX + (restPts.kl - hipX) * kSpread + kDx + strideL * 0.5 + liftL * stepKneeBulge, (hipY + footY) * 0.5 + kDy - liftL * liftHeight * 0.45];
+      const animKR = [hipX + (restPts.kr - hipX) * kSpread + kDx + strideR * 0.5 + liftR * stepKneeBulge, (hipY + footY) * 0.5 + kDy - liftR * liftHeight * 0.45];
+      const animAL = [restPts.al[0] + strideL, restPts.al[1] - liftL * liftHeight];
+      const animAR = [restPts.ar[0] + strideR, restPts.ar[1] - liftR * liftHeight];
       const animChest = mapTorsoPoint(hipX + 4, (hipY + neckY) * 0.52);
       const animW0 = mapTorsoPoint(restPts.w0[0], restPts.w0[1]);
       const animW1 = mapTorsoPoint(restPts.w1[0], restPts.w1[1]);
 
       ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.3;
-      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animKL[0], animKL[1]); ctx.lineTo(restPts.al[0], restPts.al[1]); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animKL[0], animKL[1]); ctx.lineTo(animAL[0], animAL[1]); ctx.stroke();
       ctx.strokeStyle = '#34d399';
-      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animKR[0], animKR[1]); ctx.lineTo(restPts.ar[0], restPts.ar[1]); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animKR[0], animKR[1]); ctx.lineTo(animAR[0], animAR[1]); ctx.stroke();
       ctx.strokeStyle = '#fbbf24';
       ctx.beginPath(); ctx.moveTo(waistPivotX, waistPivotY); ctx.lineTo(animChest[0], animChest[1]); ctx.lineTo(animNeckX, animNeckY); ctx.stroke();
       ctx.strokeStyle = '#fb7185';
       ctx.beginPath(); ctx.moveTo(animW0[0], animW0[1]); ctx.lineTo(animW1[0], animW1[1]); ctx.stroke();
 
-      [[waistPivotX, waistPivotY], animChest, [animNeckX, animNeckY], animKL, animKR, restPts.al, restPts.ar, animW0, animW1].forEach(pt => {
+      [[waistPivotX, waistPivotY], animChest, [animNeckX, animNeckY], animKL, animKR, animAL, animAR, animW0, animW1].forEach(pt => {
         ctx.fillStyle = '#090d16'; ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(pt[0], pt[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       });
@@ -1426,19 +1519,25 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
   const breath = Math.sin(tSec * tgt.breathFreq + phaseOffset);
   const talkBob = isActive ? Math.sin(tSec * 6.5) * 0.9 : 0;
 
+  const isWalking = (typeof STATE !== 'undefined' && STATE.storyWalkMode && STATE.storyWalkMode !== 'off') && (side === 'left' || STATE.storyWalkMode === 'scroll_bg');
+  const walkFreq = s.pose === 'sneaking' ? 4.4 : 5.5;
+  const phiL = tSec * walkFreq + phaseOffset;
+  const phiR = phiL + Math.PI;
+  const walkBobDy = isWalking ? Math.sin(phiL * 2 - 0.45) * 3.0 : 0;
+
   const cfg = rigImgs.cfg;
   const parts = rigImgs.parts;
 
   // 1. Compute Animated Root (`animPelvis`) and Spine / Torso / Head FK Hierarchy
-  const pelvisDx = dirSign * s.pelvisShiftX;
-  const pelvisDy = Math.max(0, s.crouchDrop);
+  const pelvisDx = dirSign * (s.pelvisShiftX + (isWalking ? Math.cos(phiL * 2) * 1.5 : 0));
+  const pelvisDy = Math.max(0, s.crouchDrop) + walkBobDy;
   const animPelvis = [cfg.pelvis[0] + pelvisDx, cfg.pelvis[1] + pelvisDy];
 
-  const spineRad = (dirSign * (s.spineAngle + breath * 1.1) * Math.PI) / 180;
+  const spineRad = (dirSign * (s.spineAngle + breath * 1.1 + (isWalking ? Math.cos(phiL * 2) * 1.4 : 0)) * Math.PI) / 180;
   const animChest = rotatePtAround([cfg.chest[0] + pelvisDx, cfg.chest[1] + pelvisDy - breath * tgt.breathAmp * 0.6], animPelvis, spineRad);
   const animNeck  = rotatePtAround([cfg.neck[0]  + pelvisDx, cfg.neck[1]  + pelvisDy - breath * tgt.breathAmp], animPelvis, spineRad);
 
-  const headRad = spineRad + (dirSign * (s.headAngle + talkBob * 1.4) * Math.PI) / 180;
+  const headRad = spineRad + (dirSign * (s.headAngle + talkBob * 1.4 - (isWalking ? Math.cos(phiL * 2) * 1.1 : 0)) * Math.PI) / 180;
   const headDeltaFromRest = [cfg.head[0] - cfg.neck[0], cfg.head[1] - cfg.neck[1]];
   const animHead = rotatePtAround([animNeck[0] + headDeltaFromRest[0], animNeck[1] + headDeltaFromRest[1]], animNeck, headRad);
 
@@ -1446,12 +1545,19 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
   const animHipL = rotatePtAround([cfg.hipL[0] + pelvisDx, cfg.hipL[1] + pelvisDy], animPelvis, spineRad * 0.25);
   const animHipR = rotatePtAround([cfg.hipR[0] + pelvisDx, cfg.hipR[1] + pelvisDy], animPelvis, spineRad * 0.25);
 
-  const stepL = dirSign > 0 ? s.backStepX : -s.frontStepX;
-  const stepR = dirSign > 0 ? s.frontStepX : -s.backStepX;
-  const animAnkleL = [cfg.ankleL[0] + stepL, cfg.ankleL[1]];
-  const animAnkleR = [cfg.ankleR[0] + stepR, cfg.ankleR[1]];
-  const animToeL   = [cfg.toeL[0]   + stepL, cfg.toeL[1]];
-  const animToeR   = [cfg.toeR[0]   + stepR, cfg.toeR[1]];
+  const strideAmp = s.pose === 'sneaking' ? 12.5 : 15.5;
+  const liftAmp   = s.pose === 'sneaking' ? 7.5  : 9.5;
+  const walkDxL   = isWalking ? dirSign * Math.sin(phiL) * strideAmp : 0;
+  const walkDxR   = isWalking ? dirSign * Math.sin(phiR) * strideAmp : 0;
+  const walkLiftL = isWalking ? -Math.max(0, Math.cos(phiL)) * liftAmp : 0;
+  const walkLiftR = isWalking ? -Math.max(0, Math.cos(phiR)) * liftAmp : 0;
+
+  const stepL = (dirSign > 0 ? s.backStepX : -s.frontStepX) * (isWalking ? 0.35 : 1.0) + walkDxL;
+  const stepR = (dirSign > 0 ? s.frontStepX : -s.backStepX) * (isWalking ? 0.35 : 1.0) + walkDxR;
+  const animAnkleL = [cfg.ankleL[0] + stepL, cfg.ankleL[1] + walkLiftL];
+  const animAnkleR = [cfg.ankleR[0] + stepR, cfg.ankleR[1] + walkLiftR];
+  const animToeL   = [cfg.toeL[0]   + stepL, cfg.toeL[1]   + walkLiftL];
+  const animToeR   = [cfg.toeR[0]   + stepR, cfg.toeR[1]   + walkLiftR];
 
   const L1_L = Math.hypot(cfg.kneeL[0] - cfg.hipL[0], cfg.kneeL[1] - cfg.hipL[1]);
   const L2_L = Math.hypot(cfg.ankleL[0] - cfg.kneeL[0], cfg.ankleL[1] - cfg.kneeL[1]);
@@ -1468,10 +1574,11 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
   const animShoulderL = rotatePtAround([cfg.shoulderL[0] + pelvisDx, cfg.shoulderL[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, spineRad);
   const animShoulderR = rotatePtAround([cfg.shoulderR[0] + pelvisDx, cfg.shoulderR[1] + pelvisDy - breath * tgt.breathAmp * 0.8], animPelvis, spineRad);
 
+  const walkArmSwing = isWalking && s.pose === 'relaxed' ? Math.sin(phiR) * 10.0 : (isWalking ? Math.sin(phiR) * 3.0 : 0);
   const lIsWeaponArm = rigImgs.nativeLeft || rigKey === 'kaelen_back';
-  const shL_deg = lIsWeaponArm ? -s.shoulderRAngle : dirSign * s.shoulderLAngle;
+  const shL_deg = (lIsWeaponArm ? -s.shoulderRAngle : dirSign * s.shoulderLAngle) + walkArmSwing;
   const elL_deg = lIsWeaponArm ? -s.elbowRAngle    : dirSign * s.elbowLAngle;
-  const shR_deg = lIsWeaponArm ? -s.shoulderLAngle : dirSign * s.shoulderRAngle;
+  const shR_deg = (lIsWeaponArm ? -s.shoulderLAngle : dirSign * s.shoulderRAngle) - walkArmSwing * 0.65;
   const elR_deg = lIsWeaponArm ? -s.elbowLAngle    : dirSign * s.elbowRAngle;
 
   const shL_rad = spineRad * 0.55 + ((shL_deg + breath * 1.2) * Math.PI) / 180;
@@ -1689,6 +1796,14 @@ function drawVtuberRigOnCanvas(canvas, s, tgt, tSec) {
 
 let _vtuberRafId = null;
 let _vtuberLastTs = 0;
+let _storyBgScrollPx = 0;
+let _storyCameraPanProgress = 0;
+
+function resetStoryCameraPan() {
+  _storyCameraPanProgress = 0;
+  _storyBgScrollPx = 0;
+}
+
 function startVtuberRigLoop() {
   if (_vtuberRafId) cancelAnimationFrame(_vtuberRafId);
   _vtuberLastTs = performance.now();
@@ -1702,6 +1817,52 @@ function startVtuberRigLoop() {
     _vtuberLastTs = now;
     const tSec = now / 1000;
 
+    // 1. Update 60fps Stage Walk Motion (`scroll_bg` Treadmill vs `pan_camera` Follow Hero)
+    const walkMode = STATE.storyWalkMode || 'off';
+    const isSneak = STATE.storyRigPose === 'sneaking';
+    const bgStripEl   = document.getElementById('vn-bg-strip');
+    const fgParallaxEl = document.getElementById('vn-fg-parallax');
+    const leftWrapEl  = document.getElementById('vn-left-actor-wrap');
+    const rightWrapEl = document.getElementById('vn-right-actor-wrap');
+    const telemEl     = document.getElementById('vn-walk-telemetry');
+
+    if (walkMode === 'scroll_bg') {
+      // Mode 1: Hero stays in place; seamless 3-tile background & 1.48x foreground mist/cobblestones scroll past
+      const speedPxPerSec = isSneak ? 64 : 98;
+      _storyBgScrollPx = (_storyBgScrollPx + speedPxPerSec * dt) % 2560;
+      const fgScrollPx = (_storyBgScrollPx * 1.48) % 2560;
+      if (bgStripEl)    bgStripEl.style.transform    = `translate3d(${-_storyBgScrollPx.toFixed(1)}px, 0, 0)`;
+      if (fgParallaxEl) fgParallaxEl.style.transform = `translate3d(${-fgScrollPx.toFixed(1)}px, 0, 0)`;
+      if (leftWrapEl)   leftWrapEl.style.transform   = 'translate3d(0px, 0, 0)';
+      if (rightWrapEl)  rightWrapEl.style.transform  = 'translate3d(0px, 0, 0)';
+      if (telemEl)      telemEl.textContent          = `🔄 TREADMILL SCROLL · BG: -${Math.round(_storyBgScrollPx)}px · FG: -${Math.round(fgScrollPx)}px (${speedPxPerSec}px/s)`;
+    } else if (walkMode === 'pan_camera') {
+      // Mode 2: Wide 2160px stage; Kaelen walks across the stage while the camera pans smoothly to follow him
+      const panRate = isSneak ? 0.085 : 0.125;
+      _storyCameraPanProgress = (_storyCameraPanProgress + panRate * dt) % 1.0;
+      // Smooth ease-in-out camera follow curve across the 720px wide-stage pan range
+      const p = _storyCameraPanProgress;
+      const camEase = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      const camPanX = -camEase * 680;
+      const fgPanX  = camPanX * 1.42;
+      // Hero physically advances across the screen (-90px -> +190px) while camera pans (-680px)
+      const heroScreenX = -90 + p * 280;
+      // Right-side NPC is anchored in world space ahead in the alley and pans into the right slot (+240px -> 0px)
+      const npcScreenX  = (1.0 - camEase) * 240;
+
+      if (bgStripEl)    bgStripEl.style.transform    = `translate3d(${camPanX.toFixed(1)}px, 0, 0)`;
+      if (fgParallaxEl) fgParallaxEl.style.transform = `translate3d(${fgPanX.toFixed(1)}px, 0, 0)`;
+      if (leftWrapEl)   leftWrapEl.style.transform   = `translate3d(${heroScreenX.toFixed(1)}px, 0, 0)`;
+      if (rightWrapEl)  rightWrapEl.style.transform  = `translate3d(${npcScreenX.toFixed(1)}px, 0, 0)`;
+      if (telemEl)      telemEl.textContent          = `🎥 CAMERA FOLLOW · CamPan: ${Math.round(camPanX)}px · HeroX: ${heroScreenX >= 0 ? '+' : ''}${Math.round(heroScreenX)}px (${Math.round(p * 100)}%)`;
+    } else {
+      if (bgStripEl)    bgStripEl.style.transform    = 'translate3d(0px, 0, 0)';
+      if (fgParallaxEl) fgParallaxEl.style.transform = 'translate3d(0px, 0, 0)';
+      if (leftWrapEl)   leftWrapEl.style.transform   = 'translate3d(0px, 0, 0)';
+      if (rightWrapEl)  rightWrapEl.style.transform  = 'translate3d(0px, 0, 0)';
+    }
+
+    // 2. Step springs & render 60fps rigged canvases
     const canvases = document.querySelectorAll('canvas.vn-vtuber-canvas');
     canvases.forEach(cv => {
       const slotId = cv.getAttribute('data-slot-id') || 'left';
@@ -2264,9 +2425,37 @@ function renderStoryStage() {
   return `
     <div style="width:1280px;height:720px;position:relative;overflow:hidden;background:#080a0f;">
       ${mode === 'map_stage' ? renderStoryMapBackdrop(st, card) : `
-        <!-- APPROACH 1: VN ILLUSTRATED STAGE WITH CLEARLY VISIBLE BACKDROP + STONE FLOOR + FULL-BODY SPRITES -->
-        <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
-             style="position:absolute;left:0;top:0;width:1280px;height:560px;object-fit:cover;object-position:center bottom;filter:${card.bgFilter || 'none'};transition:filter 0.3s ease;">
+        <!-- APPROACH 1: VN ILLUSTRATED STAGE WITH MULTI-LAYER PARALLAX SCROLL / WIDE CAMERA PAN + STONE FLOOR + FULL-BODY SPRITES -->
+        <div style="position:absolute;left:0;top:0;width:1280px;height:560px;overflow:hidden;">
+          <div id="vn-bg-strip" style="position:absolute;left:0;top:0;width:3840px;height:560px;display:flex;will-change:transform;filter:${card.bgFilter || 'none'};">
+            ${STATE.storyWalkMode === 'pan_camera' ? `
+              <!-- Wide 1960×560 Panoramic Stage for Camera-Follow Mode (pans smoothly up to -680px as Kaelen walks across the stage) -->
+              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                   style="width:1960px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
+            ` : `
+              <!-- Seamless 3-Tile [Normal | Mirrored | Normal] Strip (Repeats every 2560px with zero seam at tile borders!) -->
+              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                   style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
+              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                   style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;transform:scaleX(-1);">
+              <img src="${ASSETS.bg[st.bg] || ASSETS.bg.vn_alley_stage || ASSETS.bg.intro_1}" class="pixel"
+                   style="width:1280px;height:560px;object-fit:cover;object-position:center bottom;flex-shrink:0;">
+            `}
+          </div>
+
+          <!-- 2.5D Foreground Parallax Layer (1.45× Speed): Passing Tallow Lantern Light Shafts, Low Sunk-Ward Mist & Cobblestone Floor Markers -->
+          <div id="vn-fg-parallax" style="position:absolute;left:0;top:0;width:3840px;height:560px;pointer-events:none;z-index:11;will-change:transform;display:${STATE.storyWalkMode && STATE.storyWalkMode !== 'off' ? 'block' : 'none'};">
+            ${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `
+              <!-- Passing Overhead Tallow Street-Lantern Warm Light Cone -->
+              <div style="position:absolute;left:${i * 480 + 140}px;top:0;width:180px;height:540px;background:linear-gradient(180deg, rgba(245,158,11,0.16) 0%, rgba(245,158,11,0.05) 65%, transparent 100%);transform:skewX(-12deg);"></div>
+              <!-- Drifting Low Sunk-Ward Mist Wisp -->
+              <div style="position:absolute;left:${i * 480 + 40}px;bottom:34px;width:310px;height:54px;border-radius:50%;background:radial-gradient(ellipse, rgba(148,163,184,0.18) 0%, rgba(56,189,248,0.06) 55%, transparent 80%);filter:blur(4px);"></div>
+              <!-- Foreground Cobblestone Curb Parallax Seam -->
+              <div style="position:absolute;left:${i * 480 + 210}px;bottom:8px;width:96px;height:4px;border-radius:2px;background:rgba(212,166,74,0.22);box-shadow:0 1px 4px rgba(0,0,0,0.85);"></div>
+            `).join('')}
+          </div>
+        </div>
+
         <!-- Subtle top vignette only — keeps the lower stone/cobblestone floor (y: 330..540) bright and unobstructed! -->
         <div style="position:absolute;left:0;right:0;top:0;height:560px;background:linear-gradient(180deg, rgba(8,10,15,0.55) 0%, transparent 24%, transparent 82%, rgba(8,10,15,0.65) 100%);pointer-events:none;"></div>
 
@@ -2278,11 +2467,18 @@ function renderStoryStage() {
             <span style="font-size:12px;color:var(--dim);">· ${st.subtitle}</span>
           </div>
           <div class="font-mono" style="font-size:11px;color:#fbbf24;display:flex;align-items:center;gap:10px;">
-            <span>⚙️ Engine: <b>${STATE.storyRigEngine === 'atlas_b' ? 'B: 13-Part Atlas' : STATE.storyRigEngine === 'pose_c' ? 'C: 3-Pose Sheet' : STATE.storyRigEngine === 'slice_a' ? 'A: Auto-Slice' : 'B vs C vs A Compare'}</b></span>
+            ${STATE.storyWalkMode && STATE.storyWalkMode !== 'off' ? `
+              <span id="vn-walk-telemetry" style="padding:2px 8px;background:rgba(12,74,110,0.88);border:1px solid #38bdf8;border-radius:3px;color:#e0f2fe;font-size:10px;font-weight:700;">
+                ${STATE.storyWalkMode === 'scroll_bg' ? '🔄 TREADMILL SCROLL ACTIVE' : '🎥 CAMERA FOLLOW ACTIVE'}
+              </span>
+              ${STATE.storyWalkMode === 'pan_camera' ? `
+                <button class="rust-btn" style="height:20px;padding:0 7px;font-size:9.5px;" onclick="resetStoryCameraPan();" title="Restart Camera Pan & Hero Walk from Left Edge">↺ Reset Pan</button>
+              ` : ''}
+              <span>·</span>
+            ` : ''}
+            <span>⚙️ Engine: <b>${STATE.storyRigEngine === 'atlas_b' ? 'B: 13-Part Atlas' : STATE.storyRigEngine === 'pose_c' ? 'C: 3-Pose Sheet' : STATE.storyRigEngine === 'slice_a' ? 'A: Auto-Slice' : 'C vs B vs A Compare'}</b></span>
             <span>·</span>
-            <span>🦴 Rig Pose: <b>${STATE.storyRigPose === 'auto' ? 'Beat Default' : STATE.storyRigPose.toUpperCase()}</b></span>
-            <span>·</span>
-            <span>🎨 ${card.bgVariantLabel || 'Stage Artwork'}</span>
+            <span>🦴 Pose: <b>${STATE.storyRigPose === 'auto' ? 'Beat Default' : STATE.storyRigPose.toUpperCase()}</b></span>
             ${card.shake ? `<span style="padding:1px 7px;background:rgba(220,38,38,0.22);border:1px solid #ef4444;border-radius:3px;color:#fca5a5;">📳 ${card.shake}</span>` : ''}
           </div>
         </div>
@@ -2292,10 +2488,14 @@ function renderStoryStage() {
           : STATE.storyRigEngine === 'compare_bc'
             ? renderRigEngineComparisonShowcase()
             : `
-              <!-- Left & Right Full-Body Character Sprites standing directly on the stone/cobblestone floor (y: 192px above bottom) -->
+              <!-- Left & Right Full-Body Character Sprites standing/walking directly on the stone/cobblestone floor (y: 192px above bottom) -->
               <div style="position:absolute;left:115px;right:115px;bottom:192px;height:345px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:10;">
-                ${renderStoryActorSlot(card.leftActor, 'left')}
-                ${renderStoryActorSlot(card.rightActor, 'right')}
+                <div id="vn-left-actor-wrap" style="will-change:transform;">
+                  ${renderStoryActorSlot(card.leftActor, 'left')}
+                </div>
+                <div id="vn-right-actor-wrap" style="will-change:transform;">
+                  ${renderStoryActorSlot(card.rightActor, 'right')}
+                </div>
               </div>
             `}
       `}

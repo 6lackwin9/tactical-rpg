@@ -166,6 +166,7 @@ const STATE = {
   storyRigPose: 'auto',         // 'auto' (use actor.pose) | 'relaxed' | 'sneaking' | 'weapons_drawn'
   storyRigEngine: 'pose_c',     // 'pose_c' (3-Pose Sheet + Multi-Zone Deformer Rig) | 'atlas_b' (Exploded 13-Part Spine2D Atlas) | 'slice_a' (Single-Sprite 10-Part Auto-Slice) | 'compare_bc' (Side-by-Side Compare)
   storyDeformerBoost: 1.0,      // 1.0 (Normal 1x) | 2.2 (Limit-Test 2.2x) | 3.2 (Extreme 3.2x Stress-Test)
+  storyWalkMode: 'off',         // 'off' (Stationary) | 'scroll_bg' (Treadmill: Hero stays in place + scrolling parallax BG) | 'pan_camera' (Wide BG Camera Pan following walking Hero)
   storyTurnaroundView: 'side',  // 'side' | 'front' | 'back' | 'sheet_3view' (3-View Full-Body Turnaround per ART_PROMPT_TEMPLATES.md)
   storyShowRigDebug: false,     // Toggle Live2D / VTuber mesh deformer grid & joint skeleton overlay
   storyMoodOverride: null,      // null (use card.mood) | 'neutral' | 'determined' | 'angry' | 'hurt' | 'surprised' | 'afraid'
