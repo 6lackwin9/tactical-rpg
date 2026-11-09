@@ -1,0 +1,12 @@
+{
+  "frame_w": 386,
+  "frame_h": 340,
+  "frames": 26,
+  "cols": 8,
+  "fps": 24,
+  "ground_y": 324,
+  "loop": false,
+  "box_x": 0,
+  "box_y": 0,
+  "source": "image_pipeline/video/out/kaelen_video_poke.mp4"
+}
