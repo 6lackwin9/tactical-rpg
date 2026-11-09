@@ -219,8 +219,10 @@ class Halberd:
         self.profile = prof
         self.u_front = float(np.dot(self.ax.proj(lm["grip_front"]) - self.ax.socket, self.ax.d))
 
-    def draw(self, canvas: np.ndarray, grip_front, angle: float) -> np.ndarray:
-        """Draw the halberd so its canonical front-grip point sits on grip_front at the given angle."""
+    def draw(self, canvas: np.ndarray, grip_front, angle: float, length: float | None = None) -> np.ndarray:
+        """Draw the halberd so its canonical front-grip point sits on grip_front at the given angle; ``length`` (butt to
+        socket) overrides the canonical shaft length."""
+        length = self.ax.length if length is None else length
         d = np.array([math.cos(angle), math.sin(angle)])
         n = np.array([-d[1], d[0]])
         socket = np.array(grip_front, float) - self.u_front * d
@@ -230,7 +232,7 @@ class Halberd:
         u, v = px * d[0] + py * d[1], px * n[0] + py * n[1]
         out = canvas.copy()
         # shaft
-        shaft = (u >= -self.ax.length) & (u < BLADE_BACK + 2) & (np.abs(v) <= SHAFT_HALF + 0.5)
+        shaft = (u >= -length) & (u < BLADE_BACK + 2) & (np.abs(v) <= SHAFT_HALF + 0.5)
         vr = np.clip(np.rint(v), -3, 3).astype(int)
         for off, col in self.profile.items():
             sel = shaft & (vr == off)
@@ -263,9 +265,19 @@ class Hybrid:
         canon = landmarks["canonical"]
         self.halberd = Halberd(keys[canon], self.lm[canon])
         self.bodies = {k: strip_weapon(keys[k], self.lm[k]) for k in self.lm}
+        # Stop-frame keys keep their own painted weapon on the key itself; in-betweens blend the shaft length from it.
+        self.own = set(landmarks.get("own_weapon", []))
+        self.keys = keys
         self._flows = {}
 
+    def _length(self, k: str) -> float:
+        return Axis(self.lm[k]).length if k in self.own else self.halberd.ax.length
+
     def frame(self, ka: str, kb: str, t: float) -> np.ndarray:
+        if t <= 0 and ka in self.own:
+            return self.keys[ka]
+        if t >= 1 and kb in self.own:
+            return self.keys[kb]
         a, b = self.bodies[ka], self.bodies[kb]
         if t <= 0:
             body = a
@@ -279,7 +291,7 @@ class Hybrid:
         axa, axb = Axis(la), Axis(lb)
         grip = _lerp(axa.proj(la["grip_front"]), axb.proj(lb["grip_front"]), t)
         ang = _lerp_angle(axa.angle, axb.angle, t)
-        withw = self.halberd.draw(body, grip, ang)
+        withw = self.halberd.draw(body, grip, ang, (1 - t) * self._length(ka) + t * self._length(kb))
         hands = _hand_mask(body, [_lerp(la["grip_front"], lb["grip_front"], t), _lerp(la["grip_back"], lb["grip_back"], t)])
         withw[hands] = body[hands]
         return withw
@@ -345,6 +357,8 @@ def tweens(n: int, ms: int, eased=True):
 
 
 GUARD, WIND, POKE, CLEAVE = "active_drawn", "drawn_kf_windup", "drawn_kf_poke", "drawn_kf_cleave"
+# generated breakdown keys (ART_UI_STUDIO 3.5); drawn_kf_halfdraw (first take) copied the guard stance, the retake r2 is used
+MID, HALF = "drawn_kf_midswing", "drawn_kf_halfdraw_r2"
 CLIPS = {
     "poke": {
         "label": "Drawn: guard, wind-up, poke, recover",
@@ -366,6 +380,17 @@ CLIPS = {
             (CLEAVE, GUARD, [(0, 340)] + tweens(3, 85)),
         ],
     },
+    "cleave_bd": {
+        "label": "Drawn: cleave with the generated mid-swing breakdown key",
+        "note": "Same timing as the cleave above; the swing passes through drawn_kf_midswing instead of guessing it.",
+        "methods": ["keys", "flow", "hybrid"],
+        "plan": [
+            (GUARD, WIND, [(0, 500)] + tweens(2, 70)),
+            (WIND, MID, [(0, 280)] + [(0.5, 40)]),
+            (MID, CLEAVE, [(0, 40)]),
+            (CLEAVE, GUARD, [(0, 340)] + tweens(3, 85)),
+        ],
+    },
     "walk": {
         "label": "Walk, one-hand carry: 4 keys against 8 frames",
         "note": "Only the legs differ between the walk keys, so flow fills the passing frames.",
@@ -379,6 +404,17 @@ CLIPS = {
         "plan": [
             ("passive_relaxed", GUARD, [(0, 700)] + tweens(3, 90)),
             (GUARD, "passive_relaxed", [(0, 700)] + tweens(3, 90)),
+        ],
+    },
+    "draw_weapon_bd": {
+        "label": "Passive to drawn with the generated half-draw breakdown key",
+        "note": "Same timing as above, through drawn_kf_halfdraw_r2: head a little lower, back boot already out, front boot halfway.",
+        "methods": ["keys", "flow", "hybrid"],
+        "plan": [
+            ("passive_relaxed", HALF, [(0, 700)] + tweens(1, 90)),
+            (HALF, GUARD, [(0, 90)] + tweens(1, 90)),
+            (GUARD, HALF, [(0, 700)] + tweens(1, 90)),
+            (HALF, "passive_relaxed", [(0, 90)] + tweens(1, 90)),
         ],
     },
 }

@@ -1,0 +1,37 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_drawn_kf_halfdraw",
+  "prompt": "Edit this pixel-art character sprite into a new animation keyframe. Image 1 is the relaxed standing pose and image 2 is the weapon-drawn guard pose of the same character; draw the in-between pose halfway from image 1 to image 2, as he brings the halberd down into guard.\n\nCharacter (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. Face calm and composed, mouth closed.\n\nPose: the feet are halfway between the two references: the left foot steps out to the left so the stance is wider than image 1 but narrower than image 2, knees slightly bent, boots flat on the ground line of the references. The torso turns a little toward the right. The halberd tips forward from upright: the shaft leans at about 45 degrees, blade up and to the right above shoulder height, butt end near the left knee. Both hands are on the shaft, the right hand at chest height and the left hand at the hip.\n\nFraming and style: same canvas, same character size and position as the references, one character only, full body, three-quarter view facing right. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_passive_relaxed.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_drawn_kf_halfdraw.txt",
+  "time": "2026-11-09T15:37:50Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_passive_relaxed.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_active_drawn.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_drawn_kf_halfdraw_q1794238005",
+  "metadata": {
+    "asset_id": "kaelen_drawn_kf_halfdraw",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_drawn_kf_halfdraw.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_drawn_kf_halfdraw.txt",
+      "kind": "vn_keyframe",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_passive_relaxed.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_active_drawn.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_passive_relaxed.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_active_drawn.png"
+  ],
+  "notes": "Verified resolution (1024x1024) and aspect ratio (1:1) within 3% tolerance."
+}

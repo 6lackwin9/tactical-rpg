@@ -1,10 +1,15 @@
 {
   "_doc": "Weapon landmarks per aligned 340x340 keyframe (kaelen_4pose_uris.json), read off a 20 px grid. butt = shaft end, socket = metal collar under the blade, tip = blade's far point, grip_front / grip_back = the hands on the shaft. The hybrid in-betweener rebuilds the halberd from the canonical keyframe as one rigid prop placed by these points.",
   "canonical": "active_drawn",
+  "own_weapon": ["passive_relaxed"],
   "keys": {
+    "passive_relaxed": {"butt": [196, 312], "socket": [240, 98], "tip": [255, 26], "grip_front": [228, 160], "grip_back": [120, 205]},
     "active_drawn": {"butt": [98, 218], "socket": [236, 140], "tip": [282, 108], "grip_front": [214, 160], "grip_back": [128, 198]},
     "drawn_kf_windup": {"butt": [102, 219], "socket": [248, 112], "tip": [297, 79], "grip_front": [218, 136], "grip_back": [132, 191]},
     "drawn_kf_poke": {"butt": [98, 210], "socket": [280, 120], "tip": [334, 94], "grip_front": [242, 139], "grip_back": [128, 188]},
-    "drawn_kf_cleave": {"butt": [98, 171], "socket": [280, 232], "tip": [330, 247], "grip_front": [230, 214], "grip_back": [126, 183]}
+    "drawn_kf_cleave": {"butt": [98, 171], "socket": [280, 232], "tip": [330, 247], "grip_front": [230, 214], "grip_back": [126, 183]},
+    "drawn_kf_midswing": {"butt": [90, 162], "socket": [278, 223], "tip": [331, 235], "grip_front": [228, 207], "grip_back": [122, 173]},
+    "drawn_kf_halfdraw": {"butt": [102, 222], "socket": [257, 120], "tip": [304, 82], "grip_front": [232, 137], "grip_back": [135, 202]},
+    "drawn_kf_halfdraw_r2": {"butt": [88, 230], "socket": [250, 103], "tip": [290, 59], "grip_front": [218, 124], "grip_back": [124, 204]}
   }
 }
