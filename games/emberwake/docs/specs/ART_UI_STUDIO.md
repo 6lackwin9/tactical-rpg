@@ -99,6 +99,20 @@ This section records every option explored, Tushar's exact feedback, why rejecte
     2. **Generated Sneak Cycle (`active_sneak` ↔ `sneak_kf_passing`)**: Extracted the crouched passing step from `art_src/vn_stage/kaelen_sneak_4frame_sheet.jpg` and paired it with the crouched contact stride under the locked sneak upper body.
     3. **4 Single-Character `1:1` Drawn Combat Keyframes (`active_drawn`, `drawn_kf_windup`, `drawn_kf_poke`, `drawn_kf_cleave`)**: Generated directly from the single-character `#FF00FF` reference (`art_src/vn_stage/kaelen_drawn_windup_keyframe.jpg`, `kaelen_drawn_poke_keyframe.jpg`, `kaelen_drawn_cleave_keyframe.jpg`) with identical planted boots (`x = [82..261]`).
 
+### 3.5 Experiment 5: Passive stop frames vs active keyframes with code in-betweens (in review, 2026-11-09)
+
+- **Question (Tushar)**: passive poses are stop frames with minimal movement; can active poses be generated as keyframes and filled with in-between frames by code or local generation?
+- **Tool**: `python3 -m tools.mock_ui.anim_lab.tween --out <path> [--gif-dir <dir>]` builds a side-by-side lab (`kaelen_tween_lab.html`, about 3 MB) from the aligned keys in `kaelen_4pose_uris.json` and the weapon landmarks in `tools/mock_ui/anim_lab/tween_landmarks.json`. Every frame is snapped to one shared palette with a hard alpha edge and a magenta despill. Methods:
+  - `keys`: the generated keyframes only, hard cuts, held for the same total time.
+  - `flow`: dense optical flow (OpenCV DIS) between neighbouring keys; each in-between takes the nearer key's warped pixels, filling only 2 px cracks from the other key (a full fill grew a third leg in the walk).
+  - `hybrid`: the halberd is lifted out of each key (shaft line fitted to the painted shaft, band ±5.5 px, inpainted), the body is in-betweened by flow, and one canonical halberd (from `active_drawn`) is drawn back as a rigid prop placed by the front-hand grip, its angle interpolated; the hands are laid back over the shaft.
+  - `code`: the passive stop frame moved by code only (a 2 px breath over 3.6 s above the shins).
+- **Findings so far (agent, awaiting Tushar's review)**:
+  - The generated keys disagree on the weapon itself: the halberd's length (214 to 263 px) and blade shape change from key to key, so any in-between morphs the blade. A rigid prop layer fixes this and is the strongest result (poke clip).
+  - Flow in-betweens work when the moving part travels a short way (guard, wind-up, poke, recover). They fail when a limb travels far (the cleave's front hand, about 90 px) or when legs swap front and back (walk passing frames break up).
+  - Large pose changes (passive to drawn) need a generated breakdown key or local video in-betweening (Wan 2.2 first-last-frame on the PC, untested); code alone doubles the weapon.
+- **Masters**: the keyframe masters are JPEGs; their magenta fringe survives keying. Generate future keys as PNG.
+
 ---
 
 ## 4. Screen-by-Screen UI Decisions Summary (`emberwake_screen_flow.html`)
@@ -123,6 +137,10 @@ This section records every option explored, Tushar's exact feedback, why rejecte
 # 1. Build the lightweight standalone 60fps Kaelen 4-Pose & Keyframe Animation Lab (590 KB..1.7 MB)
 #    Use this FIRST when iterating on character poses, walk/sneak cycles, or weapon actions!
 python3 -m tools.mock_ui.anim_lab --out /tmp/kaelen_4pose_animation_lab.html
+
+# 1b. Build the keyframe in-between comparison lab (keys vs optical flow vs rigid-weapon hybrid, about 3 MB)
+#     (pip install opencv-python-headless once; add --gif-dir art_src/vn_stage for one GIF per clip and method)
+python3 -m tools.mock_ui.anim_lab.tween --out /tmp/kaelen_tween_lab.html
 
 # 2. Build the full playable 1280x720 Emberwake Screen Flow Mock UI (3.2 MB)
 #    Use this ONLY after standalone animation/layout changes are signed off by the user!

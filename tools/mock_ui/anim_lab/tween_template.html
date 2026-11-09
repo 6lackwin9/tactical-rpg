@@ -1,0 +1,192 @@
+<title>Kaelen In-Between Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: an animator's light table. One clip per section; its methods side by side on dark stage panels,
+   each with an exposure strip (one cell per drawing, width = how long it is held). */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --fg: #1c1f26;
+  --muted: #5b6270;
+  --line: #d5d9e0;
+  --accent: #b8862b;          /* halberd brass */
+  --accent-fg: #ffffff;
+  --stage: #22212c;           /* sprite ground, same in both themes: the sprites are judged on the game's dark stage */
+  --cell: #c9ced8;
+  --cell-on: #b8862b;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15161c; --panel: #1d1f27; --fg: #e7e9ee; --muted: #9ca3af; --line: #2e313c;
+    --accent: #d9a648; --accent-fg: #15161c; --cell: #3a3e4b; --cell-on: #d9a648; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15161c; --panel: #1d1f27; --fg: #e7e9ee; --muted: #9ca3af; --line: #2e313c;
+  --accent: #d9a648; --accent-fg: #15161c; --cell: #3a3e4b; --cell-on: #d9a648; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px; }
+header { display: grid; gap: 10px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: 1.75rem; line-height: 1.15; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.lede { margin: 0; color: var(--muted); max-width: 68ch; }
+.controls {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.group { display: flex; gap: 4px; align-items: center; }
+.group > span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-right: 4px; }
+button {
+  font: 600 0.85rem var(--body); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer; min-height: 34px;
+}
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+section.clip { display: grid; gap: 12px; }
+.clip h2 { font-family: var(--display); font-weight: 600; font-size: 1.15rem; margin: 0; text-wrap: balance; }
+.clip p { margin: 0; color: var(--muted); max-width: 72ch; }
+.rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; min-width: 0; }
+.card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+.readout { font: 400 0.75rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card .how { font-size: 0.82rem; color: var(--muted); margin: 0; }
+.stage { background: var(--stage); border-radius: 4px; display: grid; place-items: center; overflow: hidden; }
+canvas { display: block; width: 100%; max-width: 340px; height: auto; aspect-ratio: 1; image-rendering: pixelated; }
+.scale-2 canvas { max-width: 680px; }
+.scale-2 .rows { grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+.xsheet { display: flex; gap: 2px; height: 10px; }
+.xsheet i { display: block; background: var(--cell); border-radius: 2px; min-width: 2px; }
+.xsheet i.on { background: var(--cell-on); }
+footer { color: var(--muted); font-size: 0.82rem; max-width: 72ch; }
+@media (prefers-reduced-motion: reduce) { .xsheet i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Kaelen in-between lab</h1>
+    <p class="lede">Generated keyframes against in-betweens made by code. Every column in a clip runs for the same total time,
+      so only the drawings differ. All frames are snapped to one shared palette with a hard alpha edge.</p>
+  </header>
+
+  <div class="controls" role="toolbar" aria-label="Playback">
+    <div class="group"><button id="play" aria-pressed="true">Pause</button><button id="step">Next frame</button><button id="restart">Restart</button></div>
+    <div class="group"><span>Speed</span>
+      <button id="sp1" data-speed="1" aria-pressed="true">1×</button><button id="sp2" data-speed="0.5" aria-pressed="false">½×</button><button id="sp4" data-speed="0.25" aria-pressed="false">¼×</button></div>
+    <div class="group"><span>View</span>
+      <button id="onion" aria-pressed="false">Onion skin</button><button id="zoom" aria-pressed="false">2× size</button></div>
+  </div>
+
+  <main id="clips" class="wrap"></main>
+
+  <footer>
+    Methods. <b>Keys</b>: the generated keyframes only, each held for the time its in-betweens would take.
+    <b>Flow</b>: dense optical flow between neighbouring keys; each in-between takes the nearer key's warped pixels, so nothing ghosts.
+    <b>Hybrid</b>: the halberd is lifted out of every key, the body is in-betweened by flow, and one canonical halberd is drawn back
+    as a rigid prop placed by the hand landmarks. <b>Code</b>: one stop frame moved by code only.
+    Built by <code>python3 -m tools.mock_ui.anim_lab.tween</code>.
+  </footer>
+</div>
+
+<script>
+const DATA = __TWEEN_JSON__;
+const METHOD = {
+  keys: ["Keys only", "Generated keyframes, hard cuts"],
+  flow: ["Flow in-betweens", "Optical flow between keys"],
+  hybrid: ["Hybrid", "Flow body, rigid halberd by code"],
+  code: ["Code only", "One stop frame, breath by code"],
+};
+const imgs = DATA.images.map(src => { const im = new Image(); im.src = src; return im; });
+const players = [];
+const root = document.getElementById("clips");
+
+for (const clip of DATA.clips) {
+  const sec = document.createElement("section");
+  sec.className = "clip";
+  sec.id = clip.id;
+  sec.innerHTML = `<h2></h2><p></p><div class="rows"></div>`;
+  sec.querySelector("h2").textContent = clip.label;
+  sec.querySelector("p").textContent = clip.note || "";
+  const rows = sec.querySelector(".rows");
+  for (const row of clip.rows) {
+    const [name, how] = METHOD[row.method] || [row.method, ""];
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `<header><h3></h3><span class="readout"></span></header><p class="how"></p>
+      <div class="stage"><canvas width="340" height="340"></canvas></div><div class="xsheet" aria-hidden="true"></div>`;
+    card.querySelector("h3").textContent = name;
+    card.querySelector(".how").textContent = how;
+    const total = row.frames.reduce((s, f) => s + f[1], 0);
+    const xs = card.querySelector(".xsheet");
+    const cells = row.frames.map(f => { const i = document.createElement("i"); i.style.flex = `${f[1]} 0 0`; xs.appendChild(i); return i; });
+    const cv = card.querySelector("canvas");
+    const ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    players.push({ frames: row.frames, total, idx: 0, elapsed: 0, ctx, cells, readout: card.querySelector(".readout"), drawn: -1 });
+    rows.appendChild(card);
+  }
+  root.appendChild(sec);
+}
+
+let playing = true, speed = 1, onion = false, last = performance.now();
+
+function draw(p, force) {
+  if (!force && p.drawn === p.idx) return;
+  const ctx = p.ctx;
+  ctx.clearRect(0, 0, 340, 340);
+  if (onion) {
+    const prev = p.frames[(p.idx - 1 + p.frames.length) % p.frames.length][0];
+    ctx.globalAlpha = 0.3; ctx.drawImage(imgs[prev], 0, 0); ctx.globalAlpha = 1;
+  }
+  ctx.drawImage(imgs[p.frames[p.idx][0]], 0, 0);
+  if (p.cells[p.drawn]) p.cells[p.drawn].classList.remove("on");
+  p.cells[p.idx].classList.add("on");
+  p.readout.textContent = `${String(p.idx + 1).padStart(2, "0")}/${String(p.frames.length).padStart(2, "0")} · ${p.frames[p.idx][1]} ms`;
+  p.drawn = p.idx;
+}
+
+function tick(now) {
+  const dt = Math.min(100, now - last) * speed;
+  last = now;
+  if (playing) {
+    for (const p of players) {
+      p.elapsed += dt;
+      while (p.elapsed >= p.frames[p.idx][1]) { p.elapsed -= p.frames[p.idx][1]; p.idx = (p.idx + 1) % p.frames.length; }
+      draw(p);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function redrawAll() { players.forEach(p => draw(p, true)); }
+function press(btn, on) { btn.setAttribute("aria-pressed", on ? "true" : "false"); }
+
+const playBtn = document.getElementById("play");
+playBtn.addEventListener("click", () => { playing = !playing; playBtn.textContent = playing ? "Pause" : "Play"; press(playBtn, playing); });
+document.getElementById("step").addEventListener("click", () => {
+  playing = false; playBtn.textContent = "Play"; press(playBtn, false);
+  players.forEach(p => { p.idx = (p.idx + 1) % p.frames.length; p.elapsed = 0; draw(p); });
+});
+document.getElementById("restart").addEventListener("click", () => { players.forEach(p => { p.idx = 0; p.elapsed = 0; }); redrawAll(); });
+document.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click", () => {
+  speed = Number(b.dataset.speed);
+  document.querySelectorAll("[data-speed]").forEach(o => press(o, o === b));
+}));
+const onionBtn = document.getElementById("onion");
+onionBtn.addEventListener("click", () => { onion = !onion; press(onionBtn, onion); redrawAll(); });
+const zoomBtn = document.getElementById("zoom");
+zoomBtn.addEventListener("click", () => { const on = !document.body.classList.contains("scale-2"); document.body.classList.toggle("scale-2", on); press(zoomBtn, on); });
+
+if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { playing = false; playBtn.textContent = "Play"; press(playBtn, false); }
+Promise.all(imgs.map(im => im.decode().catch(() => {}))).then(() => { redrawAll(); requestAnimationFrame(tick); });
+</script>
