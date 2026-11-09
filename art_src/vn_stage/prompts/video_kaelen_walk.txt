@@ -1,4 +1,4 @@
-Start frame: kaelen_video_start_walk.png (use it as the first frame of the video).
+Start frame: kaelen_video_start_walk_360p.png (use it as the first frame of the video).
 
 Animate the character in the start frame walking to the right in place, like a side-scrolling game sprite on a treadmill: he does not move across the screen, his feet stay on the same ground line. A steady, natural walk cycle repeated for the whole clip: the legs alternate, each step has a clear passing moment with the legs together, the torso has only a small bob, and the halberd stays carried low in both hands, blade forward and down, exactly as in the start frame. Calm, even pace, about one step every half second.
 

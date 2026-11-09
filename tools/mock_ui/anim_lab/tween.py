@@ -785,15 +785,21 @@ VIDEO_STARTS = {"walk": ("sheet_walk2_f1", 300), "sneak": ("sheet_sneak2_f1", 30
 VIDEO_W, VIDEO_H, VIDEO_SCALE, VIDEO_GROUND = 1280, 720, 2, 680
 
 
-def export_video_starts(out_dir: Path) -> None:
+def export_video_starts(out_dir: Path, scale: int = VIDEO_SCALE) -> None:
+    """Start frames at 720p (scale 2: the key at 2x on 1280 x 720) or 360p (scale 1: the key at 1x on 640 x 360,
+    the sprites' own resolution). Both put the key in the same place relative to the frame, so video_preview reads
+    either result the same way."""
     keys = load_keys()
     out_dir.mkdir(parents=True, exist_ok=True)
+    w, h = VIDEO_W * scale // VIDEO_SCALE, VIDEO_H * scale // VIDEO_SCALE
+    suffix = "" if scale == VIDEO_SCALE else f"_{h}p"
     for action, (key, x) in VIDEO_STARTS.items():
-        canvas = Image.new("RGBA", (VIDEO_W, VIDEO_H), (255, 0, 255, 255))
-        sprite = Image.fromarray(keys[key]).resize((SIZE * VIDEO_SCALE, SIZE * VIDEO_SCALE), Image.NEAREST)
-        canvas.alpha_composite(sprite, (x, VIDEO_GROUND - (GROUND_Y + 1) * VIDEO_SCALE))
-        canvas.convert("RGB").save(out_dir / f"kaelen_video_start_{action}.png", optimize=True)
-    print(f"{len(VIDEO_STARTS)} video start frames -> {out_dir}")
+        canvas = Image.new("RGBA", (w, h), (255, 0, 255, 255))
+        sprite = Image.fromarray(keys[key]).resize((SIZE * scale, SIZE * scale), Image.NEAREST)
+        canvas.alpha_composite(sprite, (x * scale // VIDEO_SCALE,
+                                        VIDEO_GROUND * scale // VIDEO_SCALE - (GROUND_Y + 1) * scale))
+        canvas.convert("RGB").save(out_dir / f"kaelen_video_start_{action}{suffix}.png", optimize=True)
+    print(f"{len(VIDEO_STARTS)} video start frames ({w} x {h}) -> {out_dir}")
 
 
 def video_preview(mp4: Path, action: str, out_gif: Path, fps: int = 12, strip: Path | None = None) -> None:
@@ -888,7 +894,9 @@ def main() -> None:
     ap.add_argument("--key", default=None, help="Bundle key for --frame.")
     ap.add_argument("--x-shift", type=int, default=0, help="The x_shift of the references the frame was made on.")
     ap.add_argument("--export-video-starts", type=Path, default=None, metavar="DIR",
-                    help="Write the 1280x720 start frame per action for the image-to-video test into DIR.")
+                    help="Write the start frame per action for the image-to-video test into DIR.")
+    ap.add_argument("--video-scale", type=int, default=VIDEO_SCALE,
+                    help="Start frames at 2 = 720p (key at 2x) or 1 = 360p (key at 1x, the sprites' own size).")
     ap.add_argument("--video", type=Path, default=None, metavar="MP4",
                     help="Turn an image-to-video result into a lab GIF (with --action, --out; --strip for 12 stills).")
     ap.add_argument("--action", default=None, help="walk, sneak, poke or slash: which start frame the video used.")
@@ -900,7 +908,7 @@ def main() -> None:
         stage_refs()
         return
     if args.export_video_starts:
-        export_video_starts(args.export_video_starts)
+        export_video_starts(args.export_video_starts, args.video_scale)
         return
     if args.video:
         video_preview(args.video, args.action, args.out, strip=args.strip)

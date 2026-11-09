@@ -1,4 +1,4 @@
-Start frame: kaelen_video_start_sneak.png (use it as the first frame of the video).
+Start frame: kaelen_video_start_sneak_360p.png (use it as the first frame of the video).
 
 Animate the character in the start frame sneaking to the right in place, like a side-scrolling game sprite on a treadmill: he does not move across the screen, his feet stay on the same ground line. A slow, careful crouched stealth walk repeated for the whole clip: knees deeply bent, back bent forward, each foot lifted low and placed toe first, the legs clearly alternating, the head staying at the same low height, and the halberd held level at hip height in both hands exactly as in the start frame. Slow pace, about one step per second.
 
