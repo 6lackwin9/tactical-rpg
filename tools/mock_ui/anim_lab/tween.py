@@ -936,13 +936,35 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, 
                                                                for i in range(n - p)]))
         pmin, pmax = steps * period - 4, steps * period + 4
         print(f"  step {period} frames; loop of {steps} steps: {pmin}..{pmax} frames")
-    _, s0, length = min((score(frames[i], frames[i + p]) + 1.5 * upper(frames[i], frames[i + p]), i, p)
-                        for p in range(pmin, min(pmax, n - 1) + 1) for i in range(n - p))
-    drift = head_x(frames[s0 + length]) - head_x(frames[s0])
-    aligned = []
-    for t, f in enumerate(frames[s0:s0 + length]):
+    def legs_off(p, q):
+        return float(((p[230:335, ..., 3] > 0) != (q[230:335, ..., 3] > 0)).sum()) / 50
+
+    def planted(f, dx=0):
         low = int(np.nonzero((f[..., 3] > 0).any(axis=1))[0].max())
-        aligned.append(shifted(f, -int(round(drift * t / length)), GROUND_Y - low))
+        return shifted(f, dx, GROUND_Y - low)
+
+    # Preferred: an overlap blend. Skip the first frames (the model eases in from the still start frame), match the
+    # legs at the seam, and keep >= OVERLAP frames after the loop's end: they are at the same point of the stride as
+    # the loop's first frames, so those first frames blend from the overrun toward the real start (flow between
+    # same-phase frames: legs stay real, the halberd's drift is spread out) and the wrap needs no inserted frames.
+    ramp, overlap = 16, 6   # 16: by frame 10 the walk was still easing in (its legs bunched in the blend)
+    cands = [(2 * legs_off(frames[i], frames[i + p]) + upper(frames[i], frames[i + p]), i, p)
+             for p in range(pmin, pmax + 1) for i in range(ramp, n - p - overlap + 1)]
+    blend = 0
+    if cands:
+        _, s0, length = min(cands)
+        blend = min(8, n - s0 - length)
+        aligned = [planted(f) for f in frames[s0:s0 + length]]
+        over = [planted(f) for f in frames[s0 + length:s0 + length + blend]]
+        for t in range(blend):  # t = 0 is the frame right after the loop's end, so the wrap is seamless
+            w = t / blend
+            aligned[t] = over[t] if w == 0 else flow_tween(over[t], aligned[t], w, _flows(over[t], aligned[t]))
+        drift = 0.0
+    else:  # too short to overlap: bridge the wrap instead (below)
+        _, s0, length = min((score(frames[i], frames[i + p]) + 1.5 * upper(frames[i], frames[i + p]), i, p)
+                            for p in range(pmin, min(pmax, n - 1) + 1) for i in range(n - p))
+        drift = head_x(frames[s0 + length]) - head_x(frames[s0])
+        aligned = [planted(f, -int(round(drift * t / length))) for t, f in enumerate(frames[s0:s0 + length])]
     held = [snap(f, pal) for f in aligned]
     for _ in range(2):  # circular, so the colours carry across the wrap too
         for t in range(length):
@@ -955,14 +977,15 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, 
     # bridge enough frames that neither the silhouette nor the halberd changes more per frame than normal
     ratio = max(step(held[-1], held[0]) / max(1.0, float(np.median(sil))),
                 upper(held[-1], held[0]) / max(0.1, float(np.median(up))))
-    nb = max(0, int(np.ceil(ratio)) - 1)
+    nb = 0 if blend else max(0, int(np.ceil(ratio)) - 1)
     if nb:
         fl = _flows(held[-1], held[0])
         held += [snap(flow_tween(held[length - 1], held[0], (k + 1) / (nb + 1), fl), pal) for k in range(nb)]
     ring = [step(held[i], held[(i + 1) % len(held)]) for i in range(len(held))]
     ring_up = [upper(held[i], held[(i + 1) % len(held)]) for i in range(len(held))]
-    print(f"{mp4.name}: loop frames {s0}..{s0 + length - 1} ({length} frames, {length / 24:.2f} s), drift {drift:+.1f} px "
-          f"spread, {nb} bridge frame(s); silhouette step max {max(ring)} median {int(np.median(ring))}, "
+    print(f"{mp4.name}: loop frames {s0}..{s0 + length - 1} ({length} frames, {length / 24:.2f} s), "
+          + (f"overlap blend over {blend} frames" if blend else f"drift {drift:+.1f} px spread, {nb} bridge frame(s)")
+          + f"; silhouette step max {max(ring)} median {int(np.median(ring))}, "
           f"upper-body step max {max(ring_up):.1f} median {np.median(ring_up):.1f}, wrap steps "
           f"{[round(v, 1) for v in ring_up[length - 1:]]}")
 
