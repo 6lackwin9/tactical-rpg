@@ -1019,7 +1019,7 @@ def video_loop(mp4: Path, action: str, out: Path, pmin: int = 0, pmax: int = 0, 
 
 
 def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int = 900, settle: int = 4,
-                 tall: bool = False):
+                 tall: bool = False, no_trail: bool = False):
     """A one-shot action (poke, slash) cut from a video clip: from just before the figure leaves its starting guard
     to a few frames after it is back, at the source fps. Frames are denoised, keyed, planted on the ground line and
     given a temporal colour hold, then snapped to the lab palette. The crop is the union of every frame's figure (a
@@ -1039,17 +1039,30 @@ def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int 
     ground = top + GROUND_Y                               # the boots' row in the video frame
     bottom = top + SIZE                                   # the standard box's bottom edge
     cap = cv2.VideoCapture(str(mp4))
-    full = []
+    raw = []
     while True:
         ok, bgr = cap.read()
         if not ok:
             break
-        f = cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), size, interpolation=cv2.INTER_AREA)
-        a = cv2.bilateralFilter(f, 5, 24, 5)[:bottom].astype(int)
-        r, g, b = a[..., 0], a[..., 1], a[..., 2]
-        bg = (r > 130) & (b > 130) & (g < 120) & (np.abs(r - b) < 110)
-        full.append(clean(np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8)))
+        raw.append(cv2.bilateralFilter(cv2.resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), size,
+                                                  interpolation=cv2.INTER_AREA), 5, 24, 5)[:bottom].astype(int))
     cap.release()
+    # A painted motion trail is semi-transparent over the magenta: it reads as magenta-tinted grey (red and blue
+    # well above green, unlike the steel blade) with a bright, near-white core. Measured per frame, it spikes only on
+    # the swing frames (the 720p slash: about 1,600 to 7,100 tinted pixels on frames 19 to 24, under 10 elsewhere).
+    def masks(a):
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        key = (r > 130) & (b > 130) & (g < 120) & (np.abs(r - b) < 110)
+        tint = ~key & (r > 140) & (b > 140) & (r - g > 25) & (b - g > 25) & (np.abs(r - b) < 50)
+        hi, lo = a.max(axis=-1), a.min(axis=-1)
+        return key, tint, (hi > 195) & (hi - lo < 45)
+    tints = [int(masks(a)[1].sum()) for a in raw]
+    trail_at = {t for t, n in enumerate(tints) if n > max(150, 20 * float(np.median(tints)))}
+    full = []
+    for t, a in enumerate(raw):
+        key, tint, pale_px = masks(a)
+        bg = key | (tint if no_trail else False) | (pale_px if (no_trail and t in trail_at) else False)
+        full.append(clean(np.dstack([a, np.where(bg, 0, 255)]).astype(np.uint8)))
     sil = [f[..., 3] > 0 for f in full]
     away = [int((s != sil[0]).sum()) for s in sil]           # how far each frame is from the opening guard
     peak = int(np.argmax(away))
@@ -1061,6 +1074,10 @@ def video_action(mp4: Path, action: str, out: Path, hold: int = 22, thresh: int 
         raise SystemExit(f"{mp4.name}: no action found (largest change {max(away)} px)")
     back = next((t for t in range(peak, len(away)) if away[t] < 0.1 * away[peak]), active[-1])
     t0, t1 = max(0, active[0] - 2), min(len(full) - 1, back + settle)
+    trail = sorted(t for t in trail_at if t0 <= t <= t1)
+    if trail:
+        print(f"  motion-trail frames {trail} (tinted pixels {[tints[t] for t in trail]}); "
+              + ("trail removed" if no_trail else "kept (--no-trail removes it)"))
     seg = full[t0:t1 + 1]
     union = np.any([f[..., 3] > 0 for f in seg], axis=0)
     cols, rows = np.nonzero(union.any(axis=0))[0], np.nonzero(union.any(axis=1))[0]
@@ -1147,6 +1164,8 @@ def main() -> None:
     ap.add_argument("--width", type=int, default=SIZE, help="Crop width for --video-loop (wider keeps a long blade).")
     ap.add_argument("--video-action", type=Path, default=None, metavar="MP4",
                     help="Cut a one-shot action (poke, slash) from a video (with --action, --out prefix, --sheet).")
+    ap.add_argument("--no-trail", action="store_true",
+                    help="With --video-action: remove a motion trail the model painted behind the weapon.")
     ap.add_argument("--tall", action="store_true",
                     help="With --video-action: the clip was made from the tall 720p start frame (read it at native size).")
     ap.add_argument("--export-video-start-tall", type=Path, default=None, metavar="DIR",
@@ -1172,7 +1191,8 @@ def main() -> None:
             save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_loop.name}")
         return
     if args.video_action:
-        frames, box, ground = video_action(args.video_action, args.action, args.out, tall=args.tall)
+        frames, box, ground = video_action(args.video_action, args.action, args.out, tall=args.tall,
+                                           no_trail=args.no_trail)
         if args.sheet:
             save_sprite_sheet(frames, args.sheet, 24, source=f"image_pipeline/video/out/{args.video_action.name}",
                               loop=False, box=box, ground_y=ground)
