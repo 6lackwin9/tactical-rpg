@@ -104,10 +104,10 @@ HOOKS1 ZN3). `party` lists the expected founders (previews and sims); the campai
 | `exits` | [[11, 4]] | [[11, 4]] | [[11, 4]] | [[0, 4]] |
 | `max_rounds` | 8 | 8 | 10 | 10 |
 | `morale` | true; `morale_leader` `captain_vane`; `morale_break` 50 | false | false | false |
-| `phases` | `execution_wall`, `vane_withdraws` (CQ5 a) | `cull_1`, `cull_2`, `marrow_valve` | `cataclysm` | `bells`, `bloom` |
+| `phases` | `execution_wall`, `vane_withdraws` (CQ5 a) | `cull_1`, `cull_2`, `marrow_valve` | `cataclysm`, `orlov_withdraws` (`A6`) | `bells`, `bloom` |
 | `purse` | 30 | 25 | 100 | 0 |
-| `key_loot` | [{"loot": "loot_gate_pass", "kill": "castellan_footman"}] | [{"loot": "loot_marrow_scalpel", "kill": "proctor_quell"}, {"loot": "loot_marrow_valve", "kill": "proctor_quell"}] | [{"loot": "loot_flensing_talon", "kill": "guild_master_orlov"}, {"loot": "loot_orlovs_retribution", "kill": "guild_master_orlov"}] | [{"loot": "loot_marrow_core", "kill": "calcified_amalgam"}] |
-| `objective_reward` | {"loot": "loot_gilded_pavise", "once": true} | {"loot": "loot_slab_retorts", "once": true} | {} | {"loot": "loot_dreamers_vertebra", "once": true} |
+| `key_loot` | [{"loot": "loot_gate_pass", "kill": "castellan_footman"}] | [{"loot": "loot_marrow_scalpel", "kill": "proctor_quell"}, {"loot": "loot_marrow_valve", "kill": "proctor_quell"}] | [] | [{"loot": "loot_marrow_core", "kill": "calcified_amalgam"}] |
+| `objective_reward` | {"loot": "loot_gilded_pavise", "once": true} | {"loot": "loot_slab_retorts", "once": true} | {"loot": "loot_flensing_talon", "once": true} (plus quest `loot_orlovs_retribution` on M4 completion) | {"loot": "loot_dreamers_vertebra", "once": true} |
 | `tags` | ["main", "loud"] | ["main", "loud"] | ["main", "loud"] | ["main"] |
 
 Purse values are `{"gold_min": n, "gold_max": n, "once": true}` (Scrap is the purse's currency name, CAMPAIGN1 P1).
@@ -116,7 +116,9 @@ Purse values are `{"gold_min": n, "gold_max": n, "once": true}` (Scrap is the pu
   (role npc) on a catalog unit `tithe_captive` (side party, class rogue, level 1, tier minion, gear all `none`,
   `flee_ratio` 1.0, `deck` {}); adults 18-24 by the tone rule. Captives alive at the win add to the saved counter
   (Q-29: ROSTER1 SY1's int flag `youths_saved`, raised by the after-fight dialogue's `add_flag` by the number alive).
-- M4: Elyse is a guest; she joins after the win (bunk 6, join level `average`). Orlov's vendetta: key loot (CQ10 a).
+- M4: Elyse is a guest; she joins after the win (bunk 6, join level `average`). Orlov's vendetta (`A6`, `PR5-34`): Orlov
+  retreats at low HP (`orlov_withdraws`, `hp_below` 20) so he survives into Act 2 for Vesper's loyalty quest, leaving
+  behind `loot_flensing_talon` (`objective_reward`) while the M4 quest turn-in awards `loot_orlovs_retribution`.
   The lore's +5 Warded Tallow is a purse resource reward no encounter field pays (G25). The grease (`toxic_bog`) tiles
   of the arena stand in for Orlov's boiling-fat aura (G12).
 - Interlude: Aline's marrow dose (Q-66 b, a one-fight start buff for the founder the player picks) needs a per-member

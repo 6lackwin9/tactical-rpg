@@ -15,7 +15,7 @@ Instead of hardcoding `ROWS: [StatusRow; 17]` and per-status branches across `st
      - `weaken` (`-mag%` outgoing attack mult), `empower` (`+mag%` outgoing attack mult).
      - `fortify` (`+mag` flat Armor Rating), `expose` (`-mag` flat Armor Rating).
      - `haste` (`+1` flat Move Rate), `slow` (`-1` flat Move Rate).
-     - **`guard` (`FB-06`, `FB-16`, `FB-18`)**: sets Situational Mitigation (`Unit.guard`). Multiple guard sources (`Defend` action, 1-round Stand guard, multi-round `guard` status) do **not** stack with each other: `guard_mitigation = max(running_defend, max_active_guard_status)`. Ranged cover adds to `guard_mitigation` up to `guard_cap` (`0.9` in Slice 1 -> `0.75` in the named balance commit).
+     - **`guard` (`FB-06`, `FB-16`, `FB-18`)**: sets Situational Mitigation (`Unit.guard`). Multiple guard sources (`Defend` action, 1-round Stand guard, multi-round `guard` status) do **not** stack with each other: `guard_mitigation = max(running_defend, max_active_guard_status)`. Ranged cover adds to `guard_mitigation` up to `guard_cap` (`0.90`, kept in `R2-CLOSE` per `FB-136`).
   2. **`tick` (DoT / HoT)**:
      - `poison` (`flat` HP at round end), `burn` (`pct_max_hp` at round end), `regen` (`+pct_max_hp` heal at round end), `bleed` (`6% max_hp` on move/action or round end).
      - **Pipeline rule**: Status ticks bypass Armor and Situational Guard, respecting only `min 1`.

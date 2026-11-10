@@ -15,9 +15,9 @@ Design record for `A2.1` (Dynamic combat evaluation of the 5-stage `U1` pipeline
      - **Layer 2 (Situational Mitigation)**: `Situational = min(guard_cap, max(running_defend, guard_status) + ranged_cover)`. Guard term is skipped when `ignore_guard` is active (ranged cover is kept).
   5. **`Round`**: `max(1, roundi(result))` (clamped to target `current_hp` when applied).
 - **Heal Resolution (`BASERULES1-H`)**:
-  1. **`Base`**: `Skill Heal Base + KNOW * Skill Heal Mult` (or consumable flat/`% max_hp` heal base).
-  2. **`Flat` & `Mult`**: Additive and multiplicative outgoing/incoming heal modifiers (`1 + KNOW_Potency + passive_heal_mult`).
-  3. **`Round`**: `max(1, roundi(result))`, clamped to `max_hp - current_hp`.
+  1. **`Base`**: `Skill Heal Base + roundi(KNOW * Skill Heal Mult)` (or consumable flat/`% max_hp` / `heal_pct` base).
+  2. **`Flat` & `Mult`**: Additive and multiplicative outgoing/incoming heal modifiers (`skill_potency` on `heal` group and band `heal_taken`; `know_potency` applies to status infliction in `S1`, not heals).
+  3. **`Round`**: `max(0, roundi(result))` (`Pipeline::HEAL` `finish_min: 0`), clamped to `max_hp - current_hp`.
 
 ## 2. Mid-fight re-derivation triggers (`U1.2` <-> `A2.2`)
 
@@ -27,7 +27,7 @@ To keep combat state deterministic and avoid mid-fight max-pool shifts (`FB-21b`
 - **Dynamic combat ratings (`Armor Rating`, `Move Rate`, `Initiative`, `Unit.guard`, and active pool-band modifiers)** re-evaluate **only on 3 explicit triggers**:
   1. **Round `roll_over`**: Active statuses tick down, queued next-round statuses activate, and Poise refills to `5` pips (`Max Poise`).
   2. **Mid-round status/guard change**: A Guard skill starts its wind-up (`Option 1C` in `S1.1`), a unit is Poise-broken (`0` pips drops active guard and cancels wind-up), or an `intent_bound` status (`stealth`, `riposte`) is dropped.
-  3. **Pool band crossing**: `HP` or a secondary unit meter (`channel`, `composure`) crosses a declared band threshold (`< 25 %`, `< 50 %`, `>= 80 %`).
+  3. **Pool band crossing**: `HP` or a secondary unit meter (`strain`, `composure`) crosses a declared band threshold (`< 25 %`, `< 50 %`, `>= 80 %`).
 
 ## 3. Fixed vs tunable parameters (`aegis rules --contract`)
 
@@ -35,7 +35,7 @@ To keep combat state deterministic and avoid mid-fight max-pool shifts (`FB-21b`
 | --- | --- | --- | --- |
 | 5-stage pipeline order & 3 re-derivation triggers | **Fixed (Locked)** | `Base -> Flat -> Mult -> Mitigation -> Round` | Core `U1`/`A2` contract |
 | `armor_k` | **Tunable** | `50` (`10..200`) | Armor rating curve constant `R / (R + K)` |
-| `guard_cap` | **Tunable** | `0.90` -> `0.75` (`0.30..0.95`) | Situational mitigation cap (`FB-06` balance commit) |
+| `guard_cap` | **Tunable** | `0.90` (`0.30..0.95`) | Situational mitigation cap (kept at `0.90` in `R2-CLOSE`, `FB-136`) |
 | `crit_mult` / `counter_mult` / `flank_power_mult` | **Tunable** | `1.50` / `0.50` / `1.25` (`0.10..3.00`) | Stage 3 (`Mult`) combat multipliers |
 
 ## 4. Feasibility resolutions (`FB-56`, accepted 2026-11-07)
@@ -43,7 +43,7 @@ To keep combat state deterministic and avoid mid-fight max-pool shifts (`FB-21b`
 1. **Exact ports & trace-only folded factors (`FB-56`)**:
    - `A2.2-S1`: Port `take_damage` (`unit.rs:1091`, keeping `min 1` only when `guard > 0` initially), `heal`, and `heal_amount` (`heal_base + roundi(stat * mult)`) onto `rpgkit_rules::pipeline` with `0` golden diffs.
    - `A2.2-S2`: Record the pre-multiplied `skill_mult` components (`flank`, `splash`, `counter`) as trace-only entries on `Hit.trace` rather than splitting the `f64` multiplication order, preserving exact rounding across all 1,652 golden rows.
-   - `A2.2-S3`: Wire pool-band modifier re-evaluation after `U1` bands land; land the universal `min 1` floor and `guard_cap` `0.90 -> 0.75` as separate, named balance commits.
+   - `A2.2-S3`: Wire pool-band modifier re-evaluation after `U1` bands land; `guard_cap` was kept at `0.90` in `R2-CLOSE` (`FB-136`).
 
 ## 5. Acceptance tests (`A2.2` - `A2.5`)
 

@@ -32,7 +32,7 @@ MASTERPLAN1 sub-block U4. Interactive design session with the user, 2026-11-07. 
 
 ## Feasibility resolutions (`FB-25` to `FB-30`, accepted 2026-11-07)
 
-- **`FB-25` (14 effect types, items & meter bands, `spell_reach`)**: Items (`apply_effects`) and meter bands (including `crit`) are consumers of the same unified grant kinds. Retire unused `spell_reach` (`0` shipped rows, since `U1` moved reach to the skill).
+- **`FB-25` (14 effect types, items & meter bands, `spell_reach`)**: Items (`apply_effects`) and meter bands (including `crit`) are consumers of the same unified grant kinds. Retire `spell_reach` in `PR5-28` (`R14-SPEC-CLEANUP`, migrating `wpn_orb` in `items.json` to `range_band`, since `U1` moved reach to the skill/weapon band).
 - **`FB-26` (Per-target combine rules & 5th grant kind `grant_pool`)**:
   - Add a **combine rule per target** inside `modifier`: `sum` (`stat`, `ap_regen`, `status_potency`, `skill_potency` pooled as `1 + sum`, `forced_move` bonus tiles), `sum_capped` (`resist` per status capped at `100`), `product` (`stagger_taken` filtered by action length), `max` (`foresight` range capped, keeping first-source ID), and `or_flag` (`forced_move` immunity flags).
   - Add a **5th grant kind `grant_pool`** for `meter` (spawns the gauge at battle start, raises its floor, and opens the meter's skills).

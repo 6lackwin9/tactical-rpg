@@ -15,10 +15,10 @@ While `U1` derives continuous `Max Poise` (`CONS * 2 + STR + gear_poise_bonus`, 
   - Calculated from the skill's base `stagger` and situational multipliers:
     `D = roundi(skill_stagger * windup_mult * guard_mult * flank_mult * repeat_mult * passive_mult)`.
   - **Multipliers**:
-    - Target is in **wind-up**: `stagger_windup_mult` (`2.0x`).
+    - Target is in **wind-up**: `stagger_windup_mult` (`2.0x` ruleset default; tuned to `1.0x` on `rulesets.timeline` in `R1-BAL` `H6`).
     - Target has **active Guard** (`Unit.guard > 0`, whether from a running Defend or the `S1` `guard` status): `stagger_guard_mult` (`0.5x`).
     - Attacker **flanks** target: `flank_stagger_mult` (`1.5x`).
-    - Repeat hit in same action: `stagger_repeat_mult` (`0.5x`).
+    - Target was **broken last round** (`broken_last_round`): `stagger_repeat_mult` (`0.5x`).
 - **Quantized Pip Loss Rule (`floor(D / T)`)**:
   - A hit dealing `D` raw poise damage removes:
     `pips_lost = clamp(D / T, 0, max_pip_loss_per_hit)` (integer division `floor(D / T)`, capped at `max_pip_loss_per_hit = 3`).
@@ -36,7 +36,7 @@ While `U1` derives continuous `Max Poise` (`CONS * 2 + STR + gear_poise_bonus`, 
 - **AP Debt to Stagger/Stun (`C10`)**:
   - Units may overspend AP during planning; ending a round plan at `>= debt_stagger` (`3` AP debt) queues `stagger` for next round, and `>= debt_stun` (`5` AP debt) queues `stun`.
 - **Unit Meters (`unit_meters`)**:
-  - Secondary resource meters (`channel`, `composure`) use the `U1` generic pool store (unlocked via `U4`'s `grant_pool` passive kind per `FB-26`).
+  - Secondary resource meters (`strain`, `composure`) use the `U1` generic pool store (unlocked via `U4`'s `grant_pool` passive kind per `FB-26`).
   - Crossing a `U1` pool band (`< 25%`, `< 50%`, `>= 80%`) applies its band modifiers (`FB-25`) or grants a status (`S1`).
 
 ## 3. Fixed vs tunable parameters (`aegis rules --contract`)
@@ -46,7 +46,7 @@ While `U1` derives continuous `Max Poise` (`CONS * 2 + STR + gear_poise_bonus`, 
 | Quantized pip loss (`floor(D / T)`) & break-at-0 refill | **Fixed (Locked)** | `clamp(floor(D / T), 0, max_pip_loss)` | Core `S2` anti-chip poise rule |
 | `poise_pips` | **Tunable** | `5` (`3..8`) | Number of discrete poise pips per unit |
 | `max_pip_loss_per_hit` | **Tunable** | `3` (`1..5`) | Cap on pips lost from a single hit |
-| `stagger_windup_mult` / `stagger_guard_mult` / `flank_stagger_mult` | **Tunable** | `2.0` / `0.5` / `1.5` (`0.25..3.0`) | Situational poise damage multipliers |
+| `stagger_windup_mult` / `stagger_guard_mult` / `flank_stagger_mult` | **Tunable** | `2.0` (`1.0` in `timeline`) / `0.5` / `1.5` (`0.25..3.0`) | Situational poise damage multipliers (`R1-BAL` `H6` tuned `timeline` `stagger_windup_mult` to `1.0`) |
 | `debt_stagger` / `debt_stun` | **Tunable** | `3` / `5` (`1..10`) | AP debt thresholds queuing `stagger` / `stun` |
 
 ## 4. Feasibility resolutions (`FB-49`, accepted 2026-11-07)
