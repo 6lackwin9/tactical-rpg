@@ -232,6 +232,10 @@ This section records every option explored, Tushar's exact feedback, why rejecte
 
   | `Sunkward Battle Theme (1)` | unknown | Compose (BPM 128, Length 2:00) | candidate: 123.2 s, pulse about 120 BPM (autocorrelation peaks 60, 120), steady 20 to 118 s; **D minor** as its prompt said (D, A, F, G), while 1B and the hub came out in F minor although their prompts said D minor (Tushar noticed the D/F mix-up); no exact repeat, so the free seam is weak (distance 0.023); `--bpm 120 --xfade 1.0` keeps the loop to whole bars: 92.0 s, 46 bars, waveform match 0.41; review `battle_bar120.ogg`, `battle_bar120_seam.mp3` (and the free cut `battle.ogg`, `battle_seam.mp3`) |
 
+  | `Sunkward Battle Theme (Remix)` | unknown | Remix of the battle take, the darker prompt | darker as asked (spectral centroid 2,158 to 1,361 Hz, upper mids 13 to 4 %), still 120 BPM; "too busy in front, the background track seems ok" (Tushar). **Split stems** (song menu) gave drums, bass, other and vocals (Drive `music/out/stems_battle_remix/`); Tushar keeps **bass + other**, the drums and vocals are inconsistent. `music.py` now mixes several stems (`SRC SRC ...`): bass + other, `--bpm 120 --xfade 1.0`: 82.0 s, 41 bars, seam distance 0.0023, waveform match 0.81 (the full mix: 0.027 and 0.41); the bass stem drops out at 80 to 90 s, so the loop sits before it. Review `battle_bass_other.ogg`, `battle_bass_other_seam.mp3` |
+
+  Stems are a tool for fixing a take: keep the parts that work, replace or drop the rest; a bed without its noisy parts also loops far better. Next idea (Tushar): a church and Inquisition battle theme (pipe organ, monk choir, bells, timpani); prompt in the brief.
+
   Keys as measured: menu and hub F minor, battle D minor. One key for the set means asking for F minor; whether the switch is heard is Tushar's call.
 
   Seeds matter for new Compose work (455684). Tracks already in Tushar's Flow Music library need no seed: they are the bases for Remix and Variation, and a Variation reports its new seed.

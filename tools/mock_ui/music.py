@@ -237,7 +237,8 @@ def loudness(x: np.ndarray, target_db: float, ceiling_db: float = -1.0, max_limi
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Import a generated music track as a game track.")
-    ap.add_argument("src", type=Path)
+    ap.add_argument("src", type=Path, nargs="+",
+                    help="The track, or several stems of one track (Flow Music's Split stems) to mix together.")
     ap.add_argument("--out", type=Path, required=True, help="Ogg file to write (e.g. assets/audio/music/<key>.ogg).")
     ap.add_argument("--no-loop", action="store_true", help="Keep the whole track (credits, stingers).")
     ap.add_argument("--whole", action="store_true",
@@ -252,10 +253,13 @@ def main() -> None:
     ap.add_argument("--target-db", type=float, default=None, help="RMS level; default: the game tracks' median.")
     ap.add_argument("--preview", type=Path, default=None, help="Also write an MP3 of the seam to check by ear.")
     a = ap.parse_args()
-    x = decode(a.src)
+    parts = [decode(p) for p in a.src]
+    n = min(len(p) for p in parts)
+    x = sum(p[:n] for p in parts)                              # stems of one track share its timeline
     mono = x.mean(1)
     target = a.target_db if a.target_db is not None else reference_rms_db()
-    print(f"{a.src.name}: {len(x) / SR:.1f} s, RMS {db(rms(x)):.1f} dBFS, peak {db(np.abs(x).max()):.1f} dBFS; "
+    name = a.src[0].name if len(a.src) == 1 else " + ".join(p.stem for p in a.src)
+    print(f"{name}: {len(x) / SR:.1f} s, RMS {db(rms(x)):.1f} dBFS, peak {db(np.abs(x).max()):.1f} dBFS; "
           f"target RMS {target:.1f} dBFS")
     if a.no_loop:
         out = loudness(x, target)

@@ -80,3 +80,12 @@ battle names F minor.
 instrumental, no vocals, 16-bit SNES-era dark fantasy RPG battle theme, lo-fi warm grainy sampled orchestra, driving
 timpani and low frame drums, fast staccato low strings, anvil and chain hits as percussion, reedy hurdy-gurdy lead,
 short choir stabs, F minor, 128 bpm, tense and determined, not heroic, steady intensity, no slow intro
+
+================================================================ ROUND 4 - battle, church and Inquisition (Tushar's idea)
+Compose: BPM 120, Length 2:00, Seed 455684. If Instrumental also removes the choir, turn it off and keep "wordless
+choir, no lyrics, no solo singer".
+
+instrumental, 16-bit SNES-era dark fantasy RPG battle theme, gothic cathedral and inquisition, sampled pipe organ
+chords, low wordless monk choir chanting in unison, tolling cathedral bells, pounding timpani, low staccato string
+ostinato underneath, sparse and heavy, the organ and choir carry it with no busy lead melody, solemn, ominous,
+relentless, repeating 8-bar sections, D minor, 120 bpm
