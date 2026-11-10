@@ -8,6 +8,7 @@ Excluded (asked first, never applied alone): anything that cannot be undone (a p
 
 | Date | Item | What was asked | Applied (recommended option) | Where | Undo cost |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-10 | `FB-174` (PK1-S1 readings) | Ranges, recoil minimum, Spasm reach and hit events, a spent `unmark` with nothing to undo | All kept as built: recoil at least 1; Spasm any distance with no hit events; an empty `unmark` is spent with a log line; AP-hold reason text added to the GUI slice | READY `PR5-6`, PK2 S1 | low |
 | 2026-11-10 | PK2 `.1` defaults (`docs/sessions/PK2_GRAFTS.md` 9) | Details left open by ACTS23 5.2 and CANON | Technique slot: clearing free, assigning pays again; durability attack 1, technique 2, dulled -50% power; loot at full durability; graft tiers I/II/III (+10 floor each; III adds +1 Calcification); a Stage IV two-hander goes to the stash; 3-4 techniques per family (**user 2026-11-10: accepted**; the tier default replaced by the tier and floor rulings) | `docs/sessions/PK2_GRAFTS.md` | none (not built yet) |
 | 2026-11-10 | `FB-171` (phase `side` and `swap` defaults) | A turned unit's booked actions; a `neutral` side; turning heroes | Kept: booked actions land; two sides only; encounter data cannot turn a hero, but a hero's own Stage V breach turns it (PK2) | READY Section 4 | low |
 | 2026-11-10 | `FB-169` (roll_table) | A `guard` inside a table on `ally_hit` rolls after the damage | Option A: the check refuses it (`PR5-16`); readings kept; archive splitter fix (`PR5-17`) | READY Section 1 | none (not built) |

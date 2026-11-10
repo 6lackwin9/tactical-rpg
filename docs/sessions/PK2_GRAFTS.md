@@ -122,7 +122,7 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 
 | Slice | Scope | Acceptance |
 | --- | --- | --- |
-| `PK2-S1` (Build's PR5-8) | Unit track, stage passives, `forbid_hands`, `pierce_melee`, max HP offset, the `mark` settle (with `unmark`), Stage V departure | unit tests; **0 golden diffs** (no data) |
+| `PK2-S1` (Build's PR5-8) | Unit track, stage passives, `forbid_hands`, `pierce_melee`, max HP offset, the `mark` settle (with `unmark`), Stage V departure (a hero still hostile at the battle end settles as lost before `hero_ends` pairs members, `FB-174`), the priest keystone's skill `unmark` with `uses_per_battle` | unit tests; **0 golden diffs** (no data) |
 | `PK2-S2` (PR5-9) | Body slots, item type `graft`, the floor from the graft count (5 / 15 / 30 / 50, the keystone graft in a body slot), the 3-graft gate for Tier III, `floor_offset`, the marrow-active limit from grafts | unit tests; checks_golden only if a new item type joins a listed message (named) |
 | `PK2-S3` (PR5-10) | Recipe catalog and service, member effects | unit tests; 0 golden diffs |
 | `PK2-S4` (PR5-12) | Techniques per family, slots from mastery (+masterwork), Cold Steel-round gate (after PR5-4) | unit tests; 0 golden diffs |
