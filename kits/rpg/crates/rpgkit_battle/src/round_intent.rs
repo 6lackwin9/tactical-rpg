@@ -430,9 +430,15 @@ pub fn battle_start(w: &mut World, defaults: &[(UnitId, String)]) {
         w.round_states.entry(c).or_default().facing = facing;
     }
     for (c, id) in defaults {
-        if let Some(i) = RoundIntent::parse(id).filter(|i| w.ruleset.numbers.intents.iter().any(|x| x == i.id())) {
-            w.round_states.entry(*c).or_default().intent = Some(i);
-        }
+        set_default_intent(w, *c, id);
+    }
+}
+
+/// TQ23 (a): unit `c` takes intent `id` when the ruleset plays it (battle start; PHASEFX1: a swapped-in row's default
+/// intent; the rule `round_intent` is the caller's check).
+pub fn set_default_intent(w: &mut World, c: UnitId, id: &str) {
+    if let Some(i) = RoundIntent::parse(id).filter(|i| w.ruleset.numbers.intents.iter().any(|x| x == i.id())) {
+        w.round_states.entry(c).or_default().intent = Some(i);
     }
 }
 

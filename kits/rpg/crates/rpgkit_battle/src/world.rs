@@ -284,6 +284,32 @@ pub struct World {
     /// The AP every unit regains at a round start (`EncounterDef.ap_regen`; below 0: back to full), read by the AP
     /// forecast (INPUT1 AP1).
     pub ap_regen: i32,
+    /// PHASEFX1: the units a phase `side` turned `hostile_all` and the foe / friend lists they bring (empty: the two
+    /// sides as always). Only `set_side` changes it.
+    pub sides: Sides,
+}
+
+/// PHASEFX1 (ACTS23 PK6 hook l, engine-only): who fights whom once a phase `side` turned units `hostile_all`. A rogue
+/// stays on the enemy side (the enemy AI plans it, it counts as a foe for the win objectives) but fights every other
+/// unit: its foes are every unit of both sides, its only friend itself; the other enemy-side units have the party side
+/// and the rogues as foes. The party side's lists are unchanged (the rogues are enemies already). `views` holds each
+/// enemy-side unit's (foes, friends) while any rogue exists; empty otherwise, so `foes_of` and `friends_of` read the
+/// two side lists exactly as before.
+#[derive(Debug, Clone, Default)]
+pub struct Sides {
+    rogues: Vec<UnitId>,
+    views: IndexMap<UnitId, (Vec<UnitId>, Vec<UnitId>)>,
+}
+
+impl Sides {
+    /// The rogues, in the order they turned.
+    pub fn rogues(&self) -> &[UnitId] {
+        &self.rogues
+    }
+
+    pub fn is_rogue(&self, c: UnitId) -> bool {
+        self.rogues.contains(&c)
+    }
 }
 
 impl World {
@@ -434,6 +460,10 @@ impl World {
     }
 
     pub fn foes_of(&self, c: UnitId) -> &[UnitId] {
+        // PHASEFX1: a rogue's battle (none without a `hostile_all` side effect)
+        if let Some((foes, _)) = self.sides.views.get(&c) {
+            return foes;
+        }
         if self.allies.contains(&c) {
             &self.enemies
         } else if self.enemies.contains(&c) {
@@ -460,6 +490,9 @@ impl World {
     }
 
     pub fn friends_of(&self, c: UnitId) -> &[UnitId] {
+        if let Some((_, friends)) = self.sides.views.get(&c) {
+            return friends;
+        }
         if self.allies.contains(&c) {
             &self.allies
         } else if self.enemies.contains(&c) {
@@ -467,6 +500,63 @@ impl World {
         } else {
             &[]
         }
+    }
+
+    /// PHASEFX1: unit `c` goes to side `to` (`encounter::SIDE_TARGETS`): `hostile_all` puts it on the enemy side as a
+    /// rogue (`Sides`), `party` or `enemy` on that side (no longer a rogue); a unit changing side joins the end of its new
+    /// side's list. Returns whether anything changed (an unknown `to` or a unit on no side changes nothing).
+    pub fn set_side(&mut self, c: UnitId, to: &str) -> bool {
+        use crate::encounter::{ENEMY_SIDE, HOSTILE_ALL, PARTY_SIDE};
+        let (ally, rogue) = (self.allies.contains(&c), self.sides.rogues.contains(&c));
+        if !ally && !self.enemies.contains(&c) {
+            return false;
+        }
+        let (to_party, to_rogue) = match to {
+            HOSTILE_ALL => (false, true),
+            PARTY_SIDE => (true, false),
+            ENEMY_SIDE => (false, false),
+            _ => return false,
+        };
+        if to_party == ally && to_rogue == rogue {
+            return false;
+        }
+        if to_party && !ally {
+            self.enemies.retain(|&e| e != c);
+            self.allies.push(c);
+        } else if !to_party && ally {
+            self.allies.retain(|&a| a != c);
+            self.enemies.push(c);
+        }
+        self.sides.rogues.retain(|&r| r != c);
+        if to_rogue {
+            self.sides.rogues.push(c);
+        }
+        self.rebuild_sides();
+        true
+    }
+
+    /// PHASEFX1: each enemy-side unit's (foes, friends) while a rogue exists (`Sides`); none without one.
+    fn rebuild_sides(&mut self) {
+        self.sides.views.clear();
+        if self.sides.rogues.is_empty() {
+            return;
+        }
+        let rogues = self.sides.rogues.clone();
+        for &c in &self.enemies {
+            let view = if rogues.contains(&c) {
+                (self.allies.iter().chain(&self.enemies).copied().filter(|&u| u != c).collect(), vec![c])
+            } else {
+                let foes = self.allies.iter().copied().chain(rogues.iter().copied()).collect();
+                (foes, self.enemies.iter().copied().filter(|u| !rogues.contains(u)).collect())
+            };
+            self.sides.views.insert(c, view);
+        }
+    }
+
+    /// PHASEFX1: unit `c` becomes `u` in place (a phase `swap`: same id, cell and side lists); its new HP is journaled.
+    pub fn swap_unit(&mut self, c: UnitId, u: Unit) {
+        self.units[c] = u;
+        self.journal(c);
     }
 
     // ---- CombatGrid operations that need unit state -----------------------------------------------------------

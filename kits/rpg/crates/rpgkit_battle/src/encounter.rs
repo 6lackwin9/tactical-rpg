@@ -1,7 +1,8 @@
 //! The encounter rules a battle runs under (scripts/combat/session/): EncounterObjectives (rout, hold, escape, slay,
 //! guests and protect), EncounterPhases (boss phases: hp_below and round triggers, line / wave / status / ai /
 //! enrage effects, HOOKS1's `deck` effect under the rule deck, ENCOUNTER2's `kill` effect and phase groups,
-//! ENCOUNTER2-C's `talk` effect and the triggers `round` at a block, `downed` and `broken`; PHASEFOLD:
+//! ENCOUNTER2-C's `talk` effect and the triggers `round` at a block, `downed` and `broken`; PHASEFX1's `side` and
+//! `swap` effects; PHASEFOLD:
 //! the reinforcement wave as an `arrival` phase) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
 
@@ -318,6 +319,34 @@ pub const KILL_MAX_WITHIN: i32 = 11;
 /// Each session starts from it (`Session::kill_past_unkillable`).
 pub const KILL_OVERRIDES_UNKILLABLE: bool = true;
 
+/// PHASEFX1 (ACTS23 PK6 hook l): the phase effect that turns named units (`units` refs) to another side: `to` =
+/// `hostile_all` (the unit fights every other unit and counts as a foe for the win objectives) or a battle side id
+/// (`party`, `enemy`); its keys and targets. A side names 1 to KILL_MAX_UNITS refs.
+pub const SIDE_EFFECT: &str = "side";
+pub const SIDE_EFFECT_KEYS: [&str; 3] = ["type", "units", "to"];
+pub const HOSTILE_ALL: &str = "hostile_all";
+pub const PARTY_SIDE: &str = "party";
+pub const ENEMY_SIDE: &str = "enemy";
+pub const SIDE_TARGETS: [&str; 3] = [HOSTILE_ALL, PARTY_SIDE, ENEMY_SIDE];
+/// PHASEFX1 (ACTS23 PK6 hook m): the phase effect that replaces a unit in place by another unit row (`unit` an
+/// encounter ref, `to` a unit ref) on the same cell, keeping its side; `hp` = `keep_pct` (the same share of the new max
+/// HP, the default) or `full`. One cell per unit (2 x 2 footprints are hook n).
+pub const SWAP_EFFECT: &str = "swap";
+pub const SWAP_EFFECT_KEYS: [&str; 4] = ["type", "unit", "to", "hp"];
+pub const SWAP_KEEP_PCT: &str = "keep_pct";
+pub const SWAP_FULL: &str = "full";
+pub const SWAP_HP: [&str; 2] = [SWAP_KEEP_PCT, SWAP_FULL];
+
+/// PHASEFX1: the HP a swapped-in unit of max HP `new_max` starts with: `full`, or (`keep_pct`) the share `hp / max`
+/// the old unit held, `roundi(new_max * hp / max)`, at least 1 while the old unit stood and at most `new_max`.
+pub fn swap_hp(hp: i32, max: i32, new_max: i32, mode: &str) -> i32 {
+    if mode == SWAP_FULL || max <= 0 {
+        return new_max;
+    }
+    let share = (new_max as f64 * hp.max(0) as f64 / max as f64).round() as i32;
+    share.clamp(if hp > 0 { 1 } else { 0 }, new_max.max(0))
+}
+
 /// ENCOUNTER2-C DT1: the phase effect that opens a world dialogue tree over the battle (`dialogue` a tree ref, `speaker`
 /// "" or a character ref) and its keys. No rule reads it: the session only lists its cue (`Session::talks`).
 pub const TALK_EFFECT: &str = "talk";
@@ -358,6 +387,11 @@ impl PhaseDef {
 
     pub fn wave_refs(&self) -> Vec<String> {
         self.effects_of("wave").flat_map(|fx| value::strings(fx, "units")).collect()
+    }
+
+    /// PHASEFX1: the unit refs this phase's swaps turn units into (the session builds each once at the start).
+    pub fn swap_refs(&self) -> Vec<String> {
+        self.effects_of(SWAP_EFFECT).map(|fx| value::string(fx, "to", "")).filter(|r| !r.is_empty()).collect()
     }
 
     /// PHASEFOLD: an `arrival` trigger, the reinforcement wave (never due, never reserved; not a boss phase).
@@ -461,6 +495,16 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                             out.insert("units".into(), Value::from(value::strings(fx, "units")));
                             out.insert("by".into(), Value::from(value::string(fx, "by", "")));
                             out.insert("within".into(), Value::from(value::int(fx, "within", 0)));
+                        }
+                        // PHASEFX1: the named units change side; one unit becomes another row in place
+                        SIDE_EFFECT => {
+                            out.insert("units".into(), Value::from(value::strings(fx, "units")));
+                            out.insert("to".into(), Value::from(value::string(fx, "to", "")));
+                        }
+                        SWAP_EFFECT => {
+                            out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
+                            out.insert("to".into(), Value::from(value::string(fx, "to", "")));
+                            out.insert("hp".into(), Value::from(value::string(fx, "hp", SWAP_KEEP_PCT)));
                         }
                         // ENCOUNTER2-C DT1: kept for the battle screen's talk box; no rule reads it
                         TALK_EFFECT => {
@@ -658,6 +702,13 @@ impl Phases {
         let mates: Vec<String> = self.phases.iter().filter(|p| self.group_of(&p.id) == group && !self.fired.contains_key(&p.id) && !self.dropped.contains(&p.id)).map(|p| p.id.clone()).collect();
         self.due.retain(|d| !mates.contains(d));
         self.dropped.extend(mates);
+    }
+
+    /// PHASEFX1: a swapped unit's new row profile becomes its base (the ai settings of fired phases still apply over it).
+    pub fn rebase_profile(&mut self, c: UnitId, p: &AiProfile) {
+        if let Some(b) = self.base_profiles.get_mut(&c) {
+            *b = p.clone();
+        }
     }
 
     /// Rule 5: live profiles = base + the ai settings of every phase fired before `round` (or at its start).
@@ -885,6 +936,21 @@ impl Morale {
             return;
         }
         self.groups.push(Group { members: keys, size: size.max(1), value: START, broken: false, announced: false, line: String::new(), source: source.to_string() });
+    }
+
+    /// PHASEFX1: `key` leaves its group (a unit a phase `side` turned): the group's size shrinks by one (at least 1); a
+    /// leader key is cleared. Nothing for a key in no group.
+    pub fn leave(&mut self, key: &str) {
+        let gi = self.group_of(key);
+        if gi < 0 {
+            return;
+        }
+        let g = &mut self.groups[gi as usize];
+        g.members.retain(|m| m != key);
+        g.size = (g.size - 1).max(1);
+        if self.leader == key {
+            self.leader.clear();
+        }
     }
 
     pub fn has_group(&self, source: &str) -> bool {

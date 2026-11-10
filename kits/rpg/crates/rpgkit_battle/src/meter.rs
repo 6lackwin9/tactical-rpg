@@ -132,36 +132,56 @@ pub fn battle_start(w: &mut World) {
     if !on(w) {
         return;
     }
+    for c in 0..w.units.len() {
+        unit_start(w, c);
+    }
+    for i in 0..w.meters.gauges.len() {
+        settle_band(w, i, false);
+    }
+}
+
+/// UM1 for one unit `c` (rule on): its passive `meter` effects and the ruleset's pools become its gauges, its meter
+/// skills open (band entry is the caller's).
+fn unit_start(w: &mut World, c: UnitId) {
     let cat = w.cat.clone();
     let pools = w.ruleset.numbers.unit_pools.clone();
-    for c in 0..w.units.len() {
-        // U1.2-S5: the ruleset's pools after the passives' meters (start -1: the row's start)
-        let held = w.units[c].passive_meters.clone().into_iter().map(|h| (h.meter, h.start, h.floor));
-        for (meter, start, floor) in held.chain(pools.iter().map(|m| (m.clone(), -1, None))) {
-            let Some(def) = cat.unit_meters.get(&meter) else { continue };
-            let max = max_of(w, c, def);
-            let floor = floor.unwrap_or(def.min).clamp(def.min, max);
-            if let Some(i) = find(w, c, &meter) {
-                let g = &mut w.meters.gauges[i];
-                g.floor = g.floor.max(floor);
-                g.value = g.value.max(g.floor);
-                continue;
-            }
-            let start = match (start < 0, def.start_full) {
-                (true, true) => max,
-                (true, false) => def.start,
-                _ => start,
-            };
-            let value = start.clamp(def.min, max).max(floor);
-            w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
-            for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
-                if !w.units[c].meter_skills.contains(s) {
-                    w.units[c].meter_skills.push(s.clone());
-                }
+    // U1.2-S5: the ruleset's pools after the passives' meters (start -1: the row's start)
+    let held = w.units[c].passive_meters.clone().into_iter().map(|h| (h.meter, h.start, h.floor));
+    for (meter, start, floor) in held.chain(pools.iter().map(|m| (m.clone(), -1, None))) {
+        let Some(def) = cat.unit_meters.get(&meter) else { continue };
+        let max = max_of(w, c, def);
+        let floor = floor.unwrap_or(def.min).clamp(def.min, max);
+        if let Some(i) = find(w, c, &meter) {
+            let g = &mut w.meters.gauges[i];
+            g.floor = g.floor.max(floor);
+            g.value = g.value.max(g.floor);
+            continue;
+        }
+        let start = match (start < 0, def.start_full) {
+            (true, true) => max,
+            (true, false) => def.start,
+            _ => start,
+        };
+        let value = start.clamp(def.min, max).max(floor);
+        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
+        for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
+            if !w.units[c].meter_skills.contains(s) {
+                w.units[c].meter_skills.push(s.clone());
             }
         }
     }
-    for i in 0..w.meters.gauges.len() {
+}
+
+/// PHASEFX1: unit `c` became another row (a phase swap; rule unit_meters): the old row's gauges go, the new row's
+/// start as at the battle start (UM1, each in the band of its start value). Nothing in classic.
+pub fn restart_unit(w: &mut World, c: UnitId) {
+    if !on(w) {
+        return;
+    }
+    w.meters.gauges.retain(|g| g.unit != c);
+    let first = w.meters.gauges.len();
+    unit_start(w, c);
+    for i in first..w.meters.gauges.len() {
         settle_band(w, i, false);
     }
 }

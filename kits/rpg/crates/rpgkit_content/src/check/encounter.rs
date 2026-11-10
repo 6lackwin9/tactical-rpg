@@ -7,7 +7,7 @@ use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::encounter::{
     ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, BROKEN, BROKEN_KEYS, DOWNED, DOWNED_KEYS, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PARTY_NAME, PARTY_PREFIX, PICK_DEFAULTS, ROUND_KEYS, STAY_HOLD,
-    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS,
+    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS, SIDE_EFFECT, SIDE_EFFECT_KEYS, SIDE_TARGETS, SWAP_EFFECT, SWAP_EFFECT_KEYS, SWAP_HP, SWAP_KEEP_PCT, ENEMY_SIDE, PARTY_SIDE,
 };
 use rpgkit_battle::grid::{rows_valid, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
@@ -63,6 +63,15 @@ pub fn arrival_errors(e: &Dict) -> Vec<String> {
     errors
 }
 
+/// PHASEFX1: the side of unit row `u` (its `side`, the schema default `enemy` when empty); None for no row.
+pub fn unit_row_side(u: &Dict) -> Option<String> {
+    if u.is_empty() {
+        return None;
+    }
+    let side = json::s(u, "side");
+    Some(if side.is_empty() { ENEMY_SIDE.to_string() } else { side })
+}
+
 /// An int, or a float with no fraction (EncounterPhases._is_whole; JSON numbers may load as floats).
 fn whole(v: &Value) -> bool {
     json::is_int(v) || v.as_f64().is_some_and(|f| f == f.floor())
@@ -99,10 +108,14 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("The party holds at most {MAX_PARTY} members."));
     }
     errors.extend(arrival_errors(e));
-    errors.extend(phase_problems(e, &|r: &str| {
-        let target = v.get("units", r);
-        !target.is_empty() && super::passes_filter(wave_field(false), target)
-    }));
+    errors.extend(phase_problems(
+        e,
+        &|r: &str| {
+            let target = v.get("units", r);
+            !target.is_empty() && super::passes_filter(wave_field(false), target)
+        },
+        &|r: &str| unit_row_side(v.get("units", r)),
+    ));
     // ENCOUNTER2-C DT4: dialogue trees are world rows
     if !talk_effects(e).is_empty() {
         errors.push("A talk needs a world encounter (dialogue trees live in worlds).".into());
@@ -182,8 +195,9 @@ const DEFAULT_STATUS_ROUNDS: i64 = 2;
 const ENRAGE_POWER_MIN: i64 = 1;
 const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
-/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`; ENCOUNTER2 P1 `kill`; ENCOUNTER2-C DT1 `talk`).
-const EFFECTS: [&str; 9] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT, TALK_EFFECT];
+/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`; ENCOUNTER2 P1 `kill`; ENCOUNTER2-C DT1 `talk`;
+/// PHASEFX1 `side` and `swap`).
+const EFFECTS: [&str; 11] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT, TALK_EFFECT, SIDE_EFFECT, SWAP_EFFECT];
 /// ENCOUNTER2 P2 adds `group`.
 const PHASE_KEYS: [&str; 6] = ["id", "name", "trigger", "effects", "pause_autoplay", "group"];
 /// ENCOUNTER2 P2: a group is 1 to 24 characters a-z, 0-9 or _.
@@ -217,6 +231,8 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         rpgkit_data::SHAKE_EFFECT => &rpgkit_data::SHAKE_EFFECT_KEYS,
         KILL_EFFECT => &KILL_EFFECT_KEYS,
         TALK_EFFECT => &TALK_EFFECT_KEYS,
+        SIDE_EFFECT => &SIDE_EFFECT_KEYS,
+        SWAP_EFFECT => &SWAP_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
     }
 }
@@ -234,8 +250,9 @@ pub fn reserved_refs(e: &Dict) -> Vec<String> {
 
 /// EncounterPhases.problems: the `phases` list (the arrival included, PHASEFOLD 1.3) and the unit cap across enemies
 /// and phase waves. `ref_ok(ref)` says whether a phase-wave ref resolves under the wave field's enemy filter (the
-/// arrival's refs are checked as that field, `wave_field`).
-pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
+/// arrival's refs are checked as that field, `wave_field`); `unit_side(ref)` is the side of the unit row a swap's `to`
+/// names (None: no such unit; PHASEFX1).
+pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool, unit_side: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
     let mut errors = Vec::new();
     let raw = e.get("phases").cloned().unwrap_or(Value::Array(Vec::new()));
     let Value::Array(list) = raw else {
@@ -311,6 +328,8 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
         errors.extend(event_trigger_errors(&tag, json::get(phase, "trigger"), e, &known));
         errors.extend(effects_errors(&tag, json::get(phase, "effects"), &known, ref_ok, arrival));
         errors.extend(kill_errors(&tag, phase, e, &known));
+        errors.extend(side_errors(&tag, phase, e, &known));
+        errors.extend(swap_errors(&tag, phase, e, &known, unit_side));
         errors.extend(enrage_errors(&tag, phase, &enemies));
         if arrival {
             errors.extend(arrival_shape_errors(&tag, phase, index));
@@ -599,6 +618,75 @@ fn kill_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String]) -> Vec<Strin
             errors.push(format!("Phase '{tag}': within must be 0..{KILL_MAX_WITHIN}."));
         } else if json::to_int(&within) > 0 && by_ref.is_empty() {
             errors.push(format!("Phase '{tag}': a kill within tiles needs a by unit."));
+        }
+    }
+    errors
+}
+
+/// PHASEFX1 (ACTS23 PK6 hook l): each `side` effect of `phase`: 1 to KILL_MAX_UNITS refs, each an enemy, a phase-wave
+/// ref or a guest, never a hero (a `party` ref), a protected guest or a slay objective's target; `to` one of
+/// SIDE_TARGETS. One error per mistake.
+fn side_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String]) -> Vec<String> {
+    let mut errors = Vec::new();
+    let (party, guests, protect) = (strings(json::get(e, "party")), strings(json::get(e, "guests")), strings(json::get(e, "protect")));
+    let slay = if json::s(e, "objective") == "slay" { json::s(e, "objective_unit") } else { String::new() };
+    for fx in dicts(json::get(phase, "effects")).into_iter().filter(|fx| json::s(fx, "type") == SIDE_EFFECT) {
+        let units = json::arr(json::get(fx, "units"));
+        if units.is_empty() || units.len() > KILL_MAX_UNITS {
+            errors.push(format!("Phase '{tag}': a side names 1 to {KILL_MAX_UNITS} units."));
+        }
+        for u in units {
+            let r = gstr(u);
+            if u.is_string() && party.contains(&r) {
+                errors.push(format!("Side names hero '{r}'."));
+            } else if u.is_string() && protect.contains(&r) {
+                errors.push(format!("Side names the protected guest '{r}'."));
+            } else if u.is_string() && !slay.is_empty() && r == slay {
+                errors.push(format!("Side names the slay target '{r}'."));
+            } else if !u.is_string() || (!known.contains(&r) && !guests.contains(&r)) {
+                errors.push(format!("Phase '{tag}': side unit '{r}' is not in this encounter."));
+            }
+        }
+        let to = fx.get("to").cloned().unwrap_or(Value::Null);
+        if !to.as_str().is_some_and(|t| SIDE_TARGETS.contains(&t)) {
+            errors.push(format!("Phase '{tag}': side to '{}' must be one of {}.", gstr(&to), SIDE_TARGETS.join(", ")));
+        }
+    }
+    errors
+}
+
+/// PHASEFX1 (ACTS23 PK6 hook m): each `swap` effect of `phase`: `unit` an enemy, a phase-wave ref or a guest (never a
+/// hero); `to` a unit row (`unit_side`) of the swapped unit's side (a guest's is the party side, the others' the enemy
+/// side); `hp` one of SWAP_HP (default keep_pct). One error per mistake.
+fn swap_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String], unit_side: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
+    let mut errors = Vec::new();
+    let (party, guests) = (strings(json::get(e, "party")), strings(json::get(e, "guests")));
+    for fx in dicts(json::get(phase, "effects")).into_iter().filter(|fx| json::s(fx, "type") == SWAP_EFFECT) {
+        let unit = fx.get("unit").cloned().unwrap_or(Value::Null);
+        let r = gstr(&unit);
+        let mut side = None;
+        if unit.is_string() && party.contains(&r) {
+            errors.push(format!("Swap names hero '{r}'."));
+        } else if unit.is_string() && guests.contains(&r) && !known.contains(&r) {
+            side = Some(PARTY_SIDE);
+        } else if unit.is_string() && known.contains(&r) {
+            side = Some(ENEMY_SIDE);
+        } else {
+            errors.push(format!("Phase '{tag}': swap unit '{r}' is not in this encounter."));
+        }
+        let to = fx.get("to").cloned().unwrap_or(Value::Null);
+        let to_ref = gstr(&to);
+        match to.as_str().filter(|t| !t.is_empty()).and_then(unit_side) {
+            None => errors.push(format!("Phase '{tag}': swap to '{to_ref}' is not a unit.")),
+            Some(row_side) => {
+                if let Some(side) = side.filter(|s| *s != row_side) {
+                    errors.push(format!("Phase '{tag}': swap to '{to_ref}' is on the {row_side} side; '{r}' fights on the {side} side."));
+                }
+            }
+        }
+        let hp = fx.get("hp").cloned().unwrap_or(Value::from(SWAP_KEEP_PCT));
+        if !hp.as_str().is_some_and(|h| SWAP_HP.contains(&h)) {
+            errors.push(format!("Phase '{tag}': swap hp must be {}.", SWAP_HP.join(" or ")));
         }
     }
     errors

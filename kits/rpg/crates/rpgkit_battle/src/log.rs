@@ -355,6 +355,47 @@ pub fn kill_line(names: &[&str]) -> String {
     }
 }
 
+/// PHASEFX1: the subtypes of a phase `side` and a phase `swap` cell.
+pub const PHASE_SIDE: &str = "Side";
+pub const PHASE_SWAP: &str = "Swap";
+
+/// PHASEFX1 (engine-only): the EVENT cell of a phase `side` effect over the units it turned (`turned`) to `to`: `actor`
+/// (the encounter), the phase's name as the skill, `side_line` as the detail, the turned count as `value`; one turned
+/// unit is also the target (its side after the change).
+pub fn side_entry(w: &World, actor: &str, phase: &str, turned: &[usize], to: &str, round: i32, block: i32) -> Entry {
+    let names: Vec<&str> = turned.iter().map(|&c| w.units[c].name.as_str()).collect();
+    let mut e = Entry::event(round, block, actor, false, phase, PHASE_SIDE, "SIDE", &side_line(&names, to), to);
+    if let [c] = turned {
+        e.target = w.units[*c].name.clone();
+        e.target_is_ally = w.allies.contains(c);
+    }
+    e.value = turned.len() as i32;
+    e
+}
+
+/// PHASEFX1: "A turns on everyone." (`hostile_all`), "A and B join the party side." (a side id); `kill_line`'s list.
+pub fn side_line(names: &[&str], to: &str) -> String {
+    let (one, many) = if to == crate::encounter::HOSTILE_ALL { ("turns on everyone", "turn on everyone") } else { ("joins", "join") };
+    let tail = if to == crate::encounter::HOSTILE_ALL { String::new() } else { format!(" the {to} side") };
+    match names {
+        [] => String::new(),
+        [n] => format!("{n} {one}{tail}."),
+        [rest @ .., last] => format!("{} and {last} {many}{tail}.", rest.join(", ")),
+    }
+}
+
+/// PHASEFX1 (engine-only): the EVENT cell of a phase `swap` on unit `c` (now the new row; `old_name` its name before):
+/// `actor` (the encounter), the phase's name as the skill, "`{old}` becomes `{new}`." as the detail, the unit as the
+/// target and its HP after as `value`.
+pub fn swap_entry(w: &World, actor: &str, phase: &str, c: usize, old_name: &str, round: i32, block: i32) -> Entry {
+    let u = &w.units[c];
+    let mut e = Entry::event(round, block, actor, false, phase, PHASE_SWAP, "SWAPPED", &format!("{old_name} becomes {}.", u.name), &format!("{}/{} HP", u.hp, u.max_hp));
+    e.target = u.name.clone();
+    e.target_is_ally = w.allies.contains(&c);
+    e.value = u.hp;
+    e
+}
+
 /// ENCOUNTER2-C SR8, SR11: the subtype of a scripted round's cells (an entry that failed at planning time, a script the
 /// ruleset ignores); no HP moves with them and the metrics skip them.
 pub const SCRIPT: &str = "Script";
