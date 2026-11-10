@@ -168,3 +168,112 @@ fn accept_ghost_makes_the_ghost_picks_and_replays() {
     }
     assert_eq!(row(&mut again, 0), row(&mut h, 0), "the replay reaches the same round plan");
 }
+
+/// PK1-S2c `channel {unit, on}`: the Channel toggle is refused (an error, not recorded, nothing changes) for a unit
+/// that cannot Channel (this battle has no rule `channel`) and without `on`; outside planning it is refused too.
+#[test]
+fn channel_is_refused_for_a_unit_that_cannot_channel_and_not_recorded() {
+    let mut h = host();
+    let before = (row(&mut h, 0), history(&mut h).len());
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}));
+    assert_eq!(r["ok"], json!(false), "{r}");
+    assert!(r["error"].as_str().unwrap().contains("cannot Channel"), "{r}");
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0}));
+    assert_eq!(r["error"], json!("channel needs on: true or false"), "{r}");
+    let r = h.handle(&json!({"cmd": "channel", "unit": 2, "on": true}));
+    assert_eq!(r["error"], json!("channel needs a party unit"), "an enemy: {r}");
+    assert_eq!((row(&mut h, 0), history(&mut h).len()), before, "nothing changed, nothing recorded");
+    assert_eq!(h.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
+    assert_eq!(h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}))["error"], json!("not planning"));
+}
+
+/// PK1-S2c: `catalog`'s rows under the rule `channel`: every unit holds the Strain pool (`unit_pools`), Feed (a
+/// marrow-only self heal, +5 Strain) is the Channel Rest, the hero marks Cleave marrow; plus a scripted, locked copy of
+/// the duel (`t_scripted`, ENCOUNTER2-C SR5).
+fn channel_catalog() -> Arc<Catalog> {
+    let mut root = json!({
+        "skills": [
+            {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"},
+            {"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "switch_target", "name": "Switch Target", "kind": "TARGET", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "staggered", "name": "Staggered", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
+            {"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
+            {"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2},
+            {"id": "active_guard", "name": "Active Guard", "kind": "DEFEND", "round_intent": "guard", "level": 1, "blocks": 2, "ap_cost": 1, "mitigation": 0.5},
+            {"id": "t_cleave", "name": "Cleave", "kind": "ATTACK", "round_intent": "assault", "level": 1, "blocks": 2, "ap_cost": 2, "power_mult": 1.5, "target_mode": "ENEMY"},
+            {"id": "t_feed", "name": "Feed", "kind": "SUPPORT", "level": 1, "blocks": 1, "ap_cost": 0, "target_mode": "SELF", "heal_base": 3, "learned_only": true,
+                "channel": {"only": true}, "meters": [{"meter": "strain", "delta": 5}]}
+        ],
+        "unit_meters": [{"id": "strain", "name": "Strain", "short": "St", "min": 0, "max": 100, "start": 0, "show": "bar", "skills": ["t_feed"]}],
+        "rulesets": [{"id": "timeline", "name": "Timeline", "rules": ["round_intent", "ap_cost", "unit_meters", "channel"], "basics": ["move", "rest", "strike", "active_guard"],
+            "unit_pools": ["strain"], "channel_meter": "strain", "channel_rest": "t_feed"}],
+    });
+    let unit = |id: &str, side: &str| {
+        json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 300, "speed": 12, "attack_range": 1, "skill_cap": 5,
+            "deck": {"order": {"assault": ["t_cleave", "strike"], "guard": ["active_guard"]}, "marrow": ["t_cleave"]}})
+    };
+    root["units"] = json!([unit("t_hero", "party"), unit("t_mate", "party"), unit("t_foe", "enemy")]);
+    let duel = json!({"id": "t_duel", "name": "Duel", "party": ["t_hero", "t_mate"], "enemies": ["t_foe"], "total_blocks": 6, "unit_ap": 8, "ap_regen": 4, "max_rounds": 8});
+    let mut scripted = duel.clone();
+    scripted["id"] = json!("t_scripted");
+    scripted["script"] = json!([{"round": 1, "lock": true, "others": "auto", "banner": "Watch them", "entries": [
+        {"unit": "party:t_hero", "target": "self", "picks": [{"skill": "active_guard"}], "fill": "rest"}]}]);
+    root["encounters"] = json!([duel, scripted]);
+    Arc::new(Catalog::from_value(&root))
+}
+
+fn channel_host(encounter: &str) -> Host {
+    let mut h = Host::new(Battle::new(channel_catalog()));
+    let r = h.handle(&json!({"cmd": "new", "encounter": encounter, "ruleset": "timeline"}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    h
+}
+
+/// PK1-S2c: a successful `channel` flips the round (the reply's `channel`), keeps the marked pick, is recorded, and the
+/// history replays to the same round plan; turning it off is recorded and replays too.
+#[test]
+fn channel_flips_the_round_and_replays() {
+    let mut h = channel_host("t_duel");
+    let r = h.handle(&json!({"cmd": "pick", "unit": 0, "target": 2, "pick": {"skill": "t_cleave"}}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}));
+    assert_eq!((r["ok"].clone(), r["channel"].clone(), r["dropped"].clone()), (json!(true), json!(true), json!([])), "{r}");
+    assert!(r["lines"].is_array(), "{r}");
+    assert_eq!(row(&mut h, 0)["picks"], json!([{"skill": "t_cleave"}]), "the marked pick has a marrow counterpart: kept");
+    let hist = history(&mut h);
+    let cmds: Vec<&str> = hist.iter().map(|r| r["cmd"].as_str().unwrap()).collect();
+    assert_eq!(cmds, ["new", "pick", "channel"], "the toggle is recorded");
+    let mut again = Host::new(Battle::new(channel_catalog()));
+    for req in &hist {
+        assert_eq!(again.handle(req)["ok"], json!(true), "{req}");
+    }
+    for u in [0, 1] {
+        assert_eq!(row(&mut again, u), row(&mut h, u), "the replay reaches the same round plan");
+    }
+    let plan = |h: &mut Host| h.handle(&json!({"cmd": "plan_view"}))["plan"].clone();
+    assert_eq!(plan(&mut again), plan(&mut h), "and the same plan");
+    let skills: Vec<Value> = plan(&mut h)["t_hero"]["entries"].as_array().unwrap().iter().map(|e| e["skill"].clone()).collect();
+    assert!(skills.contains(&json!("t_cleave")) && !skills.contains(&json!("rest")), "Cleave kept, Feed fills a Channel round, never Rest: {skills:?}");
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0, "on": false}));
+    assert_eq!((r["ok"].clone(), r["channel"].clone()), (json!(true), json!(false)), "{r}");
+    let hist = history(&mut h);
+    let mut again = Host::new(Battle::new(channel_catalog()));
+    for req in &hist {
+        assert_eq!(again.handle(req)["ok"], json!(true), "{req}");
+    }
+    assert_eq!(row(&mut again, 0), row(&mut h, 0), "back to Cold Steel replays too");
+}
+
+/// ENCOUNTER2-C SR5 with PK1-S2c: a scripted, locked round refuses `channel` for a unit that could Channel, records
+/// nothing and changes nothing.
+#[test]
+fn a_locked_round_refuses_channel() {
+    let mut h = channel_host("t_scripted");
+    let before = (row(&mut h, 0), history(&mut h).len());
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}));
+    assert_eq!((r["ok"].clone(), r["error"].clone()), (json!(false), json!("Round 1 is scripted.")), "{r}");
+    assert_eq!((row(&mut h, 0), history(&mut h).len()), before, "nothing changed, nothing recorded");
+    // the same unit in the unscripted duel can Channel (the refusal is the lock's)
+    let mut free = channel_host("t_duel");
+    assert_eq!(free.handle(&json!({"cmd": "channel", "unit": 0, "on": true}))["ok"], json!(true));
+}

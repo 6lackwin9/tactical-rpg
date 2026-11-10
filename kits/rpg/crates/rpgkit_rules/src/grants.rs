@@ -96,6 +96,8 @@ pub enum Target {
     ForcedImmune(Immunity),
     /// A meter band's crit chance points (HOOKS1 UM4; no passive or item takes it).
     Crit,
+    /// PK1-S1 (3.1): a meter band's percent added to the healing its holder receives (band-only, as `Crit`).
+    HealTaken,
 }
 
 impl Target {
@@ -106,9 +108,14 @@ impl Target {
             Target::Foresight => Combine::Max,
             Target::StaggerTaken { .. } => Combine::Product,
             Target::ForcedImmune(_) => Combine::OrFlag,
-            Target::Stat { .. } | Target::ApRegen | Target::SkillPotency(_) | Target::StatusPotency | Target::SpellReach | Target::ForcedTiles | Target::Crit => {
-                Combine::Sum
-            }
+            Target::Stat { .. }
+            | Target::ApRegen
+            | Target::SkillPotency(_)
+            | Target::StatusPotency
+            | Target::SpellReach
+            | Target::ForcedTiles
+            | Target::Crit
+            | Target::HealTaken => Combine::Sum,
         }
     }
 }
@@ -177,6 +184,14 @@ impl Grant {
         }
     }
 
+    /// PK1-S1 (3.1): a band's `heal_taken` percent.
+    pub fn band_heal_taken(&self) -> Option<f64> {
+        match self {
+            Grant::Modifier(Modifier { target: Target::HealTaken, value }) => Some(*value),
+            _ => None,
+        }
+    }
+
     /// A `proficiency` grant's (gear, levels).
     pub fn proficiency(&self) -> Option<(&str, i32)> {
         match self {
@@ -240,6 +255,7 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
             vec![Grant::GrantPool { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor }]
         }
         "crit" => vec![modifier(Target::Crit, value::float(e, "value", 0.0))],
+        rpgkit_data::HEAL_TAKEN => vec![modifier(Target::HealTaken, int("value", 0))],
         _ => Vec::new(),
     }
 }

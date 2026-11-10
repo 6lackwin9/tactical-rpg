@@ -79,7 +79,10 @@ fn with_no_data_every_term_is_its_default() {
     assert_eq!(terms::term(&d, "plain", CURRENCY).name, rpgkit_data::CURRENCY_NAME, "the register points at the purse defaults");
     assert_eq!(terms::term(&d, "plain", UPKEEP).tip, rpgkit_data::UPKEEP_TIP);
     assert_eq!(terms::ids(TermScope::World), [CURRENCY, UPKEEP], "Q-T6: the spec's seven terms, two named per world");
-    assert_eq!(terms::ids(TermScope::Game).len(), RoundIntent::ALL.len(), "one game term per intent");
+    // PK1-S2b: one game term per intent, then the marrow mark; PK1-S2c-2: then the Cold Steel mark
+    assert_eq!(terms::ids(TermScope::Game).len(), RoundIntent::ALL.len() + 2, "one game term per intent, the marrow mark and the Cold Steel mark");
+    let game = terms::ids(TermScope::Game);
+    assert_eq!(game[game.len() - 2..], [rpgkit_data::terms::MARROW_MARK, rpgkit_data::terms::COLD_STEEL_MARK]);
     for i in RoundIntent::ALL {
         assert_eq!(i.name(), terms::default_name(i.term_id()), "RoundIntent::name() is the register's default");
         assert_eq!(i.label(&d.cat), i.name(), "no terms row: the label is the default name");

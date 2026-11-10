@@ -371,6 +371,9 @@ struct Buf {
 
 type Rounds = IndexMap<String, i32>;
 
+/// One fight's per-unit numbers. PHASEFX1: each unit's side is the one it had when the fight started (`ally`): after a
+/// phase `side` the hits between a turned unit and its old side are booked as friendly fire (`ff_taken`), the hits
+/// between it and its old foes as damage dealt and taken, so the HP balance and the per-side damage sums still hold.
 #[derive(Debug, Clone, Default)]
 pub struct BattleMetrics {
     /// Display name of the scenario's priority target ("" = none).
@@ -394,7 +397,8 @@ pub struct BattleMetrics {
     pub arena: IndexMap<String, ArenaRecord>,
     pub arena_strikes: i32,
     /// ENCOUNTER2 P1: display name -> HP the phase `kill` effects took from it in the last fight (part of the HP
-    /// balance; no unit dealt it, nobody is credited; empty without a kill; not in the JSON).
+    /// balance; no unit dealt it, nobody is credited; empty without a kill; not in the JSON). PHASEFX1: a phase `swap`
+    /// adds the HP its unit lost to the change (below 0: gained).
     pub scripted: IndexMap<String, i32>,
     /// ENCOUNTER2-C SR9: the rounds the last fight played scripted and its scripted entries that fell back (SR11), read
     /// from the session when the fight ends (in the JSON only when either is not zero).
@@ -656,6 +660,17 @@ impl BattleMetrics {
             self.check_priority(s);
             return;
         }
+        // PHASEFX1: a phase swap's cell (the encounter as its actor; nobody is credited)
+        if e.category == "EVENT" && e.subtype == crate::log::PHASE_SWAP {
+            self.swap_cell(s, e, &changed);
+            for c in self.ally.keys().copied().collect::<Vec<_>>() {
+                self.credit_statuses(s, None, c);
+                self.remember_statuses(s, c);
+                self.track_tile(s, c);
+            }
+            self.check_priority(s);
+            return;
+        }
         let Some(actor) = actor else {
             self.unexplained(&changed);
             return;
@@ -838,6 +853,24 @@ impl BattleMetrics {
         }
     }
 
+    /// PHASEFX1: a phase swap's cell: the swapped unit (its target, now under the new row's name, which then also names
+    /// its record) moved to the logged HP; that change, up or down, is its `scripted` HP (part of the balance; nobody
+    /// dealt or healed it).
+    fn swap_cell(&mut self, s: &Session, e: &Entry, changed: &IndexMap<UnitId, Buf>) {
+        if let Some(c) = s.w.units.iter().position(|u| u.name == e.target) {
+            self.by_name.insert(e.target.clone(), c);
+        }
+        for (&v, b) in changed {
+            let name = self.names[&v].clone();
+            *self.scripted.entry(name).or_default() += b.loss - b.gain;
+        }
+        self.checks += 1;
+        let target = self.unit(&e.target);
+        if target.is_none_or(|t| s.w.units[t].hp != e.value || changed.keys().any(|&v| v != t)) {
+            self.fail(&e.actor, &format!("log_swap {}: {} at {} HP", e.skill, e.target, e.value));
+        }
+    }
+
     /// HOOKS1 AH2: an arena cell: the one unit it names lost exactly the logged HP (its `arena.taken`; no unit dealt it).
     fn arena_cell(&mut self, e: &Entry, changed: &IndexMap<UnitId, Buf>) {
         let target = self.unit(&e.target);
@@ -875,6 +908,8 @@ impl BattleMetrics {
             r.riders += 1;
         } else if f.on == "meter" {
             r.meters += 1;
+        } else if f.on == crate::trigger::AP_SET_EVENT {
+            // PK1-S1: an `ap` set taking hold is the line of a trigger counted when it fired
         } else {
             r.fired += 1;
         }
@@ -1120,7 +1155,7 @@ impl BattleMetrics {
             if target_gain != e.value {
                 self.fail(&name, &format!("log_heal {}: {} logged, {target_gain} HP gained", e.skill, e.value));
             }
-            self.overheal(s, actor, e, target_gain);
+            self.overheal(s, actor, target, e, target_gain);
         }
     }
 
@@ -1186,8 +1221,9 @@ impl BattleMetrics {
         }
     }
 
-    /// Overheal of a heal cast: the skill's heal amount (SupportRules.heal_amount) minus the HP gained.
-    fn overheal(&mut self, s: &Session, healer: UnitId, e: &Entry, gained: i32) {
+    /// Overheal of a heal cast: the skill's heal amount (SupportRules.heal_amount; HEALPCT1: with `heal_pct` of the
+    /// target's max HP, `command::heal_amount_on`) minus the HP gained.
+    fn overheal(&mut self, s: &Session, healer: UnitId, target: Option<UnitId>, e: &Entry, gained: i32) {
         if e.outcome == "FAILED" {
             return;
         }
@@ -1195,7 +1231,7 @@ impl BattleMetrics {
         let mut amount = -1;
         for (id, sk) in w.cat.skills.iter().enumerate() {
             if sk.name == e.skill && skill::heals(sk) && w.units[healer].can_use(&w.cat, sk) {
-                amount = amount.max(crate::command::heal_amount(w, healer, id));
+                amount = amount.max(crate::command::heal_amount_on(w, healer, target.unwrap_or(healer), id));
             }
         }
         let rec = self.rec(healer);

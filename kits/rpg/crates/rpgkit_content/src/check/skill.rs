@@ -19,14 +19,16 @@ const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "des
 /// The sections and their fields (SkillKinds.SECTIONS; then RULESET1-S's timeline fields, RULESET1_TASKS 1.3: `cost`
 /// the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK; then
 /// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`
-/// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`).
-const SECTION_FIELDS: [(&str, &[&str]); 21] = [
+/// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`; PK1-S2a: `hp_cost_pct` and
+/// `requires_meter` in `cost`, the marrow version's `channel` in its own section, every authored kind; HEALPCT1:
+/// `heal_pct` in `support`).
+const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max", "position"]),
     // A3.2-K2: `affects` (IR9) beside the shape it filters
     ("area", &["area", "affects"]),
-    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
+    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
     ("guard", &["mitigation", "guard_rounds"]),
@@ -36,7 +38,7 @@ const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("combo", &["disrupt", "exploit", "exploit_consume"]),
     ("rest", &["recover_ap"]),
     ("gate", &["weapon_types", "min_proficiency"]),
-    ("cost", &["ap_cost", "meters", "hp_cost"]),
+    ("cost", &["ap_cost", "meters", "hp_cost", "hp_cost_pct", "requires_meter"]),
     ("timing", &["recovery_blocks", "windup_poise", "unbreakable"]),
     ("intent", &["intent_buff"]),
     ("impact", &["stagger", "sure_break", "armor_piercing", "ignore_guard"]),
@@ -44,15 +46,16 @@ const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("ground", &["hazard"]),
     ("triggers", &["triggers"]),
     ("riders", &["riders"]),
+    ("channel", &["channel"]),
 ];
 
 fn sections_of(kind: &str) -> &'static [&'static str] {
     match kind {
-        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate", "cost", "timing", "impact", "forced", "ground", "triggers", "riders"],
-        "DEFEND" => &["grant", "guard", "flow", "gate", "cost", "intent", "ground", "triggers"],
-        "FOCUS" => &["focus", "flow", "cost", "timing", "intent"],
-        "SUPPORT" => &["reach", "support", "grant", "flow", "gate", "cost", "timing", "intent", "ground", "triggers", "riders"],
-        "DISENGAGE" => &["jump", "cost"],
+        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate", "cost", "timing", "impact", "forced", "ground", "triggers", "riders", "channel"],
+        "DEFEND" => &["grant", "guard", "flow", "gate", "cost", "intent", "ground", "triggers", "channel"],
+        "FOCUS" => &["focus", "flow", "cost", "timing", "intent", "channel"],
+        "SUPPORT" => &["reach", "support", "grant", "flow", "gate", "cost", "timing", "intent", "ground", "triggers", "riders", "channel"],
+        "DISENGAGE" => &["jump", "cost", "channel"],
         "REST" => &["rest"],
         _ => &[],
     }
@@ -760,7 +763,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let heal_mult = json::f(e, "heal_mult", 0.0);
         let heal_base = json::i(e, "heal_base", 0);
         let cleanse = json::sget(e, "cleanse_statuses");
-        if heal_base <= 0 && heal_mult <= 0.0 && grant.is_empty() && cleanse.is_empty() {
+        // HEALPCT1: a percent heal counts as a heal (the message keeps its words, checks_golden)
+        let heal_pct = json::i(e, "heal_pct", 0);
+        if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 && grant.is_empty() && cleanse.is_empty() {
             out.push("A support skill needs a heal (base or per-stat), a cleanse or a granted status.".into());
         }
         if cleanse.iter().any(|c| c == CLEANSE_ALL) && cleanse.len() > 1 {
@@ -993,25 +998,14 @@ fn is_dual_shape(e: &Dict) -> bool {
     rows.contains(&rpgkit_rules::intent::FIELD) && rows.contains(&rpgkit_rules::intent::ASSAULT)
 }
 
-/// Whether a ruleset row lists `intent` among its intents.
-fn ruleset_lists(v: &View, intent: &str) -> bool {
-    v.entries(ruleset::KIND).iter().any(|r| json::sget(r, "intents").iter().any(|i| i == intent))
-}
-
 /// The timeline fields of one flat row (RULESET1-S, RULESET1_TASKS 1.3): the round intent allowed for the kind (IN4;
-/// `channel` only when a ruleset row lists it), an intent-bound buff that grants something (IN6), recovery that fits
+/// PK1-S2a retired `channel`: the schema's options refuse it), an intent-bound buff that grants something (IN6), recovery that fits
 /// the round (T2), a sure break with stagger (P14). Defaults never report, so classic rows are unaffected; the kinds a
 /// field belongs to are the sections' (row_problems).
 fn timeline_problems(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     let mut out = Vec::new();
     let intent = json::s(e, "round_intent");
-    if intent == ruleset::CHANNEL {
-        if !AUTHORABLE.contains(&kind) {
-            out.push(format!("Round intent: {kind} skills are neutral; channel is for authored skills."));
-        } else if !ruleset_lists(v, ruleset::CHANNEL) {
-            out.push("Round intent: channel needs a ruleset whose intents list it.".into());
-        }
-    } else if ruleset::INTENTS.contains(&intent.as_str()) || intent == ruleset::NEUTRAL {
+    if ruleset::INTENTS.contains(&intent.as_str()) || intent == ruleset::NEUTRAL {
         // (another value is not an option: the schema's enum check reports it)
         let allowed = ruleset::kind_intents(kind);
         if !allowed.contains(&intent.as_str()) {

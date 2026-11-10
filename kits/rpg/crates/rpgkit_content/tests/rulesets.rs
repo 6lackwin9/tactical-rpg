@@ -170,7 +170,8 @@ fn a_valid_row_loads_and_reads_as_its_rules_and_numbers() {
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());
     let cat = rpgkit_data::Catalog::from_value(&src.catalog);
     let r = Ruleset::of(&cat, "timeline").expect("the row");
-    assert_eq!(r.rules, REGISTER.iter().map(|x| x.id).collect::<Vec<_>>(), "every rule, in register order");
+    // (every rule but PK1-S2a's channel, which needs a unit meter row: tests/channel_checks.rs checks its row)
+    assert_eq!(r.rules, REGISTER.iter().map(|x| x.id).filter(|id| *id != ruleset::CHANNEL).collect::<Vec<_>>(), "every rule, in register order");
     assert!(!r.stances(), "round_intent makes the classic stances inert");
     assert_eq!((r.numbers.break_chance_scale, r.numbers.poise_stat.as_str()), (0.5, "max_poise"));
     assert_eq!((r.numbers.deck_slots.active, r.numbers.deck_slots.passive, r.numbers.deck_slots.keystone), (3, 2, 1));
@@ -285,8 +286,9 @@ fn numbers_past_their_range_load_at_the_schema_bounds() {
         row[&key] = json!(if below { lo - 5.0 } else { hi + 5.0 });
         want.push((key, if below { lo } else { hi }));
     }
-    // RULESET1_TASKS 1.2's ten numbers, INPUT1 1.7's `flank_protected_ap`, A1.2-S1's `item_ap` and P2.2-S1's `move_after_blocks`
-    assert_eq!(want.len(), 13, "every number of 1.2 (and INPUT1 1.7, A1.2-S1, P2.2-S1) has its range in the schema");
+    // RULESET1_TASKS 1.2's ten numbers, INPUT1 1.7's `flank_protected_ap`, A1.2-S1's `item_ap`, P2.2-S1's `move_after_blocks`
+    // PK1-S2a's `channel_power` and `marrow_actives`, and PR5-20's `channel_ai_edge`
+    assert_eq!(want.len(), 16, "every number of 1.2 (and INPUT1 1.7, A1.2-S1, P2.2-S1, PK1-S2a, PR5-20) has its range in the schema");
     write_kind(&data, ruleset::KIND, 1, json!([row]));
     let src = source::load(&data);
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());

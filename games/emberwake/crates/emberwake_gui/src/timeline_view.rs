@@ -13,7 +13,7 @@
 //! (`<reader>`)". VISCLAR1 VC4's Party foresight off masks foresight reveals (the records come through `seen_intents`).
 //! Display only: nothing here changes the battle.
 
-use crate::battle::{action_rows, ap_lines, kind_color, seen_intents, Layers};
+use crate::battle::{action_rows, ap_lines, channel_action, channel_block, channel_fill, kind_color, seen_intents, skill_text, Layers, CHANNEL_TINT};
 use crate::intent_text;
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rgba};
@@ -108,6 +108,10 @@ fn action_segments(w: &World, actions: &[ScheduledAction], u: usize, layers: &La
     let (mut segs, mut marks) = (Vec::new(), Vec::new());
     for (i, (a, r)) in mine.iter().zip(rows).enumerate().filter(|(_, (a, _))| keep(a)) {
         let mut s = segment(format!("{i}"), r.0, r.1, &r.2, &r.3, r.4, false, timeline, Vec::new());
+        // PK1-S2c (placeholder): an action in a Channel round's mode is tinted
+        if channel_action(w, a) {
+            channel_look(&mut s);
+        }
         if layers.parts && timeline {
             s.parts = parts_of(a.start, a.impact, a.end, emberwake_battle::poise::winds_up(&a.command));
         }
@@ -141,7 +145,12 @@ fn plan_segments(pw: &World, plan: &Plan, u: usize, layers: &Layers) -> Vec<Segm
             if let Some(why) = why.filter(|_| !ghost) {
                 card.push((format!("Why: {why}"), th().dim));
             }
-            let mut s = segment(format!("{i}"), e.start_block, e.end_block(pw), &sk.name, &sk.kind, e.target.filter(|t| *t != u).map(|t| pw.units[t].name.clone()), ghost, timeline, card);
+            // PK1-S2c (PK1 4.3 item 6): a marrow version's name with the marrow mark, its span tinted (placeholder)
+            let name = if e.item.is_some() { sk.name.clone() } else { skill_text(pw, u, e.skill) };
+            let mut s = segment(format!("{i}"), e.start_block, e.end_block(pw), &name, &sk.kind, e.target.filter(|t| *t != u).map(|t| pw.units[t].name.clone()), ghost, timeline, card);
+            if e.item.is_none() && channel_block(pw, u, sk) {
+                channel_look(&mut s);
+            }
             // GH8: a ghost's card starts "Auto-filled" with its reason tag
             if s.ghost {
                 s.tip.insert(0, (why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), th().dim));
@@ -152,6 +161,15 @@ fn plan_segments(pw: &World, plan: &Plan, u: usize, layers: &Layers) -> Vec<Segm
             s
         })
         .collect()
+}
+
+/// PK1-S2c (PK1 4.3 item 6, placeholder, user 2026-11-10): a span in a Channel round's mode: its fill blended toward
+/// the Channel tint and a card line saying so.
+fn channel_look(s: &mut Segment) {
+    let a = s.fill[3];
+    s.fill = channel_fill(s.fill);
+    s.fill[3] = a;
+    s.tip.push(("Channel round: marrow".into(), CHANNEL_TINT));
 }
 
 /// TV4: a masked enemy's note: its round intent and target ("Assault: Vanguard"; without one "Plans in secret"), then

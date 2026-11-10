@@ -269,11 +269,14 @@ pub struct Deck {
     /// INPUT1 FL1 (`follow_ups`): opener family -> the families the planner's fill tries first after it, in the
     /// player's priority (written order kept; an empty list is no list).
     pub follow_ups: IndexMap<String, Vec<String>>,
+    /// PK1-S2a (`marrow`, PK1 4.2, rule channel): the actives whose marrow version opens in a Channel round (written
+    /// order; at most the ruleset's `marrow_actives` of them are read).
+    pub marrow: Vec<String>,
 }
 
 impl Deck {
     /// The deck keys, in their stored order.
-    pub const KEYS: [&'static str; 5] = ["active", "passive", "keystone", "order", "follow_ups"];
+    pub const KEYS: [&'static str; 6] = ["active", "passive", "keystone", "order", "follow_ups", "marrow"];
 
     /// From a `deck` value (anything but an object is the empty deck; lists keep their strings; an empty
     /// `follow_ups` list is dropped, FL1).
@@ -283,7 +286,7 @@ impl Deck {
         let follow_ups = obj(o, "follow_ups")
             .map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).filter(|(_, l)| !l.is_empty()).collect())
             .unwrap_or_default();
-        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups }
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups, marrow: strings(o, "marrow") }
     }
 
     /// True when every key is empty (the auto deck).
@@ -293,6 +296,7 @@ impl Deck {
             && self.keystone.is_empty()
             && self.order.values().all(Vec::is_empty)
             && self.follow_ups.values().all(Vec::is_empty)
+            && self.marrow.is_empty()
     }
 
     /// INPUT1 FL1: the follow-up list set for opener family `fam` (None: no list, the fill reads the order).
@@ -381,6 +385,8 @@ pub struct SkillDef {
     pub heal_stat: String,
     pub heal_base: i32,
     pub heal_mult: f64,
+    /// HEALPCT1 (FB-177): a heal of this percent of the target's max HP, added after the heal formula (0 = none).
+    pub heal_pct: i32,
     pub grant_status: String,
     pub extra_grants: Vec<Value>,
     pub cleanse_statuses: Vec<String>,
@@ -430,6 +436,12 @@ pub struct SkillDef {
     pub hp_cost: i32,
     /// HOOKS1 IG1 (rule ignore_guard): the hits skip the guard term and P6's guard factor.
     pub ignore_guard: bool,
+    /// PK1-S2a (rule hp_cost): HP paid at the command's start as a percent of max HP (0 = none; beside `hp_cost`).
+    pub hp_cost_pct: i32,
+    /// PK1-S2a (rule unit_meters): the meter value the skill needs at its start (None = no gate).
+    pub requires_meter: Option<MeterGate>,
+    /// PK1-S2a (rule channel): the skill's marrow version block (the default: a derived version for a single-intent skill).
+    pub channel: ChannelSpec,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -476,6 +488,7 @@ impl SkillDef {
             heal_stat: string(o, "heal_stat", ""),
             heal_base: int(o, "heal_base", 0),
             heal_mult: float(o, "heal_mult", 0.0),
+            heal_pct: int(o, "heal_pct", 0),
             grant_status: string(o, "grant_status", ""),
             extra_grants: array(o, "extra_grants").to_vec(),
             cleanse_statuses: strings(o, "cleanse_statuses"),
@@ -505,6 +518,9 @@ impl SkillDef {
             meters: objs(o, "meters").iter().map(MeterDelta::from_obj).collect(),
             hp_cost: int(o, "hp_cost", 0),
             ignore_guard: boolean(o, "ignore_guard", false),
+            hp_cost_pct: int(o, "hp_cost_pct", 0),
+            requires_meter: obj(o, "requires_meter").and_then(MeterGate::from_obj),
+            channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -578,6 +594,9 @@ pub struct ItemDef {
     pub affects: Option<Affects>,
     /// The most copies of the item one stack holds (`max_stack`, 1 when unset).
     pub max_stack: i32,
+    /// PK1-S1 (3.7): a consumable's `unmark` `{mark}`: the mark id whose latest entry on the target this battle it
+    /// removes ("" = none).
+    pub unmark: String,
     pub raw: Obj,
 }
 
@@ -711,6 +730,7 @@ impl ItemDef {
             area: string(o, "area", ITEM_AREA_NONE),
             affects: Affects::parse(&string(o, "affects", "")),
             max_stack: int(o, "max_stack", 1),
+            unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
             raw: o.clone(),
         }
     }
@@ -1825,9 +1845,12 @@ pub const TRIGGER_KEYS: [&str; 4] = ["on", "when", "effects", "limit"];
 pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
 /// 8.2: the condition keys of a trigger's or rider's `when`.
 pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", "other_hp_below", "other_broken", "other_status", "intent", "meter"];
-/// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it).
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 14] = [
-    ("ap", &["value", "to"]),
+/// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it). ROLLTABLE1:
+/// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
+/// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
+/// `mark` join.
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 17] = [
+    ("ap", &["value", "set", "rounds", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
     ("guard", &["mitigation", "blocks", "to"]),
@@ -1837,11 +1860,29 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 14] = [
     ("crit", &["value", "to"]),
     ("resist", &["status", "value", "to"]),
     ("stagger", &["value", "to"]),
-    ("damage", &["value", "to"]),
+    ("damage", &["value", "pct_of_hit", "to"]),
     ("reveal", &["rounds"]),
     ("end_guard", &["to"]),
     ("stop_moves", &["to"]),
+    (ROLL_TABLE, &["rows"]),
+    (STRIKE_NEAREST, &["power", "then_status", "then_rounds"]),
+    (MARK, &["mark", "value", "to"]),
 ];
+/// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.3): a weapon strike resolved at once on the nearest other unit of any side
+/// (no AP, no plan), then an optional status on the striker for its next rounds.
+pub const STRIKE_NEAREST: &str = "strike_nearest";
+/// PK1-S1 (3.5): a mark `{mark, value}` the battle records on a unit for the world settle (`HeroEnd::marks`).
+pub const MARK: &str = "mark";
+/// PK1-S1 (3.7): a consumable's `unmark` `{mark}` removes the target's latest mark of that id this battle; its keys.
+pub const UNMARK_KEYS: [&str; 1] = ["mark"];
+/// PK1-S1 (3.2): the events whose trigger knows the hit it answers (a `damage` effect's `pct_of_hit` reads it; a rider
+/// reads the hit it rode on).
+pub const HIT_EVENTS: [&str; 4] = ["hit_taken", "guarded_hit", "hit_dealt", "kill"];
+/// ROLLTABLE1 (ACTS23 PK1 hook a): the weighted random-table trigger effect, the keys of one of its `rows`, and a row's
+/// weight range (no `roll_table` inside a row).
+pub const ROLL_TABLE: &str = "roll_table";
+pub const ROLL_ROW_KEYS: [&str; 2] = ["weight", "effects"];
+pub const ROLL_WEIGHT: (i64, i64) = (1, 1000);
 /// 8.2: whom an effect acts on.
 pub const EFFECT_TO: [&str; 2] = ["self", "other"];
 /// 8.2: a `grant` effect's `until` ("" = its rounds).
@@ -1858,14 +1899,20 @@ pub const TACTICS: [&str; 3] = ["brace_after_hit", "hold_line", "flush_cover"];
 /// UM1: how a meter is shown, and the most pips a `pips` meter draws.
 pub const METER_SHOW: [&str; 3] = ["pips", "bar", "hidden"];
 pub const METER_PIPS_MAX: i32 = 10;
-/// UM4: the passive effect types a meter band's `effects` take (`crit` as the trigger effect).
-pub const BAND_EFFECTS: [&str; 6] = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency", "crit"];
+/// UM4: the passive effect types a meter band's `effects` take (`crit` as the trigger effect). PK1-S1 (3.1): the
+/// band-only `heal_taken` (a percent added to the healing the holder receives; no passive or item takes it).
+pub const BAND_EFFECTS: [&str; 7] = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency", "crit", HEAL_TAKEN];
+pub const HEAL_TAKEN: &str = "heal_taken";
 
 /// AH2: the directions of an arena hazard's push.
 pub const ARENA_DIRS: [&str; 4] = ["east", "west", "north", "south"];
 /// AH1: the keys of an arena hazard row and of its `effect`.
 pub const ARENA_HAZARD_KEYS: [&str; 9] = ["id", "name", "cells", "columns", "rows", "rounds", "blocks", "effect", "line"];
-pub const ARENA_EFFECT_KEYS: [&str; 8] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push"];
+/// PK1-S1 (3.6): `meter` `{meter, delta}` changes that unit meter of each struck holder (the ground hazard row's `meter`
+/// field too).
+pub const ARENA_EFFECT_KEYS: [&str; 9] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push", "meter"];
+/// PK1-S1 (3.6): the keys of a hazard's `meter` (arena effect and ground hazard row).
+pub const HAZARD_METER_KEYS: [&str; 2] = ["meter", "delta"];
 
 /// DU1: the phase effect that changes a unit's deck mid-battle (rule deck), and its keys.
 pub const DECK_EFFECT: &str = "deck";
@@ -1984,6 +2031,56 @@ impl MeterDelta {
     pub fn from_obj(o: &Obj) -> Self {
         Self { meter: string(o, "meter", ""), delta: int(o, "delta", 0) }
     }
+
+    /// PK1-S1 (3.6): a hazard's `meter` object (None when absent, empty, or without a meter id or a delta).
+    pub fn of_hazard(o: &Obj) -> Option<Self> {
+        obj(o, "meter").map(Self::from_obj).filter(|m| !m.meter.is_empty() && m.delta != 0)
+    }
+}
+
+/// PK1-S2a (PK1 4.3 item 5, rule unit_meters): a skill's `requires_meter`: it starts only while the unit holds `meter`
+/// at `min` or more (Vent's Strain 50).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeterGate {
+    pub meter: String,
+    pub min: i32,
+}
+
+impl MeterGate {
+    /// The object's keys.
+    pub const KEYS: [&'static str; 2] = ["meter", "min"];
+
+    /// None for an empty object or one without a meter id.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(Self { meter: string(o, "meter", ""), min: int(o, "min", 0) }).filter(|g| !g.meter.is_empty())
+    }
+}
+
+/// PK1-S2a (PK1 4.1, rule channel): a skill's `channel` block: `none` (no marrow version), `only` (marrow only: open
+/// only in a Channel round), `cost` (replaces the derived channel meter cost), `power` (replaces `channel_power`) and
+/// `effects` (trigger effects run as a rider on each unit the marrow version lands on).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ChannelSpec {
+    pub none: bool,
+    pub only: bool,
+    pub cost: Option<i32>,
+    pub power: Option<f64>,
+    pub effects: Vec<Obj>,
+}
+
+impl ChannelSpec {
+    /// The block's keys, in their stored order.
+    pub const KEYS: [&'static str; 5] = ["none", "only", "cost", "effects", "power"];
+
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            none: boolean(o, "none", false),
+            only: boolean(o, "only", false),
+            cost: o.contains_key("cost").then(|| int(o, "cost", 0)),
+            power: o.contains_key("power").then(|| float(o, "power", 1.0)),
+            effects: objs(o, "effects"),
+        }
+    }
 }
 
 /// GH1: a ground hazard row (kind `hazards`): a timed tile overlay with terrain-like numbers.
@@ -2014,6 +2111,8 @@ pub struct HazardDef {
     /// `#rrggbb`.
     pub tint: String,
     pub glyph: String,
+    /// PK1-S1 (3.6): the unit meter change it makes on each holder of that meter it acts on (None = none).
+    pub meter: Option<MeterDelta>,
 }
 
 impl HazardDef {
@@ -2037,6 +2136,7 @@ impl HazardDef {
             duration: int(o, "duration", 2),
             tint: string(o, "tint", "#808080"),
             glyph: string(o, "glyph", "*"),
+            meter: MeterDelta::of_hazard(o),
         }
     }
 }

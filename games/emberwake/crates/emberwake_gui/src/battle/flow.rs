@@ -259,6 +259,13 @@ impl BattleScreen {
                         self.selected = Some(u);
                     }
                     RowAct::Fill => self.accept_ghost(cx, None),
+                    // PK1-S2c: the Channel toggle keeps the menu open (it re-lists for the new mode)
+                    RowAct::Channel(on) => {
+                        if let Some((h, at)) = p.menu {
+                            self.popup = Some(p);
+                            self.set_channel(cx, h, at, on);
+                        }
+                    }
                     RowAct::Step(step) => {
                         if let Some(h) = self.selected {
                             let r = self.send(cx, json!({"cmd": "add_step", "unit": h, "step": step}));

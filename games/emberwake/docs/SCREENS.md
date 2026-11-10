@@ -202,7 +202,7 @@ The rules behind every player screen come from `emberwake_world`, checked by the
   reduce motion).
 - Agent link: `state.picks` [{unit, picks}], `state.deferred`, `state.player_target`, `state.inspect` (unit or null),
   `state.ap_gauge` (pips, red, label), the menu as `popup` (rows `popup.<k>`), `overlay.positions` while an Engage row
-  is hovered; requests `pick`, `unpick`, `clear`, `autofill`, `accept_ghost` (INPUT2; `ap_gauge.pips` reads "B1 B1 B2 O
+  is hovered; requests `pick`, `unpick`, `clear`, `autofill`, `accept_ghost`, `channel {unit, on}` (PK1-S2c) (INPUT2; `ap_gauge.pips` reads "B1 B1 B2 O
   O X": the n-th block's slots, free sockets, crossed slots).
 
 ## Calmer board (VISCLAR1-A, timeline battles)

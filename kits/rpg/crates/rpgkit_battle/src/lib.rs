@@ -2,6 +2,7 @@
 
 pub mod ai;
 pub mod arena;
+pub mod channel;
 pub mod command;
 pub mod dojo;
 pub mod encounter;
@@ -10,6 +11,7 @@ pub mod grid;
 pub mod ground;
 pub mod intent;
 pub mod log;
+pub mod mark;
 pub mod meter;
 pub mod metrics;
 pub mod path;

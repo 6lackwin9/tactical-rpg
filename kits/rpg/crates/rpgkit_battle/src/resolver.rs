@@ -113,6 +113,8 @@ impl Resolver {
     /// Resets block guards, starts the commands that begin now, raises running guards, and returns the indices of
     /// the actions that resolve this block, highest initiative first.
     pub fn prepare_block(&mut self, w: &mut World, block: i32) -> Vec<usize> {
+        // PK1-S1 (3.6): the block a hazard meter change entered in this block crosses its rules at
+        w.ground.block = block;
         for &c in &self.registered {
             w.units[c].guard = 0.0;
         }
@@ -357,7 +359,8 @@ impl Resolver {
                 }
                 let u = &w.units[c];
                 let before = u.hp;
-                let amount = status::tick_amount(u, row, &w.ruleset.numbers).min(u.max_hp - u.hp);
+                // PK1-S1 (3.1): the heal pipeline caps at the missing HP after a band's `heal_taken` (`World::heal`)
+                let amount = status::tick_amount(u, row, &w.ruleset.numbers);
                 w.heal(c, amount);
                 let healed = w.units[c].hp - before;
                 if healed > 0 {

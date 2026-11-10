@@ -123,7 +123,7 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
 }
 
 /// ENCOUNTER2-C SR5: the requests a locked round refuses.
-const LOCKED_REFUSES: [&str; 10] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "pick", "unpick", "accept_ghost", "autofill"];
+const LOCKED_REFUSES: [&str; 11] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "pick", "unpick", "accept_ghost", "autofill", "channel"];
 
 fn err(msg: impl Into<String>) -> Value {
     json!({"ok": false, "error": msg.into()})
@@ -131,7 +131,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "tactics")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "channel" | "tactics")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -370,6 +370,7 @@ impl Battle {
             "unpick" => unpick_req(s, req),
             "accept_ghost" => accept_ghost_req(s, req),
             "autofill" => autofill_req(s, req),
+            "channel" => channel_req(s, req),
             "pick_options" => pick_options_req(s, req),
             "round_plan" => json!({"ok": true, "round_plan": round_plan(s)}),
             "tactics" => match tactics_arg(Some(req)) {
@@ -521,6 +522,10 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         if l.cell != NO_CELL {
             v["cell"] = json!([l.cell.x, l.cell.y]);
         }
+        // PK1-S2b: a marrow version's line says so (only then, so other replies keep their shape)
+        if l.marrow {
+            v["marrow"] = json!(true);
+        }
         v
     };
     let target = match r.round_target {
@@ -529,7 +534,7 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         Some(RoundTarget::Unit(u)) => json!({"kind": "unit", "unit": u, "name": w.units[u].name}),
         Some(RoundTarget::Cell(p)) => json!({"kind": "cell", "cell": [p.x, p.y]}),
     };
-    json!({
+    let mut out = json!({
         "unit": r.unit,
         "name": w.units[r.unit].name,
         "side": if w.allies.contains(&r.unit) { "party" } else { "enemy" },
@@ -541,7 +546,13 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         "revealed": r.revealed,
         "readers": r.readers,
         "plan": r.plan.iter().map(line).collect::<Vec<_>>(),
-    })
+    });
+    // PK1-S2b: a Channel round's record ("intent": "channel") adds the flag and the round's own row (only then)
+    if r.channel {
+        out["channel"] = json!(true);
+        out["row_intent"] = json!(r.row_intent.map_or("", |i| i.id()));
+    }
+    out
 }
 
 /// ITEMUSE1 rule 2: one row per distinct offered pouch item with copies left this round; with a target, only the items
@@ -583,7 +594,8 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
             let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": rpgkit_content::source::skill_description(&sk.raw, w.ruleset.stances())});
             // HOOKS1 HC1 (HOOKS1-UI slice 3): the HP the skill costs, priced from the battle's own catalog as the planner
             // does, only when it costs some (rule hp_cost; classic rows keep their shape)
-            let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_of(w, k));
+            // PK1-S2a: with a percent cost (`hp_cost_pct`) of the unit's max HP
+            let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_for(w, u, k));
             if hp > 0 {
                 row["hp_cost"] = json!(hp);
             }
@@ -979,6 +991,28 @@ fn autofill_req(s: &mut Session, req: &Value) -> Value {
         s.w.autofill = on;
     }
     json!({"ok": true, "autofill": s.w.autofill, "round_plan": round_plan(s)})
+}
+
+/// PK1-S2c `channel {unit, on}` (PK1 4.3 item 1, rule `channel`): the converting Channel toggle
+/// (`Session::set_channel`): flips the member's round to Channel (`on` true) or back (false) and converts its plan; the
+/// reply is `pick`'s plus `lines` (the buffs that ended and the picks dropped) and the member's `channel` flag. A refusal
+/// (a unit that cannot Channel) is an error and leaves the battle as it was (not recorded).
+fn channel_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "channel") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    let Some(on) = req.get("on").and_then(Value::as_bool) else { return err("channel needs on: true or false") };
+    let before = pick_counts(s);
+    match s.set_channel(u, on) {
+        (Err(e), _) => err(e),
+        (Ok(lines), later) => {
+            let mut reply = pick_reply(s, &before, Ok(()), later);
+            reply["lines"] = json!(lines);
+            reply["channel"] = json!(rpgkit_battle::channel::is_channel(&s.w, u));
+            reply
+        }
+    }
 }
 
 /// `pick_options {unit, target}` (read-only): the rows of the member's menu on the target (IF2, ET1).

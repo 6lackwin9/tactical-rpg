@@ -53,7 +53,7 @@ previous action leaves, otherwise the unit spends them in recovery; recovery mak
 | Pierce | Inoculated attacks ignore armour (binary, DEC-LORE-12 baseline). Today's damage type `pierce` is a type, not a bypass, so this needs an armour-bypass skill flag | [kit hook] (new flag), [data] (which skills set it) |
 | Deck | 6 slots = 3 class actives + 2 passives + 1 keystone, bucketed by kind like today's skill slots (Q-48). The basics (Move, Active Guard, Strike, Rest and the other always-on moves) take no slot and are open to every unit, as in the Ashlands (user 2026-10-25: the two base-move slots are removed) | [kit hook] (new slot type) |
 | Composure | A derived stat, not a seventh base stat (user 2026-10-25, Q-47 and Q-47a): the corruption resist, computed by its own formula from base stats plus gear, status and Calcification modifiers; shown on the unit panel; read by every corruption effect (Calcification I, the curfew chimes, the shockwave, nightmares, the Martyr mercy reward, recruit quirks). Formula and numbers: the derived-stat spec and the balance lane | [engine] formula evaluator, [kit hook] data-defined derived stats (new), [data] the Composure row |
-| Pouch, gear | Pouch 3; six gear slots MAIN, OFF, HEAD, BODY, ACC1, ACC2. Graft slots 4 (Cranial, Thoracic, Forearms, Visceral) are an Act 2 proposal | [kit hook] (exists: `emberwake_rules::gear`); graft slots new |
+| Pouch, gear | Pouch 3; six gear slots MAIN, OFF, HEAD, BODY, ACC1, ACC2. Graft slots 4 (Cranial, Thoracic, Forearms, Visceral) are an Act 2 proposal (2026-11-10: Cranial opens through the class ritual for class pieces; Forearms, Thoracic and Visceral take any monster organ; a graft teaches the monster's own skill; `docs/sessions/PK2_GRAFTS.md` 3) | [kit hook] (exists: `emberwake_rules::gear`); graft slots new |
 | Reach | Melee reach 1 by default; a reach-2 rule for polearms, billhooks and scourges (user 2026-10-25, Q-70) | [kit hook] (new) |
 | Arenas | A fixed arena size (12 x 9); larger fights are connected rooms: enemies move between rooms, an escape moves the party into another room instead of off the map, and the party may fight in several rooms at once (Q-60; spec ENCOUNTER2) | [kit hook] (new) |
 | Stay-behind objectives | A hold-a-tile escape (one unit holds while the rest escape) and an impossible fight (the first unit knocked out makes a heroic stand that holds the boss while the others escape); the Crucible uses the hold-a-tile escape and the player picks who holds; the impossible fight belongs to a later mission: the first loss is a choice, later losses become fate (Q-75, Q-75a; spec ENCOUNTER2) | [kit hook] (escape and hold exist; new variants) |
@@ -79,8 +79,8 @@ master hues plus at most one dark and one light step each (computed, hand-picked
 - Gain: an Inoculated skill adds its `strain_cost` (guideline 15-35) when the action starts; hazards and eldritch attacks
   add more.
 - Decay: at round end -10 if the unit used no Inoculated action that round, a further -10 if it held Active Guard; never
-  below the dormant floor. After battle Strain resets to the floor. Grafts raise the floor (0-50).
-- Caps (user 2026-10-25): Strain caps at 100 within a round and is set to 75 after a crisis (Q-62); the meter is a
+  below the dormant floor. After battle Strain resets to the floor. Grafts raise the floor (0-50) by how many a unit has (1: 5, 2: 15, 3: 30, 4: 50; an Inoculated keystone graft takes one of the 4 slots; user 2026-11-10, `docs/sessions/PK2_GRAFTS.md` 3).
+- Caps (user 2026-10-25): Strain caps at 100 within a round and is set to 50 after a crisis (Q-62; changed from 75 by the user 2026-11-10, so crises do not chain: from 75 one more Channel round reached 100 again); the meter is a
   generic kit meter (Q-63); aberrant enemies carry it from Act 2, humans never; Act 1 has no Strain anywhere (Q-65).
   Installing an Inoculated keystone counts as Tier III surgery (+1 stage, Q-64).
 - Crisis `[game code]` unless the kit meter's triggers can express it: 1d3, equal odds, seeded, rolled at round end:
@@ -124,7 +124,7 @@ The only undo: Aline's bone-scraping (unlocked by her quest), -1 stage and -10% 
 | --- | --- |
 | Scrap | The currency (replaces gold): trade, forge costs, bribes |
 | Warded Tallow | Upkeep: 1 per day of travel or rest for the whole cell. At 0: -2 starting AP in every battle until restocked; nothing else (the road-fight penalty stays an Ashlands option, Q-18); Act 3 Tallow costs more Scrap, daily use stays 1 (Q-45) |
-| Rock Salt | Stash material: Slab flushes, bribes; a Slab flush lowers the dormant Strain floor by 10 for the next battle; Quenched Cinder Salt is the rare one-charge item that prevents one Calcification advance (Q-43, Q-69) |
+| Rock Salt | Stash material: Slab flushes, bribes; a Slab flush lowers the dormant Strain floor by 10 for the next battle; Quenched Cinder Salt is the rare one-charge item that prevents one Calcification advance (Q-43, Q-69; used in battle after a Flesh Breach, user 2026-11-10: the stage is not saved but its effects last the battle, and it calms a unit a Stage V breach turned hostile) |
 | Aberrant Organs | Stash materials: graft surgery (Act 2 on) |
 
 No other upkeep (per-operative, per-leg, Tallow-and-Salt and per-rest versions are dropped).
@@ -171,7 +171,7 @@ mission when the previous one is done (planner pick).
 | M2 | The Crossroads Cages | 03 Ash-Crawl Crossroads | ENC-EVT-02, Proctor Quell: an open-air culling station, free the youths before the flagellants kill them; retorts for the Slab (Maren's hook) | - | - |
 | M3 | The Bone-Mill Raid | 04 Fourth Kiln | ENC-EVT-03, Overseer Grendel | Dunstan (bunk 5) | - |
 | M4 | The Tallow Vats | 05 Tallow Vats | ENC-EVT-04, Guild-Master Orlov (Vesper's vendetta) | Elyse (bunk 6) | - |
-| Interlude | The Awakening Fissure | 00 Sluice Undercroft | ENC-EVT-05, the Calcified Amalgam; Aline's single marrow dose (first grafting teaser) | - | Which deployed founder takes the dose; that founder starts Act 2 at Calcification I (planner pick) |
+| Interlude | The Awakening Fissure | 00 Sluice Undercroft | ENC-EVT-05, the Calcified Amalgam; Aline's single marrow dose (first grafting teaser) | - | Which deployed founder takes the dose; that founder starts Act 2 with that dose as their first graft (a standard Tier I graft, the Inoculation tutorial; user 2026-11-10, replacing the planner pick "starts Act 2 at Calcification I") |
 | M5 | The Crucible | 06 Crucible Watchpost to 07 Slag Gate | ENC-EVT-06, Inquisitor-Prelate Nemeth; one founder holds the Slag Gate winch; the cell escapes and Nemeth survives into Act 2 (user 2026-10-25, Q-25); he returns in Acts 2-3 (3.6) | Loses the chosen founder (captured) | Deploy four (the Crucible requires four, planner pick); choose who stays |
 
 Optional Act 1 board work: Kaelen's watchpost raid (forge bellows), Hollis's vantage points over the Crucible, Vesper's

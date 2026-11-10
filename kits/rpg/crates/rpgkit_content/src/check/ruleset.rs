@@ -176,6 +176,25 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
             }
         }
     }
+    // PK1-S2a (PK1 4.1): `channel_cost` holds three whole numbers 0-100 (AP 1, 2, 3+); the ids are snake_case (whether
+    // they name rows is `channel_refs`, the meters and skills load after the rulesets)
+    if let Some(raw) = e.get("channel_cost") {
+        let ok = raw.as_array().is_some_and(|a| a.len() == 3 && a.iter().all(|v| v.as_f64().is_some_and(|x| x.fract() == 0.0 && (0.0..=100.0).contains(&x))));
+        if !ok {
+            out.push("Channel cost by AP must be three whole numbers 0-100 (for 1, 2 and 3+ AP).".into());
+        }
+    }
+    let meter = json::s(e, "channel_meter");
+    if !meter.is_empty() && !is_id(&meter) {
+        out.push(format!("Channel meter: '{meter}' must be a unit meter id (lowercase snake_case)."));
+    }
+    if has(ruleset::CHANNEL) && meter.is_empty() {
+        out.push(format!("Channel meter: {} needs a unit meter (else the rule does nothing).", ruleset::CHANNEL));
+    }
+    let rest = json::s(e, "channel_rest");
+    if !rest.is_empty() && rest != ruleset::CHANNEL_REST_NORMAL && !is_id(&rest) {
+        out.push(format!("Channel Rest: '{rest}' must be {} or a skill family id.", ruleset::CHANNEL_REST_NORMAL));
+    }
     let origin = json::s(e, "origin");
     if origin != super::ORIGIN_SYSTEM && origin != "user" {
         out.push(format!("Origin: '{origin}' is not one of system, user."));
@@ -215,6 +234,21 @@ pub fn missing_pools(v: &View, e: &Dict) -> Vec<String> {
         .filter(|m| is_id(m) && !v.has(rpgkit_data::UNIT_METERS_KIND, m))
         .map(|m| format!("unit_pools: '{m}' has no row in {0} (data/catalog/{0}.json).", rpgkit_data::UNIT_METERS_KIND))
         .collect()
+}
+
+/// PK1-S2a (PK1 4.1, 4.3 item 5): a ruleset row's `channel_meter` names a unit meter row and its `channel_rest` (beside
+/// `normal`) a skill family.
+pub fn channel_refs(v: &View, e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let meter = json::s(e, "channel_meter");
+    if is_id(&meter) && !v.has(rpgkit_data::UNIT_METERS_KIND, &meter) {
+        out.push(format!("Channel meter: '{meter}' has no row in {0} (data/catalog/{0}.json).", rpgkit_data::UNIT_METERS_KIND));
+    }
+    let rest = json::s(e, "channel_rest");
+    if is_id(&rest) && rest != ruleset::CHANNEL_REST_NORMAL && v.typed.tier_one(&rest).is_none() {
+        out.push(format!("Channel Rest: unknown skill family '{rest}'."));
+    }
+    out
 }
 
 /// INPUT1 1.7 (MR9): the soft problems of one row (normalized): a `flank_protected_ap` set while the cost is not `fixed`

@@ -1582,6 +1582,96 @@ WebAssembly, drawn on one 1280 x 720 canvas, its files packed into two bundle pa
 and for porting checks; debugging stays on the desktop build. The Godot web export this page described until 2026-10-19
 is retired (`legacy/`, the `legacy` branch).
 
+## Test build and release build
+
+| Build | Command | Contents | Used for |
+| --- | --- | --- | --- |
+| Test (`dev_tools` on) | `tools/fc.sh web test` (the default) | Base game plus the Tools menu (Scene Runner, Combat Arena, Forge viewers, Gear Dojo, UI Gallery) and the page probe the smoke test reads | The CI artifact of every release PR; the itch.io deploy until the user calls the game playable |
+| Release (`dev_tools` off) | `tools/fc.sh web release` | Base game only: Tools and dev keys compiled out | The deploy once the user calls the game playable |
+
+`dev_tools` is a cargo feature of `emberwake_gui`, on by default, so the native desktop build does not change.
+
+## Build it (Linux, the cloud, or Git Bash on Windows)
+
+One-time setup:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked   # must equal the wasm-bindgen in Cargo.lock
+```
+
+Then `tools/fc.sh web test` (or `release`). It builds `emberwake_gui` for `wasm32-unknown-unknown` into its own
+`target-wasm/` (so it never evicts the native build), binds it with `wasm-bindgen`, runs `wasm-opt` when Binaryen is
+installed (optional), packs `games/emberwake/web_bundle.json` with `aegis bundle` (part 1: data and art, fetched before
+the main menu; part 2: audio, fetched while the game runs) and writes `out/web/` (git-ignored): `index.html`,
+`emberwake.js`, `emberwake_bg.wasm`, `bundle.json`, `emberwake_1.pak`, `emberwake_2.pak` and `build.json` (variant and
+commit). It prints each file's size raw and gzipped.
+
+## Play it locally
+
+- `tools/fc.sh web serve [port]` serves `out/web/` on `http://127.0.0.1:8000/` (Python's `http.server`). Opening
+  `index.html` as a file does not work.
+- Launch keys go in the URL query, for example `?screen=runner` (the Scene Runner, test build) or `?screen=arena&seed=3`.
+- A downloaded `web-build` artifact: unzip it and serve the folder with `python -m http.server 8000`, then open
+  `http://localhost:8000`.
+- Other devices on the same Wi-Fi: `python -m http.server 8000 --bind 0.0.0.0` in the folder and open
+  `http://<PC's IPv4 address>:8000` (allow Python through the Windows firewall on private networks).
+
+## Smoke test
+
+`tools/fc.sh web smoke` runs `tools/web/smoke.js` on a test build in `out/web/`: headless Chromium through Playwright
+loads the page and, through the page probe, checks the boot (loading bar, both bundle parts, a main menu with no Quit),
+the no-WebGL message, the URL query, (a) Tools > Combat Arena `goblin_skirmish` to the results screen, (b) New game to
+the first region screen and (c) save, reload, Continue. Every page must run without a console or page error. It needs
+Node with Playwright and its Chromium (or `CHROMIUM=<path>`); it is never in the gate.
+
+## CI artifact (release PRs)
+
+The `web (advisory)` job in `.github/workflows/gate.yml` runs on every PR into `main` (the release PR): it installs the
+wasm32 target and `wasm-bindgen-cli` 0.2.129 (cached), runs `tools/fc.sh web test`, uploads `out/web/` as the artifact
+`web-build` (kept 14 days), then runs the browser smoke (Playwright Chromium installed on the runner). The job is
+advisory: it is not in the `gate` job's `needs` and not a required check, and a smoke failure does not fail the job
+(read the smoke step's log). After it has been green on two releases the user decides whether `main` requires it
+(WEBREL1 section 5). Download the artifact from the PR's checks (the `gate` workflow run > Artifacts).
+
+## Deploy to itch.io (`web.yml`)
+
+`.github/workflows/web.yml` is manual only: **Actions > web > Run workflow**, Branch **main**, variant **test**
+(default) or **release**. The Merge & Release thread runs it when the user says "deploy". It:
+
+1. refuses any ref but `main`, and stops before building with "BUTLER_API_KEY not set" when the secret is missing, or
+   with an `ITCH_TARGET` message when the variable is missing or not of the form `<user>/<game>:html5`;
+2. builds the chosen variant with `tools/fc.sh web <variant>`;
+3. installs itch.io's `butler` for linux-amd64 from `https://broth.itch.zone/butler/linux-amd64/<version>/archive/default`,
+   pinned to 15.32.0 and checked against its sha256 (to bump: fetch the new version and its sha256 on a GitHub runner,
+   since the cloud proxy blocks `broth.itch.zone`, and change `BUTLER_VERSION` and `BUTLER_SHA256` together);
+4. pushes `out/web/` with `butler push out/web $ITCH_TARGET --userversion <variant>-<short sha>`.
+
+## One-time setup by the repo owner (itch.io page, secret, variable)
+
+1. On itch.io: **Upload new project**. Kind of project: **HTML**. Leave the upload empty (CI fills it). Embed options:
+   viewport **1280 x 720**, tick **Fullscreen button**, leave **SharedArrayBuffer support** off (the build is
+   single-threaded). Visibility: **Restricted**, then set a password under **Password protect**. Save; the URL slug (for
+   example `tactical-rpg`) is the project name.
+2. itch.io **Settings > API keys > Generate new API key**; copy it.
+3. GitHub repo **Settings > Secrets and variables > Actions**: **Secrets > New repository secret** `BUTLER_API_KEY` =
+   the key; **Variables > New repository variable** `ITCH_TARGET` = `<itch username>/<project slug>:html5`. Nothing of
+   either is in the repository.
+4. Run the `web` workflow on `main`. After the first upload, tick **This file will be played in the browser** on the
+   `html5` file in the project's edit page and save (one time).
+
+## What differs in the browser
+
+| Area | Behaviour in the browser |
+| --- | --- |
+| Quit | Hidden on the main menu (a page cannot close its own tab) |
+| Saves and settings | In the browser's `localStorage` for the page's origin (keys under `aegis/`); clearing site data wipes them. itch.io serves every game from the shared `itch.zone` origin, so the storage quota may be shared |
+| Playtest recordings and F12 screenshots | Off on the web |
+| Audio | The second bundle part, fetched after the main menu; starts only after the first click or key press (browser autoplay rule) |
+| WebGL missing | The game stops and the page shows a short message instead of drawing |
+| Touch / mobile | Runs, but the UI is built for mouse and keyboard |
+~~~
+
 ### FB-164: PR4-7 follow-ups for the first real deploy (butler hash provenance, `wasm-opt` on CI)
 
 - **Spec**: `docs/specs/WEBREL1.md` 5 (PR4-7)
@@ -1609,3 +1699,167 @@ is retired (`legacy/`, the `legacy` branch).
 - **Status**: closed: accepted (@381b8746), follow-up `WEBOPT1`
 - **Finding**: (1) the `web` job of `gate.yml` and `web.yml` gain the step "Binaryen (wasm-opt)": `binaryen-version_125-x86_64-linux.tar.gz` from the `WebAssembly/binaryen` GitHub release, checked with `sha256sum -c` against `7c3bc16599c8274a04d34a504fe4be2047884f900e0e2da2f6fb9cd667183be4` (the release's own published `.sha256` file, fetched 2026-11-10; the archive itself could not be downloaded in the cloud container, so the first runner run is the real check), extracted into `$RUNNER_TEMP`, its `bin/` added to the PATH; the `apt` `binaryen` is not installed. (2) `tools/fc.sh web` runs `wasm-opt -O2` only from version 125 on (`wasm_opt_min`, the pinned CI release; lower it only after a smoke on that version): an older `wasm-opt` prints `[web] wasm-opt N is older than 125 (it breaks the build, FB-165): skipped`, a missing one `[web] wasm-opt not installed`, a run prints `[web] wasm-opt (<version number>): <before> -> <after> bytes`. Verified here: both workflows pass actionlint 1.7.12 + shellcheck; with the `apt` Binaryen 108 on the PATH the build skipped `wasm-opt` with the message and the smoke passed 40/40 (Binaryen uninstalled again after). Measured earlier with 108 (broken build): 13,518,498 -> 9,788,617 bytes (3.8 -> 3.5 MB gzip), so expect a similar saving from 125. **Observable at the next release PR**: the pinned `wasm-opt` ran, its sizes, and the smoke on the optimised build (if it fails, the job stays advisory and Build reports a new item). Gate 2748 passed, 0 failed, 4 ignored, 0 warnings.
 - **Recommendation**: `docs/workflow/web.md` (CI artifact and deploy sections): "Both workflows install a pinned Binaryen release (version_125, sha256-checked; bump `BINARYEN_VERSION` and `BINARYEN_SHA256` together) so `wasm-opt` shrinks the `.wasm`; `tools/fc.sh web` skips a `wasm-opt` older than 125 (Binaryen 108 from `apt` breaks the build)." Build section: "`wasm-opt` is used when Binaryen 125 or newer is on the PATH (Ubuntu's `apt` package is too old)." HISTORY: "2026-11-10 WEBOPT1: `apt` Binaryen 108 tried for `wasm-opt` and dropped (its `-O2` re-points the `__wbindgen_externrefs` export at the fixed funcref table; the build did not boot, FB-165); a pinned current release is used instead." STRUCTURE: none.
+
+## FB-167, FB-168, FB-169, FB-170, FB-171 (answered in READY @9b4b25a2, moved 2026-11-10)
+
+### FB-167: ACTS23-R5 feasibility (PK1, PK2, PK3)
+
+- **Spec**: `docs/specs/ACTS23.md` sections 2, 4, 5.1, 5.2; `docs/sessions/PK1_CORRUPTION.md`; READY Section 2 row 8
+- **Kind**: feasibility
+- **Status**: closed: accepted (@6a1977ec), follow-up `PK1-S1`, `PK1-S2a`, `PK1-S2b`, `PK1-S2c`, `PK1-S3`
+- **Finding**: All of R5 is buildable. PK1 can be sliced now and holds at 0 battle, sim or phasefold diffs: the only golden it moves is `rules_contract_golden` (new rule and numbers). PK2's item instances are the one L+ item, because about 300 `stash` / `equipment` sites expect plain ids (`state.rs:61`, `:951`). PK2 and PK3 have no `.1` yet, so their slices wait on Design. Two notes on PK1 section 1, neither needing code: a skill's own `triggers` do not take `hit_dealt` (`SKILL_TRIGGER_EVENTS`, `rpgkit_data/src/lib.rs:1818`), so a hit that adds Strain is a skill `riders` row with `meter {to: other}` (`trigger.rs:531`); ground hazards use flat fields, not an `EffectSpec` (`HazardDef`, `lib.rs:1991`). ACTS23 section 2 line numbers have drifted by about 11 lines.
+
+| Package | Hook | Code sites | Cost | Golden risk | Flag-able at 0 diffs |
+| --- | --- | --- | --- | --- | --- |
+| PK1 | `strain` row and bands (data) | `unit_meters.json`; `meter.rs:131` (start), `:359` (pay), `:410` (decay) | S (asset) | none; phasefold reads shipped data but no fight holds `strain` | yes (no holder) |
+| PK1 | 3.1 `heal_taken` band effect | `BAND_EFFECTS` `lib.rs:1862`; `grants.rs:81` `Target`, `band_ok`; `world.rs:374` `heal` | S | checks_golden only if it joins the passive effect list (the "(use stat, ...)" message) | yes, as a band-only effect |
+| PK1 | 3.2 to 3.5: `pct_of_hit`, `strike_nearest`, `ap set`, `mark` | `TRIGGER_EFFECTS` `lib.rs:1829`; `trigger.rs:742` (`ap`, party side only), `:813` (`damage`); `mark` into `HeroEnd` (`roster.rs:86`), `Tally` (`rpgkit_world/src/battle.rs:246`) | M (`strike_nearest`: a resolver strike outside the plan) | none | yes (no data) |
+| PK1 | 3.6 hazard `meter` | `ARENA_EFFECT_KEYS` `lib.rs:1875`, `arena.rs:225`; `ground.rs:370` | S | none (kinds not in checks_golden) | yes |
+| PK1 | 4 Channel opener, marrow versions, planner, Fill, tells, AI | `round_intent.rs:25`, `:126` (`Pick`), `:221` (`target_problem`), `:272` (`set_intent`); `round_intent_plan.rs:496`, `:691`, `:919` (fill), `:2131` (menu rows); `skill.rs:375` (version read as Field's); `meter.rs:334` / `:347` / `:359` (cost); `ai.rs`; `intent.rs` (tells); `REGISTER` `ruleset.rs:83`; GUI `emberwake_gui/src/battle/` | L (kit) + M (game GUI) | `rules_contract_golden` re-record; timeline, sim, phasefold 0 (opener only for holders) | yes |
+| PK2 | (d) unit-scope campaign track | refusal at `check/campaign.rs:287`; `campaign/meter.rs:59`; `UnitState` `state.rs:48` (an additive saved key); stage passives at `roster.rs:66` `field_unit`; `depart` with life `lost` `roster.rs:389`; `mark` settle at `:292` | M-L | none (journey uses frozen data; additive key) | yes (no data) |
+| PK2 | (e) graft body slots: a skill and a meter floor | `LOADOUT_SLOTS` `lib.rs:26`; `gear_ok` `grants.rs:153`; `unit.rs:610`, `:639`; floors combine by max at `meter.rs:143-147` | M | checks_golden if grafts add an item type or slot value, or change the gear "(use ...)" list | yes, with a separate `body` field and a body-only effect list |
+| PK2 | (f) recipe service | `SERVICES` `explore.rs:315`; purse, stash; member effects | M | none | yes |
+| PK2 | weapon techniques per family | `apply_family_bonuses` `unit.rs:566`; `level_of` `stats.rs:222`; held like `gear_skills`; Cold Steel gate needs PK1's Channel round | M | none | yes |
+| PK2 | weapon instances and durability | `state.rs:61`, `:951`, `:755`; `gear.rs:277`; `shop.rs`; loot `battle.rs:328`; `save.rs:18` (VERSION 13, `STEPS` empty); battle cost and dulling in `skill.rs`; return through `HeroEnd` | L+ (world L, battle M) | journey_golden if the `equipment` or `stash` shape changes or VERSION goes up | yes if instances are additive and act-gated (question 6) |
+| PK3 | bleed-out and revive | `bleed_out_rounds` `lib.rs:1339` (unread); cause `bled_out` already exists (`lib.rs:1263`); `world.rs:374` (no heal on a downed unit), `:487` (a downed unit's cell is free) | M | none (no golden passes a rule) | yes |
+| PK3 | recruit generator (ROSTER1-P) | `roster.rs:523` (`pool` = 0); `recruit` effect; `UnitState` has no `name` field | M-L | none | yes |
+| PK3 | procedural keepsakes | `keepsakes_by_class` / `keepsake_name` `lib.rs:1393-1412` (unread); `depart` `roster.rs:408-415` | S-M | none | yes |
+
+Dependencies: PR5-1 `roll_table` (the crisis); PR5-2 is not in R5.
+
+- **Spec questions**:
+  1. **What is a Channel round?** PK1 4.3 sets `RoundIntent::Channel`, but an intent persists across rounds (IN2), a change ends intent-bound buffs (IN6, `round_intent.rs:283`), and the target kind, deck order, follow-ups and AI rows are all read per intent. Options: (a) a `channel` flag on the round state, cleared at round start; the first skill's row stays the intent, and entering a Channel round counts as an intent change, so bound buffs end; (b) the intent value itself. **Recommend (a)**: tells show Channel when the flag is set.
+  2. **Retire the old Channel path?** Today a ruleset can list `channel` in `intents` (`ruleset.rs:115`) and a skill can set `round_intent: channel` (`check/skill.rs:1008`). No data uses either. **Recommend retiring both** in favour of rule `channel`, with a HISTORY row and one contract re-record.
+  3. **Timeline default**: ACTS23 5.1 says "off in timeline until Act 2 data", while PK1 4.1 says "on in timeline, inert". **Recommend PK1's wording**, with `channel` added to the shipped `timeline` row in the PK1 data slice.
+  4. **"First pick"**: `Pick::MoveHere` usually comes first. **Recommend "before the first skill or item pick"**, so Move and Rest stay neutral.
+  5. **Biological Collapse on enemies**: `ap set 0` does nothing to enemies, which pay no AP and get no `ap` effects (`trigger.rs:743`). **Recommend a 1-round `stun` for units that pay no AP.**
+  6. **Graft floors**: floors combine by max, so 4 grafts at +10 give 10, not 40, and the Rock Salt flush (-10, Q-43) needs a per-member offset. **Recommend an additive body-only `meter_floor` grant plus an offset on the unit track.**
+  7. **Durability switched on by act**: one campaign world (Q-A2 (a)) keeps one ruleset, so a ruleset flag cannot turn on at Act 2. Options: (a) manifest `durability.from_act` plus kit rule `durability`; instances are created at the act line and on later acquisitions, so Act 1 saves are untouched and VERSION stays; (b) the spec's VERSION bump with a migration. **Recommend (a).**
+  8. **`channel_basics`** repeats the meter row's `skills`, which already open with no slot (UM6, `meter.rs:157`). **Recommend the `strain` row's `skills`.**
+  9. **PK2 and PK3 have no `.1` yet.** Open items: technique lists, recipe rows, recruit stat ranges, quirks and names, revive when the downed cell is taken, and naming procedural keepsakes (the stash holds ids only). **Recommend PK2 `.1` and PK3 `.1` before slicing them.**
+- **Recommendation**:
+  - `PR5-3` (kit, M): PK1 hooks 3.1 to 3.6; 0 diffs.
+  - `PR5-4` (kit, L): rule `channel`, skill field `channel`, eligibility, the marrow version in resolve and cost, the opener and planner rows, the Fill order, deck `marrow` and its limit; `rules_contract_golden` only.
+  - `PR5-5` (kit, M): Channel tells and the AI row; 0 diffs.
+  - `PR5-6` (game, M): GUI opener and greyed rows; 0 diffs.
+  - `PR5-7` (asset, S-M): the `strain` row, the marrow basic, test passive and enemy, the Dojo preset, and `channel` in `timeline`; phasefold is the canary; then a balance run.
+  - `PR5-8` (kit, M-L): unit track and the `mark` settle; 0 diffs.
+  - `PR5-9` (kit, M): body slots and the additive floor; 0 diffs.
+  - `PR5-10` (kit, M): recipe service; 0 diffs.
+  - `PR5-11` (kit, M): bleed-out and revive; 0 diffs.
+  - `PR5-12` (kit, M): weapon techniques, after PR5-4; 0 diffs.
+  - `PR5-13` (kit, L, splittable): weapon instances, then durability; 0 diffs under question 7 (a).
+  - `PR5-14` (kit, M-L): recruit generator; `PR5-15` (kit, S-M): procedural keepsakes; both 0 diffs.
+  - PR5-3 to PR5-7 can start now; PR5-8 onward wait for PK2 `.1` and PK3 `.1`.
+
+### FB-168: PR5-1 `ROLLTABLE1` landed (`roll_table` trigger effect)
+
+- **Spec**: READY Section 1 row PR5-1; `docs/specs/ACTS23.md` PK1 hook (a) (the `PR5-1` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@6a1977ec), follow-up `ROLLTABLE1`
+- **Finding**: `rpgkit_data::TRIGGER_EFFECTS` gains `roll_table` (`rows` of `{weight, effects}`; `ROLL_TABLE`, `ROLL_ROW_KEYS`, `ROLL_WEIGHT = (1, 1000)`). Every trigger path ends in `trigger::run_effects` (skill, passive and item triggers, riders, deferred `ally_hit` effects, meter `rules` crossings), so one branch at its top covers all of them: `trigger::roll_row` draws once from the seeded battle stream (`randi_range(1, total)`) only when a table fires (no draw for no rows or a total of 1) and runs the picked row's effects through `run_effects` with the same event, holder and `rules` depth (each effect keeps its own `to`). Content check `roll_table_errors` (`rpgkit_content/src/check/hooks.rs`): rows a non-empty list; row keys `weight` and `effects` only; `weight` a whole number 1..1000; 1..4 effects, each through `effect_errors` (`meter_set` allowed on meter rules); a nested `roll_table` or `redirect` refused; `to` on the table is an unknown key. Schema help on `skills.triggers` and `unit_meters.rules`. Tests: `rpgkit_battle/tests/roll_table.rs` (5: same seed same row, weights followed, draws only when a table fires, row effects with their own `to`, meter-rule crossing) and `rpgkit_content/tests/roll_table_checks.rs` (4, 19 error cases one error each). Gate 2757 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Review: change-reviewer clean (3 low, below).
+- **Recommendation**: `kits/rpg/README.md` (after the HOOKS1-M line): "ROLLTABLE1: the trigger effect `roll_table` (`rows` of `{weight 1-1000, effects}`) picks one row by weight on the seeded battle RNG (`trigger::roll_row`, one draw only when a table fires) and runs its effects as the trigger's own, in skill, passive, item and rider triggers and meter rules; no table or redirect inside a row." `engine/docs/authoring/combat_hooks.md`: add `roll_table` to the trigger effects list (:124) and the meter-rule effects (:179). GAME_BRIEF trigger effects: add `roll_table` (ACTS23 PK1 hook (a); no shipped data uses it yet). No HISTORY row (no golden re-recorded); STRUCTURE unchanged.
+
+### FB-169: PR5-1 readings beyond the row text (for confirmation)
+
+- **Spec**: READY Section 1 row PR5-1 (@ the `PR5-1` squash commit)
+- **Kind**: suggestion
+- **Status**: closed: accepted (@6a1977ec), follow-up `ROLLTABLE1-GUARD`, `FBARCHIVE-FENCE`
+- **Finding**: (1) the row says `weight: int >= 1`; the check caps it at 1000 (kit checks state a range; the sum cannot overflow). (2) A nested `redirect` is refused: a redirect claims the hit before triggers run, so in a table it would do nothing. (3) No row-count limit (the row gives none). (4) The roll writes no log line of its own; the picked row's effects log as usual. (5) Review L1: on an `ally_hit` trigger a top-level `guard` shapes the hit, but a `guard` inside a table rolls at the end of the action (with the trigger's other non-guard effects), after the damage; the check allows it and no data uses it (PK1 crisis rows fire on `round_end`). (6) Process: `feedback_check.py archive` split FB-163 at a `## ` heading inside its fenced `~~~markdown` block, leaving the tail in FEEDBACK; restored by hand into FEEDBACK_CLOSED (this push).
+- **Recommendation**: keep (1)-(4) as built. For (5), Option A (recommended): the check refuses `guard` inside a `roll_table` on an `ally_hit` row ("put guard at the top level"), a small follow-up row; Option B: document "on `ally_hit` a table rolls at the end of the action" in the help. Optional: a row cap (e.g. 8) for editor tables. For (6), a small `tools/planner` fix row: the archive splitter skips headings inside fenced blocks.
+
+### FB-170: PR5-2 `PHASEFX1` landed (encounter phase effects `side` and `swap`)
+
+- **Spec**: READY Section 1 row PR5-2; `docs/specs/ACTS23.md` PK6 hooks (l), (m) (the `PR5-2` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@6a1977ec), follow-up `PHASEFX1`
+- **Finding**: `side` {units 1..6, to: `hostile_all` / `party` / `enemy`}: a `hostile_all` rogue stays in `w.enemies` (the enemy AI plans it, the verdict and `a_side_is_wiped` count it as a foe) and `World.sides` (`Sides`, rebuilt by `World::set_side`) gives each enemy-side unit its own foe and friend lists while a rogue exists, read at the top of `foes_of` / `friends_of` (the ~70 callers keep their signatures; with no rogue the old path runs unchanged). `party` / `enemy` move the unit to the end of that side (party side = guest). A turned unit leaves its morale group; joining the party side drops `unkillable`. `swap` {unit, to, hp: `keep_pct` / `full`}: the `to` rows are built at battle start; at fire time every placed unit of the ref is replaced in place (same unit id, cell, side and encounter ref): HP `roundi(new_max * hp / max)` clamped 1..max or full, AP capped, statuses end, the new AI profile is the base, meters (`unit_meters`) and the default intent (`round_intent`) restart, poise refills, unlanded actions are cancelled at a block start, pouch skills join the catalog, the name is numbered if taken. `[Side]` / `[Swap]` log cells; metrics `swap_cell`; `Session::fates` walks the spawned enemy list. Content checks `side_errors` / `swap_errors` (units.side for a row's side; world encounters through `character_side`); the world sim maps a swap's `to`. Tests: `rpgkit_battle/tests/phase_side_swap.rs` (12) and `rpgkit_content/tests/phase_side_swap_checks.rs` (5). Gate 2774 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Review: change-reviewer, 2 medium (morale group, `unkillable` on swap) and 5 low fixed; 1 low (metrics) documented.
+- **Recommendation**: `kits/rpg/README.md`: "PHASEFX1 (ACTS23 PK6 l, m): encounter phase effects `side` {units, to: hostile_all, party or enemy} (a `hostile_all` rogue stays on the enemy side, fights every other unit through `World.sides` and counts as a foe for the win objectives; a turned unit leaves its morale group; joining the party side drops unkillable) and `swap` {unit, to, hp: keep_pct or full} (in place: same unit id, cell, side and encounter ref; HP share roundi; statuses end; meters and default intent restart; new AI and deck from the next planning); fates follow the spawned enemy list; `[Side]` / `[Swap]` log cells; content checks; one cell per unit (2 x 2 is hook n)." STRUCTURE (rpgkit_battle row): "PHASEFX1: `encounter.rs` side/swap phase effects, `swap_hp`; `world.rs` `Sides`, `set_side`, `swap_unit`; `session.rs` `phase_side`, `phase_swap`; `meter.rs` `restart_unit`; tests `tests/phase_side_swap.rs`." GAME_BRIEF (encounters / boss phases): "Phase effects also `side` (turn units hostile to all or to a side) and `swap` (replace a unit in place, keeping its HP share or full HP)." No HISTORY row.
+
+### FB-171: PR5-2 readings beyond the row text and four questions
+
+- **Spec**: READY Section 1 row PR5-2 (@ the `PR5-2` squash commit)
+- **Kind**: suggestion
+- **Status**: closed: accepted (@6a1977ec), follow-up `PHASEFX1`
+- **Finding**: Built readings: (1) "the id of a side" is `party` or `enemy` (the battle has two sides; `neutral`, a valid `units.side`, is refused). (2) Heroes, reserved and off-board units are never turned or swapped (as `kill`); the checks also refuse a hero, a protected guest or the `slay` target in `side`. (3) A swapped unit keeps its encounter ref: later effects, triggers, fates, rewards, morale keys and `unkillable` follow the old ref; earlier phase `ai` effects on it still apply on the new base. (4) `swap` hits every placed unit of the ref (as `status` / `ai` / `deck`). (5) "Deck and AI from the next round": unlanded actions are cancelled at a block-start swap; the new deck and profile plan from the next planning (at block 0 the current round's, as the `deck` effect). (6) Trigger limits and facing carry over a swap. (7) Metrics keep start sides, so hits between a turned unit and its old side book as friendly fire (balance still holds; documented on `BattleMetrics`). (8) The static swap side check uses the roster side, even after an earlier `side` turn.
+- **Recommendation**: keep (1)-(8) as built. Questions, each with the built default: (a) a unit turned mid-round keeps the actions it already booked, even against its new friends (default: keep; alternative: cancel its unlanded actions as a swap does); (b) accept `neutral` as a `side` target (default: no, two sides); (c) can a hero be turned (default: no, the player controls heroes); (d) node 20 Stage V hostility (PK1 `.1`) reuses `side: hostile_all`, so (a) decides whether a breaching unit's booked actions still land.
+
+## FB-172 (answered in READY @7bf581a4, moved 2026-11-10)
+
+### FB-172: PR5-17 `FBARCHIVE-FENCE` landed (archive and check are fence-aware)
+
+- **Spec**: READY Section 1 row PR5-17; `FB-169` (6) (the `PR5-17` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@7bf581a4), follow-up `FBARCHIVE-FENCE`
+- **Finding**: `tools/planner/feedback_check.py` gains `outside_fences(lines)` (CommonMark fences: 3 or more backticks or tildes; closed by the same character, at least as long, nothing after; any indent counts). `read_items`, `sections`, the archived-id set and `parse_building_rows` skip `## ` / `### ` lines inside a fence, and `archive` rewrites only the item's own Status line (the first outside a fence). New behaviour: a fence in FEEDBACK.md that never closes is a parse error (exit 2) instead of silently swallowing every item after it. Tests: `FenceTest` in `tools/planner/test_feedback_check.py` (4 tests, four fence variants; they fail on the old script). `tools/fc.sh tooltests` ok (144 tools/tiles, 22 planner); the check on the live docs is unchanged. Rust untouched (identical to the gated `develop`).
+- **Recommendation**: `tools/planner/README.md`, the `feedback_check.py` row: append "; `archive` and `check` treat `## ` / `### ` lines inside a fenced code block as text, so an item that quotes Markdown moves whole, and a fence in FEEDBACK.md that never closes is a parse error (exit 2) (FB-169)". Confirm the unclosed-fence error (the alternative is the CommonMark reading: the fence runs to the end of the file).
+
+## FB-173, FB-174, FB-175 (answered in READY @eee784e9, moved 2026-11-10)
+
+### FB-173: PR5-3 `PK1-S1` landed (PK1 section 3 hooks 1-7)
+
+- **Spec**: READY Section 1 row PR5-3; `docs/sessions/PK1_CORRUPTION.md` section 3 as amended by `FB-167` (the `PR5-3` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@eee784e9), follow-up `PK1-S1`
+- **Finding**: (1) band-only `heal_taken` (`BAND_EFFECTS`, `Grant::band_heal_taken`, `Unit.band_heal_taken`): every in-battle heal (item, support, regen) passes `World::heal`, `amount * (100 + pct) / 100` rounded down, at least 0, then the missing-HP cap; unchanged without the band. (2) `damage` `pct_of_hit`: a share of the event's hit (`Event.hit`, set on `hit_taken`, `guarded_hit`, `hit_dealt`, `kill` and riders; `trigger::part`, at least 1 when the hit dealt damage), never below 1 HP, not mitigated again; the check refuses `value` with it, `to: other`, and a rider without `to: self`. (3) `strike_nearest` {power, then_status, then_rounds}: the nearest other unit of any side (`World::dist`, ties to the lowest id), resolved like riposte (`roll_hit`, one crit roll, cover), no AP and no hit events, `[Spasm]` line; the status lands next round. (4) `ap` {set, rounds}: `trigger::apply_ap_sets` at round start (after `round_start` triggers, before planning) holds AP at most `set`; a unit that pays no AP gets a 1-round stun (`debt_stun_status`). (5) `mark` {mark, value, to}: `mark.rs` `Marks`, `HeroEnd.marks`, the settle's `marks` key (only when non-empty), the Results screen line "X is marked: calcify +1." (`emberwake_gui` `hub.rs`). (6) hazard `meter` {meter, delta}: arena effects (`strike_unit`) and ground hazard rows (`HazardDef.meter`, applied at `ground::settle`), holders only (`meter::from_hazard`). (7) consumable `unmark` {mark}: removes the target's latest mark of that id; on a `hostile_all` rogue that started on the party side it calms it at the next round start (`World::rejoin_party` at its start place; a start guest is a guest again, protected again if it was; joining the party side drops `unkillable`). Schema: `hazards.meter`, `items.unmark` (json, `omit_default`; empty writes no key). Tests: `rpgkit_battle/tests/pk1_hooks.rs` (13), `rpgkit_content/tests/pk1_hook_checks.rs` (9), plus roster and Results tests; two kit test expectations updated mechanically (`hooks_schema.rs`). Gate 2798 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Review: change-reviewer PASS, 1 medium (calmed guest) and 3 low fixed; 3 low in FB-174.
+- **Recommendation**: `kits/rpg/README.md` (after PHASEFX1): "PK1-S1 (PK1_CORRUPTION 3, FB-167): band-only `heal_taken` (a percent on every heal after its formula, `World::heal`); trigger `damage` `pct_of_hit` (recoil on the holder, `to: self`, never below 1 HP); `strike_nearest` {power, then_status, then_rounds} (nearest other unit of any side, ties to the lowest id, `[Spasm]` line); `ap` {set, rounds} (AP held at most `set` at the next round starts; a unit that pays no AP gets a 1-round stun); `mark` {mark, value, to} (`World::marks`, `HeroEnd::marks`, the settle's `marks`); consumable `unmark` {mark} (removes the latest mark; a turned ally rejoins the party side at the next round start in its start role); hazard `meter` {meter, delta} on arena effects and ground hazard rows (holders only)." `engine/docs/authoring/combat_hooks.md`: trigger effects (:124) add `strike_nearest`, `mark`, `ap` `set`/`rounds`, `damage` `pct_of_hit`; hazards table (:67) a row "`hazards` row: `meter` {meter, delta}, a holder's meter change"; arena `effect` (:95) add `meter`; unit_meters bands add `heal_taken` (bands only); meter-rule effects add the new trigger effects. GAME_BRIEF: "Trigger effects also `strike_nearest`, `mark`, `ap set`, `damage pct_of_hit`; band effect `heal_taken`; hazard `meter`; consumable `unmark` (PK1-S1; no shipped data uses them yet)." STRUCTURE (rpgkit_battle row): "PK1-S1: `mark.rs` (battle marks, unmark, calm); `trigger.rs` `strike_nearest`, `apply_ap_sets`; `world.rs` `heal_taken`, `rejoin_party`; `meter.rs` `from_hazard`; `Session` `start_guests` / `start_protected`; tests `tests/pk1_hooks.rs`." No HISTORY row.
+
+### FB-174: PR5-3 readings, limits and questions
+
+- **Spec**: READY Section 1 row PR5-3 (@ the `PR5-3` squash commit)
+- **Kind**: suggestion
+- **Status**: closed: accepted (@eee784e9), follow-up `PK1-S2c`
+- **Finding**: Ranges chosen (the spec gives none): `ap` `set` 0-4 and `rounds` 1-5; `strike_nearest` `power` 0.1-3.0 and `then_rounds` 1-5; `mark` id up to 24 characters and `value` 1-99; hazard meter `delta` -100..100, not 0; `heal_taken` -100..100, not 0. Limits: (L2) spec 3.4 "the planner shows why": the kit exposes `State::ap_held(c)`, but no planner or GUI text reads it yet; (L5) `strike_nearest` has no reach limit (a melee unit may strike a unit five tiles away), as the spec reads literally; (L6) `unmark` calms any `hostile_all` rogue that started on the party side and lost a mark, not only one a breach turned (fine for PK1; PK2's breach decides). The AI and planner heal estimates do not apply `heal_taken`; the Dojo heal bypasses it (a practice screen).
+- **Recommendation**: Questions, each with the built default: (1) bands cannot hold triggers, so "the Aberrant Edge band holds a hit_dealt trigger" is a meter-row `triggers` entry with `when.meter {id: strain, at_least: 75}` (default: keep; alternative: band `triggers`); (2) recoil is at least 1 when the hit dealt damage (default: keep); (3) `strike_nearest` raises no hit events (no riders, recoil or `hit_taken` on it) (default: keep); (4) an `unmark` with nothing to undo is spent with a log line "no calcify to undo" (default: keep; alternative: refused at planning); (5) for PK2: a hero still hostile at the battle end breaks `hero_ends`' member pairing, so the Stage V turn must settle it; (6) the priest keystone's skill version of `unmark` (`uses_per_battle`) is not in this slice (PK2). Follow-up rows: wire `ap_held` into the planner's reason text with PR5-6 (game GUI), and decide `strike_nearest` reach (recommended: keep any distance, it is a spasm).
+
+### FB-175: PR5-16 `ROLLTABLE1-GUARD` landed
+
+- **Spec**: READY Section 1 row PR5-16; `FB-169` (5) Option A (the `PR5-16` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@eee784e9), follow-up `ROLLTABLE1-GUARD`
+- **Finding**: `rpgkit_content/src/check/hooks.rs` `effects_errors`: a `roll_table` on an `ally_hit` row whose rows hold a `guard` is one error, "a roll_table on ally_hit cannot guard (it rolls after the hit); put guard at the top level." (`table_guards`). The same table on another event and a top-level `guard` on `ally_hit` check clean. Test `a_table_on_ally_hit_cannot_guard` (`rpgkit_content/tests/roll_table_checks.rs`). Gate 2799 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Built by the planner (small standalone logic).
+- **Recommendation**: `kits/rpg/README.md` ROLLTABLE1 line: append "; on `ally_hit` a table cannot hold a `guard` (only a top-level guard shapes the hit)". `engine/docs/authoring/combat_hooks.md` (`roll_table` entry): the same clause.
+
+## FB-176, FB-177 (answered in READY @cf3fee83, moved 2026-11-10)
+
+### FB-176: PR5-4 `PK1-S2a` landed (Channel kit core; `rules_contract_golden` re-recorded)
+
+- **Spec**: READY Section 1 row PR5-4; `docs/sessions/PK1_CORRUPTION.md` section 4 (the `PR5-4` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@cf3fee83), follow-up `PK1-S2a`
+- **Finding**: Rule `channel` (`REGISTER` entry 20: an extension in the planning system requiring `round_intent` and `unit_meters`; inert without a `channel_meter` holder) with ruleset fields `channel_meter` (default `""`), `channel_power` (1.25, 1.0-2.0), `channel_cost` ([15, 25, 35] by AP), `marrow_actives` (1, 0-3), `channel_rest` (`"normal"`), all `needs=channel` and written only when not default. The old Channel path is retired (`INTENTS` four entries; `intents: channel` and skill `round_intent: channel` refused; `RoundIntent::Channel` unreachable, kept as the tells' term slot). Skill fields `channel` {none, only, cost 0-100, power 1-3, effects}, `requires_meter` {meter, min}, `hp_cost_pct` 0-99; deck `marrow` (at most `marrow_actives`; saved only when set). New `rpgkit_battle/src/channel.rs`: `can_channel`, `has_version` (IR21 single intent, as the checks), `marked`, `opens` / `problem` (Move, Rest, only-skills, the class basic's version and the marked actives open; the rest greyed "Channel round"; only-skills greyed in Cold Steel), `version` (cost by the skill's AP, power x `channel_power` on damage, armour piercing, `channel.effects` as a rider; only-skills as authored), `rest_skill` (Feed as the Channel Rest, neutral), the Channel order (only-skills, marked actives, class basic; the meter row's skills are never auto-filled, Vent is picked by hand, Feed only fills). Round flag `RoundState.channel` (cleared each round start); converting toggle `round_intent_plan::set_channel` / `Session::set_channel` (never locked: Moves and Rest stay, skills swap version, no-counterpart skills and items drop with a line, the unit is rebuilt and refilled; turning on drops intent-bound buffs). `command::hp_cost_for` adds `hp_cost_pct` (Vent); `meter::gate_problem` (`requires_meter`); any Channel round skips every decay row of the channel meter. UM6 relaxed (`check/hook_kinds.rs`): a `channel.only` meter-row skill may raise its meter (Feed, FB-167 Q8). Game layer, mechanical: `emberwake_gui` `draw.rs` (`hp_cost_for`), `party.rs` (`Deck.marrow`), `skill_menu_tests.rs` (`a_fifth_row_holds` now uses Field). Tests: `rpgkit_battle/tests/channel.rs` (14), `rpgkit_content/tests/channel_checks.rs` (5), `rpgkit_world/tests/deck.rs` (+1); intended expectation updates in `timeline_fields.rs`, `rulesets.rs`, `hooks_schema.rs`, `deck_rows.rs`. **`rules_contract_golden` re-recorded** (`RECORD=1 tools/fc.sh test --test rules_report`): `|channel` added to `tunable rules` and removed from `tunable intents`; five `tunable` lines `needs=channel`; the rule line `channel extension system=planning ... requires=round_intent, unit_meters`; three `promoted` lines (`CHANNEL_POWER`, `CHANNEL_COST`, `MARROW_ACTIVES`). No other golden moved. Gate 2819 passed, 0 failed, 4 ignored, 0 warnings. Review: change-reviewer FAIL then fixed (1 high: Feed filled a Guard Channel round ahead of the marked active; 2 medium: guarded decay, IR21 eligibility; 3 low).
+- **Recommendation**: HISTORY: "2026-11-10 | `rules_contract_golden` re-recorded (PR5-4, PK1-S2a): rule `channel` added to the register and the `rules` options; `channel` removed from the `intents` options (old Channel intent retired, FB-167 Q1-Q2); ruleset fields `channel_meter`, `channel_power`, `channel_cost`, `marrow_actives`, `channel_rest`; promoted `CHANNEL_POWER`, `CHANNEL_COST`, `MARROW_ACTIVES` | intended contract change; no battle, sim or phasefold golden moved." `kits/rpg/README.md`: "PK1-S2a: rule `channel` (extension; requires round_intent, unit_meters; inert without a `channel_meter` holder): round flag `RoundState::channel`, the converting toggle `Session::set_channel` (Moves and Rest stay, skills swap version, no-counterpart skills and items drop, the fill refills); marrow versions (`channel::version`: `channel_cost` by AP, `channel_power`, piercing, `channel.effects` as a rider; `channel.only` as authored); the Channel order and `channel_rest`; skill fields `channel`, `requires_meter`, `hp_cost_pct`; deck `marrow`; the old `channel` intent retired." `combat_hooks.md`: the skill fields `channel`, `requires_meter`, `hp_cost_pct`, the rule `channel` and its row fields, and "a meter row's `skills` may raise the meter when `channel.only`". GAME_BRIEF (combat): "Channel (PK1): a Strain carrier toggles its round to Channel (never locked); single-intent skills become marrow versions (x1.25, armour piercing, Strain 15 / 25 / 35 by AP), Rest becomes Feed, Vent needs Strain 50 and 15% HP; a Channel round skips Strain decay." STRUCTURE (rpgkit_battle row): "PK1-S2a: `channel.rs` (round flag, eligibility, versions, Channel order, Channel Rest), `round_intent_plan.rs` `set_channel`, `Session::set_channel`, `command.rs` `hp_cost_for`, `meter.rs` `gate_problem`; test `tests/channel.rs`; content `channel_errors`, `meter_gate_errors`, `marrow_errors`, test `rpgkit_content/tests/channel_checks.rs`."
+
+### FB-177: PR5-4 readings and questions (and two notes for PR5-7)
+
+- **Spec**: READY Section 1 row PR5-4 (@ the `PR5-4` squash commit)
+- **Kind**: suggestion
+- **Status**: closed: accepted (@cf3fee83), follow-up `PK1-S3`, `HEALPCT1`
+- **Finding**: Readings: (1) kit defaults are inert (`channel_meter ""`, `channel_rest "normal"`; the kit names no game), so **PR5-7 must set `channel_meter: strain`, `channel_rest: feed` and `channel` in the shipped `timeline` row**; (2) `marrow_actives` defaults to 1 (the spec gives no number); (3) `channel.only` skills resolve as authored (cost `channel.cost` or 0, power `channel.power` or 1, no forced piercing; Vent nets -20 this way); (4) the power factor scales damage only (support and guard versions differ by cost, effects and the mode); (5) `channel.effects` run as a rider on each unit hit (they need the rule `triggers`); (6) items are greyed in a Channel round and the toggle drops them; (7) buffs and picks the toggle dropped are not restored when flipping back; (8) deck `order` and `follow_ups` are ignored in a Channel round; (9) the class basic is the deck rule's basics beyond the ruleset's (rule `deck`); (10) the gate fails an action unpaid at its start; (11) a Support skill that can target self or an ally derives Support and Stand (two intents), so it has no marrow version. **Gap for PR5-7**: Feed's "self-heal 4% of max HP" has no kit field (skills have `heal_stat`, `heal_base`, `heal_mult`; no trigger heal).
+- **Recommendation**: Questions, each with the built default: (a) items in a Channel round: greyed (default) or allowed; (b) should the marrow power factor scale heals and guard too (default: damage only); (c) should `channel.only` skills pay the derived cost by AP (default: no, as authored; PK2 graft skills would then author their cost); (d) should flipping back restore dropped picks (default: no). For the Feed heal, Option A (recommended): a small kit row adding skill field `heal_pct` (a percent of max HP, like `hp_cost_pct`) before PR5-7; Option B: author Feed's heal with the existing `heal_stat` / `heal_mult` approximation.
+
+## FB-178, FB-179, FB-180 (answered in READY @6831b703, moved 2026-11-10)
+
+### FB-178: PR5-5 `PK1-S2b` landed (Channel tells and the AI Channel row)
+
+- **Spec**: READY Section 1 row PR5-5; `docs/sessions/PK1_CORRUPTION.md` 4.3, 4.4 (the `PR5-5` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@6831b703), follow-up `PK1-S2b`
+- **Finding**: Tells: `channel::tell_intent` (Channel while the round flag is set, even with nothing planned); `Intent.round_intent` is `Channel` in a Channel round, with `Intent.channel` and `Intent.row_intent` (the round's own row, which the rules read; the Maneuver kind follows it), so the plan strip, unit card, enemy badges, threat intel and trace show Channel through the existing `RoundIntent::Channel` label. Marrow versions (the twin of a Cold Steel skill, not `channel.only` skills such as Feed and Vent) are marked: `Command.marrow`, `Line.marrow`, `channel::marrow_name` ("Cleave (Marrow)" from the new game term `marrow_mark`, renameable by a `terms` row). `rpgkit_host` `intel_json` adds `channel`, `row_intent` and a line's `marrow` only when set. `plan.rs` `estimate_damage` counts a marrow version's armour piercing (`expected_with`). AI: `ai::channel_row` after the table or tactic commits a Cold Steel pick, for units that can Channel only: it tries the same pick as a Channel round through `round_intent_plan::flip_channel` (shared with the toggle) and keeps it when the Cold Steel value is above 0, the round plans at least one marrow version, its value (expected damage plus heal) is at least `CHANNEL_AI_EDGE` (1.2) times the Cold Steel value and the planned Strain stays below the meter max; otherwise the unit, round state and steps are restored. Economy opener-only rounds stay Cold Steel; no RNG. Tests: `rpgkit_battle/tests/channel.rs` now 22 (8 new: edge, below the max, tells, mark term, enemy holder, hurt holder out of reach, rejected trial keeps an intent-bound buff, Economy). Game layer: `slice5_tests.rs` struct literals. Gate 2827 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Review: change-reviewer PASS, 2 medium fixed (Feed marked as a marrow version; Channel opened just to Feed).
+- **Recommendation**: `kits/rpg/README.md`: "PK1-S2b: tells show Channel while the round flag is set (`channel::tell_intent`; `Intent.round_intent` = Channel, `Intent.channel`, `Intent.row_intent`); marrow versions are marked (`Line.marrow`, `channel::marrow_name`, game term `marrow_mark`); the host intel adds `channel`, `row_intent`, `marrow` when set; the AI Channel row `ai::channel_row` (`CHANNEL_AI_EDGE` 1.2: a marrow version planned, value at least the edge times the Cold Steel round, the meter below its max), the shared flip `round_intent_plan::flip_channel`." The README's game-term list (TERMS1, :120): add `intent_field` (missing) and `marrow_mark`. GAME_BRIEF (combat): "AI Strain carriers open Channel when a marrow round is worth at least 1.2 times the Cold Steel round and Strain stays below 100." STRUCTURE (rpgkit_battle row): "PK1-S2b: `intent.rs` Channel tells, `ai.rs` `channel_row`; tests in `tests/channel.rs`." `combat_hooks.md`: the term `marrow_mark`.
+
+### FB-179: PR5-5 `channel_ai_edge` is a kit constant, not a ruleset number (spec 7 vs the row's 0 golden diffs)
+
+- **Spec**: `docs/sessions/PK1_CORRUPTION.md` section 7 (`channel_ai_edge` listed as tunable under `aegis rules --contract`) vs READY row PR5-5 (acceptance: 0 golden diffs)
+- **Kind**: suggestion
+- **Status**: closed: accepted (@6831b703), follow-up `HEALPCT1`
+- **Finding**: Every ruleset field is a `tunable` line in the contract, so a ruleset number `channel_ai_edge` moves `rules_contract_golden`, which the row's acceptance forbids. Built as the kit constant `ai::CHANNEL_AI_EDGE = 1.2` (not in `LOCKED`; the doc comment states the deviation). Other readings: "the best Cold Steel option" is the AI table's committed pick and its Channel trial is the same pick as a Channel round (a Field or dual-intent pick never Channels); "below 100" is below the meter's max, counting only what the round's actions pay; AI-drafted heroes holding Strain auto-Channel under autoplay and presets; a Channel round made only of `channel.only` skills (PK2 graft skills) never opens from the AI.
+- **Recommendation**: Option A (recommended): a ruleset number `channel_ai_edge` (float, default 1.2, `needs=channel`) folded into `PR5-20` (`HEALPCT1`, a kit row that may name `rules_contract_golden`) or `PR5-7`, with a named contract re-record and a HISTORY row. Option B: keep the constant and drop it from section 7's tunable list. Questions: (Q2) should the AI also try Channel from other picks or intents (default: no, the committed pick only); (Q3) the mark "Name (Marrow)" from the term's short form (default: keep); (Q4) PK2: should graft-only Channel rounds be an AI option (default: revisit with PR5-8).
+
+### FB-180: PR5-6 `PK1-S2c` landed (Channel GUI; host request `channel`)
+
+- **Spec**: READY Section 1 row PR5-6; `docs/sessions/PK1_CORRUPTION.md` 4.3 (the `PR5-6` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: closed: accepted (@6831b703), follow-up `PK1-S2c`, `PK1-S2c-2`
+- **Finding**: Kit (one game-agnostic addition): host request `channel {unit, on}` (`rpgkit_host` `channel_req` over `Session::set_channel`; mutating, recorded for replay, refused in a locked round, for a unit that cannot Channel, an enemy, outside planning or without `on`; an error records nothing). Game (`emberwake_gui`): a "Channel" button in the skill menu's neutral row (after Rest, before Select) for units that can Channel only, always live (0 AP, 0 blocks), lit while on; a placeholder violet `CHANNEL_TINT` on the unit token, the strip blocks and the timeline segments of a Channel round, plus a hero-panel line "Channel round: marrow versions only"; marrow names ("Shield Bash II (Marrow)") on strip entries, hero-panel lines and timeline segments (`input::skill_text`, only when the version is offered); `tokens::plan_pose` reads `channel::tell_intent`; the AP hold "AP held at N this round (source)" in the hero panel (`tips::ap_held_text`); Cold Steel rows greyed with the kit's reasons; Feed on the Rest button and its card in a Channel round (`MenuGrid::rest_name`); menu refusals in words (`intent_text::menu_refusal_text`: "Not enough HP: 9, it costs 10", "Needs Strain 50 or more to start: 30"). Without a holder nothing changes (menu widths and places, agent-link JSON: `channel_units` only under the rule, `strip_labels[].channel` only when true). One wording change on existing screens: greyed pick-menu rows with an HP cost now read "Not enough HP: 9, it costs 10" (was "HP 9 <= cost 10"; no fixture held it). Tests: `battle/tests/channel_tests.rs` (7) and `rpgkit_host/tests/pick_requests.rs` (+1). Gate 2835 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Review: change-reviewer PASS (lows to a part 2: past Feed or Vent timeline segments tint by the current round's mode; the closed-menu hotkey path prints the raw reason; three tests can pass without their precondition; no replay-equality or locked-round test for `channel`).
+- **Recommendation**: `kits/rpg/README.md` (PK1-S2a line): "host request `channel {unit, on}` (recorded; refused in a locked round) over `Session::set_channel`". `engine/docs/PORT_NOTES.md` (host request list, :284) and `games/emberwake/docs/SCREENS.md` (battle-screen requests, :205): add `channel {unit, on}`. GAME_BRIEF (after the Channel line): "Channel GUI (PK1-S2c): the toggle is a 0 AP neutral button for Strain carriers; a placeholder violet tint marks a Channel round's unit and its strip and timeline blocks; marrow versions show as 'Name (Marrow)'; Rest's button reads Feed; refusals in words; the hero panel names an AP hold." Questions (built defaults): (a) Vent shows the one reason the kit returns (HP is checked first) rather than both (spec 4.3 says "both reasons"); (b) "Cold Steel" is placeholder text with no `terms` entry; should it become a game term; (c) the toggle ends intent-bound buffs at once (4.3 item 1), not deferred to Confirm as IN6 does for ghost intent changes.

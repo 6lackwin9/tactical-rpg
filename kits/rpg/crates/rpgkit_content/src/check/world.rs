@@ -479,6 +479,18 @@ fn quest_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors
 }
 
+/// PHASEFX1: the battle side of world character `r` (Data.character_unit_entry: its role when `party` or `enemy`, else its
+/// base unit's side); None when it does not resolve or has no base unit.
+fn character_side(v: &View, w: &str, r: &str) -> Option<String> {
+    let c = v.worlds.resolve(w, "characters", r);
+    if c.is_empty() {
+        return None;
+    }
+    let side = encounter::unit_row_side(v.get("units", &json::s(c, "base_unit")))?;
+    let role = json::s(c, "role");
+    Some(if role == "party" || role == "enemy" { role } else { side })
+}
+
 /// WorldCatalog.guest_ok: false only for an npc character whose base unit is not on the party side.
 fn guest_ok(v: &View, w: &str, r: &str) -> bool {
     let c = v.worlds.resolve(w, "characters", r);
@@ -501,7 +513,7 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         errors.push("Add at least one enemy.".into());
     }
     errors.extend(encounter::arrival_errors(e));
-    errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty()));
+    errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty(), &|r: &str| character_side(v, w, r)));
     // ENCOUNTER2-C 5.2: the talks' trees and speakers, and the broken trigger's poise rule
     errors.extend(encounter::world_talk_problems(v, w, e));
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
@@ -531,7 +543,7 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(encounter::unkillable_problems(e));
     errors.extend(encounter::stay_behind_problems(v, e, true));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects (a ref plays as its character's base unit)
-    errors.extend(super::hooks::arena_hazards_errors(e));
+    errors.extend(super::hooks::arena_hazards_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND)));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
     errors.extend(super::hooks::deck_effect_errors(v, e, Some(w), &unit_of));
     // ENCOUNTER2-C 5.1: the scripted rounds (a ref plays as its character's base unit)

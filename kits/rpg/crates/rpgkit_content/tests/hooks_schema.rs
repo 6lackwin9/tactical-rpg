@@ -183,9 +183,11 @@ fn the_schema_and_the_code_name_the_same_fields_kinds_options_and_rules() {
         assert_eq!(shown, strs(kinds), "{key}: the schema's `when` names the same kinds");
     }
     // the rule register: the nine ids, extensions, after RULESET1's, and the ruleset row's options list them
+    // (PK1-S2a: the rule channel follows them)
     let ids: Vec<&str> = REGISTER.iter().map(|r| r.id).collect();
-    let at = ids.len() - HOOK_RULES.len();
-    assert_eq!(ids[at..].to_vec(), HOOK_RULES.to_vec());
+    let at = ids.iter().position(|i| *i == HOOK_RULES[0]).expect("the hook rules");
+    assert_eq!(ids[at..at + HOOK_RULES.len()].to_vec(), HOOK_RULES.to_vec());
+    assert_eq!(ids[at + HOOK_RULES.len()..].to_vec(), [ruleset::CHANNEL]);
     assert!(REGISTER[at..].iter().all(|r| r.kind == RuleKind::Extension), "every hook rule is an extension");
     assert_eq!(options("content", ruleset::KIND, "rules"), strs(&ids));
     assert!(HOOK_RULES.iter().all(|r| !Ruleset::classic().has(r)), "classic has none");
@@ -439,7 +441,7 @@ fn item_and_encounter_rules_each_report_one_error() {
         (json!({"rounds": [7]}), "Arena hazard 'vents': rounds are whole numbers 1-6 ([] = every round)."),
         (json!({"name": ""}), "Arena hazard 'vents': the name needs 1 to 24 characters."),
         (json!({"id": "Vents"}), "Arena hazard 'Vents': the id must be lowercase snake_case"),
-        (json!({"effect": {}}), "Arena hazard 'vents' effect: set at least one of damage, damage_pct, stagger, status or push."),
+        (json!({"effect": {}}), "Arena hazard 'vents' effect: set at least one of damage, damage_pct, stagger, status, push or meter."),
         (json!({"effect": {"damage": 5, "damage_pct": 5}}), "Arena hazard 'vents' effect: damage and damage_pct together (one of them)."),
         (json!({"effect": {"damage_pct": 60}}), "Arena hazard 'vents' effect: damage_pct must be a whole number 0-50."),
         (json!({"effect": {"status": "haste"}}), "Arena hazard 'vents' effect: status 'haste' is not a debuff."),
@@ -550,7 +552,7 @@ fn the_hook_kinds_check_their_rows() {
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0}, {"id": "f1", "from": 0}]}), "Band 'f1': bands run in ascending from."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "fear"}]}]}), "Band 'f0' status 1: 'fear' is not a status."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "statuses": [{"status": "empower", "magnitude": 60}]}]}), "Band 'f0' status 1: empower needs a magnitude 1-50."),
-        (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "ap_regen", "value": 1}]}]}), "Band 'f0' effect 1: 'ap_regen' is not one of stat, resist, stagger_taken, skill_potency, status_potency, crit."),
+        (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "ap_regen", "value": 1}]}]}), "Band 'f0' effect 1: 'ap_regen' is not one of stat, resist, stagger_taken, skill_potency, status_potency, crit, heal_taken."),
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "resist", "status": "stun", "value": 0}]}]}), "Band 'f0': Effect 1: resistance is 1-100."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": "f9", "effects": [{"type": "ap", "value": 1}]}]}), "Rule 'full': at must be a band id or a whole number 0-5."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": "f1", "dir": "sideways", "effects": [{"type": "ap", "value": 1}]}]}), "Rule 'full': dir must be up or down."),
@@ -755,8 +757,9 @@ fn the_writer_keeps_the_hook_fields_and_a_resave_is_identical() {
     let stored: Value = serde_json::from_str(&fs::read_to_string(store::file_of(&data, None, HAZARDS_KIND)).unwrap()).unwrap();
     let smoke = stored["entries"].as_array().unwrap().iter().find(|e| e["id"] == "smoke").unwrap();
     let keys: Vec<String> = smoke.as_object().unwrap().keys().cloned().collect();
-    let schema_keys: Vec<String> = fields(source::schema(), "content", HAZARDS_KIND).iter().map(|f| json::s(json::dict(f), "key")).filter(|k| k != "origin").collect();
-    assert_eq!(keys, schema_keys, "a hazard row stores every field (origin system left out)");
+    // PK1-S1: an empty `meter` is stored as no key (a row written before it existed re-saves byte for byte)
+    let schema_keys: Vec<String> = fields(source::schema(), "content", HAZARDS_KIND).iter().map(|f| json::s(json::dict(f), "key")).filter(|k| k != "origin" && k != "meter").collect();
+    assert_eq!(keys, schema_keys, "a hazard row stores every field (origin system and an empty meter left out)");
     // a bad row is refused with its reason and the file stays as it was
     let before = fs::read_to_string(store::file_of(&data, None, ZONES_KIND)).unwrap();
     let refused = store::upsert(&data, None, ZONES_KIND, &dict(json!({"id": "swamp_bog", "name": "Bog"})), None).err().expect("a code zone id is refused");

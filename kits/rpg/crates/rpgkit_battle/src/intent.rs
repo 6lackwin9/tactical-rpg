@@ -17,6 +17,11 @@
 //!
 //! HOOKS1 AH3 (rule `arena_hazards`; engine-only): `arena_tells` adds the round's scheduled arena hazards (cells and
 //! blocks), known from the round's start; none in classic.
+//!
+//! PK1-S2b (rule `channel`, PK1 4.3 item 6; engine-only): while a unit's round flag is set (a Channel round) its record
+//! shows the intent Channel (`round_intent`, term `intent_channel`) with `channel` set and the round's own row in
+//! `row_intent`, and each line of a marrow version names it with the marrow mark (`marrow`, term `marrow_mark`). Without
+//! the rule (or a Channel round) every record and the trace are unchanged.
 
 use crate::command::{CmdKind, Command};
 use crate::grid::{V2, NO_CELL};
@@ -46,8 +51,11 @@ pub struct Line {
     pub blocks: (i32, i32),
     /// RULESET1 T1: the recovery blocks booked after the impact (0 in classic; not in the trace).
     pub recovery: i32,
-    /// The action's display name ("" when arriving or idle).
+    /// The action's display name ("" when arriving or idle); PK1-S2b: a marrow version's carries the marrow mark
+    /// (`channel::marrow_name`: "Cleave (Marrow)").
     pub skill: String,
+    /// PK1-S2b (PK1 4.3 item 6, rule `channel`): the action runs a marrow version (false outside a Channel round).
+    pub marrow: bool,
 }
 
 /// The record of one enemy.
@@ -64,8 +72,15 @@ pub struct Intent {
     /// MORALE1 rule 13: the state word and the group (never the value or the flee ratio); "" and -1 without morale.
     pub morale_state: &'static str,
     pub morale_group: i32,
-    /// RULESET1 V5 (`plan_badges` with `round_intent`): the unit's round intent (None without one or with a rule off).
+    /// RULESET1 V5 (`plan_badges` with `round_intent`): the unit's round intent as the tells show it (None without one
+    /// or with a rule off); PK1-S2b: `RoundIntent::Channel` while the round is a Channel round (`channel::tell_intent`).
     pub round_intent: Option<RoundIntent>,
+    /// PK1-S2b (rule `channel`, under `plan_badges` with `round_intent`): the round is a Channel round (the round flag
+    /// `RoundState::channel`; false without the rule).
+    pub channel: bool,
+    /// PK1-S2b: the round's own intent (the first skill's row, which the rules read; `round_intent::intent_of`): equal
+    /// to `round_intent` outside a Channel round (None as `round_intent`).
+    pub row_intent: Option<RoundIntent>,
     /// The round target: the set one, else the first skill or item command's, else the lock (None as above).
     pub round_target: Option<RoundTarget>,
     /// The kind of a Maneuver round (None for the other intents).
@@ -139,8 +154,11 @@ fn fill_round(w: &World, rec: &mut Intent, planned: Option<RoundTarget>, cmds: &
     let live = |t: UnitId| w.units.get(t).is_some_and(|u| u.is_active()) && w.has(t);
     let set = w.round_states.get(&c).and_then(|r| r.target);
     rec.round_target = set.or(planned).or_else(|| cmds.iter().find_map(|cmd| command_target(c, cmd))).or_else(|| w.units[c].active_target.filter(|&t| live(t)).map(RoundTarget::Unit)).map(|t| round_intent::normalize(c, t));
-    rec.round_intent = round_intent::intent_of(w, c);
-    rec.maneuver = (rec.round_intent == Some(RoundIntent::Maneuver)).then(|| round_intent::maneuver_of(w, c));
+    // PK1-S2b (PK1 4.3 item 6): a Channel round shows Channel from the toggle on; the Maneuver kind follows the row
+    rec.row_intent = round_intent::intent_of(w, c);
+    rec.channel = crate::channel::is_channel(w, c);
+    rec.round_intent = crate::channel::tell_intent(w, c);
+    rec.maneuver = (rec.row_intent == Some(RoundIntent::Maneuver)).then(|| round_intent::maneuver_of(w, c));
 }
 
 /// The tell kind of one command.
@@ -192,8 +210,17 @@ pub fn cell_of(cmd: &Command) -> V2 {
     }
 }
 
+/// PK1-S2b (PK1 4.3 item 6): the name a command shows in the tells: a marrow version's with the marrow mark.
+pub fn skill_name(w: &World, cmd: &Command) -> String {
+    if cmd.marrow {
+        crate::channel::marrow_name(&w.cat, &cmd.name)
+    } else {
+        cmd.name.clone()
+    }
+}
+
 pub fn line_of(w: &World, a: &ScheduledAction) -> Line {
-    Line { kind: kind_of(w, &a.command), target: target_of(&a.command), cell: cell_of(&a.command), blocks: (a.start, a.impact), recovery: a.end - a.impact, skill: a.command.name.clone() }
+    Line { kind: kind_of(w, &a.command), target: target_of(&a.command), cell: cell_of(&a.command), blocks: (a.start, a.impact), recovery: a.end - a.impact, skill: skill_name(w, &a.command), marrow: a.command.marrow }
 }
 
 /// `unit`'s live (not cancelled) scheduled actions in block order.
@@ -257,7 +284,7 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
     let reveal_all = badges_on(w) && w.plan_reveal;
     let mut rec = if actions.is_empty() {
         let kind = if on_grid_at_schedule.contains(&unit) { IDLE } else { ARRIVING };
-        Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new() }, revealed: enraged || reveal_all, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
+        Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new(), marrow: false }, revealed: enraged || reveal_all, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, channel: false, row_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
     } else {
         // RULESET1 V4: a foresight range (as measured at scheduling) reveals on top of today's rule (holders in the
         // allies' order)
@@ -268,7 +295,7 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
         }
         let revealed = !readers.is_empty() || enraged || reveal_all;
         let plan = if revealed { actions.iter().map(|a| line_of(w, a)).collect() } else { Vec::new() };
-        Intent { unit, line: line_of(w, actions[0]), revealed, enraged, readers, plan, morale_state: "", morale_group: -1, round_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
+        Intent { unit, line: line_of(w, actions[0]), revealed, enraged, readers, plan, morale_state: "", morale_group: -1, round_intent: None, channel: false, row_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
     };
     let cmds: Vec<&Command> = actions.iter().map(|a| &a.command).collect();
     fill_round(w, &mut rec, None, &cmds, impacts_of(w, &actions));
@@ -278,8 +305,8 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
 /// RULESET1 V5, intent UI5: the record of a party-side unit (its own plan, so always revealed). While planning
 /// (`plan` given) it reads the unit's plan entries; after the plan is committed, its scheduled actions.
 pub fn party_intent_of(w: &World, unit: UnitId, plan: Option<&Plan>, scheduled: &[ScheduledAction]) -> Intent {
-    let idle = || Line { kind: IDLE, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new() };
-    let mut rec = Intent { unit, line: idle(), revealed: true, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, round_target: None, maneuver: None, impacts: Vec::new() };
+    let idle = || Line { kind: IDLE, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new(), marrow: false };
+    let mut rec = Intent { unit, line: idle(), revealed: true, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, channel: false, row_intent: None, round_target: None, maneuver: None, impacts: Vec::new() };
     match plan {
         Some(p) => {
             let st = p.compile(w, unit);
@@ -288,7 +315,7 @@ pub fn party_intent_of(w: &World, unit: UnitId, plan: Option<&Plan>, scheduled: 
                 .entries
                 .iter()
                 .zip(&cmds)
-                .map(|(e, cmd)| Line { kind: kind_of(w, cmd), target: target_of(cmd), cell: cell_of(cmd), blocks: (e.start_block, e.end_block(w)), recovery: e.recovery, skill: cmd.name.clone() })
+                .map(|(e, cmd)| Line { kind: kind_of(w, cmd), target: target_of(cmd), cell: cell_of(cmd), blocks: (e.start_block, e.end_block(w)), recovery: e.recovery, skill: skill_name(w, cmd), marrow: cmd.marrow })
                 .collect();
             let impacts = st.entries.iter().zip(&cmds).filter_map(|(e, cmd)| badge_kind(w, cmd).map(|k| (e.end_block(w), k))).collect();
             let refs: Vec<&Command> = cmds.iter().collect();

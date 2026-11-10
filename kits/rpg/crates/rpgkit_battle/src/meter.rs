@@ -132,36 +132,56 @@ pub fn battle_start(w: &mut World) {
     if !on(w) {
         return;
     }
+    for c in 0..w.units.len() {
+        unit_start(w, c);
+    }
+    for i in 0..w.meters.gauges.len() {
+        settle_band(w, i, false);
+    }
+}
+
+/// UM1 for one unit `c` (rule on): its passive `meter` effects and the ruleset's pools become its gauges, its meter
+/// skills open (band entry is the caller's).
+fn unit_start(w: &mut World, c: UnitId) {
     let cat = w.cat.clone();
     let pools = w.ruleset.numbers.unit_pools.clone();
-    for c in 0..w.units.len() {
-        // U1.2-S5: the ruleset's pools after the passives' meters (start -1: the row's start)
-        let held = w.units[c].passive_meters.clone().into_iter().map(|h| (h.meter, h.start, h.floor));
-        for (meter, start, floor) in held.chain(pools.iter().map(|m| (m.clone(), -1, None))) {
-            let Some(def) = cat.unit_meters.get(&meter) else { continue };
-            let max = max_of(w, c, def);
-            let floor = floor.unwrap_or(def.min).clamp(def.min, max);
-            if let Some(i) = find(w, c, &meter) {
-                let g = &mut w.meters.gauges[i];
-                g.floor = g.floor.max(floor);
-                g.value = g.value.max(g.floor);
-                continue;
-            }
-            let start = match (start < 0, def.start_full) {
-                (true, true) => max,
-                (true, false) => def.start,
-                _ => start,
-            };
-            let value = start.clamp(def.min, max).max(floor);
-            w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
-            for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
-                if !w.units[c].meter_skills.contains(s) {
-                    w.units[c].meter_skills.push(s.clone());
-                }
+    // U1.2-S5: the ruleset's pools after the passives' meters (start -1: the row's start)
+    let held = w.units[c].passive_meters.clone().into_iter().map(|h| (h.meter, h.start, h.floor));
+    for (meter, start, floor) in held.chain(pools.iter().map(|m| (m.clone(), -1, None))) {
+        let Some(def) = cat.unit_meters.get(&meter) else { continue };
+        let max = max_of(w, c, def);
+        let floor = floor.unwrap_or(def.min).clamp(def.min, max);
+        if let Some(i) = find(w, c, &meter) {
+            let g = &mut w.meters.gauges[i];
+            g.floor = g.floor.max(floor);
+            g.value = g.value.max(g.floor);
+            continue;
+        }
+        let start = match (start < 0, def.start_full) {
+            (true, true) => max,
+            (true, false) => def.start,
+            _ => start,
+        };
+        let value = start.clamp(def.min, max).max(floor);
+        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
+        for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
+            if !w.units[c].meter_skills.contains(s) {
+                w.units[c].meter_skills.push(s.clone());
             }
         }
     }
-    for i in 0..w.meters.gauges.len() {
+}
+
+/// PHASEFX1: unit `c` became another row (a phase swap; rule unit_meters): the old row's gauges go, the new row's
+/// start as at the battle start (UM1, each in the band of its start value). Nothing in classic.
+pub fn restart_unit(w: &mut World, c: UnitId) {
+    if !on(w) {
+        return;
+    }
+    w.meters.gauges.retain(|g| g.unit != c);
+    let first = w.meters.gauges.len();
+    unit_start(w, c);
+    for i in first..w.meters.gauges.len() {
         settle_band(w, i, false);
     }
 }
@@ -329,6 +349,29 @@ pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e:
     move_to(res, w, i, target, h, &what, rules, block, fired);
 }
 
+/// PK1-S1 (3.6): a hazard named `source` changes `c`'s meter by `d` (rule unit_meters; nothing when `c` holds no such
+/// meter): within the row's `delta_max` like a trigger's `meter` effect, not a skill's gain (UM3's `unless_gained` is
+/// untouched); its line is `[Meter] <unit>'s <source>: ...`, its move may cross rules. Its Fired joins the triggers the
+/// session logs next.
+pub fn from_hazard(res: &mut Resolver, w: &mut World, c: UnitId, d: &MeterDelta, source: &str, block: i32) {
+    if !on(w) || !w.units[c].is_active() {
+        return;
+    }
+    let Some(i) = find(w, c, &d.meter) else { return };
+    let Some(def) = w.cat.unit_meters.get(&d.meter).cloned() else { return };
+    let delta = d.delta.clamp(-def.delta_max, def.delta_max);
+    if delta == 0 {
+        return;
+    }
+    let h = holder(c, source, &format!("hazard:{source}"));
+    let mut fired = Fired::new(c, "meter", None, source);
+    let to = w.meters.gauges[i].value + delta;
+    move_to(res, w, i, to, &h, &format!("{}'s {} {}", w.units[c].name, def.name, delta_text(delta)), true, block, &mut fired);
+    if !fired.lines.is_empty() || !fired.moves.is_empty() {
+        res.triggers.fired.push(fired);
+    }
+}
+
 /// UM2: why `deltas` cannot be paid from the values `value_of` gives ("" = they can): a negative delta needs a value at
 /// least its size (a meter the unit does not hold counts 0): `<meter name> 0 < 1`.
 pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) -> Option<i32>) -> String {
@@ -340,6 +383,19 @@ pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) ->
         }
     }
     String::new()
+}
+
+/// PK1-S2a (PK1 4.3 item 5, `requires_meter`): why a skill gated on `gate` cannot start at the values `value_of`
+/// gives ("" = it can, or no gate): the meter below `min` (a meter the unit does not hold counts 0): `<meter name> 45
+/// < 50`. Read only under the rule unit_meters.
+pub fn gate_problem(w: &World, gate: Option<&rpgkit_data::MeterGate>, value_of: impl Fn(&str) -> Option<i32>) -> String {
+    let Some(g) = gate.filter(|_| on(w)) else { return String::new() };
+    let have = value_of(&g.meter).unwrap_or(0);
+    if have >= g.min {
+        return String::new();
+    }
+    let name = w.cat.unit_meters.get(&g.meter).map_or_else(|| g.meter.clone(), |m| m.name.clone());
+    format!("{name} {have} < {}", g.min)
 }
 
 /// UM2 for the planners: `c`'s planned meter values after paying `deltas` (clamped to its floor..max; a meter it does
@@ -384,11 +440,13 @@ pub fn pay(res: &mut Resolver, w: &mut World, i: usize) {
 /// meter is paid; the action is cancelled and logged). Returns whether it failed.
 pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
     let a = &res.scheduled[i];
-    if a.command.meters.is_empty() || !on(w) {
+    if (a.command.meters.is_empty() && a.command.gate.is_none()) || !on(w) {
         return false;
     }
     let c = a.unit;
-    let why = cost_problem(w, &a.command.meters, |m| value(w, c, m));
+    // PK1-S2a: a meter gate (`requires_meter`) is tested first, at the start, before any cost
+    let gate = gate_problem(w, a.command.gate.as_ref(), |m| value(w, c, m));
+    let why = if gate.is_empty() { cost_problem(w, &a.command.meters, |m| value(w, c, m)) } else { gate };
     if why.is_empty() {
         return false;
     }
@@ -406,7 +464,8 @@ pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
 /// UM3: round end (rule unit_meters), after the ticks and ground hazards and before the `round_end` triggers: each
 /// active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this round,
 /// `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard); then the gained marks
-/// clear.
+/// clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round skips every decay row of the channel meter (it counts as
+/// a gain, and its `if_guarded` rows skip too).
 pub fn round_end(res: &mut Resolver, w: &mut World) {
     if !on(w) {
         return;
@@ -419,8 +478,9 @@ pub fn round_end(res: &mut Resolver, w: &mut World) {
             (g.unit, g.meter.clone(), g.gained)
         };
         w.meters.gauges[i].gained = false;
+        let channel_round = crate::channel::is_channel(w, c) && meter == crate::channel::meter_id(w);
         let Some(def) = cat.unit_meters.get(&meter) else { continue };
-        if def.decay.is_empty() || !w.units[c].is_active() {
+        if def.decay.is_empty() || !w.units[c].is_active() || channel_round {
             continue;
         }
         let guarded = res.scheduled.iter().any(|a| a.unit == c && !a.cancelled && a.command.is_defend()) || w.units[c].held_guard.is_some();

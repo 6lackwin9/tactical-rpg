@@ -131,6 +131,8 @@ pub struct BandApplied {
     pub status_potency: i32,
     pub stagger: Vec<StaggerTaken>,
     pub crit: f64,
+    /// PK1-S1 (3.1): the band's `heal_taken` percent.
+    pub heal_taken: i32,
 }
 
 /// The source of the stat modifiers `apply_effects` adds for `source` (`passive:<id>`).
@@ -294,6 +296,9 @@ pub struct Unit {
     pub held_guard: Option<HeldGuard>,
     /// HOOKS1 8.2: crit chance points the trigger effect `crit` added for the battle (0 in classic).
     pub trigger_crit: f64,
+    /// PK1-S1 (3.1): the percent the held meter bands' `heal_taken` add to the healing this unit receives (0 = none;
+    /// `World::heal` reads it).
+    pub band_heal_taken: i32,
     /// HOOKS1 UM1: the passives' `meter` effects in apply order; read only under the rule unit_meters.
     pub passive_meters: Vec<HeldMeter>,
     /// U4.2-S4 (FB-30): the hit-time modifier grants of passives and meter bands, with their sources (`HitSource`); a
@@ -384,6 +389,7 @@ impl Unit {
             gear_crit: 0.0,
             held_guard: None,
             trigger_crit: 0.0,
+            band_heal_taken: 0,
             passive_meters: Vec::new(),
             hit_sources: Vec::new(),
             gear_hit_sources: Vec::new(),
@@ -707,6 +713,8 @@ impl Unit {
             // HOOKS1 UM4: a band's crit, read by `apply_band` only; U3.2-S4: a worn family's Level-2 crit
             Target::Crit if gear => self.gear_crit = c.fold_f(self.gear_crit, m.value),
             Target::Crit => {}
+            // PK1-S1 (3.1): a band's, read by `apply_band` only
+            Target::HealTaken => {}
         }
     }
 
@@ -722,6 +730,8 @@ impl Unit {
         self.apply_grants(cat, &passive, source, false);
         let crit = view.iter().filter_map(Grant::band_crit).fold(0.0, |held, v| Target::Crit.combine().fold_f(held, v));
         self.trigger_crit += crit;
+        let heal_taken = view.iter().filter_map(Grant::band_heal_taken).fold(0.0, |held, v| Target::HealTaken.combine().fold_f(held, v)) as i32;
+        self.band_heal_taken += heal_taken;
         let diff_i = |now: &IndexMap<String, i32>, was: &IndexMap<String, i32>| -> Vec<(String, i32)> {
             now.iter().filter_map(|(k, v)| Some((k.clone(), v - was.get(k).copied().unwrap_or(0))).filter(|(_, d)| *d != 0)).collect()
         };
@@ -737,6 +747,7 @@ impl Unit {
             status_potency: self.passive_status_potency - potency,
             stagger: self.stagger_taken[stagger..].to_vec(),
             crit,
+            heal_taken,
         }
     }
 
@@ -769,6 +780,7 @@ impl Unit {
             }
         }
         self.trigger_crit -= a.crit;
+        self.band_heal_taken -= a.heal_taken;
         // U4.2-S4: the band's hit-time sources go with it
         self.hit_sources.retain(|h| h.source != a.source);
     }
@@ -1025,11 +1037,11 @@ pub fn rank_numeral(rank: i32) -> &'static str {
 }
 
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a spell-source weapon (U3.2-S2: a family
-/// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal.
+/// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal (HEALPCT1: `heal_pct` too).
 pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     match group {
         "spell" => s.kind == "ATTACK" && s.spell_source,
-        "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0),
+        "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0),
         _ => false,
     }
 }

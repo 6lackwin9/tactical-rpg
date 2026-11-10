@@ -48,6 +48,13 @@ pub const HP_COST: &str = "hp_cost";
 pub const IGNORE_GUARD: &str = "ignore_guard";
 pub const AI_TACTICS: &str = "ai_tactics";
 pub const EXECUTE: &str = "execute";
+/// PK1-S2a (`docs/sessions/PK1_CORRUPTION.md` 4, ACTS23 5.1 Option B, FB-167 Q1-Q3): Channel rounds: a unit that holds
+/// the `channel_meter` may flip its round to Channel (the round flag `RoundState::channel`), so its single-intent skills
+/// plan and resolve as their marrow versions (power x `channel_power`, armour piercing, `channel_cost` of the meter by
+/// AP at the start, `channel.effects`), its `channel.only` skills open, and Rest becomes `channel_rest`; needs
+/// `round_intent` and `unit_meters`; inert while no unit holds the meter. It retires the old `channel` round intent
+/// (no ruleset lists it, no skill sets it).
+pub const CHANNEL: &str = "channel";
 
 /// An option is incompatible with classic (on only under its ruleset); an extension is compatible and inert without
 /// data, still off in classic so classic cannot drift when data is added, and may be switched on or off one by one
@@ -81,7 +88,7 @@ const fn rule_of(id: &'static str, kind: RuleKind, system: &'static str, bundle:
 }
 
 /// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order, with its metadata (BASERULES1-M).
-pub const REGISTER: [Rule; 19] = [
+pub const REGISTER: [Rule; 20] = [
     Rule {
         conflicts: &["stances=on", "switch_target_step=on"],
         ..rule_of(ROUND_INTENT, RuleKind::Option, "planning", "intent_core", &["round_intent.rs", "golden"], "one intent and target a round, follow-ups, facing, flanks drawn")
@@ -104,6 +111,7 @@ pub const REGISTER: [Rule; 19] = [
     rule_of(IGNORE_GUARD, RuleKind::Extension, "hooks", "hooks", &["riders.rs", "poise.rs"], "a skill drops guard, keeps cover"),
     rule_of(AI_TACTICS, RuleKind::Extension, "ai", "hooks", &["tactics.rs"], "target preferences and unit tactics"),
     rule_of(EXECUTE, RuleKind::Extension, "hooks", "hooks", &["execute.rs"], "the hp_below exploit"),
+    Rule { requires: &[ROUND_INTENT, UNIT_METERS], ..rule_of(CHANNEL, RuleKind::Extension, "planning", "", &["channel.rs"], "Channel rounds: marrow versions, the converting toggle, Channel Rest") },
 ];
 
 /// The register entry of `id`.
@@ -111,8 +119,9 @@ pub fn rule(id: &str) -> Option<&'static Rule> {
     REGISTER.iter().find(|r| r.id == id)
 }
 
-/// The round intents a ruleset row may list (`channel` is reserved for Act 2: RULESET1_INTENT IN1).
-pub const INTENTS: [&str; 5] = ["assault", "guard", "support", "maneuver", "channel"];
+/// The round intents a ruleset row may list (RULESET1_INTENT IN1; PK1-S2a retired `channel`: a Channel round is the
+/// round flag of the rule `channel`, not an intent, FB-167 Q1-Q2).
+pub const INTENTS: [&str; 4] = ["assault", "guard", "support", "maneuver"];
 /// INPUT1 MR10: which melee hits count a diagonal neighbour (one step on each axis) as distance 1: none, the Maneuver
 /// skills (the default of a row), or every melee attack, every skill with a position and the riposte counter. The
 /// built-in classic values: none. CLN-45: read as the row sets it, whatever the rules.
@@ -355,12 +364,9 @@ pub fn kind_intent(kind: &str) -> &'static str {
     }
 }
 
-/// The intent Act 2's meter spec reserves (IN1): a skill may take it only when a ruleset row lists it.
-pub const CHANNEL: &str = "channel";
-
 /// RULESET1_INTENT IN4: the `round_intent` values a skill of `kind` may set (beside "" = `kind_intent`): ATTACK assault
 /// or maneuver, DEFEND guard, SUPPORT support or guard (self-only), FOCUS support, DISENGAGE maneuver, the engine kinds
-/// neutral; `channel` (any authored kind) is checked on its own.
+/// neutral (PK1-S2a retired `channel`).
 pub fn kind_intents(kind: &str) -> &'static [&'static str] {
     match kind {
         "ATTACK" => &["assault", "maneuver"],
@@ -398,6 +404,21 @@ pub const SPLASH_MULT: f64 = 0.5;
 /// A4.2-K1b (INTENT2 IR17, A3.1 section 3): the default of `assault_shape_blocks`, the wind-up blocks a shaped Assault row
 /// takes beyond its Field row (rule `field_intent`; the round's blocks cap it).
 pub const ASSAULT_SHAPE_BLOCKS: i32 = 1;
+
+/// PK1-S2a (PK1 4.1, ACTS23 5.1 closing ruling 3): the default of `channel_power`, the factor on a marrow version's power.
+pub const CHANNEL_POWER: f64 = 1.25;
+/// PK1-S2a (PK1 4.1): the default of `channel_cost`, the channel meter a marrow version pays at its start by its AP
+/// (1, 2, 3 or more; an action of 0 AP pays none).
+pub const CHANNEL_COST: [i32; 3] = [15, 25, 35];
+/// PK1-S2a (PK1 4.1): the default of `marrow_actives`, how many deck actives a unit may mark as marrow (deck `marrow`).
+pub const MARROW_ACTIVES: i32 = 1;
+/// PK1-S2a (PK1 4.3 item 5): the `channel_rest` value that keeps Rest as Rest in a Channel round (the default; a game
+/// names its Channel Rest skill instead, e.g. its Feed).
+pub const CHANNEL_REST_NORMAL: &str = "normal";
+/// PR5-20 (FB-179 Option A, PK1 4.4 and section 7): the default of `channel_ai_edge`, the factor by which a Channel
+/// round's value must beat the Cold Steel round's for the AI to open Channel (`ai::channel_row`; was the kit constant
+/// `ai::CHANNEL_AI_EDGE`, PR5-5).
+pub const CHANNEL_AI_EDGE: f64 = 1.2;
 
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
@@ -498,6 +519,23 @@ pub struct Numbers {
     /// `empower` and `haste` get target orders too; a plain tunable, off unless the row sets `on` (off: only the Armor
     /// and Move Rate debuffs and the Armor buff are ordered, as before).
     pub ai_rating_scorer: bool,
+    /// PK1-S2a (`channel_meter`, PK1 4.1): the unit meter a unit must hold to Channel and that marrow versions pay ("" =
+    /// none: the rule `channel` is inert; read only under it).
+    pub channel_meter: String,
+    /// PK1-S2a (`channel_power`): the factor on a marrow version's power (a skill's `channel.power` replaces it).
+    pub channel_power: f64,
+    /// PK1-S2a (`channel_cost`): the channel meter a marrow version pays at its start by its AP 1, 2, 3+ (a skill's
+    /// `channel.cost` replaces it).
+    pub channel_cost: [i32; 3],
+    /// PK1-S2a (`marrow_actives`): the most deck actives marked marrow that open in a Channel round (deck `marrow`, in
+    /// its order; PK2 replaces it with one per installed graft).
+    pub marrow_actives: i32,
+    /// PK1-S2a (`channel_rest`): what Rest becomes in a Channel round: `normal` (Rest) or a skill family the unit uses
+    /// instead on every Rest block (the game's Feed).
+    pub channel_rest: String,
+    /// PR5-20 (`channel_ai_edge`, FB-179): the factor by which the AI's Channel round must beat its Cold Steel round's
+    /// value for the AI to keep it (`ai::channel_row`).
+    pub channel_ai_edge: f64,
 }
 
 impl Default for Numbers {
@@ -549,6 +587,12 @@ impl Default for Numbers {
             thrown_miss_spends: false,
             pouch_stacks: false,
             ai_rating_scorer: false,
+            channel_meter: String::new(),
+            channel_power: CHANNEL_POWER,
+            channel_cost: CHANNEL_COST,
+            marrow_actives: MARROW_ACTIVES,
+            channel_rest: CHANNEL_REST_NORMAL.to_string(),
+            channel_ai_edge: CHANNEL_AI_EDGE,
         }
     }
 }
@@ -625,6 +669,23 @@ impl Numbers {
             thrown_miss_spends: value::string(o, "thrown_miss_spends", "") == "on",
             pouch_stacks: value::string(o, "pouch_stacks", "") == "on",
             ai_rating_scorer: value::string(o, "ai_rating_scorer", "") == "on",
+            channel_meter: value::string(o, "channel_meter", ""),
+            channel_power: value::float(o, "channel_power", d.channel_power),
+            channel_cost: channel_cost_of(o).unwrap_or(d.channel_cost),
+            marrow_actives: value::int(o, "marrow_actives", d.marrow_actives),
+            channel_rest: Some(value::string(o, "channel_rest", "")).filter(|v| !v.is_empty()).unwrap_or(d.channel_rest),
+            channel_ai_edge: value::float(o, "channel_ai_edge", d.channel_ai_edge),
+        }
+    }
+
+    /// PK1-S2a: the channel meter a marrow version of `ap` AP pays by `channel_cost` (0 AP pays none, 3 or more the
+    /// third entry).
+    pub fn channel_cost_for(&self, ap: i32) -> i32 {
+        match ap {
+            i32::MIN..=0 => 0,
+            1 => self.channel_cost[0],
+            2 => self.channel_cost[1],
+            _ => self.channel_cost[2],
         }
     }
 
@@ -653,6 +714,14 @@ impl Numbers {
         }
         Ok(())
     }
+}
+
+/// PK1-S2a: a row's `channel_cost` (three whole numbers; None when absent or not that shape, so the default holds and
+/// the row check reports it).
+pub fn channel_cost_of(o: &Obj) -> Option<[i32; 3]> {
+    let a = o.get("channel_cost")?.as_array()?;
+    let n: Vec<i32> = a.iter().filter_map(|v| v.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i32)).collect();
+    (a.len() == 3 && n.len() == 3).then(|| [n[0], n[1], n[2]])
 }
 
 /// The rules a battle plays by: a ruleset row's rules and numbers, possibly with single
@@ -844,7 +913,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 38] = [
+pub const FIELD_RULES: [FieldRule; 44] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -902,6 +971,14 @@ pub const FIELD_RULES: [FieldRule; 38] = [
     // W2-5 I1.2-S2 (I_AI section 1 item 5): the AI's generic rating-modifier scorer, row-only like the item switches (a
     // plain tunable: off unless the row sets `on`, whatever the rules)
     FieldRule { values: &SWITCH_IDS, ..field_rule("ai_rating_scorer", &[]) },
+    // PK1-S2a (PK1 4.1, 4.3 item 5): the Channel numbers, read only under the rule channel
+    field_rule("channel_meter", &[CHANNEL]),
+    field_rule("channel_power", &[CHANNEL]),
+    field_rule("channel_cost", &[CHANNEL]),
+    field_rule("marrow_actives", &[CHANNEL]),
+    field_rule("channel_rest", &[CHANNEL]),
+    // PR5-20 (FB-179 Option A): the AI's Channel edge, read only under the rule channel
+    field_rule("channel_ai_edge", &[CHANNEL]),
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -962,7 +1039,7 @@ pub fn bundle(id: &str) -> Option<&'static Bundle> {
 
 /// The rule sets kit tests fight (library 4, `[poise, flank]` left out: it is read only, and flank is inert there); a
 /// row listing another set is untested together (a warning).
-pub const TESTED_SETS: [&[&str]; 23] = [
+pub const TESTED_SETS: [&[&str]; 24] = [
     &[],
     &[ROUND_INTENT],
     &[ROUND_INTENT, FLANK],
@@ -992,6 +1069,11 @@ pub const TESTED_SETS: [&[&str]; 23] = [
     &[
         ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FIELD_INTENT, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS,
         TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
+    ],
+    // PK1-S2a: the timeline row once the PK1 data slice lists channel (tests/channel.rs fights it)
+    &[
+        ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FIELD_INTENT, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS,
+        TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE, CHANNEL,
     ],
 ];
 
@@ -1074,7 +1156,7 @@ pub const LOCKED: [Locked; 48] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 14] = [
+pub const PROMOTED: [(&str, &str); 18] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -1089,6 +1171,10 @@ pub const PROMOTED: [(&str, &str); 14] = [
     ("ITEM_AP", "item_ap"),
     ("SPLASH_MULT", "splash_mult"),
     ("ASSAULT_SHAPE_BLOCKS", "assault_shape_blocks"),
+    ("CHANNEL_POWER", "channel_power"),
+    ("CHANNEL_COST", "channel_cost"),
+    ("MARROW_ACTIVES", "marrow_actives"),
+    ("CHANNEL_AI_EDGE", "channel_ai_edge"),
 ];
 
 impl Numbers {
@@ -1148,6 +1234,12 @@ impl Numbers {
             "thrown_miss_spends" => switch(self.thrown_miss_spends),
             "pouch_stacks" => switch(self.pouch_stacks),
             "ai_rating_scorer" => switch(self.ai_rating_scorer),
+            "channel_meter" => self.channel_meter.clone(),
+            "channel_power" => self.channel_power.to_string(),
+            "channel_cost" => self.channel_cost.iter().map(i32::to_string).collect::<Vec<_>>().join(","),
+            "marrow_actives" => self.marrow_actives.to_string(),
+            "channel_rest" => self.channel_rest.clone(),
+            "channel_ai_edge" => self.channel_ai_edge.to_string(),
             _ => return None,
         })
     }

@@ -17,3 +17,6 @@ The build session's helper scripts, moved here from the planner's own folder by 
 | `resolve_docs.py`, `sch_merge.py` | Conflict helpers for `.md` files and the schema |
 
 Run `landlane.sh` and `landtask.sh` from a checkout that already has `tools/planner/` landed (the main checkout or the stage worktree), not from the lane being landed: `landlane.sh` checks out `staging` inside that lane, which removes its own copy of the scripts if `staging` lacks them.
+
+
+- `feedback_check.py` (FB-169, FB-172): `archive` and `check` treat `## ` / `### ` lines inside a fenced code block as text, so an item that quotes Markdown moves whole; a fence in FEEDBACK.md that never closes is a parse error (exit 2).

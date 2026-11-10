@@ -1,7 +1,7 @@
 {
   "contract": [
-    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute",
-    "tunable intents strings default=[\"assault\",\"guard\",\"support\",\"maneuver\"] values=assault|guard|support|maneuver|channel needs=round_intent(refused)",
+    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute|channel",
+    "tunable intents strings default=[\"assault\",\"guard\",\"support\",\"maneuver\"] values=assault|guard|support|maneuver needs=round_intent(refused)",
     "tunable basics refs default=[]",
     "tunable poise_stat string default=\"\"",
     "tunable stagger_windup_mult float default=2.0 range=1.0..4.0 needs=poise",
@@ -26,6 +26,12 @@
     "tunable attack_lock enum default=\"none\" values=none|melee|all untested_with=chase=classic",
     "tunable move_after_blocks int default=3 range=1..4 needs=round_intent",
     "tunable item_ap int default=1 range=0..2",
+    "tunable channel_meter string default=\"\" needs=channel",
+    "tunable channel_power float default=1.25 range=1.0..2.0 needs=channel",
+    "tunable channel_cost json default=[15,25,35] needs=channel",
+    "tunable marrow_actives int default=1 range=0..3 needs=channel",
+    "tunable channel_rest string default=\"normal\" needs=channel",
+    "tunable channel_ai_edge float default=1.2 range=1.0..3.0 needs=channel",
     "tunable bleed_pct row-only default=0.06 range=0.01..0.25 (no schema entry)",
     "tunable counter_mult row-only default=0.5 range=0.1..1.5 (no schema entry)",
     "tunable debt_stagger row-only default=3 range=1..10 (no schema entry)",
@@ -67,6 +73,7 @@
     "rule ignore_guard extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule ai_tactics extension system=ai bundle=hooks requires=- conflicts=-",
     "rule execute extension system=hooks bundle=hooks requires=- conflicts=-",
+    "rule channel extension system=planning bundle=- requires=round_intent, unit_meters conflicts=-",
     "locked budget.rs::W_POWER gear",
     "locked budget.rs::W_MITIGATION gear",
     "locked budget.rs::W_STAT_POINT gear",
@@ -128,6 +135,10 @@
     "promoted GUARD_MULTI_ROUND_MITIGATION -> guard_multi_round_mitigation",
     "promoted ITEM_AP -> item_ap",
     "promoted SPLASH_MULT -> splash_mult",
-    "promoted ASSAULT_SHAPE_BLOCKS -> assault_shape_blocks"
+    "promoted ASSAULT_SHAPE_BLOCKS -> assault_shape_blocks",
+    "promoted CHANNEL_POWER -> channel_power",
+    "promoted CHANNEL_COST -> channel_cost",
+    "promoted MARROW_ACTIVES -> marrow_actives",
+    "promoted CHANNEL_AI_EDGE -> channel_ai_edge"
   ]
 }

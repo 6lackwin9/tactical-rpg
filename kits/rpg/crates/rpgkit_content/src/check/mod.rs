@@ -89,6 +89,11 @@ impl View {
         self.entries(kind).iter().any(|e| json::s(e, "id") == id)
     }
 
+    /// The ids of the loaded rows of `kind`, in order (PK1-S1: a hazard `meter` names a unit meter row).
+    pub fn ids(&self, kind: &str) -> Vec<String> {
+        self.entries(kind).iter().map(|e| json::s(e, "id")).collect()
+    }
+
     /// The ids of the loaded derived-stat rows (DERIVE1 4.1: the stat fields of gear and passives accept them).
     pub fn derived_ids(&self) -> Vec<String> {
         self.entries(derived::KIND).iter().map(|e| json::s(e, "id")).collect()
@@ -451,6 +456,8 @@ pub fn validate_all(v: &View) -> Report {
     // U1.2-S5: a ruleset's `unit_pools` name unit meter rows
     for e in v.entries(ruleset::KIND) {
         add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::missing_pools(v, e));
+        // PK1-S2a: the Channel meter and Channel Rest name rows
+        add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::channel_refs(v, e));
     }
     add("load", v.load_errors.clone());
     problems

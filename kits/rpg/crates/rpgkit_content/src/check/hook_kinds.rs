@@ -10,7 +10,7 @@ use aegis_content::schema::is_id;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{rows_valid, TERRAIN_IDS, ZONE_IDS};
-use rpgkit_data::{BAND_EFFECTS, HAZARDS_KIND, HAZARD_AFFECTS, HAZARD_ON, METER_DELTA_CAP, METER_PIPS_MAX, METER_SHOW, TRIGGER_EVENTS, UNIT_METERS_KIND, ZONES_KIND};
+use rpgkit_data::{BAND_EFFECTS, HAZARDS_KIND, HAZARD_AFFECTS, HAZARD_ON, HEAL_TAKEN, METER_DELTA_CAP, METER_PIPS_MAX, METER_SHOW, TRIGGER_EVENTS, UNIT_METERS_KIND, ZONES_KIND};
 use rpgkit_rules::status;
 use serde_json::Value;
 
@@ -33,6 +33,8 @@ pub const HAZARD_RANGES: [(&str, &str, i64, i64); 5] =
     [("potency", "Potency", 0, 100), ("status_rounds", "Status rounds", 1, 5), ("damage", "Damage", 0, 50), ("move_cost", "Move cost", 0, 3), ("duration", "Duration", 1, 5)];
 /// GH1: a hazard's cover against ranged hits.
 pub const HAZARD_COVER: (f64, f64) = (0.0, 0.5);
+/// PK1-S1 (PK1_CORRUPTION 3.1): a band's `heal_taken` percent (not 0).
+pub const HEAL_TAKEN_PCT: (i64, i64) = (-100, 100);
 
 /// What the rows' checks read from the rest of the catalog: the loaded skill rows (flat rank rows).
 pub struct Refs<'a> {
@@ -41,6 +43,9 @@ pub struct Refs<'a> {
     pub derived: &'a [String],
     /// U3.2-S2: the item family table (the gear tokens a `proficiency` effect may name; empty = the code list).
     pub families: &'a [Dict],
+    /// PK1-S1 (3.6): the unit meter ids a hazard row's `meter` may name (None: not loaded yet, as when the loader reads
+    /// the hazards before the meters; only its shape is checked then).
+    pub meters: Option<&'a [String]>,
 }
 
 /// The noun of a row of `kind` in load messages.
@@ -106,7 +111,10 @@ pub fn row_errors(kind: &str, e: &Dict, ctx: &Ctx, refs: &Refs) -> Vec<String> {
     let mut out = Vec::new();
     common_errors(kind, e, &mut out);
     match kind {
-        HAZARDS_KIND => hazard_errors(e, &mut out),
+        HAZARDS_KIND => {
+            hazard_errors(e, &mut out);
+            out.extend(super::hooks::hazard_meter_errors(e.get("meter"), refs.meters, "Hazard"));
+        }
         UNIT_METERS_KIND => meter_errors(e, ctx, refs, &mut out),
         ZONES_KIND => zone_errors(e, &mut out),
         _ => {}
@@ -321,12 +329,19 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
     for (i, t) in list("triggers", "Triggers", SKILL_ROWS_MAX, out).iter().enumerate() {
         out.extend(trigger_row_errors(t, ctx, &format!("Trigger {}", i + 1), &TRIGGER_EVENTS, &[]));
     }
-    // UM6: a meter skill spends this meter (a negative delta on it)
+    // UM6: a meter skill spends this meter (a negative delta on it); PK1-S2a (FB-167 Q8): a marrow-only one (`channel.only`,
+    // the Channel basics Feed and Vent) moves it either way (a delta on it)
     for s in json::sget(e, "skills") {
         let row = refs.skills.iter().find(|r| json::s(r, "id") == s);
+        let delta_on = |r: &Dict, ok: &dyn Fn(i64) -> bool| json::aget(r, "meters").iter().any(|m| json::s(json::dict(m), "meter") == id && ok(json::to_int(json::get(json::dict(m), "delta"))));
         match row {
             None => out.push(format!("Meter skills: unknown skill '{s}'.")),
-            Some(r) if !json::aget(r, "meters").iter().any(|m| json::s(json::dict(m), "meter") == id && json::to_int(json::get(json::dict(m), "delta")) < 0) => {
+            Some(r) if json::b(json::dget(r, "channel"), "only", false) => {
+                if !delta_on(r, &|d| d != 0) {
+                    out.push(format!("Meter skills: '{s}' does not move {id} (a meters delta on it)."));
+                }
+            }
+            Some(r) if !delta_on(r, &|d| d < 0) => {
                 out.push(format!("Meter skills: '{s}' does not spend {id} (a negative meters delta on it)."));
             }
             _ => {}
@@ -353,6 +368,16 @@ fn band_effect_errors(raw: &Value, at: &str, refs: &Refs, out: &mut Vec<String>)
         } else if t == "crit" {
             if !whole_in(json::get(json::dict(item), "value"), super::hooks::CRIT) {
                 out.push(format!("{eat}: crit needs a value {}-{}.", super::hooks::CRIT.0, super::hooks::CRIT.1));
+            }
+        } else if t == HEAL_TAKEN {
+            // PK1-S1 (3.1): band-only; a percent of every heal the holder receives
+            let o = json::dict(item);
+            for k in o.keys().filter(|k| !["type", "value"].contains(&k.as_str())) {
+                out.push(format!("{eat}: unknown key '{k}' (keys: type, value)."));
+            }
+            let v = json::get(o, "value");
+            if !whole_in(v, HEAL_TAKEN_PCT) || json::to_int(v) == 0 {
+                out.push(format!("{eat}: heal_taken needs a value {}..{}, not 0.", HEAL_TAKEN_PCT.0, HEAL_TAKEN_PCT.1));
             }
         } else {
             let ctx = Ctx { gear: super::skill::gear_tokens(refs.families), ..Ctx::default() };
@@ -399,5 +424,6 @@ pub fn entry_errors(v: &View, kind: &str, e: &Dict, current_id: &str) -> Vec<Str
     let mut rows: Vec<Dict> = v.entries(kind).iter().filter(|r| current_id.is_empty() || json::s(r, "id") != current_id).cloned().collect();
     rows.push(e.clone());
     let derived = v.derived_ids();
-    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), derived: &derived, families: v.entries("item_families") }).pop().unwrap_or_default()
+    let meters = v.ids(UNIT_METERS_KIND);
+    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), derived: &derived, families: v.entries("item_families"), meters: Some(&meters) }).pop().unwrap_or_default()
 }

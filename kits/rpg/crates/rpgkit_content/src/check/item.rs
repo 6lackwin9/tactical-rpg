@@ -681,9 +681,12 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
 
 fn consumable_problems(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
-    if json::i(e, "heal", 0) == 0 && json::i(e, "damage", 0) == 0 && json::f(e, "buff_pct", 0.0) == 0.0 {
+    // PK1-S1 (PK1_CORRUPTION 3.7): an `unmark` item is a use of its own
+    let unmark = json::get(e, "unmark").as_object().is_some_and(|u| !u.is_empty());
+    if json::i(e, "heal", 0) == 0 && json::i(e, "damage", 0) == 0 && json::f(e, "buff_pct", 0.0) == 0.0 && !unmark {
         out.push("A consumable should heal, damage or buff.".into());
     }
+    out.extend(unmark_problems(e));
     // A1.2-K3 (INTENT2 section 6, IR9): only a damage item thrown at foes hits an area, and `affects` needs one
     let area = json::s(e, "area");
     let shaped = !area.is_empty() && area != rpgkit_data::ITEM_AREA_NONE;
@@ -693,6 +696,31 @@ fn consumable_problems(e: &Dict) -> Vec<String> {
     }
     if !shaped && !json::s(e, "affects").is_empty() {
         out.push("Affects: a single-target item has no area to affect.".into());
+    }
+    out
+}
+
+/// PK1-S1 (3.7): a consumable's `unmark` (`{}` or absent = none): an object `{mark}` with a mark id (as a trigger's
+/// `mark`), on an item that does not also damage (it is used on allies).
+fn unmark_problems(e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let raw = json::get(e, "unmark");
+    if raw.is_null() || raw.as_object().is_some_and(|o| o.is_empty()) {
+        return out;
+    }
+    let Some(o) = raw.as_object() else {
+        out.push("Unmark must be an object {\"mark\": id} ({} = none).".into());
+        return out;
+    };
+    for k in o.keys().filter(|k| !rpgkit_data::UNMARK_KEYS.contains(&k.as_str())) {
+        out.push(format!("Unmark: unknown key '{k}' (keys: {}).", rpgkit_data::UNMARK_KEYS.join(", ")));
+    }
+    let id = json::s(o, "mark");
+    if id.is_empty() || id.chars().count() > super::hooks::MARK_ID_MAX || !aegis_content::schema::is_id(&id) {
+        out.push(format!("Unmark: mark needs an id of 1-{} characters (a-z, 0-9, _, a letter first).", super::hooks::MARK_ID_MAX));
+    }
+    if json::i(e, "damage", 0) > 0 {
+        out.push("Unmark: an unmark item is used on allies (no damage).".into());
     }
     out
 }

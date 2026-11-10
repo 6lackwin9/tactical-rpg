@@ -29,6 +29,9 @@ pub(super) enum RowAct {
     Fill,
     /// VISCLAR1-D: the Move of a menu on a unit: the next tile clicked is where it goes.
     MoveAim,
+    /// PK1-S2c (PK1 4.3 item 1): the Channel toggle of the neutral row: sets the menu's hero's round to Channel (true)
+    /// or back to Cold Steel (false) through the host's `channel` (the plan converts; it never locks).
+    Channel(bool),
 }
 
 /// INPUT1 GH2, IN6 timing (decision "INPUT1 answers, part 4" Q18): a member's ghost that waits for Confirm because its
@@ -129,7 +132,7 @@ fn plans_on(s: &Session, h: usize, intent: RoundIntent, at: RoundTarget) -> bool
 fn pick_label(s: &Session, h: usize, picks: &[rip::Pick]) -> String {
     let w = &s.w;
     let skill = |sid: usize| {
-        let name = w.cat.skills[sid].name.clone();
+        let name = skill_text(w, h, sid);
         match rip::hotkey_skills(w, h).iter().position(|k| *k == sid).filter(|k| *k < 9) {
             Some(k) => format!("{} {name}", k + 1),
             None => name,
@@ -141,11 +144,33 @@ fn pick_label(s: &Session, h: usize, picks: &[rip::Pick]) -> String {
             let name = emberwake_battle::command::pouch_item(w, h, id).map_or(id.clone(), |i| i.name.clone());
             format!("Use {name} ({} left)", s.plan.items_left(w, h, id, -1))
         }
-        [rip::Pick::Rest] => "Rest".into(),
+        [rip::Pick::Rest] => pick_text(w, h, &picks[0]),
         [rip::Pick::MoveHere(_)] => "Move here".into(),
-        [rip::Pick::MoveHere(_), rip::Pick::Skill { skill: sid, .. }] => format!("Move here, then {}", w.cat.skills[*sid].name),
+        [rip::Pick::MoveHere(_), rip::Pick::Skill { skill: sid, .. }] => format!("Move here, then {}", skill_text(w, h, *sid)),
         [rip::Pick::StepAfter(_)] => "Step here after".into(),
-        _ => picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "),
+        _ => picks.iter().map(|p| pick_text(w, h, p)).collect::<Vec<_>>().join(", then "),
+    }
+}
+
+/// PK1-S2c (PK1 4.3 item 6): skill `sid` as `c` plans it now: a marrow version's name with the marrow mark
+/// (`channel::marrow_name`, as the tells name it) when its Channel round offers that version, else its own (a Cold
+/// Steel skill greyed in a Channel round keeps its name).
+pub(crate) fn skill_text(w: &World, c: usize, sid: usize) -> String {
+    let s = &w.cat.skills[sid];
+    if emberwake_battle::channel::has_version(w, s) && emberwake_battle::channel::version(w, c, s).is_some() && emberwake_battle::channel::problem(w, c, s).is_none() {
+        emberwake_battle::channel::marrow_name(&w.cat, &s.name)
+    } else {
+        s.name.clone()
+    }
+}
+
+/// PK1-S2c: a pick's name for `c` (`rip::pick_name` with the round's mode): a marrow version marked (`skill_text`),
+/// Rest as the skill a Rest block plans now (`channel::rest_skill`: Feed in a Channel round).
+pub(super) fn pick_text(w: &World, c: usize, p: &rip::Pick) -> String {
+    match p {
+        rip::Pick::Skill { skill, .. } => skill_text(w, c, *skill),
+        rip::Pick::Rest => w.cat.skills[emberwake_battle::channel::rest_skill(w, c)].name.clone(),
+        _ => rip::pick_name(w, p),
     }
 }
 
@@ -547,7 +572,7 @@ impl BattleScreen {
         let mut rows: Vec<Row> = opts
             .iter()
             .filter(|o| o.intent.map_or(!o.picks.iter().any(|p| p.holds_target()), |i| listed.contains(&i)))
-            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(&w.cat, o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o) })
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: o.problem.as_ref().map_or_else(|| pick_detail(&w.cat, o), |why| intent_text::menu_refusal_text(w, why)), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o) })
             .collect();
         if !rows.is_empty() {
             // VISCLAR1-D: on a unit the Move takes its tile from the next click (on a tile it is one of the kit's cells)
@@ -565,6 +590,10 @@ impl BattleScreen {
                 tip.push((rip::ONLY_REST.into(), th().foe));
             }
             rows.push(Row { label: "Fill".into(), detail: if after_move { rip::ONLY_REST } else if has_ghost { "the rest of the round" } else { "nothing to fill" }.into(), valid: has_ghost && !after_move, act: RowAct::Fill, tip, warn: false, ap_short: None, slot: Some(Slot::Neutral("Fill")), icon: Vec::new(), at: None, count: None });
+            // PK1-S2c (PK1 4.3 item 1): the Channel toggle, only for a hero that can Channel; never locked
+            if let Some(row) = channel_row(w, h) {
+                rows.push(row);
+            }
         }
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
@@ -779,7 +808,7 @@ impl BattleScreen {
         let s = self.session();
         let w = &s.w;
         let keys = rip::hotkey_skills(w, h);
-        let skill_name = keys.get(d - 1).map(|k| w.cat.skills[*k].name.clone());
+        let skill_name = keys.get(d - 1).map(|k| skill_text(w, h, *k));
         if let Some(p) = self.popup.as_ref().filter(|p| p.menu.is_some()) {
             let prefix = format!("{d} ");
             // a skill with both Maneuver kinds has two cells on one digit: the one that can be picked
@@ -808,14 +837,15 @@ impl BattleScreen {
             self.message = "Pick a target first (click a unit or a tile)".into();
             return;
         };
-        let name = w.cat.skills[sid].name.clone();
+        // PK1-S2c: the name as the round plans it (a marrow version marked) and a refusal in words
+        let name = skill_text(w, h, sid);
         let opts = rip::pick_options(w, &s.plan, h, at);
         match opts.iter().find(|o| matches!(o.picks[..], [rip::Pick::Skill { skill, .. }] if skill == sid)) {
             Some(o) if o.problem.is_none() => {
                 let picks = o.picks.clone();
                 self.choose_pick(cx, h, at, &picks, &name);
             }
-            Some(o) => self.message = format!("{name}: {}", o.problem.clone().unwrap_or_default()),
+            Some(o) => self.message = format!("{name}: {}", o.problem.as_deref().map(|why| intent_text::menu_refusal_text(w, why)).unwrap_or_default()),
             None => self.message = format!("{name} can't act on {} this round.", target_name(w, at)),
         }
     }
@@ -830,7 +860,30 @@ impl BattleScreen {
                 self.selected = Some(u);
                 self.popup = None;
             }
+            (RowAct::Channel(on), Some((h, at))) => self.set_channel(cx, h, at, on),
             _ => {}
+        }
+    }
+
+    /// PK1-S2c (PK1 4.3 item 1): the Channel toggle: `h`'s round to Channel (`on`) or back to Cold Steel through the
+    /// host's `channel`; the plan converts (the kit's `set_channel`) and the message names what changed. An open menu on
+    /// `at` stays at its place and re-lists for the new mode; the later members' ghosts draft again (PL8).
+    pub(super) fn set_channel(&mut self, cx: &Cx, h: usize, at: RoundTarget, on: bool) {
+        let r = self.send(cx, json!({"cmd": "channel", "unit": h, "on": on}));
+        if r["ok"] != json!(true) {
+            return;
+        }
+        self.deferred.retain(|d| d.0 != h);
+        let w = &self.session().w;
+        let mode = if on { format!("{} round", RoundIntent::Channel.label(&w.cat)) } else { format!("{} round", cold_steel_name(w)) };
+        let mut msg = format!("{}: {mode}", w.units[h].name);
+        if let Some(line) = r["lines"].as_array().and_then(|l| l.last()).and_then(|l| l.as_str()) {
+            msg = format!("{msg}. {line}");
+        }
+        self.message = msg;
+        self.reghost_after(cx, h);
+        if let Some(anchor) = self.popup.as_ref().filter(|p| p.menu.is_some()).map(|p| p.anchor) {
+            self.open_menu(h, at, anchor, true);
         }
     }
 
@@ -951,6 +1004,41 @@ impl BattleScreen {
     }
 }
 
+/// PK1-S2c (PK1 4.3 item 1, user 2026-11-10): the neutral row's Channel toggle for `h` (None: it cannot Channel): 0 AP,
+/// 0 blocks, always live while planning (it never locks); its card says what flipping it does now.
+fn channel_row(w: &World, h: usize) -> Option<Row> {
+    use emberwake_battle::channel;
+    if !channel::can_channel(w, h) {
+        return None;
+    }
+    let on = channel::is_channel(w, h);
+    let name = RoundIntent::Channel.label(&w.cat);
+    let rest = &w.cat.skills[channel::rest_skill(w, h)].name;
+    let cold = cold_steel_name(w);
+    let (detail, says) = if on {
+        (format!("{name} round: click for {cold}"), format!("Back to {cold}: each marrow version turns back into its skill, the marrow-only skills drop and the auto-fill refills."))
+    } else {
+        (format!("{cold} round: click to {name}"), format!("This round's skills become their marrow versions (stronger, armour piercing, paid in {}); the rest drop and the auto-fill refills.", meter_name(w)))
+    };
+    let mut tip: Tip = vec![(format!("{name} (0 AP, 0 blocks)"), th().gold), (says, th().text), (format!("Moves stay. Rest blocks are {rest} in a {name} round. Flip it any time while planning."), th().dim)];
+    if on {
+        tip.insert(1, (format!("On: this is a {name} round"), super::skill_menu::CHANNEL_TINT));
+    }
+    Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None })
+}
+
+/// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `cold_steel_mark` (its
+/// `terms` row, else "Cold Steel").
+pub(super) fn cold_steel_name(w: &World) -> String {
+    w.cat.term(emberwake_data::terms::COLD_STEEL_MARK).name
+}
+
+/// The channel meter's name (its unit meter row's, else its id).
+fn meter_name(w: &World) -> String {
+    let id = emberwake_battle::channel::meter_id(w);
+    w.cat.unit_meters.get(id).map_or_else(|| id.to_string(), |m| m.name.clone())
+}
+
 /// VISCLAR1-D: what the menu's Move does (the kit's `build_picks`).
 fn move_tip(w: &World) -> String {
     format!("Before a skill, it moves first. After one, it replaces the last auto-filled block, up to {} move blocks, and only Rest can follow. 1 AP a tile; near keeps blocks for Rest, far is safer.", w.ruleset.numbers.move_after_blocks)
@@ -995,7 +1083,7 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
     // an item's name and copies left, as the old row's label: two items can share an icon
     let title = match item_count(s, h, o) {
         Some(n) => format!("{} ({n} left)", rip::pick_name(w, &o.picks[0])),
-        None => o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "),
+        None => o.picks.iter().map(|p| pick_text(w, h, p)).collect::<Vec<_>>().join(", then "),
     };
     let mut tip: Tip = vec![(title, th().gold)];
     // INTENT2-U (section 6 "Menu"): an item cell's card has its cost ("0 AP, <N> blocks": the kit's trial cost with the
@@ -1033,8 +1121,19 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
             tip.push((format!("Key: Shift+{}", k + 1), th().dim));
         }
     }
+    // PK1-S2c (PK1 4.3 item 5): Rest's place in a Channel round plans the Channel Rest (Feed): its description
+    if matches!(o.picks[..], [rip::Pick::Rest]) && emberwake_battle::channel::is_channel(w, h) {
+        let sk = &w.cat.skills[emberwake_battle::channel::rest_skill(w, h)];
+        let d = emberwake_content::source::skill_description(&sk.raw, w.ruleset.stances());
+        if !d.is_empty() {
+            tip.push((d, th().text));
+        }
+        if emberwake_battle::skill::kind(sk) != emberwake_battle::skill::Kind::Rest {
+            tip.push((format!("{} replaces Rest in a {} round.", sk.name, RoundIntent::Channel.label(&w.cat)), th().dim));
+        }
+    }
     if let Some(why) = &o.problem {
-        tip.push((why.clone(), th().foe));
+        tip.push((intent_text::menu_refusal_text(w, why), th().foe));
     }
     if !o.drops.is_empty() {
         tip.push((format!("Changing loses {}.", o.drops.join(", ")), th().foe));

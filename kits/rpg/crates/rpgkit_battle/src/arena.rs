@@ -44,6 +44,8 @@ pub struct Effect {
     pub magnitude: i32,
     pub status_rounds: i32,
     pub push: Option<Push>,
+    /// PK1-S1 (3.6): a unit meter change on each struck holder (None = none).
+    pub meter: Option<rpgkit_data::MeterDelta>,
 }
 
 /// AH1: one scheduled arena hazard of the encounter.
@@ -112,6 +114,7 @@ impl Hazard {
             magnitude: value::int(&e, "magnitude", 0),
             status_rounds: value::int(&e, "status_rounds", 1),
             push,
+            meter: rpgkit_data::MeterDelta::of_hazard(&e),
         };
         Self { id: value::string(o, "id", ""), name: value::string(o, "name", ""), cells, rounds: ints(o, "rounds"), blocks: ints(o, "blocks"), effect, line: value::string(o, "line", "") }
     }
@@ -268,6 +271,10 @@ fn strike_unit(res: &mut Resolver, w: &mut World, hz: &Hazard, u: UnitId, block:
         line += &format!(": {}", parts.join(", "));
     }
     res.log.push(line.clone());
+    // PK1-S1 (3.6): the meter change on a holder (its own `[Meter]` line, logged with the triggers after the strikes)
+    if let Some(d) = e.meter.as_ref().filter(|_| w.units[u].is_alive()) {
+        crate::meter::from_hazard(res, w, u, d, &hz.name, block);
+    }
     let push = match e.push {
         Some(p) if forced::on(w) && w.has(u) => {
             let c = Collide { attacker: None, mult: 0.0, ranged: false, offhand: false, flat: p.collide_damage, stagger: 0, sure_break: false, blocks: 1 };

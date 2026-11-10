@@ -185,6 +185,10 @@ pub enum Event {
 pub struct Ledger {
     pub events: Vec<Event>,
     stops: Vec<usize>,
+    /// PK1-S1 (3.6): the meter changes hazard rows made on entering, waiting for `settle` (unit, change, hazard name),
+    /// and the block the resolver last prepared (their rules' block).
+    meters: Vec<(UnitId, rpgkit_data::MeterDelta, String)>,
+    pub(crate) block: i32,
 }
 
 impl Ledger {
@@ -365,10 +369,21 @@ pub fn effect_of(def: &HazardDef, source: &str) -> status::EffectSpec {
     status::EffectSpec::inflict(&def.status, def.potency, def.status_rounds, def.magnitude, source)
 }
 
+/// PK1-S1 (3.6): the waiting hazard meter changes, in order (`meter::from_hazard`; holders only).
+fn meters(res: &mut Resolver, w: &mut World, block: i32) {
+    for (u, d, source) in std::mem::take(&mut w.ground.meters) {
+        crate::meter::from_hazard(res, w, u, &d, &source, block);
+    }
+}
+
 /// GH5, GH6: the hazard on `cell` acts on `u`: its flat damage through guard (not armour), then its status roll (one
 /// draw, the placer as the source); a trap entered is removed. None when nothing happened (a resisted roll alone).
+/// PK1-S1 (3.6): a row's `meter` change on a holder waits for `settle` (or the round end's pass), with its own line.
 fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool) -> Option<Hit> {
     let p = w.grid.ground.get(&cell)?.clone();
+    if let Some(d) = p.def.meter.as_ref().filter(|d| w.units[u].is_active() && crate::meter::value(w, u, &d.meter).is_some()) {
+        w.ground.meters.push((u, d.clone(), p.def.name.clone()));
+    }
     let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
     let before = w.units[u].hp;
     if p.def.damage > 0 {
@@ -421,6 +436,9 @@ fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool
 /// call (the resolver calls it after an action starts or lands). Any other path that moves a unit onto hazards (a
 /// `forced::shove_unit` from a trigger or an arena push) must call it too, then the session's `log_ground`.
 pub fn settle(res: &mut Resolver, w: &mut World) {
+    // PK1-S1 (3.6): the meter changes of the hazards entered since the last call
+    let block = w.ground.block.max(1);
+    meters(res, w, block);
     for i in std::mem::take(&mut w.ground.stops) {
         let Some(Event::Hit(h)) = w.ground.events.get_mut(i) else { continue };
         h.stopped = crate::forced::stop_walks(res, h.unit);
@@ -455,6 +473,7 @@ pub fn round_end(res: &mut Resolver, w: &mut World) {
             w.ground.events.push(Event::Hit(h));
         }
     }
+    meters(res, w, w.total_blocks);
     let round = res.current_round;
     let gone: Vec<V2> = w.grid.ground.iter().filter(|(_, p)| p.last_round <= round).map(|(c, _)| *c).collect();
     let mut fades: Vec<Fade> = Vec::new();

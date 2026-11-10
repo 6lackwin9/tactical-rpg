@@ -19,6 +19,11 @@ pub const INTENT_MANEUVER: &str = "intent_maneuver";
 pub const INTENT_CHANNEL: &str = "intent_channel";
 /// INTENT2 IR2 (A4.2-K1b): the Field intent's term (a tile target; rule `field_intent`).
 pub const INTENT_FIELD: &str = "intent_field";
+/// PK1-S2b (PK1 4.3 item 6): the mark a marrow version's name carries in the tells ("Cleave (Marrow)"; rule `channel`).
+pub const MARROW_MARK: &str = "marrow_mark";
+/// PK1-S2c-2 (PK1 4.3, FB-180 (b)): the name of a round that is not a Channel round (the Channel toggle's card and the
+/// planner's words: "Cold Steel round").
+pub const COLD_STEEL_MARK: &str = "cold_steel_mark";
 
 /// TM1: who names a term.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,7 +52,7 @@ const fn game(id: &'static str, name: &'static str, word: &'static str) -> TermD
 
 /// TM1, TM2: the register (spec section 3). The purse terms point at the purse defaults (CURRENCY_NAME, UPKEEP_NAME
 /// and their tips).
-pub const REGISTER: [TermDef; 8] = [
+pub const REGISTER: [TermDef; 10] = [
     TermDef { id: CURRENCY, name: crate::CURRENCY_NAME, short: crate::CURRENCY_NAME, word: "gold", tip: crate::CURRENCY_TIP, scope: TermScope::World },
     TermDef { id: UPKEEP, name: crate::UPKEEP_NAME, short: crate::UPKEEP_NAME, word: "supplies", tip: crate::UPKEEP_TIP, scope: TermScope::World },
     game(INTENT_ASSAULT, "Assault", "assault"),
@@ -56,6 +61,8 @@ pub const REGISTER: [TermDef; 8] = [
     game(INTENT_MANEUVER, "Maneuver", "maneuver"),
     game(INTENT_CHANNEL, "Channel", "channel"),
     game(INTENT_FIELD, "Field", "field"),
+    game(MARROW_MARK, "Marrow", "marrow"),
+    game(COLD_STEEL_MARK, "Cold Steel", "cold steel"),
 ];
 
 /// The register row of `id`, if any.

@@ -218,6 +218,13 @@ pub struct Command {
     /// HOOKS1 UM2: the skill's meter changes, paid at the command's start after the AP and HP cost (set only under the
     /// rule `unit_meters`).
     pub meters: Vec<rpgkit_data::MeterDelta>,
+    /// PK1-S2a: the skill's meter gate (`requires_meter`), tested at the command's start before any cost (set only under
+    /// the rule `unit_meters`).
+    pub gate: Option<rpgkit_data::MeterGate>,
+    /// PK1-S2b (PK1 4.3 item 6): the command runs a marrow version (`channel::version` of a skill with
+    /// `channel::has_version`: never a `channel.only` skill; set only in a Channel round).
+    /// The tells name it with the marrow mark (`channel::marrow_name`); no rule reads it.
+    pub marrow: bool,
     /// INPUT1 MR10: the band test counts a diagonal neighbour of the target as distance 1 (`round_intent::diagonal`).
     pub diagonal: bool,
     /// INPUT1 MR1: the position a carried Engage dashes to (None = none, or not a skill with a position).
@@ -294,6 +301,8 @@ impl Command {
             ignore_guard: false,
             guard_bypassed: false,
             meters: Vec::new(),
+            gate: None,
+            marrow: false,
             diagonal: false,
             position: None,
             carry_range: 0,
@@ -787,6 +796,11 @@ impl Command {
                     let t = &w.units[target];
                     parts.push(format!("{dmg} damage (HP {}/{}){}", t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
                 }
+                // PK1-S1 (3.7): `unmark` takes back the target's latest mark of that id (a turned ally calms next round)
+                if !item.unmark.is_empty() {
+                    let undone = crate::mark::unmark(w, target, &item.unmark, &item.name);
+                    parts.push(if undone.is_empty() { format!("no {} to undo", item.unmark) } else { undone });
+                }
                 let t = &mut w.units[target];
                 if item.buff_pct > 0.0 {
                     // A1.2-K3 (A1 section 1, FB-55(1), C07): a buff item grants its S1 status now (`item_grant`); no
@@ -1062,6 +1076,7 @@ impl Command {
         self.hp_cost = 0;
         self.ignore_guard = false;
         self.meters.clear();
+        self.gate = None;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -1592,6 +1607,27 @@ pub fn heal_amount(w: &World, caster: UnitId, skill_id: SkillId) -> i32 {
     rpgkit_rules::damage::heal(&w.units[caster], s)
 }
 
+/// HEALPCT1 (FB-177): the percent part of skill `s`'s heal on unit `target`: `heal_pct` of the target's max HP
+/// (rounded down, at least 1 HP when the percent is set, at most 100%; 0 = none), outside the caster's potency.
+pub fn heal_pct_of(w: &World, target: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
+    if s.heal_pct <= 0 || !skill::heals(s) {
+        return 0;
+    }
+    let max = w.units.get(target).map_or(0, |u| u.max_hp);
+    (max * s.heal_pct.min(100) / 100).max(1)
+}
+
+/// HEALPCT1: the heal `caster` gives `target` with `skill_id` before `World::heal` (which applies `heal_taken`): the
+/// formula (`heal_amount`) plus the percent part (`heal_pct_of`). The command, the planner's `est_heal` and the
+/// overheal metric read it.
+pub fn heal_amount_on(w: &World, caster: UnitId, target: UnitId, skill_id: SkillId) -> i32 {
+    let s = &w.cat.skills[skill_id];
+    if !skill::heals(s) {
+        return 0;
+    }
+    heal_amount(w, caster, skill_id) + heal_pct_of(w, target, s)
+}
+
 pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
     if !target.is_alive() {
         return 0;
@@ -1610,6 +1646,17 @@ pub fn hp_cost_of(w: &World, s: &rpgkit_data::SkillDef) -> i32 {
     } else {
         0
     }
+}
+
+/// PK1-S2a (rule hp_cost): the HP skill `s` costs unit `c`: `hp_cost_of` plus `hp_cost_pct` of its max HP (rounded
+/// down, at least 1 HP when the percent is set; items pay none). The planners, the command and the screens read it.
+pub fn hp_cost_for(w: &World, c: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
+    let flat = hp_cost_of(w, s);
+    if s.hp_cost_pct <= 0 || !w.ruleset.has(rpgkit_rules::ruleset::HP_COST) || skill::is_item(s) {
+        return flat;
+    }
+    let max = w.units.get(c).map_or(0, |u| u.max_hp);
+    flat + (max * s.hp_cost_pct.min(99) / 100).max(1)
 }
 
 /// HOOKS1 HC1: why a unit at `hp` cannot use a skill costing `cost` HP ("" = it can): HP at or below the cost.
@@ -1741,7 +1788,9 @@ pub fn pouch_ids(w: &World, c: UnitId) -> Vec<String> {
 /// ItemCommand.side_problem: "" when `user` may aim `item` at `target` by side (and reach 0 = self only).
 pub fn item_side_problem(w: &World, user: UnitId, item: &ItemDef, target: Option<UnitId>) -> String {
     let Some(target) = target else { return format!("Pick a target for {}.", item.name) };
-    let foe = w.foes_of(user).contains(&target);
+    // PK1-S1 (3.7): an `unmark` item reaches a turned ally (on the party side at the battle start) from the party side
+    let turned = !item.unmark.is_empty() && w.allies.contains(&user) && crate::mark::turned_ally(w, target);
+    let foe = w.foes_of(user).contains(&target) && !turned;
     if item.aims_at_foes() {
         if !foe {
             return format!("{} is thrown at a foe.", item.name);
@@ -1804,7 +1853,7 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
     }
     let mut healed = 0;
     if skill::heals(&s) {
-        let amount = heal_amount(w, caster, skill_id);
+        let amount = heal_amount_on(w, caster, target, skill_id);
         let before = w.units[target].hp;
         w.heal(target, amount);
         healed = w.units[target].hp - before;

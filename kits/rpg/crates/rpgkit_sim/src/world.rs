@@ -167,10 +167,13 @@ fn map_node(r: &mut Runner, ctx: &Ctx, node: &Value) -> Value {
     match node {
         Value::Object(o) => {
             let mut res = Map::new();
+            // PHASEFX1: a phase swap's `to` is a unit ref too (a side's `to` is a side id)
+            let swap = o.get("type").and_then(Value::as_str) == Some(rpgkit_battle::encounter::SWAP_EFFECT);
             for (k, v) in o {
                 let mapped = match (k.as_str(), v) {
                     ("unit", Value::String(s)) => json!(map_ref(r, ctx, s)),
                     ("units", Value::Array(a)) => json!(map_refs(r, ctx, a)),
+                    ("to", Value::String(s)) if swap => json!(map_ref(r, ctx, s)),
                     _ => map_node(r, ctx, v),
                 };
                 res.insert(k.clone(), mapped);

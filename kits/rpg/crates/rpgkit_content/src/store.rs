@@ -23,7 +23,8 @@ pub use aegis_content::store::Outcome;
 /// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false, `origin` system and an empty
 /// `wears_untrained` (UNITDRILL1: a row without the exception reads as before), a 0 `growth_per_stage` (W.2-S3,
 /// FB-139: a unit written before the field existed re-saves byte for byte) and an empty unit `template` (R4-1 slice 2,
-/// FB-144: the schema's `omit_default`) left out; unknown keys kept.
+/// FB-144: the schema's `omit_default`) left out, as an empty hazard `meter` (PK1-S1, a row written before it existed
+/// re-saves byte for byte); unknown keys kept.
 fn content_storage(kind: &str, full: &Dict) -> Dict {
     use crate::check::unit::{GROWTH_PER_STAGE, WEARS_UNTRAINED};
     use rpgkit_data::TEMPLATE_FIELD;
@@ -33,6 +34,7 @@ fn content_storage(kind: &str, full: &Dict) -> Dict {
             || (key == WEARS_UNTRAINED && json::strings(v).is_empty())
             || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
             || (kind == "units" && key == TEMPLATE_FIELD && gstr(v).is_empty())
+            || (kind == rpgkit_data::HAZARDS_KIND && key == "meter" && v.as_object().is_none_or(|o| o.is_empty()))
     })
 }
 
@@ -58,11 +60,20 @@ fn class_storage(full: &Dict) -> Dict {
 
 /// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the
 /// same value when read), so a row written before the switches were fields re-saves byte for byte. P1.2-S2 (FB-109):
-/// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it).
+/// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it). PK1-S2a: the
+/// Channel numbers (`RULESET_CHANNEL_FIELDS`) are stored only when they differ from their schema defaults, so a row
+/// written before they existed re-saves byte for byte.
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
-    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
+    let channel_default = |key: &str, v: &Value| {
+        RULESET_CHANNEL_FIELDS.contains(&key) && fields("content", source::RULESET_KIND).iter().map(json::dict).any(|f| json::s(f, "key") == key && json::deep_equal(json::get(f, "default"), v))
+    };
+    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v) || channel_default(key, v))
 }
+
+/// PK1-S2a (PK1 4.1): the ruleset row fields of the rule `channel`, stored only when set off their defaults.
+/// PR5-20 adds `channel_ai_edge` (FB-179).
+pub const RULESET_CHANNEL_FIELDS: [&str; 6] = ["channel_meter", "channel_power", "channel_cost", "marrow_actives", "channel_rest", "channel_ai_edge"];
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for
@@ -254,8 +265,10 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             // ItemModifiers.stored
             let has_hand = !sget(&row, "hand", "").is_empty();
             // A1.2-K3: a consumable's `area` (NONE) and `affects` ("") are stored only when set, so an item written
-            // before they existed re-saves byte for byte
-            let unset_shape = |k: &str, v: &Value| (k == "area" && gstr(v) == rpgkit_data::ITEM_AREA_NONE) || (k == "affects" && gstr(v).is_empty());
+            // before they existed re-saves byte for byte; PK1-S1: its `unmark` ({}) too
+            let unset_shape = |k: &str, v: &Value| {
+                (k == "area" && gstr(v) == rpgkit_data::ITEM_AREA_NONE) || (k == "affects" && gstr(v).is_empty()) || (k == "unmark" && v.as_object().is_none_or(|o| o.is_empty()))
+            };
             Ok(row.into_iter().filter(|(k, v)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand) || unset_shape(k, v))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),

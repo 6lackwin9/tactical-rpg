@@ -25,11 +25,16 @@ use rpgkit_rules::ruleset;
 use rpgkit_rules::stats::roundi;
 use rpgkit_rules::status;
 use rpgkit_rules::unit::HeldGuard;
+use serde_json::Value;
 
 /// 8.2: a `grant` of `rounds` -1 lasts the battle.
 pub const BATTLE_ROUNDS: i32 = 999;
-/// 8.2: the largest `ap` a trigger gives.
+/// 8.2: the largest `ap` a trigger gives (PK1-S1: also the largest `set`).
 pub const MAX_AP: i32 = 4;
+/// PK1-S1 (3.4): the most rounds an `ap` `set` lasts.
+pub const AP_SET_ROUNDS: i32 = 5;
+/// PK1-S1 (3.3): a `strike_nearest` power's range.
+pub const STRIKE_POWER: (f64, f64) = (0.1, 3.0);
 
 /// Whether the battle plays by events and triggers.
 pub fn on(w: &World) -> bool {
@@ -55,7 +60,8 @@ pub struct Holder {
 
 /// One event raised for one holder (8.1): `other` as the table says, `ally` the friend of an ally event, the event's
 /// hit (ranged or melee) and skill family, the other unit's HP share before the event (0-100), and for `hp_below` the
-/// holder's share before and after.
+/// holder's share before and after. PK1-S1 (3.2): `hit` the HP the event's hit took (`rpgkit_data::HIT_EVENTS` and a
+/// rider; 0 otherwise), read by a `damage` effect's `pct_of_hit`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {
     pub on: &'static str,
@@ -67,11 +73,12 @@ pub struct Event {
     pub other_hp: Option<f64>,
     pub hp_from: f64,
     pub hp_to: f64,
+    pub hit: i32,
 }
 
 impl Event {
     pub(crate) fn new(on: &'static str, holder: UnitId, other: Option<UnitId>) -> Self {
-        Self { on, holder, other, ally: None, ranged: None, family: String::new(), other_hp: None, hp_from: 0.0, hp_to: 0.0 }
+        Self { on, holder, other, ally: None, ranged: None, family: String::new(), other_hp: None, hp_from: 0.0, hp_to: 0.0, hit: 0 }
     }
 }
 
@@ -155,12 +162,25 @@ pub struct State {
     reveal_round: i32,
     reveal_base: Option<bool>,
     pub fired: Vec<Fired>,
+    /// PK1-S1 (3.4): the `ap` sets waiting for the next round starts, and those holding a unit's AP this round.
+    ap_sets: Vec<ApSet>,
+    ap_held: Vec<(UnitId, i32, String)>,
 }
 
 impl State {
     /// The fired triggers since the last call (the session logs them).
     pub fn take(&mut self) -> Vec<Fired> {
         std::mem::take(&mut self.fired)
+    }
+
+    /// PK1-S1 (3.4): why `c`'s AP is held this round (the AP it was held at and the trigger's source), for the planner.
+    pub fn ap_held(&self, c: UnitId) -> Option<(i32, &str)> {
+        self.ap_held.iter().find(|(u, _, _)| *u == c).map(|(_, ap, src)| (*ap, src.as_str()))
+    }
+
+    /// PK1-S1 (3.4): the `ap` sets still waiting (unit, set, round starts left).
+    pub fn ap_sets(&self) -> Vec<(UnitId, i32, i32)> {
+        self.ap_sets.iter().map(|a| (a.unit, a.set, a.rounds)).collect()
     }
 
     fn allows(&self, unit: UnitId, h: &Holder) -> i32 {
@@ -533,26 +553,26 @@ pub fn riders(res: &mut Resolver, w: &mut World, idx: usize, before: &Before) {
     if cmd.riders.is_empty() || cmd.failed || !w.units[src].is_active() {
         return;
     }
-    let landed: Vec<(UnitId, Option<bool>)> = match &cmd.kind {
+    let landed: Vec<(UnitId, Option<bool>, i32)> = match &cmd.kind {
         CmdKind::Attack { .. } | CmdKind::Area { .. } => {
-            let mut out: Vec<(UnitId, Option<bool>)> = Vec::new();
+            let mut out: Vec<(UnitId, Option<bool>, i32)> = Vec::new();
             // RD1 "damaged by a hit": a status-only attack lands no rider, nor a hit the unit took no HP from (an
-            // intercept's holder already at 1 HP)
+            // intercept's holder already at 1 HP); PK1-S1: the HP that hit took is the rider's `hit`
             for &(t, _) in &cmd.hits {
                 let Some(s) = cmd.struck.iter().find(|s| s.target == t && s.damage > 0) else { continue };
-                if !out.iter().any(|(u, _)| *u == t) {
-                    out.push((t, Some(s.ranged)));
+                if !out.iter().any(|(u, _, _)| *u == t) {
+                    out.push((t, Some(s.ranged), s.damage));
                 }
             }
             out
         }
-        CmdKind::Support { target, .. } => vec![(*target, None)],
+        CmdKind::Support { target, .. } => vec![(*target, None, 0)],
         _ => Vec::new(),
     };
     let (name, family, riders, block) = (cmd.name.clone(), cmd.family.clone(), cmd.riders.clone(), a.impact);
-    for (t, ranged) in landed {
+    for (t, ranged, hit) in landed {
         for (i, r) in riders.iter().enumerate() {
-            let ev = Event { ranged, family: family.clone(), other_hp: Some(share_of(w, t, before.hp[t])), ..Event::new("rider", src, Some(t)) };
+            let ev = Event { ranged, family: family.clone(), other_hp: Some(share_of(w, t, before.hp[t])), hit, ..Event::new("rider", src, Some(t)) };
             if !matches(w, &ev, &r.when) {
                 continue;
             }
@@ -591,7 +611,7 @@ fn action_events(res: &mut Resolver, w: &World, idx: usize, before: &Before) -> 
             continue;
         }
         let t = s.target;
-        let hit = |on: &'static str, holder: UnitId, other: UnitId| Event { ranged: Some(s.ranged), family: family.clone(), other_hp: hp_before(other), ..Event::new(on, holder, Some(other)) };
+        let hit = |on: &'static str, holder: UnitId, other: UnitId| Event { ranged: Some(s.ranged), family: family.clone(), other_hp: hp_before(other), hit: s.damage, ..Event::new(on, holder, Some(other)) };
         events.push(hit("hit_taken", t, src));
         if before.guarding[t] {
             events.push(hit("guarded_hit", t, src));
@@ -723,6 +743,14 @@ pub fn effect_of(e: &Obj, source: &str) -> Option<(status::EffectSpec, status::T
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effects: &[Obj], block: i32, rules: bool, fired: &mut Fired) {
     for e in effects {
+        // ROLLTABLE1: one row by weight on the battle RNG (drawn only here), its effects as this list's (no table inside)
+        if value::string(e, "type", "") == rpgkit_data::ROLL_TABLE {
+            if let Some(row) = roll_row(&mut res.rng, e) {
+                let picked: Vec<Obj> = row_effects(e, row).into_iter().filter(|x| value::string(x, "type", "") != rpgkit_data::ROLL_TABLE).collect();
+                run_effects(res, w, ev, h, &picked, block, rules, fired);
+            }
+            continue;
+        }
         let Some(to) = target_of(e, ev) else { continue };
         if !w.units[to].is_active() {
             continue;
@@ -730,6 +758,21 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
         let name = w.units[to].name.clone();
         let (mut dealt, mut rows) = (0, Vec::new());
         let what = match value::string(e, "type", "").as_str() {
+            // PK1-S1 (3.4): `set` holds the unit's AP at most there for its next rounds' planning (`apply_ap_sets`); a unit
+            // that pays no AP is stunned for its next round instead (FB-167 Q5)
+            "ap" if e.contains_key("set") => {
+                let set = value::int(e, "set", 0).clamp(0, MAX_AP);
+                if w.pays_ap(to) {
+                    let rounds = value::int(e, "rounds", 1).clamp(1, AP_SET_ROUNDS);
+                    res.triggers.ap_sets.push(ApSet { unit: to, set, rounds, holder: h.clone() });
+                    format!("{name}'s AP will be {set} at most next round{}", if rounds > 1 { format!(" and for {} more", rounds - 1) } else { String::new() })
+                } else {
+                    let st = w.ruleset.numbers.debt_stun_status.clone();
+                    let spec = status::EffectSpec::grant(&st, 1, 0, &w.units[h.unit].name.clone());
+                    status::apply_effect(&mut w.units[to], &spec, status::Timing::Next, 0.0, None);
+                    format!("{name} is {} next round (no AP to set)", status::display_name(&st))
+                }
+            }
             "ap" => {
                 // party side only; never re-plans the round
                 if !w.allies.contains(&to) {
@@ -804,7 +847,18 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
             "damage" => {
                 let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
                 let before = w.units[to].hp;
-                w.damage(to, value::int(e, "value", 0).max(0), false);
+                // PK1-S1 (3.2): `pct_of_hit` is that share of the event's hit (`part`), never mitigated again and never
+                // taking the unit below 1 HP (recoil); nothing when the event has no hit
+                let pct = value::int(e, "pct_of_hit", 0);
+                if pct > 0 {
+                    let amount = part(ev.hit, pct).min(before - 1);
+                    if amount <= 0 {
+                        continue;
+                    }
+                    w.damage(to, amount, true);
+                } else {
+                    w.damage(to, value::int(e, "value", 0).max(0), false);
+                }
                 rows = w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default();
                 let lost = before - w.units[to].hp;
                 dealt = lost;
@@ -845,12 +899,149 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 crate::meter::from_effect(res, w, h, to, e, rules, block, fired);
                 continue;
             }
+            // PK1-S1 (3.3): a weapon strike outside the plan, logged `[Spasm]`
+            rpgkit_data::STRIKE_NEAREST => {
+                let (l, dealt, rows) = strike_nearest(res, w, h, to, e);
+                res.log.push(l.clone());
+                fired.push(l, dealt, rows);
+                continue;
+            }
+            // PK1-S1 (3.5): an entry in the battle's marks
+            rpgkit_data::MARK => {
+                let id = value::string(e, "mark", "");
+                if id.is_empty() {
+                    continue;
+                }
+                let v = value::int(e, "value", 1);
+                w.marks.record(to, &id, v);
+                format!("{name} is marked {id} {}{v}", if v > 0 { "+" } else { "" })
+            }
             _ => continue,
         };
         let l = line(w, h, &what);
         res.log.push(l.clone());
         fired.push(l, dealt, rows);
     }
+}
+
+/// PK1-S1 (3.3): the nearest other unit on the field to `c` (`World::dist`), of any side; ties go to the lowest unit id.
+pub fn nearest_other(w: &World, c: UnitId) -> Option<UnitId> {
+    if !w.has(c) {
+        return None;
+    }
+    (0..w.units.len()).filter(|&u| u != c && w.has(u)).min_by_key(|&u| (w.dist(c, u), u))
+}
+
+/// The tag of a `strike_nearest` effect's log line.
+pub const SPASM_TAG: &str = "[Spasm]";
+
+/// PK1-S1 (3.3): the `strike_nearest` effect of holder `h` on unit `c`: `c` strikes `nearest_other` at once with its
+/// weapon as riposte's counter does (`command::roll_hit`, one crit draw, `power` x weaken x empower, its weapon's reach
+/// deciding ranged, the cover between them; mitigated by the hit), no AP and no plan, raising no event (depth 1); then
+/// `then_status` (if any) is granted to `c` for its next `then_rounds` rounds (never rolled), struck or not. Returns
+/// the `[Spasm]` line, the HP taken and its journal rows.
+fn strike_nearest(res: &mut Resolver, w: &mut World, h: &Holder, c: UnitId, e: &Obj) -> (String, i32, Vec<(UnitId, i32)>) {
+    let name = w.units[c].name.clone();
+    let (mut dealt, mut rows) = (0, Vec::new());
+    let mut what = match nearest_other(w, c) {
+        Some(t) => {
+            let u = &w.units[c];
+            let mult = value::float(e, "power", 1.0).clamp(STRIKE_POWER.0, STRIKE_POWER.1) * u.weaken_factor() * u.empower_factor();
+            let ranged = u.attack_range > 1;
+            let cover = crate::command::cover_between(w, c, t, ranged);
+            let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
+            let hit = crate::command::roll_hit(w, &mut res.rng, c, t, ranged, false, mult, cover);
+            let before = w.units[t].hp;
+            w.damage(t, hit.final_dmg, true);
+            rows = w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default();
+            dealt = before - w.units[t].hp;
+            let tu = &w.units[t];
+            format!("{name} strikes {} for {dealt}{}{}", tu.name, if hit.is_crit { " CRIT" } else { "" }, if tu.is_alive() { "" } else { ", defeated" })
+        }
+        None => format!("{name} strikes at no one"),
+    };
+    let st = value::string(e, "then_status", "");
+    if !st.is_empty() && w.units[c].is_alive() {
+        let rounds = value::int(e, "then_rounds", 1).max(1);
+        let spec = status::EffectSpec::grant(&st, rounds, 0, &w.units[h.unit].name.clone());
+        status::apply_effect(&mut w.units[c], &spec, status::Timing::Next, 0.0, None);
+        what += &format!(", then {} next round{}", status::display_name(&st), if rounds > 1 { format!(" for {rounds} rounds") } else { String::new() });
+    }
+    (format!("{SPASM_TAG} {}'s {}: {what}", w.units[h.unit].name, h.source), dealt, rows)
+}
+
+/// PK1-S1 (3.4): the `Fired::on` of an `ap` set's line at the round start (the metrics count no new firing).
+pub const AP_SET_EVENT: &str = "ap_set";
+
+/// PK1-S1 (3.4): an `ap` `set` waiting for the round start: the unit, the most AP it keeps, the round starts left and
+/// the trigger that set it (its line's holder).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApSet {
+    pub unit: UnitId,
+    pub set: i32,
+    pub rounds: i32,
+    pub holder: Holder,
+}
+
+/// PK1-S1 (3.4): the round starts (after the `round_start` triggers, rule triggers): each waiting `ap` `set` holds its
+/// active unit's AP at most there (a debt stays) for this round's planning and logs why; it counts one of its rounds.
+/// `held` records (unit, AP, source) for the planner's note (`ap_held`).
+pub fn apply_ap_sets(res: &mut Resolver, w: &mut World) {
+    res.triggers.ap_held.clear();
+    if res.triggers.ap_sets.is_empty() {
+        return;
+    }
+    let sets = std::mem::take(&mut res.triggers.ap_sets);
+    let mut done: Vec<UnitId> = Vec::new();
+    for mut a in sets {
+        if !w.units[a.unit].is_active() {
+            continue;
+        }
+        // two sets on one unit in one round: the first applies and counts, the other waits (both count down)
+        if !done.contains(&a.unit) {
+            done.push(a.unit);
+            let u = &mut w.units[a.unit];
+            let was = u.ap;
+            u.ap = u.ap.min(a.set);
+            let what = format!("{}'s AP is held at {} this round (was {was})", u.name, u.ap);
+            res.triggers.ap_held.push((a.unit, u.ap, a.holder.source.clone()));
+            let l = line(w, &a.holder, &what);
+            res.log.push(l.clone());
+            let mut fired = Fired::new(a.holder.unit, AP_SET_EVENT, Some(a.unit), &a.holder.source);
+            fired.push(l, 0, Vec::new());
+            res.triggers.fired.push(fired);
+        }
+        a.rounds -= 1;
+        if a.rounds > 0 {
+            res.triggers.ap_sets.push(a);
+        }
+    }
+}
+
+/// ROLLTABLE1: the `rows` of a `roll_table` effect (the entries that are objects) and their weights (at least 1).
+fn roll_rows(e: &Obj) -> Vec<(i64, &Obj)> {
+    value::array(e, "rows").iter().filter_map(Value::as_object).map(|r| (i64::from(value::int(r, "weight", 1).max(1)), r)).collect()
+}
+
+/// ROLLTABLE1: the row a `roll_table` effect picks: one draw `randi_range(1, total weight)` on `rng`, the first row whose
+/// running weight reaches it (a total of 1 draws nothing, as `randi_range`). None (and no draw) for a table without rows.
+pub fn roll_row(rng: &mut aegis_core::rng::GodotRng, e: &Obj) -> Option<usize> {
+    let rows = roll_rows(e);
+    if rows.is_empty() {
+        return None;
+    }
+    let total = rows.iter().map(|r| r.0).sum::<i64>().min(i64::from(i32::MAX)) as i32;
+    let roll = i64::from(rng.randi_range(1, total));
+    let mut run = 0;
+    rows.iter().position(|(weight, _)| {
+        run += weight;
+        roll <= run
+    })
+}
+
+/// ROLLTABLE1: the effects of row `row` of a `roll_table` effect (empty when out of range).
+pub fn row_effects(e: &Obj, row: usize) -> Vec<Obj> {
+    roll_rows(e).get(row).map(|(_, r)| value::array(r, "effects").iter().filter_map(Value::as_object).cloned().collect()).unwrap_or_default()
 }
 
 /// 8.2 `until` guard_end: removes the grants of the units that no longer guard (`all`: the round is over).

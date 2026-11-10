@@ -36,7 +36,7 @@ fn a_saved_deck_order_reads_the_derived_rows_under_field_intent() {
     let off = data(json!(["round_intent", "deck"]));
     let dual = json!({"field": ["d_burst"], "assault": ["d_burst", "strike"]});
     assert_eq!(order_errors(&on, dual.clone()), Vec::<String>::new(), "a dual skill in both rows; field is a key");
-    assert_eq!(order_errors(&off, dual), ["m: deck order: 'field' is not an intent (one of assault, guard, support, maneuver, channel)."]);
+    assert_eq!(order_errors(&off, dual), ["m: deck order: 'field' is not an intent (one of assault, guard, support, maneuver)."]);
     assert_eq!(order_errors(&on, json!({"assault": ["d_pot"]})), ["m: deck order assault: 'd_pot' is of intent field."], "a hazard throw is Field only");
     assert_eq!(order_errors(&off, json!({"assault": ["d_pot", "d_burst"]})), Vec::<String>::new(), "legacy: ATTACK is Assault");
 }

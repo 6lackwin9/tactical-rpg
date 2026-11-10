@@ -166,6 +166,29 @@ pub struct Prebuilt {
     pub default_intent: String,
 }
 
+/// PHASEFX1: the unit row a phase `swap` turns a unit into, built once at the start (the roster is not kept): the
+/// unit, its AI profile, art, palette, lore ref and roster tier.
+#[derive(Clone)]
+struct SwapForm {
+    unit: Unit,
+    profile: AiProfile,
+    art: String,
+    palette: String,
+    lore: String,
+    tier: String,
+    /// Its default intent (rule `round_intent`; "" = none).
+    intent: String,
+}
+
+/// ContentFactory.art_of: the unit row's own art, else its class's, else "unit".
+fn art_of(cat: &Catalog, e: &UnitDef) -> String {
+    if !e.art.is_empty() {
+        e.art.clone()
+    } else {
+        cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into())
+    }
+}
+
 /// One unit at one point of a round (BlockSnapshot: the state the screens show).
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnitSnap {
@@ -314,6 +337,14 @@ pub struct Session {
     authored_profiles: IndexMap<UnitId, AiProfile>,
     planning_round: i32,
     pending: VecDeque<usize>,
+    /// PHASEFX1: the rows the phase swaps turn units into, by unit ref (empty without a swap effect).
+    swap_forms: IndexMap<String, SwapForm>,
+    /// PHASEFX1: the enemy side as spawned (enemies, reinforcements, phase waves; `w.enemies` at the start), which the
+    /// fates follow whatever side a phase `side` later puts a unit on.
+    spawned_enemies: Vec<UnitId>,
+    /// PK1-S1 (3.7): the guests and the protected guests at the battle start (a calmed unit takes its start role back).
+    start_guests: Vec<UnitId>,
+    start_protected: Vec<UnitId>,
 }
 
 impl Session {
@@ -396,7 +427,7 @@ impl Session {
             let u = build_from(&cat, UnitBuild { row: &e, default_ap: def.unit_ap, deck: deck.as_ref(), wield: def.ruleset.numbers.wield(), over: roster.overrides(&cat, r), growth: None }).unit;
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));
-            art.push(if !e.art.is_empty() { e.art.clone() } else { cat.classes.get(&e.class_id).map(|c| c.art.clone()).unwrap_or_else(|| "unit".into()) });
+            art.push(art_of(&cat, &e));
             palettes.push(e.palette.clone());
             built.push(u);
             units_by_ref.entry(r.to_string()).or_default().push(id);
@@ -437,6 +468,18 @@ impl Session {
             slot += 1;
         }
         let count = built.len();
+        // PHASEFX1: each swap's new row, built once as a roster unit is (none without a swap effect)
+        let mut swap_forms: IndexMap<String, SwapForm> = IndexMap::new();
+        for r in phases.phases.iter().flat_map(|p| p.swap_refs()) {
+            if swap_forms.contains_key(&r) {
+                continue;
+            }
+            let Some(e) = roster.entry(&cat, &r) else { continue };
+            let mut unit = build_from(&cat, UnitBuild { row: &e, default_ap: def.unit_ap, deck: deck.as_ref(), wield: def.ruleset.numbers.wield(), over: roster.overrides(&cat, &r), growth: None }).unit;
+            unit.loadout_locked = true;
+            let form = SwapForm { unit, profile: AiProfile::for_unit(&cat, &e), art: art_of(&cat, &e), palette: e.palette.clone(), lore: roster.lore_ref(&cat, &r), tier: roster.tier(&cat, &r), intent: e.default_intent.clone() };
+            swap_forms.insert(r, form);
+        }
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_board(&def.zone, &def.rows, &cat.zones);
         // ENCOUNTER2 S1, H2: the unkillable enemy-side units and the gate of a hold escape (none in classic)
@@ -449,7 +492,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()) };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -503,6 +546,7 @@ impl Session {
         }
         let timeout_outcome = encounter::timeout_outcome(&def.raw);
         let script = crate::script::Script::read(&def.raw);
+        let (start_guests, start_protected) = (guests.clone(), protected.clone());
         let mut s = Session {
             def,
             w,
@@ -548,6 +592,10 @@ impl Session {
             authored_profiles,
             planning_round: 1,
             pending: VecDeque::new(),
+            swap_forms,
+            spawned_enemies: enemies.clone(),
+            start_guests,
+            start_protected,
         };
         s.begin_round(1);
         s.apply_start_ap();
@@ -579,6 +627,8 @@ impl Session {
         for &c in &self.resolver.registered.clone() {
             status::roll_over(&mut self.w.units[c], self.def.ap_regen, &self.w.ruleset.numbers);
         }
+        // PK1-S1 (3.7): the turned allies an `unmark` calmed rejoin the party side before anyone plans (none without one)
+        self.calm_units(round);
         // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
         let rest = round_intent::round_start(&mut self.w);
         self.events.extend(rest);
@@ -590,6 +640,8 @@ impl Session {
         crate::arena::round_start(&mut self.w, round);
         // HOOKS1 8.1: `round_start` triggers after the refill (rule triggers; nothing in classic)
         crate::trigger::round_start(&mut self.resolver, &mut self.w);
+        // PK1-S1 (3.4): the waiting `ap` sets hold their units' AP for this planning (none without one)
+        crate::trigger::apply_ap_sets(&mut self.resolver, &mut self.w);
         if crate::trigger::on(&self.w) || crate::meter::on(&self.w) {
             self.log_triggers(round, 1);
             self.log_ground(round, 1);
@@ -907,7 +959,9 @@ impl Session {
     }
 
     /// REWARD1 2.4: every enemy-side unit in spawn order (enemies, reinforcements, phase waves) with its roster ref and
-    /// how the battle left it (a wave that never came, a reserved phase wave: standing).
+    /// how the battle left it (a wave that never came, a reserved phase wave: standing). PHASEFX1: the units spawned on
+    /// the enemy side, whatever side a phase `side` turned them to (a guest turned enemy is none of them), so each
+    /// `ref#n` key stays the roster's.
     pub fn fates(&self) -> Vec<(String, Fate)> {
         let mut ref_of: IndexMap<UnitId, &str> = IndexMap::new();
         for (r, list) in &self.units_by_ref {
@@ -915,8 +969,7 @@ impl Session {
                 ref_of.insert(c, r);
             }
         }
-        self.w
-            .enemies
+        self.spawned_enemies
             .iter()
             .filter_map(|&c| {
                 let r = ref_of.get(&c)?;
@@ -1007,6 +1060,13 @@ impl Session {
         for fx in p.effects_of(encounter::KILL_EFFECT) {
             self.phase_kill(fx, &p.name, round, block);
         }
+        // PHASEFX1: side changes, then swaps, each with its cell (none in classic)
+        for fx in p.effects_of(encounter::SIDE_EFFECT) {
+            self.phase_side(fx, &p.name, round, block);
+        }
+        for fx in p.effects_of(encounter::SWAP_EFFECT) {
+            self.phase_swap(fx, &p.name, round, block);
+        }
         // ENCOUNTER2-C DT1: a talk only adds its cue (no cell, no event line, no draw)
         for fx in p.effects_of(encounter::TALK_EFFECT) {
             self.talks.push(TalkCue { phase: id.to_string(), dialogue: value::string(fx, "dialogue", ""), speaker: value::string(fx, "speaker", ""), round, block });
@@ -1060,6 +1120,158 @@ impl Session {
         self.encounter_lines.push((self.resolver.log.len(), format!("[Kill] {}", entry.detail)));
         self.append(entry);
         self.log_spared(round, block);
+    }
+
+    /// PHASEFX1 (ACTS23 PK6 hook l): a phase `side` effect: every active, placed, unreserved unit of its refs (never a
+    /// hero) goes to side `to` (`World::set_side`): `hostile_all` makes it a rogue on the enemy side that fights every
+    /// other unit (and counts as a foe for the win objectives), `party` a guest of the party side (planned as guests are),
+    /// `enemy` an enemy-side unit. A unit leaving the party side stops being a guest (and protected); one joining it is
+    /// no longer unkillable (S1 is enemy-side only); one leaving the enemy side or turning on everyone leaves its morale
+    /// group (`leave_morale`). Its actions already booked this round stay. One EVENT cell (log::side_entry; actor the encounter) over the units that changed side.
+    fn phase_side(&mut self, fx: &Obj, phase_name: &str, round: i32, block: i32) {
+        let to = value::string(fx, "to", "");
+        let mut turned: Vec<UnitId> = Vec::new();
+        for r in value::strings(fx, "units") {
+            for c in self.units_of_ref(&r) {
+                let hero = self.w.allies.contains(&c) && !self.guests.contains(&c);
+                if hero || !self.w.has(c) || self.is_reserved(c) || turned.contains(&c) {
+                    continue;
+                }
+                if !self.w.set_side(c, &to) {
+                    continue;
+                }
+                if self.w.allies.contains(&c) {
+                    if !self.guests.contains(&c) {
+                        self.guests.push(c);
+                    }
+                    // S1 is enemy-side only
+                    self.w.unkillable.retain(|&k| k != c);
+                } else {
+                    self.guests.retain(|&g| g != c);
+                    self.protected.retain(|&g| g != c);
+                }
+                // a unit leaving the enemy side or turning on everyone leaves its morale group
+                if !self.w.enemies.contains(&c) || self.w.sides.is_rogue(c) {
+                    self.leave_morale(c);
+                }
+                turned.push(c);
+            }
+        }
+        if turned.is_empty() {
+            return;
+        }
+        let entry = crate::log::side_entry(&self.w, &self.def.name, phase_name, &turned, &to, round, block);
+        self.events.push(entry.detail.clone());
+        self.encounter_lines.push((self.resolver.log.len(), format!("[Side] {}", entry.detail)));
+        self.append(entry);
+    }
+
+    /// PK1-S1 (3.7): the units an `unmark` calmed rejoin the party side (`mark::round_start`, at their battle-start place
+    /// among the allies); each gets a `[Side]` EVENT cell (log::side_entry, the encounter as the actor, the calming
+    /// item as the skill).
+    /// A unit that started as a guest is a guest again (and protected again when it started protected); it stays out
+    /// of its morale group (it left it when it turned) and, on the party side, not unkillable (S1 is enemy-side only).
+    fn calm_units(&mut self, round: i32) {
+        for (c, source) in crate::mark::round_start(&mut self.w) {
+            if self.start_guests.contains(&c) && !self.guests.contains(&c) {
+                self.guests.push(c);
+            }
+            if self.start_protected.contains(&c) && !self.protected.contains(&c) {
+                self.protected.push(c);
+            }
+            self.w.unkillable.retain(|&k| k != c);
+            let entry = crate::log::side_entry(&self.w, &self.def.name, &source, &[c], encounter::PARTY_SIDE, round, 1);
+            self.events.push(entry.detail.clone());
+            self.encounter_lines.push((self.resolver.log.len(), format!("[Side] {}", entry.detail)));
+            self.append(entry);
+        }
+    }
+
+    /// PHASEFX1: unit `c` leaves the enemy morale (a phase `side` turned it): its key leaves its group (the group's size
+    /// shrinks, so the others' deaths weigh as many as remain; a leader key is cleared), it is no longer keyed or
+    /// authored for morale, and its live profile goes back to the authored one (no flee bonus). Nothing with morale off
+    /// or a unit without a key.
+    fn leave_morale(&mut self, c: UnitId) {
+        let Some(key) = self.unit_keys.shift_remove(&c) else { return };
+        self.units_by_key.shift_remove(&key);
+        self.morale.leave(&key);
+        if let Some(p) = self.authored_profiles.shift_remove(&c) {
+            self.w.profiles.insert(c, p);
+        }
+    }
+
+    /// PHASEFX1 (ACTS23 PK6 hook m): a phase `swap` effect: every active, placed, unreserved unit of its `unit` ref
+    /// (never a hero) becomes the `to` row (built at the start; nothing when the ref did not resolve) in place: the same
+    /// unit id, cell and side, its HP `encounter::swap_hp` of `hp` (journaled), its AP kept up to the new max; the old
+    /// unit's statuses end (a fresh unit), its poise bar refills to the new row's, its actions not yet landed this round
+    /// are cancelled, and the new row's AI profile, deck, art and tier apply (its plans from the next planning); under
+    /// the rule `unit_meters` its old gauges go and the new row's start (`meter::restart_unit`), under `round_intent` it
+    /// takes the new row's default intent (its facing stays). It keeps its encounter ref (later effects, triggers, fates
+    /// and `unkillable` name it by the old ref). Its name is the row's (numbered when another unit has it). One EVENT
+    /// cell per unit (log::swap_entry; actor the encounter).
+    fn phase_swap(&mut self, fx: &Obj, phase_name: &str, round: i32, block: i32) {
+        let to = value::string(fx, "to", "");
+        let Some(form) = self.swap_forms.get(&to).cloned() else { return };
+        let mode = value::string(fx, "hp", encounter::SWAP_KEEP_PCT);
+        let mut swapped: Vec<UnitId> = Vec::new();
+        for c in self.units_of_ref(&value::string(fx, "unit", "")) {
+            let hero = self.w.allies.contains(&c) && !self.guests.contains(&c);
+            if hero || !self.w.has(c) || self.is_reserved(c) || swapped.contains(&c) {
+                continue;
+            }
+            let old = &self.w.units[c];
+            let (old_name, hp, max, ap) = (old.name.clone(), old.hp, old.max_hp, old.ap);
+            let mut u = form.unit.clone();
+            u.name = self.free_name(c, &u.name);
+            u.hp = encounter::swap_hp(hp, max, u.max_hp, &mode);
+            u.ap = ap.min(u.max_ap);
+            self.w.swap_unit(c, u);
+            self.w.profiles.insert(c, form.profile.clone());
+            if self.authored_profiles.contains_key(&c) {
+                self.authored_profiles.insert(c, form.profile.clone());
+            }
+            self.phases.rebase_profile(c, &form.profile);
+            self.art[c] = form.art.clone();
+            self.palettes[c] = form.palette.clone();
+            self.hero_keys.insert(c, form.lore.clone());
+            if self.unit_tiers.contains_key(&c) {
+                self.unit_tiers.insert(c, form.tier.clone());
+            }
+            crate::meter::restart_unit(&mut self.w, c);
+            if round_intent::on(&self.w) && !form.intent.is_empty() {
+                round_intent::set_default_intent(&mut self.w, c, &form.intent);
+            }
+            if crate::poise::on(&self.w) {
+                let (n, max_poise) = (self.w.ruleset.numbers.clone(), crate::poise::max_poise(&self.w, c));
+                let st = self.w.poise.entry(c).or_default();
+                st.broken = false;
+                crate::poise::refill(&n, st, max_poise);
+            }
+            if block > 0 {
+                for a in self.resolver.scheduled.iter_mut().filter(|a| a.unit == c && !a.cancelled && !a.landed) {
+                    a.cancelled = true;
+                }
+            }
+            swapped.push(c);
+            let entry = crate::log::swap_entry(&self.w, &self.def.name, phase_name, c, &old_name, round, block);
+            self.events.push(entry.detail.clone());
+            self.encounter_lines.push((self.resolver.log.len(), format!("[Swap] {}", entry.detail)));
+            self.append(entry);
+        }
+        if !swapped.is_empty() {
+            // the new rows' pouch items and the hazard switch, as at the start
+            self.w.add_item_skills();
+            self.w.ignore_hazards_when_off();
+        }
+    }
+
+    /// PHASEFX1: `base`, or `base N` (2, 3, ...) when another unit than `c` already has the name (_display_names).
+    fn free_name(&self, c: UnitId, base: &str) -> String {
+        let taken = |name: &str| self.w.units.iter().enumerate().any(|(i, u)| i != c && u.name == name);
+        if !taken(base) {
+            return base.to_string();
+        }
+        (2..).map(|n| format!("{base} {n}")).find(|name| !taken(name)).unwrap_or_default()
     }
 
     /// Phase ai effects, then the morale flee bonus, on the live profiles (rebuilt from the authored ones).
@@ -1345,6 +1557,20 @@ impl Session {
             return (Err("Picks are made while planning.".into()), Vec::new());
         }
         pick_on(&mut self.w, &mut self.plan, &mut self.events, c, at, picks)
+    }
+
+    /// PK1-S2a (PK1 4.3 item 1): the converting Channel toggle (`round_intent_plan::set_channel`) while planning: flips
+    /// member `c`'s round to Channel (`on`) or back to Cold Steel and converts its plan; the lines (buffs ended, picks
+    /// dropped) go to `events`. Refused outside planning or for a unit that cannot Channel (nothing changes then).
+    pub fn set_channel(&mut self, c: UnitId, on: bool) -> (Result<Vec<String>, String>, Vec<(UnitId, String)>) {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return (Err("The Channel toggle is set while planning.".into()), Vec::new());
+        }
+        let out = crate::round_intent_plan::set_channel(&mut self.w, &mut self.plan, c, on);
+        if let Ok(lines) = &out.0 {
+            self.events.extend(lines.iter().cloned());
+        }
+        out
     }
 
     pub fn plan_is_valid(&self) -> bool {

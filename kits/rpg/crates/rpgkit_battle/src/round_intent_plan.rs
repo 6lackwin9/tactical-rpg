@@ -31,6 +31,9 @@ pub const COVER_TILE: &str = "cover tile";
 pub const OPENER: &str = "opener";
 pub const RETREAT: &str = "retreat";
 pub const REST: &str = "rest";
+/// PK1-S2c-2 (PK1 4.3 item 5): how a pick's refusal joins two reasons that both apply (Vent: not enough HP and the
+/// meter gate): "HP 9 <= cost 10; Strain 30 < 50".
+pub const REASONS_JOIN: &str = "; ";
 
 /// MV11: the kinds the planner tries, in order, when the player picked none.
 pub const AUTO_KINDS: [ManeuverKind; 3] = [ManeuverKind::Engage, ManeuverKind::Disengage, ManeuverKind::Utility];
@@ -99,6 +102,10 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
 /// a skill in any of its rows; the auto order holds only skills whose primary row is the intent (a second row is by
 /// pick or by the player's order).
 pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
+    // PK1-S2a (PK1 4.3 item 4): a Channel round fills in the Channel order (marrow versions only)
+    if crate::channel::is_channel(w, c) {
+        return crate::channel::order(w, c, intent, &auto_families(w, c));
+    }
     let authored = deck_of(w, c).and_then(|d| d.order.get(intent.id())).filter(|l| !l.is_empty());
     let fams: Vec<String> = match authored {
         Some(list) => list.clone(),
@@ -113,6 +120,10 @@ pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
             }
         }
     }
+    // PK1-S2a: a Cold Steel round leaves the marrow-only skills out (nothing is left out without the rule channel)
+    if crate::channel::on(w) {
+        out.retain(|&sid| crate::channel::problem(w, c, &w.cat.skills[sid]).is_none());
+    }
     out
 }
 
@@ -122,6 +133,10 @@ pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
 /// without lists plans as before).
 pub fn follow_order(w: &World, c: UnitId, intent: RoundIntent, opener: Option<&Opener>) -> Vec<SkillId> {
     let base = order(w, c, intent);
+    // PK1-S2a (PK1 4.3 item 4): a Channel round follows the Channel order, not the follow-up lists
+    if crate::channel::is_channel(w, c) {
+        return base;
+    }
     let Some(Opener::Skill(sid)) = opener else { return base };
     let Some(fam) = w.cat.skills.get(*sid).map(|s| s.family_id().to_string()) else { return base };
     let Some(list) = deck_of(w, c).and_then(|d| d.follow_ups_of(&fam)) else { return base };
@@ -129,8 +144,8 @@ pub fn follow_order(w: &World, c: UnitId, intent: RoundIntent, opener: Option<&O
     let mut out: Vec<SkillId> = Vec::new();
     for f in list.iter().filter(|f| in_deck.contains(f)) {
         if let Some(s) = family_skill(w, c, f) {
-            // A4.2-K1b (IR15): a follow-up list may hold a skill in any of its rows
-            if round_intent::skill_rows(w, &w.cat.skills[s]).contains(&intent.id()) && !out.contains(&s) {
+            // A4.2-K1b (IR15): a follow-up list may hold a skill in any of its rows (PK1-S2a: not a marrow-only one)
+            if round_intent::skill_rows(w, &w.cat.skills[s]).contains(&intent.id()) && !out.contains(&s) && crate::channel::problem(w, c, &w.cat.skills[s]).is_none() {
                 out.push(s);
             }
         }
@@ -650,6 +665,10 @@ impl<'a> Builder<'a> {
     fn skill_opener(&self, plan: &Plan, st: &SimState, sid: SkillId) -> Result<Vec<Step>, String> {
         let w = self.w;
         let s = self.skill(sid);
+        // PK1-S2a: the round's mode (Channel or Cold Steel) offers only its versions
+        if let Some(p) = crate::channel::problem(w, self.c, s) {
+            return Err(p.into());
+        }
         if !round_intent::skill_rows(w, s).contains(&self.intent.id()) {
             return Err(format!("Only {} skills this round.", self.intent.label(&w.cat)));
         }
@@ -773,6 +792,10 @@ impl<'a> Builder<'a> {
     fn item_opener(&self, plan: &Plan, st: &SimState, id: &str) -> Result<Vec<Step>, String> {
         let w = self.w;
         let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", w.units[self.c].name)) };
+        // PK1-S2a: items have no marrow version, so a Channel round has none
+        if let Some(p) = crate::channel::item_problem(w, self.c) {
+            return Err(p.into());
+        }
         // A1.2-K3 (IR11, IR21): an item opens a round of any of its rows
         if !round_intent::item_allows(w, item, self.intent) {
             return Err(format!("{} is not a {} item.", item.name, self.intent.label(&w.cat)));
@@ -943,9 +966,11 @@ impl<'a> Builder<'a> {
                 let ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) } else { 0 };
                 let ap_free = st.ap_left - reserve.ap;
                 // HOOKS1 HC1: a skill whose HP cost the unit's HP left does not exceed is refused (rule hp_cost)
-                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
-                // HOOKS1 UM2: a skill whose meter cost the planned meters do not cover is refused (rule unit_meters)
-                let meter = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
+                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, self.c, s));
+                // HOOKS1 UM2: a skill whose meter cost the planned meters do not cover is refused (rule unit_meters;
+                // PK1-S2a: its meter gate first, then the costs with a marrow version's channel cost)
+                let gate = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
+                let meter = if gate.is_empty() { crate::meter::cost_problem(w, &crate::channel::meters_for(w, self.c, s), |m| st.meter(m)) } else { gate };
                 if !fits_before(&st, need, limit) {
                     why = format!("blocks {free} < {need}");
                 } else if ap > ap_free {
@@ -997,10 +1022,11 @@ impl<'a> Builder<'a> {
         if self.intent == RoundIntent::Maneuver { "out of range" } else { "out of reach" }.into()
     }
 
-    /// RS1: Rest on every free block left, tagged with the fill's stop cause (PL6).
+    /// RS1: Rest on every free block left, tagged with the fill's stop cause (PL6); PK1-S2a: in a Channel round the
+    /// Channel Rest (`channel_rest`, the game's Feed).
     fn rest(&self, plan: &mut Plan, cause: &str) {
         let w = self.w;
-        let rest = w.book().lowest(Kind::Rest);
+        let rest = crate::channel::rest_skill(w, self.c);
         let tag = if cause.is_empty() { REST.to_string() } else { format!("{REST}: {cause}") };
         for _ in 0..w.total_blocks {
             if plan.compile(w, self.c).blocks_left() <= 0 {
@@ -1447,7 +1473,8 @@ pub fn ghost_picks(w: &World, plan: &Plan, c: UnitId, upto: Option<usize>) -> Re
                 aim = aim.or(Some(RoundTarget::Cell(st.cell.get())));
                 Pick::Skill { skill: s, kind: maneuver }
             }),
-            Mode::SelfCast if kind == Some(Kind::Rest) => Some(Pick::Rest),
+            // PK1-S2a: the Channel Rest (Feed) is a Rest pick too
+            Mode::SelfCast if kind == Some(Kind::Rest) || skill.is_some_and(|s| crate::channel::is_channel_rest(w, c, s)) => Some(Pick::Rest),
             Mode::SelfCast | Mode::Withdraw if skill.is_some() && kind != Some(Kind::Move) => skill.map(|s| Pick::Skill { skill: s, kind: maneuver }),
             Mode::Item => {
                 aim = aim.or(Some(st.target.map_or(RoundTarget::Myself, RoundTarget::Unit)));
@@ -1494,6 +1521,81 @@ pub fn clear_picks(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), Str
     (first, rebuild_later(w, plan, c))
 }
 
+/// PK1-S2a (PK1 4.3 item 1, user 2026-11-10): the converting Channel toggle: flips `c`'s round to Channel (`on`) or
+/// back to Cold Steel, any time while planning (it never locks). Only a unit that can Channel (`channel::can_channel`)
+/// has it. Entering Channel counts as an intent change (IN6: the intent-bound buffs end; the lines name them). The plan
+/// converts: every Move and Rest pick stays where it is, each skill pick that has a version in the new mode stays (the
+/// same skill, target and anchor, now resolving as that version), a skill or item without one is dropped, and the
+/// member is rebuilt from the picks left (a pick that then no longer fits is dropped with every pick after it, as
+/// `rebuild_later` does), so the fill refills the freed blocks for the new mode (marrow versions and the Channel Rest
+/// in Channel; the Cold Steel fill and Rest back in Cold Steel); a member without picks is planned again from its
+/// intent. Then every later member is rebuilt (PL8). Returns the lines (buffs ended, picks dropped) and the later
+/// members' refusals; Err when the unit cannot Channel. Flipping to the mode it is in changes nothing.
+pub fn set_channel(w: &mut World, plan: &mut Plan, c: UnitId, on: bool) -> (Result<Vec<String>, String>, Vec<(UnitId, String)>) {
+    if !round_intent::on(w) {
+        return (Err("This battle has no round intents.".into()), Vec::new());
+    }
+    if !crate::channel::can_channel(w, c) {
+        return (Err(format!("{} cannot Channel.", w.units.get(c).map_or("That unit", |u| u.name.as_str()))), Vec::new());
+    }
+    if crate::channel::is_channel(w, c) == on {
+        return (Ok(Vec::new()), Vec::new());
+    }
+    let mut lines = flip_channel(w, c, on);
+    let picks = picks_of(w, c);
+    let mut kept: Vec<Pick> = Vec::new();
+    for p in picks {
+        let gone = match &p {
+            Pick::Skill { skill, .. } => crate::channel::problem(w, c, &w.cat.skills[*skill]),
+            Pick::Item(_) => crate::channel::item_problem(w, c),
+            _ => None,
+        };
+        match gone {
+            Some(why) => lines.push(format!("{}: {} dropped: {why}", w.units[c].name, pick_name(w, &p))),
+            None => kept.push(p),
+        }
+    }
+    // the first skill or item pick left opens the round (its intent is the round's: IF6 a)
+    let opener = kept.iter().find(|p| p.holds_target()).map(|p| match p {
+        Pick::Skill { skill, .. } => Opener::Skill(*skill),
+        Pick::Item(id) => Opener::Item(id.clone()),
+        _ => unreachable!("holds_target is a skill or an item"),
+    });
+    let any = !kept.is_empty();
+    set_picks(w, c, kept);
+    if any {
+        w.round_states.entry(c).or_default().opener = opener;
+    }
+    if picks_of(w, c).is_empty() {
+        let _ = rebuild_member(w, plan, c);
+    }
+    while !picks_of(w, c).is_empty() {
+        let Err((i, why)) = build_picks(w, plan, c) else { break };
+        let picks = picks_of(w, c);
+        let i = i.min(picks.len() - 1);
+        lines.push(format!("{}: {} dropped: {why}", w.units[c].name, pick_name(w, &picks[i])));
+        set_picks(w, c, picks[..i].to_vec());
+        if picks_of(w, c).is_empty() {
+            let _ = rebuild_member(w, plan, c);
+        }
+    }
+    (Ok(lines), rebuild_later(w, plan, c))
+}
+
+/// PK1-S2b: the round flag part of the toggle, shared by `set_channel` and the AI's Channel row (`ai`): sets `c`'s
+/// round flag to `on`; entering Channel counts as an intent change (FB-167 Q1 (a), IN6: the intent-bound buffs end).
+/// Returns the lines ("<unit> enters Channel: <buff> ends"); the plan is left alone (the caller rebuilds it).
+pub fn flip_channel(w: &mut World, c: UnitId, on: bool) -> Vec<String> {
+    let mut lines = Vec::new();
+    if on {
+        for name in round_intent::drop_bound(w, c) {
+            lines.push(format!("{} enters Channel: {name} ends", w.units[c].name));
+        }
+    }
+    w.round_states.entry(c).or_default().channel = on;
+    lines
+}
+
 /// INPUT1 GH7: the Auto-fill setting; rebuilds every active party member's ghost (members with picks from their picks,
 /// members without from their intent, `plan_unit`, or Rest with Auto-fill off).
 pub fn set_autofill(w: &mut World, plan: &mut Plan, on: bool) {
@@ -1528,9 +1630,10 @@ fn rebuild_member(w: &mut World, plan: &mut Plan, c: UnitId) -> Result<(), Strin
     plan_unit(w, plan, c)
 }
 
-/// RS1 within `limit`: Rest on every free block up to `limit`, tagged `tag`.
+/// RS1 within `limit`: Rest on every free block up to `limit`, tagged `tag` (PK1-S2a: the Channel Rest in a Channel
+/// round).
 fn rest_to(w: &World, plan: &mut Plan, c: UnitId, tag: &str, limit: i32) {
-    let rest = w.book().lowest(Kind::Rest);
+    let rest = crate::channel::rest_skill(w, c);
     for _ in 0..w.total_blocks {
         let st = plan.compile(w, c);
         if st.blocks_left() <= 0 {
@@ -1657,7 +1760,7 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                 if free < 1 {
                     return Err(fail(taken(1)));
                 }
-                let rest = w.book().lowest(Kind::Rest);
+                let rest = crate::channel::rest_skill(w, c);
                 place(w, plan, c, vec![tagged(PlanStep::self_skill(rest), &format!("pick {}", i + 1), "")], false, &room).map_err(refuse)?;
             }
             Pick::Skill { .. } | Pick::Item(_) => {
@@ -1715,7 +1818,7 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
             return Err((a.index, p.into()));
         }
         kept.push(a.step.clone());
-        let rest = w.book().lowest(Kind::Rest);
+        let rest = crate::channel::rest_skill(w, c);
         for &i in &rests_after {
             let step = tagged(PlanStep::self_skill(rest), &format!("pick {}", i + 1), "");
             let p = plan.add_step(w, c, step.clone(), false);
@@ -1830,7 +1933,12 @@ impl Builder<'_> {
         match p {
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
-                if !round_intent::skill_rows(w, s).contains(&self.intent.id()) {
+                // PK1-S2a (PK1 4.3 item 2): a Channel round offers only marrow versions, a Cold Steel round none
+                if let Some(p) = crate::channel::problem(w, self.c, s) {
+                    return Err(p.into());
+                }
+                // (the Channel Rest is neutral, as Rest)
+                if !round_intent::skill_rows(w, s).contains(&self.intent.id()) && !crate::channel::is_channel_rest(w, self.c, *sid) {
                     return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
                 let need = s.blocks + w.recovery_of(self.c, s);
@@ -1841,11 +1949,17 @@ impl Builder<'_> {
                 if ap > ap_free {
                     return Err(Refusal::ap(ap_free, ap));
                 }
-                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
-                if !hp.is_empty() {
-                    return Err(hp.into());
+                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, self.c, s));
+                // PK1-S2a: the meter gate at the pick's start (Vent: Strain below 50), then the costs; PK1-S2c-2 (PK1
+                // 4.3 item 5): both reasons when both apply ("<hp>; <gate>"), each alone as before
+                let gate = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
+                match (hp.is_empty(), gate.is_empty()) {
+                    (false, false) => return Err(format!("{hp}{REASONS_JOIN}{gate}").into()),
+                    (false, true) => return Err(hp.into()),
+                    (true, false) => return Err(gate.into()),
+                    (true, true) => {}
                 }
-                let meter = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
+                let meter = crate::meter::cost_problem(w, &crate::channel::meters_for(w, self.c, s), |m| st.meter(m));
                 if !meter.is_empty() {
                     return Err(meter.into());
                 }
@@ -1863,6 +1977,9 @@ impl Builder<'_> {
             }
             Pick::Item(id) => {
                 let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", u.name).into()) };
+                if let Some(p) = crate::channel::item_problem(w, self.c) {
+                    return Err(p.into());
+                }
                 if !round_intent::item_allows(w, item, self.intent) {
                     return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }

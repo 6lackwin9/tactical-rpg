@@ -15,6 +15,7 @@ Operate as the **Dedicated Artwork, Animation & Mock UI Session** (`art-ui-sessi
   - `games/emberwake/assets/**`, `kits/rpg/assets/**`, `engine/assets/**`
   - `games/emberwake/docs/specs/ART_UI_STUDIO.md`, `games/emberwake/docs/specs/SCREEN_ATLAS.md`, `games/emberwake/docs/specs/CAST1_ASSETS.md`, `games/emberwake/docs/specs/ART_PROMPT_TEMPLATES.md`
   - `games/emberwake/docs/preferences/ui.md`, `games/emberwake/docs/preferences/assets-world.md`
+  - `games/emberwake/docs/specs/ART_UI_REQUESTS.md` (the inbox and outbox with the Design Session), `tools/gen_music.py` (with the audio it writes) and every `README.md` inside `assets/**` (decision "Art/UI request outbox and ownership")
 - **Strictly Locked / Forbidden Paths (Never Edit in Artwork/UI Session)**:
   - **Design Session Queue & Governance Docs**: `docs/READY.md`, `docs/specs/MASTERPLAN1.md`, `docs/sessions/*.md`, `docs/TASKS.md`, `docs/DECISIONS.md`, `docs/HISTORY.md`
   - **Build Session Output & Code/Data**: `docs/FEEDBACK.md`, `docs/archive/FEEDBACK_CLOSED.md`, `engine/crates/**`, `kits/rpg/crates/**`, `games/emberwake/crates/**`, `games/emberwake/data/**`
@@ -24,7 +25,8 @@ Operate as the **Dedicated Artwork, Animation & Mock UI Session** (`art-ui-sessi
 1. Sync with `origin/develop` and read the canonical Artwork/UI history & reference index:
    - Read `games/emberwake/docs/specs/ART_UI_STUDIO.md` (contains all prior options tried, Tushar's feedback, settled rules, and the complete asset/tool catalog).
    - Read `games/emberwake/docs/specs/SCREEN_ATLAS.md` and `games/emberwake/docs/preferences/{ui,assets-world}.md` when working on screen layouts or visual chrome.
-2. Verify available preview builders:
+2. Read `games/emberwake/docs/specs/ART_UI_REQUESTS.md`: work the **Inbox** tasks (Design's requests for this session) and **delete each row once done**, logging the result in `ART_UI_STUDIO.md`; put any request for Build or Design in the **Outbox** (never in `docs/READY.md` or `docs/FEEDBACK.md`).
+3. Verify available preview builders:
    - **Standalone Animation Lab (`~600 KB..1.7 MB`)**: `python3 -m tools.mock_ui.anim_lab --out <artifact_dir>/kaelen_4pose_animation_lab.html`
    - **Full Screen-Flow Mock UI (`~3.2 MB`)**: `python3 -m tools.mock_ui --out <artifact_dir>/emberwake_screen_flow.html`
 

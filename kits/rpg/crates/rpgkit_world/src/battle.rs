@@ -464,7 +464,8 @@ pub fn fight_world(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
 /// stay-behind `then`, the act's rule row, HP, keepsakes) in the fight's world; W2: the encounter's `stay_behind.flag`
 /// set to the first member who stayed or stood ("" when none) on every outcome. Returns the result keys
 /// (`party_fates`: [[member, fate]] (W1); `stay_lines`: one `result_line` per stayed or stood hero (W4), named before
-/// anyone departs; `wounded`: [member]; `departed`: [{member, life}] (ROSTER1-U's lines); each only when not empty) and
+/// anyone departs; `wounded`: [member]; `departed`: [{member, life}] (ROSTER1-U's lines); `marks`: [{member, mark,
+/// value}] (PK1-S1); each only when not empty) and
 /// the notes (a flag the world refuses). The encounter (its `stay_behind`, objective and qid) is read as the fight's
 /// world sees it (`tally.world`, else `fight_world`), as the battle was built: a road fight on another world's route
 /// may not resolve from the played world (`played_enc`, then only the fallback).
@@ -509,6 +510,15 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
         if !settled.departed.is_empty() {
             let departed = settled.departed.iter().map(|(m, life)| json::obj([("member", m.clone().into()), ("life", life.clone().into())]).into()).collect();
             out.insert("departed".into(), Value::Array(departed));
+        }
+        // PK1-S1 (PK1_CORRUPTION 3.5): the marks the battle recorded on the members, for the results (PK2 settles them)
+        let marks: Vec<Value> = tally
+            .party
+            .iter()
+            .flat_map(|e| e.marks.iter().map(|(m, v)| json::obj([("member", e.member.clone().into()), ("mark", m.clone().into()), ("value", int(*v))]).into()))
+            .collect();
+        if !marks.is_empty() {
+            out.insert("marks".into(), Value::Array(marks));
         }
     }
     if let Some(b) = stay.as_ref().filter(|b| !b.flag.is_empty()) {
@@ -673,7 +683,8 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
 }
 
 /// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.
-pub const PARTY_KEYS: [&str; 5] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short"];
+/// PK1-S1: `marks` [{member, mark, value}], the battle's marks on the fielded members.
+pub const PARTY_KEYS: [&str; 6] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

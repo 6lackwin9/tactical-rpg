@@ -263,7 +263,7 @@ impl PlanEntry {
                         actor,
                         0,
                         blocks,
-                        CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s) * power, status_rounds: s.status_rounds, affects: skill::affects_by(s, round_intent::intent_of(w, actor)), target, splash, shape: skill::area(s), band, last_damage: 0, last_hits: 0, crit_hits: Vec::new() },
+                        CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s) * power * crate::channel::power(w, actor, s), status_rounds: s.status_rounds, affects: skill::affects_by(s, round_intent::intent_of(w, actor)), target, splash, shape: skill::area(s), band, last_damage: 0, last_hits: 0, crit_hits: Vec::new() },
                     )
                 } else {
                     // INPUT1 MR4: a skill with a position hits from the tile next to its target
@@ -274,7 +274,8 @@ impl PlanEntry {
                         s.blocks,
                         CmdKind::Attack {
                             target: self.target,
-                            skill_mult: u.power_for(s),
+                            // PK1-S2a: a marrow version's power factor (1 outside a Channel round)
+                            skill_mult: u.power_for(s) * crate::channel::power(w, actor, s),
                             use_offhand: skill::is_off_hand(s),
                             follow_tiles: if self.chase && s.dash_tiles <= 0 && self.carry == Carry::None { 1 } else { 0 },
                             dash_tiles: s.dash_tiles,
@@ -332,10 +333,22 @@ impl PlanEntry {
         // under their rules)
         if self.item.is_none() {
             cmd.riders = s.riders.clone();
-            cmd.hp_cost = command::hp_cost_of(w, s);
+            cmd.hp_cost = command::hp_cost_for(w, actor, s);
             cmd.ignore_guard = command::ignores_guard(w, s);
-            // HOOKS1 UM2: the meter changes (set only under the rule unit_meters)
-            cmd.meters = skill::meters_by(s, &w.ruleset).to_vec();
+            // HOOKS1 UM2: the meter changes (set only under the rule unit_meters); PK1-S2a: a marrow version's channel
+            // cost after them, and the meter gate
+            cmd.meters = crate::channel::meters_for(w, actor, s);
+            cmd.gate = s.requires_meter.clone().filter(|_| crate::meter::on(w));
+            // PK1-S2a (PK1 4.2): a marrow version pierces armour (attacks) and runs its `channel.effects` as a rider
+            if let Some(v) = crate::channel::version(w, actor, s) {
+                // PK1-S2b: the tells name a marrow version (the twin of a Cold Steel skill, not a marrow-only skill such
+                // as Feed or Vent) with the marrow mark
+                cmd.marrow = crate::channel::has_version(w, s);
+                if v.pierce {
+                    cmd.impact.armor_piercing = true;
+                }
+                cmd.riders.extend(crate::channel::rider(&v));
+            }
         }
         // HOOKS1 GH2: the hazard the skill or item leaves (the rule ground_hazards reads it)
         cmd.hazard = match &self.item {
@@ -622,13 +635,22 @@ impl Plan {
                 let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
                 return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, rpgkit_rules::unit::rank_numeral(rank));
             }
+            // PK1-S2a (rule channel): a Cold Steel version in a Channel round, a marrow-only skill in a Cold Steel one
+            if let Some(p) = crate::channel::problem(w, c, s) {
+                return p.to_string();
+            }
             // HOOKS1 HC1: a skill is refused while the HP left is at or below its HP cost (rule hp_cost)
-            let p = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
+            let p = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, c, s));
+            if !p.is_empty() {
+                return p;
+            }
+            // PK1-S2a: a meter gate the planned meter at the step's start does not meet (rule unit_meters)
+            let p = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
             if !p.is_empty() {
                 return p;
             }
             // HOOKS1 UM2: a skill is refused while the meters left do not cover its meter cost (rule unit_meters)
-            let p = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
+            let p = crate::meter::cost_problem(w, &crate::channel::meters_for(w, c, s), |m| st.meter(m));
             if !p.is_empty() {
                 return p;
             }
@@ -681,6 +703,10 @@ impl Plan {
             }
             _ => {
                 let Some(sid) = step.skill else { return String::new() };
+                // PK1-S2a (PK1 4.3 item 5): the Channel Rest (Feed) stands in for Rest, neutral in every round
+                if crate::channel::is_channel_rest(w, c, sid) {
+                    return String::new();
+                }
                 let target = match (step.mode, step.target) {
                     // A4.2-K1b: a shaped Assault row aims at its enemy; a Stand area (IR5: a RING) at the user
                     (Mode::Area, Some(t)) => Some(RoundTarget::Unit(t)),
@@ -1325,7 +1351,7 @@ impl Plan {
         }
         let p = self.add_entry(w, c, st, sid, index, Some(c), &[], 0, &[]);
         if p.is_empty() {
-            let heal = command::effective_heal(&w.units[c], command::heal_amount(w, c, sid));
+            let heal = command::effective_heal(&w.units[c], command::heal_amount_on(w, c, c, sid));
             st.entries.last_mut().unwrap().est_heal = heal;
         }
         p
@@ -1389,7 +1415,7 @@ impl Plan {
         }
         let p = self.add_entry(w, c, st, sid, index, Some(ally), &[], 0, &[]);
         if p.is_empty() {
-            let heal = command::effective_heal(&w.units[ally], command::heal_amount(w, c, sid));
+            let heal = command::effective_heal(&w.units[ally], command::heal_amount_on(w, c, ally, sid));
             let e = st.entries.last_mut().unwrap();
             e.est_heal = heal;
             // INPUT1 MR16, CLN-45: a Support skill on an ally chases it up to 1 tile with `chase` every_skill
@@ -1587,12 +1613,13 @@ impl Plan {
         }
         st.stance = after;
         // HOOKS1 HC1: the HP cost is paid at the command's start: HP becomes max(1, hp - cost) (rule hp_cost)
-        let cost = command::hp_cost_of(w, s);
+        let cost = command::hp_cost_for(w, c, s);
         if cost > 0 {
             st.hp_left = (st.hp_left - cost).max(1);
         }
-        // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters)
-        crate::meter::spend(w, c, &mut st.meters_left, skill::meters_by(s, &w.ruleset));
+        // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters; PK1-S2a: with a marrow
+        // version's channel cost)
+        crate::meter::spend(w, c, &mut st.meters_left, &crate::channel::meters_for(w, c, s));
         // RULESET1_INTENT RS2, FU3, CLN-45: with `rest_ap` round_end Rest pays only at round end, so no AP returns
         // mid-round
         if skill::kind(s) == Kind::Rest && pays && !w.ruleset.rest_at_round_end() {
@@ -1609,7 +1636,14 @@ impl Plan {
         }
         // HOOKS1 EX1: an execute entry counts when the foe's HP share meets it now (rule execute)
         let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
-        expected(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult)
+        // PK1-S2b: a marrow version's armour piercing counts in the estimate (the AI's Channel row compares them)
+        let version = crate::channel::version(w, c, s);
+        let hit = expected_with(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
+        // PK1-S2a: a marrow version's power factor (none outside a Channel round)
+        match version.map(|v| v.power).filter(|p| *p != 1.0) {
+            Some(p) => (hit as f64 * p).round() as i32,
+            None => hit,
+        }
     }
 
     fn estimate_hit(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, stance: Stance, foe: UnitId, from: V2) -> i32 {
@@ -1828,6 +1862,13 @@ pub fn expected_is_ranged(w: &World, c: UnitId, sid: SkillId) -> bool {
 
 /// DamageCalculator.expected: no crit, no guard, cover included; `power_scale` multiplies the skill power.
 pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64) -> i32 {
+    expected_with(w, c, foe, sid, stance, cover, power_scale, false)
+}
+
+/// `expected`, with `pierce` adding armour piercing (PK1-S2b: a marrow version's, `channel::Version::pierce`) to the
+/// skill's own; either counts only under the rule pierce, as the resolver reads it.
+#[allow(clippy::too_many_arguments)]
+pub fn expected_with(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64, pierce: bool) -> i32 {
     let s = &w.cat.skills[sid];
     let u = &w.units[c];
     damage::compute(
@@ -1841,7 +1882,7 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
             include_guard: false,
             cover,
             // RULESET1 A2: an armour-piercing skill skips armour under the rule pierce
-            ignore_armor: crate::poise::Impact::of(s).armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
+            ignore_armor: (pierce || crate::poise::Impact::of(s).armor_piercing) && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
             ..HitInput::default()
         },
     )

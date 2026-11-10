@@ -301,7 +301,8 @@ pub(super) fn plan_pose(s: &Session, i: usize, tells: bool, revealed: &[usize]) 
         let defends = steps.first().filter(|st| st.mode != Mode::Item).and_then(|st| def(st)).is_some_and(|d| emberwake_battle::skill::kind(d) == Kind::Defend);
         (defends, steps.iter().map(pose).find(|p| *p != Pose::None).unwrap_or_default())
     };
-    let intent = round_intent::intent_of(&s.w, i);
+    // PK1-S2b/S2c (PK1 4.3 item 6): the tells' intent (Channel while the round flag is set)
+    let intent = emberwake_battle::channel::tell_intent(&s.w, i);
     if intent == Some(RoundIntent::Guard) || (intent.is_none() && defends) {
         return Pose::Guard;
     }
