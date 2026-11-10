@@ -186,6 +186,24 @@ def whole_loop(x: np.ndarray, overlap_s: float, floor_db: float = -50.0):
     return loop, trimmed, db(rms(tail)) - db(rms(head))
 
 
+def gap_loop(x: np.ndarray, gap_s: float, floor_db: float = -50.0):
+    """The whole song with silence for the loop: leading and trailing near-silence trimmed, then exactly gap_s of
+    silence after the fade-out, so a restart is fade-out, a pause, then the intro building in (no overlap, no echo).
+    Returns (loop, leading trimmed s, trailing trimmed s)."""
+    block = int(SR * 0.05)
+    lv = block_db(x.mean(1), block)
+    loud = np.nonzero(lv > floor_db)[0]
+    if not len(loud):
+        raise SystemExit("track is silent")
+    a, b = int(loud[0]) * block, (int(loud[-1]) + 1) * block
+    body = x[a:b].copy()
+    edge = int(SR * 0.01)                                      # 10 ms ramps so the trims never click
+    ramp = np.linspace(0, 1, edge)[:, None]
+    body[:edge] *= ramp
+    body[-edge:] *= ramp[::-1]
+    return np.vstack([body, np.zeros((int(SR * gap_s), 2))]), a / SR, (len(x) - b) / SR
+
+
 def reference_rms_db() -> float:
     levels = []
     for d in REFERENCE_TRACKS:
@@ -218,6 +236,8 @@ def main() -> None:
     ap.add_argument("--whole", action="store_true",
                     help="Loop the whole song: its fade-out laid over its intro (menus, songs with a shape).")
     ap.add_argument("--overlap", type=float, default=8.0, help="With --whole: seconds of overlap (default 8).")
+    ap.add_argument("--gap", type=float, default=None,
+                    help="Loop the whole song with this many seconds of silence after its fade-out (no overlap).")
     ap.add_argument("--min-loop", type=float, default=60.0, help="Shortest loop to accept, in seconds (default 60).")
     ap.add_argument("--target-db", type=float, default=None, help="RMS level; default: the game tracks' median.")
     ap.add_argument("--preview", type=Path, default=None, help="Also write an MP3 of the seam to check by ear.")
@@ -229,6 +249,15 @@ def main() -> None:
           f"target RMS {target:.1f} dBFS")
     if a.no_loop:
         out = loudness(x, target)
+    elif a.gap is not None:
+        body, lead, trail = gap_loop(x, a.gap)
+        print(f"  whole-song loop with a pause: {lead:.1f} s leading and {trail:.1f} s trailing silence trimmed, "
+              f"{a.gap:.1f} s of silence before the restart")
+        out = np.vstack([loudness(body[: len(body) - int(SR * a.gap)], target), body[len(body) - int(SR * a.gap):]])
+        if a.preview:
+            k = int(SR * 12)
+            encode(np.vstack([out[-k:], out[:k]]), a.preview, "mp3")
+            print(f"  wrap preview (12 s before the restart, 12 s after) -> {a.preview}")
     elif a.whole:
         loop, trimmed, rel = whole_loop(x, a.overlap)
         print(f"  whole-song loop: {trimmed:.1f} s of trailing silence trimmed, last {a.overlap:.0f} s laid over the "
