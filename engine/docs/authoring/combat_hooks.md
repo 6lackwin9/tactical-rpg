@@ -326,3 +326,5 @@ PK1-S1 (2026-11-10): trigger effects also `strike_nearest`, `mark`, `ap` (`set`,
 PK1-S2a (2026-11-10): skill fields `channel` {none, only, cost, power, effects}, `requires_meter` {meter, min}, `hp_cost_pct`; rule `channel` with ruleset fields `channel_meter`, `channel_power`, `channel_cost`, `marrow_actives`, `channel_rest`; a meter row's `skills` may raise the meter when `channel.only`.
 
 PK1-S2b (2026-11-10): the game term `marrow_mark` names a marrow version ("Name (Marrow)").
+
+HEALPCT1 (2026-11-10): skill field `heal_pct` (SUPPORT; a percent of the target's max HP added after the heal formula; `heal_taken` applies); ruleset field `channel_ai_edge`.

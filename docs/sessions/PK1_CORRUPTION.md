@@ -110,7 +110,7 @@ Strain-carrying units (aberrants, and AI-driven heroes) get one AI row: open wit
 
 ## 7. Fixed vs tunable (`aegis rules --contract`)
 
-Tunable: `channel_power`, `channel_cost`, `marrow_actives`, `channel_ai_edge` (a ruleset number from `PR5-20`, `FB-179`; a kit constant until then), `channel_rest`, the Channel basics' numbers, the Strain row's bands, decay and crisis rows (data). Locked: the 0 AP / 0 block converting toggle, the single-intent eligibility, the all-marrow round.
+Tunable: `channel_power`, `channel_cost`, `marrow_actives`, `channel_ai_edge` (a ruleset number since `PR5-20`, range 1.0-3.0, `FB-183`), `channel_rest`, the Channel basics' numbers, the Strain row's bands, decay and crisis rows (data). Locked: the 0 AP / 0 block converting toggle, the single-intent eligibility, the all-marrow round.
 
 ## 8. Defaults Design chose (user may revisit; logged in `docs/DESIGN_REVIEW.md`)
 
