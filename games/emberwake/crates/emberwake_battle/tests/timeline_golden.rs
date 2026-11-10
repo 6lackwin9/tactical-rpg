@@ -15,7 +15,9 @@
 //!
 //! Inert extensions (4.2, RULESET1 3.2 "an extension is inert without data"): every Ashlands encounter played under
 //! classic and under classic with every extension of the register switched on (options stay off) gives identical
-//! traces, outcomes, events, logs, metrics, reports and RNG draw counts.
+//! traces, outcomes, events, logs, metrics, reports and RNG draw counts; an extension whose opt-in data the fight
+//! already holds at battle start (`reach`: a unit with a reach weapon) is left out for that fight and printed (FB-188
+//! Option A).
 //!
 //! The `tl_` fights are game data, so the test lives in the game's façade crate (the kit names no game).
 
@@ -24,7 +26,7 @@ use emberwake_battle::metrics::BattleMetrics;
 use emberwake_battle::session::{EncounterDef, Phase, Session};
 use emberwake_battle::sim::{fight, json_close, metrics_trace, FightSpec};
 use emberwake_data::{Catalog, UnitDef};
-use emberwake_rules::ruleset::{Ruleset, RuleKind, REGISTER, TIMELINE};
+use emberwake_rules::ruleset::{Ruleset, RuleKind, REACH, REGISTER, TIMELINE};
 use emberwake_world::battle::WorldRoster;
 use emberwake_world::Data;
 use indexmap::IndexMap;
@@ -232,15 +234,35 @@ fn units_state(s: &Session) -> Value {
     Value::Array(out)
 }
 
-/// One world fight as world_traces plays it, under `ruleset`, with the RNG draws after every step.
-fn world_fight(d: &Data, id: &str, seed: i64, ruleset: &Ruleset) -> Value {
+/// One world encounter's session at battle start, as world_traces starts it, under `ruleset`.
+fn world_start(d: &Data, id: &str, seed: i64, ruleset: &Ruleset) -> Session {
     let entry = d.resolve(INERT_WORLD, "encounters", id).clone();
     let mut def = EncounterDef::from_obj(&entry);
     def.id = format!("{INERT_WORLD}:{id}");
     def.rng_seed = seed;
     def.ruleset = ruleset.clone();
     let roster = WorldRoster::new(d, INERT_WORLD);
-    let mut s = Session::start(d.cat.clone(), def, &roster);
+    Session::start(d.cat.clone(), def, &roster)
+}
+
+/// FB-188 Option A: an extension is inert without its opt-in data (RULESET1 3.2), so a fight that already holds that
+/// data at battle start opts in and is left out of the check for that extension only. One row per extension whose
+/// opt-in data can ship in a classic fight (add a row when another extension's data does); only `reach` today: a unit
+/// with a reach weapon at the start (the kit query `Unit::has_reach_weapon`).
+const OPT_IN_AT_START: &[(&str, fn(&Session) -> bool)] = &[(REACH, holds_reach_weapon)];
+
+fn holds_reach_weapon(s: &Session) -> bool {
+    s.w.units.iter().any(|u| u.has_reach_weapon())
+}
+
+/// The extensions whose opt-in data the fight holds at battle start (`OPT_IN_AT_START`).
+fn opted_in_at_start(s: &Session) -> Vec<&'static str> {
+    OPT_IN_AT_START.iter().filter(|(_, holds)| holds(s)).map(|(id, _)| *id).collect()
+}
+
+/// One world fight as world_traces plays it, under `ruleset`, with the RNG draws after every step.
+fn world_fight(d: &Data, id: &str, seed: i64, ruleset: &Ruleset) -> Value {
+    let mut s = world_start(d, id, seed, ruleset);
     let start = units_state(&s);
     s.attach_metrics(BattleMetrics::new(), false);
     let mut rounds = Vec::new();
@@ -341,10 +363,18 @@ fn every_extension_is_inert_on_the_ashlands_fights() {
     assert!(!ids.is_empty(), "the Ashlands have encounters");
     let mut failures = Vec::new();
     let mut fights = 0;
+    let mut excluded_in = Vec::new();
     for id in &ids {
         for seed in INERT_SEEDS {
+            // FB-188 Option A: every extension on except those the fight's start data opts into
+            let excluded = opted_in_at_start(&world_start(&d, id, seed, &Ruleset::classic()));
+            let mut on = Ruleset::classic();
+            on.adjust(&extensions.iter().filter(|x| !excluded.contains(x)).map(|x| format!("+{x}")).collect::<Vec<_>>().join(",")).expect("extensions switch on over classic");
+            if !excluded.is_empty() {
+                excluded_in.push(format!("{id} seed {seed}: -{}", excluded.join(",-")));
+            }
             let classic = world_fight(&d, id, seed, &Ruleset::classic());
-            let mut extended = world_fight(&d, id, seed, &all_on);
+            let mut extended = world_fight(&d, id, seed, &on);
             strip_badge_columns(&classic, &mut extended);
             let mut loud = Vec::new();
             for key in ["metrics", "report"] {
@@ -364,5 +394,6 @@ fn every_extension_is_inert_on_the_ashlands_fights() {
     let (classic, changed) = (world_fight(&d, &ids[0], INERT_SEEDS[0], &Ruleset::classic()), world_fight(&d, &ids[0], INERT_SEEDS[0], &timeline));
     assert!(first_divergence("classic", &classic, &changed).is_some(), "{INERT_WORLD}:{} under timeline differs from classic", ids[0]);
     eprintln!("inert extensions: {fights} Ashlands fights checked with [{}], diverged: {}", extensions.join(", "), failures.len());
+    eprintln!("inert extensions: opted in at start (left out per fight, FB-188 Option A): {}", if excluded_in.is_empty() { "none".to_string() } else { excluded_in.join("; ") });
     assert!(failures.is_empty(), "{} of {fights} change with every extension on; first:\n{}", failures.len(), failures.iter().take(3).cloned().collect::<Vec<_>>().join("\n"));
 }

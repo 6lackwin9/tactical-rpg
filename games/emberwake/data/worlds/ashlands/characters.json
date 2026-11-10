@@ -7,7 +7,7 @@
 			"name": "Mara Voss",
 			"title": "Captain of the Ember Wardens",
 			"role": "party",
-			"base_unit": "warrior",
+			"base_unit": "mara_voss",
 			"art": "",
 			"palette": "",
 			"portrait_tier": "",

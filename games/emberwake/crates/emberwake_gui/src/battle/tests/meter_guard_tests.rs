@@ -45,7 +45,7 @@ fn rect(b: &BattleScreen, id: &str) -> Option<Rect> {
 }
 
 /// The hero holds a pips meter (0-4 from 3, in band Full), the first foe a bar meter (0-20 from 5), the foe a held
-/// guard 0.5 through block 3, and the hero's attack skills cost COST HP. Returns (hero, foe).
+/// guard 0.5 through block 3, and the hero's attack skills (every rank) cost COST HP. Returns (hero, foe).
 pub(super) fn hook_up(b: &mut BattleScreen) -> (usize, usize) {
     let h = b.selected.expect("a hero");
     let sess = b.host.session.as_mut().unwrap();
@@ -59,7 +59,8 @@ pub(super) fn hook_up(b: &mut BattleScreen) -> (usize, usize) {
         let def = UnitMeterDef::from_obj(row.as_object().unwrap());
         cat.unit_meters.insert(def.id.clone(), def);
     }
-    for sk in cat.skills.iter_mut().filter(|k| known.contains(&k.id) && k.kind == "ATTACK") {
+    // every rank of a known attack: a rank 2+ row is `<head>_<rank>` with the head as its `family` (the loader's rank rule)
+    for sk in cat.skills.iter_mut().filter(|k| (known.contains(&k.id) || known.contains(&k.family)) && k.kind == "ATTACK") {
         sk.hp_cost = COST;
     }
     w.units[h].passive_meters.push(HeldMeter { meter: "t_phial".into(), start: 3, floor: None });

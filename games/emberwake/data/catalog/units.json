@@ -2998,6 +2998,52 @@
 				"none"
 			],
 			"loot": []
+		},
+		{
+			"id": "mara_voss",
+			"name": "Mara Voss",
+			"side": "party",
+			"description": "Ashlands captain: a Warrior with her own hatchet and kite shield.",
+			"class_id": "warrior",
+			"level": 5,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [
+				"taunt_shout",
+				"shield_bash",
+				"riposte",
+				"intimidate",
+				"shield_wall"
+			],
+			"deck": {},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_hand_axe",
+			"off_hand": "shd_kite",
+			"head": "",
+			"body": "",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [],
+			"loot": []
 		}
 	]
 }

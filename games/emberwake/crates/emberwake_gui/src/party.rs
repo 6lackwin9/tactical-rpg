@@ -2615,7 +2615,11 @@ mod tests {
             ids.sort();
             ids.first().map(|s| s.to_string())
         };
-        let (Some(great), Some(shield)) = (pick(&m, "main_hand", true, "WEAPON"), pick(&m, "off_hand", false, "SHIELD")) else { panic!("a 2H weapon and a shield this class can wear") };
+        let (Some(great), Some(one), Some(shield)) = (pick(&m, "main_hand", true, "WEAPON"), pick(&m, "main_hand", false, "WEAPON"), pick(&m, "off_hand", false, "SHIELD")) else {
+            panic!("a 2H weapon, a 1H weapon and a shield this class can wear")
+        };
+        // the member's own main hand (or its class default) may be two-handed: a one-handed weapon first frees the off hand
+        drop_move(&d, &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
         drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap();
         let shields = st[&shield];
         drop_move(&d, &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).unwrap();
@@ -2642,7 +2646,10 @@ mod tests {
             ids.first().map(|s| s.to_string())
         };
         let staff = wear(&m, "main_hand", &|i| i.two_handed && i.item_type == "WEAPON").expect("a 2H weapon a mage can wear");
+        let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON").expect("a 1H weapon a mage can wear");
         let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
+        // the class default main hand may be two-handed: a one-handed weapon first frees the off hand for the focus
+        drop_move(&d, &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
         drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
         drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
