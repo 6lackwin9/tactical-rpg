@@ -95,7 +95,8 @@ The current tracks are synthesized placeholders (`tools/gen_music.py`; `assets/a
 
 | Track | Use | Status |
 | --- | --- | --- |
-| Main theme | title and main menu | have-old (`menu_theme.ogg`) |
+| Main theme | title and main menu | **picked**: test 1B (16-bit), needs the loop cut |
+| Lullaby theme | ending credits (a candidate for the slice end card) | **picked**: test 1A (dark acoustic) |
 | Opening vignette | the four slides (bell, rain, tallow crackle) | new |
 | Prologue tension | 0a Vane's order, the alley | new |
 | Meat Market | the walk, the Spent | new |
