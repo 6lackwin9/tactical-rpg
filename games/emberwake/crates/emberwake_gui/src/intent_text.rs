@@ -129,8 +129,18 @@ pub fn refusal_text(reason: &str) -> String {
 
 /// PK1-S2c (PK1 4.3 item 5, Vent's two reasons): a skill-menu refusal in words: the HP cost's as `refusal_text`
 /// ("Not enough HP: 9, it costs 10"), a meter gate's (`meter::gate_problem`, "Strain 30 < 50") "Needs Strain 50 or
-/// more to start: 30"; any other reason as the planner gave it.
+/// more to start: 30"; any other reason as the planner gave it. PK1-S2c-2: two reasons that both apply (the kit joins
+/// them with `REASONS_JOIN`) each in words, joined the same way.
 pub fn menu_refusal_text(w: &World, reason: &str) -> String {
+    let join = emberwake_battle::round_intent_plan::REASONS_JOIN;
+    if reason.contains(join) {
+        return reason.split(join).map(|r| one_refusal_text(w, r)).collect::<Vec<_>>().join(join);
+    }
+    one_refusal_text(w, reason)
+}
+
+/// One reason of `menu_refusal_text` in words.
+fn one_refusal_text(w: &World, reason: &str) -> String {
     let hp = refusal_text(reason);
     if hp != reason {
         return hp;

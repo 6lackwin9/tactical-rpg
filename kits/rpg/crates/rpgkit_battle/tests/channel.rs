@@ -439,6 +439,26 @@ fn vent_needs_fifty_strain_and_the_hp() {
     assert_eq!(gated.units[HERO].hp, hp, "nothing paid");
 }
 
+/// PK1-S2c-2 (PK1 4.3 item 5, "the planner shows both reasons"): Vent's menu cell carries each refusal alone as before
+/// (the meter gate; the HP cost) and both, joined by `REASONS_JOIN`, HP first, when both apply.
+#[test]
+fn vents_cell_shows_both_reasons_when_both_apply() {
+    let mut s = session();
+    flag(&mut s.w, HERO, true);
+    let cost = command::hp_cost_for(&s.w, HERO, skill(&s.w, "t_vent"));
+    let low = VENT_GATE - 5;
+    let gate = format!("Strain {low} < {VENT_GATE}");
+    let hp = command::hp_cost_problem(cost, cost);
+    set_strain(&mut s.w, HERO, low);
+    assert_eq!(cell(&s, HERO, RoundTarget::Myself, "t_vent"), Some(gate.clone()), "the gate alone");
+    s.w.units[HERO].hp = cost;
+    assert_eq!(cell(&s, HERO, RoundTarget::Myself, "t_vent"), Some(format!("{hp}{}{gate}", rip::REASONS_JOIN)), "both");
+    set_strain(&mut s.w, HERO, VENT_GATE + 5);
+    assert_eq!(cell(&s, HERO, RoundTarget::Myself, "t_vent"), Some(hp), "the HP alone");
+    s.w.units[HERO].hp = s.w.units[HERO].max_hp;
+    assert_eq!(cell(&s, HERO, RoundTarget::Myself, "t_vent"), None, "both met");
+}
+
 /// PK1 4.3 items 5, 8: any Channel round skips the strain decay, every row of it: the `unless_gained` row with no gain
 /// and the `if_guarded` row while the unit guarded; a Cold Steel round decays (-10, and -10 more after a guard).
 #[test]

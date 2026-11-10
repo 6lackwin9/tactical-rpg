@@ -808,7 +808,7 @@ impl BattleScreen {
         let s = self.session();
         let w = &s.w;
         let keys = rip::hotkey_skills(w, h);
-        let skill_name = keys.get(d - 1).map(|k| w.cat.skills[*k].name.clone());
+        let skill_name = keys.get(d - 1).map(|k| skill_text(w, h, *k));
         if let Some(p) = self.popup.as_ref().filter(|p| p.menu.is_some()) {
             let prefix = format!("{d} ");
             // a skill with both Maneuver kinds has two cells on one digit: the one that can be picked
@@ -837,14 +837,15 @@ impl BattleScreen {
             self.message = "Pick a target first (click a unit or a tile)".into();
             return;
         };
-        let name = w.cat.skills[sid].name.clone();
+        // PK1-S2c: the name as the round plans it (a marrow version marked) and a refusal in words
+        let name = skill_text(w, h, sid);
         let opts = rip::pick_options(w, &s.plan, h, at);
         match opts.iter().find(|o| matches!(o.picks[..], [rip::Pick::Skill { skill, .. }] if skill == sid)) {
             Some(o) if o.problem.is_none() => {
                 let picks = o.picks.clone();
                 self.choose_pick(cx, h, at, &picks, &name);
             }
-            Some(o) => self.message = format!("{name}: {}", o.problem.clone().unwrap_or_default()),
+            Some(o) => self.message = format!("{name}: {}", o.problem.as_deref().map(|why| intent_text::menu_refusal_text(w, why)).unwrap_or_default()),
             None => self.message = format!("{name} can't act on {} this round.", target_name(w, at)),
         }
     }
@@ -874,7 +875,7 @@ impl BattleScreen {
         }
         self.deferred.retain(|d| d.0 != h);
         let w = &self.session().w;
-        let mode = if on { format!("{} round", RoundIntent::Channel.label(&w.cat)) } else { "Cold Steel round".to_string() };
+        let mode = if on { format!("{} round", RoundIntent::Channel.label(&w.cat)) } else { format!("{} round", cold_steel_name(w)) };
         let mut msg = format!("{}: {mode}", w.units[h].name);
         if let Some(line) = r["lines"].as_array().and_then(|l| l.last()).and_then(|l| l.as_str()) {
             msg = format!("{msg}. {line}");
@@ -1013,16 +1014,23 @@ fn channel_row(w: &World, h: usize) -> Option<Row> {
     let on = channel::is_channel(w, h);
     let name = RoundIntent::Channel.label(&w.cat);
     let rest = &w.cat.skills[channel::rest_skill(w, h)].name;
+    let cold = cold_steel_name(w);
     let (detail, says) = if on {
-        (format!("{name} round: click for Cold Steel"), "Back to Cold Steel: each marrow version turns back into its skill, the marrow-only skills drop and the auto-fill refills.".to_string())
+        (format!("{name} round: click for {cold}"), format!("Back to {cold}: each marrow version turns back into its skill, the marrow-only skills drop and the auto-fill refills."))
     } else {
-        (format!("Cold Steel round: click to {name}"), format!("This round's skills become their marrow versions (stronger, armour piercing, paid in {}); the rest drop and the auto-fill refills.", meter_name(w)))
+        (format!("{cold} round: click to {name}"), format!("This round's skills become their marrow versions (stronger, armour piercing, paid in {}); the rest drop and the auto-fill refills.", meter_name(w)))
     };
     let mut tip: Tip = vec![(format!("{name} (0 AP, 0 blocks)"), th().gold), (says, th().text), (format!("Moves stay. Rest blocks are {rest} in a {name} round. Flip it any time while planning."), th().dim)];
     if on {
         tip.insert(1, (format!("On: this is a {name} round"), super::skill_menu::CHANNEL_TINT));
     }
     Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None })
+}
+
+/// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `cold_steel_mark` (its
+/// `terms` row, else "Cold Steel").
+pub(super) fn cold_steel_name(w: &World) -> String {
+    w.cat.term(emberwake_data::terms::COLD_STEEL_MARK).name
 }
 
 /// The channel meter's name (its unit meter row's, else its id).

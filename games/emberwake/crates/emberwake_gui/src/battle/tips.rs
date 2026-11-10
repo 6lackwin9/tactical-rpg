@@ -355,10 +355,11 @@ pub(crate) fn channel_block(w: &World, u: usize, s: &emberwake_data::SkillDef) -
     emberwake_battle::channel::version(w, u, s).is_some() && emberwake_battle::channel::problem(w, u, s).is_none()
 }
 
-/// PK1-S2c: whether committed action `a` runs in a Channel round's mode (its command's marrow flag, or a marrow-only
-/// skill in its unit's Channel round).
+/// PK1-S2c: whether committed (or archived) action `a` ran in a Channel round's mode: its command's marrow flag, or a
+/// marrow-only skill (`channel::only`: Feed, Vent; only a Channel round plans one). It reads the action alone, never
+/// the live round flag, so a past round's segments keep that round's mode.
 pub(crate) fn channel_action(w: &World, a: &emberwake_battle::resolver::ScheduledAction) -> bool {
-    a.command.marrow || w.cat.skill(&a.command.skill).is_some_and(|s| channel_block(w, a.unit, s))
+    a.command.marrow || w.cat.skill(&a.command.skill).is_some_and(emberwake_battle::channel::only)
 }
 
 /// PK1-S2c (placeholder, user 2026-11-10): a block colour in a Channel round's mode: `c` blended halfway to the Channel

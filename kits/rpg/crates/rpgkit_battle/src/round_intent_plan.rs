@@ -31,6 +31,9 @@ pub const COVER_TILE: &str = "cover tile";
 pub const OPENER: &str = "opener";
 pub const RETREAT: &str = "retreat";
 pub const REST: &str = "rest";
+/// PK1-S2c-2 (PK1 4.3 item 5): how a pick's refusal joins two reasons that both apply (Vent: not enough HP and the
+/// meter gate): "HP 9 <= cost 10; Strain 30 < 50".
+pub const REASONS_JOIN: &str = "; ";
 
 /// MV11: the kinds the planner tries, in order, when the player picked none.
 pub const AUTO_KINDS: [ManeuverKind; 3] = [ManeuverKind::Engage, ManeuverKind::Disengage, ManeuverKind::Utility];
@@ -1947,13 +1950,14 @@ impl Builder<'_> {
                     return Err(Refusal::ap(ap_free, ap));
                 }
                 let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, self.c, s));
-                if !hp.is_empty() {
-                    return Err(hp.into());
-                }
-                // PK1-S2a: the meter gate at the pick's start (Vent: Strain below 50), then the costs
+                // PK1-S2a: the meter gate at the pick's start (Vent: Strain below 50), then the costs; PK1-S2c-2 (PK1
+                // 4.3 item 5): both reasons when both apply ("<hp>; <gate>"), each alone as before
                 let gate = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
-                if !gate.is_empty() {
-                    return Err(gate.into());
+                match (hp.is_empty(), gate.is_empty()) {
+                    (false, false) => return Err(format!("{hp}{REASONS_JOIN}{gate}").into()),
+                    (false, true) => return Err(hp.into()),
+                    (true, false) => return Err(gate.into()),
+                    (true, true) => {}
                 }
                 let meter = crate::meter::cost_problem(w, &crate::channel::meters_for(w, self.c, s), |m| st.meter(m));
                 if !meter.is_empty() {

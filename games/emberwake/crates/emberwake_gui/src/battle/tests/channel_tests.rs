@@ -10,7 +10,7 @@
 
 use crate::battle::input::{skill_text, RowAct, Row};
 use crate::battle::skill_menu::{Slot, CHANNEL};
-use crate::battle::tips::ap_held_text;
+use crate::battle::tips::{ap_held_text, channel_action};
 use crate::battle::BattleScreen;
 use crate::intent_text;
 use crate::screens::{Cx, Screen};
@@ -78,7 +78,8 @@ fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     // skill with one
     let versioned: Vec<&SkillDef> = rip::hotkey_skills(w, h).into_iter().map(|k| &w.cat.skills[k]).filter(|k| channel::has_version(w, k)).collect();
     let marked = versioned.iter().find(|k| skill::kind(k) == Kind::Attack).or(versioned.first()).map(|k| k.family_id().to_string()).unwrap_or_default();
-    if !marked.is_empty() {
+    assert!(!marked.is_empty(), "the fixture needs a hero skill with a marrow version");
+    {
         let u = &mut w.units[h];
         u.deck.marrow = vec![marked.clone()];
         if !u.deck.active.contains(&marked) && u.deck_rule.is_none() {
@@ -103,7 +104,7 @@ fn toggle(rows: &[Row]) -> Option<&Row> {
     rows.iter().find(|r| r.slot == Some(Slot::Neutral(CHANNEL)))
 }
 
-fn skill_row<'a>(rows: &'a [Row], skill: usize) -> Option<&'a Row> {
+fn skill_row(rows: &[Row], skill: usize) -> Option<&Row> {
     rows.iter().find(|r| matches!(&r.act, RowAct::Pick(p) if matches!(p[..], [Pick::Skill { skill: k, .. }] if k == skill)))
 }
 
@@ -113,6 +114,13 @@ fn tip(r: &Row) -> Vec<String> {
 
 fn strip_labels(b: &BattleScreen, cx: &Cx) -> Vec<Value> {
     b.state(cx)["strip_labels"].as_array().cloned().unwrap_or_default()
+}
+
+/// Picks the first live skill cell of `h`'s menu on foe `f` (the precondition of a test: it must exist).
+fn pick_live_skill(b: &mut BattleScreen, cx: &Cx, h: usize, f: usize) {
+    let r = rows(b, h, RoundTarget::Unit(f)).into_iter().find(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if matches!(p[..], [Pick::Skill { .. }]))).expect("a live skill cell on the foe");
+    let RowAct::Pick(p) = &r.act else { unreachable!() };
+    b.choose_pick(cx, h, r.at.unwrap_or(RoundTarget::Unit(f)), p, &r.label);
 }
 
 /// The first foe on the field.
@@ -141,13 +149,9 @@ fn the_toggle_shows_for_a_holder_only_and_flips_and_converts_the_round() {
     }
     // a pick first: the first live skill row on the foe
     let f = foe(&b);
-    let pick = rows(&b, h, RoundTarget::Unit(f)).into_iter().find(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if matches!(p[..], [Pick::Skill { .. }])));
-    if let Some(r) = &pick {
-        let RowAct::Pick(p) = &r.act else { unreachable!() };
-        b.choose_pick(&cx, h, r.at.unwrap_or(RoundTarget::Unit(f)), p, &r.label);
-    }
+    pick_live_skill(&mut b, &cx, h, f);
     let before = rip::picks_of(&s(&b).w, h);
-    assert_eq!(before.len(), usize::from(pick.is_some()), "{}", b.message);
+    assert_eq!(before.len(), 1, "{}", b.message);
     // the kit's verdict for each pick in a Channel round
     let mut w2 = s(&b).w.clone();
     w2.round_states.entry(h).or_default().channel = true;
@@ -195,7 +199,7 @@ fn a_pick_without_a_counterpart_drops_when_the_round_turns_channel() {
     let mut w2 = s(&b).w.clone();
     w2.round_states.entry(h).or_default().channel = true;
     let cold = rows(&b, h, RoundTarget::Unit(f)).into_iter().find(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if matches!(p[..], [Pick::Skill { skill, .. }] if channel::problem(&w2, h, &w2.cat.skills[skill]).is_some())));
-    let Some(r) = cold else { return };
+    let r = cold.expect("the hero has a live Cold Steel skill on the foe with no counterpart (only one active is marked)");
     let RowAct::Pick(p) = &r.act else { unreachable!() };
     b.choose_pick(&cx, h, r.at.unwrap_or(RoundTarget::Unit(f)), p, &r.label);
     assert_eq!(rip::picks_of(&s(&b).w, h).len(), 1, "{}", b.message);
@@ -223,12 +227,11 @@ fn a_channel_round_tints_the_unit_and_its_blocks() {
     assert_eq!(b.state(&cx)["channel_units"], json!([]), "Cold Steel: no tint");
     assert!(strip_labels(&b, &cx).iter().all(|l| l.get("channel").is_none()), "Cold Steel: no tinted block");
     b.set_channel(&cx, h, RoundTarget::Myself, true);
-    // a marrow pick on the foe when one is live (the ghost may hold none)
+    // a marrow pick on the foe (the marked attack's version)
     let f = foe(&b);
-    if let Some(r) = rows(&b, h, RoundTarget::Unit(f)).into_iter().find(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if matches!(p[..], [Pick::Skill { .. }]))) {
-        let RowAct::Pick(p) = &r.act else { unreachable!() };
-        b.choose_pick(&cx, h, r.at.unwrap_or(RoundTarget::Unit(f)), p, &r.label);
-    }
+    pick_live_skill(&mut b, &cx, h, f);
+    let w = &s(&b).w;
+    assert!(rip::picks_of(w, h).iter().any(|p| matches!(p, Pick::Skill { skill, .. } if channel::has_version(w, &w.cat.skills[*skill]))), "a marrow version picked: {}", b.message);
     b.draw(&mut cx, &mut g, (-500, -500), true);
     assert_eq!(b.state(&cx)["channel_units"], json!([h]), "the hero wears the tint");
     let labels = strip_labels(&b, &cx);
@@ -301,6 +304,15 @@ fn vent_shows_its_two_reasons() {
     assert!(!r.valid, "not the HP to pay");
     assert_eq!(r.detail, intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(cost, cost)));
     assert!(r.detail.starts_with("Not enough HP"), "{}", r.detail);
+    // PK1-S2c-2: both short (Strain below the gate and not the HP): both reasons in words, HP first
+    set_strain(&mut b, h, low);
+    let rs = rows(&b, h, RoundTarget::Myself);
+    let r = skill_row(&rs, vent).expect("Vent's cell");
+    let both = format!("{}{}{}", intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(cost, cost)), rip::REASONS_JOIN, intent_text::menu_refusal_text(&s(&b).w, &gate));
+    assert!(!r.valid);
+    assert_eq!(r.detail, both, "both reasons");
+    assert!(tip(r).contains(&both), "{:?}", tip(r));
+    set_strain(&mut b, h, VENT_GATE + 10);
     // both met: live
     let max = s(&b).w.units[h].max_hp;
     b.host.session.as_mut().unwrap().w.units[h].hp = max;
@@ -326,7 +338,7 @@ fn cold_steel_rows_grey_in_a_channel_round() {
             let [Pick::Skill { skill, .. }] = p[..] else { continue };
             if channel::problem(w, h, &w.cat.skills[skill]) == Some(want) {
                 assert!(!r.valid, "{} greyed", r.label);
-                assert_eq!(r.label.contains(&channel::marrow_name(&w.cat, "")), false, "a greyed Cold Steel cell keeps its own name: {}", r.label);
+                assert!(!r.label.contains(&channel::marrow_name(&w.cat, "")), "a greyed Cold Steel cell keeps its own name: {}", r.label);
                 if r.detail == want {
                     assert!(tip(&r).iter().any(|l| l == want), "{:?}", tip(&r));
                     n += 1;
@@ -363,4 +375,64 @@ fn an_ap_hold_shows_its_reason_in_the_planner() {
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     let text: String = recs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join(" ");
     assert!(text.contains(&held) || recs.iter().any(|r| held.starts_with(&r.text) && r.text.starts_with("AP held at")), "the panel names the hold ({held}):\n{text}");
+}
+
+/// Confirms, resolves and advances the round through the host.
+fn play_round(b: &mut BattleScreen) {
+    for cmd in ["confirm", "resolve", "advance"] {
+        let r = b.host.handle(&json!({"cmd": cmd}));
+        assert_eq!(r["ok"], json!(true), "{cmd}: {r}");
+    }
+}
+
+/// PK1-S2c (review): an archived round's actions keep that round's mode, whatever the live round flag: a past Cold
+/// Steel round's blocks are never tinted (even while the live round is Channel), a past Channel round's are (marrow
+/// versions by their command's flag, Feed and Vent as marrow-only), even back in Cold Steel.
+#[test]
+fn a_past_rounds_blocks_keep_that_rounds_mode() {
+    let (cx, _g, mut b) = arena(RULES);
+    let (h, _) = strain_up(&mut b, 0);
+    let (cold, hot) = (s(&b).current_round, s(&b).current_round + 1);
+    // each round the hero picks its first live skill on the foe (the fill does the rest)
+    let f = foe(&b);
+    pick_live_skill(&mut b, &cx, h, f);
+    play_round(&mut b);
+    b.set_channel(&cx, h, RoundTarget::Myself, true);
+    assert!(channel::is_channel(&s(&b).w, h), "{}", b.message);
+    let f = foe(&b);
+    pick_live_skill(&mut b, &cx, h, f);
+    play_round(&mut b);
+    let mine = |b: &BattleScreen, round: i32| -> Vec<emberwake_battle::resolver::ScheduledAction> {
+        s(b).round_record(round).map(|r| r.actions.iter().filter(|a| a.unit == h).cloned().collect()).unwrap_or_default()
+    };
+    let acts = |b: &BattleScreen, round: i32| -> Vec<(String, bool)> {
+        let w = &s(b).w;
+        mine(b, round).iter().filter(|a| w.cat.skill(&a.command.skill).is_some_and(|k| !matches!(skill::kind(k), Kind::Move | Kind::Status))).map(|a| (a.command.skill.clone(), channel_action(w, a))).collect()
+    };
+    // the live round is Cold Steel now
+    assert!(!channel::is_channel(&s(&b).w, h));
+    let hot_acts = acts(&b, hot);
+    assert!(!hot_acts.is_empty(), "the Channel round acted");
+    assert!(hot_acts.iter().all(|a| a.1), "a past Channel round stays tinted: {hot_acts:?}");
+    // and while the live round is Channel, the past Cold Steel round is not tinted
+    b.set_channel(&cx, h, RoundTarget::Myself, true);
+    assert!(channel::is_channel(&s(&b).w, h));
+    let cold_acts = acts(&b, cold);
+    assert!(!cold_acts.is_empty(), "the Cold Steel round acted");
+    assert!(cold_acts.iter().all(|a| !a.1), "a past Cold Steel round is never tinted: {cold_acts:?}");
+}
+
+/// PK1-S2c-2 (FB-180 (b)): "Cold Steel" is the game term `cold_steel_mark`: the toggle's card reads its default name,
+/// and a `terms` row renames it there.
+#[test]
+fn the_cold_steel_name_is_the_games_term() {
+    let (_cx, _g, mut b) = arena(RULES);
+    let (h, _) = strain_up(&mut b, 0);
+    let cold = emberwake_data::terms::default_name(emberwake_data::terms::COLD_STEEL_MARK).to_string();
+    let detail = |b: &BattleScreen| toggle(&rows(b, h, RoundTarget::Myself)).map(|r| r.detail.clone()).expect("the toggle");
+    assert!(detail(&b).starts_with(&format!("{cold} round")), "{}", detail(&b));
+    let cat = std::sync::Arc::make_mut(&mut b.host.session.as_mut().unwrap().w.cat);
+    let row = emberwake_data::terms::TermRow { id: emberwake_data::terms::COLD_STEEL_MARK.into(), name: "Bare Iron".into(), ..Default::default() };
+    cat.terms.insert(row.id.clone(), row);
+    assert!(detail(&b).starts_with("Bare Iron round"), "{}", detail(&b));
 }
