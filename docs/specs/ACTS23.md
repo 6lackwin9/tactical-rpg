@@ -1,6 +1,6 @@
 # ACTS23: the systems Acts 2 and 3 need beyond the Act 1 slice
 
-Status: **answered** (user 2026-11-10: every recommendation in section 5 accepted except **Q-A9**, reopened as the Channel rework in section 5.1, where the user's pick is pending). Nothing is queued yet: each work package (section 4) gets a `.1` design session in `docs/sessions/`, then a Build `feasibility-check`, as `MASTERPLAN1` did.
+Status: **answered** (user 2026-11-10: every recommendation in section 5 accepted except **Q-A9**, reopened as the Channel rework in section 5.1 and decided the same day: **Option B, the fuel row**, with derived marrow versions plus overrides and all-marrow Channel rounds). Nothing is queued yet: each work package (section 4) gets a `.1` design session in `docs/sessions/`, then a Build `feasibility-check`, as `MASTERPLAN1` did.
 Depends on: R1-R4 (shipped); the Act 1 slice data in `games/emberwake/data/worlds/sunk_ward/`
 Layers: kit (most hooks), game (data, screens), engine (only the 2 x 2 unit footprint, if chosen)
 Sources: `games/emberwake/docs/lore/CANON.md` sections 2-4 (Acts 2-3 are `proposal` there), `lore/specs/full_game_systems_roadmap.md` sections 4-6 (`P2-01..P3-05`), `lore/background/{upper_bastion,mantle_fissure}_campaign_map.md`, `lore/narrative/campaign_narrative_structure.md` sections 5-8, `lore/questions/open_world_and_campaign.md` (Q-09..Q-46, mostly decided 2026-10-25). Code status: a read-only audit of `develop @4093aed3` (2026-11-10), file:line evidence kept in section 2.
@@ -59,7 +59,7 @@ Each package extends an existing `MASTERPLAN1` block rather than adding a block;
 
 | Package | Extends | Scope | New kit hooks | Data (game) |
 | --- | --- | --- | --- | --- |
-| **PK1 Corruption in battle** | `S2` pools, `A1` costs, `F` intents | Strain row, crisis, Inoculated skills, Channel, meter deltas from hazards and attacks | (a) a seeded **random-table effect** (`roll_table`: weighted rows of effects on the battle RNG stream), usable by meter rules and triggers; (b) **Channel** behaviour (which skills it allows, what it targets; spec in `.1`); (c) a **`meter` effect** on arena and ground hazards and on skill hits | `strain` in `unit_meters.json` with 5 bands, crisis rows, Inoculated skill costs per class, aberrant enemy meters |
+| **PK1 Corruption in battle** | `S2` pools, `A1` costs, `F` intents | Strain row, crisis, Inoculated skills, Channel, meter deltas from hazards and attacks | (a) a seeded **random-table effect** (`roll_table`: weighted rows of effects on the battle RNG stream), usable by meter rules and triggers; (b) **Channel as a fuel row** (section 5.1 Option B: a version row targeted as the skill's primary intent, all-marrow rounds, derived marrow package with `channel` overrides, live only for Strain carriers, behind a ruleset flag); (c) a **`meter` effect** on arena and ground hazards and on skill hits | `strain` in `unit_meters.json` with 5 bands, crisis rows, Inoculated skill costs per class, aberrant enemy meters |
 | **PK2 Calcification and grafts** | `E3` roster, `U3` gear, `U4` grants | Persistent per-unit stage track, stage passives, graft slots, recipes | (d) **unit-scope campaign track** (the refused CAMPAIGN1-DOC: per-member value, stages with passives, advance and set effects, a "lost at stage N" departure); (e) a **second slot set** (`body_slots`, kit-generic) whose items may grant a meter floor; (f) **recipes**, an NPC service turning purse and stash inputs into effects on a member (surgery, flush, excision, bone-scraping) | Calcification stages I-V, 4 graft slots, organ and salt items, the recipe rows at the Slab |
 | **PK3 Roster lifecycle** | `E3` roster, `F` fight flow | Bleed-out, revive, recruits, procedural keepsakes, Martyrs, crypts | (g) **bleed-out and revive** in battle (read `bleed_out_rounds`; a `revive` key on heal skills and items); (h) **recruit generator** (ROSTER1-P: a pool with rolled stats inside a role template, a quirk list, class from the encounter, ages 18-24 as flavour); procedural keepsakes from the fields already parsed; Martyr counter on PK2's track | `sunk_ward` `roster` rules per act, recruit pools and quirks, keepsake names |
 | **PK4 Campaign pressure** | `W3` clock, `T1` story | Doctrine, checkpoints, the Great Tithing reveal, Act 3 clock and prices | (i) **meter display relabel** effect; doctrine **play inputs** as triggers on surgery, flush, forge project and battle-end Strain; per-character lean on PK2's track; a per-act price rule if data cannot express it | Doctrine gauge and thresholds, Act 2-3 checkpoints, hard-clock rows, side-quest locks, the saved-youths gauge |
@@ -104,6 +104,8 @@ Answers (user 2026-11-10): Q-A1 (b), Q-A2 (a), Q-A3 (b), Q-A4 (a), Q-A5 (a), Q-A
 | **C** Stand charge (IR13's idea) | A self-target Stand round that builds Strain or a charge and empowers the next round | Small | Overlaps Stand and `brace`; does not give marrow versions or a per-round choice |
 | **D** Round mode toggle | A Channel switch beside the intent, like the old stances | Flexible | Stances were cut (DEC-LORE-11); a second axis on every round |
 
+**Decided (user 2026-11-10): Option B**, with sub-question 2 as recommended (derived package plus per-skill overrides) and sub-question 1 as recommended (a Channel round is all marrow); sub-questions 3-5 take their recommendations as defaults for the PK1 `.1` session.
+
 Sub-questions under **B** (recommendations in bold):
 
 1. Can a Channel round mix in Cold Steel follow-ups? **No**: a Channel round is all marrow, so the tell is true for the whole round (Rest and Move stay neutral).
@@ -112,7 +114,7 @@ Sub-questions under **B** (recommendations in bold):
 4. Intent-bound buffs in a Channel round: **only buffs bound to Channel** (none at first); the primary row's intent buffs do not apply.
 5. Enemies: aberrants that carry Strain plan Channel rounds like players (AI row), and their tell shows Channel.
 
-If B is picked, it lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
+B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
 ## 6. Next steps after review
 

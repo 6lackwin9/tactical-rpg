@@ -24,7 +24,7 @@ To prevent context bloat and outdated-spec noise in both the Design and Build se
 | `PORTRAITFX1.md`, `_TASKS.md` | Portrait expressions, sidecars, and tool checks (`tools/portraits/`) | active (`X2`, `X3`) |
 | `REGIONGROUND1_ENGINE.md`, `_KIT.md` | Ground composition and region map rendering contracts | active (`X2`, `X3`, `W1`) |
 | `WEBREL1.md` | Web (WASM) build of the game and its restricted itch.io deploy (`Post-R4`; engine seam, game entry, CI) | active (`.1` 2026-11-09; feasibility check pending) |
-| `ACTS23.md` | Survey of the systems Acts 2-3 need against the code, 8 work packages (`PK1`..`PK8`), questions `Q-A1..Q-A10` | answered (2026-11-10; Channel rework 5.1 pending) |
+| `ACTS23.md` | Survey of the systems Acts 2-3 need against the code, 8 work packages (`PK1`..`PK8`), questions `Q-A1..Q-A10` | answered (2026-11-10; Channel = fuel row, 5.1 B) |
 
 ## Archived Pre-Masterplan Reference Library (`docs/archive/specs/`)
 
