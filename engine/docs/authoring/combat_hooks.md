@@ -318,3 +318,5 @@ falls back to the default loadout. Catalog screens keep the base names.
 A cheat-death (`spare_once`, the phase trigger `spared`, the phase effect `heal`: HOOKS1 10.2, task HOOKS1-Q),
 targeting a unit in its windup, teleports on an event, terrain changed by a skill, overlapping hazards that react, a
 lethal execute and a pack-hunting tactic (HOOKS1 14, AT4). A game that needs one asks for a kit hook first.
+
+ROLLTABLE1 (2026-11-10): `roll_table` is also a trigger effect (`rows` of `{weight, effects}`, one weighted pick on the seeded battle RNG) and a meter-rule effect.

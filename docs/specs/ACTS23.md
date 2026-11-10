@@ -145,7 +145,7 @@ Sub-questions under **B** (recommendations in bold):
   4. **Keystones have no marrow version**: the Inoculation has **its own keystones** (Inoculated keystones, installed by surgery, Tier III), which take the one keystone slot instead of a Cold Steel keystone.
 - **Section 5.1 is closed**; PK1's `.1` session designs the details (the opener's planner and AI rules, the per-intent fill order in a Channel round, the content checks) against these rulings.
 
-B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
+B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`; on in `timeline` but inert until a unit holds Strain, `FB-167` Q3), so no battle golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
 ### 5.2 Cold Steel weapon techniques (user 2026-11-10)
 
