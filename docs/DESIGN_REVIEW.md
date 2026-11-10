@@ -1,8 +1,8 @@
 # Design calls for your review
 
-The Design Session writes this file (decision "Build feedback on the recommended option (user 2026-11-10)"). When a Build Session `FB-nn` or `UN-nn` item offers options, Design applies the recommended one straight away (in `docs/READY.md` section 4 and the specs) and lists it here so you can check it later. To change one, say which row and what you want instead; Design then queues the change like any other.
+The Design Session writes this file (decision "Build feedback on the recommended option (user 2026-11-10)" and `docs/PRINCIPLES.md` Section 0). Whenever an `FB-nn` / `UN-nn` Build item, `.1` spec detail, or `CL-nn` canon gap needs a reversible call while you are away, Design scores candidate options against **`docs/PRINCIPLES.md`** (`P-ARCH`..`P-UI`), applies the lowest-undo-cost principle-aligned option straight away as `[PROVISIONAL]` (in `docs/READY.md`, specs, or `CANON.md`), and logs it here with the governing `P-*` IDs so you can review it later. To flip one, say which row and what you want instead; Design then queues the change like any other.
 
-Excluded (asked first, never applied alone): anything that cannot be undone (a push to `main`, deleting files or branches, releasing) and items with no recommended option.
+Excluded (always asked first, never applied alone): anything irreversible (push/merge to `main`, `itch.io` deploy, deleting files or branches, paid external image-API spend without approval, breaking shipped release saves without migration) or a direct conflict between two `[LOCKED]` rulings.
 
 ## Open (newest first)
 
