@@ -228,6 +228,9 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   | Main theme 1B | unknown (Auto) | Producer | shipped as `menu_theme` |
   | Credits lullaby 1A | unknown (Auto) | Producer | picked |
   | Battle, `Sunkward Battle Theme` | unknown | Remix > Cover of 1B | too slow (measured 60 BPM, the base's tempo); redo in Compose |
+  | `Main Theme Upbeat 16-Bit Retro Version` | unknown | Producer, asked for a faster battle cover | not battle; kept as the base for higher-tempo work (Tushar). Same F minor (0.96), loose melodic match (0.61 vs 0.56), measured pulse about 56 BPM (busier, not clearly faster), 170.5 s song shape |
+
+  Seeds matter for new Compose work (455684). Tracks already in Tushar's Flow Music library need no seed: they are the bases for Remix and Variation, and a Variation reports its new seed.
 
 - **Hub and battle covers (2026-11-11)**: the hub cover shares 1B's key and harmony (12-tone profile correlation 0.93; both centre on F, C, A-flat and E-flat, so the set is really in F minor, not the D minor the prompts asked for) and some melodic material (best 8 s pitch-sequence match 0.70 against a 0.57 no-shared-melody baseline: moderate, not a clear quote). 170.5 s, a 20 s build-in and a fade-out, so `--gap 2.5`: 172.2 s, review copies `hub_seed455684.ogg` and `hub_seed455684_wrap.mp3`. The battle cover kept the base's tempo (60 BPM measured) as expected: battle is made in Compose with BPM set, seed 455684, and the key named as F minor to match the set.
 - **Cover has no Compose settings (Tushar, 2026-11-11)**: Remix > Cover takes its structure from the base track, so no Length, BPM or Seed; expect a cover to keep about the base's length and tempo (1B: 172 s, 66 BPM), fine for the hub (72) but maybe too slow for battle (120). More takes of a kept cover come from Remix > Variation; length is the import tool's job. If the battle cover stays slow, battle is made in Compose instead (its own melody).
