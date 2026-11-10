@@ -183,7 +183,7 @@ gate, Brother Rook on street nodes. ENC-EVT-05 is not a siege in Act 1.
 | Transition | Hub | Alert | Doom Clock | Switches on |
 | --- | --- | --- | --- | --- |
 | Prologue to Act 1 | The Sluice Undercroft opens (6 bunks) | starts at 0 (planner pick) | appears at 42 days, soft | board, travel, upkeep |
-| Act 1 to Act 2 | Stays the Sluice; the Slag Gate breach opens the High Bastion graph (node 08 on); the Scribe's Crypt is a proposal forward base | open (Q-14) | stays soft | Inoculation, Strain, Calcification, grafts, Cold Steel weapon techniques (the grafts' mirror, `docs/specs/ACTS23.md` 5.2), recruits, doctrine, permadeath and capture, sieges, the 8-bunk project; the captured founder's keepsake (an ACC heirloom, planner pick) |
+| Act 1 to Act 2 | Stays the Sluice; the Slag Gate breach opens the High Bastion graph (node 08 on); the Scribe's Crypt is a proposal forward base | open (Q-14) | stays soft | Inoculation, Strain, Calcification, grafts, Cold Steel weapon techniques (the grafts' mirror) and weapon durability (every Cold Steel skill wears the weapon; marrow skills cost Strain instead; none in Act 1; `docs/specs/ACTS23.md` 5.2), recruits, doctrine, permadeath and capture, sieges, the 8-bunk project; the captured founder's keepsake (an ACC heirloom, planner pick) |
 | Act 2 to Act 3 | Stays the Sluice; the Weeping Redoubt is a proposal forward base | carries on | turns hard | a continental wave of bell resonance (resonance itself starts in Act 2 in Upper Cinderreach and 2.5 silences it there, Q-09), Act 3 hazards |
 
 ### 3.4 Act 2 "The First Rupture": the High Bastion (proposal)
