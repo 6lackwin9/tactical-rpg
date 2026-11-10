@@ -589,7 +589,7 @@
 			"rows": [],
 			"arena_hazards": [],
 			"max_rounds": 10,
-			"total_blocks": 6,
+			"total_blocks": 3,
 			"ap_regen": 4,
 			"unit_ap": 12,
 			"start_ap": 10,

@@ -2912,10 +2912,18 @@
 			"palette": "",
 			"portrait_tier": "",
 			"skill_cap": 0,
-			"extra_skills": [],
+			"extra_skills": [
+				"tl_hook_thrust"
+			],
 			"loadout": [],
 			"deck": {
-				"active": [],
+				"active": [
+					"taunt_shout",
+					"tl_hook_thrust"
+				],
+				"marrow": [
+					"tl_hook_thrust"
+				],
 				"passive": [
 					"inoculated_test"
 				]

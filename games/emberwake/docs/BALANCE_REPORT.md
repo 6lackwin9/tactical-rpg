@@ -1,5 +1,14 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## PR5-27 (`PK1-S3-FIX` part 3) 2026-11-10 (Channel Duel 40-seed rerun: why no Vent, no crisis)
+
+- **Measured build**: branch `claude/optimistic-newton-ewkyqt` (PR5-27 data on develop with PR5-26), `sim feel 2 seeds=40 enc=pk1_channel_duel ruleset=timeline counts=on`; probes on a scratch source copy, no repo file changed.
+- **Result**: Channel 22.5% won (9/40), median 6 rounds, 97 Channel rounds, **0 Vents**; `rules=-channel` control 0% (median 8). Acceptance (Vent exercised) fails.
+- **No Vent is a bug, not tuning**: `ai::vent_row` builds a `Support` pick on `RoundTarget::Myself`; under `field_intent` (every timeline ruleset) `round_intent::target_problem` refuses that pair ("Support targets yourself or an ally"; a self skill is a Guard/Stand pick there), so `commit` fails and the row falls back to the Channel row at every Strain from 75 to 99. The kit test passes because its ruleset has no `field_intent`. A scratch fix (Guard pick on Myself under `field_rows`) makes Vent plan: 2.9 Vents a fight.
+- **The crisis does fire** (1.38 a fight in 40 `aegis battle` logs, first at round 3 in every fight: Strain 25 -> 65 -> 85 -> Bite 100 -> reset to 50); the sim shows none because it samples bands after the `round_end` reset. It needs a crisis counter.
+- **Vent fixed with today's numbers is worse**: Vents 2.9/fight, crises 0, 0% won; a Vent round is Vent + two Feed blocks (net -10 Strain, 15% HP) and no attack.
+- **Levers measured** (details in the FEEDBACK proposals): Vent -50 Strain / 10% HP with the fix: 1 Vent and 0.93 crises a fight, 37.5% won; `channel_power` 1.5 without the fix 45%, 1.75 60%, 2.0 85%; `channel_ai_edge` 1.5 -> 0% (AI never Channels).
+
 ## PR5-7 (`PK1-S3`) 2026-11-10 (Strain / Channel / Feed / Vent first run)
 
 - **Measured build**: `develop` `@c1ca8cc6`, no repo file changed; probes on scratch data copies (`data=<dir>`), 40 seeds, `rules=-channel` control.
