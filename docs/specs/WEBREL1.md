@@ -31,7 +31,7 @@ The engine is pure Rust on `winit 0.30` + `pixels 0.15` (wgpu) + `fontdue` + `ro
 | Threads / TCP | agent link `aegis_ui/src/bridge.rs`, `shell/headless.rs`, `aegis_cli/src/scenario.rs` | 4 files | Not built on web (`cfg`); the web build is single-threaded, so itch.io needs no `SharedArrayBuffer` / COOP-COEP headers |
 | Processes / env | `std::process`, `std::env` (CLI args, `APPDATA`, tools) | ~9 / ~14 files | Web reads its options from the page URL query (`?screen=arena&seed=3`), same keys as the CLI |
 | Window loop | `winit` desktop event loop, Windows-only work-area query (`windows-sys`, DISPLAY2) | `aegis_ui/src/shell.rs` | winit web backend on a `<canvas>`; the 1280 x 720 canvas (LAYOUT720) scales to the browser window by device pixel ratio |
-| Renderer | `pixels` synchronous init | `shell.rs` | `pixels` async init on wasm (wgpu WebGL2 backend; WebGPU when available) |
+| Renderer | `pixels` synchronous init | `shell.rs` | `pixels` async init on wasm (wgpu WebGL2 backend only, `Backends::GL` forced: `FB-160` Option A, 2026-11-10; WebGPU is a later engine task) |
 | Audio | `rodio` on the desktop device | `aegis_ui/src/audio.rs` | `rodio`/`cpal` web-audio backend, started on the first click or key (browser autoplay rule); a silent stub is an acceptable first step |
 | Clipboard | `arboard` (PLAYUI1-T text editor) | `aegis_ui` | Native only; on web the editor keeps an in-app clipboard |
 | Screenshots, playtest recordings | F12 to disk, recordings in the user folder | `aegis_ui` | Off on web in the release build; test builds may keep recordings in the web store |
@@ -50,6 +50,8 @@ The engine stays game-agnostic: nothing in `engine/` names `emberwake`; the game
 - The bundle is fetched, not compiled into the `.wasm` (`include_bytes!` on 31 MB would bloat the module and every rebuild). One bundle file keeps the upload far under itch.io's per-project file-count cap.
 - Test-only reads (`CARGO_MANIFEST_DIR` fonts in unit tests) stay as they are; the seam covers the runtime paths only.
 
+- As built (`PR4-4`, `FB-157`): `aegis_core::vfs` also has `vfs::dev` for dev files (F12 shots, note JPGs, recordings, frame-tuner writes, ground compose), `std::fs` on native and `Unsupported` on the web; this is how "recordings and F12 screenshots off on web" (6.1) is enforced. The fs lint passes the content writer's write calls (its reads and probes are still linted) and `aegis_core/src/scratch.rs` (a test helper).
+
 ### 2.2 User store
 
 - `aegis_save` keeps its API (`user_dir`, slots, settings, backups). Web backend: `localStorage` keys `aegis/<game id>/<relative path>`; a write that exceeds the browser quota returns the existing error type (no panic) and the UI shows "save failed".
@@ -59,7 +61,7 @@ The engine stays game-agnostic: nothing in `engine/` names `emberwake`; the game
 
 - One clock type used by the engine (wall-clock reads only through it).
 - `Shell` gains a web start path (winit `EventLoopExtWebSys` / `spawn_app`, canvas lookup by id, async `pixels` init) beside the native `run`; frame pacing on `requestAnimationFrame`.
-- Audio starts on the first user gesture; until then sounds are dropped, not queued.
+- Audio starts on the first user gesture; until then one-shot sounds are dropped, not queued, and the screen's wanted music track fades in at that gesture (as built, `FB-160`).
 - Keyboard and mouse map to the same `Key` / pointer events; right click (go back) needs the canvas context menu suppressed.
 - Dev keys (F6 map zoom, F7 view, F9 window size, F12 screenshot) are debug-build or dev-tools only, as on desktop.
 
@@ -105,6 +107,12 @@ Rules, sim and RNG code do not branch on target. No golden is re-recorded by WEB
 - `WEBREL1-E1` is split: **E1a "compiles"** (READY `PR4-3`) and **E1b "runs"** (`PR4-4`); both span engine, kit and game, and both carry a runtime acceptance (a lint: no `std::time` / `std::fs` outside the seams in non-test, non-CLI `src`), because the std stubs compile on wasm and fail only at run time.
 - `tools/fc.sh web` moves from P1 into G1 (`PR4-6`), so G1 can be tested; P1 (`PR4-7`) keeps CI and the deploy.
 - Audio ships as a second, later bundle part (about 30% of the first load); playtest recordings and F12 screenshots are off on web (itch.io serves every game from the shared `itch.zone` origin, so the storage quota may be shared); saves stay in `localStorage` (under 0.5 MB for 6 slots).
+
+### 6.2 G1 additions (`FB-157`, `FB-160`, 2026-11-10)
+
+- Quit on the web (`FB-157` Option A): the main menu hides Quit on wasm (a page cannot close its own tab; today Quit is a no-op).
+- Web saves write the key directly, with no temp key (`setItem` is atomic), so a save needs its own size in quota, not twice.
+- A failed web renderer (`Wake::Surface(Err)`) stops the loop and shows a short message on the page instead of drawing unshown frames.
 
 ## 7. Feasibility check (Build Session, read-only)
 
