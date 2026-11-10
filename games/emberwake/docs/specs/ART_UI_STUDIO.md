@@ -224,7 +224,7 @@ This section records every option explored, Tushar's exact feedback, why rejecte
 
   | Track | Seed | Route | Status |
   | --- | --- | --- | --- |
-  | Hub, `The Sluice Undercroft (Hub Theme)_455684` | 455684 | Remix > Cover of 1B | works (Tushar); cut with `--gap 2.5`, loop on review |
+  | Hub, `The Sluice Undercroft (Hub Theme)_455684` | 455684 | Remix > Cover of 1B | **shipped** as `sunk_ward_town` (the hub is a `town` location of the Sunk Ward, so MUSIC1 asks for `sunk_ward_town` before the kit's `town`); `--gap 2.5` loop approved (Tushar: "follows the same idea as main theme"); record `art_src/music/sunk_ward_town.json` |
   | Main theme 1B | unknown (Auto) | Producer | shipped as `menu_theme` |
   | Credits lullaby 1A | unknown (Auto) | Producer | picked |
   | Battle, `Sunkward Battle Theme` | unknown | Remix > Cover of 1B | too slow (measured 60 BPM, the base's tempo); redo in Compose |

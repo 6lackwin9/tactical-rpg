@@ -103,7 +103,7 @@ The current tracks are synthesized placeholders (`tools/gen_music.py`; `assets/a
 | Stealth | 0b rooftops | new |
 | Battle | regular fights (0a-0c, Corvo) | have-old (kit `combat`) |
 | Escape sting | the descent through the grate | new |
-| Hub (Sluice Undercroft) | the hearth scene and hub | have-old (kit `town`) |
+| Hub (Sluice Undercroft) | the hearth scene and hub | **done** (`sunk_ward_town.ogg`, a cover of the main theme, seed 455684) |
 | Sunk Ward exploration | the region map | new |
 | Dilemma | Corvo's Gate choice | new (or reuse prologue tension) |
 | Boss | Grendel, M3 | have-old (kit `boss`) |
