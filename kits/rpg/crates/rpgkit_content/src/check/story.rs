@@ -1,17 +1,18 @@
 //! The story checks (STORYUI1 4.1-4.3, 4.6, kit hook; engine-only, no Godot original): the rows of the world kinds
 //! `vignettes` (their cards) and `sequences` (their steps), a world manifest's `start_sequence`, and the soft warnings
 //! for card images, cues and music that no asset layer holds. Worlds without the story kinds report as before.
-//! PORTRAITFX1 7: a `line` card's `expression`.
+//! PORTRAITFX1 7: a `line` card's `expression`. STORYMUSIC1: a vignette's and a step's `music` (a music key too).
 
 use super::campaign::read_key_error;
 use super::dialogue::{self, EffectList};
 use super::quest::flag_key_ok;
 use super::world::ref_errors;
 use super::View;
+use aegis_content::schema::is_id;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_data::{
-    split_token, step_keys, AUDIO_DIR, CARDS_MAX, CARD_KEYS, CARD_STYLES, CARD_SUBTITLE_MAX, CARD_TEXT_MAX, CARD_TITLE_MAX, END_TO, FADE_MS_MAX, FIGHT_OUTCOMES, HOLD_MS_MAX, LAST_STEP_KINDS, MUSIC_EXT, MUSIC_NONE, STEPS_MAX, STEP_EFFECTS_MAX, STEP_KINDS, TOKEN_KINDS,
+    music_ask, split_token, step_keys, MusicAsk, AUDIO_DIR, CARDS_MAX, CARD_KEYS, CARD_STYLES, CARD_SUBTITLE_MAX, CARD_TEXT_MAX, CARD_TITLE_MAX, END_TO, FADE_MS_MAX, FIGHT_OUTCOMES, HOLD_MS_MAX, LAST_STEP_KINDS, MUSIC_DIR, MUSIC_EXT, MUSIC_NONE, STEPS_MAX, STEP_EFFECTS_MAX, STEP_KINDS, TOKEN_KINDS,
 };
 use serde_json::Value;
 
@@ -52,13 +53,26 @@ fn enum_key(d: &Dict, key: &str, options: &[&str], label: &str) -> Option<String
 
 // ---- 4.1, 4.2 vignettes and cards ----
 
+/// STORYMUSIC1: the problem of a vignette's or a step's `music`: empty (the music goes on), `none` (silence), a track
+/// ending `.ogg`, or a music key: one of the game's (`View::music_keys`, its manifest's `music_keys`), or the key of a
+/// track the asset layers hold (`audio/music/<key>.ogg`). A listed key needs no track (the music playing goes on until
+/// one ships).
+pub fn music_error(v: &View, music: &str, label: &str) -> Option<String> {
+    let MusicAsk::Key(key) = music_ask(music) else { return None };
+    let shape = format!("{label} '{music}' must be empty (the music goes on), {MUSIC_NONE} (silence) or a track ending {MUSIC_EXT}, or name a music key (a-z, 0-9, _)");
+    if !is_id(key) {
+        return Some(format!("{shape}."));
+    }
+    if v.music_keys.iter().any(|k| k == key) || v.assets.has(&format!("{AUDIO_DIR}{MUSIC_DIR}{key}{MUSIC_EXT}")) {
+        return None;
+    }
+    let listed = if v.music_keys.is_empty() { "none".to_string() } else { v.music_keys.join(", ") };
+    Some(format!("{label}: '{key}' is no music key of the game (game.json {}: {listed}) and no track {MUSIC_DIR}{key}{MUSIC_EXT} in the asset folders' {AUDIO_DIR}.", crate::source::MUSIC_KEYS))
+}
+
 /// The problems of a vignette row (4.1) and its cards (4.2).
 pub fn vignette_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
-    let mut errors = Vec::new();
-    let music = json::s(e, "music");
-    if !music.is_empty() && music != MUSIC_NONE && !music.ends_with(MUSIC_EXT) {
-        errors.push(format!("Music '{music}' must be empty (the music goes on), {MUSIC_NONE} (silence) or a track ending {MUSIC_EXT}."));
-    }
+    let mut errors: Vec<String> = music_error(v, &json::s(e, "music"), "Music").into_iter().collect();
     let frame = json::s(e, "frame");
     if hex_colour(&frame).is_none() {
         errors.push(format!("Frame colour '{frame}' must be #rrggbb."));
@@ -182,6 +196,12 @@ fn step_errors(v: &View, w: &str, i: usize, raw: &Value, last: bool) -> Vec<Stri
     let label = format!("Step {} ({kind})", i + 1);
     let allowed = step_keys(&kind);
     let mut errors: Vec<String> = d.keys().filter(|k| !allowed.contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}'.")).collect();
+    // STORYMUSIC1: the step's music, as a vignette's
+    match d.get("music") {
+        Some(Value::String(m)) => errors.extend(music_error(v, m, &format!("{label}: music"))),
+        Some(other) => errors.push(format!("{label}: music must be text (has {other}).")),
+        None => {}
+    }
     match kind.as_str() {
         "vignette" => errors.extend(required_ref(v, w, d, "vignette", "vignettes", &label)),
         "fight" => {
@@ -238,17 +258,27 @@ pub fn manifest_errors(v: &View, w: &str, m: &Dict) -> Vec<String> {
 
 // ---- warnings ----
 
-/// The soft problems of world `w`'s vignettes: music tracks, card images and cues that no asset layer holds (3.1:
-/// warnings in the asset checks' style, not errors).
+/// The soft problems of world `w`'s vignettes and sequence steps: music tracks, card images and cues that no asset
+/// layer holds (3.1: warnings in the asset checks' style, not errors).
 pub fn warnings(v: &View, w: &str) -> Vec<String> {
     let mut out = Vec::new();
     if v.assets.roots.is_empty() {
         return out;
     }
+    let track_missing = |music: &str| matches!(music_ask(music), MusicAsk::Track(m) if !v.assets.has(&format!("{AUDIO_DIR}{m}")));
+    for e in v.worlds.own_entries(w, "sequences") {
+        // STORYMUSIC1: a step's music track, as a vignette's
+        for (i, step) in json::aget(e, "steps").iter().enumerate() {
+            let music = json::s(json::dict(step), "music");
+            if track_missing(&music) {
+                out.push(format!("{}: step {}: music '{music}' is in no asset folder's {AUDIO_DIR}.", json::s(e, "_qid"), i + 1));
+            }
+        }
+    }
     for e in v.worlds.own_entries(w, "vignettes") {
         let qid = json::s(e, "_qid");
         let music = json::s(e, "music");
-        if !music.is_empty() && music != MUSIC_NONE && !v.assets.has(&format!("{AUDIO_DIR}{music}")) {
+        if track_missing(&music) {
             out.push(format!("{qid}: music '{music}' is in no asset folder's {AUDIO_DIR}."));
         }
         for (i, card) in json::aget(e, "cards").iter().enumerate() {

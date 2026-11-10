@@ -59,8 +59,10 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
 /// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`), and
 /// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber), an expression frame without
 /// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`) and the data's expression effects
-/// drawn while a card's `expression` holds (PORTRAITFX1-EX).
-pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
+/// drawn while a card's `expression` holds (PORTRAITFX1-EX). STORYMUSIC1: a reel's music key plays as its track
+/// (`music::reel_music`).
+pub fn vignette_screen(cx: &Cx, mut reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
+    reel.music = crate::music::reel_music(cx, &reel.music);
     let t = &cx.tuning.value;
     VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(palette()).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
         .portrait_sidecars(emberwake_content::art::face_sidecars)
@@ -126,8 +128,11 @@ pub enum StAct {
 pub struct StoryStage {
     /// A screen the stage pushed is over it (cleared when the stage is the top again).
     waiting: bool,
-    /// The music under the cards: the menu theme until a vignette names a track or silence (V8: "" keeps it playing).
+    /// The music under the cards: the menu theme until a vignette names a track or silence (V8: "" keeps it playing),
+    /// or a step asks for music (STORYMUSIC1).
     music: Option<String>,
+    /// STORYMUSIC1: the running step (sequence, step) whose music the stage took last; a new step's is taken once.
+    step_seen: Option<(String, i64)>,
     /// Why a step could not run (shown with a way back to the main menu).
     error: Vec<String>,
     w: Vec<Widget<StAct>>,
@@ -135,7 +140,23 @@ pub struct StoryStage {
 
 impl StoryStage {
     pub fn new(cx: &Cx) -> Self {
-        Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), error: Vec::new(), w: Vec::new() }
+        let mut stage = Self { waiting: false, music: crate::music::game_track(cx, crate::music::MENU), step_seen: None, error: Vec::new(), w: Vec::new() };
+        stage.take_step_music(cx);
+        stage
+    }
+
+    /// STORYMUSIC1: on a step not seen yet, its music (`story::step_music`: the step's own or its leading effects
+    /// steps') becomes the stage's; "" or a key with no track keeps the music playing.
+    fn take_step_music(&mut self, cx: &Cx) {
+        let Some(g) = cx.game.as_ref() else { return };
+        let at = g.gs.story.running.as_ref().map(|r| (r.sequence.clone(), r.step));
+        if at.is_none() || at == self.step_seen {
+            return;
+        }
+        self.step_seen = at;
+        if let Some(wish) = crate::music::story_wish(cx, &story::step_music(&cx.data, &g.gs)) {
+            self.music = Some(wish);
+        }
     }
 
     /// The next beat: a queued vignette first (Q9), then the step at `running.step`.
@@ -147,6 +168,8 @@ impl StoryStage {
         if crate::runover::map_tick(cx) {
             return;
         }
+        // STORYMUSIC1: a new step's music first, so the vignettes queued before it play under it too
+        self.take_step_music(cx);
         if let Some(wish) = play_queued(cx) {
             self.wait_on(wish);
             return;
@@ -674,6 +697,82 @@ pub(crate) mod tests {
         }
         assert!(seen.iter().all(|o| o.0.abs() <= 1 && o.1 == 0), "at most 1 px, along x: {seen:?}");
         assert!(seen.iter().any(|o| *o != (0, 0)), "the card shakes");
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// STORYMUSIC1: world `tale` whose start sequence `scored` sets music on its steps (a leading effects step's key,
+    /// a step without music, a step key with no track under a vignette with its own key, a step's `none`), and an
+    /// audio folder holding the tracks of `story_opening` and `story_escape` only.
+    fn music_cx() -> (Cx, aegis_core::scratch::Scratch) {
+        let card = json!([text_card("A card.")]);
+        let vignettes = json!([
+            {"id": "v_a", "name": "A", "cards": card},
+            {"id": "v_keyed", "name": "Keyed", "music": "story_escape", "cards": card}
+        ]);
+        let sequences = json!([{"id": "scored", "name": "Scored", "steps": [
+            {"kind": "effects", "effects": [{"effect": "set_flag", "key": "began", "value": true}], "music": "story_opening"},
+            {"kind": "vignette", "vignette": "v_a"},
+            {"kind": "vignette", "vignette": "v_keyed", "music": "prologue_tension"},
+            {"kind": "vignette", "vignette": "v_a", "music": "none"},
+            {"kind": "end", "to": "menu"}
+        ]}]);
+        let worlds = json!({"tale": {"manifest": {"id": "tale", "name": "Tale", "start_location": "hub", "start_party": ["hero"], "start_sequence": "scored"}, "own": {
+            "locations": with_ids("tale", json!([{"id": "hub", "name": "Hub"}])),
+            "vignettes": with_ids("tale", vignettes),
+            "sequences": with_ids("tale", sequences)
+        }}});
+        let catalog = json!({"classes": [{"id": "fighter", "name": "Fighter"}], "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}]});
+        let mut cx = story_cx(Data::from_values(&catalog, &worlds, &json!({})));
+        let dir = aegis_core::scratch::Scratch::new("emberwake_story_music");
+        std::fs::create_dir_all(dir.join("music")).unwrap();
+        for f in ["story_opening.ogg", "story_escape.ogg"] {
+            std::fs::write(dir.join("music").join(f), b"OggS").unwrap();
+        }
+        cx.audio = aegis_ui::audio::Audio::offline(Some(dir.to_path_buf()));
+        (cx, dir)
+    }
+
+    /// STORYMUSIC1: a step with `music` switches the stage's music (a leading effects step's from the start), a step
+    /// without keeps it, a key with no track keeps it too, a vignette's own key plays its track over the stage (V8),
+    /// a step's `none` is silence; game.json's `music_keys` lists every context of the music module and the story keys.
+    #[test]
+    fn a_step_with_music_switches_the_stage_music_and_an_empty_one_keeps_it() {
+        use crate::music::{BOSS, COMBAT, DANGER, ENCOUNTER, FIELD, MENU, SHOP, TOWN, TRAVEL};
+        let game = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../").join(aegis_content::manifest::FILE);
+        let m: Value = serde_json::from_str(&std::fs::read_to_string(&game).expect("game.json")).expect("game.json is JSON");
+        let listed = emberwake_content::source::music_keys_of(json::dict(&m));
+        for k in [MENU, FIELD, TRAVEL, TOWN, SHOP, DANGER, COMBAT, ENCOUNTER, BOSS, "story_opening", "prologue_tension", "story_escape", "story_goodbye"] {
+            assert!(listed.iter().any(|x| x == k), "game.json music_keys lists every music context and story key: {k}");
+        }
+        let (mut cx, _dir) = music_cx();
+        let opening = crate::music::path("story_opening");
+        let gs = new_game::create_for_world(&cx.data.clone(), "tale", 1).expect("a new game");
+        enter_game(&mut cx, gs, -1, Vec::new());
+        let (_, mut stage) = take(&mut cx);
+        assert_eq!(stage.music(&cx), Some(opening.clone()), "the leading effects step's key, from the start");
+        stage.tick(&mut cx);
+        let (_, mut v) = take(&mut cx);
+        assert_eq!(v.music(&cx), None, "a vignette without music leaves it to the stage");
+        play_out(&mut cx, &mut v);
+        stage.resume(&mut cx);
+        stage.tick(&mut cx);
+        let (_, mut v) = take(&mut cx);
+        assert_eq!(v.state(&cx)["reel"], json!("tale:v_keyed"));
+        assert_eq!(v.music(&cx), Some(crate::music::path("story_escape")), "the vignette's own key plays its track");
+        assert_eq!(stage.music(&cx), Some(crate::music::path("story_escape")), "V8: kept under the stage; the step's key has no track");
+        play_out(&mut cx, &mut v);
+        stage.resume(&mut cx);
+        stage.tick(&mut cx);
+        let (_, mut v) = take(&mut cx);
+        assert_eq!(stage.music(&cx), Some(String::new()), "the step's none is silence");
+        play_out(&mut cx, &mut v);
+        // a key with no track and "" keep what plays; a track path and none as written
+        assert_eq!(crate::music::story_wish(&cx, "prologue_tension"), None);
+        assert_eq!(crate::music::story_wish(&cx, ""), None);
+        assert_eq!(crate::music::story_wish(&cx, "music/x.ogg"), Some("music/x.ogg".into()));
+        assert_eq!(crate::music::reel_music(&cx, "prologue_tension"), "");
+        assert_eq!(crate::music::reel_music(&cx, "story_opening"), opening);
+        assert_eq!(crate::music::reel_music(&cx, "none"), "none");
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }
 }

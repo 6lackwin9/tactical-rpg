@@ -122,13 +122,9 @@ Decapitation, the Prelate's Censure (new: Nemeth had no maneuver, Q-74).
   stand in. The Cataclysm's drag-in is its pull; its second status expose 8 waits (G9).
 - Phases: `cataclysm` `hp_below` 40: line "Into the vats, the lot of you!", enrage 20, deck `{"unit":
   "guild_master_orlov", "add": ["scalding_cataclysm"], "order": {"assault": ["scalding_cataclysm",
-  "pressurized_lard_spray", "flensing_hook_drag"]}}`; `orlov_withdraws` `hp_below` 20: line "Back to the upper vats—seal
-  the sluices!", `flee_ratio` `1.0` on `guild_master_orlov` so he retreats into Upper Cinderreach and survives into Act 2
-  for Vesper's loyalty quest (user 2026-11-10 `A6`, matching Captain Vane's `vane_withdraws`). The lore's second trigger
-  "when Vesper attacks him" is a per-hero trigger (G10).
-- Vendetta (`A6`, superseding `CQ10 a` kill-only `key_loot`): `objective_reward` / win payout grants
-  `loot_flensing_talon` (authored catalog item `orlovs_flensing_talon`, dropped as he flees) and
-  `loot_orlovs_retribution` when M4 is won whether Orlov withdraws or falls before fleeing.
+  "pressurized_lard_spray", "flensing_hook_drag"]}}`. The lore's second trigger "when Vesper attacks him" is a
+  per-hero trigger (G10).
+- Vendetta (CQ10 a): key loot on Orlov's kill pays `loot_flensing_talon` and `loot_orlovs_retribution`.
 
 ### 3.5 The Calcified Amalgam (interlude, `enc_evt_05`; M2b)
 

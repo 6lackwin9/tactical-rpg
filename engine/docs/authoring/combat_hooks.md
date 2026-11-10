@@ -328,5 +328,3 @@ PK1-S2a (2026-11-10): skill fields `channel` {none, only, cost, power, effects},
 PK1-S2b (2026-11-10): the game term `marrow_mark` names a marrow version ("Name (Marrow)").
 
 HEALPCT1 (2026-11-10): skill field `heal_pct` (SUPPORT; a percent of the target's max HP added after the heal formula; `heal_taken` applies); ruleset field `channel_ai_edge`.
-
-SKILL-UNMARK-TURNED (2026-11-10): a `SUPPORT` skill's `unmark` (as a consumable's) reaches a battle-start party member now `hostile_all` and calms it at the next round start; under `round_intent` a `Support` round may target that member while the unit holds a usable `unmark` skill or item; the party AI uses its `unmark` skill on a turned member it would calm.

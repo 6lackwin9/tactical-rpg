@@ -47,8 +47,8 @@ At round end, a unit at Strain 100 rolls 1d3 (equal odds, seeded):
 2. **Biological Collapse**: 0 AP next round, Bleed for 3 rounds, armour 0 for the rest of the battle.
 3. **Flesh Breach**: +1 Calcification stage; bone spurs break the skin and stay.
 
-Strain resets to `50` (the bottom of Flesh-Tension) after the crisis resolves (`PK1`, `post_crisis_strain: 50`). The
-crisis waits for round end: a unit that reaches 100 mid-round finishes its planned blocks.
+Strain after the crisis is open (CANON section 6). The crisis waits for round end: a unit that reaches 100 mid-round
+finishes its planned blocks.
 
 ## 3. Calcification `[kit hook]` per-unit stage track (out of combat, permanent)
 
@@ -81,8 +81,8 @@ Act 1, which has no corruption.
   harvested Aberrant Organ; the operative learns the matching Inoculated skill and the dormant floor rises. Tier III
   (Apex organs) also advances Calcification by one stage. Details in [skill
   acquisition](skill_acquisition_and_loadout_systems.md).
-- **Flushes** `[data]` (`PK2`): Slab flushes spend Rock Salt to lower the operative's dormant Strain floor by `10`
-  (`strain_floor_delta: -10`, clamped at `0`) for the next battle only.
+- **Flushes** `[data]`: Slab flushes use Rock Salt; what a flush does (lower the floor before a mission, or something
+  else) is open (CANON section 6).
 - **Bone-scraping** `[kit hook]`: the only undo, unlocked by Sister Aline's quest ("Anatomy of a Living Saint"): -1
   Calcification stage and -10% max HP for good.
 - **Tincture of Still Blood** `[data]` pouch item on a kit status (also unlocked by Sister Aline's quest): holds the
@@ -101,7 +101,7 @@ Act 1, which has no corruption.
 
 | Gap | Options | Recommendation |
 | --- | --- | --- |
-| Composure (Stage I) is not an engine stat (STR DEX INT CONS PERC KNOW) | A: replace with an existing quantity, e.g. -5% debuff resistance against fear and morale, or -1 KNOW; B: add Composure as a new kit stat | Decided (2026-10-25, user, Q-47a; shipped `DERIVE1`): a derived stat, the corruption resist (`KNOW * 2 + round(CONS / 2)`) |
-| Strain after a crisis | A: set to 75 (the Edge); B: reset to the floor; C: set to 50 (Flesh-Tension) | Decided (`PK1`): set to `50` (`post_crisis_strain: 50`), keeping Flesh-Tension risk live without immediate re-rupture |
-| What a Rock Salt flush does | A: -10 dormant floor for the next battle; B: -Strain gain for one battle | Decided (`PK2`): `-10` dormant floor for the next battle (`strain_floor_delta: -10`) |
-| Stage III "-15% ranged damage beyond 3 tiles" replaces an accuracy roll (planner pick) | keep, or swap for -1 range | keep (`PK2` Stage III applies `-1` max weapon range above 1 plus fear/terror immunity) |
+| Composure (Stage I) is not an engine stat (STR DEX INT CONS PERC KNOW) | A: replace with an existing quantity, e.g. -5% debuff resistance against fear and morale, or -1 KNOW; B: add Composure as a new kit stat | Decided (2026-10-25, user, Q-47a): a derived stat, the corruption resist (section 3.1); formula and numbers: the derived-stat spec and the balance lane |
+| Strain after a crisis | A: set to 75 (the Edge); B: reset to the floor | A keeps the risk alive for the rest of the battle |
+| What a Rock Salt flush does | A: -10 dormant floor for the next battle; B: -Strain gain for one battle | A (one number, reads on the card) |
+| Stage III "-15% ranged damage beyond 3 tiles" replaces an accuracy roll (planner pick) | keep, or swap for -1 range | keep |

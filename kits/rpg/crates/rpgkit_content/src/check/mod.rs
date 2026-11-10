@@ -57,6 +57,9 @@ pub struct View {
     pub load_errors: Vec<String>,
     /// E2.2-S1 (FB-53b): the game-wide purse caps (the manifest's; the defaults for a view built from values).
     pub purse: crate::source::PurseCaps,
+    /// STORYMUSIC1: the game's music keys (the manifest's `music_keys`; none for a view built from values): the keys a
+    /// vignette's or a step's `music` may name without a track.
+    pub music_keys: Vec<String>,
 }
 
 /// ContentSchema.NO_ITEM: a unit gear slot or pouch left empty on purpose.
@@ -75,7 +78,7 @@ impl View {
         for (name, key) in [("item_families", "item_families"), ("quest_templates", "quests"), ("maps", "maps"), ("services", "services")] {
             rows.insert(name.into(), json::arr(&game[key]).iter().map(|e| json::dict(e).clone()).collect());
         }
-        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new(), purse: crate::source::PurseCaps::default() }
+        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new(), purse: crate::source::PurseCaps::default(), music_keys: Vec::new() }
     }
 
     pub fn entries(&self, kind: &str) -> &[Dict] {

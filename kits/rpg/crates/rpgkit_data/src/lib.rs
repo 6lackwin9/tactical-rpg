@@ -1518,12 +1518,15 @@ pub const FADE_IN_MS: i64 = 600;
 pub const FADE_OUT_MS: i64 = 400;
 /// 4.1: the default frame (letterbox and fade) colour, also a card backdrop's default top.
 pub const FRAME_COLOUR: &str = "#0a0b10";
-/// 4.1: a vignette's `music` that means silence ("" keeps the music playing; anything else is a track).
+/// 4.1: a vignette's `music` that means silence ("" keeps the music playing; anything else is a track, STORYMUSIC1: or
+/// a music key).
 pub const MUSIC_NONE: &str = "none";
 /// 4.1: a vignette's music track ends with this (a path under the asset layers' `audio/`).
 pub const MUSIC_EXT: &str = ".ogg";
 /// 4.1, 4.2: the asset folder music tracks and card cues sit under.
 pub const AUDIO_DIR: &str = "audio/";
+/// STORYMUSIC1: the folder under `AUDIO_DIR` a music key's track sits in (`music/<key>.ogg`).
+pub const MUSIC_DIR: &str = "music/";
 /// W3: the token kinds of a card text, `{flag:KEY}` (the flag's value as text) and `{member:KEY}` (the name of the
 /// member or character whose id the flag holds).
 pub const TOKEN_KINDS: [&str; 2] = ["flag", "member"];
@@ -1563,15 +1566,40 @@ pub const BOARD_INTRO_MAX: usize = 160;
 /// 4.7: the service line id of the board choice.
 pub const BOARD_SERVICE: &str = "board";
 
-/// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`).
+/// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`). STORYMUSIC1: every kind takes
+/// an optional `music` (as a vignette's: "" keeps the music playing).
 pub fn step_keys(kind: &str) -> &'static [&'static str] {
     match kind {
-        "vignette" => &["kind", "vignette"],
-        "fight" => &["kind", "encounter", "on_lost", "on_fled"],
-        "effects" => &["kind", "effects"],
-        "enter" => &["kind", "location", "anchor"],
-        "end" => &["kind", "to"],
+        "vignette" => &["kind", "vignette", "music"],
+        "fight" => &["kind", "encounter", "on_lost", "on_fled", "music"],
+        "effects" => &["kind", "effects", "music"],
+        "enter" => &["kind", "location", "anchor", "music"],
+        "end" => &["kind", "to", "music"],
         _ => &["kind"],
+    }
+}
+
+/// STORYMUSIC1: what a vignette's or a sequence step's `music` asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MusicAsk<'a> {
+    /// "": the music playing goes on.
+    Keep,
+    /// `MUSIC_NONE`.
+    Silence,
+    /// A track under the asset layers' `AUDIO_DIR`, ending `MUSIC_EXT` (`music/town.ogg`).
+    Track(&'a str),
+    /// A music key: one of the game's music keys (its manifest's `music_keys`: its music contexts and story keys) or a
+    /// track's key (`music/<key>.ogg`); the game resolves it through its music chain.
+    Key(&'a str),
+}
+
+/// STORYMUSIC1: the ask of a `music` value.
+pub fn music_ask(music: &str) -> MusicAsk<'_> {
+    match music {
+        "" => MusicAsk::Keep,
+        MUSIC_NONE => MusicAsk::Silence,
+        m if m.ends_with(MUSIC_EXT) => MusicAsk::Track(m),
+        m => MusicAsk::Key(m),
     }
 }
 

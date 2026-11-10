@@ -36,7 +36,7 @@ follows [CANON.md](../CANON.md); where they differ, CANON wins. Names follow the
 
 | Founder | Staying beat | The cell loses | Keepsake |
 | --- | --- | --- | --- |
-| Kaelen | Jams his weighted billhook haft into the winch cogs and holds the gate; dragged off alive, the deserter who found a cause | its front-line anchor and crowd control | Kaelen's Gouged Sigil |
+| Kaelen | Locks his shield into the winch cogs and holds the gate; dragged off alive, the deserter who found a cause | its front-line anchor and crowd control | Kaelen's Gouged Sigil |
 | Vesper | Burns her last phosphorus canister to blind the inquisitors at the winch; taken when the smoke clears | its single-target burst | Open |
 | Maren | Open | its field medic | Open |
 | Hollis | Open | its long-range pins | Hollis's Focusing Monocle |

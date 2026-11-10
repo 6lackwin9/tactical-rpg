@@ -330,6 +330,23 @@ pub fn current(d: &Data, gs: &GameState) -> Option<Step> {
     })
 }
 
+/// STORYMUSIC1: the `music` the running step asks for, as written ("" keeps the music playing; `rpgkit_data::music_ask`
+/// reads it): the running step's own, else the last non-empty one of the `effects` steps that ran at once just before
+/// it (Q3: the stage never sees those). "" while no sequence runs or past its last step.
+pub fn step_music(d: &Data, gs: &GameState) -> String {
+    let Some(r) = gs.story.running.as_ref() else { return String::new() };
+    let steps = json::aget(running_sequence(d, gs), "steps");
+    if r.step < 0 || r.step as usize >= steps.len() {
+        return String::new();
+    }
+    let at = r.step as usize;
+    let own = json::s(json::dict(&steps[at]), "music");
+    if !own.is_empty() {
+        return own;
+    }
+    steps[..at].iter().rev().map(json::dict).take_while(|st| json::s(st, "kind") == "effects").map(|st| json::s(st, "music")).find(|m| !m.is_empty()).unwrap_or_default()
+}
+
 /// Whether a sequence runs (the game shows its story stage; Q8: the game menu cannot open).
 pub fn is_running(gs: &GameState) -> bool {
     gs.story.running.is_some()

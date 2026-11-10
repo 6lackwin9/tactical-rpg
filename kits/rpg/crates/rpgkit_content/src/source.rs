@@ -23,6 +23,8 @@ pub struct Source {
     pub game: Value,
     /// E2.2-S1 (FB-53): the game-wide purse caps, from the game's manifest beside the data folder.
     pub purse: PurseCaps,
+    /// STORYMUSIC1: the game's music keys (`music_keys_of`), from the same manifest.
+    pub music_keys: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -56,11 +58,7 @@ impl PurseCaps {
 
     /// The caps of the manifest beside `data_dir` (the game folder's `game.json`); the defaults when there is none.
     pub fn beside(data_dir: &Path) -> Self {
-        let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| vfs::is_file(p)) else { return Self::default() };
-        match read(&path, &mut Vec::new()) {
-            Some(Value::Object(m)) => Self::from_manifest(&m),
-            _ => Self::default(),
-        }
+        manifest_beside(data_dir).map_or_else(Self::default, |m| Self::from_manifest(&m))
     }
 
     /// What keeps a manifest's purse caps from being valid: a key present that is not a whole number 1 or more.
@@ -71,6 +69,54 @@ impl PurseCaps {
             .map(|k| format!("game.json: {k} must be a whole number 1 or more."))
             .collect()
     }
+}
+
+/// The game manifest object beside `data_dir` (the game folder's `game.json`), when there is one that reads as an
+/// object.
+fn manifest_beside(data_dir: &Path) -> Option<Dict> {
+    let path = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| vfs::is_file(p))?;
+    match read(&path, &mut Vec::new()) {
+        Some(Value::Object(m)) => Some(m),
+        _ => None,
+    }
+}
+
+/// STORYMUSIC1: the optional game manifest key listing the game's music keys: the music contexts its music chain
+/// resolves and the story keys a vignette or a sequence step may name before their tracks ship. Without it, only a
+/// track the asset layers hold (`audio/music/<key>.ogg`) is a music key.
+pub const MUSIC_KEYS: &str = "music_keys";
+/// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
+/// order a write keeps them.
+pub const MANIFEST_KEYS: [&str; 3] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS];
+
+/// STORYMUSIC1: the music keys of a game manifest object (`MUSIC_KEYS`, in file order): its id-shaped strings; none when
+/// the key is missing or not a list.
+pub fn music_keys_of(m: &Dict) -> Vec<String> {
+    json::get(m, MUSIC_KEYS).as_array().into_iter().flatten().filter_map(Value::as_str).filter(|k| aegis_content::schema::is_id(k)).map(String::from).collect()
+}
+
+/// STORYMUSIC1: what keeps a manifest's `music_keys` from being valid: present and not a list of music keys (a-z, 0-9,
+/// _), or a key listed twice.
+pub fn music_keys_problems(m: &Dict) -> Vec<String> {
+    let Some(raw) = m.get(MUSIC_KEYS) else { return Vec::new() };
+    let Some(list) = raw.as_array() else { return vec![format!("game.json: {MUSIC_KEYS} must be a list of music keys (a-z, 0-9, _).")] };
+    let mut out = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for x in list {
+        match x.as_str().filter(|k| aegis_content::schema::is_id(k)) {
+            None => out.push(format!("game.json: {MUSIC_KEYS}: '{}' is not a music key (a-z, 0-9, _).", gstr(x))),
+            Some(k) if seen.contains(&k) => out.push(format!("game.json: {MUSIC_KEYS}: '{k}' is listed twice.")),
+            Some(k) => seen.push(k),
+        }
+    }
+    out
+}
+
+/// The kit's problems of a game manifest object: the purse caps' and the music keys'.
+pub fn manifest_problems(m: &Dict) -> Vec<String> {
+    let mut out = PurseCaps::problems(m);
+    out.extend(music_keys_problems(m));
+    out
 }
 
 impl Default for PurseCaps {
@@ -144,7 +190,8 @@ pub fn load(data_dir: &Path) -> Source {
     game.insert("item_families".into(), catalog["item_families"].clone());
     let mut cat = catalog.as_object().cloned().unwrap_or_default();
     cat.shift_remove("item_families");
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), errors }
+    let music_keys = manifest_beside(data_dir).map(|m| music_keys_of(&m)).unwrap_or_default();
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.

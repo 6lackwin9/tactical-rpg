@@ -5,11 +5,11 @@ proposal for every catalog row and number. Related: [combat](combat_and_timeline
 [classes](classes_and_skill_trees.md), [safehouse economy](safehouse_economy_and_triage.md),
 [bestiary](enemy_bestiary_and_ai.md).
 
-Engine facts this doc builds on (GAME_BRIEF ITEM1, C1-L, ITEMUSE1, REWARD1, WEAPONROSTER1): items live in
-`games/emberwake/data/catalog/items.json` on the families of `item_families.json` (typed rows `rpgkit_data::ItemDef`);
-a family fixes hands, slots, scaling, base and bands (`range_band` for weapon reach); items add `modifiers`, `tiers` and
-`effects` (`skill_potency`, `status_potency`, `resist`; legacy `spell_reach` retires in `PR5-28`). World named items are
-the world layer's unique pieces and must resolve to a family. Content is edited only through `aegis content`.
+Engine facts this doc builds on (GAME_BRIEF ITEM1, C1-L, ITEMUSE1, REWARD1): items live in
+`games/emberwake/data/catalog/items.json` on the families of `item_families.json` (typed rows `emberwake_data::ItemDef`);
+a family fixes hands, slots, scaling, base and bands; items add `modifiers`, `tiers` and `effects` (`skill_potency`,
+`status_potency`, `spell_reach`, `resist`). World named items are the world layer's unique pieces and must resolve to a
+family. Content is edited only through `aegis content`.
 
 ## 1. Slots and the battle pouch `[kit hook]` (exists)
 
@@ -24,27 +24,26 @@ the world layer's unique pieces and must resolve to a family. Content is edited 
 
 Graft slots (Cranial, Thoracic, Forearms, Visceral) are an Act 2 proposal `[kit hook]` (CANON 2.1).
 
-Wield and burden, as the kit has them (`rpgkit_rules::gear`, `PK1-S2` / `WEAPONROSTER1`): untrained weapon families
-remain equippable under soft wield (`0.75x` physical weapon potency and `+1` burden; class `proficiency` waives the
-penalty and unlocks `[Signature]` skills). Burden lowers **Initiative** (`8 + DEX - burden`, same-block tie-breaker)
-while **Move Rate** (`clamp(2 + floor(DEX / 6), 2, 4)` tiles per move block) is unburdened so plated front-liners keep
-pace across the grid.
+Wield and burden, as the engine has them (`emberwake_rules::gear::WieldPenalty`, GAME_BRIEF core rules): a stat
+deficit cuts power by 15% per missing point (at most 60%) and adds 1 block of cost at a deficit of 4 or more; armour
+burden lowers Speed (Speed = 8 + DEX - burden), not tiles moved. The old "+1 AP and +1 tick windup" rule is replaced
+by these.
 
 ## 2. Weapon families `[data]`
 
-Lore family to shipped `item_families.json` row (`WEAPONROSTER1`). A weapon family's speed is the speed tier of its
-skills (Snap 1 block, Standard 2, Heavy 3-4; CANON 2.1); class training per family is class `proficiency` data.
+Lore family to engine family. A weapon family's speed is the speed tier of its skills (Snap 1 block, Standard 2,
+Heavy 3-4; CANON 2.1); class training per family is class `proficiency` data.
 
-| Lore family | Engine family | Hands | Reach (`range_band`) | Typical skill speed | Scales | Trained classes |
+| Lore family | Engine family | Hands | Reach | Typical skill speed | Scales | Trained classes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Billhooks, poleaxes | `polearm` | 2H | 1-2 | Standard / Heavy | STR | Vanguard |
-| Broadswords, greatswords | `sword`, `greatsword` | 1H / 2H | 1 | Standard / Heavy | STR | Vanguard, Slag-Brute |
+| Billhooks, poleaxes | none yet (`axe` as stand-in) | 1H / 2H | 1 (reach 2: gap 1) | Standard | STR | Vanguard |
+| Broadswords, greatswords | `sword` | 1H / 2H | 1 | Standard / Heavy | STR | Vanguard, Slag-Brute |
 | Bodkins, stilettos | `dagger` | 1H | 1 | Snap | DEX | Gutter-Stalker |
-| Heavy arbalests | `crossbow` | 2H | 2-5 | Standard / Heavy | DEX / PERC | Arbalestier |
+| Heavy arbalests | `crossbow` | 2H | 4-5 | Standard / Heavy | DEX / PERC | Arbalestier |
 | Iron knuckles | `fist` | 1H / pair | 1 | Snap | STR / CONS | Slag-Brute |
 | Foundry hammers | `hammer` | 2H | 1 | Heavy | STR | Slag-Brute, Vanguard |
-| Bone-saws, censers, scourges | `bone_saw`, `censer`, `scourge` | 1H | 1 (`scourge` 1-2) | Snap / Standard | KNOW / INT / STR | Heretic Acolyte, Inquisition |
-| Chemical sprayers, retorts | `sprayer` | 2H | 2-4 | Standard | INT / PERC | Ichor Alchemist |
+| Bone-saws, censers | `mace` (censer), `dagger` (bone-saw) as stand-ins | 1H / 2H | 1 | Standard | KNOW / INT | Heretic Acolyte |
+| Chemical sprayers, retorts | none yet (`wand` / `staff` as stand-in) | 1H / 2H | 3-4 | Standard | INT / PERC | Ichor Alchemist |
 
 Family notes (proposal): billhooks have high poise damage (20-35) for breaking windups; daggers favour Snap skills that
 land before slower windups; arbalests have Heavy variants with a long windup that reward a covered firing spot;
@@ -77,10 +76,10 @@ Strain items work from Act 2 (Act 1 has no Strain). Durations are in rounds.
 | Magnesium Flash-Pot | Snap | thrown, range 3, 3 x 3: poise damage 20 (the Blind rider is dropped with the accuracy rolls) | area item exists; poise new |
 | Pitch Fire-Bomb | Standard | thrown, range 4, 3 x 3 burn for 2 rounds | exists (`con_fire_bomb` shape) |
 | Sanctified Salt Sachet | Snap | vents 25 Strain (Act 2 on) | Strain `[kit hook]` |
-| Brimstone Tallow Draught (`con_brimstone_draught`) | Snap | grants `empower` (+30% outgoing skill potency) for 2 rounds | shipped (`PK3`) |
+| Brimstone Tallow Draught | Snap | halves poise damage taken for 3 rounds (the old "Nightmare Whispers" immunity went with the nightmares) | new status `[kit hook]` |
 | Clerisy Communion Sedative | Snap | -40 Strain, then -2 AP next round (Act 2 on) | Strain `[kit hook]` |
 | Black-Bile Ampoule | Snap | +30 Strain to reach the Aberrant Edge on purpose (Act 2 on) | Strain `[kit hook]` |
-| Quenched Cinder Salt (`con_quenched_cinder_salt`) | Snap (in battle) | applies `unmark` to calm a Stage V Flesh Breach in battle before Terminal Drift takes the operative (Act 2 on) | shipped (`PK2` / `PK3`) |
+| Quenched Cinder Salt | hub only | prevents one Calcification advance after a crisis (Act 2 on) | Open: see gaps (gap 3) |
 
 ## 5. Stash materials `[data]`
 
@@ -90,7 +89,7 @@ table, `key_loot`, `objective_reward`). Apex organs are Tier III.
 
 | Material | Drops from | Used at | Use (Act 2 on unless noted) |
 | --- | --- | --- | --- |
-| Rock Salt | mortuary carts, cathedral salt cellars, bone-mills | Apothecary's Slab; bribes | flushes (`-10` dormant floor for next battle, `PK2`); bribes (Act 1 too) |
+| Rock Salt | mortuary carts, cathedral salt cellars, bone-mills | Apothecary's Slab; bribes | flushes (effect: CANON open question); bribes (Act 1 too) |
 | Titan Marrow Core (Apex) | the Calcified Amalgam (ENC-EVT-05), Marrow Horrors | Apothecary's Slab | Tier III Inoculated grafts (Ribcage Lock, Aberrant Colossus) |
 | Stalker Optic Nerve | Render-Beasts (ENC-EVT-04) | Apothecary's Slab | Ocular Lock and night-sight passives |
 | Inquisitor Marrow Valve | Inquisitor Proctors, Proctor Quell (ENC-EVT-02) | Apothecary's Slab | the Apex Strain Siphon (Maren's Strain balance) |
@@ -104,8 +103,9 @@ the currency (CANON 2.5; "Scrap Iron", "black iron slag" and gold are retired).
 ## 6. Exchange recipes `[kit hook]`
 
 Crafting at the Hearth and the Slab is an exchange recipe: materials + Scrap in, an item, upgrade or unlock out
-([safehouse economy](safehouse_economy_and_triage.md) 4). Shipped in `rpgkit_world` (`PK2` `hub_facilities`): typed
-facility services at the Hearth and Slab alongside dialogue-driven campaign unlocks.
+([safehouse economy](safehouse_economy_and_triage.md) 4). First-playable stand-in `[data]`: a dialogue choice on Bram
+or Aline that `requires` the items (condition `items`) and Scrap (condition `gold`), `take`s them and `give`s the
+result; both exist in `emberwake_world::dialogue` today.
 
 ## 7. Named relics `[data]`
 
@@ -116,11 +116,11 @@ effect needs a hook names it.
 | Relic | Slot | Source | Effect (proposal) | Needs |
 | --- | --- | --- | --- | --- |
 | The Deserter's Kettle Helm | HEAD | Kaelen's quest | rating +8, poise +15; while Kaelen holds Active Guard, adjacent allies take 20% less damage | aura (bestiary gap 2) |
-| Orlov's Flensing Talon | MAIN dagger | M4 `ENC-EVT-04` `objective_reward` (left behind when Orlov withdraws via `orlov_withdraws`; `PR5-34`) | Snap; a hit on a bleeding target below 35% HP executes it at no AP (the rear-arc condition is cut) | execute rider `[kit hook]` |
+| Orlov's Flensing Talon | MAIN dagger | Orlov (ENC-EVT-04) | Snap; a hit on a bleeding target below 35% HP executes it at no AP (the rear-arc condition is cut) | execute rider `[kit hook]` |
 | Hollis's Lever-Winch | ACC (an arbalest is two-handed, so not OFF) | Hollis's cache, Seventh Ward rafters | Heavy Winch Sunder lands 1 block sooner | per-skill speed modifier `[kit hook]` |
 | Vane's Gilded Castellan Pavise | OFF shield | Captain Vane (ENC-EVT-01) | strong guard, poise +30; Active Guard returns 15 damage and poise damage 20 to melee attackers | guard reflect `[kit hook]` (riposte is the nearest) |
 | Quell's Marrow Scalpel | MAIN dagger | Proctor Quell (ENC-EVT-02) | Snap; a hit vents 10 Strain from the wielder (Act 2 on) and bleeds the target | Strain `[kit hook]` |
-| Grendel's Pneumatic Slag-Hammer | MAIN 2H hammer | Overseer Grendel (ENC-EVT-03) | Heavy; the shockwave also hits the unit behind the target | `line_2` area (`PK1-S1`) |
+| Grendel's Pneumatic Slag-Hammer | MAIN 2H hammer | Overseer Grendel (ENC-EVT-03) | Heavy; the shockwave also hits the unit behind the target | an area shape (gap 4) |
 | Sister Aline's Embalming Crook | MAIN staff | Aline's loyalty milestone | healing +35% (`skill_potency` heal); Maren cleanses without the Bile Phial cost | cost waiver `[kit hook]` |
 | The Dreamer's Crystalline Vertebra | ACC | the Calcified Amalgam (ENC-EVT-05) | Strain floor locked at 20; Inoculated attacks +30% damage (Act 2 on) | Strain `[kit hook]` |
 | Nemeth's Warded Cassock | BODY | Nemeth, where he dies: the Silent Ossuary (ENC-ACT3-04, Act 3 node 20, optional; CANON 3.6) | rating +10, poise +35; immune to Phosphorus Fire and Blight Miasma | status immunity (`resist` exists) |
@@ -135,24 +135,19 @@ effect needs a hook names it.
 | `granted_passive` | named item `grants` (passives come from sources) | exists |
 | `unique_world_relic` | a world named item given once | `[data]` |
 | `speed_tier` | a skill field (speed tiers belong to actions) | `[kit hook]` |
-| `stagger_power` (poise damage) | skill `stagger` + armour `poise` modifier | shipped (`PK1`) |
-| `armor_piercing` | Inoculated attacks (`channel: true`) pierce (`PK1`, CANON 2.1) | shipped (`PK1`) |
-| `strain_modifier` | skill `strain` + item/facility Strain effects (`PK1` / `PK2`) | shipped (`PK1` / `PK2`) |
+| `stagger_power` (poise damage) | none | `[kit hook]` |
+| `armor_piercing` | Inoculated attacks pierce (binary, CANON 2.1) | `[kit hook]` |
+| `strain_modifier` | none | `[kit hook]` (Act 2) |
 
 ## 9. Gaps
 
-1. Reach 2 melee (billhooks, the Flagellant's scourge): **Resolved (`WEAPONROSTER1` + `PR5-28`)** — `polearm` and
-   `scourge` families carry `range_band: [1, 2]`, and `PR5-28` wires `ATTACK` weapon-reach lookup to `range_band.max`.
+1. Reach 2 melee (billhooks, the Flagellant's scourge): the engine's melee reach is 1.
 2. Cover: the brigandine's half-cover bonus and "full cover" pillars assume cover rules no doc defines. Decided
    (2026-10-25, user, Q-54): cover is only the existing cover guard; the half-cover trait and "full cover" pillars are
    dropped; cover and line of sight become engine or kit systems after testing.
-3. Quenched Cinder Salt vs. Rock Salt flush: **Resolved (`PK2` / `PK3`)** — Rock Salt flushes lower dormant Strain
-   floor by `-10` at the hub Slab, while `con_quenched_cinder_salt` is an in-battle Snap consumable applying `unmark` to
-   stabilize a Stage V breach.
-4. Line and "behind the target" areas: **Resolved (`PK1-S1`)** — `Area::Line2`, `Line3`, and `Cone3` shipped in
-   `rpgkit_data::Area`.
+3. Quenched Cinder Salt overlaps the Rock Salt flush (CANON open question).
+4. Line and "behind the target" areas: the engine has areas (`Area.SWEEP` and others); which shape fits is unchecked.
 5. Nemeth's Warded Cassock depends on whether the cell can defeat Nemeth (CANON open question). Resolved (2026-10-25,
    user, Q-25 and its follow-up): it drops where Nemeth dies, at node 20 (CANON 3.6); a cell that skips the optional
    node never gets it.
-6. Missing families: **Resolved (`WEAPONROSTER1`)** — `polearm`, `greatsword`, `censer`, `bone_saw`, `scourge`, and
-   `sprayer` shipped as first-class rows in `item_families.json`.
+6. Missing families: billhook / polearm, chemical sprayer, bone-saw and censer run on stand-in families.

@@ -9,9 +9,9 @@ Status: canon for the city layout, the Sluice Undercroft and Act 1 (2026-10-25, 
 
 ## 1. The three tiers
 
-Cinderreach is built into the caldera of an extinct volcano whose depths hold the sleeping titan, the Low Sleep. All
-three tiers live as act-gated region graphs (`campaign.act` 1-3) inside the single campaign world
-`games/emberwake/data/worlds/sunk_ward/` `[data]` (`ashlands` stays the classic testbed and parity world).
+Cinderreach is built into the caldera of an extinct volcano whose depths hold the sleeping titan, the Low Sleep. Each
+tier is one act and one world graph `[data]` (worlds in `games/emberwake/data/worlds/`, the first `sunk_ward`; the
+Ashlands stays the kit's sample and parity world).
 
 ```text
 ==========================================================================================

@@ -30,10 +30,8 @@ doc disagrees with it, CANON wins.
 6. Open questions: every gap and open question is in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) with a stable id
    (Q-01 ...), options, a recommendation, where it lives and who decides; its section 1 lists the questions to decide
    first, its section 2 the planner picks to confirm. Domain docs keep their own "Gaps" sections as pointers.
-7. Status words and maturity tags: each doc has a `Status:` line (`canon`, `proposal`, `archive` or `open`), and
-   [CANON.md](CANON.md) tags individual elements as `[LOCKED]` (narrative spine + gameplay-linked mechanics),
-   `[PROVISIONAL]` (buildable Design defaults awaiting user lock), `[PLACEHOLDER]` (unfinalized cast/faction backstories,
-   names, voices and visual look & feel kept data-driven) or `[MISSING]` (unauthored slots).
+7. Status words: each doc has a `Status:` line: `canon` (consistent with CANON.md), `proposal` (Acts 2-3 and later
+   systems, not locked), `archive` (kept for history, never a source) or `open` (the open-questions list).
 8. Writing rules: repo-relative links, plain statements (no marketing tone), markdownlint-clean
    (`bash tools/fc.sh docs`), at most about 300 lines / 25 KB per doc (split by domain behind a short index). History is
    append-only: superseded text is marked or moved to `archive/`, never deleted.
@@ -134,26 +132,33 @@ The two large docs are split by domain: the class trees and the bestiary are sho
 | [safehouse_economy_and_triage.md](systems/safehouse_economy_and_triage.md) | canon | The Undercroft's facilities, Scrap, Warded Tallow, Rock Salt and organs, hub screens |
 | [items_gear_and_progression.md](systems/items_gear_and_progression.md) | canon | Weapon families, armour profiles, pouch consumables, monster parts, named relics |
 
-## 4. Quick reference (matches CANON.md sections 1-3)
+## 4. Quick reference (matches CANON.md section 2)
 
 | Parameter | Canon value | Layer |
 | --- | --- | --- |
-| Title | Emberwake: A Scarlet Lullaby (`[LOCKED]`; codename `emberwake`) | - |
-| Acts | Act 1 The Young Vanguard (Sunk Ward, `[LOCKED]`), Act 2 The First Rupture (High Bastion, spine `[LOCKED]`, lineup `[PROVISIONAL]`), Act 3 The Awakening Abyss (Mantle Fissure, spine `[LOCKED]`, lineup `[PROVISIONAL]`) | `[data]` |
-| Ages | Playable operatives 18-24 (`[LOCKED]`); Unsealed under 25; children are stakes, never fighters; no combat graft surgery under 18 | `[data]` |
-| Founders & cast | 6 Founder class roles/weapon lineups `[LOCKED]` (`kaelen`, `vesper`, `maren`, `hollis`, `dunstan`, `elyse`; `elyse` joins at M4); all names, ages, backstories, voices and look & feel are `[PLACEHOLDER]` | `[data]` |
-| Squad & bunks | Up to 4 deployed (`PARTY_MAX` 4); 6 bunks in Act 1 (4 filled after prologue), 8 through Act 2 Hearth project | `[kit hook]` |
-| Ruleset | `timeline` for `sunk_ward`, `classic` for Ashlands | `[kit hook]` |
-| Round & AP | 6 simultaneous blocks, timeline strip at top; 12 max AP (`start_ap: 10` on timeline fights), +4 regen/round; Rest banks +0.5 AP/block (cap +2) + 5 Poise/block | `[kit hook]` + `[engine]` strip |
-| Intents & Channel | 5 Round Intents (`Assault`, `Guard`, `Support`, `Maneuver`, `Field`) + Act 2 `0 AP` converting `Channel` toggle for Strain carriers | `[kit hook]` + `[data]` |
-| Poise | `CONS * 2 + gear poise + passives`, quantized into 5 discrete pips; break cancels windup + remaining blocks, drops guard, queues `stagger` (locks blocks 1 & 4 next round) | `[kit hook]` |
-| Armour & Guard | `Active Guard` 35% DR (`Brace` 20% / 2 rounds), 0.90 cap with cover; armour `rating / (rating + 50)`, binary marrow `pierce` | `[kit hook]` |
-| Deck & gear | 3 actives + 2 passives + 1 keystone (5 universal basics + 1 class basic free); Pouch 3; 6 gear slots + 4 Act 2 `body` graft slots; Act 2 weapon instances with durability & mastery techniques | `[kit hook]` |
-| Strain (Act 2 on) | 0-24 Dormant, 25-49 Acute Resonance, 50-74 Flesh-Tension, 75-99 Aberrant Edge, 100 Rupture; -10 decay without marrow (-10 more under Active Guard) to graft-count floor (`0/5/15/30/50`) | `[kit hook]` + `[data]` |
-| Crisis | Seeded 1d3 `roll_table` at round end (resets Strain to 50): Unchecked Spasm, Biological Collapse, Flesh Breach | `[kit hook]` + `[data]` |
-| Calcification (Act 2 on) | Cumulative `unit_tracks` I-V (Vein-Blackening .. Terminal Drift); advances via Flesh Breach or Tier III grafts; undone in battle by `unmark`, at hub by bone-scraping | `[kit hook]` + `[data]` |
-| Founder at 0 HP | Downed; wounded (-20% max HP until rest) in Act 1; bleed-out, capture and permadeath from Act 2; M5 Crucible is the one scripted Act 1 winch capture | `[kit hook]` |
-| Resources | Scrap (currency + common salvage), Warded Tallow (1/day; at 0: -2 starting AP), Rock Salt, Quenched Cinder Salt, Aberrant Organs, Fine/Themed Salvage | `[kit hook]` + `[data]` |
-| Campaign meters | Inquisition Alert (0-100, Act 2+ floor 30; Act 1 Breach ends run, Act 2-3 Breach starts hub room-chain siege), Doom Clock (42d, soft Acts 1-2, hard Act 3), Doctrine (`-100..+100`) | `[kit hook]` |
-| Endings & fail | Endings A Preservation, B Ascendancy, C Red Martyrdom (`[LOCKED]` gates, `[MISSING]` prose); `Extinguished` failure screen | `[kit hook]` + `[data]` |
-| Board and art | `[LOCKED]` geometry: `640x360` canvas, `STAGE1` `32x24` cells (`12x9`), `40 px` figures in `48x48` frames (`96x96` on `2x2` footprints); `[PLACEHOLDER]` palettes, portraits and costumes | `[engine]` + `[data]` |
+| Title | Emberwake: A Scarlet Lullaby (codename `emberwake`) | - |
+| Acts | Act 1 The Young Vanguard (the Sunk Ward), Act 2 The First Rupture (the High Bastion, proposal), Act 3 The Awakening Abyss (the Mantle Fissure, proposal) | [data] |
+| Ages | Playable operatives 18-24; the Unsealed are everyone under 25; children are stakes, never fighters; no combat graft surgery under 18 | [data] |
+| Founders | Six in Act 1 (Kaelen, Vesper, Maren, Hollis, Dunstan, Elyse); the first slice has five (Elyse joins later) | [data] |
+| Squad | Up to 4 deployed (`PARTY_MAX` 4) | [kit hook] exists |
+| Bunks | 6 at the start of Act 1 (4 filled after the prologue); 8 through Bram's project | [kit hook] |
+| Ruleset | "timeline" for the new worlds, "classic" for the Ashlands | [kit hook] |
+| Round | 6 blocks, all sides resolved simultaneously; timeline strip at the top of the battle screen | [kit hook] exists, strip [engine] |
+| AP | 10 max, +4 per round; an action pays when it starts and lands on its last block | [kit hook] exists |
+| AP cost | Skill field `ap_cost`, default = skill level; Cold Steel 2-4, Inoculated 1-2 plus Strain | [data] |
+| Speed tiers | Relative windups: Snap 1 block, Standard 2, Heavy 3-4; optional recovery blocks; no fixed tick anchors | [data] (`blocks`), recovery [kit hook] |
+| Same-block impacts | Engine initiative order, no mutual trades | [kit hook] exists |
+| Poise | CONS x 2 + armour poise; refills each round; a break cancels the windup and the unit's remaining blocks that round; a repeat break costs double | [kit hook] |
+| Armour | reduction = rating / (rating + 50); lore armour points x 2 = rating | [kit hook] exists |
+| Deck | 8: Move, Active Guard (basics, outside the loadout), 3 class actives, 2 passives, 1 keystone | [kit hook] (passive and keystone slots new, Q-48) |
+| Gear | Pouch 3; MAIN, OFF, HEAD, BODY, ACC1, ACC2; graft slots are an Act 2 proposal | [kit hook] exists |
+| Strain (Act 2 on) | 0-24 Dormant, 25-49 Acute Resonance, 50-74 Flesh-Tension, 75-99 Aberrant Edge, 100 Rupture; -10 per round without an Inoculated action, -10 more under Active Guard; resets after battle | [kit hook] meter, [data] names |
+| Crisis | 1d3 at round end: Unchecked Spasm, Biological Collapse, Flesh Breach | [game code] unless the meter's triggers can express it |
+| Calcification (Act 2 on) | I Vein-Blackening, II Calloused Chitin, III Sensory Rot, IV The Shakes, V Terminal Drift; advances through Flesh Breach and Tier III grafts | [kit hook] track, [data] stages |
+| Founder at 0 HP | Downed; wounded after the battle in Act 1; permadeath and capture from Act 2; the Crucible is the one scripted Act 1 loss | [kit hook] |
+| Resources | Scrap (currency, no gold), Warded Tallow (1 per day of travel or rest; at 0: -2 starting AP), Rock Salt and Aberrant Organs (stash) | [kit hook] purse, [data] names |
+| Inquisition Alert | 0-30 Guarded, 31-70 Suspicious, 71-99 Lockdown, 100 Breach; no siege in Act 1; a lost siege costs facilities and a relocation | [kit hook] meter |
+| Doom Clock | Visible from Act 1 day 1 at 42 days; soft in Acts 1-2, hard in Act 3 | [kit hook] meter |
+| Fail screen | Extinguished: no living operative left, or the Act 3 clock runs out (not an ending) | [kit hook] |
+| Endings (proposal) | A Preservation, B Ascendancy, C Red Martyrdom; doctrine gates them | [data] |
+| Board and art | STAGE1 option B (tilted 32x24 cells, 40 px units, upright props); 48x48 rig frames, figures up to 32x48; region map square top-down; canvas 640x360 | [engine] + [game code] |

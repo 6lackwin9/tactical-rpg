@@ -496,16 +496,16 @@ impl Hooks for RpgContent {
 
     /// E2.2-S2 (FB-110 Option A): the game-wide purse caps are kit keys of the game manifest.
     fn manifest_keys(&self) -> &'static [&'static str] {
-        &source::PurseCaps::KEYS
+        &source::MANIFEST_KEYS
     }
 
     fn manifest_problems(&self, manifest: &Dict) -> Vec<String> {
-        source::PurseCaps::problems(manifest)
+        source::manifest_problems(manifest)
     }
 }
 
 /// E2.2-S2 (FB-110): merges `patch` into the game manifest at `path` (`aegis content manifest`): the engine keys and the
-/// kit's (`PurseCaps::KEYS`), checked by both.
+/// kit's (`source::MANIFEST_KEYS`: the purse caps, STORYMUSIC1's `music_keys`), checked by both.
 pub fn set_manifest(path: &Path, patch: &Dict) -> Result<aegis_content::manifest::Manifest, Vec<String>> {
     aegis_content::store::set_manifest(&RpgContent, path, patch)
 }
@@ -532,6 +532,7 @@ fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     view.terrain_file = vfs::is_file(data_dir.join("catalog/terrain.json"));
     view.load_errors = src.errors.clone();
     view.purse = src.purse;
+    view.music_keys = src.music_keys.clone();
     view
 }
 

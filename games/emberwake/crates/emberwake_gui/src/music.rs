@@ -7,7 +7,10 @@ use crate::screens::Cx;
 use aegis_core::json::s;
 use aegis_core::json::Dict;
 use emberwake_world::{Data, GameState};
+use emberwake_data::MusicAsk;
 
+// STORYMUSIC1: game.json's `music_keys` lists these contexts and the story keys (the kit's content check of a story's
+// music keys); a story test keeps it complete.
 pub const MENU: &str = "menu";
 pub const FIELD: &str = "field";
 pub const TRAVEL: &str = "travel";
@@ -15,6 +18,7 @@ pub const TOWN: &str = "town";
 pub const SHOP: &str = "shop";
 pub const DANGER: &str = "danger";
 pub const COMBAT: &str = "combat";
+pub const ENCOUNTER: &str = "encounter";
 pub const BOSS: &str = "boss";
 /// The menu context's last step.
 const MENU_KEY: &str = "menu_theme";
@@ -24,7 +28,7 @@ fn parent(ctx: &str) -> Option<&'static str> {
     match ctx {
         TRAVEL | TOWN | DANGER => Some(FIELD),
         SHOP => Some(TOWN),
-        "encounter" | BOSS => Some(COMBAT),
+        ENCOUNTER | BOSS => Some(COMBAT),
         _ => None,
     }
 }
@@ -145,6 +149,28 @@ pub fn battle_track(cx: &Cx, ctx: &str, world: &str, location: &str, request: u6
 pub fn new_request() -> u64 {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// STORYMUSIC1: what a vignette's or a sequence step's `music` asks the story stage for (V8's wish): None keeps the
+/// music playing (""; a music key with no track yet), `Some("")` is silence (`none`), else the track: a track path as
+/// written, a music key (a context, a story key such as `story_opening`, or a track's key) through `game_track`, so it
+/// takes the game's scopes (`<region>_story_opening` first) and its MUSICVAR1 variants.
+pub fn story_wish(cx: &Cx, music: &str) -> Option<String> {
+    match emberwake_data::music_ask(music) {
+        MusicAsk::Keep => None,
+        MusicAsk::Silence => Some(String::new()),
+        MusicAsk::Track(p) => Some(p.to_string()),
+        MusicAsk::Key(k) => game_track(cx, k),
+    }
+}
+
+/// STORYMUSIC1: a reel's `music` as the engine's player reads it ("", `none` or a track): a music key becomes its
+/// track (`story_wish`), or "" (the music goes on) while it has none.
+pub fn reel_music(cx: &Cx, music: &str) -> String {
+    match emberwake_data::music_ask(music) {
+        MusicAsk::Key(_) => story_wish(cx, music).unwrap_or_default(),
+        _ => music.to_string(),
+    }
 }
 
 /// `ctx` for the game in play (its world and location); without a game, the context alone.
