@@ -226,8 +226,9 @@ pub fn guard_later_mitigation(s: &SkillDef, n: &ruleset::Numbers) -> f64 {
     }
 }
 
+/// A Support skill with a heal: a formula (`heal_base`, `heal_mult`) or HEALPCT1's `heal_pct`.
 pub fn heals(s: &SkillDef) -> bool {
-    kind(s) == Kind::Support && (s.heal_base > 0 || s.heal_mult > 0.0)
+    kind(s) == Kind::Support && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0)
 }
 
 pub fn cleanses(s: &SkillDef) -> bool {

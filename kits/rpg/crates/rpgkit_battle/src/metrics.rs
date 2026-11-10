@@ -1155,7 +1155,7 @@ impl BattleMetrics {
             if target_gain != e.value {
                 self.fail(&name, &format!("log_heal {}: {} logged, {target_gain} HP gained", e.skill, e.value));
             }
-            self.overheal(s, actor, e, target_gain);
+            self.overheal(s, actor, target, e, target_gain);
         }
     }
 
@@ -1221,8 +1221,9 @@ impl BattleMetrics {
         }
     }
 
-    /// Overheal of a heal cast: the skill's heal amount (SupportRules.heal_amount) minus the HP gained.
-    fn overheal(&mut self, s: &Session, healer: UnitId, e: &Entry, gained: i32) {
+    /// Overheal of a heal cast: the skill's heal amount (SupportRules.heal_amount; HEALPCT1: with `heal_pct` of the
+    /// target's max HP, `command::heal_amount_on`) minus the HP gained.
+    fn overheal(&mut self, s: &Session, healer: UnitId, target: Option<UnitId>, e: &Entry, gained: i32) {
         if e.outcome == "FAILED" {
             return;
         }
@@ -1230,7 +1231,7 @@ impl BattleMetrics {
         let mut amount = -1;
         for (id, sk) in w.cat.skills.iter().enumerate() {
             if sk.name == e.skill && skill::heals(sk) && w.units[healer].can_use(&w.cat, sk) {
-                amount = amount.max(crate::command::heal_amount(w, healer, id));
+                amount = amount.max(crate::command::heal_amount_on(w, healer, target.unwrap_or(healer), id));
             }
         }
         let rec = self.rec(healer);

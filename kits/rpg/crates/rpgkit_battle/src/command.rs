@@ -1607,6 +1607,27 @@ pub fn heal_amount(w: &World, caster: UnitId, skill_id: SkillId) -> i32 {
     rpgkit_rules::damage::heal(&w.units[caster], s)
 }
 
+/// HEALPCT1 (FB-177): the percent part of skill `s`'s heal on unit `target`: `heal_pct` of the target's max HP
+/// (rounded down, at least 1 HP when the percent is set, at most 100%; 0 = none), outside the caster's potency.
+pub fn heal_pct_of(w: &World, target: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
+    if s.heal_pct <= 0 || !skill::heals(s) {
+        return 0;
+    }
+    let max = w.units.get(target).map_or(0, |u| u.max_hp);
+    (max * s.heal_pct.min(100) / 100).max(1)
+}
+
+/// HEALPCT1: the heal `caster` gives `target` with `skill_id` before `World::heal` (which applies `heal_taken`): the
+/// formula (`heal_amount`) plus the percent part (`heal_pct_of`). The command, the planner's `est_heal` and the
+/// overheal metric read it.
+pub fn heal_amount_on(w: &World, caster: UnitId, target: UnitId, skill_id: SkillId) -> i32 {
+    let s = &w.cat.skills[skill_id];
+    if !skill::heals(s) {
+        return 0;
+    }
+    heal_amount(w, caster, skill_id) + heal_pct_of(w, target, s)
+}
+
 pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
     if !target.is_alive() {
         return 0;
@@ -1832,7 +1853,7 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
     }
     let mut healed = 0;
     if skill::heals(&s) {
-        let amount = heal_amount(w, caster, skill_id);
+        let amount = heal_amount_on(w, caster, target, skill_id);
         let before = w.units[target].hp;
         w.heal(target, amount);
         healed = w.units[target].hp - before;

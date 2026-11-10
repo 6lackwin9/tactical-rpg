@@ -832,11 +832,18 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize, st
         "rounds" => counted(if s("kind") == "FOCUS" { i("boost_rounds", 1) } else { i("status_rounds", 1) }, "round"),
         "heal" => {
             let (base, mult, stat) = (i("heal_base", 0), f("heal_mult", 0.0), s("heal_stat"));
-            match (base > 0, mult > 0.0) {
+            let formula = match (base > 0, mult > 0.0) {
                 (true, true) => format!("{base} + {} x {stat}", format_decimal(mult)),
                 (true, false) => base.to_string(),
                 (false, true) => format!("{} x {stat}", format_decimal(mult)),
                 _ => String::new(),
+            };
+            // HEALPCT1: the percent heal of the target's max HP, after the formula
+            let pct = i("heal_pct", 0);
+            match (formula.is_empty(), pct > 0) {
+                (_, false) => formula,
+                (true, true) => format!("{pct}% of max HP"),
+                (false, true) => format!("{formula} + {pct}% of max HP"),
             }
         }
         "cleanse" => {

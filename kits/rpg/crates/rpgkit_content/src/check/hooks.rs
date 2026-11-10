@@ -60,6 +60,8 @@ pub const HAZARD_METER_DELTA: (i64, i64) = (-100, 100);
 pub const CHANNEL_COST: (i64, i64) = (0, 100);
 pub const CHANNEL_POWER: (f64, f64) = (1.0, 3.0);
 pub const HP_COST_PCT: (i64, i64) = (0, 99);
+/// HEALPCT1 (FB-177): a SUPPORT skill's `heal_pct` (0 = none; 100 = the target's full max HP).
+pub const HEAL_PCT: (i64, i64) = (0, 100);
 /// AH1: arena hazards per encounter, the name and line lengths, the effect numbers.
 pub const ARENA_MAX: usize = 4;
 pub const ARENA_NAME_MAX: usize = 24;
@@ -329,6 +331,11 @@ pub fn skill_errors(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     let pct = json::i(e, "hp_cost_pct", 0);
     if has("hp_cost_pct") && !(HP_COST_PCT.0..=HP_COST_PCT.1).contains(&pct) {
         out.push(format!("HP cost % must be {}-{} (is {pct}).", HP_COST_PCT.0, HP_COST_PCT.1));
+    }
+    // HEALPCT1: the percent heal, refused out of range as the percent cost
+    let heal_pct = json::i(e, "heal_pct", 0);
+    if has("heal_pct") && !(HEAL_PCT.0..=HEAL_PCT.1).contains(&heal_pct) {
+        out.push(format!("Heal % must be {}-{} (is {heal_pct}).", HEAL_PCT.0, HEAL_PCT.1));
     }
     let keys = ["forced_move", "hazard", "triggers", "riders", "meters", "requires_meter", "channel"];
     if keys.iter().all(|k| !has(k) || empty(k)) {

@@ -385,6 +385,8 @@ pub struct SkillDef {
     pub heal_stat: String,
     pub heal_base: i32,
     pub heal_mult: f64,
+    /// HEALPCT1 (FB-177): a heal of this percent of the target's max HP, added after the heal formula (0 = none).
+    pub heal_pct: i32,
     pub grant_status: String,
     pub extra_grants: Vec<Value>,
     pub cleanse_statuses: Vec<String>,
@@ -486,6 +488,7 @@ impl SkillDef {
             heal_stat: string(o, "heal_stat", ""),
             heal_base: int(o, "heal_base", 0),
             heal_mult: float(o, "heal_mult", 0.0),
+            heal_pct: int(o, "heal_pct", 0),
             grant_status: string(o, "grant_status", ""),
             extra_grants: array(o, "extra_grants").to_vec(),
             cleanse_statuses: strings(o, "cleanse_statuses"),

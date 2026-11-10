@@ -1037,11 +1037,11 @@ pub fn rank_numeral(rank: i32) -> &'static str {
 }
 
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a spell-source weapon (U3.2-S2: a family
-/// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal.
+/// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal (HEALPCT1: `heal_pct` too).
 pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     match group {
         "spell" => s.kind == "ATTACK" && s.spell_source,
-        "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0),
+        "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0),
         _ => false,
     }
 }

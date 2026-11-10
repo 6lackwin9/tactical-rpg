@@ -20,14 +20,15 @@ const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "des
 /// the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK; then
 /// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`
 /// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`; PK1-S2a: `hp_cost_pct` and
-/// `requires_meter` in `cost`, the marrow version's `channel` in its own section, every authored kind).
+/// `requires_meter` in `cost`, the marrow version's `channel` in its own section, every authored kind; HEALPCT1:
+/// `heal_pct` in `support`).
 const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max", "position"]),
     // A3.2-K2: `affects` (IR9) beside the shape it filters
     ("area", &["area", "affects"]),
-    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
+    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
     ("guard", &["mitigation", "guard_rounds"]),
@@ -762,7 +763,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let heal_mult = json::f(e, "heal_mult", 0.0);
         let heal_base = json::i(e, "heal_base", 0);
         let cleanse = json::sget(e, "cleanse_statuses");
-        if heal_base <= 0 && heal_mult <= 0.0 && grant.is_empty() && cleanse.is_empty() {
+        // HEALPCT1: a percent heal counts as a heal (the message keeps its words, checks_golden)
+        let heal_pct = json::i(e, "heal_pct", 0);
+        if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 && grant.is_empty() && cleanse.is_empty() {
             out.push("A support skill needs a heal (base or per-stat), a cleanse or a granted status.".into());
         }
         if cleanse.iter().any(|c| c == CLEANSE_ALL) && cleanse.len() > 1 {

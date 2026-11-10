@@ -1351,7 +1351,7 @@ impl Plan {
         }
         let p = self.add_entry(w, c, st, sid, index, Some(c), &[], 0, &[]);
         if p.is_empty() {
-            let heal = command::effective_heal(&w.units[c], command::heal_amount(w, c, sid));
+            let heal = command::effective_heal(&w.units[c], command::heal_amount_on(w, c, c, sid));
             st.entries.last_mut().unwrap().est_heal = heal;
         }
         p
@@ -1415,7 +1415,7 @@ impl Plan {
         }
         let p = self.add_entry(w, c, st, sid, index, Some(ally), &[], 0, &[]);
         if p.is_empty() {
-            let heal = command::effective_heal(&w.units[ally], command::heal_amount(w, c, sid));
+            let heal = command::effective_heal(&w.units[ally], command::heal_amount_on(w, c, ally, sid));
             let e = st.entries.last_mut().unwrap();
             e.est_heal = heal;
             // INPUT1 MR16, CLN-45: a Support skill on an ally chases it up to 1 tile with `chase` every_skill
