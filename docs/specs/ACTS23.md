@@ -48,6 +48,7 @@ Status: **E** exists and is usable as-is, **P** partial, **N** none. "Data" mean
 | 23 | Final battle retry inside the dream: each attempt costs Act 3 days, the fallen return as dream-echoes (Q-21, Q-21a) | 3 | **P** | Story fight `on_lost: "retry"` rests and repeats (`story.rs:440`); no day cost, no echoes | PK6 |
 | 24 | Endings A Preservation / B Ascendancy / C Red Martyrdom gated by doctrine; the Extinguished screen | 3 | **P** | `end` kinds are `fail` and `bad_end` (`lib.rs:1065`), run-over screen `emberwake_gui/src/runover.rs`, Extinguished cards wired; no ending kind, no choice by doctrine or flags | PK7 |
 | 25 | Act 2 and Act 3 maps, missions, bestiary, bosses, recruits pool, keepsake names, loyalty missions per surviving founder (G-16) | 2-3 | **N** (docs only) | Only `sunk_ward` (Act 1) plus the sample worlds `ashlands`, `iron_reaches`, `tidewrack` | PK8 (data) |
+| 26 | Cold Steel weapon techniques: the Cold Steel mirror of grafts (user 2026-11-10, section 5.2) | 2 | **P** | An item can grant a skill (`grant_skill`, `OFFHAND1`) and weapon families have mastery levels 1-3 (Level 3 grants a skill or passive, `item_families.level3_passive`, `C02-A`); no per-character technique slots, no Hearth assignment, no Cold-Steel-only round gate | PK2 |
 
 ## 3. Already decided (not reopened)
 
@@ -60,7 +61,7 @@ Each package extends an existing `MASTERPLAN1` block rather than adding a block;
 | Package | Extends | Scope | New kit hooks | Data (game) |
 | --- | --- | --- | --- | --- |
 | **PK1 Corruption in battle** | `S2` pools, `A1` costs, `F` intents | Strain row, crisis, Inoculated skills, Channel, meter deltas from hazards and attacks | (a) a seeded **random-table effect** (`roll_table`: weighted rows of effects on the battle RNG stream), usable by meter rules and triggers; (b) **Channel as a fuel row** (section 5.1 Option B: a version row targeted as the skill's primary intent, all-marrow rounds, derived marrow package with `channel` overrides, live only for Strain carriers, behind a ruleset flag); (c) a **`meter` effect** on arena and ground hazards and on skill hits | `strain` in `unit_meters.json` with 5 bands, crisis rows, Inoculated skill costs per class, aberrant enemy meters |
-| **PK2 Calcification and grafts** | `E3` roster, `U3` gear, `U4` grants | Persistent per-unit stage track, stage passives, graft slots, recipes | (d) **unit-scope campaign track** (the refused CAMPAIGN1-DOC: per-member value, stages with passives, advance and set effects, a "lost at stage N" departure); (e) a **second slot set** (`body_slots`, kit-generic) whose items may grant a meter floor; (f) **recipes**, an NPC service turning purse and stash inputs into effects on a member (surgery, flush, excision, bone-scraping) | Calcification stages I-V, 4 graft slots, organ and salt items, the recipe rows at the Slab |
+| **PK2 Calcification, grafts and weapon techniques** | `E3` roster, `U3` gear, `U4` grants | Persistent per-unit stage track, stage passives, graft slots, recipes; the Cold Steel weapon techniques (section 5.2) | (d) **unit-scope campaign track** (the refused CAMPAIGN1-DOC: per-member value, stages with passives, advance and set effects, a "lost at stage N" departure); (e) a **second slot set** (`body_slots`, kit-generic) whose items may grant a meter floor; (f) **recipes**, an NPC service turning purse and stash inputs into effects on a member (surgery, flush, excision, bone-scraping) | Calcification stages I-V, 4 graft slots, organ and salt items, the recipe rows at the Slab |
 | **PK3 Roster lifecycle** | `E3` roster, `F` fight flow | Bleed-out, revive, recruits, procedural keepsakes, Martyrs, crypts | (g) **bleed-out and revive** in battle (read `bleed_out_rounds`; a `revive` key on heal skills and items); (h) **recruit generator** (ROSTER1-P: a pool with rolled stats inside a role template, a quirk list, class from the encounter, ages 18-24 as flavour); procedural keepsakes from the fields already parsed; Martyr counter on PK2's track | `sunk_ward` `roster` rules per act, recruit pools and quirks, keepsake names |
 | **PK4 Campaign pressure** | `W3` clock, `T1` story | Doctrine, checkpoints, the Great Tithing reveal, Act 3 clock and prices | (i) **meter display relabel** effect; doctrine **play inputs** as triggers on surgery, flush, forge project and battle-end Strain; per-character lean on PK2's track; a per-act price rule if data cannot express it | Doctrine gauge and thresholds, Act 2-3 checkpoints, hard-clock rows, side-quest locks, the saved-youths gauge |
 | **PK5 Hub and sieges** | `W1` services, `E2` purse, `T2` sequences | Facilities with levels and projects, facility screens, sieges | (j) **facilities**: a catalog kind (id, keeper NPC, levels with costs and unlock effects) and a `facility` service and screen; (k) **siege**: a Breach trigger starting a chain of room encounters in the hub with carried HP and downed state, room outcomes that remove facility levels, relocation as story | Facilities (Hearth, Slab, Board, Bunks, Crypts) with levels, the siege rooms and waves per act |
@@ -145,6 +146,21 @@ Sub-questions under **B** (recommendations in bold):
 - **Section 5.1 is closed**; PK1's `.1` session designs the details (the opener's planner and AI rules, the per-intent fill order in a Channel round, the content checks) against these rulings.
 
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
+
+### 5.2 Cold Steel weapon techniques (user 2026-11-10)
+
+The user's concern: next to the Channel kit, Cold Steel could feel too weak in Act 2. So Cold Steel gets its own parallel power-up, the mirror of the grafts, **from Act 2 on** (not in Act 1). Decided on the user's question cards (all as recommended):
+
+| | Grafts (marrow) | Weapon techniques (Cold Steel) |
+| --- | --- | --- |
+| Where they live | Body slots on the operative (Cranial, Thoracic, Forearms, Visceral) | **Per operative, per weapon family**: learned for a family (sword, bow, ...) and active whenever that family is wielded, so a better sword keeps them; no per-item save state |
+| Slots | Up to 4 | **The family's mastery level (1-3), plus 1 when wielding a masterwork weapon forged at the Hearth**: up to 4 |
+| Where you get them | Graft surgery at the Slab (Aline): organs, Tier III advances Calcification | Assigned at the Hearth (Bram): Scrap and materials; forge work moves doctrine toward Preservationist (CANON 2.6) |
+| When usable | Channel rounds only | **Cold Steel rounds only** (greyed in a Channel round) |
+| Budget | Single intent, budgeted like dual-intent Cold Steel heavies | **The same**: single intent, budgeted like dual-intent Cold Steel heavies |
+| Lasting cost | Strain floor +10 per graft; Tier III adds a Calcification stage | None beyond Scrap, materials and the commitment to a weapon family |
+
+Kit shape for PK2: a per-member technique list keyed by weapon family (a `U3` / `U4` grant of the `grant_skill` kind, read only while that family is the active weapon and the round is Cold Steel), slot count from family mastery plus a masterwork item flag, and a Hearth assignment service (the PK5 facility or the PK2 recipe service). A content check keeps techniques single-intent and family-matched. Left to the PK2 `.1` session: the technique list per family, prices, whether reassigning a slot costs anything, and how mastery level is earned past Level 3 if needed.
 
 ## 6. Next steps after review
 
