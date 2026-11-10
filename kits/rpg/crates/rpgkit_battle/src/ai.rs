@@ -1761,11 +1761,6 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
     }
 }
 
-/// PK1 4.4 (`docs/sessions/PK1_CORRUPTION.md`, a Design default): the factor by which a Channel round's value must beat
-/// the Cold Steel round's for the AI to open Channel (`channel_row`). PK1 section 7 lists `channel_ai_edge` as tunable;
-/// it stays a kit constant until a ruleset field is approved (PR5-5: no contract change).
-pub const CHANNEL_AI_EDGE: f64 = 1.2;
-
 /// PK1-S2b: the value the Channel row compares: the expected damage and healing of `c`'s planned round (the planner's
 /// estimates, `PlanEntry::est_damage` and `est_heal`; a marrow version's power and piercing included). An invalid round
 /// is worth nothing.
@@ -1799,11 +1794,11 @@ fn marrow_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
 /// does for a member without picks: the round flag (`round_intent_plan::flip_channel`: the intent-bound buffs end), the
 /// pick's opener kept only when it opens in Channel (else the Channel order opens), the round rebuilt by the planner.
 /// It keeps the Channel round when the round compiles, plans at least one marrow version (`marrow_planned`: a Feed-only
-/// or marrow-only round does not count), its value (`round_value`) is at least `CHANNEL_AI_EDGE` times the Cold Steel
-/// round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max (the crisis); else `c`'s
-/// unit, round state and steps are put back as the Cold Steel round. A Cold Steel round worth nothing (out of reach, a
-/// Guard round) has no option to beat and stays Cold Steel untried, as do Economy's opener-only rounds. Returns the
-/// flip's lines when kept. Deterministic: nothing draws.
+/// or marrow-only round does not count), its value (`round_value`) is at least the ruleset's `channel_ai_edge` (PR5-20)
+/// times the Cold Steel round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max
+/// (the crisis); else `c`'s unit, round state and steps are put back as the Cold Steel round. A Cold Steel round worth
+/// nothing (out of reach, a Guard round) has no option to beat and stays Cold Steel untried, as do Economy's
+/// opener-only rounds. Returns the flip's lines when kept. Deterministic: nothing draws.
 fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec<String> {
     if p.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
         return Vec::new();
@@ -1824,7 +1819,7 @@ fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec
     let built = build_pick(w, plan, c, p) && marrow_planned(w, plan, c);
     let value = if built { round_value(w, plan, c) } else { 0 };
     let safe = channel_meter_after(w, plan, c).is_some_and(|(v, max)| v < max);
-    if built && value as f64 >= CHANNEL_AI_EDGE * cold as f64 && safe {
+    if built && value as f64 >= w.ruleset.numbers.channel_ai_edge * cold as f64 && safe {
         return lines;
     }
     w.units[c] = unit;

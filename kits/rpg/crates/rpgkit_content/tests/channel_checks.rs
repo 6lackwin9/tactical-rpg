@@ -105,11 +105,12 @@ fn the_schema_and_the_code_name_the_channel_fields() {
     assert_eq!(default("channel_cost"), json!(n.channel_cost));
     assert_eq!(default("marrow_actives"), json!(n.marrow_actives));
     assert_eq!(default("channel_rest"), json!(n.channel_rest));
+    assert_eq!(default("channel_ai_edge"), json!(n.channel_ai_edge));
     let options = |kind: &str, key: &str| json::aget(&field_of(kind, key), "options").iter().map(json::gstr).collect::<Vec<_>>();
     assert!(!options(ruleset::KIND, "intents").contains(&ruleset::CHANNEL.to_string()));
     assert!(!options("skills", "round_intent").contains(&ruleset::CHANNEL.to_string()));
     assert!(options(ruleset::KIND, "rules").contains(&ruleset::CHANNEL.to_string()));
-    assert_eq!(store::RULESET_CHANNEL_FIELDS.iter().filter(|k| ruleset::field_rule_of(k).is_some_and(|f| f.needs == [ruleset::CHANNEL])).count(), 5, "read only under the rule");
+    assert_eq!(store::RULESET_CHANNEL_FIELDS.iter().filter(|k| ruleset::field_rule_of(k).is_some_and(|f| f.needs == [ruleset::CHANNEL])).count(), store::RULESET_CHANNEL_FIELDS.len(), "read only under the rule");
 }
 
 #[test]
@@ -208,7 +209,8 @@ fn the_writer_stores_the_channel_numbers_only_when_set() {
     for key in store::RULESET_CHANNEL_FIELDS {
         assert!(!stored.contains_key(key), "{key} at its default is no key");
     }
-    let set = store::catalog_storage(ruleset::KIND, &row(json!({"channel_meter": "strain", "channel_cost": [10, 20, 30], "channel_rest": "feed"})), &[]).unwrap();
+    let set = store::catalog_storage(ruleset::KIND, &row(json!({"channel_meter": "strain", "channel_cost": [10, 20, 30], "channel_rest": "feed", "channel_ai_edge": 1.5})), &[]).unwrap();
     assert_eq!((json::s(&set, "channel_meter"), json::get(&set, "channel_cost").clone(), json::s(&set, "channel_rest")), ("strain".to_string(), json!([10, 20, 30]), "feed".to_string()));
+    assert_eq!(json::get(&set, "channel_ai_edge"), &json!(1.5), "PR5-20: a set AI edge is kept");
     assert!(!set.contains_key("channel_power") && !set.contains_key("marrow_actives"));
 }

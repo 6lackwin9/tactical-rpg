@@ -415,6 +415,10 @@ pub const MARROW_ACTIVES: i32 = 1;
 /// PK1-S2a (PK1 4.3 item 5): the `channel_rest` value that keeps Rest as Rest in a Channel round (the default; a game
 /// names its Channel Rest skill instead, e.g. its Feed).
 pub const CHANNEL_REST_NORMAL: &str = "normal";
+/// PR5-20 (FB-179 Option A, PK1 4.4 and section 7): the default of `channel_ai_edge`, the factor by which a Channel
+/// round's value must beat the Cold Steel round's for the AI to open Channel (`ai::channel_row`; was the kit constant
+/// `ai::CHANNEL_AI_EDGE`, PR5-5).
+pub const CHANNEL_AI_EDGE: f64 = 1.2;
 
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
@@ -529,6 +533,9 @@ pub struct Numbers {
     /// PK1-S2a (`channel_rest`): what Rest becomes in a Channel round: `normal` (Rest) or a skill family the unit uses
     /// instead on every Rest block (the game's Feed).
     pub channel_rest: String,
+    /// PR5-20 (`channel_ai_edge`, FB-179): the factor by which the AI's Channel round must beat its Cold Steel round's
+    /// value for the AI to keep it (`ai::channel_row`).
+    pub channel_ai_edge: f64,
 }
 
 impl Default for Numbers {
@@ -585,6 +592,7 @@ impl Default for Numbers {
             channel_cost: CHANNEL_COST,
             marrow_actives: MARROW_ACTIVES,
             channel_rest: CHANNEL_REST_NORMAL.to_string(),
+            channel_ai_edge: CHANNEL_AI_EDGE,
         }
     }
 }
@@ -666,6 +674,7 @@ impl Numbers {
             channel_cost: channel_cost_of(o).unwrap_or(d.channel_cost),
             marrow_actives: value::int(o, "marrow_actives", d.marrow_actives),
             channel_rest: Some(value::string(o, "channel_rest", "")).filter(|v| !v.is_empty()).unwrap_or(d.channel_rest),
+            channel_ai_edge: value::float(o, "channel_ai_edge", d.channel_ai_edge),
         }
     }
 
@@ -904,7 +913,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 43] = [
+pub const FIELD_RULES: [FieldRule; 44] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -968,6 +977,8 @@ pub const FIELD_RULES: [FieldRule; 43] = [
     field_rule("channel_cost", &[CHANNEL]),
     field_rule("marrow_actives", &[CHANNEL]),
     field_rule("channel_rest", &[CHANNEL]),
+    // PR5-20 (FB-179 Option A): the AI's Channel edge, read only under the rule channel
+    field_rule("channel_ai_edge", &[CHANNEL]),
 ];
 
 /// The metadata of row field `key`, if it has any.
@@ -1145,7 +1156,7 @@ pub const LOCKED: [Locked; 48] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 17] = [
+pub const PROMOTED: [(&str, &str); 18] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
@@ -1163,6 +1174,7 @@ pub const PROMOTED: [(&str, &str); 17] = [
     ("CHANNEL_POWER", "channel_power"),
     ("CHANNEL_COST", "channel_cost"),
     ("MARROW_ACTIVES", "marrow_actives"),
+    ("CHANNEL_AI_EDGE", "channel_ai_edge"),
 ];
 
 impl Numbers {
@@ -1227,6 +1239,7 @@ impl Numbers {
             "channel_cost" => self.channel_cost.iter().map(i32::to_string).collect::<Vec<_>>().join(","),
             "marrow_actives" => self.marrow_actives.to_string(),
             "channel_rest" => self.channel_rest.clone(),
+            "channel_ai_edge" => self.channel_ai_edge.to_string(),
             _ => return None,
         })
     }

@@ -72,7 +72,8 @@ fn ruleset_storage(full: &Dict) -> Dict {
 }
 
 /// PK1-S2a (PK1 4.1): the ruleset row fields of the rule `channel`, stored only when set off their defaults.
-pub const RULESET_CHANNEL_FIELDS: [&str; 5] = ["channel_meter", "channel_power", "channel_cost", "marrow_actives", "channel_rest"];
+/// PR5-20 adds `channel_ai_edge` (FB-179).
+pub const RULESET_CHANNEL_FIELDS: [&str; 6] = ["channel_meter", "channel_power", "channel_cost", "marrow_actives", "channel_rest", "channel_ai_edge"];
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for

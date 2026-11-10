@@ -8,8 +8,9 @@
 //! and refills the freed blocks (Feed as the Channel Rest); the first skill fixes the round's one target; Vent's gate
 //! (Strain 50 at its start) and its percent HP cost; a Channel round skips decay; a battle with the rule on and no
 //! holder plays exactly as one without it. PK1-S2b: the tells show Channel while the round flag is set and mark the
-//! marrow versions' names (the term `marrow_mark`); the AI opens Channel only past `ai::CHANNEL_AI_EDGE` and while the
-//! channel meter stays below its max, for a party member and an enemy holder alike.
+//! marrow versions' names (the term `marrow_mark`); the AI opens Channel only past the ruleset's `channel_ai_edge` (PR5-20,
+//! FB-179; was the kit constant `ai::CHANNEL_AI_EDGE`) and while the channel meter stays below its max, for a party
+//! member and an enemy holder alike.
 
 use rpgkit_battle::ai;
 use rpgkit_battle::channel;
@@ -619,7 +620,7 @@ fn ai_values(ruleset: &Ruleset, strain: i32) -> (i64, bool, i64, Option<(i32, i3
     (ai::round_value(&s.w, &s.plan, HERO), true, chan, after)
 }
 
-/// PK1 4.4: the AI opens Channel only when the Channel round is worth at least `CHANNEL_AI_EDGE` times the Cold Steel
+/// PK1 4.4: the AI opens Channel only when the Channel round is worth at least `channel_ai_edge` times the Cold Steel
 /// round (and more than nothing): at `channel_power` 1.0 the marrow round is worth more (its armour piercing) but not
 /// past the edge, so it stays Cold Steel; at 1.25 and 2.0 it opens. The kept round is the toggle's conversion (its
 /// value is the converted round's), the round's row stays the pick's, and the decision is the same on a re-pick.
@@ -630,7 +631,7 @@ fn the_ai_opens_channel_only_past_the_edge() {
         let r = badge_rules(json!({"channel_power": power}));
         let (cold, kept, chan, after) = ai_values(&r, 0);
         let (v, max) = after.expect("the hero holds strain");
-        let past = chan > 0 && chan as f64 >= ai::CHANNEL_AI_EDGE * cold as f64;
+        let past = chan > 0 && chan as f64 >= r.numbers.channel_ai_edge * cold as f64;
         assert_eq!(kept, past && v < max, "power {power}: cold {cold}, channel {chan}, strain after {v}");
         if power == 1.0 {
             assert!(chan > cold && !kept, "worth more but not past the edge: Cold Steel");
@@ -646,6 +647,23 @@ fn the_ai_opens_channel_only_past_the_edge() {
         assert_eq!(round_intent::intent_of(&s.w, HERO), first.pick.map(|p| p.intent), "the row stays the pick's");
     }
     assert_eq!(seen, (true, true), "both outcomes");
+}
+
+/// PR5-20 (FB-179 Option A): the edge is the ruleset row's `channel_ai_edge` (default `ruleset::CHANNEL_AI_EDGE`), not a
+/// kit constant. The round that stays Cold Steel at the default (power 1.0: worth more, not past the edge) opens at an
+/// edge of 1.0; the one that opens at the default (power 2.0) stays Cold Steel at an edge just past its value ratio.
+#[test]
+fn the_rulesets_channel_ai_edge_moves_the_decision() {
+    assert_eq!(badge_rules(json!({})).numbers.channel_ai_edge, ruleset::CHANNEL_AI_EDGE);
+    let (cold, kept, chan, _) = ai_values(&badge_rules(json!({"channel_power": 1.0})), 0);
+    assert!(cold > 0 && chan > cold && !kept, "default edge: Cold Steel (cold {cold}, channel {chan})");
+    let (_, kept, ..) = ai_values(&badge_rules(json!({"channel_power": 1.0, "channel_ai_edge": 1.0})), 0);
+    assert!(kept, "edge 1.0: a Channel round worth more than the Cold Steel round opens");
+    let (cold, kept, chan, _) = ai_values(&badge_rules(json!({"channel_power": 2.0})), 0);
+    assert!(cold > 0 && kept, "default edge: Channel (cold {cold}, channel {chan})");
+    let edge = chan as f64 / cold as f64 + 0.01;
+    let (_, kept, ..) = ai_values(&badge_rules(json!({"channel_power": 2.0, "channel_ai_edge": edge})), 0);
+    assert!(!kept, "edge {edge}: past the round's ratio, Cold Steel");
 }
 
 /// PK1 4.4: the AI opens Channel only while the channel meter after the round stays below its max (the crisis): with
