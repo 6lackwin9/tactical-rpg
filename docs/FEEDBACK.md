@@ -29,6 +29,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-1 `ROLLTABLE1` | done (FB-168; FB-169 suggestion): trigger effect `roll_table` (weighted rows on the seeded battle RNG), content check, schema help; 0 golden diffs | `develop` | Post-R4 queue: PR5-1, PR5-2, ACTS23-R5 feasibility (FB-167)
 | PR5-2 `PHASEFX1` | done (FB-170, FB-171): encounter phase effects `side` (hostile_all, party, enemy) and `swap` (keep_pct, full), content checks; 0 golden diffs | `develop` | PR5-1, PR5-2 done; FB-167 answered
 | PR5-3 `PK1-S1` | done (FB-173; FB-174 questions): PK1 section 3 hooks (`heal_taken`, recoil, `strike_nearest`, `ap set`, `mark`, hazard `meter`, `unmark`); 0 golden diffs | `develop` | -
+| PR5-16 `ROLLTABLE1-GUARD` | done (FB-175): the check refuses `guard` inside a `roll_table` on an `ally_hit` row; 0 golden diffs | `develop` | -
 | PR5-17 `FBARCHIVE-FENCE` | done (FB-172, answered): `feedback_check.py` treats headings inside fenced code blocks as text; an unclosed fence is a parse error | `develop` | -
 
 ## 2. Feedback Items (Append-Only)
@@ -52,6 +53,14 @@ FB-01 to FB-172 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: Ranges chosen (the spec gives none): `ap` `set` 0-4 and `rounds` 1-5; `strike_nearest` `power` 0.1-3.0 and `then_rounds` 1-5; `mark` id up to 24 characters and `value` 1-99; hazard meter `delta` -100..100, not 0; `heal_taken` -100..100, not 0. Limits: (L2) spec 3.4 "the planner shows why": the kit exposes `State::ap_held(c)`, but no planner or GUI text reads it yet; (L5) `strike_nearest` has no reach limit (a melee unit may strike a unit five tiles away), as the spec reads literally; (L6) `unmark` calms any `hostile_all` rogue that started on the party side and lost a mark, not only one a breach turned (fine for PK1; PK2's breach decides). The AI and planner heal estimates do not apply `heal_taken`; the Dojo heal bypasses it (a practice screen).
 - **Recommendation**: Questions, each with the built default: (1) bands cannot hold triggers, so "the Aberrant Edge band holds a hit_dealt trigger" is a meter-row `triggers` entry with `when.meter {id: strain, at_least: 75}` (default: keep; alternative: band `triggers`); (2) recoil is at least 1 when the hit dealt damage (default: keep); (3) `strike_nearest` raises no hit events (no riders, recoil or `hit_taken` on it) (default: keep); (4) an `unmark` with nothing to undo is spent with a log line "no calcify to undo" (default: keep; alternative: refused at planning); (5) for PK2: a hero still hostile at the battle end breaks `hero_ends`' member pairing, so the Stage V turn must settle it; (6) the priest keystone's skill version of `unmark` (`uses_per_battle`) is not in this slice (PK2). Follow-up rows: wire `ap_held` into the planner's reason text with PR5-6 (game GUI), and decide `strike_nearest` reach (recommended: keep any distance, it is a spasm).
+
+### FB-175: PR5-16 `ROLLTABLE1-GUARD` landed
+
+- **Spec**: READY Section 1 row PR5-16; `FB-169` (5) Option A (the `PR5-16` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `rpgkit_content/src/check/hooks.rs` `effects_errors`: a `roll_table` on an `ally_hit` row whose rows hold a `guard` is one error, "a roll_table on ally_hit cannot guard (it rolls after the hit); put guard at the top level." (`table_guards`). The same table on another event and a top-level `guard` on `ally_hit` check clean. Test `a_table_on_ally_hit_cannot_guard` (`rpgkit_content/tests/roll_table_checks.rs`). Gate 2799 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Built by the planner (small standalone logic).
+- **Recommendation**: `kits/rpg/README.md` ROLLTABLE1 line: append "; on `ally_hit` a table cannot hold a `guard` (only a top-level guard shapes the hit)". `engine/docs/authoring/combat_hooks.md` (`roll_table` entry): the same clause.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

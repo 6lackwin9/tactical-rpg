@@ -85,3 +85,18 @@ fn the_schema_help_names_the_table() {
         assert!(json::s(&f, "help").contains(ROLL_TABLE), "{kind}.{key}: help names roll_table");
     }
 }
+
+/// ROLLTABLE1-GUARD (FB-169 (5) Option A): on an `ally_hit` row only a top-level `guard` shapes the hit (a table rolls
+/// after it), so a table holding a `guard` there is one error; the same table on another event, and a top-level guard
+/// on `ally_hit`, check clean.
+#[test]
+fn a_table_on_ally_hit_cannot_guard() {
+    let guard = json!({"type": "guard", "mitigation": 0.5});
+    let guarding = table(json!([{"weight": 1, "effects": [guard.clone()]}, {"weight": 1, "effects": [{"type": "crit", "value": 10}]}]));
+    let on = |event: &str, list: Value| effects_errors(&list, &ctx(), "Trigger 1", Some(event), false);
+    let errs = on("ally_hit", json!([guarding.clone()]));
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert!(errs[0].contains("Trigger 1 effect 1: a roll_table on ally_hit cannot guard"), "{errs:?}");
+    assert_eq!(on("hit_taken", json!([guarding])), Vec::<String>::new());
+    assert_eq!(on("ally_hit", json!([guard])), Vec::<String>::new());
+}

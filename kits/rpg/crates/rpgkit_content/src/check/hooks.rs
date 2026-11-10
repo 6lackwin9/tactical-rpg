@@ -495,6 +495,10 @@ pub fn effects_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>, met
                 _ => {}
             }
         }
+        // ROLLTABLE1-GUARD (FB-169 (5) A): on ally_hit only a top-level guard shapes the hit; a table rolls after it
+        if t == ROLL_TABLE && event == Some("ally_hit") && table_guards(o) {
+            out.push(format!("{at}: a roll_table on ally_hit cannot guard (it rolls after the hit); put guard at the top level."));
+        }
         out.extend(effect_errors(o, &t, ctx, &at, meter_set));
     }
     if redirects > 1 {
@@ -630,6 +634,15 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
         _ => {}
     }
     out
+}
+
+/// ROLLTABLE1-GUARD: whether any row of the table `o` holds a `guard` effect.
+fn table_guards(o: &Dict) -> bool {
+    let Some(Value::Array(rows)) = o.get("rows") else { return false };
+    rows.iter()
+        .filter_map(|r| r.get("effects").and_then(Value::as_array))
+        .flatten()
+        .any(|e| e.as_object().is_some_and(|e| json::s(e, "type") == "guard"))
 }
 
 /// ROLLTABLE1: a `roll_table`'s `rows`: at least one, each `{weight, effects}` with a whole weight in ROLL_WEIGHT and
