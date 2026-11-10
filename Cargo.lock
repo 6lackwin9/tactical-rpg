@@ -52,6 +52,7 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -73,6 +74,7 @@ dependencies = [
  "aegis_core",
  "serde",
  "serde_json",
+ "web-sys",
 ]
 
 [[package]]
@@ -82,13 +84,18 @@ dependencies = [
  "aegis_core",
  "aegis_host",
  "aegis_layout",
+ "aegis_save",
  "anyhow",
  "arboard",
+ "cpal",
  "fontdue",
  "pixels",
  "png",
  "rodio",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "windows-sys 0.52.0",
  "winit",
 ]
@@ -700,8 +707,12 @@ dependencies = [
  "emberwake_rules",
  "emberwake_world",
  "indexmap",
+ "js-sys",
  "png",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

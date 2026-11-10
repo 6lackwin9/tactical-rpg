@@ -33,7 +33,7 @@ fn catalog(data: &Path) {
     let family = json!({"id": "consumable", "name": "Consumable", "description": "", "item_type": "CONSUMABLE", "off_hand_category": "", "base": {}, "bands": {}, "adjustable": [], "modifier_kinds": [], "max_modifiers": 0, "max_tiers": 0, "engine_rules": [], "damage_type": "", "art": ""});
     fs::write(data.join("catalog").join("item_families.json"), json!({"kind": "item_families", "version": 1, "entries": [family]}).to_string()).unwrap();
     let item = |id: &str, extra: Value| {
-        let mut e = json!({"id": id, "name": id, "family": "consumable", "rarity": "COMMON", "weight": 0.5, "value": 10, "description": "A test item.", "damage_type": "", "icon_id": "", "starter_stash": false, "consumable_type": "HEALTH_POTION", "heal": 0, "damage": 0, "buff_stat": "", "buff_pct": 0.0, "duration": 0, "use_blocks": 1, "use_reach": 1, "hazard": {}, "max_stack": 2});
+        let mut e = json!({"id": id, "name": id, "family": "consumable", "rarity": "COMMON", "weight": 0.5, "value": 10, "description": "A test item.", "damage_type": "", "icon_id": "", "starter_stash": false, "consumable_type": "HEALTH_POTION", "heal": 0, "damage": 0, "buff_pct": 0.0, "duration": 0, "use_blocks": 1, "use_reach": 1, "hazard": {}, "max_stack": 2});
         e.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
         e
     };

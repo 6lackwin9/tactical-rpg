@@ -1,6 +1,7 @@
 # Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main and on pushes to main: the docs lint,
 # then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate
 # and check_project.ps1; no Godot step since CLN-42). Docs-only pushes to main skip it; `gate` is the required check on main.
+# The `web` job (WEBREL1-P1, PRs only) is advisory and outside `gate`; the deploy is web.yml (docs/workflow/web.md).
 name: gate
 
 on:
@@ -44,6 +45,85 @@ jobs:
 
       - name: Build and test
         run: bash tools/fc.sh gate
+
+  # WEBREL1-P1: the web TEST build on PRs into main (the release PR), uploaded as the artifact web-build. ADVISORY: not in
+  # the needs of `gate` below and not a required check, so a red web job never blocks a release (WEBREL1 section 5: the
+  # user decides after two green releases whether main requires it). The browser smoke runs after the upload and may fail
+  # without failing the job (continue-on-error); read its step log.
+  web:
+    name: web (advisory)
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read   # artifacts and caches use the runner token, not this one
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target   # the native `aegis bundle`; the wasm build uses target-wasm/
+      CARGO_TERM_COLOR: never
+      WASM_BINDGEN_VERSION: 0.2.129   # must equal the locked wasm-bindgen (Cargo.lock; tools/fc.sh web checks it)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries (ALSA, for the native aegis CLI that packs the bundle)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config
+
+      # WEBOPT1 (FB-165): a current Binaryen release for wasm-opt, not the apt package (108 re-points the
+      # __wbindgen_externrefs export at the fixed funcref table and the build does not boot). Pinned version and sha256
+      # (the release's published .sha256, 2026-11-10); to bump, change both together. tools/fc.sh skips an older wasm-opt.
+      - name: Binaryen (wasm-opt)
+        env:
+          BINARYEN_VERSION: "125"
+          BINARYEN_SHA256: 7c3bc16599c8274a04d34a504fe4be2047884f900e0e2da2f6fb9cd667183be4
+        run: |
+          archive="binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/$archive"
+          echo "$BINARYEN_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt" --version
+
+      - name: Rust toolchain and the wasm32 target
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            . -> target-wasm
+
+      - name: Cache wasm-bindgen-cli
+        id: bindgen-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}
+
+      - name: Install wasm-bindgen-cli
+        if: steps.bindgen-cache.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+
+      - name: Web test build
+        run: wasm-bindgen --version && bash tools/fc.sh web test
+
+      - name: Upload web-build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: out/web/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Browser smoke (advisory, Playwright Chromium)
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" bash tools/fc.sh web smoke
 
   gate:
     needs: [checks]

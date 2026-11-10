@@ -95,7 +95,8 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 /// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
 /// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal; CAMPAIGN1-TM2:
 /// a saved travel mode the world no longer has loads in the default mode with a warning; R4-2 M1: a member's saved
-/// deck entry the data no longer allows is dropped with a warning, `UnitState::sanitize_deck`).
+/// deck entry the data no longer allows is dropped with a warning, `UnitState::sanitize_deck`; PR4-2: so is a loadout
+/// family, rank or worn item, `UnitState::sanitize_loadout`).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
     let (data, mut warnings) = migrate(d, &envelope)?;
@@ -106,8 +107,12 @@ pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     }
     // R4-2 M1 (FB-138): a saved deck entry the current data disallows (a skill became a class basic, a family left
     // the path) is dropped with a load warning instead of refusing the save
-    for m in &mut state.party.members {
+    // PR4-2 (AUDIT-08): a saved loadout family, rank or worn item the current data disallows is dropped (worn gear
+    // to the stash) with a load warning too
+    let party = &mut state.party;
+    for m in &mut party.members {
         warnings.extend(m.sanitize_deck(d));
+        warnings.extend(m.sanitize_loadout(d, &mut party.stash));
     }
     let errors = state.validate(d);
     if !errors.is_empty() {

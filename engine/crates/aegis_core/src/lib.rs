@@ -3,6 +3,7 @@
 //! content (docs/specs/SPLIT1.md section 2).
 
 pub mod assets;
+pub mod clock;
 pub mod fmt;
 pub mod formula;
 pub mod ghash;
@@ -12,3 +13,4 @@ pub mod scratch;
 pub mod sha256;
 pub mod sort;
 pub mod value;
+pub mod vfs;

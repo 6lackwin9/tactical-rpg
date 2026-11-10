@@ -12,6 +12,7 @@ use crate::panes::TAB_H;
 use crate::screen::{show_errors, Cx};
 use crate::ui;
 use aegis_core::assets::Layers;
+use aegis_core::vfs;
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -820,7 +821,7 @@ pub fn load(layers: &Layers) -> Result<Theme, Vec<String>> {
     let mut face_set = [false; 3];
     for (i, root) in layers.roots.iter().enumerate().rev() {
         let file = root.join(FILE);
-        if file.is_file() {
+        if vfs::is_file(&file) {
             let at = format!("{FILE} ({})", names[i]);
             apply_file(&mut t, &file, &at, layers, &mut face_set, &mut errs);
             t.sources.push(at);
@@ -850,7 +851,7 @@ pub fn load(layers: &Layers) -> Result<Theme, Vec<String>> {
 }
 
 fn apply_file(t: &mut Theme, file: &Path, at: &str, layers: &Layers, face_set: &mut [bool; 3], errs: &mut Vec<String>) {
-    let v: Value = match std::fs::read_to_string(file).map_err(|e| e.to_string()).and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string())) {
+    let v: Value = match vfs::read_to_string(file).map_err(|e| e.to_string()).and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string())) {
         Ok(v) => v,
         Err(e) => return errs.push(format!("{at}: {e}")),
     };
@@ -919,7 +920,7 @@ fn apply_file(t: &mut Theme, file: &Path, at: &str, layers: &Layers, face_set: &
             let rel = file.as_str().unwrap_or("");
             match layers.find(rel).filter(|_| !rel.is_empty()) {
                 None => errs.push(format!("{at}: fonts.{k}.file '{rel}' is in no asset layer")),
-                Some(path) => match std::fs::read(&path) {
+                Some(path) => match vfs::read(&path) {
                     Ok(bytes) if fontdue::Font::from_bytes(bytes.as_slice(), fontdue::FontSettings::default()).is_ok() => {
                         f.file = rel.into();
                         f.bytes = Some(Arc::new(bytes));
@@ -989,8 +990,8 @@ fn apply_breakpoints(keys: &mut MetricKeys, v: &Value, at: &str, errs: &mut Vec<
 
 /// The frame files of one layer's `ui/frames/` (each `<role>.png` with its `<role>.json`).
 fn load_frames(t: &mut Theme, dir: &Path, layer: &str, errs: &mut Vec<String>) {
-    let Ok(read) = std::fs::read_dir(dir) else { return };
-    let mut files: Vec<String> = read.filter_map(|e| e.ok()).filter(|e| e.path().is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    let Ok(read) = vfs::list_dir(dir) else { return };
+    let mut files: Vec<String> = read.into_iter().filter(|p| vfs::is_file(p)).map(|p| p.file_name().unwrap_or_default().to_string_lossy().into_owned()).collect();
     files.sort();
     let roles: Vec<&str> = FRAME_ROLES.iter().map(|r| r.0).collect();
     let mut stems: Vec<String> = Vec::new();
@@ -1021,7 +1022,7 @@ fn load_frames(t: &mut Theme, dir: &Path, layer: &str, errs: &mut Vec<String>) {
             continue;
         };
         let at = format!("{FRAMES_DIR}/{side} ({layer})");
-        let v: Value = match std::fs::read_to_string(dir.join(&side)).map_err(|e| e.to_string()).and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string())) {
+        let v: Value = match vfs::read_to_string(dir.join(&side)).map_err(|e| e.to_string()).and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string())) {
             Ok(v) => v,
             Err(e) => {
                 errs.push(format!("{at}: {e}"));

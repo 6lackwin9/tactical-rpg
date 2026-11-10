@@ -12,6 +12,7 @@ use aegis_content::file::{self, raw_entries, read, stringify};
 use aegis_content::schema::{copy, field_errors, has_field, normalize, sget, to_storage};
 use aegis_content::store::Hooks;
 use aegis_core::json::{self, gstr, Dict};
+use aegis_core::vfs;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -345,7 +346,7 @@ pub fn resave_text(data_dir: &Path, world: Option<&str>, kind: &str) -> Result<S
 /// The stored manifest of `world` (raw, as the file holds it), None when the world has no world.json.
 fn stored_manifest(data_dir: &Path, world: &str) -> Result<Option<Dict>, String> {
     let path = aegis_content::world::manifest_path(data_dir, world);
-    if !path.is_file() {
+    if !vfs::is_file(&path) {
         return Ok(None);
     }
     let mut errors = Vec::new();
@@ -514,7 +515,7 @@ pub fn view(data_dir: &Path) -> crate::check::View {
 
 fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     let mut view = crate::check::View::new(&src.catalog, &src.worlds, &src.game, data_dir.parent().map(aegis_core::assets::Layers::for_game).unwrap_or_default());
-    view.terrain_file = data_dir.join("catalog/terrain.json").is_file();
+    view.terrain_file = vfs::is_file(data_dir.join("catalog/terrain.json"));
     view.load_errors = src.errors.clone();
     view.purse = src.purse;
     view
@@ -576,7 +577,7 @@ pub fn warnings(data_dir: &Path) -> Vec<String> {
 /// The manifest beside the data folder (the game's game.json), when there is one: its own problems, and its
 /// worlds against the world folders (the list is metadata; the loader reads the folders).
 fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
-    let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| p.is_file()) else { return Vec::new() };
+    let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| vfs::is_file(p)) else { return Vec::new() };
     let m = match aegis_content::manifest::Manifest::read(&path) {
         Ok(m) => m,
         Err(e) => return vec![e],

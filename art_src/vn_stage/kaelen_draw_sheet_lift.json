@@ -1,0 +1,39 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_draw_sheet_lift",
+  "prompt": "Edit image 1 into a new animation keyframe. Image 1 and image 2 are two consecutive frames of the same character drawing his weapon; draw the single in-between frame exactly halfway from image 1 to image 2.\n\nCharacter (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size as in both references. Face calm and composed, mouth closed.\n\nPose: the legs and boots stay exactly as in image 1 and image 2 (they are the same in both), upright stance, boots flat on the same ground line. The right hand has lifted the halberd off the ground: the right hand is at upper-chest height, halfway between its place in image 1 and in image 2, and the shaft leans at about 60 degrees, blade up and to the right, the butt end swung off the ground to about knee height in front of his legs. The right forearm follows the shaft. The left hand has left the hip and is reaching forward toward the shaft at belt height, fingers open, just about to grip it.\n\nFraming and style: same canvas, same character size and position as image 1, one character only, full body, three-quarter view facing right. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_draw_sheet_lift.txt",
+  "time": "2026-11-09T16:31:34Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f2.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_draw_sheet_lift_q1794241724",
+  "metadata": {
+    "asset_id": "kaelen_draw_sheet_lift",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_draw_sheet_lift.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_draw_sheet_lift.txt",
+      "kind": "vn_keyframe",
+      "between": "sheet_draw_f1,sheet_draw_f2",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f2.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe",
+  "between": "sheet_draw_f1,sheet_draw_f2",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f2.png"
+  ],
+  "notes": "Verified resolution (1024x1024) and aspect ratio (1:1) within 3% tolerance."
+}

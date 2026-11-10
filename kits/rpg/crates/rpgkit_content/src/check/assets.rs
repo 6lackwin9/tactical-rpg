@@ -10,13 +10,13 @@ use super::View;
 use crate::art;
 use aegis_core::assets::{self, Clips};
 use aegis_core::json::{self, Dict};
+use aegis_core::vfs;
 use serde_json::Value;
 
 /// A PNG's size from its header (None: not a PNG).
 fn png_size(path: &std::path::Path) -> Option<(u32, u32)> {
-    let mut head = [0u8; 24];
-    use std::io::Read;
-    std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    let bytes = vfs::read(path).ok()?;
+    let head = bytes.get(..24)?;
     (head[1..4] == *b"PNG").then(|| (u32::from_be_bytes([head[16], head[17], head[18], head[19]]), u32::from_be_bytes([head[20], head[21], head[22], head[23]])))
 }
 
@@ -505,10 +505,9 @@ fn files_under(root: &std::path::Path, dir: &std::path::Path) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let Ok(read) = std::fs::read_dir(&d) else { continue };
-        for e in read.flatten() {
-            let p = e.path();
-            if p.is_dir() {
+        let Ok(read) = vfs::list_dir(&d) else { continue };
+        for p in read {
+            if vfs::is_dir(&p) {
                 stack.push(p);
             } else if let Ok(rel) = p.strip_prefix(root) {
                 out.push(rel.to_string_lossy().replace('\\', "/"));
@@ -525,13 +524,13 @@ pub fn sidecar_problems(root: &std::path::Path, rel: &str) -> Vec<String> {
     let mut out = Vec::new();
     let png_rel = format!("{}.png", rel.strip_suffix(".face.json").unwrap_or(rel));
     let png = root.join(&png_rel);
-    let width = if png.is_file() {
+    let width = if vfs::is_file(&png) {
         png_size(&png).map_or(0, |(w, _)| w as i32)
     } else {
         out.push(format!("no portrait {} beside the sidecar.", png_rel.rsplit('/').next().unwrap_or(&png_rel)));
         0
     };
-    let raw = match std::fs::read_to_string(root.join(rel)).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| e.to_string())) {
+    let raw = match vfs::read_to_string(root.join(rel)).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str::<Value>(&t).map_err(|e| e.to_string())) {
         Ok(v) => v,
         Err(e) => {
             out.push(format!("the sidecar is not JSON ({e})."));
@@ -558,8 +557,8 @@ pub fn portrait_file_warnings(root: &std::path::Path, layers: &assets::Layers, n
     for rel in files.iter().filter(|f| f.ends_with(".face.json")) {
         out.extend(sidecar_problems(root, rel).into_iter().map(|m| format!("{rel}: {m}")));
     }
-    let Ok(read) = std::fs::read_dir(&portraits) else { return out };
-    let mut folders: Vec<String> = read.flatten().filter(|e| e.path().join("faces").is_dir()).map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    let Ok(read) = vfs::list_dir(&portraits) else { return out };
+    let mut folders: Vec<String> = read.into_iter().filter(|p| vfs::is_dir(p.join("faces"))).map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string()).collect();
     folders.sort();
     let unique: Vec<&str> = ["hero", "npc", "elite", "boss"].iter().filter_map(|t| art::tier_folder(t)).collect();
     for folder in folders {
@@ -582,7 +581,7 @@ pub fn portrait_file_warnings(root: &std::path::Path, layers: &assets::Layers, n
             if !layers.has(&base) && !layers.has(&format!("{dir}/neutral.png")) {
                 out.push(format!("{dir}/: no portrait {base} and no neutral.png."));
             }
-            let base_eyes = layers.roots.iter().find(|r| r.join(&base).is_file()).and_then(|r| std::fs::read_to_string(r.join(assets::face_file(&base))).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| assets::parse_face(&v).ok()).is_some_and(|f| !f.eyes.is_empty());
+            let base_eyes = layers.roots.iter().find(|r| vfs::is_file(r.join(&base))).and_then(|r| vfs::read_to_string(r.join(assets::face_file(&base))).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| assets::parse_face(&v).ok()).is_some_and(|f| !f.eyes.is_empty());
             for rel in files.iter().filter(|f| f.strip_prefix(&format!("{dir}/")).is_some()) {
                 let name = &rel[dir.len() + 1..];
                 let (stem, png) = match (name.strip_suffix(".face.json"), name.strip_suffix(".png")) {
@@ -595,7 +594,7 @@ pub fn portrait_file_warnings(root: &std::path::Path, layers: &assets::Layers, n
                 };
                 if !names.iter().any(|f| f == stem) {
                     out.push(format!("{rel}: '{stem}' is not one of {}.", names.join(", ")));
-                } else if png && base_eyes && !root.join(assets::face_file(rel)).is_file() {
+                } else if png && base_eyes && !vfs::is_file(root.join(assets::face_file(rel))) {
                     out.push(format!("{rel}: no {stem}.face.json; it uses the base anchors ({}).", assets::face_file(&base)));
                 }
             }

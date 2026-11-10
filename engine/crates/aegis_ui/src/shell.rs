@@ -3,33 +3,43 @@
 //! exactly what the player sees: ui_tree, click, drag, hover, key, back, screenshot, game, plus whatever the top screen
 //! answers (`Screen::command`). Keys: arrows, Enter, Space, Esc, Tab, Page Up / Down and characters go to the top
 //! screen; F12 takes a screenshot; right click goes back. While a text field edits (PLAYUI1-T) the editing keys, the
-//! clipboard keys, clicks and drags in it go to the field (`ui::Edit`).
+//! clipboard keys, clicks and drags in it go to the field (`ui::Edit`). The web (WEBREL1-E2, `start_web`): the same
+//! shell on a page canvas, its renderer started asynchronously, audio from the first gesture, no agent link.
 
 use crate::bridge;
 use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::layout_audit::{self, Profile};
 use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
-use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, window_capped, window_centred, window_kept_in, window_size_of, Context, Cx, Held, Key, Nav, Notice, ScreenRect, Screen, WindowShow};
+use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, Screen};
+// The window's show, size and place (DISPLAY2): the desktop only; the web page owns its canvas (WEBREL1-E2).
+#[cfg(not(target_arch = "wasm32"))]
+use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect, WindowShow};
 use crate::canvas::{rgba, Rect};
 use crate::pacing::{FrameNeed, Pace, Pacer};
 use crate::window::Grab;
 use crate::theme::{th, Metrics};
 use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, FIELD_PAD_X, FIELD_PAD_Y};
 use anyhow::Result;
-use pixels::{Pixels, SurfaceTexture};
+use pixels::Pixels;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
+use aegis_core::vfs::dev;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WKey, KeyCode, NamedKey, PhysicalKey};
-use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::dpi::PhysicalSize;
+#[cfg(not(target_arch = "wasm32"))]
+use winit::dpi::PhysicalPosition;
+#[cfg(not(target_arch = "wasm32"))]
 use winit::monitor::MonitorHandle;
-use winit::window::{Fullscreen, Window, WindowId};
+#[cfg(not(target_arch = "wasm32"))]
+use winit::window::Fullscreen;
+use winit::window::{Window, WindowId};
 
 pub mod headless;
 
@@ -94,7 +104,7 @@ struct Shell<G> {
     /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
     open_focus: Option<String>,
     /// Playtest trail: the control under the pointer, since when, and its trail form.
-    hover: Option<(String, std::time::Instant, Value)>,
+    hover: Option<(String, aegis_core::clock::Instant, Value)>,
     /// Shift is held (a Shift+click in a text field extends its selection).
     shift: bool,
     /// The left button went down in the text field being edited: moving the mouse selects (PLAYUI1-T).
@@ -165,7 +175,7 @@ impl<G: Context> Shell<G> {
     /// The shell on a canvas of `pw` x `ph` px: everything but where the frames go, so a window and a run without one
     /// start the same. `icon_notice` is what the manifest's icon came to.
     fn open(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: &Options, (pw, ph): (u32, u32), dpr: f32, icon_notice: Option<String>) -> Self {
-        let font_bytes = std::fs::read(&options.font).unwrap_or_else(|e| panic!("{}: {e}", options.font.display()));
+        let font_bytes = aegis_core::vfs::read(&options.font).unwrap_or_else(|e| panic!("{}: {e}", options.font.display()));
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
@@ -402,7 +412,7 @@ impl<G: Context> Shell<G> {
                 self.cx.playtest.trail(json!({"type": "hover", "ctl": ctl, "ms": ms}));
             }
         }
-        self.hover = under.map(|(id, ctl)| (id, std::time::Instant::now(), ctl));
+        self.hover = under.map(|(id, ctl)| (id, aegis_core::clock::Instant::now(), ctl));
     }
 
     /// The lowest screen drawn: the top one and those under it down to the first that is not an overlay.
@@ -1018,6 +1028,23 @@ impl<G: Context> Shell<G> {
         self.cx.app.note(msg);
     }
 
+    /// The agent's `ui_tree` reply: the screen, the stack, the canvas and the top screen's widgets, state and game.
+    /// The process id only on the desktop (a page has none; `std::process::id` panics on the web).
+    fn ui_tree(&self) -> Value {
+        let cx = &self.cx;
+        let top = self.stack.last().unwrap();
+        #[allow(unused_mut)]
+        let mut out = json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": self.top_view().canvas(), "grid": top.grid().name(), "mouse": [self.mouse.0, self.mouse.1],
+            "frame": self.frames, "px": [self.gfx.canvas.w, self.gfx.canvas.h],
+            "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
+            "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))});
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            out["pid"] = json!(std::process::id());
+        }
+        out
+    }
+
     /// Agent link requests.
     fn bridge(&mut self, body: &Value) -> Value {
         self.agent = true;
@@ -1031,14 +1058,7 @@ impl<G: Context> Shell<G> {
     fn bridge_cmd(&mut self, body: &Value) -> Value {
         let cmd = body.get("cmd").and_then(Value::as_str).unwrap_or("");
         let reply = match cmd {
-            "ui_tree" => {
-                let cx = &self.cx;
-                let top = self.stack.last().unwrap();
-                json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": self.top_view().canvas(), "grid": top.grid().name(), "mouse": [self.mouse.0, self.mouse.1],
-                    "frame": self.frames, "pid": std::process::id(), "px": [self.gfx.canvas.w, self.gfx.canvas.h],
-                    "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
-                    "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))})
-            }
+            "ui_tree" => self.ui_tree(),
             "click" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
                 let infos = self.stack.last().unwrap().widgets();
@@ -1280,6 +1300,7 @@ impl<G: Context> Shell<G> {
 /// The part of `monitor` a window may use, in physical px. Windows: the monitor's work area (`GetMonitorInfoW`'s
 /// `rcWork`: the monitor without the taskbar and docked bars; a hidden taskbar leaves it whole). Elsewhere winit offers
 /// no work area, so it is the whole monitor and a panel may still cover a window's edge.
+#[cfg(not(target_arch = "wasm32"))]
 fn usable_area(monitor: &MonitorHandle) -> ScreenRect {
     #[cfg(windows)]
     {
@@ -1301,6 +1322,7 @@ fn usable_area(monitor: &MonitorHandle) -> ScreenRect {
     whole_monitor(monitor)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn whole_monitor(monitor: &MonitorHandle) -> ScreenRect {
     let (at, size) = (monitor.position(), monitor.size());
     ScreenRect { x: at.x, y: at.y, w: size.width, h: size.height }
@@ -1310,7 +1332,9 @@ fn whole_monitor(monitor: &MonitorHandle) -> ScreenRect {
 /// scale) to fit the usable area of the monitor it is on, then places it: a borderless one centred, a framed
 /// one left where it is unless it must move to stay on the usable area. The setting itself never changes: a bigger
 /// monitor gets the full size back. A value that is no size leaves the size alone; no monitor reported (Wayland can
-/// report none) means no cap and no move. Returns a line for the log when the size was capped.
+/// report none) means no cap and no move. Returns a line for the log when the size was capped (the desktop; the web
+/// page owns its canvas size).
+#[cfg(not(target_arch = "wasm32"))]
 fn size_and_place(window: &Window, want: &Value, show: WindowShow) -> Option<String> {
     let (inner, outer) = (window.inner_size(), window.outer_size());
     let frame = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
@@ -1339,14 +1363,31 @@ fn text_scale_of(v: &Value) -> f32 {
     v["text_scale"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) as f32
 }
 
+/// What wakes the event loop besides the window's own events.
+enum Wake {
+    /// The agent link has requests (`bridge`; native only).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    Link,
+    /// The web renderer came up, or failed (WEBREL1-E2): `Pixels::new_async` cannot run inside `resumed`, so it runs on
+    /// the browser's executor and hands its result back here.
+    #[cfg(target_arch = "wasm32")]
+    Surface(Result<Pixels<'static>, pixels::Error>),
+}
+
 struct App<G> {
     /// The context and the first screens, until the window exists.
     start: Option<(Cx<G>, Vec<Box<dyn Screen<G>>>)>,
     shell: Option<Shell<G>>,
     options: Options,
     window: Option<Arc<Window>>,
+    /// The renderer; on the web None until the async init hands it over (frames are drawn, not presented, until then).
     pixels: Option<Pixels<'static>>,
-    proxy: EventLoopProxy<()>,
+    proxy: EventLoopProxy<Wake>,
+    /// The page canvas the web start draws on (its element id; WEBREL1-E2).
+    #[cfg(target_arch = "wasm32")]
+    canvas: String,
+    /// Why the shell could not start (no window, no renderer): `run` returns it once the loop has stopped.
+    failed: Option<anyhow::Error>,
     bridge: Option<Receiver<bridge::Request>>,
     /// The settings last applied to the window (None: not yet), and the frame interval the cap asks for (None:
     /// unlimited).
@@ -1365,6 +1406,61 @@ struct App<G> {
 }
 
 impl<G: Context> App<G> {
+    fn new(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options, proxy: EventLoopProxy<Wake>) -> Self {
+        App {
+            start: Some((cx, stack)),
+            shell: None,
+            options,
+            window: None,
+            pixels: None,
+            proxy,
+            #[cfg(target_arch = "wasm32")]
+            canvas: String::new(),
+            failed: None,
+            bridge: None,
+            applied: None,
+            frame_every: Some(Duration::from_millis(16)),
+            pacer: Pacer::default(),
+            walk_keys: Vec::new(),
+            shift: false,
+            ctrl: false,
+            alt: false,
+        }
+    }
+
+    /// The shell cannot start or run: the loop stops and `run` returns `e`. On the web (WEBREL1 6.2), where nothing
+    /// returns, the reason goes to the console and onto the page in place of the canvas (`web::show_failure`), and
+    /// nothing is drawn any more.
+    fn fail(&mut self, el: &ActiveEventLoop, e: anyhow::Error) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            web::report(&format!("{e:#}"));
+            web::show_failure(&self.canvas, &format!("{e:#}"));
+            self.shell = None;
+        }
+        self.failed = Some(e);
+        el.exit();
+    }
+
+    /// The web renderer is ready (WEBREL1-E2): sized to the canvas as it is now (it may have been resized while the
+    /// init ran), vsync as the settings say.
+    #[cfg(target_arch = "wasm32")]
+    fn surface_ready(&mut self, mut p: Pixels<'static>) {
+        if let Some(w) = &self.window {
+            let size = w.inner_size();
+            let (pw, ph) = (size.width.max(1), size.height.max(1));
+            let _ = p.resize_surface(pw, ph);
+            let _ = p.resize_buffer(pw, ph);
+            if let Some(s) = self.shell.as_mut().filter(|s| (s.gfx.canvas.w, s.gfx.canvas.h) != (pw as i32, ph as i32)) {
+                s.resize_canvas(pw, ph);
+            }
+        }
+        if let Some(s) = &self.shell {
+            p.enable_vsync(s.cx.settings.v["vsync"].as_bool().unwrap_or(true));
+        }
+        self.pixels = Some(p);
+    }
+
     fn redraw(&mut self) {
         let started = Instant::now();
         let Some(shell) = self.shell.as_mut() else { return };
@@ -1375,9 +1471,22 @@ impl<G: Context> App<G> {
             }
         }
         shell.frame();
+        #[cfg(all(target_arch = "wasm32", feature = "web_probe"))]
+        if probe::wanted() {
+            probe::publish(shell.probe_tree());
+        }
         if shell.cx.quit {
-            shell.leave_all();
-            std::process::exit(0);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                shell.leave_all();
+                std::process::exit(0);
+            }
+            // The web build (WEBREL1-E1b): a page cannot close its own tab and `process::exit` would abort the module,
+            // so Quit is a no-op there: the flag is cleared and the current screen stays.
+            #[cfg(target_arch = "wasm32")]
+            {
+                shell.cx.quit = false;
+            }
         }
         // A screen asked for the pointer on one of its widgets (ASKNO2): moved only while the window has the focus;
         // a platform that refuses is ignored. The shell's mouse follows at once so the hover shows.
@@ -1409,7 +1518,12 @@ impl<G: Context> App<G> {
         if self.applied.as_ref() == Some(&v) {
             return;
         }
+        // The web (WEBREL1-E2): the page owns the canvas and its size, so the window show and size settings do not apply.
+        #[cfg(target_arch = "wasm32")]
+        let _ = window;
+        #[cfg(not(target_arch = "wasm32"))]
         let show = WindowShow::of(&v);
+        #[cfg(not(target_arch = "wasm32"))]
         if self.applied.as_ref().is_none_or(|a| WindowShow::of(a) != show || a["window_size"] != v["window_size"]) {
             if show == WindowShow::Fullscreen {
                 if window.fullscreen().is_none() {
@@ -1432,7 +1546,165 @@ impl<G: Context> App<G> {
     }
 }
 
-impl<G: Context> ApplicationHandler for App<G> {
+/// The renderer on the window: pixels' synchronous init (the desktop).
+#[cfg(not(target_arch = "wasm32"))]
+fn open_pixels(pw: u32, ph: u32, window: Arc<Window>) -> Result<Pixels<'static>, pixels::Error> {
+    Pixels::new(pw, ph, pixels::SurfaceTexture::new(pw, ph, window))
+}
+
+/// The web start path (WEBREL1-E2, `start_web`): the page canvas, the async renderer, the browser's console.
+#[cfg(target_arch = "wasm32")]
+mod web {
+    use super::{EventLoopProxy, Wake, Window};
+    use anyhow::{anyhow, Context as _, Result};
+    use std::sync::Arc;
+    use wasm_bindgen::JsCast;
+    use winit::dpi::{LogicalSize, PhysicalSize};
+    use winit::platform::web::WindowAttributesExtWebSys;
+    use winit::window::WindowAttributes;
+
+    /// The canvas's size on the page, in CSS px; it is drawn at the device pixel ratio (1280 x 720 CSS px are
+    /// 2560 x 1440 px at a ratio of 2), and follows the ratio when it changes (page zoom, another screen).
+    pub const CANVAS_CSS: (f64, f64) = (1280.0, 720.0);
+
+    /// The page's canvas with the element id `id`.
+    pub fn canvas(id: &str) -> Result<web_sys::HtmlCanvasElement> {
+        let doc = web_sys::window().and_then(|w| w.document()).context("the page has no document")?;
+        let el = doc.get_element_by_id(id).with_context(|| format!("the page has no element with id \"{id}\""))?;
+        el.dyn_into::<web_sys::HtmlCanvasElement>().map_err(|_| anyhow!("the page element \"{id}\" is not a canvas"))
+    }
+
+    /// The window on canvas `id`: `CANVAS_CSS` at the device pixel ratio, focusable (keys reach it), and its default
+    /// actions prevented, so a right click goes back instead of opening the browser's context menu.
+    pub fn attributes(attrs: WindowAttributes, id: &str) -> Result<WindowAttributes> {
+        let size = LogicalSize::new(CANVAS_CSS.0, CANVAS_CSS.1);
+        Ok(attrs.with_canvas(Some(canvas(id)?)).with_inner_size(size).with_min_inner_size(size).with_prevent_default(true).with_focusable(true))
+    }
+
+    /// Starts pixels' async init on the browser's executor; the result comes back to the loop as `Wake::Surface`.
+    /// WebGL2 only: wgpu takes WebGPU whenever the browser has `navigator.gpu`, also where it then finds no adapter
+    /// (headless Chromium, many Linux browsers), and WebGL2 runs in every browser the web build targets.
+    pub fn open_pixels(pw: u32, ph: u32, window: Arc<Window>, proxy: EventLoopProxy<Wake>) {
+        wasm_bindgen_futures::spawn_local(async move {
+            let surface = pixels::SurfaceTexture::new(pw, ph, window);
+            let made = pixels::PixelsBuilder::new(pw, ph, surface).wgpu_backend(pixels::wgpu::Backends::GL).build_async().await;
+            let _ = proxy.send_event(Wake::Surface(made));
+        });
+    }
+
+    /// The canvas's size in px as the window opens: winit learns it from the page's resize observer a moment later (it
+    /// reads 0 x 0 until then, and `Resized` follows), so the first frame takes `CANVAS_CSS` at the ratio.
+    pub fn first_size(window: &Window) -> PhysicalSize<u32> {
+        let size = window.inner_size();
+        if size.width > 0 && size.height > 0 {
+            return size;
+        }
+        LogicalSize::new(CANVAS_CSS.0, CANVAS_CSS.1).to_physical(window.scale_factor())
+    }
+
+    /// Gives the canvas the keyboard focus (keys reach a page element only while it has it).
+    pub fn focus(window: &Window) {
+        use winit::platform::web::WindowExtWebSys;
+        if let Some(c) = window.canvas() {
+            let _ = c.focus();
+        }
+    }
+
+    /// A start failure in the browser's console (nothing returns from the web start's loop).
+    pub fn report(message: &str) {
+        web_sys::console::error_1(&message.into());
+    }
+
+    /// The element id of the failure line `show_failure` puts on the page (a page or test may style or read it).
+    pub const FAILURE_ID: &str = "aegis-failure";
+
+    /// A failure the player must see: the canvas `id` is hidden and a short line takes its place on the page ("The game
+    /// stopped: <reason>"); with no such canvas the line goes at the end of the body.
+    pub fn show_failure(id: &str, reason: &str) {
+        let Some(doc) = web_sys::window().and_then(|w| w.document()) else { return };
+        let Ok(line) = doc.create_element("div") else { return };
+        line.set_id(FAILURE_ID);
+        let _ = line.set_attribute("style", "max-width:640px;margin:40px auto;padding:16px;font:15px sans-serif;color:#eee;background:#311;border:1px solid #844");
+        line.set_text_content(Some(&format!("The game stopped: {reason}")));
+        match canvas(id) {
+            Ok(c) => {
+                let _ = c.set_attribute("style", "display:none");
+                if let Some(parent) = c.parent_node() {
+                    let _ = parent.insert_before(&line, c.next_sibling().as_ref());
+                }
+            }
+            Err(_) => {
+                if let Some(body) = doc.body() {
+                    let _ = body.append_child(&line);
+                }
+            }
+        }
+    }
+}
+
+/// The page's view of the shell for browser tests (WEBREL1-G1; cargo feature `web_probe`, the web build only; a game
+/// turns it on in its test build): the page calls `aegisProbe()` (exported to JS), which asks the shell for a snapshot
+/// at its next frame, wakes the loop and returns the latest snapshot as JSON text ("" before the first). The snapshot
+/// is the agent's `ui_tree` reply plus where the screen sits on the page (`view`: offset and scale in canvas px,
+/// `dpr`), so a test finds a widget's rectangle and clicks it with the real mouse. It reads and never acts: input
+/// still comes only from the page's keyboard and mouse.
+#[cfg(all(target_arch = "wasm32", feature = "web_probe"))]
+mod probe {
+    use super::{EventLoopProxy, Wake};
+    use std::cell::{Cell, RefCell};
+    use wasm_bindgen::prelude::wasm_bindgen;
+
+    thread_local! {
+        static WANTED: Cell<bool> = const { Cell::new(false) };
+        static LAST: RefCell<String> = const { RefCell::new(String::new()) };
+        pub(super) static PROXY: RefCell<Option<EventLoopProxy<Wake>>> = const { RefCell::new(None) };
+    }
+
+    /// The latest snapshot (JSON text, "" before the first); the next frame takes a new one.
+    #[wasm_bindgen(js_name = aegisProbe)]
+    pub fn aegis_probe() -> String {
+        WANTED.with(|w| w.set(true));
+        PROXY.with(|p| {
+            if let Some(p) = p.borrow().as_ref() {
+                let _ = p.send_event(Wake::Link);
+            }
+        });
+        LAST.with(|l| l.borrow().clone())
+    }
+
+    /// Whether the page asked for a snapshot since the last one (and clears the ask).
+    pub(super) fn wanted() -> bool {
+        WANTED.with(|w| w.replace(false))
+    }
+
+    pub(super) fn publish(snapshot: String) {
+        LAST.with(|l| *l.borrow_mut() = snapshot);
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "web_probe"))]
+impl<G: Context> Shell<G> {
+    /// `probe`'s snapshot: `ui_tree` with the view (offset and scale in canvas px) and the device pixel ratio.
+    fn probe_tree(&self) -> String {
+        let mut out = self.ui_tree();
+        let v = self.gfx.view;
+        out["view"] = json!([v.ox, v.oy, v.s]);
+        out["dpr"] = json!(self.gfx.kit.device.dpr);
+        out.to_string()
+    }
+}
+
+/// A press that counts as the player's gesture: a page may start audio only after one (`Audio::unlock`).
+fn is_gesture(ev: &WindowEvent) -> bool {
+    match ev {
+        WindowEvent::KeyboardInput { event, .. } => event.state == ElementState::Pressed && !event.repeat,
+        WindowEvent::MouseInput { state, .. } => *state == ElementState::Pressed,
+        WindowEvent::Touch(t) => t.phase == winit::event::TouchPhase::Started,
+        _ => false,
+    }
+}
+
+impl<G: Context> ApplicationHandler<Wake> for App<G> {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
@@ -1441,6 +1713,11 @@ impl<G: Context> ApplicationHandler for App<G> {
         // The setting `start_inactive` (a scenario run's scratch profile): the window opens without taking the focus.
         let active = cx.settings.v["start_inactive"] != json!(true);
         let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(PhysicalSize::new(1280, 720)).with_min_inner_size(PhysicalSize::new(640, 360)).with_active(active);
+        #[cfg(target_arch = "wasm32")]
+        let attrs = match web::attributes(attrs, &self.canvas) {
+            Ok(a) => a,
+            Err(e) => return self.fail(el, e),
+        };
         let (attrs, icon_notice) = match crate::icon::window_icons(cx.art.layers(), &self.options.icon) {
             Ok(Some(icons)) => {
                 #[cfg(windows)]
@@ -1450,26 +1727,55 @@ impl<G: Context> ApplicationHandler for App<G> {
             Ok(None) => (attrs, None),
             Err(notice) => (attrs, Some(notice)),
         };
-        let window = Arc::new(el.create_window(attrs).expect("window"));
+        let window = match el.create_window(attrs) {
+            Ok(w) => Arc::new(w),
+            Err(e) => return self.fail(el, anyhow::anyhow!("the window: {e}")),
+        };
+        #[cfg(not(target_arch = "wasm32"))]
         let size = window.inner_size();
+        #[cfg(target_arch = "wasm32")]
+        let size = web::first_size(&window);
         let (pw, ph) = (size.width.max(1), size.height.max(1));
-        let pixels = Pixels::new(pw, ph, SurfaceTexture::new(pw, ph, window.clone())).expect("pixels");
+        // The desktop renderer starts here; the web's comes later as `Wake::Surface` (frames are drawn meanwhile).
+        #[cfg(not(target_arch = "wasm32"))]
+        match open_pixels(pw, ph, window.clone()) {
+            Ok(p) => self.pixels = Some(p),
+            Err(e) => return self.fail(el, anyhow::anyhow!("the renderer: {e}")),
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            web::open_pixels(pw, ph, window.clone(), self.proxy.clone());
+            web::focus(&window);
+        }
+        #[allow(unused_mut)]
         let mut shell = Shell::open(cx, stack, &self.options, (pw, ph), window.scale_factor() as f32, icon_notice);
-        let port = self.options.port;
-        let proxy = self.proxy.clone();
-        self.bridge = bridge::start(port, move || {
-            let _ = proxy.send_event(());
-        });
-        if self.bridge.is_none() {
-            shell.cx.notice.push(format!("Agent link: port {port} is busy."));
+        // The agent link is a TCP port: none on the web.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let port = self.options.port;
+            let proxy = self.proxy.clone();
+            self.bridge = bridge::start(port, move || {
+                let _ = proxy.send_event(Wake::Link);
+            });
+            if self.bridge.is_none() {
+                shell.cx.notice.push(format!("Agent link: port {port} is busy."));
+            }
         }
         self.shell = Some(shell);
         self.window = Some(window);
-        self.pixels = Some(pixels);
     }
 
-    /// The agent link woke the loop: its requests are answered in a redraw, at once, whatever the cap says.
-    fn user_event(&mut self, _el: &ActiveEventLoop, _e: ()) {
+    /// The agent link woke the loop: its requests are answered in a redraw, at once, whatever the cap says. On the web
+    /// the renderer arriving wakes it too (`Wake::Surface`), and the first frame is presented at once.
+    fn user_event(&mut self, _el: &ActiveEventLoop, e: Wake) {
+        match e {
+            Wake::Link => {}
+            #[cfg(target_arch = "wasm32")]
+            Wake::Surface(Ok(p)) => self.surface_ready(p),
+            // WEBREL1 6.2: no renderer, no frames: the loop stops and the page says why
+            #[cfg(target_arch = "wasm32")]
+            Wake::Surface(Err(e)) => return self.fail(_el, anyhow::anyhow!("the renderer did not start (the browser needs WebGL2): {e}")),
+        }
         self.pacer.touch(Instant::now());
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -1494,6 +1800,11 @@ impl<G: Context> ApplicationHandler for App<G> {
         if !matches!(ev, WindowEvent::RedrawRequested) {
             self.pacer.touch(Instant::now());
         }
+        if is_gesture(&ev) {
+            if let Some(s) = self.shell.as_mut() {
+                s.cx.audio.unlock();
+            }
+        }
         match ev {
             WindowEvent::CloseRequested => {
                 // Taken out first: no event after the close reaches a shell whose screens have left.
@@ -1516,14 +1827,19 @@ impl<G: Context> ApplicationHandler for App<G> {
                     w.request_redraw();
                 }
             }
-            WindowEvent::ScaleFactorChanged { scale_factor, mut inner_size_writer } => {
+            WindowEvent::ScaleFactorChanged { scale_factor, inner_size_writer } => {
                 if let Some(s) = self.shell.as_mut() {
                     s.gfx.kit.device.dpr = scale_factor as f32;
                 }
                 // Sizes are real pixels: a window moved to a monitor of another scale keeps its pixels.
+                #[cfg(not(target_arch = "wasm32"))]
                 if let Some(w) = self.window.as_ref().filter(|w| w.fullscreen().is_none()) {
-                    let _ = inner_size_writer.request_inner_size(w.inner_size());
+                    let mut writer = inner_size_writer;
+                    let _ = writer.request_inner_size(w.inner_size());
                 }
+                // The web keeps the canvas's CSS size instead: winit's new size is it at the new ratio (`Resized` follows).
+                #[cfg(target_arch = "wasm32")]
+                drop(inner_size_writer);
             }
             WindowEvent::RedrawRequested => self.redraw(),
             WindowEvent::ModifiersChanged(m) => {
@@ -1782,7 +2098,7 @@ pub fn blank_reason(c: &Canvas) -> Option<String> {
 /// would have replaced, so it cannot pass for this one.
 pub fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
     if let Some(why) = blank_reason(c) {
-        let _ = std::fs::remove_file(path);
+        let _ = dev::remove_file(path);
         anyhow::bail!("no shot: {why}");
     }
     let mut img = Image { w: c.w, h: c.h, px: c.px.clone() };
@@ -1790,13 +2106,14 @@ pub fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
         img = img.downsample(max_w, c.h * max_w / c.w);
     }
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+        dev::create_dir_all(dir)?;
     }
-    let file = std::fs::File::create(path)?;
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), img.w as u32, img.h as u32);
+    let mut bytes = Vec::new();
+    let mut enc = png::Encoder::new(&mut bytes, img.w as u32, img.h as u32);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
     enc.write_header()?.write_image_data(&img.px)?;
+    dev::write(path, bytes)?;
     Ok(())
 }
 
@@ -1808,10 +2125,33 @@ pub fn run<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: O
     if let Some(h) = options.headless {
         return headless::run(cx, stack, &options, h);
     }
-    let el: EventLoop<()> = EventLoop::with_user_event().build()?;
-    let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), pacer: Pacer::default(), walk_keys: Vec::new(), shift: false, ctrl: false, alt: false };
+    let el: EventLoop<Wake> = EventLoop::with_user_event().build()?;
+    let mut app = App::new(cx, stack, options, el.create_proxy());
     el.run_app(&mut app)?;
+    match app.failed {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
+/// The web start (WEBREL1-E2): `run` on the page's canvas with the element id `canvas_id`, shown at 1280 x 720 CSS px
+/// and drawn at the device pixel ratio. Returns at once (`spawn_app`): the browser drives the loop, frames come on its
+/// animation frames, and the renderer starts asynchronously (frames are presented once it is up). The files the shell
+/// and the screens read (the font, the theme, art) are in the mounted bundle (`aegis_core::vfs::mount`) first. A missing
+/// canvas is an error here; a renderer that fails later goes to the browser's console. Audio waits for the player's
+/// first key or click (`Audio::unlock`); there is no agent link and no headless run on the web.
+#[cfg(target_arch = "wasm32")]
+pub fn start_web<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options, canvas_id: &str) -> Result<()> {
+    use winit::platform::web::EventLoopExtWebSys;
+    anyhow::ensure!(options.headless.is_none(), "the web has no headless run");
+    web::canvas(canvas_id)?;
+    crate::theme::reload(&mut cx);
+    let el: EventLoop<Wake> = EventLoop::with_user_event().build()?;
+    #[cfg(feature = "web_probe")]
+    probe::PROXY.with(|p| *p.borrow_mut() = Some(el.create_proxy()));
+    let mut app = App::new(cx, stack, options, el.create_proxy());
+    app.canvas = canvas_id.to_string();
+    el.spawn_app(app);
     Ok(())
 }
 

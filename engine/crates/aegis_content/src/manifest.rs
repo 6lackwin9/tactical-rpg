@@ -11,6 +11,7 @@
 use crate::file::{read, stringify};
 use crate::schema::is_id;
 use aegis_core::json::{self, Dict};
+use aegis_core::vfs;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -133,7 +134,7 @@ impl Manifest {
         if !unknown.is_empty() {
             return Err(unknown);
         }
-        let mut d = if path.is_file() { Self::read(path).map_err(|e| vec![e])?.to_dict() } else { Self::default().to_dict() };
+        let mut d = if vfs::is_file(path) { Self::read(path).map_err(|e| vec![e])?.to_dict() } else { Self::default().to_dict() };
         for (k, v) in json::normalize_dict(patch) {
             if v.is_null() && !KEYS.contains(&k.as_str()) {
                 d.shift_remove(&k);
@@ -158,7 +159,7 @@ impl Manifest {
 
 /// The workspace of the game in `game_dir`: its first ancestor holding `engine/assets/` (ASSETORG2).
 pub fn workspace_of(game_dir: &Path) -> Option<PathBuf> {
-    game_dir.ancestors().skip(1).find(|d| d.join("engine/assets").is_dir()).map(Path::to_path_buf)
+    game_dir.ancestors().skip(1).find(|d| vfs::is_dir(d.join("engine/assets"))).map(Path::to_path_buf)
 }
 
 /// None, or why `kit` cannot be the kit of the game in `game_dir`: "" (no kit) or a folder `kits/<kit>/` holding
@@ -170,7 +171,7 @@ pub fn kit_problem(game_dir: &Path, kit: &str) -> Option<String> {
     if !is_id(kit) {
         return Some(format!("game.json: kit '{kit}' must be a kit id (lowercase snake_case)."));
     }
-    let found = workspace_of(game_dir).is_some_and(|ws| ws.join("kits").join(kit).join(KIT_FILE).is_file());
+    let found = workspace_of(game_dir).is_some_and(|ws| vfs::is_file(ws.join("kits").join(kit).join(KIT_FILE)));
     (!found).then(|| format!("game.json: kit '{kit}' has no kits/{kit}/{KIT_FILE}."))
 }
 
@@ -180,7 +181,7 @@ pub const KIT_FILE: &str = "kit.json";
 /// (`aegis_core::assets::kit_problems`: the id is the folder name) and writes it in `KIT_KEYS` order.
 pub fn set_kit(path: &Path, patch: &Dict) -> Result<Dict, Vec<String>> {
     let folder = path.parent().and_then(Path::file_name).map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let mut d: Dict = if path.is_file() {
+    let mut d: Dict = if vfs::is_file(path) {
         let mut errors = Vec::new();
         match read(path, &mut errors) {
             Some(Value::Object(o)) => o,
@@ -208,11 +209,11 @@ pub fn set_kit(path: &Path, patch: &Dict) -> Result<Dict, Vec<String>> {
 /// named `id`), else `games/<id>` under an ancestor.
 pub fn find_game_dir(start: &Path, id: &str) -> Option<PathBuf> {
     start.ancestors().find_map(|d| {
-        if d.file_name().is_some_and(|n| n == id) && d.join(FILE).is_file() {
+        if d.file_name().is_some_and(|n| n == id) && vfs::is_file(d.join(FILE)) {
             return Some(d.to_path_buf());
         }
         let g = d.join("games").join(id);
-        g.join(FILE).is_file().then_some(g)
+        vfs::is_file(g.join(FILE)).then_some(g)
     })
 }
 

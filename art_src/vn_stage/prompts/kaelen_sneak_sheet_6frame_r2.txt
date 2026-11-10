@@ -1,0 +1,17 @@
+Reference images, attached in this order and named here by file name: kaelen_ref_sneak.png (his crouched sneaking posture and the way he holds the halberd; not a leg pose to copy); kaelen_ref_sheet_f1.png (the same character standing: the size to draw him at).
+
+Make a pixel-art animation sprite sheet of one character sneaking to the right, one full crouched stealth walk cycle as 6 frames in a grid of 3 columns and 2 rows, read left to right, top row first. Draw him at exactly the size of kaelen_ref_sheet_f1.png in every frame (same head size and proportions; he is lower only because he crouches). The legs must clearly change from every frame to the next: this is a step cycle, not one pose repeated.
+
+Legs, frame by frame ("near leg" is the leg closer to the viewer, "far leg" the one behind it; he faces right; knees deeply bent in every frame):
+1. Reach: near foot placed far ahead, only the toe touching down; far leg bent behind carrying the weight.
+2. Shift: the near foot flat, the weight moving onto it, both knees deeply bent, the far heel lifting behind.
+3. Pass: the far leg lifted and swinging forward low under the body, its foot just above the ground beside the near ankle; the legs close together.
+4. Reach: far foot placed far ahead, only the toe touching down; near leg bent behind carrying the weight. The legs swapped from frame 1.
+5. Shift: the far foot flat, the weight moving onto it, the near heel lifting behind.
+6. Pass: the near leg lifted and swinging forward low under the body, its foot just above the ground beside the far ankle; the legs close together.
+
+Hold (every frame): crouched low, back bent forward, the halberd held level at hip height in both hands as in kaelen_ref_sneak.png, blade forward to the right, steady through the cycle; the head stays at the same low height.
+
+Character (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and alert, mouth closed.
+
+Layout and style: every frame is the same size, with the character at the same scale and his feet on the same ground line in each cell. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.

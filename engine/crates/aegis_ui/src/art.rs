@@ -18,6 +18,7 @@
 
 use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Face, Facing, Layers};
+use aegis_core::vfs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -68,8 +69,8 @@ static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
 pub fn load_png(path: &Path) -> Option<Image> {
-    let file = std::fs::File::open(path).ok()?;
-    let mut dec = png::Decoder::new(file);
+    let bytes = vfs::read(path).ok()?;
+    let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = dec.read_info().ok()?;
     let mut buf = vec![0; reader.output_buffer_size()];
@@ -205,8 +206,8 @@ impl Art {
     /// sidecar does not parse (`assets::parse_face`; its range problems are the asset check's, not the drawing's).
     pub fn face(&mut self, rel: &str) -> Option<&Face> {
         if !self.faces.contains_key(rel) {
-            let root = self.layers.roots.iter().find(|r| r.join(rel).is_file());
-            let face = root.and_then(|r| std::fs::read_to_string(r.join(assets::face_file(rel))).ok()).and_then(|t| serde_json::from_str(&t).ok()).and_then(|v| assets::parse_face(&v).ok());
+            let root = self.layers.roots.iter().find(|r| vfs::is_file(r.join(rel)));
+            let face = root.and_then(|r| vfs::read_to_string(r.join(assets::face_file(rel))).ok()).and_then(|t| serde_json::from_str(&t).ok()).and_then(|v| assets::parse_face(&v).ok());
             self.faces.insert(rel.to_string(), face);
         }
         self.faces.get(rel).and_then(|f| f.as_ref())
@@ -427,8 +428,8 @@ impl Art {
 
 /// A PNG's width and height from its header (None: not a readable PNG).
 pub fn png_size(path: &Path) -> Option<(i32, i32)> {
-    let file = std::fs::File::open(path).ok()?;
-    let reader = png::Decoder::new(std::io::BufReader::new(file)).read_info().ok()?;
+    let bytes = vfs::read(path).ok()?;
+    let reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info().ok()?;
     let info = reader.info();
     Some((info.width as i32, info.height as i32))
 }
@@ -452,7 +453,7 @@ pub fn blank_frames(clips: &Clips, sheet: &Image) -> Vec<(String, u32)> {
 pub fn find_project(start: &Path) -> Option<PathBuf> {
     let mut dir = start.to_path_buf();
     loop {
-        if dir.join("game.json").is_file() && dir.join("assets").is_dir() {
+        if vfs::is_file(dir.join("game.json")) && vfs::is_dir(dir.join("assets")) {
             return Some(dir);
         }
         if !dir.pop() {

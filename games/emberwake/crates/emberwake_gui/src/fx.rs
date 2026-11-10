@@ -55,6 +55,30 @@ pub struct Act<'a> {
     pub harms: bool,
 }
 
+impl<'a> Act<'a> {
+    /// An action of `kind` with `skill` (its row id, "" = none) by a wielder of weapon type `family` (`ranged` when
+    /// it is a ranged weapon) `dist` cells from its aim; not magic, not on the actor, not harmful (the flags `popped`
+    /// reads from the command).
+    pub fn new(kind: &'a str, skill: &'a str, family: &'a str, ranged: bool, dist: i32) -> Self {
+        Act { kind, skill, family, ranged, magic: false, dist, on_self: false, harms: false }
+    }
+
+    /// PR4-2 (AUDIT-10): the `Act` of popped command `cmd` by unit `unit` with `skill` (its row id, "" = none) and its
+    /// main weapon `weapon`, `dist` cells from its aim (`BattleScreen::popped_impact` and the FX tests read it):
+    /// the kind is `act_kind`'s, family and range the weapon's, magic a `magic` weapon damage type, and an item use
+    /// lands on the actor when it targets itself and harms when the item deals damage.
+    pub fn popped(cmd: &emberwake_battle::command::CmdKind, unit: usize, skill: &'a str, weapon: Option<&'a emberwake_rules::gear::Equipment>, dist: i32) -> Self {
+        let family = weapon.map_or("", |w| w.weapon_type());
+        let ranged = weapon.is_some_and(|w| w.is_ranged_weapon());
+        let mut act = Act::new(act_kind(cmd), skill, family, ranged, dist);
+        act.magic = weapon.is_some_and(|w| aegis_core::json::s(&w.item.raw, "damage_type") == "magic");
+        if let emberwake_battle::command::CmdKind::Item { target, item, .. } = cmd {
+            (act.on_self, act.harms) = (*target == unit, item.damage > 0);
+        }
+        act
+    }
+}
+
 /// R4-2 (3), C28: the `Act` kind of a popped command (the battle's step -> FX seam, `BattleScreen::popped_impact`):
 /// `attack`, `area`, `support` or `item`; "" for every other command (a move, a guard, a rest, a focus, a status
 /// block, a target switch), which has no effect (`style` gives no delivery).
@@ -1159,7 +1183,7 @@ mod tests {
     use serde_json::json;
 
     fn act<'a>(kind: &'a str, skill: &'a str, family: &'a str, ranged: bool, dist: i32) -> Act<'a> {
-        Act { kind, skill, family, ranged, magic: false, dist, on_self: false, harms: false }
+        Act::new(kind, skill, family, ranged, dist)
     }
 
     fn delivery(a: Act) -> Delivery {
@@ -1820,8 +1844,6 @@ mod tests {
                 let u = &s.w.units[a.unit];
                 let kind = act_kind(&a.command.kind);
                 let skill = s.w.cat.skills.iter().find(|k| k.name == a.command.name).map_or("", |k| k.id.as_str());
-                let weapon = u.inventory.main_weapon();
-                let (family, ranged) = (weapon.map_or("", |w| w.weapon_type()), weapon.is_some_and(|w| w.is_ranged_weapon()));
                 let to = match &a.command.kind {
                     emberwake_battle::command::CmdKind::Attack { target: Some(t), .. } => s.w.grid.pos(*t),
                     emberwake_battle::command::CmdKind::Area { aim, .. } => Some(*aim),
@@ -1831,7 +1853,7 @@ mod tests {
                     (Some(f), Some(t)) => f.dist(t),
                     _ => 0,
                 };
-                let d = delivery(Act { kind, skill, family, ranged, magic: false, dist, on_self: false, harms: false });
+                let d = delivery(Act::popped(&a.command.kind, a.unit, skill, u.inventory.main_weapon(), dist));
                 if kind.is_empty() {
                     others += 1;
                     assert_eq!(d, Delivery::None, "{} ({}): no effect", a.command.name, u.name);

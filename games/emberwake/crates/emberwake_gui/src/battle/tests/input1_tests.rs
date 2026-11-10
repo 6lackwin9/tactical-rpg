@@ -1099,6 +1099,7 @@ fn the_strip_with_the_gauge_fits_at_every_text_size() {
 /// ruleset's name, its switches, the reveal); a classic fight draws neither the chip nor any intent control and its
 /// state keeps its shape.
 #[test]
+#[cfg(feature = "dev_tools")] // WEBREL1-G1: reads a Tools screen (compiled out without dev_tools)
 fn the_arena_chip_shows_beyond_classic_and_classic_is_unchanged() {
     let timeline = Ruleset::of(&crate::hud::hud_tests::game_cx().data.cat, TIMELINE).expect("the catalog's timeline row");
     let off = timeline.rules.iter().copied().find(|id| rule(id).is_some_and(|r| r.kind == RuleKind::Extension) && *id != PLAN_BADGES).expect("an extension besides plan_badges");

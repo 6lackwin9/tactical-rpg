@@ -1,0 +1,5 @@
+Characters: Vesper, Kaelen, Maren, Hollis.
+
+Night at the foot of the stone bridge, the escape: Vesper kneels at a drowned iron drainage grate, levering the bars open with a crowbar, black runoff water pouring through. Kaelen stands guard behind her with his halberd, looking back up the bridge. Maren hurries toward the grate holding a bone-saw and her censer staff. Hollis runs last with his heavy crossbow, glancing over his shoulder. Two cold white searchlight beams sweep across the wet cobblestones behind them, the stuck mortuary cart up on the bridge crown in the background.
+
+Style: pixel art story illustration for a dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, a 16:9 wide image. Clear dark outlines, hand-placed pixel clusters, limited palette, light dithering. Characters exactly as their character references (faces, hair, outfits, weapons). No text, no UI, no border, no logo.

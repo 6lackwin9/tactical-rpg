@@ -1,0 +1,12 @@
+{
+  "frame_w": 442,
+  "frame_h": 482,
+  "frames": 46,
+  "cols": 8,
+  "fps": 24,
+  "ground_y": 466,
+  "loop": false,
+  "box_x": 54,
+  "box_y": 142,
+  "source": "image_pipeline/video/out/kaelen_video_slash_720tall.mp4"
+}

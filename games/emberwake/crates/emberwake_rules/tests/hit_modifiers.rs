@@ -134,18 +134,30 @@ fn every_passive_and_item_reaches_a_hit_with_the_accumulators_numbers_and_its_so
     for (name, cat) in [("shipped", shipped()), ("frozen", frozen())] {
         for (ui, base) in units(&cat).iter().enumerate() {
             let target = base.clone();
+            // the sample unit's own records (its class kit's worn gear may grant some: an item's family mastery
+            // passive, `gear:<item>:mastery`, at the wearer's proficiency): a case's records are exactly these plus the
+            // ones its own source adds
+            let own: Vec<HitSource> = base.hit_sources.iter().chain(&base.gear_hit_sources).cloned().collect();
+            let own_sources: Vec<String> = own.iter().map(|h| h.source.clone()).collect();
+            let others = |u: &Unit, src: &str| -> Vec<HitSource> { u.hit_sources.iter().chain(&u.gear_hit_sources).filter(|h| h.source != src).cloned().collect() };
             for p in cat.passives.values() {
                 passives += 1;
                 let mut u = base.clone();
                 let src = format!("passive:{}", p.id);
                 u.apply_effects(&cat, &p.effects, &src, false);
-                let allowed = [src.clone()];
+                assert_eq!(others(&u, &src), own, "{name} unit {ui}: passive {}: the other records are the unit's own", p.id);
+                let mut allowed = vec![src.clone()];
+                allowed.extend(own_sources.iter().cloned());
                 hits += both_paths(&u, &target, &cat, &format!("{name} unit {ui}: passive {}", p.id), &allowed);
                 // the same row as a meter band: its sources come and go with the band
                 let mut b = base.clone();
                 let before = b.hit_sources.clone();
                 let applied = b.apply_band(&cat, &p.effects, &format!("band:{}", p.id));
-                both_paths(&b, &target, &cat, &format!("{name} unit {ui}: band {}", p.id), &[format!("passive:band:{}", p.id)]);
+                let band_src = format!("passive:band:{}", p.id);
+                assert_eq!(others(&b, &band_src), own, "{name} unit {ui}: band {}: the other records are the unit's own", p.id);
+                let mut band_allowed = vec![band_src];
+                band_allowed.extend(own_sources.iter().cloned());
+                both_paths(&b, &target, &cat, &format!("{name} unit {ui}: band {}", p.id), &band_allowed);
                 b.remove_band(&applied);
                 assert_eq!(b.hit_sources, before, "{name} unit {ui}: band {} left, its sources gone", p.id);
             }
@@ -187,7 +199,10 @@ fn each_hit_time_target_names_its_sources_in_order() {
     let step = hit.trace.step("skill").unwrap();
     assert_eq!(names(&step.parts), names(&u.potency_parts(&skill)), "the hit's skill step names them");
     assert!(hit.trace.steps.iter().filter(|s| s.id != "skill").all(|s| s.parts.is_empty()), "rule terms carry no parts");
-    // a sync drops the worn sources only
+    // a sync drops the hand-applied worn source only: the worn records are rebuilt from the unit's gear (its own, as the
+    // base unit has them) and the five passive records stay
     u.sync_from_stats_and_gear(&cat);
-    assert!(u.gear_hit_sources.is_empty() && u.hit_sources.len() == 5);
+    assert_eq!(u.gear_hit_sources, base.gear_hit_sources, "the worn records are the base gear's again");
+    assert!(u.gear_hit_sources.iter().all(|h| h.source != "gear:ring"), "the ring's record is gone");
+    assert_eq!(u.hit_sources.len(), base.hit_sources.len() + 5);
 }

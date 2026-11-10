@@ -83,7 +83,9 @@ function render() {
     } else if (STATE.screen === 'story') {
       const m = STATE.storyMode || 'vn_stage';
       const rp = STATE.storyRigPose || 'auto';
-      const re = STATE.storyRigEngine || 'atlas_b';
+      const re = STATE.storyRigEngine || 'pose_c';
+      const db = STATE.storyDeformerBoost || 1.0;
+      const wm = STATE.storyWalkMode || 'off';
       const tv = STATE.storyTurnaroundView || 'side';
       togglesEl.innerHTML = `
         <span style="color:#fbbf24;font-weight:700;font-size:10px;">StoryStage:</span>
@@ -93,23 +95,29 @@ function render() {
         ${m === 'vn_stage' ? `
           <span style="color:#6b7280;margin:0 1px;">|</span>
           <span style="color:#34d399;font-size:10px;font-weight:700;">Rig Engine:</span>
-          <button class="db-btn ${re === 'atlas_b' ? 'active' : ''}" onclick="STATE.storyRigEngine='atlas_b';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach B: Exploded 13-Part Spine2D Cutout Atlas driven by 16-joint 2-Bone IK / FK skeleton">🧩 Atlas Parts (B)</button>
-          <button class="db-btn ${re === 'pose_c' ? 'active' : ''}" onclick="STATE.storyRigEngine='pose_c';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach C: Dedicated 3-Pose Keyframe Sheet (Relaxed / Sneaking / Drawn) + Live Idle Rig & Squash/Stretch Transition">🎬 Pose Sheet (C)</button>
-          <button class="db-btn ${re === 'slice_a' ? 'active' : ''}" onclick="STATE.storyRigEngine='slice_a';render();" title="Approach A: Single Neutral Sprite auto-sliced into 10 limbs with circular joint caps">✂️ Auto-Slice (A)</button>
-          <button class="db-btn ${re === 'compare_bc' ? 'active' : ''}" onclick="STATE.storyRigEngine='compare_bc';if(STATE.storyRigPose==='auto')STATE.storyRigPose='weapons_drawn';render();" title="Side-by-Side Live Comparison of Approach B (Exploded Atlas Rig), Approach C (3-Pose Sheet + Rig), and Approach A (Auto-Slice Rig)">⇄ Compare B vs C</button>
+          <button class="db-btn ${re === 'pose_c' ? 'active' : ''}" onclick="STATE.storyRigEngine='pose_c';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach C (Recommended): Dedicated 3-Pose Keyframe Sheet (Relaxed / Sneaking / Drawn) + Multi-Zone Strip-Mesh & Deformer Rig">🎬 Pose Sheet (C)</button>
+          <button class="db-btn ${re === 'atlas_b' ? 'active' : ''}" onclick="STATE.storyRigEngine='atlas_b';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach B: Exploded 13-Part Spine2D Cutout Atlas driven by 16-joint 2-Bone IK / FK skeleton">🧩 Atlas (B)</button>
+          <button class="db-btn ${re === 'slice_a' ? 'active' : ''}" onclick="STATE.storyRigEngine='slice_a';render();" title="Approach A: Single Neutral Sprite auto-sliced into 10 limbs with circular joint caps">✂️ Slice (A)</button>
+          <button class="db-btn ${re === 'compare_bc' ? 'active' : ''}" onclick="STATE.storyRigEngine='compare_bc';if(STATE.storyRigPose==='auto')STATE.storyRigPose='weapons_drawn';render();" title="Side-by-Side Live Comparison of Approach C (3-Pose Sheet + Deformer), Approach B (Exploded Atlas Rig), and Approach A (Auto-Slice Rig)">⇄ Compare</button>
           <span style="color:#6b7280;margin:0 1px;">|</span>
           <span style="color:#fbbf24;font-size:10px;font-weight:700;">Pose:</span>
-          <button class="db-btn ${rp === 'auto' ? 'active' : ''}" onclick="STATE.storyRigPose='auto';render();" title="Use each dialogue beat's authored pose">Beat Auto</button>
+          <button class="db-btn ${rp === 'auto' ? 'active' : ''}" onclick="STATE.storyRigPose='auto';render();" title="Use each dialogue beat's authored pose">Auto</button>
           <button class="db-btn ${rp === 'relaxed' ? 'active' : ''}" onclick="STATE.storyRigPose='relaxed';STATE.storyReactionOverride=null;render();" title="Pose 1: Relaxed (Upright stance, one-handed vertical billhook)">1. Relaxed</button>
-          <button class="db-btn ${rp === 'sneaking' ? 'active' : ''}" onclick="STATE.storyRigPose='sneaking';STATE.storyReactionOverride=null;render();" title="Pose 2: Sneaking (Deep knee flex crouch, two-handed horizontal billhook parallel to ground)">2. 👣 Sneaking</button>
-          <button class="db-btn ${rp === 'weapons_drawn' ? 'active' : ''}" onclick="STATE.storyRigPose='weapons_drawn';render();" title="Pose 3: Weapons Drawn (Combat guard crouch, two-handed diagonal billhook across chest)">3. ⚔ Weapons Drawn</button>
-          <button class="db-btn ${STATE.storyShowRigDebug ? 'active' : ''}" onclick="STATE.storyShowRigDebug=!STATE.storyShowRigDebug;render();" title="Show 16-Joint 2-Bone IK / FK Skeleton & Limb Deformer Boxes">🦴 Rig Mesh</button>
+          <button class="db-btn ${rp === 'sneaking' ? 'active' : ''}" onclick="STATE.storyRigPose='sneaking';STATE.storyReactionOverride=null;render();" title="Pose 2: Sneaking (Stealth crouch, two-handed horizontal billhook parallel to ground)">2. 👣 Sneak</button>
+          <button class="db-btn ${rp === 'weapons_drawn' ? 'active' : ''}" onclick="STATE.storyRigPose='weapons_drawn';render();" title="Pose 3: Weapons Drawn (Wide combat stance, two-handed diagonal billhook guard)">3. ⚔ Drawn</button>
           <span style="color:#6b7280;margin:0 1px;">|</span>
-          <span style="color:#93c5fd;font-size:10px;">3-View:</span>
-          <button class="db-btn ${tv === 'side' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='side';render();" title="Side Profile (VN Default)">Side</button>
-          <button class="db-btn ${tv === 'front' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='front';if(STATE.storyRigEngine!=='slice_a')STATE.storyRigEngine='slice_a';render();" title="Front View (Down / South facing from 3-View Sheet)">Front</button>
-          <button class="db-btn ${tv === 'back' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='back';if(STATE.storyRigEngine!=='slice_a')STATE.storyRigEngine='slice_a';render();" title="Back View (Up / North facing from 3-View Sheet)">Back</button>
-          <button class="db-btn ${tv === 'sheet_3view' ? 'active' : ''}" onclick="STATE.storyTurnaroundView='sheet_3view';if(STATE.storyRigEngine==='compare_bc')STATE.storyRigEngine='slice_a';render();" title="Inspect all 3 Turnaround Views (Front, Side, Back) rigged simultaneously at 60fps!">★ 3-View Sheet</button>
+          <span style="color:#38bdf8;font-size:10px;font-weight:700;">Walk Stage:</span>
+          <button class="db-btn ${wm === 'off' ? 'active' : ''}" onclick="STATE.storyWalkMode='off';render();" title="Stationary Stage (Standard idle/combat stance without stage travel)">⏹ Static</button>
+          <button class="db-btn ${wm === 'scroll_bg' ? 'active' : ''}" onclick="STATE.storyWalkMode='scroll_bg';render();" title="Mode 1 — Treadmill Parallax Scroll: Hero stays in place with 60fps walking/sneak-walking gait while multi-layer background & mist scroll past">🔄 Scroll BG</button>
+          <button class="db-btn ${wm === 'pan_camera' ? 'active' : ''}" onclick="STATE.storyWalkMode='pan_camera';resetStoryCameraPan();render();" title="Mode 2 — Wide Camera Pan Following Hero: Camera pans across a wide 2160px stage following Kaelen as he walks forward">🎥 Pan Camera</button>
+          <span style="color:#6b7280;margin:0 1px;">|</span>
+          <span style="color:#f472b6;font-size:10px;font-weight:700;">Limit-Test:</span>
+          <button class="db-btn ${db === 1.0 ? 'active' : ''}" onclick="STATE.storyDeformerBoost=1.0;render();" title="Normal 1.0x Deformer Amplitude (Subtle breathing, knee suspension, gaze lock)">1x</button>
+          <button class="db-btn ${db === 2.2 ? 'active' : ''}" onclick="STATE.storyDeformerBoost=2.2;render();" title="2.2x Limit-Test Amplitude (Heavy combat breathing, deep strip-mesh knee flex, 2.5D torso twist, hair wind)">🔥 2.2x</button>
+          <button class="db-btn ${db === 3.2 ? 'active' : ''}" onclick="STATE.storyDeformerBoost=3.2;render();" title="3.2x Extreme Stress-Test Amplitude (Pushes strip-mesh leg warp, waist hinge, and neck stabilizer to maximum limits)">🚀 3.2x</button>
+          <button class="db-btn" onclick="triggerStoryRigAction('lunge');" title="Fire a live forward Strike / Thrust Lunge impulse on the deformer rig">⚔️ Lunge</button>
+          <button class="db-btn" onclick="triggerStoryRigAction('flinch');" title="Fire a live backward Hit / Poise Stagger impulse on the deformer rig">💥 Flinch</button>
+          <button class="db-btn ${STATE.storyShowRigDebug ? 'active' : ''}" onclick="STATE.storyShowRigDebug=!STATE.storyShowRigDebug;render();" title="Show Live Deforming Strip-Mesh Warp Grid & Joint Skeleton">🦴 Mesh</button>
         ` : ''}
         <span style="color:#6b7280;margin:0 1px;">|</span>
         <button class="db-btn ${STATE.storyId === 'prologue_intro' ? 'active' : ''}" onclick="STATE.storyId='prologue_intro';STATE.storyCardIdx=0;STATE.storyMoodOverride=null;STATE.storyReactionOverride=null;render();">0a Alley</button>

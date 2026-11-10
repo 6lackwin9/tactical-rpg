@@ -45,7 +45,10 @@ pub enum MenuAct {
     NewGame,
     Load,
     Settings,
+    #[cfg(feature = "dev_tools")]
     Tools,
+    /// Desktop only: a web page cannot close its own tab (WEBREL1 6.2, `FB-157`), so the web menu has no Quit.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     Quit,
 }
 
@@ -141,6 +144,7 @@ impl MainMenu {
             MenuAct::NewGame => cx.nav.push(Nav::Push(Box::new(NewGameScreen::new(cx)))),
             MenuAct::Load => cx.nav.push(Nav::Push(Box::new(Slots::new(false)))),
             MenuAct::Settings => cx.nav.push(Nav::Push(Box::new(SettingsScreen::new(cx)))),
+            #[cfg(feature = "dev_tools")]
             MenuAct::Tools => cx.nav.push(Nav::Push(Box::new(crate::runner::SceneRunner::new()))),
             MenuAct::Quit => {
                 if cx.is_dirty() {
@@ -304,9 +308,13 @@ impl Screen<GameCx> for MainMenu {
             MenuItem::new("new_game", "New game", None, MenuAct::NewGame),
             MenuItem::new("load", "Load game", None, MenuAct::Load),
             MenuItem::new("settings", "Settings", None, MenuAct::Settings),
-            MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools),
-            MenuItem::new("quit", "Quit", None, MenuAct::Quit),
         ]);
+        // WEBREL1-G1: the dev tools (the Scene Runner) only in a build with them (`crate::DEV_TOOLS`)
+        #[cfg(feature = "dev_tools")]
+        items.push(MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools));
+        // WEBREL1 6.2 (`FB-157`): no Quit on the web, where a page cannot close its own tab
+        #[cfg(not(target_arch = "wasm32"))]
+        items.push(MenuItem::new("quit", "Quit", None, MenuAct::Quit));
         // The column widens leftward at the larger text sizes so its longest label is never cut (only the labels take
         // the mouse: `MenuStyle::Text`).
         let widest = items.iter().map(|i| ui.p.text_w(&i.label, m.title)).fold(0.0, f32::max);

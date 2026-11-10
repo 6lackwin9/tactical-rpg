@@ -19,7 +19,7 @@ use emberwake_data::STATS;
 use emberwake_rules::damage;
 use emberwake_rules::gear::item_fits_slot;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 const SCREEN_ID: &str = "gear_dojo";
 /// The desk under the two toolbar rows.

@@ -317,7 +317,7 @@ pub struct PortraitDemo {
     pub motion: usize,
     pub image: Image,
     pub face: Face,
-    last_wall: Option<std::time::Instant>,
+    last_wall: Option<aegis_core::clock::Instant>,
 }
 
 impl Default for PortraitDemo {
@@ -402,7 +402,7 @@ pub struct FxDemo {
     pub looping: bool,
     pub loop_start: u64,
     pub loop_seed: u64,
-    last_wall: Option<std::time::Instant>,
+    last_wall: Option<aegis_core::clock::Instant>,
 }
 
 impl Default for FxDemo {
@@ -678,8 +678,8 @@ impl Specimens {
     /// The Effects or Portraits page's clock moves by the wall time since the last call (at most
     /// `vignette::MAX_FRAME_MS`), while that page is on view (the gallery screen calls it every frame).
     pub fn tick(&mut self) {
-        let now = std::time::Instant::now();
-        let since = |last: Option<std::time::Instant>| last.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::vignette::MAX_FRAME_MS as f64));
+        let now = aegis_core::clock::Instant::now();
+        let since = |last: Option<aegis_core::clock::Instant>| last.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::vignette::MAX_FRAME_MS as f64));
         if self.page == 2 {
             let ms = since(self.fx.last_wall);
             self.fx.last_wall = Some(now);

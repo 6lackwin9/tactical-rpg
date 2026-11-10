@@ -15,6 +15,7 @@
 //! px (eye boxes, glow anchors, vein roots, the rim key, idle overlays): `face_file`, `parse_face`, `face_problems`.
 
 use crate::json::{self, Dict};
+use crate::vfs;
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -47,13 +48,13 @@ impl Layers {
     pub fn for_game(game_dir: &Path) -> Self {
         let mut out = Self::default();
         out.roots.push(game_dir.join("assets"));
-        let kit = std::fs::read_to_string(game_dir.join("game.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).map(|v| json::s(json::dict(&v), "kit")).unwrap_or_default();
-        let workspace = game_dir.ancestors().skip(1).find(|d| d.join("engine/assets").is_dir()).map(Path::to_path_buf);
+        let kit = vfs::read_to_string(game_dir.join("game.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).map(|v| json::s(json::dict(&v), "kit")).unwrap_or_default();
+        let workspace = game_dir.ancestors().skip(1).find(|d| vfs::is_dir(d.join("engine/assets"))).map(Path::to_path_buf);
         match &workspace {
             Some(ws) => {
                 if !kit.is_empty() {
                     let k = ws.join("kits").join(&kit).join("assets");
-                    if k.is_dir() {
+                    if vfs::is_dir(&k) {
                         out.roots.push(k);
                     } else {
                         out.notices.push(format!("Kit '{kit}' (game.json) has no folder kits/{kit}/assets: its assets are skipped."));
@@ -68,7 +69,7 @@ impl Layers {
 
     /// The first layer's file at `rel`.
     pub fn find(&self, rel: &str) -> Option<PathBuf> {
-        self.roots.iter().map(|r| r.join(rel)).find(|p| p.is_file())
+        self.roots.iter().map(|r| r.join(rel)).find(|p| vfs::is_file(p))
     }
 
     pub fn has(&self, rel: &str) -> bool {
@@ -78,27 +79,27 @@ impl Layers {
     /// The tile variants of `dir` (holding v0.png, v1.png, ...): in the first layer holding `dir/v0.png`, the run of
     /// v0..v(n-1) files; 0 when no layer has v0.
     pub fn variants(&self, dir: &str) -> usize {
-        let Some(root) = self.roots.iter().find(|r| r.join(dir).join("v0.png").is_file()) else { return 0 };
-        (0..).take_while(|n| root.join(dir).join(format!("v{n}.png")).is_file()).count()
+        let Some(root) = self.roots.iter().find(|r| vfs::is_file(r.join(dir).join("v0.png"))) else { return 0 };
+        (0..).take_while(|n| vfs::is_file(root.join(dir).join(format!("v{n}.png")))).count()
     }
 
     /// The names of the files directly in `dir` across every layer (a name once), sorted.
     pub fn list(&self, dir: &str) -> Vec<String> {
-        self.names(dir, |p| p.is_file())
+        self.names(dir, |p| vfs::is_file(p))
     }
 
     /// The names of the folders directly in `dir` across every layer (a name once), sorted.
     pub fn dirs(&self, dir: &str) -> Vec<String> {
-        self.names(dir, |p| p.is_dir())
+        self.names(dir, |p| vfs::is_dir(p))
     }
 
     fn names(&self, dir: &str, keep: impl Fn(&Path) -> bool) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for r in &self.roots {
-            let Ok(read) = std::fs::read_dir(r.join(dir)) else { continue };
-            for e in read.flatten() {
-                let name = e.file_name().to_string_lossy().to_string();
-                if keep(&e.path()) && !out.contains(&name) {
+            let Ok(read) = vfs::list_dir(r.join(dir)) else { continue };
+            for e in read {
+                let name = e.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if keep(&e) && !out.contains(&name) {
                     out.push(name);
                 }
             }
@@ -709,14 +710,14 @@ pub fn palette_problems(layers: &Layers) -> Vec<String> {
     let mut out = Vec::new();
     for root in &layers.roots {
         let mut files: Vec<PathBuf> = Vec::new();
-        for class in sorted_entries(&root.join("units")).into_iter().filter(|p| p.is_dir()) {
-            for variant in sorted_entries(&class).into_iter().filter(|p| p.is_dir()) {
-                files.extend(sorted_entries(&variant.join("palettes")).into_iter().filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "json")));
+        for class in sorted_entries(&root.join("units")).into_iter().filter(|p| vfs::is_dir(p)) {
+            for variant in sorted_entries(&class).into_iter().filter(|p| vfs::is_dir(p)) {
+                files.extend(sorted_entries(&variant.join("palettes")).into_iter().filter(|p| vfs::is_file(p) && p.extension().is_some_and(|x| x == "json")));
             }
         }
         for file in files {
             let shown = file.to_string_lossy().replace('\\', "/");
-            let reasons = match std::fs::read_to_string(&file) {
+            let reasons = match vfs::read_to_string(&file) {
                 Err(e) => vec![format!("unreadable ({e}).")],
                 Ok(text) => match serde_json::from_str::<Value>(&text) {
                     Err(e) => vec![format!("not JSON ({e}).")],
@@ -731,14 +732,14 @@ pub fn palette_problems(layers: &Layers) -> Vec<String> {
 
 /// The entries directly in `dir`, sorted by path (none when it is not a readable folder).
 fn sorted_entries(dir: &Path) -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().map(|e| e.path()).collect()).unwrap_or_default();
+    let mut out: Vec<PathBuf> = vfs::list_dir(dir).unwrap_or_default();
     out.sort();
     out
 }
 
 /// Reads a JSON file of the layers at `rel`.
 pub fn read_json(layers: &Layers, rel: &str) -> Option<Value> {
-    let text = std::fs::read_to_string(layers.find(rel)?).ok()?;
+    let text = vfs::read_to_string(layers.find(rel)?).ok()?;
     serde_json::from_str(&text).ok()
 }
 

@@ -551,7 +551,6 @@ pub struct ItemDef {
     pub consumable_type: String,
     pub heal: i32,
     pub damage: i32,
-    pub buff_stat: String,
     pub buff_pct: f64,
     pub duration: i32,
     pub use_blocks: i32,
@@ -699,7 +698,6 @@ impl ItemDef {
             consumable_type: string(o, "consumable_type", "HEALTH_POTION"),
             heal: int(o, "heal", 0),
             damage: int(o, "damage", 0),
-            buff_stat: string(o, "buff_stat", ""),
             buff_pct: float(o, "buff_pct", 0.0),
             duration: int(o, "duration", 0),
             use_blocks: int(o, "use_blocks", 1),
@@ -788,15 +786,6 @@ pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
 /// R4-1 (user 2026-11-09): the formula input of the unit's tier factor, its row's `mult` in the kit's tier table;
 /// reserved like `level`.
 pub const TIER_MULT_INPUT: &str = "tier_mult";
-/// U1.2-S4: the old tier inputs, deprecated aliases of `tier_mult` since R4-1 (one factor per tier); still reserved
-/// and read, so a formula written with them keeps working.
-pub const TIER_HP_INPUT: &str = "tier_hp";
-pub const TIER_POWER_INPUT: &str = "tier_power";
-
-/// A formula name that reads the unit's tier factor: `tier_mult` or a deprecated alias.
-pub fn is_tier_input(name: &str) -> bool {
-    name == TIER_MULT_INPUT || name == TIER_HP_INPUT || name == TIER_POWER_INPUT
-}
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]

@@ -1,0 +1,9 @@
+Edit image 1 into a new animation keyframe. Image 1 is the relaxed pose with the halberd held upright and image 2 is a later frame of the same character with the halberd tipped forward in both hands. Start from image 1 and change it only part of the way toward image 2: this is the moment the halberd has just left the ground, so the halberd must still stand much more upright than in image 2. Do not copy the pose of image 2.
+
+Halberd and arms (the part that matters most): the shaft leans at about 60 degrees from the ground, clearly steeper than in image 2 and clearly less upright than in image 1, blade up and to the right. Only the right hand holds the shaft, at upper-chest height, a little higher than in image 1; the right forearm follows the shaft. The butt end has swung off the ground to about knee height, in front of his legs. The left hand is NOT on the shaft yet: it has left the hip and is reaching forward toward the shaft at belt height, fingers open, still a short gap away from it.
+
+Character (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size as in the references. Face calm and composed, mouth closed.
+
+Legs: exactly as in image 1, upright stance, boots flat on the same ground line.
+
+Framing and style: same canvas, same character size and position as image 1, one character only, full body, three-quarter view facing right. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.

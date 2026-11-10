@@ -1,0 +1,11 @@
+Reference images, attached in this order and named here by file name: kaelen_ref_slash_f4_sx55.png (the wind-up, halberd raised behind the head; the frame to edit); kaelen_ref_slash_f5_sx55.png (the finished cleave, blade low in front).
+
+Edit kaelen_ref_slash_f4_sx55.png into a new animation keyframe: the mid-swing of a downward halberd cleave, the frame between kaelen_ref_slash_f4_sx55.png and kaelen_ref_slash_f5_sx55.png. Start from kaelen_ref_slash_f4_sx55.png and change it only part of the way toward kaelen_ref_slash_f5_sx55.png. Do not copy the pose of kaelen_ref_slash_f5_sx55.png: the blade must still be high, not at the hip.
+
+Swing (the part that matters most): the halberd has swung up over his head and the blade is now in front of him, up and to the right above head height, the edge leading forward and down. The shaft slopes down to the left at about 45 degrees across the front of the body. Both hands hold the shaft, the front hand at about head height and the back hand at about shoulder height, the arms pulling the blade forward and down. The torso is turning forward from the coil of kaelen_ref_slash_f4_sx55.png.
+
+Legs: exactly as in both references, boots planted in the same places on the same ground line.
+
+Character (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size as in both references. Face calm and composed, mouth closed.
+
+Framing and style: same canvas, same character size and position as kaelen_ref_slash_f4_sx55.png, one character only, full body, three-quarter view facing right, the whole halberd inside the canvas. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.

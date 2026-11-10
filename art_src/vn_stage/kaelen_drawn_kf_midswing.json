@@ -1,0 +1,37 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_drawn_kf_midswing",
+  "prompt": "Edit this pixel-art character sprite into a new animation keyframe. Image 1 is the wind-up pose and image 2 is the cleave pose of the same character; draw the in-between pose halfway through the swing from image 1 to image 2.\n\nCharacter (keep exactly as in image 1): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. Face calm and composed, mouth closed.\n\nPose: both boots stay planted exactly where they are in image 1, same stance width, same ground line. The torso leans slightly forward and twists toward the right. The halberd is mid-swing: the shaft runs nearly level across the body at belt height, the blade out to the right at about hip height, blade edge leading downward. The front (right) hand grips the shaft between the chest and the right hip, the back (left) hand stays near the left hip on the shaft end. Both hands on the shaft.\n\nFraming and style: same canvas, same character size and position as image 1, one character only, full body, facing right in three-quarter view. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_drawn_windup.png",
+  "prompts_file": null,
+  "time": "2026-11-09T15:37:50Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_drawn_windup.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_drawn_cleave.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_drawn_kf_midswing_q1794234079",
+  "metadata": {
+    "asset_id": "kaelen_drawn_kf_midswing",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_drawn_kf_midswing.png",
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "kind": "vn_keyframe",
+      "source_refs": [
+        "tools/mock_ui/anim_lab/kaelen_4pose_uris.json:drawn_kf_windup (340 px on #FF00FF, shared 96-colour palette)",
+        "tools/mock_ui/anim_lab/kaelen_4pose_uris.json:drawn_kf_cleave (340 px on #FF00FF, shared 96-colour palette)"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe",
+  "source_refs": [
+    "tools/mock_ui/anim_lab/kaelen_4pose_uris.json:drawn_kf_windup (340 px on #FF00FF, shared 96-colour palette)",
+    "tools/mock_ui/anim_lab/kaelen_4pose_uris.json:drawn_kf_cleave (340 px on #FF00FF, shared 96-colour palette)"
+  ],
+  "notes": "Verified resolution (1024x1024) and aspect ratio (1:1) within 3% tolerance."
+}

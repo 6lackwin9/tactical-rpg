@@ -135,8 +135,6 @@ fn every_field_rule_has_its_error() {
         (json!({"id": "know"}), "ID 'know' is a base stat."),
         (json!({"id": "level"}), "ID 'level' is the unit level input."),
         (json!({"id": "gear_mitigation"}), "ID 'gear_mitigation' is the worn gear mitigation input."),
-        (json!({"id": "tier_hp"}), "ID 'tier_hp' is a tier factor input."),
-        (json!({"id": "tier_power"}), "ID 'tier_power' is a tier factor input."),
         (json!({"id": "tier_mult"}), "ID 'tier_mult' is a tier factor input."),
         (json!({"id": "clamp"}), "ID 'clamp' is a formula function."),
         (json!({"id": "other"}), "ID 'other' is already used by another derived stat."),
@@ -150,7 +148,7 @@ fn every_field_rule_has_its_error() {
         (json!({"constants": {"Str": 1}}), "Constants: 'Str' is a base stat."),
         (json!({"constants": {"level": 1}}), "Constants: 'level' is the unit level input."),
         (json!({"constants": {"gear_mitigation": 1}}), "Constants: 'gear_mitigation' is the worn gear mitigation input."),
-        (json!({"constants": {"tier_hp": 1}}), "Constants: 'tier_hp' is a tier factor input."),
+        (json!({"constants": {"tier_mult": 1}}), "Constants: 'tier_mult' is a tier factor input."),
         (json!({"constants": {"other": 1}}), "Constants: 'other' is a derived stat id."),
         (json!({"constants": {"2x": 1}}), "Constants: '2x' is not a name (a letter or _ first, then letters, digits or _; not a function)."),
         (json!({"constants": {"round": 1}}), "Constants: 'round' is not a name (a letter or _ first, then letters, digits or _; not a function)."),
@@ -191,14 +189,20 @@ fn gear_mitigation_is_a_formula_input() {
     assert_eq!(checked.order, [0]);
 }
 
-/// U1.2-S4, R4-1: `tier_mult` (and its deprecated aliases `tier_hp`, `tier_power`) are reserved formula inputs like
-/// `level`.
+/// U1.2-S4, R4-1: `tier_mult` is a reserved formula input like `level`; PR4-2 retired its old aliases `tier_hp` and
+/// `tier_power`, so a formula naming one gets the unknown-name error.
 #[test]
-fn the_tier_factors_are_formula_inputs() {
-    let toughness = json!({"id": "toughness", "name": "Toughness", "formula": "60 * tier_mult + CONS * 8 + tier_hp + tier_power", "min": 0, "max": 500});
+fn the_tier_factor_is_a_formula_input() {
+    let toughness = json!({"id": "toughness", "name": "Toughness", "formula": "60 * tier_mult + CONS * 8", "min": 0, "max": 500});
     let checked = derived::check_rows(&[row(toughness)]);
     assert!(checked.errors[0].is_empty(), "{:?}", checked.errors[0]);
     assert_eq!(checked.order, [0]);
+    for alias in ["tier_hp", "tier_power"] {
+        let old = json!({"id": "toughness", "name": "Toughness", "formula": format!("60 * {alias}"), "min": 0, "max": 500});
+        let checked = derived::check_rows(&[row(old)]);
+        let want = format!("Formula: unknown name '{alias}' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, tier_mult, a derived stat id or a constant).");
+        assert!(checked.errors[0].contains(&want), "{alias}: {:?}", checked.errors[0]);
+    }
 }
 
 #[test]

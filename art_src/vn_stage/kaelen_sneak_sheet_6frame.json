@@ -1,0 +1,37 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_sneak_sheet_6frame",
+  "prompt": "Reference images, attached in this order and named here by file name: kaelen_ref_sneak.png (the crouched sneaking pose and hold, frame 1); kaelen_ref_sheet_f1.png (the character standing, the size for every frame).\n\nMake a pixel-art animation sprite sheet of one character sneaking to the right, one full crouched stealth walk cycle as 6 frames in a grid of 3 columns and 2 rows, read left to right, top row first. kaelen_ref_sneak.png shows the crouched sneaking pose and the way he holds the halberd: frame 1 copies kaelen_ref_sneak.png as closely as possible. kaelen_ref_sheet_f1.png shows the same character standing; draw him at exactly the size of kaelen_ref_sheet_f1.png in every frame (same head size and proportions; he is lower only because he crouches).\n\nCharacter (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and alert, mouth closed.\n\nHold (every frame): crouched low, back bent forward, the halberd held level at hip height in both hands as in kaelen_ref_sneak.png, blade forward to the right. The hold stays steady through the whole cycle.\n\nSneak cycle (he sneaks in place, facing right, knees deeply bent, careful slow steps):\n1. Front (right) foot placed carefully ahead, toe first, weight still on the back foot (as kaelen_ref_sneak.png).\n2. Weight shifts onto the front foot, body staying low.\n3. The back foot lifts and passes close to the ground under the body.\n4. The other foot now placed ahead, toe first, mirror of frame 1.\n5. Weight shifts onto it, mirror of frame 2.\n6. The back foot passes under the body, mirror of frame 3.\n\nThe head stays at the same low height through the cycle. Boots touch the same ground line in every cell.\n\nLayout and style: every frame is the same size, with the character at the same scale and on the same ground line in each cell. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.\n",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_sneak.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_sneak_sheet_6frame.txt",
+  "time": "2026-11-09T17:34:55Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sneak.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_sneak_sheet_6frame_q1794245193",
+  "metadata": {
+    "asset_id": "kaelen_sneak_sheet_6frame",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_sneak_sheet_6frame.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_sneak_sheet_6frame.txt",
+      "kind": "vn_keyframe_sheet",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sneak.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe_sheet",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sneak.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png"
+  ],
+  "notes": "Verified resolution (1200x896, long edge >= 1024px) and aspect ratio (4:3, 0.45% deviation) within 3% tolerance."
+}

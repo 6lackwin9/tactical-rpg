@@ -5,6 +5,7 @@
 
 use aegis_core::json::{self, Dict};
 use aegis_core::sha256;
+use aegis_core::vfs;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -15,15 +16,14 @@ fn cut(data: &[u8]) -> String {
 }
 
 fn collect(dir: &Path, prefix: &str, out: &mut Vec<(String, String)>) {
-    let Ok(read) = std::fs::read_dir(dir) else { return };
-    for e in read.flatten() {
-        let p = e.path();
-        let name = e.file_name().to_string_lossy().to_string();
+    let Ok(read) = vfs::list_dir(dir) else { return };
+    for p in read {
+        let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
         let rel = if prefix.is_empty() { name.clone() } else { format!("{prefix}/{name}") };
-        if p.is_dir() {
+        if vfs::is_dir(&p) {
             collect(&p, &rel, out);
         } else if p.extension().is_some_and(|x| x == "json") {
-            if let Ok(bytes) = std::fs::read(&p) {
+            if let Ok(bytes) = vfs::read(&p) {
                 out.push((rel, cut(&bytes)));
             }
         }

@@ -15,7 +15,7 @@ use aegis_ui::canvas::Image;
 use emberwake_rules::Stance;
 use emberwake_battle::skill::Kind;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 pub(super) struct Float {
     pub(super) unit: usize,

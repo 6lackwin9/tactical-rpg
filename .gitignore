@@ -47,3 +47,6 @@ __pycache__/
 
 # The Antigravity image queue (ARTQUEUE1): requests, generated images and results, in the main checkout only
 .image_pipeline/
+
+# The web build (tools/fc.sh web, WEBREL1-G1)
+/out/

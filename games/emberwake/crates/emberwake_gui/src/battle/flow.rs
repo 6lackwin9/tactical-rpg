@@ -13,7 +13,7 @@ use emberwake_battle::session::{Phase, Session};
 use aegis_core::json::{self, s};
 use emberwake_world::dialogue;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 impl BattleScreen {
     /// ENCOUNTER2-C4: the Arena's encounter has a script and the ruleset the `new` request picks has the round intent

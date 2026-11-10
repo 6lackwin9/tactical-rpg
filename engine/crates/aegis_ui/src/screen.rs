@@ -245,7 +245,7 @@ impl Settings {
     /// else both off. The old key goes, so the next save does not write it; a file with the new keys keeps them.
     pub fn load(path: PathBuf, game_defaults: Value) -> Self {
         let mut v = Self::defaults(game_defaults);
-        if let Ok(Value::Object(mut saved)) = std::fs::read_to_string(&path).map(|t| serde_json::from_str::<Value>(&t).unwrap_or(Value::Null)) {
+        if let Ok(Value::Object(mut saved)) = aegis_save::store::current().read_to_string(&path).map(|t| serde_json::from_str::<Value>(&t).unwrap_or(Value::Null)) {
             if let Some(old) = saved.shift_remove("window_mode") {
                 if !saved.contains_key("fullscreen") && !saved.contains_key("borderless") {
                     saved.insert("fullscreen".into(), Value::Bool(matches!(old.as_str(), Some("Borderless" | "Fullscreen"))));
@@ -280,11 +280,14 @@ impl Settings {
         }
     }
 
+    /// Writes the settings file through the user store (`aegis_save::store`: the disk on native, `localStorage` on
+    /// the web); a refused write (a full quota) is the error, never a panic.
     pub fn save(&self) -> Result<(), String> {
+        let st = aegis_save::store::current();
         if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            st.create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&self.path, serde_json::to_string_pretty(&self.v).unwrap()).map_err(|e| e.to_string())
+        st.write(&self.path, serde_json::to_string_pretty(&self.v).unwrap().as_bytes()).map_err(|e| e.to_string())
     }
 }
 

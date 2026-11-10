@@ -90,9 +90,9 @@ pub enum TunerAct {
     Revert,
 }
 
-/// Whether this build may write a sidecar: a debug build only.
+/// Whether this build may write a sidecar: a native debug build only (a web build has no asset files to write).
 pub const fn writes_allowed() -> bool {
-    cfg!(debug_assertions)
+    cfg!(debug_assertions) && !cfg!(target_arch = "wasm32")
 }
 
 /// What Save read before its first write to a file, for Revert.
@@ -414,7 +414,7 @@ impl FrameTuner {
         let Some(tuned) = self.tuned.get(&own).cloned() else { return Ok(format!("{own}: nothing changed, nothing written")) };
         let rel = format!("{}/{own}.json", theme::FRAMES_DIR);
         let file = theme::layers().find(&rel).ok_or_else(|| format!("no file {rel} in the layers"))?;
-        let bytes = std::fs::read(&file).map_err(|e| format!("{rel}: {e}"))?;
+        let bytes = aegis_core::vfs::read(&file).map_err(|e| format!("{rel}: {e}"))?;
         let value: Value = serde_json::from_slice(&bytes).map_err(|e| format!("{rel}: {e}"))?;
         let was = Nine::parse(&value, f.img.w, f.img.h, &rel).map_err(|e| e.join("; "))?;
         let Some(merged) = merged_sidecar(&value, &was, &tuned) else {
@@ -422,9 +422,9 @@ impl FrameTuner {
             return Ok(format!("{own}: nothing changed, nothing written"));
         };
         Nine::parse(&merged, f.img.w, f.img.h, &rel).map_err(|e| e.join("; "))?;
-        std::fs::write(&file, sidecar_text(&merged) + "\n").map_err(|e| format!("{rel}: {e}"))?;
+        aegis_core::vfs::dev::write(&file, (sidecar_text(&merged) + "\n").as_bytes()).map_err(|e| format!("{rel}: {e}"))?;
         if let Err(e) = theme::reinstall() {
-            std::fs::write(&file, &bytes).map_err(|w| format!("{rel}: {w}"))?;
+            aegis_core::vfs::dev::write(&file, &bytes).map_err(|w| format!("{rel}: {w}"))?;
             return Err(format!("{rel} put back: {}", e.join("; ")));
         }
         if !self.backups.iter().any(|b| b.role == own) {
@@ -445,7 +445,7 @@ impl FrameTuner {
             return Err("a release build shows the read-out only: nothing written".into());
         }
         let b = self.backups.remove(at);
-        std::fs::write(&b.file, &b.bytes).map_err(|e| format!("{own}: {e}"))?;
+        aegis_core::vfs::dev::write(&b.file, &b.bytes).map_err(|e| format!("{own}: {e}"))?;
         theme::reinstall().map_err(|e| e.join("; "))?;
         Ok(format!("{own}: the file as it was before the first save"))
     }

@@ -5,7 +5,9 @@
 //!   aegis replay <recording.json> ...                                          replay a playtest recording (see `replay`)
 //!   aegis content check | upsert | remove | world | apply | manifest            edit the data folder (see `content`)
 //!   aegis scenario check | run                                                 walk real screens from JSON files (see `scenario`)
+//!   aegis bundle <manifest.json> [out=<dir>]                                   pack a web build's bundle parts (see `bundle`)
 
+pub mod bundle;
 pub mod scenario;
 
 use aegis_content::file::stringify;
@@ -70,7 +72,8 @@ const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's com
 aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>]
-aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]";
+aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
+aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
 pub fn run<G: Game>(game: &G) -> Result<()> {
@@ -84,6 +87,7 @@ pub fn run<G: Game>(game: &G) -> Result<()> {
         (Some("link"), _) => link(&raw),
         (Some("replay"), Some(_)) => replay(game, &args),
         (Some("content"), Some(_)) => content(game, &args),
+        (Some("bundle"), Some(manifest)) => bundle::command(manifest, &args.key("out", ".")),
         (Some("scenario"), _) => {
             let code = scenario::command(game, &args).unwrap_or_else(|e| {
                 println!("§ could not start: {e:#}");

@@ -164,7 +164,9 @@ const STATE = {
   storyMode: 'vn_stage',        // 'vn_stage' | 'map_stage' | 'vignette_reel'
   storyActorStyle: 'full_sprite', // 'full_sprite' | 'bust_cutout' | 'backdrop_only'
   storyRigPose: 'auto',         // 'auto' (use actor.pose) | 'relaxed' | 'sneaking' | 'weapons_drawn'
-  storyRigEngine: 'atlas_b',    // 'atlas_b' (Exploded 13-Part Spine2D Atlas) | 'pose_c' (3-Pose Sheet + Idle Rig) | 'slice_a' (Single-Sprite 10-Part Auto-Slice) | 'compare_bc' (Side-by-Side Compare)
+  storyRigEngine: 'pose_c',     // 'pose_c' (3-Pose Sheet + Multi-Zone Deformer Rig) | 'atlas_b' (Exploded 13-Part Spine2D Atlas) | 'slice_a' (Single-Sprite 10-Part Auto-Slice) | 'compare_bc' (Side-by-Side Compare)
+  storyDeformerBoost: 1.0,      // 1.0 (Normal 1x) | 2.2 (Limit-Test 2.2x) | 3.2 (Extreme 3.2x Stress-Test)
+  storyWalkMode: 'off',         // 'off' (Stationary) | 'scroll_bg' (Treadmill: Hero stays in place + scrolling parallax BG) | 'pan_camera' (Wide BG Camera Pan following walking Hero)
   storyTurnaroundView: 'side',  // 'side' | 'front' | 'back' | 'sheet_3view' (3-View Full-Body Turnaround per ART_PROMPT_TEMPLATES.md)
   storyShowRigDebug: false,     // Toggle Live2D / VTuber mesh deformer grid & joint skeleton overlay
   storyMoodOverride: null,      // null (use card.mood) | 'neutral' | 'determined' | 'angry' | 'hurt' | 'surprised' | 'afraid'

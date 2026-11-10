@@ -177,7 +177,9 @@ pub fn catalog_ids(r: &mut Runner, ids: &[String], level: i32, shifted: bool) ->
             }
             let e = r.d.entry("units", id).clone();
             let copy = format!("simc_{id}");
-            let def = Def { copy_of: id.clone(), ..Def::new(&json::s(&e, "class_id"), level, &rpgkit_data::unit_tier(&e), false) };
+            // PR4-1 part 2 (AUDIT-07, FB-148): the shift goes through the world's raise, so an explicit `spend`
+            // gets the raised levels' points
+            let def = Def { copy_of: id.clone(), raise: true, ..Def::new(&json::s(&e, "class_id"), level, &rpgkit_data::unit_tier(&e), false) };
             r.define(&copy, def);
             copy
         })

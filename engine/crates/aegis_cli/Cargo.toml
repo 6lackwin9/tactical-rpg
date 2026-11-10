@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 aegis_host = { path = "../aegis_host" }
 aegis_content = { path = "../aegis_content" }
+aegis_core = { path = "../aegis_core" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 
 [dev-dependencies]
 aegis_save = { path = "../aegis_save" }
-aegis_core = { path = "../aegis_core" }

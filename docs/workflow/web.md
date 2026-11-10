@@ -1,8 +1,60 @@
-# Web build (HTML5, GitHub Pages)
+# Web build (Aegis WebAssembly, itch.io)
 
-**Retired 2026-10-19 with the Godot build (transition step 2).** This page describes the Godot web export: the preset
-(`export_presets.cfg`) and `.github/workflows/web.yml` are gone from `main` and stay on the `legacy` branch. The Aegis
-engine has no web build yet (a WebAssembly build of `emberwake` would be a new task); deploys were already paused
+The Aegis game runs in a browser since `PR4-6` `WEBREL1-G1` (2026-11-10; spec `docs/specs/WEBREL1.md`, decision "Post-R4 queue and web release (user 2026-11-09)"). Hosting: a password-protected itch.io page; every release PR builds the web bundle in CI and the upload to itch.io happens only when the user says "deploy" (the CI job and `web.yml` landed with `PR4-7` `WEBREL1-P1`, 2026-11-10).
+
+## Build, serve, smoke (Aegis)
+
+- Needs the `wasm32-unknown-unknown` target and `cargo install wasm-bindgen-cli --version 0.2.129 --locked`; `wasm-opt` is used when Binaryen 125 or newer is on the PATH (Ubuntu's `apt` package, 108, is too old: `tools/fc.sh web` skips it with a message, FB-165).
+- Build: `tools/fc.sh web test` (Tools menu, dev tools and the `aegisProbe()` test probe) or `tools/fc.sh web release` (no Tools, no dev keys) writes the gitignored `out/web/`: `index.html`, `emberwake.js`, `emberwake_bg.wasm`, `bundle.json`, `emberwake_1.pak` (game, kit and engine files without audio), `emberwake_2.pak` (audio, fetched while the game runs), `build.json`. The bundle list is `games/emberwake/web_bundle.json`, packed by `aegis bundle`.
+- Serve: `tools/fc.sh web serve [port]`, then open http://127.0.0.1:8000/. URL keys are the CLI's, for example `?screen=arena&encounter=goblin_skirmish&seed=3`; desktop-only keys (`port`, `headless`, `data`, `saves` and the like) are ignored with a console warning.
+- Smoke: `tools/fc.sh web test && tools/fc.sh web smoke` (Node with Playwright Chromium; not in the gate): boot to the main menu, Combat Arena to victory, New game to the region map, save, reload and Continue.
+- Other ways to play: a downloaded `web-build` artifact can be unzipped and served with `python -m http.server 8000` (then `http://localhost:8000`); other devices on the same Wi-Fi reach `python -m http.server 8000 --bind 0.0.0.0` at `http://<PC's IPv4 address>:8000` (allow Python through the Windows firewall on private networks). Opening `index.html` as a file does not work.
+
+## Test build and release build
+
+| Build | Command | Contents | Used for |
+| --- | --- | --- | --- |
+| Test (`dev_tools` on) | `tools/fc.sh web test` (the default) | Base game plus the Tools menu (Scene Runner, Combat Arena, Forge viewers, Gear Dojo, UI Gallery) and the page probe the smoke test reads | The CI artifact of every release PR; the itch.io deploy until the user calls the game playable |
+| Release (`dev_tools` off) | `tools/fc.sh web release` | Base game only: Tools and dev keys compiled out | The deploy once the user calls the game playable |
+
+`dev_tools` is a cargo feature of `emberwake_gui`, on by default, so the native desktop build does not change.
+
+## CI artifact (release PRs)
+
+The `web (advisory)` job in `.github/workflows/gate.yml` runs on every PR into `main` (the release PR): it installs the wasm32 target and `wasm-bindgen-cli` 0.2.129 (cached), runs `tools/fc.sh web test`, uploads `out/web/` as the artifact `web-build` (kept 14 days), then runs the browser smoke (Playwright Chromium installed on the runner). The job is advisory: it is not in the `gate` job's `needs` and not a required check, and a smoke failure does not fail the job (read the smoke step's log). After it has been green on two releases the user decides whether `main` requires it (WEBREL1 section 5). Download the artifact from the PR's checks (the `gate` workflow run > Artifacts). Both workflows install a pinned Binaryen release (`version_125`, sha256-checked; bump `BINARYEN_VERSION` and `BINARYEN_SHA256` together) so `wasm-opt` shrinks the `.wasm`.
+
+## Deploy to itch.io (`web.yml`)
+
+`.github/workflows/web.yml` is manual only: **Actions > web > Run workflow**, Branch **main**, variant **test** (default) or **release**. The Merge & Release thread runs it when the user says "deploy". It:
+
+1. refuses any ref but `main`, and stops before building with "BUTLER_API_KEY not set" when the secret is missing, or with an `ITCH_TARGET` message when the variable is missing or not of the form `<user>/<game>:html5`;
+2. builds the chosen variant with `tools/fc.sh web <variant>`;
+3. installs itch.io's `butler` for linux-amd64 from `https://broth.itch.zone/butler/linux-amd64/<version>/archive/default`, pinned to 15.32.0 and checked against its sha256 (to bump: fetch the new version and its sha256 on a GitHub runner, since the cloud proxy blocks `broth.itch.zone`, and change `BUTLER_VERSION` and `BUTLER_SHA256` together; the pin is carried over from the Godot-era workflow, so the first real deploy also checks it, `FB-164`);
+4. pushes `out/web/` with `butler push out/web $ITCH_TARGET --userversion <variant>-<short sha>`.
+
+## One-time setup by the repo owner (itch.io page, secret, variable)
+
+1. On itch.io: **Upload new project**. Kind of project: **HTML**. Leave the upload empty (CI fills it). Embed options: viewport **1280 x 720**, tick **Fullscreen button**, leave **SharedArrayBuffer support** off (the build is single-threaded). Visibility: **Restricted**, then set a password under **Password protect**. Save; the URL slug (for example `tactical-rpg`) is the project name.
+2. itch.io **Settings > API keys > Generate new API key**; copy it.
+3. GitHub repo **Settings > Secrets and variables > Actions**: **Secrets > New repository secret** `BUTLER_API_KEY` = the key; **Variables > New repository variable** `ITCH_TARGET` = `<itch username>/<project slug>:html5`. Nothing of either is in the repository.
+4. Run the `web` workflow on `main`. After the first upload, tick **This file will be played in the browser** on the `html5` file in the project's edit page and save (one time).
+
+## What differs in the browser
+
+| Area | Behaviour in the browser |
+| --- | --- |
+| Quit | Hidden on the main menu (a page cannot close its own tab) |
+| Saves and settings | In the browser's `localStorage` for the page's origin (keys under `aegis/`); clearing site data wipes them. itch.io serves every game from the shared `itch.zone` origin, so the storage quota may be shared |
+| Playtest recordings and F12 screenshots | Off on the web |
+| Dev keys (F6, F7, F9) | Need a debug build with the dev tools, so neither web build has them (`FB-162`) |
+| Audio | The second bundle part, fetched after the main menu; starts only after the first click or key press (browser autoplay rule) |
+| WebGL2 missing | The game stops and the page shows "The game stopped: ..." instead of drawing |
+| Touch / mobile | Runs, but the UI is built for mouse and keyboard |
+
+## Godot web export (retired 2026-10-19, kept as the record)
+
+**Retired 2026-10-19 with the Godot build (transition step 2).** The rest of this page describes the Godot web export: the preset
+(`export_presets.cfg`) and `.github/workflows/web.yml` are gone from `main` and stay on the `legacy` branch. Deploys were already paused
 (decision "Web deploy paused (user 2026-10-17)"). Kept as the record of how the Godot build was published.
 
 A browser build for cross-platform testing and porting checks (user 2026-10-17). It is a release build and less debug-friendly than the desktop runner; playtesting and debugging stay on desktop.

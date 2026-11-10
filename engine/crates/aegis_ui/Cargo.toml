@@ -13,9 +13,15 @@ name = "shot_compare"
 path = "src/bin/shot_compare.rs"
 test = false
 
+[features]
+# WEBREL1-G1: `shell`'s page probe for browser tests (`aegisProbe()`, the web build only; no effect on the desktop). A
+# game turns it on in its test build.
+web_probe = []
+
 [dependencies]
 aegis_host = { path = "../aegis_host" }
 aegis_core = { path = "../aegis_core" }
+aegis_save = { path = "../aegis_save" }
 aegis_layout = { path = "../aegis_layout" }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
@@ -24,8 +30,21 @@ pixels = "0.15.0"
 png = "0.17.13"
 fontdue = "0.9.2"
 rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "wav"] }
+
 # The system clipboard for the kit's text editor (PLAYUI1-T); text only (its image support would pull the image crate).
+# Native only (WEBREL1-E1a): arboard has no web backend; on wasm the editor keeps its in-app clipboard (`edit::clipboard`).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 arboard = { version = "3.7.0", default-features = false }
+
+# The web start path (WEBREL1-E2, `shell::start_web`): the page canvas by id, pixels' async init on the browser's
+# executor, and the browser audio backend. cpal is rodio's own device layer at the version rodio locks; it is named here
+# only to turn on its `wasm-bindgen` feature (Web Audio), which rodio 0.20 does not forward. wasm-bindgen must stay at
+# the locked 0.2.129: the build binds with `wasm-bindgen-cli` 0.2.129, and the two must match exactly.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "0.4.79"
+web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Node", "Window"] }
 
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.
 [target.'cfg(windows)'.dependencies]

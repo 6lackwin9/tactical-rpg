@@ -3,9 +3,21 @@ name = "emberwake_gui"
 version = "0.1.0"
 edition = "2021"
 
+# The game's screens and startup (`src/lib.rs`). The web build compiles this library as a `cdylib`
+# (`cargo rustc --lib --crate-type cdylib`, `tools/fc.sh web`), so the desktop build links no extra library.
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "emberwake"
 path = "src/main.rs"
+
+# WEBREL1-G1 4: `dev_tools` (default on, so the desktop build is as before; the web test build on, the web release
+# build off) keeps the main menu's Tools (the Scene Runner and its screens), the `screen=arena|runner` launches and the
+# debug build's dev keys, and the page probe the browser smoke test reads (`aegis_ui/web_probe`, web only).
+[features]
+default = ["dev_tools"]
+dev_tools = ["aegis_ui/web_probe"]
 
 [dependencies]
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
@@ -23,6 +35,14 @@ aegis_save = { path = "../../../../engine/crates/aegis_save" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+
+# The web entry (`src/web.rs`): the bundle's fetch with progress, the URL query, the loading bar on the page. The
+# versions `aegis_ui` locks (wasm-bindgen exactly 0.2.129, the `wasm-bindgen-cli` the build binds with).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "0.4.79"
+js-sys = "0.3.106"
+web-sys = { version = "0.3.106", features = ["console", "CssStyleDeclaration", "Document", "Element", "HtmlElement", "Location", "Node", "ReadableStream", "ReadableStreamDefaultReader", "Response", "Window"] }
 
 [dev-dependencies]
 png = "0.17.13"

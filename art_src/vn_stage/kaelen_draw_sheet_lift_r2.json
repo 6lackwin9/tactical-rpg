@@ -1,0 +1,41 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_draw_sheet_lift_r2",
+  "prompt": "Edit image 1 into a new animation keyframe. Image 1 is the relaxed pose with the halberd held upright and image 2 is a later frame of the same character with the halberd tipped forward in both hands. Start from image 1 and change it only part of the way toward image 2: this is the moment the halberd has just left the ground, so the halberd must still stand much more upright than in image 2. Do not copy the pose of image 2.\n\nHalberd and arms (the part that matters most): the shaft leans at about 60 degrees from the ground, clearly steeper than in image 2 and clearly less upright than in image 1, blade up and to the right. Only the right hand holds the shaft, at upper-chest height, a little higher than in image 1; the right forearm follows the shaft. The butt end has swung off the ground to about knee height, in front of his legs. The left hand is NOT on the shaft yet: it has left the hip and is reaching forward toward the shaft at belt height, fingers open, still a short gap away from it.\n\nCharacter (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size as in the references. Face calm and composed, mouth closed.\n\nLegs: exactly as in image 1, upright stance, boots flat on the same ground line.\n\nFraming and style: same canvas, same character size and position as image 1, one character only, full body, three-quarter view facing right. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_draw_sheet_lift_r2.txt",
+  "time": "2026-11-09T16:36:20Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f1.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_sheet_f2.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_draw_sheet_lift_r2_q1794242002",
+  "metadata": {
+    "asset_id": "kaelen_draw_sheet_lift_r2",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_draw_sheet_lift_r2.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_draw_sheet_lift_r2.txt",
+      "kind": "vn_keyframe",
+      "between": "sheet_draw_f1,sheet_draw_f2",
+      "retake_of": "kaelen_draw_sheet_lift",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f2.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe",
+  "between": "sheet_draw_f1,sheet_draw_f2",
+  "retake_of": "kaelen_draw_sheet_lift",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f1.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_sheet_f2.png"
+  ],
+  "notes": "Verified resolution (1024x1024) and aspect ratio (1:1) within 3% tolerance."
+}

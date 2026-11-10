@@ -8,7 +8,7 @@ use crate::source::fields;
 use aegis_content::schema::is_id;
 use aegis_core::formula::{self, Formula};
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{is_tier_input, GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS, TIER_MULT_INPUT};
+use rpgkit_data::{GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS, TIER_MULT_INPUT};
 use rpgkit_rules::status;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -143,7 +143,7 @@ fn row_errors(rows: &[Dict], ids: &[String], i: usize) -> (Vec<String>, Option<F
         out.push(format!("ID '{id}' is the unit level input."));
     } else if id == GEAR_MITIGATION_INPUT {
         out.push(format!("ID '{id}' is the worn gear mitigation input."));
-    } else if is_tier_input(id) {
+    } else if id == TIER_MULT_INPUT {
         out.push(format!("ID '{id}' is a tier factor input."));
     } else if formula::is_function(id) {
         out.push(format!("ID '{id}' is a formula function."));
@@ -172,7 +172,7 @@ fn row_errors(rows: &[Dict], ids: &[String], i: usize) -> (Vec<String>, Option<F
         }
         Ok(f) => {
             for n in f.names() {
-                let known = STATS.contains(&n.as_str()) || n == LEVEL_INPUT || n == GEAR_MITIGATION_INPUT || is_tier_input(n) || constants.contains(n) || ids.contains(n);
+                let known = STATS.contains(&n.as_str()) || n == LEVEL_INPUT || n == GEAR_MITIGATION_INPUT || n == TIER_MULT_INPUT || constants.contains(n) || ids.contains(n);
                 if known {
                     continue;
                 }
@@ -230,7 +230,7 @@ fn constant_errors(v: &Value, ids: &[String], out: &mut Vec<String>) -> Vec<Stri
             out.push(format!("Constants: '{k}' is the unit level input."));
         } else if k == GEAR_MITIGATION_INPUT {
             out.push(format!("Constants: '{k}' is the worn gear mitigation input."));
-        } else if is_tier_input(k) {
+        } else if k == TIER_MULT_INPUT {
             out.push(format!("Constants: '{k}' is a tier factor input."));
         } else if ids.contains(k) {
             out.push(format!("Constants: '{k}' is a derived stat id."));

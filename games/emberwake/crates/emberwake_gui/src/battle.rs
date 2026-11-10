@@ -73,7 +73,7 @@ use emberwake_battle::world::World;
 use emberwake_host::{Battle, Host};
 use emberwake_world::story;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 
 /// The Flat view's cell (and the grid panel's: 12 x 9 cells of `TILE` at (`GRID_X`, `GRID_Y`)).

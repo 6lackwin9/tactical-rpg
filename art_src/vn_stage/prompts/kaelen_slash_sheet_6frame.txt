@@ -1,0 +1,19 @@
+Reference images, attached in this order and named here by file name: kaelen_ref_sheet_f6.png (the guard pose, frame 1 and the size for every frame); kaelen_ref_drawn_windup_2.png (the wind-up pose only); kaelen_ref_drawn_cleave_2.png (the finished cleave pose only).
+
+Make a pixel-art animation sprite sheet of one character performing a downward halberd cleave, as 6 frames in a grid of 3 columns and 2 rows, read left to right, top row first. kaelen_ref_sheet_f6.png is the guard pose the attack starts from: frame 1 copies kaelen_ref_sheet_f6.png as closely as possible, and every frame draws the character and the halberd at exactly the size of kaelen_ref_sheet_f6.png. kaelen_ref_drawn_windup_2.png and kaelen_ref_drawn_cleave_2.png show only the poses of the wind-up and of the finished cleave; take the pose from them, but the character's size, proportions and halberd come from kaelen_ref_sheet_f6.png.
+
+Character (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and composed, mouth closed.
+
+Stance (every frame): the boots stay planted exactly where they are in kaelen_ref_sheet_f6.png, the same wide braced stance and the same ground line in all six cells. Only the upper body, arms and halberd move.
+
+Frames:
+1. Guard (as kaelen_ref_sheet_f6.png): halberd held across the body, blade forward and up to the right.
+2. Raise: both hands lift the halberd up and back, the blade rising above head height, the shaft tilting up; the torso starts to coil back.
+3. Wind-up (pose of kaelen_ref_drawn_windup_2.png): halberd raised high and back, blade above and behind the head, torso coiled back.
+4. Mid-swing: the blade comes down in front of him, the shaft nearly level across the body at chest height, blade edge leading downward, torso turning forward.
+5. Cleave (pose of kaelen_ref_drawn_cleave_2.png): blade low and forward to the right at about hip height or lower, torso leaning into the strike.
+6. Recover: the halberd rising back toward the guard, blade at waist height and coming up.
+
+Both hands hold the shaft in every frame, and the forearms move together with the shaft.
+
+Layout and style: every frame is the same size, with the character at the same scale and his boots on the same ground line in each cell, facing right in three-quarter view. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as kaelen_ref_sheet_f6.png. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.

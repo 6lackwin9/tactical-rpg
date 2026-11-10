@@ -2,7 +2,9 @@
 //! under the game's audio folder, addressed by relative path ("sfx/hit.wav", "music/town.ogg"); four levels
 //! (master, music, effects, interface, 0-100, from the settings) and mute; a voice pool per bus (the oldest restarts
 //! when all are busy); one music track wanted at a time, crossfaded and looped. The game decides which sound and which
-//! track (screens name their music, `Screen::music`). Without an audio device (or headless) everything is silent.
+//! track (screens name their music, `Screen::music`). Without an audio device (or headless) everything is silent. On
+//! the web (WEBREL1-E2) the device opens at the player's first gesture (`unlock`): a page may not start audio before
+//! one, and sounds asked for until then are dropped, not queued.
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde_json::Value;
@@ -11,7 +13,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
+use aegis_core::vfs;
 
 const SFX_VOICES: usize = 8;
 const UI_VOICES: usize = 2;
@@ -66,6 +69,8 @@ struct State {
     last_preview: Option<Instant>,
     cache: HashMap<String, Option<Arc<[u8]>>>,
     found: HashMap<String, bool>,
+    /// The read seam's mount count the caches were filled under (`vfs::generation`).
+    mounted: u64,
 }
 
 struct Device {
@@ -77,7 +82,14 @@ pub struct Audio {
     /// The audio folders in lookup order (ASSETORG2: the game's, its kit's, the engine's `assets/audio`).
     roots: Vec<PathBuf>,
     device: Option<Device>,
+    /// The device opens at the first gesture (`unlock`; the web): until then nothing plays.
+    waiting: bool,
     state: RefCell<State>,
+}
+
+/// The default output device; None when there is none.
+fn open_device() -> Option<Device> {
+    OutputStream::try_default().ok().map(|(stream, handle)| Device { _stream: stream, handle })
 }
 
 impl Audio {
@@ -87,9 +99,26 @@ impl Audio {
     }
 
     /// The audio folders `roots` (the first holding a file wins) on the default output device.
+    /// On the web the device waits for the first gesture (`unlock`).
     pub fn layered(roots: Vec<PathBuf>) -> Self {
-        let device = OutputStream::try_default().ok().map(|(stream, handle)| Device { _stream: stream, handle });
-        Self { roots, device, state: RefCell::new(State::new()) }
+        #[cfg(not(target_arch = "wasm32"))]
+        let (device, waiting) = (open_device(), false);
+        #[cfg(target_arch = "wasm32")]
+        let (device, waiting) = (None, true);
+        Self { roots, device, waiting, state: RefCell::new(State::new()) }
+    }
+
+    /// The player pressed a key or a button (the shell calls it on every press). On the web the first press opens the
+    /// output device (a page may start audio only from a gesture) and the music wanted now starts, fading in as at the
+    /// start; the sounds asked for before it were dropped. A no-op after that, offline and on the desktop.
+    pub fn unlock(&mut self) {
+        if !self.waiting {
+            return;
+        }
+        self.waiting = false;
+        self.device = open_device();
+        let wanted = self.state.borrow_mut().wanted.take();
+        self.music(wanted.as_deref());
     }
 
     /// The audio folders of asset `layers` (each root's `audio/`).
@@ -104,7 +133,7 @@ impl Audio {
 
     /// Several audio folders without a device (tests, tools over the asset layers).
     pub fn offline_layered(roots: Vec<PathBuf>) -> Self {
-        Self { roots, device: None, state: RefCell::new(State::new()) }
+        Self { roots, device: None, waiting: false, state: RefCell::new(State::new()) }
     }
 
     /// The audio folders of asset `layers` without a device (a run with no window: no sound device is opened or needed).
@@ -114,7 +143,7 @@ impl Audio {
 
     /// The first folder's file at `rel`.
     fn find(&self, rel: &str) -> Option<PathBuf> {
-        self.roots.iter().map(|r| r.join(rel)).find(|p| p.is_file())
+        self.roots.iter().map(|r| r.join(rel)).find(|p| vfs::is_file(p))
     }
 
     /// Whether `rel` reads and decodes (a format the engine plays: WAV or Ogg Vorbis).
@@ -186,6 +215,11 @@ impl Audio {
         voices.push((sink, Instant::now()));
     }
 
+    /// An output device is open: sounds play (false offline, without a device, and on the web before `unlock`).
+    pub fn live(&self) -> bool {
+        self.device.is_some()
+    }
+
     /// The music track wanted now (`None`: silence); a new track fades in over the old one, which fades out.
     pub fn music(&self, rel: Option<&str>) {
         let mut st = self.state.borrow_mut();
@@ -220,6 +254,7 @@ impl Audio {
 
     /// Advances the fades; tracks faded to silence stop. The shell calls it every frame.
     pub fn tick(&self) {
+        self.remounted();
         let mut st = self.state.borrow_mut();
         let now = Instant::now();
         let dt = now.duration_since(st.last_tick).as_secs_f32().min(0.25);
@@ -233,12 +268,33 @@ impl Audio {
         st.tracks.retain(|t| !(t.target == 0.0 && t.gain <= 0.0));
     }
 
-    /// The bytes of `rel`, read once (a missing or unreadable file is remembered as None).
+    /// A bundle part was mounted since the caches were filled (WEBREL1-G1: the web build's audio comes as a later part,
+    /// while the game already runs): the files remembered as missing are looked up again, and the wanted music, when
+    /// it has no track yet (its file was missing), starts now.
+    fn remounted(&self) {
+        let now = vfs::generation();
+        let wanted = {
+            let mut st = self.state.borrow_mut();
+            if st.mounted == now {
+                return;
+            }
+            st.mounted = now;
+            st.cache.retain(|_, read| read.is_some());
+            st.found.retain(|_, hit| *hit);
+            if st.tracks.iter().any(|t| t.target > 0.0) {
+                return;
+            }
+            st.wanted.take()
+        };
+        self.music(wanted.as_deref());
+    }
+
+    /// The bytes of `rel`, read once (a missing or unreadable file is remembered as None, until the next mount).
     fn bytes(&self, rel: &str) -> Option<Arc<[u8]>> {
         if let Some(hit) = self.state.borrow().cache.get(rel) {
             return hit.clone();
         }
-        let read = self.find(rel).and_then(|p| std::fs::read(p).ok()).map(Arc::from);
+        let read = self.find(rel).and_then(|p| vfs::read(p).ok()).map(Arc::from);
         self.state.borrow_mut().cache.insert(rel.to_string(), read.clone());
         read
     }
@@ -256,6 +312,7 @@ impl State {
             last_preview: None,
             cache: HashMap::new(),
             found: HashMap::new(),
+            mounted: vfs::generation(),
         }
     }
 }
@@ -309,7 +366,7 @@ mod tests {
             std::fs::create_dir_all(dir.join(file).parent().unwrap()).unwrap();
             std::fs::write(dir.join(file), dir.to_string_lossy().as_bytes()).unwrap();
         }
-        let a = Audio { roots: vec![game.clone(), engine.clone()], device: None, state: RefCell::new(State::new()) };
+        let a = Audio { roots: vec![game.clone(), engine.clone()], device: None, waiting: false, state: RefCell::new(State::new()) };
         assert!(a.has("sfx/ui_click.wav") && a.has("music/town.ogg") && !a.has("sfx/none.wav"));
         assert_eq!(a.bytes("music/town.ogg").as_deref(), Some(game.to_string_lossy().as_bytes()), "the game's file wins");
         let _ = std::fs::remove_dir_all(base);

@@ -154,7 +154,7 @@ impl<G> Recordings<G> {
                     Some(i) if i.repo => i.path.parent().map(Path::to_path_buf).unwrap_or_default(),
                     _ => cx.playtest.dir.clone(),
                 };
-                let _ = std::fs::create_dir_all(&dir);
+                let _ = aegis_core::vfs::dev::create_dir_all(&dir);
                 if let Err(e) = open_folder(&dir) {
                     self.message = e;
                 }

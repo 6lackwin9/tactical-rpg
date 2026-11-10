@@ -147,3 +147,7 @@ The machine is a low-power 8-core laptop chip (Core Ultra 7 258V). Each `cargo` 
 | 2026-11-05 | 487 s | With the caps; one builder running; 2,112 tests |
 
 CPU1 (2026-11-04): each `cargo` run takes 4 build jobs and 4 test threads (`.cargo/config.toml`). Partial and full gates queue, one at a time, and run below normal priority; a builder's direct `cargo` command is capped but not queued or lowered. `flush.sh` logs each full gate to `gate_times.tsv` in the planner's script folder, copied to the table above. Run a gate in the background: a queued one can pass the shell's 10-minute limit.
+
+Builder tip (PR4-2, 2026-11-10): dry-run a kit re-freeze in a scratch worktree (`RECORD=1` on `timeline_golden`) before re-recording, so the commit names exactly the goldens it moves.
+
+Builder tip (PR4-4, 2026-11-10): total a long test log with `grep '^test result' | awk` instead of reading it.

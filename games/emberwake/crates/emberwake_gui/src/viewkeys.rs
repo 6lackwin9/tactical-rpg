@@ -95,27 +95,27 @@ fn save(cx: &mut Cx) {
 
 /// F6 on the region map: whether `k` was the key (a release build takes it and does nothing).
 pub fn zoom_key(cx: &mut Cx, k: Key) -> bool {
-    press_zoom(cx, k, cfg!(debug_assertions))
+    press_zoom(cx, k, crate::DEV_KEYS)
 }
 
 /// F9 on a screen: whether `k` was the key (a release build takes it and does nothing).
 pub fn window_key(cx: &mut Cx, k: Key, shown: Shown) -> bool {
-    press_window(cx, k, shown, cfg!(debug_assertions))
+    press_window(cx, k, shown, crate::DEV_KEYS)
 }
 
 /// F11 on the region map: whether `k` was the key (a release build takes it and does nothing).
 pub fn walk_key(cx: &mut Cx, k: Key) -> bool {
-    press_walk(cx, k, cfg!(debug_assertions))
+    press_walk(cx, k, crate::DEV_KEYS)
 }
 
 /// F10 on the region map: whether `k` was the key (a release build takes it and does nothing).
 pub fn feel_key(cx: &mut Cx, k: Key) -> bool {
-    press_feel(cx, k, cfg!(debug_assertions))
+    press_feel(cx, k, crate::DEV_KEYS)
 }
 
 /// F5 on the region map: whether `k` was the key (a release build takes it and does nothing).
 pub fn corner_key(cx: &mut Cx, k: Key) -> bool {
-    press_corner(cx, k, cfg!(debug_assertions))
+    press_corner(cx, k, crate::DEV_KEYS)
 }
 
 /// The walk's step time for the F6 and F11 notes, so it reads while comparing zoom levels: the base and, when the Animation speed
@@ -405,7 +405,7 @@ mod tests {
         }
         let was = cx.settings.v[WALK_STEP_KEY].clone();
         assert!(walk_key(&mut cx, Key::Fn(11)), "the public key takes it");
-        assert_eq!(cx.settings.v[WALK_STEP_KEY] != was, cfg!(debug_assertions), "and follows the build");
+        assert_eq!(cx.settings.v[WALK_STEP_KEY] != was, crate::DEV_KEYS, "and follows the build");
     }
 
     /// TURNFEEL1: F10 walks the four combinations in order and back; a value that is no bool reads as off; each press saves
@@ -481,7 +481,7 @@ mod tests {
     fn the_public_keys_follow_the_build() {
         let mut cx = game_cx();
         assert!(zoom_key(&mut cx, Key::Fn(6)) && window_key(&mut cx, Key::Fn(9), Shown::Log));
-        let (zoom, size) = if cfg!(debug_assertions) { (json!(1.5), json!("1600x900")) } else { (json!(1.0), json!("1280x720")) };
+        let (zoom, size) = if crate::DEV_KEYS { (json!(1.5), json!("1600x900")) } else { (json!(1.0), json!("1280x720")) };
         assert_eq!(cx.settings.v["map_zoom"], zoom);
         assert_eq!(cx.settings.v["window_size"], size);
     }
@@ -563,9 +563,9 @@ mod tests {
             cx.settings.v["window_size"] = json!("1280x720");
             cx.notice.clear();
             s.key(&mut cx, Key::Fn(9));
-            let want = if cfg!(debug_assertions) { "1600x900" } else { "1280x720" };
+            let want = if crate::DEV_KEYS { "1600x900" } else { "1280x720" };
             assert_eq!(cx.settings.v["window_size"], json!(want), "{id}");
-            assert_eq!(cx.notice.len(), cfg!(debug_assertions) as usize, "{id}");
+            assert_eq!(cx.notice.len(), crate::DEV_KEYS as usize, "{id}");
             assert!(cx.nav.is_empty(), "{id}: no screen change");
         }
         for (name, k) in [("f5", Key::Fn(5)), ("f6", Key::Fn(6)), ("f9", Key::Fn(9)), ("f10", Key::Fn(10)), ("f11", Key::Fn(11))] {

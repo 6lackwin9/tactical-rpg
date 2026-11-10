@@ -49,7 +49,7 @@ use serde_json::{json, Value};
 use std::collections::VecDeque;
 #[cfg(test)]
 use std::time::Duration;
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 /// The leader keeps walking this long (animation ms) past a step's time, so key steps and walked paths play `walk` without
 /// a stop between tiles at any step time (`mapview::WalkStep`).
@@ -159,6 +159,8 @@ pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
 
 /// `begin_fight` that hands the reason back when the battle cannot start (the story stage shows it itself).
 pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<(), String> {
+    // a debug game starts from the Scene Runner, so only a build with the dev tools has one
+    #[cfg(feature = "dev_tools")]
     if cx.debug {
         cx.nav.push(Nav::Push(Box::new(crate::runner::DebugFight::new(fight, runner))));
         return Ok(());
@@ -1047,7 +1049,7 @@ impl Screen<GameCx> for RegionMap {
         }
         // EXPLOREVIEW1: a debug build's F7 flips the region view live, whatever is open
         if k == Key::Fn(7) {
-            if cfg!(debug_assertions) {
+            if crate::DEV_KEYS {
                 flip_view(cx);
             }
             return;
@@ -3895,7 +3897,7 @@ mod view_tests {
         frame(&mut map, &mut cx, &mut g, 1.0);
         let start = cx.gs().position;
         map.key(&mut cx, Key::Fn(7));
-        let want = if cfg!(debug_assertions) { "tilted" } else { "square" };
+        let want = if crate::DEV_KEYS { "tilted" } else { "square" };
         assert_eq!(cx.settings.v["region_view"], json!(want));
         assert_eq!(cx.gs().position, start, "no step");
         frame(&mut map, &mut cx, &mut g, 1.0);
@@ -4186,7 +4188,7 @@ mod view_tests {
         let (start, q) = (cx.gs().position, map.geo.q);
         map.key(&mut cx, Key::Fn(6));
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let debug = cfg!(debug_assertions);
+        let debug = crate::DEV_KEYS;
         assert_eq!(map.geo.q, if debug { crate::viewkeys::ZOOM_CYCLE[1] } else { q });
         assert_eq!(cx.log.last().is_some_and(|l| l.contains("1.5x")), debug);
         map.key(&mut cx, Key::Fn(9));

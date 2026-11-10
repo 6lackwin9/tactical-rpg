@@ -1,0 +1,40 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "kaelen_draw_sheet_6frame",
+  "prompt": "Make a pixel-art animation sprite sheet of one character drawing his weapon, as 6 frames in a grid of 3 columns and 2 rows, read left to right, top row first. Image 1 is the relaxed standing pose (frame 1), image 2 is the half-drawn pose (frame 4) and image 3 is the weapon-drawn guard pose (frame 6) of the same character. Frames 1, 4 and 6 copy those three references as closely as possible; frames 2, 3 and 5 are new in-between poses.\n\nCharacter (identical in every frame): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. The halberd has exactly the same length, blade shape and size in every frame. Face calm and composed, mouth closed.\n\nFrames:\n1. Relaxed (as image 1): standing upright, halberd held upright at his right side in the right hand, butt on the ground, left hand at the left hip.\n2. Lift: same upright stance as frame 1. The right hand lifts the halberd off the ground and starts tipping it forward, the shaft leaning about 70 degrees, blade up and to the right. The left hand comes forward toward the shaft.\n3. Grip: stance still nearly as frame 1, knees just starting to bend. Both hands now on the shaft, right hand at upper chest height, left hand reaching the shaft low at the left hip; the shaft leans about 58 degrees.\n4. Half-draw (as image 2): back boot stepped out, front boot halfway, knees slightly bent, shaft at about 45 degrees, right hand at chest height, left hand at the hip.\n5. Settle: front boot sliding out toward the guard stance, body lowering a little more, shaft at about 35 degrees.\n6. Guard (as image 3): wide braced stance, halberd held across the body, blade forward and up to the right.\n\nThe right forearm and hand move together with the shaft in every frame; the hands always hold the shaft (except the left hand in frames 1 and 2).\n\nLayout and style: every frame is the same size, with the character at the same scale and his boots on the same ground line in each cell, facing right in three-quarter view. Leave wide empty gaps between cells so no halberd or limb reaches into a neighbouring cell. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge across the whole sheet, no grid lines, no frame numbers, no ground shadow, no motion lines, no text, no border.",
+  "reference": "G:/My Drive/image_pipeline/refs/kaelen_ref_passive_relaxed.png",
+  "prompts_file": "art_src/vn_stage/prompts/kaelen_draw_sheet_6frame.txt",
+  "time": "2026-11-09T16:11:53Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_passive_relaxed.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_halfdraw_r2.png",
+    "G:/My Drive/image_pipeline/refs/kaelen_ref_active_drawn.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "kaelen_draw_sheet_6frame_q1794240453",
+  "metadata": {
+    "asset_id": "kaelen_draw_sheet_6frame",
+    "task": "ART_UI_STUDIO-E5",
+    "target": "art_src/vn_stage/kaelen_draw_sheet_6frame.png",
+    "route": "other",
+    "record": {
+      "prompts_file": "art_src/vn_stage/prompts/kaelen_draw_sheet_6frame.txt",
+      "kind": "vn_keyframe_sheet",
+      "source_refs": [
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_passive_relaxed.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_halfdraw_r2.png",
+        "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_active_drawn.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "kind": "vn_keyframe_sheet",
+  "source_refs": [
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_passive_relaxed.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_halfdraw_r2.png",
+    "C:/Users/tusha/AppData/Local/Temp/claude/a2d10bba25d06c44/884e03c5-a87a-409a-88e3-eb3258830e41/scratchpad/refs/kaelen_ref_active_drawn.png"
+  ],
+  "notes": "Verified resolution (1200x896, long edge >= 1024px) and aspect ratio (4:3, 0.45% deviation) within 3% tolerance."
+}

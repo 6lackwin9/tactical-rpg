@@ -7,3 +7,7 @@ edition = "2021"
 aegis_core = { path = "../aegis_core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# WEBREL1-E1b: the web user store's backend (`store::LocalStorage`); the version winit locks.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3.106", features = ["Window", "Storage"] }

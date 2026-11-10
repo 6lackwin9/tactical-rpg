@@ -5,7 +5,10 @@
 //! the state's shape (docs/specs/SPLIT1.md section 2). Engine-only addition (PLAYUI1 section 1): slot locks in a
 //! `locks.json` beside the saves; `write` and `delete` refuse a locked slot. Engine-only addition (CAMPAIGN1 F5):
 //! keyed saves (`key_<key>.json`, for example an act-start save) beside the slots, in the same envelope; they are
-//! outside the slot range, so slot saves never overwrite them and slot listings never show them.
+//! outside the slot range, so slot saves never overwrite them and slot listings never show them. Every user file goes
+//! through the user store (`store`, WEBREL1-E1b): the disk on native, `localStorage` on the web.
+
+pub mod store;
 
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
@@ -25,8 +28,15 @@ pub struct Format {
 }
 
 /// The engine's user folder: %APPDATA%/Aegis (the working folder when APPDATA is unset).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn app_dir() -> PathBuf {
     std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(".")).join("Aegis")
+}
+
+/// The engine's user folder on the web: `aegis`, the first part of every `localStorage` key (`store::key_for`).
+#[cfg(target_arch = "wasm32")]
+pub fn app_dir() -> PathBuf {
+    PathBuf::from(store::WEB_ROOT)
 }
 
 /// A game's own user folder (its saves and settings): %APPDATA%/Aegis/<game id>.
@@ -39,27 +49,28 @@ pub fn user_dir(game_id: &str) -> PathBuf {
 /// are. The copied paths (relative to the shared folder), or the problem.
 pub fn adopt_shared(game_id: &str) -> Result<Vec<String>, String> {
     let (shared, own) = (app_dir(), user_dir(game_id));
-    if own.exists() {
+    let st = store::current();
+    if st.exists(&own) {
         return Ok(Vec::new());
     }
     let mut copied = Vec::new();
     let mut copy = |rel: &Path| -> Result<(), String> {
         if let Some(dir) = own.join(rel).parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            st.create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
-        std::fs::copy(shared.join(rel), own.join(rel)).map_err(|e| format!("{}: {e}", shared.join(rel).display()))?;
+        st.copy(&shared.join(rel), &own.join(rel)).map_err(|e| format!("{}: {e}", shared.join(rel).display()))?;
         copied.push(rel.display().to_string());
         Ok(())
     };
-    if let Ok(entries) = std::fs::read_dir(shared.join("saves")) {
-        for e in entries.flatten().filter(|e| e.path().is_file()) {
-            copy(&Path::new("saves").join(e.file_name()))?;
+    if let Ok(entries) = st.list_dir(&shared.join("saves")) {
+        for p in entries.into_iter().filter(|p| st.is_file(p)) {
+            copy(&Path::new("saves").join(p.file_name().unwrap_or_default()))?;
         }
     }
-    if shared.join("settings.json").is_file() {
+    if st.is_file(&shared.join("settings.json")) {
         copy(Path::new("settings.json"))?;
     }
-    std::fs::create_dir_all(&own).map_err(|e| format!("{}: {e}", own.display()))?;
+    st.create_dir_all(&own).map_err(|e| format!("{}: {e}", own.display()))?;
     Ok(copied)
 }
 
@@ -68,7 +79,7 @@ pub fn path_for(dir: &Path, slot: i64) -> PathBuf {
 }
 
 pub fn exists(dir: &Path, slot: i64) -> bool {
-    path_for(dir, slot).is_file()
+    store::current().is_file(&path_for(dir, slot))
 }
 
 /// Deletes a slot's save; refused while the slot is locked (`set_locked`).
@@ -79,7 +90,7 @@ pub fn delete(dir: &Path, slot: i64) -> Result<(), String> {
     if is_locked(dir, slot) {
         return Err(locked_text(slot));
     }
-    std::fs::remove_file(path_for(dir, slot)).map_err(|_| format!("Slot {slot} could not be deleted."))
+    store::current().remove_file(&path_for(dir, slot)).map_err(|_| format!("Slot {slot} could not be deleted."))
 }
 
 // ---- Slot locks (PLAYUI1 section 1): a sidecar file beside the saves, so a lock never rewrites a save ----------
@@ -93,7 +104,7 @@ fn locked_text(slot: i64) -> String {
 
 /// The slots listed in `<dir>/locks.json`; a missing or unreadable file lists none.
 fn listed_locks(dir: &Path) -> Vec<i64> {
-    let text = std::fs::read_to_string(dir.join(LOCKS_FILE)).unwrap_or_default();
+    let text = store::current().read_to_string(&dir.join(LOCKS_FILE)).unwrap_or_default();
     match serde_json::from_str::<Value>(&text) {
         Ok(Value::Object(o)) => json::aget(&o, "locked").iter().filter(|v| v.is_number()).map(json::to_int).collect(),
         _ => Vec::new(),
@@ -124,20 +135,24 @@ pub fn set_locked(fmt: &Format, dir: &Path, slot: i64, on: bool) -> Result<(), S
     }
     locked.sort_unstable();
     locked.dedup();
-    if locked.is_empty() && !dir.join(LOCKS_FILE).exists() {
+    let st = store::current();
+    if locked.is_empty() && !st.exists(&dir.join(LOCKS_FILE)) {
         return Ok(());
     }
     let text = serde_json::to_string_pretty(&serde_json::json!({ "locked": locked })).unwrap_or_default();
     let (path, tmp) = (dir.join(LOCKS_FILE), dir.join(format!("{LOCKS_FILE}.fc_tmp")));
-    if std::fs::write(&tmp, text).is_err() || std::fs::rename(&tmp, &path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
+    if st.writes_whole() {
+        return st.write(&path, text.as_bytes()).map_err(|_| format!("Can't write '{}'.", path.display()));
+    }
+    if st.write(&tmp, text.as_bytes()).is_err() || st.rename(&tmp, &path).is_err() {
+        let _ = st.remove_file(&tmp);
         return Err(format!("Can't write '{}'.", path.display()));
     }
     Ok(())
 }
 
 fn now() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    aegis_core::clock::SystemTime::now().duration_since(aegis_core::clock::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 /// Problem strings; empty = written. `state` gives the game_state value or the game's own problems (checked after
@@ -161,7 +176,9 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
     write_envelope(fmt, dir, &path_for(dir, slot), saved_at, state)
 }
 
-/// Writes `state` in the envelope to `final_path` through a temp file and a rename; problem strings, empty = written.
+/// Writes `state` in the envelope to `final_path` through a temp file and a rename (directly on a store that
+/// `writes_whole`, the web: no temp key, so a save needs only its own size in the quota); problem strings, empty =
+/// written.
 fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, state: Value) -> Vec<String> {
     let envelope = json::obj([
         ("format", fmt.tag.into()),
@@ -169,24 +186,35 @@ fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, st
         ("saved_at", int(if saved_at > 0 { saved_at } else { now() })),
         ("game_state", state),
     ]);
-    if std::fs::create_dir_all(dir).is_err() && !dir.is_dir() {
+    let st = store::current();
+    if st.create_dir_all(dir).is_err() && !st.is_dir(dir) {
         return vec![format!("Can't create the save folder '{}'.", dir.display())];
-    }
-    let mut tmp = final_path.with_extension("json.fc_tmp");
-    let mut n = 1;
-    while tmp.exists() {
-        tmp = final_path.with_extension(format!("json.fc_tmp{n}"));
-        n += 1;
     }
     let mut buf = Vec::new();
     let pretty = serde_json::ser::PrettyFormatter::with_indent(b"\t");
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, pretty);
-    if serde::Serialize::serialize(&json::sorted(&Value::Object(envelope)), &mut ser).is_err() || std::fs::write(&tmp, &buf).is_err() {
-        let _ = std::fs::remove_file(&tmp);
+    if serde::Serialize::serialize(&json::sorted(&Value::Object(envelope)), &mut ser).is_err() {
         return vec![format!("Can't write '{}'.", final_path.display())];
     }
-    if std::fs::rename(&tmp, final_path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
+    if st.writes_whole() {
+        // A refused write changes nothing: the previous save stays.
+        return match st.write(final_path, &buf) {
+            Ok(()) => Vec::new(),
+            Err(_) => vec![format!("Can't write '{}'.", final_path.display())],
+        };
+    }
+    let mut tmp = final_path.with_extension("json.fc_tmp");
+    let mut n = 1;
+    while st.exists(&tmp) {
+        tmp = final_path.with_extension(format!("json.fc_tmp{n}"));
+        n += 1;
+    }
+    if st.write(&tmp, &buf).is_err() {
+        let _ = st.remove_file(&tmp);
+        return vec![format!("Can't write '{}'.", final_path.display())];
+    }
+    if st.rename(&tmp, final_path).is_err() {
+        let _ = st.remove_file(&tmp);
         return vec!["Can't move the save into place (the previous save was kept).".into()];
     }
     Vec::new()
@@ -197,7 +225,7 @@ pub fn read(dir: &Path, slot: i64) -> Result<String, Vec<String>> {
     if !exists(dir, slot) {
         return Err(vec![format!("No save in slot {slot}.")]);
     }
-    Ok(std::fs::read_to_string(path_for(dir, slot)).unwrap_or_default())
+    Ok(store::current().read_to_string(&path_for(dir, slot)).unwrap_or_default())
 }
 
 /// A save file's text as an envelope: parse and format check (not migrated).
@@ -265,10 +293,11 @@ pub fn peek(fmt: &Format, dir: &Path, slot: i64) -> Peek {
 }
 
 fn peek_file(fmt: &Format, path: &Path) -> Peek {
-    if !path.is_file() {
+    let st = store::current();
+    if !st.is_file(path) {
         return Peek::Missing;
     }
-    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let text = st.read_to_string(path).unwrap_or_default();
     let envelope = match serde_json::from_str::<Value>(&text) {
         Ok(Value::Object(e)) if json::s(&e, "format") == fmt.tag => e,
         _ => return Peek::Unreadable,
@@ -317,7 +346,7 @@ pub fn key_path(dir: &Path, key: &str) -> PathBuf {
 
 /// Whether a keyed save exists; a bad key has none.
 pub fn exists_keyed(dir: &Path, key: &str) -> bool {
-    check_key(key).is_ok() && key_path(dir, key).is_file()
+    check_key(key).is_ok() && store::current().is_file(&key_path(dir, key))
 }
 
 /// `write` for a keyed save: the same envelope and atomic write, no slot range and no locks; a later write with the
@@ -338,7 +367,7 @@ pub fn read_keyed(dir: &Path, key: &str) -> Result<String, Vec<String>> {
     if !exists_keyed(dir, key) {
         return Err(vec![format!("No save '{key}'.")]);
     }
-    Ok(std::fs::read_to_string(key_path(dir, key)).unwrap_or_default())
+    Ok(store::current().read_to_string(&key_path(dir, key)).unwrap_or_default())
 }
 
 /// `peek` for a keyed save; a bad key is `Missing`.

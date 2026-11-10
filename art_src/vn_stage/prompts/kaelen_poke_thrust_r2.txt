@@ -1,0 +1,11 @@
+Reference images, attached in this order and named here by file name: kaelen_ref_poke_f3_sx45.png (the drive frame just before the thrust; the frame to edit); kaelen_ref_poke_f5_sx45.png (the retract frame just after the thrust).
+
+Edit kaelen_ref_poke_f3_sx45.png into a new animation keyframe: the full thrust of a short, quick halberd poke, the frame between kaelen_ref_poke_f3_sx45.png and kaelen_ref_poke_f5_sx45.png. Start from kaelen_ref_poke_f3_sx45.png and change it only as described here. This is a compact thrust, not a long lunge: do not stretch the arms or the halberd.
+
+Thrust (the part that matters most): the halberd keeps exactly the length, blade shape and size it has in both references; it is not longer. It moves forward along its own line by about one forearm's length beyond where it is in kaelen_ref_poke_f3_sx45.png, keeping the same angle. The front arm (the hand nearer the blade) straightens only partly, the elbow still clearly bent. The back hand stays near the hip and slides forward only a little with the shaft. The torso leans forward a little and stays in the same three-quarter view as in both references, not turned side-on. Both hands stay on the shaft.
+
+Legs: as in kaelen_ref_poke_f3_sx45.png, boots planted in the same places on the same ground line, the front knee a little more bent.
+
+Character (keep exactly as in the references): Kaelen, a young male militia fighter with shoulder-length golden-blonde hair, a scarred steel breastplate over a cream quilted gambeson tunic, spiked brown leather bracers, olive trousers and dark brown boots, holding a halberd with a dark wooden shaft, a steel collar and a crescent axe blade with a small back hook. Face calm and composed, mouth closed.
+
+Framing and style: same canvas, same character size and position as kaelen_ref_poke_f3_sx45.png, one character only, full body, three-quarter view facing right, the whole halberd inside the canvas. Same 16-bit pixel art style, palette and dark outlines as the references. Solid flat pure magenta (#FF00FF) background edge to edge, no ground shadow, no motion lines, no text, no border.

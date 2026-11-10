@@ -2,6 +2,12 @@
 
 Newest pass on top. Candidate statuses: `proposed`, `confirmed (user <date>)`, `rejected (user <date>): <reason>`, `done`. Only the user confirms; confirmed candidates become `docs/TASKS.md` rows. Cleanup is never folded into a feature task: "after X" = run once X is merged, "superseded by X" = X deletes it anyway.
 
+## Design note, 2026-11-10 (from FB-155 review)
+
+| Candidate | What | Status |
+| --- | --- | --- |
+| CLN-WASMLINT | `aegis_core/tests/clock_lint.rs` walks kit and game `src/` from an engine crate's tests (precedent `aegis_core/tests/clip_windup.rs`); a workspace check beside `tools/fc.sh layers` would keep the engine crate from reading other layers | proposed |
+
 ## Later backlog pass, 2026-11-02
 
 Confirmed by the user 2026-11-03 (decision "Ashlands is a test bed"): rewrites and merges apply; CLN-57, CLN-66, CLN-67 and CLN-68 are superseded, those rows are dropped; the keep verdicts on PACE1-A, PACE1-B and DESERT1 are superseded, also dropped.
