@@ -2289,6 +2289,16 @@ fn menu_rows_on(w: &World, c: UnitId, at: RoundTarget, held: bool) -> Vec<(Vec<P
                 }
             }
             item_rows(&mut rows, &|i| i.aims_at_foes());
+            // PR5-25 (PK1 3.7): on a turned ally the `unmark` Support skills and items too (a Support round on it)
+            if crate::mark::unmark_round_target(w, c, t) {
+                for &sid in &skills {
+                    let s = &w.cat.skills[sid];
+                    if intent_is(s, RoundIntent::Support) && !s.unmark.is_empty() && s.target_mode != "SELF" {
+                        rows.push(skill_row(sid, None));
+                    }
+                }
+                item_rows(&mut rows, &|i| !i.unmark.is_empty() && !i.aims_at_foes() && command::item_side_problem(w, c, i, Some(t)).is_empty());
+            }
             // A4.2-K1b (IR19): on an enemy the Field row aims at its tile (a click on a unit means the unit; the Field
             // row is how to aim at its tile)
             if round_intent::field_rows(w) && w.has(t) {

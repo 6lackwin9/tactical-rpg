@@ -87,6 +87,7 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
     let mut precast_done = false;
     let mut riposte_tried = false;
     let mut self_care_tried = false;
+    let mut unmark_tried = false;
     let band = basic_band(w, actor);
     let reach = band.1;
 
@@ -99,6 +100,13 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
         if profile.flee_ratio > 0.0 && !profile.reckless && ratio <= profile.flee_ratio && !fled {
             fled = true;
             if plan.add_step(w, actor, PlanStep::withdraw(), true).is_empty() {
+                continue;
+            }
+        }
+        // PR5-25: a party-side unit with an `unmark` skill calms a turned ally it would calm (once a plan)
+        if !unmark_tried {
+            unmark_tried = true;
+            if try_unmark(w, plan, actor) {
                 continue;
             }
         }
@@ -430,6 +438,48 @@ fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
             if plan.add_step(w, actor, PlanStep::use_item(&b.id, t), false).is_empty() {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// PR5-25 (PK1 3.7, PK2 2: a SUPPORT skill's `unmark`): the (turned ally, `unmark` skill) pairs `actor` would
+/// calm it with now (`mark::would_calm`), in the battle-start party order, then catalog order; only for a party-side
+/// actor, and none on a turned ally another unit already plans an `unmark` on this round. Deterministic, no draw.
+fn unmark_options(w: &World, plan: &Plan, actor: UnitId) -> Vec<(UnitId, SkillId)> {
+    if !w.allies.contains(&actor) {
+        return Vec::new();
+    }
+    let skills = crate::mark::unmark_skills(w, actor);
+    if skills.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for &t in w.marks.start_party() {
+        if t == actor || !w.units[t].is_active() || !w.has(t) {
+            continue;
+        }
+        let calming: Vec<SkillId> = skills.iter().copied().filter(|&sid| crate::mark::would_calm(w, t, &w.cat.skills[sid].unmark)).collect();
+        if calming.is_empty() || unmark_planned_on(w, plan, actor, t) {
+            continue;
+        }
+        out.extend(calming.into_iter().map(|sid| (t, sid)));
+    }
+    out
+}
+
+/// PR5-25: whether a unit of the party side other than `actor` already plans an `unmark` (skill or item) on `t`.
+fn unmark_planned_on(w: &World, plan: &Plan, actor: UnitId, t: UnitId) -> bool {
+    w.allies.iter().filter(|&&a| a != actor).any(|&a| {
+        plan.entries_for(w, a).iter().any(|e| e.target == Some(t) && e.item.as_ref().map_or_else(|| !w.cat.skills[e.skill].unmark.is_empty(), |i| !i.unmark.is_empty()))
+    })
+}
+
+/// PR5-25: plans the first `unmark_options` pair that fits (an ally step on the turned ally); whether one did.
+fn try_unmark(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
+    for (t, sid) in unmark_options(w, plan, actor) {
+        if plan.add_step(w, actor, PlanStep::ally(sid, t), false).is_empty() {
+            return true;
         }
     }
     false
@@ -1704,14 +1754,31 @@ pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &Ai
         }
     }
     // ENCOUNTER2 H6: a hold escape's part comes first (None without one)
+    // PR5-25: then calming a turned ally with an `unmark` skill (a Support round, row 2's tag), before any tactic
     let choice = match hold_choice(w, plan, c) {
         Some(ch) => ch,
-        None => match tactic_pick(w, plan, c, profile, tactic) {
-            Some(p) => Choice::Pick(ROW_TACTIC, p),
-            None => table(w, plan, c, profile, 0),
+        None => match unmark_pick(w, plan, c) {
+            Some(p) => Choice::Pick(ROW_SUPPORT, p),
+            None => match tactic_pick(w, plan, c, profile, tactic) {
+                Some(p) => Choice::Pick(ROW_TACTIC, p),
+                None => table(w, plan, c, profile, 0),
+            },
         },
     };
     resolve(w, plan, c, profile, choice)
+}
+
+/// PR5-25: a Support round on the first turned ally an `unmark` skill of `c` would calm (`unmark_options`), opened by
+/// that skill; None when there is none or no such round plans.
+fn unmark_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
+    for (t, sid) in unmark_options(w, plan, c) {
+        let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Unit(t));
+        p.opener = Some(Opener::Skill(sid));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
 }
 
 /// Commits `pick` for `c` as a tactic's pick would be (a failed commit goes on with the table from its first row); for

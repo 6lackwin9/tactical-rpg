@@ -246,7 +246,8 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
         // A1.2-K3 (IR15, FB-121): under `field_intent` a self target is Stand's, for items too (a heal on yourself is a
         // Stand round); without it a self item stays Support
         (RoundIntent::Support, RoundTarget::Myself) => !field_rows(w),
-        (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t),
+        // PR5-25: a turned ally is a Support target while an `unmark` (skill or item) of the unit reaches it
+        (RoundIntent::Support, RoundTarget::Unit(t)) => friend(t) || crate::mark::unmark_round_target(w, c, t),
         (RoundIntent::Support, RoundTarget::Cell(_)) => false,
         (RoundIntent::Channel, _) => true,
         // INTENT2 IR2, IR5: Field aims at a tile (the source); a click on a unit means the unit

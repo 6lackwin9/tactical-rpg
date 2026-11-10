@@ -1696,7 +1696,8 @@ pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Opti
     if s.target_mode == "SELF" {
         return "self only".into();
     }
-    if !w.friends_of(caster).contains(&t) {
+    // PR5-25: a SUPPORT skill's `unmark` reaches a turned ally as the consumable's does (`mark::unmark_reaches`)
+    if !w.friends_of(caster).contains(&t) && !crate::mark::unmark_reaches(w, caster, &s.unmark, t) {
         return "not an ally".into();
     }
     String::new()
@@ -1802,7 +1803,7 @@ pub fn pouch_ids(w: &World, c: UnitId) -> Vec<String> {
 pub fn item_side_problem(w: &World, user: UnitId, item: &ItemDef, target: Option<UnitId>) -> String {
     let Some(target) = target else { return format!("Pick a target for {}.", item.name) };
     // PK1-S1 (3.7): an `unmark` item reaches a turned ally (on the party side at the battle start) from the party side
-    let turned = !item.unmark.is_empty() && w.allies.contains(&user) && crate::mark::turned_ally(w, target);
+    let turned = crate::mark::unmark_reaches(w, user, &item.unmark, target);
     let foe = w.foes_of(user).contains(&target) && !turned;
     if item.aims_at_foes() {
         if !foe {

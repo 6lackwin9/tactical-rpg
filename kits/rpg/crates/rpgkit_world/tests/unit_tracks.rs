@@ -5,7 +5,8 @@
 //! refuses two-handed items in `can_wear`; the settle moves each track by the battle's marks (`tracks` result key),
 //! sends a now-forbidden two-hander to the stash (`stashed`), departs a member at the departure stage, and a hero still
 //! hostile at the battle end, `lost` for the track's cause, before the rest of the settle; `hero_ends` pairs the members
-//! with the battle-start party side, so a turned hero keeps its member.
+//! with the battle-start party side, so a turned hero keeps its member. PR5-25: a Stage V member (a five-stage track)
+//! turned by a breach and calmed by an ally's SUPPORT `unmark` skill settles at the stage below, without departing.
 
 use aegis_core::json;
 use rpgkit_battle::session::{Prebuilt, Session};
@@ -40,6 +41,24 @@ fn with_ids(w: &str, rows: Value) -> Value {
 /// One class, two founders and a foe; a three-stage track (stage two forbids two-handed items, stage three departs);
 /// a two-handed staff and a one-handed sword.
 fn data() -> Data {
+    data_with(3)
+}
+
+/// `data` with a `top`-stage track (stages one and two as there, the last departs) and the SUPPORT skill Inoculate
+/// (`unmark` of the track's mark, once a battle; PR5-25).
+fn data_with(top: i32) -> Data {
+    let names = ["One", "Two", "Three", "Four", "Five"];
+    let stages: Vec<Value> = (1..=top)
+        .map(|n| {
+            let name = names[(n - 1) as usize];
+            match n {
+                _ if n == top => json!({"name": name, "departure": "lost"}),
+                1 => json!({"name": name, "passive": "t_stage_one"}),
+                2 => json!({"name": name, "passive": "t_stage_two"}),
+                _ => json!({"name": name}),
+            }
+        })
+        .collect();
     let catalog = json!({
         "classes": [{"id": "drill", "name": "Drill", "skill_path": {"d_one": 1}, "base_stats": {"STR": 12, "DEX": 10, "INT": 6, "CONS": 12, "PERC": 10, "KNOW": 10}}],
         "skills": [
@@ -50,7 +69,8 @@ fn data() -> Data {
             {"id": "staggered", "name": "Staggered", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
             {"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
             {"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2},
-            {"id": "d_one", "name": "One", "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"}
+            {"id": "d_one", "name": "One", "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"},
+            {"id": "d_inoculate", "name": "Inoculate", "kind": "SUPPORT", "level": 1, "blocks": 1, "target_mode": "ALLY", "reach_min": 0, "reach_max": 9, "unmark": {"mark": MARK}, "uses_per_battle": 1}
         ],
         "units": [
             {"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1},
@@ -64,8 +84,7 @@ fn data() -> Data {
             {"id": "great_staff", "name": "Great Staff", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "staff", "two_handed": true, "base_power": 20, "value": 5},
             {"id": "plain_sword", "name": "Plain Sword", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "base_power": 10, "value": 5}
         ],
-        "unit_tracks": [{"id": TRACK, "name": "Track", "mark": MARK, "cause": CAUSE, "stages": [
-            {"name": "One", "passive": "t_stage_one"}, {"name": "Two", "passive": "t_stage_two"}, {"name": "Three", "departure": "lost"}]}]
+        "unit_tracks": [{"id": TRACK, "name": "Track", "mark": MARK, "cause": CAUSE, "stages": stages}]
     });
     let worlds = json!({"w": {"manifest": {"id": "w"}, "own": {
         "characters": with_ids("w", json!([
@@ -234,4 +253,47 @@ fn hero_ends_pair_a_turned_hero_with_its_member() {
     let paired: Vec<(&str, &str)> = ends.iter().map(|e| (e.member.as_str(), e.hostile.as_str())).collect();
     assert_eq!(paired, [("founder", TRACK), ("second", "")]);
     assert_eq!(ends[0].marks, vec![(MARK.to_string(), 1)]);
+}
+
+/// PR5-25 (`FB-187` (5)): on a five-stage track, a breach takes the founder from Stage IV to Stage V (turned on
+/// everyone); the second member's planned SUPPORT `unmark` skill reaches it, takes the breach back (Stage IV again) and
+/// calms it at the next round start; `hero_ends` carries no hostility and no mark, so the settle keeps the founder at
+/// Stage IV (no departure).
+#[test]
+fn a_stage_v_member_calmed_by_an_unmark_skill_settles_without_departing() {
+    let top = 5;
+    let d = data_with(top);
+    let members = vec![member(&d, "founder", i64::from(top - 1)), member(&d, "second", 0)];
+    let mut gs = game(&d, members.clone());
+    let mut party = Vec::new();
+    let mut fielded = Vec::new();
+    for m in &members {
+        let f = roster::field_unit(&d, &gs, m, "w").unwrap();
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
+        fielded.push((m.id.clone(), f.pouch_unloaded));
+    }
+    let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", "fight"));
+    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, "w"), party);
+    let (founder, second) = (s.w.allies[0], s.w.allies[1]);
+    // the keystone as the second member's (its family active, as a deck's keystone slot holds it)
+    s.w.units[second].known_skills.push("d_inoculate".into());
+    s.w.units[second].active_extra_families.push(d.cat.family_of("d_inoculate").to_string());
+    s.w.marks.record(founder, MARK, 1);
+    let parts = rpgkit_battle::mark::sync_tracks(&mut s.w, founder, MARK);
+    assert!(parts.iter().any(|p| p == "Founder's Track is at stage 5 (Five)") && parts.iter().any(|p| p.ends_with("turns on everyone")), "{parts:?}");
+    let ino = s.w.book().find("d_inoculate").unwrap();
+    assert_eq!(s.plan.add_step(&s.w, second, rpgkit_battle::plan::PlanStep::ally(ino, founder), true), "", "the unmark reaches the turned founder");
+    assert!(s.confirm_plan());
+    while s.phase != rpgkit_battle::session::Phase::Replay && !s.combat_over {
+        s.step_next();
+    }
+    assert!(s.resolver.log.iter().any(|l| l.ends_with("Founder calms at the next round start")), "{:?}", s.resolver.log);
+    assert!(s.can_advance_round());
+    s.advance_round();
+    assert_eq!(s.w.allies, vec![founder, second], "calmed, back at its start place");
+    let ends = roster::hero_ends(&s, &fielded);
+    assert!(ends.iter().all(|e| e.hostile.is_empty() && e.marks.is_empty()), "{ends:?}");
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &ends);
+    assert!(settled.departed.is_empty(), "{:?}", settled.departed);
+    assert_eq!(gs.party.member("founder").map(|m| m.track_stage(TRACK)), Some(i64::from(top - 1)), "Stage IV kept");
 }

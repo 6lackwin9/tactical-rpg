@@ -106,6 +106,50 @@ pub fn turned_ally(w: &World, c: UnitId) -> bool {
     w.sides.is_rogue(c) && w.marks.started_on_party(c)
 }
 
+/// PK1-S1 (3.7), PR5-25: whether an `unmark` of `mark` ("" = the use has none) used by `user` may reach `target`
+/// although it fights the user: the user is on the party side and the target a turned ally (`turned_ally`). The same
+/// rule for a consumable's `unmark` and a SUPPORT skill's.
+pub fn unmark_reaches(w: &World, user: UnitId, mark: &str, target: UnitId) -> bool {
+    !mark.is_empty() && w.allies.contains(&user) && turned_ally(w, target)
+}
+
+/// PR5-25: the SUPPORT skills with an `unmark` that `c` can use now (catalog order): known at its skill cap and not
+/// used up this battle (`uses_problem`, nothing planned counted).
+pub fn unmark_skills(w: &World, c: UnitId) -> Vec<crate::skill::SkillId> {
+    let cap = w.skill_cap_of(c);
+    w.book().available(crate::skill::Kind::Support, cap, Some(&w.units[c])).into_iter().filter(|&sid| !w.cat.skills[sid].unmark.is_empty() && uses_problem(w, c, &w.cat.skills[sid], 0).is_empty()).collect()
+}
+
+/// PR5-25 (rule round_intent): whether a Support round of `c` may take the turned ally `t` as its round target: an
+/// `unmark` reaches it (`unmark_reaches`) through a skill `c` can use (`unmark_skills`) or an offered pouch item with
+/// one. Any other step of that round still needs a friend (its own side check).
+pub fn unmark_round_target(w: &World, c: UnitId, t: UnitId) -> bool {
+    if !w.allies.contains(&c) || !turned_ally(w, t) {
+        return false;
+    }
+    let item = w.units[c].inventory.pouch.iter().any(|i| !i.unmark.is_empty() && i.offered_in_battle());
+    item || !unmark_skills(w, c).is_empty()
+}
+
+/// PR5-25 (the AI's read of `unmark`): whether an `unmark` of `mark` on `c` now would calm it: `c` is a turned ally
+/// not already calming that holds a `mark` entry, and the stage its turning track (if one turned it) would be at once
+/// the latest entry goes (`sync_tracks`' formula) is no departure stage. Reads only; draws nothing.
+pub fn would_calm(w: &World, c: UnitId, mark: &str) -> bool {
+    if mark.is_empty() || !turned_ally(w, c) || w.marks.calming(c) {
+        return false;
+    }
+    let Some(latest) = w.marks.list.iter().rev().find(|m| m.unit == c && m.mark == mark) else { return false };
+    let Some(t) = w.marks.turned_by(c).and_then(|id| w.cat.unit_tracks.get(id)) else { return true };
+    let now = w.units[c].tracks.as_ref().and_then(|s| s.get(&t.id).copied()).unwrap_or(0);
+    let after = if t.mark == mark {
+        let start = w.marks.track_start(c, &t.id).unwrap_or(now);
+        t.clamp(i64::from(start) + w.marks.sum_of(c, mark) - i64::from(latest.value))
+    } else {
+        now
+    };
+    t.departure_at(after).is_empty()
+}
+
 /// 3.7: an `unmark` of `mark` by `source` on `c`: its latest `mark` entry goes (PK2-S1: the unit tracks it moved move
 /// back, `sync_tracks`); on a turned ally (`turned_ally`) it is also calmed at the next round start, unless a unit
 /// track turned it and it is still at that track's departure stage. Returns the log part ("" = nothing to undo).
