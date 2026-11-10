@@ -109,6 +109,24 @@ struct Ctx {
     world: String,
     level: i32,
     shifted: bool,
+    /// R3-STAGE-SIM: the world stage (`stage=`; 0 = authored levels).
+    stage: i64,
+    /// The refs on the party's side (the encounter's `party` and `guests`): never staged, as `WorldRoster::allies`.
+    allies: Vec<String>,
+}
+
+/// R3-STAGE-SIM: the level an enemy ref `id` of unit row `e` fights at on the context's stage: its level without the
+/// stage (the elevel shift when set, else its own) grown by `rpgkit_world::battle::stage_level` (a hero or an ally
+/// never grows). None when the stage leaves it unchanged.
+fn staged_level(ctx: &Ctx, id: &str, e: &Dict) -> Option<i32> {
+    if ctx.stage <= 0 || ctx.allies.iter().any(|a| a == id) {
+        return None;
+    }
+    let mut row = e.clone();
+    let level = if ctx.shifted { i64::from(ctx.level) } else { json::i(e, "level", 1) };
+    row.insert("level".into(), json!(level));
+    let grown = rpgkit_world::battle::stage_level(&row, ctx.stage);
+    (grown != level).then_some(grown as i32)
 }
 
 /// The unit id of story reference `id`: a plain character (or catalog unit) is its base unit (a level-shifted copy
@@ -120,13 +138,22 @@ fn map_ref(r: &mut Runner, ctx: &Ctx, id: &str) -> String {
     let d = r.d;
     let character = d.resolve(&ctx.world, "characters", id);
     let base_id = if character.is_empty() { id.to_string() } else { json::s_or(character, "base_unit", id) };
-    if character.is_empty() || !has_extras(d, character, &ctx.world) {
-        return catalog_ids(r, &[base_id], ctx.level, ctx.shifted).remove(0);
-    }
     let e = d.entry("units", &base_id);
-    let copy = format!("simw_{}", json::s_or(character, "_qid", id).replace(':', "_"));
-    let level = if ctx.shifted { ctx.level } else { json::i(e, "level", 1) as i32 };
-    let def = Def { copy_of: base_id.clone(), character: Some((ctx.world.clone(), id.to_string())), ..Def::new(&json::s(e, "class_id"), level, &rpgkit_data::unit_tier(e), false) };
+    let staged = staged_level(ctx, id, e);
+    if character.is_empty() || !has_extras(d, character, &ctx.world) {
+        let Some(level) = staged else { return catalog_ids(r, &[base_id], ctx.level, ctx.shifted).remove(0) };
+        // a staged copy simc_<id>_s<stage> (its own id: an ally of the same unit keeps the unstaged copy)
+        let copy = format!("simc_{base_id}_s{}", ctx.stage);
+        let def = Def { copy_of: base_id.clone(), raise: true, ..Def::new(&json::s(e, "class_id"), level, &rpgkit_data::unit_tier(e), false) };
+        r.define(&copy, def);
+        return copy;
+    }
+    let mut copy = format!("simw_{}", json::s_or(character, "_qid", id).replace(':', "_"));
+    if staged.is_some() {
+        copy += &format!("_s{}", ctx.stage);
+    }
+    let level = staged.unwrap_or(if ctx.shifted { ctx.level } else { json::i(e, "level", 1) as i32 });
+    let def = Def { copy_of: base_id.clone(), character: Some((ctx.world.clone(), id.to_string())), raise: staged.is_some(), ..Def::new(&json::s(e, "class_id"), level, &rpgkit_data::unit_tier(e), false) };
     r.define(&copy, def);
     copy
 }
@@ -162,7 +189,8 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
     if entry.is_empty() {
         return None;
     }
-    let ctx = Ctx { world: world.to_string(), level: foe_level, shifted: elevel_set };
+    let allies = json::sget(&entry, "party").into_iter().chain(json::sget(&entry, "guests")).collect();
+    let ctx = Ctx { world: world.to_string(), level: foe_level, shifted: elevel_set, stage: i64::from(r.args.stage), allies };
     let mut base = Map::new();
     for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "start_ap", "ap_regen"] {
         if let Some(v) = entry.get(key) {

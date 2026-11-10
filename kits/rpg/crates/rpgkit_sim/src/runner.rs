@@ -32,11 +32,16 @@ pub struct Def {
     pub copy_of: String,
     /// The story character (world, ref) the unit plays: it spawns with that character's extras.
     pub character: Option<(String, String)>,
+    /// PR4-1 (R3-STAGE-SIM): an enemy copy grown by `stage=` (stage > 0): its level goes through the world's raise
+    /// (`rpgkit_rules::unit::raise_level`, as `WorldRoster::entry`) from the authored level, so an explicit `spend`
+    /// gets the extra points; with `elevel=` too, that raise also covers the elevel shift. False: the level is written
+    /// as is, so an unstaged `elevel=` copy gets no extra points (AUDIT-07's routing moves `sim_golden`; parked, FB-148).
+    pub raise: bool,
 }
 
 impl Def {
     pub fn new(class_id: &str, level: i32, tier: &str, party: bool) -> Self {
-        Self { class_id: class_id.into(), level, tier: tier.into(), party, loadout: Vec::new(), plain: false, copy_of: String::new(), character: None }
+        Self { class_id: class_id.into(), level, tier: tier.into(), party, loadout: Vec::new(), plain: false, copy_of: String::new(), character: None, raise: false }
     }
 }
 
@@ -230,7 +235,9 @@ impl<'a> Runner<'a> {
         } else {
             let mut e = self.d.entry("units", &def.copy_of).clone();
             e.insert("id".into(), json!(id));
-            e.insert("level".into(), json!(def.level));
+            if !def.raise {
+                e.insert("level".into(), json!(def.level));
+            }
             // C02-A (FB-83): a story character's AI role and default intent over its base unit's, as a world battle
             // spawns it (`Data::character_unit_entry`, U4.2-S3; AUDIT-04 `Prebuilt::default_intent`)
             if let Some((w, c)) = &def.character {
@@ -257,7 +264,12 @@ impl<'a> Runner<'a> {
                 entry.insert("loadout".into(), json!(roles::role_loadout(&self.d.cat, &self.args.game.classes, &def.class_id, roles::primary_role(&self.args.game.classes, &def.class_id), def.level)));
             }
         }
-        self.units.insert(id.into(), UnitDef::from_obj(&entry));
+        let mut unit = UnitDef::from_obj(&entry);
+        if def.raise && !def.copy_of.is_empty() {
+            // PR4-1: a staged enemy copy through the world's raise (`WorldRoster::entry`)
+            rpgkit_rules::unit::raise_level(&self.d.cat, &mut unit, def.level);
+        }
+        self.units.insert(id.into(), unit);
         self.written.insert(id.into(), variant);
         true
     }

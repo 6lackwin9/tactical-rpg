@@ -82,8 +82,9 @@ pub fn foe_level(level: i64, stage: i64, growth: i64) -> i64 {
 
 /// The level roster unit row `entry` (a character's unit entry, `Data::character_unit_entry`) fights at on stage
 /// `stage`: `foe_level` for an enemy (tier other than `hero`), the base level for a hero. A row without `tier` reads
-/// the schema default `hero` (`rpgkit_data::unit_tier`, AUDIT-01), so it never scales.
-fn stage_level(entry: &Dict, stage: i64) -> i64 {
+/// the schema default `hero` (`rpgkit_data::unit_tier`, AUDIT-01), so it never scales. Public for the sim's `stage=`
+/// (R3-STAGE-SIM), which levels its world fights by the same rule.
+pub fn stage_level(entry: &Dict, stage: i64) -> i64 {
     let level = json::i(entry, "level", 1);
     if rpgkit_data::unit_tier(entry) == rpgkit_data::DEFAULT_TIER {
         return level;

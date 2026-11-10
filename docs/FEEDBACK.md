@@ -31,7 +31,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | R4-2 `R4-CLOSE` | done (`3353e62b`) | `develop` | - |
 | R4 release | released: `main` @32ae1ada ([#58](https://github.com/6lackwin9/tactical-rpg/pull/58), merge commit; tree = develop @ad903f92, which adds a whitespace fix for an MD012 lint error from 92a7282b) | `main` | Ready queue empty; next: Section 3 `R3-STAGE-SEED`, `POST-R4-CLEANUP` when Design queues them. |
 | WEBREL1 feasibility | done: FB-147 (read-only audit, no code) | - | Waiting on Design: E1 split (Option A) and slice order. |
-| PR4-1 `R3-STAGE-SIM` | building (`logic-builder`) | `claude/optimistic-newton-ewkyqt` | Next: PR4-2 `POST-R4-CLEANUP` (items 1, 3, 4). |
+| PR4-1 `R3-STAGE-SIM` | done: part 1 (`stage=N`, FB-149); part 2 parked (FB-148, limit-blocker) | `develop` | Next: PR4-2 `POST-R4-CLEANUP` (items 1, 3, 4). |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -52,6 +52,31 @@ FB-01 to FB-146 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
   5. **Saves**: `aegis_save::write_envelope` (`lib.rs:165-193`) writes tab-indented sorted JSON; the largest state in the journey golden (64 states, 700 steps) is a 2.9 KB envelope. A long campaign should stay under ~50 KB a slot, so 6 slots + settings + locks < 0.5 MB, far below 5 MB even at 2x for UTF-16; saves are text, so no base64. Risk: itch.io serves HTML5 games from the shared `itch.zone` origin, so the quota may be shared, and playtest recordings with JPG shots could overflow it.
   6. **Cost** (builder runs), all slices can keep **0 golden diffs** (on native `web-time` re-exports std and the seam passes straight to `std::fs`, so `checks_golden` and the store resave keep their bytes): **E1 L** (2-3 runs: arboard gate, clock seam across engine + kit + game, read seam, user store with `aegis_save`'s 14 read / 11 write path sites mapped to keys plus `screen.rs` settings, `cfg` for bridge, headless and exit); **E2 M** (1-2 runs; needs `wasm-bindgen-cli` 0.2.129, not installed); **G1 M** (rework `main.rs:76-130` startup; `emberwake_gui` is bin-only, so add a lib/cdylib start or use the bin; smoke tests need Playwright: the container has Chromium at `/opt/pw-browsers/chromium`); **P1 S-M** (no web job in `.github/workflows` yet; install `wasm-bindgen-cli` and `butler` in CI).
 - **Recommendation**: order **E1 -> E2 -> G1 -> P1**, with P1's `tools/fc.sh web` moved into G1 so G1 can be tested. **Option A (recommended)**: split E1 into **E1a "compiles"** (arboard target-gate, `aegis_core::clock` re-exporting `web_time` swapped in at the 28 sites, `shell.rs:1456/1489` behind `cfg`; small, and it makes the spec's E1 compile criterion true) and **E1b "runs"** (read seam, user store, `cfg` for TCP and exit). **Option B**: keep E1 whole. Either way: (1) give E1 a runtime acceptance, since a clean compile proves little when the std stubs compile (a lint: no `std::time` / `std::fs` outside the seams in non-test, non-CLI `src`; or a `wasm-bindgen-test`); (2) let E1 span engine, kit and game for the clock and read sites above; (3) ship audio as a later bundle part; (4) consider IndexedDB, or recordings off on web, given the shared `itch.zone` quota.
+
+### FB-148: PR4-1 part 2 (AUDIT-07, `elevel=` through `raise_level`) parked: it moves `sim_golden`
+
+- **Spec**: READY Section 1 row PR4-1 `R3-STAGE-SIM` clause (2); `FB-143` / `FB-146` AUDIT-07
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: routing the sim's `elevel=` raise through `rpgkit_rules::unit::raise_level` changes `sim_golden` run 11 (`party 3 1 comp=warrior,priest enc=world:ash_patrol,world:ash_raiders elevel=+1 pouch=con_heal_potion`), line 10: `world:ash_raiders 100 - 3.0 2.0/2 0.82 1.00` becomes `... 0.81 1.00`. Cause: `ash_raiders` fields `ash_skirmisher`, whose base unit `goblin_skirmisher` has an explicit `spend` (`{DEX: 4, PERC: 2}`), so at +1 level it now gets its extra spend points (the intended AUDIT-07 effect). The row's acceptance says `sim_golden` byte-identical with no `elevel=` change, and names no re-record, so the clause is parked: the plumbing is in (`runner::Def.raise`): a staged copy (`stage=` > 0) already routes its `elevel=` shift through `raise_level`, an unstaged `elevel=` copy does not. The part-2 acceptance test (`elevel=2` on an explicit-`spend` enemy spends the 2 extra levels' points like `raise_level`) was written, confirmed to fail on the parked path, and left out of the landing (review M1: no ignored acceptance test); it returns un-ignored with part 2. Part 1 (`stage=N`) landed with 0 golden diffs.
+- **Recommendation**: **Option A (recommended)**: approve re-recording `sim_golden` (run 11 only, one hp ratio `0.82 -> 0.81`) as the intended AUDIT-07 change; Build sets `Def.raise` on `elevel=` copies, un-ignores the test and names the re-record in the commit plus a HISTORY line. **Option B**: keep `elevel=` as a plain level shift (sim-only knob, no spend) and drop AUDIT-07; Build deletes the ignored test. Also confirm one reading (no golden impact): with `stage=` and `elevel=` together, the stage grows the elevel-shifted level and the spend raise runs from the authored level (as built).
+
+### FB-149: PR4-1 `R3-STAGE-SIM` landed (part 1) + `stage=0..3` sweep
+
+- **Spec**: READY Section 1 row PR4-1 (the `PR4-1` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `aegis sim` takes `stage=N` (int `0..`, default `0`; a bad value is refused as "stage must be a number >= 0"). World encounters (party, sweep, campaign: `world::encounter` reads `args.stage`) play at world stage N: an enemy's level follows `rpgkit_world::battle::stage_level` (now `pub`, the campaign's own rule; hero tier, `party` and `guests` never grow; capped at `MAX_LEVEL`), staged enemies are written as copies (`simc_<unit>_s<N>`, `simw_<qid>_s<N>`) built with `raise_level` so an explicit `spend` gets its extra points. `stage=` is listed in `sim help` only (`args::STAGE_USAGE`), since `sim_golden` runs 19-20 print `USAGE`. Tests: 4 new in `rpgkit_sim/tests/stage.rs` (+1 ignored, FB-148). Gate: 2702 passed, 0 failed, 5 ignored, 0 warnings; **0 golden diffs**. **Sweep** (`sim party`, level 5, default comp warrior/ranger/priest/mage, 10 seeds a fight): stages 1-3 are byte-identical to stage 0 because no shipped unit has `growth_per_stage` yet, so the content half needs values before a sweep can show anything:
+
+  | Campaign fight (stages 0-3 identical) | Win % | Avg rounds | Party HP |
+  | --- | --- | --- | --- |
+  | `courtyard_skirmish` | 100 | 1.6 | 0.95 |
+  | `pass_ambush` | 100 | 3.0 | 0.94 |
+  | `wagon_raid` | 100 | 1.8 | 0.98 |
+  | `ashmaw_stand` (arms branch) | 100 | 4.3 | 0.60 |
+  | `ashmaw_stand_barred` (gate branch) | 100 | 3.5 | 0.80 |
+
+- **Recommendation**: GAME_BRIEF (sim keys): "`sim stage=N` (0..; default 0) plays world encounters (party, sweep, campaign) at world stage N: enemies grow by `growth_per_stage` through `rpgkit_world::battle::stage_level`, hero tier and guests never grow, and staged copies spend an explicit `spend` via `raise_level`; listed in `sim help` only (`args::STAGE_USAGE`)." HISTORY: "2026-11-10 PR4-1 `R3-STAGE-SIM` part 1 (`stage=N` sim key) landed with 0 golden diffs; part 2 (AUDIT-07 `elevel=` through `raise_level`) parked as FB-148 because it moves `sim_golden` run 11." STRUCTURE: none. Note: `stage=` is one fixed stage for every fight of a run, also in campaign mode, where the real campaign uses stage = act (as the row specifies). For the held content half (`R3-STAGE-SEED`): the 5 fights are all 100% wins at level 5 with this comp, so a `growth_per_stage` pick should be swept at the campaign's actual party levels per act.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

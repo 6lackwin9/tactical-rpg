@@ -28,6 +28,8 @@ pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each
 /// BASERULES1-M2 (FB-40, library section 7): the help of the ruleset notes, printed apart from `usage` (`sim help`), which
 /// `sim_golden` holds.
 pub const RULE_NOTES_USAGE: &str = "       with ruleset= or rules=: the picked ruleset's notes (aegis rules: requires, conflicts, untested sets, ranges) print after ARGS as RULES error: / RULES warning: lines; the run still plays";
+/// PR4-1 (R3-STAGE-SIM): the help of the `stage=` key, printed apart from `usage` (`sim help`), which `sim_golden` holds.
+pub const STAGE_USAGE: &str = "       stage=0.. (0): world encounters (party, sweep, campaign) at that world stage: enemies grow by their growth_per_stage as in the campaign";
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
@@ -90,6 +92,9 @@ pub struct SimArgs {
     pub elevel: i32,
     /// Catalog encounters use party level + elevel too.
     pub elevel_set: bool,
+    /// R3-STAGE-SIM (PR4-1): the world stage (`world_stage`) world encounters are fought at: enemies grow by their
+    /// unit's `growth_per_stage` as in the campaign (`rpgkit_world::battle::stage_level`). 0 = authored levels.
+    pub stage: i32,
     pub elite_class: String,
     pub boss_class: String,
     pub roles: Vec<String>,
@@ -169,6 +174,7 @@ impl Default for SimArgs {
             encounters: strings(&GENERATED),
             elevel: 0,
             elevel_set: false,
+            stage: 0,
             elite_class: String::new(),
             boss_class: String::new(),
             roles: strings(&ROLES),
@@ -703,6 +709,12 @@ impl SimArgs {
                     return Err(format!("elevel must be +n, -n or catalog (got '{value}')"));
                 }
             }
+            "stage" => {
+                match value.parse::<i32>() {
+                    Ok(n) if n >= 0 => self.stage = n,
+                    _ => return Err(format!("stage must be a number >= 0 (got '{value}')")),
+                }
+            }
             "elite" | "boss" => {
                 if !ids.contains(&value) {
                     return Err(format!("{key} must be a class id of {classes} (got '{value}')"));
@@ -925,6 +937,9 @@ impl SimArgs {
         }
         if !self.pouch.is_empty() {
             t += &format!(", pouch {}", self.pouch.join(","));
+        }
+        if self.stage > 0 {
+            t += &format!(", stage {}", self.stage);
         }
         t
     }

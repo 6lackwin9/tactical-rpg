@@ -150,6 +150,8 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
             // BASERULES1-M2: the same, for the ruleset notes (no golden run asks for help)
             if argv.first().map(String::as_str) == Some("help") {
                 out.push(args::RULE_NOTES_USAGE.to_string());
+                // PR4-1: the same, for `stage=`
+                out.push(args::STAGE_USAGE.to_string());
             }
             return out;
         }
