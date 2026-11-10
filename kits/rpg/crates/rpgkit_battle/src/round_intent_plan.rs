@@ -1538,14 +1538,7 @@ pub fn set_channel(w: &mut World, plan: &mut Plan, c: UnitId, on: bool) -> (Resu
     if crate::channel::is_channel(w, c) == on {
         return (Ok(Vec::new()), Vec::new());
     }
-    let mut lines = Vec::new();
-    if on {
-        // FB-167 Q1 (a): entering a Channel round counts as an intent change (IN6)
-        for name in round_intent::drop_bound(w, c) {
-            lines.push(format!("{} enters Channel: {name} ends", w.units[c].name));
-        }
-    }
-    w.round_states.entry(c).or_default().channel = on;
+    let mut lines = flip_channel(w, c, on);
     let picks = picks_of(w, c);
     let mut kept: Vec<Pick> = Vec::new();
     for p in picks {
@@ -1584,6 +1577,20 @@ pub fn set_channel(w: &mut World, plan: &mut Plan, c: UnitId, on: bool) -> (Resu
         }
     }
     (Ok(lines), rebuild_later(w, plan, c))
+}
+
+/// PK1-S2b: the round flag part of the toggle, shared by `set_channel` and the AI's Channel row (`ai`): sets `c`'s
+/// round flag to `on`; entering Channel counts as an intent change (FB-167 Q1 (a), IN6: the intent-bound buffs end).
+/// Returns the lines ("<unit> enters Channel: <buff> ends"); the plan is left alone (the caller rebuilds it).
+pub fn flip_channel(w: &mut World, c: UnitId, on: bool) -> Vec<String> {
+    let mut lines = Vec::new();
+    if on {
+        for name in round_intent::drop_bound(w, c) {
+            lines.push(format!("{} enters Channel: {name} ends", w.units[c].name));
+        }
+    }
+    w.round_states.entry(c).or_default().channel = on;
+    lines
 }
 
 /// INPUT1 GH7: the Auto-fill setting; rebuilds every active party member's ghost (members with picks from their picks,

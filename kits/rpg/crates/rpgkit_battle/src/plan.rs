@@ -341,6 +341,9 @@ impl PlanEntry {
             cmd.gate = s.requires_meter.clone().filter(|_| crate::meter::on(w));
             // PK1-S2a (PK1 4.2): a marrow version pierces armour (attacks) and runs its `channel.effects` as a rider
             if let Some(v) = crate::channel::version(w, actor, s) {
+                // PK1-S2b: the tells name a marrow version (the twin of a Cold Steel skill, not a marrow-only skill such
+                // as Feed or Vent) with the marrow mark
+                cmd.marrow = crate::channel::has_version(w, s);
                 if v.pierce {
                     cmd.impact.armor_piercing = true;
                 }
@@ -1633,9 +1636,11 @@ impl Plan {
         }
         // HOOKS1 EX1: an execute entry counts when the foe's HP share meets it now (rule execute)
         let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
-        let hit = expected(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult);
+        // PK1-S2b: a marrow version's armour piercing counts in the estimate (the AI's Channel row compares them)
+        let version = crate::channel::version(w, c, s);
+        let hit = expected_with(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
         // PK1-S2a: a marrow version's power factor (none outside a Channel round)
-        match crate::channel::version(w, c, s).map(|v| v.power).filter(|p| *p != 1.0) {
+        match version.map(|v| v.power).filter(|p| *p != 1.0) {
             Some(p) => (hit as f64 * p).round() as i32,
             None => hit,
         }
@@ -1857,6 +1862,13 @@ pub fn expected_is_ranged(w: &World, c: UnitId, sid: SkillId) -> bool {
 
 /// DamageCalculator.expected: no crit, no guard, cover included; `power_scale` multiplies the skill power.
 pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64) -> i32 {
+    expected_with(w, c, foe, sid, stance, cover, power_scale, false)
+}
+
+/// `expected`, with `pierce` adding armour piercing (PK1-S2b: a marrow version's, `channel::Version::pierce`) to the
+/// skill's own; either counts only under the rule pierce, as the resolver reads it.
+#[allow(clippy::too_many_arguments)]
+pub fn expected_with(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64, pierce: bool) -> i32 {
     let s = &w.cat.skills[sid];
     let u = &w.units[c];
     damage::compute(
@@ -1870,7 +1882,7 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
             include_guard: false,
             cover,
             // RULESET1 A2: an armour-piercing skill skips armour under the rule pierce
-            ignore_armor: crate::poise::Impact::of(s).armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
+            ignore_armor: (pierce || crate::poise::Impact::of(s).armor_piercing) && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
             ..HitInput::default()
         },
     )

@@ -221,6 +221,10 @@ pub struct Command {
     /// PK1-S2a: the skill's meter gate (`requires_meter`), tested at the command's start before any cost (set only under
     /// the rule `unit_meters`).
     pub gate: Option<rpgkit_data::MeterGate>,
+    /// PK1-S2b (PK1 4.3 item 6): the command runs a marrow version (`channel::version` of a skill with
+    /// `channel::has_version`: never a `channel.only` skill; set only in a Channel round).
+    /// The tells name it with the marrow mark (`channel::marrow_name`); no rule reads it.
+    pub marrow: bool,
     /// INPUT1 MR10: the band test counts a diagonal neighbour of the target as distance 1 (`round_intent::diagonal`).
     pub diagonal: bool,
     /// INPUT1 MR1: the position a carried Engage dashes to (None = none, or not a skill with a position).
@@ -298,6 +302,7 @@ impl Command {
             guard_bypassed: false,
             meters: Vec::new(),
             gate: None,
+            marrow: false,
             diagonal: false,
             position: None,
             carry_range: 0,

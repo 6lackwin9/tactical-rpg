@@ -1692,6 +1692,10 @@ pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &Ai
     if !round_intent::on(w) || !w.units[c].is_active() || !w.has(c) {
         return IntentRound::default();
     }
+    // PK1-S2b: a re-pick starts from Cold Steel (the Channel row may open Channel again)
+    if crate::channel::is_channel(w, c) {
+        round_intent_plan::flip_channel(w, c, false);
+    }
     plan.path_penalties.insert(c);
     if w.units[c].attack_range > 1 {
         let shooters = shooters_of(w, w.foes_of(c));
@@ -1718,6 +1722,9 @@ pub fn plan_given(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile
     if !round_intent::on(w) || !w.units[c].is_active() || !w.has(c) {
         return IntentRound::default();
     }
+    if crate::channel::is_channel(w, c) {
+        round_intent_plan::flip_channel(w, c, false);
+    }
     plan.path_penalties.insert(c);
     resolve(w, plan, c, profile, Choice::Pick(ROW_TACTIC, pick))
 }
@@ -1730,6 +1737,8 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
             Choice::Pick(row, p) => match commit(w, plan, c, &p) {
                 Ok(l) => {
                     lines.extend(l);
+                    // PK1-S2b (PK1 4.4): a unit that can Channel may turn the committed round into a Channel round
+                    lines.extend(channel_row(w, plan, c, &p));
                     return IntentRound { row, pick: Some(p), lines };
                 }
                 Err(l) => {
@@ -1750,6 +1759,85 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
             }
         }
     }
+}
+
+/// PK1 4.4 (`docs/sessions/PK1_CORRUPTION.md`, a Design default): the factor by which a Channel round's value must beat
+/// the Cold Steel round's for the AI to open Channel (`channel_row`). PK1 section 7 lists `channel_ai_edge` as tunable;
+/// it stays a kit constant until a ruleset field is approved (PR5-5: no contract change).
+pub const CHANNEL_AI_EDGE: f64 = 1.2;
+
+/// PK1-S2b: the value the Channel row compares: the expected damage and healing of `c`'s planned round (the planner's
+/// estimates, `PlanEntry::est_damage` and `est_heal`; a marrow version's power and piercing included). An invalid round
+/// is worth nothing.
+pub fn round_value(w: &World, plan: &Plan, c: UnitId) -> i64 {
+    let st = plan.compile(w, c);
+    if st.error_index >= 0 {
+        return 0;
+    }
+    st.entries.iter().map(|e| i64::from(e.est_damage.max(0)) + i64::from(e.est_heal.max(0))).sum()
+}
+
+/// PK1-S2b: the channel meter `c` would hold at the end of its planned round (its value now plus what the round's
+/// actions pay, clamped as the meter is) and the meter's max; None when it holds none.
+pub fn channel_meter_after(w: &World, plan: &Plan, c: UnitId) -> Option<(i32, i32)> {
+    let m = crate::channel::meter_id(w);
+    let max = crate::meter::pool(w, c, m)?.max;
+    plan.compile(w, c).meter(m).map(|v| (v, max))
+}
+
+/// PK1-S2b: whether `c`'s planned round holds a marrow version (`channel::version` of a skill with
+/// `channel::has_version`; not a `channel.only` skill, Feed or Vent).
+fn marrow_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
+    plan.compile(w, c).entries.iter().any(|e| {
+        let s = &w.cat.skills[e.skill];
+        crate::channel::has_version(w, s) && crate::channel::version(w, c, s).is_some()
+    })
+}
+
+/// PK1 4.4 (rule `channel`): the AI's Channel row. After the AI committed `p` for `c` (a Cold Steel round), a unit that
+/// can Channel (`channel::can_channel`; others are never touched) tries the same pick as a Channel round, as the toggle
+/// does for a member without picks: the round flag (`round_intent_plan::flip_channel`: the intent-bound buffs end), the
+/// pick's opener kept only when it opens in Channel (else the Channel order opens), the round rebuilt by the planner.
+/// It keeps the Channel round when the round compiles, plans at least one marrow version (`marrow_planned`: a Feed-only
+/// or marrow-only round does not count), its value (`round_value`) is at least `CHANNEL_AI_EDGE` times the Cold Steel
+/// round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max (the crisis); else `c`'s
+/// unit, round state and steps are put back as the Cold Steel round. A Cold Steel round worth nothing (out of reach, a
+/// Guard round) has no option to beat and stays Cold Steel untried, as do Economy's opener-only rounds. Returns the
+/// flip's lines when kept. Deterministic: nothing draws.
+fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec<String> {
+    if p.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
+        return Vec::new();
+    }
+    let cold = round_value(w, plan, c);
+    if cold <= 0 {
+        return Vec::new();
+    }
+    let unit = w.units[c].clone();
+    let saved = w.round_states.get(&c).cloned();
+    let steps = plan.steps_of(c);
+    let lines = round_intent_plan::flip_channel(w, c, true);
+    let opener = p.opener.clone().filter(|o| match o {
+        Opener::Skill(sid) => crate::channel::opens(w, c, &w.cat.skills[*sid]),
+        Opener::Item(_) => false,
+    });
+    w.round_states.entry(c).or_default().opener = opener;
+    let built = build_pick(w, plan, c, p) && marrow_planned(w, plan, c);
+    let value = if built { round_value(w, plan, c) } else { 0 };
+    let safe = channel_meter_after(w, plan, c).is_some_and(|(v, max)| v < max);
+    if built && value as f64 >= CHANNEL_AI_EDGE * cold as f64 && safe {
+        return lines;
+    }
+    w.units[c] = unit;
+    match saved {
+        Some(rs) => {
+            w.round_states.insert(c, rs);
+        }
+        None => {
+            w.round_states.shift_remove(&c);
+        }
+    }
+    plan.set_steps(c, steps);
+    Vec::new()
 }
 
 /// AI1's rows in table order (`table` starts at an index into it).

@@ -521,6 +521,10 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         if l.cell != NO_CELL {
             v["cell"] = json!([l.cell.x, l.cell.y]);
         }
+        // PK1-S2b: a marrow version's line says so (only then, so other replies keep their shape)
+        if l.marrow {
+            v["marrow"] = json!(true);
+        }
         v
     };
     let target = match r.round_target {
@@ -529,7 +533,7 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         Some(RoundTarget::Unit(u)) => json!({"kind": "unit", "unit": u, "name": w.units[u].name}),
         Some(RoundTarget::Cell(p)) => json!({"kind": "cell", "cell": [p.x, p.y]}),
     };
-    json!({
+    let mut out = json!({
         "unit": r.unit,
         "name": w.units[r.unit].name,
         "side": if w.allies.contains(&r.unit) { "party" } else { "enemy" },
@@ -541,7 +545,13 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         "revealed": r.revealed,
         "readers": r.readers,
         "plan": r.plan.iter().map(line).collect::<Vec<_>>(),
-    })
+    });
+    // PK1-S2b: a Channel round's record ("intent": "channel") adds the flag and the round's own row (only then)
+    if r.channel {
+        out["channel"] = json!(true);
+        out["row_intent"] = json!(r.row_intent.map_or("", |i| i.id()));
+    }
+    out
 }
 
 /// ITEMUSE1 rule 2: one row per distinct offered pouch item with copies left this round; with a target, only the items

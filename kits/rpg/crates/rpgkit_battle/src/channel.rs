@@ -11,6 +11,9 @@
 //! its own overrides. A Channel round counts as a gain of the channel meter, so its decay skips the round. Every entry
 //! point reads the rule (and `round_intent`, `unit_meters`, a named meter) first, so a battle without it, or without a
 //! unit holding the meter, plans and resolves as before (no draw, no line, no order change).
+//!
+//! PK1-S2b: the tells show Channel while the flag is set (`tell_intent`; the records in `intent`) and name a marrow
+//! version with the marrow mark (`marrow_name`, the term `marrow_mark`); the AI's Channel row is `ai::channel_row`.
 
 use crate::meter;
 use crate::round_intent::{self, RoundIntent};
@@ -49,6 +52,22 @@ pub fn can_channel(w: &World, c: UnitId) -> bool {
 /// Whether `c`'s round is a Channel round (the round flag; false without the rule).
 pub fn is_channel(w: &World, c: UnitId) -> bool {
     on(w) && w.round_states.get(&c).is_some_and(|r| r.channel)
+}
+
+/// PK1-S2b (PK1 4.3 item 6): the intent `c`'s tells show: Channel while its round flag is set (from the toggle on,
+/// with or without a skill planned yet), else its round intent (`round_intent::intent_of`; None without one). The
+/// round's own intent stays the first skill's row for the rules (FB-167 Q1 (a)); only the tells read this.
+pub fn tell_intent(w: &World, c: UnitId) -> Option<RoundIntent> {
+    if is_channel(w, c) {
+        return Some(RoundIntent::Channel);
+    }
+    round_intent::intent_of(w, c)
+}
+
+/// PK1-S2b (PK1 4.3 item 6): a marrow version's name in the tells: the skill's name with the marrow mark (the term
+/// `marrow_mark`'s short form, the game's `terms` row else "Marrow"): "Cleave (Marrow)".
+pub fn marrow_name(cat: &rpgkit_data::Catalog, name: &str) -> String {
+    format!("{name} ({})", cat.term(rpgkit_data::terms::MARROW_MARK).short)
 }
 
 /// The kinds with no intent of their own (Move, Rest, Target, Status): neutral in either mode.
