@@ -147,6 +147,10 @@ Sub-questions under **B** (recommendations in bold):
 
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`; on in `timeline` but inert until a unit holds Strain, `FB-167` Q3), so no battle golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
+### 5.1a The Act 2 opening as a tutorial arc (user 2026-11-10)
+
+The first missions of Act 2 teach the new systems through story, with no special rules (PK8 content): (1) the **Inoculation** tutorial: the founder who took Aline's dose starts Act 2 with that dose as a normal Tier I graft, and grafting and the Slab open through them; (2) the **Calcification** tutorial ("Aline's lesson", `docs/sessions/PK2_GRAFTS.md` 3): a scripted Flesh Breach and a Quenched Cinder Salt, introducing the Salt as the rare counter to the Inoculation's effects; (3) the **recruit** tutorial: if the dosed founder was captured, a dosed guest youth from the Crucible is the Calcification subject and then the first recruit; (4) a parallel **Cold Steel** tutorial (Bram's lesson: techniques, durability, a dulled weapon, repair and reforge), designed with the Cold Steel pass.
+
 ### 5.2 Cold Steel weapon techniques (user 2026-11-10)
 
 The user's concern: next to the Channel kit, Cold Steel could feel too weak in Act 2. So Cold Steel gets its own parallel power-up, the mirror of the grafts, **from Act 2 on** (not in Act 1). Decided on the user's question cards (all as recommended):
