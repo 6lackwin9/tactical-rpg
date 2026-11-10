@@ -1632,11 +1632,14 @@ pub fn heal_amount_on(w: &World, caster: UnitId, target: UnitId, skill_id: Skill
     heal_amount(w, caster, skill_id) + heal_pct_of(w, target, s)
 }
 
+/// The HP `amount` of healing restores on `target`: PK1-KITFIX (d, FB-181 (b)): after its held bands' `heal_taken`
+/// (`world::heal_taken`, as `World::heal` applies it), within its missing HP; 0 on a downed unit. The planner's
+/// `est_heal` (and so `ai::round_value`) reads it.
 pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
     if !target.is_alive() {
         return 0;
     }
-    amount.clamp(0, target.max_hp - target.hp)
+    crate::world::heal_taken(amount, target.band_heal_taken).clamp(0, target.max_hp - target.hp)
 }
 
 pub fn cleansable(target: &Unit, s: &rpgkit_data::SkillDef) -> Vec<&'static str> {

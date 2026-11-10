@@ -168,8 +168,12 @@ pub fn base_armor_rating(u: &Unit) -> i32 {
 }
 
 /// Base rating + the active Armor buffs' magnitudes (fortify) - the active Armor debuffs' (expose), floor 0; W2-5
-/// (C09): the statuses are the table's `modifier` rows with `rating` armor, not named ids.
+/// (C09): the statuses are the table's `modifier` rows with `rating` armor, not named ids. PK1-KITFIX (b): a held
+/// `armor` (a trigger's `rating_set`) is the rating instead, whatever the statuses add.
 pub fn armor_rating(u: &Unit) -> i32 {
+    if let Some(v) = u.rating_set(Rating::Armor) {
+        return v.max(0);
+    }
     let raised = u.active_magnitude_where(|s| status::raises_rating(s, Rating::Armor));
     let lowered = u.active_magnitude_where(|s| status::lowers_rating(s, Rating::Armor));
     (base_armor_rating(u) + raised - lowered).max(0)

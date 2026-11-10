@@ -299,6 +299,9 @@ pub struct Unit {
     /// PK1-S1 (3.1): the percent the held meter bands' `heal_taken` add to the healing this unit receives (0 = none;
     /// `World::heal` reads it).
     pub band_heal_taken: i32,
+    /// PK1-KITFIX (b): the ratings a trigger's `rating_set` holds at a value (one per rating; empty = none, so every
+    /// rating reads as before).
+    pub rating_sets: Vec<crate::status::RatingSet>,
     /// HOOKS1 UM1: the passives' `meter` effects in apply order; read only under the rule unit_meters.
     pub passive_meters: Vec<HeldMeter>,
     /// U4.2-S4 (FB-30): the hit-time modifier grants of passives and meter bands, with their sources (`HitSource`); a
@@ -400,6 +403,7 @@ impl Unit {
             held_guard: None,
             trigger_crit: 0.0,
             band_heal_taken: 0,
+            rating_sets: Vec::new(),
             passive_meters: Vec::new(),
             hit_sources: Vec::new(),
             gear_hit_sources: Vec::new(),
@@ -480,9 +484,25 @@ impl Unit {
         self.st.active.iter().any(|s| read(s))
     }
 
+    /// PK1-KITFIX (b): the value `rating` is held at (a trigger's `rating_set`), None when nothing holds it.
+    pub fn rating_set(&self, rating: crate::status::Rating) -> Option<i32> {
+        self.rating_sets.iter().find(|r| r.rating == rating).map(|r| r.value)
+    }
+
+    /// PK1-KITFIX (b): holds `rating` at `value` for `rounds` more round starts (below 0: the rest of the battle); a set
+    /// of the same rating replaces the one there.
+    pub fn set_rating(&mut self, rating: crate::status::Rating, value: i32, rounds: i32) {
+        self.rating_sets.retain(|r| r.rating != rating);
+        self.rating_sets.push(crate::status::RatingSet { rating, value, rounds: if rounds < 0 { -1 } else { rounds } });
+    }
+
     /// Move Rate +1 under a Move Rate buff (haste), -1 under a Move Rate debuff (slow), floor 1; W2-5 (C09): the
     /// statuses are the table's `modifier` rows with `rating` move_rate (one step each way however many are active).
+    /// PK1-KITFIX (b): a held `move_rate` is the value instead (at least 1).
     pub fn move_per_block(&self) -> i32 {
+        if let Some(v) = self.rating_set(crate::status::Rating::MoveRate) {
+            return v.max(1);
+        }
         let hasted = self.has_status_where(|s| crate::status::raises_rating(s, crate::status::Rating::MoveRate)) as i32;
         let slowed = self.has_status_where(|s| crate::status::lowers_rating(s, crate::status::Rating::MoveRate)) as i32;
         (self.move_rate + hasted - slowed).max(1)
@@ -1588,14 +1608,22 @@ impl Unit {
 
     /// `1 - capped magnitude / 100` per active Attack Power debuff (weaken), 1.0 with none; W2-5 (C09): the statuses
     /// are the table's `modifier` rows with `rating` attack_power and `kind` debuff.
+    /// PK1-KITFIX (b): 1.0 while `attack_power` is held (`empower_factor` carries the held value).
     pub fn weaken_factor(&self) -> f64 {
+        if self.rating_set(crate::status::Rating::AttackPower).is_some() {
+            return 1.0;
+        }
         let lowers = |s: &str| crate::status::lowers_rating(s, crate::status::Rating::AttackPower);
         self.st.active.iter().filter(|s| lowers(s)).fold(1.0, |f, s| f * (1.0 - self.capped_magnitude(s) as f64 / 100.0))
     }
 
     /// `1 + capped magnitude / 100` per active Attack Power buff (empower), 1.0 with none; W2-5 (C09): the statuses
     /// are the table's `modifier` rows with `rating` attack_power and `kind` buff.
+    /// PK1-KITFIX (b): a held `attack_power` is its value / 100 instead (so weaken x empower is the held factor).
     pub fn empower_factor(&self) -> f64 {
+        if let Some(v) = self.rating_set(crate::status::Rating::AttackPower) {
+            return f64::from(v.max(0)) / 100.0;
+        }
         let raises = |s: &str| crate::status::raises_rating(s, crate::status::Rating::AttackPower);
         self.st.active.iter().filter(|s| raises(s)).fold(1.0, |f, s| f * (1.0 + self.capped_magnitude(s) as f64 / 100.0))
     }

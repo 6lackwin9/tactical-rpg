@@ -10,7 +10,7 @@ use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{GRID_H, GRID_W};
 use rpgkit_data::{
     ALLY_EVENTS, ARENA_DIRS, ARENA_EFFECT_KEYS, ARENA_HAZARD_KEYS, CLASS_OVERLAY_KEYS, DECK_EFFECT, EFFECT_TO, FORCED_FROM, FORCED_IMMUNE, FORCED_KINDS, FORCED_MOVE_KEYS, FORCED_WHEN, GRANT_UNTIL,
-    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
+    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RATING_SET, RATING_SET_RANGES, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
     TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
 };
 use rpgkit_rules::ruleset;
@@ -471,6 +471,12 @@ pub fn placement_warnings(e: &Dict) -> Vec<String> {
 /// One trigger row (a skill's, or a passive or item `trigger` effect with `extra` keys such as `type`), answering one
 /// of `events`.
 pub fn trigger_row_errors(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra: &[&str]) -> Vec<String> {
+    trigger_row_errors_with(o, ctx, at, events, extra, false)
+}
+
+/// PK1-KITFIX (a): a trigger row as `trigger_row_errors`; with `meter_set` (a unit meter row's `triggers`, as its
+/// `rules`) its effects may also hold `meter_set`.
+pub fn trigger_row_errors_with(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra: &[&str], meter_set: bool) -> Vec<String> {
     let mut out = Vec::new();
     let allowed: Vec<&str> = TRIGGER_KEYS.iter().chain(extra.iter()).copied().collect();
     unknown_keys(o, &allowed, at, &mut out);
@@ -482,7 +488,7 @@ pub fn trigger_row_errors(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra:
     }
     let event = events.contains(&on.as_str()).then_some(on.as_str());
     out.extend(when_errors(json::get(o, "when"), ctx, at, Some(event.unwrap_or(""))));
-    out.extend(effects_errors(json::get(o, "effects"), ctx, at, Some(event.unwrap_or("")), false));
+    out.extend(effects_errors(json::get(o, "effects"), ctx, at, Some(event.unwrap_or("")), meter_set));
     enum_key(o, "limit", &TRIGGER_LIMITS, false, at, &mut out);
     out
 }
@@ -660,7 +666,11 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
                 magnitude_key(o, &st, at, &mut out);
             }
             whole_key(o, "potency", POTENCY, true, at, &mut out);
-            whole_key(o, "rounds", GRANT_ROUNDS, false, at, &mut out);
+            // PK1-KITFIX (b): -1 the rest of the battle, as a grant's
+            let rounds = o.get("rounds").cloned().unwrap_or(json::int(1));
+            if !whole_in(&rounds, (-1, -1)) && !whole_in(&rounds, GRANT_ROUNDS) {
+                out.push(format!("{at}: rounds must be -1 (the battle) or {}-{}.", GRANT_ROUNDS.0, GRANT_ROUNDS.1));
+            }
         }
         "guard" => {
             if !o.get("mitigation").is_some_and(|m| number_in(m, MITIGATION)) {
@@ -728,6 +738,21 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
                 out.push(format!("{at}: mark needs an id of 1-{MARK_ID_MAX} characters (a-z, 0-9, _, a letter first)."));
             }
             whole_key(o, "value", MARK_VALUE, false, at, &mut out);
+        }
+        // PK1-KITFIX (b): a rating held at a value within its range, for 1-5 rounds or -1 the rest of the battle
+        RATING_SET => {
+            let rating = json::s(o, "rating");
+            match RATING_SET_RANGES.iter().find(|(r, _)| *r == rating) {
+                None => {
+                    let names: Vec<&str> = RATING_SET_RANGES.iter().map(|(r, _)| *r).collect();
+                    out.push(format!("{at}: rating_set needs a rating ({}).", names.join(", ")));
+                }
+                Some((_, range)) => whole_key(o, "value", *range, true, at, &mut out),
+            }
+            let rounds = o.get("rounds").cloned().unwrap_or(json::int(1));
+            if !whole_in(&rounds, (-1, -1)) && !whole_in(&rounds, GRANT_ROUNDS) {
+                out.push(format!("{at}: rounds must be -1 (the battle) or {}-{}.", GRANT_ROUNDS.0, GRANT_ROUNDS.1));
+            }
         }
         "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
         ROLL_TABLE => out.extend(roll_table_errors(o, ctx, at, meter_set)),

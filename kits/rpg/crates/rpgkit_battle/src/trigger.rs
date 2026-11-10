@@ -717,8 +717,8 @@ pub(crate) fn line(w: &World, h: &Holder, what: &str) -> String {
 
 /// A4.2 (C08): a trigger effect's status as an EffectSpec and its timing, `source` the holder's name. `grant`: never
 /// rolled, lands now, `rounds` (default 1) at least 1 and a negative value the whole battle (`BATTLE_ROUNDS`).
-/// `inflict`: rolled when its row is `resistable` (`potency` default 100, `rounds` default 1), lands next round. None for
-/// another effect type or an empty `status`.
+/// `inflict`: rolled when its row is `resistable` (`potency` default 100, `rounds` default 1; PK1-KITFIX (b): a negative
+/// value the whole battle, as `grant`), lands next round. None for another effect type or an empty `status`.
 pub fn effect_of(e: &Obj, source: &str) -> Option<(status::EffectSpec, status::Timing)> {
     let st = value::string(e, "status", "");
     if st.is_empty() {
@@ -731,7 +731,11 @@ pub fn effect_of(e: &Obj, source: &str) -> Option<(status::EffectSpec, status::T
             let rounds = if rounds < 0 { BATTLE_ROUNDS } else { rounds.max(1) };
             Some((status::EffectSpec::grant(&st, rounds, magnitude, source), status::Timing::Now))
         }
-        "inflict" => Some((status::EffectSpec::inflict(&st, value::int(e, "potency", 100), value::int(e, "rounds", 1), magnitude, source), status::Timing::Next)),
+        "inflict" => {
+            let rounds = value::int(e, "rounds", 1);
+            let rounds = if rounds < 0 { BATTLE_ROUNDS } else { rounds };
+            Some((status::EffectSpec::inflict(&st, value::int(e, "potency", 100), rounds, magnitude, source), status::Timing::Next))
+        }
         _ => None,
     }
 }
@@ -906,6 +910,21 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 fired.push(l, dealt, rows);
                 continue;
             }
+            // PK1-KITFIX (b): the rating held at the value (at once; a set wins over the statuses on that rating)
+            rpgkit_data::RATING_SET => {
+                let id = value::string(e, "rating", "");
+                let Some(rating) = status::Rating::from_id(&id).filter(|_| rpgkit_data::RATING_SET_RANGES.iter().any(|(r, _)| *r == id)) else { continue };
+                let v = value::int(e, "value", 0);
+                let rounds = value::int(e, "rounds", 1);
+                let rounds = if rounds < 0 { -1 } else { rounds.max(1) };
+                w.units[to].set_rating(rating, v, rounds);
+                let how_long = match rounds {
+                    r if r < 0 => " for the battle".to_string(),
+                    1 => " through next round".to_string(),
+                    r => format!(" for {r} rounds"),
+                };
+                format!("{name}'s {} held at {v}{how_long}", rating_label(&id))
+            }
             // PK1-S1 (3.5): an entry in the battle's marks
             rpgkit_data::MARK => {
                 let id = value::string(e, "mark", "");
@@ -928,6 +947,15 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
         res.log.push(l.clone());
         fired.push(l, dealt, rows);
     }
+}
+
+/// PK1-KITFIX (b): a rating word as a log shows it (`move_rate` -> "Move Rate").
+pub fn rating_label(id: &str) -> String {
+    let word = |w: &str| {
+        let mut c = w.chars();
+        c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+    };
+    id.split('_').filter(|w| !w.is_empty()).map(word).collect::<Vec<_>>().join(" ")
 }
 
 /// PK1-S1 (3.3): the nearest other unit on the field to `c` (`World::dist`), of any side; ties go to the lowest unit id.

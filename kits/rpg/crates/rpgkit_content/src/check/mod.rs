@@ -7,6 +7,7 @@ pub mod assets;
 pub mod board;
 pub mod campaign;
 pub mod derived;
+pub mod dojo_preset;
 pub mod expression_fx;
 pub mod dialogue;
 pub mod encounter;
@@ -282,6 +283,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if kind == unit_track::KIND {
         // PK2-S1: the row checks the loader applies (the stages, their passives and departure, unique ids)
         return unit_track::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == dojo_preset::KIND {
+        // PK1-KITFIX (c): the row checks the loader applies (the gear slots and items, the pouch, the passives, unique ids)
+        return dojo_preset::entry_errors(v, &content(kind, entry), current_id);
     }
     if kind == ground::KIND {
         // REGIONGROUND1 KT 1.3: the row checks the loader applies (the fields' limits, unknown keys, unique ids and orders)

@@ -828,7 +828,8 @@ impl Plan {
         }
         let tu = &w.units[target];
         if con.heal > 0 {
-            st.entries[last].est_heal = con.heal.min((tu.max_hp - tu.hp).max(0));
+            // PK1-KITFIX (d): the item's heal after the target's `heal_taken`, as `World::heal` applies it
+            st.entries[last].est_heal = crate::world::heal_taken(con.heal, tu.band_heal_taken).min((tu.max_hp - tu.hp).max(0));
         }
         if con.damage > 0 {
             // A1.2-K3: the item damage pipeline's value (the flat damage unless the ruleset mitigates item damage)

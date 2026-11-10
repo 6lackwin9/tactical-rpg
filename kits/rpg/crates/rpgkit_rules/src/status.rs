@@ -94,6 +94,17 @@ impl Rating {
     }
 }
 
+/// PK1-KITFIX (b, FB-184 A): a rating held at `value` (the trigger effect `rating_set`): while it holds, the rating is
+/// the value whatever the statuses raising or lowering it add. `rounds` counts the round starts it still outlasts (it
+/// takes hold at once, so a set made during a round or at its end holds the rest of it and the next `rounds` rounds);
+/// below 0 it holds the rest of the battle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RatingSet {
+    pub rating: Rating,
+    pub value: i32,
+    pub rounds: i32,
+}
+
 /// I1.2-S1: what a `targeting` row does to enemy targeting (the table's `targeting` word; S1 section 1 `targeting`):
 /// `pull` draws enemy targeting toward the unit (taunt), `hide` makes it untargetable by single-target skills
 /// (stealth).
@@ -741,6 +752,14 @@ pub fn regen_ap(c: &Unit, ap: i32, ap_regen: i32) -> i32 {
 /// Round start: last round's statuses expire (multi-round ones count down), queued ones and AP-debt penalties take
 /// effect (`n`: the ruleset's debt numbers), then AP recovers (`regen_ap`). Returns the statuses now active.
 pub fn roll_over(c: &mut Unit, ap_regen: i32, n: &Numbers) -> Vec<String> {
+    // PK1-KITFIX (b): a held rating counts down with the round starts (a battle-long one never does)
+    c.rating_sets.retain_mut(|r| {
+        if r.rounds < 0 {
+            return true;
+        }
+        r.rounds -= 1;
+        r.rounds >= 0
+    });
     let st = &mut c.st;
     let carried: Vec<(String, i32)> = st.rounds_left.iter().filter_map(|(k, v)| (v - 1 > 0).then(|| (k.clone(), v - 1))).collect();
     let old_magnitudes = st.magnitudes.clone();

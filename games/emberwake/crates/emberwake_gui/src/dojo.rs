@@ -11,7 +11,7 @@ use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_ui::window::{Desk, Frac, Layout, Win};
 use crate::party::{DeckTerms, DECK_KINDS};
-use emberwake_battle::dojo::{stance_label, DojoSession, Fx, PlanSetup, PlanView, Tone, PRESETS, SLOTS};
+use emberwake_battle::dojo::{stance_label, DojoSession, Fx, PlanSetup, PlanView, Tone, SLOTS};
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::round_intent::{ManeuverKind, RoundIntent};
 use emberwake_data::Deck;
@@ -303,7 +303,13 @@ impl Dojo {
             DAct::DummyGuard => s.toggle_dummy_defense(),
             DAct::Bench(n) => s.run_benchmark(n),
             DAct::Switch => s.switch_weapon(),
-            DAct::Preset(i) => s.apply_preset(PRESETS[i].id),
+            // PK1-KITFIX (c): the built-in presets with the catalog's dojo_presets rows over them
+            DAct::Preset(i) => {
+                if let Some(p) = s.presets().get(i) {
+                    let id = p.id.clone();
+                    s.apply_preset(&id);
+                }
+            }
             DAct::ClearGear => s.clear_gear(),
             DAct::Unequip(slot) => s.unequip(slot),
             DAct::StashClick(id) => {
@@ -526,7 +532,7 @@ impl Dojo {
             y += 13;
         }
         y += 3;
-        let names: Vec<String> = PRESETS.iter().map(|p| p.name.to_string()).collect();
+        let names: Vec<String> = self.s.presets().into_iter().map(|p| p.name).collect();
         ui.p.text(b.x as f32 + 3.0, y as f32 + 1.0, "Quick setup", SMALL, th().info);
         ui.select("dojo.preset", Rect::new(b.x + 52, y, b.w - 56, 11), &names, usize::MAX, DAct::Preset, true, tip("Loadout presets", "Stows all gear, then equips the preset (from the stash, else made); pieces this hero can't use are skipped."));
         ui.button("dojo.cleargear", Rect::new(b.x + 3, y + 14, 60, 11), "Clear gear", DAct::ClearGear, true);
@@ -1456,5 +1462,31 @@ mod tests {
         pick(&mut cx, &mut dojo, TIMELINE);
         dojo.s.reset();
         assert!(dojo.s.ruleset.has(emberwake_rules::ruleset::DECK) && dojo.state(&cx).get("deck").is_some(), "a deck rule: decks rebuilt and shown");
+    }
+
+    /// PK1-KITFIX (c): Quick setup lists the built-in presets with the catalog's dojo_presets rows over them; picking a
+    /// data row applies it (the hero holds its passive). The row is test-only, on this test's own copy of the data; its
+    /// passive is the first passive id in order.
+    #[test]
+    fn quick_setup_lists_and_applies_data_presets() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut ids: Vec<String> = cx.data.cat.passives.keys().cloned().collect();
+        ids.sort();
+        let passive = ids.first().cloned().expect("a passive");
+        let mut data = (*cx.app.data).clone();
+        let row = emberwake_data::DojoPresetDef::from_obj(json!({"id": "t_gui_preset", "name": "GUI Test Preset", "passives": [passive]}).as_object().unwrap());
+        data.edit_cat(|cat| {
+            cat.dojo_presets.insert(row.id.clone(), row.clone());
+        });
+        cx.app.data = Arc::new(data);
+        let mut dojo = Dojo::new(&cx);
+        let listed = dojo.s.presets();
+        assert_eq!(listed.len(), emberwake_battle::dojo::PRESETS.len() + 1, "the built-in presets and the row");
+        let at = listed.iter().position(|p| p.id == "t_gui_preset").expect("the row is listed");
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(dojo.w.iter().any(|w| w.id.starts_with("dojo.preset")), "the Quick setup list");
+        dojo.act(&mut cx, DAct::Preset(at));
+        assert!(dojo.s.hero().passives.contains(&passive), "the hero holds the row's passive {passive}");
     }
 }

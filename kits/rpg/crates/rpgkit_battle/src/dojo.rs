@@ -14,8 +14,8 @@ use crate::session::{EncounterDef, Prebuilt, Session};
 use crate::skill;
 use crate::world::{AiProfile, UnitId};
 use aegis_core::rng::GodotRng;
-use rpgkit_data::{Catalog, Deck, ItemDef, SkillDef, UnitDef, STATS};
-use rpgkit_rules::{build_from, UnitBuild};
+use rpgkit_data::{Catalog, Deck, DojoPresetDef, ItemDef, SkillDef, UnitDef, STATS};
+use rpgkit_rules::{build_from, Overrides, UnitBuild};
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
 use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for, Equipment, Slot};
@@ -113,7 +113,22 @@ pub struct Preset {
     pub pouch: &'static [&'static str],
 }
 
-/// DojoLoadouts.get_presets (item ids for the Godot ItemCatalog makers).
+impl Preset {
+    /// PK1-KITFIX (c): the built-in preset as a data row's shape (no passives).
+    pub fn to_def(&self) -> DojoPresetDef {
+        DojoPresetDef {
+            id: self.id.into(),
+            name: self.name.into(),
+            description: self.desc.into(),
+            gear: self.gear.iter().map(|(slot, item)| (slot.to_string(), item.to_string())).collect(),
+            pouch: self.pouch.iter().map(|i| i.to_string()).collect(),
+            passives: Vec::new(),
+        }
+    }
+}
+
+/// DojoLoadouts.get_presets (item ids for the Godot ItemCatalog makers). PK1-KITFIX (c): the built-in presets; the
+/// catalog's `dojo_presets` rows go over them (`presets_of`).
 pub const PRESETS: [Preset; 8] = [
     Preset { id: "sword_board", name: "Sword & Board", desc: "1H Broadsword, Buckler, Brigandine, Ring of the Bear", gear: &[("main_hand", "wpn_broadsword"), ("off_hand", "shd_buckler"), ("body", "arm_leather"), ("accessory_1", "acc_bear_ring")], pouch: &["con_heal_potion", "con_fire_bomb"] },
     Preset { id: "claymore_tank", name: "Claymore Bruiser", desc: "2H Iron Claymore, Plate Cuirass, Ring of the Bear (Tier 1 test)", gear: &[("main_hand", "wpn_claymore"), ("body", "arm_plate"), ("accessory_1", "acc_bear_ring")], pouch: &["con_heal_potion", "con_focus_elixir"] },
@@ -124,6 +139,14 @@ pub const PRESETS: [Preset; 8] = [
     Preset { id: "duelist", name: "Blade & Dagger", desc: "1H Broadsword + Shadow Dagger off-hand (Dual Strike), Brigandine, Swiftness Amulet", gear: &[("main_hand", "wpn_broadsword"), ("off_hand", "wpn_dagger"), ("body", "arm_leather"), ("accessory_2", "acc_swift_amulet")], pouch: &["con_heal_potion"] },
     Preset { id: "arcanist", name: "Arcanist", desc: "1H Wand with a Mystic Tome off-hand (a tome needs a one-handed main hand; the 2H staff leaves the off hand empty)", gear: &[("main_hand", "wpn_wand"), ("off_hand", "wpn_tome")], pouch: &["con_focus_elixir"] },
 ];
+
+/// PK1-KITFIX (c): the presets the Dojo lists: the built-in `PRESETS`, a catalog `dojo_presets` row with a built-in
+/// id replacing that preset in its place, then the other rows in file order. No row = the built-in presets exactly.
+pub fn presets_of(cat: &Catalog) -> Vec<DojoPresetDef> {
+    let mut out: Vec<DojoPresetDef> = PRESETS.iter().map(|p| cat.dojo_presets.get(p.id).cloned().unwrap_or_else(|| p.to_def())).collect();
+    out.extend(cat.dojo_presets.values().filter(|d| !PRESETS.iter().any(|p| p.id == d.id)).cloned());
+    out
+}
 
 pub fn stance_label(s: Stance) -> &'static str {
     match s {
@@ -241,6 +264,8 @@ pub struct DojoSession {
     spent: Vec<IndexMap<String, i32>>,
     /// Each hero's deck set here (None = its catalog row's; RULESET1 9 D5).
     decks: Vec<Option<Deck>>,
+    /// PK1-KITFIX (c): the passives each hero holds from the preset applied last (empty = none; a rebuild keeps them).
+    pub preset_passives: Vec<Vec<String>>,
     /// RULESET1 5 (rule `poise`): each hero's and the dummy's poise bar (refilled each round).
     pub hero_poise: Vec<PoiseState>,
     pub dummy_poise: PoiseState,
@@ -303,6 +328,7 @@ impl DojoSession {
             hero_ids,
             spent: vec![IndexMap::new(); n],
             decks: vec![None; n],
+            preset_passives: vec![Vec::new(); n],
             hero_poise: vec![PoiseState::default(); n],
             dummy_poise: PoiseState::default(),
             dummy_windup: false,
@@ -837,7 +863,9 @@ impl DojoSession {
         let Some(def) = self.hero_def(i) else { return };
         let rule = self.deck_rule();
         // U3.2-S3: under the Dojo ruleset's wield terms
-        let mut u = build_from(&self.cat, UnitBuild { wield: self.ruleset.numbers.wield(), ..UnitBuild::row(&def, 0, rule.as_ref()) }).unit;
+        // PK1-KITFIX (c): plus the passives of the preset applied last
+        let over = Overrides { passives: self.preset_passives[i].clone(), ..Overrides::default() };
+        let mut u = build_from(&self.cat, UnitBuild { wield: self.ruleset.numbers.wield(), over, ..UnitBuild::row(&def, 0, rule.as_ref()) }).unit;
         u.inventory = self.heroes[i].inventory.clone();
         for (st, pts) in &self.spent[i] {
             *u.stats.core.entry(st.clone()).or_insert(0) += pts;
@@ -1472,35 +1500,52 @@ impl DojoSession {
         self.log_event("EVENT", "Clear Gear", "All gear and pouch items returned to stash", 0, "STASHED");
     }
 
+    /// PK1-KITFIX (c): the presets this Dojo lists (`presets_of` its catalog).
+    pub fn presets(&self) -> Vec<DojoPresetDef> {
+        presets_of(&self.cat)
+    }
+
     /// DojoSession.apply_loadout: everything to the stash, then the preset's pieces (from the stash, else made) and
-    /// pouch; pieces the hero can't use are skipped and named.
+    /// pouch; pieces the hero can't use are skipped and named. PK1-KITFIX (c): any preset `presets` lists; when its
+    /// passives differ from the ones the hero holds from the last preset, the hero is rebuilt with them first (HP, AP
+    /// and poise refill), so a preset without passives drops the last one's.
     pub fn apply_preset(&mut self, id: &str) {
-        let Some(p) = PRESETS.iter().find(|p| p.id == id) else { return };
+        let Some(p) = self.presets().into_iter().find(|p| p.id == id) else { return };
         self.stow_all();
+        let i = self.active;
+        if self.preset_passives[i] != p.passives {
+            self.preset_passives[i] = p.passives.clone();
+            self.alloc = None;
+            self.rebuild(i);
+        }
         let (mut equipped, mut skipped) = (0, Vec::new());
-        for (slot, item) in p.gear {
+        for (slot, item) in &p.gear {
             // A piece not in the stash is made for the hero (and dropped when it is skipped).
             if self.equip_internal(item, slot, false) {
                 equipped += 1;
             } else {
-                skipped.push(self.cat.items.get(*item).map(|i| i.name.clone()).unwrap_or_else(|| item.to_string()));
+                skipped.push(self.cat.items.get(item).map(|i| i.name.clone()).unwrap_or_else(|| item.to_string()));
             }
         }
-        for item in p.pouch {
-            let Some(def) = self.cat.items.get(*item).cloned() else { continue };
+        for item in &p.pouch {
+            let Some(def) = self.cat.items.get(item).cloned() else { continue };
             self.take_from_stash(item);
             self.hero_mut().inventory.add_to_pouch(&def);
         }
         self.changed();
         let mut detail = format!("{}: {equipped} pieces equipped", p.name);
-        let mut breakdown = format!("[color=#4ade80]Applied loadout [b]{}[/b][/color]\n{}", p.name, p.desc);
+        let mut breakdown = format!("[color=#4ade80]Applied loadout [b]{}[/b][/color]\n{}", p.name, p.description);
+        if !p.passives.is_empty() {
+            let names: Vec<String> = p.passives.iter().map(|id| self.cat.passives.get(id).map_or_else(|| id.clone(), |d| d.name.clone())).collect();
+            breakdown += &format!("\nPassives: {}", names.join(", "));
+        }
         if !skipped.is_empty() {
             detail += &format!(" • skipped {}", skipped.join(", "));
             breakdown += &format!("\n[color=#f87171]Skipped (not eligible for {}): {}[/color]", self.hero().name, skipped.join(", "));
         }
         let target = self.hero().name.clone();
         self.log_action("EVENT", "Quick Setup", &detail, equipped, "LOADOUT", &breakdown, &target, false);
-        self.fx("glow", true, p.name, Tone::Good);
+        self.fx("glow", true, &p.name, Tone::Good);
     }
 
     pub fn add_to_pouch(&mut self, id: &str) -> bool {

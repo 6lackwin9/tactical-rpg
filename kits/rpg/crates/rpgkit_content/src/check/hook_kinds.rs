@@ -3,7 +3,7 @@
 //! numbers' ranges live in these checks (the schema rows carry no `min` / `max`, so normalizing never clamps): a value
 //! out of range is refused with its reason. The loader keeps the rows that pass, in file order.
 
-use super::hooks::{effects_errors, trigger_row_errors, whole_in, Ctx, SKILL_ROWS_MAX};
+use super::hooks::{effects_errors, trigger_row_errors_with, whole_in, Ctx, SKILL_ROWS_MAX};
 use super::View;
 use crate::source::fields;
 use aegis_content::schema::is_id;
@@ -325,9 +325,9 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
         }
         out.extend(effects_errors(json::get(r, "effects"), ctx, &at, Some(""), true));
     }
-    // U1.2-S5: the trigger rows every holder holds
+    // U1.2-S5: the trigger rows every holder holds; PK1-KITFIX (a): their effects take `meter_set` too, as the rules'
     for (i, t) in list("triggers", "Triggers", SKILL_ROWS_MAX, out).iter().enumerate() {
-        out.extend(trigger_row_errors(t, ctx, &format!("Trigger {}", i + 1), &TRIGGER_EVENTS, &[]));
+        out.extend(trigger_row_errors_with(t, ctx, &format!("Trigger {}", i + 1), &TRIGGER_EVENTS, &[], true));
     }
     // UM6: a meter skill spends this meter (a negative delta on it); PK1-S2a (FB-167 Q8): a marrow-only one (`channel.only`,
     // the Channel basics Feed and Vent) moves it either way (a delta on it)

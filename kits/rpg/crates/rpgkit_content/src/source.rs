@@ -107,6 +107,9 @@ pub const UNIT_TEMPLATES_KIND: &str = crate::check::unit_template::KIND;
 /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the unit track rows, loaded into the catalog beside CATALOG_KINDS after the
 /// role templates (they name passives; Godot had no such kind).
 pub const UNIT_TRACKS_KIND: &str = crate::check::unit_track::KIND;
+/// PK1-KITFIX (c): the Dojo preset rows, loaded into the catalog beside CATALOG_KINDS after the unit tracks (they name
+/// items and passives; Godot's presets were code, DojoLoadouts).
+pub const DOJO_PRESETS_KIND: &str = crate::check::dojo_preset::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -196,6 +199,8 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(UNIT_TEMPLATES_KIND.into(), Value::Array(read_unit_templates(&dir, errors).into_iter().map(Value::Object).collect()));
     let tracks = read_unit_tracks(&dir, &out, errors);
     out.insert(UNIT_TRACKS_KIND.into(), Value::Array(tracks.into_iter().map(Value::Object).collect()));
+    let presets = read_dojo_presets(&dir, &out, errors);
+    out.insert(DOJO_PRESETS_KIND.into(), Value::Array(presets.into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -374,6 +379,33 @@ fn read_unit_tracks(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: unit track '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PK1-KITFIX (c) (engine-only, beside CATALOG_KINDS): the Dojo preset rows that pass their checks
+/// (`check::dojo_preset`, the items and passives read from `loaded`), in file order; every problem goes to `errors` and
+/// its row is skipped. A missing file is an empty table.
+fn read_dojo_presets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{DOJO_PRESETS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(DOJO_PRESETS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let table = |kind: &str| -> Vec<Dict> { loaded.get(kind).map(json::arr).unwrap_or_default().iter().map(|p| json::dict(p).clone()).collect() };
+    let checked = crate::check::dojo_preset::check_rows(&rows, &table("items"), &table("passives"));
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: Dojo preset '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

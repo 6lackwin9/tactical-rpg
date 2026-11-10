@@ -15,10 +15,12 @@ use aegis_core::value::*;
 use indexmap::IndexMap;
 use serde_json::Value;
 
+pub mod dojo_preset;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
 pub mod unit_track;
+pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
 pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
@@ -927,6 +929,9 @@ pub struct Catalog {
     /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the unit tracks (kind `unit_tracks`; engine-only), keyed by id. No row =
     /// no member holds a track.
     pub unit_tracks: IndexMap<String, UnitTrackDef>,
+    /// PK1-KITFIX (c): the Dojo's data presets (kind `dojo_presets`; engine-only), keyed by id in file order. No row =
+    /// the Dojo lists its built-in presets only.
+    pub dojo_presets: IndexMap<String, DojoPresetDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -983,6 +988,9 @@ impl Catalog {
             cat.unit_templates.entry(t.role.clone()).or_insert(t);
         }
         cat.unit_tracks = rows(UNIT_TRACKS_KIND).iter().map(UnitTrackDef::from_obj).map(|t| (t.id.clone(), t)).collect();
+        for p in rows(DOJO_PRESETS_KIND).iter().map(DojoPresetDef::from_obj) {
+            cat.dojo_presets.entry(p.id.clone()).or_insert(p);
+        }
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -1880,7 +1888,7 @@ pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", 
 /// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
 /// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
 /// `mark` join.
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 17] = [
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 18] = [
     ("ap", &["value", "set", "rounds", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
@@ -1898,7 +1906,17 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 17] = [
     (ROLL_TABLE, &["rows"]),
     (STRIKE_NEAREST, &["power", "then_status", "then_rounds"]),
     (MARK, &["mark", "value", "to"]),
+    (RATING_SET, &["rating", "value", "rounds", "to"]),
 ];
+/// PK1-KITFIX (b, FB-184 A): a rating held at a value `{rating, value, rounds}` (rounds 1-5 or -1 the rest of the
+/// battle): while it holds, the rating is the value whatever the statuses raising or lowering it add (a later set of
+/// the same rating replaces it).
+pub const RATING_SET: &str = "rating_set";
+/// PK1-KITFIX (b): the ratings a `rating_set` names (the status table's `rating` words; `guard` is not one: a guard
+/// comes from the Defend command, held guards and the guard status, so it has no single value to hold) and each one's
+/// value range: `armor` the Armor Rating (points), `attack_power` the statuses' attack factor (a percent: 100 = as
+/// without them), `move_rate` the tiles a Walk moves per block.
+pub const RATING_SET_RANGES: [(&str, (i64, i64)); 3] = [("armor", (0, 200)), ("attack_power", (0, 300)), ("move_rate", (1, 9))];
 /// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.3): a weapon strike resolved at once on the nearest other unit of any side
 /// (no AP, no plan), then an optional status on the striker for its next rounds.
 pub const STRIKE_NEAREST: &str = "strike_nearest";
