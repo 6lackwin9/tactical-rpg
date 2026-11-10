@@ -1825,8 +1825,9 @@ pub const TRIGGER_KEYS: [&str; 4] = ["on", "when", "effects", "limit"];
 pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
 /// 8.2: the condition keys of a trigger's or rider's `when`.
 pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", "other_hp_below", "other_broken", "other_status", "intent", "meter"];
-/// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it).
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 14] = [
+/// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it). ROLLTABLE1:
+/// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects.
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 15] = [
     ("ap", &["value", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
@@ -1841,7 +1842,13 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 14] = [
     ("reveal", &["rounds"]),
     ("end_guard", &["to"]),
     ("stop_moves", &["to"]),
+    (ROLL_TABLE, &["rows"]),
 ];
+/// ROLLTABLE1 (ACTS23 PK1 hook a): the weighted random-table trigger effect, the keys of one of its `rows`, and a row's
+/// weight range (no `roll_table` inside a row).
+pub const ROLL_TABLE: &str = "roll_table";
+pub const ROLL_ROW_KEYS: [&str; 2] = ["weight", "effects"];
+pub const ROLL_WEIGHT: (i64, i64) = (1, 1000);
 /// 8.2: whom an effect acts on.
 pub const EFFECT_TO: [&str; 2] = ["self", "other"];
 /// 8.2: a `grant` effect's `until` ("" = its rounds).

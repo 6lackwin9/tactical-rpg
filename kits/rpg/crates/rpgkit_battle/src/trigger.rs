@@ -25,6 +25,7 @@ use rpgkit_rules::ruleset;
 use rpgkit_rules::stats::roundi;
 use rpgkit_rules::status;
 use rpgkit_rules::unit::HeldGuard;
+use serde_json::Value;
 
 /// 8.2: a `grant` of `rounds` -1 lasts the battle.
 pub const BATTLE_ROUNDS: i32 = 999;
@@ -723,6 +724,14 @@ pub fn effect_of(e: &Obj, source: &str) -> Option<(status::EffectSpec, status::T
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effects: &[Obj], block: i32, rules: bool, fired: &mut Fired) {
     for e in effects {
+        // ROLLTABLE1: one row by weight on the battle RNG (drawn only here), its effects as this list's (no table inside)
+        if value::string(e, "type", "") == rpgkit_data::ROLL_TABLE {
+            if let Some(row) = roll_row(&mut res.rng, e) {
+                let picked: Vec<Obj> = row_effects(e, row).into_iter().filter(|x| value::string(x, "type", "") != rpgkit_data::ROLL_TABLE).collect();
+                run_effects(res, w, ev, h, &picked, block, rules, fired);
+            }
+            continue;
+        }
         let Some(to) = target_of(e, ev) else { continue };
         if !w.units[to].is_active() {
             continue;
@@ -851,6 +860,32 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
         res.log.push(l.clone());
         fired.push(l, dealt, rows);
     }
+}
+
+/// ROLLTABLE1: the `rows` of a `roll_table` effect (the entries that are objects) and their weights (at least 1).
+fn roll_rows(e: &Obj) -> Vec<(i64, &Obj)> {
+    value::array(e, "rows").iter().filter_map(Value::as_object).map(|r| (i64::from(value::int(r, "weight", 1).max(1)), r)).collect()
+}
+
+/// ROLLTABLE1: the row a `roll_table` effect picks: one draw `randi_range(1, total weight)` on `rng`, the first row whose
+/// running weight reaches it (a total of 1 draws nothing, as `randi_range`). None (and no draw) for a table without rows.
+pub fn roll_row(rng: &mut aegis_core::rng::GodotRng, e: &Obj) -> Option<usize> {
+    let rows = roll_rows(e);
+    if rows.is_empty() {
+        return None;
+    }
+    let total = rows.iter().map(|r| r.0).sum::<i64>().min(i64::from(i32::MAX)) as i32;
+    let roll = i64::from(rng.randi_range(1, total));
+    let mut run = 0;
+    rows.iter().position(|(weight, _)| {
+        run += weight;
+        roll <= run
+    })
+}
+
+/// ROLLTABLE1: the effects of row `row` of a `roll_table` effect (empty when out of range).
+pub fn row_effects(e: &Obj, row: usize) -> Vec<Obj> {
+    roll_rows(e).get(row).map(|(_, r)| value::array(r, "effects").iter().filter_map(Value::as_object).cloned().collect()).unwrap_or_default()
 }
 
 /// 8.2 `until` guard_end: removes the grants of the units that no longer guard (`all`: the round is over).

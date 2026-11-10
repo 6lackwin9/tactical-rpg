@@ -26,6 +26,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR4-6 `WEBREL1-G1` | done (FB-161; FB-162 suggestion): the game runs in a browser (web entry, bundle, `dev_tools`, `fc.sh web`, smoke 40/40, WEBREL1 6.2) | `develop` | - |
 | PR4-7 `WEBREL1-P1` | done (FB-163; FB-164 suggestion): advisory `web` CI job, `web.yml` itch.io deploy; GitHub-side acceptance observable at the next release | `develop` | - |
 | PR4-9 `WEBOPT1` | done (FB-166): pinned Binaryen version_125 on CI, `wasm-opt` version guard in `fc.sh web`; first real `wasm-opt` run at the next release PR | `develop` | Post-R4 queue PR4-1..PR4-9 complete (@381b8746). Watch at the next release PR: the `web` job (`web-build`, pinned `wasm-opt` sizes, smoke on the optimised build). |
+| PR5-1 `ROLLTABLE1` | done (FB-168; FB-169 suggestion): trigger effect `roll_table` (weighted rows on the seeded battle RNG), content check, schema help; 0 golden diffs | `develop` | Post-R4 queue: PR5-1, PR5-2, ACTS23-R5 feasibility (FB-167)
+| PR5-2 `PHASEFX1` | building: encounter phase effects `side` and `swap` | `claude/optimistic-newton-ewkyqt` | -
 
 ## 2. Feedback Items (Append-Only)
 
@@ -33,95 +35,71 @@ Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `St
 
 FB-01 to FB-166 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-10). New items start at FB-167. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
 
-## Test build and release build
+### FB-167: ACTS23-R5 feasibility (PK1, PK2, PK3)
 
-| Build | Command | Contents | Used for |
-| --- | --- | --- | --- |
-| Test (`dev_tools` on) | `tools/fc.sh web test` (the default) | Base game plus the Tools menu (Scene Runner, Combat Arena, Forge viewers, Gear Dojo, UI Gallery) and the page probe the smoke test reads | The CI artifact of every release PR; the itch.io deploy until the user calls the game playable |
-| Release (`dev_tools` off) | `tools/fc.sh web release` | Base game only: Tools and dev keys compiled out | The deploy once the user calls the game playable |
+- **Spec**: `docs/specs/ACTS23.md` sections 2, 4, 5.1, 5.2; `docs/sessions/PK1_CORRUPTION.md`; READY Section 2 row 8
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: All of R5 is buildable. PK1 can be sliced now and holds at 0 battle, sim or phasefold diffs: the only golden it moves is `rules_contract_golden` (new rule and numbers). PK2's item instances are the one L+ item, because about 300 `stash` / `equipment` sites expect plain ids (`state.rs:61`, `:951`). PK2 and PK3 have no `.1` yet, so their slices wait on Design. Two notes on PK1 section 1, neither needing code: a skill's own `triggers` do not take `hit_dealt` (`SKILL_TRIGGER_EVENTS`, `rpgkit_data/src/lib.rs:1818`), so a hit that adds Strain is a skill `riders` row with `meter {to: other}` (`trigger.rs:531`); ground hazards use flat fields, not an `EffectSpec` (`HazardDef`, `lib.rs:1991`). ACTS23 section 2 line numbers have drifted by about 11 lines.
 
-`dev_tools` is a cargo feature of `emberwake_gui`, on by default, so the native desktop build does not change.
+| Package | Hook | Code sites | Cost | Golden risk | Flag-able at 0 diffs |
+| --- | --- | --- | --- | --- | --- |
+| PK1 | `strain` row and bands (data) | `unit_meters.json`; `meter.rs:131` (start), `:359` (pay), `:410` (decay) | S (asset) | none; phasefold reads shipped data but no fight holds `strain` | yes (no holder) |
+| PK1 | 3.1 `heal_taken` band effect | `BAND_EFFECTS` `lib.rs:1862`; `grants.rs:81` `Target`, `band_ok`; `world.rs:374` `heal` | S | checks_golden only if it joins the passive effect list (the "(use stat, ...)" message) | yes, as a band-only effect |
+| PK1 | 3.2 to 3.5: `pct_of_hit`, `strike_nearest`, `ap set`, `mark` | `TRIGGER_EFFECTS` `lib.rs:1829`; `trigger.rs:742` (`ap`, party side only), `:813` (`damage`); `mark` into `HeroEnd` (`roster.rs:86`), `Tally` (`rpgkit_world/src/battle.rs:246`) | M (`strike_nearest`: a resolver strike outside the plan) | none | yes (no data) |
+| PK1 | 3.6 hazard `meter` | `ARENA_EFFECT_KEYS` `lib.rs:1875`, `arena.rs:225`; `ground.rs:370` | S | none (kinds not in checks_golden) | yes |
+| PK1 | 4 Channel opener, marrow versions, planner, Fill, tells, AI | `round_intent.rs:25`, `:126` (`Pick`), `:221` (`target_problem`), `:272` (`set_intent`); `round_intent_plan.rs:496`, `:691`, `:919` (fill), `:2131` (menu rows); `skill.rs:375` (version read as Field's); `meter.rs:334` / `:347` / `:359` (cost); `ai.rs`; `intent.rs` (tells); `REGISTER` `ruleset.rs:83`; GUI `emberwake_gui/src/battle/` | L (kit) + M (game GUI) | `rules_contract_golden` re-record; timeline, sim, phasefold 0 (opener only for holders) | yes |
+| PK2 | (d) unit-scope campaign track | refusal at `check/campaign.rs:287`; `campaign/meter.rs:59`; `UnitState` `state.rs:48` (an additive saved key); stage passives at `roster.rs:66` `field_unit`; `depart` with life `lost` `roster.rs:389`; `mark` settle at `:292` | M-L | none (journey uses frozen data; additive key) | yes (no data) |
+| PK2 | (e) graft body slots: a skill and a meter floor | `LOADOUT_SLOTS` `lib.rs:26`; `gear_ok` `grants.rs:153`; `unit.rs:610`, `:639`; floors combine by max at `meter.rs:143-147` | M | checks_golden if grafts add an item type or slot value, or change the gear "(use ...)" list | yes, with a separate `body` field and a body-only effect list |
+| PK2 | (f) recipe service | `SERVICES` `explore.rs:315`; purse, stash; member effects | M | none | yes |
+| PK2 | weapon techniques per family | `apply_family_bonuses` `unit.rs:566`; `level_of` `stats.rs:222`; held like `gear_skills`; Cold Steel gate needs PK1's Channel round | M | none | yes |
+| PK2 | weapon instances and durability | `state.rs:61`, `:951`, `:755`; `gear.rs:277`; `shop.rs`; loot `battle.rs:328`; `save.rs:18` (VERSION 13, `STEPS` empty); battle cost and dulling in `skill.rs`; return through `HeroEnd` | L+ (world L, battle M) | journey_golden if the `equipment` or `stash` shape changes or VERSION goes up | yes if instances are additive and act-gated (question 6) |
+| PK3 | bleed-out and revive | `bleed_out_rounds` `lib.rs:1339` (unread); cause `bled_out` already exists (`lib.rs:1263`); `world.rs:374` (no heal on a downed unit), `:487` (a downed unit's cell is free) | M | none (no golden passes a rule) | yes |
+| PK3 | recruit generator (ROSTER1-P) | `roster.rs:523` (`pool` = 0); `recruit` effect; `UnitState` has no `name` field | M-L | none | yes |
+| PK3 | procedural keepsakes | `keepsakes_by_class` / `keepsake_name` `lib.rs:1393-1412` (unread); `depart` `roster.rs:408-415` | S-M | none | yes |
 
-## Build it (Linux, the cloud, or Git Bash on Windows)
+Dependencies: PR5-1 `roll_table` (the crisis); PR5-2 is not in R5.
 
-One-time setup:
+- **Spec questions**:
+  1. **What is a Channel round?** PK1 4.3 sets `RoundIntent::Channel`, but an intent persists across rounds (IN2), a change ends intent-bound buffs (IN6, `round_intent.rs:283`), and the target kind, deck order, follow-ups and AI rows are all read per intent. Options: (a) a `channel` flag on the round state, cleared at round start; the first skill's row stays the intent, and entering a Channel round counts as an intent change, so bound buffs end; (b) the intent value itself. **Recommend (a)**: tells show Channel when the flag is set.
+  2. **Retire the old Channel path?** Today a ruleset can list `channel` in `intents` (`ruleset.rs:115`) and a skill can set `round_intent: channel` (`check/skill.rs:1008`). No data uses either. **Recommend retiring both** in favour of rule `channel`, with a HISTORY row and one contract re-record.
+  3. **Timeline default**: ACTS23 5.1 says "off in timeline until Act 2 data", while PK1 4.1 says "on in timeline, inert". **Recommend PK1's wording**, with `channel` added to the shipped `timeline` row in the PK1 data slice.
+  4. **"First pick"**: `Pick::MoveHere` usually comes first. **Recommend "before the first skill or item pick"**, so Move and Rest stay neutral.
+  5. **Biological Collapse on enemies**: `ap set 0` does nothing to enemies, which pay no AP and get no `ap` effects (`trigger.rs:743`). **Recommend a 1-round `stun` for units that pay no AP.**
+  6. **Graft floors**: floors combine by max, so 4 grafts at +10 give 10, not 40, and the Rock Salt flush (-10, Q-43) needs a per-member offset. **Recommend an additive body-only `meter_floor` grant plus an offset on the unit track.**
+  7. **Durability switched on by act**: one campaign world (Q-A2 (a)) keeps one ruleset, so a ruleset flag cannot turn on at Act 2. Options: (a) manifest `durability.from_act` plus kit rule `durability`; instances are created at the act line and on later acquisitions, so Act 1 saves are untouched and VERSION stays; (b) the spec's VERSION bump with a migration. **Recommend (a).**
+  8. **`channel_basics`** repeats the meter row's `skills`, which already open with no slot (UM6, `meter.rs:157`). **Recommend the `strain` row's `skills`.**
+  9. **PK2 and PK3 have no `.1` yet.** Open items: technique lists, recipe rows, recruit stat ranges, quirks and names, revive when the downed cell is taken, and naming procedural keepsakes (the stash holds ids only). **Recommend PK2 `.1` and PK3 `.1` before slicing them.**
+- **Recommendation**:
+  - `PR5-3` (kit, M): PK1 hooks 3.1 to 3.6; 0 diffs.
+  - `PR5-4` (kit, L): rule `channel`, skill field `channel`, eligibility, the marrow version in resolve and cost, the opener and planner rows, the Fill order, deck `marrow` and its limit; `rules_contract_golden` only.
+  - `PR5-5` (kit, M): Channel tells and the AI row; 0 diffs.
+  - `PR5-6` (game, M): GUI opener and greyed rows; 0 diffs.
+  - `PR5-7` (asset, S-M): the `strain` row, the marrow basic, test passive and enemy, the Dojo preset, and `channel` in `timeline`; phasefold is the canary; then a balance run.
+  - `PR5-8` (kit, M-L): unit track and the `mark` settle; 0 diffs.
+  - `PR5-9` (kit, M): body slots and the additive floor; 0 diffs.
+  - `PR5-10` (kit, M): recipe service; 0 diffs.
+  - `PR5-11` (kit, M): bleed-out and revive; 0 diffs.
+  - `PR5-12` (kit, M): weapon techniques, after PR5-4; 0 diffs.
+  - `PR5-13` (kit, L, splittable): weapon instances, then durability; 0 diffs under question 7 (a).
+  - `PR5-14` (kit, M-L): recruit generator; `PR5-15` (kit, S-M): procedural keepsakes; both 0 diffs.
+  - PR5-3 to PR5-7 can start now; PR5-8 onward wait for PK2 `.1` and PK3 `.1`.
 
-```bash
-rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version 0.2.129 --locked   # must equal the wasm-bindgen in Cargo.lock
-```
+### FB-168: PR5-1 `ROLLTABLE1` landed (`roll_table` trigger effect)
 
-Then `tools/fc.sh web test` (or `release`). It builds `emberwake_gui` for `wasm32-unknown-unknown` into its own
-`target-wasm/` (so it never evicts the native build), binds it with `wasm-bindgen`, runs `wasm-opt` when Binaryen is
-installed (optional), packs `games/emberwake/web_bundle.json` with `aegis bundle` (part 1: data and art, fetched before
-the main menu; part 2: audio, fetched while the game runs) and writes `out/web/` (git-ignored): `index.html`,
-`emberwake.js`, `emberwake_bg.wasm`, `bundle.json`, `emberwake_1.pak`, `emberwake_2.pak` and `build.json` (variant and
-commit). It prints each file's size raw and gzipped.
+- **Spec**: READY Section 1 row PR5-1; `docs/specs/ACTS23.md` PK1 hook (a) (the `PR5-1` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `rpgkit_data::TRIGGER_EFFECTS` gains `roll_table` (`rows` of `{weight, effects}`; `ROLL_TABLE`, `ROLL_ROW_KEYS`, `ROLL_WEIGHT = (1, 1000)`). Every trigger path ends in `trigger::run_effects` (skill, passive and item triggers, riders, deferred `ally_hit` effects, meter `rules` crossings), so one branch at its top covers all of them: `trigger::roll_row` draws once from the seeded battle stream (`randi_range(1, total)`) only when a table fires (no draw for no rows or a total of 1) and runs the picked row's effects through `run_effects` with the same event, holder and `rules` depth (each effect keeps its own `to`). Content check `roll_table_errors` (`rpgkit_content/src/check/hooks.rs`): rows a non-empty list; row keys `weight` and `effects` only; `weight` a whole number 1..1000; 1..4 effects, each through `effect_errors` (`meter_set` allowed on meter rules); a nested `roll_table` or `redirect` refused; `to` on the table is an unknown key. Schema help on `skills.triggers` and `unit_meters.rules`. Tests: `rpgkit_battle/tests/roll_table.rs` (5: same seed same row, weights followed, draws only when a table fires, row effects with their own `to`, meter-rule crossing) and `rpgkit_content/tests/roll_table_checks.rs` (4, 19 error cases one error each). Gate 2757 passed, 0 failed, 4 ignored, 0 warnings; 0 golden diffs. Review: change-reviewer clean (3 low, below).
+- **Recommendation**: `kits/rpg/README.md` (after the HOOKS1-M line): "ROLLTABLE1: the trigger effect `roll_table` (`rows` of `{weight 1-1000, effects}`) picks one row by weight on the seeded battle RNG (`trigger::roll_row`, one draw only when a table fires) and runs its effects as the trigger's own, in skill, passive, item and rider triggers and meter rules; no table or redirect inside a row." `engine/docs/authoring/combat_hooks.md`: add `roll_table` to the trigger effects list (:124) and the meter-rule effects (:179). GAME_BRIEF trigger effects: add `roll_table` (ACTS23 PK1 hook (a); no shipped data uses it yet). No HISTORY row (no golden re-recorded); STRUCTURE unchanged.
 
-## Play it locally
+### FB-169: PR5-1 readings beyond the row text (for confirmation)
 
-- `tools/fc.sh web serve [port]` serves `out/web/` on `http://127.0.0.1:8000/` (Python's `http.server`). Opening
-  `index.html` as a file does not work.
-- Launch keys go in the URL query, for example `?screen=runner` (the Scene Runner, test build) or `?screen=arena&seed=3`.
-- A downloaded `web-build` artifact: unzip it and serve the folder with `python -m http.server 8000`, then open
-  `http://localhost:8000`.
-- Other devices on the same Wi-Fi: `python -m http.server 8000 --bind 0.0.0.0` in the folder and open
-  `http://<PC's IPv4 address>:8000` (allow Python through the Windows firewall on private networks).
-
-## Smoke test
-
-`tools/fc.sh web smoke` runs `tools/web/smoke.js` on a test build in `out/web/`: headless Chromium through Playwright
-loads the page and, through the page probe, checks the boot (loading bar, both bundle parts, a main menu with no Quit),
-the no-WebGL message, the URL query, (a) Tools > Combat Arena `goblin_skirmish` to the results screen, (b) New game to
-the first region screen and (c) save, reload, Continue. Every page must run without a console or page error. It needs
-Node with Playwright and its Chromium (or `CHROMIUM=<path>`); it is never in the gate.
-
-## CI artifact (release PRs)
-
-The `web (advisory)` job in `.github/workflows/gate.yml` runs on every PR into `main` (the release PR): it installs the
-wasm32 target and `wasm-bindgen-cli` 0.2.129 (cached), runs `tools/fc.sh web test`, uploads `out/web/` as the artifact
-`web-build` (kept 14 days), then runs the browser smoke (Playwright Chromium installed on the runner). The job is
-advisory: it is not in the `gate` job's `needs` and not a required check, and a smoke failure does not fail the job
-(read the smoke step's log). After it has been green on two releases the user decides whether `main` requires it
-(WEBREL1 section 5). Download the artifact from the PR's checks (the `gate` workflow run > Artifacts).
-
-## Deploy to itch.io (`web.yml`)
-
-`.github/workflows/web.yml` is manual only: **Actions > web > Run workflow**, Branch **main**, variant **test**
-(default) or **release**. The Merge & Release thread runs it when the user says "deploy". It:
-
-1. refuses any ref but `main`, and stops before building with "BUTLER_API_KEY not set" when the secret is missing, or
-   with an `ITCH_TARGET` message when the variable is missing or not of the form `<user>/<game>:html5`;
-2. builds the chosen variant with `tools/fc.sh web <variant>`;
-3. installs itch.io's `butler` for linux-amd64 from `https://broth.itch.zone/butler/linux-amd64/<version>/archive/default`,
-   pinned to 15.32.0 and checked against its sha256 (to bump: fetch the new version and its sha256 on a GitHub runner,
-   since the cloud proxy blocks `broth.itch.zone`, and change `BUTLER_VERSION` and `BUTLER_SHA256` together);
-4. pushes `out/web/` with `butler push out/web $ITCH_TARGET --userversion <variant>-<short sha>`.
-
-## One-time setup by the repo owner (itch.io page, secret, variable)
-
-1. On itch.io: **Upload new project**. Kind of project: **HTML**. Leave the upload empty (CI fills it). Embed options:
-   viewport **1280 x 720**, tick **Fullscreen button**, leave **SharedArrayBuffer support** off (the build is
-   single-threaded). Visibility: **Restricted**, then set a password under **Password protect**. Save; the URL slug (for
-   example `tactical-rpg`) is the project name.
-2. itch.io **Settings > API keys > Generate new API key**; copy it.
-3. GitHub repo **Settings > Secrets and variables > Actions**: **Secrets > New repository secret** `BUTLER_API_KEY` =
-   the key; **Variables > New repository variable** `ITCH_TARGET` = `<itch username>/<project slug>:html5`. Nothing of
-   either is in the repository.
-4. Run the `web` workflow on `main`. After the first upload, tick **This file will be played in the browser** on the
-   `html5` file in the project's edit page and save (one time).
-
-## What differs in the browser
-
-| Area | Behaviour in the browser |
-| --- | --- |
-| Quit | Hidden on the main menu (a page cannot close its own tab) |
-| Saves and settings | In the browser's `localStorage` for the page's origin (keys under `aegis/`); clearing site data wipes them. itch.io serves every game from the shared `itch.zone` origin, so the storage quota may be shared |
-| Playtest recordings and F12 screenshots | Off on the web |
-| Audio | The second bundle part, fetched after the main menu; starts only after the first click or key press (browser autoplay rule) |
-| WebGL missing | The game stops and the page shows a short message instead of drawing |
-| Touch / mobile | Runs, but the UI is built for mouse and keyboard |
-~~~
+- **Spec**: READY Section 1 row PR5-1 (@ the `PR5-1` squash commit)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: (1) the row says `weight: int >= 1`; the check caps it at 1000 (kit checks state a range; the sum cannot overflow). (2) A nested `redirect` is refused: a redirect claims the hit before triggers run, so in a table it would do nothing. (3) No row-count limit (the row gives none). (4) The roll writes no log line of its own; the picked row's effects log as usual. (5) Review L1: on an `ally_hit` trigger a top-level `guard` shapes the hit, but a `guard` inside a table rolls at the end of the action (with the trigger's other non-guard effects), after the damage; the check allows it and no data uses it (PK1 crisis rows fire on `round_end`). (6) Process: `feedback_check.py archive` split FB-163 at a `## ` heading inside its fenced `~~~markdown` block, leaving the tail in FEEDBACK; restored by hand into FEEDBACK_CLOSED (this push).
+- **Recommendation**: keep (1)-(4) as built. For (5), Option A (recommended): the check refuses `guard` inside a `roll_table` on an `ally_hit` row ("put guard at the top level"), a small follow-up row; Option B: document "on `ally_hit` a table rolls at the end of the action" in the help. Optional: a row cap (e.g. 8) for editor tables. For (6), a small `tools/planner` fix row: the archive splitter skips headings inside fenced blocks.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

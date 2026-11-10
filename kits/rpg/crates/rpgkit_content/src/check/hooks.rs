@@ -10,7 +10,7 @@ use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{GRID_H, GRID_W};
 use rpgkit_data::{
     ALLY_EVENTS, ARENA_DIRS, ARENA_EFFECT_KEYS, ARENA_HAZARD_KEYS, CLASS_OVERLAY_KEYS, DECK_EFFECT, EFFECT_TO, FORCED_FROM, FORCED_IMMUNE, FORCED_KINDS, FORCED_MOVE_KEYS, FORCED_WHEN, GRANT_UNTIL,
-    HAZARD_AT, HAZARD_PLACE_KEYS, HAZARD_SHAPES, METER_SET, METER_SET_KEYS, RIDER_KEYS, TACTICS, TRIGGER_EFFECTS, TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
+    HAZARD_AT, HAZARD_PLACE_KEYS, HAZARD_SHAPES, METER_SET, METER_SET_KEYS, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, TACTICS, TRIGGER_EFFECTS, TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
 };
 use rpgkit_rules::ruleset;
 use rpgkit_rules::status;
@@ -563,7 +563,52 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
         "stagger" => whole_key(o, "value", STAGGER, true, at, &mut out),
         "damage" => whole_key(o, "value", DAMAGE, true, at, &mut out),
         "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
+        ROLL_TABLE => out.extend(roll_table_errors(o, ctx, at, meter_set)),
         _ => {}
+    }
+    out
+}
+
+/// ROLLTABLE1: a `roll_table`'s `rows`: at least one, each `{weight, effects}` with a whole weight in ROLL_WEIGHT and
+/// 1-EFFECTS_MAX trigger effects (as its list's: `meter_set` on a meter rule), none of them a `roll_table` or a
+/// `redirect` (a hit is claimed before any table rolls).
+fn roll_table_errors(o: &Dict, ctx: &Ctx, at: &str, meter_set: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    let rows = match o.get("rows") {
+        Some(Value::Array(a)) if !a.is_empty() => a,
+        _ => {
+            out.push(format!("{at}: roll_table needs rows, a list of 1 or more {{weight, effects}}."));
+            return out;
+        }
+    };
+    for (r, row) in rows.iter().enumerate() {
+        let at = format!("{at} row {}", r + 1);
+        let Some(row) = row.as_object() else {
+            out.push(format!("{at} must be an object {{weight, effects}}."));
+            continue;
+        };
+        unknown_keys(row, &ROLL_ROW_KEYS, &at, &mut out);
+        whole_key(row, "weight", ROLL_WEIGHT, true, &at, &mut out);
+        let list = match row.get("effects") {
+            Some(Value::Array(a)) if !a.is_empty() && a.len() <= EFFECTS_MAX => a.as_slice(),
+            _ => {
+                out.push(format!("{at}: effects holds 1-{EFFECTS_MAX} effects."));
+                continue;
+            }
+        };
+        for (i, item) in list.iter().enumerate() {
+            let at = format!("{at} effect {}", i + 1);
+            let Some(e) = item.as_object() else {
+                out.push(format!("{at} must be an object {{type, ...}}."));
+                continue;
+            };
+            let t = json::s(e, "type");
+            match t.as_str() {
+                ROLL_TABLE => out.push(format!("{at}: a roll_table cannot hold a roll_table.")),
+                "redirect" => out.push(format!("{at}: a roll_table cannot redirect.")),
+                _ => out.extend(effect_errors(e, &t, ctx, &at, meter_set)),
+            }
+        }
     }
     out
 }
