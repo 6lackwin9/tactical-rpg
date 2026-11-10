@@ -31,6 +31,16 @@ rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "w
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 arboard = { version = "3.7.0", default-features = false }
 
+# The web start path (WEBREL1-E2, `shell::start_web`): the page canvas by id, pixels' async init on the browser's
+# executor, and the browser audio backend. cpal is rodio's own device layer at the version rodio locks; it is named here
+# only to turn on its `wasm-bindgen` feature (Web Audio), which rodio 0.20 does not forward. wasm-bindgen must stay at
+# the locked 0.2.129: the build binds with `wasm-bindgen-cli` 0.2.129, and the two must match exactly.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cpal = { version = "0.15.3", features = ["wasm-bindgen"] }
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "0.4.79"
+web-sys = { version = "0.3.106", features = ["console", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Window"] }
+
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52.0", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }

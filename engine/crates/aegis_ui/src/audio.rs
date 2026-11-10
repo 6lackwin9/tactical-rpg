@@ -2,7 +2,9 @@
 //! under the game's audio folder, addressed by relative path ("sfx/hit.wav", "music/town.ogg"); four levels
 //! (master, music, effects, interface, 0-100, from the settings) and mute; a voice pool per bus (the oldest restarts
 //! when all are busy); one music track wanted at a time, crossfaded and looped. The game decides which sound and which
-//! track (screens name their music, `Screen::music`). Without an audio device (or headless) everything is silent.
+//! track (screens name their music, `Screen::music`). Without an audio device (or headless) everything is silent. On
+//! the web (WEBREL1-E2) the device opens at the player's first gesture (`unlock`): a page may not start audio before
+//! one, and sounds asked for until then are dropped, not queued.
 
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use serde_json::Value;
@@ -78,7 +80,14 @@ pub struct Audio {
     /// The audio folders in lookup order (ASSETORG2: the game's, its kit's, the engine's `assets/audio`).
     roots: Vec<PathBuf>,
     device: Option<Device>,
+    /// The device opens at the first gesture (`unlock`; the web): until then nothing plays.
+    waiting: bool,
     state: RefCell<State>,
+}
+
+/// The default output device; None when there is none.
+fn open_device() -> Option<Device> {
+    OutputStream::try_default().ok().map(|(stream, handle)| Device { _stream: stream, handle })
 }
 
 impl Audio {
@@ -88,9 +97,26 @@ impl Audio {
     }
 
     /// The audio folders `roots` (the first holding a file wins) on the default output device.
+    /// On the web the device waits for the first gesture (`unlock`).
     pub fn layered(roots: Vec<PathBuf>) -> Self {
-        let device = OutputStream::try_default().ok().map(|(stream, handle)| Device { _stream: stream, handle });
-        Self { roots, device, state: RefCell::new(State::new()) }
+        #[cfg(not(target_arch = "wasm32"))]
+        let (device, waiting) = (open_device(), false);
+        #[cfg(target_arch = "wasm32")]
+        let (device, waiting) = (None, true);
+        Self { roots, device, waiting, state: RefCell::new(State::new()) }
+    }
+
+    /// The player pressed a key or a button (the shell calls it on every press). On the web the first press opens the
+    /// output device (a page may start audio only from a gesture) and the music wanted now starts, fading in as at the
+    /// start; the sounds asked for before it were dropped. A no-op after that, offline and on the desktop.
+    pub fn unlock(&mut self) {
+        if !self.waiting {
+            return;
+        }
+        self.waiting = false;
+        self.device = open_device();
+        let wanted = self.state.borrow_mut().wanted.take();
+        self.music(wanted.as_deref());
     }
 
     /// The audio folders of asset `layers` (each root's `audio/`).
@@ -105,7 +131,7 @@ impl Audio {
 
     /// Several audio folders without a device (tests, tools over the asset layers).
     pub fn offline_layered(roots: Vec<PathBuf>) -> Self {
-        Self { roots, device: None, state: RefCell::new(State::new()) }
+        Self { roots, device: None, waiting: false, state: RefCell::new(State::new()) }
     }
 
     /// The audio folders of asset `layers` without a device (a run with no window: no sound device is opened or needed).
@@ -185,6 +211,11 @@ impl Audio {
             voices.remove(0);   // dropping a sink stops it: the oldest makes room
         }
         voices.push((sink, Instant::now()));
+    }
+
+    /// An output device is open: sounds play (false offline, without a device, and on the web before `unlock`).
+    pub fn live(&self) -> bool {
+        self.device.is_some()
     }
 
     /// The music track wanted now (`None`: silence); a new track fades in over the old one, which fades out.
@@ -310,7 +341,7 @@ mod tests {
             std::fs::create_dir_all(dir.join(file).parent().unwrap()).unwrap();
             std::fs::write(dir.join(file), dir.to_string_lossy().as_bytes()).unwrap();
         }
-        let a = Audio { roots: vec![game.clone(), engine.clone()], device: None, state: RefCell::new(State::new()) };
+        let a = Audio { roots: vec![game.clone(), engine.clone()], device: None, waiting: false, state: RefCell::new(State::new()) };
         assert!(a.has("sfx/ui_click.wav") && a.has("music/town.ogg") && !a.has("sfx/none.wav"));
         assert_eq!(a.bytes("music/town.ogg").as_deref(), Some(game.to_string_lossy().as_bytes()), "the game's file wins");
         let _ = std::fs::remove_dir_all(base);
