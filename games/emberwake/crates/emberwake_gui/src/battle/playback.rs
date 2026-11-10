@@ -16,7 +16,7 @@ use aegis_ui::audio::Bus;
 use emberwake_battle::command::CmdKind;
 use emberwake_battle::grid::V2;
 use emberwake_battle::session::Phase;
-use aegis_core::json::{self, Dict};
+use aegis_core::json::Dict;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -301,8 +301,7 @@ impl BattleScreen {
         }
         let from = s.w.grid.pos(act.unit)?;
         let at = |i: usize| s.w.grid.pos(i).or(t.anims[i].seen.pos);
-        let (mut on_self, mut harms, mut target, mut cells) = (false, false, None, Vec::new());
-        let kind = fx::act_kind(&act.command.kind);
+        let (mut target, mut cells) = (None, Vec::new());
         let aim = match &act.command.kind {
             CmdKind::Attack { target: tg, .. } => {
                 target = *tg;
@@ -313,20 +312,16 @@ impl BattleScreen {
                 Some(*aim)
             }
             CmdKind::Support { target, .. } => at(*target),
-            CmdKind::Item { target, item, .. } => {
-                (on_self, harms) = (*target == act.unit, item.damage > 0);
-                at(*target)
-            }
+            CmdKind::Item { target, .. } => at(*target),
             _ => None,
         };
         let to = aim.filter(|c| *c != emberwake_battle::grid::NO_CELL).unwrap_or(from);
         let def = s.w.cat.skills.iter().find(|k| k.name == act.command.name);
         let skill = def.map_or("", |k| k.id.as_str());
-        let weapon = u.inventory.main_weapon();
-        let family = weapon.map_or("", |w| w.weapon_type());
-        let ranged = weapon.is_some_and(|w| w.is_ranged_weapon());
-        let magic = weapon.is_some_and(|w| json::s(&w.item.raw, "damage_type") == "magic");
-        let style = fx::style(fx::Act { kind, skill, family, ranged, magic, dist: from.dist(to), on_self, harms });
+        // PR4-2 (AUDIT-10): the same `Act` the FX tests build (`fx::Act::popped`)
+        let fx_act = fx::Act::popped(&act.command.kind, act.unit, skill, u.inventory.main_weapon(), from.dist(to));
+        let (kind, family) = (fx_act.kind, fx_act.family);
+        let style = fx::style(fx_act);
         let radius = cells.iter().map(|c| c.dist(to)).max().unwrap_or(0);
         let delivery = style.delivery;
         if delivery == fx::Delivery::None {

@@ -298,3 +298,44 @@ fn the_spend_growth_reads_the_template() {
         assert_eq!(spend_growth(&cat, row(&cat, id)), class_growth, "{id}: the class's");
     }
 }
+
+/// PR4-2 single-scaling guard: a templated `elite` has its stats already scaled by `tier_mult`, so a derived formula's
+/// tier input that shares a product with a base stat (or with a row reading one) reads 1 there, and scales the other
+/// terms only; the same rows on the untemplated `elite` read as written (the stat scaled once, by the formula).
+#[test]
+fn a_derived_formula_never_scales_a_templated_stat_twice() {
+    let rows = json!([
+        {"id": "stout", "name": "Stout", "formula": "CONS * tier_mult", "min": 0, "max": 100000},
+        {"id": "grit", "name": "Grit", "formula": "60 * tier_mult + CONS * 8", "min": 0, "max": 100000},
+        {"id": "bulk", "name": "Bulk", "formula": "(60 + CONS * 8) * tier_mult", "min": 0, "max": 100000},
+        {"id": "frame", "name": "Frame", "formula": "CONS * 2", "min": 0, "max": 100000},
+        {"id": "framed", "name": "Framed", "formula": "frame * tier_mult + 10 * tier_mult", "min": 0, "max": 100000},
+        {"id": "shadowed", "name": "Shadowed", "formula": "frame * tier_mult", "constants": {"frame": 30}, "min": 0, "max": 100000}
+    ]);
+    let with_rows = |templates: Vec<Value>| {
+        let blade = json!({"id": "blade", "name": "Blade", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "base_power": 20});
+        Catalog::from_value(&json!({"classes": [class_row(drill_base())], "units": units(), "items": [blade], "unit_templates": templates, "derived_stats": rows}))
+    };
+    let value = |cat: &Catalog, u: &Unit, id: &str| rpgkit_rules::derived::value(cat, "classic", u, id).expect("the row");
+    let m = tier_row("elite").mult;
+    assert!(m > 1.0, "the elite factor scales up");
+    let cat = with_rows(vec![aggressor()]);
+    let u = unit(&cat, "foe_elite");
+    assert!(u.tier_scaled && u.tier_mult == m);
+    let cons = stat(&u, "CONS");
+    let unscaled = unscaled_core(&aggressor(), LEVEL)["CONS"];
+    assert_eq!(cons, roundi(unscaled as f64 * m).max(STAT_FLOOR), "CONS carries tier_mult once already");
+    assert_eq!(value(&cat, &u, "stout"), cons, "the stat is not scaled again");
+    assert_eq!(value(&cat, &u, "grit"), roundi(HP_BASE as f64 * m) + cons * 8, "the constant term still scales");
+    assert_eq!(value(&cat, &u, "bulk"), HP_BASE + cons * 8, "a product holding a stat is not scaled");
+    assert_eq!(value(&cat, &u, "framed"), roundi(cons as f64 * 2.0 + 10.0 * m), "through another row: that row reads a stat");
+    assert_eq!(value(&cat, &u, "shadowed"), roundi(30.0 * m), "a row constant named like a row is a constant: it scales");
+    // untemplated: the formula as written
+    let plain = with_rows(vec![]);
+    let p = unit(&plain, "foe_elite");
+    assert!(!p.tier_scaled);
+    let pc = stat(&p, "CONS");
+    assert_eq!(value(&plain, &p, "stout"), roundi(pc as f64 * m));
+    assert_eq!(value(&plain, &p, "bulk"), roundi((HP_BASE + pc * 8) as f64 * m));
+    assert_eq!(value(&plain, &p, "framed"), roundi(pc as f64 * 2.0 * m + 10.0 * m));
+}

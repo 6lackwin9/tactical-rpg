@@ -270,8 +270,17 @@ impl<'a> Eval<'a> {
         }
     }
 
+    /// The formula's value. PR4-2 single-scaling guard: a role-templated unit (`Unit::tier_scaled`) has its base stats
+    /// already scaled by `tier_mult` (`CharacterStats::scale_core`), so a tier input that shares a product with a base
+    /// stat (or with a derived row reading one) reads 1 there: the tier scales the formula's other terms only (as
+    /// `max_hp_scaled` scales the 60 only). Every other unit reads the formula as written.
     fn raw(&mut self, d: &DerivedStatDef) -> f64 {
-        d.formula.eval(&mut |n| self.input(d, n).1)
+        if !self.unit.tier_scaled {
+            return d.formula.eval(&mut |n| self.input(d, n).1);
+        }
+        let cat = self.cat;
+        let marked = |n: &str| reads_stat(cat, d, n, 0);
+        d.formula.eval_marked(&marked, &mut |n, under| if under && rpgkit_data::is_tier_input(n) { 1.0 } else { self.input(d, n).1 })
     }
 
     fn value_of(&mut self, d: &DerivedStatDef) -> i32 {
@@ -290,6 +299,20 @@ impl<'a> Eval<'a> {
         self.done.insert(d.id.clone(), v);
         v
     }
+}
+
+/// Whether formula name `name` of row `row` reads a base stat: a stat itself, or a derived row whose formula (through
+/// other rows, at most `MAX_ROW_DEPTH` deep) names one; a constant of `row` never does (`Eval::input` reads a constant
+/// before a row of the same name). PR4-2 single-scaling guard, `Eval::raw`.
+fn reads_stat(cat: &Catalog, row: &DerivedStatDef, name: &str, depth: usize) -> bool {
+    const MAX_ROW_DEPTH: usize = 16;
+    if STATS.contains(&name) {
+        return true;
+    }
+    if row.constants.contains_key(name) {
+        return false;
+    }
+    depth < MAX_ROW_DEPTH && cat.derived_stats.get(name).is_some_and(|other| other.formula.names().iter().any(|n| reads_stat(cat, other, n, depth + 1)))
 }
 
 /// The unit's modifiers on the id (any case: `StatModifier::permanent` upper-cases), matching the weapon context,

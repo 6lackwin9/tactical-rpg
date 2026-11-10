@@ -153,17 +153,40 @@ impl Formula {
     /// Evaluates the formula, asking `input` for each name as it is reached (left to right, operands in source order;
     /// a name used twice is asked twice). A non-finite input counts as 0. The result is always finite.
     pub fn eval(&self, input: &mut dyn FnMut(&str) -> f64) -> f64 {
-        self.node(&self.root, input)
+        self.node(&self.root, false, None, &mut |n, _| input(n))
     }
 
-    fn node(&self, n: &Node, input: &mut dyn FnMut(&str) -> f64) -> f64 {
+    /// `eval`, also telling `input` whether the name it asks for shares a product with a `marked` name: one operand of
+    /// a `*` or `/` holds the name (at any depth, through groups, signs, sums and calls) and the other holds a marked
+    /// name, or an enclosing product does. The caller decides what a name reads there (a factor already folded into
+    /// the marked inputs is not applied twice); the arithmetic is `eval`'s.
+    pub fn eval_marked(&self, marked: &dyn Fn(&str) -> bool, input: &mut dyn FnMut(&str, bool) -> f64) -> f64 {
+        self.node(&self.root, false, Some(marked), input)
+    }
+
+    /// Whether subtree `n` names an input `marked` accepts.
+    fn holds(&self, n: &Node, marked: &dyn Fn(&str) -> bool) -> bool {
+        match n {
+            Node::Num(_) => false,
+            Node::Name(i) => marked(&self.names[*i]),
+            Node::Neg(x) => self.holds(x, marked),
+            Node::Bin(_, l, r) => self.holds(l, marked) || self.holds(r, marked),
+            Node::Call(_, args) => args.iter().any(|a| self.holds(a, marked)),
+        }
+    }
+
+    fn node(&self, n: &Node, under: bool, marked: Option<&dyn Fn(&str) -> bool>, input: &mut dyn FnMut(&str, bool) -> f64) -> f64 {
         let v = match n {
             Node::Num(v) => *v,
-            Node::Name(i) => input(&self.names[*i]),
-            Node::Neg(x) => -self.node(x, input),
+            Node::Name(i) => input(&self.names[*i], under),
+            Node::Neg(x) => -self.node(x, under, marked, input),
             Node::Bin(op, l, r) => {
-                let a = self.node(l, input);
-                let b = self.node(r, input);
+                let (lu, ru) = match (op, marked) {
+                    (Op::Mul | Op::Div, Some(m)) => (under || self.holds(r, m), under || self.holds(l, m)),
+                    _ => (under, under),
+                };
+                let a = self.node(l, lu, marked, input);
+                let b = self.node(r, ru, marked, input);
                 match op {
                     Op::Add => a + b,
                     Op::Sub => a - b,
@@ -180,7 +203,7 @@ impl Formula {
             Node::Call(f, args) => {
                 let mut vals = Vec::with_capacity(args.len());
                 for a in args {
-                    vals.push(self.node(a, input));
+                    vals.push(self.node(a, under, marked, input));
                 }
                 match f {
                     Func::Min => vals.iter().copied().fold(vals[0], f64::min),

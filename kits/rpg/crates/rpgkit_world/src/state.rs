@@ -745,6 +745,91 @@ impl UnitState {
         (errors, kept)
     }
 
+    /// PR4-2 (AUDIT-08): drops the saved loadout and gear entries the current data disallows and returns one load
+    /// warning per dropped entry (as `sanitize_deck` does for the deck): a skill-loadout family that is unknown, not
+    /// owned, listed twice or past the slot caps; a `loadout_ranks` entry `loadout_errors` refuses (a basic, unowned or
+    /// unknown family, a rank the family lacks); worn gear in an unknown slot or of an unknown item (its item family
+    /// left the data: nothing to keep), or that the member can no longer wear (`can_wear`, an off-hand held with a
+    /// two-handed main): a known item goes to `stash`. A member whose base unit or class is gone is left to `validate`;
+    /// a valid member is untouched.
+    pub fn sanitize_loadout(&mut self, d: &Data, stash: &mut IndexMap<String, i64>) -> Vec<String> {
+        let at = format!("Unit '{}'", self.id);
+        let entry = d.entry("units", &self.base_unit);
+        if entry.is_empty() || !d.cat.classes.contains_key(&self.class_id(d)) {
+            return Vec::new();
+        }
+        let mut warnings = Vec::new();
+        let dropped = |problem: String, what: &str| format!("{at}: {problem} Dropped from the saved {what} (the data no longer allows it).");
+        if !self.loadout_errors(d, &at).is_empty() {
+            let owned = self.owned_families_anywhere(d);
+            let mut seen: Vec<String> = Vec::new();
+            for (list, cap) in [(&mut self.loadout_class, rpgkit_rules::stats::MAX_CLASS_SLOTS), (&mut self.loadout_extra, rpgkit_rules::stats::MAX_EXTRA_SLOTS)] {
+                let mut kept: Vec<String> = Vec::new();
+                for fam in list.iter() {
+                    let problem = if d.cat.tier_one(fam).is_none() {
+                        format!("loadout family '{fam}' is unknown.")
+                    } else if !owned.contains(fam) {
+                        format!("loadout family '{fam}' is not owned.")
+                    } else if seen.contains(fam) {
+                        format!("loadout lists family '{fam}' twice.")
+                    } else if kept.len() >= cap {
+                        format!("loadout family '{fam}' is past the {cap} slots.")
+                    } else {
+                        seen.push(fam.clone());
+                        kept.push(fam.clone());
+                        continue;
+                    };
+                    warnings.push(dropped(problem, "loadout"));
+                }
+                *list = kept;
+            }
+            let ranks = std::mem::take(&mut self.loadout_ranks);
+            for (fam, rank) in ranks {
+                let problem = if d.cat.is_basic_family(&fam) {
+                    format!("rank set for family '{fam}', which is a basic family.")
+                } else if !owned.contains(&fam) {
+                    format!("rank set for family '{fam}' that is not owned.")
+                } else if !d.cat.family_rows(&fam).iter().any(|s| s.tier as i64 == rank) {
+                    format!("family '{fam}' has no rank {rank}.")
+                } else {
+                    self.loadout_ranks.insert(fam, rank);
+                    continue;
+                };
+                warnings.push(dropped(problem, "loadout ranks"));
+            }
+        }
+        let to_stash = |item: &str, stash: &mut IndexMap<String, i64>| *stash.entry(item.to_string()).or_insert(0) += 1;
+        let worn = std::mem::take(&mut self.equipment);
+        for (slot, item) in worn {
+            let problem = if !LOADOUT_SLOTS.contains(&slot.as_str()) {
+                format!("unknown equipment slot '{slot}'.")
+            } else if !d.has("items", &item) {
+                format!("unknown item '{item}' in {slot}.")
+            } else if let Err(e) = self.can_wear(d, &item, &slot) {
+                e
+            } else {
+                self.equipment.insert(slot, item);
+                continue;
+            };
+            if d.has("items", &item) {
+                to_stash(&item, stash);
+                warnings.push(format!("{at}: {problem} Moved from the saved gear to the stash (the data no longer allows it)."));
+            } else {
+                warnings.push(dropped(problem, "gear"));
+            }
+        }
+        let held = |slot: &str, eq: &IndexMap<String, String>| eq.get(slot).and_then(|i| d.cat.items.get(i)).cloned();
+        if let (Some(main), Some(off)) = (held("main_hand", &self.equipment), held("off_hand", &self.equipment)) {
+            if !off_hand_ok(Some(&main), &off) {
+                if let Some(item) = self.equipment.shift_remove("off_hand") {
+                    to_stash(&item, stash);
+                }
+                warnings.push(format!("{at}: {} can't be held with the two-handed {}. Moved from the saved gear to the stash (the data no longer allows it).", off.name, main.name));
+            }
+        }
+        warnings
+    }
+
     pub fn loadout_errors(&self, d: &Data, at: &str) -> Vec<String> {
         let mut errors = Vec::new();
         if self.loadout_class.len() > rpgkit_rules::stats::MAX_CLASS_SLOTS {

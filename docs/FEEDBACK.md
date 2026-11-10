@@ -31,7 +31,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | R4-2 `R4-CLOSE` | done (`3353e62b`) | `develop` | - |
 | R4 release | released: `main` @32ae1ada ([#58](https://github.com/6lackwin9/tactical-rpg/pull/58), merge commit; tree = develop @ad903f92, which adds a whitespace fix for an MD012 lint error from 92a7282b) | `main` | Ready queue empty; next: Section 3 `R3-STAGE-SEED`, `POST-R4-CLEANUP` when Design queues them. |
 | WEBREL1 feasibility | done: FB-147 (read-only audit, no code) | - | Waiting on Design: E1 split (Option A) and slice order. |
-| PR4-1 `R3-STAGE-SIM` | done: part 1 (`stage=N`, FB-149); part 2 parked (FB-148, limit-blocker) | `develop` | Next: PR4-2 `POST-R4-CLEANUP` (items 1, 3, 4). |
+| PR4-1 `R3-STAGE-SIM` | done: part 1 (`stage=N`, FB-149); part 2 parked (FB-148, limit-blocker) | `develop` | - |
+| PR4-2 `POST-R4-CLEANUP` | phase A done (FB-150 limit-blocker, FB-151); phase B building (alias and `buff_stat` removal, `timeline_kit.json` re-freeze) | `claude/optimistic-newton-ewkyqt` | - |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -77,6 +78,22 @@ FB-01 to FB-146 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
   | `ashmaw_stand_barred` (gate branch) | 100 | 3.5 | 0.80 |
 
 - **Recommendation**: GAME_BRIEF (sim keys): "`sim stage=N` (0..; default 0) plays world encounters (party, sweep, campaign) at world stage N: enemies grow by `growth_per_stage` through `rpgkit_world::battle::stage_level`, hero tier and guests never grow, and staged copies spend an explicit `spend` via `raise_level`; listed in `sim help` only (`args::STAGE_USAGE`)." HISTORY: "2026-11-10 PR4-1 `R3-STAGE-SIM` part 1 (`stage=N` sim key) landed with 0 golden diffs; part 2 (AUDIT-07 `elevel=` through `raise_level`) parked as FB-148 because it moves `sim_golden` run 11." STRUCTURE: none. Note: `stage=` is one fixed stage for every fight of a run, also in campaign mode, where the real campaign uses stage = act (as the row specifies). For the held content half (`R3-STAGE-SEED`): the 5 fights are all 100% wins at level 5 with this comp, so a `growth_per_stage` pick should be swept at the campaign's actual party levels per act.
+
+### FB-150: PR4-2 AUDIT-08 orphan `loadout_ranks` clause built narrower (literal clause breaks valid saves)
+
+- **Spec**: READY Section 1 row PR4-2 item (1) (AUDIT-08: "`loadout_ranks` entries with no matching loadout entry are dropped")
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: the literal clause conflicts with a save invariant. `progression::pin_ranks` (`kits/rpg/crates/rpgkit_world/src/progression.rs:243-253`) pins a rank for every active family of the built unit "so the class default loadout (stored empty) is pinned too", and the party screen's ConfirmSkills with `using_default` (`games/emberwake/crates/emberwake_gui/src/party.rs:1184-1202`) clears `loadout_class` / `loadout_extra` and then calls `pin_ranks`. So a valid, game-written save routinely has an empty loadout with ranks for families in no loadout list; dropping them would change valid saves and break the store byte-for-byte resave. Built instead (in the PR4-2 phase A landing): `UnitState::sanitize_loadout` drops only the rank entries the existing rank rules refuse (`loadout_errors`: basic, unknown or unowned family, a rank the family lacks), with a test that an empty loadout plus pinned ranks loads and re-saves unchanged. `change-reviewer` verified the invariant.
+- **Recommendation**: **Option A (recommended, as built)**: keep the narrower rule (drop what `loadout_errors` refuses) and reword the clause in the AUDIT-08 record. **Option B**: drop ranks with no loadout entry only when the loadout is non-empty (an explicit loadout); needs a ruling on whether an explicit loadout may keep ranks of unslotted families for later re-slotting. No golden impact either way.
+
+### FB-151: PR4-2 phase A landed (AUDIT-08, AUDIT-10, tier single-scaling guard)
+
+- **Spec**: READY Section 1 row PR4-2 items (1), (2), (3) guard part (the `PR4-2 (phase A)` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: (1) `rpgkit_world::state::UnitState::sanitize_loadout(d, stash)`, called per member from `save::decode` after `sanitize_deck`: drops a skill-loadout family that is unknown, unowned, listed twice or past the slot caps; drops refused `loadout_ranks` (FB-150); worn gear of an unknown item is dropped, gear in an unknown slot, gear that fails `can_wear`, or an off-hand beside a two-handed main goes to `party.stash`; one warning line per entry; a valid member is untouched. (2) `emberwake_gui::fx::Act::new` and `Act::popped` (used by `battle/playback.rs` `popped_impact` and the fx tests; the step-loop test now passes the weapon's real `magic` flag, an intended tightening). (3) single-scaling guard in `rpgkit_rules/src/derived.rs`: on a templated non-hero (`tier_scaled`), a tier input that shares a `*` / `/` product with a base stat (or a derived row that reads one) reads 1, so `CONS*tier_mult` gives `CONS`, `60*tier_mult + CONS*8` keeps the 60 scaled, `(60+CONS*8)*tier_mult` gives `60+CONS*8`; untemplated units read formulas as written. **Layer deviation (engine)**: the guard needs `aegis_core::formula::Formula::eval_marked(marked, input(name, under))` (game-agnostic; `eval` routes through it with unchanged arithmetic; `change-reviewer` ruled it the right fix, since a static content check cannot express a per-unit guard). No shipped or fixture formula uses a tier input today, so **0 golden diffs**. Tests: `rpgkit_world/tests/loadout_sanitize.rs` (6), `aegis_core/tests/formula_marked.rs` (2), `rpgkit_rules/tests/unit_templates.rs` (+1). Gate: 2711 passed, 0 failed, 4 ignored, 0 warnings.
+- **Recommendation**: engine/README.md `aegis_core` row (:138): add "`Formula::eval_marked`: eval that tells the input whether a name shares a product with a marked name (PR4-2 tier guard)". STRUCTURE tests: `rpgkit_world/tests/loadout_sanitize.rs` (PR4-2 AUDIT-08), `aegis_core/tests/formula_marked.rs`. GAME_BRIEF save: "A saved loadout family, rank or worn item the data no longer allows is dropped on load with a warning (worn gear to the stash); data drift never refuses a save." GAME_BRIEF stats: "On a templated non-hero, a derived formula never applies `tier_mult` to a stat again." HISTORY: none (0 golden diffs). EFFICIENCY (builder tip): "dry-run a kit re-freeze in a scratch worktree (`RECORD=1` on `timeline_golden`) before re-recording".
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
