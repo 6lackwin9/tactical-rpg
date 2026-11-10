@@ -1,0 +1,99 @@
+# WEBREL1-P1: deploy the web build to the restricted itch.io page with butler. Manual only (Actions > web > Run workflow,
+# Branch: main; the Merge & Release thread runs it when the user says "deploy"). It refuses any ref but main and stops
+# before building when the repo secret BUTLER_API_KEY or the repo variable ITCH_TARGET (<user>/<game>:html5) is not set;
+# both are set by the user (docs/workflow/web.md). The test build (dev tools on) is the default until the user calls the
+# game playable (WEBREL1 section 4); then pick release.
+name: web
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Which build to deploy (test = with the Tools menu; release = base game only)
+        type: choice
+        options: [test, release]
+        default: test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-deploy
+  cancel-in-progress: false   # a running upload is never cancelled
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable   # rust-toolchain.toml pins the Windows (gnullvm) toolchain of the desktop
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target   # .cargo/config.toml points at a Windows folder
+      CARGO_TERM_COLOR: never
+      WASM_BINDGEN_VERSION: 0.2.129   # must equal the locked wasm-bindgen (Cargo.lock; tools/fc.sh web checks it)
+      # butler pinned (the version and sha256 the Godot-era web.yml verified on a GitHub runner). To bump: fetch
+      # https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default and its sha256 on a GitHub runner (the cloud
+      # proxy blocks broth.itch.zone), then change both lines.
+      BUTLER_VERSION: 15.32.0
+      BUTLER_SHA256: 2335971394ef6596f95ded0833e85ee28755e13761716ef4c91d6b11f69162f5
+    steps:
+      - name: Preflight (main only; BUTLER_API_KEY and ITCH_TARGET set)
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+          VARIANT: ${{ inputs.variant }}
+        run: |
+          fail() { echo "$1"; echo "::error::$1"; exit 1; }
+          [ "$GITHUB_REF" = refs/heads/main ] \
+            || fail "web.yml deploys from main only (this run is on $GITHUB_REF): Actions > web > Run workflow, Branch: main"
+          [ -n "${BUTLER_API_KEY:-}" ] || fail "BUTLER_API_KEY not set"
+          [ -n "${ITCH_TARGET:-}" ] || fail "ITCH_TARGET not set (repo variable, e.g. <user>/<game>:html5)"
+          [[ "$ITCH_TARGET" =~ ^[^/[:space:]]+/[^/:[:space:]]+:[^/:[:space:]]+$ ]] \
+            || fail "ITCH_TARGET must look like <user>/<game>:html5 (got '$ITCH_TARGET')"
+          echo "deploying the $VARIANT build of $GITHUB_SHA to $ITCH_TARGET"
+
+      - uses: actions/checkout@v4
+
+      - name: System libraries (ALSA, for the native aegis CLI that packs the bundle)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config
+
+      - name: Rust toolchain and the wasm32 target
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustc --version
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            . -> target-wasm
+
+      - name: Cache wasm-bindgen-cli
+        id: bindgen-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}
+
+      - name: Install wasm-bindgen-cli
+        if: steps.bindgen-cache.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+
+      - name: Web build
+        env:
+          VARIANT: ${{ inputs.variant }}
+        run: bash tools/fc.sh web "$VARIANT"
+
+      - name: Install butler
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/butler.zip" "https://broth.itch.zone/butler/linux-amd64/$BUTLER_VERSION/archive/default"
+          echo "$BUTLER_SHA256  $RUNNER_TEMP/butler.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/butler.zip" -d "$RUNNER_TEMP/butler" && chmod +x "$RUNNER_TEMP/butler/butler"
+          "$RUNNER_TEMP/butler/butler" -V
+
+      - name: Upload to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+          VARIANT: ${{ inputs.variant }}
+        run: '"$RUNNER_TEMP/butler/butler" push out/web "$ITCH_TARGET" --userversion "$VARIANT-${GITHUB_SHA::7}"'
