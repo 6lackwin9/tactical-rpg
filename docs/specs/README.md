@@ -1,6 +1,6 @@
 # Specs Index and Context Rules
 
-To prevent context bloat and outdated-spec noise in both the Design and Build sessions, `docs/specs/` holds only **active Masterplan, Engine/Kit, and Cross-Cutting contracts** (`22` files). Superseded pre-Masterplan Tier 2 specs live in `docs/archive/specs/` (and completed historical Emberwake task specs live in `docs/archive/specs/emberwake/`).
+To prevent context bloat and outdated-spec noise in both the Design and Build sessions, `docs/specs/` holds only **active Masterplan, Engine/Kit, and Cross-Cutting contracts** (`23` files). Superseded pre-Masterplan Tier 2 specs live in `docs/archive/specs/` (and completed historical Emberwake task specs live in `docs/archive/specs/emberwake/`).
 
 - **Build Session**: Reads **only** `docs/READY.md` and the specific spec sections named in `docs/READY.md` (`docs/sessions/*.md` and active Tier 1 specs).
 - **Design Session**: Uses `docs/specs/MASTERPLAN1.md` and `docs/sessions/<SUBBLOCK>.md` as the canonical bottom-up RPG Kit specs.
@@ -24,6 +24,7 @@ To prevent context bloat and outdated-spec noise in both the Design and Build se
 | `PORTRAITFX1.md`, `_TASKS.md` | Portrait expressions, sidecars, and tool checks (`tools/portraits/`) | active (`X2`, `X3`) |
 | `REGIONGROUND1_ENGINE.md`, `_KIT.md` | Ground composition and region map rendering contracts | active (`X2`, `X3`, `W1`) |
 | `WEBREL1.md` | Web (WASM) build of the game and its restricted itch.io deploy (`Post-R4`; engine seam, game entry, CI) | active (`.1` 2026-11-09; feasibility check pending) |
+| `ACTS23.md` | Survey of the systems Acts 2-3 need against the code, 8 work packages (`PK1`..`PK8`), questions `Q-A1..Q-A10` | draft (2026-11-10; user review pending) |
 
 ## Archived Pre-Masterplan Reference Library (`docs/archive/specs/`)
 
