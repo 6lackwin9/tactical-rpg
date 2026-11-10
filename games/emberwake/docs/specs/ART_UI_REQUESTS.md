@@ -2,7 +2,7 @@
 
 The hand-off file between the Artwork & Mock UI Session and the Design Session (decision "Art/UI request outbox and ownership", user 2026-11-10). Build never reads it; Design turns outbox rows into `docs/READY.md` items.
 
-- **Inbox** (Design writes, Art/UI works): tasks for the Art/UI session. At its session start Art/UI reads the inbox, does the tasks, and **deletes each row once done**, logging the result in `ART_UI_STUDIO.md`.
+- **Inbox** (Design or the user writes, Art/UI works): tasks for the Art/UI session; the user adds art requests here directly (or asks the Design Session to), and the file stays in use as the standing art request queue. At its session start Art/UI reads the inbox, does the tasks, and **deletes each row once done**, logging the result in `ART_UI_STUDIO.md`.
 - **Outbox** (Art/UI writes, Design triages): requests from Art/UI for Build or Design. At its session start Design queues or answers each row in `docs/READY.md` and **deletes the row once it is recorded there** (READY Section 4 keeps the answer with the request id).
 
 ## Inbox (for Art/UI)
