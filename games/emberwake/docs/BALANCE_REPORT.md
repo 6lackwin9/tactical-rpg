@@ -1,5 +1,14 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## PR5-7 (`PK1-S3`) 2026-11-10 (Strain / Channel / Feed / Vent first run)
+
+- **Measured build**: `develop` `@c1ca8cc6`, no repo file changed; probes on scratch data copies (`data=<dir>`), 40 seeds, `rules=-channel` control.
+- **The hero never Channels because it has no marrow version**: `strike` is a ruleset basic (not a class basic) and the warrior's class basic is `brace`; `channel.only` skills do not count. One marked marrow attack active (`extra_skills`, `deck.active`, `deck.marrow` = `tl_hook_thrust`) makes it Channel: 85% won vs 2.5% control, median 2 rounds.
+- **Cliff**: `channel_ai_edge` 1.0 / 1.2 -> 85%, 1.5 / 2.0 -> 2.5%; `channel_power` 1.0 -> 2.5%, 1.25 -> 85%, 1.5 -> 92.5%.
+- **Watch list**: crisis never fires (decay runs before the `round_end` trigger and the AI refuses a Channel round that ends at 100), the AI never Vents, Strain sits in Aberrant Edge (+50% empower) at no cost, Feed heals 10-12 HP, no Flesh-Tension signal (no poise breaks in the duel).
+- **Longer fights**: `total_blocks` 3 gives medians 7-8 rounds (elite) and 4-5 (standard); levels and tier do not.
+- **Regression check**: `sim feel 5 seeds=40` 61.0% overall and `sim party 5 12` 100 / 92 / 100 / 92 / 92, both identical to `R4-CLOSE`.
+
 ## R4-CLOSE (`R4-2`) 2026-11-08 (Final Backend & Golden Lock balance pass, `FB-146`)
 
 - **Measured build**: `develop` `@3353e62b` (`r42.json`, `CLASS-BASICS` rows in frozen `timeline_kit.json`, `goblin_skirmish` in `timeline_golden` and run via `enc=` outside the default 5-fight feel set).
