@@ -137,7 +137,12 @@ Sub-questions under **B** (recommendations in bold):
   1. **A marrow-enabled skill keeps its Cold Steel version**: entering a Channel round switches it from Cold Steel to marrow, leaving it switches back. The theme by intent count (user's correction: "1 in 10 / 2 in 10" meant one intent / two intents): **single-intent skills switch** between Cold Steel and marrow; **dual-intent skills are the Cold Steel heavies** with no marrow version (the cap above); the **dedicated marrow skills** (the graft skills) are usually stronger versions of regular skills.
   2. **How many actives may be marrow depends on the graft level** (more or higher-tier grafts allow more marrow actives); numbers to settle in the PK1 `.1` session.
   3. **No -1 AP**: a marrow version keeps the Cold Steel AP cost and gets enough power instead (balance tuning).
-- **Still open for the PK1 `.1` session:** the marrow-active limit per graft level; the default package numbers (power x 1.25, armour pierce, Strain 15 / 25 / 35); whether keystones have marrow versions.
+- **Closing rulings (user 2026-11-10, sixth follow-up):**
+  1. **Graft skills are budgeted like dual-intent Cold Steel skills** (the heavies): same value budget (`A1` value and cost), even though they have a single intent.
+  2. **Marrow-active limit**: one marrow active per installed graft, up to the 3 actives (the Design default the user agreed to; the per-level detail is tuned in PK1 if grafts get levels).
+  3. **Default marrow package to start with**: power x 1.25, armour pierce, Strain 15 / 25 / 35 by AP cost (1 / 2 / 3+), same AP as the Cold Steel version; balance tunes from there.
+  4. **Keystones have no marrow version**: the Inoculation has **its own keystones** (Inoculated keystones, installed by surgery, Tier III), which take the one keystone slot instead of a Cold Steel keystone.
+- **Section 5.1 is closed**; PK1's `.1` session designs the details (the opener's planner and AI rules, the per-intent fill order in a Channel round, the content checks) against these rulings.
 
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
