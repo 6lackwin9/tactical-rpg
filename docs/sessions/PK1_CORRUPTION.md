@@ -48,6 +48,7 @@ A `triggers` row on the Strain meter: `on: round_end`, `when: {meter: {strain: "
 3. **`strike_nearest`** trigger effect `{power: 1.0, then_status, then_rounds}`: a basic weapon strike resolved immediately at round end on the nearest other unit of any side, no AP, no plan; logged as `[Spasm]`.
 4. **`ap` with `set`**: `{type: ap, set: 0, rounds: 1}` sets the unit's AP to 0 for its next round's planning (the planner shows why).
 5. **`mark`** trigger effect `{mark, value}`: appends to the battle result's per-unit marks (a list the world settle reads); PK1 records and shows it in the results screen; PK2 consumes `calcify`. With PK2, a `calcify` mark also grants the next stage's passive for the rest of the battle (and at Stage V applies `side: hostile_all`), so the stage bites in the fight.
+7. **`unmark` item effect (the in-battle undo of a Flesh Breach, user 2026-11-10)**: `{mark: "calcify"}` removes the target's latest `calcify` mark of this battle, so the stage is **not saved** when the battle settles, while the stage's effects stay until the battle ends (a temporary boost). On a unit that a Stage V breach turned hostile, it also **calms it**: the hostility ends at the next round start (the unit returns to its side, keeping its previous stage). The item may target such a unit although it is hostile (it was an ally at the battle's start). Carried by **Quenched Cinder Salt** (game data, CANON 2.5, Q-43, Q-69): a rare one-charge pouch item (loot, costly at the Slab, a few per act).
 6. **Hazards that add Strain**: arena hazard `effect` and ground hazard `EffectSpec` gain `meter {meter, delta}` (applied only to holders of that meter).
 
 ## 4. Channel (ACTS23 5.1, all user rulings)
@@ -88,13 +89,14 @@ Strain-carrying units (aberrants, and AI-driven heroes) get one AI row: open wit
 - `strain` row (section 2) with the crisis trigger.
 - The two Channel basics (section 4.3 item 5): **Feed** and **Vent** (user 2026-11-10; they replace the Design default of a 1 AP Assault strike; Surge and Hold were dropped), each `channel.only`, with the default numbers there.
 - A test passive `inoculated_test` granting the Strain meter (floor 0) and `channel.only` test skills, for the Dojo and sims until PK2's grafts exist.
+- **Quenched Cinder Salt** (pouch item with `unmark`, rare: drop and price rows by the balance lane).
 - One aberrant test enemy with Strain and a Strain-adding hit, and a Dojo preset "Channel duel".
 
 ## 6. Slices (proposed; Build's feasibility check may reorder)
 
 | Slice | Scope | Acceptance |
 | --- | --- | --- |
-| `PK1-S1` | Section 3 hooks (`heal_taken`, `pct_of_hit`, `strike_nearest`, `ap set`, `mark`, hazard `meter`) | unit tests per hook; **0 golden diffs** (no data uses them) |
+| `PK1-S1` | Section 3 hooks (`heal_taken`, `pct_of_hit`, `strike_nearest`, `ap set`, `mark` and `unmark`, hazard `meter`) | unit tests per hook; **0 golden diffs** (no data uses them) |
 | `PK1-S2` | Section 4 kit: rule `channel` and fields, eligibility and marrow versions, the opener toggle, Channel Rest (`channel_rest`), planner rows and Fill order, deck `marrow` and the limit, tells, AI row | unit tests: the opener toggles only while nothing is planned and only for holders, and locks after the first block; a Channel round skips decay; Rest becomes Feed in a Channel round; Vent is refused when Strain is below 50 at its start and may take Strain below 50; Feed and Vent change Strain and HP by their amounts; rows offer only marrow versions after it; a dual-intent skill never gets one; cost by AP; the target rule; `rules_contract_golden` re-recorded (new ruleset fields), **0 battle and sim golden diffs** |
 | `PK1-S3` | Section 5 data and the Dojo preset; balance run (Q-67: crisis rate per battle, Inoculated dominance in short fights, Flesh-Tension as a trap) | data checks clean; a `sim` report in `FEEDBACK.md`; goldens unchanged unless a fixture reads the new rows (named) |
 

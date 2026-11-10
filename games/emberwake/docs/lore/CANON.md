@@ -124,7 +124,7 @@ The only undo: Aline's bone-scraping (unlocked by her quest), -1 stage and -10% 
 | --- | --- |
 | Scrap | The currency (replaces gold): trade, forge costs, bribes |
 | Warded Tallow | Upkeep: 1 per day of travel or rest for the whole cell. At 0: -2 starting AP in every battle until restocked; nothing else (the road-fight penalty stays an Ashlands option, Q-18); Act 3 Tallow costs more Scrap, daily use stays 1 (Q-45) |
-| Rock Salt | Stash material: Slab flushes, bribes; a Slab flush lowers the dormant Strain floor by 10 for the next battle; Quenched Cinder Salt is the rare one-charge item that prevents one Calcification advance (Q-43, Q-69) |
+| Rock Salt | Stash material: Slab flushes, bribes; a Slab flush lowers the dormant Strain floor by 10 for the next battle; Quenched Cinder Salt is the rare one-charge item that prevents one Calcification advance (Q-43, Q-69; used in battle after a Flesh Breach, user 2026-11-10: the stage is not saved but its effects last the battle, and it calms a unit a Stage V breach turned hostile) |
 | Aberrant Organs | Stash materials: graft surgery (Act 2 on) |
 
 No other upkeep (per-operative, per-leg, Tallow-and-Salt and per-rest versions are dropped).
