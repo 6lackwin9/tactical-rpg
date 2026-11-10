@@ -63,15 +63,20 @@ A `triggers` row on the Strain meter: `on: round_end`, `when: {meter: {strain: "
 - A unit can Channel when it holds the `channel_meter` (a Strain carrier). Others never see the opener.
 - **Eligible skills**: single intent (the `IR21` derived list has one entry), not neutral (Move, Rest and items never), not `channel.none`. Dual-intent skills are the Cold Steel heavies and have no marrow version (user cap).
 - **Marrow version** of an eligible skill: same target, shape, blocks and AP; power x `channel_power`; `armor_piercing` on attacks; pays `channel_cost[AP]` (or `channel.cost`) of the channel meter at its start; adds `channel.effects`; costs no weapon durability (PK2).
-- **What a unit has in a Channel round**: its `channel.only` skills (graft skills and an Inoculated keystone, PK2; in PK1 test data, granted by a test passive), the universal marrow basic (`channel_basics`, no slot), the class role basic's marrow version (if single intent), and the marrow versions of the deck actives the player marked as marrow (deck field `marrow`, at most `marrow_actives` of them, single intent only).
+- **What a unit has in a Channel round**: its `channel.only` skills (graft skills and an Inoculated keystone, PK2; in PK1 test data, granted by a test passive), the four Channel basics (`channel_basics`, no slot: Surge, Hold, Vent, Feed), the class role basic's marrow version (if single intent), and the marrow versions of the deck actives the player marked as marrow (deck field `marrow`, at most `marrow_actives` of them, single intent only).
 
 ### 4.3 The Channel round
 
 1. **Channel opener, a toggle** (user 2026-11-10): a neutral command beside Move, Rest and Fill, **0 AP, 0 blocks**, only for a unit that can Channel. It names no target and sets the round intent to `channel` (the existing `RoundIntent::Channel`); clicking it again returns the round to Cold Steel. It works **only while the unit has nothing planned this round**: once any block is on its timeline, the toggle is locked (it can no longer enter Channel, nor leave it).
 2. After the opener, every intent row offers **only marrow versions** (section 4.2); Cold Steel versions are grey with the reason "Channel round".
 3. The **first skill after the opener fixes the round's one target** (TG1); later picks must use that target, as in any round (the row each comes from still sets its anchor).
-4. Follow-ups and Fill: marrow versions only, in the **Channel order**: `channel.only` skills, then marked actives, then the class basic, then the marrow basic; what cannot fit is Rest.
-5. **Rest in a Channel round is "Hold the marrow"** (user 2026-11-10): a valid move, but not a normal Rest: it regains no AP (no Rest AP effect), and a Channel round counts as "gained" for decay even if it holds only Rest, so Strain does not decay at that round's end: the unit holds its bracket on purpose and stays visibly channelling. Ruleset field `channel_rest` (`hold`; kit-generic, other games may pick `normal`).
+4. Follow-ups and Fill: marrow versions only, in the **Channel order**: `channel.only` skills, then marked actives, then the class basic, then Surge; what cannot fit is Hold.
+5. **The Channel basics, a four-button marrow throttle** (user 2026-11-10; replaces the single marrow basic and the plain Rest in a Channel round): free (no slot), only in Channel rounds, only for Strain carriers, in the neutral row where Rest sits:
+   - **Surge** (push): Stand self, 0 AP, 1 block, +20 Strain, `empower` 25 until the end of the round.
+   - **Hold** (steady; the Channel Rest): a valid fill like Rest but not a normal Rest: regains no AP, and a Channel round always counts as "gained" for decay, so Strain does not decay at that round's end: the unit keeps its bracket on purpose.
+   - **Vent** (down): Stand self, 1 block, -15 Strain, costs 10% of max HP.
+   - **Feed** (sustain): Stand self, 1 block, +10 Strain and a small self-heal (default 8% of max HP).
+   Ruleset field `channel_rest` (`hold`; kit-generic, another game may pick `normal`) and `channel_basics` (the four ids, game data). Numbers are first-pass defaults for the balance lane.
 6. Tells: the plan strip, the unit card and enemy plan badges show the Channel intent from the opener on; the threat intel lists marrow versions as their own names (the skill name with a marrow mark, game term).
 7. A round not opened with the opener is Cold Steel; no marrow version is offered.
 8. Strain bookkeeping: each marrow action pays at its start; decay skips the round (`unless_gained`, and a Channel round always counts as gained, item 5).
@@ -83,7 +88,7 @@ Strain-carrying units (aberrants, and AI-driven heroes) get one AI row: open wit
 ## 5. Game data (asset lane, after the kit slices)
 
 - `strain` row (section 2) with the crisis trigger.
-- The universal marrow basic, **Marrow Surge** (user 2026-11-10; replaces the Design default of a 1 AP Assault strike): a **Stand self skill**, `channel.only`, that pays Strain to push the marrow: default 0 AP, 1 block, Strain cost 20, grants `empower` 25 until the end of the round, so the rest of the Channel round hits harder at a Strain price; works for every class.
+- The four Channel basics (section 4.3 item 5): **Surge**, **Hold**, **Vent**, **Feed** (user 2026-11-10; Surge replaces the Design default of a 1 AP Assault strike), each `channel.only`, with the default numbers there.
 - A test passive `inoculated_test` granting the Strain meter (floor 0) and `channel.only` test skills, for the Dojo and sims until PK2's grafts exist.
 - One aberrant test enemy with Strain and a Strain-adding hit, and a Dojo preset "Channel duel".
 
@@ -92,12 +97,12 @@ Strain-carrying units (aberrants, and AI-driven heroes) get one AI row: open wit
 | Slice | Scope | Acceptance |
 | --- | --- | --- |
 | `PK1-S1` | Section 3 hooks (`heal_taken`, `pct_of_hit`, `strike_nearest`, `ap set`, `mark`, hazard `meter`) | unit tests per hook; **0 golden diffs** (no data uses them) |
-| `PK1-S2` | Section 4 kit: rule `channel` and fields, eligibility and marrow versions, the opener toggle, Channel Rest (`channel_rest`), planner rows and Fill order, deck `marrow` and the limit, tells, AI row | unit tests: the opener toggles only while nothing is planned and only for holders, and locks after the first block; a Channel Rest regains no AP and stops that round's decay; rows offer only marrow versions after it; a dual-intent skill never gets one; cost by AP; the target rule; `rules_contract_golden` re-recorded (new ruleset fields), **0 battle and sim golden diffs** |
+| `PK1-S2` | Section 4 kit: rule `channel` and fields, eligibility and marrow versions, the opener toggle, Channel Rest (`channel_rest`), planner rows and Fill order, deck `marrow` and the limit, tells, AI row | unit tests: the opener toggles only while nothing is planned and only for holders, and locks after the first block; Hold regains no AP and stops that round's decay; Surge, Vent and Feed change Strain by their amounts; rows offer only marrow versions after it; a dual-intent skill never gets one; cost by AP; the target rule; `rules_contract_golden` re-recorded (new ruleset fields), **0 battle and sim golden diffs** |
 | `PK1-S3` | Section 5 data and the Dojo preset; balance run (Q-67: crisis rate per battle, Inoculated dominance in short fights, Flesh-Tension as a trap) | data checks clean; a `sim` report in `FEEDBACK.md`; goldens unchanged unless a fixture reads the new rows (named) |
 
 ## 7. Fixed vs tunable (`aegis rules --contract`)
 
-Tunable: `channel_power`, `channel_cost`, `marrow_actives`, `channel_ai_edge`, `channel_rest`, Marrow Surge's numbers, the Strain row's bands, decay and crisis rows (data). Locked: the opener's 0 AP / 0 block toggle that locks once a block is planned, the single-intent eligibility, the all-marrow round.
+Tunable: `channel_power`, `channel_cost`, `marrow_actives`, `channel_ai_edge`, `channel_rest`, the Channel basics' numbers, the Strain row's bands, decay and crisis rows (data). Locked: the opener's 0 AP / 0 block toggle that locks once a block is planned, the single-intent eligibility, the all-marrow round.
 
 ## 8. Defaults Design chose (user may revisit; logged in `docs/DESIGN_REVIEW.md`)
 
@@ -105,4 +110,4 @@ Tunable: `channel_power`, `channel_cost`, `marrow_actives`, `channel_ai_edge`, `
 - Spasm targets the nearest unit of any side, ties to the lowest id.
 - Biological Collapse's armour 0 is `expose` for 99 rounds.
 - The Channel AI edge 1.2 and the "stay below 100" guard.
-- ~~The marrow basic is an Assault skill at 1 AP~~: replaced by the user's pick, Marrow Surge (section 5). User 2026-11-10: the other defaults above accepted.
+- ~~The marrow basic is an Assault skill at 1 AP~~: replaced by the user's pick: the four Channel basics, Surge, Hold, Vent and Feed (section 4.3 item 5). User 2026-11-10: the other defaults above accepted.
