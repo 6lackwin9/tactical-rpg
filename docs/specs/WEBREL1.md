@@ -1,8 +1,8 @@
 # WEBREL1: Web (WASM) build of the game, deployed to itch.io
 
-Status: `.1` design (user answers 2026-11-09); awaiting the Build Session `feasibility-check` (`docs/READY.md` Section 2)
+Status: `.1` design (user answers 2026-11-09); feasibility checked (`FB-147`, 2026-11-10) and sliced into `docs/READY.md` Section 1 `PR4-3..PR4-7`
 Depends on: none (R1-R4 shipped; Post-R4 track, `games/emberwake/docs/MILESTONES.md`)
-Layers: engine (`aegis_ui`, `aegis_save`, `aegis_core`: a web platform seam), game (`emberwake_gui`: the web entry and its bundle), platform (tools and CI)
+Layers: engine (`aegis_ui`, `aegis_save`, `aegis_core`: a web platform seam; the clock and read sites also reach kit loaders, `FB-147`), game (`emberwake_gui`: the web entry and its bundle), platform (tools and CI)
 Touches: `engine/crates/{aegis_ui,aegis_save,aegis_core}`, `games/emberwake/crates/emberwake_gui`, `tools/`, `.github/workflows/`, `docs/workflow/web.md` (new)
 
 ## Goal
@@ -35,6 +35,8 @@ The engine is pure Rust on `winit 0.30` + `pixels 0.15` (wgpu) + `fontdue` + `ro
 | Audio | `rodio` on the desktop device | `aegis_ui/src/audio.rs` | `rodio`/`cpal` web-audio backend, started on the first click or key (browser autoplay rule); a silent stub is an acceptable first step |
 | Clipboard | `arboard` (PLAYUI1-T text editor) | `aegis_ui` | Native only; on web the editor keeps an in-app clipboard |
 | Screenshots, playtest recordings | F12 to disk, recordings in the user folder | `aegis_ui` | Off on web in the release build; test builds may keep recordings in the web store |
+
+Feasibility (`FB-147`, 2026-11-10): only 3 compile blockers (`arboard`; `shell.rs:1456` `Pixels::new`; `shell.rs:1489` `ControlFlow::WaitUntil` taking `web_time::Instant`), no crate version bump, so no golden risk; the table also misses a second settings writer (`aegis_ui/src/screen.rs`), `shell.rs:1380` `process::exit` (Quit), kit clock and read sites (`rpgkit_world/src/new_game.rs:87`, `rpgkit_world/src/data.rs`, `rpgkit_content`) and `engine/assets` (1.3 MB) in the bundle.
 
 Bundle size today: `games/emberwake/assets` 22 MB, `kits/rpg/assets` 7.9 MB, `games/emberwake/data` 1.1 MB (about 31 MB before compression).
 
@@ -97,6 +99,12 @@ Rules, sim and RNG code do not branch on target. No golden is re-recorded by WEB
 | `WEBREL1-E2` | engine | Shell web start path, async renderer init, DPR scaling, audio on first gesture | A minimal engine example (no game) renders a frame and takes input in headless Chromium |
 | `WEBREL1-G1` | game | `emberwake_gui` web entry, URL query options, bundle manifest, `dev_tools` feature | Test build boots to the main menu in headless Chromium; smoke test (a)-(c) passes; native gate green, 0 golden diffs |
 | `WEBREL1-P1` | platform | `tools/fc.sh web`, `web` CI job (advisory), `web.yml` deploy with `butler` | CI job uploads `web-build` on a release PR; `web.yml` dry run (no secret) stops with a clear "BUTLER_API_KEY not set" message; with the secret, a manual run uploads to the restricted page |
+
+### 6.1 Amendments after the feasibility check (`FB-147` Option A, 2026-11-10)
+
+- `WEBREL1-E1` is split: **E1a "compiles"** (READY `PR4-3`) and **E1b "runs"** (`PR4-4`); both span engine, kit and game, and both carry a runtime acceptance (a lint: no `std::time` / `std::fs` outside the seams in non-test, non-CLI `src`), because the std stubs compile on wasm and fail only at run time.
+- `tools/fc.sh web` moves from P1 into G1 (`PR4-6`), so G1 can be tested; P1 (`PR4-7`) keeps CI and the deploy.
+- Audio ships as a second, later bundle part (about 30% of the first load); playtest recordings and F12 screenshots are off on web (itch.io serves every game from the shared `itch.zone` origin, so the storage quota may be shared); saves stay in `localStorage` (under 0.5 MB for 6 slots).
 
 ## 7. Feasibility check (Build Session, read-only)
 
