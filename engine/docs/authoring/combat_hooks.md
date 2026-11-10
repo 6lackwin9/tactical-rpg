@@ -322,3 +322,5 @@ lethal execute and a pack-hunting tactic (HOOKS1 14, AT4). A game that needs one
 ROLLTABLE1 (2026-11-10): `roll_table` is also a trigger effect (`rows` of `{weight, effects}`, one weighted pick on the seeded battle RNG) and a meter-rule effect.
 
 PK1-S1 (2026-11-10): trigger effects also `strike_nearest`, `mark`, `ap` (`set`, `rounds`) and `damage` `pct_of_hit`; a `hazards` row and an arena `effect` take `meter` {meter, delta} (a holder's meter change); unit-meter bands take `heal_taken` (bands only); meter-rule effects take the new trigger effects. On `ally_hit` a `roll_table` cannot hold a `guard` (PR5-16).
+
+PK1-S2a (2026-11-10): skill fields `channel` {none, only, cost, power, effects}, `requires_meter` {meter, min}, `hp_cost_pct`; rule `channel` with ruleset fields `channel_meter`, `channel_power`, `channel_cost`, `marrow_actives`, `channel_rest`; a meter row's `skills` may raise the meter when `channel.only`.
