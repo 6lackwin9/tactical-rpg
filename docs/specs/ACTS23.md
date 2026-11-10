@@ -122,6 +122,11 @@ Sub-questions under **B** (recommendations in bold):
   2. **Two Channel basics**, free like the other basics: one **universal marrow basic** (a new basic skill every Strain carrier has), and the **class role basic's marrow version**. The other universal basics (Strike, Off-hand Jab, Active Guard) get no marrow version.
   3. **The 3 actives: the player selects which are marrow** in the loadout; only the selected ones (single-intent, by the cap) show in the Channel row.
   4. **What you can pick depends on the round's first pick** (the intent rule): open from the Channel row and the round is all marrow (graft skills, the two Channel basics, the selected actives); open from any other row and the round is Cold Steel.
+- **The Channel row and how a Channel round opens (user 2026-11-10, third follow-up; refines items 1-4):**
+  1. **The Channel row holds at most 5 skills**: up to **4 graft skills** (one per graft slot; an Inoculated keystone, installed by surgery, counts as one of them) plus the **universal marrow basic**. It never grows past 5, whatever the deck holds.
+  2. **A Channel round opens only from the Channel row** (a graft skill or the marrow basic).
+  3. **Once it is open, the marrow versions show in the other rows**: the round's follow-ups may also be the marrow versions of the actives selected as marrow (single-intent) and the class basic's marrow version, picked from their own rows (Assault, Stand, Support, Maneuver, Field), always on the round's one target (TG1: same target kind as the opener). Cold Steel versions stay out of a Channel round.
+  4. Opened from any other row, the round is Cold Steel and no marrow version is offered.
 - **Open for the PK1 `.1` session:** whether a selected active keeps its Cold Steel row too (default: yes, it shows in both); whether the number of marrow actives is capped (default: no cap beyond the 3 actives); the keystone slot holding a Cold Steel or an Inoculated keystone; whether a marrow version costs 1 AP less (denser bursts) instead of only power and pierce.
 
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
