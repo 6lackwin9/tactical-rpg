@@ -57,6 +57,15 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 | Thoracic | from Act 2 | any monster organ | hide, breath, endurance |
 | Visceral | from Act 2 | any monster organ | blood, bile, sustain |
 
+  **Surgery materials by slot** (user 2026-11-10): a surgery uses two loot pieces: the **core** (the monster's core organ, which teaches its skill and sets the tier; any core fits any monster slot) and a **slot material** matching the body part it goes into, so every part a monster drops counts:
+
+| Slot | Slot material (examples) |
+| --- | --- |
+| Forearms | claws, talons, bone spurs |
+| Thoracic | hide, chitin plates, scale |
+| Visceral | bile, gall sacs, blood sacs |
+| Cranial | nerve and eye tissue (the class ritual's rite) |
+
   The three monster slots have no hard organ restriction (their roles are flavour for which organs read best there). A graft's power depends on its organ's tier, not its slot; all four count toward the floor ("graft count"). So a unit with three monster grafts that wants its keystone does the class ritual and grafts the keystone into Cranial as its 4th graft (floor 50), or, with Cranial already holding a class skill, overwrites that class skill (count unchanged).
 - **A fallen named founder's Apex organ** teaches a marrow version of that founder's signature skill (Design default, following "the monster's own skill").
 - **The floor follows the number of grafts, steepening** (user 2026-11-10; replaces "+10 per graft" and the keystone's "at least 30"): grafts counted are the body slots in use (the keystone graft is one of them, so at most 4); the floor is set from the count, not summed per item (kit: a count-to-floor table on the meter grant; the per-member offset of `FB-167` Q6 stays):
@@ -66,7 +75,7 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 | Floor | none (not a Strain carrier) | 5 | 15 | 30 (starts in Acute Resonance) | 50 (starts in Flesh-Tension, the cap) |
 
 - **Inoculated skills come only from surgery** (user 2026-11-10): each surgery teaches its organ's skill, so a unit's Inoculated skills are exactly the grafts in its body (and its keystone).
-- **The surgery process**: harvest an organ (loot; tier by source) -> at the Slab pick the organ, pay Scrap, pick the operative -> a monster organ goes into a free Forearms, Thoracic or Visceral slot; class skills and the keystone go into Cranial after the class ritual (any Tier III surgery needs 3 grafts first) -> the operative gains the organ's skill, becomes a Strain carrier and moves up the floor table; Tier III adds +1 Calcification; the operative starts the next mission bandaged (flavour). No surgery on anyone under 18 (CANON 2.4).
+- **The surgery process**: harvest an organ (loot; tier by source) -> at the Slab pick the core, the slot and its slot material, pay Scrap, pick the operative -> a monster organ goes into a free Forearms, Thoracic or Visceral slot; class skills and the keystone go into Cranial after the class ritual (any Tier III surgery needs 3 grafts first) -> the operative gains the organ's skill, becomes a Strain carrier and moves up the floor table; Tier III adds +1 Calcification; the operative starts the next mission bandaged (flavour). No surgery on anyone under 18 (CANON 2.4).
 - **Replacing a graft** (user 2026-11-10): one surgery overwrites an occupied slot: the new organ goes in, the **old organ is destroyed** (no refund), **no HP cost** (the slot stays filled), the graft count and floor stay the same, and a Tier III organ still adds +1 Calcification; so a slot can be upgraded Tier I -> II -> III. **Excision** (leaving the slot empty) keeps its -15% max HP for good and also destroys the organ.
 - **Losing a grafted unit** (user 2026-11-10): installed organs are lost with the unit. A **fallen body yields one organ** (`classes_and_skill_trees.md` "On death"): a named founder gives a unique named Apex organ, a recruit a standard class organ, added to the stash when the cell holds the field at the battle's end (a won battle, or a lost one where the fallen are recovered under the roster rules); **captured** units and **Stage V** losses leave no organ (no body), only their keepsake (PK3).
 - **Marrow-active limit** (PK1 `marrow_actives`): one marrow active per installed graft, up to the 3 actives.
@@ -75,7 +84,7 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 ## 4. Recipes: the exchange service (kit hook (f))
 
 - **Kit**: catalog kind `recipes` and an NPC service `recipe` (beside turn_in, offer, board, shop, recruit; `explore.rs:315`) shown on the SERVICES1 `ServiceScreen`. A recipe row: `id`, `name`, `npc` (who offers it), `requires` (flags, quest steps, act), `cost` (purse amounts and stash items), `target` (`member`, or `weapon` for section 7), and `effects` from a member-effect list: `install` (an item into a body slot), `remove` (out of a body slot), `track` (add to a unit track), `max_hp_pct` (permanent offset), `floor_offset`, `repair`, `reforge`, `assign_technique`, `clear_technique`, `doctrine` (a delta PK4 reads; reserved now).
-- **Game data at the Slab (Aline)**: graft surgery per organ (organ item + Scrap; into an empty or an occupied slot, the replaced organ destroyed; Tier III, the keystone included, also `track +1`; `doctrine` toward Flesh-Broker); **excision** (remove a graft, organ destroyed, `max_hp_pct -15`); **Rock Salt flush** (Rock Salt, `floor_offset -10` for the next battle; toward Preservationist); **bone-scraping** (after Aline's quest; `track -1`, `max_hp_pct -10`).
+- **Game data at the Slab (Aline)**: graft surgery per core and slot (core + the slot's material + Scrap; into an empty or an occupied slot, the replaced organ destroyed; Tier III, the keystone included, also `track +1`; `doctrine` toward Flesh-Broker); **excision** (remove a graft, organ destroyed, `max_hp_pct -15`); **Rock Salt flush** (Rock Salt, `floor_offset -10` for the next battle; toward Preservationist); **bone-scraping** (after Aline's quest; `track -1`, `max_hp_pct -10`).
 - **At the Hearth (Bram)**: technique assignment (section 5), repair and reforge (section 7), all toward Preservationist.
 
 ## 5. Weapon techniques (ACTS23 5.2, user rulings)
