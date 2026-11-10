@@ -1,11 +1,6 @@
 # NPCs and questlines: the society of Cinderreach
 
-Status: canon for the Act 1 cast and quests (2026-10-25, consistent with [CANON.md](../CANON.md)); Act 2-3 quests
-and the disposition numbers are `proposal`. Names, ages and first appearances follow the
-[cast registry](cast_registry.md), which also lists the founders and the bosses. Related:
-[factions](factions_and_sociology.md), [Sunk Ward map](sunk_ward_campaign_map.md), arcs and fates per act:
-[who's who](who_is_who.md). Layer tags: `[engine]`,
-`[kit hook]`, `[data]`, `[game code]`.
+Status: `[LOCKED]` hub facility roles (`Slab`, `Hearth`, `Basin`), boss slots & Central Truth reveals (`2.4`, `3.5`); `[PROVISIONAL]` optional board jobs, personal quests & disposition thresholds (`CL-01..07`); **`[PLACEHOLDER]` NPC names, ages, backstories, physical looks & quotes** ([CANON.md](../CANON.md) wins on conflict). Active placeholder spellings follow [cast_registry.md](cast_registry.md); keep 100% data/VFS-driven (`characters.json`, `dialogue.json`, `shops.json`). Related: [factions](factions_and_sociology.md), [Sunk Ward map](sunk_ward_campaign_map.md), [who's who](who_is_who.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
 ## 1. Overview
 

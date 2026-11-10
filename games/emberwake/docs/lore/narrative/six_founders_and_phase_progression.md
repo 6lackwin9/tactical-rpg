@@ -1,10 +1,6 @@
 # The six founders and the act progression
 
-Status: canon for sections 1-3 (Act 1); proposal for sections 4-5 (Acts 2-3) (consistency pass 2026-10-25). This doc
-follows [CANON.md](../CANON.md); where they differ, CANON wins. Names follow the
-[cast registry](../background/cast_registry.md). Related: [classes and skill trees](../systems/classes_and_skill_trees.md),
-[campaign structure](campaign_narrative_structure.md), [recruits and prologue](recruits_and_prologue_architecture.md).
-Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
+Status: `[LOCKED]` 6-class roster slots, Act 1 join missions & Act 1-3 system progression; `[PROVISIONAL]` Act 3 hub-hazard details (`CL-05`); **`[PLACEHOLDER]` founder names, ages, backstories & physical looks** ([CANON.md](../CANON.md) wins on conflict). Active placeholder spellings follow [cast_registry.md](../background/cast_registry.md). Related: [classes and skill trees](../systems/classes_and_skill_trees.md), [campaign structure](campaign_narrative_structure.md), [recruits and prologue](recruits_and_prologue_architecture.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
 ## 1. Summary
 
@@ -18,7 +14,7 @@ five (Elyse joins later).
 3. Act 3 "The Awakening Abyss": corruption reaches hub life. The titan stirs, the bells cause resonance, Warded Tallow
    runs short, and high-Calcification veterans live in isolation.
 
-## 2. The six founders (canon)
+## 2. The six founders (`[LOCKED]` class role & join slot, `[PLACEHOLDER]` backstory & look)
 
 Four join in the prologue; two join in early Act 1 missions, completing the roster before the Crucible
 `[data]` (characters, classes).
@@ -34,7 +30,7 @@ Four join in the prologue; two join in early Act 1 missions, completing the rost
 
 The four prologue dossiers: [prologue and starter squad](prologue_and_starter_squad_lore.md) 2.
 
-### 2.1 Dunstan "Slag-Jaw" (Slag-Brute)
+### 2.1 Dunstan "Slag-Jaw" (Slag-Brute, `[PLACEHOLDER]` bio & look)
 
 - Look: a towering, soot-stained youth; iron shackles still riveted around his scarred wrists, used as knuckle guards;
   half his jaw burned by molten slag and wired with scrap.
@@ -44,17 +40,17 @@ The four prologue dossiers: [prologue and starter squad](prologue_and_starter_sq
   Dunstan off the chain gang. The fight introduces grappling and close-range knockbacks. The old version (a night cart
   ambush, Dunstan working under the Foundry-Master) is retired.
 
-### 2.2 Elyse (Ichor Alchemist)
+### 2.2 Elyse (Ichor Alchemist, `[PLACEHOLDER]` bio & look)
 
 - Look: a slight frame in an oversized, patched leather apothecary apron stained copper-green; cracked brass goggles on
   her forehead; a wicker bandolier of sulfur and white phosphorus flasks.
 - Backstory: a hedge chemist brewing counterfeit tallow and anti-sedative tonics for commoners in a still beneath the
   Tallow Vats, until an Inquisition purge cornered her.
 - Recruitment, M4 The Tallow Vats (node 05, ENC-EVT-04, Guild-Master Orlov, Vesper's vendetta): the cell pulls Elyse
-  out of the purge. The fight introduces thrown flash-pots and smoke that blocks line of sight. The old version ("The
+  out of the purge (`orlov_withdraws` retreats Orlov into Act 2). The fight introduces thrown flash-pots and smoke that blocks line of sight. The old version ("The
   Cellar Purge" in a burning tenement) is retired.
 
-## 3. Act 1: Cold Steel and the Inoculation teasers (canon)
+## 3. Act 1: Cold Steel and the Inoculation teasers (`[LOCKED]` beats, `[PLACEHOLDER]` copy)
 
 Through Act 1 the player relies on discipline, AP, reach and poise; no founder carries Strain or Calcification (their
 visible taints are backstory). Two scripted beats foreshadow Inoculation:
@@ -65,11 +61,10 @@ visible taints are backstory). Two scripted beats foreshadow Inoculation:
    are `[data]`, Open.)
 2. Aline's marrow dose (interlude, ENC-EVT-05, node 00): the Calcified Amalgam crawls out of the Awakening Fissure
    under the Sluice. Aline hands over one sealed dose of raw marrow and the player picks which deployed founder takes
-   it `[data]` (encounter, item). The old in-battle effect (+100% damage that ignores armour for one round) waits for
-   the balance lane: Open. After the battle the founder collapses coughing black bile, the veins along the neck
-   blacken, and the founder starts Act 2 at Calcification Stage I `[kit hook]` (stage track set by an event). This is
-   the one Act 1 exception to 0% corruption. ENC-EVT-05 is not a siege. The old variant (the dose given against an
-   elite Castellan in Mission 5) is retired.
+   it `[data]` (encounter, item). After the battle the founder collapses coughing black bile and starts Act 2 carrying a
+   **Tier I graft** (`PK2_GRAFTS` 3, [CANON.md](../CANON.md) 1.2; Calcification itself advances only via Flesh Breach or
+   Tier III grafts). ENC-EVT-05 is not a siege. The old variant (the dose given against an elite Castellan in Mission 5)
+   is retired.
 
 ## 4. Act 2: two doctrines (proposal)
 

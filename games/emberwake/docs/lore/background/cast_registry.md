@@ -1,13 +1,10 @@
 # Cast and place registry
 
-Status: canon (2026-10-25). Part of [CANON.md](../CANON.md); the domain docs follow it. Former names are in the "Renamed
-from" columns below. Arcs and fates per act: [who's who](who_is_who.md).
+Status: `[LOCKED]` roles, stable IDs, join/encounter slots & tone rule; **`[PLACEHOLDER]` names, epithets, ages, backstories & taints** (follows [CANON.md](../CANON.md) Section 3). Keep 100% data-driven in `characters.json` / `terms.json`; use this registry's single spelling while active so placeholder copy never drifts across retired variants ("Renamed from"). Arcs and fates per act: [who's who](who_is_who.md).
 
-Naming rule: within the founders and the hub cast every first letter and sound is distinct; nowhere in the cast is a
-near-collision (rhymes, shared stems, a name that is also a place). Ages: playable operatives are 18-24; everyone under
-25 is Unsealed; children are stakes and non-combat NPCs only. "(planner pick)" marks a choice the brief did not make.
+Naming & tone rule (`[LOCKED]`): playable operatives are `18-24` (Unsealed `under 25`); children (`under 18`) are stakes and non-combat NPCs only—never fighters, graft subjects, or on-screen violence victims. Active placeholder rule: within the founders and hub cast every first letter and sound stays distinct, with no place/person collisions.
 
-## Founders (playable, Severed Root)
+## Founders (`[LOCKED]` class & join slot, `[PLACEHOLDER]` name, age & backstory)
 
 | Name | Class | Age | Background (one line) | First appearance | Renamed from |
 | --- | --- | --- | --- | --- | --- |

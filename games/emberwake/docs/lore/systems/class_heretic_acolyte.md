@@ -1,6 +1,6 @@
 # The Heretic Acolyte (engine class `priest`)
 
-Status: canon for the Cold Steel branch and Maren's Act 1 kit; proposal for the Inoculated branch (Act 2 on).
+Status: `[LOCKED]` class role, `3/2/2` weapons & Act 1 Cold Steel kit; `[PROVISIONAL]` Act 2 Inoculated tree; **`[PLACEHOLDER]` Section 4 founder name, backstory, taint & look** ([CANON.md](../CANON.md) 3.1 wins).
 Conventions (timing, armour scale, flat damage and heal values) are in the [classes index](classes_and_skill_trees.md)
 section 3; rules in [combat and the timeline](combat_and_timeline.md).
 

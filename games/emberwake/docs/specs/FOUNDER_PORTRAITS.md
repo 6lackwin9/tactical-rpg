@@ -1,10 +1,10 @@
 # FOUNDER_PORTRAITS: portrait briefs for the six founders
 
-Status: picks switched to the Gemini route (user 2026-11-01): the open-ended Gemini takes (no reference; R1 prompts with the Hearth line, Gemini web-app queue) are now `art_src/<id>.png`, because they match the cast's Gemini portraits; the Klein picks stay as `art_src/<id>_klein_pick.png`. Was: approved for local draft renders (user 2026-10-27): FPQ1 bareheaded (the helm on the sprite and a later variant), FPQ2 cowl down, FPQ3 graft kept in the left eye, FPQ4 all six Hearth; FPQ5-FPQ9 follow the recommendations for the drafts (the user picks from the renders; nothing is placed until then). Was: proposal (2026-10-27, design lane).
-Depends on: the user's approval of this spec; the LOCALGEN3 tooling (template route, `localgen.py vary`)
-Lane: asset (the planner runs the local renders; the user picks)
+Status: **`[PLACEHOLDER]` visual drafts awaiting Lore Session lock-down (`CANON.md` 6.3 Pass L2)**; `[LOCKED]` portrait/frame geometry & VFS paths (`portraits/heroes/<id>.png`). Current draft picks use the Gemini route (user 2026-11-01: `art_src/<id>.png`, Klein takes at `art_src/<id>_klein_pick.png`; earlier 2026-10-27 draft notes: FPQ1 bareheaded, FPQ2 cowl down, FPQ3 left-eye graft, FPQ4 all six Hearth). All founder names, faces, hair, scars, taints, and costumes here stay replaceable `[PLACEHOLDER]` blueprints until locked in [CANON.md](../lore/CANON.md) Section 3.1.
+Depends on: Lore Session lock-down (`CANON.md` 6.3) for final portraits; LOCALGEN3 (`localgen.py vary`) / `/art-ui-session` for drafts and direct VFS placement
+Lane: asset (`/art-ui-session`)
 Touches: `art_src/<id>.json` and `art_src/<id>.png` plus their takes (`kaelen`, `vesper`, `maren`, `hollis`,
-`dunstan`, `elyse`); later `games/emberwake/assets/portraits/heroes/<id>.png` (a separate placing task)
+`dunstan`, `elyse`); `games/emberwake/assets/portraits/heroes/<id>.png` (replaceable via VFS for direct scenario/sim runs)
 
 ## Goal
 

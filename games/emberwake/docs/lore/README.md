@@ -43,7 +43,7 @@ doc disagrees with it, CANON wins.
 ```text
 games/emberwake/docs/lore/
   README.md        this index
-  CANON.md         the numbers sheet, campaign spine, endings, glossary, open questions
+  CANON.md         master worldbuilding, history timeline, factions, strata, cast dossiers, systems, named items/organs, glossary & Lore->Asset pipeline
   OPEN_QUESTIONS.md  every open question with an id (index: decide first, planner picks)
   STORY_GUIDE.md   the story, who's who, story elements, reveal timeline and story gaps in one place
   modules/         lore modules: independent lore and events, decided alone, connected later (index README.md)
@@ -62,16 +62,16 @@ games/emberwake/docs/lore/
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [CANON.md](CANON.md) | canon | The cell, the numbers sheet (combat, Strain, Calcification, roster, resources, meters), the campaign spine, endings, glossary, open questions |
+| [CANON.md](CANON.md) | master blueprint (`[LOCKED]` / `[PROVISIONAL]` / `[PLACEHOLDER]`) | Cosmology, chronological history -> mission linkage, factions, strata/hub, full cast dossiers, campaign spine, systems, named relics/keepsakes/organs, glossary, `CL-01..07` & Lore -> Asset pipeline |
 | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | open | Index of every open question (Q-01..Q-91): decide first, planner picks to confirm (P-01..P-29) |
-| [STORY_GUIDE.md](STORY_GUIDE.md) | canon summary | The story in one page, belief against truth, the acts, Nemeth traced, story elements, reveal timeline, story gaps G-01..G-33 |
+| [STORY_GUIDE.md](STORY_GUIDE.md) | `[LOCKED]` spine / `[PLACEHOLDER]` copy | The story in one page, belief against truth, the acts, Nemeth traced, story elements, reveal timeline, story gaps G-01..G-33 |
 | [modules/README.md](modules/README.md) | open | Lore modules: the format, and the seeds LM-01..LM-17 from the `3 lore` questions and story gaps |
 | - part: [open_world_and_campaign.md](questions/open_world_and_campaign.md) | open | Story and world, campaign and meters, roster and lifecycle, hub and economy (Q-01..Q-46) |
 | - part: [open_systems_and_scope.md](questions/open_systems_and_scope.md) | open | Combat and rules, Strain and Calcification, items, enemies, art, slice scope, process (Q-47..Q-91) |
 | [worldbuilding_decisions.md](specs/worldbuilding_decisions.md) | canon | The brainstorm's decision log: DEC-LORE-01..16 (2026-10-24, superseded parts marked) and the 2026-10-25 decisions from DEC-LORE-17 on |
 | [rpg_kit_and_system_architecture.md](specs/rpg_kit_and_system_architecture.md) | canon | The layer rule; which existing system carries each lore feature, which kit hooks to add, what is game code; corrected module names |
 | [full_game_systems_roadmap.md](specs/full_game_systems_roadmap.md) | canon (Acts 2-3 sections proposal) | The first playable slice "Sunk Ward, first night", milestones M0-M4 with layer tags, the Acts 2-3 systems |
-| [art_and_visual_style.md](specs/art_and_visual_style.md) | canon | One palette (16 hues, steps, skin ramp), the STAGE1 option B board, sprite bounds, decals, animation, UI and audio direction |
+| [art_and_visual_style.md](specs/art_and_visual_style.md) | `[LOCKED]` geometry / `[PLACEHOLDER]` aesthetics | One palette (16 hues, steps, skin ramp), the STAGE1 option B board, sprite bounds, decals, animation, UI and audio direction |
 | [naming_and_asset_guide.md](specs/naming_and_asset_guide.md) | canon | How named things are named (ids, asset briefs, faction and role sounds, distinctness, one source of truth) |
 | [master_specification.md](archive/master_specification.md) | archive | The raw design export of 2026-10-24; superseded by the domain docs and CANON.md |
 
@@ -79,29 +79,29 @@ games/emberwake/docs/lore/
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [cast_registry.md](background/cast_registry.md) | canon | Every named character and place: role, age, one-line background, first appearance, former names |
-| [central_truth.md](background/central_truth.md) | canon (Option A) | Spoiler sheet: what the Red Tithing really does, the precedent and the Clerisy's founding, and how the endings relate (Option A chosen, Q-01) |
-| [who_is_who.md](background/who_is_who.md) | canon summary | Every named character's want, first appearance, arc per act and fate (part of the story guide) |
-| [tithing_options.md](background/tithing_options.md) | decided (user 2026-10-25): option B with b2, tied to the Clerisy's founding (CANON 3.6) | The Great Tithing's story context: what commoners know, why now, precedent (the decision on top; the options kept as the record of Q-04 / Q-16) |
-| [cosmology_and_setting.md](background/cosmology_and_setting.md) | canon | The Low Sleep titan, the Shroud, the Stagnation of Mortality, the lexicon |
-| [factions_and_sociology.md](background/factions_and_sociology.md) | canon | Sovereign Clerisy, Iron Inquisition, Castellan Watch, Tallow Guild, Fourth Kiln Syndicate, the Spent, the Severed Root, the doctrines |
-| [world_geography_and_hub.md](background/world_geography_and_hub.md) | canon | Cinderreach's three strata, the Sluice Undercroft and its facilities, the hazard list; forward bases as proposal |
-| [sunk_ward_campaign_map.md](background/sunk_ward_campaign_map.md) | canon | Act 1: the Sunk Ward node graph, route rules, the Alert meter, missions M1-M5 and the interlude (`ENC-EVT-01..06`) |
-| [upper_bastion_campaign_map.md](background/upper_bastion_campaign_map.md) | proposal | Act 2: the High Bastion graph, rooftop and street routes, culling wagons, `ENC-ACT2-01..06` |
-| [mantle_fissure_campaign_map.md](background/mantle_fissure_campaign_map.md) | proposal | Act 3: the Mantle Fissure graph, the hard Doom Clock, tremors, `ENC-ACT3-01..06`, the endings' stage |
-| [npcs_and_questlines.md](background/npcs_and_questlines.md) | canon | The hub cast's quests and the city's cast (regime, guild, neutrals, commoners) |
+| [cast_registry.md](background/cast_registry.md) | `[LOCKED]` roles / `[PLACEHOLDER]` names & bios | Every named character and place: role, age, one-line background, first appearance, former names |
+| [central_truth.md](background/central_truth.md) | `[LOCKED]` (Option A) | Spoiler sheet: what the Red Tithing really does, the precedent and the Clerisy's founding, and how the endings relate (Option A chosen, Q-01) |
+| [who_is_who.md](background/who_is_who.md) | `[LOCKED]` spine / `[PLACEHOLDER]` wants | Every named character's want, first appearance, arc per act and fate (part of the story guide) |
+| [tithing_options.md](background/tithing_options.md) | `[LOCKED]` (user 2026-10-25): option B with b2 | The Great Tithing's story context: what commoners know, why now, precedent |
+| [cosmology_and_setting.md](background/cosmology_and_setting.md) | `[LOCKED]` rules / `[PLACEHOLDER]` lexicon | The Low Sleep titan, the Shroud, the Stagnation of Mortality, the lexicon |
+| [factions_and_sociology.md](background/factions_and_sociology.md) | `[LOCKED]` roles / `[PLACEHOLDER]` aesthetics | Sovereign Clerisy, Iron Inquisition, Castellan Watch, Tallow Guild, Fourth Kiln Syndicate, the Spent, the Severed Root, the doctrines |
+| [world_geography_and_hub.md](background/world_geography_and_hub.md) | `[LOCKED]` strata & hub / `[PROVISIONAL]` hazards | Cinderreach's three strata, the Sluice Undercroft and its facilities, the hazard list; forward bases as story-only |
+| [sunk_ward_campaign_map.md](background/sunk_ward_campaign_map.md) | canon (`[PLACEHOLDER]` copy) | Act 1: the Sunk Ward node graph, route rules, the Alert meter, missions M1-M5 and the interlude (`ENC-EVT-01..06`) |
+| [upper_bastion_campaign_map.md](background/upper_bastion_campaign_map.md) | `[PROVISIONAL]` (`2.4/2.6` `[LOCKED]`) | Act 2: the High Bastion graph, rooftop and street routes, culling wagons, `ENC-ACT2-01..06` |
+| [mantle_fissure_campaign_map.md](background/mantle_fissure_campaign_map.md) | `[PROVISIONAL]` (`3.2/3.4-3.6` `[LOCKED]`) | Act 3: the Mantle Fissure graph, the hard Doom Clock, tremors, `ENC-ACT3-01..06`, the endings' stage |
+| [npcs_and_questlines.md](background/npcs_and_questlines.md) | `[LOCKED]` facilities / `[PLACEHOLDER]` personas | The hub cast's quests and the city's cast (regime, guild, neutrals, commoners) |
 
 ### 3.3 Narrative (`narrative/`)
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [campaign_narrative_structure.md](narrative/campaign_narrative_structure.md) | canon | The three acts: The Young Vanguard, The First Rupture, The Awakening Abyss |
-| [new_game_onboarding_and_intro.md](narrative/new_game_onboarding_and_intro.md) | canon | The intro vignette, the cold open in the rain, prologue missions 0a-0c |
-| [prologue_and_starter_squad_lore.md](narrative/prologue_and_starter_squad_lore.md) | canon | Dossiers of Kaelen, Vesper, Maren and Hollis; the hearth scene |
-| [recruits_and_prologue_architecture.md](narrative/recruits_and_prologue_architecture.md) | canon | How the prologue converges on the hub; guests; Living Martyrs (Act 2 proposal) |
-| [six_founders_and_phase_progression.md](narrative/six_founders_and_phase_progression.md) | canon | The six founders and where each joins in Act 1; the first grafting teaser; the doctrine divide |
-| [narrative_choices_and_dilemmas.md](narrative/narrative_choices_and_dilemmas.md) | canon | The Crucible sacrifice and the later dilemmas (doctrine, Living Martyrs, siege priority, the Tithing) |
-| [narrative_agency_and_fail_states.md](narrative/narrative_agency_and_fail_states.md) | canon | The ensemble rule, downed and wounded founders, the Extinguished failure screen |
+| [campaign_narrative_structure.md](narrative/campaign_narrative_structure.md) | `[LOCKED]` spine | The three acts: The Young Vanguard, The First Rupture, The Awakening Abyss |
+| [new_game_onboarding_and_intro.md](narrative/new_game_onboarding_and_intro.md) | `[LOCKED]` flow / `[PLACEHOLDER]` copy | The intro vignette, the cold open in the rain, prologue missions 0a-0c |
+| [prologue_and_starter_squad_lore.md](narrative/prologue_and_starter_squad_lore.md) | `[LOCKED]` spine / `[PLACEHOLDER]` dossiers | Dossiers of Kaelen, Vesper, Maren and Hollis; the hearth scene |
+| [recruits_and_prologue_architecture.md](narrative/recruits_and_prologue_architecture.md) | `[LOCKED]` lifecycle | How the prologue converges on the hub; guests; Living Martyrs |
+| [six_founders_and_phase_progression.md](narrative/six_founders_and_phase_progression.md) | `[LOCKED]` progression / `[PLACEHOLDER]` bios | The six founders and where each joins in Act 1; the first grafting teaser; the doctrine divide |
+| [narrative_choices_and_dilemmas.md](narrative/narrative_choices_and_dilemmas.md) | `[LOCKED]` gates / `[PROVISIONAL]` numbers | The Crucible sacrifice and the later dilemmas (doctrine, Living Martyrs, siege priority, the Tithing) |
+| [narrative_agency_and_fail_states.md](narrative/narrative_agency_and_fail_states.md) | `[LOCKED]` rules | The ensemble rule, downed and wounded founders, the Extinguished failure screen |
 
 ### 3.4 Systems (`systems/`)
 
@@ -110,15 +110,15 @@ The two large docs are split by domain: the class trees and the bestiary are sho
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [combat_and_timeline.md](systems/combat_and_timeline.md) | canon | The "timeline" ruleset: 6 blocks per round, speed tiers as relative windups, poise and breaks, Active Guard, impact badges |
-| [magic_and_corruption.md](systems/magic_and_corruption.md) | canon | Cold Steel and Inoculated, Strain brackets, the 1d3 crisis, Calcification stages I-V |
-| [classes_and_skill_trees.md](systems/classes_and_skill_trees.md) | canon | Index of the six classes' Cold Steel and Inoculated trees and the founders' signatures (split into parts) |
-| - part: [class_vanguard.md](systems/class_vanguard.md) | canon (Inoculated proposal) | The Vanguard (`warrior`) and Kaelen |
-| - part: [class_gutter_stalker.md](systems/class_gutter_stalker.md) | canon (Inoculated proposal) | The Gutter-Stalker (`rogue`) and Vesper |
-| - part: [class_arbalestier.md](systems/class_arbalestier.md) | canon (Inoculated proposal) | The Arbalestier (`ranger`) and Hollis |
-| - part: [class_slag_brute.md](systems/class_slag_brute.md) | canon (Inoculated proposal) | The Slag-Brute (`brawler`) and Dunstan |
-| - part: [class_heretic_acolyte.md](systems/class_heretic_acolyte.md) | canon (Inoculated proposal) | The Heretic Acolyte (`priest`) and Maren |
-| - part: [class_ichor_alchemist.md](systems/class_ichor_alchemist.md) | canon (Inoculated proposal) | The Ichor Alchemist (`mage`) and Elyse |
+| [combat_and_timeline.md](systems/combat_and_timeline.md) | `[LOCKED]` ruleset | The "timeline" ruleset: 6 blocks per round, speed tiers as relative windups, poise and breaks, Active Guard, impact badges |
+| [magic_and_corruption.md](systems/magic_and_corruption.md) | `[LOCKED]` mechanics | Cold Steel and Inoculated, Strain brackets, the 1d3 crisis, Calcification stages I-V |
+| [classes_and_skill_trees.md](systems/classes_and_skill_trees.md) | `[LOCKED]` roles / `[PROVISIONAL]` trees | Index of the six classes' Cold Steel and Inoculated trees and the founders' signatures (split into parts) |
+| - part: [class_vanguard.md](systems/class_vanguard.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Vanguard (`warrior`) and Kaelen |
+| - part: [class_gutter_stalker.md](systems/class_gutter_stalker.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Gutter-Stalker (`rogue`) and Vesper |
+| - part: [class_arbalestier.md](systems/class_arbalestier.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Arbalestier (`ranger`) and Hollis |
+| - part: [class_slag_brute.md](systems/class_slag_brute.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Slag-Brute (`brawler`) and Dunstan |
+| - part: [class_heretic_acolyte.md](systems/class_heretic_acolyte.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Heretic Acolyte (`priest`) and Maren |
+| - part: [class_ichor_alchemist.md](systems/class_ichor_alchemist.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Ichor Alchemist (`mage`) and Elyse |
 | [skill_acquisition_and_loadout_systems.md](systems/skill_acquisition_and_loadout_systems.md) | canon | Learning skills at the Hearth and the Slab; the 8-slot deck |
 | [rules_engine_architecture.md](systems/rules_engine_architecture.md) | canon | The battle math against the real rules: armour curve, Strain gain, poise, interrupts |
 | [risk_reward_and_corruption_balance.md](systems/risk_reward_and_corruption_balance.md) | canon | The balance axes: AP density, reliability against burst, Strain surfing, roster lifespan |

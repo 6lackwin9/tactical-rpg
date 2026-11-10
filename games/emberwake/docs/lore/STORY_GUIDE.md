@@ -1,46 +1,18 @@
 # Story guide: Emberwake: A Scarlet Lullaby
 
-Status: canon summary (2026-10-25); CANON.md wins on conflict. The one doc to open to follow the story and the cast
-without reading the domain docs. It summarises [CANON.md](CANON.md), the [cast registry](background/cast_registry.md),
-the [central truth](background/central_truth.md) and the act docs; it adds no story. Acts 2 and 3 are `proposal`
-(not locked) and are marked so. Spoilers throughout. The full cast table is
-[background/who_is_who.md](background/who_is_who.md); open questions keep their ids from
-[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) (Q-nn); gaps this guide found are G-nn in section 7. Game-agnostic template:
-[engine/docs/authoring/story_guide.md](../../../../engine/docs/authoring/story_guide.md).
+Status: `[LOCKED]` narrative spine, Central Truth (Option A), reveal chain & Act 1-3 climax beats; `[PROVISIONAL]` Act 2-3 optional beats (`CL-01..07`); **`[PLACEHOLDER]` cast/faction/place proper nouns, backstories & dialogue copy** ([CANON.md](CANON.md) wins on conflict). Summarises [CANON.md](CANON.md), [cast_registry.md](background/cast_registry.md), [central_truth.md](background/central_truth.md), and [who_is_who.md](background/who_is_who.md); open questions use [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) (`Q-nn`), story gaps use `G-nn` (Sec. 7). Template: [story_guide.md](../../../../engine/docs/authoring/story_guide.md).
 
-Decided by the user on 2026-10-25 and used here: Q-01 A (the lullaby is a harvest); Q-04, Q-16, Q-07, Q-12 (the Great
-Tithing and the Clerisy's founding, [tithing_options.md](background/tithing_options.md) B with b2, CANON 3.6); Q-13 (an
-Act 1 Breach ends the run, only if the meter is ignored); Q-25 and its follow-up (Nemeth's arc, CANON 3.6); Q-31 B
-(wounded = -20% max HP until a rest); Q-38 (Act 1 holds only the founders); Q-47a (Composure, a derived stat).
+Decided (`[LOCKED]`): `Q-01 A` (lullaby = harvest); `Q-04/16/07/12` (Great Tithing & Clerisy founding, [tithing_options.md](background/tithing_options.md) `B+b2`); `Q-13` (Act 1 Breach ends run); `Q-25` (`Nemeth` escapes `M5` -> `2.4` -> `node 20`); `A6` (`Orlov` withdraws at `M4`); `Q-31 B` (wounded `-20%` HP); `Q-38` (Act 1 founders only); `Q-47a` (`Composure` derived stat).
 
 ## 1. The story in one page
 
-Cinderreach is a city built into a volcanic caldera over a sleeping titan, the Low Sleep. Two centuries ago the
-Extinguishing put out the sun, the moon and the stars; the Shroud hangs in their place and the cathedral bells keep the
-hours. The Sovereign Clerisy rules through the Iron Inquisition, its city arm the Castellan Watch, and the Tallow Guild
-that renders the dead into lamp fat. Adults of 25 and over (the Spent) are dulled by communion draughts and tallow
-fumes; only the young (the Unsealed) still think and fight. The Clerisy preaches that the titan would wake and break
-the continent, and that the Red Tithing, Unsealed youths led in chains into the crypts, is the lullaby that keeps it
-asleep.
+Cinderreach sits in a volcanic caldera over a sleeping titan (**the Low Sleep**). Two centuries ago **the Extinguishing** hid sky and stars behind **the Shroud**; cathedral bells keep the hours. The **Sovereign Clerisy** rules via the **Iron Inquisition**, **Castellan Watch**, and **Tallow Guild** (rendering the dead into lamp fat). Adults `25+` (**the Spent**) are dulled by bone-sediment draughts and tallow fumes; only youths `under 25` (**the Unsealed**) resist. Publicly, the yearly **Red Tithing** is the lullaby keeping the titan asleep.
 
-The player leads the Severed Root, a cell of Unsealed youths aged 18-24, from the Sluice Undercroft beneath the city.
-Six founders join in Act 1; Bram (Cold Steel) and Sister Aline (grafts) run the hub and argue over what the cell may
-become. The Doom Clock counts the days to the Tithing from day 1 (42 days).
+The player leads **the Severed Root** (`18-24` Unsealed operatives) from the **Sluice Undercroft**. Six founders join in Act 1; `Bram` (Cold Steel) and `Sister Aline` (grafts) run the hub on a `42`-day Doom Clock.
 
-The central truth (Q-01 A, canon; CANON 3.6): the lullaby is a harvest. The Clerisy raises children as sacrifices
-(refinement: from infancy, in its foundling houses, the Lullaby Houses), and youths swept from the wards fill out the
-count. After the rite the tithed are laid in crypts over the titan's veins, where the dream steeps them; Lazar's
-anatomists render the remains into marrow, the younger the more potent, and the conduits carry it to the cathedral;
-the Clerisy drinks it and does not age (Othemar is 64 where the Spent rarely pass 45). Without the dream the remains
-are only flesh, so the Clerisy keeps the titan asleep and dreaming and blames it for the folk's woes. The old serve too:
-the Guild renders the dead Spent into tallow; the young become marrow, the old become fuel. Waking is not the end of
-the world; it is the end of the harvest. Othemar's last sacrament is a Great Tithing large enough to keep the titan
-dreaming for another lifetime. Tone rule: children are stakes, never fighters or on-screen victims.
+**Central truth (`Q-01 A`, `[LOCKED]`)**: The lullaby is a harvest. **Lullaby Houses** raise tithe-children from infancy while ward sweeps fill the count. Sacrifices laid over dreaming veins are steeped by the dream; `Lazar`'s Embalming Cloisters render the remains into **rendered marrow** (younger = purer), pumped to St. Lyra's so the Clerisy never ages (`Othemar` is `64` while Spent rarely pass `45`). Dead Spent become **Warded Tallow** ("young -> marrow, old -> fuel"). Waking the titan ends the harvest, not the world. **Tone rule (`[LOCKED]`)**: children are stakes only, never fighters or on-screen victims.
 
-The precedent (CANON 3.6): the Clerisy was founded at the Extinguishing with the first Great Tithing, recorded as the
-titan's wrath; the folk know only the yearly rite. This year the cell's raids starve the dream and hasten the waking,
-so the Clerisy turns the rite the clock counts to into a second Great Tithing: the more the cell saves, the more it
-needs.
+**Precedent (`[LOCKED]`)**: The Clerisy founded itself during the Extinguishing with the **first Great Tithing** (`recorded as the titan's wrath`). This year, the cell's Act 1 raids starve the dream and stir tremors, forcing `Othemar` to escalate the yearly rite into a **second Great Tithing**.
 
 ## 2. What the player believes and what is true
 
@@ -58,36 +30,10 @@ needs.
 
 ## 3. The acts
 
-- **Prologue (canon).** A four-slide vignette (the Shroud, the titan, the Clerisy's claim, a guard who refuses). 0a:
-  Kaelen, a deserter, faces Captain Vane's "Order 44" alone in the rain. A walk through the Meat Market shows the Spent
-  and the rendering. 0b: Vesper joins on the rooftops. 0c: the two free Maren and Hollis from a mortuary cart. The
-  four drop through the Drowned Runoff Grate into the Sluice Undercroft: the hearth scene with Bram and Aline ("The Red
-  Tithing is in six weeks"), the Doom Clock at 42 days.
-- **Act 1 "The Young Vanguard", the Sunk Ward (canon).** Cold Steel only; missions from Tess's board. M1 breaks Vane's
-  sweep. M2 frees caged youths from Proctor Quell, whose illegal marrow valve shows the elite carry the mutation they
-  kill for. M3 raids the bone-mill (Overseer Grendel); Dunstan joins. M4 hits the Tallow Vats (Guild-Master Orlov,
-  Vesper's enemy); Elyse joins. Interlude: the floor of the hub splits on a titan vein; Aline gives one founder a single
-  marrow dose (Calcification I in Act 2); Brother Malachi's catacombs open. M5 the Crucible: Inquisitor-Prelate Nemeth
-  holds the Slag Gate; one of four deployed founders stays on the jammed winch and is taken alive; the other three
-  escape, and Nemeth escapes with the captured founder (Q-25 A, CANON 3.6). Optional jobs: Pip's rescue, Agnes's
-  attics, Corvo's gate, Rook's ciphers, Kaelen's bellows, Hollis's vantage points, Vesper's drainage locks. Act 1 holds
-  only the six founders (Q-38).
-- **Act 2 "The First Rupture", the High Bastion (proposal).** Grief turns to pragmatism: grafts, Strain and
-  Calcification, recruits from culling wagons (the first takes the bunk the Crucible emptied), permadeath and capture,
-  sieges, the doctrine split between Bram and Aline. 2.1 Ruthven's checkpoint; 2.2 culling wagons (Lucan); 2.3 the
-  Tallow Reservoir; 2.4 the Embalming Cloisters (Chief Anatomist Lazar, Aline's quest): Lazar's records give the Great
-  Tithing's date and scale and show the cell's raids caused it, the clock is relabelled "the Great Tithing", and the
-  cell sees Nemeth deliver the captured founder to Lazar's anatomists and arrives too late; 2.5 the Grand Belltower
-  (silences the bells' resonance, Q-09); 2.6 the Reliquary Crypts: the founders' tomb and record, and the Key of the
-  Mantle Chasm opens the way down.
-- **Act 3 "The Awakening Abyss", the Mantle Fissure (proposal).** The bells toll without pause, the Clerisy gathers
-  youths for the Great Tithing and the Doom Clock turns hard. 3.1 the Chasm Gatekeepers; 3.2 the cell cuts the Marrow
-  Conduits (High Castellan Ulric; +2 days) and the titan begins to stir; 3.3 (optional) Cantor Ysolde's Chorus Spire;
-  3.4 (optional) the Silent Ossuary, one battle in two phases: the corrupted founder fights at Nemeth's side, then
-  breaks, goes insane and kills everyone in reach, Nemeth included, and the cell fights the monstrosity (mercy and the
-  Transcendent Relic after); 3.5 Othemar
-  falls at the High Altar and the clock stops; 3.6 the Dreaming Core: the titan opens its eyes and the cell chooses an
-  ending.
+- **Prologue (`[LOCKED]` spine, `[PLACEHOLDER]` copy).** Four-slide vignette -> `0a` (`Kaelen` vs. `Vane`'s Order 44) -> Meat Market walk -> `0b` (`Vesper` joins) -> `0c` (`Maren` & `Hollis` freed from mortuary cart) -> Sluice Undercroft hearth with `Bram` & `Sister Aline` (`42d` Doom Clock).
+- **Act 1 "The Young Vanguard", Sunk Ward (`[LOCKED]` spine).** Cold Steel only (`6` founders, `Q-38`). `M1` breaks `Vane`'s sweep (`CL-01` retreat); `M2` frees youths from `Quell` (neck marrow valve); `M3` raids bone-mill (`Grendel` slain, `Dunstan` joins); `M4` hits Tallow Vats (`Orlov` withdraws via `orlov_withdraws`, `Elyse` joins); `Interlude` splits hub floor on a vein (`Aline` gives `1` founder a marrow dose -> **Act 2 Tier I graft**; `Malachi`'s catacombs open); `M5` Crucible (`1` of `4` deployed holds winch and is captured alive by `Nemeth`, who escapes); +`7` optional board jobs.
+- **Act 2 "The First Rupture", High Bastion (`[LOCKED]` milestones, `[PROVISIONAL]` lineup).** Unlocks grafts/Strain/Calcification, Cold Steel techniques/durability, `18-24` wagon recruits, sieges, Doctrine. `2.1` `Ruthven`'s cordon; `2.2` wagons (`Lucan`); `2.3` Reservoir; **`2.4` Embalming Cloisters (`Lazar`)**: Great Tithing date/scale/cause, clock relabelled, cell sees `Nemeth` hand captive to `Lazar` (`no rescue`); `2.5` Belltower; **`2.6` Reliquary Crypts**: First Extinguishers' record & **Key of the Mantle Chasm**.
+- **Act 3 "The Awakening Abyss", Mantle Fissure (`[LOCKED]` climax).** Hard Doom Clock. `3.1` Gatekeepers; **`3.2` Marrow Conduits** (`Ulric` slain, `+2d`, titan stirs); `3.3` (opt.) `Ysolde`'s Chorus Spire; **`3.4` (opt.) Silent Ossuary**: 2-phase fight (`M5` captive beside `Nemeth` -> breaks `hostile_all`, kills `Nemeth` & guard -> mercy + `Transcendent Relic`); **`3.5` High Altar** (`Othemar` falls, clock stops); **`3.6` Dreaming Core** -> ending choice.
 
 | Ending (proposal) | What happens under truth A | Voice | Gate |
 | --- | --- | --- | --- |
@@ -176,8 +122,8 @@ closed keeps its row, marked "Resolved (date): ...".
 | --- | --- | --- | --- | --- |
 | G-01 | Nemeth's want, Act 2-3 role and fate | new | (a) he returns on the Act 2 main path and falls there; (b) he is met at the Silent Ossuary (node 20) beside the founder he took | Resolved (2026-10-25): b, with the 2.4 sighting; at node 20 the founder fights at his side, breaks and kills him; his want (pure marrow, a place among the ageless) is a planner refinement (CANON 3.6) |
 | G-02 | Nemeth's kit; his Warded Cassock after Q-25 A | Q-74; Cassock new | (a) it drops where he finally falls (G-01); (b) cut | Resolved in part (2026-10-25): a, the Cassock drops where he dies at node 20 (CANON 3.6); his kit stays open (Q-74) |
-| G-03 | Captain Vane after M1 (his relic drops at M1 either way) | Q-24 | - | Q-24 rec |
-| G-04 | Fates of Quell, Grendel and Orlov: slay objectives and drops imply death, but Orlov's Act 2 "settle the feud" implies he lives | new | (a) Act 1 bosses die at their missions unless a doc gives a return; the feud targets his Guild; (b) Orlov escapes M4 and dies in Vesper's loyalty quest | a |
+| G-03 | Captain Vane after M1 (his relic drops at M1 either way) | Q-24 | - | `CL-01` `[PROVISIONAL]`: withdraws at `25%` HP in `M1` |
+| G-04 | Fates of Quell, Grendel and Orlov: slay objectives and drops imply death, but Orlov's Act 2 "settle the feud" implies he lives | new | (a) Act 1 bosses die at their missions unless a doc gives a return; the feud targets his Guild; (b) Orlov escapes M4 and dies in Vesper's loyalty quest | Resolved (2026-11-10 `A6`): b, `Orlov` withdraws at `M4` (`orlov_withdraws`, `[LOCKED]`); `Quell` & `Grendel` die (`CL-01` `[PROVISIONAL]`) |
 | G-05 | Ruthven: fought or not, and his fate | Q-26 | - | Q-26 rec |
 | G-06 | Wants and fates of Lazar, Ulric and Ysolde; Lazar's faction | new; Q-76 | (a) each dies at their node, except Ysolde, who lives if Malachi mediates; (b) per-boss calls | a |
 | G-07 | Why the Awakening Chorus wants the titan awake, and whether it knows the truth | new | (a) it knows the dream is fed and wants the harvest ended; (b) it worships the titan and knows nothing | a |

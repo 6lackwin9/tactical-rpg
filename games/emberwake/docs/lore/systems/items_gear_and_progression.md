@@ -1,9 +1,6 @@
 # Items, gear and progression
 
-Status: canon for the slots, the pouch, the resources and the Act 1 relic sources ([CANON](../CANON.md) 2.1, 2.5);
-proposal for every catalog row and number. Related: [combat](combat_and_timeline.md),
-[classes](classes_and_skill_trees.md), [safehouse economy](safehouse_economy_and_triage.md),
-[bestiary](enemy_bestiary_and_ai.md).
+Status: `[LOCKED]` equipment slots, `POUCH_MAX = 3`, weapon families (`WEAPONROSTER1`), resource loops & Act 1-3 relic drop slots; `[PROVISIONAL]` catalog tuning numbers; **`[PLACEHOLDER]` item/relic/organ names, inscriptions & icons** ([CANON.md](../CANON.md) Section 5 wins on conflict). Related: [combat](combat_and_timeline.md), [classes](classes_and_skill_trees.md), [safehouse economy](safehouse_economy_and_triage.md), [bestiary](enemy_bestiary_and_ai.md).
 
 Engine facts this doc builds on (GAME_BRIEF ITEM1, C1-L, ITEMUSE1, REWARD1, WEAPONROSTER1): items live in
 `games/emberwake/data/catalog/items.json` on the families of `item_families.json` (typed rows `rpgkit_data::ItemDef`);

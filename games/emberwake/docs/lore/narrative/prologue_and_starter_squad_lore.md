@@ -1,16 +1,10 @@
 # Prologue and starter squad dossiers
 
-Status: canon (consistency pass 2026-10-25). This doc follows [CANON.md](../CANON.md); where they differ, CANON wins.
-Names, ages and backgrounds follow the [cast registry](../background/cast_registry.md). Related:
-[onboarding](new_game_onboarding_and_intro.md), [recruits and prologue](recruits_and_prologue_architecture.md),
-[classes and skill trees](../systems/classes_and_skill_trees.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`,
-`[game code]`.
+Status: `[LOCKED]` 3-mission prologue tutorial spine (`0a`->`0b`->`0c`->Hearth) & class roles; **`[PLACEHOLDER]` founder names, ages, looks, backstories, taints & script copy** ([CANON.md](../CANON.md) wins on conflict). Active placeholder spellings follow [cast_registry.md](../background/cast_registry.md); keep 100% data/VFS-driven (`characters.json`, `sequences.json`, `vignettes.json`). Related: [onboarding](new_game_onboarding_and_intro.md), [recruits and prologue](recruits_and_prologue_architecture.md), [classes and skill trees](../systems/classes_and_skill_trees.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
-## 1. Structure: three missions and the hearth
+## 1. Structure: three missions and the hearth (`[LOCKED]` spine)
 
-The prologue is a tutorial and an introduction: for each of the four starting founders it shows who they were in the
-regime's machinery, the moment that broke them, and their visible taint. The taints are backstory and Act 2 hooks only:
-0% corruption and no mechanics in Act 1.
+The prologue is a tutorial and an introduction: `0a` (`warrior` solo), `0b` (`rogue` joins), and `0c` (`priest` + `ranger` freed) converge on the Sluice Undercroft hearth (`0%` corruption and Cold Steel only throughout Act 1; visible taints below are `[PLACEHOLDER]` flavour hooks with no Act 1 mechanics).
 
 | Step | Mission | Founders introduced |
 | --- | --- | --- |
@@ -21,7 +15,7 @@ regime's machinery, the moment that broke them, and their visible taint. The tai
 
 The old five-vignette layout (a separate Maren cart break and a Hollis bridge shootout) is merged into 0c.
 
-## 2. The four starting dossiers
+## 2. The four starting dossiers (`[LOCKED]` combat lesson, `[PLACEHOLDER]` backstory, taint & look)
 
 ### 2.1 Kaelen (Vanguard, 21)
 

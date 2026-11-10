@@ -1,15 +1,11 @@
 # Who's who: the cast by act
 
-Status: canon summary (2026-10-25); CANON.md wins on conflict. Part of the [story guide](../STORY_GUIDE.md). Names,
-ages and first appearances come from the [cast registry](cast_registry.md), which wins on any name or age. The Act 2
-and Act 3 columns summarise proposal docs ([High Bastion](upper_bastion_campaign_map.md),
-[Mantle Fissure](mantle_fissure_campaign_map.md)). "Not written" means no doc says it; the
-[gaps](../STORY_GUIDE.md#7-gaps) list each one. Spoilers: the central truth (Q-01 option A) is used throughout.
+Status: `[LOCKED]` spine beats (`M5` capture -> `2.4` Lazar -> `3.4` Silent Ossuary, `M4` Orlov withdraw, Central Truth A); `[PROVISIONAL]` Act 2-3 optional arcs (`CL-01..07`); **`[PLACEHOLDER]` names, ages, wants & backstories** ([CANON.md](../CANON.md) wins on conflict). Part of [STORY_GUIDE.md](../STORY_GUIDE.md) and [cast_registry.md](cast_registry.md). Act 2-3 columns summarise [High Bastion](upper_bastion_campaign_map.md) and [Mantle Fissure](mantle_fissure_campaign_map.md); "Not written" points to [gaps](../STORY_GUIDE.md#7-gaps).
 
 Abbreviations: P = prologue (0a-0c); M1-M5 = Act 1 missions; 2.1-2.6 and 3.1-3.6 = Act 2 and Act 3 missions; Q-nn =
 [open questions](../OPEN_QUESTIONS.md); G-nn = gaps in the story guide.
 
-## 1. The six founders (playable, the Severed Root)
+## 1. The six founders (`[LOCKED]` role & spine beats, `[PLACEHOLDER]` wants & backstory)
 
 | Name | Faction and role | Wants | First seen | Prologue and Act 1 | Act 2 (proposal) | Act 3 (proposal) | Fate or open |
 | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -1,8 +1,6 @@
 # Factions and sociology: power in Cinderreach
 
-Status: canon (2026-10-25, consistent with [CANON.md](../CANON.md)); the doctrine split (section 4) is Act 2 and its
-numbers are `proposal`. Names follow the [cast registry](cast_registry.md); the Clerisy's real motive is the
-[central truth](central_truth.md) (proposal). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
+Status: `[LOCKED]` 6-faction structural hierarchy, monopolies, combat roles & Act 2 Preservationist/Flesh-Broker split; `[PROVISIONAL]` Chorus & boss details (`CL-06`); **`[PLACEHOLDER]` faction/figure proper nouns, vestments, silhouettes & rim-lights** ([CANON.md](../CANON.md) Section 2.1 wins on conflict). Active placeholder spellings follow [cast_registry.md](cast_registry.md); spoiler sheet: [central_truth.md](central_truth.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
 ## 1. Hierarchy
 
