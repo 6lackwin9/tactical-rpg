@@ -649,6 +649,12 @@ impl Plan {
             if !p.is_empty() {
                 return p;
             }
+            // PK2-S1: a skill used up this battle (`uses_per_battle`), the steps planned before this one included
+            let planned = st.entries.iter().filter(|e| e.step_index >= 0 && e.skill == sid).count();
+            let p = crate::mark::uses_problem(w, c, s, planned);
+            if !p.is_empty() {
+                return p;
+            }
             // HOOKS1 UM2: a skill is refused while the meters left do not cover its meter cost (rule unit_meters)
             let p = crate::meter::cost_problem(w, &crate::channel::meters_for(w, c, s), |m| st.meter(m));
             if !p.is_empty() {
@@ -1871,18 +1877,20 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
 pub fn expected_with(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64, pierce: bool) -> i32 {
     let s = &w.cat.skills[sid];
     let u = &w.units[c];
+    let ranged = expected_is_ranged(w, c, sid);
     damage::compute(
         u,
         &w.units[foe],
         HitInput {
-            ranged: expected_is_ranged(w, c, sid),
+            ranged,
             offhand: skill::is_off_hand(s),
             skill_mult: u.power_for(s) * power_scale,
             attacker_stance: stance,
             include_guard: false,
             cover,
             // RULESET1 A2: an armour-piercing skill skips armour under the rule pierce
-            ignore_armor: (pierce || crate::poise::Impact::of(s).armor_piercing) && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
+            // PK2-S1: a member grant `pierce_melee` on a melee hit too
+            ignore_armor: (pierce || crate::poise::Impact::of(s).armor_piercing || (u.pierce_melee && !ranged)) && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
             ..HitInput::default()
         },
     )

@@ -971,7 +971,11 @@ impl<'a> Builder<'a> {
                 // PK1-S2a: its meter gate first, then the costs with a marrow version's channel cost)
                 let gate = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
                 let meter = if gate.is_empty() { crate::meter::cost_problem(w, &crate::channel::meters_for(w, self.c, s), |m| st.meter(m)) } else { gate };
-                if !fits_before(&st, need, limit) {
+                // PK2-S1: a skill used up this battle (`uses_per_battle`), the plan's uses included
+                let used = crate::mark::uses_problem(w, self.c, s, planned_uses(&st, sid));
+                if !used.is_empty() {
+                    why = used;
+                } else if !fits_before(&st, need, limit) {
                     why = format!("blocks {free} < {need}");
                 } else if ap > ap_free {
                     why = format!("AP {} < {ap}", ap_free.max(0));
@@ -1922,6 +1926,11 @@ fn move_route(w: &World, plan: &Plan, c: UnitId, from: V2, cell: V2) -> Result<V
     Ok(route)
 }
 
+/// PK2-S1: the planned steps of `st` that run skill `sid` (`mark::uses_problem`'s `planned`).
+fn planned_uses(st: &SimState, sid: SkillId) -> usize {
+    st.entries.iter().filter(|e| e.step_index >= 0 && e.skill == sid).count()
+}
+
 impl Builder<'_> {
     /// The steps of a skill or item pick from the tile at `st` (IF6 a, c, d first: intent, blocks, AP): the opener's
     /// (with its before-move when `may_move`, PL5) or a follow-up's from where the plan leaves the unit.
@@ -1936,6 +1945,11 @@ impl Builder<'_> {
                 // PK1-S2a (PK1 4.3 item 2): a Channel round offers only marrow versions, a Cold Steel round none
                 if let Some(p) = crate::channel::problem(w, self.c, s) {
                     return Err(p.into());
+                }
+                // PK2-S1: a skill used up this battle (`uses_per_battle`), the plan's uses included
+                let used = crate::mark::uses_problem(w, self.c, s, planned_uses(st, *sid));
+                if !used.is_empty() {
+                    return Err(used.into());
                 }
                 // (the Channel Rest is neutral, as Rest)
                 if !round_intent::skill_rows(w, s).contains(&self.intent.id()) && !crate::channel::is_channel_rest(w, self.c, *sid) {

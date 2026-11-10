@@ -106,7 +106,9 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
         let e = json::dict(raw);
         let t = json::s(e, "type");
         let at = format!("Effect {}", i + 1);
-        if items_only && TYPES.contains(&t.as_str()) && !ITEM_TYPES.contains(&t.as_str()) {
+        // PK2-S1: the member grants are passives' only (a unit track's stage passive)
+        let member = rpgkit_data::MEMBER_GRANTS.contains(&t.as_str());
+        if items_only && (TYPES.contains(&t.as_str()) || member) && !ITEM_TYPES.contains(&t.as_str()) {
             errors.push(format!("{at}: '{t}' is not allowed on items (use stat_bonuses / passives)."));
             continue;
         }
@@ -209,6 +211,21 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 }
             }
             "forced_move" | "trigger" | "meter" => errors.extend(super::hooks::passive_effect_errors(e, &t, hooks, &at)),
+            // PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): `forbid_hands` {hands: 2} and `pierce_melee` {} (no other key;
+            // the unknown-type message keeps its list, checks_golden)
+            rpgkit_data::FORBID_HANDS => {
+                if !e.get("hands").is_some_and(|h| rpgkit_data::FORBID_HANDS_VALUES.iter().any(|&n| whole_in(h, n, n))) {
+                    errors.push(format!("{at}: forbid_hands needs hands {} (two-handed items).", rpgkit_data::FORBID_HANDS_VALUES[0]));
+                }
+                for k in e.keys().filter(|k| !matches!(k.as_str(), "type" | "hands")) {
+                    errors.push(format!("{at}: forbid_hands takes only hands (not '{k}')."));
+                }
+            }
+            rpgkit_data::PIERCE_MELEE => {
+                for k in e.keys().filter(|k| k.as_str() != "type") {
+                    errors.push(format!("{at}: pierce_melee takes no keys (not '{k}')."));
+                }
+            }
             _ => errors.push(format!("{at}: unknown effect type '{t}' (use {}).", if items_only { ITEM_TYPES.join(", ") } else { TYPES.join(", ") })),
         }
     }

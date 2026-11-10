@@ -209,7 +209,7 @@ fn party_of(d: &Data, members: &[(&str, i64)]) -> GameState {
 }
 
 fn end(member: &str, hp: i64, max_hp: i64, alive: bool) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new() }
+    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new(), hostile: String::new() }
 }
 
 #[test]
@@ -327,7 +327,7 @@ fn cell(d: &Data, w: &str, act: i64) -> GameState {
 
 /// A fielded hero's end at `hp` of the battle max `max` with ENCOUNTER2's `fate` (0 HP = not alive).
 fn fated(member: &str, hp: i64, max: i64, fate: PartyFate) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new() }
+    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new() }
 }
 
 fn max_of(d: &Data, gs: &GameState, id: &str) -> i64 {

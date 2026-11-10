@@ -62,6 +62,8 @@ pub const CHANNEL_POWER: (f64, f64) = (1.0, 3.0);
 pub const HP_COST_PCT: (i64, i64) = (0, 99);
 /// HEALPCT1 (FB-177): a SUPPORT skill's `heal_pct` (0 = none; 100 = the target's full max HP).
 pub const HEAL_PCT: (i64, i64) = (0, 100);
+/// PK2-S1: a skill's `uses_per_battle` (0 = no limit).
+pub const USES_PER_BATTLE: (i64, i64) = (0, 9);
 /// AH1: arena hazards per encounter, the name and line lengths, the effect numbers.
 pub const ARENA_MAX: usize = 4;
 pub const ARENA_NAME_MAX: usize = 24;
@@ -294,6 +296,26 @@ pub fn skill_triggers_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
     out
 }
 
+/// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` ({} = none): `{mark}`, a mark id of 1-24 characters.
+pub fn skill_unmark_errors(raw: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if raw.is_null() || raw.as_object().is_some_and(|o| o.is_empty()) {
+        return out;
+    }
+    let Some(o) = raw.as_object() else {
+        out.push("Unmark must be an object {\"mark\": id} ({} = none).".into());
+        return out;
+    };
+    for k in o.keys().filter(|k| !rpgkit_data::UNMARK_KEYS.contains(&k.as_str())) {
+        out.push(format!("Unmark: unknown key '{k}' (keys: {}).", rpgkit_data::UNMARK_KEYS.join(", ")));
+    }
+    let id = json::s(o, "mark");
+    if id.is_empty() || id.chars().count() > MARK_ID_MAX || !aegis_content::schema::is_id(&id) {
+        out.push(format!("Unmark: mark needs an id of 1-{MARK_ID_MAX} characters (a-z, 0-9, _, a letter first)."));
+    }
+    out
+}
+
 /// RD1: a skill's `riders` (up to 3 rows of conditions and effects; no event, no redirect).
 pub fn riders_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
     let mut out = Vec::new();
@@ -336,6 +358,14 @@ pub fn skill_errors(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     let heal_pct = json::i(e, "heal_pct", 0);
     if has("heal_pct") && !(HEAL_PCT.0..=HEAL_PCT.1).contains(&heal_pct) {
         out.push(format!("Heal % must be {}-{} (is {heal_pct}).", HEAL_PCT.0, HEAL_PCT.1));
+    }
+    // PK2-S1: the per-battle use limit and the skill form of `unmark` (PK1 3.7)
+    let uses = json::i(e, "uses_per_battle", 0);
+    if has("uses_per_battle") && !(USES_PER_BATTLE.0..=USES_PER_BATTLE.1).contains(&uses) {
+        out.push(format!("Uses per battle must be {}-{} (is {uses}; 0 = no limit).", USES_PER_BATTLE.0, USES_PER_BATTLE.1));
+    }
+    if has("unmark") {
+        out.extend(skill_unmark_errors(json::get(e, "unmark")));
     }
     let keys = ["forced_move", "hazard", "triggers", "riders", "meters", "requires_meter", "channel"];
     if keys.iter().all(|k| !has(k) || empty(k)) {

@@ -18,9 +18,11 @@ use serde_json::Value;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
+pub mod unit_track;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
 pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
+pub use unit_track::{TrackStage, UnitTrackDef, TRACK_DEPARTURES, TRACK_STAGES_MAX, TRACK_STAGE_KEYS, UNIT_TRACKS_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -442,6 +444,11 @@ pub struct SkillDef {
     pub requires_meter: Option<MeterGate>,
     /// PK1-S2a (rule channel): the skill's marrow version block (the default: a derived version for a single-intent skill).
     pub channel: ChannelSpec,
+    /// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` `{mark}`, the consumable's effect as a skill: the mark id
+    /// whose latest entry on the target this battle it removes ("" = none).
+    pub unmark: String,
+    /// PK2-S1: how many times a unit may use the skill in one battle (0 = no limit).
+    pub uses_per_battle: i32,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -521,6 +528,8 @@ impl SkillDef {
             hp_cost_pct: int(o, "hp_cost_pct", 0),
             requires_meter: obj(o, "requires_meter").and_then(MeterGate::from_obj),
             channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
+            unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            uses_per_battle: int(o, "uses_per_battle", 0),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -915,6 +924,9 @@ pub struct Catalog {
     /// R4-1 (`U2.3-TIERS`, FB-78): the role templates (kind `unit_templates`; engine-only), keyed by role (the first
     /// row of a role wins; the content check refuses a second). No row for a role = its units keep their class's stats.
     pub unit_templates: IndexMap<String, UnitTemplate>,
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the unit tracks (kind `unit_tracks`; engine-only), keyed by id. No row =
+    /// no member holds a track.
+    pub unit_tracks: IndexMap<String, UnitTrackDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -970,6 +982,7 @@ impl Catalog {
         for t in rows(UNIT_TEMPLATES_KIND).iter().map(UnitTemplate::from_obj) {
             cat.unit_templates.entry(t.role.clone()).or_insert(t);
         }
+        cat.unit_tracks = rows(UNIT_TRACKS_KIND).iter().map(UnitTrackDef::from_obj).map(|t| (t.id.clone(), t)).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -1004,6 +1017,23 @@ impl Catalog {
             Some(row) => row.term(),
             None => Term::default_of(id),
         }
+    }
+
+    /// PK2-S1: the departure causes a save may record: `DEPART_CAUSES`, then each unit track row's `cause` (the game's
+    /// word, named in its data), each once.
+    pub fn depart_causes(&self) -> Vec<String> {
+        let mut out: Vec<String> = DEPART_CAUSES.iter().map(|c| c.to_string()).collect();
+        for t in self.unit_tracks.values() {
+            if !t.cause.is_empty() && !out.contains(&t.cause) {
+                out.push(t.cause.clone());
+            }
+        }
+        out
+    }
+
+    /// `cause` is one of `depart_causes`.
+    pub fn depart_cause_ok(&self, cause: &str) -> bool {
+        DEPART_CAUSES.contains(&cause) || self.unit_tracks.values().any(|t| !t.cause.is_empty() && t.cause == cause)
     }
 
     pub fn skill(&self, id: &str) -> Option<&SkillDef> {
@@ -1280,6 +1310,7 @@ pub const DEPART_LIVES: [&str; 5] = ["captured", "dead", "retired", "dismissed",
 /// KS1, 11.1: the lives that pay a keepsake (`keepsakes.on`, a rule row's `keepsakes_on`).
 pub const KEEPSAKE_LIVES: [&str; 3] = ["captured", "dead", "lost"];
 /// 11.4: why a member departed (`party.departed[].cause`).
+/// PK2-S1: a unit track row's `cause` is a known cause too (`Catalog::depart_cause_ok`); the game names it in its data.
 pub const DEPART_CAUSES: [&str; 7] = ["stayed", "stood", "downed", "bled_out", "lost_battle", "story", "roster"];
 /// L4: the HP of members who come home (`carry` = HEAL1's carry-over, `full` = back to full).
 pub const HP_AFTER: [&str; 2] = ["carry", "full"];
@@ -1875,6 +1906,14 @@ pub const STRIKE_NEAREST: &str = "strike_nearest";
 pub const MARK: &str = "mark";
 /// PK1-S1 (3.7): a consumable's `unmark` `{mark}` removes the target's latest mark of that id this battle; its keys.
 pub const UNMARK_KEYS: [&str; 1] = ["mark"];
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the member grants of the passive grammar (passives only; gear, bands and
+/// meters may not carry them): `forbid_hands` `{hands: 2}` (equipping refuses items held in that many hands; a worn one
+/// goes to the stash at the settle) and `pierce_melee` `{}` (melee and bare-handed hits pierce armour, rule pierce).
+pub const FORBID_HANDS: &str = "forbid_hands";
+pub const PIERCE_MELEE: &str = "pierce_melee";
+pub const MEMBER_GRANTS: [&str; 2] = [FORBID_HANDS, PIERCE_MELEE];
+/// PK2-S1: the `hands` a `forbid_hands` grant may name (two-handed items only so far).
+pub const FORBID_HANDS_VALUES: [i64; 1] = [2];
 /// PK1-S1 (3.2): the events whose trigger knows the hit it answers (a `damage` effect's `pct_of_hit` reads it; a rider
 /// reads the hit it rode on).
 pub const HIT_EVENTS: [&str; 4] = ["hit_taken", "guarded_hit", "hit_dealt", "kill"];

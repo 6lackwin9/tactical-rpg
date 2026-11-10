@@ -733,6 +733,9 @@ impl Command {
                         parts.push(next_round(&st, row.get("rounds").and_then(Value::as_f64).map_or(1, |v| v as i32)));
                     }
                 }
+                if !s.unmark.is_empty() {
+                    parts.push(if done.unmarked.is_empty() { format!("no {} to undo", s.unmark) } else { done.unmarked.clone() });
+                }
                 let who = if target == src { "themselves".to_string() } else { t.name.clone() };
                 self.log = format!("[Support] {src_name} used {} on {who}: {}", self.name, if parts.is_empty() { "no effect".to_string() } else { parts.join(", ") });
                 if let CmdKind::Support { last_heal, last_status, last_cleansed, .. } = &mut self.kind {
@@ -969,7 +972,8 @@ impl Command {
     /// damage dealt to that unit.
     #[allow(clippy::too_many_arguments)]
     fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
-        let pierce = self.pierces(w);
+        // PK2-S1: a member grant `pierce_melee` pierces with every melee hit
+        let pierce = self.pierces(w) || pierces_melee(w, src, ranged);
         let claim = match self.ally.as_mut() {
             Some(watch) => crate::trigger::ally_hit(w, watch, src, f, ranged, &self.family, skip),
             None => None,
@@ -1673,6 +1677,12 @@ pub fn ignores_guard(w: &World, s: &rpgkit_data::SkillDef) -> bool {
     s.ignore_guard && w.ruleset.has(rpgkit_rules::ruleset::IGNORE_GUARD) && !skill::is_item(s) && skill::kind(s) == skill::Kind::Attack
 }
 
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): a melee (or bare-handed) hit of `src` skips armour by its member grant
+/// `pierce_melee` (a unit track's stage), under the rule pierce as every armour-piercing hit.
+pub fn pierces_melee(w: &World, src: UnitId, ranged: bool) -> bool {
+    !ranged && w.units[src].pierce_melee && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
+}
+
 /// "" when `target` is legal for `skill` cast by `caster` (distance aside).
 pub fn target_problem(w: &World, caster: UnitId, skill_id: SkillId, target: Option<UnitId>) -> String {
     let s = &w.cat.skills[skill_id];
@@ -1840,6 +1850,8 @@ struct Supported {
     status: String,
     cleansed: Vec<String>,
     extras: Vec<String>,
+    /// PK2-S1: the `unmark` log part ("" = the skill has none or found nothing to undo).
+    unmarked: String,
 }
 
 /// SupportRules.apply: cleanse, heal, grant, extra grants.
@@ -1865,5 +1877,7 @@ fn support_apply(w: &mut World, caster: UnitId, target: UnitId, skill_id: SkillI
         status::apply_effect(&mut w.units[target], &spec, status::grant_timing(&s.grant_status, false), 0.0, None);
     }
     let extras = status::grant_extras(&mut w.units[target], &s.extra_grants, false, &name);
-    Supported { healed, status: s.grant_status.clone(), cleansed, extras }
+    // PK2-S1 (PK1 3.7, FB-174 (6)): the skill form of the consumable's `unmark` (the target's latest mark of that id)
+    let unmarked = if s.unmark.is_empty() { String::new() } else { crate::mark::unmark(w, target, &s.unmark, &s.name) };
+    Supported { healed, status: s.grant_status.clone(), cleansed, extras, unmarked }
 }

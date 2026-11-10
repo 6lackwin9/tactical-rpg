@@ -21,14 +21,14 @@ const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "des
 /// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`
 /// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`; PK1-S2a: `hp_cost_pct` and
 /// `requires_meter` in `cost`, the marrow version's `channel` in its own section, every authored kind; HEALPCT1:
-/// `heal_pct` in `support`).
+/// `heal_pct` in `support`; PK2-S1: `unmark` in `support`, `uses_per_battle` in `cost`).
 const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max", "position"]),
     // A3.2-K2: `affects` (IR9) beside the shape it filters
     ("area", &["area", "affects"]),
-    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "cleanse_statuses"]),
+    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "unmark", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
     ("guard", &["mitigation", "guard_rounds"]),
@@ -38,7 +38,7 @@ const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("combo", &["disrupt", "exploit", "exploit_consume"]),
     ("rest", &["recover_ap"]),
     ("gate", &["weapon_types", "min_proficiency"]),
-    ("cost", &["ap_cost", "meters", "hp_cost", "hp_cost_pct", "requires_meter"]),
+    ("cost", &["ap_cost", "meters", "hp_cost", "hp_cost_pct", "requires_meter", "uses_per_battle"]),
     ("timing", &["recovery_blocks", "windup_poise", "unbreakable"]),
     ("intent", &["intent_buff"]),
     ("impact", &["stagger", "sure_break", "armor_piercing", "ignore_guard"]),
@@ -765,7 +765,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let cleanse = json::sget(e, "cleanse_statuses");
         // HEALPCT1: a percent heal counts as a heal (the message keeps its words, checks_golden)
         let heal_pct = json::i(e, "heal_pct", 0);
-        if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 && grant.is_empty() && cleanse.is_empty() {
+        // PK2-S1: an `unmark` is a support use of its own (the message keeps its words, checks_golden)
+        let unmark = json::get(e, "unmark").as_object().is_some_and(|u| !u.is_empty());
+        if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 && grant.is_empty() && cleanse.is_empty() && !unmark {
             out.push("A support skill needs a heal (base or per-stat), a cleanse or a granted status.".into());
         }
         if cleanse.iter().any(|c| c == CLEANSE_ALL) && cleanse.len() > 1 {

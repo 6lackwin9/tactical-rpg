@@ -27,6 +27,7 @@ pub mod terms;
 pub mod travel;
 pub mod unit;
 pub mod unit_template;
+pub mod unit_track;
 pub mod world;
 
 /// The catalog kinds the checks cover so far.
@@ -277,6 +278,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if kind == unit_template::KIND {
         // R4-1: the row checks the loader applies (the role, the share vectors and their stats, unique ids and roles)
         return unit_template::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == unit_track::KIND {
+        // PK2-S1: the row checks the loader applies (the stages, their passives and departure, unique ids)
+        return unit_track::entry_errors(v, &content(kind, entry), current_id);
     }
     if kind == ground::KIND {
         // REGIONGROUND1 KT 1.3: the row checks the loader applies (the fields' limits, unknown keys, unique ids and orders)

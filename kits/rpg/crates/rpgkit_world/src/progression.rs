@@ -214,6 +214,9 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         loadout: (!work.loadout_class.is_empty() || !work.loadout_extra.is_empty()).then(|| (work.loadout_class.clone(), work.loadout_extra.clone())),
         ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
         pouch_stacks: d.ruleset(world).numbers.pouch_stacks,
+        // PK2-S1: the member's tracks (a battle mark advances them) and its permanent max HP offset
+        max_hp_offset: work.max_hp_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        tracks: work.tracks.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(i32::MAX)) as i32)).collect(),
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms
@@ -226,16 +229,37 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
 /// U2.2-S2 (FB-28): a member's passives, re-gathered at each build: its character's sources now (character, faction,
 /// disciplines, named items, in that order, resolved in the character's own world), then the other ids it owns (quest
 /// grants, earned ones) in saved order, each once. A new game saves the sources as they were (`new_game`), so the two
-/// agree until the data changes; then a grant added to a source reaches the existing save.
+/// agree until the data changes; then a grant added to a source reaches the existing save. PK2-S1: then its unit
+/// tracks' stage passives (`track_passives`), slotless.
 pub fn member_passives(d: &Data, state: &UnitState) -> Vec<String> {
     let world = aegis_content::split_qid(&state.lore_ref).map(|(w, _)| w).unwrap_or_default();
     let mut out = d.character_passives(character_of(d, state), &world);
-    for id in &state.passives {
+    for id in state.passives.iter().chain(&track_passives(d, state)) {
         if !out.contains(id) {
             out.push(id.clone());
         }
     }
     out
+}
+
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives the member's unit tracks grant: per track row (catalog order)
+/// the member is on, every stage's passive up to its stage (`UnitTrackDef::passives_to`).
+pub fn track_passives(d: &Data, state: &UnitState) -> Vec<String> {
+    d.cat.unit_tracks.values().flat_map(|t| t.passives_to(t.clamp(state.track_stage(&t.id)))).collect()
+}
+
+/// PK2-S1: the member grant `forbid_hands` its passives give (`member_passives`; 0 = none).
+pub fn forbid_hands(d: &Data, state: &UnitState) -> i32 {
+    member_passives(d, state)
+        .iter()
+        .filter_map(|id| d.cat.passives.get(id))
+        .flat_map(|p| rpgkit_rules::grants::read(&p.effects))
+        .filter_map(|g| match g {
+            rpgkit_rules::grants::Grant::ForbidHands { hands } => Some(hands),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// SKILLUI1 (the user's answer to Q2): every slotted family without a rank entry gets its highest unlocked rank now,

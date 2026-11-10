@@ -96,7 +96,7 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 /// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal; CAMPAIGN1-TM2:
 /// a saved travel mode the world no longer has loads in the default mode with a warning; R4-2 M1: a member's saved
 /// deck entry the data no longer allows is dropped with a warning, `UnitState::sanitize_deck`; PR4-2: so is a loadout
-/// family, rank or worn item, `UnitState::sanitize_loadout`).
+/// family, rank or worn item, `UnitState::sanitize_loadout`; PK2-S1: so is a unit track, `UnitState::sanitize_tracks`).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
     let (data, mut warnings) = migrate(d, &envelope)?;
@@ -111,6 +111,9 @@ pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     // to the stash) with a load warning too
     let party = &mut state.party;
     for m in &mut party.members {
+        // PK2-S1: a unit track the data no longer has is dropped, a stage past its row's top held there (before the
+        // loadout, whose two-handed refusal reads the stage passives)
+        warnings.extend(m.sanitize_tracks(d));
         warnings.extend(m.sanitize_deck(d));
         warnings.extend(m.sanitize_loadout(d, &mut party.stash));
     }

@@ -914,7 +914,13 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 }
                 let v = value::int(e, "value", 1);
                 w.marks.record(to, &id, v);
-                format!("{name} is marked {id} {}{v}", if v > 0 { "+" } else { "" })
+                let mut what = format!("{name} is marked {id} {}{v}", if v > 0 { "+" } else { "" });
+                // PK2-S1: the unit track the mark moves takes hold at once (its stage passive; the departure stage
+                // turns the unit on everyone)
+                for part in crate::mark::sync_tracks(w, to, &id) {
+                    what = format!("{what}; {part}");
+                }
+                what
             }
             _ => continue,
         };

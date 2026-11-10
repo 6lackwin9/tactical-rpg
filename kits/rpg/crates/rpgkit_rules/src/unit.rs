@@ -332,6 +332,16 @@ pub struct Unit {
     /// RULESET1 9 D1-D4: the deck terms the unit is built and fights under (None = classic: today's loadout, basics and
     /// passives).
     pub deck_rule: Option<DeckRule>,
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives' `forbid_hands` (0 = none; 2 = no two-handed item).
+    pub forbid_hands: i32,
+    /// PK2-S1: the passives' `pierce_melee` (melee and bare-handed hits pierce armour under the rule pierce).
+    pub pierce_melee: bool,
+    /// PK2-S1: a party member's permanent max HP offset (added to the derived max HP on every sync, at least 1 HP).
+    pub max_hp_offset: i32,
+    /// PK2-S1: a party member's unit track stages (track id -> stage; a track it is not on reads 0). None = the unit holds
+    /// no track (a catalog unit, an enemy, a guest, or any unit while the catalog has no track row): a battle mark never
+    /// advances it.
+    pub tracks: Option<IndexMap<String, i32>>,
 }
 
 impl Unit {
@@ -406,6 +416,10 @@ impl Unit {
             rank_choice: None,
             deck: Deck::default(),
             deck_rule: None,
+            forbid_hands: 0,
+            pierce_melee: false,
+            max_hp_offset: 0,
+            tracks: None,
         }
     }
 
@@ -515,7 +529,8 @@ impl Unit {
             None => (1, None),
         };
         let ctx = ctx.as_deref();
-        self.max_hp = if self.tier_scaled { self.stats.max_hp_scaled(self.tier_mult, ctx) } else { self.stats.max_hp(self.tier_mult, ctx) }.max(1);
+        // PK2-S1: a member's permanent max HP offset on top of the derived max
+        self.max_hp = (if self.tier_scaled { self.stats.max_hp_scaled(self.tier_mult, ctx) } else { self.stats.max_hp(self.tier_mult, ctx) } + self.max_hp_offset).max(1);
         self.hp = self.hp.min(self.max_hp);
         self.initiative = (self.stats.initiative(burden, ctx) - self.carry_penalty).max(1);
         self.move_rate = self.stats.move_rate(burden + self.carry_penalty, ctx);
@@ -602,6 +617,29 @@ impl Unit {
         self.refresh_path_skills(cat);
     }
 
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): `passive` granted mid-battle for the rest of it (a unit track's stage
+    /// reached in battle): applied once (`apply_passive`), then the derived numbers re-read (move rate, initiative,
+    /// range) keeping the battle's max HP and HP (a wounded cut stays). Whether it was newly applied.
+    pub fn grant_passive_now(&mut self, cat: &Catalog, passive: &rpgkit_data::PassiveDef) -> bool {
+        if self.passives.contains(&passive.id) {
+            return false;
+        }
+        self.apply_passive(cat, passive);
+        if !self.passives.contains(&passive.id) {
+            return false;
+        }
+        let (max, hp) = (self.max_hp, self.hp);
+        self.sync_from_stats_and_gear(cat);
+        self.max_hp = max;
+        self.hp = hp.min(max);
+        true
+    }
+
+    /// PK2-S1: whether the member grant `forbid_hands` refuses `item` (a two-handed item under `hands` 2).
+    pub fn forbids(&self, item: &rpgkit_data::ItemDef) -> bool {
+        forbids_hands(self.forbid_hands, item)
+    }
+
     /// Passives.apply_effects (item effects and passives share the grammar): the typed grant view of `effects`
     /// (U4.2-S1, `grants::read`), applied by `apply_grants`.
     pub fn apply_effects(&mut self, cat: &Catalog, effects: &[Value], source: &str, gear: bool) {
@@ -643,6 +681,9 @@ impl Unit {
                 }
                 // HOOKS1 UM1: passives only (HOOKS1-S gives items no meter effect)
                 Grant::GrantPool { meter, start, floor } => self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor: *floor }),
+                // PK2-S1: member grants, passives only (`Grant::gear_ok`)
+                Grant::ForbidHands { hands } => self.forbid_hands = self.forbid_hands.max(*hands),
+                Grant::PierceMelee => self.pierce_melee = true,
             }
         }
     }
@@ -1032,6 +1073,12 @@ impl Unit {
 }
 
 /// A skill rank as the game writes it: I to V (SKILLUI1 rank texts and refusals).
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): whether a `forbid_hands` of `hands` (0 = none) refuses `item`: 2 refuses
+/// every two-handed item (bows and arbalests included).
+pub fn forbids_hands(hands: i32, item: &rpgkit_data::ItemDef) -> bool {
+    hands >= 2 && item.two_handed
+}
+
 pub fn rank_numeral(rank: i32) -> &'static str {
     ["-", "I", "II", "III", "IV", "V"].get(rank.max(0) as usize).copied().unwrap_or("V+")
 }
@@ -1146,6 +1193,10 @@ pub struct Growth {
     pub ranks: IndexMap<String, i32>,
     /// A1.2-K3: the played ruleset's `pouch_stacks` (the battle pouch takes stacks; `Inventory::pouch_stacks`).
     pub pouch_stacks: bool,
+    /// PK2-S1: the member's permanent max HP offset (`Unit::max_hp_offset`).
+    pub max_hp_offset: i32,
+    /// PK2-S1: the member's unit track stages (`Unit::tracks`; the passives come in `Overrides::passives`).
+    pub tracks: IndexMap<String, i32>,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1228,6 +1279,10 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     let (mut pouch_unloaded, mut loadout_error) = (Vec::new(), None);
     match &b.growth {
         Some(g) => {
+            // PK2-S1: a member holds its tracks (empty: on none yet) once the catalog has a track row, and its max HP
+            // offset
+            u.tracks = (!cat.unit_tracks.is_empty()).then(|| g.tracks.clone());
+            u.max_hp_offset = g.max_hp_offset;
             for sk in &g.learned_skills {
                 u.learn_skill_checked(cat, sk, false);
             }

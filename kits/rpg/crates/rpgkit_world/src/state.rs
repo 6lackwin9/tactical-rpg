@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::{Deck, RosterManifest, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
+use rpgkit_data::{Deck, RosterManifest, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -36,6 +36,10 @@ pub fn stack_limit(d: &Data, item: &str) -> i64 {
 
 /// A1.2-K3 (INTENT2-K3): the saved member key of the pouch's packed targets (`UnitState::pouch_packed`).
 pub const POUCH_PACKED_KEY: &str = "pouch_packed";
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the saved member key of its unit track stages (`UnitState::tracks`) and of
+/// its permanent max HP offset (`UnitState::max_hp_offset`); each written only when set (no save VERSION bump).
+pub const TRACKS_KEY: &str = "tracks";
+pub const MAX_HP_OFFSET_KEY: &str = "max_hp_offset";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -76,6 +80,13 @@ pub struct UnitState {
     /// max_stack)`; a pouch id without an entry reads its current count). A key with no copy left keeps its slot. Saved
     /// as `pouch_packed` only when not empty (no save bump: a save without it reads the current pouch).
     pub pouch_packed: IndexMap<String, i64>,
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): unit track id -> the member's stage on it (1..the row's stages; a track
+    /// without an entry reads 0). Saved as `tracks` only when a stage is above 0 (no save bump: a save without it reads
+    /// every track at 0).
+    pub tracks: IndexMap<String, i64>,
+    /// PK2-S1: the permanent max HP offset (bone-scraping, excision; negative lowers it), added to the built max HP
+    /// (at least 1). Saved as `max_hp_offset` only when not 0.
+    pub max_hp_offset: i64,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -196,6 +207,10 @@ impl UnitState {
         if !item_fits_slot(def, slot) {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
+        // PK2-S1: a member grant `forbid_hands` (a unit track's stage) refuses two-handed items
+        if rpgkit_rules::unit::forbids_hands(progression::forbid_hands(d, self), def) {
+            return Err(format!("{} is two-handed: {} can't wield two-handed items now.", def.name, progression::display_name(d, self)));
+        }
         Ok(())
     }
 
@@ -286,6 +301,14 @@ impl UnitState {
         if !self.pouch_packed.is_empty() {
             out.insert(POUCH_PACKED_KEY.into(), Value::Object(self.pouch_packed.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
         }
+        // PK2-S1: only a member on a track saves `tracks`, only an offset saves `max_hp_offset`
+        let tracks: Dict = self.tracks.iter().filter(|(_, v)| **v != 0).map(|(k, v)| (k.clone(), int(*v))).collect();
+        if !tracks.is_empty() {
+            out.insert(TRACKS_KEY.into(), Value::Object(tracks));
+        }
+        if self.max_hp_offset != 0 {
+            out.insert(MAX_HP_OFFSET_KEY.into(), int(self.max_hp_offset));
+        }
         Value::Object(out)
     }
 
@@ -331,7 +354,36 @@ impl UnitState {
             deck_problems,
             conditions: json::sget(d, "conditions"),
             pouch_packed: d.get(POUCH_PACKED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            tracks: d.get(TRACKS_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            max_hp_offset: json::i(d, MAX_HP_OFFSET_KEY, 0),
         }
+    }
+
+    /// PK2-S1: the member's stage on unit track `track` (0 = not on it).
+    pub fn track_stage(&self, track: &str) -> i64 {
+        self.tracks.get(track).copied().unwrap_or(0)
+    }
+
+    /// PK2-S1: a loaded member's tracks the data no longer allows: a track id with no row is dropped, a stage past its
+    /// row's top is held at the top (each with a load warning; never a refusal). Returns the warnings.
+    pub fn sanitize_tracks(&mut self, d: &Data) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let name = self.id.clone();
+        self.tracks.retain(|track, stage| match d.cat.unit_tracks.get(track) {
+            None => {
+                warnings.push(format!("Unit '{name}': unit track '{track}' is gone; its stage {stage} is dropped."));
+                false
+            }
+            Some(row) => {
+                let top = i64::from(row.top());
+                if *stage > top {
+                    warnings.push(format!("Unit '{name}': unit track '{track}' stage {stage} is held at its top stage {top}."));
+                    *stage = top;
+                }
+                true
+            }
+        });
+        warnings
     }
 
     /// ROSTER1 W1: whether the member carries condition `id`.
@@ -371,6 +423,13 @@ impl UnitState {
         }
         if self.hp_lost < 0 {
             errors.push(format!("{at}: hp_lost must be 0 or more."));
+        }
+        // PK2-S1: a stage is never below 0 (an unknown track or a stage past the row's top is dropped or held at load,
+        // `sanitize_tracks`)
+        for (track, stage) in &self.tracks {
+            if *stage < 0 {
+                errors.push(format!("{at}: track '{track}' stage must be 0 or more."));
+            }
         }
         for (i, c) in self.conditions.iter().enumerate() {
             if !MEMBER_CONDITIONS.contains(&c.as_str()) {
@@ -903,7 +962,7 @@ pub struct Departed {
     pub member: UnitState,
     /// One of `rpgkit_data::DEPART_LIVES`.
     pub life: String,
-    /// One of `rpgkit_data::DEPART_CAUSES`.
+    /// One of `rpgkit_data::DEPART_CAUSES` or a unit track row's `cause` (`Catalog::depart_causes`).
     pub cause: String,
     pub encounter: String,
     pub day: i64,
@@ -1141,8 +1200,8 @@ impl PartyState {
             if !DEPART_LIVES.contains(&x.life.as_str()) {
                 errors.push(format!("Departed '{id}': unknown life '{}' (known: {}).", x.life, DEPART_LIVES.join(", ")));
             }
-            if !DEPART_CAUSES.contains(&x.cause.as_str()) {
-                errors.push(format!("Departed '{id}': unknown cause '{}' (known: {}).", x.cause, DEPART_CAUSES.join(", ")));
+            if !d.cat.depart_cause_ok(&x.cause) {
+                errors.push(format!("Departed '{id}': unknown cause '{}' (known: {}).", x.cause, d.cat.depart_causes().join(", ")));
             }
             if x.day < 0 {
                 errors.push(format!("Departed '{id}': day must be 0 or more."));

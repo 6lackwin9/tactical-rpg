@@ -158,6 +158,29 @@ impl Resolver {
         resolving
     }
 
+    /// PK2-S1: the command `i` starting now runs a skill with `uses_per_battle` (0 = no limit): used up already, it is
+    /// cancelled with a log line (true); its use is counted once its costs are paid (`count_use`).
+    fn used_up(&mut self, w: &mut World, i: usize) -> bool {
+        let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
+        let Some(limit) = w.cat.skill(&id).map(|s| s.uses_per_battle).filter(|&n| n > 0) else { return false };
+        if w.skill_uses.get(&(c, id)).copied().unwrap_or(0) < limit {
+            return false;
+        }
+        self.scheduled[i].cancelled = true;
+        let msg = format!("[Action Failed] {}'s {} is used up this battle.", w.units[c].name, self.scheduled[i].command.name);
+        self.notes.push((i, msg.clone()));
+        self.log.push(msg);
+        true
+    }
+
+    /// PK2-S1: counts one use of the command's skill when it has a `uses_per_battle` limit.
+    fn count_use(&self, w: &mut World, i: usize) {
+        let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
+        if w.cat.skill(&id).is_some_and(|s| s.uses_per_battle > 0) {
+            *w.skill_uses.entry((c, id)).or_insert(0) += 1;
+        }
+    }
+
     /// Commands starting now pay AP (skill + stance switch; debt allowed; RULESET1 T11: not the units `pays_ap` spares),
     /// enter their stance and run on_start.
     /// ATTACKLOCK1: under `attack_lock` the block's dashes start after its other actions and read the tiles as they
@@ -186,11 +209,17 @@ impl Resolver {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
+            // PK2-S1: a skill with `uses_per_battle` the unit has used up fails at its start (no AP)
+            if self.used_up(w, i) {
+                continue;
+            }
             // HOOKS1 UM2: a meter cost the unit cannot pay now fails the command unpaid (rule unit_meters; nothing in
             // classic)
             if crate::meter::unpaid(self, w, i) {
                 continue;
             }
+            // PK2-S1: the costs are paid, so the use counts (a command failing unpaid keeps its use)
+            self.count_use(w, i);
             let a = &self.scheduled[i];
             let total = a.command.ap_cost + a.command.stance_switch_cost;
             if w.pays_ap(c) {
