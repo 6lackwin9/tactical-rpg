@@ -2,12 +2,13 @@
 
 use aegis_ui::theme::th;
 use super::board::{cell_rect, draw_flat, draw_stage, hp_bar, note_drawn, with_alpha, Board};
-use super::input::{engage_positions, kind_name, rest_text, target_name, RowAct};
+use super::input::{engage_positions, kind_name, pick_text, rest_text, skill_text, target_name, RowAct};
 use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, pip_view, poise_bar, poise_number, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
-use super::tips::{ap_blocks, ap_gauge_of, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, REST_BLOCK};
+use super::skill_menu::CHANNEL_TINT;
+use super::tips::{ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, REST_BLOCK};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
@@ -169,10 +170,18 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             .map(|e| {
                 let sk = &w.cat.skills[e.skill];
                 let chain = if e.item.is_some() { vec![kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
-                ((e.start_block, e.end_block(pw), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage), chain)
+                // PK1-S2c (PK1 4.3 item 6): a marrow version's name with the marrow mark
+                let name = if e.item.is_some() { sk.name.clone() } else { skill_text(pw, u, e.skill) };
+                ((e.start_block, e.end_block(pw), name, sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage), chain)
             })
             .unzip(),
         _ => (Vec::new(), Vec::new()),
+    };
+    // PK1-S2c (PK1 4.3 item 6, user 2026-11-10): which spans run in the Channel round's mode (the placeholder tint)
+    let channel_spans: Vec<bool> = match sel {
+        Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| channel_action(w, a)).collect(),
+        Some(u) if w.units[u].is_active() => compiled.iter().flat_map(|st| st.entries.iter()).map(|e| e.item.is_none() && channel_block(pw, u, &w.cat.skills[e.skill])).collect(),
+        _ => Vec::new(),
     };
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
     // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
@@ -340,13 +349,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let ghost = ghosts.get(k).copied().unwrap_or(false) && !rest;
         // VISCLAR1-C (decision "Battle view answers, part 2"): one solid colour a block, no wind-up or impact shading (the
         // full timeline view keeps its parts); an auto-filled block fades, with no outline
-        let fill = if rest { REST_BLOCK } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
-        let edge = if live { th().gold } else if ghost { rgba(0, 0, 0, 0) } else if timeline { fill } else { rgba(255, 255, 255, 50) };
+        // PK1-S2c (placeholder, user 2026-11-10): a span in the Channel round's mode is tinted violet with a violet edge
+        let channel = channel_spans.get(k).copied().unwrap_or(false);
+        let base = if channel { channel_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
+        let fill = if rest { REST_BLOCK } else if ghost { aegis_ui::timeline::ghost_fill(base) } else { base };
+        let edge = if live { th().gold } else if channel { CHANNEL_TINT } else if ghost { rgba(0, 0, 0, 0) } else if timeline { fill } else { rgba(255, 255, 255, 50) };
         ui.p.panel(r, fill, edge, RADIUS);
         if timeline {
             // VISCLAR1-B (mock C): the skill's icon and name centred, the icon alone when the name does not fit
             let look = if rest { BlockLook::Rest } else if ghost { BlockLook::Ghost } else { BlockLook::Chosen };
-            strip_labels.push(draw_block_label(&mut ui, &mut cx.art, r, &e.2, icons.get(k).map_or(&[], Vec::as_slice), look));
+            let mut label = draw_block_label(&mut ui, &mut cx.art, r, &e.2, icons.get(k).map_or(&[], Vec::as_slice), look);
+            if channel {
+                label["channel"] = json!(true);
+            }
+            strip_labels.push(label);
         } else {
             ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, th().text);
         }
@@ -536,6 +552,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             }
         };
         let ap_line = (format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ALLY);
+        // PK1-S2c (FB-174, PK1-S1 `ap` set): why the hero's AP is held this round (the kit's `State::ap_held`)
+        let ap_held = s.resolver.triggers.ap_held(h).map(|(ap, src)| (ap_held_text(ap, src), th().foe));
         if timeline {
             // INPUT1 IF8: the round first: "Intent: <Intent> (<kind>) from <first pick | tactic>" (or carried over), a
             // ghost's intent change that waits for Confirm (IN6), the target, the picks, the planned commands without
@@ -543,7 +561,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let intent = ri::intent_of(pw, h);
             let picks = rip::picks_of(w, h);
             let from = match picks.iter().find(|p| p.holds_target()) {
-                Some(p) => format!(" from {}", rip::pick_name(w, p)),
+                Some(p) => format!(" from {}", pick_text(w, h, p)),
                 None if picks.is_empty() && !g.player_target.contains(&h) => format!(" from {}", TACTIC_LABELS[g.tactic_of(h)]),
                 None => " (carried over)".into(),
             };
@@ -564,8 +582,12 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 Some(t) => lines.push((format!("Target: {}", target_name(pw, t)), th().text)),
                 None => lines.push(("Target: click the board".into(), th().dim)),
             }
+            // PK1-S2c (PK1 4.3 items 1-2): a Channel round says so (placeholder words and tint)
+            if emberwake_battle::channel::is_channel(pw, h) {
+                lines.push((format!("{} round: marrow versions only", RoundIntent::Channel.label(&pw.cat)), CHANNEL_TINT));
+            }
             if !picks.is_empty() && !s.plan_confirmed {
-                lines.push((format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")), th().gold));
+                lines.push((format!("Picks: {}", picks.iter().map(|p| pick_text(w, h, p)).collect::<Vec<_>>().join(", ")), th().gold));
             }
             if s.plan_confirmed {
                 for (start, _, name, _, tgt) in committed(s, h) {
@@ -574,7 +596,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 }
             } else {
                 for (k, e) in st.entries.iter().enumerate().filter(|(_, e)| e.step_index >= 0 && emberwake_battle::skill::kind(&w.cat.skills[e.skill]) != Kind::Rest) {
-                    let name = &w.cat.skills[e.skill].name;
+                    let name = if e.item.is_some() { w.cat.skills[e.skill].name.clone() } else { skill_text(pw, h, e.skill) };
                     let tgt = e.target.filter(|t| *t != h).map(|t| format!(" > {}", short_name(&w.units[t].name))).unwrap_or_default();
                     lines.push((format!("B{} {name}{tgt}", e.start_block), if ghosts.get(k).copied().unwrap_or(false) { th().dim } else { th().text }));
                 }
@@ -595,12 +617,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 lines.push((note, th().foe));
             }
             lines.push(ap_line);
+            lines.extend(ap_held);
             statuses(&mut lines);
             stats(&mut lines);
             lines.push((format!("Gear: {weapon}"), th().gold));
         } else {
             stats(&mut lines);
             lines.push(ap_line);
+            lines.extend(ap_held);
             lines.push((format!("Gear: {weapon}"), th().gold));
             statuses(&mut lines);
             if s.plan_confirmed {
@@ -620,7 +644,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                     lines.push(("No plan yet".into(), th().gold));
                 }
                 for e in st.entries.iter().filter(|e| e.step_index >= 0) {
-                    let name = &w.cat.skills[e.skill].name;
+                    let name = if e.item.is_some() { w.cat.skills[e.skill].name.clone() } else { skill_text(pw, h, e.skill) };
                     let tgt = e.target.filter(|t| *t != h).map(|t| format!(" > {}", short_name(&w.units[t].name))).unwrap_or_default();
                     lines.push((format!("B{} {name}{tgt}", e.start_block), th().text));
                 }
@@ -708,7 +732,11 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // VC2: the focus set but the unit under the mouse (each view adds its own hover)
     let focus = focus_set(w, sel, None, pinned);
     let stage_set = g.stage_set(cx);
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
+    // PK1-S2c (PK1 4.3 item 6, placeholder): the units whose round is a Channel round wear the tint: a party member's
+    // own flag, an enemy's through its round record while the tells show
+    let channel_units: Vec<usize> = (0..w.units.len()).filter(|&i| if w.allies.contains(&i) { emberwake_battle::channel::is_channel(w, i) } else { show_tells && rounds.iter().any(|r| r.unit == i && r.channel) }).collect();
+    g.channel_units = channel_units.clone();
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref(), channel: &channel_units };
     let (board_hover, flat_hover) = match view {
         View::Stage => (draw_stage(board, &stage_set, &mut ui, cx, &tuning, now), None),
         View::Flat => (None, draw_flat(board, &mut ui, cx, &tuning, now)),

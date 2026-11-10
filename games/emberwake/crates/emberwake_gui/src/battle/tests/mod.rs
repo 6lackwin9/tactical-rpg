@@ -23,6 +23,7 @@ mod script_screen_tests;
 mod portrait_panel_tests;
 mod portrait_timeline_tests;
 mod strip_block_tests;
+mod channel_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};

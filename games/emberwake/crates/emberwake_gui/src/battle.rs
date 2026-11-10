@@ -43,7 +43,9 @@ pub(crate) use marks::{party_foresight_off, seen_intents};
 #[allow(unused_imports)]
 pub(crate) use marks::FORESIGHT_OFF;
 pub(crate) use overlays::{overlay_default, Layers, OVERLAY_GROUPS};
-pub(crate) use tips::{action_rows, ap_lines, kind_color};
+pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, kind_color};
+pub(crate) use input::skill_text;
+pub(crate) use skill_menu::CHANNEL_TINT;
 use draw::{draw, log_groups_json};
 use flow::boss_fight;
 use input::{pick_json, Deferred, Popup};
@@ -389,6 +391,8 @@ pub struct BattleScreen {
     /// round banner's round with the FX clock ms it started at.
     card_ap: Vec<(usize, ApPips)>,
     cards_shown: Vec<Value>,
+    /// PK1-S2c (placeholder): the units drawn with the Channel tint last frame (the agent link's `channel_units`).
+    channel_units: Vec<usize>,
     banner: Option<(i32, u64)>,
     /// VISCLAR1-D: the round's summary shown before the next round's prompt while that prompt stands (prompt, summary), and
     /// when the last advance of a timeline battle came (`CONFIRM_GUARD_MS`).
@@ -504,6 +508,7 @@ impl BattleScreen {
             waiting: None,
             card_ap: Vec::new(),
             cards_shown: Vec::new(),
+            channel_units: Vec::new(),
             banner: None,
             round_note: None,
             advanced_at: None,
@@ -1020,6 +1025,10 @@ impl Screen<GameCx> for BattleScreen {
             out["strip_labels"] = json!(self.strip_labels);
             // VISCLAR1-D: the party cards as last drawn and the round banner showing (null: none)
             out["party_cards"] = json!(self.cards_shown);
+            // PK1-S2c: the units wearing the Channel tint (key only under the rule channel)
+            if emberwake_battle::channel::on(w) {
+                out["channel_units"] = json!(self.channel_units);
+            }
             out["round_banner"] = json!(self.round_banner_now(cx).map(|b| json!({"round": b.0, "alpha": b.1})));
         }
         // INPUT1 PB1-PB4: the playback aids (timeline battles): the speed, whether the playback waits at a block's end

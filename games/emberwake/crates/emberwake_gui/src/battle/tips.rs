@@ -349,6 +349,36 @@ pub(super) fn committed_icon_chains(s: &Session, u: usize) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// PK1-S2c (PK1 4.3 item 6): whether `u` runs skill `s` in its Channel round's mode (a marrow version or a marrow-only
+/// skill, Feed and Vent among them: `channel::version`): the placeholder tint's test for a strip or timeline block.
+pub(crate) fn channel_block(w: &World, u: usize, s: &emberwake_data::SkillDef) -> bool {
+    emberwake_battle::channel::version(w, u, s).is_some() && emberwake_battle::channel::problem(w, u, s).is_none()
+}
+
+/// PK1-S2c: whether committed action `a` runs in a Channel round's mode (its command's marrow flag, or a marrow-only
+/// skill in its unit's Channel round).
+pub(crate) fn channel_action(w: &World, a: &emberwake_battle::resolver::ScheduledAction) -> bool {
+    a.command.marrow || w.cat.skill(&a.command.skill).is_some_and(|s| channel_block(w, a.unit, s))
+}
+
+/// PK1-S2c (placeholder, user 2026-11-10): a block colour in a Channel round's mode: `c` blended halfway to the Channel
+/// tint (the final look comes with the UI layout work).
+pub(crate) fn channel_fill(c: Rgba) -> Rgba {
+    let t = super::skill_menu::CHANNEL_TINT;
+    let mix = |a: u8, b: u8| ((a as u16 + b as u16) / 2) as u8;
+    [mix(c[0], t[0]), mix(c[1], t[1]), mix(c[2], t[2]), c[3]]
+}
+
+/// PK1-S2c (FB-174): the planner's reason for an AP hold (PK1-S1 `ap` set; `trigger::State::ap_held`): "AP held at 0
+/// this round (Collapse)".
+pub(super) fn ap_held_text(ap: i32, source: &str) -> String {
+    if source.is_empty() {
+        format!("AP held at {ap} this round")
+    } else {
+        format!("AP held at {ap} this round ({source})")
+    }
+}
+
 /// A kind's own icon.
 pub(super) fn kind_icon(kind: &str) -> String {
     format!("skills/kinds/{}.png", kind.to_lowercase())
@@ -387,7 +417,9 @@ pub(crate) fn action_rows(w: &World, actions: &[emberwake_battle::resolver::Sche
                 CmdKind::Walk { .. } => ("MOVE", None),
                 CmdKind::Disengage { .. } => ("DISENGAGE", None),
             };
-            let name = if a.cancelled { format!("{} (cancelled)", a.command.name) } else { a.command.name.clone() };
+            // PK1-S2c (PK1 4.3 item 6): a marrow version's name with the marrow mark (`intent::skill_name`)
+            let name = emberwake_battle::intent::skill_name(w, &a.command);
+            let name = if a.cancelled { format!("{name} (cancelled)") } else { name };
             (a.start, a.end, name, kind.to_string(), target.filter(|t| *t != u).map(|t| w.units[t].name.clone()))
         })
         .collect()

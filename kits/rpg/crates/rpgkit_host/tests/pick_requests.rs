@@ -168,3 +168,21 @@ fn accept_ghost_makes_the_ghost_picks_and_replays() {
     }
     assert_eq!(row(&mut again, 0), row(&mut h, 0), "the replay reaches the same round plan");
 }
+
+/// PK1-S2c `channel {unit, on}`: the Channel toggle is refused (an error, not recorded, nothing changes) for a unit
+/// that cannot Channel (this battle has no rule `channel`) and without `on`; outside planning it is refused too.
+#[test]
+fn channel_is_refused_for_a_unit_that_cannot_channel_and_not_recorded() {
+    let mut h = host();
+    let before = (row(&mut h, 0), history(&mut h).len());
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}));
+    assert_eq!(r["ok"], json!(false), "{r}");
+    assert!(r["error"].as_str().unwrap().contains("cannot Channel"), "{r}");
+    let r = h.handle(&json!({"cmd": "channel", "unit": 0}));
+    assert_eq!(r["error"], json!("channel needs on: true or false"), "{r}");
+    let r = h.handle(&json!({"cmd": "channel", "unit": 2, "on": true}));
+    assert_eq!(r["error"], json!("channel needs a party unit"), "an enemy: {r}");
+    assert_eq!((row(&mut h, 0), history(&mut h).len()), before, "nothing changed, nothing recorded");
+    assert_eq!(h.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
+    assert_eq!(h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}))["error"], json!("not planning"));
+}

@@ -32,8 +32,27 @@ const CELL_EDGE: Rgba = rgb(170, 175, 190);
 const FADE: u8 = 70;
 /// The neutral row's name.
 const NEUTRAL_LINE: &str = "Any time";
-/// The neutral row's buttons in their places (the mock's Fill, Move, Rest; on another ally, Select).
+/// The neutral row's buttons in their places (the mock's Fill, Move, Rest; on another ally, Select). PK1-S2c: the
+/// Channel toggle (`CHANNEL`) goes after Rest only on a menu that has it, so every other menu keeps its places and width.
 const NEUTRAL: [&str; 4] = ["Fill", "Move", "Rest", "Select"];
+/// PK1-S2c (PK1 4.3 item 1, user 2026-11-10): the Channel toggle's button (0 AP, 0 blocks; only for a unit that can
+/// Channel). A placeholder place: the final UI moves it to a mode control.
+pub(super) const CHANNEL: &str = "Channel";
+/// PK1-S2c (PK1 4.3 item 6): the placeholder Channel look (the toggle lit, a Channel round's unit and its marrow
+/// blocks): a violet tint until the UI layout work designs the real one (user 2026-11-10).
+pub(crate) const CHANNEL_TINT: Rgba = rgb(170, 90, 230);
+/// How strongly the placeholder tint lies over a unit's sprite.
+pub(super) const CHANNEL_TINT_ALPHA: u8 = 110;
+
+/// The neutral buttons of a menu in their order: Fill, Move, Rest, the Channel toggle when `channel`, Select.
+fn neutral_order(channel: bool) -> Vec<&'static str> {
+    let mut out = vec![NEUTRAL[0], NEUTRAL[1], NEUTRAL[2]];
+    if channel {
+        out.push(CHANNEL);
+    }
+    out.push(NEUTRAL[3]);
+    out
+}
 
 /// Where a row of the menu goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +87,10 @@ pub(super) struct MenuGrid {
     /// The name column and a neutral button's width, measured for the text size (`fit`).
     pub(super) label_w: i32,
     pub(super) button_w: i32,
+    /// PK1-S2c: the neutral buttons in their order (the Channel toggle only on a menu that has it), and the Rest
+    /// button's text when it names another skill (Feed in a Channel round; measured with the buttons).
+    pub(super) buttons: Vec<&'static str>,
+    pub(super) rest_name: String,
 }
 
 impl MenuGrid {
@@ -78,9 +101,10 @@ impl MenuGrid {
         let mut places = vec![(0, 0); rows.len()];
         let mut cols = 0;
         let mut depth = 1;
+        let buttons = neutral_order(rows.iter().any(|r| r.slot == Some(Slot::Neutral(CHANNEL))));
         for (k, row) in rows.iter().enumerate() {
             if let Some(Slot::Neutral(text)) = row.slot {
-                places[k] = (0, NEUTRAL.iter().position(|n| *n == text).unwrap_or(0) as i32);
+                places[k] = (0, buttons.iter().position(|n| *n == text).unwrap_or(0) as i32);
             }
         }
         for (i, name) in intents {
@@ -93,20 +117,21 @@ impl MenuGrid {
             }
             depth += 1;
         }
-        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, button_w: ICON + 7 }
+        let rest_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral("Rest"))).map(|r| r.label.clone()).filter(|l| l != "Rest").unwrap_or_default();
+        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, button_w: ICON + 7, buttons, rest_name }
     }
 
     /// Measures the name column and the neutral buttons for the text size.
     pub(super) fn fit(&mut self, p: &mut Painter) {
         let label = self.lines.iter().map(|l| p.text_w(&l.0, BODY)).fold(0.0, f32::max);
-        let button = NEUTRAL.iter().map(|n| p.text_w(n, SMALL)).fold(0.0, f32::max);
+        let button = self.buttons.iter().copied().chain(std::iter::once(self.rest_name.as_str())).map(|n| p.text_w(n, SMALL)).fold(0.0, f32::max);
         self.label_w = label.ceil() as i32 + 2;
         self.button_w = (button.ceil() as i32 + 6).max(ICON);
     }
 
     /// The panel's size with a title row `row_h` high.
     pub(super) fn size(&self, row_h: i32) -> (i32, i32) {
-        let neutral = NEUTRAL.len() as i32 * (self.button_w + GAP);
+        let neutral = self.buttons.len() as i32 * (self.button_w + GAP);
         let cells = neutral.max(self.cols * (ICON + GAP));
         ((2 * PAD + self.label_w + GAP + cells - GAP).max(MENU_MIN_W), row_h + 2 + self.depth * (ICON + GAP) - GAP + PAD)
     }
@@ -166,11 +191,15 @@ pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &
         let lit = hover && row.valid;
         match row.slot {
             Some(Slot::Neutral(text)) => {
-                let fill = if lit { th().card_hot } else { th().card };
-                let edge = if lit { th().gold } else { th().edge_live };
+                // PK1-S2c: the Channel toggle while on is lit in the placeholder Channel tint
+                let on = matches!(row.act, super::input::RowAct::Channel(false));
+                let fill = if lit { th().card_hot } else if on { CHANNEL_TINT } else { th().card };
+                let edge = if lit { th().gold } else if on { CHANNEL_TINT } else { th().edge_live };
                 ui.p.panel(rr, with_alpha(fill, shows), with_alpha(edge, shows), 1.5);
                 let y = rr.y as f32 + (rr.h as f32 - ui.p.line_h(SMALL)) / 2.0;
-                ui.p.text_center(rr.x as f32 + rr.w as f32 / 2.0, y, text, SMALL, with_alpha(th().text, shows.max(110)));
+                // PK1-S2c (PK1 4.3 item 5): the Rest button names what a Rest block plans (Feed in a Channel round)
+                let shown = if text == "Rest" && !row.label.is_empty() { row.label.as_str() } else { text };
+                ui.p.text_center(rr.x as f32 + rr.w as f32 / 2.0, y, shown, SMALL, with_alpha(th().text, shows.max(110)));
             }
             _ => {
                 let edge = if lit { th().gold } else { CELL_EDGE };

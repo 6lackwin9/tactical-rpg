@@ -3,6 +3,7 @@
 use aegis_ui::theme::th;
 use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
+use super::skill_menu::{CHANNEL_TINT, CHANNEL_TINT_ALPHA};
 use super::{Action, ALLY, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
 use super::tips::{intent_glyph, intent_ring_color, ring_intent, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
@@ -96,6 +97,8 @@ pub(super) struct Board<'a> {
     pub(super) pushes: &'a [emberwake_battle::forced::Forecast],
     /// ENCOUNTER2-U: a hold escape's tiles and gate (None without one).
     pub(super) hold: Option<&'a HoldMarks>,
+    /// PK1-S2c (PK1 4.3 item 6, placeholder): the units whose round is a Channel round as the party sees it (the tint).
+    pub(super) channel: &'a [usize],
 }
 
 /// INPUT1 MR12: `unit` moved in this step by a dash: a command of its whose start is this block made the dash board event
@@ -244,7 +247,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// to centre over the units, the cell widgets.
 /// The Flat board; returns the unit whose tile the mouse is over (VC2's hovered unit).
 pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel } = b;
     let w = &s.w;
     // VISCLAR1 VC2: the unit under the mouse (its tile) joins the focus set; AR3: the arrows of the selected and the
     // inspected unit (Alt: all)
@@ -386,6 +389,10 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
                 if let Some((col, ta)) = fx::tint_of(looks, anim_now, reduce, tuning) {
                     status_tint(&mut ui.p, &mut cx.art, (b, palette, &f), tr, facing, col, scaled(ta, alpha));
                 }
+                // PK1-S2c (placeholder, user 2026-11-10): a Channel round's unit wears the violet tint
+                if channel.contains(&i) {
+                    status_tint(&mut ui.p, &mut cx.art, (b, palette, &f), tr, facing, CHANNEL_TINT, scaled(CHANNEL_TINT_ALPHA, alpha));
+                }
                 if flash {
                     hit_flash(&mut ui.p, &mut cx.art, b, palette, &f, tr, facing);
                 }
@@ -394,6 +401,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
                 }
             }
             _ => {
+                let ring = if channel.contains(&i) { CHANNEL_TINT } else { ring };
                 let ring = with_alpha(ring, scaled(ring[3], alpha));
                 ui.p.panel(tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
                 ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, th().bg);
@@ -539,7 +547,7 @@ pub(super) fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// (front-most last, so it takes the click). `set`: the world's stage set (LOOK1-L1; "" = `common_stage`). Returns the
 /// unit the mouse is over on the board.
 pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold, channel } = b;
     let w = &s.w;
     // VISCLAR1 AR3: the arrows of the selected and the inspected unit (Alt: all)
     let shown = overlay.map(|o| o.shown(&layers, sel, inspect, alt));
@@ -753,6 +761,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                                     if let Some((col, ta)) = fx::tint_of(&t.looks, anim_now, reduce, tuning) {
                                         status_tint(&mut ui.p, &mut cx.art, (b, &t.palette, &f), t.tr, t.facing, col, scaled(ta, alpha));
                                     }
+                                    // PK1-S2c (placeholder): a Channel round's unit wears the violet tint
+                                    if channel.contains(&i) {
+                                        status_tint(&mut ui.p, &mut cx.art, (b, &t.palette, &f), t.tr, t.facing, CHANNEL_TINT, scaled(CHANNEL_TINT_ALPHA, alpha));
+                                    }
                                     // FX1 4.1: the hit flash right after its unit's sprite
                                     if t.flash {
                                         hit_flash(&mut ui.p, &mut cx.art, b, &t.palette, &f, t.tr, t.facing);
@@ -763,6 +775,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                                     frames.push((i, f));
                                 }
                                 _ => {
+                                    let ring = if channel.contains(&i) { CHANNEL_TINT } else { ring };
                                     let ring = with_alpha(ring, scaled(ring[3], alpha));
                                     ui.p.panel(t.tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
                                     let letter = w.units[i].name.chars().next().unwrap_or('?').to_string();

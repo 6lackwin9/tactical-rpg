@@ -127,6 +127,29 @@ pub fn refusal_text(reason: &str) -> String {
     }
 }
 
+/// PK1-S2c (PK1 4.3 item 5, Vent's two reasons): a skill-menu refusal in words: the HP cost's as `refusal_text`
+/// ("Not enough HP: 9, it costs 10"), a meter gate's (`meter::gate_problem`, "Strain 30 < 50") "Needs Strain 50 or
+/// more to start: 30"; any other reason as the planner gave it.
+pub fn menu_refusal_text(w: &World, reason: &str) -> String {
+    let hp = refusal_text(reason);
+    if hp != reason {
+        return hp;
+    }
+    let gate = reason.rsplit_once(" < ").and_then(|(left, min)| {
+        let (name, have) = left.rsplit_once(' ')?;
+        Some((name, have.parse::<i32>().ok()?, min.parse::<i32>().ok()?))
+    });
+    if let Some((name, have, min)) = gate {
+        if let Some(def) = w.cat.unit_meters.values().find(|m| m.name == name) {
+            let g = emberwake_data::MeterGate { meter: def.id.clone(), min };
+            if emberwake_battle::meter::gate_problem(w, Some(&g), |_| Some(have)) == reason {
+                return format!("Needs {name} {min} or more to start: {have}");
+            }
+        }
+    }
+    reason.to_string()
+}
+
 /// INPUT1 MR4: a skill's range in words for its menu row tip and hover card: "Range 2: dash to a flank, then hit" or
 /// "Range 3: dash behind, then hit" for a skill with a position (its range N), else its band ("Range 2-4", "Range 1").
 pub fn range_line(w: &World, c: usize, s: &emberwake_data::SkillDef) -> String {

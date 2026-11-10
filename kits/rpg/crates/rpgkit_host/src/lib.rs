@@ -123,7 +123,7 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
 }
 
 /// ENCOUNTER2-C SR5: the requests a locked round refuses.
-const LOCKED_REFUSES: [&str; 10] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "pick", "unpick", "accept_ghost", "autofill"];
+const LOCKED_REFUSES: [&str; 11] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "pick", "unpick", "accept_ghost", "autofill", "channel"];
 
 fn err(msg: impl Into<String>) -> Value {
     json!({"ok": false, "error": msg.into()})
@@ -131,7 +131,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "tactics")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "channel" | "tactics")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -370,6 +370,7 @@ impl Battle {
             "unpick" => unpick_req(s, req),
             "accept_ghost" => accept_ghost_req(s, req),
             "autofill" => autofill_req(s, req),
+            "channel" => channel_req(s, req),
             "pick_options" => pick_options_req(s, req),
             "round_plan" => json!({"ok": true, "round_plan": round_plan(s)}),
             "tactics" => match tactics_arg(Some(req)) {
@@ -990,6 +991,28 @@ fn autofill_req(s: &mut Session, req: &Value) -> Value {
         s.w.autofill = on;
     }
     json!({"ok": true, "autofill": s.w.autofill, "round_plan": round_plan(s)})
+}
+
+/// PK1-S2c `channel {unit, on}` (PK1 4.3 item 1, rule `channel`): the converting Channel toggle
+/// (`Session::set_channel`): flips the member's round to Channel (`on` true) or back (false) and converts its plan; the
+/// reply is `pick`'s plus `lines` (the buffs that ended and the picks dropped) and the member's `channel` flag. A refusal
+/// (a unit that cannot Channel) is an error and leaves the battle as it was (not recorded).
+fn channel_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "channel") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    let Some(on) = req.get("on").and_then(Value::as_bool) else { return err("channel needs on: true or false") };
+    let before = pick_counts(s);
+    match s.set_channel(u, on) {
+        (Err(e), _) => err(e),
+        (Ok(lines), later) => {
+            let mut reply = pick_reply(s, &before, Ok(()), later);
+            reply["lines"] = json!(lines);
+            reply["channel"] = json!(rpgkit_battle::channel::is_channel(&s.w, u));
+            reply
+        }
+    }
 }
 
 /// `pick_options {unit, target}` (read-only): the rows of the member's menu on the target (IF2, ET1).
