@@ -230,6 +230,10 @@ This section records every option explored, Tushar's exact feedback, why rejecte
   | Battle, `Sunkward Battle Theme` | unknown | Remix > Cover of 1B | too slow (measured 60 BPM, the base's tempo); redo in Compose |
   | `Main Theme Upbeat 16-Bit Retro Version` | unknown | Producer, asked for a faster battle cover | not battle; kept as the base for higher-tempo work (Tushar). Same F minor (0.96), loose melodic match (0.61 vs 0.56), measured pulse about 56 BPM (busier, not clearly faster), 170.5 s song shape |
 
+  | `Sunkward Battle Theme (1)` | unknown | Compose (BPM 128, Length 2:00) | candidate: 123.2 s, pulse about 120 BPM (autocorrelation peaks 60, 120), steady 20 to 118 s; **D minor** as its prompt said (D, A, F, G), while 1B and the hub came out in F minor although their prompts said D minor (Tushar noticed the D/F mix-up); no exact repeat, so the free seam is weak (distance 0.023); `--bpm 120 --xfade 1.0` keeps the loop to whole bars: 92.0 s, 46 bars, waveform match 0.41; review `battle_bar120.ogg`, `battle_bar120_seam.mp3` (and the free cut `battle.ogg`, `battle_seam.mp3`) |
+
+  Keys as measured: menu and hub F minor, battle D minor. One key for the set means asking for F minor; whether the switch is heard is Tushar's call.
+
   Seeds matter for new Compose work (455684). Tracks already in Tushar's Flow Music library need no seed: they are the bases for Remix and Variation, and a Variation reports its new seed.
 
 - **Hub and battle covers (2026-11-11)**: the hub cover shares 1B's key and harmony (12-tone profile correlation 0.93; both centre on F, C, A-flat and E-flat, so the set is really in F minor, not the D minor the prompts asked for) and some melodic material (best 8 s pitch-sequence match 0.70 against a 0.57 no-shared-melody baseline: moderate, not a clear quote). 170.5 s, a 20 s build-in and a fade-out, so `--gap 2.5`: 172.2 s, review copies `hub_seed455684.ogg` and `hub_seed455684_wrap.mp3`. The battle cover kept the base's tempo (60 BPM measured) as expected: battle is made in Compose with BPM set, seed 455684, and the key named as F minor to match the set.

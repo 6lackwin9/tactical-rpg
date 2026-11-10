@@ -106,8 +106,11 @@ def band_features(mono: np.ndarray, hop: int, n_fft: int = 4096, bands: int = 32
     return feat / np.maximum(np.linalg.norm(feat, axis=1, keepdims=True), 1e-9)
 
 
-def find_loop(mono: np.ndarray, lo: int, hi: int, min_len_s: float, window_s: float = 2.0, hop_s: float = 0.05):
-    """Best (start, end) samples inside [lo, hi): what precedes the end matches what precedes the start."""
+def find_loop(mono: np.ndarray, lo: int, hi: int, min_len_s: float, window_s: float = 2.0, hop_s: float = 0.05,
+              bar_s: float = 0.0):
+    """Best (start, end) samples inside [lo, hi): what precedes the end matches what precedes the start. With bar_s,
+    only loops a whole number of bars long count, so the beat stays in time across the wrap (beat-driven tracks
+    without an exact repeat)."""
     hop = int(SR * hop_s)
     feat = band_features(mono, hop)
     w = int(window_s / hop_s)
@@ -124,7 +127,11 @@ def find_loop(mono: np.ndarray, lo: int, hi: int, min_len_s: float, window_s: fl
         raise SystemExit(f"steady part {(hi - lo) / SR:.1f} s is shorter than the minimum loop {min_len_s:.0f} s")
     sim = win[starts] @ win[f_lo:f_hi].T                       # starts x ends
     ends = np.arange(f_lo, f_hi)
-    valid = ends[None, :] - starts[:, None] >= min_len
+    span = ends[None, :] - starts[:, None]
+    valid = span >= min_len
+    if bar_s:
+        bars = span * hop_s / bar_s
+        valid &= np.abs(bars - np.round(bars)) * bar_s <= hop_s / 2
     dist = np.where(valid, 1 - sim, np.inf)
     best = float(dist.min())
     # generated songs repeat sections almost exactly (1B: a section every 87.3 s at distance 0.0004), so only seams
@@ -236,6 +243,9 @@ def main() -> None:
     ap.add_argument("--whole", action="store_true",
                     help="Loop the whole song: its fade-out laid over its intro (menus, songs with a shape).")
     ap.add_argument("--overlap", type=float, default=8.0, help="With --whole: seconds of overlap (default 8).")
+    ap.add_argument("--bpm", type=float, default=None,
+                    help="Section loop only: keep the loop a whole number of 4-beat bars at this tempo.")
+    ap.add_argument("--xfade", type=float, default=0.5, help="Section loop crossfade in seconds (default 0.5).")
     ap.add_argument("--gap", type=float, default=None,
                     help="Loop the whole song with this many seconds of silence after its fade-out (no overlap).")
     ap.add_argument("--min-loop", type=float, default=60.0, help="Shortest loop to accept, in seconds (default 60).")
@@ -270,11 +280,14 @@ def main() -> None:
     else:
         lo, hi, level = steady_part(mono)
         print(f"  steady part {lo / SR:.1f}..{hi / SR:.1f} s (blocks above {level:.1f} dB)")
-        start, end, dist, best = find_loop(mono, lo, hi, a.min_loop)
+        bar_s = 4 * 60 / a.bpm if a.bpm else 0.0
+        start, end, dist, best = find_loop(mono, lo, hi, a.min_loop, bar_s=bar_s)
+        if bar_s:
+            print(f"  bar-locked at {a.bpm:g} BPM: {(end - start) / SR / bar_s:.0f} bars of {bar_s:.2f} s")
         end, corr = align_end(mono, start, end)
         print(f"  loop {start / SR:.2f}..{end / SR:.2f} s ({(end - start) / SR:.1f} s), seam distance {dist:.4f} "
               f"(best possible {best:.4f}; 0 = identical), waveform match at the seam {corr:.2f} (1 = identical)")
-        out = loudness(make_loop(x, start, end), target)
+        out = loudness(make_loop(x, start, end, a.xfade), target)
         if a.preview:
             k = int(SR * 8)
             encode(np.vstack([out[-k:], out[:k]]), a.preview, "mp3")
