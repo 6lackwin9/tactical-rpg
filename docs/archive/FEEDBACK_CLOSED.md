@@ -1960,3 +1960,15 @@ Dependencies: PR5-1 `roll_table` (the crisis); PR5-2 is not in R5.
 | PR4-6 `WEBREL1-G1` | done (FB-161; FB-162 suggestion): the game runs in a browser (web entry, bundle, `dev_tools`, `fc.sh web`, smoke 40/40, WEBREL1 6.2) | `develop` | - |
 | PR4-7 `WEBREL1-P1` | done (FB-163; FB-164 suggestion): advisory `web` CI job, `web.yml` itch.io deploy; GitHub-side acceptance observable at the next release | `develop` | - |
 | PR4-9 `WEBOPT1` | done (FB-166): pinned Binaryen version_125 on CI, `wasm-opt` version guard in `fc.sh web`; first real `wasm-opt` run at the next release PR | `develop` | Post-R4 queue PR4-1..PR4-9 complete (@381b8746). Watch at the next release PR: the `web` job (`web-build`, pinned `wasm-opt` sizes, smoke on the optimised build). |
+| PR5-1 `ROLLTABLE1` | done (FB-168; FB-169 suggestion): trigger effect `roll_table` (weighted rows on the seeded battle RNG), content check, schema help; 0 golden diffs | `develop` | Post-R4 queue: PR5-1, PR5-2, ACTS23-R5 feasibility (FB-167)
+| PR5-2 `PHASEFX1` | done (FB-170, FB-171): encounter phase effects `side` (hostile_all, party, enemy) and `swap` (keep_pct, full), content checks; 0 golden diffs | `develop` | PR5-1, PR5-2 done; FB-167 answered
+| PR5-3 `PK1-S1` | done (FB-173; FB-174 questions): PK1 section 3 hooks (`heal_taken`, recoil, `strike_nearest`, `ap set`, `mark`, hazard `meter`, `unmark`); 0 golden diffs | `develop` | -
+| PR5-4 `PK1-S2a` | done (FB-176; FB-177 questions): rule `channel`, marrow versions, the converting toggle, Channel order and Feed, deck `marrow`, `requires_meter`, `hp_cost_pct`; `rules_contract_golden` re-recorded | `develop` | next: PR5-5, PR5-6, then PR5-7
+| PR5-5 `PK1-S2b` | done (FB-178; FB-179 question): Channel tells, marrow mark, AI Channel row (`CHANNEL_AI_EDGE` 1.2 as a kit constant); 0 golden diffs | `develop` | next: PR5-6, PR5-20, PR5-7
+| PR5-6 `PK1-S2c` | done (FB-180): Channel toggle, placeholder tint, marrow names, Feed on Rest, refusals in words, AP-hold line; host request `channel`; 0 golden diffs; follow-ups are PR5-21 | `develop` | -
+| PR5-20 `HEALPCT1` | done (FB-181, FB-183): skill field `heal_pct`; ruleset number `channel_ai_edge` (`rules_contract_golden` re-recorded) | `develop` | -
+| PR5-8 `PK2-S1` | done (FB-186; FB-187 questions): unit tracks, member grants, max HP offset, breach, settle, skill `unmark`; 0 golden diffs | `develop` | -
+| PR5-22 `PK1-KITFIX` | done (FB-189): `meter_set` in meter triggers, `inflict` for the battle, `rating_set`, Dojo presets as data, heal estimates apply `heal_taken`; 0 golden diffs | `develop` | -
+| PR5-21 `PK1-S2c-2` | done (FB-182): past-round tint, hotkey refusals in words, precondition asserts, `channel` replay and locked-round tests, Vent both reasons, term `cold_steel_mark`; 0 golden diffs | `develop` | -
+| PR5-16 `ROLLTABLE1-GUARD` | done (FB-175): the check refuses `guard` inside a `roll_table` on an `ally_hit` row; 0 golden diffs | `develop` | -
+| PR5-17 `FBARCHIVE-FENCE` | done (FB-172, answered): `feedback_check.py` treats headings inside fenced code blocks as text; an unclosed fence is a parse error | `develop` | -

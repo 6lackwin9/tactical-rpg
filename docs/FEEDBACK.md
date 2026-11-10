@@ -11,22 +11,11 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | --- | --- | --- | --- |
 | Done on `develop` | done | `develop` | ATTACKLOCK1 slice 1 (off until F1.2-S1), SIMCOUNT1, VISCLAR1-D (user look after the combat silos, UN-02), TESTCLEAN1, SKILLS1, SKILLS1-FB, KITIDS1, BASERULES1-M and -M2, U1.2-S1 and -S2, U2.2-S1 to -S3, U3.2-S1 and -S2, U4.2-S1 and -S2, S1.2-S1 to -S3, S2.2-S1 and -S2, U1.2-S3a to -S5, U3.2-S3 to -S5, U4.2-S3 and -S4, S1.2-S4, S2.2-S3 and -S4, AUDIT-R1. |
 | R1 to PR4 rows (R1 to R4 releases, the Post-R4 queue PR4-1..PR4-9) | released or done | `main` / `develop` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-10) |
-| PR5-1 `ROLLTABLE1` | done (FB-168; FB-169 suggestion): trigger effect `roll_table` (weighted rows on the seeded battle RNG), content check, schema help; 0 golden diffs | `develop` | Post-R4 queue: PR5-1, PR5-2, ACTS23-R5 feasibility (FB-167)
-| PR5-2 `PHASEFX1` | done (FB-170, FB-171): encounter phase effects `side` (hostile_all, party, enemy) and `swap` (keep_pct, full), content checks; 0 golden diffs | `develop` | PR5-1, PR5-2 done; FB-167 answered
-| PR5-3 `PK1-S1` | done (FB-173; FB-174 questions): PK1 section 3 hooks (`heal_taken`, recoil, `strike_nearest`, `ap set`, `mark`, hazard `meter`, `unmark`); 0 golden diffs | `develop` | -
-| PR5-4 `PK1-S2a` | done (FB-176; FB-177 questions): rule `channel`, marrow versions, the converting toggle, Channel order and Feed, deck `marrow`, `requires_meter`, `hp_cost_pct`; `rules_contract_golden` re-recorded | `develop` | next: PR5-5, PR5-6, then PR5-7
-| PR5-5 `PK1-S2b` | done (FB-178; FB-179 question): Channel tells, marrow mark, AI Channel row (`CHANNEL_AI_EDGE` 1.2 as a kit constant); 0 golden diffs | `develop` | next: PR5-6, PR5-20, PR5-7
-| PR5-6 `PK1-S2c` | done (FB-180): Channel toggle, placeholder tint, marrow names, Feed on Rest, refusals in words, AP-hold line; host request `channel`; 0 golden diffs; follow-ups are PR5-21 | `develop` | -
-| PR5-20 `HEALPCT1` | done (FB-181, FB-183): skill field `heal_pct`; ruleset number `channel_ai_edge` (`rules_contract_golden` re-recorded) | `develop` | -
+| PR5-1 to PR5-6, PR5-8, PR5-16, PR5-17, PR5-20 to PR5-22 | done (FB-168 to FB-189, answered) | `develop` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-10) |
 | PR5-7 `PK1-S3` | done (FB-190 data; FB-191 balance run, 6 findings for Design) | `develop` | -
 | PR5-18 `WEAPONROSTER1` | done (FB-192; FB-193 sims and questions): class lineup, default loadouts, placeholder `warrior/2h_polearm`, FB-188 rulings; `phasefold_golden` re-recorded | `develop` | -
 | PR5-25 `SKILL-UNMARK-TURNED` | done (FB-194): a SUPPORT skill's `unmark` reaches and calms a turned party member; the item `unmark` under round_intent too; 0 golden diffs | `develop` | -
 | PR5-23 `MUSICVAR1` | done (FB-195): music variants per request (seeded, never the last pick), Ogg loop points; 0 golden diffs | `develop` | next: PR5-24, PK2 rows
-| PR5-8 `PK2-S1` | done (FB-186; FB-187 questions): unit tracks, member grants, max HP offset, breach, settle, skill `unmark`; 0 golden diffs | `develop` | -
-| PR5-22 `PK1-KITFIX` | done (FB-189): `meter_set` in meter triggers, `inflict` for the battle, `rating_set`, Dojo presets as data, heal estimates apply `heal_taken`; 0 golden diffs | `develop` | -
-| PR5-21 `PK1-S2c-2` | done (FB-182): past-round tint, hotkey refusals in words, precondition asserts, `channel` replay and locked-round tests, Vent both reasons, term `cold_steel_mark`; 0 golden diffs | `develop` | -
-| PR5-16 `ROLLTABLE1-GUARD` | done (FB-175): the check refuses `guard` inside a `roll_table` on an `ally_hit` row; 0 golden diffs | `develop` | -
-| PR5-17 `FBARCHIVE-FENCE` | done (FB-172, answered): `feedback_check.py` treats headings inside fenced code blocks as text; an unclosed fence is a parse error | `develop` | -
 
 ## 2. Feedback Items (Append-Only)
 
