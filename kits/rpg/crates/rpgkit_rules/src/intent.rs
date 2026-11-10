@@ -125,7 +125,15 @@ pub fn allowed(rules: &Ruleset, s: &IntentInput, authored: &str) -> Vec<&'static
         return derive(s);
     }
     let legacy = if authored.is_empty() { ruleset::kind_intent(&s.kind) } else { authored };
-    [ASSAULT, STAND, SUPPORT, MANEUVER, FIELD, ruleset::CHANNEL, NEUTRAL].into_iter().filter(|i| *i == legacy).collect()
+    // PK1-S2a: the old `channel` intent is retired (a Channel round is the rule channel's round flag), so it reads none
+    [ASSAULT, STAND, SUPPORT, MANEUVER, FIELD, NEUTRAL].into_iter().filter(|i| *i == legacy).collect()
+}
+
+/// PK1-S2a (PK1 4.2, ACTS23 5.1 "only single-intent skills get a Channel row"): whether IR21 derives one intent for
+/// the skill, not neutral (only such a skill may have a marrow version or be marrow-only).
+pub fn single_intent(s: &IntentInput) -> bool {
+    let rows = derive(s);
+    rows.len() == 1 && rows[0] != NEUTRAL
 }
 
 /// Whether the derived list allows `intent` (the `row_allows` of the row-aware checks, W2-4).

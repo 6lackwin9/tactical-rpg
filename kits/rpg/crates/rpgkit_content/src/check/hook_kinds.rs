@@ -329,12 +329,19 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
     for (i, t) in list("triggers", "Triggers", SKILL_ROWS_MAX, out).iter().enumerate() {
         out.extend(trigger_row_errors(t, ctx, &format!("Trigger {}", i + 1), &TRIGGER_EVENTS, &[]));
     }
-    // UM6: a meter skill spends this meter (a negative delta on it)
+    // UM6: a meter skill spends this meter (a negative delta on it); PK1-S2a (FB-167 Q8): a marrow-only one (`channel.only`,
+    // the Channel basics Feed and Vent) moves it either way (a delta on it)
     for s in json::sget(e, "skills") {
         let row = refs.skills.iter().find(|r| json::s(r, "id") == s);
+        let delta_on = |r: &Dict, ok: &dyn Fn(i64) -> bool| json::aget(r, "meters").iter().any(|m| json::s(json::dict(m), "meter") == id && ok(json::to_int(json::get(json::dict(m), "delta"))));
         match row {
             None => out.push(format!("Meter skills: unknown skill '{s}'.")),
-            Some(r) if !json::aget(r, "meters").iter().any(|m| json::s(json::dict(m), "meter") == id && json::to_int(json::get(json::dict(m), "delta")) < 0) => {
+            Some(r) if json::b(json::dget(r, "channel"), "only", false) => {
+                if !delta_on(r, &|d| d != 0) {
+                    out.push(format!("Meter skills: '{s}' does not move {id} (a meters delta on it)."));
+                }
+            }
+            Some(r) if !delta_on(r, &|d| d < 0) => {
                 out.push(format!("Meter skills: '{s}' does not spend {id} (a negative meters delta on it)."));
             }
             _ => {}

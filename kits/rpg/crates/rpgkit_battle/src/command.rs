@@ -218,6 +218,9 @@ pub struct Command {
     /// HOOKS1 UM2: the skill's meter changes, paid at the command's start after the AP and HP cost (set only under the
     /// rule `unit_meters`).
     pub meters: Vec<rpgkit_data::MeterDelta>,
+    /// PK1-S2a: the skill's meter gate (`requires_meter`), tested at the command's start before any cost (set only under
+    /// the rule `unit_meters`).
+    pub gate: Option<rpgkit_data::MeterGate>,
     /// INPUT1 MR10: the band test counts a diagonal neighbour of the target as distance 1 (`round_intent::diagonal`).
     pub diagonal: bool,
     /// INPUT1 MR1: the position a carried Engage dashes to (None = none, or not a skill with a position).
@@ -294,6 +297,7 @@ impl Command {
             ignore_guard: false,
             guard_bypassed: false,
             meters: Vec::new(),
+            gate: None,
             diagonal: false,
             position: None,
             carry_range: 0,
@@ -1067,6 +1071,7 @@ impl Command {
         self.hp_cost = 0;
         self.ignore_guard = false;
         self.meters.clear();
+        self.gate = None;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -1615,6 +1620,17 @@ pub fn hp_cost_of(w: &World, s: &rpgkit_data::SkillDef) -> i32 {
     } else {
         0
     }
+}
+
+/// PK1-S2a (rule hp_cost): the HP skill `s` costs unit `c`: `hp_cost_of` plus `hp_cost_pct` of its max HP (rounded
+/// down, at least 1 HP when the percent is set; items pay none). The planners, the command and the screens read it.
+pub fn hp_cost_for(w: &World, c: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
+    let flat = hp_cost_of(w, s);
+    if s.hp_cost_pct <= 0 || !w.ruleset.has(rpgkit_rules::ruleset::HP_COST) || skill::is_item(s) {
+        return flat;
+    }
+    let max = w.units.get(c).map_or(0, |u| u.max_hp);
+    flat + (max * s.hp_cost_pct.min(99) / 100).max(1)
 }
 
 /// HOOKS1 HC1: why a unit at `hp` cannot use a skill costing `cost` HP ("" = it can): HP at or below the cost.

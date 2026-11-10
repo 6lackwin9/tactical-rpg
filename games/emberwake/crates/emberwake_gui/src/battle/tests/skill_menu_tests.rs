@@ -150,22 +150,24 @@ fn nothing_shifts_when_an_intent_fixes() {
     assert!(!grid.faded(None), "the neutral row never fades with an intent");
 }
 
-/// Rows of the fifth intent are one list entry: Channel listed, the menu has one more row of its own for a skill of that
-/// intent, nothing overlaps at any text size, and the panel stays on the screen from the screen's far corner.
+/// Rows of the fifth intent are one list entry: Field listed (PK1-S2a: Channel is a round flag now, never a row), the
+/// menu has one more row of its own for a skill of that intent, nothing overlaps at any text size, and the panel stays
+/// on the screen from the screen's far corner.
 #[test]
 fn a_fifth_row_holds() {
     let (mut cx, mut g, mut b) = arena();
     let (h, foe) = (b.selected.unwrap(), foe_of(&b));
     let sess = b.host.session.as_mut().unwrap();
-    // A4.2-K1b: an authored round_intent is read only without field_intent (IR21 derives the rows, never Channel)
+    // the four listed intents first, then the rule field_intent adds the fifth row
     sess.w.ruleset.rules.retain(|r| *r != emberwake_rules::ruleset::FIELD_INTENT);
     let was = menu_intents(&sess.w).len();
-    let added = RoundIntent::ALL.into_iter().find(|i| !sess.w.ruleset.numbers.intents.iter().any(|x| x == i.id())).expect("an intent the ruleset does not list");
-    sess.w.ruleset.numbers.intents.push(added.id().to_string());
+    let added = RoundIntent::Field;
+    assert!(!ri::listed(&sess.w, added) && !ri::listed(&sess.w, RoundIntent::Channel));
+    sess.w.ruleset.rules.push(emberwake_rules::ruleset::FIELD_INTENT);
     assert_eq!(menu_intents(&sess.w).len(), was + 1);
-    // one of the hero's skills belongs to the new intent
-    let sid = rip::hotkey_skills(&sess.w, h)[0];
-    Arc::make_mut(&mut sess.w.cat).skills[sid].round_intent = added.id().to_string();
+    // one of the hero's attacks derives the new row (IR21: an ARC is Field and Assault)
+    let sid = rip::hotkey_skills(&sess.w, h).into_iter().find(|&k| sess.w.cat.skills[k].kind == "ATTACK").expect("an attack");
+    Arc::make_mut(&mut sess.w.cat).skills[sid].area = "ARC".to_string();
     b.act(&mut cx, Action::UnitClick(foe));
     for scale in [1.0f32, 1.15, 1.3] {
         let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);

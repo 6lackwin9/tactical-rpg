@@ -91,10 +91,12 @@ fn deck_from(raw: Option<&Value>) -> (Deck, Vec<String>) {
     let mut deck = Deck::default();
     for (k, v) in o {
         match k.as_str() {
-            "active" | "passive" | "keystone" => {
+            // PK1-S2a: `marrow` (the actives marked marrow) is a list of text too (a save without it reads none)
+            "active" | "passive" | "keystone" | "marrow" => {
                 let slot = match k.as_str() {
                     "active" => &mut deck.active,
                     "passive" => &mut deck.passive,
+                    "marrow" => &mut deck.marrow,
                     _ => &mut deck.keystone,
                 };
                 match texts(v) {
@@ -154,6 +156,10 @@ fn deck_value(deck: &Deck) -> Value {
     let follow_ups: Dict = deck.follow_ups.iter().filter(|(_, l)| !l.is_empty()).map(|(k, l)| (k.clone(), strs(l))).collect();
     if !follow_ups.is_empty() {
         out.insert("follow_ups".into(), Value::Object(follow_ups));
+    }
+    // PK1-S2a: a deck without marrow marks writes as before
+    if !deck.marrow.is_empty() {
+        out.insert("marrow".into(), strs(&deck.marrow));
     }
     Value::Object(out)
 }
@@ -740,6 +746,30 @@ impl UnitState {
             }
             if !list_kept.is_empty() {
                 kept.follow_ups.insert(key.clone(), list_kept);
+            }
+        }
+        // PK1-S2a (PK1 4.2, rule channel): each marrow mark is an active of the deck with a marrow version (IR21 single
+        // intent, no channel none or only), none twice, within every channel ruleset's marrow actives
+        let mut bad = twice("marrow", &self.deck.marrow, &mut Vec::new(), &mut errors);
+        for (i, fam) in self.deck.marrow.iter().enumerate() {
+            let before = errors.len();
+            if !actives.contains(fam) {
+                errors.push(format!("{at}: deck marrow: '{fam}' is not an active of the deck."));
+            } else if d.cat.tier_one(fam).is_some_and(|s| s.channel.none || s.channel.only || !rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_def(s))) {
+                errors.push(format!("{at}: deck marrow: '{fam}' has no marrow version."));
+            }
+            bad[i] |= errors.len() > before;
+        }
+        kept.marrow = keep(&self.deck.marrow, &bad);
+        let channel_rows = d.cat.rulesets.values().map(rpgkit_rules::ruleset::Ruleset::from_row).filter(|r| r.has(rpgkit_rules::ruleset::CHANNEL));
+        for r in channel_rows {
+            let max = r.numbers.marrow_actives.max(0);
+            let n = if clean { kept.marrow.len() } else { self.deck.marrow.len() };
+            if n as i64 > i64::from(max) {
+                errors.push(format!("{at}: deck: {n} marrow entries (the {} ruleset's marrow actives allow {max}).", r.name));
+                if clean {
+                    kept.marrow.truncate(usize::try_from(max).unwrap_or(0));
+                }
             }
         }
         (errors, kept)

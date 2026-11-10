@@ -2,6 +2,7 @@
 
 pub mod ai;
 pub mod arena;
+pub mod channel;
 pub mod command;
 pub mod dojo;
 pub mod encounter;

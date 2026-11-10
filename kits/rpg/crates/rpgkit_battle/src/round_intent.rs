@@ -14,8 +14,10 @@ use rpgkit_data::{ItemDef, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, MeleeDiagonal, Numbers};
 use rpgkit_rules::status;
 
-/// RULESET1_INTENT IN1: the intents a unit may hold (`channel` only when the ruleset row lists it; INTENT2 IR2 `field`,
-/// a tile target, only under the rule `field_intent`: `listed`).
+/// RULESET1_INTENT IN1: the intents a unit may hold (INTENT2 IR2 `field`, a tile target, only under the rule
+/// `field_intent`: `listed`). PK1-S2a retired `Channel` as an intent (FB-167 Q1-Q2): no ruleset row may list it and no
+/// skill may set it, so `listed` never holds it; a Channel round is the rule `channel`'s round flag
+/// (`RoundState::channel`). The value stays only as the tells' term (`intent_channel`, "Channel").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoundIntent {
     Assault,
@@ -116,6 +118,10 @@ pub struct RoundState {
     /// Decision "Auto-fill keeps a flank": the indexes in `picks` accepted from the ghost (`accept_ghost`): they plan as
     /// the fill did, so accepting keeps the tile; a pick from the menu still repositions. Cleared with the picks.
     pub accepted: Vec<usize>,
+    /// PK1-S2a (PK1 4.3, FB-167 Q1 (a), rule `channel`): the round is a Channel round (its skills plan and resolve as
+    /// marrow versions; `crate::channel`); set by the converting toggle (`round_intent_plan::set_channel`), cleared at
+    /// every round start (every round starts in Cold Steel). In no trace or save.
+    pub channel: bool,
 }
 
 /// INPUT1 IF4, ET1-ET4 (`round_intent_plan::pick`): one pick of a member's round. A skill (with the Maneuver kind of
@@ -158,10 +164,12 @@ pub fn intent_of(w: &World, c: UnitId) -> Option<RoundIntent> {
 }
 
 /// Whether the battle offers `intent` (IN1): the ruleset row lists it; INTENT2 IR2's Field is offered by the rule
-/// `field_intent` instead (no row lists it; classic never has it).
+/// `field_intent` instead (no row lists it; classic never has it). PK1-S2a: the retired Channel intent is never
+/// offered, whatever a hand-built row lists (a Channel round is the rule channel's round flag).
 pub fn listed(w: &World, intent: RoundIntent) -> bool {
     match intent {
         RoundIntent::Field => w.ruleset.has(ruleset::FIELD_INTENT),
+        RoundIntent::Channel => false,
         _ => w.ruleset.numbers.intents.iter().any(|i| i == intent.id()),
     }
 }
@@ -415,6 +423,8 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.picks.clear();
         rs.accepted.clear();
         rs.fill = None;
+        // PK1-S2a (PK1 4.3 item 1): every round starts in Cold Steel
+        rs.channel = false;
     }
     lines
 }
@@ -437,7 +447,7 @@ pub fn battle_start(w: &mut World, defaults: &[(UnitId, String)]) {
 /// TQ23 (a): unit `c` takes intent `id` when the ruleset plays it (battle start; PHASEFX1: a swapped-in row's default
 /// intent; the rule `round_intent` is the caller's check).
 pub fn set_default_intent(w: &mut World, c: UnitId, id: &str) {
-    if let Some(i) = RoundIntent::parse(id).filter(|i| w.ruleset.numbers.intents.iter().any(|x| x == i.id())) {
+    if let Some(i) = RoundIntent::parse(id).filter(|i| *i != RoundIntent::Channel && w.ruleset.numbers.intents.iter().any(|x| x == i.id())) {
         w.round_states.entry(c).or_default().intent = Some(i);
     }
 }

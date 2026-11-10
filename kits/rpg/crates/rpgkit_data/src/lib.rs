@@ -269,11 +269,14 @@ pub struct Deck {
     /// INPUT1 FL1 (`follow_ups`): opener family -> the families the planner's fill tries first after it, in the
     /// player's priority (written order kept; an empty list is no list).
     pub follow_ups: IndexMap<String, Vec<String>>,
+    /// PK1-S2a (`marrow`, PK1 4.2, rule channel): the actives whose marrow version opens in a Channel round (written
+    /// order; at most the ruleset's `marrow_actives` of them are read).
+    pub marrow: Vec<String>,
 }
 
 impl Deck {
     /// The deck keys, in their stored order.
-    pub const KEYS: [&'static str; 5] = ["active", "passive", "keystone", "order", "follow_ups"];
+    pub const KEYS: [&'static str; 6] = ["active", "passive", "keystone", "order", "follow_ups", "marrow"];
 
     /// From a `deck` value (anything but an object is the empty deck; lists keep their strings; an empty
     /// `follow_ups` list is dropped, FL1).
@@ -283,7 +286,7 @@ impl Deck {
         let follow_ups = obj(o, "follow_ups")
             .map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).filter(|(_, l)| !l.is_empty()).collect())
             .unwrap_or_default();
-        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups }
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups, marrow: strings(o, "marrow") }
     }
 
     /// True when every key is empty (the auto deck).
@@ -293,6 +296,7 @@ impl Deck {
             && self.keystone.is_empty()
             && self.order.values().all(Vec::is_empty)
             && self.follow_ups.values().all(Vec::is_empty)
+            && self.marrow.is_empty()
     }
 
     /// INPUT1 FL1: the follow-up list set for opener family `fam` (None: no list, the fill reads the order).
@@ -430,6 +434,12 @@ pub struct SkillDef {
     pub hp_cost: i32,
     /// HOOKS1 IG1 (rule ignore_guard): the hits skip the guard term and P6's guard factor.
     pub ignore_guard: bool,
+    /// PK1-S2a (rule hp_cost): HP paid at the command's start as a percent of max HP (0 = none; beside `hp_cost`).
+    pub hp_cost_pct: i32,
+    /// PK1-S2a (rule unit_meters): the meter value the skill needs at its start (None = no gate).
+    pub requires_meter: Option<MeterGate>,
+    /// PK1-S2a (rule channel): the skill's marrow version block (the default: a derived version for a single-intent skill).
+    pub channel: ChannelSpec,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -505,6 +515,9 @@ impl SkillDef {
             meters: objs(o, "meters").iter().map(MeterDelta::from_obj).collect(),
             hp_cost: int(o, "hp_cost", 0),
             ignore_guard: boolean(o, "ignore_guard", false),
+            hp_cost_pct: int(o, "hp_cost_pct", 0),
+            requires_meter: obj(o, "requires_meter").and_then(MeterGate::from_obj),
+            channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -2019,6 +2032,51 @@ impl MeterDelta {
     /// PK1-S1 (3.6): a hazard's `meter` object (None when absent, empty, or without a meter id or a delta).
     pub fn of_hazard(o: &Obj) -> Option<Self> {
         obj(o, "meter").map(Self::from_obj).filter(|m| !m.meter.is_empty() && m.delta != 0)
+    }
+}
+
+/// PK1-S2a (PK1 4.3 item 5, rule unit_meters): a skill's `requires_meter`: it starts only while the unit holds `meter`
+/// at `min` or more (Vent's Strain 50).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeterGate {
+    pub meter: String,
+    pub min: i32,
+}
+
+impl MeterGate {
+    /// The object's keys.
+    pub const KEYS: [&'static str; 2] = ["meter", "min"];
+
+    /// None for an empty object or one without a meter id.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(Self { meter: string(o, "meter", ""), min: int(o, "min", 0) }).filter(|g| !g.meter.is_empty())
+    }
+}
+
+/// PK1-S2a (PK1 4.1, rule channel): a skill's `channel` block: `none` (no marrow version), `only` (marrow only: open
+/// only in a Channel round), `cost` (replaces the derived channel meter cost), `power` (replaces `channel_power`) and
+/// `effects` (trigger effects run as a rider on each unit the marrow version lands on).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ChannelSpec {
+    pub none: bool,
+    pub only: bool,
+    pub cost: Option<i32>,
+    pub power: Option<f64>,
+    pub effects: Vec<Obj>,
+}
+
+impl ChannelSpec {
+    /// The block's keys, in their stored order.
+    pub const KEYS: [&'static str; 5] = ["none", "only", "cost", "effects", "power"];
+
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            none: boolean(o, "none", false),
+            only: boolean(o, "only", false),
+            cost: o.contains_key("cost").then(|| int(o, "cost", 0)),
+            power: o.contains_key("power").then(|| float(o, "power", 1.0)),
+            effects: objs(o, "effects"),
+        }
     }
 }
 

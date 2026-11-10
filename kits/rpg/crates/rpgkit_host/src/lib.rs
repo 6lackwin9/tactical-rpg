@@ -583,7 +583,8 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
             let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": rpgkit_content::source::skill_description(&sk.raw, w.ruleset.stances())});
             // HOOKS1 HC1 (HOOKS1-UI slice 3): the HP the skill costs, priced from the battle's own catalog as the planner
             // does, only when it costs some (rule hp_cost; classic rows keep their shape)
-            let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_of(w, k));
+            // PK1-S2a: with a percent cost (`hp_cost_pct`) of the unit's max HP
+            let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_for(w, u, k));
             if hp > 0 {
                 row["hp_cost"] = json!(hp);
             }

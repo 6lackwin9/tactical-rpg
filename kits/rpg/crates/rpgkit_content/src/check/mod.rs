@@ -456,6 +456,8 @@ pub fn validate_all(v: &View) -> Report {
     // U1.2-S5: a ruleset's `unit_pools` name unit meter rows
     for e in v.entries(ruleset::KIND) {
         add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::missing_pools(v, e));
+        // PK1-S2a: the Channel meter and Channel Rest name rows
+        add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::channel_refs(v, e));
     }
     add("load", v.load_errors.clone());
     problems

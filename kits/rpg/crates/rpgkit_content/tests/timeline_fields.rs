@@ -1,6 +1,6 @@
 //! Timeline fields and their checks (RULESET1-S, docs/specs/RULESET1_TASKS.md 1.3-1.6): the schema and the code name
 //! the same fields, kinds and options; the fields load into the typed catalog with defaults that change nothing; each
-//! rule broken alone is one error naming its field (a DEFEND skill set to assault, channel no ruleset lists, an order
+//! rule broken alone is one error naming its field (a DEFEND skill set to assault, the retired channel intent, an order
 //! entry of another intent, ...); INPUT1 1.7's `position` checks and the `dash_tiles` transition warning (the first
 //! revision's "Maneuver attack without dash tiles" warning retired); ranked timeline fields fold and render through the
 //! writer; the `{range}` and `{position}` tokens (INPUT1 MR15). Scratch data folders only.
@@ -228,7 +228,8 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         // skills (1.3)
         ("skills", "brace", json!({"round_intent": "assault"}), "Round intent: DEFEND skills take guard (not assault)."),
         ("skills", "move", json!({"round_intent": "assault"}), "Round intent: MOVE skills take neutral (not assault)."),
-        ("skills", "thrust", json!({"round_intent": "channel"}), "Round intent: channel needs a ruleset whose intents list it."),
+        // PK1-S2a: the old channel intent is retired (FB-167 Q2)
+        ("skills", "thrust", json!({"round_intent": "channel"}), "Round intent: 'channel' is not one of , assault, guard, support, maneuver, neutral."),
         ("skills", "thrust", json!({"round_intent": "bogus"}), "Round intent: 'bogus' is not one of"),
         ("skills", "mend", json!({"round_intent": "guard"}), "Round intent guard on a SUPPORT skill needs Targets SELF"),
         ("skills", "mend", json!({"intent_buff": true}), "Intent-bound buff needs a granted status"),
@@ -265,7 +266,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"move": ["strike"]}}}), "Follow-ups for 'move': not an opener in the deck."),
         ("units", "drillman", json!({"deck": {"follow_ups": ["strike"]}}), "Deck follow_ups must be an object"),
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"thrust": "strike"}}}), "Follow-ups for 'thrust' must be a list of skill families."),
-        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups."),
+        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups, marrow."),
         ("units", "drillman", json!({"deck": []}), "Deck must be an object"),
         // item families (1.6)
         ("item_families", "polearm", json!({"engine_rules": ["reach", "always_ranged"]}), "reach is for melee families; it can't go with always_ranged."),
@@ -283,8 +284,10 @@ fn each_broken_rule_is_one_error_naming_its_field() {
     drop_scratch(&data);
 }
 
+/// PK1-S2a (FB-167 Q2): the old Channel path is retired: a ruleset row may no longer list `channel` as an intent and a
+/// skill may no longer set it as its round intent (a Channel round is the rule channel's round flag).
 #[test]
-fn channel_is_taken_once_a_ruleset_lists_it() {
+fn the_retired_channel_intent_is_refused() {
     let (_scratch, data) = scratch("channel");
     catalog(&data);
     write_kind(
@@ -293,9 +296,11 @@ fn channel_is_taken_once_a_ruleset_lists_it() {
         1,
         json!([{"id": "timeline", "name": "Timeline", "rules": ["round_intent"], "intents": ["assault", "guard", "support", "maneuver", "channel"]}]),
     );
+    let src = source::load(&data);
+    assert!(src.errors.iter().any(|e| e.contains("Intents: 'channel' is not one of assault, guard, support, maneuver.")), "{:?}", src.errors);
     let v = store::view(&data);
-    assert_eq!(errors_of(&v, "skills", "thrust", &json!({"round_intent": "channel"})), Vec::<String>::new());
-    assert_eq!(errors_of(&v, "skills", "rest", &json!({"round_intent": "channel"})), ["Round intent: REST skills are neutral; channel is for authored skills."]);
+    assert_eq!(errors_of(&v, "skills", "thrust", &json!({"round_intent": "channel"})), ["Round intent: 'channel' is not one of , assault, guard, support, maneuver, neutral."]);
+    assert!(!INTENTS.contains(&ruleset::CHANNEL), "channel is a rule id now, not an intent");
     drop_scratch(&data);
 }
 
@@ -510,9 +515,9 @@ fn deck_orders_read_the_derived_rows_under_field_intent() {
     assert_eq!(errors_of(&v, "units", "drillman", &both), Vec::<String>::new(), "IR15: a skill in each of its rows' lists");
     assert_eq!(errors_of(&v, "units", "drillman", &json!({"deck": {"active": ["thrust"], "order": {"field": ["thrust"]}}})), ["Deck order field: 'thrust' is of intent assault."], "field is an order key");
     let unknown = errors_of(&v, "units", "drillman", &json!({"deck": {"order": {"dance": ["strike"]}}}));
-    assert_eq!(unknown, ["Deck order: 'dance' is not an intent (one of assault, guard, support, maneuver, channel, field)."]);
+    assert_eq!(unknown, ["Deck order: 'dance' is not an intent (one of assault, guard, support, maneuver, field)."]);
     let legacy_unknown = errors_of(&legacy, "units", "drillman", &json!({"deck": {"order": {"field": ["strike"]}}}));
-    assert_eq!(legacy_unknown, ["Deck order: 'field' is not an intent (one of assault, guard, support, maneuver, channel)."]);
+    assert_eq!(legacy_unknown, ["Deck order: 'field' is not an intent (one of assault, guard, support, maneuver)."]);
     // a follow-up shares one of the opener's rows
     let follow = json!({"deck": {"active": ["mend", "brace"], "follow_ups": {"mend": ["brace"]}}});
     assert_eq!(errors_of(&v, "units", "drillman", &follow), Vec::<String>::new(), "Stand is one of mend's rows");

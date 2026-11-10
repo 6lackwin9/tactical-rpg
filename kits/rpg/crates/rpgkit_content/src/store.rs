@@ -60,11 +60,19 @@ fn class_storage(full: &Dict) -> Dict {
 
 /// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the
 /// same value when read), so a row written before the switches were fields re-saves byte for byte. P1.2-S2 (FB-109):
-/// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it).
+/// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it). PK1-S2a: the
+/// Channel numbers (`RULESET_CHANNEL_FIELDS`) are stored only when they differ from their schema defaults, so a row
+/// written before they existed re-saves byte for byte.
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
-    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
+    let channel_default = |key: &str, v: &Value| {
+        RULESET_CHANNEL_FIELDS.contains(&key) && fields("content", source::RULESET_KIND).iter().map(json::dict).any(|f| json::s(f, "key") == key && json::deep_equal(json::get(f, "default"), v))
+    };
+    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v) || channel_default(key, v))
 }
+
+/// PK1-S2a (PK1 4.1): the ruleset row fields of the rule `channel`, stored only when set off their defaults.
+pub const RULESET_CHANNEL_FIELDS: [&str; 5] = ["channel_meter", "channel_power", "channel_cost", "marrow_actives", "channel_rest"];
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for

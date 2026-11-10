@@ -425,6 +425,7 @@ impl DeckTerms {
             keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
             order: auto_unit.deck.order.clone(),
             follow_ups: IndexMap::new(),
+            marrow: Vec::new(),
         };
         // apply_deck's auto pick for an empty active row: the loadout's families the member owns, the first `active`
         let mut auto_actives: Vec<String> = Vec::new();
@@ -526,7 +527,7 @@ impl DeckTerms {
         if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() || !shown.follow_ups.is_empty() {
             return shown;
         }
-        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new() }
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new(), marrow: Vec::new() }
     }
 
     /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the

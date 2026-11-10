@@ -131,7 +131,7 @@ fn a_damaged_deck_is_refused() {
     let d = data();
     let base = state(&d, member("hero")).to_value();
     let damaged: Vec<(Value, &str)> = vec![
-        (json!([1]), "deck must be an object {active, passive, keystone, order, follow_ups}."),
+        (json!([1]), "deck must be an object {active, passive, keystone, order, follow_ups, marrow}."),
         (json!({"follow_ups": ["d_one"]}), "deck.follow_ups must be an object {opener family: [skill families]}."),
         (json!({"follow_ups": {"d_one": "d_two"}}), "deck.follow_ups.d_one must be a list of text."),
         (json!({"active": "d_one"}), "deck.active must be a list of text."),
@@ -165,7 +165,7 @@ fn the_deck_rules_refuse_misfiled_or_unowned_entries() {
         (json!({"passive": ["d_ghost"]}), "deck passive: unknown passive 'd_ghost'."),
         (json!({"keystone": ["d_anvil"]}), "deck keystone: passive 'd_anvil' is not owned."),
         (json!({"active": ["d_one", "d_two", "d_three", "d_four"]}), "deck: 4 active entries (the Timeline ruleset's deck slots allow 3)."),
-        (json!({"order": {"dance": ["strike"]}}), "deck order: 'dance' is not an intent (one of assault, guard, support, maneuver, channel)."),
+        (json!({"order": {"dance": ["strike"]}}), "deck order: 'dance' is not an intent (one of assault, guard, support, maneuver)."),
         (json!({"active": ["d_one"], "order": {"assault": ["d_two"]}}), "deck order assault: 'd_two' is neither an active of the deck nor a basic."),
         (json!({"active": ["d_ward"], "order": {"assault": ["d_ward"]}}), "deck order assault: 'd_ward' is of intent guard."),
         (json!({"order": {"assault": ["strike", "strike"]}}), "deck order lists 'strike' twice."),
@@ -332,7 +332,7 @@ fn a_saved_deck_the_data_no_longer_allows_loads_without_the_bad_entries() {
         dropped("hero", "deck passive: unknown passive 'd_ghost'."),
         dropped("hero", "deck: 4 active entries (the Timeline ruleset's deck slots allow 3)."),
         dropped("hero", "deck order assault: 'd_four' is neither an active of the deck nor a basic."),
-        dropped("hero", "deck order: 'dance' is not an intent (one of assault, guard, support, maneuver, channel)."),
+        dropped("hero", "deck order: 'dance' is not an intent (one of assault, guard, support, maneuver)."),
         dropped("hero", "Follow-ups for 'd_far': not an opener in the deck."),
         dropped("hero", "Follow-ups after 'd_one': 'd_four' is not in the deck."),
         dropped("cut", "deck active: 'd_far' is a basic (open to every unit, no slot)."),
@@ -348,4 +348,24 @@ fn a_saved_deck_the_data_no_longer_allows_loads_without_the_bad_entries() {
     ok.deck = deck(json!({"active": ["d_four", "d_ward", "d_two"], "passive": ["d_braced"], "order": {"assault": ["d_two", "strike"]}}));
     let kept = save::decode(&d, &envelope(save::VERSION, &state(&d, ok.clone()).to_value())).expect("loads");
     assert!(kept.warnings.is_empty() && kept.state.party.members[0].deck == ok.deck);
+}
+
+/// PK1-S2a (PK1 4.2, rule channel): a deck's `marrow` marks save only when set and read back; a mark must be an active
+/// of the deck (a damaged list refuses the save); a deck without marks saves as before.
+#[test]
+fn a_marrow_mark_saves_and_is_checked() {
+    let d = data();
+    let mut m = member("hero");
+    m.deck = deck(json!({"active": ["d_one", "d_two"], "marrow": ["d_one"]}));
+    let v = state(&d, m).to_value();
+    assert_eq!(v["party"]["members"][0]["deck"], json!({"active": ["d_one", "d_two"], "marrow": ["d_one"]}));
+    let loaded = save::decode(&d, &envelope(save::VERSION, &v)).expect("loads");
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    assert_eq!(loaded.state.party.members[0].deck.marrow, ["d_one"]);
+    let mut m = member("hero");
+    m.deck = deck(json!({"active": ["d_one"], "marrow": ["d_two"]}));
+    assert_eq!(m.validate(&d), ["Unit 'hero': deck marrow: 'd_two' is not an active of the deck."]);
+    let mut damaged = state(&d, member("hero")).to_value();
+    damaged["party"]["members"][0]["deck"] = json!({"active": ["d_one"], "marrow": [1]});
+    assert_eq!(save::decode(&d, &envelope(save::VERSION, &damaged)).err().expect("refused"), ["Unit 'hero': deck.marrow must be a list of text."]);
 }

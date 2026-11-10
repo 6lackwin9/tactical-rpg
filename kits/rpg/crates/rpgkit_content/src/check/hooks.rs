@@ -56,6 +56,10 @@ pub const STRIKE_POWER: (f64, f64) = (0.1, 3.0);
 pub const MARK_ID_MAX: usize = 24;
 pub const MARK_VALUE: (i64, i64) = (1, 99);
 pub const HAZARD_METER_DELTA: (i64, i64) = (-100, 100);
+/// PK1-S2a (PK1 4.1, 4.3 item 5): a skill's `channel.cost` and `channel.power`, its `hp_cost_pct`.
+pub const CHANNEL_COST: (i64, i64) = (0, 100);
+pub const CHANNEL_POWER: (f64, f64) = (1.0, 3.0);
+pub const HP_COST_PCT: (i64, i64) = (0, 99);
 /// AH1: arena hazards per encounter, the name and line lengths, the effect numbers.
 pub const ARENA_MAX: usize = 4;
 pub const ARENA_NAME_MAX: usize = 24;
@@ -321,7 +325,12 @@ pub fn skill_errors(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     if has("hp_cost") && !(HP_COST.0..=HP_COST.1).contains(&cost) {
         out.push(format!("HP cost must be {}-{} (is {cost}).", HP_COST.0, HP_COST.1));
     }
-    let keys = ["forced_move", "hazard", "triggers", "riders", "meters"];
+    // PK1-S2a: the percent HP cost, refused out of range as the flat one
+    let pct = json::i(e, "hp_cost_pct", 0);
+    if has("hp_cost_pct") && !(HP_COST_PCT.0..=HP_COST_PCT.1).contains(&pct) {
+        out.push(format!("HP cost % must be {}-{} (is {pct}).", HP_COST_PCT.0, HP_COST_PCT.1));
+    }
+    let keys = ["forced_move", "hazard", "triggers", "riders", "meters", "requires_meter", "channel"];
     if keys.iter().all(|k| !has(k) || empty(k)) {
         return out;
     }
@@ -341,6 +350,60 @@ pub fn skill_errors(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     }
     if has("meters") {
         out.extend(meter_costs_errors(json::get(e, "meters"), &ctx));
+    }
+    if has("requires_meter") {
+        out.extend(meter_gate_errors(json::get(e, "requires_meter"), &ctx));
+    }
+    if has("channel") {
+        out.extend(channel_errors(json::get(e, "channel"), e, &ctx));
+    }
+    out
+}
+
+/// PK1-S2a (PK1 4.3 item 5): a skill's `requires_meter` ({} = none): `{meter, min}`, a known meter and a whole `min`
+/// within its row's range.
+pub fn meter_gate_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(o) = set_object(raw, "Meter gate", &mut out) else { return out };
+    let at = "Meter gate";
+    unknown_keys(o, &rpgkit_data::MeterGate::KEYS, at, &mut out);
+    let meter = json::s(o, "meter");
+    match ctx.meter(&meter) {
+        None => out.push(format!("{at}: unknown unit meter '{meter}'.")),
+        Some(range) => whole_key(o, "min", range, true, at, &mut out),
+    }
+    out
+}
+
+/// PK1-S2a (PK1 4.1, 4.2): a skill's `channel` block ({} = the default: a derived marrow version when it has a single
+/// intent): its keys, `none` and `only` (true or false, not both; `none` with nothing else), `cost` a whole 0-100,
+/// `power` 1.0-3.0, `effects` 1-4 trigger effects (as a rider's: no event); any key but `none` needs a single-intent
+/// skill (IR21: a dual-intent skill has no marrow version, and a marrow-only one is authored with one intent).
+pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(o) = set_object(raw, "Channel", &mut out) else { return out };
+    let at = "Channel";
+    unknown_keys(o, &rpgkit_data::ChannelSpec::KEYS, at, &mut out);
+    bool_key(o, "none", at, &mut out);
+    bool_key(o, "only", at, &mut out);
+    let none = json::b(o, "none", false);
+    if none && json::b(o, "only", false) {
+        out.push(format!("{at}: none and only exclude each other."));
+    }
+    if none && ["cost", "power", "effects"].iter().any(|k| o.contains_key(*k)) {
+        out.push(format!("{at}: none (no marrow version) takes no cost, power or effects."));
+    }
+    whole_key(o, "cost", CHANNEL_COST, false, at, &mut out);
+    if o.get("power").is_some_and(|v| !number_in(v, CHANNEL_POWER)) {
+        out.push(format!("{at}: power must be {}-{}.", CHANNEL_POWER.0, CHANNEL_POWER.1));
+    }
+    if o.contains_key("effects") {
+        out.extend(effects_errors(json::get(o, "effects"), ctx, "Channel", None, false));
+    }
+    let input = rpgkit_rules::intent::IntentInput::of_row(e);
+    if !none && !rpgkit_rules::intent::single_intent(&input) {
+        let rows = rpgkit_rules::intent::derive(&input).join(" and ");
+        out.push(format!("{at}: only a single-intent skill has a marrow version or is marrow-only (this one derives {rows})."));
     }
     out
 }

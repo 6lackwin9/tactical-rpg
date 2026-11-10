@@ -527,7 +527,45 @@ fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
         if head.is_empty() { Vec::new() } else { super::ruleset::intent_rows(head, field) }
     };
     follow_up_errors(deck.get("follow_ups"), &active, &basics, &intent_of, &mut errors);
+    marrow_errors(v, deck, &active, &owned, &mut errors);
     errors
+}
+
+/// PK1-S2a (PK1 4.2, rule channel): a skill row (a family's tier one) that has a marrow version: IR21 derives one intent
+/// for it and its `channel` sets neither `none` nor `only`.
+pub fn has_marrow_version(head: &Dict) -> bool {
+    let ch = json::dget(head, "channel");
+    !json::b(ch, "none", false) && !json::b(ch, "only", false) && rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_row(head))
+}
+
+/// PK1-S2a (PK1 4.2): a deck's `marrow` marks actives of the deck (with no `active` list: families the unit owns) that
+/// have a marrow version, none twice, no more than any ruleset with the rule channel opens (`marrow_actives`).
+fn marrow_errors(v: &View, deck: &Dict, active: &[String], owned: &[String], errors: &mut Vec<String>) {
+    let marrow = deck_list(deck, "marrow", errors);
+    repeats("Deck marrow", &marrow, &mut Vec::new(), errors);
+    for fam in &marrow {
+        let in_deck = if active.is_empty() { owned.contains(fam) } else { active.contains(fam) };
+        if !in_deck {
+            errors.push(format!("Deck marrow: '{fam}' is not an active of the deck."));
+            continue;
+        }
+        let head = v.get("skills", fam);
+        if !head.is_empty() && !has_marrow_version(head) {
+            errors.push(format!("Deck marrow: '{fam}' has no marrow version (it needs a single intent and no channel none or only)."));
+        }
+    }
+    let mut distinct: Vec<&String> = Vec::new();
+    for fam in &marrow {
+        if !distinct.contains(&fam) {
+            distinct.push(fam);
+        }
+    }
+    for r in v.entries(ruleset::KIND).iter().filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::CHANNEL)) {
+        let max = json::i(r, "marrow_actives", i64::from(ruleset::MARROW_ACTIVES));
+        if distinct.len() as i64 > max {
+            errors.push(format!("Deck: {} marrow entries (the {} ruleset's marrow actives allow {max}).", distinct.len(), json::s_or(r, "name", &json::s(r, "id"))));
+        }
+    }
 }
 
 /// The display form of an intent id ("assault" -> "Assault"; "" -> "no intent").

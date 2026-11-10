@@ -1559,6 +1559,20 @@ impl Session {
         pick_on(&mut self.w, &mut self.plan, &mut self.events, c, at, picks)
     }
 
+    /// PK1-S2a (PK1 4.3 item 1): the converting Channel toggle (`round_intent_plan::set_channel`) while planning: flips
+    /// member `c`'s round to Channel (`on`) or back to Cold Steel and converts its plan; the lines (buffs ended, picks
+    /// dropped) go to `events`. Refused outside planning or for a unit that cannot Channel (nothing changes then).
+    pub fn set_channel(&mut self, c: UnitId, on: bool) -> (Result<Vec<String>, String>, Vec<(UnitId, String)>) {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return (Err("The Channel toggle is set while planning.".into()), Vec::new());
+        }
+        let out = crate::round_intent_plan::set_channel(&mut self.w, &mut self.plan, c, on);
+        if let Ok(lines) = &out.0 {
+            self.events.extend(lines.iter().cloned());
+        }
+        out
+    }
+
     pub fn plan_is_valid(&self) -> bool {
         self.w.allies.iter().all(|&a| !self.w.units[a].is_active() || self.plan.is_valid(&self.w, a))
     }

@@ -385,6 +385,19 @@ pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) ->
     String::new()
 }
 
+/// PK1-S2a (PK1 4.3 item 5, `requires_meter`): why a skill gated on `gate` cannot start at the values `value_of`
+/// gives ("" = it can, or no gate): the meter below `min` (a meter the unit does not hold counts 0): `<meter name> 45
+/// < 50`. Read only under the rule unit_meters.
+pub fn gate_problem(w: &World, gate: Option<&rpgkit_data::MeterGate>, value_of: impl Fn(&str) -> Option<i32>) -> String {
+    let Some(g) = gate.filter(|_| on(w)) else { return String::new() };
+    let have = value_of(&g.meter).unwrap_or(0);
+    if have >= g.min {
+        return String::new();
+    }
+    let name = w.cat.unit_meters.get(&g.meter).map_or_else(|| g.meter.clone(), |m| m.name.clone());
+    format!("{name} {have} < {}", g.min)
+}
+
 /// UM2 for the planners: `c`'s planned meter values after paying `deltas` (clamped to its floor..max; a meter it does
 /// not hold stays out).
 pub fn spend(w: &World, c: UnitId, values: &mut [(String, i32)], deltas: &[MeterDelta]) {
@@ -427,11 +440,13 @@ pub fn pay(res: &mut Resolver, w: &mut World, i: usize) {
 /// meter is paid; the action is cancelled and logged). Returns whether it failed.
 pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
     let a = &res.scheduled[i];
-    if a.command.meters.is_empty() || !on(w) {
+    if (a.command.meters.is_empty() && a.command.gate.is_none()) || !on(w) {
         return false;
     }
     let c = a.unit;
-    let why = cost_problem(w, &a.command.meters, |m| value(w, c, m));
+    // PK1-S2a: a meter gate (`requires_meter`) is tested first, at the start, before any cost
+    let gate = gate_problem(w, a.command.gate.as_ref(), |m| value(w, c, m));
+    let why = if gate.is_empty() { cost_problem(w, &a.command.meters, |m| value(w, c, m)) } else { gate };
     if why.is_empty() {
         return false;
     }
@@ -449,7 +464,8 @@ pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
 /// UM3: round end (rule unit_meters), after the ticks and ground hazards and before the `round_end` triggers: each
 /// active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this round,
 /// `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard); then the gained marks
-/// clear.
+/// clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round skips every decay row of the channel meter (it counts as
+/// a gain, and its `if_guarded` rows skip too).
 pub fn round_end(res: &mut Resolver, w: &mut World) {
     if !on(w) {
         return;
@@ -462,8 +478,9 @@ pub fn round_end(res: &mut Resolver, w: &mut World) {
             (g.unit, g.meter.clone(), g.gained)
         };
         w.meters.gauges[i].gained = false;
+        let channel_round = crate::channel::is_channel(w, c) && meter == crate::channel::meter_id(w);
         let Some(def) = cat.unit_meters.get(&meter) else { continue };
-        if def.decay.is_empty() || !w.units[c].is_active() {
+        if def.decay.is_empty() || !w.units[c].is_active() || channel_round {
             continue;
         }
         let guarded = res.scheduled.iter().any(|a| a.unit == c && !a.cancelled && a.command.is_defend()) || w.units[c].held_guard.is_some();
