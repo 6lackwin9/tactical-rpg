@@ -654,6 +654,8 @@ fn family_errors(v: &View, e: &Dict) -> Vec<String> {
 }
 
 /// SkillValidator.entry_errors: family rules, row rules, and the family's description template (from its first rank).
+/// PR4-8 (SKILLCHECK-FOLD, FB-153): a family head whose ranks do not fold, and that reports no other error, gets one
+/// error naming the first fold problem, so its template is never silently unchecked.
 pub fn entry_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = family_errors(v, e);
     errors.extend(row_problems(v, e));
@@ -661,9 +663,19 @@ pub fn entry_errors(v: &View, e: &Dict) -> Vec<String> {
     if !template.is_empty() && tier(e) <= 1 {
         let id = json::s(e, "id");
         let mut rows = vec![e.clone()];
-        rows.extend(v.entries("skills").iter().filter(|o| head_of(o) == id && json::s(o, "id") != id).cloned());
-        if let Ok(folded) = fold(&id, &rows) {
-            errors.extend(validate_template(&template, &folded));
+        // the head arrives with schema defaults filled (`validate_entry`), so its ranks are filled the same way
+        // (as `collapse` does) before they fold together
+        rows.extend(v.entries("skills").iter().filter(|o| head_of(o) == id && json::s(o, "id") != id).map(|o| content("skills", o)));
+        match fold(&id, &rows) {
+            Ok(folded) => errors.extend(validate_template(&template, &folded)),
+            // an entry that already reports an error is not silently unchecked: its fold problem is usually that
+            // error restated, and the template is checked once it is fixed
+            Err(problems) if errors.is_empty() => {
+                let prefix = format!("Family '{id}': ");
+                let first = problems.first().map_or("", |p| p.strip_prefix(&prefix).unwrap_or(p).trim_end_matches('.'));
+                errors.push(format!("Family '{id}': the description template is not checked because the ranks do not fold ({first})"));
+            }
+            Err(_) => {}
         }
     }
     errors

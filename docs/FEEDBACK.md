@@ -20,7 +20,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR4-1 `R3-STAGE-SIM` | done: part 1 (`stage=N`, `55ef14d8`), part 2 (AUDIT-07, `sim_golden` run 11 re-recorded, FB-154) | `develop` | - |
 | PR4-2 `POST-R4-CLEANUP` | done: phase A (`feadda4d`), phase B re-freeze (`c49194b2`, FB-152; FB-153 suggestion); item 2 stays held | `develop` | - |
 | PR4-3 `WEBREL1-E1a` | done (FB-155): wasm32 check clean, `aegis_core::clock`, clock lint | `develop` | - |
-| PR4-4 `WEBREL1-E1b` | done (FB-156; FB-157 suggestion): `aegis_core::vfs`, `aegis_save::store`, wasm `cfg`, fs lint | `develop` | Next: PR4-5 `WEBREL1-E2`. |
+| PR4-4 `WEBREL1-E1b` | done (FB-156; FB-157 suggestion): `aegis_core::vfs`, `aegis_save::store`, wasm `cfg`, fs lint | `develop` | - |
+| PR4-8 `SKILLCHECK-FOLD` | done (FB-158 suggestion): fold error when nothing else is reported; ranks normalised before the fold | `develop` | Next: PR4-5 `WEBREL1-E2`. |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -43,6 +44,14 @@ FB-01 to FB-155 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: (1) **`aegis_core::vfs::dev`** is a new public engine API beyond 2.1's list: F12 shots, note JPGs, recordings, frame-tuner writes and `ground::compose_file` go through it (`std::fs` on native; every call fails with `Unsupported` on the web, so a dev feature reports instead of panicking). It implements 6.1's "recordings and F12 screenshots off on web" in one named seam the lint sees, instead of `cfg` on about 10 files; `change-reviewer` recommends keeping it. (2) The fs lint passes the content writer's write calls (`WRITERS`; its reads and probes are still linted) and allows `aegis_core/src/scratch.rs` (a test helper). (3) **Quit on the web is a no-op** (the quit flag is cleared and the screen stays; the user closes the tab), which cannot trap the user; a page cannot close its own tab. (4) A web save writes a temp key then moves it over the save, so it briefly needs about twice the save's size in quota (fine under the 0.5 MB estimate; `setItem` is already atomic, so G1 could skip the temp key).
 - **Recommendation**: (1)-(2) record `vfs::dev` and the two pass-lists in WEBREL1 2.1 / 6.1 (as built). (3) **Option A (recommended)**: on the web, Quit returns to the main menu (or the menu hides Quit), decided in G1; **Option B**: keep the no-op. (4) Optional G1 tidy: write web saves directly (no temp key).
+
+### FB-158: PR4-8 `SKILLCHECK-FOLD` landed (fold error when nothing else is reported; ranks normalised before the fold)
+
+- **Spec**: READY Section 1 row PR4-8 (`FB-153` Option A) (the `PR4-8` squash commit on `develop`, 2026-11-10)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: `rpgkit_content::check::skill::entry_errors` now reports a family head whose ranks do not fold as one content error, "Family '<id>': the description template is not checked because the ranks do not fold (<first fold problem>)" (test `rpgkit_content/tests/skill_fold_error.rs`, 3). Two choices beyond the row's text: (1) **the error is emitted only when the entry reports no other error**: emitting it always added a restated error to 315 of 409 `checks_golden` skill cases (for example "Heal base belongs to SUPPORT skills, not ATTACK." plus a fold error naming `heal_base`) and caught nothing new; with the rule, an entry that already fails `content check` shows its fold problem on the next check after that error is fixed, so no data set reaches `data ok` with an unchecked template (fold problems reported nowhere else: a rank-2+ unknown key, a rank name that is not the derived name, a template that differs between ranks). `change-reviewer` ruled it within the spec's intent. (2) **Ranks are filled with schema defaults before the fold** (`content("skills", o)`, as `collapse` does): `validate_entry` passes a defaulted head while sibling rows came raw, so a rank missing a schema-default key (a row saved before a field existed, the AUDIT-10 case) failed the fold with "'system' must match across ranks" — silent before, a false error once fold errors surface. **0 golden diffs** (`checks_golden` unchanged), shipped data `data ok` (0 new errors); gate 2741 passed, 0 failed, 4 ignored, 0 warnings.
+- **Recommendation**: **Option A (recommended, as built)**: keep both. **Option B**: emit the fold error always (re-record `checks_golden`: 315 cases gain a restated error). HISTORY: none (0 golden diffs). STRUCTURE tests: `rpgkit_content/tests/skill_fold_error.rs`.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
