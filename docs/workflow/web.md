@@ -4,7 +4,7 @@ The Aegis game runs in a browser since `PR4-6` `WEBREL1-G1` (2026-11-10; spec `d
 
 ## Build, serve, smoke (Aegis)
 
-- Needs the `wasm32-unknown-unknown` target and `cargo install wasm-bindgen-cli --version 0.2.129 --locked`; `wasm-opt` is used if installed.
+- Needs the `wasm32-unknown-unknown` target and `cargo install wasm-bindgen-cli --version 0.2.129 --locked`; `wasm-opt` is used when Binaryen 125 or newer is on the PATH (Ubuntu's `apt` package, 108, is too old: `tools/fc.sh web` skips it with a message, FB-165).
 - Build: `tools/fc.sh web test` (Tools menu, dev tools and the `aegisProbe()` test probe) or `tools/fc.sh web release` (no Tools, no dev keys) writes the gitignored `out/web/`: `index.html`, `emberwake.js`, `emberwake_bg.wasm`, `bundle.json`, `emberwake_1.pak` (game, kit and engine files without audio), `emberwake_2.pak` (audio, fetched while the game runs), `build.json`. The bundle list is `games/emberwake/web_bundle.json`, packed by `aegis bundle`.
 - Serve: `tools/fc.sh web serve [port]`, then open http://127.0.0.1:8000/. URL keys are the CLI's, for example `?screen=arena&encounter=goblin_skirmish&seed=3`; desktop-only keys (`port`, `headless`, `data`, `saves` and the like) are ignored with a console warning.
 - Smoke: `tools/fc.sh web test && tools/fc.sh web smoke` (Node with Playwright Chromium; not in the gate): boot to the main menu, Combat Arena to victory, New game to the region map, save, reload and Continue.
@@ -21,7 +21,7 @@ The Aegis game runs in a browser since `PR4-6` `WEBREL1-G1` (2026-11-10; spec `d
 
 ## CI artifact (release PRs)
 
-The `web (advisory)` job in `.github/workflows/gate.yml` runs on every PR into `main` (the release PR): it installs the wasm32 target and `wasm-bindgen-cli` 0.2.129 (cached), runs `tools/fc.sh web test`, uploads `out/web/` as the artifact `web-build` (kept 14 days), then runs the browser smoke (Playwright Chromium installed on the runner). The job is advisory: it is not in the `gate` job's `needs` and not a required check, and a smoke failure does not fail the job (read the smoke step's log). After it has been green on two releases the user decides whether `main` requires it (WEBREL1 section 5). Download the artifact from the PR's checks (the `gate` workflow run > Artifacts).
+The `web (advisory)` job in `.github/workflows/gate.yml` runs on every PR into `main` (the release PR): it installs the wasm32 target and `wasm-bindgen-cli` 0.2.129 (cached), runs `tools/fc.sh web test`, uploads `out/web/` as the artifact `web-build` (kept 14 days), then runs the browser smoke (Playwright Chromium installed on the runner). The job is advisory: it is not in the `gate` job's `needs` and not a required check, and a smoke failure does not fail the job (read the smoke step's log). After it has been green on two releases the user decides whether `main` requires it (WEBREL1 section 5). Download the artifact from the PR's checks (the `gate` workflow run > Artifacts). Both workflows install a pinned Binaryen release (`version_125`, sha256-checked; bump `BINARYEN_VERSION` and `BINARYEN_SHA256` together) so `wasm-opt` shrinks the `.wasm`.
 
 ## Deploy to itch.io (`web.yml`)
 
