@@ -13,7 +13,7 @@ Placeholders (decision "Placeholder-first assets"): when Build lands a feature w
 | --- | --- | --- | --- | --- |
 | AI-01 | Repaint the **placeholder** `warrior/2h_polearm` look (Build copies it from an existing warrior two-handed look in `PR5-18`) with real polearm art, in place (same files: clips, palettes, side and view clips), plus any other placeholder look `PR5-18` reports in `FEEDBACK.md` | The Vanguard's main weapon is now the polearm, held two-handed; the placeholder keeps the art checks green until the real art lands, and no setup changes are needed | `games/emberwake/assets/units/warrior/2h_polearm/` (and any other reported placeholder) | open |
 | AI-02 | Remove `menu_theme` from `TRACKS` in `tools/gen_music.py` (line 546), or retire the script once Flow replaces the synthesized loops | Running it with no arguments overwrites the shipped Flow menu theme; the script is Art/UI's now | `tools/gen_music.py` | open |
-| AI-03 | Produce the slice's story tracks: `story_opening` (the opening vignette), `prologue_tension`, `story_escape`, `story_goodbye` | `PR5-24` `STORYMUSIC1` adds the hook; the tracks are Art/UI's | `games/emberwake/assets/music/` | open |
+| AI-03 | Produce the slice's story tracks: `story_opening` (the opening vignette), `prologue_tension`, `story_escape`, `story_goodbye` (as `<key>.ogg` or region-scoped `<region>_<key>.ogg`, updating `assets/audio/music/README.md`) | `PR5-24` `STORYMUSIC1` landed (`game.json` `music_keys` + vignette/step `music`); the `.ogg` files and music README are Art/UI's | `games/emberwake/assets/audio/music/` | open |
 
 ## Outbox (for Design)
 
