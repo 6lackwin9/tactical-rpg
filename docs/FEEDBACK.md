@@ -29,13 +29,21 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-1 `ROLLTABLE1` | done (FB-168; FB-169 suggestion): trigger effect `roll_table` (weighted rows on the seeded battle RNG), content check, schema help; 0 golden diffs | `develop` | Post-R4 queue: PR5-1, PR5-2, ACTS23-R5 feasibility (FB-167)
 | PR5-2 `PHASEFX1` | done (FB-170, FB-171): encounter phase effects `side` (hostile_all, party, enemy) and `swap` (keep_pct, full), content checks; 0 golden diffs | `develop` | PR5-1, PR5-2 done; FB-167 answered
 | PR5-3 `PK1-S1` | building: PK1 section 3 hooks 1-7 | `claude/optimistic-newton-ewkyqt` | -
-| PR5-17 `FBARCHIVE-FENCE` | building: archive splitter skips headings inside fences | `claude/optimistic-newton-ewkyqt` | -
+| PR5-17 `FBARCHIVE-FENCE` | done (FB-172): `feedback_check.py` treats headings inside fenced code blocks as text; an unclosed fence is a parse error | `develop` | -
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
 FB-01 to FB-171 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-10). New items start at FB-172. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+
+### FB-172: PR5-17 `FBARCHIVE-FENCE` landed (archive and check are fence-aware)
+
+- **Spec**: READY Section 1 row PR5-17; `FB-169` (6) (the `PR5-17` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: `tools/planner/feedback_check.py` gains `outside_fences(lines)` (CommonMark fences: 3 or more backticks or tildes; closed by the same character, at least as long, nothing after; any indent counts). `read_items`, `sections`, the archived-id set and `parse_building_rows` skip `## ` / `### ` lines inside a fence, and `archive` rewrites only the item's own Status line (the first outside a fence). New behaviour: a fence in FEEDBACK.md that never closes is a parse error (exit 2) instead of silently swallowing every item after it. Tests: `FenceTest` in `tools/planner/test_feedback_check.py` (4 tests, four fence variants; they fail on the old script). `tools/fc.sh tooltests` ok (144 tools/tiles, 22 planner); the check on the live docs is unchanged. Rust untouched (identical to the gated `develop`).
+- **Recommendation**: `tools/planner/README.md`, the `feedback_check.py` row: append "; `archive` and `check` treat `## ` / `### ` lines inside a fenced code block as text, so an item that quotes Markdown moves whole, and a fence in FEEDBACK.md that never closes is a parse error (exit 2) (FB-169)". Confirm the unclosed-fence error (the alternative is the CommonMark reading: the fence runs to the end of the file).
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

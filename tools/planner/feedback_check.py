@@ -21,6 +21,9 @@ docs/archive/FEEDBACK_CLOSED.md under one new heading, its Status line rewritten
 `closed: <disposition> (@<commit>)`, plus `, follow-up <ids>` when the Follow-up is not `none`. The commit defaults to
 the last commit that changed READY.md (8 characters). It refuses when the check has errors other than waiting items.
 Items without a row stay. It does not commit.
+
+Headings inside a fenced code block (``` or ~~~) are text, not item or section boundaries (FB-169), so an item quoting
+Markdown moves whole; a fence in FEEDBACK.md that never closes is a parse error (exit 2).
 """
 from __future__ import annotations
 
@@ -43,6 +46,7 @@ TICKED = re.compile(r"`([^`]+)`")
 RANGE = re.compile(r"^(.*-[A-Z]+)(\d+)\.\.[A-Z]*(\d+)$")  # U4.2-S3..S4 -> U4.2-S3, U4.2-S4
 CLOSED_SUBJECT = re.compile(r"^Close .*squash-landed on develop", re.IGNORECASE)
 BUILDING_STATUS = re.compile(r"\b(building|in-progress|in progress|running)\b", re.IGNORECASE)
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")  # a fenced code block line: ``` or ~~~ (3 or more), then an info string
 
 
 class ParseError(Exception):
@@ -77,18 +81,49 @@ class Report:
     archivable: list[str] = field(default_factory=list)
 
 
+def outside_fences(lines: list[str]) -> tuple[list[bool], int | None]:
+    """Per line: True when it is ordinary text, False on a fence line or inside a fenced code block (FB-169), plus the
+    line index of a fence still open at the end (None when every fence closes).
+
+    CommonMark rule: a fence opens with 3 or more ` or ~ (a backtick fence's info string has no backtick) and closes
+    with the same character, at least as many, and nothing but spaces after. Any indent counts, so a fence nested in a
+    list item is seen too. A `## ` line inside a fence quotes Markdown; it is not a heading.
+    """
+    mask: list[bool] = []
+    fence: tuple[str, int, int] | None = None  # (character, length, opening line index)
+    for i, line in enumerate(lines):
+        m = FENCE.match(line)
+        if fence is None:
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                fence = (m.group(1)[0], len(m.group(1)), i)
+                mask.append(False)
+            else:
+                mask.append(True)
+        else:
+            mask.append(False)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1] and not m.group(2).strip():
+                fence = None
+    return mask, (fence[2] if fence else None)
+
+
 def read_items(lines: list[str]) -> list[Item]:
-    """The ### FB-nn / UN-nn blocks: from the header to the next ### or ## header."""
+    """The ### FB-nn / UN-nn blocks: from the header to the next ### or ## header (headings inside a fenced code block
+    do not count, FB-169; a fence left open is a parse error, since it would swallow every item after it)."""
+    text, unclosed = outside_fences(lines)
+    if unclosed is not None:
+        raise ParseError(f"FEEDBACK.md:{unclosed + 1}: a fenced code block opens here and never closes")
     items: list[Item] = []
     for i, line in enumerate(lines):
+        if not text[i]:
+            continue
         if items and items[-1].end == len(lines) and line.startswith(("## ", "### ")):
             items[-1].end = i
         m = HEADER.match(line)
         if m:
             items.append(Item(m.group(1), "", i, len(lines)))
     for it in items:
-        for line in lines[it.start:it.end]:
-            s = STATUS.match(line)
+        for k, line in enumerate(lines[it.start:it.end], it.start):
+            s = STATUS.match(line) if text[k] else None
             if s:
                 it.status = s.group(1).strip()
                 break
@@ -104,8 +139,9 @@ def read_items(lines: list[str]) -> list[Item]:
 def sections(lines: list[str]) -> dict[str, tuple[int, int]]:
     """READY.md '## <n>. ...' sections by number: (first line index, end index)."""
     found: list[tuple[str, int]] = []
+    text = outside_fences(lines)[0]
     for i, line in enumerate(lines):
-        m = re.match(r"^## (\d+)\.", line)
+        m = re.match(r"^## (\d+)\.", line) if text[i] else None
         if m:
             found.append((m.group(1), i))
     out: dict[str, tuple[int, int]] = {}
@@ -193,7 +229,9 @@ def check(feedback: str, ready: str, closed: str, pending_ok: bool) -> tuple[Rep
     secs = sections(rd_lines)
     tasks = task_ids(rd_lines, secs)
     answers = read_answers(rd_lines, secs)
-    archived = {m.group(1) for m in (HEADER.match(line) for line in closed.splitlines()) if m}
+    cl_lines = closed.splitlines()
+    cl_text = outside_fences(cl_lines)[0]
+    archived = {m.group(1) for m in (HEADER.match(line) for line, t in zip(cl_lines, cl_text) if t) if m}
     rep = Report()
     by_id: dict[str, Answer] = {}
     for a in answers:
@@ -248,6 +286,7 @@ def archive(feedback: str, closed: str, items: list[Item], answers: dict[str, An
             commit: str, today: str) -> tuple[str, str]:
     """Returns the new FEEDBACK.md and FEEDBACK_CLOSED.md texts."""
     fb_lines = feedback.splitlines()
+    text = outside_fences(fb_lines)[0]
     move = [it for it in items if it.id in ids]
     blocks: list[str] = []
     drop: set[int] = set()
@@ -257,7 +296,9 @@ def archive(feedback: str, closed: str, items: list[Item], answers: dict[str, An
         if a.follow_up != ["none"]:
             status += ", follow-up " + ", ".join(f"`{t}`" for t in a.follow_up)
         block = fb_lines[it.start:it.end]
-        block = [f"- **Status**: {status}" if STATUS.match(line) else line for line in block]
+        # only the item's own Status line (the first one outside a fence), not a quoted one inside a code block
+        k = next(k for k in range(it.start, it.end) if text[k] and STATUS.match(fb_lines[k]))
+        block[k - it.start] = f"- **Status**: {status}"
         blocks.append("\n".join(block))
         # the item plus the blank lines after it
         end = it.end
@@ -276,7 +317,10 @@ def parse_building_rows(feedback_text: str) -> list[str]:
     """Finds rows in FEEDBACK.md Section 1 whose Stage / Status cell indicates an active build."""
     in_sec1 = False
     rows: list[str] = []
-    for line in feedback_text.splitlines():
+    lines = feedback_text.splitlines()
+    for line, plain in zip(lines, outside_fences(lines)[0]):
+        if not plain:
+            continue
         if line.startswith("## 1."):
             in_sec1 = True
             continue

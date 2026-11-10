@@ -210,5 +210,76 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual(fc.parse_building_rows(fb), ["R1.1-1 `AUDIT-R1b` (building: 3 lanes)"])
 
 
+def quoting(fence: str, info: str = "markdown") -> str:
+    """FEEDBACK with FB-01 quoting a whole Markdown doc (its own ## / ### headings and a Status line) in a fence."""
+    quoted = "\n".join([
+        f"{fence}{info}",
+        "# Quoted doc",
+        "",
+        "## 3. Notes for the user",
+        "",
+        "### FB-99: not an item",
+        "",
+        "- **Status**: open",
+        "",
+        "## Tail section",
+        fence,
+    ])
+    return FEEDBACK.replace("- **Finding**: one\n", f"- **Finding**: one\n\n{quoted}\n\n- **Recommendation**: keep\n")
+
+
+class FenceTest(unittest.TestCase):
+    """FB-169: headings inside a fenced code block (``` or ~~~) are not item or section boundaries."""
+
+    def archive_fb01(self, feedback: str) -> tuple[str, str]:
+        rows = "| `FB-01` | `accepted` | `ROW-A` | yes | 2026-11-07 |"
+        rep, items, answers = fc.check(feedback, READY.format(rows=rows), CLOSED, True)
+        self.assertEqual(rep.errors, [])
+        self.assertEqual([it.id for it in items], ["FB-01", "FB-02", "UN-01"])
+        self.assertEqual(rep.archivable, ["FB-01"])
+        return fc.archive(feedback, CLOSED, items, answers, rep.archivable, "abcd1234", "2026-11-10")
+
+    def test_fenced_item_is_archived_whole(self):
+        for fence, info in (("```", "markdown"), ("~~~", "markdown"), ("````", ""), ("~~~~", " md")):
+            with self.subTest(fence=fence):
+                fb = quoting(fence, info)
+                new_fb, closed = self.archive_fb01(fb)
+                # the remaining FEEDBACK is the original minus FB-01: FB-02, section 3 and UN-01 untouched
+                self.assertEqual(new_fb, FEEDBACK.replace(FEEDBACK[FEEDBACK.index("### FB-01"):FEEDBACK.index("### FB-02")], ""))
+                for tail in ("## Tail section", "### FB-99", "- **Recommendation**: keep", "# Quoted doc"):
+                    self.assertNotIn(tail, new_fb)
+                    self.assertIn(tail, closed)
+                # the item's own Status is rewritten; the quoted one inside the fence is not
+                self.assertIn("- **Status**: closed: accepted (@abcd1234), follow-up `ROW-A`", closed)
+                self.assertIn("### FB-99: not an item\n\n- **Status**: open\n", closed)
+                self.assertTrue(closed.rstrip().endswith("- **Recommendation**: keep"))
+
+    def test_shorter_or_other_char_does_not_close(self):
+        # a ~~~ line inside a ``` fence, and ``` inside a ```` fence, are content, not closers
+        fb = quoting("````").replace("# Quoted doc", "```\n~~~\n# Quoted doc")
+        new_fb, closed = self.archive_fb01(fb)
+        self.assertNotIn("## Tail section", new_fb)
+        self.assertIn("## Tail section", closed)
+
+    def test_unclosed_fence_is_a_parse_error(self):
+        fb = FEEDBACK.replace("- **Finding**: one\n", "- **Finding**: one\n\n```markdown\n## Not closed\n")
+        with self.assertRaises(fc.ParseError):
+            fc.check(fb, READY.format(rows=ALL_ROWS), CLOSED, False)
+
+    def test_fenced_headings_ignored_by_sections_archive_ids_and_build_rows(self):
+        ready = READY.format(rows=ALL_ROWS).replace("## 2. Feasibility", "```\n## 4. Fake\n```\n\n## 2. Feasibility")
+        self.assertEqual(sorted(fc.sections(ready.splitlines())), ["1", "2", "3", "4"])
+        self.assertEqual(run(), fc.check(FEEDBACK, ready, CLOSED, False)[0])
+        # a ### FB-77 header quoted in a fence in the archive does not count as archived: its row still warns
+        rows = ALL_ROWS + "\n| `FB-77` | `policy` | `none` | ok | 2026-11-07 |"
+        self.assertEqual(run(rows=rows, closed=CLOSED + "\n### FB-77: real\n\n- **Status**: closed\n").warnings, [])
+        warned = run(rows=rows, closed=CLOSED + "\n~~~\n### FB-77: quoted\n~~~\n").warnings
+        self.assertEqual(len(warned), 1)
+        self.assertIn("FB-77 is in neither", warned[0])
+        fb = ("## 1. Build Status\n\n| Task | Stage / Status |\n| --- | --- |\n"
+              "```\n## 2. quoted\n```\n| R1 | building |\n\n## 2. Feedback Items\n")
+        self.assertEqual(fc.parse_building_rows(fb), ["R1 (building)"])
+
+
 if __name__ == "__main__":
     unittest.main()
