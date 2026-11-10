@@ -1,6 +1,6 @@
 # ACTS23: the systems Acts 2 and 3 need beyond the Act 1 slice
 
-Status: **draft for user review** (Design Session 2026-11-10); nothing here is queued. After review each work package (section 4) gets a `.1` design session in `docs/sessions/`, then a Build `feasibility-check`, as `MASTERPLAN1` did.
+Status: **answered** (user 2026-11-10: every recommendation in section 5 accepted except **Q-A9**, reopened as the Channel rework in section 5.1, where the user's pick is pending). Nothing is queued yet: each work package (section 4) gets a `.1` design session in `docs/sessions/`, then a Build `feasibility-check`, as `MASTERPLAN1` did.
 Depends on: R1-R4 (shipped); the Act 1 slice data in `games/emberwake/data/worlds/sunk_ward/`
 Layers: kit (most hooks), game (data, screens), engine (only the 2 x 2 unit footprint, if chosen)
 Sources: `games/emberwake/docs/lore/CANON.md` sections 2-4 (Acts 2-3 are `proposal` there), `lore/specs/full_game_systems_roadmap.md` sections 4-6 (`P2-01..P3-05`), `lore/background/{upper_bastion,mantle_fissure}_campaign_map.md`, `lore/narrative/campaign_narrative_structure.md` sections 5-8, `lore/questions/open_world_and_campaign.md` (Q-09..Q-46, mostly decided 2026-10-25). Code status: a read-only audit of `develop @4093aed3` (2026-11-10), file:line evidence kept in section 2.
@@ -84,6 +84,35 @@ Proposed releases (names provisional): **R5** = PK1 + PK2 + PK3 (the corruption 
 | Q-A8 | Facilities and levels | (a) 5 facilities (Hearth, Slab, Board, Bunks, Crypts) x 3 levels; (b) fewer, deeper trees | **(a)**, numbers by the balance lane |
 | Q-A9 | What Channel is | (a) the intent of Inoculated and aberrant skills (a skill's intent stays single: Channel skills cost Strain); (b) a stance that turns any skill Inoculated | **(a)**: keeps "a skill has one intent" (CANON 2.1) |
 | Q-A10 | Scope target | (a) keep 16-20 h, 32-40 battles (campaign structure 7); (b) a shorter first release of Act 2 only | **(a)** for the plan; content waves can still ship Act 2 first |
+
+Answers (user 2026-11-10): Q-A1 (b), Q-A2 (a), Q-A3 (b), Q-A4 (a), Q-A5 (a), Q-A6 (a), Q-A7 (a), Q-A8 (a), Q-A10 (a); **Q-A9 reopened**: "now we can have a skill with two intents, so see what Channel contributes and whether it can be reworked" (section 5.1).
+
+### 5.1 Channel rework (Q-A9 reopened, analysis for the user)
+
+**What Channel contributes today: nothing that runs.** It is an enum slot (`rpgkit_battle/src/round_intent.rs:25`), a term (`intent_channel`, "Channel"), a tip label "FOCUS" (`emberwake_gui/src/battle/tips.rs:31`) and a name in the ruleset's intent list (`rpgkit_rules/src/ruleset.rs:115`). The planner refuses Channel rounds ("Channel rounds are not planned yet", `round_intent_plan.rs:497`), `target_problem` accepts any target (`round_intent.rs:243`), `IR21`'s `intent::derive` never returns it, and the game ruleset does not list it. On paper: CANON 2.1 "Channel from Act 2"; F3.1 "hidden Channel when a unit owns a `grant_pool` meter"; INTENT2 IR13: an intent names the round's target (IR1, IR2) and Channel names none, so it fails the test ("most likely a Stand round with a meter rule").
+
+**What a round intent gives that a plain skill tag does not:** (1) a round commitment: follow-ups come from the same intent (FU2); (2) the intent tell: enemies' plans and threat intel show it, so a round is readable at a glance; (3) intent-bound buffs; (4) per-intent deck order and AI rows; (5) round-end rules can read it.
+
+**What the Act 2 Inoculation needs** (CANON 2.2, `magic_and_corruption.md`, `classes_and_skill_trees.md`): a Strain cost on use (exists: `skills.meters`), decay that skips a round of marrow use (exists: `unless_gained`), armour pierce (exists: `pierce`), and two things that are missing: **a readable sign that a unit is burning marrow this round**, and **a real choice between Cold Steel and marrow** (today a skill is one or the other, so the Inoculated branch is a second skill list to author).
+
+**Dual intents change the question.** Since `IR21` a skill shows in up to two rows and the row it is picked from sets its version (Field vs Assault). So Channel no longer has to be a sixth target kind or a separate skill list: it can be a **version row**.
+
+| Option | What Channel becomes | Gains | Costs |
+| --- | --- | --- | --- |
+| **A** Retire | Removed; "Inoculated" is only a skill tag (a meter cost) usable in any intent, shown by a marrow mark on the plan badge | Simplest; no new rule | No round commitment, no tell beyond a badge, Inoculated skills stay a separate list |
+| **B** Fuel row (**recommended**) | A row that never names a target: a skill with a marrow version also shows in the Channel row, anchored and targeted as its primary intent (IR2 unchanged). Picked from that row, the round is a **Channel round**: every follow-up must come from the Channel row, each pays its `strain_cost` at action start, and the marrow package applies (armour pierce, a power bonus, any authored extra effect). The row is live only for a unit that carries the `strain` meter (grafted, Act 2 on), as F3.1 already says | One catalogue serves both branches: a Cold Steel skill and its marrow version are one row each, so the Act 2 skill pass is mostly versions, not new skills; "this round I burn marrow" is one fact on the plan strip and in enemy tells (aberrants telegraph Strain attacks the same way); the Cold Steel vs Inoculation choice becomes per round, which is the risk-and-reward loop the lore wants; decay already reads the round | A sixth row slot for Strain carriers; `IR21` gains a rule that the fuel row does not count toward the 2 target rows; planner, tells and AI learn Channel rounds; a skill field for the marrow version |
+| **C** Stand charge (IR13's idea) | A self-target Stand round that builds Strain or a charge and empowers the next round | Small | Overlaps Stand and `brace`; does not give marrow versions or a per-round choice |
+| **D** Round mode toggle | A Channel switch beside the intent, like the old stances | Flexible | Stances were cut (DEC-LORE-11); a second axis on every round |
+
+Sub-questions under **B** (recommendations in bold):
+
+1. Can a Channel round mix in Cold Steel follow-ups? **No**: a Channel round is all marrow, so the tell is true for the whole round (Rest and Move stay neutral).
+2. How is a marrow version defined? **A derived default package** (armour pierce, power x 1.25, `strain_cost` from the skill's AP: 1 AP -> 15, 2 -> 25, 3+ -> 35, the CANON guideline) **plus optional per-skill overrides** (a `channel` block on the skill: `strain_cost`, extra effects through `EffectSpec`, or `only: true` for marrow-only skills such as Calcified Spike), the same "derived, not authored per skill" rule as the Field bonuses.
+3. Which skills get the row? **Every attack, support and Stand skill of a Strain carrier by default**, with `channel: {none: true}` to exclude one; balance can narrow it.
+4. Intent-bound buffs in a Channel round: **only buffs bound to Channel** (none at first); the primary row's intent buffs do not apply.
+5. Enemies: aberrants that carry Strain plan Channel rounds like players (AI row), and their tell shows Channel.
+
+If B is picked, it lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
 ## 6. Next steps after review
 

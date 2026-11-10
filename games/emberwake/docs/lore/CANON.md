@@ -5,7 +5,7 @@ Status: canon (2026-10-25, the consistency pass approved by the user). Title: **
 many, sung in blood each generation; the title need not appear in game text). The codename and paths stay `emberwake`.
 
 This file is the single source the domain docs follow. Where a domain doc disagrees, this file wins; Acts 2-3 and
-later systems are `proposal` (not locked). "(planner pick)" marks a choice the approved brief did not make (the list
+later systems are `proposal` (not locked), except the systems surveyed in `docs/specs/ACTS23.md`, locked by the user on 2026-11-10 (Q-A1 (b); the Act 2-3 mission lists stay proposal; the Channel intent is being reworked, ACTS23 section 5.1). "(planner pick)" marks a choice the approved brief did not make (the list
 to confirm is in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) section 2); open questions (section 6) must not be filled with
 invented design. Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]` (engine = technology any game needs;
 kit = a shape any story in the genre could fill; game = named by the story, mostly data). "(exists)" marks a
