@@ -80,6 +80,8 @@ fn each_mistake_has_its_text() {
     let check = |e: Value| check::validate_entry(&v, UNIT_TRACKS_KIND, &dict(e), "");
     assert_eq!(check(track("tt")), Vec::<String>::new());
     assert_eq!(check(with(track("tt"), "mark", json!(""))), Vec::<String>::new(), "no mark: nothing advances it in battle");
+    // PR5-26 (audit B9): a track needs a name
+    assert_eq!(check(with(track("tt"), "name", json!(""))), ["A unit track needs a name."]);
     assert_eq!(check(stages(json!([]))), [format!("A unit track needs 1-{TRACK_STAGES_MAX} stages (has 0).")]);
     let many: Vec<Value> = (0..=TRACK_STAGES_MAX).map(|i| json!({"name": format!("S{i}")})).collect();
     assert_eq!(check(stages(Value::Array(many))), [format!("A unit track needs 1-{TRACK_STAGES_MAX} stages (has {}).", TRACK_STAGES_MAX + 1)]);

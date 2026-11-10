@@ -362,6 +362,44 @@ pub(crate) fn channel_action(w: &World, a: &emberwake_battle::resolver::Schedule
     a.command.marrow || w.cat.skill(&a.command.skill).is_some_and(emberwake_battle::channel::only)
 }
 
+/// PR5-26 (audit B8; PK1 4.3 items 5, 6): the strip's Channel line for a block of skill `s`: the Channel Rest in a
+/// Channel round's Rest place (`channel_rest`: "Feed replaces Rest in a Channel round.") or a marrow version
+/// (`marrow`: its power factor, armour piercing and channel meter cost: "Marrow version: power x1.25, armour piercing,
+/// +10 Strain"); None for any other block.
+pub(crate) fn channel_note(w: &World, s: &emberwake_data::SkillDef, channel_rest: bool, marrow: Option<(f64, bool, i32)>) -> Option<String> {
+    if channel_rest {
+        return Some(format!("{} replaces Rest in a {} round.", s.name, RoundIntent::Channel.label(&w.cat)));
+    }
+    let (power, pierce, cost) = marrow?;
+    let mut bits = vec![format!("power x{power}")];
+    if pierce {
+        bits.push("armour piercing".into());
+    }
+    if cost != 0 {
+        bits.push(super::marks::hazard_meter_text(w, &emberwake_data::MeterDelta { meter: w.ruleset.numbers.channel_meter.clone(), delta: cost }));
+    }
+    Some(format!("Marrow version: {}", bits.join(", ")))
+}
+
+/// PR5-26: `channel_note` for a planned entry of `u` (skill `sid`) in the live round (the round flag's mode).
+pub(crate) fn planned_channel_note(w: &World, u: usize, sid: usize) -> Option<String> {
+    use emberwake_battle::channel;
+    let s = w.cat.skills.get(sid)?;
+    let marrow = channel::version(w, u, s).filter(|_| !channel::only(s) && channel::problem(w, u, s).is_none()).map(|v| (v.power, v.pierce, v.cost));
+    channel_note(w, s, channel::is_channel_rest(w, u, sid), marrow)
+}
+
+/// PR5-26: `channel_note` for committed (or archived) action `a`, read from the action alone (`channel_action`): its
+/// marrow flag with the command's piercing and channel meter cost, or the Channel Rest's marrow-only skill.
+pub(crate) fn action_channel_note(w: &World, a: &emberwake_battle::resolver::ScheduledAction) -> Option<String> {
+    let s = w.cat.skill(&a.command.skill)?;
+    let n = &w.ruleset.numbers;
+    let rest = emberwake_battle::channel::only(s) && !n.channel_rest.is_empty() && w.cat.family_of(&s.id) == n.channel_rest.as_str();
+    let cost: i32 = a.command.meters.iter().filter(|d| d.meter == n.channel_meter).map(|d| d.delta).sum();
+    let marrow = a.command.marrow.then(|| (s.channel.power.unwrap_or(n.channel_power), a.command.impact.armor_piercing, cost));
+    channel_note(w, s, rest, marrow)
+}
+
 /// PK1-S2c (placeholder, user 2026-11-10): a block colour in a Channel round's mode: `c` blended halfway to the Channel
 /// tint (the final look comes with the UI layout work).
 pub(crate) fn channel_fill(c: Rgba) -> Rgba {

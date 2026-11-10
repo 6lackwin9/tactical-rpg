@@ -49,7 +49,10 @@ pub fn row_errors(e: &Dict, passives: &[Dict]) -> Vec<String> {
         out.push(format!("ID '{id}' must be {ID_MIN}-{ID_MAX} characters of a-z, 0-9 and _."));
     }
     let n = chars(&json::s(e, "name"));
-    if n > NAME_MAX {
+    // PR5-26 (audit B9): the results and the cards name the track, so it needs one
+    if n == 0 {
+        out.push("A unit track needs a name.".into());
+    } else if n > NAME_MAX {
         out.push(format!("Name is {n} characters (max {NAME_MAX})."));
     }
     let mark = json::s(e, "mark");

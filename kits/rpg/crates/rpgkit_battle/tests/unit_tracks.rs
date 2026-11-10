@@ -50,6 +50,7 @@ fn catalog() -> Catalog {
         json!({"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true}),
         json!({"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2}),
         json!({"id": "t_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.5, "target_mode": "ENEMY"}),
+        json!({"id": "t_burst", "name": "Burst", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.5, "reach_min": 1, "reach_max": 2, "area": "BURST"}),
         json!({"id": "t_inoculate", "name": "Inoculate", "kind": "SUPPORT", "level": 1, "blocks": 1, "ap_cost": 1, "target_mode": "ALLY", "reach_min": 0, "reach_max": 3,
                "unmark": {"mark": MARK}, "uses_per_battle": 1}),
     ];
@@ -239,7 +240,7 @@ fn breach_unmark_breach_matches_the_settle() {
 }
 
 /// `pierce_melee` skips armour on a melee hit under the rule pierce (the hit equals the armour-free formula, the
-/// estimate too); without the rule, without the grant or on a ranged hit the armour counts.
+/// estimate and the command's forecast too, PR5-26); without the rule, without the grant or on a ranged hit the armour counts.
 #[test]
 fn pierce_melee_skips_armour_on_melee_hits() {
     for (rules, grant, pierces) in [(vec![PIERCE], true, true), (vec![PIERCE], false, false), (vec![], true, false)] {
@@ -259,6 +260,15 @@ fn pierce_melee_skips_armour_on_melee_hits() {
         assert_eq!(plan.add_step(&w, HERO, step, true), "");
         let id = sid(&w, "t_jab");
         let cmd = plan.entries_for(&w, HERO).into_iter().find(|e| e.skill == id).unwrap().build_command(&w, HERO);
+        // PR5-26 (audit B5): the command's forecast ("Armour pierced") reads the grant on a melee attack too, and
+        // (review F4) on a melee unit's area attack, as `land` pierces its hits
+        assert_eq!(cmd.pierces(&w), pierces, "forecast: rules {rules:?}, grant {grant}");
+        let mut area = Plan::new();
+        assert_eq!(area.add_step(&w, HERO, PlanStep::area_at(sid(&w, "t_burst"), V2::new(5, 4)), true), "");
+        let burst = sid(&w, "t_burst");
+        let blast = area.entries_for(&w, HERO).into_iter().find(|e| e.skill == burst).unwrap().build_command(&w, HERO);
+        assert!(matches!(blast.kind, command::CmdKind::Area { .. }));
+        assert_eq!(blast.pierces(&w), pierces, "area forecast: rules {rules:?}, grant {grant}");
         let mut res = Resolver::new(BLOCKS, 1);
         assert!(res.schedule(HERO, cmd, 1));
         run(&mut w, &mut res);

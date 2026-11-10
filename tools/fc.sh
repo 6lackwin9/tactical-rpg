@@ -35,6 +35,12 @@
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 status=0
+# PR5-26 (audit B12): rust-toolchain.toml pins the desktop's Windows toolchain (gnullvm); on any other OS with no toolchain
+# picked, cargo and the tools it starts (tooltests' ground_compose) take `stable`
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) [ "${OS:-}" = "Windows_NT" ] || [ -n "${RUSTUP_TOOLCHAIN:-}" ] || export RUSTUP_TOOLCHAIN=stable ;;
+esac
 # A linked worktree (.git is a file) builds into its own folder, so parallel lanes never share cargo's build lock or
 # overwrite each other's binaries (.cargo/config.toml names one folder for every checkout).
 if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f .git ]; then

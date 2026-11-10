@@ -391,6 +391,19 @@ class ComposeTest(unittest.TestCase):
 
 
 class BoardTest(unittest.TestCase):
+    def test_cargo_env_picks_stable_off_windows(self):
+        """PR5-26 (audit B12): off Windows, with no toolchain picked, cargo runs on `stable` (rust-toolchain.toml pins the
+        desktop's Windows toolchain); a picked one stays; on Windows nothing is set."""
+        with unittest.mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("RUSTUP_TOOLCHAIN", None)
+            env = board.cargo_env()
+            if os.name == "nt":
+                self.assertNotIn("RUSTUP_TOOLCHAIN", env)
+            else:
+                self.assertEqual(env["RUSTUP_TOOLCHAIN"], "stable")
+            os.environ["RUSTUP_TOOLCHAIN"] = "nightly"
+            self.assertEqual(board.cargo_env()["RUSTUP_TOOLCHAIN"], "nightly")
+
     def test_board_of_a_fixture_set(self):
         with tempfile.TemporaryDirectory() as d:
             sd = os.path.join(d, "set")

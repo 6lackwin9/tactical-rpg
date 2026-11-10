@@ -171,6 +171,25 @@ fn each_broken_rule_is_one_error() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// PR5-26 (audit B3): an automatic deck (no `active` list) marks the actives the channel ruleset's deck rule fills (the
+/// battle's own list, `rpgkit_rules::unit::auto_actives`, truncated to the active slots): with two active slots a mark
+/// on an automatic active checks clean, a mark on an owned family past the slots is one error.
+#[test]
+fn an_automatic_decks_marks_are_its_automatic_actives() {
+    let (_s, data) = scratch("auto");
+    catalog(&data, timeline(json!({"deck_slots": {"active": 2, "passive": 0, "keystone": 0}})));
+    let v = store::view(&data);
+    let rule = rpgkit_rules::DeckRule::of(&ruleset::Ruleset::from_row(v.get(ruleset::KIND, "timeline"))).unwrap().with_class(&v.typed, "drill");
+    let auto = rpgkit_rules::unit::auto_actives(&v.typed, &rpgkit_data::UnitDef::from_obj(v.get("units", "drillman")), &rule);
+    let owned = ["jab", "thrust", "cleave"];
+    assert_eq!(auto.len(), 2, "truncated to the slots: {auto:?}");
+    let inside = auto.iter().find(|f| *f != "cleave").expect("a single-intent automatic active");
+    let past = owned.iter().find(|f| !auto.iter().any(|a| a == *f)).expect("an owned family past the slots");
+    assert_eq!(errors_of(&v, "units", "drillman", &json!({"deck": {"marrow": [inside]}})), Vec::<String>::new(), "{inside}");
+    let errors = errors_of(&v, "units", "drillman", &json!({"deck": {"marrow": [past]}}));
+    assert!(errors.len() == 1 && errors[0].contains(&format!("Deck marrow: '{past}' is not among the automatic actives")), "{errors:?}");
+}
+
 /// A ruleset row's Channel numbers: `channel_cost` three whole numbers 0-100; the rule needs a `channel_meter`; the meter
 /// and the Channel Rest name rows (`normal` keeps Rest); the rule needs `round_intent` and `unit_meters` (the register).
 #[test]

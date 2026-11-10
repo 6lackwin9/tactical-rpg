@@ -116,3 +116,25 @@ fn a_stowed_backup_weapon_adds_only_its_burden_and_the_switch_moves_type_range_a
     assert_eq!(mitigation(&u), mitigation(&sling));
     assert_eq!((stat_line(&u), mitigation(&u), u.worn_burden()), (stat_line(&off_only), mitigation(&off_only), off_only.worn_burden()));
 }
+
+/// PR5-26 (audit B7): a main-hand hit swings the ready weapon (`damage::weapon_for(u, false)` is
+/// `Inventory::active_weapon`): with the sling switched to in a pike + sling pair the hit's weapon and attack power are
+/// the sling-only unit's, switched back the pike-only unit's; an off-hand hit reads the off hand as before.
+#[test]
+fn a_main_hand_hit_swings_the_ready_weapon_of_the_pair() {
+    use rpgkit_rules::damage::{power_of, weapon_for};
+    let cat = catalog();
+    let pike = wearing(&cat, &[("pike", Slot::MainHand)]);
+    let sling = wearing(&cat, &[("sling", Slot::MainHand)]);
+    let mut u = wearing(&cat, &[("pike", Slot::MainHand), ("sling", Slot::OffHand)]);
+    let id = |u: &Unit, off: bool| weapon_for(u, off).map(|e| e.item.id.clone());
+    assert_eq!((id(&u, false).as_deref(), id(&u, true).as_deref()), (Some("pike"), Some("sling")));
+    assert_eq!(power_of(&u, u.attack_range > 1, false), power_of(&pike, pike.attack_range > 1, false), "pike ready");
+    assert!(u.inventory.toggle_active_weapon());
+    u.sync_from_stats_and_gear(&cat);
+    assert_eq!(id(&u, false).as_deref(), Some("sling"), "the switched-to weapon");
+    assert_eq!(power_of(&u, u.attack_range > 1, false), power_of(&sling, sling.attack_range > 1, false), "sling ready");
+    assert!(u.inventory.toggle_active_weapon());
+    u.sync_from_stats_and_gear(&cat);
+    assert_eq!(id(&u, false).as_deref(), Some("pike"), "switched back");
+}

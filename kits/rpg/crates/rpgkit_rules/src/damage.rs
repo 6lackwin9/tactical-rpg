@@ -25,11 +25,13 @@ pub const TRAINED_FIST_MIN_LEVEL: i32 = 2;
 pub const GUARD_CAP: f64 = 0.9;
 pub const FIST: &str = "fist";
 
+/// The weapon a hit swings: the off hand's for an off-hand hit, else the ready one (PR5-26, audit B7: the switched-to
+/// off-hand weapon of a two-handed pair, `Inventory::active_weapon`; the main hand otherwise).
 pub fn weapon_for(u: &Unit, offhand: bool) -> Option<&Equipment> {
     if offhand {
         u.inventory.offhand_weapon()
     } else {
-        u.inventory.main_weapon()
+        u.inventory.active_weapon()
     }
 }
 

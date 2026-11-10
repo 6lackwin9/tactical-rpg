@@ -536,7 +536,9 @@ impl DojoSession {
                     notes.push("flank".to_string());
                 }
                 let imp = Impact::of(sk);
-                if imp.armor_piercing && w.ruleset.has(ruleset::PIERCE) {
+                // PR5-26 (audit B5): a melee hit of a unit with the member grant `pierce_melee` too
+                let melee_pierce = crate::command::pierces_melee(w, c, w.units[c].attack_range > 1 && !skill::is_off_hand(sk));
+                if (imp.armor_piercing && w.ruleset.has(ruleset::PIERCE)) || melee_pierce {
                     notes.push("armour pierced".to_string());
                 }
                 if imp.stagger > 0 && w.ruleset.has(ruleset::POISE) {
@@ -1053,8 +1055,9 @@ impl DojoSession {
             "ATTACK" => {
                 let ranged = self.hero().inventory.main_weapon().is_some_and(|m| m.is_ranged_weapon()) && !skill::is_off_hand(&s);
                 let mult = self.hero().power_for(&s);
-                // RULESET1 A2: an armour-piercing hit under the rule pierce
-                let pierce = Impact::of(&s).armor_piercing && self.ruleset.has(ruleset::PIERCE);
+                // RULESET1 A2: an armour-piercing hit under the rule pierce; PR5-26 (audit B5): a melee hit of a hero
+                // with the member grant `pierce_melee` too (`command::pierces_melee`)
+                let pierce = (Impact::of(&s).armor_piercing || (self.hero().pierce_melee && !ranged)) && self.ruleset.has(ruleset::PIERCE);
                 let guarding = self.dummy.guard > 0.0;
                 let mut hit = if skill::deals_damage(&s) {
                     Some(self.apply_hit_by(&s.name, ranged, skill::is_off_hand(&s), mult, pierce))
@@ -1392,7 +1395,8 @@ impl DojoSession {
         let mut out: Vec<String> = Vec::new();
         for id in &self.stash {
             let Some(item) = self.cat.items.get(id) else { continue };
-            if out.contains(id) || !item_fits_slot(item, slot) {
+            // PR5-26 (audit B6): not an item the hero's `forbid_hands` refuses
+            if out.contains(id) || !item_fits_slot(item, slot) || self.hero().forbids(item) {
                 continue;
             }
             if slot == "off_hand" && !off_hand_ok(main.as_ref(), item) {
@@ -1433,6 +1437,13 @@ impl DojoSession {
         if !item_fits_slot(&item, slot_key) {
             if announce {
                 self.fail("Equip", &format!("{} cannot be equipped in the {} slot", item.name, slot_label(slot_key)));
+            }
+            return false;
+        }
+        // PR5-26 (audit B6): the hero's member grant `forbid_hands` refuses two-handed items (`Unit::forbids`)
+        if self.hero().forbids(&item) {
+            if announce {
+                self.fail("Equip", &format!("{} is two-handed: {} can't wield two-handed items now", item.name, self.hero().name));
             }
             return false;
         }

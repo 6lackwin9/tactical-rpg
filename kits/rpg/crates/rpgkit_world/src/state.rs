@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::{Deck, RosterManifest, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
+use rpgkit_data::{Deck, RosterManifest, DEPART_LIVES, MEMBER_CONDITIONS, NO_ITEM, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -212,6 +212,20 @@ impl UnitState {
             return Err(format!("{} is two-handed: {} can't wield two-handed items now.", def.name, progression::display_name(d, self)));
         }
         Ok(())
+    }
+
+    /// PR5-26 (audit B2): the item slot `slot` gives the member without its own gear: its base unit's row in world
+    /// `world` (the row's item or its class's default, as a build equips it; None: empty).
+    pub fn default_item(&self, d: &Data, world: &str, slot: &str) -> Option<String> {
+        let cat = d.cat_in(world);
+        cat.units.get(&self.base_unit).and_then(|row| rpgkit_rules::unit::row_slot_item(cat, row, slot))
+    }
+
+    /// PR5-26 (audit B2): whether the member's grant `forbid_hands` refuses the default item of `slot` (`default_item`),
+    /// so a slot left to its default must hold `NO_ITEM` instead.
+    pub fn forbids_default(&self, d: &Data, world: &str, slot: &str) -> bool {
+        let hands = progression::forbid_hands(d, self);
+        hands > 0 && self.default_item(d, world, slot).and_then(|id| d.cat_in(world).items.get(&id)).is_some_and(|i| rpgkit_rules::unit::forbids_hands(hands, i))
     }
 
     /// U3.2-S3 (FB-34, FB-63 (2)): whether the member wears `item` trained: its class's training or its drill passives'
@@ -465,6 +479,9 @@ impl UnitState {
         for (slot, item) in &self.equipment {
             if !LOADOUT_SLOTS.contains(&slot.as_str()) {
                 errors.push(format!("{at}: unknown equipment slot '{slot}'."));
+            } else if item == NO_ITEM {
+                // PR5-26 (audit B2): a slot left empty in place of its default (`stash_forbidden`)
+                continue;
             } else if !d.has("items", item) {
                 errors.push(format!("{at}: unknown item '{item}' in {slot}."));
             } else if let Err(e) = self.can_wear(d, item, slot) {
@@ -809,10 +826,37 @@ impl UnitState {
         }
         // PK1-S2a (PK1 4.2, rule channel): each marrow mark is an active of the deck with a marrow version (IR21 single
         // intent, no channel none or only), none twice, within every channel ruleset's marrow actives
+        // PR5-26 (audit B3): an automatic deck (no actives listed) marks the actives each channel ruleset's deck rule
+        // fills (the battle's own list, truncated to its active slots); with no such ruleset, the families it owns
+        let autos: Vec<(String, Vec<String>)> = if actives.is_empty() && !self.deck.marrow.is_empty() {
+            // the member as it fights: its deck (the marks keep it non-empty, so it replaces the base unit's) with no
+            // actives listed, built without the validation that called this
+            let mut work = self.clone();
+            work.deck.active.clear();
+            // PR5-26 review F3: in the member's own world (its class path there; a save holds no played world)
+            let world = aegis_content::split_qid(&self.lore_ref).map(|(w, _)| w).unwrap_or_default();
+            rules
+                .iter()
+                .filter(|r| r.has(rpgkit_rules::ruleset::CHANNEL))
+                .filter_map(|r| {
+                    let rule = rpgkit_rules::DeckRule::of(r)?;
+                    Some((r.name.clone(), progression::build_unchecked(d, &work, &world, false, Some(&rule))?.unit.active_families()))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let mut bad = twice("marrow", &self.deck.marrow, &mut Vec::new(), &mut errors);
         for (i, fam) in self.deck.marrow.iter().enumerate() {
             let before = errors.len();
-            if !actives.contains(fam) {
+            let in_deck = if !actives.is_empty() {
+                actives.contains(fam)
+            } else if autos.is_empty() {
+                owned.contains(fam)
+            } else {
+                autos.iter().all(|(_, auto)| auto.contains(fam))
+            };
+            if !in_deck {
                 errors.push(format!("{at}: deck marrow: '{fam}' is not an active of the deck."));
             } else if d.cat.tier_one(fam).is_some_and(|s| s.channel.none || s.channel.only || !rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_def(s))) {
                 errors.push(format!("{at}: deck marrow: '{fam}' has no marrow version."));
@@ -892,6 +936,10 @@ impl UnitState {
         for (slot, item) in worn {
             let problem = if !LOADOUT_SLOTS.contains(&slot.as_str()) {
                 format!("unknown equipment slot '{slot}'.")
+            } else if item == NO_ITEM {
+                // PR5-26 (audit B2): an emptied slot stays empty
+                self.equipment.insert(slot, item);
+                continue;
             } else if !d.has("items", &item) {
                 format!("unknown item '{item}' in {slot}.")
             } else if let Err(e) = self.can_wear(d, &item, &slot) {

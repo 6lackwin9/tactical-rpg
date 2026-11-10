@@ -37,9 +37,14 @@ fn with_ids(w: &str, rows: Value) -> Value {
 /// A class with a five-family path, the timeline basics, a learned-only attack nobody owns, passives of each slot kind
 /// (and one source-granted), a party unit without a deck and one with a deck, the timeline ruleset with the deck rule.
 fn data() -> Data {
+    data_with(json!([]))
+}
+
+/// `data` with the ruleset rows `extra` after the timeline row.
+fn data_with(extra: Value) -> Data {
     let atk = |id: &str| json!({"id": id, "name": id, "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"});
     let path: serde_json::Map<String, Value> = PATH.iter().map(|f| (f.to_string(), json!(1))).collect();
-    let catalog = json!({
+    let mut catalog = json!({
         // CLASS-BASICS: the second class's basic is the learned-only attack
         "classes": [{"id": "drill", "name": "Drill", "skill_path": path}, {"id": "drill_cut", "name": "Drill Cut", "skill_path": path, "basics": ["d_far"]}],
         "skills": [
@@ -66,6 +71,7 @@ fn data() -> Data {
         "rulesets": [{"id": "timeline", "name": "Timeline", "rules": ["round_intent", "deck"], "basics": ["move", "rest", "strike", "active_guard"],
             "deck_slots": {"active": SLOTS.0, "passive": SLOTS.1, "keystone": SLOTS.2}}]
     });
+    catalog["rulesets"].as_array_mut().unwrap().extend(extra.as_array().unwrap().iter().cloned());
     let worlds = json!({
         "w": {"manifest": {"id": "w", "start_location": "camp", "start_party": ["hero"]}, "own": {
             "locations": with_ids("w", json!([{"id": "camp", "name": "Camp"}]))
@@ -368,4 +374,29 @@ fn a_marrow_mark_saves_and_is_checked() {
     let mut damaged = state(&d, member("hero")).to_value();
     damaged["party"]["members"][0]["deck"] = json!({"active": ["d_one"], "marrow": [1]});
     assert_eq!(save::decode(&d, &envelope(save::VERSION, &damaged)).err().expect("refused"), ["Unit 'hero': deck.marrow must be a list of text."]);
+}
+
+/// PR5-26 (audit B3): an automatic deck (no actives listed) marks the actives the channel ruleset's deck rule fills (the
+/// member built with its deck as it fights, truncated to the active slots): a mark on one checks clean, a mark on an
+/// owned family past the slots is not an active of the deck. With no channel ruleset a mark on an owned family checks
+/// clean (inert until a ruleset plays Channel).
+#[test]
+fn an_automatic_decks_marrow_marks_are_its_automatic_actives() {
+    let channel = json!({"id": "t_channel", "name": "Channel", "rules": ["round_intent", "deck", "channel"], "basics": ["move", "rest", "strike", "active_guard"],
+        "deck_slots": {"active": SLOTS.0, "passive": SLOTS.1, "keystone": SLOTS.2}});
+    let d = data_with(json!([channel]));
+    let rule = DeckRule::of(&Ruleset::of(&d.cat, "t_channel").expect("the row")).expect("the deck rule");
+    let auto = progression::build_in(&d, &member("hero"), "", Some(&rule)).expect("builds").unit.active_families();
+    assert_eq!(auto.len(), SLOTS.0 as usize, "{auto:?}");
+    let attacks = ["d_one", "d_two", "d_three", "d_four"];
+    let inside = attacks.iter().find(|f| auto.iter().any(|a| a == *f)).expect("an automatic attack");
+    let past = attacks.iter().find(|f| !auto.iter().any(|a| a == *f)).expect("an owned attack past the slots");
+    let mut m = member("hero");
+    m.deck = deck(json!({"marrow": [inside]}));
+    assert_eq!(m.validate(&d), Vec::<String>::new(), "{inside}");
+    assert!(progression::build_in(&d, &m, "", Some(&rule)).is_some(), "the member builds");
+    m.deck = deck(json!({"marrow": [past]}));
+    assert_eq!(m.validate(&d), [format!("Unit 'hero': deck marrow: '{past}' is not an active of the deck.")]);
+    let plain = data();
+    assert_eq!(m.validate(&plain), Vec::<String>::new(), "no channel ruleset: an owned family");
 }

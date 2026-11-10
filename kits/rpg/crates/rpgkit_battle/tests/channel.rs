@@ -741,7 +741,8 @@ fn the_marrow_mark_is_the_games_term() {
 
 /// PK1 4.4 for an enemy holder (an aberrant): the AI table's pick and the Channel row run at the round's enemy
 /// scheduling; the enemy tells (scheduled actions) show Channel exactly while its round flag is set, with every marrow
-/// version line marked, and the meter it pays is real (it never reaches the max through a Channel round).
+/// version line marked (PR5-26: or a marrow-only Spike or Vent planned), and the meter it pays is real (it never
+/// reaches the max through a Channel round).
 #[test]
 fn an_enemy_holder_channels_and_its_tells_say_so() {
     let mut channelled = false;
@@ -759,7 +760,11 @@ fn an_enemy_holder_channels_and_its_tells_say_so() {
             if !on {
                 assert!(!rec.line.marrow && rec.plan.iter().all(|l| !l.marrow));
             } else {
-                assert!(rec.line.marrow || rec.plan.iter().any(|l| l.marrow));
+                // PR5-26: or a marrow-only skill other than Feed: Spike (FB-191 (1), the Channel row counts it) or Vent
+                // (FB-191 (e), the Vent row at high Strain)
+                let only: Vec<String> = s.w.cat.skills.iter().filter(|k| channel::only(k) && k.id != "t_feed").map(|k| k.name.clone()).collect();
+                let named = rec.plan.iter().chain([&rec.line]).any(|l| only.contains(&l.skill));
+                assert!(rec.line.marrow || rec.plan.iter().any(|l| l.marrow) || named, "{:?}", rec.plan);
             }
             let trace = rpgkit_battle::intent::trace(&s.w, &[rec.clone()]);
             assert_eq!(trace[0][8], json!(rec.round_intent.map_or("", |i| i.id())), "the trace's round intent slot");
@@ -849,3 +854,89 @@ fn an_economy_round_stays_cold_steel() {
     assert!(!channel::is_channel(&e.w, HERO), "opener-only rounds stay Cold Steel");
 }
 
+/// PR5-26 (audit B1): a command coerced to Rest (RULESET1_INTENT TG4: its target is gone) runs no skill and no marrow
+/// version: `into_rest` clears the skill id (no `uses_per_battle` count, no used-up failure) and the marrow flag (no
+/// Channel tell), with its meter cost, as it clears the rest of the command.
+#[test]
+fn a_coerced_rest_drops_the_skill_and_the_marrow_version() {
+    let mut s = session();
+    flag(&mut s.w, HERO, true);
+    let mut cmd = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
+    assert!(cmd.marrow && cmd.skill == "t_jab" && !cmd.meters.is_empty(), "a marrow Jab before");
+    cmd.into_rest();
+    assert!(matches!(cmd.kind, command::CmdKind::Rest { .. }), "{:?}", cmd.kind);
+    assert!(cmd.skill.is_empty() && !cmd.marrow && cmd.meters.is_empty(), "skill {:?}, marrow {}", cmd.skill, cmd.marrow);
+    assert_eq!(cmd.ap_cost, 0);
+}
+
+/// PR5-26 (FB-191 (1)): the AI's Channel row counts a round whose only Channel skill is a `channel.only` attack (Spike),
+/// not only a marrow version: with every marrow version gone (no marks, the class basic `channel.none`, the marked
+/// actives out of the deck) and an edge that any planned round clears, the AI opens Channel and plans Spike; with
+/// Spike a plain skill too (`channel.none`) there is nothing to Channel with and the round stays Cold Steel.
+#[test]
+fn the_ai_counts_a_marrow_only_attack_as_a_channel_round() {
+    for spike in [true, false] {
+        let mut s = session_with(badge_rules(json!({"channel_ai_edge": 0.01})), true);
+        let bash = sid(&s.w, "t_bash");
+        std::sync::Arc::make_mut(&mut s.w.cat).skills[bash].channel.none = true;
+        s.w.units[HERO].deck.marrow.clear();
+        for fam in ["t_jab", "t_heavy", "t_cleave", "t_plain", "t_brace"] {
+            drop_active(&mut s.w, HERO, fam);
+        }
+        if !spike {
+            let k = sid(&s.w, "t_spike");
+            let cat = std::sync::Arc::make_mut(&mut s.w.cat);
+            cat.skills[k].channel.only = false;
+            cat.skills[k].channel.none = true;
+        }
+        let _ = ai_round(&mut s, HERO);
+        let planned = planned(&s, HERO);
+        assert_eq!(channel::is_channel(&s.w, HERO), spike, "spike {spike}: {planned:?}");
+        if spike {
+            assert!(planned.iter().any(|p| p == "t_spike"), "{planned:?}");
+        }
+    }
+}
+
+/// PR5-26 (FB-191 (e)): the AI Vents at high Strain: from `ai::CHANNEL_AI_VENT_PCT` of the meter's max its round is a
+/// Channel round on itself opened by Vent (`ai::vent_skill`: the marrow-only meter skill that lowers Strain); one below
+/// it plans no Vent. A Vent its HP cannot pay (`hp_cost_pct`) is not planned either. Review F5: a Vent round's pick is
+/// the Vent's (Support on itself, Vent the opener); an Economy round (opener only) is never turned.
+#[test]
+fn the_ai_vents_at_high_strain() {
+    let max = 100;
+    let at = ai::CHANNEL_AI_VENT_PCT * max / 100;
+    assert!(at >= VENT_GATE, "the Vent threshold clears Vent's own gate");
+    for (strain, vents) in [(at, true), (at - 1, false), (max, true)] {
+        let mut s = session_with(badge_rules(json!({})), true);
+        assert_eq!(ai::vent_skill(&s.w, HERO), Some(sid(&s.w, "t_vent")));
+        set_strain(&mut s.w, HERO, strain);
+        let round = ai_round(&mut s, HERO);
+        let planned = planned(&s, HERO);
+        assert_eq!(planned.first().map(String::as_str) == Some("t_vent"), vents, "strain {strain}: {planned:?}");
+        if vents {
+            assert!(channel::is_channel(&s.w, HERO), "a Channel round");
+            assert_eq!(round_intent::intent_of(&s.w, HERO), Some(RoundIntent::Support));
+            // review F5: the round's pick is the Vent's
+            let pick = round.pick.expect("a pick");
+            assert_eq!((pick.intent, pick.target, pick.opener), (RoundIntent::Support, RoundTarget::Myself, Some(rpgkit_battle::round_intent::Opener::Skill(sid(&s.w, "t_vent")))));
+        }
+    }
+    // review F5: an Economy round (opener only; the Cold Steel pick of a calm round) is never turned into a Vent round
+    let mut s = session_with(badge_rules(json!({})), true);
+    let full = ai_round(&mut s, HERO);
+    let mut e = session_with(badge_rules(json!({})), true);
+    set_strain(&mut e.w, HERO, max);
+    let mut pick = full.pick.expect("a pick");
+    pick.opener_only = true;
+    let profile = e.w.profile_of(HERO);
+    let got = ai::plan_given(&mut e.w, &mut e.plan, HERO, &profile, pick);
+    assert!(got.pick.is_some_and(|p| p.opener_only), "the Economy pick is kept");
+    assert!(!planned(&e, HERO).iter().any(|p| p == "t_vent") && !channel::is_channel(&e.w, HERO), "no Vent in an Economy round");
+    let mut s = session_with(badge_rules(json!({})), true);
+    set_strain(&mut s.w, HERO, max);
+    let hurt = s.w.units[HERO].max_hp * VENT_PCT / 100;
+    s.w.units[HERO].hp = hurt.max(1);
+    let _ = ai_round(&mut s, HERO);
+    assert!(!planned(&s, HERO).iter().any(|p| p == "t_vent"), "a Vent the HP cannot pay");
+}

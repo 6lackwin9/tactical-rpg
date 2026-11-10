@@ -183,6 +183,19 @@ impl State {
         self.ap_sets.iter().map(|a| (a.unit, a.set, a.rounds)).collect()
     }
 
+    /// PR5-26 (the sim's counts): how many times each unit's trigger rows whose key starts with `prefix` fired this
+    /// battle (units with none left out; unit order of first firing).
+    pub fn battle_counts(&self, prefix: &str) -> Vec<(UnitId, i32)> {
+        let mut out: Vec<(UnitId, i32)> = Vec::new();
+        for ((unit, _), (_, battle)) in self.counts.iter().filter(|((_, k), (_, b))| k.starts_with(prefix) && *b > 0) {
+            match out.iter_mut().find(|(u, _)| u == unit) {
+                Some(e) => e.1 += battle,
+                None => out.push((*unit, *battle)),
+            }
+        }
+        out
+    }
+
     fn allows(&self, unit: UnitId, h: &Holder) -> i32 {
         let (round, battle) = self.counts.get(&(unit, h.key.clone())).copied().unwrap_or((0, 0));
         match h.row.limit.as_str() {

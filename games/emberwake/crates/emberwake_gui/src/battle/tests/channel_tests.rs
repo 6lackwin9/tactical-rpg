@@ -250,6 +250,32 @@ fn a_channel_round_tints_the_unit_and_its_blocks() {
     assert!(labels.iter().any(|l| l.get("channel").is_some()), "a Channel round plans in the Channel mode: {labels:?}");
 }
 
+/// PR5-26 (audit B8): in a Channel round the strip's hover card of a block in the Channel mode carries its Channel line
+/// (`tips::planned_channel_note`): "Marrow version: ..." on a marrow version (its power, piercing and Strain cost from
+/// `channel::version`), "<Feed> replaces Rest in a Channel round." on the Channel Rest; Cold Steel blocks carry none.
+#[test]
+fn a_channel_rounds_strip_cards_name_the_marrow_version_and_the_channel_rest() {
+    let (mut cx, mut g, mut b) = arena(RULES);
+    let (h, _) = strain_up(&mut b, 0);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    let cards = |b: &BattleScreen| b.w.iter().filter(|x| x.id.starts_with("strip.block")).map(|x| x.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()).collect::<Vec<_>>();
+    assert!(cards(&b).iter().flatten().all(|l| !l.starts_with("Marrow version") && !l.contains("replaces Rest")), "Cold Steel: no Channel line");
+    b.set_channel(&cx, h, RoundTarget::Myself, true);
+    let f = foe(&b);
+    pick_live_skill(&mut b, &cx, h, f);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    let w = &s(&b).w;
+    let notes: Vec<String> = s(&b).plan.entries_for(w, h).iter().filter_map(|e| crate::battle::tips::planned_channel_note(w, h, e.skill)).collect();
+    assert!(notes.iter().any(|n| n.starts_with("Marrow version: power x")), "a marrow version's line: {notes:?}");
+    let feed = &w.cat.skills[sid(&b, FEED)];
+    let rest_line = format!("{} replaces Rest in a", feed.name);
+    assert!(notes.iter().all(|n| n.starts_with("Marrow version") || n.starts_with(&rest_line)), "{notes:?}");
+    let shown: Vec<String> = cards(&b).into_iter().flatten().collect();
+    for n in &notes {
+        assert!(shown.contains(n), "{n} on a strip card: {shown:?}");
+    }
+}
+
 /// PK1 4.3 item 5: Rest's button names the Channel Rest (Feed) in a Channel round, its card says so, and no plain Rest
 /// block is left in the round; back in Cold Steel it is Rest again.
 #[test]

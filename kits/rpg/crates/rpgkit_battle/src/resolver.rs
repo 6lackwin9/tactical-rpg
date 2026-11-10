@@ -402,10 +402,13 @@ impl Resolver {
         self.log.extend(lines);
         // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
         crate::ground::round_end(self, w);
-        // HOOKS1 UM3: the meters' decay, while this round's Defends and held guards are still known (rule unit_meters)
-        crate::meter::round_end(self, w);
-        // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
+        // HOOKS1 UM3: this round's Defends and held guards, for the meters' decay below (the triggers end the held guards)
+        let guarded = crate::meter::guarded_now(self, w);
+        // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic).
+        // PR5-26 (FB-191 Option A): before the decay, so a meter's `round_end` row reads the round's value
         crate::trigger::round_end(self, w);
+        // HOOKS1 UM3: the meters' decay (rule unit_meters)
+        crate::meter::round_end(self, w, &guarded);
         // S1.2-S4: every held guard ends with the round (a multi-round guard goes on as its `guard` status)
         for &c in &self.registered {
             w.units[c].held_guard = None;

@@ -9,12 +9,12 @@
 
 use crate::data::Data;
 use crate::progression;
-use crate::state::{Departed, GameState, PartyState, RosterCaps, UnitState};
+use crate::state::{Departed, GameState, PartyState, RosterCaps, UnitState, LOADOUT_SLOTS};
 use aegis_core::json;
 use rpgkit_battle::encounter::{PartyFate, STAY_THEN};
 use rpgkit_battle::session::Session;
 use rpgkit_battle::world::AiProfile;
-use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
+use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, NO_ITEM, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
 use rpgkit_rules::Unit;
 use serde_json::Value;
 
@@ -175,6 +175,8 @@ pub struct Settled {
     pub tracks: Vec<TrackMove>,
     /// PK2-S1: the worn items a member grant `forbid_hands` sent to the stash (member, item id).
     pub stashed: Vec<(String, String)>,
+    /// PR5-26 review F2: the slots left empty (`NO_ITEM`) because the grant refuses their default (member, slot).
+    pub cleared: Vec<(String, String)>,
 }
 
 /// PK2-S1: a member's unit track stage moved at the settle.
@@ -219,21 +221,44 @@ fn settle_tracks(d: &Data, gs: &mut GameState, e: &HeroEnd, out: &mut Settled) -
 }
 
 /// PK2-S1: the worn items member `id`'s member grant `forbid_hands` refuses go to the stash (a stage reached in the
-/// battle; PK2 9 default 5). Returns the item ids.
-fn stash_forbidden(d: &Data, gs: &mut GameState, id: &str) -> Vec<String> {
-    let Some(m) = gs.party.member(id) else { return Vec::new() };
+/// battle; PK2 9 default 5). Returns the item ids. PR5-26 (audit B2): a slot whose default (its base unit's or class's
+/// item, `UnitState::forbids_default`) the grant refuses too holds `NO_ITEM` after, so the build leaves it empty instead
+/// of equipping the default again (the default is no stash item: nothing goes to the stash for it). Returns the stashed
+/// item ids and (review F2) the slots so emptied.
+fn stash_forbidden(d: &Data, gs: &mut GameState, id: &str) -> (Vec<String>, Vec<String>) {
+    let world = gs.world_id.clone();
+    let Some(m) = gs.party.member(id) else { return (Vec::new(), Vec::new()) };
     let hands = progression::forbid_hands(d, m);
     if hands == 0 {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
-    let slots: Vec<String> = m.equipment.iter().filter(|(_, item)| d.cat.items.get(*item).is_some_and(|i| rpgkit_rules::unit::forbids_hands(hands, i))).map(|(slot, _)| slot.clone()).collect();
-    let mut items = Vec::new();
-    for slot in slots {
-        let Some(item) = gs.party.member_mut(id).and_then(|m| m.equipment.shift_remove(&slot)) else { continue };
-        gs.party.add_to_stash(&item, 1);
-        items.push(item);
+    let forbidden = |item: &str| d.cat.items.get(item).is_some_and(|i| rpgkit_rules::unit::forbids_hands(hands, i));
+    let mut moves: Vec<(String, Option<String>, bool)> = Vec::new();
+    for slot in LOADOUT_SLOTS {
+        let stash = match m.equipment.get(slot) {
+            Some(item) if item == NO_ITEM || !forbidden(item) => continue,
+            Some(item) => Some(item.clone()),
+            None => None,
+        };
+        let empty = m.forbids_default(d, &world, slot);
+        if stash.is_some() || empty {
+            moves.push((slot.to_string(), stash, empty));
+        }
     }
-    items
+    let (mut items, mut cleared) = (Vec::new(), Vec::new());
+    for (slot, stash, empty) in moves {
+        let Some(m) = gs.party.member_mut(id) else { break };
+        m.equipment.shift_remove(&slot);
+        if empty {
+            m.equipment.insert(slot.clone(), NO_ITEM.to_string());
+            cleared.push(slot);
+        }
+        if let Some(item) = stash {
+            gs.party.add_to_stash(&item, 1);
+            items.push(item);
+        }
+    }
+    (items, cleared)
 }
 
 /// ENCOUNTER2 W3, 3.2's first row: the life `then` gives a stayer or stander (`capture`: captured, `kill`: dead) and its
@@ -392,9 +417,9 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
                 continue;
             }
         }
-        for item in stash_forbidden(d, gs, &e.member) {
-            out.stashed.push((e.member.clone(), item));
-        }
+        let (items, cleared) = stash_forbidden(d, gs, &e.member);
+        out.stashed.extend(items.into_iter().map(|item| (e.member.clone(), item)));
+        out.cleared.extend(cleared.into_iter().map(|slot| (e.member.clone(), slot)));
         if let Some((life, cause)) = then_departs(f, e) {
             if depart(d, gs, &e.member, life, cause, &f.encounter).is_ok() {
                 out.departed.push((e.member.clone(), life.to_string()));

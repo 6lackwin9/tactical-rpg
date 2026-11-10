@@ -79,3 +79,31 @@ fn the_menu_and_pick_reach_the_turned_hero_with_an_unmark_only() {
     let mate = rp.as_array().unwrap().iter().find(|r| r["unit"] == json!(1)).cloned().unwrap();
     assert_eq!((mate["intent"].as_str(), mate["target"].clone()), (Some("support"), json!(0)), "{mate}");
 }
+
+/// PR5-26 (audit B10): the replies carry the PK1/PK2 state, each key only when set: `state` gives the turned hero its
+/// marks, tracks and `outcome_of` keeps them; `skills` lists Inoculate's `unmark` and its use limit with the uses left
+/// (one fewer once used this battle); a unit with none of it carries none of the keys.
+#[test]
+fn the_replies_carry_the_marks_tracks_and_use_limits() {
+    let mut h = host();
+    let st = h.handle(&json!({"cmd": "state"}))["state"].clone();
+    let (hero, mate) = (st["units"][0].clone(), st["units"][1].clone());
+    assert_eq!(hero["marks"], json!([[MARK, 1]]), "{hero}");
+    assert!(hero["tracks"]["t_track"].as_i64().is_some_and(|n| n >= 2), "{hero}");
+    for k in ["marks", "tracks", "skill_uses", "channel", "marrow", "forbid_hands", "pierce_melee"] {
+        assert!(mate.get(k).is_none(), "the mate holds no {k}: {mate}");
+    }
+    let s = h.commands.session.as_ref().unwrap();
+    let out = rpgkit_host::outcome_of(s);
+    assert_eq!(out["units"][0]["marks"], hero["marks"]);
+    assert!(out["units"][1].get("marks").is_none());
+    let row = |h: &mut Host| h.handle(&json!({"cmd": "skills", "unit": 1}))["skills"].as_array().unwrap().iter().find(|r| r["skill"] == "t_inoculate").cloned().expect("Inoculate");
+    let ino = row(&mut h);
+    assert_eq!((ino["unmark"].clone(), ino["uses_per_battle"].clone(), ino["uses_left"].clone()), (json!(MARK), json!(1), json!(1)), "{ino}");
+    h.commands.session.as_mut().unwrap().w.skill_uses.insert((1, "t_inoculate".to_string()), 1);
+    assert_eq!(row(&mut h)["uses_left"], json!(0));
+    let st = h.handle(&json!({"cmd": "state"}))["state"].clone();
+    assert_eq!(st["units"][1]["skill_uses"], json!({"t_inoculate": 1}));
+    let strike = h.handle(&json!({"cmd": "skills", "unit": 1}))["skills"].as_array().unwrap().iter().find(|r| r["skill"] == "strike").cloned().unwrap();
+    assert!(strike.get("uses_per_battle").is_none() && strike.get("unmark").is_none() && strike.get("marrow").is_none(), "{strike}");
+}

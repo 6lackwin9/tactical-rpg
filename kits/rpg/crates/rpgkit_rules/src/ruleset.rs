@@ -710,6 +710,12 @@ impl Numbers {
             "rest_ap_per_block" => self.rest_ap_per_block = v,
             "rest_ap_cap" => self.rest_ap_cap = whole(v)?,
             "rest_poise_per_block" => self.rest_poise_per_block = whole(v)?,
+            // PR5-26 (FB-191 (f)): the Channel rule's numbers (`channel_cost` by AP 1, 2 and 3+)
+            "channel_power" => self.channel_power = v,
+            "channel_ai_edge" => self.channel_ai_edge = v,
+            "channel_cost_1" => self.channel_cost[0] = whole(v)?,
+            "channel_cost_2" => self.channel_cost[1] = whole(v)?,
+            "channel_cost_3" => self.channel_cost[2] = whole(v)?,
             _ => return Err(format!("'{key}' is not a ruleset tuning number")),
         }
         Ok(())

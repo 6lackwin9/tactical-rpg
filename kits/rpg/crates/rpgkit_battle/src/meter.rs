@@ -461,12 +461,19 @@ pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
     true
 }
 
-/// UM3: round end (rule unit_meters), after the ticks and ground hazards and before the `round_end` triggers: each
-/// active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this round,
-/// `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard); then the gained marks
-/// clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round skips every decay row of the channel meter (it counts as
-/// a gain, and its `if_guarded` rows skip too).
-pub fn round_end(res: &mut Resolver, w: &mut World) {
+/// UM3: whether each unit guarded this round (a Defend, or a held guard), read before the `round_end` triggers end the
+/// held guards (PR5-26: the decay runs after them and reads this).
+pub fn guarded_now(res: &Resolver, w: &World) -> Vec<bool> {
+    (0..w.units.len()).map(|c| res.scheduled.iter().any(|a| a.unit == c && !a.cancelled && a.command.is_defend()) || w.units[c].held_guard.is_some()).collect()
+}
+
+/// UM3: round end (rule unit_meters), after the ticks and ground hazards and (PR5-26, FB-191 Option A) after the
+/// `round_end` triggers, so a meter's own `round_end` row (a crisis `at_least` its max) reads the round's value before
+/// it decays: each active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this
+/// round, `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard, `guarded` read by
+/// `guarded_now` before the triggers); then the gained marks clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round
+/// skips every decay row of the channel meter (it counts as a gain, and its `if_guarded` rows skip too).
+pub fn round_end(res: &mut Resolver, w: &mut World, guarded: &[bool]) {
     if !on(w) {
         return;
     }
@@ -483,7 +490,7 @@ pub fn round_end(res: &mut Resolver, w: &mut World) {
         if def.decay.is_empty() || !w.units[c].is_active() || channel_round {
             continue;
         }
-        let guarded = res.scheduled.iter().any(|a| a.unit == c && !a.cancelled && a.command.is_defend()) || w.units[c].held_guard.is_some();
+        let guarded = guarded.get(c).copied().unwrap_or(false);
         let h = holder(c, &def.name, &def.id);
         let mut fired = Fired::new(c, "meter", None, &def.name);
         for d in &def.decay {

@@ -33,7 +33,12 @@ pub const STAGE_USAGE: &str = "       stage=0.. (0): world encounters (party, sw
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
-pub const TUNE_PREFIXES: [&str; 4] = ["stagger_", "flank_", "break_chance_", "rest_"];
+/// PR5-26 (FB-191 (f)): `channel_` (the Channel rule's `channel_power` and `channel_ai_edge`).
+pub const TUNE_PREFIXES: [&str; 5] = ["stagger_", "flank_", "break_chance_", "rest_", "channel_"];
+/// PR5-26 (FB-191 (f)): the `tune=` keys of the ruleset's `channel_cost` (a list in the schema): the cost by AP 1, 2 and
+/// 3+, each a whole number 0-`CHANNEL_COST_MAX`.
+pub const CHANNEL_COST_KEYS: [&str; 3] = ["channel_cost_1", "channel_cost_2", "channel_cost_3"];
+pub const CHANNEL_COST_MAX: f64 = 100.0;
 /// CAMPAIGN1-SIM: the keys only the deadlines mode reads (any other mode refuses them).
 pub const DEADLINE_KEYS: [&str; 1] = ["losses"];
 /// CAMPAIGN1-SIM: `losses=` (lost tries per mission in the worst case): default and range.
@@ -366,7 +371,8 @@ impl SimArgs {
             }
             a.seed_count = int(s) as usize;
             a.seeds_set = true;
-        } else if a.mode == "party" || a.mode == "sweep" {
+        } else if (a.mode == "party" || a.mode == "sweep") && !a.seeds_set {
+            // PR5-26 (FB-193 (a)): `seeds=N` holds in these modes too; only without it the party default
             a.seed_count = PARTY_SEEDS;
         } else if a.mode == "feel" && !a.seeds_set {
             a.seed_count = crate::feel::FEEL_SEEDS;
@@ -955,11 +961,15 @@ pub fn feel_roster(d: &Data, id: &str) -> Vec<String> {
 
 /// RULESET1-G2: the `tune=` keys: the kit schema's numeric ruleset fields with a TUNE_PREFIXES prefix.
 pub fn tune_keys() -> Vec<String> {
-    tune_fields().map(|f| aegis_core::json::s(f, "key")).collect()
+    tune_fields().map(|f| aegis_core::json::s(f, "key")).chain(CHANNEL_COST_KEYS.iter().map(|k| k.to_string())).collect()
 }
 
-/// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one).
+/// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one). PR5-26: a `channel_cost` key's
+/// range is 0..`CHANNEL_COST_MAX` (the row check's).
 pub fn tune_range(key: &str) -> Option<(f64, f64)> {
+    if CHANNEL_COST_KEYS.contains(&key) {
+        return Some((0.0, CHANNEL_COST_MAX));
+    }
     let f = tune_fields().find(|f| aegis_core::json::s(f, "key") == key)?;
     Some((f.get("min")?.as_f64()?, f.get("max")?.as_f64()?))
 }

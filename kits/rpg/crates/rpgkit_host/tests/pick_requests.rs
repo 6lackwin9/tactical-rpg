@@ -264,6 +264,32 @@ fn channel_flips_the_round_and_replays() {
     assert_eq!(row(&mut again, 0), row(&mut h, 0), "back to Cold Steel replays too");
 }
 
+/// PR5-26 (audit B10): the replies carry the Channel state: `round_plan` and `state` give a holder of the channel meter
+/// its round flag (`channel`), `state` its marked actives (`marrow`) and meter values; `skills` marks Feed
+/// `channel_only` and, in a Channel round, gives Cleave its marrow version's terms (`channel::version`), none in Cold
+/// Steel.
+#[test]
+fn the_replies_carry_the_channel_state() {
+    let mut h = channel_host("t_duel");
+    assert_eq!(row(&mut h, 0)["channel"], json!(false), "Cold Steel");
+    let unit = |h: &mut Host| h.handle(&json!({"cmd": "state"}))["state"]["units"][0].clone();
+    let u = unit(&mut h);
+    assert_eq!((u["channel"].clone(), u["marrow"].clone(), u["meters"]["strain"].clone()), (json!(false), json!(["t_cleave"]), json!(0)), "{u}");
+    let skill = |h: &mut Host, id: &str| h.handle(&json!({"cmd": "skills", "unit": 0}))["skills"].as_array().unwrap().iter().find(|r| r["skill"] == id).cloned();
+    assert!(skill(&mut h, "t_cleave").expect("Cleave").get("marrow").is_none(), "Cold Steel: no marrow terms");
+    assert_eq!(h.handle(&json!({"cmd": "channel", "unit": 0, "on": true}))["ok"], json!(true));
+    assert_eq!(row(&mut h, 0)["channel"], json!(true));
+    assert_eq!(unit(&mut h)["channel"], json!(true));
+    let s = h.commands.session.as_ref().unwrap();
+    let sk = s.w.cat.skill("t_cleave").unwrap().clone();
+    let v = rpgkit_battle::channel::version(&s.w, 0, &sk).expect("a marrow version");
+    let cleave = skill(&mut h, "t_cleave").expect("Cleave");
+    assert_eq!(cleave["marrow"], json!({"cost": v.cost, "power": v.power, "pierce": v.pierce}), "{cleave}");
+    if let Some(feed) = skill(&mut h, "t_feed") {
+        assert_eq!(feed["channel_only"], json!(true), "{feed}");
+    }
+}
+
 /// ENCOUNTER2-C SR5 with PK1-S2c: a scripted, locked round refuses `channel` for a unit that could Channel, records
 /// nothing and changes nothing.
 #[test]

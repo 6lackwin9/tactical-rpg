@@ -164,6 +164,31 @@ fn the_crisis_sets_its_meter_holds_the_armour_and_bleeds_for_the_battle() {
     assert_eq!(armor_rating(&w.units[ALLY]), ARMOR);
 }
 
+/// PR5-26 (FB-191 Option A): the battle's round end runs the `round_end` triggers before the meters' decay, so a
+/// Strain at MAX with a decay row (-DECAY a round, not gained) fires the crisis (the armour held at 0, Strain set to
+/// AFTER) and then decays from AFTER; a Strain one below MAX decays without a crisis. (Decay first would take MAX below
+/// the crisis's `at_least` before it reads it.)
+#[test]
+fn the_round_end_crisis_reads_the_meter_before_it_decays() {
+    const DECAY: i32 = 10;
+    for (start, crisis) in [(MAX, true), (MAX - 1, false)] {
+        let mut w = session(&["strain"]).w;
+        std::sync::Arc::make_mut(&mut w.cat).unit_meters.get_mut("strain").expect("the strain row").decay = vec![json!({"delta": -DECAY}).as_object().unwrap().clone()];
+        w.meters.gauges.iter_mut().find(|g| g.unit == HERO && g.meter == "strain").expect("a gauge").value = start;
+        let mut res = registered();
+        res.apply_round_end_effects(&mut w);
+        let after = if crisis { AFTER - DECAY } else { start - DECAY };
+        assert_eq!(meter::value(&w, HERO, "strain"), Some(after), "start {start}: {:?}", res.log);
+        assert_eq!(armor_rating(&w.units[HERO]) == 0, crisis, "start {start}: the crisis held the armour");
+        let set = res.log.iter().position(|l| l.contains(&format!("set to {AFTER}")));
+        let decay = res.log.iter().position(|l| l.contains("decays"));
+        assert_eq!(set.is_some(), crisis, "{:?}", res.log);
+        if crisis {
+            assert!(set < decay, "the crisis before the decay: {:?}", res.log);
+        }
+    }
+}
+
 // ---- (b) inflict for the battle ---------------------------------------------------------------------------------------
 
 #[test]

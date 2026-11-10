@@ -1490,13 +1490,27 @@ pub fn loadout_of(cat: &Catalog, e: &UnitDef, arch: &ClassDef, owned_ids: &[Stri
     (class_out, extra_out)
 }
 
+/// PR5-26 (audit B2): the item id slot `slot_key` of row `e` holds before any member gear: the row's own id, its
+/// class's default for "" (`arch`), None for `NO_ITEM` or nothing.
+fn slot_default(e: &UnitDef, arch: Option<&ClassDef>, slot_key: &str) -> Option<String> {
+    let item_id = e.slots.get(slot_key)?;
+    if item_id == NO_ITEM {
+        return None;
+    }
+    let id = if item_id.is_empty() { arch.and_then(|a| a.loadout.get(slot_key).cloned()).unwrap_or_default() } else { item_id.clone() };
+    (!id.is_empty()).then_some(id)
+}
+
+/// PR5-26 (audit B2): the item id slot `slot_key` of catalog row `e` gives a unit built from it (its own or its class's
+/// default; None: empty), as `build_from` equips it before a member's own gear.
+pub fn row_slot_item(cat: &Catalog, e: &UnitDef, slot_key: &str) -> Option<String> {
+    slot_default(e, class_for(cat, e), slot_key)
+}
+
 /// The class's default gear with the unit's per-slot overrides, then the pouch.
 fn equip(cat: &Catalog, u: &mut Unit, e: &UnitDef, arch: Option<&ClassDef>) {
-    for (slot_key, item_id) in &e.slots {
-        if item_id == NO_ITEM {
-            continue;
-        }
-        let id = if item_id.is_empty() { arch.and_then(|a| a.loadout.get(slot_key).cloned()).unwrap_or_default() } else { item_id.clone() };
+    for slot_key in e.slots.keys() {
+        let Some(id) = slot_default(e, arch, slot_key) else { continue };
         let Some(item) = cat.items.get(&id) else { continue };
         if item.is_equipment() {
             u.inventory.equip(Equipment::new(item), Slot::parse(slot_key).unwrap_or(Slot::MainHand));

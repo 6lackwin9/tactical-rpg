@@ -9,7 +9,7 @@ use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
-use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
+use emberwake_data::{Catalog, Deck, DerivedStatDef, NO_ITEM, STATS};
 use emberwake_rules::damage;
 use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
 use emberwake_rules::gear::TIER_SOURCE;
@@ -101,6 +101,8 @@ pub struct Character {
     /// INTENT2-U: the gear draft's world plays `pouch_stacks` (the pouch holds stacks with packed counts; set with the
     /// draft).
     gear_stacks: bool,
+    /// PR5-26 review F3: the played world the gear draft reads its class defaults in (set with the draft).
+    gear_world: String,
     pending_switch: Option<(Option<String>, Option<&'static str>)>,
     /// First family row shown on the Skills tab (the wheel scrolls).
     scroll: usize,
@@ -419,13 +421,15 @@ impl DeckTerms {
         work.deck = Deck::default();
         let auto_unit = progression::build_in(d, &work, world, Some(&rule))?.unit;
         let classic = progression::build_as(d, &work, world, false, None)?.unit;
+        let auto_active = auto_unit.active_families();
         let auto = Deck {
-            active: auto_unit.active_families(),
+            // PR5-26 (audit B4): the base unit's marrow marks among the automatic actives
+            marrow: auto_unit.deck.marrow.iter().filter(|f| auto_active.contains(f)).cloned().collect(),
+            active: auto_active,
             passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
             keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
             order: auto_unit.deck.order.clone(),
             follow_ups: IndexMap::new(),
-            marrow: Vec::new(),
         };
         // apply_deck's auto pick for an empty active row: the loadout's families the member owns, the first `active`
         let mut auto_actives: Vec<String> = Vec::new();
@@ -527,7 +531,8 @@ impl DeckTerms {
         if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() || !shown.follow_ups.is_empty() {
             return shown;
         }
-        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new(), marrow: Vec::new() }
+        // PR5-26 (audit B4): the actives marked marrow stay (they mark the automatic actives)
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new(), marrow: shown.marrow }
     }
 
     /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
@@ -553,8 +558,9 @@ impl DeckTerms {
     }
 
     /// An active that leaves the deck leaves every order and follow-up list and drops its own follow-up list (an
-    /// emptied list is the auto order again; INPUT1 FL3).
+    /// emptied list is the auto order again; INPUT1 FL3). PR5-26 (audit B4): and its marrow mark.
     fn unordered(d: &mut Deck, fam: &str) {
+        d.marrow.retain(|f| f != fam);
         for l in d.order.values_mut().chain(d.follow_ups.values_mut()) {
             l.retain(|f| f != fam);
         }
@@ -813,7 +819,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -963,6 +969,7 @@ impl Character {
         if self.gear.is_none() {
             self.gear = Some((self.m(cx).clone(), cx.gs().party.stash.clone()));
             self.gear_stacks = cx.data.ruleset(&cx.gs().world_id).numbers.pouch_stacks;
+            self.gear_world = cx.gs().world_id.clone();
         }
     }
 
@@ -1207,17 +1214,17 @@ impl Character {
                     show_errors(cx, errors);
                 }
             }
-            PAct::Unequip(slot) => self.gear_move(cx, |d, work, stash| take_off(d, work, stash, &slot)),
-            PAct::Equip(item) => self.gear_move(cx, |d, work, stash| equip(d, work, stash, &item, None)),
+            PAct::Unequip(slot) => self.gear_move(cx, |d, world, work, stash| take_off(d, world, work, stash, &slot)),
+            PAct::Equip(item) => self.gear_move(cx, |d, world, work, stash| equip(d, world, work, stash, &item, None)),
             PAct::PouchAdd(item) => {
                 let stacks = self.stacks_on(cx);
-                self.gear_move(cx, |d, work, stash| pouch_put(d, work, stash, &item, None, stacks))
+                self.gear_move(cx, |d, _, work, stash| pouch_put(d, work, stash, &item, None, stacks))
             }
             PAct::PouchRemove(i) => {
                 let stacks = self.stacks_on(cx);
-                self.gear_move(cx, |_, work, stash| pouch_take(work, stash, i, stacks))
+                self.gear_move(cx, |_, _, work, stash| pouch_take(work, stash, i, stacks))
             }
-            PAct::PouchPack(item, n) => self.gear_move(cx, |d, work, stash| work.pack_pouch(d, &item, n, stash).map_err(|e| named(d, &item, e))),
+            PAct::PouchPack(item, n) => self.gear_move(cx, |d, _, work, stash| work.pack_pouch(d, &item, n, stash).map_err(|e| named(d, &item, e))),
             PAct::ResetGear => self.gear = None,
             PAct::ConfirmGear => {
                 let Some((work, stash)) = self.gear.clone() else { return };
@@ -1253,11 +1260,12 @@ impl Character {
 
     /// One gear move on the draft (loaded first); a refused move shows its reason. INTENT2-U: under `pouch_stacks` the
     /// pouch is not topped up here: only the kit's auto-fill at combat start and after a fight moves copies in.
-    fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &mut UnitState, &mut Stash) -> Result<(), String>) {
+    fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &str, &mut UnitState, &mut Stash) -> Result<(), String>) {
         self.load_gear(cx);
         let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
         let (work, stash) = self.gear.as_mut().unwrap();
-        if let Err(e) = mv(&d, work, stash) {
+        if let Err(e) = mv(&d, &world, work, stash) {
             show_errors(cx, vec![e]);
         }
     }
@@ -1271,7 +1279,7 @@ impl Character {
     /// The draft after the drop of payload `from` on target `to` (GEARUI1 drag and drop), or why it can't be done.
     fn after_drop(&self, d: &Data, from: &str, to: &str) -> Result<(UnitState, Stash), String> {
         let (mut work, mut stash) = self.gear.clone().ok_or("No gear draft.")?;
-        drop_move(d, &mut work, &mut stash, from, to, self.gear_stacks)?;
+        drop_move(d, &self.gear_world, &mut work, &mut stash, from, to, self.gear_stacks)?;
         Ok((work, stash))
     }
 }
@@ -1296,7 +1304,7 @@ fn give_one(stash: &mut Stash, item: String) {
 
 /// Wears `item` from the stash in `slot`, or (None) the first free slot it fits, else the first it fits; what the slot
 /// held goes back to the stash.
-fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Option<&str>) -> Result<(), String> {
+fn equip(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Option<&str>) -> Result<(), String> {
     let def = d.cat.items.get(item).ok_or_else(|| format!("Unknown item '{item}'."))?;
     if stash.get(item).copied().unwrap_or(0) < 1 {
         return Err(format!("There is no {} in the stash.", def.name));
@@ -1304,15 +1312,16 @@ fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Op
     let slot = match slot {
         Some(s) if fits(def, s) => s,
         Some(s) => return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(s).to_lowercase())),
-        None => *LOADOUT_SLOTS.iter().find(|s| fits(def, s) && !work.equipment.contains_key(**s)).or_else(|| LOADOUT_SLOTS.iter().find(|s| fits(def, s))).ok_or_else(|| format!("{} can't be worn.", def.name))?,
+        None => *LOADOUT_SLOTS.iter().find(|s| fits(def, s) && work.equipment.get(**s).is_none_or(|i| i == NO_ITEM)).or_else(|| LOADOUT_SLOTS.iter().find(|s| fits(def, s))).ok_or_else(|| format!("{} can't be worn.", def.name))?,
     };
     work.can_wear(d, item, slot)?;
     if slot == "off_hand" {
-        if let Some(main) = main_weapon(d, work).filter(|m| !off_hand_ok(Some(m), def)) {
+        if let Some(main) = main_weapon(d, world, work).filter(|m| !off_hand_ok(Some(m), def)) {
             return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
         }
     }
-    if let Some(old) = work.equipment.insert(slot.to_string(), item.to_string()) {
+    // PR5-26 (audit B2): an emptied slot (`NO_ITEM`) gives nothing back
+    if let Some(old) = work.equipment.insert(slot.to_string(), item.to_string()).filter(|o| o != NO_ITEM) {
         give_one(stash, old);
     }
     take_one(stash, item);
@@ -1327,57 +1336,76 @@ fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Op
 }
 
 /// The weapon the main hand holds: the worn one, else the class default the build gives.
-fn main_weapon(d: &Data, work: &UnitState) -> Option<emberwake_data::ItemDef> {
+fn main_weapon(d: &Data, world: &str, work: &UnitState) -> Option<emberwake_data::ItemDef> {
     match work.equipment.get("main_hand") {
         Some(id) => d.cat.items.get(id).cloned(),
-        None => progression::build_as(d, work, "", false, None).and_then(|b| b.unit.inventory.get(emberwake_rules::gear::Slot::MainHand).map(|e| e.item.clone())),
+        None => progression::build_as(d, work, world, false, None).and_then(|b| b.unit.inventory.get(emberwake_rules::gear::Slot::MainHand).map(|e| e.item.clone())),
     }
 }
 
 /// Takes off what `slot` holds; when the main hand's class default that comes back is two-handed, a shield or focus
 /// in the off hand goes to the stash too (the two-handed rule).
-fn take_off(d: &Data, work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
-    unequip(work, stash, slot)?;
+fn take_off(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
+    unequip(d, world, work, stash, slot)?;
     if slot == "main_hand" {
         let off = work.equipment.get("off_hand").and_then(|o| d.cat.items.get(o)).cloned();
-        if let (Some(main), Some(off)) = (main_weapon(d, work), off) {
+        if let (Some(main), Some(off)) = (main_weapon(d, world, work), off) {
             if !off_hand_ok(Some(&main), &off) {
-                unequip(work, stash, "off_hand")?;
+                unequip(d, world, work, stash, "off_hand")?;
             }
         }
     }
     Ok(())
 }
 
-/// Takes off what `slot` holds (the class default comes back).
-fn unequip(work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
-    let item = work.equipment.shift_remove(slot).ok_or_else(|| format!("The {} slot already holds the class default.", slot.replace('_', " ")))?;
+/// Takes off what `slot` holds (the class default comes back). PR5-26 (audit B2): a slot left empty (`NO_ITEM`) stays
+/// so; a worn item whose class default the member's `forbid_hands` refuses leaves the slot empty (`NO_ITEM`).
+fn unequip(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
+    match work.equipment.get(slot) {
+        None => return Err(format!("The {} slot already holds the class default.", slot.replace('_', " "))),
+        Some(i) if i == NO_ITEM => return Err(format!("The {} slot is already empty.", slot.replace('_', " "))),
+        Some(_) => {}
+    }
+    // PR5-26 review F3: the default of the played world (as the settle's `stash_forbidden` reads it)
+    let empty = work.forbids_default(d, world, slot);
+    let item = work.equipment.shift_remove(slot).unwrap_or_default();
+    if empty {
+        work.equipment.insert(slot.to_string(), NO_ITEM.to_string());
+    }
     give_one(stash, item);
     Ok(())
 }
 
 /// Moves the item worn in `from` to `to` (it must fit there); what `to` held moves to `from` when it fits, else to the
 /// stash.
-fn move_slot(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str) -> Result<(), String> {
-    let item = work.equipment.get(from).cloned().ok_or("That slot holds the class default.")?;
+fn move_slot(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str) -> Result<(), String> {
+    let item = work.equipment.get(from).cloned().filter(|i| i != NO_ITEM).ok_or("That slot holds the class default.")?;
     let def = d.cat.items.get(&item).ok_or_else(|| format!("Unknown item '{item}'."))?;
     if from == to || !fits(def, to) {
         return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(to).to_lowercase()));
     }
+    // PR5-26 (audit B6): the member's `forbid_hands` refuses the item in its new slot too
+    work.can_wear(d, &item, to)?;
     if to == "off_hand" {
         let mut rest = work.clone();
         rest.equipment.shift_remove(from);
-        if let Some(main) = main_weapon(d, &rest).filter(|m| !off_hand_ok(Some(m), def)) {
+        if let Some(main) = main_weapon(d, world, &rest).filter(|m| !off_hand_ok(Some(m), def)) {
             return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
         }
     }
     work.equipment.shift_remove(from);
-    if let Some(old) = work.equipment.insert(to.to_string(), item) {
-        if d.cat.items.get(&old).is_some_and(|o| fits(o, from)) {
+    // PR5-26 review F1: an emptied slot (`NO_ITEM`) gives nothing back; the slot left behind holds `NO_ITEM` when the
+    // class default that would come back is one the member's `forbid_hands` refuses (as `unequip`)
+    let old = work.equipment.insert(to.to_string(), item).filter(|o| o != NO_ITEM);
+    match old {
+        Some(old) if d.cat.items.get(&old).is_some_and(|o| fits(o, from)) => {
             work.equipment.insert(from.to_string(), old);
-        } else {
-            give_one(stash, old);
         }
+        Some(old) => give_one(stash, old),
+        None => {}
+    }
+    if !work.equipment.contains_key(from) && work.forbids_default(d, world, from) {
+        work.equipment.insert(from.to_string(), NO_ITEM.to_string());
     }
     Ok(())
 }
@@ -1468,15 +1496,15 @@ pub(crate) fn pouch_pips(cur: i64, packed: i64, limit: i64) -> Vec<Pip> {
 
 /// A drop: payload `stash.<item>`, `equip.<slot>` or `pouch.<i>` on target `slot.<slot>`, `pouch.<i>` or `stash`
 /// (INTENT2-U: under `pouch_stacks`, `stacks`, a pouch index names a stack slot).
-fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str, stacks: bool) -> Result<(), String> {
+fn drop_move(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str, stacks: bool) -> Result<(), String> {
     let (kind, what) = from.split_once('.').unwrap_or((from, ""));
     let (target, at) = to.split_once('.').unwrap_or((to, ""));
     let index = |s: &str| s.parse::<usize>().map_err(|_| format!("Bad pouch slot '{s}'."));
     match (kind, target) {
-        ("stash", "slot") => equip(d, work, stash, what, Some(at)),
+        ("stash", "slot") => equip(d, world, work, stash, what, Some(at)),
         ("stash", "pouch") => pouch_put(d, work, stash, what, Some(index(at)?), stacks),
-        ("equip", "stash") => take_off(d, work, stash, what),
-        ("equip", "slot") => move_slot(d, work, stash, what, at),
+        ("equip", "stash") => take_off(d, world, work, stash, what),
+        ("equip", "slot") => move_slot(d, world, work, stash, what, at),
         ("pouch", "stash") => pouch_take(work, stash, index(what)?, stacks),
         ("pouch", "pouch") if stacks => work.move_pouch_slot(d, index(what)?, index(at)?),
         ("pouch", "pouch") => {
@@ -2202,7 +2230,8 @@ impl Character {
         ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, th().info);
         for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
             let y = 116 + i as i32 * 15;
-            let explicit = work.equipment.get(*slot).cloned();
+            // PR5-26 (audit B2): a slot left empty (`NO_ITEM`) shows empty, as no item
+            let explicit = work.equipment.get(*slot).cloned().filter(|i| i != NO_ITEM);
             let shown = explicit.clone().or_else(|| {
                 let s = emberwake_rules::gear::Slot::parse(slot)?;
                 built.as_ref().and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
@@ -2377,13 +2406,13 @@ impl Character {
         let mouse = ui.mouse;
         if let Some(from) = ui.dragging() {
             let to = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mouse.0, mouse.1))?.drop.clone()?;
-            return drop_move(d, &mut w, &mut st, from, &to, self.gear_stacks).ok().map(|_| w);
+            return drop_move(d, &self.gear_world, &mut w, &mut st, from, &to, self.gear_stacks).ok().map(|_| w);
         }
         let hovered = ui.widgets.iter().rev().find(|x| x.action.is_some() && ui.hover(x.rect))?;
         let ok = if let Some(item) = hovered.id.strip_prefix("gear.stash.") {
-            d.cat.items.get(item).is_some_and(|i| i.is_equipment()) && equip(d, &mut w, &mut st, item, None).is_ok()
+            d.cat.items.get(item).is_some_and(|i| i.is_equipment()) && equip(d, &self.gear_world, &mut w, &mut st, item, None).is_ok()
         } else if let Some(slot) = hovered.id.strip_prefix("gear.slot.") {
-            take_off(d, &mut w, &mut st, slot).is_ok()
+            take_off(d, &self.gear_world, &mut w, &mut st, slot).is_ok()
         } else {
             false
         };
@@ -2398,7 +2427,8 @@ const FOLLOW_TOGGLE: i32 = 11;
 
 pub(crate) fn deck_json(d: &Deck) -> Value {
     let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
-    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups)})
+    // PR5-26 (audit B4): the actives marked marrow too
+    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups), "marrow": d.marrow})
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
@@ -2535,12 +2565,12 @@ mod tests {
     fn a_stash_item_dropped_on_a_slot_it_fits_is_worn_and_the_old_one_returns() {
         let (d, mut m, mut st) = setup();
         let (a, sword) = (first(&d, "accessory_1"), first(&d, "main_hand"));
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
         assert_eq!(m.equipment.get("accessory_1"), Some(&a));
         assert_eq!(st[&a], 1);
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
         assert_eq!(st[&a], 1, "the replaced copy came back");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{sword}"), "slot.body", false).is_err(), "a weapon is not body armour");
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{sword}"), "slot.body", false).is_err(), "a weapon is not body armour");
     }
 
     #[test]
@@ -2548,21 +2578,21 @@ mod tests {
         let (d, mut m, mut st) = setup();
         let a = first(&d, "accessory_1");
         let before = st[&a];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
-        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "equip.accessory_1", "stash", false).unwrap();
         assert!(!m.equipment.contains_key("accessory_1"));
         assert_eq!(st[&a], before);
-        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash", false).is_err(), "a class default can't come off");
+        assert!(drop_move(&d, "", &mut m, &mut st, "equip.accessory_1", "stash", false).is_err(), "a class default can't come off");
     }
 
     #[test]
     fn a_worn_item_moves_to_another_slot_it_fits() {
         let (d, mut m, mut st) = setup();
         let a = first(&d, "accessory_1");
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
-        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "slot.accessory_2", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "equip.accessory_1", "slot.accessory_2", false).unwrap();
         assert_eq!((m.equipment.get("accessory_1"), m.equipment.get("accessory_2")), (None, Some(&a)));
-        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_2", "slot.body", false).is_err());
+        assert!(drop_move(&d, "", &mut m, &mut st, "equip.accessory_2", "slot.body", false).is_err());
     }
 
     #[test]
@@ -2571,7 +2601,7 @@ mod tests {
         m.pouch.clear();
         let c = consumables(&d);
         let wear = first(&d, "main_hand");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{wear}"), "pouch.0", false).is_err(), "gear is not a consumable");
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{wear}"), "pouch.0", false).is_err(), "gear is not a consumable");
         st.insert(c[0].clone(), 10);
         for _ in 0..POUCH_MAX {
             pouch_put(&d, &mut m, &mut st, &c[0], None, false).unwrap();
@@ -2579,12 +2609,12 @@ mod tests {
         assert!(pouch_put(&d, &mut m, &mut st, &c[0], None, false).is_err(), "a full pouch");
         let other = c.last().unwrap().clone();
         let n = st[&c[0]];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{other}"), "pouch.1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{other}"), "pouch.1", false).unwrap();
         assert_eq!(m.pouch[1], other);
         assert_eq!(st[&c[0]], n + 1, "the replaced one came back");
-        drop_move(&d, &mut m, &mut st, "pouch.1", "pouch.0", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "pouch.1", "pouch.0", false).unwrap();
         assert_eq!(m.pouch[0], other);
-        drop_move(&d, &mut m, &mut st, "pouch.0", "stash", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "pouch.0", "stash", false).unwrap();
         assert_eq!(m.pouch.len(), POUCH_MAX - 1);
     }
 
@@ -2598,12 +2628,50 @@ mod tests {
         let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
         untrained.sort();
         let item = untrained.into_iter().find(|id| !m.trains(&d, id)).expect("a weapon this member has no training in").to_string();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).unwrap();
         assert_eq!(m.equipment.get("main_hand"), Some(&item));
         assert!(m.validate(&d).is_empty(), "Confirm takes it: {:?}", m.validate(&d));
         let built = progression::build_with(&d, &m, "", false).unwrap();
         let (badge, note) = wield_badge(Some(&built.unit), &d.cat.items[&item]).expect("a penalty badge");
         assert!(badge.starts_with('x') && note.contains("untrained"), "{badge} {note}");
+    }
+
+    /// PR5-26 (audit B2, B6): a member whose grant `forbid_hands` refuses two-handed items (a scratch passive here) can't
+    /// wear one from the stash or move one into a slot; a slot left empty (`NO_ITEM`) shows empty, takes an item without
+    /// giving anything back and can't be taken off again; taking off the main hand leaves it empty exactly when the
+    /// class default the build would bring back is two-handed (`UnitState::forbids_default`).
+    #[test]
+    fn a_member_forbidden_two_handers_keeps_them_off_and_its_empty_slot() {
+        let (mut d, mut m, mut st) = setup();
+        let no_2h = emberwake_data::PassiveDef { id: "t_no_2h".into(), name: "No 2H".into(), effects: vec![json!({"type": "forbid_hands", "hands": 2})], slot: String::new() };
+        std::sync::Arc::make_mut(&mut d.cat).passives.insert(no_2h.id.clone(), no_2h);
+        let mut great: Vec<&String> = d.cat.items.iter().filter(|(id, i)| i.two_handed && m.can_wear(&d, id, "main_hand").is_ok()).map(|(id, _)| id).collect();
+        great.sort();
+        let great = great.first().map(|s| s.to_string()).expect("a two-handed weapon the member can wear");
+        m.passives.push("t_no_2h".into());
+        // the first main hand item it can wear now: one-handed
+        let one = wearable(&d, &m, "main_hand");
+        assert!(m.can_wear(&d, &great, "main_hand").is_err(), "forbidden now");
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).is_err(), "no two-hander from the stash");
+        m.equipment.insert("main_hand".into(), NO_ITEM.into());
+        assert!(take_off(&d, "", &mut m, &mut st, "main_hand").is_err(), "an empty slot can't be taken off");
+        let before = st.clone();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        assert_eq!(m.equipment.get("main_hand"), Some(&one));
+        assert!(!st.contains_key(NO_ITEM) && st[&one] == before[&one] - 1, "the empty slot gives nothing back");
+        take_off(&d, "", &mut m, &mut st, "main_hand").unwrap();
+        let left = m.forbids_default(&d, "", "main_hand").then(|| NO_ITEM.to_string());
+        assert_eq!(m.equipment.get("main_hand").cloned(), left, "empty exactly when the default is a two-hander");
+        assert_eq!(st[&one], before[&one], "the worn item went back");
+        // review F1: a worn item moved into an emptied slot gives nothing back, and the slot it leaves is empty exactly
+        // when its default is a two-hander
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        m.equipment.insert("off_hand".into(), NO_ITEM.into());
+        let before = st.clone();
+        drop_move(&d, "", &mut m, &mut st, "equip.main_hand", "slot.off_hand", false).unwrap();
+        assert_eq!(m.equipment.get("off_hand"), Some(&one), "moved");
+        assert_eq!(st, before, "nothing came back to the stash (no '{NO_ITEM}')");
+        assert_eq!(m.equipment.get("main_hand").cloned(), left, "the main hand left behind: empty exactly when the default is a two-hander");
     }
 
     /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)").
@@ -2619,13 +2687,13 @@ mod tests {
             panic!("a 2H weapon, a 1H weapon and a shield this class can wear")
         };
         // the member's own main hand (or its class default) may be two-handed: a one-handed weapon first frees the off hand
-        drop_move(&d, &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap();
         let shields = st[&shield];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the shield is stowed");
         assert_eq!(st[&shield], shields + 1);
-        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap_err();
+        let err = drop_move(&d, "", &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap_err();
         assert!(err.contains("both hands"), "{err}");
         let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none_or(|o| off_hand_ok(Some(&d.cat.items[&great]), &o.item)), "no default shield under the 2H weapon");
@@ -2649,11 +2717,11 @@ mod tests {
         let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON").expect("a 1H weapon a mage can wear");
         let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
         // the class default main hand may be two-handed: a one-handed weapon first frees the off hand for the focus
-        drop_move(&d, &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap_err().contains("both hands"));
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap_err().contains("both hands"));
         let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none(), "no default orb under the staff");
         m.equipment.insert("off_hand".into(), focus);
@@ -2669,7 +2737,7 @@ mod tests {
         for slot in ["main_hand", "body", "accessory_1"] {
             let mut w = m.clone();
             let item = wearable(&d, &m, slot);
-            equip(&d, &mut w, &mut st, &item, Some(slot)).unwrap();
+            equip(&d, "", &mut w, &mut st, &item, Some(slot)).unwrap();
             changed |= sheet(&d, "", &rs, &w) != before;
         }
         assert!(changed);
@@ -2851,6 +2919,24 @@ mod tests {
             auto_actives: strs(&["lunge"]),
             intent_names: IndexMap::new(),
         }
+    }
+
+    /// PR5-26 (audit B4): the actives marked marrow survive a deck edit: a passive edit on an automatic deck keeps the
+    /// marks (its actives stay automatic), an actives edit pins the deck with them, an active that leaves the deck drops
+    /// its mark, and the agent link's deck lists them.
+    #[test]
+    fn deck_edits_keep_the_marrow_marks() {
+        let t = terms();
+        let auto = Deck { keystone: strs(&["k1"]), marrow: strs(&["lunge"]), ..Default::default() };
+        let d = t.slot(&auto, "passive", "p2").unwrap();
+        assert_eq!((d.active.clone(), d.marrow.clone()), (Vec::new(), strs(&["lunge"])), "a passive edit keeps the actives automatic and the mark");
+        let d = t.slot(&auto, "active", "cleave").unwrap();
+        assert_eq!((d.active.clone(), d.marrow.clone()), (strs(&["lunge", "cleave"]), strs(&["lunge"])), "pinned with the mark");
+        let d = t.unslot(&d, "active", 0).unwrap();
+        assert_eq!((d.active.clone(), d.marrow.clone()), (strs(&["cleave"]), Vec::new()), "the unslotted active's mark goes");
+        let d = t.after_drop(&Deck { active: strs(&["lunge", "cleave"]), marrow: strs(&["lunge"]), ..Default::default() }, "deck.own.active.wall", "deck.active.0").unwrap();
+        assert_eq!((d.active.clone(), d.marrow.clone()), (strs(&["wall", "cleave"]), Vec::new()), "a replaced active's mark goes");
+        assert_eq!(deck_json(&auto)["marrow"], json!(["lunge"]));
     }
 
     /// A4.2-K1b (INTENT2 IR15): with derived rows (`rows_of`) a dual skill fits the player's order of either row and the
@@ -3536,16 +3622,16 @@ mod pouch_stack_tests {
         let (b, c) = (others[0].clone(), others[1].clone());
         let mut m = cx.gs().party.member(&member).unwrap().clone();
         let mut st: Stash = [(a.clone(), 2), (b.clone(), 1), (c.clone(), 1)].into_iter().collect();
-        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
-        drop_move(d, &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
         let before = (m.clone(), st.clone());
-        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
         assert_eq!((m.clone(), st.clone()), before, "its own slot: nothing changes");
-        drop_move(d, &mut m, &mut st, "pouch.1", "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, "pouch.1", "pouch.0", true).unwrap();
         assert_eq!(m.pouch_slots(), [b.clone(), a.clone()], "the moved slot keeps its place");
         // a copy in the slot, as the kit's auto-fill would have put there at a fight's start
         m.pouch.push(a.clone());
-        drop_move(d, &mut m, &mut st, &format!("stash.{c}"), "pouch.1", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{c}"), "pouch.1", true).unwrap();
         assert_eq!(m.pouch_slots(), [b.clone(), c.clone()], "the dropped item takes that place");
         assert_eq!(st[&a], 3, "the replaced slot's copy came back");
         // a key-less slot (copies with no packed target, as an old save before its first fight) sorts after the keyed
@@ -3554,9 +3640,9 @@ mod pouch_stack_tests {
         let mut m = cx.gs().party.member(&member).unwrap().clone();
         m.pouch = vec![k.clone()];
         m.pouch_packed.clear();
-        drop_move(d, &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
         assert_eq!(m.pouch_slots(), [b.clone(), k.clone()], "the keyed slot first, the key-less one after it");
-        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
         assert_eq!(m.pouch_slots(), [a.clone(), k.clone()], "the new item in slot 0; the key-less slot not moved");
         assert!(!m.pouch_packed.contains_key(&k), "the key-less slot untouched");
     }

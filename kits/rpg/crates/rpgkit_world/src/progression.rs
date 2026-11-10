@@ -4,7 +4,7 @@
 use crate::data::Data;
 use crate::state::{GameState, PartyState, UnitState};
 use aegis_core::json::{self, int, Dict};
-use rpgkit_data::{UnitDef, STATS};
+use rpgkit_data::{UnitDef, NO_ITEM, STATS};
 use rpgkit_rules::gear::Slot;
 use rpgkit_rules::stats::MAX_LEVEL;
 use rpgkit_rules::{build_from, Growth, Overrides, Unit, UnitBuild};
@@ -184,6 +184,12 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
     if !state.validate(d).is_empty() {
         return None;
     }
+    build_unchecked(d, state, world, auto_spend, deck)
+}
+
+/// `build_as` without the validation first (PR5-26: `UnitState::deck_errors` builds the member's automatic deck through
+/// it, so validating there would recurse); the caller answers for the state.
+pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
     // HOOKS1 CN3: the world may replace the class path (the base catalog when it does not)
     let cat = d.cat_in(world);
     let mut work = state.clone();
@@ -191,6 +197,10 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         auto_for(d, &mut work);
     }
     let mut def = cat.units.get(&work.base_unit)?.clone();
+    // PR5-26 (audit B2): a slot the member holds empty (`NO_ITEM`, `roster::stash_forbidden`) takes no default either
+    for (slot, _) in work.equipment.iter().filter(|(_, id)| *id == NO_ITEM) {
+        def.slots.insert(slot.clone(), NO_ITEM.to_string());
+    }
     def.level = work.level(d) as i32;
     def.spend = work.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
     if def.spend.is_empty() {

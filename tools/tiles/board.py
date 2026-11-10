@@ -232,8 +232,12 @@ def row_of(ground_id):
 
 def cargo_env():
     """The environment cargo runs in. As `tools/fc.sh`: a linked worktree (its `.git` is a file) builds into its own folder,
-    so a board in one lane never waits on another's build."""
+    so a board in one lane never waits on another's build; off Windows with no toolchain picked, `stable`."""
     env = dict(os.environ)
+    # PR5-26 (audit B12): rust-toolchain.toml pins the desktop's Windows toolchain; elsewhere, with none picked, `stable`
+    # (as `tools/fc.sh`)
+    if os.name != "nt" and not env.get("RUSTUP_TOOLCHAIN"):
+        env["RUSTUP_TOOLCHAIN"] = "stable"
     if "CARGO_TARGET_DIR" not in env and os.path.isfile(os.path.join(REPO, ".git")):
         with open(os.path.join(REPO, ".cargo", "config.toml"), encoding="utf-8") as f:
             base = re.search(r'^target-dir = "(.*)"', f.read(), re.M)

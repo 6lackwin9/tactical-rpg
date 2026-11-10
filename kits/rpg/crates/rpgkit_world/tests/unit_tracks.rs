@@ -15,6 +15,7 @@ use rpgkit_world::roster::{self, FightEnd, HeroEnd};
 use rpgkit_world::state::{PartyState, UnitState, MAX_HP_OFFSET_KEY, TRACKS_KEY};
 use rpgkit_world::{new_game, progression, Data, GameState};
 use serde_json::{json, Value};
+use rpgkit_data::NO_ITEM;
 
 const TRACK: &str = "t_track";
 const MARK: &str = "t_mark";
@@ -60,7 +61,10 @@ fn data_with(top: i32) -> Data {
         })
         .collect();
     let catalog = json!({
-        "classes": [{"id": "drill", "name": "Drill", "skill_path": {"d_one": 1}, "base_stats": {"STR": 12, "DEX": 10, "INT": 6, "CONS": 12, "PERC": 10, "KNOW": 10}}],
+        "classes": [
+            {"id": "drill", "name": "Drill", "skill_path": {"d_one": 1}, "base_stats": {"STR": 12, "DEX": 10, "INT": 6, "CONS": 12, "PERC": 10, "KNOW": 10}},
+            {"id": "lance", "name": "Lance", "skill_path": {"d_one": 1}, "base_stats": {"STR": 12, "DEX": 10, "INT": 6, "CONS": 12, "PERC": 10, "KNOW": 10}, "main_hand": "great_staff"}
+        ],
         "skills": [
             {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"},
             {"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "basic": true, "mitigation": 0.3},
@@ -74,6 +78,8 @@ fn data_with(top: i32) -> Data {
         ],
         "units": [
             {"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1},
+            {"id": "lancer", "name": "Lancer", "side": "party", "class_id": "lance", "level": 1},
+            {"id": "pikeman", "name": "Pikeman", "side": "party", "class_id": "drill", "level": 1, "main_hand": "great_staff"},
             {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": 1}
         ],
         "passives": [
@@ -90,6 +96,8 @@ fn data_with(top: i32) -> Data {
         "characters": with_ids("w", json!([
             {"id": "founder", "name": "Founder", "role": "party", "base_unit": "hero"},
             {"id": "second", "name": "Second", "role": "party", "base_unit": "hero"},
+            {"id": "lancer", "name": "Lancer", "role": "party", "base_unit": "lancer"},
+            {"id": "pikeman", "name": "Pikeman", "role": "party", "base_unit": "pikeman"},
             {"id": "foe", "name": "Foe", "role": "enemy", "base_unit": "brute"}
         ])),
         "encounters": with_ids("w", json!([{"id": "fight", "party": ["founder"], "enemies": ["foe"]}]))
@@ -203,6 +211,47 @@ fn the_settle_moves_the_tracks_by_the_marks() {
     let res = battle::settle(&d, &mut gs, "w:fight", "won", Some(&tally));
     assert!(res.get("tracks").is_none() && res.get("stashed").is_none());
     assert_eq!(gs.party.member("founder").unwrap().track_stage(TRACK), 2);
+}
+
+/// PR5-26 (audit B2): a member whose main hand is left to a two-handed default (its class's, its base unit's) holds
+/// `NO_ITEM` there once its stage forbids two-handed items, so its build leaves the hand empty instead of equipping the
+/// default again; the default is no stash item (nothing stashed). A worn two-hander over such a default goes to the
+/// stash and the hand is left empty too. The settled member stays valid and saves and loads its empty slot; the
+/// result lists the emptied slot (`cleared`, review F2).
+#[test]
+fn a_forbidden_two_handed_default_leaves_the_hand_empty() {
+    let d = data();
+    let main = |m: &UnitState| progression::build_played(&d, m, "w").expect("builds").unit.inventory.main_weapon().map(|e| e.item.id.clone());
+    for (who, worn) in [("lancer", false), ("pikeman", false), ("lancer", true)] {
+        let mut m = member(&d, who, 1);
+        if worn {
+            m.equipment.insert("main_hand".into(), "great_staff".into());
+        }
+        assert_eq!(main(&m).as_deref(), Some("great_staff"), "{who}: the two-hander before");
+        let mut gs = game(&d, vec![m]);
+        let tally = Tally { party: vec![end(who, &[(MARK, 1)], "")], world: "w".into(), ..Tally::default() };
+        let res = battle::settle(&d, &mut gs, "w:fight", "won", Some(&tally));
+        let m = gs.party.member(who).unwrap().clone();
+        assert_eq!(m.track_stage(TRACK), 2, "{who}: the stage that forbids");
+        assert_eq!(m.equipment.get("main_hand").map(String::as_str), Some(NO_ITEM), "{who} (worn {worn})");
+        assert_eq!(main(&m), None, "{who}: the build leaves the hand empty");
+        let stashed = if worn { json!([{"member": who, "item": "great_staff"}]) } else { Value::Null };
+        assert_eq!(res.get("stashed").cloned().unwrap_or(Value::Null), stashed, "{who} (worn {worn})");
+        // review F2: the result names the emptied slot
+        assert_eq!(res["cleared"], json!([{"member": who, "slot": "main_hand"}]), "{who} (worn {worn})");
+        assert_eq!(gs.party.stash.get("great_staff").copied(), worn.then_some(1));
+        assert!(m.validate(&d).is_empty(), "{:?}", m.validate(&d));
+        let back = UnitState::from_dict(json::dict(&m.to_value()));
+        assert_eq!(back.equipment.get("main_hand").map(String::as_str), Some(NO_ITEM), "saved and loaded");
+    }
+    // a one-handed default stays: only the forbidden default is emptied
+    let mut sworded = member(&d, "founder", 1);
+    sworded.equipment.insert("main_hand".into(), "great_staff".into());
+    let mut gs = game(&d, vec![sworded]);
+    let tally = Tally { party: vec![end("founder", &[(MARK, 1)], "")], world: "w".into(), ..Tally::default() };
+    let res = battle::settle(&d, &mut gs, "w:fight", "won", Some(&tally));
+    assert_eq!(gs.party.member("founder").unwrap().equipment.get("main_hand"), None, "the class default (none) comes back");
+    assert!(res.get("cleared").is_none(), "no slot emptied");
 }
 
 /// The departure stage departs the member `lost` for the track's cause; a hero still hostile at the battle end departs

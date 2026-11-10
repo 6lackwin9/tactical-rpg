@@ -178,3 +178,31 @@ fn the_hover_card_names_the_class_in_the_battles_world() {
     }
     assert!(seen > 0, "a unit with a class");
 }
+
+/// PR5-26 (audit B8; PK1-S1 3.6): a hazard's unit meter change shows in its hover lines in words ("+15 <meter name>",
+/// `marks::hazard_meter_text`; the meter's id when the catalog has no row): on the ground hazard's card and on the arena
+/// hazard's tile and strip lines. Test rows only (no shipped Strain carrier).
+#[test]
+fn a_hazards_meter_change_shows_in_its_lines() {
+    let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), RULES);
+    let (cells, col) = mark_up(&mut b);
+    {
+        let sess = b.host.session.as_mut().unwrap();
+        let round = sess.current_round;
+        let w = &mut sess.w;
+        let row = json!({"id": "smoke", "name": "Test smoke", "on": "enter", "damage": 5, "affects": "foes", "duration": 2, "tint": "#40c0ff", "glyph": "T", "meter": {"meter": "t_strain", "delta": 15}});
+        let p = w.grid.ground.get_mut(&cells[0]).expect("the visible hazard");
+        p.def = HazardDef::from_obj(row.as_object().unwrap());
+        let arena_row = json!({"id": "vents", "name": "Test Vents", "columns": [col], "blocks": [2, 4], "effect": {"damage": 9, "meter": {"meter": "t_strain", "delta": -5}}});
+        w.arena.hazards = vec![Hazard::from_obj(arena_row.as_object().unwrap())];
+        arena::round_start(w, round);
+    }
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    let tile = |c: V2| format!("tile.{}.{}", c.x, c.y);
+    let ground_card = tip_text(&b, &tile(cells[0]));
+    assert!(ground_card.contains("On entering: 5 damage, +15 t_strain"), "{ground_card}");
+    let tells = emberwake_battle::intent::arena_tells(&s(&b).w);
+    let blk = tells[0].blocks[0];
+    let strip = tip_text(&b, &format!("strip.block{blk}"));
+    assert!(strip.contains("9 damage, -5 t_strain"), "{strip}");
+}

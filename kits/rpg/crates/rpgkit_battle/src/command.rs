@@ -321,6 +321,20 @@ impl Command {
     /// RULESET1 A2: the hit skips armour (rule `pierce` and the skill's `armor_piercing`). Public for the battle
     /// screen's forecasts (RULESET1-U slice 6).
     pub fn pierces(&self, w: &World) -> bool {
+        // PR5-26 (audit B5): an attack of a source with the member grant `pierce_melee` pierces when it is a melee one
+        // (the forecast's "Armour pierced"; `land` reads each hit's own reach: an area hit's as its source's range,
+        // review F4)
+        let ranged = |use_offhand: bool| w.units.get(self.source).map(|u| u.attack_range > 1 && !use_offhand);
+        self.pierces_by_skill(w)
+            || match &self.kind {
+                CmdKind::Attack { use_offhand, .. } => ranged(*use_offhand).is_some_and(|r| pierces_melee(w, self.source, r)),
+                CmdKind::Area { .. } => ranged(false).is_some_and(|r| pierces_melee(w, self.source, r)),
+                _ => false,
+            }
+    }
+
+    /// The skill's own armour piercing (or a marrow version's) under the rule pierce.
+    fn pierces_by_skill(&self, w: &World) -> bool {
         self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
 
@@ -973,7 +987,7 @@ impl Command {
     #[allow(clippy::too_many_arguments)]
     fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
         // PK2-S1: a member grant `pierce_melee` pierces with every melee hit
-        let pierce = self.pierces(w) || pierces_melee(w, src, ranged);
+        let pierce = self.pierces_by_skill(w) || pierces_melee(w, src, ranged);
         let claim = match self.ally.as_mut() {
             Some(watch) => crate::trigger::ally_hit(w, watch, src, f, ranged, &self.family, skip),
             None => None,
@@ -1081,6 +1095,10 @@ impl Command {
         self.ignore_guard = false;
         self.meters.clear();
         self.gate = None;
+        // PR5-26 (audit B1): a coerced Rest runs no skill (no `uses_per_battle` count or used-up failure) and no
+        // marrow version (no Channel tell)
+        self.skill.clear();
+        self.marrow = false;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.

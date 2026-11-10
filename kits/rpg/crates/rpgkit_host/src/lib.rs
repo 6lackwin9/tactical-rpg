@@ -449,9 +449,15 @@ fn stance_name(u: &rpgkit_rules::Unit) -> &'static str {
 pub fn outcome_of(s: &Session) -> Value {
     let state = state_of(s);
     let keep = ["id", "hp", "ap", "pos", "stance", "statuses", "pending", "alive", "withdrawn"];
+    // PR5-26 (audit B10): the PK1/PK2 keys a unit's state carries only when set (so other checkpoints keep their shape)
+    let set = ["channel", "meters", "marks", "skill_uses", "tracks"];
     let units: Vec<Value> = state["units"]
         .as_array()
-        .map(|a| a.iter().map(|u| Value::Object(keep.iter().map(|k| (k.to_string(), u[*k].clone())).collect())).collect())
+        .map(|a| {
+            a.iter()
+                .map(|u| Value::Object(keep.iter().map(|k| (k.to_string(), u[*k].clone())).chain(set.iter().filter_map(|k| u.get(*k).map(|v| (k.to_string(), v.clone())))).collect()))
+                .collect()
+        })
         .unwrap_or_default();
     let result = s.final_outcome();
     json!({"round": s.current_round, "over": s.combat_over, "result": result, "log_count": s.resolver.log.len(), "units": units})
@@ -473,6 +479,11 @@ pub fn state_of(s: &Session) -> Value {
             })
         })
         .collect();
+    // PR5-26 (audit B10): each unit's PK1/PK2 state, a key only when it is set (a battle without them keeps its shape)
+    let mut units = units;
+    for (i, v) in units.iter_mut().enumerate() {
+        pk_state(s, i, v);
+    }
     let rows: Vec<String> = (0..GRID_H)
         .map(|y| (0..GRID_W).map(|x| TERRAIN_IDS.iter().position(|t| *t == w.grid.terrain_id(V2::new(x, y))).map(|i| ".,:os*~WmL#T=rfpi".chars().nth(i).unwrap()).unwrap_or('.')).collect())
         .collect();
@@ -498,6 +509,42 @@ pub fn state_of(s: &Session) -> Value {
         state["script"] = json!({"round": rs.round, "lock": s.round_locked(), "banner": rs.banner});
     }
     state
+}
+
+/// PR5-26 (audit B10): unit `i`'s PK1 / PK2 keys on its state row `v`, each only when set: `channel` (a holder of
+/// the channel meter: whether its round is a Channel round), `marrow` (its deck's marked actives), `meters` (meter id ->
+/// value), `marks` ([[mark, value]] this battle), `skill_uses` (skill id -> uses this battle), `tracks` (track id ->
+/// stage), `forbid_hands`, `pierce_melee`.
+fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
+    let w = &s.w;
+    let u = &w.units[i];
+    if rpgkit_battle::channel::can_channel(w, i) {
+        v["channel"] = json!(rpgkit_battle::channel::is_channel(w, i));
+    }
+    if !u.deck.marrow.is_empty() {
+        v["marrow"] = json!(u.deck.marrow);
+    }
+    let meters: serde_json::Map<String, Value> = w.meters.gauges.iter().filter(|g| g.unit == i).map(|g| (g.meter.clone(), json!(g.value))).collect();
+    if !meters.is_empty() {
+        v["meters"] = Value::Object(meters);
+    }
+    let marks = w.marks.of(i);
+    if !marks.is_empty() {
+        v["marks"] = json!(marks.iter().map(|(m, n)| json!([m, n])).collect::<Vec<_>>());
+    }
+    let uses: serde_json::Map<String, Value> = w.skill_uses.iter().filter(|((c, _), _)| *c == i).map(|((_, id), n)| (id.clone(), json!(n))).collect();
+    if !uses.is_empty() {
+        v["skill_uses"] = Value::Object(uses);
+    }
+    if let Some(t) = u.tracks.as_ref().filter(|t| !t.is_empty()) {
+        v["tracks"] = Value::Object(t.iter().map(|(k, n)| (k.clone(), json!(n))).collect());
+    }
+    if u.forbid_hands > 0 {
+        v["forbid_hands"] = json!(u.forbid_hands);
+    }
+    if u.pierce_melee {
+        v["pierce_melee"] = json!(true);
+    }
 }
 
 fn scheduled(s: &Session) -> Vec<Value> {
@@ -598,6 +645,22 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
             let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_for(w, u, k));
             if hp > 0 {
                 row["hp_cost"] = json!(hp);
+            }
+            // PR5-26 (audit B10): PK2-S1's use limit (with the uses left) and `unmark`, PK1-S2's Channel terms (a
+            // marrow-only skill; the marrow version this unit would run now), each only when set
+            if sk.uses_per_battle > 0 {
+                let used = w.skill_uses.get(&(u, sk.id.clone())).copied().unwrap_or(0);
+                row["uses_per_battle"] = json!(sk.uses_per_battle);
+                row["uses_left"] = json!((sk.uses_per_battle - used).max(0));
+            }
+            if !sk.unmark.is_empty() {
+                row["unmark"] = json!(sk.unmark);
+            }
+            if rpgkit_battle::channel::on(w) && rpgkit_battle::channel::only(sk) {
+                row["channel_only"] = json!(true);
+            }
+            if let Some(v) = rpgkit_battle::channel::version(w, u, sk).filter(|_| !rpgkit_battle::channel::only(sk)) {
+                row["marrow"] = json!({"cost": v.cost, "power": v.power, "pierce": v.pierce});
             }
             out.push(row);
         }
@@ -1060,11 +1123,16 @@ fn round_plan(s: &Session) -> Vec<Value> {
                 None => Value::Null,
             };
             let ap = rip::ap_forecast(w, &s.plan, c);
-            json!({"unit": c, "name": w.units[c].name, "side": "party",
+            let mut row = json!({"unit": c, "name": w.units[c].name, "side": "party",
                 "intent": rs.intent.map(|i| i.id()), "target": target, "maneuver": rs.maneuver.map(intent::maneuver_id), "maneuver_auto": rs.maneuver_auto,
                 "opener": opener, "reasons": rip::reasons(w, &s.plan, c),
                 "picks": rs.picks.iter().map(|p| pick_json(s, p)).collect::<Vec<_>>(), "ghost_from": rip::ghost_from(w, &s.plan, c), "autofill": w.autofill,
-                "ap": {"now": ap.now, "spent": ap.spent, "picked": ap.picked, "filled": ap.filled, "left": ap.left, "gain": ap.gain, "rest_gain": ap.rest_gain, "next": ap.next, "max": ap.max}})
+                "ap": {"now": ap.now, "spent": ap.spent, "picked": ap.picked, "filled": ap.filled, "left": ap.left, "gain": ap.gain, "rest_gain": ap.rest_gain, "next": ap.next, "max": ap.max}});
+            // PR5-26 (audit B10): a holder of the channel meter's round flag (only then, so other rows keep their shape)
+            if rpgkit_battle::channel::can_channel(w, c) {
+                row["channel"] = json!(rs.channel);
+            }
+            row
         })
         .collect()
 }

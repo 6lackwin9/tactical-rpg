@@ -1804,9 +1804,20 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
             Choice::Pick(row, p) => match commit(w, plan, c, &p) {
                 Ok(l) => {
                     lines.extend(l);
-                    // PK1-S2b (PK1 4.4): a unit that can Channel may turn the committed round into a Channel round
-                    lines.extend(channel_row(w, plan, c, &p));
-                    return IntentRound { row, pick: Some(p), lines };
+                    // PK1-S2b (PK1 4.4): a unit that can Channel may turn the committed round into a Channel round;
+                    // PR5-26 (FB-191 (e)): at high Strain it Vents instead (`vent_row`)
+                    // (review F5: the round's pick is then the Vent's: Support on itself)
+                    let pick = match vent_row(w, plan, c, &p) {
+                        Some((l, vent)) => {
+                            lines.extend(l);
+                            vent
+                        }
+                        None => {
+                            lines.extend(channel_row(w, plan, c, &p));
+                            p
+                        }
+                    };
+                    return IntentRound { row, pick: Some(pick), lines };
                 }
                 Err(l) => {
                     // the trial offered it, the real set did not (IN6 dropped a buff the round relied on, or an
@@ -1848,12 +1859,83 @@ pub fn channel_meter_after(w: &World, plan: &Plan, c: UnitId) -> Option<(i32, i3
 }
 
 /// PK1-S2b: whether `c`'s planned round holds a marrow version (`channel::version` of a skill with
-/// `channel::has_version`; not a `channel.only` skill, Feed or Vent).
+/// `channel::has_version`) or, PR5-26 (FB-191 (1)), one of its `channel.only` skills that is no meter row's skill (Feed,
+/// Vent: UM6) and not the Channel Rest: a Feed-only round does not count.
 fn marrow_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
+    let basics: Vec<&str> = w.units[c].meter_skills.iter().map(|id| w.cat.family_of(id)).collect();
     plan.compile(w, c).entries.iter().any(|e| {
         let s = &w.cat.skills[e.skill];
+        if crate::channel::only(s) {
+            return !basics.contains(&s.family_id()) && !crate::channel::is_channel_rest(w, c, e.skill) && crate::channel::problem(w, c, s).is_none();
+        }
         crate::channel::has_version(w, s) && crate::channel::version(w, c, s).is_some()
     })
+}
+
+/// PR5-26 (FB-191 (e)): the AI Vents when its channel meter is at least this percent of the meter's max.
+pub const CHANNEL_AI_VENT_PCT: i32 = 75;
+
+/// PR5-26: `c`'s Vent: the marrow-only meter row skill (UM6) that lowers the channel meter the most (the row it uses
+/// now, `round_intent_plan::family_skill`); None without one.
+pub fn vent_skill(w: &World, c: UnitId) -> Option<SkillId> {
+    let m = crate::channel::meter_id(w);
+    let drop = |sid: SkillId| -> i32 { skill::meters_by(&w.cat.skills[sid], &w.ruleset).iter().filter(|d| d.meter == m).map(|d| d.delta).sum() };
+    let mut best: Option<(SkillId, i32)> = None;
+    for id in &w.units[c].meter_skills {
+        let Some(sid) = round_intent_plan::family_skill(w, c, w.cat.family_of(id)) else { continue };
+        let d = drop(sid);
+        if crate::channel::only(&w.cat.skills[sid]) && d < 0 && best.is_none_or(|(_, b)| d < b) {
+            best = Some((sid, d));
+        }
+    }
+    best.map(|(sid, _)| sid)
+}
+
+/// PR5-26 (FB-191 (e)): the AI's Vent row. After the AI committed a (Cold Steel) round for `c`, a unit that can Channel
+/// whose channel meter is at least `CHANNEL_AI_VENT_PCT` of its max turns the round into a Channel round on itself
+/// opened by its Vent (`vent_skill`; the planner fills the rest of the round as a Channel round does). It keeps it when
+/// the round compiles with the Vent planned (its meter gate and HP cost met); else `c`'s unit, round state and steps are
+/// put back and None (the Channel row decides). Economy's opener-only rounds are never turned (review F5), as in the
+/// Channel row. Returns the lines and the Vent's pick (Support on itself) when kept. Deterministic: nothing draws.
+fn vent_row(w: &mut World, plan: &mut Plan, c: UnitId, committed: &IntentPick) -> Option<(Vec<String>, IntentPick)> {
+    if committed.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
+        return None;
+    }
+    let pool = crate::meter::pool(w, c, crate::channel::meter_id(w))?;
+    if pool.max <= 0 || i64::from(pool.current) * 100 < i64::from(CHANNEL_AI_VENT_PCT) * i64::from(pool.max) {
+        return None;
+    }
+    let vent = vent_skill(w, c)?;
+    let unit = w.units[c].clone();
+    let saved = w.round_states.get(&c).cloned();
+    let steps = plan.steps_of(c);
+    plan.clear(c);
+    let mut lines = round_intent_plan::flip_channel(w, c, true);
+    let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Myself);
+    p.opener = Some(Opener::Skill(vent));
+    let kept = match commit(w, plan, c, &p) {
+        Ok(l) => {
+            let st = plan.compile(w, c);
+            st.error_index < 0 && st.entries.iter().any(|e| e.skill == vent && e.step_index >= 0) && crate::channel::is_channel(w, c)
+        }
+        .then_some(l),
+        Err(_) => None,
+    };
+    if let Some(l) = kept {
+        lines.extend(l);
+        return Some((lines, p));
+    }
+    w.units[c] = unit;
+    match saved {
+        Some(rs) => {
+            w.round_states.insert(c, rs);
+        }
+        None => {
+            w.round_states.shift_remove(&c);
+        }
+    }
+    plan.set_steps(c, steps);
+    None
 }
 
 /// PK1 4.4 (rule `channel`): the AI's Channel row. After the AI committed `p` for `c` (a Cold Steel round), a unit that
