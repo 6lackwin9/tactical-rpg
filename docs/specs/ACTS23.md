@@ -117,8 +117,12 @@ Sub-questions under **B** (recommendations in bold):
 **Follow-up rulings (user 2026-11-10), replacing sub-question 3:**
 
 - **Cap: only single-intent skills get a Channel row.** A skill with two intents (`IR21` dual, 26 of 129 today) has no marrow version, so no skill ever shows in more than two rows; marrow-only skills are authored with a single intent (a content check enforces both).
-- **What a Channel round draws on (the deck stays 3 actives + 1 keystone + 2 passives, basics free):** (1) **basic marrow skills**: marrow versions of the basics (Strike, Off-hand Jab, Active Guard, a single-intent role basic), free like the basics, so a Strain carrier can always fill a Channel round; (2) **the marrow versions of the unit's class skills** in its deck (single-intent actives and the keystone). Channel gets its own per-intent fill order (class skills first, then basics), like the other intents.
-- **Open for the PK1 `.1` session:** where marrow-only signatures (Calcified Spike and the like) live; the default to confirm is the graft slots (each installed graft adds its skill to the Channel row with no deck slot; the lore already has surgery teach the matching Inoculated skill), with the keystone slot holding a Cold Steel or an Inoculated keystone. Also open: whether a marrow version costs 1 AP less (denser bursts) instead of only power and pierce.
+- **The Channel kit (user 2026-11-10, second follow-up; replaces the draft bullet above it):**
+  1. **Grafts carry the marrow-exclusive skills**: each installed graft adds its exclusive skill to the Channel row, with no deck slot.
+  2. **Two Channel basics**, free like the other basics: one **universal marrow basic** (a new basic skill every Strain carrier has), and the **class role basic's marrow version**. The other universal basics (Strike, Off-hand Jab, Active Guard) get no marrow version.
+  3. **The 3 actives: the player selects which are marrow** in the loadout; only the selected ones (single-intent, by the cap) show in the Channel row.
+  4. **What you can pick depends on the round's first pick** (the intent rule): open from the Channel row and the round is all marrow (graft skills, the two Channel basics, the selected actives); open from any other row and the round is Cold Steel.
+- **Open for the PK1 `.1` session:** whether a selected active keeps its Cold Steel row too (default: yes, it shows in both); whether the number of marrow actives is capped (default: no cap beyond the 3 actives); the keystone slot holding a Cold Steel or an Inoculated keystone; whether a marrow version costs 1 AP less (denser bursts) instead of only power and pierce.
 
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
