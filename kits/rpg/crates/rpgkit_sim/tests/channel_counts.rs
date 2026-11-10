@@ -3,7 +3,8 @@
 //! run's ruleset; every Channel `tune=` key the refusal names is one `Numbers::set` takes. `counts=on` adds per side
 //! the Channel counts: marrow actions and Vents (`RULE_COUNTERS`), Channel rounds, the channel meter's own triggers
 //! (its crisis), the rounds by the meter's band and the poise breaks the side took; the sides' breaks add up to the
-//! run's breaks and each holder's round ends in one band.
+//! run's breaks and each holder's round ends in one band. PR5-26 follow-up (FB-201): `crises` counts the firings of the
+//! meter's crisis rows (a `round_end` row at its max) as they fire, not the other meter triggers.
 
 use rpgkit_sim::args::{self, SimArgs};
 use rpgkit_sim::feel::JSON_PREFIX;
@@ -16,6 +17,10 @@ const MAX: i32 = 100;
 /// Every unit holds Strain (the ruleset's `unit_pools`; decay 10 a round, a crisis at MAX setting it to 50, bands calm
 /// and edge) and marks Heavy marrow; Feed (+5) and Vent (-20, gate 50) are the meter's skills.
 fn data() -> Data {
+    Data::from_values(&catalog(), &json!({}), &json!({}))
+}
+
+fn catalog() -> Value {
     let atk = |id: &str, blocks: i32, ap: i32, stagger: i32| json!({"id": id, "name": id, "kind": "ATTACK", "round_intent": "assault", "level": 1, "blocks": blocks, "ap_cost": ap, "power_mult": 1.0, "stagger": stagger, "target_mode": "ENEMY"});
     let unit = |id: &str, side: &str| {
         json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 120, "speed": 12, "attack_range": 1, "skill_cap": 5, "poise": 30, "extra_skills": ["t_heavy", "t_jab"],
@@ -47,7 +52,7 @@ fn data() -> Data {
         "rulesets": [{"id": "t_channel", "name": "Channel", "rules": ["round_intent", "poise", "ap_cost", "unit_meters", "triggers", "channel"], "basics": ["move", "rest", "strike", "active_guard"],
             "unit_pools": ["strain"], "channel_meter": "strain", "channel_rest": "t_feed"}],
     });
-    Data::from_values(&catalog, &json!({}), &json!({}))
+    catalog
 }
 
 fn game() -> SimGame {
@@ -106,4 +111,30 @@ fn counts_on_reports_the_channel_numbers_per_side() {
     }
     assert!(channel_rounds > 0, "past an edge of 1 at power 2 the AI Channels: {t}");
     assert!(out.iter().any(|l| l.contains("party rule counts: ") && l.contains("Channel rounds ") && l.contains("breaks taken ")), "the human line");
+}
+
+/// PR5-26 follow-up (FB-201): the crises. Strain starts at its max and only Feed is the meter's skill (no Vent), so each
+/// holder's first round ends at the max and its crisis row fires (the bands then read the reset value); a second
+/// `round_end` row from 50 (not the max) fires too and is a meter trigger, not a crisis. Without `counts=on` no crisis
+/// count prints.
+#[test]
+fn counts_on_counts_the_crises_as_they_fire() {
+    let mut cat = catalog();
+    let meter = &mut cat["unit_meters"][0];
+    meter["start"] = json!(MAX);
+    meter["skills"] = json!(["t_feed"]);
+    meter["triggers"].as_array_mut().unwrap().push(json!({"on": "round_end", "when": {"meter": {"id": "strain", "at_least": 50}}, "limit": "battle", "effects": [{"type": "meter", "meter": "strain", "delta": -1}]}));
+    let d = Data::from_values(&cat, &json!({}), &json!({}));
+    let seeds = 3;
+    let out = rpgkit_sim::run(&d, &argv(&format!("feel seeds={seeds} ruleset=t_channel counts=on")), &game());
+    let t = &report(&out)["total"];
+    for side in ["party", "enemy"] {
+        let c = &t[side]["rule_counts"]["channel"];
+        let (crises, triggers) = (c["crises"].as_i64().unwrap(), c["meter_triggers"].as_i64().unwrap());
+        assert!(crises >= seeds, "{side}: each fight's first round ends at the max ({crises}): {c}");
+        assert!(crises < triggers, "{side}: the row from 50 is a meter trigger, not a crisis ({crises} of {triggers})");
+    }
+    assert!(out.iter().any(|l| l.contains("party rule counts: ") && l.contains(", crises ")), "the human line");
+    let plain = rpgkit_sim::run(&d, &argv(&format!("feel seeds={seeds} ruleset=t_channel")), &game());
+    assert!(!plain.iter().any(|l| l.contains("crises")), "only with counts=on");
 }

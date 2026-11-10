@@ -8,7 +8,7 @@ use crate::grid::{V2, DIRS, GRID_H, GRID_W, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
 use crate::plan::{cover_pref, expected, PlanEntry, PlanStep, SimState, Step, MAX_MOVE_BLOCKS};
 use crate::plan::Plan;
-use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent, RoundTarget};
+use crate::round_intent::{self, ManeuverKind, Opener, Pick, RoundIntent, RoundTarget};
 use crate::round_intent_plan;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{AiProfile, Role, Tactic, TargetPref, UnitId, UnitTactic, World};
@@ -1806,7 +1806,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
                     lines.extend(l);
                     // PK1-S2b (PK1 4.4): a unit that can Channel may turn the committed round into a Channel round;
                     // PR5-26 (FB-191 (e)): at high Strain it Vents instead (`vent_row`)
-                    // (review F5: the round's pick is then the Vent's: Support on itself)
+                    // (review F5: the round's pick is then the Vent's, on itself)
                     let pick = match vent_row(w, plan, c, &p) {
                         Some((l, vent)) => {
                             lines.extend(l);
@@ -1896,7 +1896,8 @@ pub fn vent_skill(w: &World, c: UnitId) -> Option<SkillId> {
 /// opened by its Vent (`vent_skill`; the planner fills the rest of the round as a Channel round does). It keeps it when
 /// the round compiles with the Vent planned (its meter gate and HP cost met); else `c`'s unit, round state and steps are
 /// put back and None (the Channel row decides). Economy's opener-only rounds are never turned (review F5), as in the
-/// Channel row. Returns the lines and the Vent's pick (Support on itself) when kept. Deterministic: nothing draws.
+/// Channel row. Returns the lines and the Vent's pick (on itself, in the row a self pick of it takes: Stand under
+/// `field_intent`, else Support) when kept. Deterministic: nothing draws.
 fn vent_row(w: &mut World, plan: &mut Plan, c: UnitId, committed: &IntentPick) -> Option<(Vec<String>, IntentPick)> {
     if committed.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
         return None;
@@ -1911,7 +1912,10 @@ fn vent_row(w: &mut World, plan: &mut Plan, c: UnitId, committed: &IntentPick) -
     let steps = plan.steps_of(c);
     plan.clear(c);
     let mut lines = round_intent_plan::flip_channel(w, c, true);
-    let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Myself);
+    // PR5-26 follow-up (FB-201): the Vent on itself takes the row the planner gives a self pick of the skill
+    // (`round_intent_plan::pick_row_at`: Stand under `field_intent`, IR15; else its legacy Support row)
+    let intent = round_intent_plan::pick_row_at(w, c, &Pick::Skill { skill: vent, kind: None }, RoundTarget::Myself).unwrap_or(RoundIntent::Support);
+    let mut p = IntentPick::new(intent, RoundTarget::Myself);
     p.opener = Some(Opener::Skill(vent));
     let kept = match commit(w, plan, c, &p) {
         Ok(l) => {

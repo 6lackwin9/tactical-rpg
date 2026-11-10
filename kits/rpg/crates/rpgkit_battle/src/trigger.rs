@@ -196,6 +196,11 @@ impl State {
         out
     }
 
+    /// PR5-26 follow-up (FB-201, the sim's crises): how many times `unit`'s trigger row `key` fired this battle.
+    pub fn battle_count(&self, unit: UnitId, key: &str) -> i32 {
+        self.counts.get(&(unit, key.to_string())).map_or(0, |(_, battle)| *battle)
+    }
+
     fn allows(&self, unit: UnitId, h: &Holder) -> i32 {
         let (round, battle) = self.counts.get(&(unit, h.key.clone())).copied().unwrap_or((0, 0));
         match h.row.limit.as_str() {

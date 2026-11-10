@@ -1265,8 +1265,9 @@ fn pick_rows(w: &World, c: UnitId, p: &Pick) -> Vec<RoundIntent> {
 
 /// A4.2-K1b (IR15, IR19): the row a pick aimed at `at` takes: the first of its rows the target fits (a tile the Field
 /// row, an enemy the Assault row), else its primary. IR3 (b), IR15: a self target is always Stand when Stand is one of
-/// its rows (a self-or-ally heal on yourself plans in Stand).
-fn pick_row_at(w: &World, c: UnitId, p: &Pick, at: RoundTarget) -> Option<RoundIntent> {
+/// its rows (a self-or-ally heal on yourself plans in Stand). PR5-26 follow-up (FB-201): the AI's Vent row takes its
+/// self pick's row here too.
+pub(crate) fn pick_row_at(w: &World, c: UnitId, p: &Pick, at: RoundTarget) -> Option<RoundIntent> {
     let rows = pick_rows(w, c, p);
     let at = round_intent::normalize(c, at);
     // A1.2-K3: items too (a heal on yourself is a Stand round under `field_intent`)

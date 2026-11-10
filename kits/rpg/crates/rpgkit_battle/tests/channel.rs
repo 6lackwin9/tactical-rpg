@@ -901,42 +901,53 @@ fn the_ai_counts_a_marrow_only_attack_as_a_channel_round() {
 /// PR5-26 (FB-191 (e)): the AI Vents at high Strain: from `ai::CHANNEL_AI_VENT_PCT` of the meter's max its round is a
 /// Channel round on itself opened by Vent (`ai::vent_skill`: the marrow-only meter skill that lowers Strain); one below
 /// it plans no Vent. A Vent its HP cannot pay (`hp_cost_pct`) is not planned either. Review F5: a Vent round's pick is
-/// the Vent's (Support on itself, Vent the opener); an Economy round (opener only) is never turned.
+/// the Vent's (on itself, Vent the opener); an Economy round (opener only) is never turned. PR5-26 follow-up (FB-201):
+/// the Vent pick takes the row a self pick of the skill takes, so it Vents under `field_intent` too (every timeline
+/// ruleset): Stand there (IR15: a self target is Stand's), Support without it.
 #[test]
 fn the_ai_vents_at_high_strain() {
     let max = 100;
     let at = ai::CHANNEL_AI_VENT_PCT * max / 100;
     assert!(at >= VENT_GATE, "the Vent threshold clears Vent's own gate");
-    for (strain, vents) in [(at, true), (at - 1, false), (max, true)] {
-        let mut s = session_with(badge_rules(json!({})), true);
-        assert_eq!(ai::vent_skill(&s.w, HERO), Some(sid(&s.w, "t_vent")));
-        set_strain(&mut s.w, HERO, strain);
-        let round = ai_round(&mut s, HERO);
-        let planned = planned(&s, HERO);
-        assert_eq!(planned.first().map(String::as_str) == Some("t_vent"), vents, "strain {strain}: {planned:?}");
-        if vents {
-            assert!(channel::is_channel(&s.w, HERO), "a Channel round");
-            assert_eq!(round_intent::intent_of(&s.w, HERO), Some(RoundIntent::Support));
-            // review F5: the round's pick is the Vent's
-            let pick = round.pick.expect("a pick");
-            assert_eq!((pick.intent, pick.target, pick.opener), (RoundIntent::Support, RoundTarget::Myself, Some(rpgkit_battle::round_intent::Opener::Skill(sid(&s.w, "t_vent")))));
+    for (field, row) in [(false, RoundIntent::Support), (true, RoundIntent::Guard)] {
+        let rules = || if field { vent_field_rules() } else { badge_rules(json!({})) };
+        assert_eq!(round_intent::field_rows(&session_with(rules(), true).w), field);
+        for (strain, vents) in [(at, true), (at - 1, false), (max, true)] {
+            let mut s = session_with(rules(), true);
+            assert_eq!(ai::vent_skill(&s.w, HERO), Some(sid(&s.w, "t_vent")));
+            set_strain(&mut s.w, HERO, strain);
+            let round = ai_round(&mut s, HERO);
+            let planned = planned(&s, HERO);
+            assert_eq!(planned.first().map(String::as_str) == Some("t_vent"), vents, "field {field}, strain {strain}: {planned:?}");
+            if vents {
+                assert!(channel::is_channel(&s.w, HERO), "a Channel round");
+                assert_eq!(round_intent::intent_of(&s.w, HERO), Some(row), "field {field}");
+                // review F5: the round's pick is the Vent's
+                let pick = round.pick.expect("a pick");
+                assert_eq!((pick.intent, pick.target, pick.opener), (row, RoundTarget::Myself, Some(rpgkit_battle::round_intent::Opener::Skill(sid(&s.w, "t_vent")))));
+            }
         }
+        // review F5: an Economy round (opener only; the Cold Steel pick of a calm round) is never turned into a Vent round
+        let mut s = session_with(rules(), true);
+        let full = ai_round(&mut s, HERO);
+        let mut e = session_with(rules(), true);
+        set_strain(&mut e.w, HERO, max);
+        let mut pick = full.pick.expect("a pick");
+        pick.opener_only = true;
+        let profile = e.w.profile_of(HERO);
+        let got = ai::plan_given(&mut e.w, &mut e.plan, HERO, &profile, pick);
+        assert!(got.pick.is_some_and(|p| p.opener_only), "the Economy pick is kept");
+        assert!(!planned(&e, HERO).iter().any(|p| p == "t_vent") && !channel::is_channel(&e.w, HERO), "no Vent in an Economy round");
+        let mut s = session_with(rules(), true);
+        set_strain(&mut s.w, HERO, max);
+        let hurt = s.w.units[HERO].max_hp * VENT_PCT / 100;
+        s.w.units[HERO].hp = hurt.max(1);
+        let _ = ai_round(&mut s, HERO);
+        assert!(!planned(&s, HERO).iter().any(|p| p == "t_vent"), "a Vent the HP cannot pay");
     }
-    // review F5: an Economy round (opener only; the Cold Steel pick of a calm round) is never turned into a Vent round
-    let mut s = session_with(badge_rules(json!({})), true);
-    let full = ai_round(&mut s, HERO);
-    let mut e = session_with(badge_rules(json!({})), true);
-    set_strain(&mut e.w, HERO, max);
-    let mut pick = full.pick.expect("a pick");
-    pick.opener_only = true;
-    let profile = e.w.profile_of(HERO);
-    let got = ai::plan_given(&mut e.w, &mut e.plan, HERO, &profile, pick);
-    assert!(got.pick.is_some_and(|p| p.opener_only), "the Economy pick is kept");
-    assert!(!planned(&e, HERO).iter().any(|p| p == "t_vent") && !channel::is_channel(&e.w, HERO), "no Vent in an Economy round");
-    let mut s = session_with(badge_rules(json!({})), true);
-    set_strain(&mut s.w, HERO, max);
-    let hurt = s.w.units[HERO].max_hp * VENT_PCT / 100;
-    s.w.units[HERO].hp = hurt.max(1);
-    let _ = ai_round(&mut s, HERO);
-    assert!(!planned(&s, HERO).iter().any(|p| p == "t_vent"), "a Vent the HP cannot pay");
+}
+
+/// `badge_rules` with `field_intent` (a timeline-style ruleset: every shipped timeline row has it).
+fn vent_field_rules() -> Ruleset {
+    rules(true, json!({"rules": [ROUND_INTENT, DECK, AP_COST, PIERCE, FIELD_INTENT, TRIGGERS, UNIT_METERS, HP_COST, CHANNEL, ruleset::PLAN_BADGES]}))
 }

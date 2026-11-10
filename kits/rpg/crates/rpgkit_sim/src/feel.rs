@@ -123,9 +123,12 @@ pub struct Side {
     pub items_by_id: IndexMap<String, i64>,
     /// PR5-26 (FB-191 (f), counts=on): the Channel rule's numbers: unit-rounds played as a Channel round, the channel
     /// meter's own triggers fired (its crisis), unit-rounds ending in each band of the channel meter (by band name; "-"
-    /// outside every band), and the poise breaks the side's units took.
+    /// outside every band), and the poise breaks the side's units took. PR5-26 follow-up (FB-201): `crises`, the firings
+    /// of the channel meter's crisis rows (`crisis_at`: a `round_end` row that needs the meter at its max), counted as
+    /// they fire (the bands sample after a crisis reset, so they never show the max band).
     pub channel_rounds: i64,
     pub channel_triggers: i64,
+    pub crises: i64,
     pub channel_bands: IndexMap<String, i64>,
     pub breaks_taken: i64,
 }
@@ -154,6 +157,7 @@ impl Side {
         }
         self.channel_rounds += o.channel_rounds;
         self.channel_triggers += o.channel_triggers;
+        self.crises += o.crises;
         for (k, v) in &o.channel_bands {
             *self.channel_bands.entry(k.clone()).or_default() += v;
         }
@@ -177,7 +181,7 @@ impl Side {
         json!({
             "counts": counts, "per_fight": per_fight, "protected_share_pct": self.protected_share(),
             "rest_blocks_per_round": round2(ratio(self.rest_blocks, rounds)), "items_by_id": counts_json(&self.items_by_id),
-            "channel": {"rounds": self.channel_rounds, "meter_triggers": self.channel_triggers, "bands": counts_json(&self.channel_bands)},
+            "channel": {"rounds": self.channel_rounds, "meter_triggers": self.channel_triggers, "crises": self.crises, "bands": counts_json(&self.channel_bands)},
             "breaks_taken": self.breaks_taken,
         })
     }
@@ -188,13 +192,14 @@ impl Side {
         let items: Vec<String> = self.items_by_id.iter().map(|(k, v)| format!("{k} {v}")).collect();
         let bands: Vec<String> = self.channel_bands.iter().map(|(k, v)| format!("{k} {v}")).collect();
         format!(
-            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, rounds by band {}; breaks taken {}",
+            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, crises {}, rounds by band {}; breaks taken {}",
             counts.join(", "),
             self.protected_share(),
             round2(ratio(self.rest_blocks, rounds)),
             if items.is_empty() { "-".to_string() } else { items.join(" ") },
             self.channel_rounds,
             self.channel_triggers,
+            self.crises,
             if bands.is_empty() { "-".to_string() } else { bands.join(" ") },
             self.breaks_taken
         )
@@ -645,8 +650,34 @@ impl Feel {
                     c.enemy.channel_triggers += i64::from(n);
                 }
             }
+            // PR5-26 follow-up (FB-201): the crises among them, by the holder's side
+            if let Some(def) = s.w.cat.unit_meters.get(m) {
+                for (n, row) in def.triggers.iter().enumerate() {
+                    let Some(at) = crisis_at(row, m) else { continue };
+                    let key = format!("{}{m}#{n}", rpgkit_battle::meter::METER_KEY);
+                    for unit in 0..s.w.units.len() {
+                        let max = rpgkit_battle::meter::pool(&s.w, unit, m).map_or(def.max, |p| p.max);
+                        let fired = s.resolver.triggers.battle_count(unit, &key);
+                        if fired == 0 || at < max {
+                            continue;
+                        }
+                        if s.w.allies.contains(&unit) {
+                            c.party.crises += i64::from(fired);
+                        } else {
+                            c.enemy.crises += i64::from(fired);
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+/// PR5-26 follow-up (FB-201): a crisis row of meter `m`: a `round_end` trigger row whose `when` holds `m` at least some
+/// value (Some(that value); a crisis when it reaches the holder's max).
+fn crisis_at(row: &rpgkit_data::TriggerRow, m: &str) -> Option<i32> {
+    let cond = row.when.get("meter")?.as_object()?;
+    (row.on == "round_end" && cond.get("id").and_then(Value::as_str) == Some(m)).then(|| cond.get("at_least").and_then(Value::as_i64).unwrap_or(0) as i32)
 }
 
 /// The `feel` mode: each of the arguments' encounters (catalog encounters with a party) fought over every seed with its
