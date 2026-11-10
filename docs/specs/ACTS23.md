@@ -114,6 +114,12 @@ Sub-questions under **B** (recommendations in bold):
 4. Intent-bound buffs in a Channel round: **only buffs bound to Channel** (none at first); the primary row's intent buffs do not apply.
 5. Enemies: aberrants that carry Strain plan Channel rounds like players (AI row), and their tell shows Channel.
 
+**Follow-up rulings (user 2026-11-10), replacing sub-question 3:**
+
+- **Cap: only single-intent skills get a Channel row.** A skill with two intents (`IR21` dual, 26 of 129 today) has no marrow version, so no skill ever shows in more than two rows; marrow-only skills are authored with a single intent (a content check enforces both).
+- **What a Channel round draws on (the deck stays 3 actives + 1 keystone + 2 passives, basics free):** (1) **basic marrow skills**: marrow versions of the basics (Strike, Off-hand Jab, Active Guard, a single-intent role basic), free like the basics, so a Strain carrier can always fill a Channel round; (2) **the marrow versions of the unit's class skills** in its deck (single-intent actives and the keystone). Channel gets its own per-intent fill order (class skills first, then basics), like the other intents.
+- **Open for the PK1 `.1` session:** where marrow-only signatures (Calcified Spike and the like) live; the default to confirm is the graft slots (each installed graft adds its skill to the Channel row with no deck slot; the lore already has surgery teach the matching Inoculated skill), with the keystone slot holding a Cold Steel or an Inoculated keystone. Also open: whether a marrow version costs 1 AP less (denser bursts) instead of only power and pierce.
+
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
 ## 6. Next steps after review
