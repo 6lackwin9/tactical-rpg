@@ -95,7 +95,7 @@ The current tracks are synthesized placeholders (`tools/gen_music.py`; `assets/a
 
 | Track | Use | Status |
 | --- | --- | --- |
-| Main theme | title and main menu | **picked**: test 1B (16-bit), needs the loop cut |
+| Main theme | title and main menu | **done** (`menu_theme.ogg`, test 1B, whole song with a pause) |
 | Lullaby theme | ending credits (a candidate for the slice end card) | **picked**: test 1A (dark acoustic) |
 | Opening vignette | the four slides (bell, rain, tallow crackle) | new |
 | Prologue tension | 0a Vane's order, the alley | new |
