@@ -1,5 +1,8 @@
 Emberwake: A Scarlet Lullaby - Flow Music brief (ART_UI_STUDIO 3.9)
 
+HOUSE SEED: 455684 (Tushar, 2026-11-11) for every new creation; variants get their own seeds, logged in
+ART_UI_STUDIO 3.9.
+
 Tool: Flow Music (flowmusic.app, from Flow's top bar). A chat "Producer" on Lyria 3.5 that makes and edits tracks;
 downloads are free. Paste SOUND BIBLE below into Customize Producer > memories once, so every session keeps it.
 
@@ -69,3 +72,11 @@ soot-black alleys and on rooftops. Driving sampled timpani and low frame drums a
 strings, metallic anvil and chain hits as percussion, a sampled hurdy-gurdy or reedy lead playing a faster, broken
 fragment of the Scarlet Lullaby in D minor, short choir stabs. Tense and determined, not heroic. Steady intensity
 throughout. About 2 minutes.
+
+================================================================ ROUND 3 - battle in Compose (the cover kept 1B's 60 BPM)
+Compose: Instrumental ON; Advanced: BPM 128, Length 2:00, Seed 455684. The set is really in F minor (measured), so
+battle names F minor.
+
+instrumental, no vocals, 16-bit SNES-era dark fantasy RPG battle theme, lo-fi warm grainy sampled orchestra, driving
+timpani and low frame drums, fast staccato low strings, anvil and chain hits as percussion, reedy hurdy-gurdy lead,
+short choir stabs, F minor, 128 bpm, tense and determined, not heroic, steady intensity, no slow intro
