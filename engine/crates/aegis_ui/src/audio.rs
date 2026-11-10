@@ -12,6 +12,7 @@ use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
 use aegis_core::clock::{Duration, Instant};
+use aegis_core::vfs;
 
 const SFX_VOICES: usize = 8;
 const UI_VOICES: usize = 2;
@@ -114,7 +115,7 @@ impl Audio {
 
     /// The first folder's file at `rel`.
     fn find(&self, rel: &str) -> Option<PathBuf> {
-        self.roots.iter().map(|r| r.join(rel)).find(|p| p.is_file())
+        self.roots.iter().map(|r| r.join(rel)).find(|p| vfs::is_file(p))
     }
 
     /// Whether `rel` reads and decodes (a format the engine plays: WAV or Ogg Vorbis).
@@ -238,7 +239,7 @@ impl Audio {
         if let Some(hit) = self.state.borrow().cache.get(rel) {
             return hit.clone();
         }
-        let read = self.find(rel).and_then(|p| std::fs::read(p).ok()).map(Arc::from);
+        let read = self.find(rel).and_then(|p| vfs::read(p).ok()).map(Arc::from);
         self.state.borrow_mut().cache.insert(rel.to_string(), read.clone());
         read
     }

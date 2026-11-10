@@ -13,3 +13,4 @@ pub mod scratch;
 pub mod sha256;
 pub mod sort;
 pub mod value;
+pub mod vfs;

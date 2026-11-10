@@ -173,7 +173,7 @@ struct PortraitFile {
 /// that order; PORTRAITFX2 FL4).
 fn portrait_files(layers: &Layers, faces: &[String]) -> Vec<PortraitFile> {
     let layer_of = |rel: &str| {
-        let i = layers.roots.iter().position(|r| r.join(rel).is_file());
+        let i = layers.roots.iter().position(|r| aegis_core::vfs::is_file(r.join(rel)));
         let names = if layers.roots.len() == 3 { ["game", "kit", "engine"] } else { ["", "", ""] };
         i.map(|i| names.get(i).filter(|n| !n.is_empty()).map_or_else(|| format!("layer {}", i + 1), |n| n.to_string())).unwrap_or_default()
     };

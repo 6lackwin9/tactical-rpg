@@ -3,6 +3,7 @@
 //! {"kind", "version", "entries": [...]} (or a bare list).
 
 use aegis_core::json::{self, to_int_or, Dict};
+use aegis_core::vfs;
 use serde_json::Value;
 use std::path::Path;
 
@@ -18,7 +19,7 @@ fn floats(v: Value) -> Value {
 
 /// A data file as JSON.parse reads it; None when missing, or unreadable (reported in `errors`).
 pub fn read(path: &Path, errors: &mut Vec<String>) -> Option<Value> {
-    let text = std::fs::read_to_string(path).ok()?;
+    let text = vfs::read_to_string(path).ok()?;
     match serde_json::from_str::<Value>(&text) {
         Ok(v) => Some(floats(v)),
         Err(e) => {

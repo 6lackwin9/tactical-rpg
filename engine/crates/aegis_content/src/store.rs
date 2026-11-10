@@ -11,6 +11,7 @@ use crate::manifest::Manifest;
 use crate::schema::sget;
 use crate::world::manifest_path;
 use aegis_core::json::{self, Dict};
+use aegis_core::vfs;
 use std::path::{Path, PathBuf};
 
 /// What the writer asks of the game.
@@ -71,7 +72,7 @@ pub fn upsert(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
         return Err(vec![format!("Unknown kind '{kind}' (one of {}).", known.join(", "))]);
     }
     if let Some(w) = world {
-        if !manifest_path(data_dir, w).is_file() {
+        if !vfs::is_file(manifest_path(data_dir, w)) {
             return Err(vec![format!("Unknown world '{w}'.")]);
         }
     }
@@ -117,10 +118,10 @@ pub fn set_world(hooks: &impl Hooks, data_dir: &Path, world: &str, patch: &Dict,
         return Err(vec![format!("World '{world}' must be a world id (lowercase snake_case).")]);
     }
     let path = manifest_path(data_dir, world);
-    let existed = path.is_file();
+    let existed = vfs::is_file(&path);
     let text = hooks.world_manifest_text(data_dir, world, patch, full)?;
     let folder = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let new_folder = !folder.is_dir();
+    let new_folder = !vfs::is_dir(&folder);
     let old_problems = hooks.world_blocking(data_dir);
     std::fs::create_dir_all(&folder).map_err(|e| vec![format!("{}: {e}", folder.display())])?;
     write_checked(&path, &text, &old_problems, || hooks.world_blocking(data_dir)).inspect_err(|_| {
@@ -165,7 +166,7 @@ fn commit(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, 
 /// Writes `text` to `path`; when `problems()` then lists one that `old_problems` does not, the file is put back as it
 /// was (removed when it was new) and the new problems are the error.
 fn write_checked(path: &Path, text: &str, old_problems: &[String], problems: impl Fn() -> Vec<String>) -> Result<(), Vec<String>> {
-    let before = std::fs::read_to_string(path).ok();
+    let before = vfs::read_to_string(path).ok();
     std::fs::write(path, text).map_err(|e| vec![format!("{}: {e}", path.display())])?;
     let new: Vec<String> = problems().into_iter().filter(|p| !old_problems.contains(p)).collect();
     if !new.is_empty() {

@@ -21,7 +21,6 @@ use crate::painter::Painter;
 use anyhow::{anyhow, bail, Context as _, Result};
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
-use std::io::Write as _;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -1100,8 +1099,10 @@ pub struct ComposedFile {
 ///   `MARKS_MAX`, each at most `MARK_PX_MAX` a side), `marks_per_100` (whole, 0 to 10);
 /// - `blocked` (optional): rows, `#` a blocked cell; `placed` (optional, at most `PLACED_MAX`): `{x, y, w, h, strength}` in
 ///   cells, strength 0 to `PATCHES_MAX`, the rect and a ring of one cell on one ground and free of blocked cells.
+///
+/// The job is read through the read seam and the PNG written as a dev file (`aegis_core::vfs::dev`: off on the web).
 pub fn compose_file(job_path: &Path, out_path: &Path) -> Result<ComposedFile> {
-    let text = std::fs::read_to_string(job_path).with_context(|| format!("reading {}", job_path.display()))?;
+    let text = aegis_core::vfs::read_to_string(job_path).with_context(|| format!("reading {}", job_path.display()))?;
     let job: Value = serde_json::from_str(&text).with_context(|| format!("parsing {}", job_path.display()))?;
     let dir = job_path.parent().unwrap_or(Path::new("."));
     let loaded = load_job(&job, dir)?;
@@ -1112,17 +1113,16 @@ pub fn compose_file(job_path: &Path, out_path: &Path) -> Result<ComposedFile> {
         bail!("the job is too large: at most {ART_PX_MAX} art px");
     }
     if let Some(parent) = out_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        aegis_core::vfs::dev::create_dir_all(parent)?;
     }
-    let file = std::fs::File::create(out_path).with_context(|| format!("writing {}", out_path.display()))?;
-    let mut out = std::io::BufWriter::new(file);
+    let mut out = Vec::new();
     let mut enc = png::Encoder::new(&mut out, composed.w as u32, composed.h as u32);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
     let mut writer = enc.write_header()?;
     writer.write_image_data(&composed.px)?;
     writer.finish()?;
-    out.flush().with_context(|| format!("writing {}", out_path.display()))?;
+    aegis_core::vfs::dev::write(out_path, &out).with_context(|| format!("writing {}", out_path.display()))?;
     Ok(ComposedFile { w: composed.w, h: composed.h, compose_ms })
 }
 

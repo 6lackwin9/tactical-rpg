@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 use aegis_core::clock::{Duration, Instant};
+use aegis_core::vfs::dev;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
@@ -165,7 +166,7 @@ impl<G: Context> Shell<G> {
     /// The shell on a canvas of `pw` x `ph` px: everything but where the frames go, so a window and a run without one
     /// start the same. `icon_notice` is what the manifest's icon came to.
     fn open(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: &Options, (pw, ph): (u32, u32), dpr: f32, icon_notice: Option<String>) -> Self {
-        let font_bytes = std::fs::read(&options.font).unwrap_or_else(|e| panic!("{}: {e}", options.font.display()));
+        let font_bytes = aegis_core::vfs::read(&options.font).unwrap_or_else(|e| panic!("{}: {e}", options.font.display()));
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
@@ -1376,8 +1377,17 @@ impl<G: Context> App<G> {
         }
         shell.frame();
         if shell.cx.quit {
-            shell.leave_all();
-            std::process::exit(0);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                shell.leave_all();
+                std::process::exit(0);
+            }
+            // The web build (WEBREL1-E1b): a page cannot close its own tab and `process::exit` would abort the module,
+            // so Quit is a no-op there: the flag is cleared and the current screen stays.
+            #[cfg(target_arch = "wasm32")]
+            {
+                shell.cx.quit = false;
+            }
         }
         // A screen asked for the pointer on one of its widgets (ASKNO2): moved only while the window has the focus;
         // a platform that refuses is ignored. The shell's mouse follows at once so the hover shows.
@@ -1795,7 +1805,7 @@ pub fn blank_reason(c: &Canvas) -> Option<String> {
 /// would have replaced, so it cannot pass for this one.
 pub fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
     if let Some(why) = blank_reason(c) {
-        let _ = std::fs::remove_file(path);
+        let _ = dev::remove_file(path);
         anyhow::bail!("no shot: {why}");
     }
     let mut img = Image { w: c.w, h: c.h, px: c.px.clone() };
@@ -1803,13 +1813,14 @@ pub fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
         img = img.downsample(max_w, c.h * max_w / c.w);
     }
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+        dev::create_dir_all(dir)?;
     }
-    let file = std::fs::File::create(path)?;
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), img.w as u32, img.h as u32);
+    let mut bytes = Vec::new();
+    let mut enc = png::Encoder::new(&mut bytes, img.w as u32, img.h as u32);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
     enc.write_header()?.write_image_data(&img.px)?;
+    dev::write(path, bytes)?;
     Ok(())
 }
 

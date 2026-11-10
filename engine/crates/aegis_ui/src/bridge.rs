@@ -1,11 +1,16 @@
 //! Agent link (ENGINE_SPEC section 4.2): a localhost TCP port speaking the same JSON lines as `aegis serve`, plus
 //! GUI-only requests (ui_tree, screenshot, click). Requests are handed to the GUI loop, so the agent acts on the very
-//! battle the user is looking at.
+//! battle the user is looking at. Native only (WEBREL1-E1b): the web build has no TCP or threads, so `start` there
+//! opens nothing and returns None (the shell runs without an agent link).
 
 use serde_json::Value;
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::{BufRead, BufReader, Write};
+#[cfg(not(target_arch = "wasm32"))]
 use std::net::TcpListener;
-use std::sync::mpsc::{channel, Receiver, Sender};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::mpsc::channel;
+use std::sync::mpsc::{Receiver, Sender};
 
 pub const DEFAULT_PORT: u16 = 47800;
 
@@ -16,6 +21,7 @@ pub struct Request {
 
 /// Starts the listener thread; requests arrive on the returned receiver, and `wake` runs after each (a loop asleep in a
 /// window's event queue needs it; a loop that waits on the receiver passes nothing to do).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn start(port: u16, wake: impl Fn() + Clone + Send + 'static) -> Option<Receiver<Request>> {
     let listener = TcpListener::bind(("127.0.0.1", port)).ok()?;
     let (tx, rx) = channel::<Request>();
@@ -50,4 +56,10 @@ pub fn start(port: u16, wake: impl Fn() + Clone + Send + 'static) -> Option<Rece
         }
     });
     Some(rx)
+}
+
+/// The web build: no agent link (no TCP, no threads); nothing is opened.
+#[cfg(target_arch = "wasm32")]
+pub fn start(_port: u16, _wake: impl Fn() + Clone + Send + 'static) -> Option<Receiver<Request>> {
+    None
 }

@@ -5,6 +5,7 @@
 use crate::file::{entries_of, read};
 use crate::schema::{fields, normalize, sget};
 use aegis_core::json::{self, empty, Dict};
+use aegis_core::vfs;
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -196,10 +197,10 @@ impl Catalogs {
 /// normalized by the schema's "world" section, as {id: {manifest, lineage, own: {kind: [entry]}}}.
 pub fn load(data_dir: &Path, schema: &Value, kinds: &[&str], errors: &mut Vec<String>) -> Value {
     let root = data_dir.join("worlds");
-    let mut ids: Vec<String> = std::fs::read_dir(&root)
-        .map(|rd| rd.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().to_string()).collect())
+    let mut ids: Vec<String> = vfs::list_dir(&root)
+        .map(|rd| rd.into_iter().filter(|p| vfs::is_dir(p)).map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string()).collect())
         .unwrap_or_default();
-    ids.retain(|id| !id.starts_with('.') && manifest_path(data_dir, id).is_file());
+    ids.retain(|id| !id.starts_with('.') && vfs::is_file(manifest_path(data_dir, id)));
     ids.sort();
     let mut manifests: Vec<(String, Dict)> = Vec::new();
     let mut owns: Vec<Dict> = Vec::new();

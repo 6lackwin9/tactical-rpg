@@ -15,6 +15,7 @@ use crate::Driver;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 use aegis_core::clock::{SystemTime, UNIX_EPOCH};
+use aegis_core::vfs::dev;
 
 pub const FORMAT: &str = "playtest";
 /// Version 1 was the Godot build's shape (plans and RNG states per round, PLAYTEST1-L); the engine replays command logs.
@@ -154,19 +155,19 @@ impl Recording {
 
     /// `load`, with the failure split into what a screen shows and the full cause.
     pub fn read(path: &Path) -> Result<Self, Unreadable> {
-        let text = std::fs::read_to_string(path).map_err(|e| Unreadable { reason: "The file cannot be read.".into(), detail: format!("{}: {e}", path.display()) })?;
+        let text = dev::read_to_string(path).map_err(|e| Unreadable { reason: "The file cannot be read.".into(), detail: format!("{}: {e}", path.display()) })?;
         let v: Value = serde_json::from_str(&text).map_err(|e| Unreadable { reason: format!("Not valid JSON: {e}"), detail: format!("{}: {e}", path.display()) })?;
         Self::from_json(&v).map_err(|e| Unreadable { reason: e.clone(), detail: e })
     }
 
     /// Writes `<dir>/<id>.json` through a temporary file (an interrupted save never leaves half a recording).
     pub fn save(&self, dir: &Path) -> Result<PathBuf, String> {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        dev::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let path = dir.join(format!("{}.json", self.id));
         let tmp = dir.join(format!("{}.json.tmp", self.id));
         let text = serde_json::to_string_pretty(&self.to_json()).map_err(|e| e.to_string())?;
-        std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
-        std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+        dev::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        dev::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
         Ok(path)
     }
 }
@@ -205,7 +206,7 @@ pub fn new_id(dir: &Path, secs: i64) -> String {
     let base = format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}");
     let mut id = base.clone();
     let mut n = 2;
-    while dir.join(format!("{id}.json")).exists() {
+    while dev::exists(dir.join(format!("{id}.json"))) {
         id = format!("{base}-{n}");
         n += 1;
     }
@@ -226,14 +227,14 @@ pub struct Unreadable {
 /// failed to load.
 pub fn list(dir: &Path) -> Vec<(PathBuf, Result<Recording, Unreadable>)> {
     let entry = |p: PathBuf| -> Option<PathBuf> {
-        if p.is_dir() {
+        if dev::is_dir(&p) {
             let inner = p.join(format!("{}.json", p.file_name()?.to_string_lossy()));
-            inner.is_file().then_some(inner)
+            dev::is_file(&inner).then_some(inner)
         } else {
             p.extension().is_some_and(|x| x == "json").then_some(p)
         }
     };
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().filter_map(|e| entry(e.path())).collect()).unwrap_or_default();
+    let mut paths: Vec<PathBuf> = dev::list_dir(dir).map(|r| r.into_iter().filter_map(entry).collect()).unwrap_or_default();
     paths.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
     paths.into_iter().map(|p| {
         let r = Recording::read(&p);
@@ -258,13 +259,13 @@ pub fn image_dir(path: &Path) -> PathBuf {
 pub fn copy_to(path: &Path, dest_root: &Path) -> Result<PathBuf, String> {
     let id = path.file_stem().ok_or_else(|| format!("{}: not a recording file", path.display()))?;
     let dest = dest_root.join(id);
-    std::fs::create_dir_all(&dest).map_err(|e| format!("Cannot create {}: {e}", dest.display()))?;
-    std::fs::copy(path, dest.join(path.file_name().unwrap_or(id))).map_err(|e| format!("Cannot copy {}: {e}", path.display()))?;
+    dev::create_dir_all(&dest).map_err(|e| format!("Cannot create {}: {e}", dest.display()))?;
+    dev::copy(path, dest.join(path.file_name().unwrap_or(id))).map_err(|e| format!("Cannot copy {}: {e}", path.display()))?;
     let images = image_dir(path);
     if images != dest {
-        for f in std::fs::read_dir(&images).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect::<Vec<_>>()).unwrap_or_default() {
+        for f in dev::list_dir(&images).map(|r| r.into_iter().filter(|p| dev::is_file(p)).collect::<Vec<_>>()).unwrap_or_default() {
             if let Some(name) = f.file_name() {
-                std::fs::copy(&f, dest.join(name)).map_err(|e| format!("Cannot copy {}: {e}", f.display()))?;
+                dev::copy(&f, dest.join(name)).map_err(|e| format!("Cannot copy {}: {e}", f.display()))?;
             }
         }
     }

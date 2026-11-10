@@ -10,6 +10,7 @@
 use aegis_content::file::{entries_of, read};
 use aegis_content::schema::{normalize, sget, snapped};
 use aegis_core::json::{self, gstr, int, to_float_or, to_int_or, Dict};
+use aegis_core::vfs;
 use rpgkit_rules::status;
 use serde_json::{Map, Value};
 use std::path::Path;
@@ -55,7 +56,7 @@ impl PurseCaps {
 
     /// The caps of the manifest beside `data_dir` (the game folder's `game.json`); the defaults when there is none.
     pub fn beside(data_dir: &Path) -> Self {
-        let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| p.is_file()) else { return Self::default() };
+        let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| vfs::is_file(p)) else { return Self::default() };
         match read(&path, &mut Vec::new()) {
             Some(Value::Object(m)) => Self::from_manifest(&m),
             _ => Self::default(),

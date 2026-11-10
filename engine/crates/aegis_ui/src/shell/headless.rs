@@ -7,16 +7,25 @@
 //! nothing here fakes a clock. Two link requests exist only here: `frames` (frames now) and `clip` (a numbered sequence).
 //! With no window to close, a run also ends when nothing has asked anything for a while (`Headless::idle`): a driver that
 //! was killed leaves no invisible game behind.
+//!
+//! Native only (WEBREL1-E1b): the run loop needs the agent link (TCP, threads), `std::thread::sleep` and clip files,
+//! none of which the web build has. `Headless` and its argument parsing stay on every target; on the web `run` refuses.
 
-use super::{blank_reason, save_png, text_scale_of, Options, Shell};
-use crate::bridge;
-use crate::pacing::{Pace, Pacer};
-use crate::screen::{window_size_of, Context, Cx, Screen};
+use super::Options;
+use crate::screen::{Context, Cx, Screen};
+use aegis_core::clock::Duration;
 use anyhow::{bail, Context as _, Result};
-use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::RecvTimeoutError;
-use aegis_core::clock::{Duration, Instant};
+#[cfg(not(target_arch = "wasm32"))]
+use {
+    super::{blank_reason, save_png, text_scale_of, Shell},
+    crate::bridge,
+    crate::pacing::{Pace, Pacer},
+    crate::screen::window_size_of,
+    aegis_core::clock::Instant,
+    serde_json::{json, Value},
+    std::path::{Path, PathBuf},
+    std::sync::mpsc::RecvTimeoutError,
+};
 
 /// The default frame rate.
 pub const DEFAULT_FPS: u32 = 15;
@@ -40,6 +49,7 @@ pub const CLIP_EVERY_MS: (u64, u64) = (10, 2000);
 pub const CLIP_MS_MAX: u64 = 15_000;
 pub const CLIP_WALL_MS_MAX: u64 = 30_000;
 pub const CLIP_BYTES_MAX: u64 = 256 << 20;
+#[cfg(not(target_arch = "wasm32"))]
 const CLIP_MAX_W: u64 = 1280;
 
 /// How a headless run draws.
@@ -86,6 +96,7 @@ impl Headless {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Loop<G> {
     shell: Shell<G>,
     pacer: Pacer,
@@ -96,6 +107,7 @@ struct Loop<G> {
     asked_at: Instant,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<G: Context> Loop<G> {
     /// One frame, as a window's redraw: the shell's own step, then the settings. What a window does with the OS (the
     /// pointer, the surface) has no place here.
@@ -197,6 +209,7 @@ impl<G: Context> Loop<G> {
 }
 
 /// A `clip` request, checked.
+#[cfg(not(target_arch = "wasm32"))]
 struct ClipPlan {
     dir: PathBuf,
     frames: u64,
@@ -204,6 +217,7 @@ struct ClipPlan {
     max_w: i32,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ClipPlan {
     fn read(body: &Value, frame: Duration) -> std::result::Result<Self, String> {
         let dir = body["dir"].as_str().filter(|d| !d.is_empty()).map(PathBuf::from).ok_or("clip needs dir, a folder")?;
@@ -225,6 +239,7 @@ impl ClipPlan {
 }
 
 /// What is past a clip's limits, if anything: large frames written slowly or at length must not run away.
+#[cfg(not(target_arch = "wasm32"))]
 fn clip_over(bytes: u64, took: Duration) -> Option<String> {
     if bytes > CLIP_BYTES_MAX {
         return Some(format!("{bytes} bytes written, at most {CLIP_BYTES_MAX}"));
@@ -233,6 +248,7 @@ fn clip_over(bytes: u64, took: Duration) -> Option<String> {
 }
 
 /// An earlier clip's frames would pass for this one's, gaps and all.
+#[cfg(not(target_arch = "wasm32"))]
 fn holds_frames(dir: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else { return false };
     entries.flatten().any(|e| e.file_name().to_string_lossy().starts_with("frame_"))
@@ -241,6 +257,7 @@ fn holds_frames(dir: &Path) -> bool {
 /// Runs the screens with no window until a screen or the link sets `cx.quit`: then they leave and this returns, so the
 /// game exits as a window's does. The link's port being taken is an error here, with no window to show it on. No link
 /// request for `Headless::idle` is an error too, after the screens leave: its driver is gone, and nothing else can end this.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: &Options, h: Headless) -> Result<()> {
     // The same notice over the first screen as a window, so the two walk the same screens.
     let icon_notice = crate::icon::window_icons(cx.art.layers(), &options.icon).err();
@@ -278,6 +295,12 @@ pub(super) fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options
             bail!("no link request for {} s: leaving (idle_exit= sets the limit)", h.idle.as_secs());
         }
     }
+}
+
+/// The web build: no headless runs (no agent link, no thread sleep, no clip files).
+#[cfg(target_arch = "wasm32")]
+pub(super) fn run<G: Context>(_cx: Cx<G>, _stack: Vec<Box<dyn Screen<G>>>, _options: &Options, _h: Headless) -> Result<()> {
+    bail!("headless= runs are native only (no agent link on the web)")
 }
 
 #[cfg(test)]

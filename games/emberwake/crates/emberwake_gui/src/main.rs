@@ -82,10 +82,10 @@ fn main() -> Result<()> {
     let engine_dir = [Some(cwd.clone()), exe_dir].into_iter().flatten().find_map(|start| {
         let mut d = start;
         loop {
-            if d.join("crates/aegis_ui").is_dir() {
+            if aegis_core::vfs::is_dir(d.join("crates/aegis_ui")) {
                 return Some(d);
             }
-            if d.join("engine/crates/aegis_ui").is_dir() {
+            if aegis_core::vfs::is_dir(d.join("engine/crates/aegis_ui")) {
                 return Some(d.join("engine"));
             }
             if !d.pop() {

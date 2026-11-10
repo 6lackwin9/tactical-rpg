@@ -6,6 +6,7 @@
 
 use aegis_content::Catalogs;
 use aegis_core::json::{self, empty, Dict};
+use aegis_core::vfs;
 use rpgkit_data::Catalog;
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -48,7 +49,7 @@ pub struct Data {
 
 /// A data folder: holds catalog/ and worlds/.
 fn is_data_dir(d: &Path) -> bool {
-    d.join("catalog").is_dir() && d.join("worlds").is_dir()
+    vfs::is_dir(d.join("catalog")) && vfs::is_dir(d.join("worlds"))
 }
 
 fn dicts(v: &Value) -> Vec<Dict> {
@@ -67,7 +68,7 @@ impl Data {
     /// A data folder read by the engine's own loader (`source`): the data and the load problems (bad files or
     /// entries are skipped and reported).
     pub fn open(dir: &Path) -> Result<(Self, Vec<String>)> {
-        anyhow::ensure!(dir.join("catalog").is_dir(), "{} is not a data folder (catalog/, worlds/, ...)", dir.display());
+        anyhow::ensure!(vfs::is_dir(dir.join("catalog")), "{} is not a data folder (catalog/, worlds/, ...)", dir.display());
         let src = rpgkit_content::source::load(dir);
         let mut d = Self::from_values(&src.catalog, &src.worlds, &src.game);
         d.purse = src.purse;
@@ -77,7 +78,7 @@ impl Data {
     /// The data/ folder of the nearest game folder at or above `start` (one holding game.json, data/catalog/ and
     /// data/worlds/): for a start inside a game's folder.
     pub fn find_data_dir(start: &Path) -> Option<std::path::PathBuf> {
-        start.ancestors().find(|d| d.join(aegis_content::manifest::FILE).is_file() && is_data_dir(&d.join("data"))).map(|d| d.join("data"))
+        start.ancestors().find(|d| vfs::is_file(d.join(aegis_content::manifest::FILE)) && is_data_dir(&d.join("data"))).map(|d| d.join("data"))
     }
 
     /// The data/ folder of game `id` found from `start` (the game folder, the repository, or a folder inside either;

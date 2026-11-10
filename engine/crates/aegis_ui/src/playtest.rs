@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, Once};
 use aegis_core::clock::{Duration, Instant};
+use aegis_core::vfs::dev;
 
 /// A hub with recording on exists in this process (the report functions do nothing otherwise).
 static RECORDING: AtomicBool = AtomicBool::new(false);
@@ -125,7 +126,9 @@ pub struct Playtests {
 }
 
 impl Playtests {
+    /// Recording is never on in the web build (WEBREL1 6.1: itch.io's storage quota may be shared; `dev::ON`).
     pub fn new(dir: PathBuf, on: bool, content: Value) -> Self {
+        let on = on && dev::ON;
         if on {
             RECORDING.store(true, Ordering::Relaxed);
             HOOK.call_once(hook_panics);
@@ -189,6 +192,7 @@ impl Playtests {
     /// has none (`content` runs only then); off saves the open recording first, and a new one opens once recording is
     /// back on.
     pub fn set_on(&mut self, on: bool, content: impl FnOnce() -> Value) {
+        let on = on && dev::ON;
         if on == self.on {
             return;
         }
@@ -263,8 +267,8 @@ impl Playtests {
         if let Some((w, h, px)) = shot {
             let folder = dir.join(&rec.id);
             let file = format!("note_{n}.jpg");
-            std::fs::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
-            std::fs::write(folder.join(&file), crate::jpeg::encode_rgba(w, h, &px, 85)).map_err(|e| format!("{file}: {e}"))?;
+            dev::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+            dev::write(folder.join(&file), crate::jpeg::encode_rgba(w, h, &px, 85)).map_err(|e| format!("{file}: {e}"))?;
             image = file;
         }
         note["n"] = json!(n);
