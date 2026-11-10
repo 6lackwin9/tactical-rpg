@@ -110,6 +110,16 @@ impl Equipment {
         self.is_melee_weapon() && self.item.reach_rule
     }
 
+    /// PR5-28 (U3 FB-36c): the far edge of a reach weapon's melee band: its family's `range_band.max`, else
+    /// `REACH_WEAPON_REACH` (a family without a `range_band`, or a catalog frozen before it).
+    pub fn reach_max(&self) -> i32 {
+        if self.item.family_reach_max > 0 {
+            self.item.family_reach_max
+        } else {
+            crate::unit::REACH_WEAPON_REACH
+        }
+    }
+
     fn discount(&self, prof: &Proficiency) -> i32 {
         if self.item.weapon_type.is_empty() {
             0

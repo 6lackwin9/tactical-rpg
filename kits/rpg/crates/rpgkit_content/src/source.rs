@@ -1224,7 +1224,17 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if !level3.is_empty() {
         row.insert(rpgkit_data::ITEM_FAMILY_LEVEL3.into(), Value::from(level3));
     }
+    // PR5-28 (U3 FB-36c): the family's `range_band.max` rides on the row the same way (the reach rule's band edge; no
+    // key without a `range_band`, so the battle reads the fallback reach)
+    if let Some(max) = range_band_max(family) {
+        row.insert(rpgkit_data::ITEM_FAMILY_REACH_MAX.into(), Value::from(max));
+    }
     row
+}
+
+/// PR5-28 (U3 FB-36c): a family's `range_band.max` (None: no `range_band`, an empty one or no whole `max`).
+fn range_band_max(family: &Dict) -> Option<i64> {
+    json::dget(family, "range_band").get("max").and_then(Value::as_i64)
 }
 
 /// One row of ItemModifiers.legacy_tiers.

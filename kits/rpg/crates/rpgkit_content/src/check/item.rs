@@ -36,9 +36,9 @@ const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delt
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 15] = [
+const DERIVED_KEYS: [&str; 16] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES,
-    rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3,
+    rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX,
 ];
 const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
@@ -1084,6 +1084,7 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
         }
     }
     out.extend(mastery_problems(v, f, &t));
+    out.extend(range_band_problems(f));
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
     let users: Vec<&Dict> = v.entries("items").iter().filter(|i| json::s(i, "family") == old_id).collect();
     if old_id != id && !users.is_empty() {
@@ -1177,6 +1178,36 @@ fn reach_rule_problems(f: &Dict, t: &str) -> Vec<String> {
         if !range.is_null() && json::to_int(range) != 1 {
             out.push(format!("reach needs base range 1 on every hand ({hand} has {}).", json::to_int(range)));
         }
+    }
+    out
+}
+
+/// PR5-28 (U3 FB-36c): the widest `range_band.max` (the top of a family's range number).
+const RANGE_BAND_MAX: i64 = 6;
+
+/// PR5-28 (U3 FB-36c): `range_band` is `{}` (none: the reach rule's fallback band edge 2) or `{"min": 1, "max": 2-6}`
+/// (whole numbers), and only on a family with the engine rule `reach` (the one rule that reads it).
+fn range_band_problems(f: &Dict) -> Vec<String> {
+    let raw = json::get(f, "range_band");
+    let Some(band) = raw.as_object() else {
+        return if raw.is_null() { Vec::new() } else { vec!["Range band must be an object: {} or {\"min\": 1, \"max\": n}.".into()] };
+    };
+    if band.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    if !json::sget(f, "engine_rules").iter().any(|r| r == "reach") {
+        out.push("Range band needs the engine rule reach (the reach rule's melee band).".into());
+    }
+    if let Some(k) = band.keys().find(|k| *k != "min" && *k != "max") {
+        out.push(format!("Range band: unknown key '{k}' (min, max)."));
+    }
+    let whole = |k: &str| band.get(k).and_then(Value::as_i64);
+    if whole("min") != Some(1) {
+        out.push("Range band min must be 1 (a melee band starts next to the target).".into());
+    }
+    if !whole("max").is_some_and(|m| (2..=RANGE_BAND_MAX).contains(&m)) {
+        out.push(format!("Range band max must be a whole number 2-{RANGE_BAND_MAX}."));
     }
     out
 }

@@ -84,12 +84,12 @@ fn terrain_storage(entry: &Dict, full: &Dict) -> Dict {
     row
 }
 
-/// U3.2-S4: a family row stores its Level-2 bonus and Level-3 passive as no key while they are empty (the defaults), so a
-/// row written before they existed re-saves byte for byte.
+/// U3.2-S4: a family row stores its Level-2 bonus and Level-3 passive (PR5-28: and its `range_band`) as no key while they
+/// are empty (the defaults), so a row written before they existed re-saves byte for byte.
 fn family_storage(full: &Dict) -> Dict {
     let mut row = content_storage("item_families", full);
     row.retain(|k, v| match k.as_str() {
-        "level2_bonus" => v.as_object().is_some_and(|m| !m.is_empty()),
+        "level2_bonus" | "range_band" => v.as_object().is_some_and(|m| !m.is_empty()),
         "level3_passive" => !gstr(v).is_empty(),
         _ => true,
     });
@@ -183,10 +183,10 @@ pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
 }
 
 /// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule,
-/// U3.2-S2 the family's engine rules, U3.2-S4 its Level-2 bonus and Level-3 passive).
-const ITEM_DERIVED: [&str; 16] = [
+/// U3.2-S2 the family's engine rules, U3.2-S4 its Level-2 bonus and Level-3 passive, PR5-28 its `range_band.max`).
+const ITEM_DERIVED: [&str; 17] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE,
-    rpgkit_data::ITEM_FAMILY_RULES, rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3,
+    rpgkit_data::ITEM_FAMILY_RULES, rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX,
 ];
 
 /// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections (one

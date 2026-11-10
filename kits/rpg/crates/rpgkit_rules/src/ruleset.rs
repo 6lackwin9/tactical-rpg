@@ -1158,7 +1158,7 @@ pub const LOCKED: [Locked; 48] = [
     locked("GEAR_REACH_CAP", "unit.rs", "positioning", "the most reach gear adds"),
     locked("FORESIGHT_RANGE_MAX", "unit.rs", "tells", BOUND_WHY),
     locked("STAGGER_TAKEN_MULT_MAX", "unit.rs", "poise", BOUND_WHY),
-    locked("REACH_WEAPON_REACH", "unit.rs", "positioning", "the reach rule's band"),
+    locked("REACH_WEAPON_REACH", "unit.rs", "positioning", "the reach rule's band without a family range_band"),
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).

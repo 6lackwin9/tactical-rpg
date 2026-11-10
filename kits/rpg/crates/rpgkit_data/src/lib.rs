@@ -596,6 +596,9 @@ pub struct ItemDef {
     /// U3.2-S4 (U3 "Level 3 (Master)"): the family's mastery passive id (the resolved row's `ITEM_FAMILY_LEVEL3` key; ""
     /// = none).
     pub level3_passive: String,
+    /// PR5-28 (U3 FB-36c): the family's `range_band.max` (the resolved row's `ITEM_FAMILY_REACH_MAX` key; 0 = the family
+    /// has no `range_band`, the reach rule then reads its fallback `rpgkit_rules::unit::REACH_WEAPON_REACH`).
+    pub family_reach_max: i32,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
     /// A1.2-K3 (INTENT2 section 6, INTENT2-K3): a thrown consumable's one authored area shape (`NONE` = single target;
@@ -630,6 +633,9 @@ pub const ITEM_FAMILY_RULES: &str = "family_rules";
 pub const ITEM_FAMILY_LEVEL2: &str = "family_level2_bonus";
 /// U3.2-S4: the resolved item row's key that carries its family's `level3_passive` (as `ITEM_FAMILY_LEVEL2`).
 pub const ITEM_FAMILY_LEVEL3: &str = "family_level3_passive";
+/// PR5-28 (U3 FB-36c): the resolved item row's key that carries its family's `range_band.max` (written by the loader only
+/// when the family has a `range_band`; the writer leaves it out of the stored form).
+pub const ITEM_FAMILY_REACH_MAX: &str = "family_reach_max";
 
 /// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
 /// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at
@@ -737,6 +743,7 @@ impl ItemDef {
             family_rules,
             level2_bonus: obj(o, ITEM_FAMILY_LEVEL2).map(FamilyBonus::from_obj).unwrap_or_default(),
             level3_passive: string(o, ITEM_FAMILY_LEVEL3, ""),
+            family_reach_max: int(o, ITEM_FAMILY_REACH_MAX, 0),
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
             area: string(o, "area", ITEM_AREA_NONE),
             affects: Affects::parse(&string(o, "affects", "")),

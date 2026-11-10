@@ -15,7 +15,8 @@ pub const GROUPS: [&str; 2] = ["spell", "heal"];
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
 /// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
 pub const STAGGER_TAKEN_MULT_MAX: f64 = 2.0;
-/// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this).
+/// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this) when its family
+/// has no `range_band` (PR5-28: the family's `range_band.max` wins, `Equipment::reach_max`).
 pub const REACH_WEAPON_REACH: i32 = 2;
 /// U3.2-S4 (FB-35): the source kind of the stat modifiers worn items' effects add (their `stat` effects and their
 /// families' mastery passives'); every sync takes them all off before it applies the worn gear again. AUDIT-05: each
@@ -446,6 +447,12 @@ impl Unit {
     /// battle reads it only under the rule `reach` (`rpgkit_battle::skill::melee_reach`).
     pub fn has_reach_weapon(&self) -> bool {
         self.attack_range <= 1 && self.inventory.active_weapon().is_some_and(|w| w.has_reach())
+    }
+
+    /// PR5-28 (U3 FB-36c): the melee reach of the unit's ready weapon under the rule `reach`: its family's
+    /// `range_band.max`, else `REACH_WEAPON_REACH` (also without a ready weapon; read only when `has_reach_weapon`).
+    pub fn weapon_reach(&self) -> i32 {
+        self.inventory.active_weapon().map_or(REACH_WEAPON_REACH, |w| w.reach_max())
     }
 
     /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the

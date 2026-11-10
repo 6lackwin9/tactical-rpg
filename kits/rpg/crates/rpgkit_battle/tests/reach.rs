@@ -42,6 +42,15 @@ fn weapon(id: &str, family: &str, base_range: i32, reach: bool) -> Value {
 /// Engine skills, a plain cut, an off-hand jab, LINE and RING areas, a lunge with its own reach (1-3) and a dash;
 /// a lancer with a reach weapon, a swordsman with a plain one, two foes.
 fn catalog() -> Catalog {
+    catalog_with(None)
+}
+
+/// `catalog` with the lancer's pike resolved against a family `range_band` of `reach_max` (PR5-28; None: no band).
+fn catalog_with(reach_max: Option<i32>) -> Catalog {
+    let mut pike = weapon("t_pike", "t_pole", 1, true);
+    if let Some(m) = reach_max {
+        pike[rpgkit_data::ITEM_FAMILY_REACH_MAX] = json!(m);
+    }
     let skills = vec![
         json!({"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"}),
         json!({"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "basic": true, "mitigation": 0.3}),
@@ -62,7 +71,7 @@ fn catalog() -> Catalog {
     };
     Catalog::from_value(&json!({
         "skills": skills,
-        "items": [weapon("t_pike", "t_pole", 1, true), weapon("t_sabre", "t_blade", 1, false)],
+        "items": [pike, weapon("t_sabre", "t_blade", 1, false)],
         "units": [unit("t_lancer", "party", "t_pike"), unit("t_swordsman", "party", "t_sabre"), unit("t_foe", "enemy", ""), unit("t_foe_b", "enemy", "")]
     }))
 }
@@ -78,10 +87,15 @@ fn reach_on() -> Ruleset {
 
 /// Lancer, swordsman, foe, foe_b (unit ids 0..4), deployed, then moved to the corners (tests place them).
 fn session(rules: Ruleset) -> Session {
+    session_from(rules, catalog())
+}
+
+/// `session` over catalog `cat`.
+fn session_from(rules: Ruleset, cat: Catalog) -> Session {
     let row = json!({"id": "t_fight", "name": "Fight", "party": ["t_lancer", "t_swordsman"], "enemies": ["t_foe", "t_foe_b"], "total_blocks": BLOCKS, "unit_ap": 10, "ap_regen": 0, "max_rounds": 8});
     let mut def = EncounterDef::from_obj(row.as_object().unwrap());
     def.ruleset = rules;
-    let mut s = Session::start(Arc::new(catalog()), def, &IndexMap::new());
+    let mut s = Session::start(Arc::new(cat), def, &IndexMap::new());
     for (c, cell) in [(LANCER, V2::new(0, 0)), (SWORD, V2::new(0, 8)), (FOE, V2::new(11, 0)), (FOE_B, V2::new(11, 8))] {
         place(&mut s.w, c, cell);
     }
@@ -316,5 +330,35 @@ fn engaged_and_threat_use_the_melee_band() {
         let cell = V2::new(far, 0);
         assert!(cell.dist(w.pos(SWORD)) > w.units[SWORD].move_per_block() * 2 + 1, "the swordsman does not reach it");
         assert_eq!(round_intent::threat(w, FOE, cell), on as usize, "PL4 threat, rule {on}");
+    }
+}
+
+/// PR5-28 (U3 FB-36c): the reach band's far edge is the weapon family's `range_band.max` (the resolved row's
+/// `ITEM_FAMILY_REACH_MAX`), `REACH_WEAPON_REACH` without one; it moves every reader of the band (a plain attack's band,
+/// the melee reach, the threat measure, the hover card) and only under the rule; a skill's own `reach_max` still wins.
+#[test]
+fn the_reach_band_edge_is_the_family_range_band_max() {
+    let fallback = session(reach_on());
+    assert_eq!(fallback.w.units[LANCER].weapon_reach(), REACH_WEAPON_REACH, "no range_band: the fallback");
+    for edge in [2, 3, 4] {
+        let s = session_from(reach_on(), catalog_with(Some(edge)));
+        let w = &s.w;
+        let lancer = &w.units[LANCER];
+        assert!(lancer.has_reach_weapon());
+        assert_eq!(lancer.weapon_reach(), edge);
+        let band = |id: &str, c: UnitId| skill::reach_by(&w.cat.skills[sid(w, id)], &w.units[c], &w.ruleset);
+        assert_eq!(band("t_cut", LANCER), (1, edge), "a plain attack strikes 1 to the family's max");
+        assert_eq!(band("strike", LANCER), (1, edge));
+        assert_eq!(band("t_jab", LANCER), (1, 1), "an off-hand jab stays (1, 1)");
+        assert_eq!(band("t_lunge", LANCER), (1, 3), "the skill's own reach wins");
+        assert_eq!(band("t_cut", SWORD), (1, 1), "no reach weapon");
+        assert_eq!(skill::melee_reach(lancer, &w.ruleset), edge);
+        assert_eq!(skill::attack_band(lancer, &w.ruleset), (1, edge), "the hover card's band");
+        assert_eq!(skill::threat_reach(lancer, &w.ruleset), edge.max(1));
+        assert_eq!(round_intent::melee_reach(w, LANCER), edge);
+        for rules in [Ruleset::classic(), ruleset(&[ROUND_INTENT])] {
+            assert_eq!(skill::melee_reach(lancer, &rules), 1, "the band edge is read only under the rule");
+            assert_eq!(skill::attack_band(lancer, &rules), skill::reach_for(&w.cat.skills[sid(w, "strike")], lancer));
+        }
     }
 }
