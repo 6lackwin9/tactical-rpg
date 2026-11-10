@@ -24,29 +24,14 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR4-8 `SKILLCHECK-FOLD` | done (FB-158 suggestion): fold error when nothing else is reported; ranks normalised before the fold | `develop` | - |
 | PR4-5 `WEBREL1-E2` | done (FB-159; FB-160 suggestion): `shell::start_web`, async WebGL2 renderer, DPR, audio on first gesture; `web_min` passes in headless Chromium | `develop` | - |
 | PR4-6 `WEBREL1-G1` | done (FB-161; FB-162 suggestion): the game runs in a browser (web entry, bundle, `dev_tools`, `fc.sh web`, smoke 40/40, WEBREL1 6.2) | `develop` | - |
-| PR4-7 `WEBREL1-P1` | done (FB-163; FB-164 suggestion): advisory `web` CI job, `web.yml` itch.io deploy; GitHub-side acceptance observable at the next release | `develop` | Queue empty: waiting on Design (FB-161 to FB-164). |
+| PR4-7 `WEBREL1-P1` | done (FB-163; FB-164 suggestion): advisory `web` CI job, `web.yml` itch.io deploy; GitHub-side acceptance observable at the next release | `develop` | - |
+| PR4-9 `WEBOPT1` | parked (FB-165 limit-blocker): the `apt` Binaryen 108 breaks the optimised build; work kept on the branch @`6df0d0e4` | `claude/optimistic-newton-ewkyqt` | Waiting on Design (FB-165). |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
-FB-01 to FB-162 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-10). New items start at FB-163. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
-
-### FB-163: PR4-7 `WEBREL1-P1` landed (advisory `web` CI job, `web.yml` itch.io deploy) + `docs/workflow/web.md` replacement
-
-- **Spec**: READY Section 1 row PR4-7; `docs/specs/WEBREL1.md` 5 (the `PR4-7` squash commit on `develop`, 2026-11-10)
-- **Kind**: docs-delta
-- **Status**: open
-- **Finding**: (1) `.github/workflows/gate.yml` gains the job `web` ("web (advisory)"): pull requests only (`if: github.event_name == 'pull_request'`, so PRs into `main`); ALSA, the stable toolchain with the `wasm32-unknown-unknown` target, rust-cache over `target` and `target-wasm`, a cached `wasm-bindgen-cli 0.2.129`, `tools/fc.sh web test`, upload of `out/web/` as artifact `web-build` (14 days), then the browser smoke (`playwright@1.63.0` installed into `$RUNNER_TEMP`, Chromium with deps) with `continue-on-error: true`; the required `gate` job keeps `needs: [checks]` exactly, so a red `web` never turns `gate` red. (2) `.github/workflows/web.yml`: `workflow_dispatch` only (input `variant`: `test` default, or `release`), `contents: read`, concurrency `web-deploy` never cancelled; a preflight step before checkout stops a run that is not on `main`, or with exactly "BUTLER_API_KEY not set", or when `ITCH_TARGET` is missing or not `<user>/<game>:html5`; then `tools/fc.sh web <variant>`, butler 15.32.0 from `broth.itch.zone` checked with `sha256sum -c`, and `butler push out/web $ITCH_TARGET --userversion <variant>-<sha7>`; inputs, secret and variable reach the shell through env only. Local checks: both files parse, actionlint 1.7.12 with shellcheck clean on them, the preflight dry run prints each message with exit 1 (and exit 0 when all is set), `tools/fc.sh web test` and `web smoke` (40/40) pass with the CI commands; gate 2748 passed, 0 failed, 0 warnings. **Observable only on GitHub after the next release**: `web-build` uploaded on the release PR (and the cold install times), a `web.yml` run without the secret, a real butler push once the user sets `BUTLER_API_KEY` and `ITCH_TARGET` (FB-164).
-- **Recommendation**: STRUCTURE (`.github/workflows` row): "`gate.yml` job `web` (WEBREL1-P1, advisory, PRs into main: web test build, artifact `web-build`, browser smoke); `web.yml` (WEBREL1-P1: manual itch.io deploy with butler, main only)". `docs/workflow/web.md` (already rewritten for build, serve and smoke in `61bfb947`, FB-161): take the sections **CI artifact (release PRs)**, **Deploy to itch.io (`web.yml`)**, **One-time setup by the repo owner** and **What differs in the browser** from the full text below (95 lines, passes the repo's markdown lint as a file; the other sections overlap what Design wrote):
-
-~~~markdown
-# Web build (HTML5, itch.io)
-
-The browser build of Emberwake on the Aegis engine (WEBREL1, `docs/specs/WEBREL1.md`): `emberwake_gui` compiled to
-WebAssembly, drawn on one 1280 x 720 canvas, its files packed into two bundle parts. It is for playtesting on any device
-and for porting checks; debugging stays on the desktop build. The Godot web export this page described until 2026-10-19
-is retired (`legacy/`, the `legacy` branch).
+FB-01 to FB-164 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-10). New items start at FB-165. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
 
 ## Test build and release build
 
@@ -138,13 +123,13 @@ advisory: it is not in the `gate` job's `needs` and not a required check, and a 
 | Touch / mobile | Runs, but the UI is built for mouse and keyboard |
 ~~~
 
-### FB-164: PR4-7 follow-ups for the first real deploy (butler hash provenance, `wasm-opt` on CI)
+### FB-165: PR4-9 `WEBOPT1` parked: the `apt` Binaryen (108) breaks the web build
 
-- **Spec**: `docs/specs/WEBREL1.md` 5 (PR4-7)
-- **Kind**: suggestion
+- **Spec**: READY Section 1 row PR4-9 (`FB-164` Option A); branch `claude/optimistic-newton-ewkyqt` @`6df0d0e4` (not landed)
+- **Kind**: limit-blocker
 - **Status**: open
-- **Finding**: (1) the butler pin (15.32.0 and its sha256) is copied from the Godot-era `web.yml` (commit `1412c1f2^`), checked there on a GitHub runner; it cannot be re-checked from the cloud container (the proxy blocks `broth.itch.zone`), so if itch.io changed that archive the first real deploy stops at the `sha256sum -c` step with no upload. (2) CI does not install Binaryen, so `wasm-opt` is skipped and the itch.io `.wasm` stays 12.9 MB (3.8 MB gzip); `wasm-opt -Oz` usually trims 10 to 30%.
-- **Recommendation**: (1) the user's first `web.yml` run (after setting `BUTLER_API_KEY` and `ITCH_TARGET`) doubles as the check; on a hash failure, Build refreshes `BUTLER_VERSION` / `BUTLER_SHA256` from a runner log. (2) **Option A (recommended)**: a later small platform task adds Binaryen (`apt-get install binaryen`) to the `web` job and `web.yml`; **Option B**: leave it until load time matters.
+- **Finding**: built as specified (`binaryen` added to the `apt-get install` of the `web` job in `gate.yml` and of `web.yml`; `tools/fc.sh web` now prints `wasm-opt (<version>): <before> -> <after> bytes`; both workflows parse and pass actionlint + shellcheck). With the `apt` package (Ubuntu's `binaryen 108-1`, the version an `ubuntu-latest` runner would also install) `wasm-opt -O2` shrinks the module 13,518,498 -> 9,788,617 bytes (3.8 -> 3.5 MB gzip), but **the optimised build does not boot**: the smoke fails 25 checks with `RangeError: WebAssembly.Table.grow(): failed to grow table by 4`. Cause (`wasm-dis` before and after): the input has `(table $0 4059 4059 funcref)` and `(table $__wbindgen_externrefs 1024 anyref)` exported as `__wbindgen_externrefs`; after `-O2` the export points at `table $0`, the fixed-size funcref table, so `wasm-bindgen`'s glue grows the wrong table (a Binaryen 108 bug with reference-types modules). The acceptance ("the smoke still passes on the optimised build") cannot be met with the `apt` package. A newer Binaryen release could not be tried from the cloud container (downloading the release binary was refused). `tools/fc.sh` runs `wasm-opt` whenever it is on the PATH, so any machine with an old Binaryen gets a broken web build today too (no machine in the project has one: it was uninstalled here after the test).
+- **Recommendation**: **Option A (recommended)**: install a current Binaryen release in both workflows from its GitHub release archive (`WebAssembly/binaryen` `version_12x`, linux x86_64, pinned with a sha256 checked on a runner, like butler), plus a guard in `tools/fc.sh` that skips `wasm-opt` below a minimum version (and says so); Build verifies the smoke on the first release PR. **Option B**: build the web module without reference types (`-C target-feature=-reference-types`, so `wasm-bindgen` uses its JS heap and old `wasm-opt` works); a codegen change that needs the smoke and a size check. **Option C**: drop WEBOPT1 (the `.wasm` stays 3.8 MB gzip) and only add the version guard to `tools/fc.sh`.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
