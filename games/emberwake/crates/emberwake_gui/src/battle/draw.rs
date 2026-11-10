@@ -26,7 +26,7 @@ use aegis_core::json::s;
 use emberwake_battle::skill::Kind;
 use emberwake_battle::world::World;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), live: bool) {
     let now = Instant::now();

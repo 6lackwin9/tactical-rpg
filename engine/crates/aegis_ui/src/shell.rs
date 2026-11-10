@@ -17,12 +17,12 @@ use crate::window::Grab;
 use crate::theme::{th, Metrics};
 use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, FIELD_PAD_X, FIELD_PAD_Y};
 use anyhow::Result;
-use pixels::{Pixels, SurfaceTexture};
+use pixels::Pixels;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
@@ -94,7 +94,7 @@ struct Shell<G> {
     /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
     open_focus: Option<String>,
     /// Playtest trail: the control under the pointer, since when, and its trail form.
-    hover: Option<(String, std::time::Instant, Value)>,
+    hover: Option<(String, aegis_core::clock::Instant, Value)>,
     /// Shift is held (a Shift+click in a text field extends its selection).
     shift: bool,
     /// The left button went down in the text field being edited: moving the mouse selects (PLAYUI1-T).
@@ -402,7 +402,7 @@ impl<G: Context> Shell<G> {
                 self.cx.playtest.trail(json!({"type": "hover", "ctl": ctl, "ms": ms}));
             }
         }
-        self.hover = under.map(|(id, ctl)| (id, std::time::Instant::now(), ctl));
+        self.hover = under.map(|(id, ctl)| (id, aegis_core::clock::Instant::now(), ctl));
     }
 
     /// The lowest screen drawn: the top one and those under it down to the first that is not an overlay.
@@ -1432,6 +1432,19 @@ impl<G: Context> App<G> {
     }
 }
 
+/// The renderer on the window: pixels' synchronous init (the desktop).
+#[cfg(not(target_arch = "wasm32"))]
+fn open_pixels(pw: u32, ph: u32, window: Arc<Window>) -> Result<Pixels<'static>, pixels::Error> {
+    Pixels::new(pw, ph, pixels::SurfaceTexture::new(pw, ph, window))
+}
+
+/// The web (WEBREL1-E1a, compile only): pixels has only `new_async` there, which cannot run inside `resumed`. The web
+/// start path (`spawn_app`, the async init handed back as a user event) is PR4-5 `WEBREL1-E2`; until then this errors.
+#[cfg(target_arch = "wasm32")]
+fn open_pixels(_pw: u32, _ph: u32, _window: Arc<Window>) -> Result<Pixels<'static>, pixels::Error> {
+    Err(pixels::Error::UserDefined("the web renderer starts in WEBREL1-E2 (PR4-5)".into()))
+}
+
 impl<G: Context> ApplicationHandler for App<G> {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -1453,7 +1466,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let window = Arc::new(el.create_window(attrs).expect("window"));
         let size = window.inner_size();
         let (pw, ph) = (size.width.max(1), size.height.max(1));
-        let pixels = Pixels::new(pw, ph, SurfaceTexture::new(pw, ph, window.clone())).expect("pixels");
+        let pixels = open_pixels(pw, ph, window.clone()).expect("pixels");
         let mut shell = Shell::open(cx, stack, &self.options, (pw, ph), window.scale_factor() as f32, icon_notice);
         let port = self.options.port;
         let proxy = self.proxy.clone();

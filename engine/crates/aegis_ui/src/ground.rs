@@ -1105,7 +1105,7 @@ pub fn compose_file(job_path: &Path, out_path: &Path) -> Result<ComposedFile> {
     let job: Value = serde_json::from_str(&text).with_context(|| format!("parsing {}", job_path.display()))?;
     let dir = job_path.parent().unwrap_or(Path::new("."));
     let loaded = load_job(&job, dir)?;
-    let t0 = std::time::Instant::now();
+    let t0 = aegis_core::clock::Instant::now();
     let composed = compose_loaded(&loaded);
     let compose_ms = t0.elapsed().as_secs_f64() * 1000.0;
     if composed.w <= 0 || composed.h <= 0 {

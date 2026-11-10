@@ -20,7 +20,7 @@ use indexmap::IndexMap;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 /// The game as the shell sees it.
 pub struct Emberwake;

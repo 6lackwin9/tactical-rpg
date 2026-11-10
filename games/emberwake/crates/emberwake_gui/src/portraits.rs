@@ -274,7 +274,7 @@ pub struct Faces {
     budget: Budget,
     /// The portraits' clock: the screen advances it (`tick` by wall time; the battle copies FX1's clock in).
     pub clock: Clock,
-    last_wall: Option<std::time::Instant>,
+    last_wall: Option<aegis_core::clock::Instant>,
     /// Keys drawn or reacted to since the last `begin`.
     touched: BTreeSet<String>,
     /// Cues a review page holds on a portrait beside its look (the Gallery's toggles); the surfaces pin none.
@@ -310,7 +310,7 @@ impl Faces {
 
     /// The clock moves by the wall time since the last call (at most `vignette::MAX_FRAME_MS`).
     pub fn tick(&mut self) {
-        let now = std::time::Instant::now();
+        let now = aegis_core::clock::Instant::now();
         let ms = self.last_wall.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(aegis_ui::vignette::MAX_FRAME_MS as f64));
         self.last_wall = Some(now);
         self.clock.advance(ms, 1.0);

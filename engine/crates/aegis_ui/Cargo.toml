@@ -24,7 +24,10 @@ pixels = "0.15.0"
 png = "0.17.13"
 fontdue = "0.9.2"
 rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "wav"] }
+
 # The system clipboard for the kit's text editor (PLAYUI1-T); text only (its image support would pull the image crate).
+# Native only (WEBREL1-E1a): arboard has no web backend; on wasm the editor keeps its in-app clipboard (`edit::clipboard`).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 arboard = { version = "3.7.0", default-features = false }
 
 # DISPLAY2: the monitor's work area (GetMonitorInfoW); winit reports only the whole monitor. The version winit uses.

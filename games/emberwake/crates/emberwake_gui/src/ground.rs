@@ -261,19 +261,19 @@ mod tests {
         for view in [View::Square, View::Tilted] {
             for z in [1.0, 2.0, 3.0] {
                 let q = mapview::zoom_of(&json!(z));
-                let t0 = std::time::Instant::now();
+                let t0 = aegis_core::clock::Instant::now();
                 let p = picture(&mut cx, &t, &sets, view, q).expect("a picture");
                 let job = t0.elapsed();
-                let t1 = std::time::Instant::now();
+                let t1 = aegis_core::clock::Instant::now();
                 let key = p.key("keep");
                 let keyed = t1.elapsed();
-                let t2 = std::time::Instant::now();
+                let t2 = aegis_core::clock::Instant::now();
                 let art = p.compose();
                 let composed = t2.elapsed();
                 let (cw, ch) = mapview::cell_of(view, q);
                 let (w, h) = ((p.plan.cols * cw) as f32 * 3.0, (p.plan.rows * ch) as f32 * 3.0);
                 let bytes = (w * h * 4.0) as usize;
-                let t3 = std::time::Instant::now();
+                let t3 = aegis_core::clock::Instant::now();
                 let copy = if bytes <= composer::PHYSICAL_MAX { composer::expand(&art, w as i32, h as i32).len() } else { 0 };
                 let expanded = t3.elapsed();
                 println!("{view:?} {z}x: art {}x{} ({} MB), job {:.1} ms (first read of the art sizes), key {:.1} ms, compose {:.1} ms, physical copy {} MB in {:.1} ms{}; {:?}", art.w, art.h, art.px.len() / 1_000_000, job.as_secs_f64() * 1e3, keyed.as_secs_f64() * 1e3, composed.as_secs_f64() * 1e3, bytes / 1_000_000, expanded.as_secs_f64() * 1e3, if copy == 0 { " (past the limit: not kept)" } else { "" }, key.cell);

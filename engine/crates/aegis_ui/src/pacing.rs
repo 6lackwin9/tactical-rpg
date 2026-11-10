@@ -6,7 +6,7 @@
 //! screen that says so (`Screen::frame_need`, default `FrameNeed::Full`: a screen that has not said keeps drawing) waits
 //! for input, the agent link or its own next change, with `HEARTBEAT` as the limit.
 
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// After input, or the last frame a screen needed in full, frames go on this long: a screen drawn each frame shows what
 /// a click changed a frame or two later, and a short ease nobody declared still finishes.

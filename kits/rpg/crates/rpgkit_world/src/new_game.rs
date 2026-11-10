@@ -84,7 +84,7 @@ pub fn create(d: &Data, world_id: &str, ids: &[String], seed: i64) -> Result<Gam
 }
 
 fn clock_seed() -> i64 {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let now = aegis_core::clock::SystemTime::now().duration_since(aegis_core::clock::UNIX_EPOCH).unwrap_or_default();
     (now.as_millis() as i64 ^ now.subsec_micros() as i64) & SEED_MAX
 }
 

@@ -18,7 +18,7 @@ use emberwake_battle::round_intent_plan as rip;
 use emberwake_battle::session::{Phase, Session};
 use emberwake_battle::skill::Kind;
 use emberwake_battle::world::World;
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 /// RULESET1_INTENT UI5: a round intent's colour, its commands' colour (Assault an attack's, Guard a Defend's, Support's,
 /// Maneuver a Disengage's, Channel a Focus's). A4.2-K1b: Field takes the theme's earth tone (`field_color`).

@@ -18,7 +18,7 @@ use emberwake_battle::grid::V2;
 use emberwake_battle::session::Phase;
 use aegis_core::json::Dict;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// INPUT1 PB3: the playback speed setting (`playback_speed`: "1x", "0.5x", "block"; anything else reads 1x).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

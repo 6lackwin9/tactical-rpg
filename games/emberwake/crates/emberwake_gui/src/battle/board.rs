@@ -21,7 +21,7 @@ use emberwake_battle::session::Session;
 use aegis_core::assets::{ClipFrame, Facing};
 use aegis_ui::art::Art;
 use emberwake_battle::world::World;
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 /// A cell's foot point as an effect point (4.1: an area's aim, support motes, falls).
 pub(super) fn foot_point(geo: &Geom, c: V2) -> (f32, f32) {

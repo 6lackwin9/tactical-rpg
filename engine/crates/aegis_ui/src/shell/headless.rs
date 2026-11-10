@@ -16,7 +16,7 @@ use anyhow::{bail, Context as _, Result};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::RecvTimeoutError;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// The default frame rate.
 pub const DEFAULT_FPS: u32 = 15;

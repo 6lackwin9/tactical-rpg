@@ -14,7 +14,7 @@
 use crate::Driver;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use aegis_core::clock::{SystemTime, UNIX_EPOCH};
 
 pub const FORMAT: &str = "playtest";
 /// Version 1 was the Godot build's shape (plans and RNG states per round, PLAYTEST1-L); the engine replays command logs.

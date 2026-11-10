@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, Once};
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// A hub with recording on exists in this process (the report functions do nothing otherwise).
 static RECORDING: AtomicBool = AtomicBool::new(false);

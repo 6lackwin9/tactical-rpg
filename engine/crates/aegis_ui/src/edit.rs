@@ -638,38 +638,64 @@ pub fn field_shift(lay: &Layout, caret: usize, r: Rect, g: i32) -> f32 {
     (lay.x_of(caret) - (r.w as f32 - 2.0 * FIELD_PAD_X * g as f32)).max(0.0)
 }
 
-/// The clipboard (PLAYUI1-T): the system's through `arboard` (the engine runs on the desktop only), with an in-app
-/// copy that keeps copy and paste working inside the app when the system clipboard is unavailable. The crate's unit
-/// tests never touch the system's.
+/// The clipboard (PLAYUI1-T): the system's through `arboard` on the desktop, with an in-app copy that keeps copy and
+/// paste working inside the app when the system clipboard is unavailable. On the web (`wasm32`, WEBREL1-E1a) there is
+/// no system clipboard: only the in-app copy. The crate's unit tests never touch the system's.
 pub mod clipboard {
     use std::cell::RefCell;
 
     thread_local! {
         static LOCAL: RefCell<String> = const { RefCell::new(String::new()) };
-        /// None: not opened yet; Some(None): the system clipboard can't be opened.
-        static SYSTEM: RefCell<Option<Option<arboard::Clipboard>>> = const { RefCell::new(None) };
-    }
-
-    fn system<T>(f: impl FnOnce(&mut arboard::Clipboard) -> Option<T>) -> Option<T> {
-        if cfg!(test) {
-            return None;
-        }
-        SYSTEM.with(|s| s.borrow_mut().get_or_insert_with(|| arboard::Clipboard::new().ok()).as_mut().and_then(f))
     }
 
     /// Copies `text` (the in-app copy always, the system's when it works).
     pub fn set(text: &str) {
         LOCAL.with(|l| *l.borrow_mut() = text.to_string());
-        system(|c| c.set_text(text.to_string()).ok());
+        system::set(text);
     }
 
     /// The text to paste: the system clipboard's ("" when it holds no text), else the in-app copy.
     pub fn get() -> String {
-        let sys = system(|c| match c.get_text() {
-            Ok(t) => Some(t),
-            Err(arboard::Error::ContentNotAvailable) => Some(String::new()),
-            Err(_) => None,
-        });
-        sys.unwrap_or_else(|| LOCAL.with(|l| l.borrow().clone()))
+        system::get().unwrap_or_else(|| LOCAL.with(|l| l.borrow().clone()))
+    }
+
+    /// The desktop's system clipboard through `arboard`.
+    #[cfg(not(target_arch = "wasm32"))]
+    mod system {
+        use std::cell::RefCell;
+
+        thread_local! {
+            /// None: not opened yet; Some(None): the system clipboard can't be opened.
+            static SYSTEM: RefCell<Option<Option<arboard::Clipboard>>> = const { RefCell::new(None) };
+        }
+
+        fn with<T>(f: impl FnOnce(&mut arboard::Clipboard) -> Option<T>) -> Option<T> {
+            if cfg!(test) {
+                return None;
+            }
+            SYSTEM.with(|s| s.borrow_mut().get_or_insert_with(|| arboard::Clipboard::new().ok()).as_mut().and_then(f))
+        }
+
+        pub(super) fn set(text: &str) {
+            with(|c| c.set_text(text.to_string()).ok());
+        }
+
+        pub(super) fn get() -> Option<String> {
+            with(|c| match c.get_text() {
+                Ok(t) => Some(t),
+                Err(arboard::Error::ContentNotAvailable) => Some(String::new()),
+                Err(_) => None,
+            })
+        }
+    }
+
+    /// The web has no system clipboard here (WEBREL1-E1a): copy and paste stay in the app.
+    #[cfg(target_arch = "wasm32")]
+    mod system {
+        pub(super) fn set(_text: &str) {}
+
+        pub(super) fn get() -> Option<String> {
+            None
+        }
     }
 }

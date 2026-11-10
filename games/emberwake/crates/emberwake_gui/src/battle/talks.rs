@@ -6,7 +6,7 @@ use crate::talk::TalkAct;
 use crate::screens::Cx;
 use aegis_core::json::{self, Dict};
 use emberwake_world::dialogue;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// ENCOUNTER2-C DT6: an open battle talk: the tree it plays and its runner (a scene: no services).
 pub(super) struct BattleTalk {

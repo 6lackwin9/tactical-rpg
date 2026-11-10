@@ -137,7 +137,7 @@ pub fn set_locked(fmt: &Format, dir: &Path, slot: i64, on: bool) -> Result<(), S
 }
 
 fn now() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    aegis_core::clock::SystemTime::now().duration_since(aegis_core::clock::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 /// Problem strings; empty = written. `state` gives the game_state value or the game's own problems (checked after

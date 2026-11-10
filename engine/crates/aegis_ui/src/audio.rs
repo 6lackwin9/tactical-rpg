@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 const SFX_VOICES: usize = 8;
 const UI_VOICES: usize = 2;

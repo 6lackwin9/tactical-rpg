@@ -15,7 +15,7 @@
 
 use aegis_ui::canvas::Rect;
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use aegis_core::clock::{Duration, Instant};
 
 /// A map cell's width (logical px; 32 px at 1280 wide, MAPVIEW1), and its height in each view.
 pub const CELL_W: i32 = 16;

@@ -49,7 +49,7 @@ use serde_json::{json, Value};
 use std::collections::VecDeque;
 #[cfg(test)]
 use std::time::Duration;
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 /// The leader keeps walking this long (animation ms) past a step's time, so key steps and walked paths play `walk` without
 /// a stop between tiles at any step time (`mapview::WalkStep`).

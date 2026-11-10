@@ -22,7 +22,7 @@ use crate::theme::th;
 use crate::ui::{tip, Gfx, Ui, Widget, BODY, RADIUS, SMALL, H, W};
 use aegis_core::json;
 use serde_json::{json, Value};
-use std::time::Instant;
+use aegis_core::clock::Instant;
 
 /// The settings keys (engine keys, `Settings::engine_defaults`).
 pub const TEXT_SPEED: &str = "text_speed";

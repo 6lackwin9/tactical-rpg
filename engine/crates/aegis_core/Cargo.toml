@@ -6,3 +6,7 @@ edition = "2021"
 [dependencies]
 serde_json = { workspace = true }
 indexmap = { workspace = true }
+
+# WEBREL1-E1a: the web clock behind `clock` (std's Instant::now panics on wasm32-unknown-unknown); the version winit locks.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1.1.0"
