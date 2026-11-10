@@ -211,6 +211,9 @@ fn the_ai_calms_the_turned_member_when_the_unmark_would() {
     ai::build_steps(&s.w, &mut plan, ALLY, &p);
     let first = plan.entries_for(&s.w, ALLY).into_iter().next().expect("a planned entry");
     assert_eq!((first.skill, first.target), (ino, Some(HERO)), "the unmark first");
+    // the foe knows the unmark too (FB-194 review): an enemy-side user never reaches the turned member
+    let mut s = s;
+    s.w.units[FOE].known_skills.push("t_inoculate".to_string());
     let mut plan = Plan::new();
     let p = s.w.profile_of(FOE);
     ai::build_steps(&s.w, &mut plan, FOE, &p);

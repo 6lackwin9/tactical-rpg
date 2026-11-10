@@ -123,9 +123,28 @@ pub fn path(key: &str) -> String {
     format!("music/{key}.ogg")
 }
 
-/// The first track of the context's chain that has a file (None: silence).
-pub fn track(cx: &Cx, ctx: &str, world: &str, location: &str) -> Option<String> {
+/// The first track of the context's chain that has a file (None: silence), before its variant is picked.
+fn chain_track(cx: &Cx, ctx: &str, world: &str, location: &str) -> Option<String> {
     candidates(&cx.data, ctx, world, location).into_iter().map(|k| path(&k)).find(|p| cx.audio.has(p))
+}
+
+/// The track of the context's chain (`chain_track`), as one of its variants when `<key>_2.ogg`, ... ship (MUSICVAR1):
+/// a request lasts while the track plays, seeded by the game's seed (0 without a game).
+pub fn track(cx: &Cx, ctx: &str, world: &str, location: &str) -> Option<String> {
+    let seed = cx.game.as_ref().map_or(0, |g| g.gs.rng_seed);
+    chain_track(cx, ctx, world, location).map(|p| cx.audio.music_variant(&p, None, seed))
+}
+
+/// MUSICVAR1: the track of one battle (`request`, from `new_request` when it starts), its variant seeded by the
+/// battle's seed: the battle keeps its pick, the next battle picks again and never the same one.
+pub fn battle_track(cx: &Cx, ctx: &str, world: &str, location: &str, request: u64, seed: i64) -> Option<String> {
+    chain_track(cx, ctx, world, location).map(|p| cx.audio.music_variant(&p, Some(request), seed))
+}
+
+/// A new music request id (one per battle start; ids only need to differ).
+pub fn new_request() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// `ctx` for the game in play (its world and location); without a game, the context alone.
@@ -196,6 +215,27 @@ mod tests {
         assert_eq!(region_context(&d, &gs, false), TOWN, "warden_keep is a fortress");
         assert_eq!(region_context(&d, &gs, true), SHOP);
         assert_eq!(region_context(&d, &GameState { location_id: String::new(), ..gs }, false), FIELD);
+    }
+
+    /// MUSICVAR1 outside battle: a context's track with variants plays one while it lasts; after other music the next
+    /// request picks another. A plain track (no variants) is unchanged.
+    #[test]
+    fn a_context_track_with_variants_picks_one_per_request() {
+        let dir = aegis_core::scratch::Scratch::new("emberwake_music_variants");
+        std::fs::create_dir_all(dir.join("music")).unwrap();
+        for f in ["menu_theme.ogg", "menu_theme_2.ogg", "travel.ogg"] {
+            std::fs::write(dir.join("music").join(f), b"OggS").unwrap();
+        }
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.audio = Audio::offline(Some(dir.to_path_buf()));
+        assert_eq!(track(&cx, TRAVEL, "", "").as_deref(), Some("music/travel.ogg"));
+        let first = track(&cx, MENU, "", "").expect("a menu track");
+        cx.audio.music(Some(&first));
+        assert_eq!(track(&cx, MENU, "", "").as_ref(), Some(&first), "the playing pick stays");
+        cx.audio.music(Some("music/travel.ogg"));
+        let second = track(&cx, MENU, "", "").expect("a menu track");
+        assert_ne!(second, first, "back from other music, the other variant");
+        assert!(["music/menu_theme.ogg", "music/menu_theme_2.ogg"].contains(&second.as_str()));
     }
 
     #[test]

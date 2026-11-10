@@ -84,6 +84,7 @@ impl BattleScreen {
     pub(super) fn after_start(&mut self, intro: &str) {
         self.tokens = Tokens::default();
         self.rev += 1;
+        self.music_request = crate::music::new_request();
         // A new battle: the last one's pending feedback has nothing left to show on (rule F's flush happens in `send`).
         self.impacts.clear();
         self.flashes.clear();
