@@ -1,0 +1,12 @@
+{
+  "key": "sunk_ward_combat_3",
+  "file": "games/emberwake/assets/audio/music/sunk_ward_combat_3.ogg",
+  "plays": "variant 3 of sunk_ward_combat (battles in the Sunk Ward); not played until the engine picks among a key's variants (ART_UI_STUDIO 3.9, the variant request)",
+  "source": "Flow Music (flowmusic.app), model Lyria 3.5: 'Sunkward Battle Theme (New Drums)', Tushar's new-drums take from the Inquisition take (bass and other similar, not the same); Split stems, all four kept (the drums and choir complement each other)",
+  "master": "Drive image_pipeline/music/out/Sunkward Battle Theme (New Drums)_tracks.zip, extracted to music/out/stems_battle_new_drums/battle_nd_{drums,bass,other,vocals}.m4a (116.7 s)",
+  "prompt": "unknown (made in Flow Music from the Inquisition take; round 4 prompt as its base)",
+  "seed": "unknown",
+  "import": "python -m tools.mock_ui.music battle_nd_drums.m4a battle_nd_bass.m4a battle_nd_other.m4a battle_nd_vocals.m4a --whole --overlap 4 --rotate 8 --out games/emberwake/assets/audio/music/sunk_ward_combat_3.ogg",
+  "loop": "whole song: trailing silence trimmed, the last 4 s laid over the intro; the file starts on the chord 8.00 s in; 112.0 s, several stages (the choir at 32 s, the drums at 39.9 s); RMS -14.8 dBFS, peak -1.0 dBFS",
+  "approved": "Tushar 2026-11-10 (by ear: all three battle tracks loop well; use them as battle variants, this one has multiple stages)"
+}
