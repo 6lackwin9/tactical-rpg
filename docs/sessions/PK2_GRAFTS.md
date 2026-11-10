@@ -38,15 +38,17 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 
 - **Kit**: a second slot set, **body slots**, separate from gear (`LOADOUT_SLOTS` untouched, a new member key `body`: slot -> item id), with its own effect list (body items may grant a meter and a floor; gear still may not, `Grant::gear_ok`).
 - **Game data**: 4 slots, Cranial, Thoracic, Forearms, Visceral (CANON 2.1). A **graft** is an item of a new item type `graft` with `body_slot`, `tier` and grants: its **marrow-exclusive skill** (`grant_skill`, a skill with `channel.only`, single intent, budgeted like a dual-intent Cold Steel heavy, ACTS23 5.1) and the **Strain meter** (holding any graft makes the unit a Strain carrier).
-- **Three surgery tiers** (user 2026-11-10; they mirror the T1 / T2 / T3 skills of each class's Inoculated branch):
+- **Three surgery tiers** (user 2026-11-10). **A graft teaches the monster's own skill** (user 2026-11-10, replacing the per-class Inoculated branches): each aberrant or elite enemy that drops an organ names the skill it teaches (its signature move as a marrow-only skill), usable by any class; the tier follows the source:
 
 | Tier | Organs | Teaches | Extra cost |
 | --- | --- | --- | --- |
-| I | standard organs from ordinary aberrations (Stalker Optic Nerve, Caustic Gall-Bladder) | a T1 Inoculated skill | none beyond the floor |
-| II | elite organs from elite aberrations and Inquisitors (Inquisitor Marrow Valve) | a T2 Inoculated skill | none beyond the floor |
-| III (Apex) | Apex organs from bosses and Marrow Horrors (Titan Marrow Core, a unique named organ); Aline offers Apex grafting after mission 2.4 | a T3 Inoculated skill, or the class's **Inoculated keystone** | +1 Calcification stage at install |
+| I | standard organs from ordinary aberrations (Stalker Optic Nerve, Caustic Gall-Bladder) | that monster's skill (T1 budget) | none beyond the floor |
+| II | elite organs from elite aberrations and Inquisitors (Inquisitor Marrow Valve) | that elite's skill (T2 budget) | none beyond the floor |
+| III (Apex) | Apex organs from bosses and Marrow Horrors (Titan Marrow Core, a unique named organ); Aline offers Apex grafting after mission 2.4 | that boss's skill (T3 budget), or the class's **Inoculated keystone** | +1 Calcification stage at install |
 
-- **The Inoculated keystone is a Tier III graft** (Q-64: there is no other way to get it): made at the Slab from an Apex organ like any graft, but installed into the one **keystone slot** instead of a body slot.
+- **The Inoculated keystone is a Tier III graft** (Q-64: there is no other way to get it): made at the Slab from an Apex organ like any graft, but installed into the one **keystone slot** instead of a body slot; **one per unit**, and only for a unit that **already has at least 3 grafts** (user 2026-11-10; with the keystone counted the unit then sits at the 50 floor). It is the one class-specific Inoculated piece: each class has its own Inoculated keystone (the priest's carries the in-combat Flesh Breach undo, PK1).
+- **Slots are generic** (user 2026-11-10): any organ fits any of the 4 body slots; the names Cranial, Thoracic, Forearms and Visceral stay as flavour labels. A graft's power depends on its organ's tier, not on its slot; the slots only count toward the floor ("graft count", not "stage", which is Calcification's word).
+- **A fallen named founder's Apex organ** teaches a marrow version of that founder's signature skill (Design default, following "the monster's own skill").
 - **The floor follows the number of grafts, steepening** (user 2026-11-10; replaces "+10 per graft" and the keystone's "at least 30"): grafts counted are the body slots in use plus an Inoculated keystone; the floor is set from the count, not summed per item (kit: a count-to-floor table on the meter grant; the per-member offset of `FB-167` Q6 stays):
 
 | Grafts | 0 | 1 | 2 | 3 | 4 | 5 (4 + keystone) |
@@ -54,7 +56,7 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 | Floor | none (not a Strain carrier) | 5 | 15 | 30 (starts in Acute Resonance) | 50 (starts in Flesh-Tension) | 50 (cap) |
 
 - **Inoculated skills come only from surgery** (user 2026-11-10): each surgery teaches its organ's skill, so a unit's Inoculated skills are exactly the grafts in its body (and its keystone).
-- **The surgery process**: harvest an organ (loot; tier by source) -> at the Slab pick the organ, pay Scrap, pick the operative -> the organ decides the body slot (an Apex organ may instead go into the keystone slot) -> the operative gains the organ's skill, becomes a Strain carrier and moves up the floor table; Tier III adds +1 Calcification; the operative starts the next mission bandaged (flavour). No surgery on anyone under 18 (CANON 2.4).
+- **The surgery process**: harvest an organ (loot; tier by source) -> at the Slab pick the organ, pay Scrap, pick the operative -> the organ goes into any free body slot (an Apex organ may instead go into the keystone slot, given 3 grafts) -> the operative gains the organ's skill, becomes a Strain carrier and moves up the floor table; Tier III adds +1 Calcification; the operative starts the next mission bandaged (flavour). No surgery on anyone under 18 (CANON 2.4).
 - **Replacing a graft** (user 2026-11-10): one surgery overwrites an occupied slot: the new organ goes in, the **old organ is destroyed** (no refund), **no HP cost** (the slot stays filled), the graft count and floor stay the same, and a Tier III organ still adds +1 Calcification; so a slot can be upgraded Tier I -> II -> III. **Excision** (leaving the slot empty) keeps its -15% max HP for good and also destroys the organ.
 - **Losing a grafted unit** (user 2026-11-10): installed organs are lost with the unit. A **fallen body yields one organ** (`classes_and_skill_trees.md` "On death"): a named founder gives a unique named Apex organ, a recruit a standard class organ, added to the stash when the cell holds the field at the battle's end (a won battle, or a lost one where the fallen are recovered under the roster rules); **captured** units and **Stage V** losses leave no organ (no body), only their keepsake (PK3).
 - **Marrow-active limit** (PK1 `marrow_actives`): one marrow active per installed graft, up to the 3 actives.
