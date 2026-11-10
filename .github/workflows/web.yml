@@ -56,6 +56,21 @@ jobs:
       - name: System libraries (ALSA, for the native aegis CLI that packs the bundle)
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config
 
+      # WEBOPT1 (FB-165): a current Binaryen release for wasm-opt, not the apt package (108 re-points the
+      # __wbindgen_externrefs export at the fixed funcref table and the build does not boot). Pinned version and sha256
+      # (the release's published .sha256, 2026-11-10); to bump, change both together. tools/fc.sh skips an older wasm-opt.
+      - name: Binaryen (wasm-opt)
+        env:
+          BINARYEN_VERSION: "125"
+          BINARYEN_SHA256: 7c3bc16599c8274a04d34a504fe4be2047884f900e0e2da2f6fb9cd667183be4
+        run: |
+          archive="binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/$archive"
+          echo "$BINARYEN_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt" --version
+
       - name: Rust toolchain and the wasm32 target
         run: |
           rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown

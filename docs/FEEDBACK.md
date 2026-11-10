@@ -25,13 +25,13 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR4-5 `WEBREL1-E2` | done (FB-159; FB-160 suggestion): `shell::start_web`, async WebGL2 renderer, DPR, audio on first gesture; `web_min` passes in headless Chromium | `develop` | - |
 | PR4-6 `WEBREL1-G1` | done (FB-161; FB-162 suggestion): the game runs in a browser (web entry, bundle, `dev_tools`, `fc.sh web`, smoke 40/40, WEBREL1 6.2) | `develop` | - |
 | PR4-7 `WEBREL1-P1` | done (FB-163; FB-164 suggestion): advisory `web` CI job, `web.yml` itch.io deploy; GitHub-side acceptance observable at the next release | `develop` | - |
-| PR4-9 `WEBOPT1` | parked (FB-165 limit-blocker): the `apt` Binaryen 108 breaks the optimised build; work kept on the branch @`6df0d0e4` | `claude/optimistic-newton-ewkyqt` | Waiting on Design (FB-165). |
+| PR4-9 `WEBOPT1` | done (FB-166): pinned Binaryen version_125 on CI, `wasm-opt` version guard in `fc.sh web`; first real `wasm-opt` run at the next release PR | `develop` | Queue empty: waiting on Design (FB-166). |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
-FB-01 to FB-164 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-10). New items start at FB-165. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+FB-01 to FB-165 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-10). New items start at FB-166. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
 
 ## Test build and release build
 
@@ -123,13 +123,13 @@ advisory: it is not in the `gate` job's `needs` and not a required check, and a 
 | Touch / mobile | Runs, but the UI is built for mouse and keyboard |
 ~~~
 
-### FB-165: PR4-9 `WEBOPT1` parked: the `apt` Binaryen (108) breaks the web build
+### FB-166: PR4-9 `WEBOPT1` landed (pinned Binaryen on CI, `wasm-opt` version guard)
 
-- **Spec**: READY Section 1 row PR4-9 (`FB-164` Option A); branch `claude/optimistic-newton-ewkyqt` @`6df0d0e4` (not landed)
-- **Kind**: limit-blocker
+- **Spec**: READY Section 1 row PR4-9 (reworked by `FB-165` Option A) (the `PR4-9` squash commit on `develop`, 2026-11-10)
+- **Kind**: docs-delta
 - **Status**: open
-- **Finding**: built as specified (`binaryen` added to the `apt-get install` of the `web` job in `gate.yml` and of `web.yml`; `tools/fc.sh web` now prints `wasm-opt (<version>): <before> -> <after> bytes`; both workflows parse and pass actionlint + shellcheck). With the `apt` package (Ubuntu's `binaryen 108-1`, the version an `ubuntu-latest` runner would also install) `wasm-opt -O2` shrinks the module 13,518,498 -> 9,788,617 bytes (3.8 -> 3.5 MB gzip), but **the optimised build does not boot**: the smoke fails 25 checks with `RangeError: WebAssembly.Table.grow(): failed to grow table by 4`. Cause (`wasm-dis` before and after): the input has `(table $0 4059 4059 funcref)` and `(table $__wbindgen_externrefs 1024 anyref)` exported as `__wbindgen_externrefs`; after `-O2` the export points at `table $0`, the fixed-size funcref table, so `wasm-bindgen`'s glue grows the wrong table (a Binaryen 108 bug with reference-types modules). The acceptance ("the smoke still passes on the optimised build") cannot be met with the `apt` package. A newer Binaryen release could not be tried from the cloud container (downloading the release binary was refused). `tools/fc.sh` runs `wasm-opt` whenever it is on the PATH, so any machine with an old Binaryen gets a broken web build today too (no machine in the project has one: it was uninstalled here after the test).
-- **Recommendation**: **Option A (recommended)**: install a current Binaryen release in both workflows from its GitHub release archive (`WebAssembly/binaryen` `version_12x`, linux x86_64, pinned with a sha256 checked on a runner, like butler), plus a guard in `tools/fc.sh` that skips `wasm-opt` below a minimum version (and says so); Build verifies the smoke on the first release PR. **Option B**: build the web module without reference types (`-C target-feature=-reference-types`, so `wasm-bindgen` uses its JS heap and old `wasm-opt` works); a codegen change that needs the smoke and a size check. **Option C**: drop WEBOPT1 (the `.wasm` stays 3.8 MB gzip) and only add the version guard to `tools/fc.sh`.
+- **Finding**: (1) the `web` job of `gate.yml` and `web.yml` gain the step "Binaryen (wasm-opt)": `binaryen-version_125-x86_64-linux.tar.gz` from the `WebAssembly/binaryen` GitHub release, checked with `sha256sum -c` against `7c3bc16599c8274a04d34a504fe4be2047884f900e0e2da2f6fb9cd667183be4` (the release's own published `.sha256` file, fetched 2026-11-10; the archive itself could not be downloaded in the cloud container, so the first runner run is the real check), extracted into `$RUNNER_TEMP`, its `bin/` added to the PATH; the `apt` `binaryen` is not installed. (2) `tools/fc.sh web` runs `wasm-opt -O2` only from version 125 on (`wasm_opt_min`, the pinned CI release; lower it only after a smoke on that version): an older `wasm-opt` prints `[web] wasm-opt N is older than 125 (it breaks the build, FB-165): skipped`, a missing one `[web] wasm-opt not installed`, a run prints `[web] wasm-opt (<version number>): <before> -> <after> bytes`. Verified here: both workflows pass actionlint 1.7.12 + shellcheck; with the `apt` Binaryen 108 on the PATH the build skipped `wasm-opt` with the message and the smoke passed 40/40 (Binaryen uninstalled again after). Measured earlier with 108 (broken build): 13,518,498 -> 9,788,617 bytes (3.8 -> 3.5 MB gzip), so expect a similar saving from 125. **Observable at the next release PR**: the pinned `wasm-opt` ran, its sizes, and the smoke on the optimised build (if it fails, the job stays advisory and Build reports a new item). Gate 2748 passed, 0 failed, 4 ignored, 0 warnings.
+- **Recommendation**: `docs/workflow/web.md` (CI artifact and deploy sections): "Both workflows install a pinned Binaryen release (version_125, sha256-checked; bump `BINARYEN_VERSION` and `BINARYEN_SHA256` together) so `wasm-opt` shrinks the `.wasm`; `tools/fc.sh web` skips a `wasm-opt` older than 125 (Binaryen 108 from `apt` breaks the build)." Build section: "`wasm-opt` is used when Binaryen 125 or newer is on the PATH (Ubuntu's `apt` package is too old)." HISTORY: "2026-11-10 WEBOPT1: `apt` Binaryen 108 tried for `wasm-opt` and dropped (its `-O2` re-points the `__wbindgen_externrefs` export at the fixed funcref table; the build did not boot, FB-165); a pinned current release is used instead." STRUCTURE: none.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

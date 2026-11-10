@@ -321,9 +321,26 @@ web() {
   rm -rf "$out" && mkdir -p "$out"
   wasm-bindgen --target web --no-typescript --out-dir "$out" --out-name emberwake "$target/wasm32-unknown-unknown/release/emberwake_gui.wasm" \
     || { echo "[web] FAIL: wasm-bindgen"; status=1; return; }
+  # WEBOPT1 (FB-165): an older Binaryen breaks the module (108's -O2 re-points the __wbindgen_externrefs export at the
+  # fixed funcref table), so wasm-opt runs only from this version on: the pinned CI release; lower it only after a smoke
+  local wasm_opt_min=125 wasm_opt_ver=0
   if command -v wasm-opt >/dev/null; then
-    wasm-opt -O2 --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue \
-      -o "$out/emberwake_bg.opt.wasm" "$out/emberwake_bg.wasm" && mv "$out/emberwake_bg.opt.wasm" "$out/emberwake_bg.wasm" || echo "[web] wasm-opt failed: the unoptimised module is kept"
+    wasm_opt_ver=$(wasm-opt --version 2>/dev/null | sed -n 's/^wasm-opt version \([0-9][0-9]*\).*/\1/p')
+    wasm_opt_ver=${wasm_opt_ver:-0}
+  fi
+  if command -v wasm-opt >/dev/null && [ "$wasm_opt_ver" -lt "$wasm_opt_min" ]; then
+    echo "[web] wasm-opt $( [ "$wasm_opt_ver" -gt 0 ] && echo "$wasm_opt_ver" || echo "(unknown version)" ) is older than $wasm_opt_min (it breaks the build, FB-165): skipped, the module is not optimised"
+  elif command -v wasm-opt >/dev/null; then
+    # WEBOPT1: the module's size before and after, so the CI log shows what wasm-opt saved
+    local before; before=$(wc -c < "$out/emberwake_bg.wasm")
+    if wasm-opt -O2 --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue \
+      -o "$out/emberwake_bg.opt.wasm" "$out/emberwake_bg.wasm" && mv "$out/emberwake_bg.opt.wasm" "$out/emberwake_bg.wasm"; then
+      echo "[web] wasm-opt ($wasm_opt_ver): $before -> $(wc -c < "$out/emberwake_bg.wasm") bytes"
+    else
+      echo "[web] wasm-opt failed: the unoptimised module is kept"
+    fi
+  else
+    echo "[web] wasm-opt not installed: the module is not optimised"
   fi
   aegis bundle games/emberwake/web_bundle.json out="$out" >/dev/null || { echo "[web] FAIL: the bundle"; status=1; return; }
   cp tools/web/index.html "$out/"
