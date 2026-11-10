@@ -39,7 +39,7 @@ A `triggers` row on the Strain meter: `on: round_end`, `when: {meter: {strain: "
 
 1. **Unchecked Spasm**: a full-power strike with the unit's weapon on the nearest unit, ally or foe (ties: the lowest unit id), then `stun` next round. **New** effect `strike_nearest` (section 3.3).
 2. **Biological Collapse**: 0 AP next round (**new** `ap` key `set: 0` for the next round, section 3.4), `bleed` 3 rounds, armour rating 0 for the rest of the battle (`expose` at a magnitude that zeroes the rating, `rounds` 99).
-3. **Flesh Breach**: +1 Calcification stage. Battle cannot change a campaign track, so a **new** effect `mark` records `{unit, mark: "calcify", value: 1}` in the battle result; PK2's unit track applies it when the battle settles (section 3.5).
+3. **Flesh Breach**: +1 Calcification stage, **taking hold at once** (user 2026-11-10): the new stage's effects apply to the unit for the rest of the battle (PK2 gives each stage a slotless passive, so the battle grants that passive now), and the **new** effect `mark` records `{unit, mark: "calcify", value: 1}` in the battle result so PK2's track saves the stage when the battle settles (section 3.5). A Flesh Breach into **Stage V** turns the unit hostile on the spot (the lore's "turns hostile" fate, through the `PR5-2` phase effect `side` with `hostile_all`, reused as a trigger effect); it is lost when the battle settles.
 
 ## 3. New kit hooks for the Strain layer
 
@@ -47,7 +47,7 @@ A `triggers` row on the Strain meter: `on: round_end`, `when: {meter: {strain: "
 2. **Recoil**: the trigger effect `damage` gains `pct_of_hit` (an int percent of the damage the triggering hit dealt; `to: self`); the Aberrant Edge band holds a `hit_dealt` trigger with it. Recoil cannot down the unit below 1 HP (CANON is silent; Design default, so a crisis is the only self-kill path).
 3. **`strike_nearest`** trigger effect `{power: 1.0, then_status, then_rounds}`: a basic weapon strike resolved immediately at round end on the nearest other unit of any side, no AP, no plan; logged as `[Spasm]`.
 4. **`ap` with `set`**: `{type: ap, set: 0, rounds: 1}` sets the unit's AP to 0 for its next round's planning (the planner shows why).
-5. **`mark`** trigger effect `{mark, value}`: appends to the battle result's per-unit marks (a list the world settle reads); PK1 only records and shows it in the results screen; PK2 consumes `calcify`.
+5. **`mark`** trigger effect `{mark, value}`: appends to the battle result's per-unit marks (a list the world settle reads); PK1 records and shows it in the results screen; PK2 consumes `calcify`. With PK2, a `calcify` mark also grants the next stage's passive for the rest of the battle (and at Stage V applies `side: hostile_all`), so the stage bites in the fight.
 6. **Hazards that add Strain**: arena hazard `effect` and ground hazard `EffectSpec` gain `meter {meter, delta}` (applied only to holders of that meter).
 
 ## 4. Channel (ACTS23 5.1, all user rulings)
