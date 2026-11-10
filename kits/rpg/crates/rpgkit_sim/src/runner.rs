@@ -32,10 +32,10 @@ pub struct Def {
     pub copy_of: String,
     /// The story character (world, ref) the unit plays: it spawns with that character's extras.
     pub character: Option<(String, String)>,
-    /// PR4-1 (R3-STAGE-SIM): an enemy copy grown by `stage=` (stage > 0): its level goes through the world's raise
-    /// (`rpgkit_rules::unit::raise_level`, as `WorldRoster::entry`) from the authored level, so an explicit `spend`
-    /// gets the extra points; with `elevel=` too, that raise also covers the elevel shift. False: the level is written
-    /// as is, so an unstaged `elevel=` copy gets no extra points (AUDIT-07's routing moves `sim_golden`; parked, FB-148).
+    /// PR4-1 (R3-STAGE-SIM): an enemy copy grown by `stage=` (stage > 0) or shifted by `elevel=` (part 2, AUDIT-07,
+    /// FB-148): its level goes through the world's raise (`rpgkit_rules::unit::raise_level`, as `WorldRoster::entry`)
+    /// from the authored level, so an explicit `spend` gets the extra points (with both keys the stage grows the
+    /// elevel-shifted level). False: the level is written as is (party units, plain catalog refs).
     pub raise: bool,
 }
 

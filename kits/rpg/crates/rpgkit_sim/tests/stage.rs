@@ -1,8 +1,8 @@
 //! PR4-1 (R3-STAGE-SIM): `sim stage=N` fights a world encounter at world stage N, so an enemy grows by its unit's
 //! `growth_per_stage` exactly as the campaign's `WorldRoster` builds it (`rpgkit_world::battle::stage_level`: a hero
 //! tier or a guest never grows, capped at the top unit level); a staged enemy copy goes through
-//! `rpgkit_rules::unit::raise_level`, so an explicit `spend` gets the raised levels' points (an unstaged `elevel=`
-//! copy does not yet: AUDIT-07's routing moves `sim_golden`, parked as limit-blocker FB-148).
+//! `rpgkit_rules::unit::raise_level`, so an explicit `spend` gets the raised levels' points; an `elevel=` copy goes
+//! through the same raise (PR4-1 part 2, AUDIT-07, FB-148).
 //! Checked on a scratch world built here.
 
 use rpgkit_rules::stats::{spend_pool, MAX_LEVEL};
@@ -142,6 +142,24 @@ fn a_staged_character_with_extras_is_its_own_staged_copy() {
     let want = rpgkit_world::battle::stage_level(d.entry("units", "wolf"), i64::from(stage)) as i32;
     assert_eq!(row.level, want, "grown by the stage rule");
     assert_eq!(over.tuning.power, CHAMP_POWER, "still spawns with its extras");
+}
+
+/// PR4-1 part 2 (AUDIT-07, FB-148): an `elevel=` raise of an explicit-spend enemy spends the raised levels' points
+/// exactly as `raise_level` does in the world.
+#[test]
+fn an_elevel_raise_spends_an_explicit_spend_enemys_extra_points_like_raise_level() {
+    let d = data();
+    let a = args(0);
+    let mut r = Runner::new(&d, &a);
+    let raised = BASE + 2;
+    let enc = world::encounter(&mut r, "pit", raised, true, "vale", true).expect("the scratch encounter");
+    let (row, _) = r.spawn_row(&enc.enemies[0]).expect("the brute writes");
+    let mut want = rpgkit_data::UnitDef::from_obj(d.entry("units", "brute"));
+    rpgkit_rules::unit::raise_level(&d.cat, &mut want, raised);
+    assert_eq!(row.level, raised);
+    assert_eq!(row.spend, want.spend, "the raised levels' points as raise_level spends them");
+    assert_eq!(row.spend.values().sum::<i32>(), spend_pool(raised), "the whole pool at the raised level");
+    assert!(row.spend.get("STR").copied().unwrap_or(0) >= spend_pool(BASE), "the authored spend is kept");
 }
 
 #[test]

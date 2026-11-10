@@ -153,7 +153,7 @@ fn map_ref(r: &mut Runner, ctx: &Ctx, id: &str) -> String {
         copy += &format!("_s{}", ctx.stage);
     }
     let level = staged.unwrap_or(if ctx.shifted { ctx.level } else { json::i(e, "level", 1) as i32 });
-    let def = Def { copy_of: base_id.clone(), character: Some((ctx.world.clone(), id.to_string())), raise: staged.is_some(), ..Def::new(&json::s(e, "class_id"), level, &rpgkit_data::unit_tier(e), false) };
+    let def = Def { copy_of: base_id.clone(), character: Some((ctx.world.clone(), id.to_string())), raise: staged.is_some() || ctx.shifted, ..Def::new(&json::s(e, "class_id"), level, &rpgkit_data::unit_tier(e), false) };
     r.define(&copy, def);
     copy
 }
