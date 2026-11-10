@@ -29,7 +29,7 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 | IV | The Shakes | cannot equip two-handed weapons (bows and arbalests included); melee and bare-handed attacks pierce armour; sleeps in the Isolation Crypts (housing, PK3) |
 | V | Terminal Drift | lost (departure `lost`, cause `calcified`) when the battle settles; in battle the unit turns hostile at once (PK1 2.1) |
 
-- **Advances** (CANON 2.3, and only these): a `calcify` **mark** from a Flesh Breach (PK1; the stage takes hold from the next round, saved at settle unless undone by `unmark`); **Tier III graft surgery** (+1 at install, section 3); installing an **Inoculated keystone** (Tier III surgery, +1, Q-64).
+- **Advances** (CANON 2.3, and only these): a `calcify` **mark** from a Flesh Breach (PK1; the stage takes hold from the next round, saved at settle unless undone by `unmark`); **Tier III graft surgery** (+1 at install, section 3), the Inoculated keystone included (Q-64).
 - **Undo**: Quenched Cinder Salt and the priest's Inoculated keystone in battle (PK1 `unmark`, before settle); **bone-scraping** at the Slab after Aline's quest: -1 stage and -10% max HP for good (section 4).
 - **Kit pieces**: a member grant `forbid_hands: 2` (Stage IV: equipping refuses two-handed items; an equipped two-hander goes to the stash at settle) and `pierce_melee` (melee and bare-handed hits pierce); a member **max HP offset** (permanent, from bone-scraping and excision).
 - **Living Martyrs** (Stage IV volunteers, Q-37) and the crypts are PK3; this track gives them their counter.
@@ -37,19 +37,29 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 ## 3. Grafts: body slots (kit hook (e))
 
 - **Kit**: a second slot set, **body slots**, separate from gear (`LOADOUT_SLOTS` untouched, a new member key `body`: slot -> item id), with its own effect list (body items may grant a meter and a floor; gear still may not, `Grant::gear_ok`).
-- **Game data**: 4 slots, Cranial, Thoracic, Forearms, Visceral (CANON 2.1). A **graft** is an item of a new item type `graft` with `body_slot`, `tier` (I, II, III) and grants:
-  - its **marrow-exclusive skill** (`grant_skill`, a skill with `channel.only`, single intent, budgeted like a dual-intent Cold Steel heavy, ACTS23 5.1);
-  - the **Strain meter** (holding any graft makes the unit a Strain carrier);
-  - an **additive floor** step (`meter_floor`, body-only; default +10 per graft, per-organ in data, Q-44; floors from body items add up, capped at 50, CANON 2.2; `FB-167` Q6).
-- **Tier III** (Apex organs, for example the Titan Marrow Core) adds +1 Calcification stage at install.
-- **Inoculated keystone**: slotted in the one keystone slot by surgery (Tier III, +1 stage); while slotted the Strain floor is at least 30 ("keystones lock it at 30").
+- **Game data**: 4 slots, Cranial, Thoracic, Forearms, Visceral (CANON 2.1). A **graft** is an item of a new item type `graft` with `body_slot`, `tier` and grants: its **marrow-exclusive skill** (`grant_skill`, a skill with `channel.only`, single intent, budgeted like a dual-intent Cold Steel heavy, ACTS23 5.1) and the **Strain meter** (holding any graft makes the unit a Strain carrier).
+- **Three surgery tiers** (user 2026-11-10; they mirror the T1 / T2 / T3 skills of each class's Inoculated branch):
+
+| Tier | Organs | Teaches | Extra cost |
+| --- | --- | --- | --- |
+| I | standard organs from ordinary aberrations (Stalker Optic Nerve, Caustic Gall-Bladder) | a T1 Inoculated skill | none beyond the floor |
+| II | elite organs from elite aberrations and Inquisitors (Inquisitor Marrow Valve) | a T2 Inoculated skill | none beyond the floor |
+| III (Apex) | Apex organs from bosses and Marrow Horrors (Titan Marrow Core, a unique named organ); Aline offers Apex grafting after mission 2.4 | a T3 Inoculated skill, or the class's **Inoculated keystone** | +1 Calcification stage at install |
+
+- **The Inoculated keystone is a Tier III graft** (Q-64: there is no other way to get it): made at the Slab from an Apex organ like any graft, but installed into the one **keystone slot** instead of a body slot.
+- **The floor follows the number of grafts, steepening** (user 2026-11-10; replaces "+10 per graft" and the keystone's "at least 30"): grafts counted are the body slots in use plus an Inoculated keystone; the floor is set from the count, not summed per item (kit: a count-to-floor table on the meter grant; the per-member offset of `FB-167` Q6 stays):
+
+| Grafts | 0 | 1 | 2 | 3 | 4 | 5 (4 + keystone) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Floor | none (not a Strain carrier) | 5 | 15 | 30 (starts in Acute Resonance) | 50 (starts in Flesh-Tension) | 50 (cap) |
+
 - **Marrow-active limit** (PK1 `marrow_actives`): one marrow active per installed graft, up to the 3 actives.
 - **Per-member floor offset** for the Rock Salt flush (section 4): `floor_offset` on the member, applied to the next battle, then cleared.
 
 ## 4. Recipes: the exchange service (kit hook (f))
 
 - **Kit**: catalog kind `recipes` and an NPC service `recipe` (beside turn_in, offer, board, shop, recruit; `explore.rs:315`) shown on the SERVICES1 `ServiceScreen`. A recipe row: `id`, `name`, `npc` (who offers it), `requires` (flags, quest steps, act), `cost` (purse amounts and stash items), `target` (`member`, or `weapon` for section 7), and `effects` from a member-effect list: `install` (an item into a body slot), `remove` (out of a body slot), `track` (add to a unit track), `max_hp_pct` (permanent offset), `floor_offset`, `repair`, `reforge`, `assign_technique`, `clear_technique`, `doctrine` (a delta PK4 reads; reserved now).
-- **Game data at the Slab (Aline)**: graft surgery per organ (organ item + Scrap; Tier III also `track +1`; `doctrine` toward Flesh-Broker); **excision** (remove a graft, `max_hp_pct -15`); **Rock Salt flush** (Rock Salt, `floor_offset -10` for the next battle; toward Preservationist); **bone-scraping** (after Aline's quest; `track -1`, `max_hp_pct -10`).
+- **Game data at the Slab (Aline)**: graft surgery per organ (organ item + Scrap; Tier III, the keystone included, also `track +1`; `doctrine` toward Flesh-Broker); **excision** (remove a graft, `max_hp_pct -15`); **Rock Salt flush** (Rock Salt, `floor_offset -10` for the next battle; toward Preservationist); **bone-scraping** (after Aline's quest; `track -1`, `max_hp_pct -10`).
 - **At the Hearth (Bram)**: technique assignment (section 5), repair and reforge (section 7), all toward Preservationist.
 
 ## 5. Weapon techniques (ACTS23 5.2, user rulings)
@@ -78,7 +88,7 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 | Slice | Scope | Acceptance |
 | --- | --- | --- |
 | `PK2-S1` (Build's PR5-8) | Unit track, stage passives, `forbid_hands`, `pierce_melee`, max HP offset, the `mark` settle (with `unmark`), Stage V departure | unit tests; **0 golden diffs** (no data) |
-| `PK2-S2` (PR5-9) | Body slots, item type `graft`, additive body-only `meter_floor` (cap 50), the keystone floor 30, `floor_offset`, the marrow-active limit from grafts | unit tests; checks_golden only if a new item type joins a listed message (named) |
+| `PK2-S2` (PR5-9) | Body slots, item type `graft`, the floor from the graft count (5 / 15 / 30 / 50, the keystone counting as a graft), `floor_offset`, the marrow-active limit from grafts | unit tests; checks_golden only if a new item type joins a listed message (named) |
 | `PK2-S3` (PR5-10) | Recipe catalog and service, member effects | unit tests; 0 golden diffs |
 | `PK2-S4` (PR5-12) | Techniques per family, slots from mastery (+masterwork), Cold Steel-round gate (after PR5-4) | unit tests; 0 golden diffs |
 | `PK2-S5a` (PR5-13a) | Weapon instances behind `durability.from_act` | unit tests incl. the act-line conversion and an Act 1 save loading unchanged; **0 journey diffs** |
@@ -90,6 +100,6 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 1. Reassigning a technique slot: clearing free, assigning pays again.
 2. Durability numbers: attack 1, technique 2, dulled -50% power; per-family max to the balance lane.
 3. Loot weapons drop at full durability.
-4. Graft tiers: Tier I +10 floor; Tier II +10 floor and a stronger skill; Tier III +10 floor, the strongest skill, +1 Calcification.
+4. ~~Graft tiers +10 floor each~~: decided by the user (section 3: three organ tiers, the floor by graft count).
 5. A two-hander equipped at Stage IV goes to the stash at settle.
 6. Technique list size: 3-4 per weapon family at first.

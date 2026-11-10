@@ -79,7 +79,7 @@ master hues plus at most one dark and one light step each (computed, hand-picked
 - Gain: an Inoculated skill adds its `strain_cost` (guideline 15-35) when the action starts; hazards and eldritch attacks
   add more.
 - Decay: at round end -10 if the unit used no Inoculated action that round, a further -10 if it held Active Guard; never
-  below the dormant floor. After battle Strain resets to the floor. Grafts raise the floor (0-50).
+  below the dormant floor. After battle Strain resets to the floor. Grafts raise the floor (0-50) by how many a unit has (1: 5, 2: 15, 3: 30, 4 or more: 50; an Inoculated keystone counts as one; user 2026-11-10, `docs/sessions/PK2_GRAFTS.md` 3).
 - Caps (user 2026-10-25): Strain caps at 100 within a round and is set to 50 after a crisis (Q-62; changed from 75 by the user 2026-11-10, so crises do not chain: from 75 one more Channel round reached 100 again); the meter is a
   generic kit meter (Q-63); aberrant enemies carry it from Act 2, humans never; Act 1 has no Strain anywhere (Q-65).
   Installing an Inoculated keystone counts as Tier III surgery (+1 stage, Q-64).
