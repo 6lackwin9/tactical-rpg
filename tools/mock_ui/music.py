@@ -249,6 +249,8 @@ def main() -> None:
     ap.add_argument("--xfade", type=float, default=0.5, help="Section loop crossfade in seconds (default 0.5).")
     ap.add_argument("--gap", type=float, default=None,
                     help="Loop the whole song with this many seconds of silence after its fade-out (no overlap).")
+    ap.add_argument("--from", dest="start_s", type=float, default=0.0,
+                    help="Use the source only from this second on (skip an opening the loop should not replay).")
     ap.add_argument("--min-loop", type=float, default=60.0, help="Shortest loop to accept, in seconds (default 60).")
     ap.add_argument("--target-db", type=float, default=None, help="RMS level; default: the game tracks' median.")
     ap.add_argument("--preview", type=Path, default=None, help="Also write an MP3 of the seam to check by ear.")
@@ -256,6 +258,9 @@ def main() -> None:
     parts = [decode(p) for p in a.src]
     n = min(len(p) for p in parts)
     x = sum(p[:n] for p in parts)                              # stems of one track share its timeline
+    if a.start_s:                                              # drop a quiet opening (e.g. before the drums enter)
+        x = x[int(SR * a.start_s):]
+        print(f"  from {a.start_s:.2f} s of the source")
     mono = x.mean(1)
     target = a.target_db if a.target_db is not None else reference_rms_db()
     name = a.src[0].name if len(a.src) == 1 else " + ".join(p.stem for p in a.src)
