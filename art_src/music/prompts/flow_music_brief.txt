@@ -48,3 +48,24 @@ in the same sound as the main theme. Driving low frame drums and taiko-like hits
 struck metal and chains as percussion, a hurdy-gurdy playing a broken, faster fragment of the Scarlet Lullaby in
 D minor, short choir stabs. Tense and determined, not heroic. Steady intensity so it loops; no intro build, no
 ending. About 2 minutes.
+
+================================================================ ROUND 2 (after test 1: 1B is the main theme, 1A the credits)
+Tushar picked 1B's 16-bit sound. Lyria writes whole songs (intro and fade-out) whatever the prompt says, so prompts
+no longer ask for loops: the import tool cuts the loop. Attach the 1B track as a reference (+) where Flow Music
+accepts audio.
+
+TEST 2 (hub):
+Hub theme for Emberwake: A Scarlet Lullaby, in the same 16-bit SNES-era dark fantasy RPG sound as the attached main
+theme: sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. An underground refuge: a flooded stone
+undercroft lit by a charcoal forge, water dripping into a basin. A warm, quiet variation of the Scarlet Lullaby, the
+same sad 6/8 cradle tune in D minor, on sampled solo viola and harp over a soft low string pad, with gentle crackling
+coals and slow water drips. The only warm place in a cold city: tired, safe for now, still sad. 72 BPM. No drums.
+About 2 minutes.
+
+TEST 3 (battle):
+Battle theme for Emberwake: A Scarlet Lullaby, in the same 16-bit SNES-era dark fantasy RPG sound as the attached
+main theme: sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. Turn-based tactical fights in
+soot-black alleys and on rooftops. Driving sampled timpani and low frame drums at 120 BPM, staccato sampled low
+strings, metallic anvil and chain hits as percussion, a sampled hurdy-gurdy or reedy lead playing a faster, broken
+fragment of the Scarlet Lullaby in D minor, short choir stabs. Tense and determined, not heroic. Steady intensity
+throughout. About 2 minutes.
