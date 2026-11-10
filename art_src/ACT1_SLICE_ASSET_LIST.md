@@ -101,7 +101,7 @@ The current tracks are synthesized placeholders (`tools/gen_music.py`; `assets/a
 | Prologue tension | 0a Vane's order, the alley | new |
 | Meat Market | the walk, the Spent | new |
 | Stealth | 0b rooftops | new |
-| Battle | regular fights (0a-0c, Corvo) | have-old (kit `combat`) |
+| Battle | regular fights (0a-0c, Corvo) | **done** (`sunk_ward_combat.ogg`, the Inquisition take's bass + other stems, 48 s loop); two whole-song takes in review |
 | Escape sting | the descent through the grate | new |
 | Hub (Sluice Undercroft) | the hearth scene and hub | **done** (`sunk_ward_town.ogg`, a cover of the main theme, seed 455684) |
 | Sunk Ward exploration | the region map | new |

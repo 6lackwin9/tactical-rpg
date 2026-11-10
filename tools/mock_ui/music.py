@@ -211,6 +211,15 @@ def gap_loop(x: np.ndarray, gap_s: float, floor_db: float = -50.0):
     return np.vstack([body, np.zeros((int(SR * gap_s), 2))]), a / SR, (len(x) - b) / SR
 
 
+def onset_near(mono: np.ndarray, at: int, search_s: float = 0.3, win_s: float = 0.01) -> int:
+    """The sample, within search_s of `at`, where the level rises most (a note's attack): a clean place to begin."""
+    w = int(SR * win_s)
+    lo, hi = max(at - int(SR * search_s), w), min(at + int(SR * search_s), len(mono) - w)
+    e = np.convolve(mono[lo - w:hi + w] ** 2, np.ones(w) / w, "same")
+    rise = np.log10(e[2 * w:] + 1e-12) - np.log10(e[:-2 * w] + 1e-12)   # level just after against just before
+    return lo + int(np.argmax(rise[: hi - lo]))
+
+
 def reference_rms_db() -> float:
     levels = []
     for d in REFERENCE_TRACKS:
@@ -251,6 +260,9 @@ def main() -> None:
                     help="Loop the whole song with this many seconds of silence after its fade-out (no overlap).")
     ap.add_argument("--from", dest="start_s", type=float, default=0.0,
                     help="Use the source only from this second on (skip an opening the loop should not replay).")
+    ap.add_argument("--rotate", type=float, default=0.0,
+                    help="Start the file this many seconds into the loop, at the nearest attack (e.g. past a "
+                         "--whole overlap, so the first play does not open on the song's fading ending).")
     ap.add_argument("--min-loop", type=float, default=60.0, help="Shortest loop to accept, in seconds (default 60).")
     ap.add_argument("--target-db", type=float, default=None, help="RMS level; default: the game tracks' median.")
     ap.add_argument("--preview", type=Path, default=None, help="Also write an MP3 of the seam to check by ear.")
@@ -301,6 +313,11 @@ def main() -> None:
             k = int(SR * 8)
             encode(np.vstack([out[-k:], out[:k]]), a.preview, "mp3")
             print(f"  seam preview (8 s before the wrap, 8 s after) -> {a.preview}")
+    if a.rotate and not a.no_loop:
+        cut = onset_near(out.mean(1), int(SR * a.rotate))
+        out = np.roll(out, -cut, axis=0)                       # the loop is circular: the seam stays as it was
+        print(f"  file starts {cut / SR:.2f} s into the loop (the attack nearest {a.rotate:.2f} s), so the first "
+              f"play opens there; every later cycle runs through the seam")
     encode(out, a.out, "ogg")
     print(f"  wrote {a.out} ({len(out) / SR:.1f} s, RMS {db(rms(out)):.1f} dBFS, peak {db(np.abs(out).max()):.1f} dBFS)")
 

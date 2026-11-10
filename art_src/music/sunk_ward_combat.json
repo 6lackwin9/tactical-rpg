@@ -1,0 +1,14 @@
+{
+  "key": "sunk_ward_combat",
+  "file": "games/emberwake/assets/audio/music/sunk_ward_combat.ogg",
+  "plays": "MUSIC1 context combat for battles in the Sunk Ward (world scope sunk_ward); boss fights fall back to it until a sunk_ward_boss ships; elsewhere the kit's combat",
+  "source": "Flow Music (flowmusic.app), Compose, model Lyria 3.5: 'Sunkward Battle Theme (inquisition)', the round 4 prompt of art_src/music/prompts/flow_music_brief.txt; Split stems, bass + other kept (Tushar: the choir and drums were inconsistent)",
+  "master": "Drive image_pipeline/music/out/Sunkward Battle Theme (inquisition)_stems.zip, extracted to music/out/stems_battle_inquisition/battle_inq_{bass,other}.m4a (118.5 s)",
+  "prompt": "instrumental, 16-bit SNES-era dark fantasy RPG battle theme, gothic cathedral and inquisition, sampled pipe organ chords, low wordless monk choir chanting in unison, tolling cathedral bells, pounding timpani, low staccato string ostinato underneath, sparse and heavy, the organ and choir carry it with no busy lead melody, solemn, ominous, relentless, repeating 8-bar sections, D minor, 120 bpm",
+  "settings": "BPM 120, Length 2:00",
+  "seed": "455684 as the brief asks (not confirmed from the take)",
+  "import": "python -m tools.mock_ui.music battle_inq_bass.m4a battle_inq_other.m4a --min-loop 45 --bpm 120 --xfade 1.0 --rotate 1.0 --out games/emberwake/assets/audio/music/sunk_ward_combat.ogg",
+  "loop": "bar-locked section loop 63.45..111.44 s of the stems (24 bars at 120 BPM, 48.0 s), 1 s crossfade at the seam (waveform match 0.32); the file starts 0.84 s into the loop on an attack, so the first play skips the end of a phrase; RMS -14.6 dBFS, peak -1.0 dBFS",
+  "measured": "120 BPM; bass centroid 97 Hz, other 617 Hz (darker than the first battle take's 2,158 Hz full mix)",
+  "approved": "Tushar 2026-11-10 (by ear: ready as is, pretty good seam; asked to start the playback past the first second)"
+}
