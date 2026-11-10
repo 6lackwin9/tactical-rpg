@@ -98,6 +98,13 @@ Strain-carrying units (aberrants, and AI-driven heroes) get one AI row: open wit
 | `PK1-S2` | Section 4 kit: rule `channel` and fields, eligibility and marrow versions, the opener toggle, Channel Rest (`channel_rest`), planner rows and Fill order, deck `marrow` and the limit, tells, AI row | unit tests: the opener toggles only while nothing is planned and only for holders, and locks after the first block; a Channel round skips decay; Rest becomes Feed in a Channel round; Vent is refused when Strain is below 50 at its start and may take Strain below 50; Feed and Vent change Strain and HP by their amounts; rows offer only marrow versions after it; a dual-intent skill never gets one; cost by AP; the target rule; `rules_contract_golden` re-recorded (new ruleset fields), **0 battle and sim golden diffs** |
 | `PK1-S3` | Section 5 data and the Dojo preset; balance run (Q-67: crisis rate per battle, Inoculated dominance in short fights, Flesh-Tension as a trap) | data checks clean; a `sim` report in `FEEDBACK.md`; goldens unchanged unless a fixture reads the new rows (named) |
 
+### 6.1 Balance watch for `PK1-S3` (user 2026-11-10)
+
+- **Is Vent worth it?** Measure how often a unit Vents to dodge a crisis (and its Calcification risk) only to end the battle barely alive or wounded; the HP cost is tuned against that trade, not on its own.
+- **Is Vent too easy?** If venting makes Strain trivial, bring back a limit (once per round, or a rising HP cost per Vent in the battle).
+- **Candidate variant** if a bigger brake is wanted: a two-block Vent that removes about 30 Strain (same 50 unlock, higher HP cost).
+- **Feed under Acute Resonance**: whether the -25% healing makes Feed too weak (knobs: exempt Feed, or raise its base heal).
+
 ## 7. Fixed vs tunable (`aegis rules --contract`)
 
 Tunable: `channel_power`, `channel_cost`, `marrow_actives`, `channel_ai_edge`, `channel_rest`, the Channel basics' numbers, the Strain row's bands, decay and crisis rows (data). Locked: the opener's 0 AP / 0 block toggle that locks once a block is planned, the single-intent eligibility, the all-marrow round.
