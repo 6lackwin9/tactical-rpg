@@ -1,8 +1,20 @@
-# Web build (HTML5, GitHub Pages)
+# Web build (Aegis WebAssembly, itch.io)
 
-**Retired 2026-10-19 with the Godot build (transition step 2).** This page describes the Godot web export: the preset
-(`export_presets.cfg`) and `.github/workflows/web.yml` are gone from `main` and stay on the `legacy` branch. The Aegis
-engine has no web build yet (a WebAssembly build of `emberwake` would be a new task); deploys were already paused
+The Aegis game runs in a browser since `PR4-6` `WEBREL1-G1` (2026-11-10; spec `docs/specs/WEBREL1.md`, decision "Post-R4 queue and web release (user 2026-11-09)"). Hosting: a password-protected itch.io page; every release PR builds the web bundle in CI and the upload to itch.io happens only when the user says "deploy" (the CI job and `web.yml` come with `PR4-7` `WEBREL1-P1`).
+
+## Build, serve, smoke (Aegis)
+
+- Needs the `wasm32-unknown-unknown` target and `cargo install wasm-bindgen-cli --version 0.2.129 --locked`; `wasm-opt` is used if installed.
+- Build: `tools/fc.sh web test` (Tools menu, dev tools and the `aegisProbe()` test probe) or `tools/fc.sh web release` (no Tools, no dev keys) writes the gitignored `out/web/`: `index.html`, `emberwake.js`, `emberwake_bg.wasm`, `bundle.json`, `emberwake_1.pak` (game, kit and engine files without audio), `emberwake_2.pak` (audio, fetched while the game runs), `build.json`. The bundle list is `games/emberwake/web_bundle.json`, packed by `aegis bundle`.
+- Serve: `tools/fc.sh web serve [port]`, then open http://127.0.0.1:8000/. URL keys are the CLI's, for example `?screen=arena&encounter=goblin_skirmish&seed=3`; desktop-only keys (`port`, `headless`, `data`, `saves` and the like) are ignored with a console warning.
+- Smoke: `tools/fc.sh web test && tools/fc.sh web smoke` (Node with Playwright Chromium; not in the gate): boot to the main menu, Combat Arena to victory, New game to the region map, save, reload and Continue.
+- itch.io: upload the contents of `out/web/` as the HTML5 zip (`index.html` at the zip root); viewport 1280 x 720 with the fullscreen button; the page password set on itch.io.
+- In the browser: the main menu has no Quit (a page cannot close its tab); saves live in `localStorage` (`aegis/emberwake/...`); playtest recordings and F12 shots are off; a browser without WebGL2 shows "The game stopped: ..." instead of the game.
+
+## Godot web export (retired 2026-10-19, kept as the record)
+
+**Retired 2026-10-19 with the Godot build (transition step 2).** The rest of this page describes the Godot web export: the preset
+(`export_presets.cfg`) and `.github/workflows/web.yml` are gone from `main` and stay on the `legacy` branch. Deploys were already paused
 (decision "Web deploy paused (user 2026-10-17)"). Kept as the record of how the Godot build was published.
 
 A browser build for cross-platform testing and porting checks (user 2026-10-17). It is a release build and less debug-friendly than the desktop runner; playtesting and debugging stay on desktop.

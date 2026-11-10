@@ -63,7 +63,7 @@ The engine stays game-agnostic: nothing in `engine/` names `emberwake`; the game
 - `Shell` gains a web start path (winit `EventLoopExtWebSys` / `spawn_app`, canvas lookup by id, async `pixels` init) beside the native `run`; frame pacing on `requestAnimationFrame`.
 - Audio starts on the first user gesture; until then one-shot sounds are dropped, not queued, and the screen's wanted music track fades in at that gesture (as built, `FB-160`).
 - Keyboard and mouse map to the same `Key` / pointer events; right click (go back) needs the canvas context menu suppressed.
-- Dev keys (F6 map zoom, F7 view, F9 window size, F12 screenshot) are debug-build or dev-tools only, as on desktop.
+- Dev keys (F6 map zoom, F7 view, F9 window size, F12 screenshot) need a debug build with the dev tools (`debug_assertions` and `dev_tools`, `FB-162` Option A), as on desktop; the web test build (`--release`) therefore has no dev keys.
 
 ### 2.4 Determinism
 

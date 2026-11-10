@@ -8,6 +8,7 @@ Excluded (asked first, never applied alone): anything that cannot be undone (a p
 
 | Date | Item | What was asked | Applied (recommended option) | Where | Undo cost |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-10 | `FB-162` (dev keys on the web) | Dev keys on "debug build OR dev tools" would switch them on in desktop release builds | Option A, as built: debug build AND dev tools; the web test build has no F6/F7/F9 keys (Option B: also allow them in the web test build) | `WEBREL1.md` 2.3, READY Section 4 | low (a small follow-up adds Option B) |
 | 2026-11-10 | `FB-160` (web renderer and music) | WebGPU-first or WebGL2 only; music before the first click | Option A: WebGL2 only for this release (wgpu picks WebGPU even with no adapter); the wanted music fades in at the first gesture; a failed renderer shows an on-page message (G1) | `WEBREL1.md` section 1, 2.3, 6.2; READY `PR4-6` | low (a later engine task can add WebGPU with GL fallback) |
 | 2026-11-10 | `FB-158` (skill fold check) | Show the new fold error always, or only when the entry has no other error | Option A, as built: only when nothing else is reported (always would restate an error on 315 golden cases); ranks get schema defaults before the fold | READY Section 4 | low (Option B = re-record `checks_golden`) |
 | 2026-11-10 | `FB-157` (Quit on the web) | A page cannot close its own tab; Quit is a no-op today | Option A: the main menu hides Quit on the web (G1); web saves write directly with no temp key | `WEBREL1.md` 6.2; READY `PR4-6` | none (not built yet) |
