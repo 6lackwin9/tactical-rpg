@@ -324,3 +324,5 @@ ROLLTABLE1 (2026-11-10): `roll_table` is also a trigger effect (`rows` of `{weig
 PK1-S1 (2026-11-10): trigger effects also `strike_nearest`, `mark`, `ap` (`set`, `rounds`) and `damage` `pct_of_hit`; a `hazards` row and an arena `effect` take `meter` {meter, delta} (a holder's meter change); unit-meter bands take `heal_taken` (bands only); meter-rule effects take the new trigger effects. On `ally_hit` a `roll_table` cannot hold a `guard` (PR5-16).
 
 PK1-S2a (2026-11-10): skill fields `channel` {none, only, cost, power, effects}, `requires_meter` {meter, min}, `hp_cost_pct`; rule `channel` with ruleset fields `channel_meter`, `channel_power`, `channel_cost`, `marrow_actives`, `channel_rest`; a meter row's `skills` may raise the meter when `channel.only`.
+
+PK1-S2b (2026-11-10): the game term `marrow_mark` names a marrow version ("Name (Marrow)").
