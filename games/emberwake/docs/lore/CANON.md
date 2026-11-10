@@ -80,7 +80,7 @@ master hues plus at most one dark and one light step each (computed, hand-picked
   add more.
 - Decay: at round end -10 if the unit used no Inoculated action that round, a further -10 if it held Active Guard; never
   below the dormant floor. After battle Strain resets to the floor. Grafts raise the floor (0-50).
-- Caps (user 2026-10-25): Strain caps at 100 within a round and is set to 75 after a crisis (Q-62); the meter is a
+- Caps (user 2026-10-25): Strain caps at 100 within a round and is set to 50 after a crisis (Q-62; changed from 75 by the user 2026-11-10, so crises do not chain: from 75 one more Channel round reached 100 again); the meter is a
   generic kit meter (Q-63); aberrant enemies carry it from Act 2, humans never; Act 1 has no Strain anywhere (Q-65).
   Installing an Inoculated keystone counts as Tier III surgery (+1 stage, Q-64).
 - Crisis `[game code]` unless the kit meter's triggers can express it: 1d3, equal odds, seeded, rolled at round end:

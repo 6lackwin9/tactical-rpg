@@ -14,7 +14,7 @@ Checked on `develop` @`53962283`:
 | Gain when an action starts | `skills.meters` `[{meter, delta}]`, paid at the command's start after AP (UM2) |
 | Decay at round end: -10 unless the unit gained this round, a further -10 if it held Active Guard | `decay` rows with `unless_gained` and `if_guarded` (UM3) |
 | Floor (grafts raise it, PK2) | a passive's `meter` grant `{meter, start, floor}` (`grants.rs:144`) |
-| Cap at 100, set to 75 after a crisis | the row's `max`; rule effect `meter_set` (UM5) |
+| Cap at 100, set to 50 after a crisis (user 2026-11-10; was 75, CANON Q-62) | the row's `max`; rule effect `meter_set` (UM5) |
 | Bracket effects | `bands` with `effects` (`stat`, `resist`, `stagger_taken`, `skill_potency`, `status_potency`, `crit`) and `statuses` (UM4) |
 | Crisis at round end at 100 | a meter `triggers` row `on: round_end` with `when.meter` (held by every holder) |
 | Eldritch attacks that add Strain to the target | a skill trigger `on: hit_dealt` with the effect `meter {meter, delta, to: other}` |
@@ -35,7 +35,7 @@ Checked on `develop` @`53962283`:
 
 ### 2.1 The crisis (CANON 2.2: 1d3, equal odds, seeded, round end)
 
-A `triggers` row on the Strain meter: `on: round_end`, `when: {meter: {strain: ">= 100"}}`, effects `[roll_table (PR5-1, equal weights), meter_set strain 75]`:
+A `triggers` row on the Strain meter: `on: round_end`, `when: {meter: {strain: ">= 100"}}`, effects `[roll_table (PR5-1, equal weights), meter_set strain 50]`:
 
 1. **Unchecked Spasm**: a full-power strike with the unit's weapon on the nearest unit, ally or foe (ties: the lowest unit id), then `stun` next round. **New** effect `strike_nearest` (section 3.3).
 2. **Biological Collapse**: 0 AP next round (**new** `ap` key `set: 0` for the next round, section 3.4), `bleed` 3 rounds, armour rating 0 for the rest of the battle (`expose` at a magnitude that zeroes the rating, `rounds` 99).
