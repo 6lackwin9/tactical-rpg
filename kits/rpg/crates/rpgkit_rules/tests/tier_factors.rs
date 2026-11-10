@@ -1,9 +1,9 @@
 //! U1.2-S4, R4-1 (user 2026-11-09: one factor per tier) on a scratch catalog built here (no shipped data): the kit's
 //! tier table (`tiers.json`) holds each tier's `mult` (the formula input `tier_mult`, which replaced `tier_hp` and
-//! `tier_power`) and AI skill cap, each factor inside the user's range for its tier; a unit without a role template
-//! has max HP `round((60 + CONS x 8 + STR x 2) x tier_mult)` and attack power's base-stage multiplier `tier_mult`;
-//! derived formulas read `tier_mult` (and its deprecated aliases `tier_hp`, `tier_power`, the same value); a tier leaves
-//! an untemplated unit's stats alone (the 6..18 check reads the class row).
+//! `tier_power`, retired in PR4-2) and AI skill cap, each factor inside the user's range for its tier; a unit without a
+//! role template has max HP `round((60 + CONS x 8 + STR x 2) x tier_mult)` and attack power's base-stage multiplier
+//! `tier_mult`; derived formulas read `tier_mult` (the retired aliases `tier_hp`, `tier_power` are unknown names, read
+//! as 0); a tier leaves an untemplated unit's stats alone (the 6..18 check reads the class row).
 
 use rpgkit_data::Catalog;
 use rpgkit_rules::derived::{self, InputKind};
@@ -81,16 +81,16 @@ fn tier_mult_is_the_base_stage_multiplier() {
 }
 
 #[test]
-fn formulas_read_the_tier_factor_and_its_aliases() {
+fn formulas_read_the_tier_factor_and_not_its_retired_aliases() {
     let cat = catalog();
     for (tier, ..) in RANGES {
         let m = tier_row(tier).mult;
         let u = unit(&cat, tier);
         let b = derived::breakdown(&cat, "classic", &u, "tier_mark").expect("the row");
         let kinds: Vec<(String, InputKind, f64)> = b.inputs.iter().map(|i| (i.name.clone(), i.kind, i.value)).collect();
-        let want: Vec<(String, InputKind, f64)> = ["tier_mult", "tier_hp", "tier_power"].iter().map(|n| (n.to_string(), InputKind::Tier, m)).collect();
+        let want: Vec<(String, InputKind, f64)> = vec![("tier_mult".into(), InputKind::Tier, m), ("tier_hp".into(), InputKind::Unknown, 0.0), ("tier_power".into(), InputKind::Unknown, 0.0)];
         assert_eq!(kinds, want, "{tier}");
-        assert_eq!(b.value, roundi(m * 111.0).min(1000), "{tier}");
+        assert_eq!(b.value, roundi(m * 100.0).min(1000), "{tier}");
     }
 }
 

@@ -894,6 +894,10 @@ const NUMBER_FIELDS: [(&str, &str, i64); 4] = [("power", "base_power", 0), ("ran
 /// belongs to the skill). The loader ignores them in a family's base and band rows, its adjustable list, an item's adjust
 /// modifiers and a stored flat key; the writer stores the cleaned rows, so a resave drops them.
 pub const RETIRED_NUMBERS: [&str; 1] = ["block_cost"];
+/// PR4-2 (FB-146): item keys no longer in the schema (consumable `buff_stat`: read by nothing; a buff item grants
+/// `empower` at its `buff_pct`). The loader ignores a stored one and the writer stores the cleaned row, so a resave
+/// drops it instead of keeping it as an unknown key.
+pub const RETIRED_ITEM_KEYS: [&str; 1] = ["buff_stat"];
 
 fn is_retired_adjust(m: &Value) -> bool {
     m.as_object().is_some_and(|m| sget(m, "kind", "") == "adjust" && RETIRED_NUMBERS.contains(&sget(m, "field", "").as_str()))
@@ -994,7 +998,11 @@ fn read_items(list: &[Value], at: &str, version: i64, families: &[Dict], errors:
             Some(family) => found.push(content("items", &resolve_item(d, family))),
             None => {
                 errors.push(format!("{at}: item '{}' names the unknown family '{fam_id}'; it is kept as stored.", sget(d, "id", "")));
-                found.push(content("items", d));
+                let mut row = d.clone();
+                for k in RETIRED_ITEM_KEYS {
+                    row.shift_remove(k);
+                }
+                found.push(content("items", &row));
             }
         }
     }
@@ -1004,9 +1012,10 @@ fn read_items(list: &[Value], at: &str, version: i64, families: &[Dict], errors:
 /// ItemModifiers.resolve: the flat row of a stored entry (normalized by the caller).
 pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     let mut row = entry.clone();
-    // U3.2-S1: a stored retired key and adjust modifiers on a retired number are ignored (and so not written back)
-    for k in RETIRED_NUMBERS {
-        row.shift_remove(k);
+    // U3.2-S1: a stored retired key and adjust modifiers on a retired number are ignored (and so not written back);
+    // PR4-2: so is a retired item key
+    for k in RETIRED_NUMBERS.iter().chain(&RETIRED_ITEM_KEYS) {
+        row.shift_remove(*k);
     }
     if let Some(Value::Array(list)) = row.get_mut("modifiers") {
         list.retain(|m| !is_retired_adjust(m));

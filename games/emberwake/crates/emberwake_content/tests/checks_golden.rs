@@ -61,11 +61,26 @@ struct Case {
     fields: Vec<String>,
 }
 
-fn case_of(bases: &Dict, row: &Value) -> Case {
+/// The loader-computed skill keys (U3.2-S2 `spell_source`) the frozen catalog's rows carry and the slim bases (chosen
+/// before the key existed) lack. A family head without one would not fold with its frozen higher ranks (which have
+/// it), and the template checks of the head would be skipped; the base takes the frozen row's value (PR4-2).
+const LOADER_SKILL_KEYS: [&str; 1] = ["spell_source"];
+
+/// `view` (the frozen data; None where only the inputs matter) aligns a catalog skill base with its frozen row's
+/// loader-computed keys before the case's fields are set.
+fn case_of(bases: &Dict, row: &Value, view: Option<&View>) -> Case {
     let name = row["base"].as_str().expect("base");
     let mut parts = name.splitn(3, '|');
     let (world, kind, current) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let mut entry = bases.get(name).and_then(Value::as_object).unwrap_or_else(|| panic!("no base {name}")).clone();
+    if let Some(view) = view.filter(|_| world.is_empty() && kind == "skills") {
+        let frozen = view.get("skills", current);
+        for k in LOADER_SKILL_KEYS {
+            if let (false, Some(v)) = (entry.contains_key(k), frozen.get(k)) {
+                entry.insert(k.into(), v.clone());
+            }
+        }
+    }
     let mut fields = Vec::new();
     for (f, v) in row["set"].as_object().into_iter().flatten() {
         entry.insert(f.clone(), v.clone());
@@ -119,7 +134,7 @@ fn checks_report_their_golden() {
         let recorded: Vec<Value> = rows
             .iter()
             .map(|row| {
-                let c = case_of(&bases, row);
+                let c = case_of(&bases, row, Some(&view));
                 let (first, second) = messages(&view, &c);
                 let mut out = Map::new();
                 for k in ["base", "set", "drop"] {
@@ -140,7 +155,7 @@ fn checks_report_their_golden() {
     let mut per_kind: indexmap::IndexMap<String, (usize, usize)> = indexmap::IndexMap::new();
     let mut failures = Vec::new();
     for row in &rows {
-        let c = case_of(&bases, row);
+        let c = case_of(&bases, row, Some(&view));
         let (first, second) = messages(&view, &c);
         let (want_first, want_second) = (strings(&row["errors"]), strings(&row[second_key(&c)]));
         let label = if c.world.is_empty() { c.kind.clone() } else { format!("{} {}", c.world, c.kind) };
@@ -189,7 +204,7 @@ fn the_golden_covers_every_check_family() {
         return; // the recording test is rewriting the file; run again without RECORD
     }
     let (bases, rows) = golden();
-    let cases: Vec<(Case, &Value)> = rows.iter().map(|r| (case_of(&bases, r), r)).collect();
+    let cases: Vec<(Case, &Value)> = rows.iter().map(|r| (case_of(&bases, r, None), r)).collect();
     let covered = |world: bool, kind: &str| {
         let of_kind: Vec<&(Case, &Value)> = cases.iter().filter(|(c, _)| c.world.is_empty() != world && c.kind == kind).collect();
         let errors = of_kind.iter().any(|(_, r)| !strings(&r["errors"]).is_empty());

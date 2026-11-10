@@ -72,7 +72,7 @@ fn potion() -> ItemDef {
 }
 
 fn elixir(pct: f64) -> ItemDef {
-    item(json!({"id": format!("k_elixir_{}", roundi(pct * 100.0)), "name": "Elixir", "consumable_type": "FOCUS_INCENSE", "buff_stat": "STR", "buff_pct": pct, "duration": 2, "use_reach": 0}))
+    item(json!({"id": format!("k_elixir_{}", roundi(pct * 100.0)), "name": "Elixir", "consumable_type": "FOCUS_INCENSE", "buff_pct": pct, "duration": 2, "use_reach": 0}))
 }
 
 fn ruleset(rules: &[&str]) -> Ruleset {

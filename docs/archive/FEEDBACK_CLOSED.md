@@ -1392,3 +1392,23 @@ When `docs/FEEDBACK.md` approaches the 300-line / 25 KB doc limit, the Build Ses
   - Docs delta: engine README `aegis_content::store::manifest_key_problems`; kit README `DEFAULT_TIER` / `unit_tier`, `raise_level`, `sanitize_deck`, the roll-loop guard rule; GAME_BRIEF checks (roll-loop warning and guard, derived stat must be in the world's ruleset, overlay class-basic warning, unregistered game.json key is a problem; saved deck entries dropped on load); STRUCTURE / kit README save gates (C27) and step stream (C28) tests; HISTORY: "R4-2: tierless rows read `hero` everywhere (loot cap and sim were `standard`); saved deck entries the data disallows are dropped with a warning; roll-loop guard = set_flag + unless (AUDIT-06); frozen `timeline_kit.json` gains CLASS-BASICS rows; re-recorded `timeline_golden`, `rules_golden`, `sim_golden` (brawler runs)".
   - Follow-ups from the audit (none hold R4): AUDIT-07 (low) the sim's `elevel=` copy path (`rpgkit_sim/src/runner.rs:233`) skips `raise_level`, so the 5 explicit-`spend` rows leave points unallocated when shifted; bundle with `R3-STAGE-SEED`. AUDIT-08 (low) M1 covers `deck` only: a stale loadout family, `loadout_ranks` entry or `can_wear` failure still refuses the save (`state.rs:764`). AUDIT-09 (low, design call) `goblin_skirmish` fires only Sweep Kick of the class basics and caps at round 6/8; queue a scripted or mage-including class fight if coverage matters, and look at its cap rate. AUDIT-10 (low) the FX test builds `Act` with fixed `magic/on_self/harms` instead of `popped_impact`'s computation; share one constructor.
   - Big picture: the frozen kit is now a hand-curated fork (patched in W2-5, R4-1, R4-2); either name the whole kit-consumer golden set whenever a row edits `timeline_kit.json`, or re-freeze it from shipped data once after R4. Report the two always-lose duels apart from feel overall. The 5 explicit-`spend` rows were authored on class shares and now sit on template bases: re-author or drop the spend. `tier_hp` / `tier_power` aliases and item `buff_stat` (parsed, never read; brimstone says `CONS` while its effect is Empower) are dead weight. A `derived_stats` formula using a stat and `tier_mult` would scale a templated unit twice: add a check before the A/I silos author formulas. Branch pushes get no CI; consider CI on `claude/*` or a `Gate:` trailer rule on golden-moving commits.
+
+## Build Status rows R1 to R2 (moved 2026-11-10)
+
+| Task / Sub-block | Stage / Status | Branch / Commit | Notes |
+| --- | --- | --- | --- |
+| R1 release | released: `main` @98ab973a (PR #55, merge commit; tree = develop @f7f5cb71) | `main` | Next: Phase R1.1. |
+| R1.1-1 `AUDIT-R1b` (AUDIT-08..12) | done (FB-95) | `develop` | 3 parallel lanes + FB-94 additions; checks_golden re-recorded. |
+| R1.1-2 `C02-A` | done (FB-96) | `develop` | asset + logic lanes in parallel; phasefold re-recorded. |
+| R1.1-3 `R1-BAL` | done (FB-99, FB-100, FB-103) | `develop` | Phase R1.1 complete. |
+| READY row 14 `A2.2-S1/S2` | done (FB-102) | `develop` | - |
+| READY row 16 `A4.2-K1a` + `A3.2-S1` | done (FB-105; `field_intent` gate moved to W2-4 per FB-106) | `develop` | R2-W1 batch 1 complete. |
+| READY row 19 `I1.2-S1` | done (FB-104) | `develop` | - |
+| READY row 15 `A1.2-S1/S2` | done (FB-107) | `develop` | - |
+| READY row 17 `F1.2-S1` + `F2.2-S1` | done (FB-108) | `develop` | - |
+| READY row 18 `P1.2-S1` + `P2.2-S1` | done (FB-109) | `develop` | R2 Wave 1 complete. |
+| READY row 20 (R3-W1) | done (FB-111) | `develop` | R3 Wave 1 complete. |
+| W2-4 (R2-W2) | done (slices 1-7) | `develop` | - |
+| W2-5 (R2-W2) | done: slices 1-4 (FB-127..129, 131); open FB-128, FB-130 | `develop` | - |
+| R2-W2b CLASS-BASICS | done (FB-132, FB-134, FB-135) | `develop` | - |
+| R2 release | released: `main` @3cc73f2b ([#56](https://github.com/6lackwin9/tactical-rpg/pull/56), merge commit; tree = develop @f5c6568a) | `main` | - |

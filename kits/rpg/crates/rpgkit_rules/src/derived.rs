@@ -31,7 +31,7 @@ pub enum InputKind {
     Level,
     /// RULESET1 P1: the summed `effective_mitigation` of the unit's worn gear (`Inventory::total_flat_mitigation`).
     Gear,
-    /// The unit's tier factor (`tier_mult`; its deprecated aliases `tier_hp`, `tier_power`; the kit's tier table).
+    /// The unit's tier factor (`tier_mult`, the kit's tier table; PR4-2 retired the aliases `tier_hp`, `tier_power`).
     Tier,
     /// A key of the row's `constants`.
     Constant,
@@ -245,7 +245,7 @@ impl<'a> Eval<'a> {
         Self { cat, unit, weapon: unit.weapon_context(), done: IndexMap::new(), busy: Vec::new() }
     }
 
-    /// A formula name: a base stat, `level`, `gear_mitigation`, `tier_mult` (or an alias), a constant of the row, another row (computed whatever
+    /// A formula name: a base stat, `level`, `gear_mitigation`, `tier_mult`, a constant of the row, another row (computed whatever
     /// its rulesets), or 0.
     fn input(&mut self, d: &DerivedStatDef, name: &str) -> (InputKind, f64) {
         if STATS.contains(&name) {
@@ -257,7 +257,7 @@ impl<'a> Eval<'a> {
         if name == GEAR_MITIGATION_INPUT {
             return (InputKind::Gear, self.unit.inventory.total_flat_mitigation(Some(&self.unit.stats)) as f64);
         }
-        if rpgkit_data::is_tier_input(name) {
+        if name == rpgkit_data::TIER_MULT_INPUT {
             return (InputKind::Tier, self.unit.tier_mult);
         }
         if let Some(c) = d.constants.get(name) {
@@ -280,7 +280,7 @@ impl<'a> Eval<'a> {
         }
         let cat = self.cat;
         let marked = |n: &str| reads_stat(cat, d, n, 0);
-        d.formula.eval_marked(&marked, &mut |n, under| if under && rpgkit_data::is_tier_input(n) { 1.0 } else { self.input(d, n).1 })
+        d.formula.eval_marked(&marked, &mut |n, under| if under && n == rpgkit_data::TIER_MULT_INPUT { 1.0 } else { self.input(d, n).1 })
     }
 
     fn value_of(&mut self, d: &DerivedStatDef) -> i32 {
