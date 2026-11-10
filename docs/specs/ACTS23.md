@@ -120,7 +120,7 @@ Sub-questions under **B** (recommendations in bold):
 - **Cap: only single-intent skills get a Channel row.** A skill with two intents (`IR21` dual, 26 of 129 today) has no marrow version, so no skill ever shows in more than two rows; marrow-only skills are authored with a single intent (a content check enforces both).
 - **The Channel kit (user 2026-11-10, second follow-up; replaces the draft bullet above it):**
   1. **Grafts carry the marrow-exclusive skills**: each installed graft adds its exclusive skill to the Channel row, with no deck slot.
-  2. **Two Channel basics**, free like the other basics: one **universal marrow basic (since PK1 `.1`: the four Channel basics Surge, Hold, Vent, Feed)** (a new basic skill every Strain carrier has), and the **class role basic's marrow version**. The other universal basics (Strike, Off-hand Jab, Active Guard) get no marrow version.
+  2. **Two Channel basics**, free like the other basics: one **universal marrow basic (since PK1 `.1`: the Channel basics Hold, Vent, Feed)** (a new basic skill every Strain carrier has), and the **class role basic's marrow version**. The other universal basics (Strike, Off-hand Jab, Active Guard) get no marrow version.
   3. **The 3 actives: the player selects which are marrow** in the loadout; only the selected ones (single-intent, by the cap) show in the Channel row.
   4. **What you can pick depends on the round's first pick** (the intent rule): open from the Channel row and the round is all marrow (graft skills, the two Channel basics, the selected actives); open from any other row and the round is Cold Steel.
 - **The Channel row and how a Channel round opens (user 2026-11-10, third follow-up; refines items 1-4):**
