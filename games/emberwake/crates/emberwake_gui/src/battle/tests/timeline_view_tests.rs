@@ -292,6 +292,7 @@ fn the_view_fits_at_every_text_size() {
 /// builder), planning and during playback; the battle's view alone gives every track its portrait square
 /// (PORTRAITFX1-TL).
 #[test]
+#[cfg(feature = "dev_tools")] // WEBREL1-G1: reads a Tools screen (compiled out without dev_tools)
 fn the_battle_view_and_the_gallery_build_the_same_timeline() {
     let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
     b.tv_open = true;

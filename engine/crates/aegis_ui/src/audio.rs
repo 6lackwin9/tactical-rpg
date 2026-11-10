@@ -69,6 +69,8 @@ struct State {
     last_preview: Option<Instant>,
     cache: HashMap<String, Option<Arc<[u8]>>>,
     found: HashMap<String, bool>,
+    /// The read seam's mount count the caches were filled under (`vfs::generation`).
+    mounted: u64,
 }
 
 struct Device {
@@ -252,6 +254,7 @@ impl Audio {
 
     /// Advances the fades; tracks faded to silence stop. The shell calls it every frame.
     pub fn tick(&self) {
+        self.remounted();
         let mut st = self.state.borrow_mut();
         let now = Instant::now();
         let dt = now.duration_since(st.last_tick).as_secs_f32().min(0.25);
@@ -265,7 +268,28 @@ impl Audio {
         st.tracks.retain(|t| !(t.target == 0.0 && t.gain <= 0.0));
     }
 
-    /// The bytes of `rel`, read once (a missing or unreadable file is remembered as None).
+    /// A bundle part was mounted since the caches were filled (WEBREL1-G1: the web build's audio comes as a later part,
+    /// while the game already runs): the files remembered as missing are looked up again, and the wanted music, when
+    /// it has no track yet (its file was missing), starts now.
+    fn remounted(&self) {
+        let now = vfs::generation();
+        let wanted = {
+            let mut st = self.state.borrow_mut();
+            if st.mounted == now {
+                return;
+            }
+            st.mounted = now;
+            st.cache.retain(|_, read| read.is_some());
+            st.found.retain(|_, hit| *hit);
+            if st.tracks.iter().any(|t| t.target > 0.0) {
+                return;
+            }
+            st.wanted.take()
+        };
+        self.music(wanted.as_deref());
+    }
+
+    /// The bytes of `rel`, read once (a missing or unreadable file is remembered as None, until the next mount).
     fn bytes(&self, rel: &str) -> Option<Arc<[u8]>> {
         if let Some(hit) = self.state.borrow().cache.get(rel) {
             return hit.clone();
@@ -288,6 +312,7 @@ impl State {
             last_preview: None,
             cache: HashMap::new(),
             found: HashMap::new(),
+            mounted: vfs::generation(),
         }
     }
 }

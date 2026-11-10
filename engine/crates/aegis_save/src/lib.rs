@@ -141,6 +141,9 @@ pub fn set_locked(fmt: &Format, dir: &Path, slot: i64, on: bool) -> Result<(), S
     }
     let text = serde_json::to_string_pretty(&serde_json::json!({ "locked": locked })).unwrap_or_default();
     let (path, tmp) = (dir.join(LOCKS_FILE), dir.join(format!("{LOCKS_FILE}.fc_tmp")));
+    if st.writes_whole() {
+        return st.write(&path, text.as_bytes()).map_err(|_| format!("Can't write '{}'.", path.display()));
+    }
     if st.write(&tmp, text.as_bytes()).is_err() || st.rename(&tmp, &path).is_err() {
         let _ = st.remove_file(&tmp);
         return Err(format!("Can't write '{}'.", path.display()));
@@ -173,7 +176,9 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
     write_envelope(fmt, dir, &path_for(dir, slot), saved_at, state)
 }
 
-/// Writes `state` in the envelope to `final_path` through a temp file and a rename; problem strings, empty = written.
+/// Writes `state` in the envelope to `final_path` through a temp file and a rename (directly on a store that
+/// `writes_whole`, the web: no temp key, so a save needs only its own size in the quota); problem strings, empty =
+/// written.
 fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, state: Value) -> Vec<String> {
     let envelope = json::obj([
         ("format", fmt.tag.into()),
@@ -185,16 +190,26 @@ fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, st
     if st.create_dir_all(dir).is_err() && !st.is_dir(dir) {
         return vec![format!("Can't create the save folder '{}'.", dir.display())];
     }
+    let mut buf = Vec::new();
+    let pretty = serde_json::ser::PrettyFormatter::with_indent(b"\t");
+    let mut ser = serde_json::Serializer::with_formatter(&mut buf, pretty);
+    if serde::Serialize::serialize(&json::sorted(&Value::Object(envelope)), &mut ser).is_err() {
+        return vec![format!("Can't write '{}'.", final_path.display())];
+    }
+    if st.writes_whole() {
+        // A refused write changes nothing: the previous save stays.
+        return match st.write(final_path, &buf) {
+            Ok(()) => Vec::new(),
+            Err(_) => vec![format!("Can't write '{}'.", final_path.display())],
+        };
+    }
     let mut tmp = final_path.with_extension("json.fc_tmp");
     let mut n = 1;
     while st.exists(&tmp) {
         tmp = final_path.with_extension(format!("json.fc_tmp{n}"));
         n += 1;
     }
-    let mut buf = Vec::new();
-    let pretty = serde_json::ser::PrettyFormatter::with_indent(b"\t");
-    let mut ser = serde_json::Serializer::with_formatter(&mut buf, pretty);
-    if serde::Serialize::serialize(&json::sorted(&Value::Object(envelope)), &mut ser).is_err() || st.write(&tmp, &buf).is_err() {
+    if st.write(&tmp, &buf).is_err() {
         let _ = st.remove_file(&tmp);
         return vec![format!("Can't write '{}'.", final_path.display())];
     }

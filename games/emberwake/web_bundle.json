@@ -1,0 +1,36 @@
+{
+	"about": "WEBREL1-G1: what the web build ships (aegis bundle; tools/fc.sh web). Paths from the repository root. Part 1 is fetched before the main menu; part 2 (the audio) while the game runs.",
+	"root": "../..",
+	"name": "emberwake",
+	"exclude": [
+		"*.md",
+		"games/emberwake/data/seeds"
+	],
+	"parts": [
+		{
+			"file": "emberwake_1.pak",
+			"include": [
+				"games/emberwake/game.json",
+				"games/emberwake/tuning.json",
+				"games/emberwake/data",
+				"games/emberwake/assets",
+				"kits/rpg/kit.json",
+				"kits/rpg/assets",
+				"engine/assets"
+			],
+			"exclude": [
+				"games/emberwake/assets/audio",
+				"kits/rpg/assets/audio",
+				"engine/assets/audio"
+			]
+		},
+		{
+			"file": "emberwake_2.pak",
+			"include": [
+				"games/emberwake/assets/audio",
+				"kits/rpg/assets/audio",
+				"engine/assets/audio"
+			]
+		}
+	]
+}

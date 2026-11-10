@@ -837,11 +837,15 @@ impl BattleScreen {
 
     /// The ruleset chip of an Arena fight beyond classic (RULESET1-U, user 2026-10-29: the Scene Runner card's text);
     /// None in a world battle and in a plain classic one.
+    /// An Arena fight opens only from the dev tools (WEBREL1-G1), so a build without them has no chip.
     pub(super) fn arena_chip(&self) -> Option<String> {
         let s = self.host.session.as_ref()?;
         if self.world_mode() || s.w.ruleset.rules.is_empty() {
             return None;
         }
+        #[cfg(not(feature = "dev_tools"))]
+        return None;
+        #[cfg(feature = "dev_tools")]
         Some(crate::runner::chip_text(&s.w.ruleset.name, &self.arena_rules, &self.arena_diagonal, s.w.plan_reveal && s.w.ruleset.has(emberwake_rules::ruleset::PLAN_BADGES)))
     }
 

@@ -36,6 +36,13 @@ pub trait Store {
         self.write(to, &bytes)
     }
 
+    /// Whether one `write` replaces a file whole or not at all (WEBREL1 6.2: `localStorage.setItem` is atomic), so the
+    /// save API writes the file directly instead of a temp file and a rename, and a save needs only its own size in the
+    /// quota. False on disk, where a write cut short leaves half a file.
+    fn writes_whole(&self) -> bool {
+        false
+    }
+
     /// The file at `path` as UTF-8.
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
         String::from_utf8(self.read(path)?).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "stream did not contain valid UTF-8"))
@@ -139,6 +146,11 @@ impl<B: KeyBackend> Keys<B> {
 }
 
 impl<B: KeyBackend> Store for Keys<B> {
+    /// One `set` replaces the value whole or refuses and changes nothing.
+    fn writes_whole(&self) -> bool {
+        true
+    }
+
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
         let key = key_for(path).ok_or_else(|| outside(path))?;
         self.backend.get(&key).map(String::into_bytes).ok_or_else(|| missing(path))

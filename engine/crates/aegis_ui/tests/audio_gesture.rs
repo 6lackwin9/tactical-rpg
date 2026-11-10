@@ -24,3 +24,23 @@ fn wanted_music_survives_the_gesture() {
     a.unlock();
     assert_eq!(a.wanted_music(), None);
 }
+
+/// WEBREL1-G1: the web build's audio arrives as a later bundle part, while the game already runs. A sound looked up
+/// before it came is remembered as missing; after the next mount (`vfs::mount`, which the web start calls per part)
+/// and the shell's tick it is looked up again and found. Natively the read seam reads the disk, so the file appears on
+/// disk here and the mount only counts the generation.
+#[test]
+fn a_later_bundle_part_brings_the_sounds_remembered_missing() {
+    let dir = aegis_core::scratch::Scratch::new("audio_late_part");
+    let a = Audio::offline(Some(dir.to_path_buf()));
+    a.music(Some("music/theme.ogg"));
+    assert!(!a.has("sfx/hit.wav"), "not there yet");
+    std::fs::create_dir_all(dir.join("sfx")).unwrap();
+    std::fs::write(dir.join("sfx/hit.wav"), b"RIFF").unwrap();
+    a.tick();
+    assert!(!a.has("sfx/hit.wav"), "remembered as missing until a part is mounted");
+    aegis_core::vfs::mount(aegis_core::vfs::Table::new());
+    a.tick();
+    assert!(a.has("sfx/hit.wav"), "looked up again after the mount");
+    assert_eq!(a.wanted_music().as_deref(), Some("music/theme.ogg"), "the wanted track is still wanted");
+}

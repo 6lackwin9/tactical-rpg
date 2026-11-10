@@ -707,8 +707,12 @@ dependencies = [
  "emberwake_rules",
  "emberwake_world",
  "indexmap",
+ "js-sys",
  "png",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

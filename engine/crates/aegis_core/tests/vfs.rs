@@ -78,3 +78,31 @@ fn a_later_bundle_part_extends_the_table() {
     vfs::mount(t);
     assert!(!vfs::is_file("game/assets/audio/hit.ogg"));
 }
+
+/// WEBREL1-G1: a bundle part is the table in the pack format; it reads back as the same files, and anything that is
+/// not a whole pack is refused with the reason.
+#[test]
+fn a_bundle_part_packs_and_reads_back() {
+    let t = table();
+    let pack = t.to_pack();
+    assert_eq!(&pack[..8], vfs::PACK_MAGIC);
+    assert_eq!(u32::from_le_bytes([pack[8], pack[9], pack[10], pack[11]]) as usize, t.len());
+    let size: usize = t.iter().map(|(k, v)| 8 + k.len() + v.len()).sum();
+    assert_eq!(pack.len(), 12 + size, "magic, count, then length-prefixed keys and data");
+    let back = Table::from_pack(&pack).unwrap();
+    assert_eq!(back.iter().collect::<Vec<_>>(), t.iter().collect::<Vec<_>>());
+    assert_eq!(Table::from_pack(&Table::new().to_pack()).unwrap().len(), 0, "an empty part");
+    assert!(Table::from_pack(b"NOTAPACK\0\0\0\0").unwrap_err().contains("magic"));
+    assert!(Table::from_pack(&pack[..pack.len() - 1]).unwrap_err().contains("cut off"));
+    let mut longer = pack.clone();
+    longer.push(0);
+    assert!(Table::from_pack(&longer).unwrap_err().contains("after the last"));
+}
+
+/// Each mount counts one generation, so a reader that cached a missing file knows a later part may have brought it.
+#[test]
+fn every_mount_counts_a_generation() {
+    let before = vfs::generation();
+    vfs::mount(Table::new());
+    assert!(vfs::generation() > before);
+}

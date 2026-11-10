@@ -1028,6 +1028,23 @@ impl<G: Context> Shell<G> {
         self.cx.app.note(msg);
     }
 
+    /// The agent's `ui_tree` reply: the screen, the stack, the canvas and the top screen's widgets, state and game.
+    /// The process id only on the desktop (a page has none; `std::process::id` panics on the web).
+    fn ui_tree(&self) -> Value {
+        let cx = &self.cx;
+        let top = self.stack.last().unwrap();
+        #[allow(unused_mut)]
+        let mut out = json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": self.top_view().canvas(), "grid": top.grid().name(), "mouse": [self.mouse.0, self.mouse.1],
+            "frame": self.frames, "px": [self.gfx.canvas.w, self.gfx.canvas.h],
+            "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
+            "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))});
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            out["pid"] = json!(std::process::id());
+        }
+        out
+    }
+
     /// Agent link requests.
     fn bridge(&mut self, body: &Value) -> Value {
         self.agent = true;
@@ -1041,14 +1058,7 @@ impl<G: Context> Shell<G> {
     fn bridge_cmd(&mut self, body: &Value) -> Value {
         let cmd = body.get("cmd").and_then(Value::as_str).unwrap_or("");
         let reply = match cmd {
-            "ui_tree" => {
-                let cx = &self.cx;
-                let top = self.stack.last().unwrap();
-                json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": self.top_view().canvas(), "grid": top.grid().name(), "mouse": [self.mouse.0, self.mouse.1],
-                    "frame": self.frames, "pid": std::process::id(), "px": [self.gfx.canvas.w, self.gfx.canvas.h],
-                    "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
-                    "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))})
-            }
+            "ui_tree" => self.ui_tree(),
             "click" => {
                 let id = body.get("id").and_then(Value::as_str).unwrap_or("");
                 let infos = self.stack.last().unwrap().widgets();
@@ -1418,10 +1428,16 @@ impl<G: Context> App<G> {
         }
     }
 
-    /// The shell cannot start: the loop stops and `run` returns `e` (the web, where nothing returns: the console).
+    /// The shell cannot start or run: the loop stops and `run` returns `e`. On the web (WEBREL1 6.2), where nothing
+    /// returns, the reason goes to the console and onto the page in place of the canvas (`web::show_failure`), and
+    /// nothing is drawn any more.
     fn fail(&mut self, el: &ActiveEventLoop, e: anyhow::Error) {
         #[cfg(target_arch = "wasm32")]
-        web::report(&format!("{e:#}"));
+        {
+            web::report(&format!("{e:#}"));
+            web::show_failure(&self.canvas, &format!("{e:#}"));
+            self.shell = None;
+        }
         self.failed = Some(e);
         el.exit();
     }
@@ -1455,6 +1471,10 @@ impl<G: Context> App<G> {
             }
         }
         shell.frame();
+        #[cfg(all(target_arch = "wasm32", feature = "web_probe"))]
+        if probe::wanted() {
+            probe::publish(shell.probe_tree());
+        }
         if shell.cx.quit {
             #[cfg(not(target_arch = "wasm32"))]
             {
@@ -1594,6 +1614,84 @@ mod web {
     pub fn report(message: &str) {
         web_sys::console::error_1(&message.into());
     }
+
+    /// The element id of the failure line `show_failure` puts on the page (a page or test may style or read it).
+    pub const FAILURE_ID: &str = "aegis-failure";
+
+    /// A failure the player must see: the canvas `id` is hidden and a short line takes its place on the page ("The game
+    /// stopped: <reason>"); with no such canvas the line goes at the end of the body.
+    pub fn show_failure(id: &str, reason: &str) {
+        let Some(doc) = web_sys::window().and_then(|w| w.document()) else { return };
+        let Ok(line) = doc.create_element("div") else { return };
+        line.set_id(FAILURE_ID);
+        let _ = line.set_attribute("style", "max-width:640px;margin:40px auto;padding:16px;font:15px sans-serif;color:#eee;background:#311;border:1px solid #844");
+        line.set_text_content(Some(&format!("The game stopped: {reason}")));
+        match canvas(id) {
+            Ok(c) => {
+                let _ = c.set_attribute("style", "display:none");
+                if let Some(parent) = c.parent_node() {
+                    let _ = parent.insert_before(&line, c.next_sibling().as_ref());
+                }
+            }
+            Err(_) => {
+                if let Some(body) = doc.body() {
+                    let _ = body.append_child(&line);
+                }
+            }
+        }
+    }
+}
+
+/// The page's view of the shell for browser tests (WEBREL1-G1; cargo feature `web_probe`, the web build only; a game
+/// turns it on in its test build): the page calls `aegisProbe()` (exported to JS), which asks the shell for a snapshot
+/// at its next frame, wakes the loop and returns the latest snapshot as JSON text ("" before the first). The snapshot
+/// is the agent's `ui_tree` reply plus where the screen sits on the page (`view`: offset and scale in canvas px,
+/// `dpr`), so a test finds a widget's rectangle and clicks it with the real mouse. It reads and never acts: input
+/// still comes only from the page's keyboard and mouse.
+#[cfg(all(target_arch = "wasm32", feature = "web_probe"))]
+mod probe {
+    use super::{EventLoopProxy, Wake};
+    use std::cell::{Cell, RefCell};
+    use wasm_bindgen::prelude::wasm_bindgen;
+
+    thread_local! {
+        static WANTED: Cell<bool> = const { Cell::new(false) };
+        static LAST: RefCell<String> = const { RefCell::new(String::new()) };
+        pub(super) static PROXY: RefCell<Option<EventLoopProxy<Wake>>> = const { RefCell::new(None) };
+    }
+
+    /// The latest snapshot (JSON text, "" before the first); the next frame takes a new one.
+    #[wasm_bindgen(js_name = aegisProbe)]
+    pub fn aegis_probe() -> String {
+        WANTED.with(|w| w.set(true));
+        PROXY.with(|p| {
+            if let Some(p) = p.borrow().as_ref() {
+                let _ = p.send_event(Wake::Link);
+            }
+        });
+        LAST.with(|l| l.borrow().clone())
+    }
+
+    /// Whether the page asked for a snapshot since the last one (and clears the ask).
+    pub(super) fn wanted() -> bool {
+        WANTED.with(|w| w.replace(false))
+    }
+
+    pub(super) fn publish(snapshot: String) {
+        LAST.with(|l| *l.borrow_mut() = snapshot);
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "web_probe"))]
+impl<G: Context> Shell<G> {
+    /// `probe`'s snapshot: `ui_tree` with the view (offset and scale in canvas px) and the device pixel ratio.
+    fn probe_tree(&self) -> String {
+        let mut out = self.ui_tree();
+        let v = self.gfx.view;
+        out["view"] = json!([v.ox, v.oy, v.s]);
+        out["dpr"] = json!(self.gfx.kit.device.dpr);
+        out.to_string()
+    }
 }
 
 /// A press that counts as the player's gesture: a page may start audio only after one (`Audio::unlock`).
@@ -1674,8 +1772,9 @@ impl<G: Context> ApplicationHandler<Wake> for App<G> {
             Wake::Link => {}
             #[cfg(target_arch = "wasm32")]
             Wake::Surface(Ok(p)) => self.surface_ready(p),
+            // WEBREL1 6.2: no renderer, no frames: the loop stops and the page says why
             #[cfg(target_arch = "wasm32")]
-            Wake::Surface(Err(e)) => web::report(&format!("the renderer did not start: {e}")),
+            Wake::Surface(Err(e)) => return self.fail(_el, anyhow::anyhow!("the renderer did not start (the browser needs WebGL2): {e}")),
         }
         self.pacer.touch(Instant::now());
         if let Some(w) = &self.window {
@@ -2048,6 +2147,8 @@ pub fn start_web<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, opti
     web::canvas(canvas_id)?;
     crate::theme::reload(&mut cx);
     let el: EventLoop<Wake> = EventLoop::with_user_event().build()?;
+    #[cfg(feature = "web_probe")]
+    probe::PROXY.with(|p| *p.borrow_mut() = Some(el.create_proxy()));
     let mut app = App::new(cx, stack, options, el.create_proxy());
     app.canvas = canvas_id.to_string();
     el.spawn_app(app);

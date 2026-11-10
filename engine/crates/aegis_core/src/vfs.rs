@@ -66,6 +66,57 @@ impl Table {
         self.files.len()
     }
 
+    /// Every file as (key, bytes), in key order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &[u8])> {
+        self.files.iter().map(|(k, v)| (k.as_str(), v.as_slice()))
+    }
+
+    /// The table as one bundle part in the pack format (`PACK_MAGIC`): the magic, the file count, then per file (in key
+    /// order) the key's length, the key (UTF-8, `/`-separated), the data's length and the data; every number a
+    /// little-endian u32.
+    pub fn to_pack(&self) -> Vec<u8> {
+        let size: usize = self.files.iter().map(|(k, v)| 8 + k.len() + v.len()).sum();
+        let mut out = Vec::with_capacity(PACK_MAGIC.len() + 4 + size);
+        out.extend_from_slice(PACK_MAGIC);
+        out.extend_from_slice(&(self.files.len() as u32).to_le_bytes());
+        for (k, v) in &self.files {
+            out.extend_from_slice(&(k.len() as u32).to_le_bytes());
+            out.extend_from_slice(k.as_bytes());
+            out.extend_from_slice(&(v.len() as u32).to_le_bytes());
+            out.extend_from_slice(v);
+        }
+        out
+    }
+
+    /// A bundle part in the pack format (`to_pack`) as a table; the problem when the bytes are not one (another magic,
+    /// a cut-off file, a key that is not UTF-8, bytes after the last file).
+    pub fn from_pack(bytes: &[u8]) -> Result<Table, String> {
+        let mut at = 0usize;
+        let mut take = |n: usize, what: &str| -> Result<&[u8], String> {
+            let end = at.checked_add(n).filter(|e| *e <= bytes.len()).ok_or_else(|| format!("the pack is cut off in {what} at byte {at}"))?;
+            let s = &bytes[at..end];
+            at = end;
+            Ok(s)
+        };
+        if take(PACK_MAGIC.len(), "the magic")? != PACK_MAGIC {
+            return Err("not a bundle pack (no AEGISPK1 magic)".into());
+        }
+        let num = |b: &[u8]| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
+        let count = num(take(4, "the file count")?);
+        let mut t = Table::new();
+        for i in 0..count {
+            let klen = num(take(4, "a key length")?);
+            let k = std::str::from_utf8(take(klen, "a key")?).map_err(|_| format!("file {i}: the key is not UTF-8"))?.to_string();
+            let dlen = num(take(4, "a data length")?);
+            let data = take(dlen, &k)?.to_vec();
+            t.insert(&k, data);
+        }
+        if at != bytes.len() {
+            return Err(format!("{} byte(s) after the last of {count} files", bytes.len() - at));
+        }
+        Ok(t)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
@@ -117,12 +168,19 @@ impl Table {
     }
 }
 
+/// The first bytes of a bundle part (`Table::to_pack`, WEBREL1-G1): the format's name and version.
+pub const PACK_MAGIC: &[u8; 8] = b"AEGISPK1";
+
 #[cfg(target_arch = "wasm32")]
 static MOUNTED: std::sync::RwLock<Table> = std::sync::RwLock::new(Table::new());
 
-/// Mounts `table` as the web file tree (adding to what is mounted: a later bundle part extends it). Native reads never
-/// look at it (they read the disk), so on native this only keeps the table for nothing; the web start calls it once
-/// per fetched bundle part before the first frame.
+/// How many tables were mounted so far (`generation`).
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Mounts `table` as the web file tree (adding to what is mounted: a later bundle part extends it) and counts one
+/// generation. Native reads never look at it (they read the disk), so on native this only counts; the web start calls
+/// it once per fetched bundle part (the first before the first frame, a later one, such as the audio, while the game
+/// runs).
 pub fn mount(table: Table) {
     #[cfg(target_arch = "wasm32")]
     {
@@ -131,6 +189,13 @@ pub fn mount(table: Table) {
     }
     #[cfg(not(target_arch = "wasm32"))]
     drop(table);
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The number of `mount` calls so far: a reader that remembers a missing file (a cache) forgets it when this changes,
+/// since a later bundle part may have brought the file.
+pub fn generation() -> u64 {
+    GENERATION.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[cfg(target_arch = "wasm32")]

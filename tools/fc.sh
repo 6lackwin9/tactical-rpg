@@ -24,6 +24,12 @@
 #                                (0 pass, 1 a step failed, 2 could not start); never in the gate
 #   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
+#   tools/fc.sh web [test|release]   the web build (WEBREL1-G1) into out/web/: emberwake_gui as wasm (test: dev tools and the page
+#                                probe; release: neither), wasm-bindgen 0.2.129, wasm-opt when installed, the bundle parts
+#                                (games/emberwake/web_bundle.json, aegis bundle), index.html; prints the sizes raw and gzipped
+#   tools/fc.sh web serve [port]  serve out/web/ on http://127.0.0.1:<port>/ (default 8000; Python's http.server)
+#   tools/fc.sh web smoke         the browser smoke test of a test build in out/web/ (tools/web/smoke.js: headless Chromium through
+#                                Playwright); never in the gate
 # The Godot-only commands (parse, parse-all, arena, dojo, run, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
@@ -286,6 +292,48 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
   cargo run -q -p emberwake_host "${rel[@]}" -- scenario "$verb" "${rest[@]}" || status=$?
 }
 
+# WEBREL1-G1: the web build. The wasm build has its own target folder (target-wasm/, gitignored), so it never evicts the
+# native build; wasm-bindgen-cli must match the locked wasm-bindgen exactly (cargo install wasm-bindgen-cli --version
+# 0.2.129 --locked).
+web() {
+  local variant=${1:-test} out=out/web target=${CARGO_TARGET_DIR_WASM:-$PWD/target-wasm} feats=() f
+  case "$variant" in
+    test) ;;
+    release) feats=(--no-default-features) ;;
+    serve)
+      [ -f "$out/index.html" ] || { echo "[web] no build in $out: tools/fc.sh web test (or release) first"; status=2; return; }
+      local py port=${2:-8000}
+      py=$(command -v python3 || command -v python) || { echo "[web] serve needs Python (python3 -m http.server)"; status=2; return; }
+      echo "[web] serving $out on http://127.0.0.1:$port/ (Ctrl+C stops)"
+      "$py" -m http.server "$port" --bind 127.0.0.1 --directory "$out" || status=1
+      return ;;
+    smoke)
+      grep -q '"variant": "test"' "$out/build.json" 2>/dev/null || { echo "[web] smoke needs a test build in $out: tools/fc.sh web test first"; status=2; return; }
+      node tools/web/smoke.js "$out" || status=1
+      return ;;
+    *) echo "usage: tools/fc.sh web [test|release] | web serve [port] | web smoke"; status=2; return ;;
+  esac
+  if ! wasm-bindgen --version 2>/dev/null | grep -q " 0.2.129$"; then
+    echo "[web] needs wasm-bindgen-cli 0.2.129 (cargo install wasm-bindgen-cli --version 0.2.129 --locked)"; status=2; return
+  fi
+  CARGO_TARGET_DIR=$target cargo rustc -q -p emberwake_gui --lib --crate-type cdylib --release --target wasm32-unknown-unknown "${feats[@]}" \
+    || { echo "[web] FAIL: the wasm build"; status=1; return; }
+  rm -rf "$out" && mkdir -p "$out"
+  wasm-bindgen --target web --no-typescript --out-dir "$out" --out-name emberwake "$target/wasm32-unknown-unknown/release/emberwake_gui.wasm" \
+    || { echo "[web] FAIL: wasm-bindgen"; status=1; return; }
+  if command -v wasm-opt >/dev/null; then
+    wasm-opt -O2 --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue \
+      -o "$out/emberwake_bg.opt.wasm" "$out/emberwake_bg.wasm" && mv "$out/emberwake_bg.opt.wasm" "$out/emberwake_bg.wasm" || echo "[web] wasm-opt failed: the unoptimised module is kept"
+  fi
+  aegis bundle games/emberwake/web_bundle.json out="$out" >/dev/null || { echo "[web] FAIL: the bundle"; status=1; return; }
+  cp tools/web/index.html "$out/"
+  printf '{"variant": "%s", "commit": "%s"}\n' "$variant" "$(git rev-parse --short HEAD 2>/dev/null)" > "$out/build.json"
+  for f in "$out"/emberwake_bg.wasm "$out"/*.pak; do
+    awk -v n="$(basename "$f")" -v r="$(wc -c < "$f")" -v z="$(gzip -9c "$f" | wc -c)" 'BEGIN { printf "[web] %-22s %6.1f MB raw, %6.1f MB gzip\n", n, r / 1048576, z / 1048576 }'
+  done
+  echo "[web] ok: $variant build in $out (tools/fc.sh web serve)"
+}
+
 # Low-power laptop (CPU1): cargo runs below normal priority on the desktop, so the machine stays usable; children inherit it.
 case "$1" in gate|build|test|clippy)
   [ -z "${CI:-}" ] && [ -r /proc/$$/winpid ] && powershell -NoProfile -Command "(Get-Process -Id $(cat /proc/$$/winpid)).PriorityClass='BelowNormal'" 2>/dev/null ;;
@@ -311,6 +359,7 @@ case "$1" in
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
   scenario) scenario "${@:2}" ;;
+  web) web "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
   *) sed -n '2,20p' "$0"; status=1 ;;

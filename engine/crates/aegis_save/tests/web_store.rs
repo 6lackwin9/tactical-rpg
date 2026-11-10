@@ -79,19 +79,25 @@ fn the_save_api_runs_on_the_web_store_and_writes_the_same_bytes_as_on_disk() {
 fn a_write_past_the_quota_is_a_save_problem_and_keeps_the_previous_save() {
     let small = json!({"a": 1});
     let big = json!({"a": "x".repeat(4000)});
-    // room for the first save and its temp copy (a write goes to a temp key, then moves over the save)
-    let s = mem(1000);
+    // WEBREL1 6.2: a web save writes its key directly (no temp key), so the quota needs room for one save only
+    let one = {
+        let s = mem(0);
+        with_store(s.clone(), || assert!(write(&FMT, &web_dir(), 1, 1234, || Ok(small.clone())).is_empty()));
+        s.backend.used()
+    };
+    let s = mem(one + 8);
     let dir = web_dir();
     with_store(s.clone(), || {
         assert!(write(&FMT, &dir, 1, 1234, || Ok(small.clone())).is_empty());
+        assert!(write(&FMT, &dir, 1, 1236, || Ok(small.clone())).is_empty(), "saving over it needs no second copy's room");
         let kept = read(&dir, 1).unwrap();
         let problems = write(&FMT, &dir, 1, 1235, || Ok(big.clone()));
         assert_eq!(problems.len(), 1, "one problem, no panic: {problems:?}");
         assert!(problems[0].starts_with("Can't write"), "the save API's usual problem: {problems:?}");
         assert_eq!(read(&dir, 1).unwrap(), kept, "the previous save is kept");
     });
-    assert!(s.backend.used() <= 1000);
-    assert!(s.backend.keys().iter().all(|k| !k.contains("fc_tmp")), "the refused temp key is not left behind");
+    assert!(s.backend.used() <= one + 8);
+    assert!(s.backend.keys().iter().all(|k| !k.contains("fc_tmp")), "no temp key is ever written");
 }
 
 #[test]
