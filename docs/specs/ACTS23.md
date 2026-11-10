@@ -48,7 +48,7 @@ Status: **E** exists and is usable as-is, **P** partial, **N** none. "Data" mean
 | 23 | Final battle retry inside the dream: each attempt costs Act 3 days, the fallen return as dream-echoes (Q-21, Q-21a) | 3 | **P** | Story fight `on_lost: "retry"` rests and repeats (`story.rs:440`); no day cost, no echoes | PK6 |
 | 24 | Endings A Preservation / B Ascendancy / C Red Martyrdom gated by doctrine; the Extinguished screen | 3 | **P** | `end` kinds are `fail` and `bad_end` (`lib.rs:1065`), run-over screen `emberwake_gui/src/runover.rs`, Extinguished cards wired; no ending kind, no choice by doctrine or flags | PK7 |
 | 25 | Act 2 and Act 3 maps, missions, bestiary, bosses, recruits pool, keepsake names, loyalty missions per surviving founder (G-16) | 2-3 | **N** (docs only) | Only `sunk_ward` (Act 1) plus the sample worlds `ashlands`, `iron_reaches`, `tidewrack` | PK8 (data) |
-| 26 | Cold Steel weapon techniques: the Cold Steel mirror of grafts (user 2026-11-10, section 5.2) | 2 | **P** | An item can grant a skill (`grant_skill`, `OFFHAND1`) and weapon families have mastery levels 1-3 (Level 3 grants a skill or passive, `item_families.level3_passive`, `C02-A`); no per-character technique slots, no Hearth assignment, no Cold-Steel-only round gate | PK2 |
+| 26 | Cold Steel weapon techniques, the Cold Steel mirror of grafts, with per-weapon durability (user 2026-11-10, section 5.2) | 2 | **P** (durability **N**: no item instances) | An item can grant a skill (`grant_skill`, `OFFHAND1`) and weapon families have mastery levels 1-3 (Level 3 grants a skill or passive, `item_families.level3_passive`, `C02-A`); no per-character technique slots, no Hearth assignment, no Cold-Steel-only round gate | PK2 |
 
 ## 3. Already decided (not reopened)
 
@@ -158,7 +158,13 @@ The user's concern: next to the Channel kit, Cold Steel could feel too weak in A
 | Where you get them | Graft surgery at the Slab (Aline): organs, Tier III advances Calcification | Assigned at the Hearth (Bram): Scrap and materials; forge work moves doctrine toward Preservationist (CANON 2.6) |
 | When usable | Channel rounds only | **Cold Steel rounds only** (greyed in a Channel round) |
 | Budget | Single intent, budgeted like dual-intent Cold Steel heavies | **The same**: single intent, budgeted like dual-intent Cold Steel heavies |
-| Lasting cost | Strain floor +10 per graft; Tier III adds a Calcification stage | None beyond Scrap, materials and the commitment to a weapon family |
+| Lasting cost | Strain floor +10 per graft; Tier III adds a Calcification stage (on the unit) | **Weapon durability** (on the weapon, user 2026-11-10): technique use wears the individual weapon; it must be repaired or reforged at the Hearth for Scrap and materials |
+
+**Weapon durability (user 2026-11-10, question cards: per individual weapon item, built together with techniques):** the cost of Cold Steel sits on the weapon, not the unit, so the two branches pay in different currencies (marrow: Strain and Calcification on the operative; Cold Steel: resources on the weapon).
+
+- Each weapon is an **individual item with its own durability** (and its masterwork flag), so spares, hand-overs and reforging are per weapon.
+- Defaults for the PK2 `.1` session to confirm: technique uses wear the wielded weapon (plain Cold Steel skills do not, or much less); at 0 the weapon is **dulled**: its wielder's techniques lock until it is repaired (plain skills still work); **repair** at the Hearth restores durability for Scrap and materials, **reforge** restores it and can raise the weapon (masterwork, the +1 technique slot); numbers by the balance lane, tuned so Cold Steel does not crowd out the marrow side.
+- **New kit hook: item instances** (the largest change in PK2): today the stash and loadouts hold item ids. Default scope to confirm: instances for weapons only (main hand and off-hand weapons carry durability and the masterwork flag; armour, accessories and consumables stay plain ids), with a save format version bump and migration (old saves get full-durability instances), shop and loot rows creating instances, and the content writer unchanged (catalog rows stay templates).
 
 Kit shape for PK2: a per-member technique list keyed by weapon family (a `U3` / `U4` grant of the `grant_skill` kind, read only while that family is the active weapon and the round is Cold Steel), slot count from family mastery plus a masterwork item flag, and a Hearth assignment service (the PK5 facility or the PK2 recipe service). A content check keeps techniques single-intent and family-matched. Left to the PK2 `.1` session: the technique list per family, prices, whether reassigning a slot costs anything, and how mastery level is earned past Level 3 if needed.
 
