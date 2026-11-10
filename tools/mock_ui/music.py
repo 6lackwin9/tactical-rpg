@@ -16,6 +16,11 @@ songs (an intro build, a fade-out ending), so a looping track needs its steady m
 
 `--no-loop` keeps the whole track (credits, stingers): steps 1, 4 and 5 only.
 
+`--whole [--overlap 8]` loops the whole song instead of a section (Tushar, 2026-11-11: section cuts of a 3-minute
+menu theme sounded abrupt and lost its shape): trailing silence trimmed, the fade-out laid over the intro, so a restart
+from the file's start runs out of the fade into the opening. The engine always restarts a track at its start, so an
+intro that plays once and a loop body after it needs loop points in the engine (requested in ART_UI_STUDIO 3.9).
+
     python -m tools.mock_ui.music IN.mp3 --out games/emberwake/assets/audio/music/menu_theme.ogg --preview SEAM.mp3
 """
 from __future__ import annotations
@@ -161,6 +166,26 @@ def make_loop(x: np.ndarray, start: int, end: int, xf_s: float = 0.5) -> np.ndar
     return loop
 
 
+def whole_loop(x: np.ndarray, overlap_s: float, floor_db: float = -50.0):
+    """The whole song as a loop: trailing near-silence trimmed, then the song's last overlap_s laid over its first
+    overlap_s, so playback that restarts at the file's start runs from the fade-out straight into the intro. The head
+    keeps its own level (the intro plays as written on the first play too); the tail gets a cosine fade so it reaches
+    silence inside the overlap even when the song ends loud. Returns (loop, trimmed seconds, the tail's level in the
+    overlap relative to the head's)."""
+    mono = x.mean(1)
+    lv = block_db(mono, int(SR * 0.05))
+    loud = np.nonzero(lv > floor_db)[0]
+    n = (int(loud[-1]) + 1) * int(SR * 0.05) if len(loud) else len(x)
+    trimmed = (len(x) - n) / SR
+    L = int(SR * overlap_s)
+    if n < 3 * L:
+        raise SystemExit(f"track {n / SR:.1f} s is too short for a {overlap_s:.0f} s overlap")
+    head, tail = x[:L], x[n - L:n] * np.cos(np.linspace(0, np.pi / 2, L))[:, None]
+    loop = x[:n - L].copy()
+    loop[:L] = head + tail
+    return loop, trimmed, db(rms(tail)) - db(rms(head))
+
+
 def reference_rms_db() -> float:
     levels = []
     for d in REFERENCE_TRACKS:
@@ -190,6 +215,9 @@ def main() -> None:
     ap.add_argument("src", type=Path)
     ap.add_argument("--out", type=Path, required=True, help="Ogg file to write (e.g. assets/audio/music/<key>.ogg).")
     ap.add_argument("--no-loop", action="store_true", help="Keep the whole track (credits, stingers).")
+    ap.add_argument("--whole", action="store_true",
+                    help="Loop the whole song: its fade-out laid over its intro (menus, songs with a shape).")
+    ap.add_argument("--overlap", type=float, default=8.0, help="With --whole: seconds of overlap (default 8).")
     ap.add_argument("--min-loop", type=float, default=60.0, help="Shortest loop to accept, in seconds (default 60).")
     ap.add_argument("--target-db", type=float, default=None, help="RMS level; default: the game tracks' median.")
     ap.add_argument("--preview", type=Path, default=None, help="Also write an MP3 of the seam to check by ear.")
@@ -201,6 +229,15 @@ def main() -> None:
           f"target RMS {target:.1f} dBFS")
     if a.no_loop:
         out = loudness(x, target)
+    elif a.whole:
+        loop, trimmed, rel = whole_loop(x, a.overlap)
+        print(f"  whole-song loop: {trimmed:.1f} s of trailing silence trimmed, last {a.overlap:.0f} s laid over the "
+              f"intro (tail {rel:+.1f} dB against the intro there)")
+        out = loudness(loop, target)
+        if a.preview:
+            k = int(SR * 12)
+            encode(np.vstack([out[-k:], out[:k]]), a.preview, "mp3")
+            print(f"  wrap preview (12 s before the restart, 12 s after) -> {a.preview}")
     else:
         lo, hi, level = steady_part(mono)
         print(f"  steady part {lo / SR:.1f}..{hi / SR:.1f} s (blocks above {level:.1f} dB)")
