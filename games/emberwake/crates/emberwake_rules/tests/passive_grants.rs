@@ -223,6 +223,8 @@ fn old_apply_band(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &str) 
         status_potency: u.passive_status_potency - potency,
         stagger: u.stagger_taken[stagger..].to_vec(),
         crit,
+        // PK1-S1: the band-only heal_taken came after this reference (no shipped band holds it)
+        heal_taken: 0,
     }
 }
 

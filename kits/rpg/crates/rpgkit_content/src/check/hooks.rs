@@ -10,7 +10,8 @@ use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{GRID_H, GRID_W};
 use rpgkit_data::{
     ALLY_EVENTS, ARENA_DIRS, ARENA_EFFECT_KEYS, ARENA_HAZARD_KEYS, CLASS_OVERLAY_KEYS, DECK_EFFECT, EFFECT_TO, FORCED_FROM, FORCED_IMMUNE, FORCED_KINDS, FORCED_MOVE_KEYS, FORCED_WHEN, GRANT_UNTIL,
-    HAZARD_AT, HAZARD_PLACE_KEYS, HAZARD_SHAPES, METER_SET, METER_SET_KEYS, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, TACTICS, TRIGGER_EFFECTS, TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
+    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
+    TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
 };
 use rpgkit_rules::ruleset;
 use rpgkit_rules::status;
@@ -46,6 +47,15 @@ pub const CRIT: (i64, i64) = (1, 100);
 pub const RESIST: (i64, i64) = (1, 100);
 pub const STAGGER: (i64, i64) = (1, 100);
 pub const DAMAGE: (i64, i64) = (1, 99);
+/// PK1-S1 (PK1_CORRUPTION 3.2-3.6): an `ap` `set` and its rounds, a `damage` `pct_of_hit`, a `strike_nearest` power and
+/// its status rounds, a `mark` id's length and value, a hazard `meter` delta.
+pub const AP_SET: (i64, i64) = (0, 4);
+pub const AP_SET_ROUNDS: (i64, i64) = (1, 5);
+pub const PCT_OF_HIT: (i64, i64) = (1, 100);
+pub const STRIKE_POWER: (f64, f64) = (0.1, 3.0);
+pub const MARK_ID_MAX: usize = 24;
+pub const MARK_VALUE: (i64, i64) = (1, 99);
+pub const HAZARD_METER_DELTA: (i64, i64) = (-100, 100);
 /// AH1: arena hazards per encounter, the name and line lengths, the effect numbers.
 pub const ARENA_MAX: usize = 4;
 pub const ARENA_NAME_MAX: usize = 24;
@@ -469,6 +479,14 @@ pub fn effects_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>, met
             continue;
         };
         let t = json::s(o, "type");
+        // PK1-S1 (3.2): a share of the hit needs an event with a hit (a rider rides on one)
+        if t == "damage" && o.contains_key("pct_of_hit") && event.is_some_and(|e| !e.is_empty() && !HIT_EVENTS.contains(&e)) {
+            out.push(format!("{at}: pct_of_hit needs a hit event ({}) or a rider.", HIT_EVENTS.join(", ")));
+        }
+        // PK1-S1 (3.2): a rider's effect acts on the unit it landed on unless it says `to: self`; recoil is the holder's
+        if t == "damage" && o.contains_key("pct_of_hit") && event.is_none() && !o.contains_key("to") {
+            out.push(format!("{at}: pct_of_hit is recoil on the holder: a rider sets to: self."));
+        }
         if t == "redirect" {
             redirects += 1;
             match event {
@@ -505,7 +523,20 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
     enum_key(o, "to", &EFFECT_TO, false, at, &mut out);
     let st = json::s(o, "status");
     match t {
-        "ap" => whole_key(o, "value", AP, true, at, &mut out),
+        // PK1-S1 (3.4): `set` (with `rounds`) instead of `value`
+        "ap" if o.contains_key("set") => {
+            if o.contains_key("value") {
+                out.push(format!("{at}: ap takes value or set, not both."));
+            }
+            whole_key(o, "set", AP_SET, true, at, &mut out);
+            whole_key(o, "rounds", AP_SET_ROUNDS, false, at, &mut out);
+        }
+        "ap" => {
+            whole_key(o, "value", AP, true, at, &mut out);
+            if o.contains_key("rounds") {
+                out.push(format!("{at}: rounds goes with set."));
+            }
+        }
         "grant" => {
             if !status::buffs().contains(&st.as_str()) {
                 out.push(format!("{at}: grant '{st}' is not a buff ({}).", status::buffs().join(", ")));
@@ -561,7 +592,39 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
             whole_key(o, "value", RESIST, true, at, &mut out);
         }
         "stagger" => whole_key(o, "value", STAGGER, true, at, &mut out),
+        // PK1-S1 (3.2): a flat `value` or `pct_of_hit`, a share of the event's hit (recoil)
+        "damage" if o.contains_key("pct_of_hit") => {
+            if o.contains_key("value") {
+                out.push(format!("{at}: damage takes value or pct_of_hit, not both."));
+            }
+            whole_key(o, "pct_of_hit", PCT_OF_HIT, true, at, &mut out);
+            if json::s(o, "to") == "other" {
+                out.push(format!("{at}: pct_of_hit is recoil on the holder (to: self)."));
+            }
+        }
         "damage" => whole_key(o, "value", DAMAGE, true, at, &mut out),
+        STRIKE_NEAREST => {
+            if o.get("power").is_some_and(|p| !number_in(p, STRIKE_POWER)) {
+                out.push(format!("{at}: power must be a number {:.1}-{:.1}.", STRIKE_POWER.0, STRIKE_POWER.1));
+            }
+            let then = json::s(o, "then_status");
+            if !then.is_empty() && status::row_of(&then).is_none() {
+                out.push(format!("{at}: then_status '{then}' is not a status."));
+            }
+            if o.contains_key("then_rounds") {
+                if then.is_empty() {
+                    out.push(format!("{at}: then_rounds needs a then_status."));
+                }
+                whole_key(o, "then_rounds", GRANT_ROUNDS, false, at, &mut out);
+            }
+        }
+        MARK => {
+            let id = json::s(o, "mark");
+            if id.is_empty() || chars(&id) > MARK_ID_MAX || !aegis_content::schema::is_id(&id) {
+                out.push(format!("{at}: mark needs an id of 1-{MARK_ID_MAX} characters (a-z, 0-9, _, a letter first)."));
+            }
+            whole_key(o, "value", MARK_VALUE, false, at, &mut out);
+        }
         "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
         ROLL_TABLE => out.extend(roll_table_errors(o, ctx, at, meter_set)),
         _ => {}
@@ -673,8 +736,30 @@ pub fn tactics_errors(raw: &Value, label: &str) -> Vec<String> {
 
 // ---- Encounters (1.2, 1.6) ---------------------------------------------------------------------------------------
 
-/// AH1: an encounter's `arena_hazards` (catalog and world encounters).
-pub fn arena_hazards_errors(e: &Dict) -> Vec<String> {
+/// PK1-S1 (3.6): a hazard's `meter` {meter, delta} (an arena effect's or a ground hazard row's; `{}` or absent = none):
+/// a known unit meter (`meters` None: not known yet, the loader's pass) and a whole delta in HAZARD_METER_DELTA, not 0.
+pub fn hazard_meter_errors(raw: Option<&Value>, meters: Option<&[String]>, at: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(raw) = raw.filter(|v| !v.is_null()) else { return out };
+    let label = format!("{at} meter");
+    let Some(o) = set_object(raw, &label, &mut out) else { return out };
+    unknown_keys(o, &HAZARD_METER_KEYS, &label, &mut out);
+    let id = json::s(o, "meter");
+    if id.is_empty() {
+        out.push(format!("{label}: meter is required (a unit meter id)."));
+    } else if meters.is_some_and(|m| !m.contains(&id)) {
+        out.push(format!("{label}: unknown unit meter '{id}'."));
+    }
+    let delta = json::get(o, "delta");
+    if !whole_in(delta, HAZARD_METER_DELTA) || json::to_int(delta) == 0 {
+        out.push(format!("{label}: delta must be a whole number {}..{}, not 0.", HAZARD_METER_DELTA.0, HAZARD_METER_DELTA.1));
+    }
+    out
+}
+
+/// AH1: an encounter's `arena_hazards` (catalog and world encounters); `meters` the unit meter ids (PK1-S1: an
+/// effect's `meter`).
+pub fn arena_hazards_errors(e: &Dict, meters: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let list = list_of(json::get(e, "arena_hazards"), "Arena hazards", ARENA_MAX, &mut out);
     let max_rounds = json::to_int(json::get(e, "max_rounds")).max(1);
@@ -724,13 +809,13 @@ pub fn arena_hazards_errors(e: &Dict) -> Vec<String> {
         if blocks.is_empty() || blocks.iter().any(|x| !whole_in(x, (1, max_block))) {
             out.push(format!("{at}: blocks lists at least one whole number 1-{max_block}."));
         }
-        out.extend(arena_effect_errors(json::get(o, "effect"), &at));
+        out.extend(arena_effect_errors(json::get(o, "effect"), &at, meters));
     }
     out
 }
 
-/// AH2: an arena hazard's `effect`: at least one of damage, damage_pct, stagger, a status, a push.
-fn arena_effect_errors(raw: &Value, at: &str) -> Vec<String> {
+/// AH2: an arena hazard's `effect`: at least one of damage, damage_pct, stagger, a status, a push (PK1-S1: or a meter).
+fn arena_effect_errors(raw: &Value, at: &str, meters: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let Some(o) = raw.as_object() else {
         out.push(format!("{at}: effect must be an object."));
@@ -770,8 +855,10 @@ fn arena_effect_errors(raw: &Value, at: &str) -> Vec<String> {
             None => out.push(format!("{at}: push must be an object {{dir, tiles, collide_damage}}.")),
         }
     }
-    if !positive("damage") && !positive("damage_pct") && !positive("stagger") && st.is_empty() && push.is_none() {
-        out.push(format!("{at}: set at least one of damage, damage_pct, stagger, status or push."));
+    out.extend(hazard_meter_errors(o.get("meter"), Some(meters), &at));
+    let meter = o.get("meter").is_some_and(|m| m.as_object().is_some_and(|m| !m.is_empty()));
+    if !positive("damage") && !positive("damage_pct") && !positive("stagger") && st.is_empty() && push.is_none() && !meter {
+        out.push(format!("{at}: set at least one of damage, damage_pct, stagger, status, push or meter."));
     }
     out
 }

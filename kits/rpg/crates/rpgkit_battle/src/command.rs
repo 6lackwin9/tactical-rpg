@@ -787,6 +787,11 @@ impl Command {
                     let t = &w.units[target];
                     parts.push(format!("{dmg} damage (HP {}/{}){}", t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
                 }
+                // PK1-S1 (3.7): `unmark` takes back the target's latest mark of that id (a turned ally calms next round)
+                if !item.unmark.is_empty() {
+                    let undone = crate::mark::unmark(w, target, &item.unmark, &item.name);
+                    parts.push(if undone.is_empty() { format!("no {} to undo", item.unmark) } else { undone });
+                }
                 let t = &mut w.units[target];
                 if item.buff_pct > 0.0 {
                     // A1.2-K3 (A1 section 1, FB-55(1), C07): a buff item grants its S1 status now (`item_grant`); no
@@ -1741,7 +1746,9 @@ pub fn pouch_ids(w: &World, c: UnitId) -> Vec<String> {
 /// ItemCommand.side_problem: "" when `user` may aim `item` at `target` by side (and reach 0 = self only).
 pub fn item_side_problem(w: &World, user: UnitId, item: &ItemDef, target: Option<UnitId>) -> String {
     let Some(target) = target else { return format!("Pick a target for {}.", item.name) };
-    let foe = w.foes_of(user).contains(&target);
+    // PK1-S1 (3.7): an `unmark` item reaches a turned ally (on the party side at the battle start) from the party side
+    let turned = !item.unmark.is_empty() && w.allies.contains(&user) && crate::mark::turned_ally(w, target);
+    let foe = w.foes_of(user).contains(&target) && !turned;
     if item.aims_at_foes() {
         if !foe {
             return format!("{} is thrown at a foe.", item.name);

@@ -908,6 +908,8 @@ impl BattleMetrics {
             r.riders += 1;
         } else if f.on == "meter" {
             r.meters += 1;
+        } else if f.on == crate::trigger::AP_SET_EVENT {
+            // PK1-S1: an `ap` set taking hold is the line of a trigger counted when it fired
         } else {
             r.fired += 1;
         }

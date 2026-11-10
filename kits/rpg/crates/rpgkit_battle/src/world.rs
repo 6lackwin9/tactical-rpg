@@ -287,6 +287,8 @@ pub struct World {
     /// PHASEFX1: the units a phase `side` turned `hostile_all` and the foe / friend lists they bring (empty: the two
     /// sides as always). Only `set_side` changes it.
     pub sides: Sides,
+    /// PK1-S1 (3.5, 3.7): the battle's marks, the units an `unmark` calms and the battle-start party side (`mark`).
+    pub marks: crate::mark::Marks,
 }
 
 /// PHASEFX1 (ACTS23 PK6 hook l, engine-only): who fights whom once a phase `side` turned units `hostile_all`. A rogue
@@ -310,6 +312,15 @@ impl Sides {
     pub fn is_rogue(&self, c: UnitId) -> bool {
         self.rogues.contains(&c)
     }
+}
+
+/// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.1): a heal of `amount` (after its formula) scaled by a `heal_taken` of
+/// `pct` percent: `amount * (100 + pct) / 100`, rounded down, at least 0 (0 = unchanged).
+pub fn heal_taken(amount: i32, pct: i32) -> i32 {
+    if pct == 0 || amount <= 0 {
+        return amount;
+    }
+    (i64::from(amount) * i64::from(100 + pct)).div_euclid(100).clamp(0, i64::from(i32::MAX)) as i32
 }
 
 impl World {
@@ -396,9 +407,11 @@ impl World {
         dealt
     }
 
-    /// Combatant.heal on unit `c` (journaled; a downed unit is not healed and nothing is recorded).
+    /// Combatant.heal on unit `c` (journaled; a downed unit is not healed and nothing is recorded). PK1-S1 (3.1): every
+    /// heal source passes here after its formula, so the held bands' `heal_taken` scales it (`heal_taken`).
     pub fn heal(&mut self, c: UnitId, amount: i32) {
         if self.units[c].is_alive() {
+            let amount = heal_taken(amount, self.units[c].band_heal_taken);
             self.units[c].heal(amount);
             self.journal(c);
         }
@@ -531,6 +544,24 @@ impl World {
         if to_rogue {
             self.sides.rogues.push(c);
         }
+        self.rebuild_sides();
+        true
+    }
+
+    /// PK1-S1 (3.7): rogue `c` (a unit that started on the party side) returns to the party side (`set_side` party) at
+    /// its battle-start place among the allies: before every ally that came later in the start order and before the
+    /// units that joined since (guests), so the heroes keep their order. False when it is no rogue.
+    pub fn rejoin_party(&mut self, c: UnitId) -> bool {
+        if !self.sides.is_rogue(c) || !self.set_side(c, crate::encounter::PARTY_SIDE) {
+            return false;
+        }
+        let rank = |u: UnitId| self.marks.start_party().iter().position(|&s| s == u);
+        let mine = rank(c).unwrap_or(usize::MAX);
+        let others: Vec<UnitId> = self.allies.iter().copied().filter(|&a| a != c).collect();
+        let at = others.iter().position(|&a| rank(a).is_none_or(|r| r > mine)).unwrap_or(others.len());
+        let mut allies = others;
+        allies.insert(at, c);
+        self.allies = allies;
         self.rebuild_sides();
         true
     }

@@ -9,7 +9,8 @@
 //! level (BK5), `party_min` (BK6), the departed recruit (L1), the read keys (RK1) and the load warning (11.4).
 //! ENCOUNTER2-W (ENCOUNTER2.md 3.3): `then` capture and kill (W3), the stay flag (W2), the result lines (W4), the
 //! fates in the result (W1), and the settle in the kit runners (3.2: every runner, a fight without a battle in a row
-//! world) with the battle start's `party_min` read in the fight's world.
+//! world) with the battle start's `party_min` read in the fight's world. PK1-S1: the battle marks ride in `HeroEnd` and
+//! the settle's `marks`.
 
 use rpgkit_battle::encounter::PartyFate;
 use rpgkit_battle::round_intent::{self, RoundIntent};
@@ -208,7 +209,7 @@ fn party_of(d: &Data, members: &[(&str, i64)]) -> GameState {
 }
 
 fn end(member: &str, hp: i64, max_hp: i64, alive: bool) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None }
+    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new() }
 }
 
 #[test]
@@ -273,6 +274,39 @@ fn hero_ends_pair_the_fielded_members_with_the_allies() {
     assert_eq!(gs.party.members[1].hp_lost, ends[1].max_hp - progression::hp_after(9, ends[1].max_hp, "won"));
 }
 
+/// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.5): a member's battle marks ride in its `HeroEnd` (in the order
+/// recorded; a guest's are not a member's) and the settle lists them under `marks` ({member, mark, value}); a battle
+/// without marks adds no key.
+#[test]
+fn hero_ends_carry_the_battle_marks_into_the_settle() {
+    let d = data();
+    let ids = ["founder", "second"];
+    let members: Vec<UnitState> = ids.iter().map(|c| new_game::hero_from_character(&d, "w", c).unwrap()).collect();
+    let mut party = Vec::new();
+    let mut fielded = Vec::new();
+    for m in &members {
+        let f = roster::field_unit(&d, &gs_of(&d, "w"), m, "w").unwrap();
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone(), default_intent: f.default_intent });
+        fielded.push((m.id.clone(), f.pouch_unloaded));
+    }
+    let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", "fight"));
+    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster::new(&d, "w"), party);
+    let unmarked = Tally::of_world_fight(&s, &fielded, "w");
+    assert!(unmarked.party.iter().all(|e| e.marks.is_empty()));
+    let (second, guest) = (s.w.allies[1], s.w.allies[2]);
+    s.w.marks.record(second, "calcify", 1);
+    s.w.marks.record(guest, "calcify", 1);
+    s.w.marks.record(second, "scar", 2);
+    let tally = Tally::of_world_fight(&s, &fielded, "w");
+    assert!(tally.party[0].marks.is_empty());
+    assert_eq!(tally.party[1].marks, vec![("calcify".to_string(), 1), ("scar".to_string(), 2)]);
+    let mut gs = GameState::create(&d, "w", PartyState { members: members.clone(), ..PartyState::default() });
+    let res = battle::settle(&d, &mut gs, "w:fight", "won", Some(&tally));
+    assert_eq!(res["marks"], json!([{"member": "second", "mark": "calcify", "value": 1}, {"member": "second", "mark": "scar", "value": 2}]));
+    let mut gs = GameState::create(&d, "w", PartyState { members, ..PartyState::default() });
+    assert!(battle::settle(&d, &mut gs, "w:fight", "won", Some(&unmarked)).get("marks").is_none());
+}
+
 // ---- slice 3: the rule rows, wounded, departures, keepsakes, save keys ----------------------------------------------
 
 /// A game in world `w` at `act` (a campaign world's act; ignored without a campaign) with the founder, the second
@@ -293,7 +327,7 @@ fn cell(d: &Data, w: &str, act: i64) -> GameState {
 
 /// A fielded hero's end at `hp` of the battle max `max` with ENCOUNTER2's `fate` (0 HP = not alive).
 fn fated(member: &str, hp: i64, max: i64, fate: PartyFate) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate) }
+    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new() }
 }
 
 fn max_of(d: &Data, gs: &GameState, id: &str) -> i64 {

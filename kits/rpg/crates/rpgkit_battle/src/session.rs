@@ -342,6 +342,9 @@ pub struct Session {
     /// PHASEFX1: the enemy side as spawned (enemies, reinforcements, phase waves; `w.enemies` at the start), which the
     /// fates follow whatever side a phase `side` later puts a unit on.
     spawned_enemies: Vec<UnitId>,
+    /// PK1-S1 (3.7): the guests and the protected guests at the battle start (a calmed unit takes its start role back).
+    start_guests: Vec<UnitId>,
+    start_protected: Vec<UnitId>,
 }
 
 impl Session {
@@ -489,7 +492,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen, sides: Default::default(), marks: crate::mark::Marks::new(&(0..n_allies).collect::<Vec<_>>()) };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -543,6 +546,7 @@ impl Session {
         }
         let timeout_outcome = encounter::timeout_outcome(&def.raw);
         let script = crate::script::Script::read(&def.raw);
+        let (start_guests, start_protected) = (guests.clone(), protected.clone());
         let mut s = Session {
             def,
             w,
@@ -590,6 +594,8 @@ impl Session {
             pending: VecDeque::new(),
             swap_forms,
             spawned_enemies: enemies.clone(),
+            start_guests,
+            start_protected,
         };
         s.begin_round(1);
         s.apply_start_ap();
@@ -621,6 +627,8 @@ impl Session {
         for &c in &self.resolver.registered.clone() {
             status::roll_over(&mut self.w.units[c], self.def.ap_regen, &self.w.ruleset.numbers);
         }
+        // PK1-S1 (3.7): the turned allies an `unmark` calmed rejoin the party side before anyone plans (none without one)
+        self.calm_units(round);
         // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
         let rest = round_intent::round_start(&mut self.w);
         self.events.extend(rest);
@@ -632,6 +640,8 @@ impl Session {
         crate::arena::round_start(&mut self.w, round);
         // HOOKS1 8.1: `round_start` triggers after the refill (rule triggers; nothing in classic)
         crate::trigger::round_start(&mut self.resolver, &mut self.w);
+        // PK1-S1 (3.4): the waiting `ap` sets hold their units' AP for this planning (none without one)
+        crate::trigger::apply_ap_sets(&mut self.resolver, &mut self.w);
         if crate::trigger::on(&self.w) || crate::meter::on(&self.w) {
             self.log_triggers(round, 1);
             self.log_ground(round, 1);
@@ -1154,6 +1164,27 @@ impl Session {
         self.events.push(entry.detail.clone());
         self.encounter_lines.push((self.resolver.log.len(), format!("[Side] {}", entry.detail)));
         self.append(entry);
+    }
+
+    /// PK1-S1 (3.7): the units an `unmark` calmed rejoin the party side (`mark::round_start`, at their battle-start place
+    /// among the allies); each gets a `[Side]` EVENT cell (log::side_entry, the encounter as the actor, the calming
+    /// item as the skill).
+    /// A unit that started as a guest is a guest again (and protected again when it started protected); it stays out
+    /// of its morale group (it left it when it turned) and, on the party side, not unkillable (S1 is enemy-side only).
+    fn calm_units(&mut self, round: i32) {
+        for (c, source) in crate::mark::round_start(&mut self.w) {
+            if self.start_guests.contains(&c) && !self.guests.contains(&c) {
+                self.guests.push(c);
+            }
+            if self.start_protected.contains(&c) && !self.protected.contains(&c) {
+                self.protected.push(c);
+            }
+            self.w.unkillable.retain(|&k| k != c);
+            let entry = crate::log::side_entry(&self.w, &self.def.name, &source, &[c], encounter::PARTY_SIDE, round, 1);
+            self.events.push(entry.detail.clone());
+            self.encounter_lines.push((self.resolver.log.len(), format!("[Side] {}", entry.detail)));
+            self.append(entry);
+        }
     }
 
     /// PHASEFX1: unit `c` leaves the enemy morale (a phase `side` turned it): its key leaves its group (the group's size

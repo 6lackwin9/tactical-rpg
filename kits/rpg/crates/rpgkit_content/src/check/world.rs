@@ -543,7 +543,7 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(encounter::unkillable_problems(e));
     errors.extend(encounter::stay_behind_problems(v, e, true));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects (a ref plays as its character's base unit)
-    errors.extend(super::hooks::arena_hazards_errors(e));
+    errors.extend(super::hooks::arena_hazards_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND)));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
     errors.extend(super::hooks::deck_effect_errors(v, e, Some(w), &unit_of));
     // ENCOUNTER2-C 5.1: the scripted rounds (a ref plays as its character's base unit)

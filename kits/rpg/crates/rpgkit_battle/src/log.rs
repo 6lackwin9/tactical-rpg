@@ -316,7 +316,7 @@ pub const TRIGGER: &str = "Trigger";
 /// HOOKS1 8.1 (engine-only): the EVENT cell of one trigger effect: the holder, the trigger's source (skill, passive or
 /// item), the event as the status (`rider` for a rider, RD1), the other unit as the target, the effect's line.
 pub fn trigger_entry(w: &World, f: &crate::trigger::Fired, line: &str, round: i32, block: i32) -> Entry {
-    let what = trim(trim(trim(line, "[Trigger] "), "[Rider] "), "[Meter] ");
+    let what = trim(trim(trim(trim(line, "[Trigger] "), "[Rider] "), "[Meter] "), "[Spasm] ");
     let mut e = Entry::event(round, block, &w.units[f.holder].name, w.allies.contains(&f.holder), &f.source, TRIGGER, "TRIGGERED", what, &f.on);
     if let Some(o) = f.other {
         e.target = w.units[o].name.clone();

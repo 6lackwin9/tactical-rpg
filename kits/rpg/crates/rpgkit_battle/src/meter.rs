@@ -349,6 +349,29 @@ pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e:
     move_to(res, w, i, target, h, &what, rules, block, fired);
 }
 
+/// PK1-S1 (3.6): a hazard named `source` changes `c`'s meter by `d` (rule unit_meters; nothing when `c` holds no such
+/// meter): within the row's `delta_max` like a trigger's `meter` effect, not a skill's gain (UM3's `unless_gained` is
+/// untouched); its line is `[Meter] <unit>'s <source>: ...`, its move may cross rules. Its Fired joins the triggers the
+/// session logs next.
+pub fn from_hazard(res: &mut Resolver, w: &mut World, c: UnitId, d: &MeterDelta, source: &str, block: i32) {
+    if !on(w) || !w.units[c].is_active() {
+        return;
+    }
+    let Some(i) = find(w, c, &d.meter) else { return };
+    let Some(def) = w.cat.unit_meters.get(&d.meter).cloned() else { return };
+    let delta = d.delta.clamp(-def.delta_max, def.delta_max);
+    if delta == 0 {
+        return;
+    }
+    let h = holder(c, source, &format!("hazard:{source}"));
+    let mut fired = Fired::new(c, "meter", None, source);
+    let to = w.meters.gauges[i].value + delta;
+    move_to(res, w, i, to, &h, &format!("{}'s {} {}", w.units[c].name, def.name, delta_text(delta)), true, block, &mut fired);
+    if !fired.lines.is_empty() || !fired.moves.is_empty() {
+        res.triggers.fired.push(fired);
+    }
+}
+
 /// UM2: why `deltas` cannot be paid from the values `value_of` gives ("" = they can): a negative delta needs a value at
 /// least its size (a meter the unit does not hold counts 0): `<meter name> 0 < 1`.
 pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) -> Option<i32>) -> String {

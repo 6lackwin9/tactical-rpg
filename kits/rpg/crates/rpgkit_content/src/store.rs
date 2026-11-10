@@ -23,7 +23,8 @@ pub use aegis_content::store::Outcome;
 /// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false, `origin` system and an empty
 /// `wears_untrained` (UNITDRILL1: a row without the exception reads as before), a 0 `growth_per_stage` (W.2-S3,
 /// FB-139: a unit written before the field existed re-saves byte for byte) and an empty unit `template` (R4-1 slice 2,
-/// FB-144: the schema's `omit_default`) left out; unknown keys kept.
+/// FB-144: the schema's `omit_default`) left out, as an empty hazard `meter` (PK1-S1, a row written before it existed
+/// re-saves byte for byte); unknown keys kept.
 fn content_storage(kind: &str, full: &Dict) -> Dict {
     use crate::check::unit::{GROWTH_PER_STAGE, WEARS_UNTRAINED};
     use rpgkit_data::TEMPLATE_FIELD;
@@ -33,6 +34,7 @@ fn content_storage(kind: &str, full: &Dict) -> Dict {
             || (key == WEARS_UNTRAINED && json::strings(v).is_empty())
             || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
             || (kind == "units" && key == TEMPLATE_FIELD && gstr(v).is_empty())
+            || (kind == rpgkit_data::HAZARDS_KIND && key == "meter" && v.as_object().is_none_or(|o| o.is_empty()))
     })
 }
 
@@ -254,8 +256,10 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             // ItemModifiers.stored
             let has_hand = !sget(&row, "hand", "").is_empty();
             // A1.2-K3: a consumable's `area` (NONE) and `affects` ("") are stored only when set, so an item written
-            // before they existed re-saves byte for byte
-            let unset_shape = |k: &str, v: &Value| (k == "area" && gstr(v) == rpgkit_data::ITEM_AREA_NONE) || (k == "affects" && gstr(v).is_empty());
+            // before they existed re-saves byte for byte; PK1-S1: its `unmark` ({}) too
+            let unset_shape = |k: &str, v: &Value| {
+                (k == "area" && gstr(v) == rpgkit_data::ITEM_AREA_NONE) || (k == "affects" && gstr(v).is_empty()) || (k == "unmark" && v.as_object().is_none_or(|o| o.is_empty()))
+            };
             Ok(row.into_iter().filter(|(k, v)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand) || unset_shape(k, v))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),

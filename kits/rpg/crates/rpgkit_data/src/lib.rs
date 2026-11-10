@@ -578,6 +578,9 @@ pub struct ItemDef {
     pub affects: Option<Affects>,
     /// The most copies of the item one stack holds (`max_stack`, 1 when unset).
     pub max_stack: i32,
+    /// PK1-S1 (3.7): a consumable's `unmark` `{mark}`: the mark id whose latest entry on the target this battle it
+    /// removes ("" = none).
+    pub unmark: String,
     pub raw: Obj,
 }
 
@@ -711,6 +714,7 @@ impl ItemDef {
             area: string(o, "area", ITEM_AREA_NONE),
             affects: Affects::parse(&string(o, "affects", "")),
             max_stack: int(o, "max_stack", 1),
+            unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
             raw: o.clone(),
         }
     }
@@ -1826,9 +1830,11 @@ pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
 /// 8.2: the condition keys of a trigger's or rider's `when`.
 pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", "other_hp_below", "other_broken", "other_status", "intent", "meter"];
 /// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it). ROLLTABLE1:
-/// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects.
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 15] = [
-    ("ap", &["value", "to"]),
+/// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
+/// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
+/// `mark` join.
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 17] = [
+    ("ap", &["value", "set", "rounds", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
     ("guard", &["mitigation", "blocks", "to"]),
@@ -1838,12 +1844,24 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 15] = [
     ("crit", &["value", "to"]),
     ("resist", &["status", "value", "to"]),
     ("stagger", &["value", "to"]),
-    ("damage", &["value", "to"]),
+    ("damage", &["value", "pct_of_hit", "to"]),
     ("reveal", &["rounds"]),
     ("end_guard", &["to"]),
     ("stop_moves", &["to"]),
     (ROLL_TABLE, &["rows"]),
+    (STRIKE_NEAREST, &["power", "then_status", "then_rounds"]),
+    (MARK, &["mark", "value", "to"]),
 ];
+/// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.3): a weapon strike resolved at once on the nearest other unit of any side
+/// (no AP, no plan), then an optional status on the striker for its next rounds.
+pub const STRIKE_NEAREST: &str = "strike_nearest";
+/// PK1-S1 (3.5): a mark `{mark, value}` the battle records on a unit for the world settle (`HeroEnd::marks`).
+pub const MARK: &str = "mark";
+/// PK1-S1 (3.7): a consumable's `unmark` `{mark}` removes the target's latest mark of that id this battle; its keys.
+pub const UNMARK_KEYS: [&str; 1] = ["mark"];
+/// PK1-S1 (3.2): the events whose trigger knows the hit it answers (a `damage` effect's `pct_of_hit` reads it; a rider
+/// reads the hit it rode on).
+pub const HIT_EVENTS: [&str; 4] = ["hit_taken", "guarded_hit", "hit_dealt", "kill"];
 /// ROLLTABLE1 (ACTS23 PK1 hook a): the weighted random-table trigger effect, the keys of one of its `rows`, and a row's
 /// weight range (no `roll_table` inside a row).
 pub const ROLL_TABLE: &str = "roll_table";
@@ -1865,14 +1883,20 @@ pub const TACTICS: [&str; 3] = ["brace_after_hit", "hold_line", "flush_cover"];
 /// UM1: how a meter is shown, and the most pips a `pips` meter draws.
 pub const METER_SHOW: [&str; 3] = ["pips", "bar", "hidden"];
 pub const METER_PIPS_MAX: i32 = 10;
-/// UM4: the passive effect types a meter band's `effects` take (`crit` as the trigger effect).
-pub const BAND_EFFECTS: [&str; 6] = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency", "crit"];
+/// UM4: the passive effect types a meter band's `effects` take (`crit` as the trigger effect). PK1-S1 (3.1): the
+/// band-only `heal_taken` (a percent added to the healing the holder receives; no passive or item takes it).
+pub const BAND_EFFECTS: [&str; 7] = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency", "crit", HEAL_TAKEN];
+pub const HEAL_TAKEN: &str = "heal_taken";
 
 /// AH2: the directions of an arena hazard's push.
 pub const ARENA_DIRS: [&str; 4] = ["east", "west", "north", "south"];
 /// AH1: the keys of an arena hazard row and of its `effect`.
 pub const ARENA_HAZARD_KEYS: [&str; 9] = ["id", "name", "cells", "columns", "rows", "rounds", "blocks", "effect", "line"];
-pub const ARENA_EFFECT_KEYS: [&str; 8] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push"];
+/// PK1-S1 (3.6): `meter` `{meter, delta}` changes that unit meter of each struck holder (the ground hazard row's `meter`
+/// field too).
+pub const ARENA_EFFECT_KEYS: [&str; 9] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push", "meter"];
+/// PK1-S1 (3.6): the keys of a hazard's `meter` (arena effect and ground hazard row).
+pub const HAZARD_METER_KEYS: [&str; 2] = ["meter", "delta"];
 
 /// DU1: the phase effect that changes a unit's deck mid-battle (rule deck), and its keys.
 pub const DECK_EFFECT: &str = "deck";
@@ -1991,6 +2015,11 @@ impl MeterDelta {
     pub fn from_obj(o: &Obj) -> Self {
         Self { meter: string(o, "meter", ""), delta: int(o, "delta", 0) }
     }
+
+    /// PK1-S1 (3.6): a hazard's `meter` object (None when absent, empty, or without a meter id or a delta).
+    pub fn of_hazard(o: &Obj) -> Option<Self> {
+        obj(o, "meter").map(Self::from_obj).filter(|m| !m.meter.is_empty() && m.delta != 0)
+    }
 }
 
 /// GH1: a ground hazard row (kind `hazards`): a timed tile overlay with terrain-like numbers.
@@ -2021,6 +2050,8 @@ pub struct HazardDef {
     /// `#rrggbb`.
     pub tint: String,
     pub glyph: String,
+    /// PK1-S1 (3.6): the unit meter change it makes on each holder of that meter it acts on (None = none).
+    pub meter: Option<MeterDelta>,
 }
 
 impl HazardDef {
@@ -2044,6 +2075,7 @@ impl HazardDef {
             duration: int(o, "duration", 2),
             tint: string(o, "tint", "#808080"),
             glyph: string(o, "glyph", "*"),
+            meter: MeterDelta::of_hazard(o),
         }
     }
 }

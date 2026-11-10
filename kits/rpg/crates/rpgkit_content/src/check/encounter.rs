@@ -149,7 +149,7 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     // ENCOUNTER2-C 5.1: the scripted rounds
     errors.extend(script_problems(v, e, &|r: &str| v.get("units", r).clone()));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects
-    errors.extend(super::hooks::arena_hazards_errors(e));
+    errors.extend(super::hooks::arena_hazards_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND)));
     errors.extend(super::hooks::deck_effect_errors(v, e, None, &|r: &str| v.get("units", r).clone()));
     errors
 }

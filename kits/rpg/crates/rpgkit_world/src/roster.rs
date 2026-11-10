@@ -94,6 +94,9 @@ pub struct HeroEnd {
     pub unloaded: Vec<String>,
     /// ENCOUNTER2 S3's fate (None for a unit `party_fates` does not list).
     pub fate: Option<PartyFate>,
+    /// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.5): the marks the battle recorded on it (mark id, value), in order
+    /// (`rpgkit_battle::mark`); the settle shows them (`battle::apply`'s `marks`), PK2 consumes them.
+    pub marks: Vec<(String, i64)>,
 }
 
 /// The ends of session `s`'s fielded members: `members` (member id, unloaded pouch ids) in the order they were fielded,
@@ -113,6 +116,7 @@ pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd>
                 pouch: u.inventory.pouch.iter().map(|p| p.id.clone()).collect(),
                 unloaded: unloaded.clone(),
                 fate: fates.iter().find(|(c, _)| *c == a).map(|(_, f)| *f),
+                marks: s.w.marks.of(a).into_iter().map(|(m, v)| (m, i64::from(v))).collect(),
             }
         })
         .collect()
@@ -375,6 +379,7 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
                 pouch: m.pouch.clone(),
                 unloaded: Vec::new(),
                 fate: Some(if hp > 0 { PartyFate::Standing } else { PartyFate::Downed }),
+                marks: Vec::new(),
             })
         })
         .collect()

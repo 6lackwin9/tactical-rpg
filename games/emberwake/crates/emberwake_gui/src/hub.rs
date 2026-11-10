@@ -425,6 +425,8 @@ pub struct Results {
     /// INTENT2-U (A1.2-K3 "Stacks & Auto-Fill"): the pouch slots the post-battle auto-fill left short (`battle::apply`'s
     /// `stash_short`: "Stash short: Ash 1 of 3 Fire Flask").
     stash_short: Vec<String>,
+    /// PK1-S1 (`battle::apply`'s `marks`): the marks the battle recorded on members (member, mark, value).
+    marks: Vec<(String, String, i64)>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -460,6 +462,26 @@ pub fn party_lines(d: &emberwake_world::Data, gs: &GameState, wounded: &[String]
         out.push((format!("Wounded until the next rest: {}.", names.join(", ")), PartyLine::Wounded));
     }
     out
+}
+
+/// PK1-S1: the results' mark lines, one per marked member in first-mark order ("Ash is marked: calcify +1."); names
+/// from the members (or the departed records), the mark ids as the kit records them.
+pub fn mark_lines(d: &emberwake_world::Data, gs: &GameState, marks: &[(String, String, i64)]) -> Vec<String> {
+    let mut order: Vec<&str> = Vec::new();
+    for (m, _, _) in marks {
+        if !order.contains(&m.as_str()) {
+            order.push(m);
+        }
+    }
+    order
+        .into_iter()
+        .map(|member| {
+            let departed = || gs.party.departed.iter().rev().find(|x| x.member.id == member).map(|x| progression::display_name(d, &x.member));
+            let name = gs.party.member(member).map(|m| progression::display_name(d, m)).or_else(departed).unwrap_or_else(|| member.to_string());
+            let list: Vec<String> = marks.iter().filter(|(m, _, _)| m == member).map(|(_, k, v)| format!("{k} {}{v}", if *v > 0 { "+" } else { "" })).collect();
+            format!("{name} is marked: {}.", list.join(", "))
+        })
+        .collect()
 }
 
 /// REWARD1 section 7: the tally line ("Foes defeated: 3 of 5 (2 slain, 1 surrendered)."), the outcome's note, and the
@@ -538,6 +560,7 @@ impl Results {
             wounded: json::sget(res, "wounded"),
             departed: json::aget(res, "departed").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "life"))).collect(),
             stash_short: json::sget(res, "stash_short"),
+            marks: json::aget(res, "marks").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "mark"), json::i(x, "value", 0))).collect(),
             w: Vec::new(),
         }
     }
@@ -611,6 +634,11 @@ impl Screen<GameCx> for Results {
             ui.p.text(24.0, y as f32, text, BODY + 1.0, th().dim);
             y += line;
         }
+        // PK1-S1: the marks the battle left on members
+        for text in mark_lines(&d, &gs, &self.marks) {
+            ui.p.text(24.0, y as f32, &text, BODY + 1.0, th().foe);
+            y += line;
+        }
         let mut prompt = false;
         for m in &gs.party.members {
             let Some(a) = self.award.get(&m.id).and_then(Value::as_object) else { continue };
@@ -657,7 +685,12 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short})
+        let mut out = json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed, "stash_short": self.stash_short});
+        // PK1-S1: only when the battle left marks (the state of a battle without them reads as before)
+        if !self.marks.is_empty() {
+            out["marks"] = json!(self.marks.iter().map(|(m, k, v)| json!({"member": m, "mark": k, "value": v})).collect::<Vec<_>>());
+        }
+        out
     }
     widget_plumbing!();
 }
@@ -741,6 +774,26 @@ mod tests {
         assert_clean(&mut r, &mut cx, "results with a stash short line");
         let none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
         assert!(none.stash_short.is_empty());
+    }
+
+    /// PK1-S1: the results draw one mark line per marked member (`battle::apply`'s `marks`) after the stash lines, and
+    /// the state lists them; no key, no line and no state key.
+    #[test]
+    fn the_results_draw_the_battle_marks() {
+        let mut cx = game_cx();
+        let member = cx.gs().party.members[0].id.clone();
+        let name = progression::display_name(&cx.data, &cx.gs().party.members[0]);
+        let marks = json!([{"member": member, "mark": "calcify", "value": 1}, {"member": member, "mark": "scar", "value": 2}]);
+        let res = json::obj([("ok", json!(true)), ("stash_short", json!(["Stash short: x"])), ("marks", marks.clone())]);
+        let mut r = Results::new(&res, "won", &Dict::new());
+        let t = texts(&frame(&mut r, &mut cx, &mut gfx(), 1.0));
+        let line = format!("{name} is marked: calcify +1, scar +2.");
+        let at = |s: &str| t.iter().position(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        assert!(at("Stash short: x") < at(&line), "after the stash lines");
+        assert_eq!(r.state(&cx)["marks"], marks);
+        assert_clean(&mut r, &mut cx, "results with marks");
+        let none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
+        assert!(none.state(&cx).get("marks").is_none());
     }
 
     /// A game whose party has at least `n` members (copies of the first under new ids, test-only members).
