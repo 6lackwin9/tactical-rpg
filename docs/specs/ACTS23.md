@@ -134,10 +134,10 @@ Sub-questions under **B** (recommendations in bold):
   4. **Keystone**: it keeps its own deck slot and is not one of the 4 graft slots (the user left this open; with no Channel row the row size no longer matters, so the deck shape decides).
   5. A round that does not start with the opener is Cold Steel; enemies that carry Strain use the opener the same way (AI row).
 - **Answers to the open points (user 2026-11-10, fifth follow-up):**
-  1. **A marrow-enabled skill keeps its Cold Steel version**: entering a Channel round switches it from Cold Steel to marrow, leaving it switches back. The theme by tier (branch tiers T1-T3, `classes_and_skill_trees.md`; reading of the user's words to confirm): **tier 1 skills switch** between Cold Steel and marrow; **tier 2 skills are Cold Steel heavies** with no marrow version; the **dedicated marrow skills** (the graft skills) are usually stronger versions of regular skills.
+  1. **A marrow-enabled skill keeps its Cold Steel version**: entering a Channel round switches it from Cold Steel to marrow, leaving it switches back. The theme by intent count (user's correction: "1 in 10 / 2 in 10" meant one intent / two intents): **single-intent skills switch** between Cold Steel and marrow; **dual-intent skills are the Cold Steel heavies** with no marrow version (the cap above); the **dedicated marrow skills** (the graft skills) are usually stronger versions of regular skills.
   2. **How many actives may be marrow depends on the graft level** (more or higher-tier grafts allow more marrow actives); numbers to settle in the PK1 `.1` session.
   3. **No -1 AP**: a marrow version keeps the Cold Steel AP cost and gets enough power instead (balance tuning).
-- **Still open for the PK1 `.1` session:** the marrow-active limit per graft level; the default package numbers (power x 1.25, armour pierce, Strain 15 / 25 / 35); whether T3 actives and keystones have marrow versions.
+- **Still open for the PK1 `.1` session:** the marrow-active limit per graft level; the default package numbers (power x 1.25, armour pierce, Strain 15 / 25 / 35); whether keystones have marrow versions.
 
 B lands in **PK1** (corruption in battle) as kit hook (b) in place of "Channel behaviour", behind a ruleset flag (off in `classic`, off in `timeline` until the Act 2 data turns it on), so no golden moves until data uses it; INTENT2 IR13 and CANON 2.1 ("a skill has one intent") get a note.
 
