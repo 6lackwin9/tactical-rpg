@@ -1473,6 +1473,9 @@ mod tests {
         let mut ids: Vec<String> = cx.data.cat.passives.keys().cloned().collect();
         ids.sort();
         let passive = ids.first().cloned().expect("a passive");
+        // the list before the test row: the built-in presets and the shipped rows, however many ship
+        let baseline = Dojo::new(&cx).s.presets().len();
+        assert!(baseline >= emberwake_battle::dojo::PRESETS.len(), "the built-in presets are listed");
         let mut data = (*cx.app.data).clone();
         let row = emberwake_data::DojoPresetDef::from_obj(json!({"id": "t_gui_preset", "name": "GUI Test Preset", "passives": [passive]}).as_object().unwrap());
         data.edit_cat(|cat| {
@@ -1481,7 +1484,7 @@ mod tests {
         cx.app.data = Arc::new(data);
         let mut dojo = Dojo::new(&cx);
         let listed = dojo.s.presets();
-        assert_eq!(listed.len(), emberwake_battle::dojo::PRESETS.len() + 1, "the built-in presets and the row");
+        assert_eq!(listed.len(), baseline + 1, "the list before it and the row");
         let at = listed.iter().position(|p| p.id == "t_gui_preset").expect("the row is listed");
         let mut g = crate::hud::hud_tests::gfx();
         dojo.draw(&mut cx, &mut g, (-500, -500), true);

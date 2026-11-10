@@ -1,0 +1,21 @@
+{
+	"kind": "dojo_presets",
+	"version": 1,
+	"entries": [
+		{
+			"id": "channel_duel",
+			"name": "Channel duel",
+			"description": "Inoculated test hero: Strain, Feed and Vent",
+			"gear": {
+				"main_hand": "wpn_broadsword",
+				"body": "arm_leather"
+			},
+			"pouch": [
+				"con_quenched_salt"
+			],
+			"passives": [
+				"inoculated_test"
+			]
+		}
+	]
+}

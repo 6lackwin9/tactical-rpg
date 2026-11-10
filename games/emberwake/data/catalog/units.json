@@ -2893,6 +2893,111 @@
 					"count": 1
 				}
 			]
+		},
+		{
+			"id": "inoculated_hero",
+			"name": "Inoculated (test)",
+			"side": "party",
+			"description": "Test hero for the Channel duel: Strain carrier with two Channel-only skills.",
+			"class_id": "warrior",
+			"level": 2,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [],
+			"deck": {
+				"active": [],
+				"passive": [
+					"inoculated_test"
+				]
+			},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.0,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_broadsword",
+			"off_hand": "shd_buckler",
+			"head": "",
+			"body": "arm_leather",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"con_heal_potion",
+				"con_quenched_salt"
+			],
+			"loot": []
+		},
+		{
+			"id": "aberrant_test",
+			"name": "Aberrant (test)",
+			"side": "enemy",
+			"description": "Aberrant test enemy: carries Strain, its bite adds Strain to a holder.",
+			"class_id": "warrior",
+			"level": 2,
+			"tier": "elite",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"strain_bite"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"strain_bite"
+				],
+				"passive": [
+					"aberrant_strain"
+				],
+				"order": {
+					"assault": [
+						"strain_bite",
+						"strike"
+					]
+				}
+			},
+			"default_intent": "",
+			"ai_role": "AGGRESSOR",
+			"target_pref": "NEAREST",
+			"flee_ratio": 0.0,
+			"defend_below": 0.0,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": true,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_shortsword",
+			"off_hand": "none",
+			"head": "",
+			"body": "arm_leather",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"loot": []
 		}
 	]
 }

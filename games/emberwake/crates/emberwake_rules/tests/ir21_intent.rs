@@ -4,7 +4,7 @@
 //! (`Field, Assault`). W2-4 (FB-114) migrated the 7 legacy SWEEP rows per FB-101 Option A (4 ARC, 3 RING) and retired
 //! SWEEP, so the shipped data has 26 = 8 + 18 dual rows and the FB-101 per-intent totals directly; R2-W2b CLASS-BASICS
 //! (FB-133) added three class basics, one row per intent shape (a Maneuver, a self-targetable SUPPORT and a PLUS
-//! attack at range), so 28 = 9 + 19. Read-only: the rows are game data, so the test lives in the game's façade crate.
+//! attack at range), so 28 = 9 + 19; PR5-7 (PK1-S3) added five single-intent Channel test skills (2 Stand, 3 Assault). Read-only: the rows are game data, so the test lives in the game's façade crate.
 
 use emberwake_data::Catalog;
 use emberwake_rules::intent::{self, IntentInput, ASSAULT, FIELD, MANEUVER, STAND, SUPPORT};
@@ -102,7 +102,7 @@ fn the_fb101_split_ships_with_its_shapes_and_no_sweep_remains() {
 #[test]
 fn shipped_data_gives_28_dual_and_the_intent_totals() {
     let rows = rows();
-    assert_eq!(rows.len(), 133, "IR21 covers all 133 skills (129 + brace, W2-4 slice 4 / FB-119, + 3 class basics, CLASS-BASICS)");
+    assert_eq!(rows.len(), 138, "IR21 covers all 138 skills (129 + brace, W2-4 slice 4 / FB-119, + 3 class basics, CLASS-BASICS, + 5 PK1-S3 Channel test skills)");
     let brace = rows.iter().find(|r| id(r) == "brace").expect("brace shipped");
     assert_eq!(derive(brace), [STAND], "brace (DEFEND, guard) is single-intent Stand: the dual counts stay");
     // CLASS-BASICS (FB-133): each new class basic derives by its shape, one per intent list
@@ -110,15 +110,21 @@ fn shipped_data_gives_28_dual_and_the_intent_totals() {
         let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
         assert_eq!(derive(r), want, "{i}: IR21 by its row");
     }
+    // PR5-7 (PK1-S3): the five Channel test skills derive single-intent by their shape: the two SELF-only basics
+    // (feed SUPPORT, vent FOCUS) Stand, the three single-target attacks Assault; the dual counts stay
+    for (i, want) in [("feed", STAND), ("vent", STAND), ("marrow_lash", ASSAULT), ("marrow_bolt", ASSAULT), ("strain_bite", ASSAULT)] {
+        let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
+        assert_eq!(derive(r), [want], "{i}: IR21 by its row");
+    }
     let ss = ids_with(&rows, &[SUPPORT, STAND]).len();
     let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
     let dual = rows.iter().filter(|r| derive(r).len() == 2).count();
     assert_eq!((dual, ss, fa), (28, 9, 19), "28 = 9 Support,Stand + 19 Field,Assault");
     let totals: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| primary(&rows, i)).collect();
-    assert_eq!(totals, [59, 24, 17, 13, 15, 5], "FB-101 totals by primary intent (+ brace in Stand, + the 3 class basics in Field, Support, Maneuver): Assault, Field, Stand, Support, Maneuver, Neutral");
+    assert_eq!(totals, [62, 24, 19, 13, 15, 5], "FB-101 totals by primary intent (+ brace in Stand, + the 3 class basics in Field, Support, Maneuver, + the 5 PK1-S3 skills: 3 in Assault, 2 in Stand): Assault, Field, Stand, Support, Maneuver, Neutral");
     assert_eq!(totals.iter().sum::<usize>(), rows.len(), "every skill has exactly one primary");
     let listed: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| listing(&rows, i)).collect();
-    assert_eq!(listed, [78, 24, 26, 13, 15, 5], "a dual row lists under both intents: 19 Field,Assault add to Assault, 9 Support,Stand to Stand");
+    assert_eq!(listed, [81, 24, 28, 13, 15, 5], "a dual row lists under both intents: 19 Field,Assault add to Assault, 9 Support,Stand to Stand");
     assert_eq!(listed.iter().sum::<usize>(), rows.len() + dual, "each dual row counts twice");
 }
 

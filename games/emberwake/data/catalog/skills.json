@@ -2856,6 +2856,110 @@
 			"reach_max": 3,
 			"area": "PLUS",
 			"power_mult": 0.5
+		},
+		{
+			"id": "feed",
+			"name": "Feed",
+			"kind": "SUPPORT",
+			"level": 1,
+			"ap_cost": 0,
+			"blocks": 1,
+			"description": "Channel basic and the Channel round's Rest: +5 Strain and a heal of 4% max HP per block (healing is cut by Acute Resonance).",
+			"learned_only": true,
+			"round_intent": "support",
+			"target_mode": "SELF",
+			"heal_pct": 4,
+			"meters": [
+				{
+					"meter": "strain",
+					"delta": 5
+				}
+			],
+			"channel": {
+				"only": true
+			}
+		},
+		{
+			"id": "vent",
+			"name": "Vent",
+			"kind": "FOCUS",
+			"level": 1,
+			"ap_cost": 0,
+			"blocks": 1,
+			"description": "Channel basic: -20 Strain for 15% of max HP; only while Strain is 50 or more.",
+			"learned_only": true,
+			"round_intent": "support",
+			"meters": [
+				{
+					"meter": "strain",
+					"delta": -20
+				}
+			],
+			"hp_cost_pct": 15,
+			"requires_meter": {
+				"meter": "strain",
+				"min": 50
+			},
+			"channel": {
+				"only": true
+			}
+		},
+		{
+			"id": "marrow_lash",
+			"name": "Marrow Lash",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 2,
+			"description": "Test skill (Channel only): a piercing marrow strike. Costs 15 Strain.",
+			"learned_only": true,
+			"power_mult": 1.5,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 15
+			}
+		},
+		{
+			"id": "marrow_bolt",
+			"name": "Marrow Bolt",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Test skill (Channel only): a ranged piercing marrow bolt. Costs 25 Strain.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.4,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 25
+			}
+		},
+		{
+			"id": "strain_bite",
+			"name": "Strain Bite",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 2,
+			"description": "Aberrant test strike: a hit that adds 15 Strain to a Strain holder.",
+			"learned_only": true,
+			"riders": [
+				{
+					"when": {},
+					"effects": [
+						{
+							"type": "meter",
+							"meter": "strain",
+							"delta": 15,
+							"to": "other"
+						}
+					]
+				}
+			]
 		}
 	]
 }

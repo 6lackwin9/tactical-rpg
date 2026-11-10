@@ -24,7 +24,8 @@
 				"hp_cost",
 				"ignore_guard",
 				"ai_tactics",
-				"execute"
+				"execute",
+				"channel"
 			],
 			"intents": [
 				"assault",
@@ -66,6 +67,8 @@
 			"attack_lock": "melee",
 			"move_after_blocks": 3,
 			"item_ap": 0,
+			"channel_meter": "strain",
+			"channel_rest": "feed",
 			"poise_mode": "pips",
 			"item_mitigation": "on",
 			"thrown_miss_spends": "on",

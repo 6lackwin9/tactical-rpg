@@ -328,7 +328,3 @@ PK1-S2a (2026-11-10): skill fields `channel` {none, only, cost, power, effects},
 PK1-S2b (2026-11-10): the game term `marrow_mark` names a marrow version ("Name (Marrow)").
 
 HEALPCT1 (2026-11-10): skill field `heal_pct` (SUPPORT; a percent of the target's max HP added after the heal formula; `heal_taken` applies); ruleset field `channel_ai_edge`.
-
-PK2-S1 (2026-11-10): passive effects `forbid_hands {hands: 2}` and `pierce_melee {}` (passive-only); SUPPORT skill field `unmark {mark}` (reaches a Stage V turned party member too, `PR5-25`) and skill field `uses_per_battle` (0-9, counted once the action is paid); a battle `mark` moves a `unit_tracks` row with the same `mark` (granting cumulative stage passives 1..stage at once and turning a party member `hostile_all` at a departure stage).
-
-PK1-KITFIX (2026-11-10): a unit-meter row's `triggers` also take `meter_set`; `inflict` takes `rounds: -1` (the rest of the battle, like `grant`); trigger effect `rating_set {rating, value, rounds, to}` holds `armor` (0-200), `attack_power` (0-300, status attack factor as a percent, 100 = none), or `move_rate` (1-9) (`guard` refused; `rounds: -1` = the battle; wins over status modifiers on that rating, and a later set replaces it); catalog kind `dojo_presets` (`{gear, pouch, passives}`, pouch <= 3, passives <= 4) overrides/extends the built-in Dojo presets; heal estimates apply `heal_taken`.

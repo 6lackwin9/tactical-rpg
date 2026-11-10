@@ -1087,6 +1087,42 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "inoculated_test",
+			"name": "Inoculated (test)",
+			"description": "Test passive for the Dojo and sims until grafts exist: holds Strain and opens two Channel-only skills.",
+			"effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_lash"
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_bolt"
+				}
+			],
+			"slot": "passive"
+		},
+		{
+			"id": "aberrant_strain",
+			"name": "Aberrant Strain",
+			"description": "An aberrant carries Strain: its hits feed it, its crises are real.",
+			"effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0
+				}
+			],
+			"slot": "passive"
 		}
 	]
 }

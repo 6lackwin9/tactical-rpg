@@ -182,8 +182,8 @@ fn the_toggle_shows_for_a_holder_only_and_flips_and_converts_the_round() {
         assert!(channel::problem(w, h, sk).is_none() && channel::version(w, h, sk).is_none(), "{} is a Cold Steel entry", sk.name);
     }
     b.draw(&mut cx, &mut g, (-500, -500), true);
-    // without the rule nobody has it, holder or not
-    let (_cx, _g, mut b) = arena("+unit_meters,+triggers,+hp_cost");
+    // without the rule nobody has it, holder or not (the shipped timeline row lists channel since PK1-S3: switched off)
+    let (_cx, _g, mut b) = arena("+unit_meters,+triggers,+hp_cost,-channel");
     let (h, _) = strain_up(&mut b, 0);
     assert!(toggle(&rows(&b, h, RoundTarget::Myself)).is_none(), "no rule channel: no toggle");
 }
