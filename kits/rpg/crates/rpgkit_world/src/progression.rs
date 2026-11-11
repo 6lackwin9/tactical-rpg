@@ -227,6 +227,9 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
         // PK2-S1: the member's tracks (a battle mark advances them) and its permanent max HP offset
         max_hp_offset: work.max_hp_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
         tracks: work.tracks.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(i32::MAX)) as i32)).collect(),
+        // PK2-S2: the grafts in its body slots (catalog slot order) and its floor offset for this battle
+        body: work.body_items(d),
+        floor_offset: work.floor_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms

@@ -99,11 +99,12 @@ fn class_basics(w: &World, c: UnitId) -> Vec<String> {
 
 /// PK1 4.2: the deck actives `c` marked channeled whose version opens in a Channel round: its deck's `channeled` families in
 /// order that are among its actives (`Unit::active_families` under the deck rule, else the deck's `active`) and have a
-/// channeled version, at most `channeled_actives` of them.
+/// channeled version, at most `channeled_actives` of them (PK2-S2: a unit with a body, one per graft).
 pub fn marked(w: &World, c: UnitId) -> Vec<String> {
     let u = &w.units[c];
     let actives: Vec<String> = if u.deck_rule.is_some() && !u.active_families().is_empty() { u.active_families() } else { u.deck.active.clone() };
-    let most = usize::try_from(w.ruleset.numbers.channeled_actives.max(0)).unwrap_or(0);
+    // PK2-S2: a unit with a body marks one per graft (`Unit::channeled_limit`)
+    let most = usize::try_from(u.channeled_limit(w.ruleset.numbers.channeled_actives)).unwrap_or(0);
     let mut out: Vec<String> = Vec::new();
     for fam in &u.deck.channeled {
         if out.len() >= most {

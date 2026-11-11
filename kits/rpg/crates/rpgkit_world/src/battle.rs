@@ -535,6 +535,11 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
             let cleared = settled.cleared.iter().map(|(m, slot)| json::obj([("member", m.clone().into()), ("slot", slot.clone().into())]).into()).collect();
             out.insert("cleared".into(), Value::Array(cleared));
         }
+        // PK2-S2: the items fallen members left in the stash
+        if !settled.remains.is_empty() {
+            let remains = settled.remains.iter().map(|(m, item)| json::obj([("member", m.clone().into()), ("item", item.clone().into())]).into()).collect();
+            out.insert("remains".into(), Value::Array(remains));
+        }
     }
     if let Some(b) = stay.as_ref().filter(|b| !b.flag.is_empty()) {
         let err = quest::set_flag(d, gs, &b.flag, Value::String(first_stayer));
@@ -701,7 +706,8 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
 /// PK1-S1: `marks` [{member, mark, value}], the battle's marks on the fielded members. PK2-S1: `tracks` [{member,
 /// track, from, to}] (the unit tracks the marks moved) and `stashed` [{member, item}] (worn items a `forbid_hands`
 /// sent to the stash). PR5-26 (review F2): `cleared` [{member, slot}] (a slot left empty, its default refused).
-pub const PARTY_KEYS: [&str; 9] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared"];
+/// PK2-S2: `remains` [{member, item}] (what a fallen member left in the stash, the field held).
+pub const PARTY_KEYS: [&str; 10] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared", "remains"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

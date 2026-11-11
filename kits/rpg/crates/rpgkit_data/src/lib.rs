@@ -15,11 +15,13 @@ use aegis_core::value::*;
 use indexmap::IndexMap;
 use serde_json::Value;
 
+pub mod body_slot;
 pub mod dojo_preset;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
 pub mod unit_track;
+pub use body_slot::{BodySlotDef, GraftSpec, BODY_ROLES, BODY_ROLE_CLASS, BODY_ROLE_MONSTER, BODY_EFFECTS_KEY, BODY_SLOTS_KIND, BODY_SLOTS_MAX, GRAFT, GRAFT_TIERS, GRAFT_TOP_TIER_NEEDS};
 pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
@@ -129,6 +131,9 @@ pub struct ClassDef {
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "Losing a grafted unit"): the item a fallen member of the class leaves
+    /// (its character's `remains` first; "" = none).
+    pub remains: String,
 }
 
 impl ClassDef {
@@ -174,6 +179,7 @@ impl ClassDef {
             basics: strings(o, "basics"),
             loadout,
             pouch: strings(o, "pouch"),
+            remains: string(o, REMAINS_KEY, ""),
         }
     }
 
@@ -621,8 +627,13 @@ pub struct ItemDef {
     /// PK1-S1 (3.7): a consumable's `unmark` `{mark}`: the mark id whose latest entry on the target this battle it
     /// removes ("" = none).
     pub unmark: String,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `GRAFT` item's body fields (None for any other item type).
+    pub graft: Option<GraftSpec>,
     pub raw: Obj,
 }
+
+/// PK2-S2: the class and character key naming the item a fallen member leaves (`ClassDef::remains`).
+pub const REMAINS_KEY: &str = "remains";
 
 /// A1.2-K3: the `area` of a single-target consumable (the schema default; the writer stores no key for it).
 pub const ITEM_AREA_NONE: &str = "NONE";
@@ -759,8 +770,14 @@ impl ItemDef {
             affects: Affects::parse(&string(o, "affects", "")),
             max_stack: int(o, "max_stack", 1),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            graft: (string(o, "item_type", "") == GRAFT).then(|| GraftSpec::from_obj(o)),
             raw: o.clone(),
         }
+    }
+
+    /// PK2-S2: whether the item is a body piece (item type `GRAFT`).
+    pub fn is_graft(&self) -> bool {
+        self.graft.is_some()
     }
 
     /// U3.2-S2: whether the item's family has engine rule `rule`.
@@ -949,6 +966,9 @@ pub struct Catalog {
     /// PK1-KITFIX (c): the Dojo's data presets (kind `dojo_presets`; engine-only), keyed by id in file order. No row =
     /// the Dojo lists its built-in presets only.
     pub dojo_presets: IndexMap<String, DojoPresetDef>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the body slots (kind `body_slots`; engine-only), keyed by id in file
+    /// order. No row = no member holds a body slot (the graft count, its floor and its channeled limit stay off).
+    pub body_slots: IndexMap<String, BodySlotDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -1005,6 +1025,7 @@ impl Catalog {
             cat.unit_templates.entry(t.role.clone()).or_insert(t);
         }
         cat.unit_tracks = rows(UNIT_TRACKS_KIND).iter().map(UnitTrackDef::from_obj).map(|t| (t.id.clone(), t)).collect();
+        cat.body_slots = rows(BODY_SLOTS_KIND).iter().map(BodySlotDef::from_obj).map(|b| (b.id.clone(), b)).collect();
         for p in rows(DOJO_PRESETS_KIND).iter().map(DojoPresetDef::from_obj) {
             cat.dojo_presets.entry(p.id.clone()).or_insert(p);
         }
@@ -1975,6 +1996,10 @@ pub const UNMARK_KEYS: [&str; 1] = ["mark"];
 pub const FORBID_HANDS: &str = "forbid_hands";
 pub const PIERCE_MELEE: &str = "pierce_melee";
 pub const MEMBER_GRANTS: [&str; 2] = [FORBID_HANDS, PIERCE_MELEE];
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `meter` effect's optional floor table by the holder's graft count
+/// (`[1 graft, 2 grafts, ...]`; a count past the table reads its last floor; no graft = no table floor), and its length.
+pub const METER_FLOORS: &str = "floors";
+pub const METER_FLOORS_MAX: usize = 8;
 /// PK2-S1: the `hands` a `forbid_hands` grant may name (two-handed items only so far).
 pub const FORBID_HANDS_VALUES: [i64; 1] = [2];
 /// PK1-S1 (3.2): the events whose trigger knows the hit it answers (a `damage` effect's `pct_of_hit` reads it; a rider

@@ -148,8 +148,10 @@ pub enum Grant {
     /// `levels` more proficiency in gear family `gear`.
     Proficiency { gear: String, levels: i32 },
     GrantSkill(SkillGrant),
-    /// FB-26 (`meter`): the unit meter the battle spawns, its start (-1 = the row's) and floor (None = the row's min).
-    GrantPool { meter: String, start: i32, floor: Option<i32> },
+    /// FB-26 (`meter`): the unit meter the battle spawns, its start (-1 = the row's) and floor (None = the row's min);
+    /// PK2-S2: `floors`, the floor by the holder's graft count (`[1 graft, 2 grafts, ...]`; empty = none), read over
+    /// `floor` (`Unit::table_floor`).
+    GrantPool { meter: String, start: i32, floor: Option<i32>, floors: Vec<i32> },
     /// A reactive hook; its order among the unit's triggers is its limit key (`source#index`).
     Trigger(TriggerRow),
     /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): a member grant: equipping refuses items held in `hands` hands
@@ -260,7 +262,8 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         "trigger" => vec![Grant::Trigger(TriggerRow::from_obj(e))],
         "meter" => {
             let floor = e.get("floor").filter(|v| v.is_number()).map(|v| to_int(v, 0));
-            vec![Grant::GrantPool { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor }]
+            let floors = value::array(e, rpgkit_data::METER_FLOORS).iter().map(|v| to_int(v, 0)).collect();
+            vec![Grant::GrantPool { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor, floors }]
         }
         "crit" => vec![modifier(Target::Crit, value::float(e, "value", 0.0))],
         rpgkit_data::HEAL_TAKEN => vec![modifier(Target::HealTaken, int("value", 0))],

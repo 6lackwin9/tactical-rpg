@@ -40,6 +40,13 @@ pub const POUCH_PACKED_KEY: &str = "pouch_packed";
 /// its permanent max HP offset (`UnitState::max_hp_offset`); each written only when set (no save VERSION bump).
 pub const TRACKS_KEY: &str = "tracks";
 pub const MAX_HP_OFFSET_KEY: &str = "max_hp_offset";
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the saved member keys of its body slots (`UnitState::body`: slot -> graft
+/// item id), its class rite (`UnitState::class_rite`) and its floor offset for the next battle
+/// (`UnitState::floor_offset`); each written only when set (no save VERSION bump).
+/// `body` is the graft body slots, not `equipment.body` (the armour slot).
+pub const BODY_KEY: &str = "body";
+pub const CLASS_RITE_KEY: &str = "class_rite";
+pub const FLOOR_OFFSET_KEY: &str = "floor_offset";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -87,6 +94,15 @@ pub struct UnitState {
     /// PK2-S1: the permanent max HP offset (bone-scraping, excision; negative lowers it), added to the built max HP
     /// (at least 1). Saved as `max_hp_offset` only when not 0.
     pub max_hp_offset: i64,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): body slot id -> the `GRAFT` item installed there (a second slot set,
+    /// separate from `equipment`; the graft count is its length). Saved as `body` only when not empty.
+    pub body: IndexMap<String, String>,
+    /// PK2-S2: the member did its class rite, which opens the class body slots (class pieces only). Saved as
+    /// `class_rite` only when true (`set_class_rite`).
+    pub class_rite: bool,
+    /// PK2-S2 (FB-167 Q6): added to the floors a body meter's `floors` table gives in the member's next battle; the
+    /// settle clears it. Saved as `floor_offset` only when not 0.
+    pub floor_offset: i64,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -270,6 +286,8 @@ impl UnitState {
         }
         ids.extend(json::sget(d.entry("units", &self.base_unit), "extra_skills"));
         ids.extend(self.learned_skills.iter().cloned());
+        // PK2-S2: a graft's skill is owned while it sits in the body (a deck active may name it)
+        ids.extend(self.body_skills(d));
         rpgkit_rules::unit::families_of(&d.cat, &ids)
     }
 
@@ -323,6 +341,16 @@ impl UnitState {
         if self.max_hp_offset != 0 {
             out.insert(MAX_HP_OFFSET_KEY.into(), int(self.max_hp_offset));
         }
+        // PK2-S2: only a grafted member saves `body`, only a rite `class_rite`, only an offset `floor_offset`
+        if !self.body.is_empty() {
+            out.insert(BODY_KEY.into(), Value::Object(self.body.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect()));
+        }
+        if self.class_rite {
+            out.insert(CLASS_RITE_KEY.into(), Value::Bool(true));
+        }
+        if self.floor_offset != 0 {
+            out.insert(FLOOR_OFFSET_KEY.into(), int(self.floor_offset));
+        }
         Value::Object(out)
     }
 
@@ -370,7 +398,124 @@ impl UnitState {
             pouch_packed: d.get(POUCH_PACKED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             tracks: d.get(TRACKS_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             max_hp_offset: json::i(d, MAX_HP_OFFSET_KEY, 0),
+            body: json::dget(d, BODY_KEY).iter().map(|(k, v)| (k.clone(), json::gstr(v))).collect(),
+            class_rite: json::b(d, CLASS_RITE_KEY, false),
+            floor_offset: json::i(d, FLOOR_OFFSET_KEY, 0),
         }
+    }
+
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the graft count, the body slots in use.
+    pub fn graft_count(&self) -> usize {
+        self.body.len()
+    }
+
+    /// PK2-S2: the installed grafts in the catalog's body slot order (a slot or item the data no longer has is skipped).
+    pub fn body_items(&self, d: &Data) -> Vec<rpgkit_data::ItemDef> {
+        d.cat.body_slots.keys().filter_map(|slot| self.body.get(slot)).filter_map(|id| d.cat.items.get(id)).filter(|i| i.is_graft()).cloned().collect()
+    }
+
+    /// PK2-S2: the skills its grafts teach (their `body_effects`' `skill` grants), each once.
+    pub fn body_skills(&self, d: &Data) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for g in self.body_items(d).iter().filter_map(|i| i.graft.as_ref()) {
+            for grant in rpgkit_rules::grants::read(&g.effects) {
+                if let rpgkit_rules::grants::Grant::GrantSkill(rpgkit_rules::grants::SkillGrant::Learn(skill)) = grant {
+                    if !out.contains(&skill) {
+                        out.push(skill);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// PK2-S2: sets the class rite (it opens the class body slots); the rite's source (a quest, a recipe) is the game's.
+    pub fn set_class_rite(&mut self, done: bool) {
+        self.class_rite = done;
+    }
+
+    /// PK2-S2: why graft `item` may not sit in body slot `slot` of this member (None: it fits): a known slot, a known
+    /// `GRAFT` item, the slot's role (a class slot takes class pieces only, once the class rite is done; a monster slot
+    /// monster pieces), a class piece's class.
+    pub fn graft_misfit(&self, d: &Data, slot: &str, item: &str) -> Option<String> {
+        let Some(row) = d.cat.body_slots.get(slot) else { return Some(format!("unknown body slot '{slot}'.")) };
+        let Some(def) = d.cat.items.get(item) else { return Some(format!("unknown item '{item}' in body slot {slot}.")) };
+        let Some(g) = &def.graft else { return Some(format!("{} in body slot {slot} is not a graft.", def.name)) };
+        if g.role != row.role {
+            return Some(format!("body slot {slot} takes {} grafts; {} is a {} graft.", row.role, def.name, g.role));
+        }
+        if row.is_class() && !self.class_rite {
+            return Some(format!("body slot {slot} opens with the member's class rite."));
+        }
+        if !g.class_id.is_empty() && g.class_id != self.class_id(d) {
+            return Some(format!("{} is a piece of class '{}'.", def.name, g.class_id));
+        }
+        None
+    }
+
+    /// PK2-S2: whether the installed graft in `slot` is a keystone graft.
+    fn keystone_at(&self, d: &Data, slot: &str) -> bool {
+        self.body.get(slot).and_then(|i| d.cat.items.get(i)).and_then(|i| i.graft.as_ref()).is_some_and(|g| g.keystone)
+    }
+
+    /// PK2-S2: the body rules of a saved member: every entry fits (`graft_misfit`) and at most one keystone graft.
+    pub fn body_errors(&self, d: &Data, at: &str) -> Vec<String> {
+        let mut errors: Vec<String> = self.body.iter().filter_map(|(slot, item)| self.graft_misfit(d, slot, item)).map(|e| format!("{at}: {e}")).collect();
+        let keystones = self.body.keys().filter(|slot| self.keystone_at(d, slot)).count();
+        if keystones > 1 {
+            errors.push(format!("{at}: body holds {keystones} keystone grafts (one per member)."));
+        }
+        errors
+    }
+
+    /// PK2-S2: a loaded member's body entries the data no longer allows (`graft_misfit`, a second keystone graft) are
+    /// dropped, each with a load warning (the graft is gone; never a refusal). Returns the warnings.
+    pub fn sanitize_body(&mut self, d: &Data) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let mut kept: IndexMap<String, String> = IndexMap::new();
+        let mut keystone = false;
+        for (slot, item) in &self.body {
+            let problem = match self.graft_misfit(d, slot, item) {
+                Some(p) => Some(p),
+                None if self.keystone_at(d, slot) && keystone => Some(format!("a second keystone graft in body slot {slot}.")),
+                None => None,
+            };
+            match problem {
+                Some(p) => warnings.push(format!("Unit '{}': {p} The graft is dropped.", self.id)),
+                None => {
+                    keystone |= self.keystone_at(d, slot);
+                    kept.insert(slot.clone(), item.clone());
+                }
+            }
+        }
+        self.body = kept;
+        warnings
+    }
+
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "The surgery process", "Replacing a graft"): installs graft `item` in
+    /// body slot `slot` (no cost here: a recipe pays it): it must fit (`graft_misfit`), a keystone graft is one per
+    /// member (one in the same slot it replaces), and a top-tier graft (a keystone graft too, `GraftSpec::top_tier`)
+    /// needs `GRAFT_TOP_TIER_NEEDS` grafts first (the slot it overwrites counts). An occupied slot is overwritten: Ok(the
+    /// replaced item id, destroyed: no refund); the count and so the floor stay. Err (nothing changes) with the refusal.
+    pub fn install_graft(&mut self, d: &Data, slot: &str, item: &str) -> Result<Option<String>, String> {
+        if let Some(e) = self.graft_misfit(d, slot, item) {
+            return Err(e);
+        }
+        let g = d.cat.items.get(item).and_then(|i| i.graft.clone()).unwrap_or_default();
+        if g.keystone && self.body.keys().any(|s| s != slot && self.keystone_at(d, s)) {
+            return Err("the member already holds a keystone graft (one per member).".into());
+        }
+        let held = self.graft_count();
+        if g.top_tier() && held < rpgkit_data::GRAFT_TOP_TIER_NEEDS {
+            return Err(format!("a tier {} graft needs {} grafts first (the member holds {held}).", rpgkit_data::GRAFT_TIERS.1, rpgkit_data::GRAFT_TOP_TIER_NEEDS));
+        }
+        Ok(self.body.insert(slot.to_string(), item.to_string()))
+    }
+
+    /// PK2-S2 (excision): empties body slot `slot`; the removed item id (destroyed: no refund), None when it was empty.
+    /// The permanent max HP cost is the recipe's (`max_hp_offset`).
+    pub fn remove_graft(&mut self, slot: &str) -> Option<String> {
+        self.body.shift_remove(slot)
     }
 
     /// PK2-S1: the member's stage on unit track `track` (0 = not on it).
@@ -474,6 +619,8 @@ impl UnitState {
             }
         }
         errors.extend(self.loadout_errors(d, &at));
+        // PK2-S2: the body slots (an entry the data no longer allows is dropped at load, `sanitize_body`)
+        errors.extend(self.body_errors(d, &at));
         errors.extend(self.deck_problems.iter().map(|p| format!("{at}: {p}")));
         errors.extend(self.deck_errors(d, &at));
         for (slot, item) in &self.equipment {
@@ -864,6 +1011,18 @@ impl UnitState {
             bad[i] |= errors.len() > before;
         }
         kept.channeled = keep(&self.deck.channeled, &bad);
+        // PK2-S2: with body slots in the catalog a member marks one per graft, whatever the ruleset
+        if !d.cat.body_slots.is_empty() {
+            let max = self.graft_count();
+            let n = if clean { kept.channeled.len() } else { self.deck.channeled.len() };
+            if n > max {
+                errors.push(format!("{at}: deck: {n} channeled entries (one per graft; the member holds {max})."));
+                if clean {
+                    kept.channeled.truncate(max);
+                }
+            }
+            return (errors, kept);
+        }
         let channel_rows = d.cat.rulesets.values().map(rpgkit_rules::ruleset::Ruleset::from_row).filter(|r| r.has(rpgkit_rules::ruleset::CHANNEL));
         for r in channel_rows {
             let max = r.numbers.channeled_actives.max(0);

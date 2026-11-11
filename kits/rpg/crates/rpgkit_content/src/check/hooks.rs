@@ -834,7 +834,7 @@ pub fn passive_effect_errors(e: &Dict, t: &str, ctx: &Ctx, at: &str) -> Vec<Stri
         }
         "trigger" => out.extend(trigger_row_errors(e, ctx, at, &TRIGGER_EVENTS, &["type"])),
         "meter" => {
-            unknown_keys(e, &["type", "meter", "start", "floor"], at, &mut out);
+            unknown_keys(e, &["type", "meter", "start", "floor", rpgkit_data::METER_FLOORS], at, &mut out);
             let meter = json::s(e, "meter");
             match ctx.meter(&meter) {
                 None => out.push(format!("{at}: unknown unit meter '{meter}'.")),
@@ -843,12 +843,33 @@ pub fn passive_effect_errors(e: &Dict, t: &str, ctx: &Ctx, at: &str) -> Vec<Stri
                         out.push(format!("{at}: start must be -1 (the meter's) or {}-{}.", range.0, range.1));
                     }
                     whole_key(e, "floor", range, false, at, &mut out);
+                    out.extend(floors_errors(e.get(rpgkit_data::METER_FLOORS), range, at));
                 }
             }
         }
         _ => {}
     }
     out
+}
+
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a meter effect's optional `floors`, the floor by the holder's graft count
+/// (`[1 graft, 2 grafts, ...]`, the last holding above): 1-`METER_FLOORS_MAX` whole numbers in the meter's range, never
+/// falling.
+fn floors_errors(raw: Option<&Value>, range: (i64, i64), at: &str) -> Vec<String> {
+    let Some(raw) = raw else { return Vec::new() };
+    let max = rpgkit_data::METER_FLOORS_MAX;
+    let key = rpgkit_data::METER_FLOORS;
+    let list = match raw.as_array() {
+        Some(a) if !a.is_empty() && a.len() <= max => a,
+        _ => return vec![format!("{at}: {key} is a list of 1-{max} floors (by graft count: 1, 2, ...).")],
+    };
+    if !list.iter().all(|f| whole_in(f, range)) {
+        return vec![format!("{at}: each of {key} must be a whole number {}-{}.", range.0, range.1)];
+    }
+    if list.windows(2).any(|w| json::to_int(&w[1]) < json::to_int(&w[0])) {
+        return vec![format!("{at}: {key} never falls as the graft count grows.")];
+    }
+    Vec::new()
 }
 
 // ---- Units and phase ai (1.2) ------------------------------------------------------------------------------------

@@ -346,6 +346,16 @@ pub struct Unit {
     /// no track (a catalog unit, an enemy, a guest, or any unit while the catalog has no track row): a battle mark never
     /// advances it.
     pub tracks: Option<IndexMap<String, i32>>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a party member's graft count (its body slots in use) once the catalog
+    /// has a body slot row. None = the unit holds no body (a catalog unit, an enemy, a guest, or any unit while the
+    /// catalog has no body slot row): no floor table applies and the ruleset's `channeled_actives` limits its marks.
+    pub graft_count: Option<i32>,
+    /// PK2-S2 (FB-167 Q6): a party member's floor offset for this battle, added to every floor a meter effect's
+    /// `floors` table gives (0 = none).
+    pub floor_offset: i32,
+    /// PK2-S2: the skills its keystone grafts teach: open without an active slot, each taking one of the deck's keystone
+    /// slots (`slotted`).
+    pub keystone_skills: Vec<String>,
 }
 
 impl Unit {
@@ -425,6 +435,9 @@ impl Unit {
             pierce_melee: false,
             max_hp_offset: 0,
             tracks: None,
+            graft_count: None,
+            floor_offset: 0,
+            keystone_skills: Vec::new(),
         }
     }
 
@@ -662,6 +675,25 @@ impl Unit {
         true
     }
 
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the floor a meter effect's `floors` table gives this unit: the entry of
+    /// its graft count (a count past the table reads the last), plus its floor offset; None without a table, a body or a
+    /// graft (no graft: not a holder of the table's floor).
+    pub fn table_floor(&self, floors: &[i32]) -> Option<i32> {
+        let n = usize::try_from(self.graft_count?).ok().filter(|n| *n > 0)?;
+        floors.get(n.min(floors.len()).checked_sub(1)?).map(|f| f + self.floor_offset)
+    }
+
+    /// PK2-S2: how many deck actives the unit may mark channeled: one per graft for a unit with a body (its deck's
+    /// actives bound it), else the ruleset's `channeled_actives` (`ruleset`).
+    pub fn channeled_limit(&self, ruleset: i32) -> i32 {
+        self.graft_count.unwrap_or(ruleset).max(0)
+    }
+
+    /// PK2-S2: whether a keystone graft teaches `skill_id` (open without an active slot).
+    pub fn keystone_skill(&self, skill_id: &str) -> bool {
+        self.keystone_skills.iter().any(|s| s == skill_id)
+    }
+
     /// PK2-S1: whether the member grant `forbid_hands` refuses `item` (a two-handed item under `hands` 2).
     pub fn forbids(&self, item: &rpgkit_data::ItemDef) -> bool {
         forbids_hands(self.forbid_hands, item)
@@ -707,7 +739,11 @@ impl Unit {
                     list.push(HeldTrigger { source: from, key, row: row.clone() });
                 }
                 // HOOKS1 UM1: passives only (HOOKS1-S gives items no meter effect)
-                Grant::GrantPool { meter, start, floor } => self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor: *floor }),
+                // PK2-S2: a `floors` table reads the member's graft count (plus its floor offset) over `floor`
+                Grant::GrantPool { meter, start, floor, floors } => {
+                    let floor = self.table_floor(floors).or(*floor);
+                    self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor });
+                }
                 // PK2-S1: member grants, passives only (`Grant::gear_ok`)
                 Grant::ForbidHands { hands } => self.forbid_hands = self.forbid_hands.max(*hands),
                 Grant::PierceMelee => self.pierce_melee = true,
@@ -888,7 +924,8 @@ impl Unit {
     /// Catalog.is_always_active, with the deck rule's open and closed basics (D1).
     /// HOOKS1 UM6: a meter skill the battle gave is open without a slot.
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) {
+        // PK2-S2: a keystone graft's skill sits in the keystone slot, open without an active slot
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.keystone_skill(skill_id) {
             return true;
         }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
@@ -901,7 +938,8 @@ impl Unit {
         let list = match passive.slot.as_str() {
             "" => return true,
             "passive" => DeckRule::take(&self.deck.passive, rule.slots.passive),
-            "keystone" => DeckRule::take(&self.deck.keystone, rule.slots.keystone),
+            // PK2-S2: each keystone graft's skill takes one of the keystone slots
+            "keystone" => DeckRule::take(&self.deck.keystone, (rule.slots.keystone - self.keystone_skills.len() as i32).max(0)),
             _ => return false,
         };
         list.contains(&passive.id)
@@ -937,7 +975,8 @@ impl Unit {
         for fam in wanted {
             let basic = cat.is_basic_family(&fam) || rule.basics.contains(&fam);
             // U3.2-S4 (OFFHAND1): a family owned only through worn gear takes no slot (it is open while worn)
-            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id));
+            // PK2-S2: nor does a keystone graft's (it sits in the keystone slot)
+            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id) && !self.keystone_skill(&s.id));
             if !basic && owned && !actives.contains(&fam) {
                 actives.push(fam);
             }
@@ -1224,6 +1263,12 @@ pub struct Growth {
     pub max_hp_offset: i32,
     /// PK2-S1: the member's unit track stages (`Unit::tracks`; the passives come in `Overrides::passives`).
     pub tracks: IndexMap<String, i32>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the `GRAFT` items in the member's body slots (slot order); their
+    /// `body_effects` apply as a passive's (a meter included), each counts toward the graft count once the catalog has a
+    /// body slot row (`Unit::graft_count`).
+    pub body: Vec<rpgkit_data::ItemDef>,
+    /// PK2-S2 (FB-167 Q6): the member's floor offset for the next battle (`Unit::floor_offset`).
+    pub floor_offset: i32,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1298,10 +1343,32 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
         u.inventory.equip(Equipment::new(item), Slot::parse(&item.slot).unwrap_or(Slot::MainHand));
         geared = true;
     }
+    // PK2-S2: a member's body before its passives (a keystone graft takes a keystone slot from the slotted passives)
+    let body: Vec<(String, Vec<Grant>)> = match &b.growth {
+        Some(g) if !cat.body_slots.is_empty() => {
+            u.graft_count = Some(g.body.len() as i32);
+            u.floor_offset = g.floor_offset;
+            let held: Vec<(String, Vec<Grant>, bool)> = g.body.iter().filter_map(|i| i.graft.as_ref().map(|s| (i.id.clone(), grants::read(&s.effects), s.keystone))).collect();
+            for (_, list, _) in held.iter().filter(|(_, _, keystone)| *keystone) {
+                for g in list {
+                    if let Grant::GrantSkill(SkillGrant::Learn(skill)) = g {
+                        u.keystone_skills.push(skill.clone());
+                    }
+                }
+            }
+            held.into_iter().map(|(id, list, _)| (id, list)).collect()
+        }
+        _ => Vec::new(),
+    };
     for id in &b.over.passives {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);
         }
+    }
+    // PK2-S2: the body items' effects as a passive's (`body:<item>`; no member grant), after the passives
+    for (id, list) in body {
+        let list: Vec<Grant> = list.into_iter().filter(|g| !matches!(g, Grant::ForbidHands { .. } | Grant::PierceMelee)).collect();
+        u.apply_grants(cat, &list, &format!("body:{id}"), false);
     }
     let (mut pouch_unloaded, mut loadout_error) = (Vec::new(), None);
     match &b.growth {

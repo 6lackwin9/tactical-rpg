@@ -135,7 +135,8 @@ fn rename_deck_keys(v: &mut Value, aliases: &[KeyAlias]) {
 /// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal; CAMPAIGN1-TM2:
 /// a saved travel mode the world no longer has loads in the default mode with a warning; R4-2 M1: a member's saved
 /// deck entry the data no longer allows is dropped with a warning, `UnitState::sanitize_deck`; PR4-2: so is a loadout
-/// family, rank or worn item, `UnitState::sanitize_loadout`; PK2-S1: so is a unit track, `UnitState::sanitize_tracks`).
+/// family, rank or worn item, `UnitState::sanitize_loadout`; PK2-S1: so is a unit track, `UnitState::sanitize_tracks`;
+/// PK2-S2: so is a body slot entry, `UnitState::sanitize_body`).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     decode_with(d, text, &[])
 }
@@ -162,6 +163,8 @@ pub fn decode_with(d: &Data, text: &str, deck_aliases: &[KeyAlias]) -> Result<Lo
         // PK2-S1: a unit track the data no longer has is dropped, a stage past its row's top held there (before the
         // loadout, whose two-handed refusal reads the stage passives)
         warnings.extend(m.sanitize_tracks(d));
+        // PK2-S2: a body entry the data no longer allows is dropped (before the deck, which may name a graft's skill)
+        warnings.extend(m.sanitize_body(d));
         warnings.extend(m.sanitize_deck(d));
         warnings.extend(m.sanitize_loadout(d, &mut party.stash));
     }

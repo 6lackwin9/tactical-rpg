@@ -2,7 +2,7 @@
 //! shipped data). Expectations come from the rules and the rows below: only a holder of the channel meter can Channel,
 //! the round flag starts every round off; a channeled version exists for a single-intent skill (never a dual-intent one,
 //! a neutral kind or `channel.none`); a Channel round offers only the channeled-only skills, the class basic and the
-//! actives marked channeled (at most `channeled_actives`), a Standard round no channeled-only skill; the derived cost is
+//! actives marked channeled (at most `channeled_actives`; PK2-S2: a unit with a body one per graft), a Standard round no channeled-only skill; the derived cost is
 //! `channel_cost` by AP (or `channel.cost`), paid at the start, with power x `channel_power` and armour piercing; the
 //! converting toggle keeps Moves and Rest picks, keeps each skill that has a version in the new mode, drops the others
 //! and refills the freed blocks (Feed as the Channel Rest); the first skill fixes the round's one target; Vent's gate
@@ -255,6 +255,20 @@ fn eligibility_is_single_intent_and_the_round_opens_its_channeled_set() {
     let cold = session();
     assert_eq!(channel::problem(&cold.w, HERO, skill(&cold.w, "t_spike")), Some(channel::ONLY_CHANNEL));
     assert_eq!(channel::problem(&cold.w, HERO, skill(&cold.w, "t_jab")), None);
+}
+
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a unit with a body marks one channeled active per graft whatever the
+/// ruleset's `channeled_actives` (its deck's marks bound it); a unit without a body keeps the ruleset's number.
+#[test]
+fn a_body_marks_one_channeled_active_per_graft() {
+    let mut s = session();
+    assert_eq!(s.w.units[HERO].graft_count, None);
+    assert_eq!(channel::marked(&s.w, HERO), ["t_jab"], "no body: channeled_actives 1");
+    let marks = ["t_jab", "t_heavy"];
+    for n in 0..=marks.len() + 1 {
+        s.w.units[HERO].graft_count = Some(n as i32);
+        assert_eq!(channel::marked(&s.w, HERO), marks[..n.min(marks.len())], "{n} grafts");
+    }
 }
 
 /// PK1 4.1, 4.2: the derived cost is `channel_cost` by the skill's AP (1, 2, 3+; 0 AP none), `channel.cost` replaces it;

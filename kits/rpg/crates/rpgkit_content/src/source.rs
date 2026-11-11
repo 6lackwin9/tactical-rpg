@@ -156,6 +156,9 @@ pub const UNIT_TRACKS_KIND: &str = crate::check::unit_track::KIND;
 /// PK1-KITFIX (c): the Dojo preset rows, loaded into the catalog beside CATALOG_KINDS after the unit tracks (they name
 /// items and passives; Godot's presets were code, DojoLoadouts).
 pub const DOJO_PRESETS_KIND: &str = crate::check::dojo_preset::KIND;
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the body slot rows, loaded into the catalog beside CATALOG_KINDS after the
+/// Dojo presets (Godot had no such kind).
+pub const BODY_SLOTS_KIND: &str = crate::check::body_slot::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -248,6 +251,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(UNIT_TRACKS_KIND.into(), Value::Array(tracks.into_iter().map(Value::Object).collect()));
     let presets = read_dojo_presets(&dir, &out, errors);
     out.insert(DOJO_PRESETS_KIND.into(), Value::Array(presets.into_iter().map(Value::Object).collect()));
+    out.insert(BODY_SLOTS_KIND.into(), Value::Array(read_body_slots(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -426,6 +430,31 @@ fn read_unit_tracks(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: unit track '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PK2-S2 (engine-only, beside CATALOG_KINDS): the body slot rows that pass their checks (`check::body_slot`), in file
+/// order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_body_slots(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{BODY_SLOTS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(BODY_SLOTS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::body_slot::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: body slot '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

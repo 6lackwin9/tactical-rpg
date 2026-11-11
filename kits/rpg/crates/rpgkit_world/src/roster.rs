@@ -177,6 +177,8 @@ pub struct Settled {
     pub stashed: Vec<(String, String)>,
     /// PR5-26 review F2: the slots left empty (`NO_ITEM`) because the grant refuses their default (member, slot).
     pub cleared: Vec<(String, String)>,
+    /// PK2-S2: the items fallen members left in the stash (member, item id; `fallen_remains`).
+    pub remains: Vec<(String, String)>,
 }
 
 /// PK2-S1: a member's unit track stage moved at the settle.
@@ -259,6 +261,25 @@ fn stash_forbidden(d: &Data, gs: &mut GameState, id: &str) -> (Vec<String>, Vec<
         }
     }
     (items, cleared)
+}
+
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "Losing a grafted unit"): a member who just departed `dead` while the party
+/// holds the field (`FightEnd::field_held`) leaves its body's item in the stash: its character's `remains`, else its
+/// class's (`ClassDef::remains`; "" = none, an unknown item = none); `out.remains` names it. A captured member, a
+/// unit track's departure (`lost`) and a fight the party does not hold leave nothing; its installed grafts are lost with
+/// it (the body is no gear: `depart` stashes none).
+fn fallen_remains(d: &Data, gs: &mut GameState, f: &FightEnd, member: &str, life: &str, out: &mut Settled) {
+    if life != DEAD || !f.field_held() {
+        return;
+    }
+    let Some(record) = gs.party.departed.iter().rev().find(|r| r.member.id == member) else { return };
+    let own = json::s(d.resolve(&gs.world_id, "characters", &record.member.lore_ref), rpgkit_data::REMAINS_KEY);
+    let item = if own.is_empty() { d.cat.classes.get(&record.member.class_id(d)).map(|c| c.remains.clone()).unwrap_or_default() } else { own };
+    if item.is_empty() || !d.has("items", &item) {
+        return;
+    }
+    gs.party.add_to_stash(&item, 1);
+    out.remains.push((member.to_string(), item));
 }
 
 /// ENCOUNTER2 W3, 3.2's first row: the life `then` gives a stayer or stander (`capture`: captured, `kill`: dead) and its
@@ -406,6 +427,8 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
     for e in ends {
         if let Some(m) = gs.party.member_mut(&e.member) {
             m.pouch = e.pouch.iter().chain(&e.unloaded).cloned().collect();
+            // PK2-S2 (FB-167 Q6): the floor offset held for this battle only
+            m.floor_offset = 0;
         }
     }
     let mut home: Vec<&HeroEnd> = Vec::new();
@@ -423,6 +446,7 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
         if let Some((life, cause)) = then_departs(f, e) {
             if depart(d, gs, &e.member, life, cause, &f.encounter).is_ok() {
                 out.departed.push((e.member.clone(), life.to_string()));
+                fallen_remains(d, gs, f, &e.member, life, &mut out);
                 continue;
             }
         }
@@ -448,6 +472,7 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
         let (value, cause) = settle_value(&row, f, e);
         if value == CAPTURED || value == DEAD {
             if depart(d, gs, &e.member, &value, cause, &f.encounter).is_ok() {
+                fallen_remains(d, gs, f, &e.member, &value, &mut out);
                 out.departed.push((e.member.clone(), value));
             }
             continue;

@@ -366,6 +366,10 @@ pub fn prepare(v: &View, raw: &Dict, old: &Dict) -> Dict {
 pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<String> {
     let mut out = Vec::new();
     out.extend(super::assets::icon_errors(v, e, family));
+    // PK2-S2: a body piece's own fields (flat or resolved, the type its family gives)
+    if json::s(e, "item_type") == rpgkit_data::GRAFT {
+        out.extend(graft_problems(v, e));
+    }
     if !inherit {
         out.extend(legacy_errors(v, e));
         return out;
@@ -409,6 +413,39 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
         // HOOKS1 GH2: the hazard a consumable leaves (no SKILL shape: an item has no area of its own)
         if json::get(e, "hazard").as_object().is_none_or(|h| !h.is_empty()) {
             out.extend(super::hooks::hazard_place_errors(json::get(e, "hazard"), &super::hooks::Ctx::of(v), false));
+        }
+    }
+    out
+}
+
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `GRAFT` item's keystone mark (a top-tier class piece only), class (a
+/// class piece only) and `body_effects` (the passive grammar without a member grant); its tier (1-3), body role and a
+/// known class are the schema's (normalised, enum- and ref-checked with every field).
+fn graft_problems(v: &View, e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let role = json::s(e, "body_role");
+    let class_piece = role == rpgkit_data::BODY_ROLE_CLASS;
+    let keystone = json::b(e, "keystone", false);
+    if keystone && !class_piece {
+        out.push(format!("A keystone graft is a class piece (body role {}).", rpgkit_data::BODY_ROLE_CLASS));
+    }
+    // PK2 3: the keystone is a top-tier graft (so the 3-graft gate applies to it)
+    let top = rpgkit_data::GRAFT_TIERS.1;
+    if keystone && json::i(e, "tier", 0) != i64::from(top) {
+        out.push(format!("A keystone graft is a tier {top} graft (it needs 3 grafts first, as every tier {top} graft)."));
+    }
+    // a known class is the schema's ref check
+    if !json::s(e, "class_id").is_empty() && !class_piece {
+        out.push(format!("Only a class piece (body role {}) names a class.", rpgkit_data::BODY_ROLE_CLASS));
+    }
+    let effects = json::get(e, rpgkit_data::BODY_EFFECTS_KEY);
+    for message in simple::effect_errors(effects, &has_skill(v), &v.derived_ids(), true, false, &super::hooks::Ctx::of(v)) {
+        out.push(format!("Body effects: {message}"));
+    }
+    for (i, fx) in effects.as_array().map(Vec::as_slice).unwrap_or_default().iter().enumerate() {
+        let t = json::s(json::dict(fx), "type");
+        if rpgkit_data::MEMBER_GRANTS.contains(&t.as_str()) {
+            out.push(format!("Body effects: Effect {}: '{t}' is a passive's member grant; a graft can't carry it.", i + 1));
         }
     }
     out
