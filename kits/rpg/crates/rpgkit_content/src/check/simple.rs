@@ -87,6 +87,11 @@ pub fn terrain_errors(v: &super::View, e: &Dict, current_id: &str) -> Vec<String
     if json::s_or(e, "origin", super::ORIGIN_SYSTEM) != super::ORIGIN_SYSTEM {
         errors.push("Terrain rows are system assets (origin system).".into());
     }
+    // PR5-33: the look colour is empty (the game's default) or #rrggbb
+    let color = json::s(e, rpgkit_data::looks::COLOR_KEY);
+    if !color.is_empty() && (!color.starts_with('#') || rpgkit_data::looks::parse_color(&color).is_none()) {
+        errors.push(format!("Colour '{color}' must be #rrggbb (or empty for the default)."));
+    }
     errors
 }
 

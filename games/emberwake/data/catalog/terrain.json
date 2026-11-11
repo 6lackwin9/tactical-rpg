@@ -24,7 +24,8 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"color": "#3c6838"
 		},
 		{
 			"id": "dirt",
@@ -36,7 +37,10 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "sunken",
+			"relief_depth": 2,
+			"color": "#685438"
 		},
 		{
 			"id": "stone",
@@ -48,7 +52,8 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"color": "#5c5c64"
 		},
 		{
 			"id": "sand",
@@ -60,7 +65,8 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"color": "#aaa078"
 		},
 		{
 			"id": "snow",
@@ -72,7 +78,8 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"color": "#aaa078"
 		},
 		{
 			"id": "shallow_water",
@@ -84,7 +91,11 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "sunken",
+			"relief_depth": 3,
+			"color": "#385c8c",
+			"face": "water"
 		},
 		{
 			"id": "deep_water",
@@ -96,7 +107,11 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "sunken",
+			"relief_depth": 5,
+			"color": "#1e366e",
+			"face": "water"
 		},
 		{
 			"id": "mud",
@@ -108,7 +123,9 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "sunken",
+			"relief_depth": 1
 		},
 		{
 			"id": "lava",
@@ -120,7 +137,11 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "sunken",
+			"relief_depth": 5,
+			"color": "#963214",
+			"face": "lava"
 		},
 		{
 			"id": "wall",
@@ -132,7 +153,10 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "block",
+			"color": "#2e2e36",
+			"face": "wall"
 		},
 		{
 			"id": "tree",
@@ -144,7 +168,10 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "standing",
+			"prop": "tree",
+			"color": "#1e4628"
 		},
 		{
 			"id": "bridge",
@@ -168,7 +195,9 @@
 			"hazard_potency": 100,
 			"hazard_magnitude": 0,
 			"hazard_rounds": 1,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"prop": "stones",
+			"color": "#5c5c64"
 		},
 		{
 			"id": "burning_ground",
@@ -192,7 +221,9 @@
 			"hazard_potency": 80,
 			"hazard_magnitude": 4,
 			"hazard_rounds": 2,
-			"hazard_on": "both"
+			"hazard_on": "both",
+			"relief": "sunken",
+			"relief_depth": 2
 		},
 		{
 			"id": "ice",

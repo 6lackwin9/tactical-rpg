@@ -3,6 +3,7 @@
 
 use aegis_core::value;
 use indexmap::IndexMap;
+use rpgkit_data::looks::{Face, Relief, TerrainLook};
 use rpgkit_data::{Catalog, ZoneDef};
 use std::ops::{Add, Mul, Sub};
 
@@ -166,6 +167,8 @@ pub struct TerrainTable {
     pub ids: Vec<String>,
     /// LAYER-DOWN-2: the board glyph of each row (None: a new type without one).
     pub glyphs: Vec<Option<char>>,
+    /// PR5-33: the look of each row (`TerrainLook::of` its catalog row; presentation only, no rule reads it).
+    pub looks: Vec<TerrainLook>,
 }
 
 impl TerrainTable {
@@ -177,6 +180,7 @@ impl TerrainTable {
     pub fn from_catalog(cat: &Catalog) -> Self {
         let ids = terrain_ids(cat);
         let glyphs = ids.iter().map(|id| glyph_of(id, cat.terrain.get(id))).collect();
+        let looks = ids.iter().map(|id| TerrainLook::of(cat.terrain.get(id))).collect();
         let rows = ids
             .iter()
             .enumerate()
@@ -206,7 +210,13 @@ impl TerrainTable {
                 }
             })
             .collect();
-        Self { rows, ids, glyphs }
+        Self { rows, ids, glyphs, looks }
+    }
+
+    /// PR5-33: the look of terrain type `id` (an unknown type: the default look, flat ground).
+    pub fn look(&self, id: &str) -> &TerrainLook {
+        static FLAT: TerrainLook = TerrainLook { relief: Relief::Ground, depth: 0, prop: String::new(), color: None, face: Face::Earth };
+        self.index_of(id).and_then(|i| self.looks.get(i)).unwrap_or(&FLAT)
     }
 
     /// LAYER-DOWN-2: the type index of board glyph `ch` (None: no type has it).

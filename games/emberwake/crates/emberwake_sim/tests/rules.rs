@@ -43,7 +43,8 @@ fn argument_errors_name_the_problem() {
 fn game_parse_keeps_the_game_defaults() {
     let d = data();
     let a = emberwake_sim::parse(&d, &argv("party 3")).unwrap();
-    assert_eq!(a.world, emberwake_sim::WORLD);
+    assert!(!emberwake_sim::game().default_world.is_empty(), "the game names a default world (sim.json)");
+    assert_eq!(a.world, emberwake_sim::game().default_world);
     assert_eq!(a.game.default_world, emberwake_sim::game().default_world);
     let kit = SimArgs::parse(&d, &argv("party 3")).unwrap();
     assert_eq!(kit.world, "", "the kit alone has no default world");
@@ -84,7 +85,7 @@ fn sweep_compositions() {
     let sample = count("sweep dupes=on sample=7");
     assert_eq!(sample.len(), 7);
     assert_eq!(sample, count("sweep dupes=on sample=7"), "the draw is seeded");
-    assert_eq!(sorted_key(emberwake_sim::CLASSES.ids, &["mage".into(), "warrior".into(), "priest".into()]), "warrior,priest,mage", "class order");
+    assert_eq!(sorted_key(emberwake_sim::game().classes.ids, &["mage".into(), "warrior".into(), "priest".into()]), "warrior,priest,mage", "class order");
 }
 
 #[test]
@@ -148,7 +149,7 @@ fn feel_runs_the_timeline_test_encounters() {
     let last = out.last().and_then(|l| l.strip_prefix(emberwake_sim::feel::JSON_PREFIX)).expect("FEEL_JSON last");
     let r: serde_json::Value = serde_json::from_str(last).expect("JSON");
     assert_eq!(r["ruleset"], serde_json::json!("timeline"));
-    for e in emberwake_sim::FEEL_ENCOUNTERS {
+    for e in &emberwake_sim::game().feel_encounters {
         assert_eq!(r["encounters"][e]["fights"], serde_json::json!(1), "{e}: one fight (quick)");
     }
 }

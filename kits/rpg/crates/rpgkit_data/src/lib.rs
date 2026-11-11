@@ -17,6 +17,7 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod looks;
 pub mod mastery;
 pub mod recipe;
 pub mod terms;
@@ -24,6 +25,7 @@ pub mod unit_budget;
 pub mod unit_template;
 pub mod unit_track;
 pub use body_slot::{BodySlotDef, GraftSpec, BODY_ROLES, BODY_ROLE_CLASS, BODY_ROLE_MONSTER, BODY_EFFECTS_KEY, BODY_SLOTS_KIND, BODY_SLOTS_MAX, GRAFT, GRAFT_TIERS, GRAFT_TOP_TIER_NEEDS};
+pub use looks::{FamilyLook, TerrainLook};
 pub use mastery::{MasteryBook, Technique, MASTERY_BOOK};
 pub use recipe::{RecipeCost, RecipeDef, PROF_ROLES, RECIPES_KIND, RECIPE_SERVICE, RECIPE_TARGETS};
 pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
@@ -477,6 +479,10 @@ pub struct SkillDef {
     pub unmark: String,
     /// PK2-S1: how many times a unit may use the skill in one battle (0 = no limit).
     pub uses_per_battle: i32,
+    /// PR5-33: the look key the game shows when the skill is used (`looks::FX_KEY`; "" = by kind and weapon).
+    pub fx: String,
+    /// PR5-33: the body clip the actor tries first (`looks::CLIP_KEY`; "" = by kind and weapon).
+    pub clip: String,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -558,6 +564,8 @@ impl SkillDef {
             channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
             uses_per_battle: int(o, "uses_per_battle", 0),
+            fx: string(o, looks::FX_KEY, ""),
+            clip: string(o, looks::CLIP_KEY, ""),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -1031,6 +1039,10 @@ pub struct Catalog {
     /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipes (kind `recipes`; engine-only), keyed by id in file order. No
     /// row = no NPC offers the recipe service.
     pub recipes: IndexMap<String, RecipeDef>,
+    /// PR5-33: the look of each weapon family's strikes (kind `item_families`), keyed by family id in file order: the
+    /// rows of the value `from_value` reads, or `set_family_looks` (the world data passes its families, which the
+    /// resolved catalog leaves out). No row = the game's default look.
+    pub family_looks: IndexMap<String, FamilyLook>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -1092,9 +1104,15 @@ impl Catalog {
         for p in rows(DOJO_PRESETS_KIND).iter().map(DojoPresetDef::from_obj) {
             cat.dojo_presets.entry(p.id.clone()).or_insert(p);
         }
+        cat.set_family_looks(rows("item_families").iter());
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
+    }
+
+    /// PR5-33: the family looks from item family rows `families` (`FamilyLook::from_obj`, keyed by id; replaces any).
+    pub fn set_family_looks<'a>(&mut self, families: impl Iterator<Item = &'a Obj>) {
+        self.family_looks = families.map(|o| (string(o, "id", ""), FamilyLook::from_obj(o))).collect();
     }
 
     /// Appends skills after the authored ones (a battle's synthetic item skills) and re-indexes.

@@ -1,4 +1,5 @@
 mod pacing_tests;
+mod data_looks_tests;
 mod windup_tests;
 mod skill_menu_tests;
 mod field_rows_tests;
@@ -47,16 +48,20 @@ use emberwake_world::Data;
 use serde_json::json;
 use std::sync::Arc;
 
+/// PR5-33: the skill row's `clip` first, then the family row's `attack_clips` (one target) or `area_clips` (an area),
+/// then `attack`; a support plays `cast`; other commands none.
 #[test]
 fn an_action_picks_the_rig_clip_of_its_skill_kind_and_weapon() {
-    assert_eq!(action_clips("shield_bash", "attack", "sword"), ["shield_bash", "attack"], "a skill with its own clip first");
-    assert_eq!(action_clips("cyclone_kick", "area", ""), ["sweep_kick", "sweep_kick", "kick", "jab", "attack"]);
-    assert_eq!(action_clips("strike", "attack", "fist"), ["jab", "attack"], "fists jab");
-    assert_eq!(action_clips("caustic_vomit", "attack", ""), ["spit", "jab", "attack"], "the crawler spits, other bodies fall back");
-    assert_eq!(action_clips("strike", "attack", "bow"), ["attack"]);
-    assert_eq!(action_clips("volley", "area", "bow"), ["attack"]);
-    assert_eq!(action_clips("mend", "support", "mace"), ["cast"]);
-    assert!(action_clips("guard", "", "sword").is_empty(), "guards play through the stance, moves through the slide");
+    let fists = emberwake_data::FamilyLook { attack_clips: vec!["jab".into()], area_clips: vec!["sweep_kick".into(), "kick".into(), "jab".into()], ..Default::default() };
+    let plain = emberwake_data::FamilyLook::default();
+    assert_eq!(action_clips("shield_bash", "attack", Some(&plain)), ["shield_bash", "attack"], "a skill with its own clip first");
+    assert_eq!(action_clips("sweep_kick", "area", Some(&fists)), ["sweep_kick", "sweep_kick", "kick", "jab", "attack"]);
+    assert_eq!(action_clips("", "attack", Some(&fists)), ["jab", "attack"], "fists jab");
+    assert_eq!(action_clips("spit", "attack", Some(&fists)), ["spit", "jab", "attack"], "the crawler spits, other bodies fall back");
+    assert_eq!(action_clips("", "attack", Some(&plain)), ["attack"]);
+    assert_eq!(action_clips("", "area", None), ["attack"], "no family row");
+    assert_eq!(action_clips("", "support", Some(&fists)), ["cast"]);
+    assert!(action_clips("", "", Some(&fists)).is_empty(), "guards play through the stance, moves through the slide");
 }
 
 /// The rig's sheets face right: a token facing left (FACE1) shows the sheet frame mirrored, its outline with it; one
@@ -357,7 +362,7 @@ fn tokens_follow_the_battle_step_by_step() {
                 // FX1 4.2 step 1: an attacker that moved in this step (a dash, a charge, an Engage carry) strikes after its slide
                 let at = if a.slide.is_some_and(|(_, t0)| t0 == now) { now + a.slide_ms(300) } else { now };
                 assert_eq!(want.1, at);
-                assert!(want.0.last() == Some(&"attack"), "{:?} ends with the generic attack", want.0);
+                assert!(want.0.last().map(String::as_str) == Some("attack"), "{:?} ends with the generic attack", want.0);
             }
         }
     }
@@ -845,7 +850,7 @@ fn a_hit_shows_on_the_board_at_its_impact_not_at_the_pop() {
     assert!(at >= i.t0, "the impact comes after t0");
     if i.delivery == crate::fx::Delivery::Melee {
         let actor_clips = unit_clips(&mut cx, &b, i.actor);
-        let clip = i.clips.iter().copied().find(|c| actor_clips.clip(c).is_some());
+        let clip = i.clips.iter().find(|c| actor_clips.clip(c).is_some());
         let want = clip.and_then(|c| actor_clips.clip(c).unwrap().impact_ms()).unwrap_or(cx.tuning.value.melee_hit_ms);
         assert_eq!(at, i.t0 + want, "a blow lands at its clip's impact frame");
     }

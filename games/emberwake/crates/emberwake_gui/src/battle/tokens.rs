@@ -44,7 +44,7 @@ pub(super) struct Seen {
 pub(super) struct UnitAnim {
     pub(super) player: ClipPlayer,
     /// An action clip to start (candidates best first, `action_clips`) and when; the draw picks the first the body has.
-    pub(super) want: Option<(Vec<&'static str>, u64)>,
+    pub(super) want: Option<(Vec<String>, u64)>,
     /// The tile it slides from and when the slide started.
     pub(super) slide: Option<(V2, u64)>,
     /// INPUT1 MR12: the slide is a dash (`DASH_MS` long, not the walk's), and its `dash` clip is still to be picked
@@ -523,12 +523,12 @@ impl Tokens {
                     a.facing = turn(a.facing, from, to);
                 }
                 if !kind.is_empty() && !instant {
-                    let skill = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.id.as_str());
-                    let weapon = u.inventory.main_weapon().map_or("", |w| w.weapon_type());
+                    let clip = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.clip.as_str());
+                    let family = fx::family_look(&s.w.cat, u.inventory.main_weapon().map_or("", |w| w.weapon_type()));
                     let a = &mut self.anims[act.unit];
                     // FX1 4.2 step 1: after its slide when it moved in this step (a dash, a charge, an Engage carry)
                     let t0 = if a.slide.is_some_and(|(_, t)| t == now) { now + a.slide_ms(walk_ms) } else { now };
-                    a.want = Some((action_clips(skill, kind, weapon), t0));
+                    a.want = Some((action_clips(clip, kind, family), t0));
                     a.strike = struck == Some(act.unit);
                 }
             }
@@ -675,25 +675,24 @@ impl Tokens {
     }
 }
 
-/// Skills with a clip of their own on the sprite rig (SPRITE1 section 2; ids from tools/sprites/classes.py). CAST1-S:
-/// the Ash-Crawler's `caustic_vomit` plays the crawler rig's `spit` (CREATURE1; a body without it falls back).
-const SKILL_CLIPS: [(&str, &str); 6] =
-    [("shield_bash", "shield_bash"), ("offhand_jab", "jab"), ("haymaker", "haymaker"), ("sweep_kick", "sweep_kick"), ("cyclone_kick", "sweep_kick"), ("caustic_vomit", "spit")];
-/// Weapon types that fight with fists (the brawler's jab and kicks).
-const FIST_WEAPONS: [&str; 3] = ["", "fist", "unarmed"];
-
 /// SPRITE1-U: the clips an action's actor may play, best first (the first one its body has is played; none: no clip).
-/// `kind` is the command's: "attack" (one target), "area" or "support"; `weapon` the actor's main weapon type ("" =
-/// none). A skill with its own rig clip plays it; fists jab one target and sweep an area; any other attack plays
-/// `attack`; a support skill plays `cast` (no rig clip yet).
-pub(super) fn action_clips(skill: &str, kind: &str, weapon: &str) -> Vec<&'static str> {
-    let mut out: Vec<&'static str> = SKILL_CLIPS.iter().filter(|(s, _)| *s == skill).map(|(_, c)| *c).collect();
-    let fists = FIST_WEAPONS.contains(&weapon);
+/// `kind` is the command's: "attack" (one target), "area" or "support"; `clip` the skill's own rig clip (PR5-33: its
+/// row's `clip`, "" none; SPRITE1 section 2, CAST1-S); `family` the look of the actor's main weapon family (`fx::
+/// family_look`: no weapon is the kit's fist family). The skill's clip first; an attack tries its family's attack or
+/// area clips (PR5-33: the family row's `attack_clips` / `area_clips`, the brawler's jab and kicks), then `attack`; a
+/// support skill plays `cast` (no rig clip yet).
+pub(super) fn action_clips(clip: &str, kind: &str, family: Option<&emberwake_data::looks::FamilyLook>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if !clip.is_empty() {
+        out.push(clip.to_string());
+    }
     match kind {
-        "attack" if fists => out.extend(["jab", "attack"]),
-        "area" if fists => out.extend(["sweep_kick", "kick", "jab", "attack"]),
-        "attack" | "area" => out.push("attack"),
-        "support" => out.push("cast"),
+        "attack" | "area" => {
+            let first = family.map_or(&[][..], |f| if kind == "area" { &f.area_clips[..] } else { &f.attack_clips[..] });
+            out.extend(first.iter().cloned());
+            out.push("attack".into());
+        }
+        "support" => out.push("cast".into()),
         _ => {}
     }
     out

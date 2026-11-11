@@ -8,6 +8,7 @@
 
 pub mod args;
 pub mod campaign;
+pub mod config;
 pub mod deadlines;
 pub mod feel;
 pub mod kpi;

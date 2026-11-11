@@ -45,7 +45,7 @@ fn host_autoplay_and_sim_feel_fight_alike() {
     };
     let d = Arc::new(d);
     let mut compared = 0;
-    for id in emberwake_sim::FEEL_ENCOUNTERS.iter().filter(|e| d.cat.encounters.contains_key(**e)) {
+    for id in emberwake_sim::game().feel_encounters.iter().filter(|e| d.cat.encounters.contains_key(*e)) {
         for seed in SEEDS {
             assert_eq!(host_fight(&d, id, seed), sim_fight(&d, id, seed), "{id} seed {seed}: host autoplay vs sim feel (outcome, rounds)");
             compared += 1;

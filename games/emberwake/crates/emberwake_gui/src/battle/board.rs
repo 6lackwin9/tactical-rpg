@@ -122,8 +122,8 @@ pub(super) fn start_wanted(tokens: &mut Tokens, art: &mut Art, i: usize, body: O
             let (cands, t0) = a.want.take().unwrap_or_default();
             if let Some(c) = cands.into_iter().find(|c| art.has_clip(b, c)) {
                 // WINDUP1 W4: from its `strike` frame after a held wind-up (0 when the row marks none)
-                let from = if a.strike { art.clips(b).and_then(|k| k.clip(c)).map_or(0, |k| k.strike) } else { 0 };
-                a.player.play_from(c, t0, from);
+                let from = if a.strike { art.clips(b).and_then(|k| k.clip(&c)).map_or(0, |k| k.strike) } else { 0 };
+                a.player.play_from(&c, t0, from);
             }
             a.strike = false;
         }
@@ -178,7 +178,7 @@ pub(super) struct StatusOn {
 fn status_draws(tokens: &mut Tokens, i: usize, alive: bool, wall: u64, now: u64, t: &Tuning) -> Vec<fx::Drawn> {
     let Some(a) = tokens.anims.get_mut(i) else { return Vec::new() };
     let looks = if alive { fx::status_frame(&a.marks, &mut a.slots, wall, now, t.status_cycle_ms) } else { Vec::new() };
-    a.status_fx = looks.iter().map(|d| d.look.id).collect();
+    a.status_fx = looks.iter().map(|d| d.id).collect();
     looks
 }
 
@@ -214,7 +214,7 @@ fn flat_status(tokens: &mut Tokens, w: &World, geo: &Geom, t: &Tuning, anim_now:
 pub(super) fn draw_status_loops(p: &mut Painter, on: &[StatusOn], layer: Layer, geo: &Geom, t: &Tuning, now: u64, still: bool) {
     for s in on {
         for d in &s.looks {
-            let Some(l) = fx::status_loop(d.look, geo, t, s.foot, s.left, d.start, fx::status_seed(s.unit, d.look.id), d.pending) else { continue };
+            let Some(l) = fx::status_loop(d.look, geo, t, s.foot, s.left, d.start, fx::status_seed(s.unit, d.id), d.pending) else { continue };
             if l.layer() != layer {
                 continue;
             }
@@ -270,7 +270,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             let tid = w.grid.terrain_id(c);
             match cx.art.tile_in(&emberwake_content::art::BATTLE_SETS, tid, gx, gy, TILE) {
                 Some(img) => ui.p.image(img, r),
-                None => ui.p.fill(r, stage::terrain_color(tid)),
+                None => ui.p.fill(r, stage::terrain_color(&w.grid, tid)),
             }
             if w.grid.is_exit(c) {
                 // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)

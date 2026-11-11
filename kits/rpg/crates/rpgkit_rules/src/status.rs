@@ -162,6 +162,9 @@ pub struct StatusRow {
     pub targeting: Option<Targeting>,
     /// S1 behaviour primitives (at least one), see [`Primitive`].
     pub primitives: &'static [Primitive],
+    /// PR5-33 (`rpgkit_data::looks`): the look key a game shows on a unit under the status ("" = none). Presentation
+    /// only: no rule reads it.
+    pub fx: &'static str,
 }
 
 impl StatusRow {
@@ -243,6 +246,7 @@ fn parse_row(i: usize, r: &'static Value) -> StatusRow {
         rating,
         targeting,
         primitives: Box::leak(primitives.into_boxed_slice()),
+        fx: text("fx"),
     }
 }
 

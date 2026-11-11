@@ -150,7 +150,7 @@ fn a_fallen_unit_draws_no_looks_and_a_stealthed_one_is_faded() {
         b.draw(&mut cx, &mut g, (-500, -500), true);
         assert_eq!(b.tokens.anims[v].status_fx, ["stealth"], "{view}");
         assert_ne!(plain, g.canvas.px, "{view}: the stealthed token is faded");
-        assert_eq!(fx::token_alpha(&[fx::Drawn { look: fx::status_look("stealth").unwrap(), pending: false, start: 0 }], &cx.tuning.value), fx::STEALTH_ALPHA);
+        assert_eq!(fx::token_alpha(&[fx::Drawn { id: "stealth", look: fx::status_look("stealth").unwrap(), pending: false, start: 0 }], &cx.tuning.value), fx::STEALTH_ALPHA);
     }
 }
 
@@ -198,7 +198,7 @@ fn the_agent_link_tokens_name_the_status_looks_drawn() {
 fn reduce_motion_draws_the_loops_still() {
     let t = Tuning::default();
     let geo = Geom::new(View::Stage, &t);
-    let looks = ["stun", "burn"].iter().map(|id| fx::Drawn { look: fx::status_look(id).unwrap(), pending: false, start: 0 }).collect();
+    let looks = ["stun", "burn"].iter().map(|id| fx::Drawn { id, look: fx::status_look(id).unwrap(), pending: false, start: 0 }).collect();
     let on = [StatusOn { unit: 0, foot: (300.0, 200.0), left: false, looks }];
     let render = |now: u64, still: bool, on: &[StatusOn]| {
         let mut g = crate::hud::hud_tests::gfx();

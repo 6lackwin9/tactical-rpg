@@ -14,8 +14,9 @@ use serde_json::Value;
 /// The kinds in table order (SkillKinds.KINDS).
 pub const KINDS: [&str; 9] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", "REST", "MOVE", "TARGET", "STATUS"];
 const AUTHORABLE: [&str; 5] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE"];
-/// The fields every kind has (RULESET1-S adds `round_intent`: every kind has an intent, IN4).
-const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier", "round_intent"];
+/// The fields every kind has (RULESET1-S adds `round_intent`: every kind has an intent, IN4; PR5-33 the presentation
+/// fields `fx` and `clip`, `rpgkit_data::looks`).
+const COMMON_FIELDS: [&str; 19] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier", "round_intent", "fx", "clip"];
 /// The sections and their fields (SkillKinds.SECTIONS; then RULESET1-S's timeline fields, RULESET1_TASKS 1.3: `cost`
 /// the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK; then
 /// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`

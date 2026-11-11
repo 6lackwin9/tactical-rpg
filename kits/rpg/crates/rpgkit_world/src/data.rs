@@ -110,8 +110,11 @@ impl Data {
             level_delta_min: json::f(kill, "level_delta_min", 0.25),
             level_delta_max: json::f(kill, "level_delta_max", 2.0),
         };
+        // PR5-33: the battle catalog carries the family looks (the resolved catalog leaves the family rows out)
+        let mut cat = Catalog::from_value(catalog);
+        cat.set_family_looks(catalogs.content.get("item_families").into_iter().flat_map(|t| t.values()));
         let mut d = Self {
-            cat: Arc::new(Catalog::from_value(catalog)),
+            cat: Arc::new(cat),
             catalogs,
             maps: dicts(json::get(g, "maps")),
             quest_templates: dicts(json::get(g, "quests")),
