@@ -67,9 +67,9 @@ fn a_recorded_battle_replays_round_by_round() {
     assert!(s.checkpoints.len() >= 3, "a checkpoint per concluded round: {}", s.checkpoints.len());
     assert_eq!(s.checkpoints[0]["state"]["round"], json!(1));
     let mut rec = Recording::new("20261020-000000", "agent", json!({}));
-    rec.battles.push(s.clone());
+    rec.sessions.push(s.clone());
     let back = Recording::from_json(&rec.to_json()).unwrap();
-    let report = playtest::replay(&mut Host::new(Battle::new(cat.clone())), &back.battles[0], None);
+    let report = playtest::replay(&mut Host::new(Battle::new(cat.clone())), &back.sessions[0], None);
     assert!(report.matched(), "{report:?}");
 
     let mut changed = s.clone();

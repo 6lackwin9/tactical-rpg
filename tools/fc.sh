@@ -18,12 +18,12 @@
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
-#   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
+#   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: session=, until=, json, variant=, write=, seeds=, fallback=)
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
 #   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
 #                                (0 pass, 1 a step failed, 2 could not start); never in the gate
-#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
+#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [rules=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
 #   tools/fc.sh web [test|release]   the web build (WEBREL1-G1) into out/web/: emberwake_gui as wasm (test: dev tools and the page
 #                                probe; release: neither), wasm-bindgen 0.2.129, wasm-opt when installed, the bundle parts
@@ -276,11 +276,11 @@ aegis() {  # the CLI, built on demand
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
-  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [rules=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
   local verb=run
   if [ "$1" = "shots" ]; then
     verb=shots; shift
-    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
+    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [scene=] [rules=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
   fi
   for a in "$@"; do
     case "$a" in

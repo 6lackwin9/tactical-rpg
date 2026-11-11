@@ -241,12 +241,12 @@ impl Playtests {
         if !self.on || session.requests.is_empty() {
             return;
         }
-        let battles = &mut self.open().battles;
-        match slot.filter(|i| *i < battles.len()) {
-            Some(i) => battles[i] = session,
+        let sessions = &mut self.open().sessions;
+        match slot.filter(|i| *i < sessions.len()) {
+            Some(i) => sessions[i] = session,
             None => {
-                battles.push(session);
-                *slot = Some(battles.len() - 1);
+                sessions.push(session);
+                *slot = Some(sessions.len() - 1);
             }
         }
         self.save();
@@ -340,8 +340,8 @@ mod tests {
         assert_eq!((a, b), (Some(0), Some(1)));
         let id = hub.current().unwrap().id.clone();
         let saved = Recording::load(&hub.path_of(&id)).unwrap();
-        assert_eq!(saved.battles.len(), 2);
-        assert_eq!(saved.battles[0].requests.len(), 5, "a running session is saved again in place");
+        assert_eq!(saved.sessions.len(), 2);
+        assert_eq!(saved.sessions[0].requests.len(), 5, "a running session is saved again in place");
         assert_eq!(saved.content["total"], json!("abc"));
         assert_eq!(hub.list().len(), 1);
         // Reported errors and missing art reach the trail on the next tick, art once per key, stamped with the screen.

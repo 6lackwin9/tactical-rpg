@@ -2818,7 +2818,7 @@ mod tests {
         s.frame();
         assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.play"}))["ok"], json!(true));
         s.frame();
-        assert_eq!(*LAUNCHED.lock().unwrap(), vec![(6, Some((json!({"recording": id, "battle": 0, "at": 3}), 3))), (6, None)]);
+        assert_eq!(*LAUNCHED.lock().unwrap(), vec![(6, Some((json!({"recording": id, "session": 0, "at": 3}), 3))), (6, None)]);
         s.stack.pop();
         s.frame();
         assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.copy"}))["ok"], json!(true));

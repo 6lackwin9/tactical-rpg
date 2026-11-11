@@ -633,12 +633,12 @@ fn everything_the_game_writes_lies_under_the_scratch_folder() {
     let scratch = Path::new("scratch_root");
     let mut s = scenario_of(json!([{"step": "back"}]));
     s.launch.screen = "runner".into();
-    s.launch.encounter = Some("e1".into());
+    s.launch.scene = Some("e1".into());
     s.launch.seed = Some(9);
     let p = scenario::plan(&s, (1280, 720), "somegame", Path::new("game.exe"), Some(Path::new("copy/data")), 4567, scratch);
     assert_eq!(p.appdata, scratch);
     assert!(p.settings_path.starts_with(scratch) && p.recordings.starts_with(scratch));
-    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "encounter=e1".into(), "seed=9".into(), "data=copy/data".into()] {
+    for want in ["port=4567".to_string(), format!("saves={}", scratch.join("saves").display()), "screen=runner".into(), "scene=e1".into(), "seed=9".into(), "data=copy/data".into()] {
         assert!(p.args.contains(&want), "{want} in {:?}", p.args);
     }
     let dir = temp("write");
@@ -1070,10 +1070,12 @@ fn a_file_that_cannot_run_as_written_is_a_problem() {
     v["window"] = json!(true);
     assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("clip")), "a clip needs no window, even inside a repeat");
     let mut v = minimal(json!([{"step": "back"}]));
-    v["launch"] = json!({"screen": "runner", "ruleset": "r1"});
-    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("ruleset")));
-    v["launch"] = json!({"ruleset": "r1"});
+    v["launch"] = json!({"screen": "runner", "rules": "r1"});
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("rules")));
+    v["launch"] = json!({"rules": "r1"});
     assert!(parse("x", &v).is_err(), "the default screen is not the arena");
+    v["launch"] = json!({"screen": "runner", "ruleset": "r1"});
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("rules")), "the old name is held to the same rule");
 }
 
 #[test]
@@ -1104,13 +1106,36 @@ fn a_pause_waits_and_never_past_the_runs_timeout() {
 }
 
 #[test]
-fn a_launch_names_its_ruleset() {
+fn a_launch_names_its_rules() {
     let mut v = minimal(json!([{"step": "back"}]));
-    v["launch"] = json!({"screen": "arena", "encounter": "e1", "ruleset": "r1"});
+    v["launch"] = json!({"screen": "arena", "scene": "e1", "rules": "r1"});
     let p = scenario::plan(&parse("x", &v).unwrap(), (1280, 720), "somegame", Path::new("game.exe"), None, 4567, Path::new("scratch_root"));
-    assert!(p.args.contains(&"ruleset=r1".to_string()), "{:?}", p.args);
-    v["launch"]["ruleset"] = json!(3);
+    assert!(p.args.contains(&"rules=r1".to_string()) && p.args.contains(&"scene=e1".to_string()), "{:?}", p.args);
+    v["launch"]["rules"] = json!(3);
     assert!(parse("x", &v).is_err());
+}
+
+/// LAYER-ENG-KEYS (PR5-29a): a file with the launch keys' old names loads as the new ones, and the game is launched
+/// with the new keys either way; a launch giving both names of one key is refused.
+#[test]
+fn the_old_launch_key_names_still_load() {
+    let mut v = minimal(json!([{"step": "back"}]));
+    v["launch"] = json!({"screen": "arena", "scene": "e1", "rules": "r1", "seed": 3});
+    let new = parse("x", &v).unwrap();
+    v["launch"] = json!({"screen": "arena", "encounter": "e1", "ruleset": "r1", "seed": 3});
+    let old = parse("x", &v).unwrap();
+    assert_eq!(old.launch, new.launch);
+    assert_eq!((new.launch.scene.as_deref(), new.launch.rules.as_deref()), (Some("e1"), Some("r1")));
+    let p = scenario::plan(&old, (1280, 720), "somegame", Path::new("game.exe"), None, 4567, Path::new("scratch_root"));
+    assert!(p.args.contains(&"scene=e1".to_string()) && p.args.contains(&"rules=r1".to_string()), "{:?}", p.args);
+    assert!(!p.args.iter().any(|a| a.starts_with("encounter=") || a.starts_with("ruleset=")), "the game hears only the new keys: {:?}", p.args);
+    for (key, old) in scenario::LAUNCH_ALIASES {
+        v["launch"] = json!({"screen": "arena", key: "a", old: "b"});
+        let problems = parse("x", &v).unwrap_err();
+        assert!(problems.iter().any(|p| p.contains(key) && p.contains(old) && p.contains("both")), "{key}/{old}: {problems:?}");
+    }
+    v["launch"] = json!({"screen": "arena", "fight": "e1"});
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("unknown key 'fight'")));
 }
 
 // ---- the proof helper ----
@@ -1126,8 +1151,13 @@ fn proof_shots_turn_a_short_list_into_steps() {
     assert_eq!(s.steps, parse("menu", &json!({"id": "menu", "steps": [{"step": "shot", "name": "shot"}]})).unwrap().steps, "one shot when none is named");
     assert!(!s.window);
 
-    let s = scenario::shots_scenario("fight", &keys(&["screen=arena", "encounter=e1", "ruleset=r1", "seed=4", "do=screen:a_b,shot:start,key:a,widget:w,pause:50,click:c,hover:h,clip:play:6:100"])).unwrap();
-    assert_eq!((s.launch.screen.as_str(), s.launch.encounter.as_deref(), s.launch.ruleset.as_deref(), s.launch.seed), ("arena", Some("e1"), Some("r1"), Some(4)));
+    let s = scenario::shots_scenario("fight", &keys(&["screen=arena", "scene=e1", "rules=r1", "seed=4", "do=screen:a_b,shot:start,key:a,widget:w,pause:50,click:c,hover:h,clip:play:6:100"])).unwrap();
+    assert_eq!((s.launch.screen.as_str(), s.launch.scene.as_deref(), s.launch.rules.as_deref(), s.launch.seed), ("arena", Some("e1"), Some("r1"), Some(4)));
+    // LAYER-ENG-KEYS: the old key names work as `shots` keys too; both names of one key are refused.
+    let old = scenario::shots_scenario("fight", &keys(&["screen=arena", "encounter=e1", "ruleset=r1", "seed=4"])).unwrap();
+    assert_eq!((old.launch.scene.as_deref(), old.launch.rules.as_deref()), (Some("e1"), Some("r1")));
+    assert!(scenario::shots_scenario("fight", &keys(&["screen=arena", "scene=e1", "encounter=e2"])).is_err());
+    assert!(scenario::shots_scenario("fight", &keys(&["screen=arena", "rules=r1", "ruleset=r2"])).is_err());
     let kinds = json!([
         {"step": "wait", "until": {"path": "screen", "eq": "a_b"}}, {"step": "shot", "name": "start"}, {"step": "key", "key": "a"}, {"step": "wait", "until": {"widget": "w"}},
         {"step": "pause", "ms": 50}, {"step": "click", "id": "c"}, {"step": "hover", "id": "h"}, {"step": "clip", "name": "play", "frames": 6, "every_ms": 100}

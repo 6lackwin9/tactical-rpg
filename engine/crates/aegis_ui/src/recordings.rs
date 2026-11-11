@@ -104,7 +104,7 @@ impl<G> Recordings<G> {
     }
 
     fn session(&self) -> Option<&Session> {
-        self.picked().and_then(|r| r.battles.get(self.battle))
+        self.picked().and_then(|r| r.sessions.get(self.battle))
     }
 
     fn act(&mut self, cx: &mut Cx<G>, a: Act) {
@@ -140,7 +140,7 @@ impl<G> Recordings<G> {
                 let take = match a {
                     Act::TakeOver => {
                         let at = take_over_points(&session).get(self.round).map_or(1, |p| p.1);
-                        Some((json!({"recording": rec.id, "battle": self.battle, "at": at}), at))
+                        Some((json!({"recording": rec.id, "session": self.battle, "at": at}), at))
                     }
                     _ => None,
                 };
@@ -212,7 +212,7 @@ impl<G> Screen<G> for Recordings<G> {
                         badges.push("stale");
                     }
                     let badge = if badges.is_empty() { String::new() } else { format!(" [{}]", badges.join(", ")) };
-                    (format!("{id}  {} battles, {} notes{badge}", rec.battles.len(), rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
+                    (format!("{id}  {} battles, {} notes{badge}", rec.sessions.len(), rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
                 }
                 Err(_) => (format!("{id}  (unreadable)"), t.foe),
             };
@@ -246,7 +246,7 @@ impl<G> Screen<G> for Recordings<G> {
                 ui.p.text(x as f32, y as f32, "BATTLE", SMALL, t.info);
                 y += 9;
                 let labels: Vec<String> = rec
-                    .battles
+                    .sessions
                     .iter()
                     .enumerate()
                     .map(|(i, b)| {
@@ -259,7 +259,7 @@ impl<G> Screen<G> for Recordings<G> {
                 ui.select("recordings.battle", Rect::new(x, y, 240, 14), &labels, self.battle, Act::Battle, !labels.is_empty(), Vec::new());
                 ui.button_tip("recordings.play", Rect::new(x + 246, y, 60, 14), "Play back", Act::PlayBack, !labels.is_empty(), tip("Play back", "Replays the battle to its end and shows it (watched, not recorded)."));
                 y += 18;
-                let points: Vec<String> = rec.battles.get(self.battle).map(take_over_points).unwrap_or_default().into_iter().map(|p| p.0).collect();
+                let points: Vec<String> = rec.sessions.get(self.battle).map(take_over_points).unwrap_or_default().into_iter().map(|p| p.0).collect();
                 self.round = self.round.min(points.len().saturating_sub(1));
                 ui.select("recordings.round", Rect::new(x, y, 120, 14), &points, self.round, Act::Round, !points.is_empty(), Vec::new());
                 ui.button_tip("recordings.take_over", Rect::new(x + 126, y, 60, 14), "Take over", Act::TakeOver, !points.is_empty(), tip("Take over", "Replays the battle to the chosen round, then you play on: a new session that names this one as its parent."));
