@@ -45,6 +45,31 @@ impl Slot {
     }
 }
 
+/// PK2-S5b: the share of its weapon power a dulled weapon swings at (`rpgkit_data::DULLED_POWER_MULT`; kept in the data
+/// crate beside the durability bound, so the `LOCKED` table and the rules contract stay as they were).
+pub use rpgkit_data::DULLED_POWER_MULT;
+
+/// PK2-S5b: one wielded weapon instance's wear in a battle: its durability as the battle began (`start`, more than 0
+/// for a weapon that wears; an instance of an item that never wears is not tracked) and what the battle spent from it
+/// so far (`spent`, counted past the start: the settle clamps the instance at 0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Wear {
+    pub start: i32,
+    pub spent: i32,
+}
+
+impl Wear {
+    /// The durability left now (0 or more).
+    pub fn left(&self) -> i32 {
+        (self.start - self.spent).max(0)
+    }
+
+    /// Whether the weapon is dulled now (no durability left).
+    pub fn dulled(&self) -> bool {
+        self.left() == 0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Equipment {
     pub item: ItemDef,
@@ -108,6 +133,16 @@ impl Equipment {
     /// under the rule `reach`).
     pub fn has_reach(&self) -> bool {
         self.is_melee_weapon() && self.item.reach_rule
+    }
+
+    /// PR5-28 (U3 FB-36c): the far edge of a reach weapon's melee band: its family's `range_band.max`, else
+    /// `REACH_WEAPON_REACH` (a family without a `range_band`, or a catalog frozen before it).
+    pub fn reach_max(&self) -> i32 {
+        if self.item.family_reach_max > 0 {
+            self.item.family_reach_max
+        } else {
+            crate::unit::REACH_WEAPON_REACH
+        }
     }
 
     fn discount(&self, prof: &Proficiency) -> i32 {

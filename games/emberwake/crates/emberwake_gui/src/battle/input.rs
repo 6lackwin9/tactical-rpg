@@ -153,12 +153,12 @@ fn pick_label(s: &Session, h: usize, picks: &[rip::Pick]) -> String {
 }
 
 /// PK1-S2c (PK1 4.3 item 6): skill `sid` as `c` plans it now: a marrow version's name with the marrow mark
-/// (`channel::marrow_name`, as the tells name it) when its Channel round offers that version, else its own (a Cold
+/// (`channel::channeled_name`, as the tells name it) when its Channel round offers that version, else its own (a Cold
 /// Steel skill greyed in a Channel round keeps its name).
 pub(crate) fn skill_text(w: &World, c: usize, sid: usize) -> String {
     let s = &w.cat.skills[sid];
     if emberwake_battle::channel::has_version(w, s) && emberwake_battle::channel::version(w, c, s).is_some() && emberwake_battle::channel::problem(w, c, s).is_none() {
-        emberwake_battle::channel::marrow_name(&w.cat, &s.name)
+        emberwake_battle::channel::channeled_name(&w.cat, &s.name)
     } else {
         s.name.clone()
     }
@@ -572,7 +572,7 @@ impl BattleScreen {
         let mut rows: Vec<Row> = opts
             .iter()
             .filter(|o| o.intent.map_or(!o.picks.iter().any(|p| p.holds_target()), |i| listed.contains(&i)))
-            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: o.problem.as_ref().map_or_else(|| pick_detail(&w.cat, o), |why| intent_text::menu_refusal_text(w, why)), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o) })
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: o.problem.as_ref().map_or_else(|| pick_detail(&w.cat, o), |_| intent_text::menu_refusal_text(&o.reasons)), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short, slot: Some(slot_of(o)), icon: cell_icon(w, o), at: Some(o.at), count: item_count(s, h, o) })
             .collect();
         if !rows.is_empty() {
             // VISCLAR1-D: on a unit the Move takes its tile from the next click (on a tile it is one of the kit's cells)
@@ -845,7 +845,7 @@ impl BattleScreen {
                 let picks = o.picks.clone();
                 self.choose_pick(cx, h, at, &picks, &name);
             }
-            Some(o) => self.message = format!("{name}: {}", o.problem.as_deref().map(|why| intent_text::menu_refusal_text(w, why)).unwrap_or_default()),
+            Some(o) => self.message = format!("{name}: {}", o.problem.as_deref().map(|_| intent_text::menu_refusal_text(&o.reasons)).unwrap_or_default()),
             None => self.message = format!("{name} can't act on {} this round.", target_name(w, at)),
         }
     }
@@ -992,8 +992,9 @@ impl BattleScreen {
                 }
                 d
             } else {
-                // HOOKS1-UI slice 3: an HP-cost refusal in words
-                let r = intent_text::refusal_text(p["reason"].as_str().unwrap_or(""));
+                // HOOKS1-UI slice 3: an HP-cost refusal in words (PR5-32: from the reason's fields, `refusal::Reason`)
+                let reasons: Vec<emberwake_battle::refusal::Reason> = p["reasons"].as_array().map(|a| a.iter().filter_map(emberwake_battle::refusal::Reason::from_json).collect()).unwrap_or_default();
+                let r = intent_text::refusal_text(&reasons);
                 tip.push((r.clone(), th().foe));
                 r
             };
@@ -1015,10 +1016,12 @@ fn channel_row(w: &World, h: usize) -> Option<Row> {
     let name = RoundIntent::Channel.label(&w.cat);
     let rest = &w.cat.skills[channel::rest_skill(w, h)].name;
     let cold = cold_steel_name(w);
+    // PR5-32: the channeled mark's word is the game's term (`channeled_mark`: "marrow")
+    let mark = super::tips::channeled_word(w);
     let (detail, says) = if on {
-        (format!("{name} round: click for {cold}"), format!("Back to {cold}: each marrow version turns back into its skill, the marrow-only skills drop and the auto-fill refills."))
+        (format!("{name} round: click for {cold}"), format!("Back to {cold}: each {mark} version turns back into its skill, the {mark}-only skills drop and the auto-fill refills."))
     } else {
-        (format!("{cold} round: click to {name}"), format!("This round's skills become their marrow versions (stronger, armour piercing, paid in {}); the rest drop and the auto-fill refills.", meter_name(w)))
+        (format!("{cold} round: click to {name}"), format!("This round's skills become their {mark} versions (stronger, armour piercing, paid in {}); the rest drop and the auto-fill refills.", meter_name(w)))
     };
     let mut tip: Tip = vec![(format!("{name} (0 AP, 0 blocks)"), th().gold), (says, th().text), (format!("Moves stay. Rest blocks are {rest} in a {name} round. Flip it any time while planning."), th().dim)];
     if on {
@@ -1027,10 +1030,10 @@ fn channel_row(w: &World, h: usize) -> Option<Row> {
     Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None })
 }
 
-/// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `cold_steel_mark` (its
+/// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `standard_mark` (its
 /// `terms` row, else "Cold Steel").
 pub(super) fn cold_steel_name(w: &World) -> String {
-    w.cat.term(emberwake_data::terms::COLD_STEEL_MARK).name
+    w.cat.term(emberwake_data::terms::STANDARD_MARK).name
 }
 
 /// The channel meter's name (its unit meter row's, else its id).
@@ -1132,8 +1135,8 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
             tip.push((format!("{} replaces Rest in a {} round.", sk.name, RoundIntent::Channel.label(&w.cat)), th().dim));
         }
     }
-    if let Some(why) = &o.problem {
-        tip.push((intent_text::menu_refusal_text(w, why), th().foe));
+    if o.problem.is_some() {
+        tip.push((intent_text::menu_refusal_text(&o.reasons), th().foe));
     }
     if !o.drops.is_empty() {
         tip.push((format!("Changing loses {}.", o.drops.join(", ")), th().foe));
@@ -1144,36 +1147,10 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
 /// A4.2-K1b (INTENT2 IR5, IR17, IR19): while an area row of the skill menu is hovered (rule `field_intent`), the impact
 /// tiles its pick would plan, with the row (Field: the source's marks with the Field bonus; Assault: the shape on the
 /// locked target's tile; Stand: the ring), on copies; empty for any other row or a refused pick. INTENT2-U: an area
-/// item's Field row (the tile command, `PlanStep::use_item_at`) previews its marks the same way.
+/// item's Field row (the tile command, `PlanStep::use_item_at`) previews its marks the same way. PR5-32: the kit's
+/// `round_intent_plan::area_preview` (one rule with the planned areas' `area_marks`).
 pub(super) fn area_preview(s: &Session, h: usize, at: RoundTarget, picks: &[rip::Pick]) -> Vec<(Vec<V2>, RoundIntent)> {
-    let w = &s.w;
-    let area = |p: &rip::Pick| match p {
-        rip::Pick::Skill { skill, .. } => emberwake_battle::skill::is_area(&w.cat.skills[*skill]),
-        rip::Pick::Item(id) => emberwake_battle::command::pouch_item(w, h, id).is_some_and(|i| emberwake_battle::command::item_area_on(w, i)),
-        _ => false,
-    };
-    if !ri::field_rows(w) || !picks.iter().any(area) {
-        return Vec::new();
-    }
-    let Ok((w2, p2)) = rip::preview_plan(w, &s.plan, h, at, picks) else { return Vec::new() };
-    let Some(intent) = ri::intent_of(&w2, h) else { return Vec::new() };
-    let skills: Vec<usize> = picks.iter().filter_map(|p| match p {
-        rip::Pick::Skill { skill, .. } => Some(*skill),
-        _ => None,
-    }).collect();
-    let items: Vec<&String> = picks.iter().filter_map(|p| match p {
-        rip::Pick::Item(id) => Some(id),
-        _ => None,
-    }).collect();
-    let picked = |e: &emberwake_battle::plan::PlanEntry| match &e.item {
-        Some(i) => items.contains(&&i.id),
-        None => skills.contains(&e.skill),
-    };
-    p2.entries_for(&w2, h)
-        .into_iter()
-        .filter(|e| picked(e) && !e.cells.is_empty())
-        .map(|e| (e.cells.clone(), if e.target.is_some() { RoundIntent::Assault } else { intent }))
-        .collect()
+    rip::area_preview(&s.w, &s.plan, h, at, picks)
 }
 
 /// INPUT1 MR13: the open position tiles of a Maneuver Engage pick of `h` on the unit `at` (true: the preferred tier),

@@ -44,7 +44,7 @@ fn reel_a() -> Value {
     json!({
         "id": "reel_a", "name": "Reel A", "music": "music/theme_1.ogg", "frame": "#0a0b10", "skippable": true, "once": false,
         "cards": [
-            {"style": "image", "image": "backgrounds/story/card_1.png", "top": "#0a0b10", "bottom": "#2c1546", "ash": true, "text": "First card.", "fade_in_ms": 1200, "hold_ms": 3500, "fade_out_ms": 600},
+            {"style": "image", "image": "backgrounds/story/card_1.png", "top": "#0a0b10", "bottom": "#2c1546", "particles_rise": true, "text": "First card.", "fade_in_ms": 1200, "hold_ms": 3500, "fade_out_ms": 600},
             {"style": "text", "top": "#1e232d", "text": "{member:picked} stayed on day {flag:campaign.day}.", "when": [{"kind": "flag", "key": "picked", "op": "!=", "value": ""}]},
             {"style": "title", "title": "Test Title", "subtitle": "Test Subtitle", "hold_ms": 3000},
             {"style": "line", "speaker": "keeper_a", "text": "A line.", "cue": "sfx/cue_1.wav"}
@@ -237,7 +237,10 @@ fn each_bad_vignette_or_card_field_is_one_error() {
         ("an image on a text card", with(&g, &["cards", "1", "image"], json!("backgrounds/x.png")), "Card 2: image is for an image card only."),
         ("a top not a colour", with(&g, &["cards", "0", "top"], json!("#12")), "Card 1: top '#12' must be #rrggbb."),
         ("a bottom not a colour", with(&g, &["cards", "0", "bottom"], json!("red")), "Card 1: bottom 'red' must be #rrggbb."),
-        ("ash not a bool", with(&g, &["cards", "0", "ash"], json!("yes")), "ash must be true or false."),
+        ("particles_rise not a bool", with(&g, &["cards", "0", "particles_rise"], json!("yes")), "particles_rise must be true or false."),
+        // FB-206 (2b): the old key `ash` is still read and checked; both names on one card are refused
+        ("ash not a bool", with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!("yes")), "Card 1: ash must be true or false."),
+        ("both names", with(&g, &["cards", "0", "ash"], json!(true)), "Card 1: both particles_rise and its old name ash (keep particles_rise)."),
         ("a title card without a title", with(&g, &["cards", "2", "title"], json!("")), "Card 3: a title card needs a title."),
         ("a title over 48", with(&g, &["cards", "2", "title"], json!(long(49))), "title is longer than 48 characters."),
         ("a subtitle over 80", with(&g, &["cards", "2", "subtitle"], json!(long(81))), "subtitle is longer than 80 characters."),
@@ -268,6 +271,7 @@ fn each_bad_vignette_or_card_field_is_one_error() {
     let full: Vec<Value> = (0..24).map(|_| json!({"style": "text", "text": "x"})).collect();
     assert!(added(&v, "vignettes", &g, &with(&g, &["cards"], json!(full))).is_empty());
     assert!(added(&v, "vignettes", &g, &with(&g, &["music"], json!("none"))).is_empty(), "none is silence");
+    assert!(added(&v, "vignettes", &g, &with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!(true))).is_empty(), "the old key ash is taken");
     drop_scratch(&data);
 }
 
@@ -475,5 +479,81 @@ fn the_writer_stores_the_new_fields_and_kinds() {
         let again = store::resave_text(&data, Some(W), kind).unwrap();
         assert_eq!(serde_json::from_str::<Value>(&again).unwrap()["entries"].as_array().map(Vec::len), serde_json::from_str::<Value>(&text).unwrap()["entries"].as_array().map(Vec::len), "{kind}");
     }
+    drop_scratch(&data);
+}
+
+/// STORYMUSIC1: the game's music keys are its manifest's optional `music_keys` (scratch `game.json` beside the data
+/// folder): the loader and the check view carry them; a value that is not a list of id-shaped keys, or a key listed
+/// twice, is a manifest problem the writer refuses; a write keeps the list.
+#[test]
+fn the_game_manifest_lists_its_music_keys() {
+    let data = story_world("music_manifest");
+    let path = data.parent().unwrap().join("game.json");
+    assert!(source::load(&data).music_keys.is_empty(), "no game.json: no keys");
+    let game = json!({"id": "demo", "title": "Demo", "version": "0.1.0", "worlds": [W], "start_worlds": [W], "references": []});
+    fs::write(&path, game.to_string()).unwrap();
+    assert!(source::load(&data).music_keys.is_empty(), "no music_keys: no keys");
+    store::set_manifest(&path, &dict(json!({"music_keys": ["theme_open", "theme_tense"]}))).unwrap();
+    assert_eq!(source::load(&data).music_keys, ["theme_open", "theme_tense"]);
+    assert_eq!(store::view(&data).music_keys, ["theme_open", "theme_tense"]);
+    let before = fs::read_to_string(&path).unwrap();
+    for (bad, needle) in [(json!("theme_open"), "must be a list of music keys"), (json!(["Theme Open"]), "'Theme Open' is not a music key"), (json!([3]), "'3' is not a music key"), (json!(["theme_open", "theme_open"]), "'theme_open' is listed twice")] {
+        let refused = store::set_manifest(&path, &dict(json!({"music_keys": bad}))).unwrap_err();
+        assert!(refused.len() == 1 && refused[0].contains(needle), "{bad}: {refused:?}");
+    }
+    assert_eq!(fs::read_to_string(&path).unwrap(), before, "nothing written");
+    assert!(!store::check(&data).iter().any(|l| l.contains("music_keys")), "a valid list is no problem of the data check");
+    store::set_manifest(&path, &dict(json!({"music_keys": null}))).unwrap();
+    assert!(source::load(&data).music_keys.is_empty(), "removed: no keys");
+    drop_scratch(&data);
+}
+
+/// STORYMUSIC1: a vignette's and a step's `music` may be a music key: one of the game's `music_keys` (no track needed)
+/// or the key of a track the asset layers hold; an unknown key, a key not shaped like an id or a step music that is not
+/// text is one error; without `music_keys` only a track's key counts. A step's missing track is a warning, as a
+/// vignette's.
+#[test]
+fn a_music_key_names_a_game_music_key_or_a_shipped_track() {
+    let data = story_world("music_keys");
+    let game = json!({"id": "demo", "title": "Demo", "version": "0.1.0", "worlds": [W], "start_worlds": [W], "references": [], "music_keys": ["theme_open", "theme_tense"]});
+    fs::write(data.parent().unwrap().join("game.json"), game.to_string()).unwrap();
+    let assets = data.parent().unwrap().join("assets");
+    let track = assets.join("audio/music/own_theme.ogg");
+    fs::create_dir_all(track.parent().unwrap()).unwrap();
+    fs::write(&track, b"x").unwrap();
+    let view = || {
+        let src = source::load(&data);
+        let mut v = check::View::new(&src.catalog, &src.worlds, &src.game, aegis_core::assets::Layers::of(vec![assets.clone()]));
+        v.music_keys = src.music_keys.clone();
+        v
+    };
+    let v = view();
+    let (g, p) = (reel_a(), seq_a());
+    for key in ["theme_open", "theme_tense", "own_theme"] {
+        assert!(added(&v, "vignettes", &g, &with(&g, &["music"], json!(key))).is_empty(), "vignette music {key}");
+        for (i, kind) in [(0, "vignette"), (1, "fight"), (2, "effects"), (3, "enter")] {
+            assert!(added(&v, "sequences", &p, &with(&p, &["steps", &i.to_string(), "music"], json!(key))).is_empty(), "{kind} step music {key}");
+        }
+    }
+    for (i, music) in [(0, ""), (1, "none"), (2, "music/theme_1.ogg")] {
+        assert!(added(&v, "sequences", &p, &with(&p, &["steps", &i.to_string(), "music"], json!(music))).is_empty(), "step music '{music}'");
+    }
+    assert_one(&v, "vignettes", &g, &with(&g, &["music"], json!("ghost_theme")), "Music: 'ghost_theme' is no music key of the game (game.json music_keys: theme_open, theme_tense)", "an unknown vignette key");
+    assert_one(&v, "vignettes", &g, &with(&g, &["music"], json!("Ghost Theme")), "Music 'Ghost Theme' must be empty", "a key not an id");
+    assert_one(&v, "sequences", &p, &with(&p, &["steps", "1", "music"], json!("ghost_theme")), "Step 2 (fight): music: 'ghost_theme' is no music key", "an unknown step key");
+    assert_one(&v, "sequences", &p, &with(&p, &["steps", "0", "music"], json!("music/x.mp3")), "Step 1 (vignette): music 'music/x.mp3' must be empty", "a step track not .ogg");
+    assert_one(&v, "sequences", &p, &with(&p, &["steps", "2", "music"], json!(3)), "Step 3 (effects): music must be text", "a step music not text");
+    // without the manifest's list only a track's key counts; a track key whose file went is unknown again
+    let mut bare = view();
+    bare.music_keys.clear();
+    assert_one(&bare, "vignettes", &g, &with(&g, &["music"], json!("theme_open")), "(game.json music_keys: none)", "no list: a listed key is unknown");
+    assert!(added(&bare, "vignettes", &g, &with(&g, &["music"], json!("own_theme"))).is_empty(), "no list: a track's key");
+    fs::remove_file(&track).unwrap();
+    assert_one(&v, "vignettes", &g, &with(&g, &["music"], json!("own_theme")), "no track music/own_theme.ogg", "a track key whose file went");
+    // a step's missing track warns (a key never does: the game resolves it, and without a track the music goes on)
+    write_kind(&data, "sequences", json!([with(&p, &["steps", "1", "music"], json!("music/gone.ogg")), with(&seq_b(), &["steps", "1", "music"], json!("theme_tense"))]));
+    let found: Vec<String> = check::story::warnings(&view(), W).into_iter().filter(|w| w.contains("step")).collect();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].contains("step 2: music 'music/gone.ogg' is in no asset folder's audio/"), "{found:?}");
     drop_scratch(&data);
 }

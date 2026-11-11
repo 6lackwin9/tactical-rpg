@@ -573,6 +573,46 @@
 				"dojo_ranger"
 			],
 			"protect": []
+		},
+		{
+			"id": "pk1_channel_duel",
+			"name": "Channel Duel",
+			"description": "PK1 test: an Inoculated hero (Strain, Channel) against an aberrant that adds Strain with every bite.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 10,
+			"total_blocks": 3,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"start_ap": 10,
+			"rng_seed": 2026,
+			"party": [
+				"inoculated_hero"
+			],
+			"enemies": [
+				"aberrant_test"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
 		}
 	]
 }

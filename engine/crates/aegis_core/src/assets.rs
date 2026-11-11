@@ -12,7 +12,9 @@
 //! its `strike` frame; `ClipPlayer::play_from` starts a shot at a frame and `ClipPlayer::set_base_from` starts the base
 //! at a frame, optionally holding it still after the intro.
 //! Face sidecars (PORTRAITFX1-E, spec 4.1): `<portrait>.face.json` beside a portrait PNG holds its anchors in image
-//! px (eye boxes, glow anchors, vein roots, the rim key, idle overlays): `face_file`, `parse_face`, `face_problems`.
+//! px (eye boxes, glow anchors, line roots, the rim key, idle overlays): `face_file`, `parse_face`, `face_problems`.
+//! FB-206 (2b): the overlay primitives have generic names (`lines`, `point_glow`, `particles_rise`, `drift`); a sidecar
+//! or cue written with the old names (`veins`, `eye_glow`, `ash`, `smoke`) still loads (`PRIMITIVE_ALIASES`).
 
 use crate::json::{self, Dict};
 use crate::vfs;
@@ -746,7 +748,10 @@ pub fn read_json(layers: &Layers, rel: &str) -> Option<Value> {
 // ---- Portrait face sidecars (PORTRAITFX1 4.1) ---------------------------------------------------------------------
 
 /// The keys a face sidecar may hold.
-pub const FACE_KEYS: [&str; 11] = ["size", "border", "eyes", "blink", "lid", "glow", "veins", "mouth", "face", "rim", "idle"];
+pub const FACE_KEYS: [&str; 11] = ["size", "border", "eyes", "blink", "lid", "glow", "lines", "mouth", "face", "rim", "idle"];
+/// FB-206 (2b): the old sidecar keys a reader still takes, (old, key of `FACE_KEYS`); a sidecar holding both names of
+/// one key is refused.
+pub const FACE_KEY_ALIASES: [(&str, &str); 1] = [("veins", "lines")];
 /// PORTRAITFX1-EX: the face box a sidecar without its own `face` takes from its eye boxes, in units of the eyes' span
 /// (the union's width, at least `size / 5`) around the union's centre and top: x from -0.9 span, y from -0.6 span,
 /// 1.8 span wide, 1.9 span tall (clamped to the inner rect).
@@ -754,7 +759,17 @@ pub const FACE_FROM_EYES: [f32; 4] = [0.9, 0.6, 1.8, 1.9];
 /// The keys of one `idle` entry.
 pub const IDLE_KEYS: [&str; 3] = ["effect", "color", "intensity"];
 /// The overlays a sidecar's `idle` may name.
-pub const IDLE_OVERLAYS: [&str; 5] = ["glow", "veins", "eye_glow", "ash", "smoke"];
+pub const IDLE_OVERLAYS: [&str; 5] = ["glow", "lines", "point_glow", "particles_rise", "drift"];
+/// FB-206 (2b): the old names of the overlay primitives, (old, canonical): growing lines from roots, a glow on the eye
+/// boxes, falling specks, rising puffs. Readers of sidecars and cue rows map them (`canonical_primitive`); writers
+/// write the canonical name.
+pub const PRIMITIVE_ALIASES: [(&str, &str); 4] = [("veins", "lines"), ("eye_glow", "point_glow"), ("ash", "particles_rise"), ("smoke", "drift")];
+
+/// FB-206 (2b): the canonical name of an effect: an old primitive name's new one (`PRIMITIVE_ALIASES`), any other name
+/// unchanged.
+pub fn canonical_primitive(name: &str) -> &str {
+    PRIMITIVE_ALIASES.iter().find(|(old, _)| *old == name).map_or(name, |&(_, new)| new)
+}
 /// A sidecar's `size` range (image px).
 pub const FACE_SIZE_MIN: i32 = 16;
 pub const FACE_SIZE_MAX: i32 = 1024;
@@ -768,7 +783,7 @@ pub struct IdleOverlay {
 }
 
 /// A portrait's face sidecar (`<portrait>.face.json`): anchors in image px of a `size`-wide PNG. Boxes are
-/// `[x, y, w, h]`, glow anchors `[x, y, r]`, vein roots `[x, y, deg, len]` (0 deg = right, 90 = down).
+/// `[x, y, w, h]`, glow anchors `[x, y, r]`, line roots `[x, y, deg, len]` (0 deg = right, 90 = down).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Face {
     pub size: i32,
@@ -779,7 +794,8 @@ pub struct Face {
     /// The lid colour (None: sampled 1 px above each eye box).
     pub lid: Option<[u8; 3]>,
     pub glow: Vec<[i32; 3]>,
-    pub veins: Vec<[i32; 4]>,
+    /// The `lines` overlay's roots (sidecar key `lines`, old name `veins`).
+    pub lines: Vec<[i32; 4]>,
     /// Reserved for layered puppets: parsed and checked, read by nothing.
     pub mouth: Option<[i32; 4]>,
     /// PORTRAITFX1-EX: the face box the expression effects tint and place their marks by (None: `face_box` derives it
@@ -793,7 +809,7 @@ pub struct Face {
 impl Face {
     /// A sidecar with no anchors for a `size` portrait (the default border, blinking allowed, no overlays).
     pub fn plain(size: i32) -> Face {
-        Face { size, border: default_border(size), eyes: Vec::new(), blink: true, lid: None, glow: Vec::new(), veins: Vec::new(), mouth: None, face: None, rim: None, idle: Vec::new() }
+        Face { size, border: default_border(size), eyes: Vec::new(), blink: true, lid: None, glow: Vec::new(), lines: Vec::new(), mouth: None, face: None, rim: None, idle: Vec::new() }
     }
 
     /// The inner rect's bounds on each axis, [lo, hi) in image px (inside the border).
@@ -886,13 +902,22 @@ fn tuples<const N: usize>(raw: Option<&Value>, label: &str, shape: &str, problem
 
 /// Reads a face sidecar (PORTRAITFX1 4.1): the keys and their types (unknown keys refused, `size` required, colours
 /// "" or `#rrggbb`, whole numbers for every anchor); the ranges and anchor rules are `face_problems`. Every problem is
-/// listed.
+/// listed. FB-206 (2b): an old key (`FACE_KEY_ALIASES`) reads as its new one (both in one sidecar: refused), and an
+/// idle effect's old name as its canonical one (`canonical_primitive`), so the parsed face holds canonical names only.
 pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
     let mut p: Vec<String> = Vec::new();
     let Some(o) = v.as_object() else { return Err(vec!["a face sidecar must be an object {size, eyes, ...}.".into()]) };
-    for k in o.keys().filter(|k| !FACE_KEYS.contains(&k.as_str())) {
+    let old_key = |k: &str| FACE_KEY_ALIASES.iter().any(|(old, _)| *old == k);
+    for k in o.keys().filter(|k| !FACE_KEYS.contains(&k.as_str()) && !old_key(k)) {
         p.push(format!("the face sidecar has no key '{k}' (keys: {}).", FACE_KEYS.join(", ")));
     }
+    for (old, new) in FACE_KEY_ALIASES {
+        if o.contains_key(old) && o.contains_key(new) {
+            p.push(format!("the face sidecar holds both '{new}' and its old name '{old}' (keep '{new}')."));
+        }
+    }
+    // a key, or its old name when the sidecar was written before the rename
+    let key = |k: &str| o.get(k).or_else(|| FACE_KEY_ALIASES.iter().find(|(_, new)| *new == k).and_then(|(old, _)| o.get(*old)));
     let size = match o.get("size").map(whole) {
         Some(Some(s)) => s,
         Some(None) => {
@@ -923,7 +948,7 @@ pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
     };
     let lid = colour_or_empty(o.get("lid"), "lid", &mut p);
     let glow = tuples::<3>(o.get("glow"), "glow", "[x, y, r]", &mut p);
-    let veins = tuples::<4>(o.get("veins"), "veins", "[x, y, deg, len]", &mut p);
+    let lines = tuples::<4>(key("lines"), "lines", "[x, y, deg, len]", &mut p);
     let one_box = |key: &str, p: &mut Vec<String>| match o.get(key) {
         None => None,
         Some(Value::Array(a)) if a.is_empty() => None,
@@ -953,7 +978,7 @@ pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
                     p.push(format!("idle entry {n} has no key '{k}' (keys: {}).", IDLE_KEYS.join(", ")));
                 }
                 let effect = match e.get("effect") {
-                    Some(Value::String(s)) => s.clone(),
+                    Some(Value::String(s)) => canonical_primitive(s).to_string(),
                     _ => {
                         p.push(format!("idle entry {n}: effect must be a name."));
                         String::new()
@@ -973,7 +998,7 @@ pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
         Some(_) => p.push("idle must be a list of {effect, color, intensity}.".into()),
     }
     if p.is_empty() {
-        Ok(Face { size, border, eyes, blink, lid, glow, veins, mouth, face, rim, idle })
+        Ok(Face { size, border, eyes, blink, lid, glow, lines, mouth, face, rim, idle })
     } else {
         Err(p)
     }
@@ -982,7 +1007,7 @@ pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
 /// Every range and anchor rule of a parsed sidecar (PORTRAITFX1 4.1; the kit's asset check A11 calls it), one line
 /// each: `size` 16-1024 and equal to the PNG's width `png_w` (0: not checked; else a warning, the anchors being
 /// scaled by width / size), `border` 0-size/8, at most 2 eye boxes inside the inner rect (w 2-size/6, h 1-size/10),
-/// at most 3 glow anchors (centre inside, r 4-size/2), at most 3 vein roots (root inside, deg -180-360, len
+/// at most 3 glow anchors (centre inside, r 4-size/2), at most 3 line roots (root inside, deg -180-360, len
 /// 6-size/2), the mouth inside, the face box inside and at least size/8 a side (PORTRAITFX1-EX), at most 4 idle overlays named by `IDLE_OVERLAYS` with their anchors and an intensity
 /// 0.05-1.0. Empty: the sidecar is sound.
 pub fn face_problems(face: &Face, png_w: i32) -> Vec<String> {
@@ -1026,19 +1051,19 @@ pub fn face_problems(face: &Face, png_w: i32) -> Vec<String> {
             out.push(format!("glow anchor {n} radius must be 4-{} (is {r}).", s / 2));
         }
     }
-    if face.veins.len() > 3 {
-        out.push(format!("veins holds at most 3 roots (has {}).", face.veins.len()));
+    if face.lines.len() > 3 {
+        out.push(format!("lines holds at most 3 roots (has {}).", face.lines.len()));
     }
-    for (i, &[x, y, deg, len]) in face.veins.iter().enumerate() {
+    for (i, &[x, y, deg, len]) in face.lines.iter().enumerate() {
         let n = i + 1;
         if !inside(x, y) {
-            out.push(format!("vein root {n} ({x}, {y}) must lie inside the inner rect ({lo}-{hi})."));
+            out.push(format!("line root {n} ({x}, {y}) must lie inside the inner rect ({lo}-{hi})."));
         }
         if !(-180..=360).contains(&deg) {
-            out.push(format!("vein root {n} deg must be -180-360 (is {deg})."));
+            out.push(format!("line root {n} deg must be -180-360 (is {deg})."));
         }
         if !(6..=s / 2).contains(&len) {
-            out.push(format!("vein root {n} len must be 6-{} (is {len}).", s / 2));
+            out.push(format!("line root {n} len must be 6-{} (is {len}).", s / 2));
         }
     }
     if let Some([x, y, w, h]) = face.mouth {
@@ -1064,8 +1089,8 @@ pub fn face_problems(face: &Face, png_w: i32) -> Vec<String> {
         }
         match e {
             "glow" if face.glow.is_empty() => out.push("idle glow needs a glow anchor.".into()),
-            "veins" if face.veins.is_empty() => out.push("idle veins needs a vein root.".into()),
-            "eye_glow" if face.eyes.is_empty() => out.push("idle eye_glow needs an eye box.".into()),
+            "lines" if face.lines.is_empty() => out.push("idle lines needs a line root.".into()),
+            "point_glow" if face.eyes.is_empty() => out.push("idle point_glow needs an eye box.".into()),
             _ => {}
         }
         if !(0.05..=1.0).contains(&o.intensity) {
@@ -1193,8 +1218,8 @@ mod tests {
     /// The sidecar example of PORTRAITFX1 4.1.
     fn face_example() -> Value {
         json!({"size": 240, "border": 8, "eyes": [[98, 92, 12, 6], [128, 90, 12, 6]], "blink": true, "lid": "",
-            "glow": [[120, 200, 30]], "veins": [[140, 120, 200, 40]], "mouth": [], "rim": "",
-            "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]})
+            "glow": [[120, 200, 30]], "lines": [[140, 120, 200, 40]], "mouth": [], "rim": "",
+            "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]})
     }
 
     /// The example with `key` set to `v`, parsed (it must parse), then its range and anchor problems on a 240 px PNG.
@@ -1208,19 +1233,19 @@ mod tests {
     fn e1_the_sidecar_example_parses_and_each_broken_rule_names_itself() {
         let f = parse_face(&face_example()).unwrap();
         assert_eq!((f.size, f.border, f.eyes.len(), f.blink, f.lid, f.rim, f.mouth), (240, 8, 2, true, None, None, None));
-        assert_eq!((f.glow.clone(), f.veins.clone()), (vec![[120, 200, 30]], vec![[140, 120, 200, 40]]));
-        assert_eq!(f.idle, vec![IdleOverlay { effect: "eye_glow".into(), color: Some([0xc0, 0x84, 0xfc]), intensity: 0.8 }]);
+        assert_eq!((f.glow.clone(), f.lines.clone()), (vec![[120, 200, 30]], vec![[140, 120, 200, 40]]));
+        assert_eq!(f.idle, vec![IdleOverlay { effect: "point_glow".into(), color: Some([0xc0, 0x84, 0xfc]), intensity: 0.8 }]);
         assert!(face_problems(&f, 240).is_empty(), "{:?}", face_problems(&f, 240));
         assert_eq!(parse_face(&json!({"size": 90})).unwrap().border, 3, "the border defaults to round(size / 30)");
 
         // An eye box outside the inner rect (8..232): x 4 < 8.
         assert_eq!(face_with("eyes", json!([[4, 92, 12, 6]])), ["eye box 1 [4, 92, 12, 6] must lie inside the inner rect (8-232)."]);
         assert_eq!(face_with("eyes", json!([[98, 92, 12, 6], [128, 90, 12, 6], [60, 90, 12, 6]])), ["eyes holds at most 2 boxes (has 3)."]);
-        assert_eq!(face_with("eyes", json!([])), ["idle eye_glow needs an eye box."]);
+        assert_eq!(face_with("eyes", json!([])), ["idle point_glow needs an eye box."]);
         let mut no_root = face_example();
-        no_root["veins"] = json!([]);
-        no_root["idle"] = json!([{"effect": "veins"}]);
-        assert_eq!(face_problems(&parse_face(&no_root).unwrap(), 240), ["idle veins needs a vein root."]);
+        no_root["lines"] = json!([]);
+        no_root["idle"] = json!([{"effect": "lines"}]);
+        assert_eq!(face_problems(&parse_face(&no_root).unwrap(), 240), ["idle lines needs a line root."]);
         let mut unknown = face_example();
         unknown["nose"] = json!([1, 2]);
         assert_eq!(parse_face(&unknown).unwrap_err(), [format!("the face sidecar has no key 'nose' (keys: {}).", FACE_KEYS.join(", "))]);
@@ -1237,9 +1262,9 @@ mod tests {
     #[test]
     fn face_ranges_follow_the_size() {
         assert_eq!(face_with("glow", json!([[120, 200, 3]])), ["glow anchor 1 radius must be 4-120 (is 3)."]);
-        assert_eq!(face_with("veins", json!([[140, 120, 400, 40]])), ["vein root 1 deg must be -180-360 (is 400)."]);
+        assert_eq!(face_with("lines", json!([[140, 120, 400, 40]])), ["line root 1 deg must be -180-360 (is 400)."]);
         assert_eq!(face_with("eyes", json!([[98, 92, 41, 6]])), ["eye box 1 width must be 2-40 (is 41)."]);
-        assert_eq!(face_with("idle", json!([{"effect": "sparkle", "intensity": 2.0}])), ["idle 'sparkle' is not an overlay (one of glow, veins, eye_glow, ash, smoke).", "idle 'sparkle' intensity must be 0.05-1.0 (is 2)."]);
+        assert_eq!(face_with("idle", json!([{"effect": "sparkle", "intensity": 2.0}])), ["idle 'sparkle' is not an overlay (one of glow, lines, point_glow, particles_rise, drift).", "idle 'sparkle' intensity must be 0.05-1.0 (is 2)."]);
         assert!(parse_face(&json!({"eyes": [[1, 2, 3]]})).unwrap_err().contains(&"size is required.".to_string()));
         assert!(parse_face(&json!({"size": 96, "eyes": [[1.5, 2, 3, 4]]})).is_err(), "anchors are whole numbers");
     }

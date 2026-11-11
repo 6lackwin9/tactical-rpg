@@ -1,142 +1,62 @@
 # Narrative choices and dilemmas
 
-Status: canon for Choice 1 (the Crucible); proposal for Choices 2-5 (Acts 2-3) (consistency pass 2026-10-25). This doc
-follows [CANON.md](../CANON.md); where they differ, CANON wins. Names follow the
-[cast registry](../background/cast_registry.md). Layer tags as in [CANON.md](../CANON.md): `[engine]`, `[kit hook]`,
-`[data]`, `[game code]`.
+Status: **`[LOCKED]` (`2026-11-10` Lore & Visual Hooks Session)** — all 5 structural campaign dilemmas (`M5` Crucible winch beats & keepsakes `CL-03`, `Berek` vs. `Sabina` Doctrine, Living Martyrs, Hub Breach sieges w/ `Ruthven`, and `3.6` Catastrophe-Stopping Endings `A/B/C`), matching [CANON.md](../CANON.md) Sections 3-6. Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
-## 1. What a major choice must do
+## 1. Core Design Principle (`[LOCKED]`)
 
-- Leave a mechanical consequence beyond the scene: who stays in the roster, which branches unlock, what the hub burns,
-  which endings stay open.
-- Set two values against each other: human survival (discipline, conservation) against eldritch pragmatism (power,
-  speed of killing).
-- Offer no path where everyone is saved. The cell pays in blood, in marrow or in its humanity.
+Every major choice leaves a permanent mechanical trace (roster, implants/techniques, hub economy, or ending gate) and pits **mortal discipline (`Preservationist` — `Berek "Cinder-Lung" Dorn`)** against **retort-refined marrow adaptation (`Flesh-Broker` — `Chirurgeon Sabina`)**, with no bloodless golden path:
 
-| Doctrine | Preservationist (Bram) | Flesh-Broker (Aline) |
+| Doctrine | Preservationist (`Berek`) | Flesh-Broker (`Sabina`) |
 | --- | --- | --- |
-| Motto | "We remain human, or we have already lost." | "Humanity is a corpse; only weapons survive." |
-| Skills | Cold Steel first | Inoculation and grafts |
-| Roster | protects the founders; few grafts | spends recruits as shock troops |
-| Battles | AP-heavy, longer, positional | short; Inoculated attacks ignore armour |
-| Cost | Scrap and Rock Salt | Calcification churn; more Living Martyrs |
+| Creed | *"Iron doesn't dream, and iron doesn't turn you into them."* | *"Distill what the sleeper bleeds, and turn their sacrament back on them."* |
+| Build focus | Cold Steel Mastery `1-3` techniques, masterwork `4th` techniques, `0` Strain floor | `M2` `Slab Retorts` ossuary bone-pins (`4` slots), `Channel` (`x1.25` armour-pierce) |
+| Roster & cost | Protects veterans' human bodies; spends `Scrap`, durability & `Rock Salt` | High Strain floors (`0/5/15/30/50`), Calcification churn, Living Martyrs & bone-scraping |
+| Exclusive payoffs | Gates **Ending A (`Black-Iron Severance`)** | `Malachi` `3.3` mediation; gates **Ending B (`The Living Conduit`)** |
 
-## 2. Choice 1: the Crucible sacrifice (Act 1 climax, canon)
+## 2. Choice 1: The Crucible Winch Sacrifice (`M5`, `[LOCKED]`, `CL-03`)
 
-- Context: in M5 the cell storms the Crucible Watchpost to break through the Slag Gate. Inquisitor-Prelate Nemeth and
-  his reinforcements cut off the retreat; the gate's portcullis winch is jammed, and one founder must hold the winch
-  tile under fire so the others get through.
-- The choice: which of the four deployed founders stays. The Crucible requires four, and the player deploys knowing one
-  will stay, so deployment is the decision.
-- The outcome: Nemeth takes the founder alive `[kit hook]` (unit lifecycle: scripted capture). The cell keeps that
-  founder's keepsake, an ACC heirloom any operative can equip `[data]` (numbers Open). Act 2 opens: recruits, the Slab,
-  Strain and Calcification. Nemeth escapes with the captured founder (Q-25 a); at 2.4 the cell sees him deliver them
-  to Lazar and arrives too late; at the optional Act 3 node 20 the founder, corrupted, fights at Nemeth's side, then
-  breaks and kills everyone in reach, Nemeth included, and the cell fights the monstrosity (CANON 3.6).
+- **Context (`ENC-EVT-06`):** Storming the Crucible Watchpost (`node 06 -> 07`), `Inquisitor-Prelate Nemeth` shrugs off Cold Steel and reinforces the Slag Gate. One of the **`4` deployed founders** must hold the jammed portcullis winch so the other three break through into Act 2 (`deployment = the choice`).
+- **Arc Payoff:** `Nemeth` takes the winch founder alive (`keepsake_<id>` stays in stash, `ACC`, `value 0`, `~50%` founder trait). At Act 2 start `Talia Rusk` fills their open bunk with `1` class-matched `18-24` visored/cowled runaway (`CL-07`); at `2.4` the squad sees `Nemeth` hand the captive to `Lazar` (`no rescue`); at optional `3.4` Silent Ossuary (`node 20`), the remade captive fights beside `Nemeth`, snaps into `hostile_all` and tears `Nemeth` apart, then faces the squad as a `2x2` aberration (`Q-94`: stronger if given the `Interlude` marrow dose) -> mercy upgrades `keepsake_<id>` into its **Transcendent Relic**.
 
-| Founder | Staying beat | The cell loses | Keepsake |
+| Founder | Locked `M5` Winch Stay-Behind Beat (`CL-03`) | Squad Loses | Locked Keepsake (`keepsake_<id>`) |
 | --- | --- | --- | --- |
-| Kaelen | Locks his shield into the winch cogs and holds the gate; dragged off alive, the deserter who found a cause | its front-line anchor and crowd control | Kaelen's Gouged Sigil |
-| Vesper | Burns her last phosphorus canister to blind the inquisitors at the winch; taken when the smoke clears | its single-target burst | Open |
-| Maren | Open | its field medic | Open |
-| Hollis | Open | its long-range pins | Hollis's Focusing Monocle |
-| Dunstan | Wedges his wired jaw and chain into the winch teeth to hold the gate; Nemeth's men pry him loose alive | its grappler and armour breaker | Open |
-| Elyse | Open | its area control | Open |
+| `Kaelen` | Jams his weighted billhook haft into the winch cogs and holds the gate line alone | Front-line anchor & Poise guard | **Kaelen's Gouged Sigil** (`keepsake_kaelen`) |
+| `Vesper` | Burns her last phosphorus/smoke pot at the winch to blind `Nemeth`'s vanguard | Snap single-target striker | **Vesper's Runner Whistle** (`keepsake_vesper`) |
+| `Maren` | Loops her bronze censer chain through the ratchet teeth and braces the bar under fire | Field sutures & Poise triage | **Maren's Copyist Quill** (`keepsake_maren`) |
+| `Hollis` | Wedges his steel arbalest prod into the pinion gear and holds the corridor with sidearm bolts | Long-range pins & sightline lock | **Hollis's Focusing Monocle** (`keepsake_hollis`) |
+| `Dunstan` | Wedges his iron-wired jaw and penal chain into the winch teeth until pried loose alive | Grappler & `line_2` sunder bruiser | **Dunstan's Shackle Link** (`keepsake_dunstan`) |
+| `Elyse` | Fuses the brake housing with a point-blank phosphorus-vitriol charge through the acid cloud | `3x3` hazard & status control | **Elyse's Cracked Retort** (`keepsake_elyse`) |
 
-Retired (contradicted CANON): the "scalding tallow valve" and "drainage crank" mechanisms (the Slag Gate winch is the
-one mechanism); the founder dying at the gate (taken alive); candidates limited to three founders (any of the four
-deployed); keepsakes as grafts or keystones ("Shield of the Unsealed", "Sinew-Tearer Graft" +20% flank damage,
-"Slag-Marrow Core" +5 armour +30 poise): keepsakes are heirlooms, grafts are Act 2 surgery and flank damage is cut.
+## 3. Choice 2: Act 2 Dual-Rituals & Doctrine (`-100..+100`, `[LOCKED]`, `CL-02`)
 
-## 3. Choice 2: Preservationist or Flesh-Broker (Act 2, proposal)
+Across Act 2, hub choices, Slab surgeries vs. Hearth masterworks, and each surviving founder's **dual-branch personal ritual** shift Doctrine (`Cold Steel keystone + Hearth relic` vs. `Cranial implant + Inoculated keystone`):
 
-Through Act 2 Aline and Bram argue over the cell's future. Choices in hub events move a doctrine meter
-`[kit hook]` (campaign meter) `[data]` (events). Inputs and thresholds: Open.
+1. **`Kaelen`:** Hunt `Capt. Vane` & burn 7th Ward debt ledgers (`Deserter's Kettle Helm` vs. forearm bone-spur keystone).
+2. **`Vesper`:** Raid Guild Counting-House, slay `Orlov` & burn marrow-debt ledgers (Cold Steel edge vs. ash-smoke keystone).
+3. **`Maren`:** St. Lyra's hidden vault & `2.6` chronicle cipher (sanctified censer rite vs. marrow-ink throat keystone).
+4. **`Hollis`:** Ambush Bastion convoy to free `Wren` (`14`) & track `Ruthven` (crag winch mastery vs. amber tapetum pin).
+5. **`Dunstan` + `Berek`:** Raid Fourth Kiln, slay `Jessop` & flood mortar moulds (black-iron fist rite vs. basalt-jaw keystone).
+6. **`Elyse`:** Sabotage High Bastion sedative cisterns alongside `2.3`/`2.4` (pure alum alchemy vs. geode-burn keystone).
 
-### 3.1 The Preservationist doctrine (Bram)
+## 4. Choice 3: Living Martyrs (`Acts 2-3`, `[LOCKED]` roles)
 
-- Core: no high-tier grafts on clean operatives; Bram's forged steel, defensive formations and martial drill.
-- Without grafts the Strain floor stays 0, so a crisis comes only from Inoculated skills used in that battle.
-- Battles lean on AP efficiency, poise breaks and armour sundering.
-- Fewer losses let founders reach Tier III weapon masteries and their capstone passives.
-- Higher demand for Scrap (forge work) and Rock Salt (Slab flushes).
+Prisoners rescued at Calcification Stage III-IV (`18-24` only) occupy up to `2` stasis slots in the **Isolation Crypts** (freeing Dry Hollows bunks) and pose a three-way choice (`[kit hook]` + `[data]`):
 
-### 3.2 The Flesh-Broker doctrine (Aline)
+- **Deploy as shock troop:** Enters with a Tier III Apex implant; if fallen on a held field or claimed by Drift, `Sabina` recovers `1` **`Dreamer's Marrow Geode`** (`titan_marrow_core`).
+- **Merciful salt cremation:** `Sabina` administers a painless draught and `Rock Salt` cremation so they never suffer Stage V Terminal Drift (`Doctrine` shifts Preservationist).
+- **Crypt stasis:** Held in the `2` Isolation Crypt stasis slots ticking per deployment/day until needed.
 
-- Core: harvest Aberrant Organs from elite inquisitors and graft them into recruits; treat the Unsealed as a torch to
-  burn before 25.
-- Grafts raise Strain floors (0-50, CANON 2.2), so units fight closer to Flesh-Tension and the Aberrant Edge.
-- Inoculated attacks ignore armour (binary pierce), so bosses fall in fewer rounds.
-- Calcification churn: units advance through stages I-IV by Flesh Breach and Tier III surgery and are replaced through
-  culling-wagon raids.
+## 5. Choice 4: Hub Breach Sieges & `Ruthven` (`Acts 2-3`, `[LOCKED]`, `CL-06`)
 
-### 3.3 What doctrine gates
+Reaching `100` Alert in Act 1 ends the run (`Extinguished`); in Acts 2-3 it triggers a **Sluice Undercroft Breach siege** led in Act 2 by **`Inquisitor-General Ruthven` ("the Blind Eye")** (`Sabina` & `Berek` are protect targets, `G-17`; if the player never triggers an Act 2 Breach, `Ruthven` appears on the `2.6` Reliquary approach so `Hollis` and `Talia` never miss their showdown). Returning to defend forfeits an active board job; finishing the job first damages Undercroft facility tiers.
 
-The endings (Choice 5): A is open unless the cell is Flesh-Broker; B needs Flesh-Broker; C is always open.
+## 6. Choice 5: The Catastrophe-Stopping Ending (`3.6` Dreaming Core, `[LOCKED]`)
 
-## 4. Choice 3: the Living Martyr (Acts 2-3, proposal)
+Slaying `Arch-Prelate Othemar` at `3.5` High Altar (`node 21`) stops the Great Tithing—which starves the waking titan and **genuinely begins cracking Cinderreach's volcanic caldera** under an **unbroken Shroud**. At the `2x2` **Dreaming Core (`node 22`)**, the squad chooses how to stop the collapse:
 
-- Context: an operative or a rescued prisoner at Calcification Stage IV (The Shakes): limbs hardening into black stone,
-  constant pain, a few missions from Terminal Drift. "Living Martyr" names these people; it is no longer a stage name.
-  Their rules: [recruits and prologue](recruits_and_prologue_architecture.md) 4.
-- Option 1, shock troop: deploy them into the worst fights; they die on the field and leave an Apex organ (Tier III
-  Aberrant Organ) for the Slab `[data]`. Old numbers "enters at maximum Strain and pays no AP" clash with the crisis
-  rule (100 Strain rolls a crisis each round end): Open.
-- Option 2, mercy (salt cremation): Aline gives a lethal sedative; Rock Salt cremation and burial with honours in the
-  undercroft; no Terminal Drift. Old reward "+10 max Composure to the cell": Composure is now a derived stat, the
-  corruption resist ([CANON](../CANON.md) 2.1), and the mercy reward is one of its readers; whether the reward exists and
-  its size stay open (Q-37; numbers after the derived-stat spec).
-- Option 3, stasis: kept alive in the Isolation Crypts on draughts and salt washes. Cost: Open (the old "+1 Salt Ration"
-  upkeep is dropped: CANON has one upkeep, Warded Tallow).
-
-## 5. Choice 4: siege priority (Acts 2-3, proposal)
-
-When Inquisition Alert reaches 100% (Breach) `[kit hook]` (meter threshold trigger), a strike force follows the
-drainage vents toward the Sluice Undercroft. There is no siege in Act 1. If the cell is on a mission when it fires:
-
-- Defend the Water-Lock Basin: the cell returns to hold the sluice corridor. Facilities, bunks and the stash are safe;
-  the mission objective is forfeited (for example, a transport executes four Unsealed captives).
-- Finish the mission: the cell completes the objective (for example, the Cathedral Bell Archive or a rescued
-  alchemist); Bram and Aline blow the outer storm-drain conduits to buy time, damaging facilities `[kit hook]` (hub
-  facility levels). Old cost "lose 2 bunks or temporary facility lockouts": numbers Open.
-
-A siege that is fought and lost costs facilities and forces a relocation; it is never a Game Over. Siege battle:
-`[data]` encounter over the `[kit hook]` objectives (hold) and reinforcement waves.
-
-## 6. Choice 5: the ending (Act 3, proposal)
-
-At the end of Act 3 the bells ring without pause while the Clerisy gathers Unsealed youths for the Great Tithing
-(thousands; CANON 3.6). Arch-Prelate Othemar falls at the High Altar (node 21) in every run; at the Dreaming Core (node 22) the
-cell chooses `[kit hook]` (event trigger gated by the doctrine meter) `[data]` (ending scenes):
-
-| Ending | What happens | Voice | Doctrine gate |
+| Ending (`[LOCKED]`) | Hub Voice | Gate | Outcome & Permanent Cost |
 | --- | --- | --- | --- |
-| A Preservation | Cold Steel: black-iron spikes sever the synapse and the titan sinks into a deep coma; humanity stays mortal and untainted | Bram | open unless Flesh-Broker |
-| B Ascendancy | Transhuman: the cell merges with the titan's marrow and rules as something new | Aline | Flesh-Broker only |
-| C Red Martyrdom | The cell gives itself to break the Tithing for good | the cell | always open |
-| Extinguished | Failure screen (no living operative, or the Act 3 clock), not an ending | - | - |
-
-What each ending means for the titan follows the [central truth](../background/central_truth.md) (Option A, canon):
-A ends the cycle (no dream to feed); B hands the cell the chronicle and the source, so the next Great Tithing would be
-theirs to call; C sates the dream so the cycle never turns again (CANON 3.6).
-Retired: the old triangle "Sever the Clerisy / Drown the Leviathan / Red Martyrdom" (assassinating "High Archon Vane",
-now Othemar, and flooding the fissure from the Tallow Reservoirs), and the anarchy and flood endings.
-
-## 7. Related docs
-
-- [Campaign structure](campaign_narrative_structure.md): the three acts and their missions.
-- [Agency and fail states](narrative_agency_and_fail_states.md): founders, recruits, reserves, the Extinguished screen.
-- [Six founders](six_founders_and_phase_progression.md): the six classes and the act progression.
-- [Prologue and starter squad](prologue_and_starter_squad_lore.md): dossiers and the hearth scene.
-- [Onboarding](new_game_onboarding_and_intro.md): the cold open.
-- [Recruits and prologue](recruits_and_prologue_architecture.md): prologue missions, guests, Living Martyrs.
-
-## 8. Gaps (Open)
-
-- Crucible staying beats for Maren, Hollis and Elyse; keepsake names for Vesper, Maren, Dunstan and Elyse; keepsake
-  numbers.
-- Doctrine inputs and thresholds; whether the meter is visible to the player.
-- Living Martyr shock-troop numbers; the mercy reward (whether it raises Composure, and by how much; Q-37); the stasis
-  cost.
-- Siege facility damage numbers; the relocation target.
-- The size of the Great Tithing: decided, thousands (CANON 3.6).
+| **A — `Black-Iron Severance`** | `Berek` | Open unless Flesh-Broker | Black-iron spikes kill the Core's brainstem—**saves Cinderreach & ends Tithings/marrow forever**, but **kills geothermal warmth** (freezing dark caldera) & **petrifies active implants**. |
+| **B — `The Living Conduit`** | `Sabina` | Flesh-Broker only | Grafted wardens bind into the Core's crown to sedate it **without child tithes**, **keeping warmth & marrow**—at the dark risk of becoming an **immortal new Clerisy**. |
+| **C — `Stone Martyrdom`** | The squad | Always open | Total rapid ossification inside the wounded Core **petrifies both Core and deployed squad into black-stone pillars** holding up Cinderreach forever. |
+| **`Extinguished`** | *(Failure)* | `0` living operatives or Act 3 `0d` | Not an ending: the second Great Tithing completes, feeding the Clerisy for a generation. |

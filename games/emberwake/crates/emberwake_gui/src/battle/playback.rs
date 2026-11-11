@@ -98,10 +98,12 @@ impl BattleScreen {
         let hp_before = std::mem::replace(&mut self.last_hp, hps);
         let log = &self.session().resolver.log;
         let lines: Vec<String> = log.iter().skip(self.log_seen).cloned().collect();
+        // PR5-32: the new lines' typed events: the sounds, impact modifiers and breaks read them, never the words
+        let events: Vec<emberwake_battle::event::EventKind> = emberwake_battle::event::since(&self.session().resolver.events, self.log_seen).cloned().collect();
         // PORTRAITFX1-P (5.3): the step's portrait events, fired with its feedback (at the impact, rule I)
         let mut portrait = if hp_before.len() == self.last_hp.len() { emberwake_battle::portrait::session_step_events(self.session(), &hp_before, &lines) } else { Vec::new() };
-        for line in &lines {
-            if let Some(key) = sound_of(line) {
+        for e in &events {
+            if let Some(key) = sound_of(e) {
                 sounds.push(format!("sfx/{key}.wav"));
             }
         }
@@ -125,8 +127,8 @@ impl BattleScreen {
         match pending {
             Some(mut i) => {
                 i.traces = traces;
-                i.mods = fx::Mods::of(&lines, !struck.is_empty());
-                i.broke = fx::broke(&lines);
+                i.mods = fx::Mods::of(&events, !struck.is_empty());
+                i.broke = fx::broke(&events);
                 (i.after, i.floats, i.struck, i.sounds) = (after, floats, struck, sounds);
                 i.marks = self.session().w.units.iter().map(|u| fx::marks_of(&u.st)).collect();
                 i.portrait = portrait;
@@ -134,7 +136,7 @@ impl BattleScreen {
             }
             None => {
                 // 4.5 row 2: a break whose step has no action to land shakes at once (not under skip animations, 4.6)
-                if !skip && fx::broke(&lines) {
+                if !skip && fx::broke(&events) {
                     let now = self.clock.now();
                     let seed = { let s = self.session(); fx::shake_seed(s.current_round, s.current_block, fx::BREAK_KEY) };
                     self.shake(cx, fx::HEAVY, now, seed);
@@ -317,9 +319,8 @@ impl BattleScreen {
         };
         let to = aim.filter(|c| *c != emberwake_battle::grid::NO_CELL).unwrap_or(from);
         let def = s.w.cat.skills.iter().find(|k| k.name == act.command.name);
-        let skill = def.map_or("", |k| k.id.as_str());
         // PR4-2 (AUDIT-10): the same `Act` the FX tests build (`fx::Act::popped`)
-        let fx_act = fx::Act::popped(&act.command.kind, act.unit, skill, u.inventory.main_weapon(), from.dist(to));
+        let fx_act = fx::Act::popped(&act.command.kind, act.unit, def, u.inventory.main_weapon(), from.dist(to), &s.w.cat);
         let (kind, family) = (fx_act.kind, fx_act.family);
         let style = fx::style(fx_act);
         let radius = cells.iter().map(|c| c.dist(to)).max().unwrap_or(0);
@@ -333,7 +334,7 @@ impl BattleScreen {
         // INPUT1 MR12: after a dash's shorter slide
         let slide = if dashed(s, act.unit) { DASH_MS } else { walk_ms };
         let t0 = if moved && walk_ms > 0 { now + slide } else { now };
-        let clips = if kind == "item" { Vec::new() } else { action_clips(skill, kind, family) };
+        let clips = if kind == "item" { Vec::new() } else { action_clips(def.map_or("", |k| k.clip.as_str()), kind, family) };
         Some(Impact {
             at: None,
             actor: act.unit,
@@ -373,7 +374,7 @@ impl BattleScreen {
         for i in self.impacts.iter_mut().filter(|i| i.at.is_none()) {
             // WINDUP1 W4: a strike from a held wind-up starts at the clip's `strike` frame, so it lands that much sooner
             let clip_ms = s.w.units.get(i.actor).and_then(|u| cx.art.first_body(&body_keys(&s.art[i.actor], u))).and_then(|b| {
-                let name = i.clips.iter().copied().find(|c| cx.art.has_clip(&b, c))?;
+                let name = i.clips.iter().find(|c| cx.art.has_clip(&b, c))?;
                 let c = cx.art.clips(&b)?.clip(name)?;
                 let skipped = if i.strike { c.ms_before(c.strike) } else { 0 };
                 c.impact_ms().map(|ms| ms.saturating_sub(skipped))

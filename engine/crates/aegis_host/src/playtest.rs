@@ -1,5 +1,5 @@
 //! Playtest recordings on the command API (PLAYTEST1 on the engine), game-agnostic. A recording keeps every session
-//! (a "battle": the host's history from its starting request, with the checkpoints the game took) of one play run,
+//! (the host's history from its starting request, with the checkpoints the game took) of one play run,
 //! plus the UI trail and the player's notes, and the content fingerprint of the data it was played on. Because every
 //! state change goes through the host, replaying a session's requests on a fresh host gives the same states: the
 //! replayer compares each checkpoint, reports the first difference (later checkpoints are unverified), and can take
@@ -7,9 +7,11 @@
 //!
 //! File (`<id>.json`, written atomically through `<id>.json.tmp`):
 //!   {format: "playtest", version: 2, id, origin: user | agent, created, engine, source_rev, scenario,
-//!    parent: null | {id, battle, at}, content: {algo, total, files}, battles: [{index, requests, checkpoints, end}],
+//!    parent: null | {id, session, at}, content: {algo, total, files}, sessions: [{index, requests, checkpoints, end}],
 //!    trail: [event], trail_dropped, notes: [note]}
 //! Unknown keys are kept. `end` is {result, at} (`abandoned` when the session was left before its end).
+//! LAYER-ENG-KEYS (PR5-29a): `sessions` was `battles` and the parent's `session` was `battle`; a file with the old
+//! `battles` still loads (`SESSIONS_ALIAS`; one with both keys is refused) and is written back with `sessions`.
 
 use crate::Driver;
 use serde_json::{json, Map, Value};
@@ -22,6 +24,9 @@ pub const FORMAT: &str = "playtest";
 pub const VERSION: i64 = 2;
 pub const TRAIL_MAX: usize = 20000;
 pub const ABANDONED: &str = "abandoned";
+/// The file key of the sessions, and the old name it still loads from.
+pub const SESSIONS_KEY: &str = "sessions";
+pub const SESSIONS_ALIAS: &str = "battles";
 
 /// One recorded session: the requests from its starting one, the checkpoints after them, how it ended.
 #[derive(Debug, Clone, PartialEq)]
@@ -53,7 +58,7 @@ pub struct Recording {
     pub scenario: String,
     pub parent: Value,
     pub content: Value,
-    pub battles: Vec<Session>,
+    pub sessions: Vec<Session>,
     pub trail: Vec<Value>,
     pub trail_dropped: u64,
     pub notes: Vec<Value>,
@@ -61,7 +66,7 @@ pub struct Recording {
     pub extra: Map<String, Value>,
 }
 
-const KNOWN: [&str; 14] = ["format", "version", "id", "origin", "created", "engine", "source_rev", "scenario", "parent", "content", "battles", "trail", "trail_dropped", "notes"];
+const KNOWN: [&str; 15] = ["format", "version", "id", "origin", "created", "engine", "source_rev", "scenario", "parent", "content", SESSIONS_KEY, SESSIONS_ALIAS, "trail", "trail_dropped", "notes"];
 
 impl Recording {
     pub fn new(id: &str, origin: &str, content: Value) -> Self {
@@ -74,7 +79,7 @@ impl Recording {
             scenario: String::new(),
             parent: Value::Null,
             content,
-            battles: Vec::new(),
+            sessions: Vec::new(),
             trail: Vec::new(),
             trail_dropped: 0,
             notes: Vec::new(),
@@ -92,10 +97,10 @@ impl Recording {
     }
 
     pub fn to_json(&self) -> Value {
-        let battles: Vec<Value> = self.battles.iter().enumerate().map(|(i, b)| json!({"index": i, "requests": b.requests, "checkpoints": b.checkpoints, "end": b.end})).collect();
+        let sessions: Vec<Value> = self.sessions.iter().enumerate().map(|(i, b)| json!({"index": i, "requests": b.requests, "checkpoints": b.checkpoints, "end": b.end})).collect();
         let mut out = json!({
             "format": FORMAT, "version": VERSION, "id": self.id, "origin": self.origin, "created": self.created, "engine": self.engine,
-            "source_rev": self.source_rev, "scenario": self.scenario, "parent": self.parent, "content": self.content, "battles": battles,
+            "source_rev": self.source_rev, "scenario": self.scenario, "parent": self.parent, "content": self.content, SESSIONS_KEY: sessions,
             "trail": self.trail, "trail_dropped": self.trail_dropped, "notes": self.notes,
         });
         if let Some(o) = out.as_object_mut() {
@@ -118,18 +123,23 @@ impl Recording {
             _ => return Err(format!("recording version must be {VERSION}")),
         }
         let s = |k: &str, d: &str| v[k].as_str().unwrap_or(d).to_string();
-        let mut battles = Vec::new();
-        for (i, b) in v["battles"].as_array().map(|a| a.as_slice()).unwrap_or(&[]).iter().enumerate() {
-            let requests = b["requests"].as_array().cloned().ok_or_else(|| format!("battle {i}: requests must be a list"))?;
+        let key = match (v.get(SESSIONS_KEY).is_some(), v.get(SESSIONS_ALIAS).is_some()) {
+            (true, true) => return Err(format!("a recording has '{SESSIONS_KEY}' or its old name '{SESSIONS_ALIAS}', not both")),
+            (false, true) => SESSIONS_ALIAS,
+            _ => SESSIONS_KEY,
+        };
+        let mut sessions = Vec::new();
+        for (i, b) in v[key].as_array().map(|a| a.as_slice()).unwrap_or(&[]).iter().enumerate() {
+            let requests = b["requests"].as_array().cloned().ok_or_else(|| format!("session {i}: requests must be a list"))?;
             if requests.iter().any(|r| !r.is_object() || !r["cmd"].is_string()) {
-                return Err(format!("battle {i}: every request is an object with a cmd"));
+                return Err(format!("session {i}: every request is an object with a cmd"));
             }
             let checkpoints = b["checkpoints"].as_array().cloned().unwrap_or_default();
             if checkpoints.iter().any(|c| c["at"].as_u64().is_none_or(|at| at as usize > requests.len())) {
-                return Err(format!("battle {i}: a checkpoint's at is past its requests"));
+                return Err(format!("session {i}: a checkpoint's at is past its requests"));
             }
             let end = if b["end"].is_object() { b["end"].clone() } else { json!({"result": ABANDONED, "at": requests.len()}) };
-            battles.push(Session { requests, checkpoints, end });
+            sessions.push(Session { requests, checkpoints, end });
         }
         let extra = v.as_object().map(|o| o.iter().filter(|(k, _)| !KNOWN.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default();
         Ok(Self {
@@ -141,7 +151,7 @@ impl Recording {
             scenario: s("scenario", ""),
             parent: v["parent"].clone(),
             content: v["content"].clone(),
-            battles,
+            sessions,
             trail: v["trail"].as_array().cloned().unwrap_or_default(),
             trail_dropped: v["trail_dropped"].as_u64().unwrap_or(0),
             notes: v["notes"].as_array().cloned().unwrap_or_default(),
@@ -550,12 +560,12 @@ mod tests {
         assert_eq!(s.result(), "won");
         assert!(replay(&mut host(), &s, None).matched());
         let mut rec = Recording::new("20261020-120000", "user", json!({"algo": "sha256-12", "total": "x", "files": {}}));
-        rec.battles.push(s.clone());
+        rec.sessions.push(s.clone());
         rec.extra.insert("future_key".into(), json!(7));
         let dir = aegis_core::scratch::Scratch::vacant("playtest");
         let path = rec.save(&dir).unwrap();
         let back = Recording::load(&path).unwrap();
-        assert_eq!(back.battles[0], s);
+        assert_eq!(back.sessions[0], s);
         assert_eq!(back.extra["future_key"], json!(7));
         assert_eq!(new_id(&dir, 0), "19700101-000000");
         // Copy to repo: the recording and its images land in <inbox>/<id>/, which lists like the flat file.
@@ -630,7 +640,7 @@ mod tests {
         let bad = json!({"format": "playtest", "version": 2, "battles": [{"requests": [{"cmd": "new"}], "checkpoints": [{"at": 5}]}]});
         assert!(Recording::from_json(&bad).unwrap_err().contains("past its requests"));
         let ok = Recording::from_json(&json!({"format": "playtest", "version": 2})).unwrap();
-        assert!(ok.battles.is_empty() && ok.origin == "user");
+        assert!(ok.sessions.is_empty() && ok.origin == "user");
         assert_eq!(utc_text(1_792_500_000), "2026-10-20T12:40:00Z");
     }
 }

@@ -94,8 +94,8 @@ const EFFECT_GOLD_MAX: i64 = 99999;
 const ADD_DELTA_MAX: i64 = 100;
 const ITEM_COUNT_MAX: i64 = 99;
 const MAX_ITEM_KEYS: usize = 8;
-/// ServiceCatalog's line ids, then STORYUI1's `board` (4.7).
-const SERVICE_IDS: [&str; 8] = ["greeting", "offer", "accept", "decline", "turn_in", "shop", "farewell", rpgkit_data::BOARD_SERVICE];
+/// ServiceCatalog's line ids, then STORYUI1's `board` (4.7) and PK2-S3's `recipe`.
+const SERVICE_IDS: [&str; 9] = ["greeting", "offer", "accept", "decline", "turn_in", "shop", "farewell", rpgkit_data::BOARD_SERVICE, rpgkit_data::RECIPE_SERVICE];
 const TOKENS: [&str; 4] = ["npc", "quest", "shop", "gold"];
 const TEXT_TOKENS: [&str; 2] = ["npc", "gold"];
 

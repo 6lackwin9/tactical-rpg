@@ -14,21 +14,22 @@ use serde_json::Value;
 /// The kinds in table order (SkillKinds.KINDS).
 pub const KINDS: [&str; 9] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", "REST", "MOVE", "TARGET", "STATUS"];
 const AUTHORABLE: [&str; 5] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE"];
-/// The fields every kind has (RULESET1-S adds `round_intent`: every kind has an intent, IN4).
-const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier", "round_intent"];
+/// The fields every kind has (RULESET1-S adds `round_intent`: every kind has an intent, IN4; PR5-33 the presentation
+/// fields `fx` and `clip`, `rpgkit_data::looks`).
+const COMMON_FIELDS: [&str; 19] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier", "round_intent", "fx", "clip"];
 /// The sections and their fields (SkillKinds.SECTIONS; then RULESET1-S's timeline fields, RULESET1_TASKS 1.3: `cost`
 /// the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK; then
 /// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`
 /// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`; PK1-S2a: `hp_cost_pct` and
-/// `requires_meter` in `cost`, the marrow version's `channel` in its own section, every authored kind; HEALPCT1:
-/// `heal_pct` in `support`).
+/// `requires_meter` in `cost`, the channeled version's `channel` in its own section, every authored kind; HEALPCT1:
+/// `heal_pct` in `support`; PK2-S1: `unmark` in `support`, `uses_per_battle` in `cost`).
 const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max", "position"]),
     // A3.2-K2: `affects` (IR9) beside the shape it filters
     ("area", &["area", "affects"]),
-    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "cleanse_statuses"]),
+    ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "heal_pct", "unmark", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
     // AUDIT-07: `guard_rounds` (S1.2-S4) beside the fraction it holds
     ("guard", &["mitigation", "guard_rounds"]),
@@ -38,7 +39,7 @@ const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("combo", &["disrupt", "exploit", "exploit_consume"]),
     ("rest", &["recover_ap"]),
     ("gate", &["weapon_types", "min_proficiency"]),
-    ("cost", &["ap_cost", "meters", "hp_cost", "hp_cost_pct", "requires_meter"]),
+    ("cost", &["ap_cost", "meters", "hp_cost", "hp_cost_pct", "requires_meter", "uses_per_battle"]),
     ("timing", &["recovery_blocks", "windup_poise", "unbreakable"]),
     ("intent", &["intent_buff"]),
     ("impact", &["stagger", "sure_break", "armor_piercing", "ignore_guard"]),
@@ -538,35 +539,61 @@ fn template_warnings(template: &str, entry: &Dict) -> Vec<String> {
 
 const MAX_CLASS_TIER: i64 = 3;
 const MAX_UNLOCK_OFFSET: i64 = 8;
-const UNARMED_TOKEN: &str = "unarmed";
+pub(crate) const UNARMED_TOKEN: &str = "unarmed";
 const CLEANSE_ALL: &str = "all";
 const HEAL_STATS: [&str; 2] = ["INT", "KNOW"];
-/// Proficiency.gear_types(); RULESET1-S (TQ8) adds the reach-2 weapon types `polearm` and `scourge`, CAST1-S the weapon
-/// types `censer`, `bone_saw` and `sprayer`.
-pub const GEAR_TYPES: [&str; 21] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield", "plate", "leather", "cloth"];
-/// Gear types added after the Godot freeze that need no item family until data uses them (ItemValidator.family_set_errors
-/// asks a family of every other gear type).
-pub const OPTIONAL_GEAR_TYPES: [&str; 5] = ["polearm", "scourge", "censer", "bone_saw", "sprayer"];
 /// The item types whose family id is a gear token (a weapon type, a shield, an armour), and of those the hand ones.
 const GEAR_ITEM_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
 const HAND_ITEM_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
+/// LAYER-DOWN-2: the schema field whose options are the gear tokens of a catalog without a family table.
+const GEAR_FIELD: (&str, &str) = ("items", "weapon_type");
+/// LAYER-DOWN-2: the armour tokens among the pre-family gear tokens (a pre-family catalog has no item type per token;
+/// `weapon_tokens` leaves these out).
+const PRE_FAMILY_ARMOR: [&str; 3] = ["plate", "leather", "cloth"];
+
+/// LAYER-DOWN-2: the gear tokens of a catalog without a family table (a pre-family catalog, read like
+/// ItemValidator._legacy_errors), in their listed order: the kit schema's items `weapon_type` options without "" (the
+/// field reads its options from the family table, `options_from` `gear_types`; its own list is this fallback). No Rust
+/// list names a gear type.
+pub fn schema_gear_tokens() -> Vec<String> {
+    let f = fields("content", GEAR_FIELD.0).iter().map(json::dict).find(|f| json::s(f, "key") == GEAR_FIELD.1).cloned().unwrap_or_default();
+    json::aget(&f, "options").iter().filter_map(Value::as_str).filter(|o| !o.is_empty()).map(String::from).collect()
+}
 
 /// U3.2-S2: the gear tokens of a family table (Proficiency.gear_types): the ids of its WEAPON, SHIELD and ARMOR families
-/// in table order. No family table (a pre-family catalog, read like ItemValidator._legacy_errors) reads `GEAR_TYPES`.
+/// in table order. No family table (a pre-family catalog) reads `schema_gear_tokens` (LAYER-DOWN-2).
 pub fn gear_tokens(families: &[Dict]) -> Vec<String> {
-    tokens_of(families, &GEAR_ITEM_TYPES, &GEAR_TYPES)
+    if families.is_empty() {
+        return schema_gear_tokens();
+    }
+    tokens_of(families, &GEAR_ITEM_TYPES)
 }
 
 /// U3.2-S2: the weapon tokens of a family table (Proficiency.WEAPON_TYPES, the hand gear): the ids of its WEAPON and
-/// SHIELD families in table order (the gear tokens without the armour). No family table reads `unit::WEAPON_TYPES`.
+/// SHIELD families in table order (the gear tokens without the armour). No family table: `schema_gear_tokens` without
+/// the armour ones (LAYER-DOWN-2).
 pub fn weapon_tokens(families: &[Dict]) -> Vec<String> {
-    tokens_of(families, &HAND_ITEM_TYPES, &super::unit::WEAPON_TYPES)
+    if families.is_empty() {
+        return schema_gear_tokens().into_iter().filter(|g| !PRE_FAMILY_ARMOR.contains(&g.as_str())).collect();
+    }
+    tokens_of(families, &HAND_ITEM_TYPES)
 }
 
-fn tokens_of(families: &[Dict], types: &[&str], legacy: &[&str]) -> Vec<String> {
+/// LAYER-DOWN-2: the gear tokens as the check messages list them: the family table's gear tokens in the schema's listed
+/// order (`schema_gear_tokens`), then the table's other gear families in table order (a family the schema does not
+/// list); no family table: the schema's list. The tokens are the table's (`gear_tokens`); only the order is the schema's.
+pub fn listed_gear_tokens(families: &[Dict]) -> Vec<String> {
+    let listed = schema_gear_tokens();
     if families.is_empty() {
-        return legacy.iter().map(|g| g.to_string()).collect();
+        return listed;
     }
+    let tokens = gear_tokens(families);
+    let mut out: Vec<String> = listed.into_iter().filter(|g| tokens.contains(g)).collect();
+    out.extend(tokens.into_iter().filter(|g| !out.contains(g)).collect::<Vec<_>>());
+    out
+}
+
+fn tokens_of(families: &[Dict], types: &[&str]) -> Vec<String> {
     families.iter().filter(|f| types.contains(&crate::source::item_type_of(f).as_str())).map(|f| json::s(f, "id")).collect()
 }
 
@@ -765,7 +792,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let cleanse = json::sget(e, "cleanse_statuses");
         // HEALPCT1: a percent heal counts as a heal (the message keeps its words, checks_golden)
         let heal_pct = json::i(e, "heal_pct", 0);
-        if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 && grant.is_empty() && cleanse.is_empty() {
+        // PK2-S1: an `unmark` is a support use of its own (the message keeps its words, checks_golden)
+        let unmark = json::get(e, "unmark").as_object().is_some_and(|u| !u.is_empty());
+        if heal_base <= 0 && heal_mult <= 0.0 && heal_pct <= 0 && grant.is_empty() && cleanse.is_empty() && !unmark {
             out.push("A support skill needs a heal (base or per-stat), a cleanse or a granted status.".into());
         }
         if cleanse.iter().any(|c| c == CLEANSE_ALL) && cleanse.len() > 1 {

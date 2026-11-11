@@ -4,7 +4,7 @@
 use crate::grid::{V2, DIRS};
 use rpgkit_data::{Affects, Catalog, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, Ruleset};
-use rpgkit_rules::unit::{skill_in_group, BASE_AP, REACH_WEAPON_REACH};
+use rpgkit_rules::unit::{skill_in_group, BASE_AP};
 use rpgkit_rules::{Stance, Unit};
 
 pub type SkillId = usize;
@@ -435,20 +435,21 @@ pub fn has_reach(c: &Unit, rules: &Ruleset) -> bool {
     rules.has(ruleset::REACH) && c.has_reach_weapon()
 }
 
-/// The far edge of `c`'s plain melee band: its melee reach with a reach weapon (K1), else `attack_range` as today.
+/// The far edge of `c`'s plain melee band: its melee reach with a reach weapon (K1; PR5-28: the weapon family's
+/// `range_band.max`, fallback 2), else `attack_range` as today.
 fn melee_band_max(c: &Unit, rules: &Ruleset) -> i32 {
     if has_reach(c, rules) {
-        REACH_WEAPON_REACH
+        c.weapon_reach()
     } else {
         c.attack_range
     }
 }
 
-/// RULESET1 K1: `c`'s melee reach, the far edge of its melee band (1 to it): 2 with a reach weapon under the rule
-/// `reach`, else 1. It also bounds "engaged" (RULESET1_INTENT MV2).
+/// RULESET1 K1: `c`'s melee reach, the far edge of its melee band (1 to it): with a reach weapon under the rule `reach`
+/// its family's `range_band.max` (PR5-28; 2 without one), else 1. It also bounds "engaged" (RULESET1_INTENT MV2).
 pub fn melee_reach(c: &Unit, rules: &Ruleset) -> i32 {
     if has_reach(c, rules) {
-        REACH_WEAPON_REACH
+        c.weapon_reach()
     } else {
         1
     }

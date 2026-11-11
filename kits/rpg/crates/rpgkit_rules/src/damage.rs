@@ -25,11 +25,13 @@ pub const TRAINED_FIST_MIN_LEVEL: i32 = 2;
 pub const GUARD_CAP: f64 = 0.9;
 pub const FIST: &str = "fist";
 
+/// The weapon a hit swings: the off hand's for an off-hand hit, else the ready one (PR5-26, audit B7: the switched-to
+/// off-hand weapon of a two-handed pair, `Inventory::active_weapon`; the main hand otherwise).
 pub fn weapon_for(u: &Unit, offhand: bool) -> Option<&Equipment> {
     if offhand {
         u.inventory.offhand_weapon()
     } else {
-        u.inventory.main_weapon()
+        u.inventory.active_weapon()
     }
 }
 
@@ -59,6 +61,8 @@ pub struct AttackPower {
     /// `untrained_power_mult` (`untrained_mult`), stacking with the deficit ratio.
     pub untrained: bool,
     pub untrained_mult: f64,
+    /// PK2-S5b: the swung weapon instance is dulled (0 durability): its weapon power took `gear::DULLED_POWER_MULT`.
+    pub dulled: bool,
     pub stat_name: String,
     pub stat_val: i32,
     pub unit_scaling: f64,
@@ -123,6 +127,12 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                     res.untrained_mult = if pen.untrained { pen.untrained_mult } else { 0.0 };
                 }
                 res.weapon_power = if pen.penalized { total as f64 * pen.factor() } else { total as f64 };
+                // PK2-S5b: a dulled weapon instance swings at `DULLED_POWER_MULT` of its weapon power (`Unit::wear`;
+                // nothing tracked, nothing changes)
+                if !u.wear.is_empty() && u.swung_slot(offhand).is_some_and(|s| u.dulled(s)) {
+                    res.dulled = true;
+                    res.weapon_power *= crate::gear::DULLED_POWER_MULT;
+                }
             }
             res.stat_name = stat_name.to_string();
             res.stat_val = u.stats.stat(stat_name, ctx);
@@ -168,8 +178,12 @@ pub fn base_armor_rating(u: &Unit) -> i32 {
 }
 
 /// Base rating + the active Armor buffs' magnitudes (fortify) - the active Armor debuffs' (expose), floor 0; W2-5
-/// (C09): the statuses are the table's `modifier` rows with `rating` armor, not named ids.
+/// (C09): the statuses are the table's `modifier` rows with `rating` armor, not named ids. PK1-KITFIX (b): a held
+/// `armor` (a trigger's `rating_set`) is the rating instead, whatever the statuses add.
 pub fn armor_rating(u: &Unit) -> i32 {
+    if let Some(v) = u.rating_set(Rating::Armor) {
+        return v.max(0);
+    }
     let raised = u.active_magnitude_where(|s| status::raises_rating(s, Rating::Armor));
     let lowered = u.active_magnitude_where(|s| status::lowers_rating(s, Rating::Armor));
     (base_armor_rating(u) + raised - lowered).max(0)

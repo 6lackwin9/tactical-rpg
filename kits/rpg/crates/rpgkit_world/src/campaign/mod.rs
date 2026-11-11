@@ -683,6 +683,11 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
         }
         _ => return false,
     }
+    // PK2-S5a: the act line: from the manifest's `durability.from_act` every owned weapon becomes an instance (before
+    // the GUI writes the act-start save)
+    if effect == "set_act" {
+        crate::weapons::sync(d, gs);
+    }
     true
 }
 

@@ -1,7 +1,7 @@
 //! The gear dojo's sandbox (emberwake_battle::dojo, DojoSession) on the shipped catalog: expectations come from the
 //! battle rules it reuses (damage::compute, skill costs, statuses, gear rules), not from recorded numbers.
 
-use emberwake_battle::dojo::{DojoSession, DUMMY_MAX_HP, HERO_AP, PRESETS, ROUND_AP_REGEN};
+use emberwake_battle::dojo::{DojoSession, DUMMY_MAX_HP, HERO_AP, ROUND_AP_REGEN};
 use emberwake_rules::damage::{self, HitInput};
 use emberwake_rules::gear::Slot;
 use emberwake_rules::unit::Stance;
@@ -119,12 +119,14 @@ fn a_benchmark_leaves_the_dummy_alone_and_repeats_with_the_seed() {
 #[test]
 fn every_preset_names_catalog_items_and_sword_and_board_dresses_the_warrior() {
     let mut s = session();
-    for p in PRESETS {
-        for (slot, item) in p.gear {
-            assert!(s.cat.items.contains_key(*item), "{}: {item}", p.id);
-            assert!(emberwake_rules::gear::item_fits_slot(&s.cat.items[*item], slot), "{}: {item} in {slot}", p.id);
+    // LAYER-DOWN-2: the presets are the catalog's dojo_presets rows
+    assert!(!s.presets().is_empty(), "the game ships its presets");
+    for p in s.presets() {
+        for (slot, item) in &p.gear {
+            assert!(s.cat.items.contains_key(item), "{}: {item}", p.id);
+            assert!(emberwake_rules::gear::item_fits_slot(&s.cat.items[item], slot), "{}: {item} in {slot}", p.id);
         }
-        assert!(p.pouch.iter().all(|i| s.cat.items.contains_key(*i)), "{}", p.id);
+        assert!(p.pouch.iter().all(|i| s.cat.items.contains_key(i)), "{}", p.id);
     }
     s.apply_preset("sword_board");
     let inv = &s.hero().inventory;
@@ -157,7 +159,8 @@ fn gear_moves_between_the_stash_and_the_hero_and_follows_the_two_handed_rule() {
     assert!(s.hero().inventory.main_weapon().is_none_or(|m| m.item.id != "wpn_claymore"));
     s.clear_gear();
     // Everything is back: the starter stash, the preset's made pieces, the claymore the test added.
-    let made = PRESETS[0].gear.iter().map(|(_, i)| *i).chain(PRESETS[0].pouch.iter().copied()).filter(|i| !pre.iter().any(|x| x == i)).count();
+    let first = s.presets().into_iter().find(|p| p.id == "sword_board").expect("the sword_board preset");
+    let made = first.gear.iter().map(|(_, i)| i).chain(first.pouch.iter()).filter(|i| !pre.contains(i)).count();
     assert_eq!(s.stash.len(), total + added + made, "nothing is lost or invented");
 }
 
@@ -178,10 +181,10 @@ fn the_ready_weapon_returns_to_the_main_hand_when_the_pair_changes() {
 #[test]
 fn a_preset_piece_the_hero_has_no_training_for_is_worn_untrained() {
     let mut s = session();
-    let preset = PRESETS.iter().find(|p| p.gear.iter().any(|(_, i)| !s.trained_for(&s.cat.items[*i]))).expect("a preset with a piece the warrior has no training for");
-    s.apply_preset(preset.id);
-    for (_, item) in preset.gear.iter().filter(|(_, i)| !s.trained_for(&s.cat.items[*i])) {
-        let worn = s.hero().inventory.gear().find(|e| e.id() == *item).unwrap_or_else(|| panic!("{item} is worn"));
+    let preset = s.presets().into_iter().find(|p| p.gear.iter().any(|(_, i)| !s.trained_for(&s.cat.items[i]))).expect("a preset with a piece the warrior has no training for");
+    s.apply_preset(&preset.id);
+    for (_, item) in preset.gear.iter().filter(|(_, i)| !s.trained_for(&s.cat.items[i])) {
+        let worn = s.hero().inventory.gear().find(|e| e.id() == item.as_str()).unwrap_or_else(|| panic!("{item} is worn"));
         assert!(worn.wield_penalty(&s.hero().stats).untrained, "{item} is worn untrained");
     }
 }

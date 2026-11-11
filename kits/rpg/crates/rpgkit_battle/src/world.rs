@@ -289,6 +289,17 @@ pub struct World {
     pub sides: Sides,
     /// PK1-S1 (3.5, 3.7): the battle's marks, the units an `unmark` calms and the battle-start party side (`mark`).
     pub marks: crate::mark::Marks,
+    /// PK2-S1: (unit, skill catalog id) -> how many times the unit started that skill this battle (only skills with a
+    /// `uses_per_battle` are counted; `mark::uses_problem`).
+    pub skill_uses: IndexMap<(UnitId, String), i32>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): unit -> the main-hand weapon families it started an attack skill with
+    /// this battle, each once (only heroes built from member state, `Unit::rank_choice`): the settle's mastery use
+    /// (`rpgkit_world::roster::HeroEnd::attacked`).
+    pub weapon_attacks: IndexMap<UnitId, Vec<String>>,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the sims' alternative dulled mode: a technique that swings a dulled
+    /// weapon is locked too (`wear::problem`). False (the default dulled penalty alone) in every battle the sims do not switch;
+    /// only the sim key `dulled=lock` sets it.
+    pub dulled_lock: bool,
 }
 
 /// PHASEFX1 (ACTS23 PK6 hook l, engine-only): who fights whom once a phase `side` turned units `hostile_all`. A rogue

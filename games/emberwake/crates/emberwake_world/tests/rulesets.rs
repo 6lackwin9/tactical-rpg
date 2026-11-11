@@ -1,12 +1,13 @@
 //! RULESET1-R on the shipped data: every shipped world resolves to the ruleset its manifest (or nearest ancestor) names, classic when unset, and the three classic worlds stay classic (3.1.1); a battle
 //! plays by the ruleset its caller gives it (3.1.3); under `round_intent` the classic stance machinery is inert (intent
 //! IN3: no stance change, no switch AP, no flow stance, no stance break), in battles and in the Dojo, while classic keeps
-//! it; the register's extensions change nothing in a classic battle until their rules land.
+//! it; the register's extensions change nothing in a classic battle until their rules land, except one whose opt-in data
+//! the fight already holds at battle start (left out and printed: FB-188 Option A).
 
 use emberwake_battle::dojo::DojoSession;
 use emberwake_battle::session::{EncounterDef, Phase, Session};
 use emberwake_battle::skill;
-use emberwake_rules::ruleset::{Ruleset, CLASSIC, REGISTER, ROUND_INTENT, TIMELINE};
+use emberwake_rules::ruleset::{Ruleset, CLASSIC, REACH, REGISTER, ROUND_INTENT, TIMELINE};
 use emberwake_rules::Stance;
 use emberwake_world::Data;
 use indexmap::IndexMap;
@@ -97,11 +98,26 @@ fn round_intent_leaves_the_classic_stances_inert_in_battle() {
     assert!(classic.iter().any(|a| a.4 && a.1 == Some(Stance::Offensive)), "classic attacks enter Offensive");
 }
 
+/// FB-188 Option A: an extension is inert without its opt-in data (RULESET1 3.2), so a fight that already holds that
+/// data at battle start opts in and is left out of the check for that extension only. One row per extension whose
+/// opt-in data can ship in a classic fight (add a row when another extension's data does); only `reach` today: a unit
+/// with a reach weapon at the start (the kit query `Unit::has_reach_weapon`).
+const OPT_IN_AT_START: &[(&str, fn(&Session) -> bool)] = &[(REACH, holds_reach_weapon)];
+
+fn holds_reach_weapon(s: &Session) -> bool {
+    s.w.units.iter().any(|u| u.has_reach_weapon())
+}
+
 #[test]
 fn extensions_change_nothing_in_a_classic_battle_yet() {
     let d = data();
+    let start = Session::start(d.cat.clone(), encounter(&d), &IndexMap::new());
+    let excluded: Vec<&str> = OPT_IN_AT_START.iter().filter(|(_, holds)| holds(&start)).map(|(id, _)| *id).collect();
+    eprintln!("extensions opted in at start (left out, FB-188 Option A): [{}]", excluded.join(", "));
+    let extensions: Vec<&str> = REGISTER.iter().filter(|r| r.kind == emberwake_rules::ruleset::RuleKind::Extension).map(|r| r.id).collect();
+    let on: Vec<String> = extensions.iter().filter(|x| !excluded.contains(x)).map(|x| format!("+{x}")).collect();
+    assert_eq!(on.len() + excluded.len(), extensions.len(), "every other extension stays checked");
     let mut all = Ruleset::classic();
-    let on: Vec<String> = REGISTER.iter().filter(|r| r.kind == emberwake_rules::ruleset::RuleKind::Extension).map(|r| format!("+{}", r.id)).collect();
     all.adjust(&on.join(",")).unwrap();
     assert_eq!(all.rules.len(), on.len());
     assert_eq!(play(&d, all, 4), play(&d, Ruleset::classic(), 4), "the same actions, stances and log");

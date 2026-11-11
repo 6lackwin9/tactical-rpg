@@ -1,0 +1,12 @@
+{
+  "key": "sunk_ward_combat_2",
+  "file": "games/emberwake/assets/audio/music/sunk_ward_combat_2.ogg",
+  "plays": "variant 2 of sunk_ward_combat (battles in the Sunk Ward); not played until the engine picks among a key's variants (ART_UI_STUDIO 3.9, the variant request)",
+  "source": "Flow Music (flowmusic.app), Compose, model Lyria 3.5: 'Sunkward Battle Theme (inquisition)', the round 4 prompt of art_src/music/prompts/flow_music_brief.txt; Split stems, bass + other kept, the same stems as sunk_ward_combat",
+  "master": "Drive image_pipeline/music/out/stems_battle_inquisition/battle_inq_{bass,other}.m4a (118.5 s)",
+  "prompt": "see art_src/music/sunk_ward_combat.json",
+  "seed": "455684 as the brief asks (not confirmed from the take)",
+  "import": "python -m tools.mock_ui.music battle_inq_bass.m4a battle_inq_other.m4a --whole --overlap 4 --rotate 8 --out games/emberwake/assets/audio/music/sunk_ward_combat_2.ogg",
+  "loop": "whole song: trailing silence trimmed, the last 4 s laid over the intro; the file starts on the chord 8.01 s in, so the first play skips the overlap; 111.0 s, several stages; RMS -14.6 dBFS, peak -1.0 dBFS",
+  "approved": "Tushar 2026-11-10 (by ear: all three battle tracks loop well; use them as battle variants, this one has multiple stages)"
+}

@@ -4,7 +4,7 @@ use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_core::value::to_int;
-use rpgkit_data::{Catalog, ClassDef, Deck, UnitDef, UnitTemplate, NO_ITEM};
+use rpgkit_data::{Catalog, ClassDef, Deck, Technique, UnitDef, UnitTemplate, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
@@ -15,7 +15,8 @@ pub const GROUPS: [&str; 2] = ["spell", "heal"];
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
 /// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
 pub const STAGGER_TAKEN_MULT_MAX: f64 = 2.0;
-/// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this).
+/// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this) when its family
+/// has no `range_band` (PR5-28: the family's `range_band.max` wins, `Equipment::reach_max`).
 pub const REACH_WEAPON_REACH: i32 = 2;
 /// U3.2-S4 (FB-35): the source kind of the stat modifiers worn items' effects add (their `stat` effects and their
 /// families' mastery passives'); every sync takes them all off before it applies the worn gear again. AUDIT-05: each
@@ -299,6 +300,9 @@ pub struct Unit {
     /// PK1-S1 (3.1): the percent the held meter bands' `heal_taken` add to the healing this unit receives (0 = none;
     /// `World::heal` reads it).
     pub band_heal_taken: i32,
+    /// PK1-KITFIX (b): the ratings a trigger's `rating_set` holds at a value (one per rating; empty = none, so every
+    /// rating reads as before).
+    pub rating_sets: Vec<crate::status::RatingSet>,
     /// HOOKS1 UM1: the passives' `meter` effects in apply order; read only under the rule unit_meters.
     pub passive_meters: Vec<HeldMeter>,
     /// U4.2-S4 (FB-30): the hit-time modifier grants of passives and meter bands, with their sources (`HitSource`); a
@@ -332,6 +336,43 @@ pub struct Unit {
     /// RULESET1 9 D1-D4: the deck terms the unit is built and fights under (None = classic: today's loadout, basics and
     /// passives).
     pub deck_rule: Option<DeckRule>,
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives' `forbid_hands` (0 = none; 2 = no two-handed item).
+    pub forbid_hands: i32,
+    /// PK2-S1: the passives' `pierce_melee` (melee and bare-handed hits pierce armour under the rule pierce).
+    pub pierce_melee: bool,
+    /// PK2-S1: a party member's permanent max HP offset (added to the derived max HP on every sync, at least 1 HP).
+    pub max_hp_offset: i32,
+    /// PK2-S1: a party member's unit track stages (track id -> stage; a track it is not on reads 0). None = the unit holds
+    /// no track (a catalog unit, an enemy, a guest, or any unit while the catalog has no track row): a battle mark never
+    /// advances it.
+    pub tracks: Option<IndexMap<String, i32>>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a party member's graft count (its body slots in use) once the catalog
+    /// has a body slot row. None = the unit holds no body (a catalog unit, an enemy, a guest, or any unit while the
+    /// catalog has no body slot row): no floor table applies and the ruleset's `channeled_actives` limits its marks.
+    pub graft_count: Option<i32>,
+    /// PK2-S2 (FB-167 Q6): a party member's floor offset for this battle, added to every floor a meter effect's
+    /// `floors` table gives (0 = none).
+    pub floor_offset: i32,
+    /// PK2-S2: the skills its keystone grafts teach: open without an active slot, each taking one of the deck's keystone
+    /// slots (`slotted`). PK2-S4: or the wielded family's keystone (`mastery_keystone`).
+    pub keystone_skills: Vec<String>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a party member's weapon mastery levels (gear type -> 1-3). None = the
+    /// unit holds no mastery (a catalog unit, an enemy, a guest, a member with no mastery level and no masterwork main
+    /// hand): no technique opens.
+    pub mastery: Option<IndexMap<String, i32>>,
+    /// PK2-S4: the main-hand weapon is a masterwork instance (its own `technique` opens; weapon instances, PR5-13a).
+    pub masterwork: bool,
+    /// PK2-S4: the techniques open now: the main-hand weapon family's first n at mastery n, then a masterwork weapon's
+    /// own; rebuilt on every sync. Owned and open without a slot, standard rounds only, greyed under the wrong grip.
+    pub techniques: Vec<Technique>,
+    /// PK2-S4: the wielded family's keystone the unit holds (mastery 3 and its forge rite; "" = none; set once at build
+    /// from the saved main hand, not on a mid-battle swap, unlike `techniques`), also in
+    /// `keystone_skills`; standard rounds only.
+    pub mastery_keystone: String,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the wear of the weapon instances it wields that wear (slot -> wear;
+    /// `Growth::wear`). Empty = none tracked (a catalog unit, an enemy, a guest, a member without instances, or a
+    /// battle whose ruleset lacks the rule `durability`): nothing is spent and nothing is dulled.
+    pub wear: IndexMap<Slot, crate::gear::Wear>,
 }
 
 impl Unit {
@@ -390,6 +431,7 @@ impl Unit {
             held_guard: None,
             trigger_crit: 0.0,
             band_heal_taken: 0,
+            rating_sets: Vec::new(),
             passive_meters: Vec::new(),
             hit_sources: Vec::new(),
             gear_hit_sources: Vec::new(),
@@ -406,6 +448,18 @@ impl Unit {
             rank_choice: None,
             deck: Deck::default(),
             deck_rule: None,
+            forbid_hands: 0,
+            pierce_melee: false,
+            max_hp_offset: 0,
+            tracks: None,
+            graft_count: None,
+            floor_offset: 0,
+            keystone_skills: Vec::new(),
+            mastery: None,
+            masterwork: false,
+            techniques: Vec::new(),
+            mastery_keystone: String::new(),
+            wear: IndexMap::new(),
         }
     }
 
@@ -428,6 +482,12 @@ impl Unit {
     /// battle reads it only under the rule `reach` (`rpgkit_battle::skill::melee_reach`).
     pub fn has_reach_weapon(&self) -> bool {
         self.attack_range <= 1 && self.inventory.active_weapon().is_some_and(|w| w.has_reach())
+    }
+
+    /// PR5-28 (U3 FB-36c): the melee reach of the unit's ready weapon under the rule `reach`: its family's
+    /// `range_band.max`, else `REACH_WEAPON_REACH` (also without a ready weapon; read only when `has_reach_weapon`).
+    pub fn weapon_reach(&self) -> i32 {
+        self.inventory.active_weapon().map_or(REACH_WEAPON_REACH, |w| w.reach_max())
     }
 
     /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the
@@ -466,9 +526,25 @@ impl Unit {
         self.st.active.iter().any(|s| read(s))
     }
 
+    /// PK1-KITFIX (b): the value `rating` is held at (a trigger's `rating_set`), None when nothing holds it.
+    pub fn rating_set(&self, rating: crate::status::Rating) -> Option<i32> {
+        self.rating_sets.iter().find(|r| r.rating == rating).map(|r| r.value)
+    }
+
+    /// PK1-KITFIX (b): holds `rating` at `value` for `rounds` more round starts (below 0: the rest of the battle); a set
+    /// of the same rating replaces the one there.
+    pub fn set_rating(&mut self, rating: crate::status::Rating, value: i32, rounds: i32) {
+        self.rating_sets.retain(|r| r.rating != rating);
+        self.rating_sets.push(crate::status::RatingSet { rating, value, rounds: if rounds < 0 { -1 } else { rounds } });
+    }
+
     /// Move Rate +1 under a Move Rate buff (haste), -1 under a Move Rate debuff (slow), floor 1; W2-5 (C09): the
     /// statuses are the table's `modifier` rows with `rating` move_rate (one step each way however many are active).
+    /// PK1-KITFIX (b): a held `move_rate` is the value instead (at least 1).
     pub fn move_per_block(&self) -> i32 {
+        if let Some(v) = self.rating_set(crate::status::Rating::MoveRate) {
+            return v.max(1);
+        }
         let hasted = self.has_status_where(|s| crate::status::raises_rating(s, crate::status::Rating::MoveRate)) as i32;
         let slowed = self.has_status_where(|s| crate::status::lowers_rating(s, crate::status::Rating::MoveRate)) as i32;
         (self.move_rate + hasted - slowed).max(1)
@@ -515,7 +591,8 @@ impl Unit {
             None => (1, None),
         };
         let ctx = ctx.as_deref();
-        self.max_hp = if self.tier_scaled { self.stats.max_hp_scaled(self.tier_mult, ctx) } else { self.stats.max_hp(self.tier_mult, ctx) }.max(1);
+        // PK2-S1: a member's permanent max HP offset on top of the derived max
+        self.max_hp = (if self.tier_scaled { self.stats.max_hp_scaled(self.tier_mult, ctx) } else { self.stats.max_hp(self.tier_mult, ctx) } + self.max_hp_offset).max(1);
         self.hp = self.hp.min(self.max_hp);
         self.initiative = (self.stats.initiative(burden, ctx) - self.carry_penalty).max(1);
         self.move_rate = self.stats.move_rate(burden + self.carry_penalty, ctx);
@@ -563,6 +640,59 @@ impl Unit {
             self.apply_effects(cat, &fx, &src, true);
         }
         self.apply_family_bonuses(cat);
+        self.techniques = self.open_techniques();
+    }
+
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the techniques open now (`techniques`): none without mastery or a main-hand
+    /// weapon; else the weapon family's first n techniques at mastery n (at most 3), then the weapon's own technique when
+    /// it is a masterwork instance, each skill once.
+    fn open_techniques(&self) -> Vec<Technique> {
+        let (Some(levels), Some(main)) = (&self.mastery, self.inventory.get(Slot::MainHand)) else { return Vec::new() };
+        if main.item.item_type != "WEAPON" {
+            return Vec::new();
+        }
+        let level = levels.get(main.weapon_type()).copied().unwrap_or(0).clamp(0, rpgkit_data::mastery::MASTERY_MAX);
+        let mut out: Vec<Technique> = main.item.family_techniques.iter().take(level as usize).cloned().collect();
+        if let Some(own) = main.item.technique.as_ref().filter(|_| self.masterwork) {
+            out.push(own.clone());
+        }
+        let mut seen: Vec<String> = Vec::new();
+        out.retain(|t| {
+            let fresh = !seen.contains(&t.skill);
+            seen.push(t.skill.clone());
+            fresh
+        });
+        out
+    }
+
+    /// PK2-S4: the open technique of skill `skill_id` (None: not a technique now).
+    pub fn technique(&self, skill_id: &str) -> Option<&Technique> {
+        self.techniques.iter().find(|t| t.skill == skill_id)
+    }
+
+    /// PK2-S4: whether `skill_id` is a technique open now or the unit's wielded-family keystone: owned and open without
+    /// a slot, usable only in standard rounds (never in a Channel round).
+    pub fn technique_skill(&self, skill_id: &str) -> bool {
+        self.technique(skill_id).is_some() || (!self.mastery_keystone.is_empty() && self.mastery_keystone == skill_id)
+    }
+
+    /// PK2-S4: why technique `skill_id` is greyed now (None: it fits, or it is no technique): its grip tag against the
+    /// main-hand weapon's grip (`Technique::grip_problem`).
+    pub fn technique_problem(&self, skill_id: &str) -> Option<&'static str> {
+        let t = self.technique(skill_id)?;
+        t.grip_problem(self.inventory.get(Slot::MainHand).is_some_and(|e| e.item.two_handed))
+    }
+
+    /// PK2-S5b: the slot of the weapon a hit swings (`damage::weapon_for`): the off hand's weapon for an off-hand hit,
+    /// else the ready weapon's slot (the off hand while a 2H pair's off-hand weapon is ready). None: no weapon there.
+    pub fn swung_slot(&self, offhand: bool) -> Option<Slot> {
+        let slot = if offhand || self.inventory.is_offhand_active() { Slot::OffHand } else { Slot::MainHand };
+        crate::damage::weapon_for(self, offhand).map(|_| slot)
+    }
+
+    /// PK2-S5b: whether the weapon instance in `slot` is dulled (tracked and at 0 durability; `wear`).
+    pub fn dulled(&self, slot: Slot) -> bool {
+        self.wear.get(&slot).is_some_and(|w| w.dulled())
     }
 
     /// U3.2-S4 (U3 Level 2 and Level 3): each worn gear family once, at the unit's proficiency in it: from level 2 its
@@ -600,6 +730,48 @@ impl Unit {
         self.passives.push(passive.id.clone());
         self.apply_effects(cat, &passive.effects, &format!("passive:{}", passive.id), false);
         self.refresh_path_skills(cat);
+    }
+
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): `passive` granted mid-battle for the rest of it (a unit track's stage
+    /// reached in battle): applied once (`apply_passive`), then the derived numbers re-read (move rate, initiative,
+    /// range) keeping the battle's max HP and HP (a wounded cut stays). Whether it was newly applied.
+    pub fn grant_passive_now(&mut self, cat: &Catalog, passive: &rpgkit_data::PassiveDef) -> bool {
+        if self.passives.contains(&passive.id) {
+            return false;
+        }
+        self.apply_passive(cat, passive);
+        if !self.passives.contains(&passive.id) {
+            return false;
+        }
+        let (max, hp) = (self.max_hp, self.hp);
+        self.sync_from_stats_and_gear(cat);
+        self.max_hp = max;
+        self.hp = hp.min(max);
+        true
+    }
+
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the floor a meter effect's `floors` table gives this unit: the entry of
+    /// its graft count (a count past the table reads the last), plus its floor offset; None without a table, a body or a
+    /// graft (no graft: not a holder of the table's floor).
+    pub fn table_floor(&self, floors: &[i32]) -> Option<i32> {
+        let n = usize::try_from(self.graft_count?).ok().filter(|n| *n > 0)?;
+        floors.get(n.min(floors.len()).checked_sub(1)?).map(|f| f + self.floor_offset)
+    }
+
+    /// PK2-S2: how many deck actives the unit may mark channeled: one per graft for a unit with a body (its deck's
+    /// actives bound it), else the ruleset's `channeled_actives` (`ruleset`).
+    pub fn channeled_limit(&self, ruleset: i32) -> i32 {
+        self.graft_count.unwrap_or(ruleset).max(0)
+    }
+
+    /// PK2-S2: whether a keystone graft teaches `skill_id` (open without an active slot).
+    pub fn keystone_skill(&self, skill_id: &str) -> bool {
+        self.keystone_skills.iter().any(|s| s == skill_id)
+    }
+
+    /// PK2-S1: whether the member grant `forbid_hands` refuses `item` (a two-handed item under `hands` 2).
+    pub fn forbids(&self, item: &rpgkit_data::ItemDef) -> bool {
+        forbids_hands(self.forbid_hands, item)
     }
 
     /// Passives.apply_effects (item effects and passives share the grammar): the typed grant view of `effects`
@@ -642,7 +814,14 @@ impl Unit {
                     list.push(HeldTrigger { source: from, key, row: row.clone() });
                 }
                 // HOOKS1 UM1: passives only (HOOKS1-S gives items no meter effect)
-                Grant::GrantPool { meter, start, floor } => self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor: *floor }),
+                // PK2-S2: a `floors` table reads the member's graft count (plus its floor offset) over `floor`
+                Grant::GrantPool { meter, start, floor, floors } => {
+                    let floor = self.table_floor(floors).or(*floor);
+                    self.passive_meters.push(HeldMeter { meter: meter.clone(), start: *start, floor });
+                }
+                // PK2-S1: member grants, passives only (`Grant::gear_ok`)
+                Grant::ForbidHands { hands } => self.forbid_hands = self.forbid_hands.max(*hands),
+                Grant::PierceMelee => self.pierce_melee = true,
             }
         }
     }
@@ -820,7 +999,9 @@ impl Unit {
     /// Catalog.is_always_active, with the deck rule's open and closed basics (D1).
     /// HOOKS1 UM6: a meter skill the battle gave is open without a slot.
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) {
+        // PK2-S2: a keystone graft's skill sits in the keystone slot, open without an active slot
+        // PK2-S4: a technique is open without a slot while its weapon is wielded
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.keystone_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
@@ -833,7 +1014,8 @@ impl Unit {
         let list = match passive.slot.as_str() {
             "" => return true,
             "passive" => DeckRule::take(&self.deck.passive, rule.slots.passive),
-            "keystone" => DeckRule::take(&self.deck.keystone, rule.slots.keystone),
+            // PK2-S2: each keystone graft's skill takes one of the keystone slots
+            "keystone" => DeckRule::take(&self.deck.keystone, (rule.slots.keystone - self.keystone_skills.len() as i32).max(0)),
             _ => return false,
         };
         list.contains(&passive.id)
@@ -869,7 +1051,9 @@ impl Unit {
         for fam in wanted {
             let basic = cat.is_basic_family(&fam) || rule.basics.contains(&fam);
             // U3.2-S4 (OFFHAND1): a family owned only through worn gear takes no slot (it is open while worn)
-            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id));
+            // PK2-S2: nor does a keystone graft's (it sits in the keystone slot)
+            // PK2-S4: nor does a technique (open while its weapon is wielded)
+            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id) && !self.keystone_skill(&s.id) && !self.technique_skill(&s.id));
             if !basic && owned && !actives.contains(&fam) {
                 actives.push(fam);
             }
@@ -884,7 +1068,8 @@ impl Unit {
 
     /// HOOKS1 UM6: a meter skill the battle gave is owned (before the deck rule's closed basics).
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) {
+        // PK2-S4: a technique open now is owned
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         if let Some(open) = self.deck_basic(cat, skill_id) {
@@ -1032,6 +1217,12 @@ impl Unit {
 }
 
 /// A skill rank as the game writes it: I to V (SKILLUI1 rank texts and refusals).
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): whether a `forbid_hands` of `hands` (0 = none) refuses `item`: 2 refuses
+/// every two-handed item (bows and arbalests included).
+pub fn forbids_hands(hands: i32, item: &rpgkit_data::ItemDef) -> bool {
+    hands >= 2 && item.two_handed
+}
+
 pub fn rank_numeral(rank: i32) -> &'static str {
     ["-", "I", "II", "III", "IV", "V"].get(rank.max(0) as usize).copied().unwrap_or("V+")
 }
@@ -1146,6 +1337,29 @@ pub struct Growth {
     pub ranks: IndexMap<String, i32>,
     /// A1.2-K3: the played ruleset's `pouch_stacks` (the battle pouch takes stacks; `Inventory::pouch_stacks`).
     pub pouch_stacks: bool,
+    /// PK2-S1: the member's permanent max HP offset (`Unit::max_hp_offset`).
+    pub max_hp_offset: i32,
+    /// PK2-S1: the member's unit track stages (`Unit::tracks`; the passives come in `Overrides::passives`).
+    pub tracks: IndexMap<String, i32>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the `GRAFT` items in the member's body slots (slot order); their
+    /// `body_effects` apply as a passive's (a meter included), each counts toward the graft count once the catalog has a
+    /// body slot row (`Unit::graft_count`).
+    pub body: Vec<rpgkit_data::ItemDef>,
+    /// PK2-S2 (FB-167 Q6): the member's floor offset for the next battle (`Unit::floor_offset`).
+    pub floor_offset: i32,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the proficiency levels the member trained (a recipe), on
+    /// top of its class's and its drills' (`Proficiency::add_bonus`; the level still tops out at `PROF_MAX_LEVEL`).
+    pub trained: IndexMap<String, i32>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the member's weapon mastery level (1-3; `Unit::mastery`).
+    pub mastery: IndexMap<String, i32>,
+    /// PK2-S4: the member's main-hand weapon is a masterwork instance (`Unit::masterwork`; weapon instances, PR5-13a).
+    pub masterwork: bool,
+    /// PK2-S4: the member's forge rite is done (with mastery 3 the wielded family's keystone opens, `Unit::mastery_keystone`).
+    pub forge_rite: bool,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): slot -> the durability of the weapon instance the member wields there,
+    /// for instances that wear (`Unit::wear`; a slot holding no weapon is skipped). Empty = none (weapon instances off,
+    /// or a ruleset without the rule `durability`).
+    pub wear: IndexMap<Slot, i32>,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1220,14 +1434,54 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
         u.inventory.equip(Equipment::new(item), Slot::parse(&item.slot).unwrap_or(Slot::MainHand));
         geared = true;
     }
+    // PK2-S2: a member's body before its passives (a keystone graft takes a keystone slot from the slotted passives)
+    let body: Vec<(String, Vec<Grant>)> = match &b.growth {
+        Some(g) if !cat.body_slots.is_empty() => {
+            u.graft_count = Some(g.body.len() as i32);
+            u.floor_offset = g.floor_offset;
+            let held: Vec<(String, Vec<Grant>, bool)> = g.body.iter().filter_map(|i| i.graft.as_ref().map(|s| (i.id.clone(), grants::read(&s.effects), s.keystone))).collect();
+            for (_, list, _) in held.iter().filter(|(_, _, keystone)| *keystone) {
+                for g in list {
+                    if let Grant::GrantSkill(SkillGrant::Learn(skill)) = g {
+                        u.keystone_skills.push(skill.clone());
+                    }
+                }
+            }
+            held.into_iter().map(|(id, list, _)| (id, list)).collect()
+        }
+        _ => Vec::new(),
+    };
+    // PK2-S4: a member's mastery, and the wielded family's keystone before its passives (it takes a keystone slot)
+    if let Some(g) = &b.growth {
+        // a member without mastery (and no masterwork) holds none, so its unit reads as before
+        u.mastery = (!g.mastery.is_empty() || g.masterwork).then(|| g.mastery.clone());
+        u.masterwork = g.masterwork;
+        u.mastery_keystone = mastery_keystone(&u, g);
+        if !u.mastery_keystone.is_empty() {
+            u.keystone_skills.push(u.mastery_keystone.clone());
+        }
+    }
     for id in &b.over.passives {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);
         }
     }
+    // PK2-S2: the body items' effects as a passive's (`body:<item>`; no member grant), after the passives
+    for (id, list) in body {
+        let list: Vec<Grant> = list.into_iter().filter(|g| !matches!(g, Grant::ForbidHands { .. } | Grant::PierceMelee)).collect();
+        u.apply_grants(cat, &list, &format!("body:{id}"), false);
+    }
     let (mut pouch_unloaded, mut loadout_error) = (Vec::new(), None);
     match &b.growth {
         Some(g) => {
+            // PK2-S1: a member holds its tracks (empty: on none yet) once the catalog has a track row, and its max HP
+            // offset
+            u.tracks = (!cat.unit_tracks.is_empty()).then(|| g.tracks.clone());
+            u.max_hp_offset = g.max_hp_offset;
+            // PK2-S3: the trained proficiency levels, before the gear is read
+            for (gear, levels) in &g.trained {
+                u.stats.proficiency.add_bonus(gear, *levels);
+            }
             for sk in &g.learned_skills {
                 u.learn_skill_checked(cat, sk, false);
             }
@@ -1241,6 +1495,8 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
                     u.inventory.unequip(Slot::OffHand);
                 }
             }
+            // PK2-S5b: the wear of the wielded weapon instances that wear (a slot holding no weapon now is skipped)
+            u.wear = g.wear.iter().filter(|(s, _)| u.inventory.get(**s).is_some_and(Equipment::is_weapon)).map(|(s, d)| (*s, crate::gear::Wear { start: (*d).max(0), spent: 0 })).collect();
             u.inventory.pouch.clear();
             u.inventory.pouch_stacks = g.pouch_stacks;
             for item in g.pouch.iter().filter(|i| i.item_type == "CONSUMABLE") {
@@ -1268,6 +1524,22 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     }
     apply_tuning(&mut u, &b.over.tuning);
     BuiltUnit { unit: u, pouch_unloaded, loadout_error }
+}
+
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5, the standard-path keystone): the keystone member `g` holds ("" = none): the
+/// main-hand weapon family's keystone (the member's saved main hand, else its row's) at mastery 3 once its forge rite is
+/// done, and only while no keystone graft holds the keystone (a unit holds one keystone, of either path).
+fn mastery_keystone(u: &Unit, g: &Growth) -> String {
+    if !g.forge_rite || !u.keystone_skills.is_empty() {
+        return String::new();
+    }
+    let saved = g.equipment.iter().find(|(s, _)| *s == Slot::MainHand).map(|(_, i)| i);
+    let Some(main) = saved.or_else(|| u.inventory.get(Slot::MainHand).map(|e| &e.item)) else { return String::new() };
+    let level = g.mastery.get(&main.weapon_type).copied().unwrap_or(0);
+    if main.item_type != "WEAPON" || level < rpgkit_data::mastery::MASTERY_MAX {
+        return String::new();
+    }
+    main.family_keystone.clone()
 }
 
 /// WorldFactory.apply_character's tuning: max HP by `hp_pct` percent, then power, armour, initiative (key `speed`) and AP
@@ -1415,13 +1687,27 @@ pub fn loadout_of(cat: &Catalog, e: &UnitDef, arch: &ClassDef, owned_ids: &[Stri
     (class_out, extra_out)
 }
 
+/// PR5-26 (audit B2): the item id slot `slot_key` of row `e` holds before any member gear: the row's own id, its
+/// class's default for "" (`arch`), None for `NO_ITEM` or nothing.
+fn slot_default(e: &UnitDef, arch: Option<&ClassDef>, slot_key: &str) -> Option<String> {
+    let item_id = e.slots.get(slot_key)?;
+    if item_id == NO_ITEM {
+        return None;
+    }
+    let id = if item_id.is_empty() { arch.and_then(|a| a.loadout.get(slot_key).cloned()).unwrap_or_default() } else { item_id.clone() };
+    (!id.is_empty()).then_some(id)
+}
+
+/// PR5-26 (audit B2): the item id slot `slot_key` of catalog row `e` gives a unit built from it (its own or its class's
+/// default; None: empty), as `build_from` equips it before a member's own gear.
+pub fn row_slot_item(cat: &Catalog, e: &UnitDef, slot_key: &str) -> Option<String> {
+    slot_default(e, class_for(cat, e), slot_key)
+}
+
 /// The class's default gear with the unit's per-slot overrides, then the pouch.
 fn equip(cat: &Catalog, u: &mut Unit, e: &UnitDef, arch: Option<&ClassDef>) {
-    for (slot_key, item_id) in &e.slots {
-        if item_id == NO_ITEM {
-            continue;
-        }
-        let id = if item_id.is_empty() { arch.and_then(|a| a.loadout.get(slot_key).cloned()).unwrap_or_default() } else { item_id.clone() };
+    for slot_key in e.slots.keys() {
+        let Some(id) = slot_default(e, arch, slot_key) else { continue };
         let Some(item) = cat.items.get(&id) else { continue };
         if item.is_equipment() {
             u.inventory.equip(Equipment::new(item), Slot::parse(slot_key).unwrap_or(Slot::MainHand));
@@ -1533,14 +1819,22 @@ impl Unit {
 
     /// `1 - capped magnitude / 100` per active Attack Power debuff (weaken), 1.0 with none; W2-5 (C09): the statuses
     /// are the table's `modifier` rows with `rating` attack_power and `kind` debuff.
+    /// PK1-KITFIX (b): 1.0 while `attack_power` is held (`empower_factor` carries the held value).
     pub fn weaken_factor(&self) -> f64 {
+        if self.rating_set(crate::status::Rating::AttackPower).is_some() {
+            return 1.0;
+        }
         let lowers = |s: &str| crate::status::lowers_rating(s, crate::status::Rating::AttackPower);
         self.st.active.iter().filter(|s| lowers(s)).fold(1.0, |f, s| f * (1.0 - self.capped_magnitude(s) as f64 / 100.0))
     }
 
     /// `1 + capped magnitude / 100` per active Attack Power buff (empower), 1.0 with none; W2-5 (C09): the statuses
     /// are the table's `modifier` rows with `rating` attack_power and `kind` buff.
+    /// PK1-KITFIX (b): a held `attack_power` is its value / 100 instead (so weaken x empower is the held factor).
     pub fn empower_factor(&self) -> f64 {
+        if let Some(v) = self.rating_set(crate::status::Rating::AttackPower) {
+            return f64::from(v.max(0)) / 100.0;
+        }
         let raises = |s: &str| crate::status::raises_rating(s, crate::status::Rating::AttackPower);
         self.st.active.iter().filter(|s| raises(s)).fold(1.0, |f, s| f * (1.0 + self.capped_magnitude(s) as f64 / 100.0))
     }
@@ -1655,7 +1949,7 @@ impl Unit {
     /// The level gate of can_use: basics (under the deck rule the ruleset's basics, D1), engine skills, meter skills
     /// (HOOKS1 UM6) and hand-built units are never gated.
     pub fn tier_unlocked(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
-        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.gear_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
+        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.gear_skill(&skill.id) || self.technique_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
             return true;
         }
         self.stats.level >= self.skill_unlock_level(cat, skill)

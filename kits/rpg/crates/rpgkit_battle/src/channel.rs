@@ -2,18 +2,18 @@
 //! engine-only, no Godot original). A unit that holds the ruleset's `channel_meter` may flip its round to Channel: the
 //! round flag `RoundState::channel` (not an intent: the first skill's row stays the round's intent, FB-167 Q1 (a)),
 //! cleared at every round start, flipped any time while planning by the converting toggle
-//! (`round_intent_plan::set_channel`). In a Channel round the planner offers only marrow versions: the unit's
-//! `channel.only` skills, its class basic's version and the versions of the deck actives it marked marrow (deck
-//! `marrow`, at most `marrow_actives`), each single intent (IR21) and not `channel.none`; Move and Rest stay, items do
-//! not; Rest becomes `channel_rest`. A marrow version resolves with power x `channel_power` (or `channel.power`),
+//! (`round_intent_plan::set_channel`). In a Channel round the planner offers only channeled versions: the unit's
+//! `channel.only` skills, its class basic's version and the versions of the deck actives it marked channeled (deck
+//! `channeled`, at most `channeled_actives`), each single intent (IR21) and not `channel.none`; Move and Rest stay, items do
+//! not; Rest becomes `channel_rest`. A channeled version resolves with power x `channel_power` (or `channel.power`),
 //! armour piercing on attacks, `channel_cost` of the meter by AP (or `channel.cost`) paid at its start and its
 //! `channel.effects` as a rider; a `channel.only` skill resolves as authored (no derived power, piercing or cost) plus
 //! its own overrides. A Channel round counts as a gain of the channel meter, so its decay skips the round. Every entry
 //! point reads the rule (and `round_intent`, `unit_meters`, a named meter) first, so a battle without it, or without a
 //! unit holding the meter, plans and resolves as before (no draw, no line, no order change).
 //!
-//! PK1-S2b: the tells show Channel while the flag is set (`tell_intent`; the records in `intent`) and name a marrow
-//! version with the marrow mark (`marrow_name`, the term `marrow_mark`); the AI's Channel row is `ai::channel_row`.
+//! PK1-S2b: the tells show Channel while the flag is set (`tell_intent`; the records in `intent`) and name a channeled
+//! version with the channeled mark (`channeled_name`, the term `channeled_mark`); the AI's Channel row is `ai::channel_row`.
 
 use crate::meter;
 use crate::round_intent::{self, RoundIntent};
@@ -23,9 +23,9 @@ use aegis_core::value::Obj;
 use rpgkit_data::{MeterDelta, Rider, SkillDef};
 use rpgkit_rules::ruleset;
 
-/// PK1 4.3 item 2: the reason a Cold Steel version (or an item) is greyed in a Channel round.
+/// PK1 4.3 item 2: the reason a Standard version (or an item) is greyed in a Channel round.
 pub const CHANNEL_ROUND: &str = "Channel round";
-/// PK1 4.3 item 1: the reason a marrow-only skill is greyed in a Cold Steel round.
+/// PK1 4.3 item 1: the reason a channeled-only skill is greyed in a Standard round.
 pub const ONLY_CHANNEL: &str = "Only in a Channel round";
 
 /// Whether the battle plays Channel rounds: the rule `channel` with `round_intent` and `unit_meters` (its requirements)
@@ -64,10 +64,10 @@ pub fn tell_intent(w: &World, c: UnitId) -> Option<RoundIntent> {
     round_intent::intent_of(w, c)
 }
 
-/// PK1-S2b (PK1 4.3 item 6): a marrow version's name in the tells: the skill's name with the marrow mark (the term
-/// `marrow_mark`'s short form, the game's `terms` row else "Marrow"): "Cleave (Marrow)".
-pub fn marrow_name(cat: &rpgkit_data::Catalog, name: &str) -> String {
-    format!("{name} ({})", cat.term(rpgkit_data::terms::MARROW_MARK).short)
+/// PK1-S2b (PK1 4.3 item 6): a channeled version's name in the tells: the skill's name with the channeled mark (the term
+/// `channeled_mark`'s short form, the game's `terms` row else "Channeled"): "Cleave (Channeled)".
+pub fn channeled_name(cat: &rpgkit_data::Catalog, name: &str) -> String {
+    format!("{name} ({})", cat.term(rpgkit_data::terms::CHANNELED_MARK).short)
 }
 
 /// The kinds with no intent of their own (Move, Rest, Target, Status): neutral in either mode.
@@ -75,9 +75,9 @@ fn neutral(s: &SkillDef) -> bool {
     matches!(skill::kind(s), Kind::Move | Kind::Rest | Kind::Target | Kind::Status)
 }
 
-/// PK1 4.2: whether `s` has a marrow version: an authored skill (not an item, not neutral) that IR21 derives one
+/// PK1 4.2: whether `s` has a channeled version: an authored skill (not an item, not neutral) that IR21 derives one
 /// intent for (`rpgkit_rules::intent::single_intent`, the content and save checks' test, whether or not the battle
-/// plays `field_intent`), not `channel.none` and not `channel.only` (a marrow-only skill has no Cold Steel version to
+/// plays `field_intent`), not `channel.none` and not `channel.only` (a channeled-only skill has no Standard version to
 /// convert from). `_w` keeps the battle in the signature for the callers.
 pub fn has_version(_w: &World, s: &SkillDef) -> bool {
     if skill::is_item(s) || neutral(s) || s.channel.none || s.channel.only {
@@ -86,7 +86,7 @@ pub fn has_version(_w: &World, s: &SkillDef) -> bool {
     rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_def(s))
 }
 
-/// Whether `s` is marrow-only (`channel.only`).
+/// Whether `s` is channeled-only (`channel.only`).
 pub fn only(s: &SkillDef) -> bool {
     s.channel.only && !skill::is_item(s)
 }
@@ -97,15 +97,16 @@ fn class_basics(w: &World, c: UnitId) -> Vec<String> {
     w.units[c].deck_rule.iter().flat_map(|r| r.basics.iter()).filter(|b| !base.contains(b)).cloned().collect()
 }
 
-/// PK1 4.2: the deck actives `c` marked marrow whose version opens in a Channel round: its deck's `marrow` families in
+/// PK1 4.2: the deck actives `c` marked channeled whose version opens in a Channel round: its deck's `channeled` families in
 /// order that are among its actives (`Unit::active_families` under the deck rule, else the deck's `active`) and have a
-/// marrow version, at most `marrow_actives` of them.
+/// channeled version, at most `channeled_actives` of them (PK2-S2: a unit with a body, one per graft).
 pub fn marked(w: &World, c: UnitId) -> Vec<String> {
     let u = &w.units[c];
     let actives: Vec<String> = if u.deck_rule.is_some() && !u.active_families().is_empty() { u.active_families() } else { u.deck.active.clone() };
-    let most = usize::try_from(w.ruleset.numbers.marrow_actives.max(0)).unwrap_or(0);
+    // PK2-S2: a unit with a body marks one per graft (`Unit::channeled_limit`)
+    let most = usize::try_from(u.channeled_limit(w.ruleset.numbers.channeled_actives)).unwrap_or(0);
     let mut out: Vec<String> = Vec::new();
-    for fam in &u.deck.marrow {
+    for fam in &u.deck.channeled {
         if out.len() >= most {
             break;
         }
@@ -122,9 +123,10 @@ pub fn marked(w: &World, c: UnitId) -> Vec<String> {
 }
 
 /// PK1 4.2: whether skill `s` opens for `c` in a Channel round: a neutral kind (Move, Rest), a `channel.only` skill,
-/// or the marrow version of its class basic or of an active it marked marrow.
+/// or the channeled version of its class basic or of an active it marked channeled.
 pub fn opens(w: &World, c: UnitId, s: &SkillDef) -> bool {
-    if skill::is_item(s) {
+    // PK2-S4: a technique (and the wielded family's keystone) is standard rounds only
+    if skill::is_item(s) || w.units[c].technique_skill(&s.id) {
         return false;
     }
     if neutral(s) || only(s) {
@@ -137,10 +139,19 @@ pub fn opens(w: &World, c: UnitId, s: &SkillDef) -> bool {
     class_basics(w, c).iter().any(|b| b == fam) || marked(w, c).iter().any(|m| m == fam)
 }
 
-/// PK1 4.3 items 1-2, 7: why `c` may not plan `s` in its round's mode (None: it may): a Cold Steel version (or an
-/// item) in a Channel round is "Channel round", a marrow-only skill in a Cold Steel round "Only in a Channel round".
-/// None without the rule.
+/// PK1 4.3 items 1-2, 7: why `c` may not plan `s` in its round's mode (None: it may): a Standard version (or an
+/// item) in a Channel round is "Channel round", a channeled-only skill in a Standard round "Only in a Channel round".
+/// None without the rule. PK2-S4: first, with or without the rule, a technique whose grip tag does not fit the
+/// main-hand weapon (`Unit::technique_problem`); a technique in a Channel round is "Channel round" (`opens`).
+/// PK2-S5b: then, under the sims' `World::dulled_lock`, a technique that swings a dulled weapon (`wear::problem`).
 pub fn problem(w: &World, c: UnitId, s: &SkillDef) -> Option<&'static str> {
+    if let Some(p) = w.units.get(c).and_then(|u| u.technique_problem(&s.id)) {
+        return Some(p);
+    }
+    // PK2-S5b: the sims' alternative dulled mode locks the techniques that swing a dulled weapon (`wear::problem`)
+    if let Some(p) = crate::wear::problem(w, c, s) {
+        return Some(p);
+    }
     if !on(w) {
         return None;
     }
@@ -150,13 +161,13 @@ pub fn problem(w: &World, c: UnitId, s: &SkillDef) -> Option<&'static str> {
     only(s).then_some(ONLY_CHANNEL)
 }
 
-/// PK1 4.3 item 2: why `c` may not use a pouch item now (None: it may): items have no marrow version, so a Channel
+/// PK1 4.3 item 2: why `c` may not use a pouch item now (None: it may): items have no channeled version, so a Channel
 /// round greys them.
 pub fn item_problem(w: &World, c: UnitId) -> Option<&'static str> {
     is_channel(w, c).then_some(CHANNEL_ROUND)
 }
 
-/// PK1 4.2: what a marrow version adds to its skill: the channel meter it pays at its start, the factor on its
+/// PK1 4.2: what a channeled version adds to its skill: the channel meter it pays at its start, the factor on its
 /// power, armour piercing (attacks), and the trigger effects of `channel.effects` (run as a rider).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Version {
@@ -166,7 +177,7 @@ pub struct Version {
     pub effects: Vec<Obj>,
 }
 
-/// The marrow version `c` would use `s` in now (None: a Cold Steel round, no rule, an item, a neutral kind, or a skill
+/// The channeled version `c` would use `s` in now (None: a Standard round, no rule, an item, a neutral kind, or a skill
 /// with no version). A derived version: `channel.cost` else `channel_cost` by the skill's AP (`skill::ap_cost_by`: by
 /// the skill, so a unit that pays no AP still pays the meter), `channel.power` else `channel_power`, piercing on an
 /// attack; a `channel.only` skill: `channel.cost` else 0, `channel.power` else 1, its own piercing.
@@ -186,13 +197,13 @@ pub fn version(w: &World, c: UnitId, s: &SkillDef) -> Option<Version> {
     Some(Version { cost, power: s.channel.power.unwrap_or(n.channel_power), pierce: skill::kind(s) == Kind::Attack, effects: s.channel.effects.clone() })
 }
 
-/// The factor on `s`'s power for `c` now (1 outside a marrow version).
+/// The factor on `s`'s power for `c` now (1 outside a channeled version).
 pub fn power(w: &World, c: UnitId, s: &SkillDef) -> f64 {
     version(w, c, s).map_or(1.0, |v| v.power)
 }
 
 /// HOOKS1 UM2 with PK1-S2a: the meter changes `c` pays at `s`'s start: the skill's `meters` (rule unit_meters), then a
-/// marrow version's channel cost on the channel meter (rule channel). The planners and the command read it.
+/// channeled version's channel cost on the channel meter (rule channel). The planners and the command read it.
 pub fn meters_for(w: &World, c: UnitId, s: &SkillDef) -> Vec<MeterDelta> {
     let mut out = skill::meters_by(s, &w.ruleset).to_vec();
     if let Some(v) = version(w, c, s).filter(|v| v.cost > 0) {
@@ -201,7 +212,7 @@ pub fn meters_for(w: &World, c: UnitId, s: &SkillDef) -> Vec<MeterDelta> {
     out
 }
 
-/// The rider a marrow version's `channel.effects` run as (None: none).
+/// The rider a channeled version's `channel.effects` run as (None: none).
 pub fn rider(v: &Version) -> Option<Rider> {
     (!v.effects.is_empty()).then(|| Rider { when: Obj::new(), effects: v.effects.clone() })
 }

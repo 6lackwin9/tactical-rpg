@@ -260,6 +260,12 @@ pub fn choice_open(d: &Data, gs: &GameState, choice: &Dict) -> bool {
         && !json::aget(choice, "unless").iter().any(|c| condition_holds(d, gs, json::dict(c)))
 }
 
+/// PK2-S3: the runner's own effect of the recipe service choice (never authored: the dialogue checks refuse it).
+pub const OPEN_RECIPES: &str = "open_recipes";
+/// PK2-S3: the refusal of a step while the recipe pane is open, and of the service once nothing is offered.
+pub const RECIPES_BUSY_TEXT: &str = "Close the recipes first.";
+pub const RECIPES_NONE_TEXT: &str = "Nothing is offered now.";
+
 pub const LOCKED_TEXT: &str = "Locked";
 pub const NOT_NOW_TEXT: &str = "Not now";
 
@@ -381,12 +387,15 @@ pub struct DialogueRunner {
     pub shop_qid: String,
     /// STORYUI1 B3: the board whose pane is open over the conversation ("" = none), like `shop_qid`.
     pub board_qid: String,
+    /// PK2-S3: the character whose recipe pane is open over the conversation ("" = none), like `shop_qid`.
+    pub recipe_npc: String,
     tree_speaker: String,
     nodes: IndexMap<String, Dict>,
     /// Turn-in waiting for confirm: (quest qid, trailing effects, to).
     pending: Option<(String, Vec<Dict>, String)>,
     shop_to: String,
     board_to: String,
+    recipe_to: String,
     pub notes: Vec<String>,
     /// CAMPAIGN1 W1: the campaign events of the effects applied since the last result (a node's effects when the
     /// conversation opens included); the next result carries them as `campaign`.
@@ -567,6 +576,15 @@ impl DialogueRunner {
                 ]));
             }
         }
+        // PK2-S3: the recipe pane, after the shop, while the character offers a recipe
+        if !crate::recipe::offered(d, gs, &self.character_qid).is_empty() {
+            out.push(json::obj([
+                ("text", self.line(d, gs, rpgkit_data::RECIPE_SERVICE).into()),
+                ("to", "".into()),
+                ("effects", Value::Array(vec![Value::Object(json::obj([("effect", OPEN_RECIPES.into())]))])),
+                ("_service", rpgkit_data::RECIPE_SERVICE.into()),
+            ]));
+        }
         out.push(json::obj([("text", self.line(d, gs, "farewell").into()), ("to", "".into()), ("_service", "farewell".into())]));
         out
     }
@@ -661,6 +679,10 @@ impl DialogueRunner {
         if !self.board_qid.is_empty() {
             out.insert("board".into(), self.board_qid.clone().into());
         }
+        // PK2-S3: only while the recipe pane is open
+        if !self.recipe_npc.is_empty() {
+            out.insert(rpgkit_data::RECIPE_SERVICE.into(), self.recipe_npc.clone().into());
+        }
         // PORTRAITFX1 7: the speaker's face for this node, only when the node names one (a Godot node never did)
         let expression = json::s(&node, "expression");
         if !expression.is_empty() {
@@ -678,6 +700,8 @@ impl DialogueRunner {
             Some("Close the shop first.")
         } else if !self.board_qid.is_empty() {
             Some(board::BUSY_TEXT)
+        } else if !self.recipe_npc.is_empty() {
+            Some(RECIPES_BUSY_TEXT)
         } else {
             None
         }
@@ -750,6 +774,14 @@ impl DialogueRunner {
                 self.board_to = if to.is_empty() { self.node_id.clone() } else { to };
                 let mut out = res_ok();
                 out.insert("board".into(), self.board_qid.clone().into());
+                out
+            }
+            // PK2-S3: the recipe pane opens over the conversation, like the shop
+            OPEN_RECIPES => {
+                self.recipe_npc = self.character_qid.clone();
+                self.recipe_to = if to.is_empty() { self.node_id.clone() } else { to };
+                let mut out = res_ok();
+                out.insert(rpgkit_data::RECIPE_SERVICE.into(), self.recipe_npc.clone().into());
                 out
             }
             // STORYUI1 4.7: the sequence started (in `apply`); the conversation closes and the game shows the story
@@ -852,6 +884,11 @@ impl DialogueRunner {
                 "open_shop" => {
                     if !shop::is_open(d, gs, &json::s(fx, "shop")) {
                         out.push("The shop is closed.".into());
+                    }
+                }
+                OPEN_RECIPES => {
+                    if crate::recipe::offered(d, gs, &self.character_qid).is_empty() {
+                        out.push(RECIPES_NONE_TEXT.into());
                     }
                 }
                 "fight" => {
@@ -997,6 +1034,25 @@ impl DialogueRunner {
         self.with_notes(out)
     }
 
+    /// PK2-S3: closes the recipe pane back to the conversation (the node the choice led to).
+    pub fn close_recipes(&mut self, d: &Data, gs: &mut GameState) -> Dict {
+        self.notes.clear();
+        let res = if self.recipe_npc.is_empty() {
+            json::fail("No recipes are open.")
+        } else {
+            self.recipe_npc.clear();
+            if self.recipe_to == self.node_id {
+                let mut out = res_ok();
+                out.insert("node".into(), self.node_id.clone().into());
+                out
+            } else {
+                let to = self.recipe_to.clone();
+                self.move_to(d, gs, &to)
+            }
+        };
+        self.with_notes(res)
+    }
+
     pub fn close_shop(&mut self, d: &Data, gs: &mut GameState) -> Dict {
         self.notes.clear();
         let res = if self.shop_qid.is_empty() {
@@ -1077,6 +1133,8 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
             }
         }
         "open_board" => board::mark_opened(d, gs, &json::s(fx, "board")),
+        // PK2-S3: the runner opens the recipe pane (a service choice only; no authored effect)
+        OPEN_RECIPES => {}
         // CAMPAIGN1 R2, R3: the rest and its note; its days run at the tick after the list (inert outside a campaign)
         "rest" => {
             let note = crate::campaign::purse::rest_effect(d, gs);

@@ -95,6 +95,14 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
     }
     u.apply_deck(cat);
     u.rank_choice = Some(work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect());
+    // PR5-19 (PK2-S6) ships the first unit track and body slot rows, so every member now holds the PK2-S1/S2 growth
+    // fields: its tracks (empty at stage 0) once the catalog has a track row, and its graft count once it has a body
+    // slot row. PK2-S2 rule (FB-209): a member with a body marks one channeled active per graft, so one with no graft
+    // marks none (`Unit::channeled_limit`).
+    u.tracks = (!cat.unit_tracks.is_empty()).then(|| work.tracks.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(i32::MAX)) as i32)).collect());
+    if !cat.body_slots.is_empty() {
+        u.graft_count = Some(work.body_items(d).len() as i32);
+    }
     Some(u)
 }
 

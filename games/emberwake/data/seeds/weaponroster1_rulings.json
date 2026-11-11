@@ -1,0 +1,502 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_iron_billhook",
+    "name": "Iron Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A plain hooked polearm: reach and a steady pierce.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "warrior",
+    "name": "Warrior",
+    "description": "Vanguard: huge constitution, polearm and plate; a wall that holds the line and hooks foes at reach.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.112903225806452,
+     "INT": 0.0967741935483871,
+     "CONS": 0.274193548387097,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "CONS": 0.4,
+     "STR": 0.4,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "sword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "mace": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "axe": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "shield": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "plate": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "polearm": {
+      "level": 3,
+      "scaling": 1.5
+     }
+    },
+    "skill_path": {
+     "taunt_shout": 1,
+     "shield_bash": 3,
+     "riposte": 3,
+     "intimidate": 4,
+     "sunder": 5,
+     "shield_wall": 5,
+     "rend_armor": 6
+    },
+    "basics": [
+     "brace"
+    ],
+    "main_hand": "wpn_iron_billhook",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "ranger",
+    "name": "Ranger",
+    "description": "Ranged skirmisher: dexterity and perception, bows and light armor.",
+    "art": "ranger",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.129032258064516,
+     "DEX": 0.241935483870968,
+     "INT": 0.145161290322581,
+     "CONS": 0.145161290322581,
+     "PERC": 0.225806451612903,
+     "KNOW": 0.112903225806452
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "bow": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "crossbow": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "sword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "cloth": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "aimed_shot": 1,
+     "pinning_shot": 3,
+     "leap_back": 3,
+     "barbed_arrow": 5,
+     "volley": 5,
+     "deadeye": 5,
+     "focus": 5,
+     "crippling_shot": 6
+    },
+    "basics": [
+     "disengage_step"
+    ],
+    "main_hand": "stirrup_arbalest",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "brawler",
+    "name": "Brawler",
+    "description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
+    "art": "brawler",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.225806451612903,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.241935483870968,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "fist": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "mace": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "axe": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "plate": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "shield": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "sword": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "body_blow": 1,
+     "lunge": 3,
+     "hamstring": 4,
+     "haymaker": 5,
+     "charge_in": 5,
+     "cyclone_kick": 5,
+     "crushing_blow": 6
+    },
+    "basics": [
+     "sweep_kick"
+    ],
+    "main_hand": "wpn_knuckles",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "priest",
+    "name": "Priest",
+    "description": "Support: heals and rallies allies; knowledge, maces and cloth.",
+    "art": "priest",
+    "ai_role": "SUPPORT",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.129032258064516,
+     "INT": 0.17741935483871,
+     "CONS": 0.193548387096774,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.241935483870968
+    },
+    "growth_shares": {
+     "KNOW": 0.4,
+     "CONS": 0.2,
+     "INT": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "mace": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "staff": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "dagger": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "cloth": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "leather": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "tome": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "orb": {
+      "level": 2,
+      "scaling": 1.25
+     },
+     "censer": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "bone_saw": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "scourge": {
+      "level": 2,
+      "scaling": 1.5
+     }
+    },
+    "skill_path": {
+     "smite": 1,
+     "rally": 1,
+     "mend": 3,
+     "purify": 3,
+     "hex": 5,
+     "greater_mend": 5,
+     "renewal": 5,
+     "judgement": 7,
+     "aegis": 6,
+     "rejuvenate": 6
+    },
+    "basics": [
+     "tend_wounds"
+    ],
+    "main_hand": "bronze_censer",
+    "off_hand": "wpn_tome",
+    "head": "",
+    "body": "arm_cleric_vestment",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "mage",
+    "name": "Mage",
+    "description": "Glass caster: intelligence and area damage from range.",
+    "art": "mage",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.145161290322581,
+     "INT": 0.274193548387097,
+     "CONS": 0.129032258064516,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.193548387096774
+    },
+    "growth_shares": {
+     "INT": 0.4,
+     "CONS": 0.2,
+     "KNOW": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "staff": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "wand": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "orb": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "tome": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "cloth": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "sprayer": {
+      "level": 3,
+      "scaling": 1.5
+     }
+    },
+    "skill_path": {
+     "arcane_bolt": 1,
+     "arc_lance": 3,
+     "hex": 3,
+     "focus": 4,
+     "firebomb": 5,
+     "glacial_burst": 5,
+     "inferno": 7
+    },
+    "basics": [
+     "cinder_spark"
+    ],
+    "main_hand": "brass_vitriol_sprayer",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_mage_robe",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "mara_voss",
+    "name": "Mara Voss",
+    "side": "party",
+    "description": "Ashlands captain: a Warrior with her own hatchet and kite shield.",
+    "class_id": "warrior",
+    "level": 5,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [],
+    "loadout": [
+     "taunt_shout",
+     "shield_bash",
+     "riposte",
+     "intimidate",
+     "shield_wall"
+    ],
+    "deck": {},
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_hand_axe",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "world": "ashlands",
+   "kind": "characters",
+   "entry": {
+    "id": "mara_voss",
+    "name": "Mara Voss",
+    "title": "Captain of the Ember Wardens",
+    "role": "party",
+    "base_unit": "mara_voss",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "Raised in the keep's kitchens, Mara earned her captaincy by holding the Courtyard alone for two nights. She trusts drills over speeches.",
+    "personality": "dry, stubborn, protective",
+    "faction": "ember_wardens",
+    "home": "warden_keep",
+    "disciplines": [
+     "ember_blade"
+    ],
+    "passives": [],
+    "temperament": "steady_nerves",
+    "default_intent": "guard",
+    "named_items": [
+     "ember_brigandine"
+    ],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "mara_talk",
+    "gone_flags": [
+     {
+      "key": "ashlands.mara_fallen",
+      "value": true
+     }
+    ],
+    "tags": []
+   }
+  }
+ ]
+}

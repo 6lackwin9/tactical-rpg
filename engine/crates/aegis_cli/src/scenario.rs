@@ -3,7 +3,7 @@
 //! window that does not take the focus when the file or `window=1` asks.
 //!   aegis scenario check [<file> | all]                                       parse the files; no game starts
 //!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]
-//!   aegis scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
+//!   aegis scenario shots <name> [screen=] [scene=] [rules=] [seed=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
 //! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. Nothing here runs in the gate
@@ -70,13 +70,20 @@ pub enum Status {
     Waiting(String),
 }
 
+/// How the game starts (`launch` in the file): `scene` is the game's id of what the screen opens on, `rules` the
+/// game's id of the rules it plays by (only with `screen` arena); both reach the game as the launch keys `scene=` and
+/// `rules=`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Launch {
     pub screen: String,
-    pub encounter: Option<String>,
+    pub scene: Option<String>,
     pub seed: Option<u64>,
-    pub ruleset: Option<String>,
+    pub rules: Option<String>,
 }
+
+/// LAYER-ENG-KEYS (PR5-29a): the launch keys' genre-free names and the old names they had, which still load (in a file
+/// and as `shots` keys); a launch giving both names of one key is refused.
+pub const LAUNCH_ALIASES: [(&str, &str); 2] = [("scene", "encounter"), ("rules", "ruleset")];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
@@ -154,6 +161,20 @@ fn plain_name(name: &str) -> bool {
 fn unknown_keys(v: &Map<String, Value>, known: &[&str], place: &str, problems: &mut Vec<String>) {
     for k in v.keys().filter(|k| !known.contains(&k.as_str())) {
         problems.push(format!("{place}: unknown key '{k}'"));
+    }
+}
+
+/// A launch text under `key` or its old name (`LAUNCH_ALIASES`); both at once is a problem.
+fn aliased_text(l: &Map<String, Value>, key: &str, problems: &mut Vec<String>) -> Option<String> {
+    let old = LAUNCH_ALIASES.iter().find(|(k, _)| *k == key).map_or(key, |(_, o)| *o);
+    match (l.contains_key(key), l.contains_key(old)) {
+        (true, true) => {
+            problems.push(format!("launch: '{key}' and its old name '{old}' are both given"));
+            None
+        }
+        (true, false) => Some(text_of(l, key, "launch", problems)),
+        (false, true) => Some(text_of(l, old, "launch", problems)),
+        (false, false) => None,
     }
 }
 
@@ -455,26 +476,23 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Status::Active
         }
     };
-    let mut launch = Launch { screen: "menu".into(), encounter: None, seed: None, ruleset: None };
+    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, rules: None };
     if let Some(l) = o.get("launch") {
         match l.as_object() {
             None => p.push("launch: an object".into()),
             Some(l) => {
-                unknown_keys(l, &["screen", "encounter", "seed", "ruleset"], "launch", p);
+                let known: Vec<&str> = ["screen", "seed"].into_iter().chain(LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old])).collect();
+                unknown_keys(l, &known, "launch", p);
                 match l.get("screen").map(|s| s.as_str()) {
                     None => {}
                     Some(Some(s @ ("menu" | "arena" | "runner"))) => launch.screen = s.to_string(),
                     Some(_) => p.push("launch: 'screen' is menu, arena or runner".into()),
                 }
-                if l.contains_key("encounter") {
-                    launch.encounter = Some(text_of(l, "encounter", "launch", p));
-                }
+                launch.scene = aliased_text(l, "scene", p);
                 if l.contains_key("seed") {
                     launch.seed = Some(int_of(l, "seed", None, (0, u64::MAX), "launch", p));
                 }
-                if l.contains_key("ruleset") {
-                    launch.ruleset = Some(text_of(l, "ruleset", "launch", p));
-                }
+                launch.rules = aliased_text(l, "rules", p);
             }
         }
     }
@@ -528,8 +546,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
     if window && has_clip(&steps) {
         p.push("scenario: a 'clip' is taken in a run with no window, and this one has 'window' true".into());
     }
-    if launch.ruleset.is_some() && launch.screen != "arena" {
-        p.push("launch: 'ruleset' comes with 'screen' arena".into());
+    if launch.rules.is_some() && launch.screen != "arena" {
+        p.push("launch: 'rules' comes with 'screen' arena".into());
     }
     let counted = steps_counted(&steps);
     if counted > STEPS_MAX {
@@ -720,14 +738,14 @@ pub fn free_port() -> std::io::Result<u16> {
 pub fn plan(s: &Scenario, size: (u32, u32), game_id: &str, exe: &Path, data: Option<&Path>, port: u16, scratch: &Path) -> Plan {
     let user = user_dir_under(scratch, game_id);
     let mut args = vec![format!("port={port}"), format!("saves={}", scratch.join("saves").display()), format!("screen={}", s.launch.screen)];
-    if let Some(e) = &s.launch.encounter {
-        args.push(format!("encounter={e}"));
+    if let Some(e) = &s.launch.scene {
+        args.push(format!("scene={e}"));
     }
     if let Some(n) = s.launch.seed {
         args.push(format!("seed={n}"));
     }
-    if let Some(r) = &s.launch.ruleset {
-        args.push(format!("ruleset={r}"));
+    if let Some(r) = &s.launch.rules {
+        args.push(format!("rules={r}"));
     }
     if let Some(d) = data {
         args.push(format!("data={}", d.display()));
@@ -1345,7 +1363,7 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
 }
 
 const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
-const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [rules=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
@@ -1443,11 +1461,12 @@ pub fn do_steps(list: &str) -> std::result::Result<Vec<Value>, String> {
     Ok(steps)
 }
 
-/// The scenario `shots` runs: named `name`, launched as the keys say.
+/// The scenario `shots` runs: named `name`, launched as the keys say (`scene=`, `rules=`, or their old names
+/// `encounter=`, `ruleset=`, `LAUNCH_ALIASES`).
 pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, Vec<String>> {
     let steps = do_steps(&args.key("do", "")).map_err(|e| vec![e])?;
     let mut launch = json!({"screen": args.key("screen", "menu")});
-    for k in ["encounter", "ruleset"] {
+    for k in LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old]) {
         if let Some(v) = args.keys.get(k) {
             launch[k] = json!(v);
         }

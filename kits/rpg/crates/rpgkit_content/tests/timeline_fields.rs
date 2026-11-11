@@ -151,10 +151,11 @@ fn the_schema_and_the_checks_name_the_same_fields_kinds_and_options() {
     intents.push(NEUTRAL.to_string());
     assert_eq!(json::aget(&field_of("skills", "round_intent"), "options").iter().map(gstr).collect::<Vec<_>>(), intents, "\"\", the ruleset intents, neutral");
     assert_eq!(json::aget(&field_of("passives", "slot"), "options").iter().map(gstr).collect::<Vec<_>>(), strs(&["", "passive", "keystone"]));
-    let weapon_types: Vec<String> = json::aget(&field_of("items", "weapon_type"), "options").iter().map(gstr).collect();
-    for g in skill::OPTIONAL_GEAR_TYPES {
-        assert!(skill::GEAR_TYPES.contains(&g) && weapon_types.contains(&g.to_string()), "{g}: a gear type and a weapon type option");
-    }
+    // LAYER-DOWN-2: an item's gear type reads the family table; its own options are the pre-family catalog's tokens
+    let weapon_type = field_of("items", "weapon_type");
+    assert_eq!(json::s(&weapon_type, "options_from"), "gear_types");
+    let weapon_types: Vec<String> = json::aget(&weapon_type, "options").iter().map(gstr).collect();
+    assert_eq!(weapon_types[1..], skill::schema_gear_tokens()[..], "the pre-family gear tokens are the field's options");
     assert!(json::aget(&field_of("item_families", "engine_rules"), "options").iter().any(|o| o == "reach"));
     // every IN4 intent a kind allows is a schema option, and each authored kind's default is among its allowed ones
     for kind in skill::KINDS {
@@ -266,7 +267,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"move": ["strike"]}}}), "Follow-ups for 'move': not an opener in the deck."),
         ("units", "drillman", json!({"deck": {"follow_ups": ["strike"]}}), "Deck follow_ups must be an object"),
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"thrust": "strike"}}}), "Follow-ups for 'thrust' must be a list of skill families."),
-        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups, marrow."),
+        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups, channeled."),
         ("units", "drillman", json!({"deck": []}), "Deck must be an object"),
         // item families (1.6)
         ("item_families", "polearm", json!({"engine_rules": ["reach", "always_ranged"]}), "reach is for melee families; it can't go with always_ranged."),

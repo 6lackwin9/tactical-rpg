@@ -1,0 +1,39 @@
+{
+	"kind": "unit_tracks",
+	"version": 1,
+	"entries": [
+		{
+			"id": "calcification",
+			"name": "Calcification",
+			"mark": "calcify",
+			"cause": "calcified",
+			"stages": [
+				{
+					"name": "Vein-Blackening",
+					"passive": "calcify_1",
+					"departure": ""
+				},
+				{
+					"name": "Calloused Chitin",
+					"passive": "",
+					"departure": ""
+				},
+				{
+					"name": "Sensory Rot",
+					"passive": "",
+					"departure": ""
+				},
+				{
+					"name": "The Shakes",
+					"passive": "calcify_4",
+					"departure": ""
+				},
+				{
+					"name": "Terminal Drift",
+					"passive": "",
+					"departure": "lost"
+				}
+			]
+		}
+	]
+}

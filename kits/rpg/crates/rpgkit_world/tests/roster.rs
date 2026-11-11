@@ -45,7 +45,7 @@ fn with_ids(w: &str, rows: Value) -> Value {
 }
 
 /// A world's two founders, a party-side guest, a foe and the fight between them; slice 4: two later recruits, the
-/// Crucible (`party_min` 4) and one-choice scenes that recruit (by each BK5 `level`) or start the Crucible.
+/// `crucible` fight (`party_min` 4) and one-choice scenes that recruit (by each BK5 `level`) or start that fight.
 fn own(w: &str) -> Value {
     let scene = |id: &str, fx: Value| json!({"id": id, "start": "a", "services": false, "nodes": [{"id": "a", "text": "Well?", "choices": [{"text": "Go.", "effects": [fx]}]}]});
     json!({
@@ -54,8 +54,8 @@ fn own(w: &str) -> Value {
             {"id": "second", "name": "Second", "role": "party", "base_unit": "hero"},
             {"id": "guide", "name": "Guide", "role": "npc", "base_unit": "hero"},
             {"id": "foe", "name": "Foe", "role": "enemy", "base_unit": "brute"},
-            {"id": "kaelen", "name": "Kaelen", "role": "party", "base_unit": "hero"},
-            {"id": "dunstan", "name": "Dunstan", "role": "party", "base_unit": "hero"}
+            {"id": "kestrel", "name": "Kestrel", "role": "party", "base_unit": "hero"},
+            {"id": "dalton", "name": "Dalton", "role": "party", "base_unit": "hero"}
         ])),
         "encounters": with_ids(w, json!([
             {"id": "fight", "party": ["founder"], "enemies": ["foe"], "guests": ["guide"]},
@@ -67,9 +67,9 @@ fn own(w: &str) -> Value {
              "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "flag": "winch_held"}}
         ])),
         "dialogues": with_ids(w, json!([
-            scene("r_kaelen", json!({"effect": "recruit", "character": "kaelen"})),
-            scene("r_average", json!({"effect": "recruit", "character": "dunstan", "level": "average"})),
-            scene("r_three", json!({"effect": "recruit", "character": "dunstan", "level": 3})),
+            scene("r_kestrel", json!({"effect": "recruit", "character": "kestrel"})),
+            scene("r_average", json!({"effect": "recruit", "character": "dalton", "level": "average"})),
+            scene("r_three", json!({"effect": "recruit", "character": "dalton", "level": 3})),
             scene("f_crucible", json!({"effect": "fight", "encounter": "crucible"}))
         ]))
     })
@@ -209,7 +209,7 @@ fn party_of(d: &Data, members: &[(&str, i64)]) -> GameState {
 }
 
 fn end(member: &str, hp: i64, max_hp: i64, alive: bool) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new() }
+    HeroEnd { member: member.into(), hp, max_hp, alive, pouch: vec!["left".into()], unloaded: vec!["spare".into()], fate: None, marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new() }
 }
 
 #[test]
@@ -327,7 +327,7 @@ fn cell(d: &Data, w: &str, act: i64) -> GameState {
 
 /// A fielded hero's end at `hp` of the battle max `max` with ENCOUNTER2's `fate` (0 HP = not alive).
 fn fated(member: &str, hp: i64, max: i64, fate: PartyFate) -> HeroEnd {
-    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new() }
+    HeroEnd { member: member.into(), hp, max_hp: max, alive: hp > 0, pouch: Vec::new(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new(), attacked: Vec::new(), worn: Vec::new() }
 }
 
 fn max_of(d: &Data, gs: &GameState, id: &str) -> i64 {
@@ -574,13 +574,13 @@ fn without_bunks_the_party_max_caps_a_recruit() {
     // BK1, BK3 classic: no roster block: the cap is the party max and the refusal is RECRUIT1's text
     let d = data();
     let mut gs = crew(&d, "w", 4);
-    let res = scene(&d, &mut gs, "r_kaelen");
+    let res = scene(&d, &mut gs, "r_kestrel");
     assert_eq!(errors(&res), ["The party is full (4 of 4)."]);
-    assert!(gs.party.member("kaelen").is_none());
+    assert!(gs.party.member("kestrel").is_none());
     // with a place free the recruit joins and deploys (active_ids has room, BK4)
     let mut gs = crew(&d, "w", 3);
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
-    assert!(gs.party.member("kaelen").is_some() && has(&gs.party.active_ids, "kaelen"));
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")));
+    assert!(gs.party.member("kestrel").is_some() && has(&gs.party.active_ids, "kestrel"));
 }
 
 #[test]
@@ -589,19 +589,19 @@ fn bunks_apart_from_the_party_max_bench_the_fifth_member() {
     let d = data();
     let mut gs = crew(&d, "bw", 4);
     assert_eq!(gs.party.max_active, 4);
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
-    assert!(gs.party.member("kaelen").is_some() && !has(&gs.party.active_ids, "kaelen"), "benched: {:?}", gs.party.active_ids);
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")));
+    assert!(gs.party.member("kestrel").is_some() && !has(&gs.party.active_ids, "kestrel"), "benched: {:?}", gs.party.active_ids);
     assert_eq!(gs.party.active_ids.len(), 4, "active_ids never passes max_active");
     // six members fill six bunks: the bunk text
     let mut gs = crew(&d, "bw", BUNKS as usize);
-    assert_eq!(errors(&scene(&d, &mut gs, "r_kaelen")), [format!("Every bunk is taken ({BUNKS} of {BUNKS}).")]);
+    assert_eq!(errors(&scene(&d, &mut gs, "r_kestrel")), [format!("Every bunk is taken ({BUNKS} of {BUNKS}).")]);
     // the bunks flag adds, at most bunks_max; a negative flag counts 0
     for (flag, cap) in [(2, BUNKS + 2), (5, BUNKS_MAX), (-3, BUNKS)] {
         gs.flags.insert("hub_bunks".into(), json!(flag));
         assert_eq!((roster::bunk_cap(&gs), gs.read_flag("roster.bunks")), (cap, Some(json!(cap))), "flag {flag}");
     }
     gs.flags.insert("hub_bunks".into(), json!(2));
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")), "a seventh bunk");
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")), "a seventh bunk");
 }
 
 #[test]
@@ -610,10 +610,10 @@ fn a_world_switches_bunks_on_with_0_bunks() {
     let d = data();
     let mut gs = crew(&d, "zw", 3);
     assert_eq!((gs.party.max_active, roster::bunk_cap(&gs)), (3, 3));
-    assert_eq!(errors(&scene(&d, &mut gs, "r_kaelen")), ["The party is full (3 of 3)."]);
+    assert_eq!(errors(&scene(&d, &mut gs, "r_kestrel")), ["The party is full (3 of 3)."]);
     gs.flags.insert("hub_bunks".into(), json!(2));
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
-    assert!(gs.party.member("kaelen").is_some() && !has(&gs.party.active_ids, "kaelen"), "past the party max it is benched");
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")));
+    assert!(gs.party.member("kestrel").is_some() && !has(&gs.party.active_ids, "kestrel"), "past the party max it is benched");
     gs.party.active_ids.clear();
     assert!(ok(&scene(&d, &mut gs, "r_average")));
     assert!(gs.party.active_ids.is_empty(), "BK4: an empty active_ids stays empty (the first max_active deploy)");
@@ -624,14 +624,14 @@ fn a_departed_character_is_never_recruited_again() {
     // L1: member ids are never reused: the precheck refuses, the effect outside a talk notes it
     let d = data();
     let mut gs = crew(&d, "bw", 3);
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
-    roster::depart(&d, &mut gs, "kaelen", "captured", "story", "").unwrap();
-    assert_eq!(errors(&scene(&d, &mut gs, "r_kaelen")), ["Kaelen is gone."]);
-    let fx = json!({"effect": "recruit", "character": "kaelen"}).as_object().unwrap().clone();
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")));
+    roster::depart(&d, &mut gs, "kestrel", "captured", "story", "").unwrap();
+    assert_eq!(errors(&scene(&d, &mut gs, "r_kestrel")), ["Kestrel is gone."]);
+    let fx = json!({"effect": "recruit", "character": "kestrel"}).as_object().unwrap().clone();
     let (mut notes, mut events) = (Vec::new(), Vec::new());
     dialogue::apply_effects(&d, &mut gs, &[fx], &mut notes, &mut events);
-    assert_eq!(notes, ["Kaelen is gone."]);
-    assert!(gs.party.member("kaelen").is_none());
+    assert_eq!(notes, ["Kestrel is gone."]);
+    assert!(gs.party.member("kestrel").is_none());
 }
 
 #[test]
@@ -670,14 +670,14 @@ fn the_join_level_is_highest_average_or_a_number() {
     let level_of = |gs: &GameState, id: &str| progression::level_for(&d, gs.party.member(id).unwrap().total_xp);
     let mut gs = party();
     assert!(ok(&scene(&d, &mut gs, "r_average")));
-    assert_eq!(level_of(&gs, "dunstan"), (2 + 3 + 3) / 3);
+    assert_eq!(level_of(&gs, "dalton"), (2 + 3 + 3) / 3);
     let mut gs = party();
     assert!(ok(&scene(&d, &mut gs, "r_three")));
-    assert_eq!(gs.party.member("dunstan").unwrap().total_xp, at(3));
+    assert_eq!(gs.party.member("dalton").unwrap().total_xp, at(3));
     let mut gs = party();
     let best = gs.party.members.iter().map(|m| m.total_xp).max().unwrap();
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
-    assert_eq!(gs.party.member("kaelen").unwrap().total_xp, best);
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")));
+    assert_eq!(gs.party.member("kestrel").unwrap().total_xp, best);
 }
 
 #[test]
@@ -685,7 +685,7 @@ fn the_roster_read_keys_answer_from_the_party() {
     // RK1 through `quest::condition_met` (no Data: BK7's settings ride on the party)
     let d = data();
     let mut gs = crew(&d, "bw", 4);
-    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    assert!(ok(&scene(&d, &mut gs, "r_kestrel")));
     roster::depart(&d, &mut gs, "founder", "captured", "story", "").unwrap();
     roster::depart(&d, &mut gs, "second", "dead", "story", "").unwrap();
     assert_eq!(gs.read_flag("roster.living"), Some(json!(3)));
@@ -694,7 +694,7 @@ fn the_roster_read_keys_answer_from_the_party() {
     assert_eq!(gs.read_flag("roster.pool"), Some(json!(0)));
     let lives: Vec<Option<Value>> = ["captured", "dead", "retired"].iter().map(|l| gs.read_flag(&format!("roster.departed.{l}"))).collect();
     assert_eq!(lives, [Some(json!(1)), Some(json!(1)), Some(json!(0))]);
-    let states: Vec<Option<Value>> = ["founder", "kaelen", "m3", "nobody"].iter().map(|m| gs.read_flag(&format!("roster.{m}"))).collect();
+    let states: Vec<Option<Value>> = ["founder", "kestrel", "m3", "nobody"].iter().map(|m| gs.read_flag(&format!("roster.{m}"))).collect();
     assert_eq!(states, [Some(json!("captured")), Some(json!("ready")), Some(json!("ready")), Some(json!(""))], "a start-party unit reads too");
     assert!(quest::condition_met(&gs, &cond("roster.founder", "==", json!("captured"))));
     assert!(quest::condition_met(&gs, &cond("roster.bunks_free", ">=", json!(1))));

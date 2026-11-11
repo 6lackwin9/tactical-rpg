@@ -285,7 +285,7 @@ pub fn meter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         errors.push(format!("Name is longer than {METER_NAME_MAX} characters."));
     }
     if json::s(e, "scope") == "unit" {
-        errors.push("Scope unit is a doctrine lean: CAMPAIGN1-DOC (not built yet).".into());
+        errors.push("Scope unit (a per-member value) is not built yet: CAMPAIGN1-DOC; a per-member stage is a unit_tracks row.".into());
     }
     let countdown = json::s(e, "kind") == "countdown";
     let (lo, hi, start) = (json::i(e, "min", 0), json::i(e, "max", 100), json::i(e, "start", 0));

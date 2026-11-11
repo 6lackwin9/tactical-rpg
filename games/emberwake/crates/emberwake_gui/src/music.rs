@@ -7,7 +7,10 @@ use crate::screens::Cx;
 use aegis_core::json::s;
 use aegis_core::json::Dict;
 use emberwake_world::{Data, GameState};
+use emberwake_data::MusicAsk;
 
+// STORYMUSIC1: game.json's `music_keys` lists these contexts and the story keys (the kit's content check of a story's
+// music keys); a story test keeps it complete.
 pub const MENU: &str = "menu";
 pub const FIELD: &str = "field";
 pub const TRAVEL: &str = "travel";
@@ -15,6 +18,7 @@ pub const TOWN: &str = "town";
 pub const SHOP: &str = "shop";
 pub const DANGER: &str = "danger";
 pub const COMBAT: &str = "combat";
+pub const ENCOUNTER: &str = "encounter";
 pub const BOSS: &str = "boss";
 /// The menu context's last step.
 const MENU_KEY: &str = "menu_theme";
@@ -24,7 +28,7 @@ fn parent(ctx: &str) -> Option<&'static str> {
     match ctx {
         TRAVEL | TOWN | DANGER => Some(FIELD),
         SHOP => Some(TOWN),
-        "encounter" | BOSS => Some(COMBAT),
+        ENCOUNTER | BOSS => Some(COMBAT),
         _ => None,
     }
 }
@@ -123,9 +127,50 @@ pub fn path(key: &str) -> String {
     format!("music/{key}.ogg")
 }
 
-/// The first track of the context's chain that has a file (None: silence).
-pub fn track(cx: &Cx, ctx: &str, world: &str, location: &str) -> Option<String> {
+/// The first track of the context's chain that has a file (None: silence), before its variant is picked.
+fn chain_track(cx: &Cx, ctx: &str, world: &str, location: &str) -> Option<String> {
     candidates(&cx.data, ctx, world, location).into_iter().map(|k| path(&k)).find(|p| cx.audio.has(p))
+}
+
+/// The track of the context's chain (`chain_track`), as one of its variants when `<key>_2.ogg`, ... ship (MUSICVAR1):
+/// a request lasts while the track plays, seeded by the game's seed (0 without a game).
+pub fn track(cx: &Cx, ctx: &str, world: &str, location: &str) -> Option<String> {
+    let seed = cx.game.as_ref().map_or(0, |g| g.gs.rng_seed);
+    chain_track(cx, ctx, world, location).map(|p| cx.audio.music_variant(&p, None, seed))
+}
+
+/// MUSICVAR1: the track of one battle (`request`, from `new_request` when it starts), its variant seeded by the
+/// battle's seed: the battle keeps its pick, the next battle picks again and never the same one.
+pub fn battle_track(cx: &Cx, ctx: &str, world: &str, location: &str, request: u64, seed: i64) -> Option<String> {
+    chain_track(cx, ctx, world, location).map(|p| cx.audio.music_variant(&p, Some(request), seed))
+}
+
+/// A new music request id (one per battle start; ids only need to differ).
+pub fn new_request() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// STORYMUSIC1: what a vignette's or a sequence step's `music` asks the story stage for (V8's wish): None keeps the
+/// music playing (""; a music key with no track yet), `Some("")` is silence (`none`), else the track: a track path as
+/// written, a music key (a context, a story key such as `story_opening`, or a track's key) through `game_track`, so it
+/// takes the game's scopes (`<region>_story_opening` first) and its MUSICVAR1 variants.
+pub fn story_wish(cx: &Cx, music: &str) -> Option<String> {
+    match emberwake_data::music_ask(music) {
+        MusicAsk::Keep => None,
+        MusicAsk::Silence => Some(String::new()),
+        MusicAsk::Track(p) => Some(p.to_string()),
+        MusicAsk::Key(k) => game_track(cx, k),
+    }
+}
+
+/// STORYMUSIC1: a reel's `music` as the engine's player reads it ("", `none` or a track): a music key becomes its
+/// track (`story_wish`), or "" (the music goes on) while it has none.
+pub fn reel_music(cx: &Cx, music: &str) -> String {
+    match emberwake_data::music_ask(music) {
+        MusicAsk::Key(_) => story_wish(cx, music).unwrap_or_default(),
+        _ => music.to_string(),
+    }
 }
 
 /// `ctx` for the game in play (its world and location); without a game, the context alone.
@@ -196,6 +241,27 @@ mod tests {
         assert_eq!(region_context(&d, &gs, false), TOWN, "warden_keep is a fortress");
         assert_eq!(region_context(&d, &gs, true), SHOP);
         assert_eq!(region_context(&d, &GameState { location_id: String::new(), ..gs }, false), FIELD);
+    }
+
+    /// MUSICVAR1 outside battle: a context's track with variants plays one while it lasts; after other music the next
+    /// request picks another. A plain track (no variants) is unchanged.
+    #[test]
+    fn a_context_track_with_variants_picks_one_per_request() {
+        let dir = aegis_core::scratch::Scratch::new("emberwake_music_variants");
+        std::fs::create_dir_all(dir.join("music")).unwrap();
+        for f in ["menu_theme.ogg", "menu_theme_2.ogg", "travel.ogg"] {
+            std::fs::write(dir.join("music").join(f), b"OggS").unwrap();
+        }
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.audio = Audio::offline(Some(dir.to_path_buf()));
+        assert_eq!(track(&cx, TRAVEL, "", "").as_deref(), Some("music/travel.ogg"));
+        let first = track(&cx, MENU, "", "").expect("a menu track");
+        cx.audio.music(Some(&first));
+        assert_eq!(track(&cx, MENU, "", "").as_ref(), Some(&first), "the playing pick stays");
+        cx.audio.music(Some("music/travel.ogg"));
+        let second = track(&cx, MENU, "", "").expect("a menu track");
+        assert_ne!(second, first, "back from other music, the other variant");
+        assert!(["music/menu_theme.ogg", "music/menu_theme_2.ogg"].contains(&second.as_str()));
     }
 
     #[test]

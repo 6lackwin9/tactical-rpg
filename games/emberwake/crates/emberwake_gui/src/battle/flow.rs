@@ -7,6 +7,7 @@ use super::{log_settled, Action, BattleScreen, Mode, AUTO_CONFIRM, CONFIRM_GUARD
 use super::tokens::Tokens;
 use crate::screens::{show_errors, Cx, Nav};
 use aegis_ui::audio::Bus;
+use emberwake_battle::event::EventKind;
 use emberwake_battle::round_intent::{self as ri, RoundTarget};
 use emberwake_battle::round_intent_plan as rip;
 use emberwake_battle::session::{Phase, Session};
@@ -84,6 +85,7 @@ impl BattleScreen {
     pub(super) fn after_start(&mut self, intro: &str) {
         self.tokens = Tokens::default();
         self.rev += 1;
+        self.music_request = crate::music::new_request();
         // A new battle: the last one's pending feedback has nothing left to show on (rule F's flush happens in `send`).
         self.impacts.clear();
         self.flashes.clear();
@@ -528,23 +530,20 @@ pub(super) fn boss_fight(s: &Session) -> bool {
     (0..s.w.units.len()).any(|c| !s.w.allies.contains(&c) && s.tier_of(c) == "boss")
 }
 
-/// The sound a resolver log line plays (scripts/audio/sound_events.gd FOR_PRESET); None: silent. The engine's log
-/// has no mitigation tag, so a hit for 0 plays mitigated; a status that is a buff plays nothing.
-pub(super) fn sound_of(line: &str) -> Option<&'static str> {
-    let tag = line.split_once(']').map(|(t, _)| t.trim_start_matches('['))?;
-    match tag {
-        "Attack Miss" | "Area Miss" => Some("miss"),
-        "Attack" if line.contains(" CRIT") => Some("crit"),
-        "Attack" if line.contains(" for 0 ") => Some("mitigated"),
-        "Attack" => Some("hit"),
-        "Status" => {
-            let id = line.split_once("(inflicts ")?.1.split(')').next()?;
-            (!emberwake_rules::status::row_of(id).is_some_and(|r| r.buff)).then_some("debuff")
-        }
-        "Defend" if !line.contains("guard was broken") => Some("defend"),
-        "Focus" => Some("buff"),
-        "Support" => Some("heal"),
-        "Move" | "Move Cut Short" | "Withdrawal" | "Dash" | "Chase" | "Disengage" => Some("move_step"),
+/// The sound a resolver log line plays (scripts/audio/sound_events.gd FOR_PRESET), read from the line's typed event
+/// (PR5-32: `event::EventKind`, never the line's words); None: silent. The engine's log has no mitigation tag, so a
+/// hit for 0 plays mitigated; a status that is a buff plays nothing, a resisted one nothing.
+pub(super) fn sound_of(e: &EventKind) -> Option<&'static str> {
+    match e {
+        EventKind::Miss => Some("miss"),
+        EventKind::Hit { crit: true, .. } => Some("crit"),
+        EventKind::Hit { zero: true, .. } => Some("mitigated"),
+        EventKind::Hit { .. } => Some("hit"),
+        EventKind::Status { status, landed: true } if !status.is_empty() => (!emberwake_rules::status::row_of(status).is_some_and(|r| r.buff)).then_some("debuff"),
+        EventKind::Guard { broken: false } => Some("defend"),
+        EventKind::Focus => Some("buff"),
+        EventKind::Support => Some("heal"),
+        EventKind::Move => Some("move_step"),
         _ => None,
     }
 }

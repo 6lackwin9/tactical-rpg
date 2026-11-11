@@ -1,7 +1,6 @@
 # The Ichor Alchemist (engine class `mage`)
 
-Status: canon for the Cold Steel branch and Elyse's Act 1 kit; proposal for the Inoculated branch (Act 2 on). Elyse
-joins in Act 1 mission 4 and is not in the first playable slice.
+Status: `[LOCKED]` class role, `3/2/2` weapons, Act 1 Cold Steel kit & `M4` join slot (post-first-slice); `[PROVISIONAL]` Act 2 Inoculated tree; **`[PLACEHOLDER]` Section 4 founder name, backstory, taint & look** ([CANON.md](../CANON.md) 3.1 wins).
 Conventions (timing, armour scale, flat damage values) are in the [classes index](classes_and_skill_trees.md)
 section 3; rules in [combat and the timeline](combat_and_timeline.md).
 

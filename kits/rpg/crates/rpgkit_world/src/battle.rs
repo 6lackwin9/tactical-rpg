@@ -445,6 +445,8 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     if !events.is_empty() {
         out.insert("campaign".into(), Value::Array(events));
     }
+    // PK2-S5a: loot weapons are fresh instances (full durability), gear the settle stashed keeps its instance
+    crate::weapons::sync(d, gs);
     out
 }
 
@@ -465,7 +467,9 @@ pub fn fight_world(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
 /// set to the first member who stayed or stood ("" when none) on every outcome. Returns the result keys
 /// (`party_fates`: [[member, fate]] (W1); `stay_lines`: one `result_line` per stayed or stood hero (W4), named before
 /// anyone departs; `wounded`: [member]; `departed`: [{member, life}] (ROSTER1-U's lines); `marks`: [{member, mark,
-/// value}] (PK1-S1); each only when not empty) and
+/// value}] (PK1-S1); `tracks` [{member, track, from, to}] and `stashed` [{member, item}] (PK2-S1), `cleared`
+/// [{member, slot}] (PR5-26: a slot left empty, its default refused), `remains` (PK2-S2), `mastery` [{member, family,
+/// from, to, level}] (PK2-S4); each only when not empty) and
 /// the notes (a flag the world refuses). The encounter (its `stay_behind`, objective and qid) is read as the fight's
 /// world sees it (`tally.world`, else `fight_world`), as the battle was built: a road fight on another world's route
 /// may not resolve from the played world (`played_enc`, then only the fallback).
@@ -520,6 +524,30 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
         if !marks.is_empty() {
             out.insert("marks".into(), Value::Array(marks));
         }
+        // PK2-S1: the unit tracks the marks moved and the worn items a member grant sent to the stash
+        if !settled.tracks.is_empty() {
+            let tracks = settled.tracks.iter().map(|t| json::obj([("member", t.member.clone().into()), ("track", t.track.clone().into()), ("from", int(t.from)), ("to", int(t.to))]).into()).collect();
+            out.insert("tracks".into(), Value::Array(tracks));
+        }
+        if !settled.stashed.is_empty() {
+            let stashed = settled.stashed.iter().map(|(m, item)| json::obj([("member", m.clone().into()), ("item", item.clone().into())]).into()).collect();
+            out.insert("stashed".into(), Value::Array(stashed));
+        }
+        // PR5-26 review F2: the slots left empty because their default is refused
+        if !settled.cleared.is_empty() {
+            let cleared = settled.cleared.iter().map(|(m, slot)| json::obj([("member", m.clone().into()), ("slot", slot.clone().into())]).into()).collect();
+            out.insert("cleared".into(), Value::Array(cleared));
+        }
+        // PK2-S2: the items fallen members left in the stash
+        if !settled.remains.is_empty() {
+            let remains = settled.remains.iter().map(|(m, item)| json::obj([("member", m.clone().into()), ("item", item.clone().into())]).into()).collect();
+            out.insert("remains".into(), Value::Array(remains));
+        }
+        // PK2-S4: the weapon mastery gained by use
+        if !settled.mastery.is_empty() {
+            let mastery = settled.mastery.iter().map(|g| json::obj([("member", g.member.clone().into()), ("family", g.family.clone().into()), ("from", int(g.from)), ("to", int(g.to)), ("level", int(i64::from(g.level())))]).into()).collect();
+            out.insert("mastery".into(), Value::Array(mastery));
+        }
     }
     if let Some(b) = stay.as_ref().filter(|b| !b.flag.is_empty()) {
         let err = quest::set_flag(d, gs, &b.flag, Value::String(first_stayer));
@@ -547,6 +575,8 @@ pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<
         return Err(short);
     }
     let lines = roster::auto_fill_at_start(d, gs, &world);
+    // PK2-S5a: the fielded members wield their gear's instances (a masterwork main hand opens its technique)
+    crate::weapons::sync(d, gs);
     Ok((world, lines))
 }
 
@@ -683,8 +713,12 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
 }
 
 /// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.
-/// PK1-S1: `marks` [{member, mark, value}], the battle's marks on the fielded members.
-pub const PARTY_KEYS: [&str; 6] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks"];
+/// PK1-S1: `marks` [{member, mark, value}], the battle's marks on the fielded members. PK2-S1: `tracks` [{member,
+/// track, from, to}] (the unit tracks the marks moved) and `stashed` [{member, item}] (worn items a `forbid_hands`
+/// sent to the stash). PR5-26 (review F2): `cleared` [{member, slot}] (a slot left empty, its default refused).
+/// PK2-S2: `remains` [{member, item}] (what a fallen member left in the stash, the field held). PK2-S4: `mastery`
+/// [{member, family, from, to, level}] (the weapon mastery the members gained by use).
+pub const PARTY_KEYS: [&str; 11] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared", "remains", "mastery"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

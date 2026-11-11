@@ -32,7 +32,7 @@ fn tip_text(b: &BattleScreen, id: &str) -> String {
     b.w.iter().filter(|x| x.id == id).flat_map(|x| x.tip.iter().map(|(t, _)| t.clone())).collect::<Vec<_>>().join(" | ")
 }
 
-/// The hero's attack skills push 2 (a test row on the battle's catalog), the hero plans Assault on its first foe.
+/// The hero's attack skills (every rank) push 2 (a test row on the battle's catalog), the hero plans Assault on its first foe.
 pub(super) fn plan_push(cx: &Cx, b: &mut BattleScreen) -> (usize, usize) {
     let h = b.selected.expect("a hero");
     let sess = b.host.session.as_mut().unwrap();
@@ -40,7 +40,8 @@ pub(super) fn plan_push(cx: &Cx, b: &mut BattleScreen) -> (usize, usize) {
     let f = w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.has(e)).expect("a foe");
     let known = w.units[h].known_skills.clone();
     let push = emberwake_data::ForcedMove::from_obj(json!({"kind": "push", "tiles": 2, "collide_mult": 0.5}).as_object().unwrap());
-    for sk in std::sync::Arc::make_mut(&mut w.cat).skills.iter_mut().filter(|k| known.contains(&k.id) && k.kind == "ATTACK") {
+    // every rank of a known attack: a rank 2+ row is `<head>_<rank>` with the head as its `family` (the loader's rank rule)
+    for sk in std::sync::Arc::make_mut(&mut w.cat).skills.iter_mut().filter(|k| (known.contains(&k.id) || known.contains(&k.family)) && k.kind == "ATTACK") {
         sk.forced_move = push.clone();
     }
     let r = b.send(cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": f}));

@@ -1,0 +1,33 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "vent",
+    "name": "Vent",
+    "kind": "FOCUS",
+    "level": 1,
+    "ap_cost": 0,
+    "blocks": 1,
+    "description": "Channel basic: -50 Strain for 10% of max HP; only while Strain is 50 or more.",
+    "learned_only": true,
+    "round_intent": "support",
+    "meters": [
+     {
+      "meter": "strain",
+      "delta": -50
+     }
+    ],
+    "hp_cost_pct": 10,
+    "requires_meter": {
+     "meter": "strain",
+     "min": 50
+    },
+    "channel": {
+     "only": true
+    }
+   }
+  }
+ ]
+}

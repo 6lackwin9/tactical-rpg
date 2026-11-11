@@ -7,6 +7,9 @@ pub mod assets;
 pub mod board;
 pub mod campaign;
 pub mod derived;
+pub mod body_slot;
+pub mod dojo_preset;
+pub mod recipe;
 pub mod expression_fx;
 pub mod dialogue;
 pub mod encounter;
@@ -27,6 +30,7 @@ pub mod terms;
 pub mod travel;
 pub mod unit;
 pub mod unit_template;
+pub mod unit_track;
 pub mod world;
 
 /// The catalog kinds the checks cover so far.
@@ -55,6 +59,9 @@ pub struct View {
     pub load_errors: Vec<String>,
     /// E2.2-S1 (FB-53b): the game-wide purse caps (the manifest's; the defaults for a view built from values).
     pub purse: crate::source::PurseCaps,
+    /// STORYMUSIC1: the game's music keys (the manifest's `music_keys`; none for a view built from values): the keys a
+    /// vignette's or a step's `music` may name without a track.
+    pub music_keys: Vec<String>,
 }
 
 /// ContentSchema.NO_ITEM: a unit gear slot or pouch left empty on purpose.
@@ -73,7 +80,7 @@ impl View {
         for (name, key) in [("item_families", "item_families"), ("quest_templates", "quests"), ("maps", "maps"), ("services", "services")] {
             rows.insert(name.into(), json::arr(&game[key]).iter().map(|e| json::dict(e).clone()).collect());
         }
-        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new(), purse: crate::source::PurseCaps::default() }
+        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new(), purse: crate::source::PurseCaps::default(), music_keys: Vec::new() }
     }
 
     pub fn entries(&self, kind: &str) -> &[Dict] {
@@ -151,6 +158,8 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
         "status_buff" => std::iter::once(String::new()).chain(rpgkit_rules::status::ROWS.iter().filter(|r| r.buff && !r.grant.is_empty()).map(|r| r.id.to_string())).collect(),
+        // LAYER-DOWN-2: an item's gear type (items `weapon_type`): "", then the family table's gear tokens in their listed order
+        "gear_types" => std::iter::once(String::new()).chain(skill::listed_gear_tokens(v.entries("item_families"))).collect(),
         "weapon_types" => skill::gear_tokens(v.entries("item_families")).into_iter().chain(std::iter::once("unarmed".to_string())).collect(),
         "debuffs_or_all" => rpgkit_rules::status::debuffs().into_iter().map(String::from).chain(std::iter::once("all".to_string())).collect(),
         _ => json::aget(f, "options").iter().map(gstr).collect(),
@@ -278,6 +287,22 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // R4-1: the row checks the loader applies (the role, the share vectors and their stats, unique ids and roles)
         return unit_template::entry_errors(v, &content(kind, entry), current_id);
     }
+    if kind == unit_track::KIND {
+        // PK2-S1: the row checks the loader applies (the stages, their passives and departure, unique ids)
+        return unit_track::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == body_slot::KIND {
+        // PK2-S2: the row checks the loader applies (the id, name, role, origin; unique ids, the row count)
+        return body_slot::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == recipe::KIND {
+        // PK2-S3: the row checks the loader applies (the cost, the effects and their refs; unique ids), then the world refs
+        return recipe::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == dojo_preset::KIND {
+        // PK1-KITFIX (c): the row checks the loader applies (the gear slots and items, the pouch, the passives, unique ids)
+        return dojo_preset::entry_errors(v, &content(kind, entry), current_id);
+    }
     if kind == ground::KIND {
         // REGIONGROUND1 KT 1.3: the row checks the loader applies (the fields' limits, unknown keys, unique ids and orders)
         return ground::entry_errors(v, &content(kind, entry), current_id);
@@ -306,7 +331,7 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     match kind {
         "skills" => errors.extend(skill::entry_errors(v, &e)),
         "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false, &hooks::Ctx::of(v))),
-        "terrain" => errors.extend(simple::terrain_errors(&e)),
+        "terrain" => errors.extend(simple::terrain_errors(v, &e, current_id)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
         "units" => {
             errors.extend(unit::unit_errors(v, &e));
@@ -415,8 +440,8 @@ pub type Report = IndexMap<String, Vec<String>>;
 
 /// ContentCatalog.validate_all: every entry's errors, the map templates' prop and ground checks (PROPS1, REGIONGROUND1,
 /// `maps:<id>`), then the
-/// rules across entries (required skills, one family per gear token, skill families that fold, a row per terrain
-/// type) and the load problems.
+/// rules across entries (required skills, skill families that fold, a row per terrain type; LAYER-DOWN-2: no
+/// fixed gear token set asks a family any more, the family table names the tokens) and the load problems.
 pub fn validate_all(v: &View) -> Report {
     let mut problems = Report::new();
     for kind in KINDS {
@@ -442,7 +467,6 @@ pub fn validate_all(v: &View) -> Report {
         }
     };
     add("skills:required", skill::required_errors(v));
-    add("item_families:required", item::family_set_errors(v.entries("item_families")));
     add("skills:fold", skill::collapse(v.entries("skills")).1);
     if v.terrain_file {
         add("terrain:missing", simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}'.")).collect());
@@ -458,6 +482,10 @@ pub fn validate_all(v: &View) -> Report {
         add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::missing_pools(v, e));
         // PK1-S2a: the Channel meter and Channel Rest name rows
         add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::channel_refs(v, e));
+    }
+    // PK2-S3: a recipe's offering character and its `requires` (the world refs)
+    for e in v.entries(recipe::KIND) {
+        add(&format!("{}:{}", recipe::KIND, json::s(e, "id")), recipe::world_errors(v, e));
     }
     add("load", v.load_errors.clone());
     problems

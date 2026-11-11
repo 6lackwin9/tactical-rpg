@@ -311,15 +311,16 @@ pub fn marker_view(d: &Data, gs: &GameState, loc: &Dict, m: &Dict) -> Dict {
     ])
 }
 
-/// The NPC services in badge order (`board`: STORYUI1 B4).
-pub const SERVICES: [&str; 5] = ["turn_in", "offer", "board", "shop", "recruit"];
+/// The NPC services in badge order (`board`: STORYUI1 B4; `recipe`: PK2-S3).
+pub const SERVICES: [&str; 6] = ["turn_in", "offer", "board", "shop", rpgkit_data::RECIPE_SERVICE, "recruit"];
 
 /// PLAYUI1-M (spec PLAYUI1 2.2 A; engine-only, no Godot function): what the character `character_qid` offers now, in
 /// `SERVICES` order: `turn_in` (a ready quest turns in here), `offer` (an available quest starts here; both as the
 /// marker badges `ready` and `quest`; STORYUI1 B4: a board quest is no `offer`), `board` (keeper of an open board with
-/// an available quest, STORYUI1 B4), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
-/// `recruit` effect for a character not in the party, the choice's conditions holding). Read-only; `marker_view` stays
-/// as Godot had it (the journey golden compares it).
+/// an available quest, STORYUI1 B4), `shop` (keeper of an open shop), `recipe` (PK2-S3: it offers a recipe now,
+/// `recipe::offered`), `recruit` (a choice in its dialogue tree with a `recruit` effect for a character not in the
+/// party, the choice's conditions holding). Read-only; `marker_view` stays as Godot had it (the journey golden
+/// compares it).
 pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'static str> {
     let mut out = Vec::new();
     if character_qid.is_empty() {
@@ -342,6 +343,9 @@ pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'stat
     });
     if keeps_shop {
         out.push("shop");
+    }
+    if !crate::recipe::offered(d, gs, character_qid).is_empty() {
+        out.push(rpgkit_data::RECIPE_SERVICE);
     }
     let c = d.resolve(&gs.world_id, "characters", character_qid);
     let tree_ref = json::s(c, "dialogue");

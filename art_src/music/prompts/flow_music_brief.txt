@@ -1,0 +1,91 @@
+Emberwake: A Scarlet Lullaby - Flow Music brief (ART_UI_STUDIO 3.9)
+
+HOUSE SEED: 455684 (Tushar, 2026-11-11) for every new creation; variants get their own seeds, logged in
+ART_UI_STUDIO 3.9.
+
+Tool: Flow Music (flowmusic.app, from Flow's top bar). A chat "Producer" on Lyria 3.5 that makes and edits tracks;
+downloads are free. Paste SOUND BIBLE below into Customize Producer > memories once, so every session keeps it.
+
+================================================================ SOUND BIBLE (paste into Producer memories)
+All music is for "Emberwake: A Scarlet Lullaby", a dark-fantasy tactical RPG in a soot-black industrial-gothic city
+(the Sunk Ward): tenement rooftops, tallow vats, bone-mills, iron cages, cathedral bells, rain and searchlights. A
+theocracy tithes its youths to keep a dreaming titan asleep; a small cell of young deserters fights back.
+
+- Always instrumental unless asked otherwise. Never lyrics. Wordless voices only when asked.
+- Palette: low strings (cello, double bass, viola), a solo violin or viola da gamba, hurdy-gurdy, music box and
+  celesta, low male choir and a lone child's or woman's wordless voice, church bells and hand bells, struck metal
+  (anvil, chains, iron pipes), frame drums and taiko-like low drums, harp, dulcimer, a small pipe organ.
+- Avoid: modern pop, EDM, trap, rock drum kits, electric guitar, synth leads, epic trailer "braams", happy major keys.
+- Mood: cold, sooty, sorrowful, defiant; tension held, not released; warmth is rare and earned (the hearth).
+- The leitmotif "The Scarlet Lullaby": a simple, slightly sad 6/8 cradle tune that circles in D minor (Dorian
+  colour) and never fully resolves. The Clerisy sings it to the tithe-children; it returns in many tracks: sweet on a
+  music box, cold in the choir, broken on a hurdy-gurdy in battle, warm on the hearth's strings.
+- Game use: tracks loop in the game, so keep each one in a single steady mood and tempo with no fade-out ending,
+  no big intro build and no outro; 90 to 150 seconds is enough.
+
+================================================================ TEST 1 - main theme, two directions (pick by ear)
+Make two versions; the winner sets the sound for every other track.
+
+1A (dark acoustic, cinematic):
+Main menu theme for Emberwake: A Scarlet Lullaby. Instrumental. It opens on a music box playing the Scarlet
+Lullaby, a simple sad 6/8 cradle tune in D minor that circles without resolving; low cello and a soft distant church
+bell join under it, then a slow low male choir hums the same tune, cold and solemn, over rain and a faint crackle of
+tallow fire. 66 BPM. No drums, no big build. Steady mood throughout so it loops; no fade-out ending. About 2 minutes.
+
+1B (16-bit era, retro console):
+Main menu theme for Emberwake: A Scarlet Lullaby, in the style of a 16-bit SNES-era dark fantasy RPG soundtrack:
+sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. A music box plays the Scarlet Lullaby, a simple sad
+6/8 cradle tune in D minor that circles without resolving; sampled strings and a choir pad carry it, with a slow
+church bell. 66 BPM. No modern drums. Steady mood throughout so it loops; no fade-out ending. About 2 minutes.
+
+================================================================ TEST 2 - hub (the Sluice Undercroft, the hearth)
+Hub theme for a dark-fantasy RPG's underground refuge: a flooded stone undercroft lit by a charcoal forge, water
+dripping into a basin. Instrumental, in the same sound as the main theme. A warm, quiet variation of the Scarlet
+Lullaby on solo viola and harp, with a low cello drone, soft crackling coals and slow dripping water; the only warm
+place in a cold city: tired, safe for now, still sad. 72 BPM, 6/8. No drums. Steady mood so it loops; no ending.
+About 2 minutes.
+
+================================================================ TEST 3 - battle (regular fights)
+Battle theme for a dark-fantasy tactical RPG, turn-based fights in soot-black alleys and on rooftops. Instrumental,
+in the same sound as the main theme. Driving low frame drums and taiko-like hits at 120 BPM, staccato low strings,
+struck metal and chains as percussion, a hurdy-gurdy playing a broken, faster fragment of the Scarlet Lullaby in
+D minor, short choir stabs. Tense and determined, not heroic. Steady intensity so it loops; no intro build, no
+ending. About 2 minutes.
+
+================================================================ ROUND 2 (after test 1: 1B is the main theme, 1A the credits)
+Tushar picked 1B's 16-bit sound. Lyria writes whole songs (intro and fade-out) whatever the prompt says, so prompts
+no longer ask for loops: the import tool cuts the loop. Attach the 1B track as a reference (+) where Flow Music
+accepts audio.
+
+TEST 2 (hub):
+Hub theme for Emberwake: A Scarlet Lullaby, in the same 16-bit SNES-era dark fantasy RPG sound as the attached main
+theme: sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. An underground refuge: a flooded stone
+undercroft lit by a charcoal forge, water dripping into a basin. A warm, quiet variation of the Scarlet Lullaby, the
+same sad 6/8 cradle tune in D minor, on sampled solo viola and harp over a soft low string pad, with gentle crackling
+coals and slow water drips. The only warm place in a cold city: tired, safe for now, still sad. 72 BPM. No drums.
+About 2 minutes.
+
+TEST 3 (battle):
+Battle theme for Emberwake: A Scarlet Lullaby, in the same 16-bit SNES-era dark fantasy RPG sound as the attached
+main theme: sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. Turn-based tactical fights in
+soot-black alleys and on rooftops. Driving sampled timpani and low frame drums at 120 BPM, staccato sampled low
+strings, metallic anvil and chain hits as percussion, a sampled hurdy-gurdy or reedy lead playing a faster, broken
+fragment of the Scarlet Lullaby in D minor, short choir stabs. Tense and determined, not heroic. Steady intensity
+throughout. About 2 minutes.
+
+================================================================ ROUND 3 - battle in Compose (the cover kept 1B's 60 BPM)
+Compose: Instrumental ON; Advanced: BPM 128, Length 2:00, Seed 455684. The set is really in F minor (measured), so
+battle names F minor.
+
+instrumental, no vocals, 16-bit SNES-era dark fantasy RPG battle theme, lo-fi warm grainy sampled orchestra, driving
+timpani and low frame drums, fast staccato low strings, anvil and chain hits as percussion, reedy hurdy-gurdy lead,
+short choir stabs, F minor, 128 bpm, tense and determined, not heroic, steady intensity, no slow intro
+
+================================================================ ROUND 4 - battle, church and Inquisition (Tushar's idea)
+Compose: BPM 120, Length 2:00, Seed 455684. If Instrumental also removes the choir, turn it off and keep "wordless
+choir, no lyrics, no solo singer".
+
+instrumental, 16-bit SNES-era dark fantasy RPG battle theme, gothic cathedral and inquisition, sampled pipe organ
+chords, low wordless monk choir chanting in unison, tolling cathedral bells, pounding timpani, low staccato string
+ostinato underneath, sparse and heavy, the organ and choir carry it with no busy lead melody, solemn, ominous,
+relentless, repeating 8-bar sections, D minor, 120 bpm

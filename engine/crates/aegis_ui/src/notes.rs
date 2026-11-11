@@ -2,7 +2,7 @@
 //! field (the kit's text editor, PLAYUI1-T: selection, clipboard, undo) types right away and fills the box; four tags
 //! (mechanic, ui, ux, bug); Save (Ctrl+Enter) writes the note and its screenshot into the run's recording, Cancel
 //! (Esc) drops it. The screen under it gets no input while it is open, and does not
-//! tick (a battle's auto-play pauses).
+//! tick (a game's auto-play pauses).
 
 use crate::canvas::Rect;
 use crate::playtest::TAGS;

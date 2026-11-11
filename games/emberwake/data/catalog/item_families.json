@@ -95,7 +95,9 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_poise_ward",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "slash"
 		},
 		{
 			"id": "axe",
@@ -190,7 +192,9 @@
 				"burden": 1
 			},
 			"level3_passive": "mastery_bleed_edge",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "cleave"
 		},
 		{
 			"id": "mace",
@@ -257,7 +261,9 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_heavy_impact",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "bludgeon"
 		},
 		{
 			"id": "hammer",
@@ -323,7 +329,9 @@
 				"burden": 1
 			},
 			"level3_passive": "mastery_heavy_impact",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "bludgeon"
 		},
 		{
 			"id": "fist",
@@ -389,7 +397,23 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_fist",
-			"art": ""
+			"techniques": [
+				{
+					"skill": "tq_fist_breaker",
+					"grip": ""
+				}
+			],
+			"durability": 40,
+			"art": "",
+			"fx": "fists",
+			"attack_clips": [
+				"jab"
+			],
+			"area_clips": [
+				"sweep_kick",
+				"kick",
+				"jab"
+			]
 		},
 		{
 			"id": "dagger",
@@ -455,7 +479,15 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_agile_step",
-			"art": ""
+			"techniques": [
+				{
+					"skill": "tq_dagger_flurry",
+					"grip": ""
+				}
+			],
+			"durability": 40,
+			"art": "",
+			"fx": "stab"
 		},
 		{
 			"id": "bow",
@@ -523,7 +555,9 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_bow",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "arrow"
 		},
 		{
 			"id": "staff",
@@ -620,7 +654,10 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_arcane_focus",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "bludgeon",
+			"fx_far": "arcane_orb"
 		},
 		{
 			"id": "wand",
@@ -688,7 +725,10 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_arcane_focus",
-			"art": ""
+			"durability": 40,
+			"art": "",
+			"fx": "slash",
+			"fx_far": "arcane_orb"
 		},
 		{
 			"id": "orb",
@@ -756,7 +796,9 @@
 				"crit": 1
 			},
 			"level3_passive": "mastery_arcane_focus",
-			"art": ""
+			"art": "",
+			"fx": "slash",
+			"fx_far": "arcane_orb"
 		},
 		{
 			"id": "tome",
@@ -824,7 +866,9 @@
 				"crit": 1
 			},
 			"level3_passive": "mastery_arcane_focus",
-			"art": ""
+			"art": "",
+			"fx": "slash",
+			"fx_far": "arcane_orb"
 		},
 		{
 			"id": "shield",
@@ -1110,7 +1154,15 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_crossbow",
-			"art": ""
+			"techniques": [
+				{
+					"skill": "tq_crossbow_volley",
+					"grip": ""
+				}
+			],
+			"durability": 40,
+			"art": "",
+			"fx": "bolt"
 		},
 		{
 			"id": "accessory",
@@ -1269,12 +1321,24 @@
 			"engine_rules": [
 				"reach"
 			],
+			"range_band": {
+				"min": 1,
+				"max": 2
+			},
 			"damage_type": "pierce",
 			"level2_bonus": {
 				"burden": 1
 			},
 			"level3_passive": "mastery_heavy_impact",
-			"art": ""
+			"techniques": [
+				{
+					"skill": "tq_polearm_hook",
+					"grip": ""
+				}
+			],
+			"durability": 40,
+			"art": "",
+			"fx": "slash"
 		},
 		{
 			"id": "scourge",
@@ -1337,12 +1401,18 @@
 			"engine_rules": [
 				"reach"
 			],
+			"range_band": {
+				"min": 1,
+				"max": 2
+			},
 			"damage_type": "slash",
 			"level2_bonus": {
 				"crit": 2
 			},
 			"level3_passive": "mastery_bleed_edge",
-			"art": "scourge"
+			"durability": 40,
+			"art": "scourge",
+			"fx": "slash"
 		},
 		{
 			"id": "censer",
@@ -1408,7 +1478,15 @@
 				"burden": 1
 			},
 			"level3_passive": "mastery_sacred_censer",
-			"art": "censer"
+			"techniques": [
+				{
+					"skill": "tq_censer_swing",
+					"grip": ""
+				}
+			],
+			"durability": 40,
+			"art": "censer",
+			"fx": "slash"
 		},
 		{
 			"id": "bone_saw",
@@ -1474,7 +1552,9 @@
 				"crit": 2
 			},
 			"level3_passive": "mastery_bleed_edge",
-			"art": "bone_saw"
+			"durability": 40,
+			"art": "bone_saw",
+			"fx": "slash"
 		},
 		{
 			"id": "sprayer",
@@ -1542,7 +1622,31 @@
 				"burden": 1
 			},
 			"level3_passive": "mastery_bleed_edge",
-			"art": "sprayer"
+			"techniques": [
+				{
+					"skill": "tq_sprayer_jet",
+					"grip": ""
+				}
+			],
+			"durability": 40,
+			"art": "sprayer",
+			"fx": "arrow"
+		},
+		{
+			"id": "graft",
+			"name": "Graft",
+			"description": "",
+			"item_type": "GRAFT",
+			"off_hand_category": "",
+			"base": {},
+			"bands": {},
+			"adjustable": [],
+			"modifier_kinds": [],
+			"max_modifiers": 0,
+			"max_tiers": 0,
+			"engine_rules": [],
+			"damage_type": "",
+			"art": ""
 		}
 	]
 }

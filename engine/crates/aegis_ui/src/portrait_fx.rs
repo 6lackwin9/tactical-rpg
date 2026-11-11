@@ -1,6 +1,6 @@
 //! Portrait effects (PORTRAITFX1-E, docs/specs/PORTRAITFX1.md section 4): engine-only (Godot had no portrait
 //! effects), game-agnostic. A `PortraitFx` per drawn portrait composes the picture with its base life (breath, rim
-//! flicker, blink), overlays (glow, veins, eye glow, ash, smoke), states (desaturate, tint, fade, still) and reactions
+//! flicker, blink), overlays (glow, lines, point glow, particles rise, drift), states (desaturate, tint, fade, still) and reactions
 //! (flash, jolt) on the CPU at the drawn size, caches the result and draws it into the caller's rect.
 //!
 //! - Anchors come from the face sidecar (`aegis_core::assets::Face`, read by `Art::face`), scaled from its `size` to
@@ -24,13 +24,14 @@ use crate::art::Art;
 use crate::canvas::{Image, Rect, Rgba};
 use crate::fx::{hash01, Axis, Camera, Envelope, Shake, ShakeLimits};
 use crate::painter::Painter;
-use aegis_core::assets::{Face, IdleOverlay, IDLE_OVERLAYS};
+use aegis_core::assets::{canonical_primitive, Face, IdleOverlay, IDLE_OVERLAYS};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::f32::consts::PI;
 
-/// The cue vocabulary (spec 4.2), in this order.
-pub const EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"];
+/// The cue vocabulary (spec 4.2), in this order. FB-206 (2b): the overlay primitives' old names (`veins`, `eye_glow`,
+/// `ash`, `smoke`; `aegis_core::assets::PRIMITIVE_ALIASES`) still parse as these (`Cue::parse`).
+pub const EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"];
 /// The base life every portrait runs where its tier allows (not cues).
 pub const BASE_LIFE: [&str; 3] = ["breath", "rim", "blink"];
 /// The jolt presets.
@@ -53,22 +54,22 @@ pub const BLINK_MS: u64 = 130;
 pub const DOUBLE_BLINK_MS: u64 = 220;
 /// A flash fired with no `ms`.
 pub const FLASH_MS: u32 = 160;
-/// An eye-glow flare.
+/// A point-glow flare.
 pub const FLARE_MS: u64 = 140;
-/// Veins grow to full length over this long.
-pub const VEIN_GROW_MS: u64 = 1800;
-/// The anchors check's outline colours (eye boxes, glow circles, vein roots).
+/// Lines grow to full length over this long.
+pub const LINE_GROW_MS: u64 = 1800;
+/// The anchors check's outline colours (eye boxes, glow circles, line roots).
 pub const ANCHOR_EYE: Rgba = [34, 211, 238, 255];
 pub const ANCHOR_GLOW: Rgba = [244, 114, 182, 255];
-pub const ANCHOR_VEIN: Rgba = [250, 204, 21, 255];
+pub const ANCHOR_LINE: Rgba = [250, 204, 21, 255];
 
 /// The engine's default colour of an effect (plain numbers; a game passes its own through cues and sidecars).
 pub fn default_color(effect: &str) -> Rgba {
     match effect {
         "tint" => [0x06, 0xb6, 0xd4, 255],
-        "glow" | "veins" => [0x93, 0x33, 0xea, 255],
-        "eye_glow" => [0xe1, 0x1d, 0x48, 255],
-        "ash" | "smoke" => [0x6b, 0x72, 0x80, 255],
+        "glow" | "lines" => [0x93, 0x33, 0xea, 255],
+        "point_glow" => [0xe1, 0x1d, 0x48, 255],
+        "particles_rise" | "drift" => [0x6b, 0x72, 0x80, 255],
         _ => [255, 255, 255, 255],
     }
 }
@@ -126,14 +127,14 @@ impl Tier {
         }
     }
 
-    /// Whether the tier draws `effect` (base life or cue): reduced drops `breath`, `veins` and `smoke` (and halves the
-    /// ash and the jolt); minimal keeps `flash`, `desaturate`, `tint`, `fade`, `face` and the `eye_glow` core only.
+    /// Whether the tier draws `effect` (base life or cue): reduced drops `breath`, `lines` and `drift` (and halves the
+    /// particles and the jolt); minimal keeps `flash`, `desaturate`, `tint`, `fade`, `face` and the `point_glow` core only.
     pub fn allows(self, effect: &str) -> bool {
         let known = BASE_LIFE.contains(&effect) || EFFECTS.contains(&effect);
         match self {
             Tier::Full => known,
-            Tier::Reduced => known && !matches!(effect, "breath" | "veins" | "smoke"),
-            Tier::Minimal => matches!(effect, "flash" | "desaturate" | "tint" | "fade" | "face" | "eye_glow"),
+            Tier::Reduced => known && !matches!(effect, "breath" | "lines" | "drift"),
+            Tier::Minimal => matches!(effect, "flash" | "desaturate" | "tint" | "fade" | "face" | "point_glow"),
         }
     }
 
@@ -168,8 +169,10 @@ pub struct Cue {
 
 impl Cue {
     /// A cue of `effect` at intensity 1, ms 0, the default colour, priority 50, keyed by its effect; None for an
-    /// unknown effect, or a `jolt` whose `preset` is not in `PORTRAIT_JOLTS` (the caller drops it).
+    /// unknown effect, or a `jolt` whose `preset` is not in `PORTRAIT_JOLTS` (the caller drops it). An old primitive
+    /// name parses as its canonical one (FB-206 (2b): a cue row written before the rename).
     pub fn parse(effect: &str, preset: &str) -> Option<Cue> {
+        let effect = canonical_primitive(effect);
         let e = *EFFECTS.iter().find(|x| **x == effect)?;
         let preset = if e == "jolt" { *PORTRAIT_JOLTS.iter().find(|x| **x == preset)? } else { "" };
         Some(Cue { effect: e, intensity: 1.0, ms: 0, color: None, preset, expression: String::new(), priority: 50, key: e.to_string() })
@@ -178,10 +181,12 @@ impl Cue {
     /// A sidecar's idle overlay as a held cue (`idle.<effect>`); None when its effect is not one of
     /// `assets::IDLE_OVERLAYS` (a sidecar never holds a state such as `still` or `fade`, nor a reaction).
     pub fn idle(o: &IdleOverlay) -> Option<Cue> {
-        if !IDLE_OVERLAYS.contains(&o.effect.as_str()) {
+        // `parse_face` writes canonical names; a face built in code may still hold an old one
+        let effect = canonical_primitive(&o.effect);
+        if !IDLE_OVERLAYS.contains(&effect) {
             return None;
         }
-        Some(Cue::parse(&o.effect, "")?.with_intensity(o.intensity).with_color(o.color.map(rgb3)).with_key(&format!("idle.{}", o.effect)))
+        Some(Cue::parse(effect, "")?.with_intensity(o.intensity).with_color(o.color.map(rgb3)).with_key(&format!("idle.{effect}")))
     }
 
     pub fn with_intensity(mut self, i: f32) -> Self {
@@ -805,7 +810,7 @@ struct Key {
     anchors: bool,
     rim: Option<Rgba>,
     face: Option<Face>,
-    /// The time read when something moves continuously (breath, rim, pulses, ash, smoke).
+    /// The time read when something moves continuously (breath, rim, pulses, particles, drift).
     t: Option<u64>,
     /// The blink phase (0 open, 1 half, 2 closed).
     blink: u8,
@@ -881,7 +886,7 @@ pub struct PortraitFx {
 }
 
 /// The effects a composition draws from cues, in order.
-const DRAWN: [&str; 10] = ["still", "desaturate", "tint", "glow", "veins", "eye_glow", "ash", "smoke", "flash", "fade"];
+const DRAWN: [&str; 10] = ["still", "desaturate", "tint", "glow", "lines", "point_glow", "particles_rise", "drift", "flash", "fade"];
 
 impl PortraitFx {
     /// A portrait keyed by `key` (the character id, else the unit id, else the path): its seed is FNV-1a 64 of it.
@@ -1038,8 +1043,10 @@ impl PortraitFx {
     }
 
     /// The strength of `effect` at `now`: the strongest of its held and fired cues (never summed), with that cue's
-    /// colour (ties: the first key in sort order); None when nothing gives it a strength above 0.
+    /// colour (ties: the first key in sort order); None when nothing gives it a strength above 0. An old primitive name
+    /// reads as its canonical one.
     pub fn level(&self, effect: &str, now: u64) -> Option<Level> {
+        let effect = canonical_primitive(effect);
         let held = self.holds.iter().filter(|(_, h)| h.cue.effect == effect).map(|(k, h)| (h.cue.intensity * h.ease(now), k.as_str(), &h.cue, h.since));
         let fired = self.timed.iter().filter(|(c, s)| c.effect == effect && now >= *s && now < s + c.ms as u64).map(|(c, s)| {
             let u = (now - s) as f32 / c.ms.max(1) as f32;
@@ -1155,7 +1162,7 @@ impl PortraitFx {
         let now_q = tq(now);
         let mut levels: BTreeMap<&'static str, Level> = BTreeMap::new();
         for e in DRAWN {
-            if !tier.allows(e) || (reduce && matches!(e, "ash" | "smoke")) {
+            if !tier.allows(e) || (reduce && matches!(e, "particles_rise" | "drift")) {
                 continue;
             }
             if let Some(l) = self.level(e, now_q) {
@@ -1177,7 +1184,7 @@ impl PortraitFx {
         let pulsing = ex.as_ref().is_some_and(|(r, _)| r.mark.is_some() && r.mark_pulse_ms > 0 && tier != Tier::Minimal && !reduce);
         let tinted = ex.as_ref().is_some_and(|(r, _)| r.tint.is_some());
         let mo = self.motion_out(now_q, s, tier, reduce, still, tinted);
-        let animated = mo.moving || rim_live || moving("glow") || moving("veins") || (moving("eye_glow") && tier != Tier::Minimal) || moving("ash") || moving("smoke") || pulsing;
+        let animated = mo.moving || rim_live || moving("glow") || moving("lines") || (moving("point_glow") && tier != Tier::Minimal) || moving("particles_rise") || moving("drift") || pulsing;
         let t = if (animated || blinking) && !budget.take() { self.frozen.unwrap_or(now_q) } else { now_q };
         let mo = if t == now_q { mo } else { self.motion_out(t, s, tier, reduce, still, tinted) };
         let expr = ex.map(|(row, since)| {
@@ -1261,7 +1268,7 @@ impl PortraitFx {
             let on = match e {
                 "jolt" => !l.reduce && l.tier != Tier::Minimal && self.jolt.active(now),
                 "face" => !self.expression(now).is_empty(),
-                _ => l.tier.allows(e) && !(l.reduce && matches!(e, "ash" | "smoke")) && self.level(e, now).is_some(),
+                _ => l.tier.allows(e) && !(l.reduce && matches!(e, "particles_rise" | "drift")) && self.level(e, now).is_some(),
             };
             if on {
                 out.push(e);
@@ -1388,10 +1395,10 @@ pub fn flare_on(seed: u64, t: u64) -> bool {
     }
 }
 
-/// The ash specks' top-left corners at `t` for intensity `i`: min(32, round(18 i)) specks (halved, rounded up, at
+/// The `particles_rise` specks' top-left corners at `t` for intensity `i`: min(32, round(18 i)) specks (halved, rounded up, at
 /// reduced), speck k at h(600 + k) of the inner width plus a 2 % sway (sin(t / 900 + k)), starting h(650 + k) down
 /// and falling (0.03 + 0.03 h(700 + k)) x `s` px a second, wrapping inside the inner rect [lo, hi).
-pub fn ash_specks(seed: u64, t: u64, i: f32, tier: Tier, s: i32, lo: i32, hi: i32) -> Vec<(i32, i32)> {
+pub fn particle_specks(seed: u64, t: u64, i: f32, tier: Tier, s: i32, lo: i32, hi: i32) -> Vec<(i32, i32)> {
     let n = ((18.0 * i).round() as usize).min(32);
     let n = if tier == Tier::Reduced { n.div_ceil(2) } else { n };
     let w = (hi - lo).max(1) as f32;
@@ -1518,8 +1525,8 @@ fn line_px(a: (i32, i32), b: (i32, i32), out: &mut BTreeSet<(i32, i32)>) {
     }
 }
 
-/// A vein polyline: `segs` segments of `step` px from `from`, segment j turned 25 (2 h(k0 + j) - 1) deg from `deg`.
-fn vein_points(seed: u64, from: (f32, f32), deg: f32, step: f32, segs: usize, k0: u64) -> Vec<(f32, f32)> {
+/// A `lines` polyline: `segs` segments of `step` px from `from`, segment j turned 25 (2 h(k0 + j) - 1) deg from `deg`.
+fn line_points(seed: u64, from: (f32, f32), deg: f32, step: f32, segs: usize, k0: u64) -> Vec<(f32, f32)> {
     let mut pts = vec![from];
     for j in 0..segs {
         let a = (deg + 25.0 * (2.0 * hash01(seed, k0 + j as u64) - 1.0)).to_radians();
@@ -1648,7 +1655,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         }
     }
 
-    // 5. overlays: glow, veins, eye glow.
+    // 5. overlays: glow, lines, point glow.
     if let Some(l) = lv("glow") {
         let pulse = if reduce { 0.8 } else { 0.6 + 0.4 * cycle(t, 1800.0).sin() };
         let anchors: Vec<(f32, f32, f32)> = if face.glow.is_empty() {
@@ -1662,27 +1669,27 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
             }
         }
     }
-    if let Some(l) = lv("veins") {
+    if let Some(l) = lv("lines") {
         let pulse = if reduce { 0.8 } else { 0.6 + 0.4 * cycle(t, 2400.0).sin() };
-        let grown = if reduce { 1.0 } else { (t.saturating_sub(l.start) as f32 / VEIN_GROW_MS as f32).clamp(0.0, 1.0) };
+        let grown = if reduce { 1.0 } else { (t.saturating_sub(l.start) as f32 / LINE_GROW_MS as f32).clamp(0.0, 1.0) };
         let wide = tier == Tier::Full && s > 192;
         let step = (3.0 * k).max(1.0);
-        for (ri, v) in face.veins.iter().enumerate() {
+        for (ri, v) in face.lines.iter().enumerate() {
             let root = (bx(v[0] as f32 * k), by(v[1] as f32 * k));
             let len = v[3] as f32 * k;
             let segs = (v[3] as f32 / 3.0).ceil().max(1.0) as usize;
             let k0 = 400 + ri as u64 * 1000;
-            let trunk = vein_points(seed, root, v[2] as f32, step, segs, k0);
+            let trunk = line_points(seed, root, v[2] as f32, step, segs, k0);
             // Trunk first (the first 60 % of the growth), then the branches.
-            let mut lines: Vec<(Vec<(f32, f32)>, usize)> = vec![(trunk.clone(), (segs as f32 * (grown / 0.6).min(1.0)).round() as usize)];
+            let mut strokes: Vec<(Vec<(f32, f32)>, usize)> = vec![(trunk.clone(), (segs as f32 * (grown / 0.6).min(1.0)).round() as usize)];
             let bsegs = ((0.4 * v[3] as f32) / 3.0).ceil().max(1.0) as usize;
             let bshow = (bsegs as f32 * ((grown - 0.6) / 0.4).clamp(0.0, 1.0)).round() as usize;
             for (bi, (at, turn)) in [(0.4f32, 35.0f32), (0.7, -35.0)].into_iter().enumerate() {
                 let from = trunk[((segs as f32 * at).round() as usize).min(segs)];
-                lines.push((vein_points(seed, from, v[2] as f32 + turn, step, bsegs, k0 + 200 * (bi as u64 + 1)), bshow));
+                strokes.push((line_points(seed, from, v[2] as f32 + turn, step, bsegs, k0 + 200 * (bi as u64 + 1)), bshow));
             }
             let mut px: BTreeSet<(i32, i32)> = BTreeSet::new();
-            for (pts, shown) in lines {
+            for (pts, shown) in strokes {
                 for w in pts.windows(2).take(shown) {
                     line_px((w[0].0.round() as i32, w[0].1.round() as i32), (w[1].0.round() as i32, w[1].1.round() as i32), &mut px);
                 }
@@ -1702,7 +1709,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
             }
         }
     }
-    if let Some(l) = lv("eye_glow") {
+    if let Some(l) = lv("point_glow") {
         let flare = if !reduce && tier != Tier::Minimal && flare_on(seed, t) { 1.4 } else { 1.0 };
         for &(x0, y0, x1, y1) in &eyes {
             let (w, h) = ((x1 - x0) as f32, (y1 - y0) as f32);
@@ -1721,10 +1728,10 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         }
     }
 
-    // 6. ash, then smoke.
-    if let Some(l) = lv("ash") {
+    // 6. particles, then drift.
+    if let Some(l) = lv("particles_rise") {
         let sz = (s / 96).max(1);
-        for (x, y) in ash_specks(seed, t, l.i, tier, s, lo, hi) {
+        for (x, y) in particle_specks(seed, t, l.i, tier, s, lo, hi) {
             for yy in y..y + sz {
                 for xx in x..x + sz {
                     over(&mut img, xx, yy, alpha(l.color, 160.0 * l.i), lo, hi);
@@ -1732,7 +1739,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
             }
         }
     }
-    if let Some(l) = lv("smoke") {
+    if let Some(l) = lv("drift") {
         let w = h_in as f32;
         for kk in 0..4u64 {
             let r = (0.05 + 0.04 * hash01(seed, 800 + kk)) * s as f32;
@@ -1761,7 +1768,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         }
     }
 
-    // The anchors check: 1 px outlines of the eye boxes, glow circles and vein roots (inside the border too).
+    // The anchors check: 1 px outlines of the eye boxes, glow circles and line roots (inside the border too).
     if key.anchors {
         let ring = |img: &mut Image, x0: i32, y0: i32, x1: i32, y1: i32, c: Rgba| {
             for x in x0..x1 {
@@ -1776,9 +1783,9 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         for &(x0, y0, x1, y1) in &eyes {
             ring(&mut img, x0, y0, x1, y1, ANCHOR_EYE);
         }
-        for v in &face.veins {
+        for v in &face.lines {
             let (x, y) = ((v[0] as f32 * k).round() as i32 + mx, by(v[1] as f32 * k).round() as i32);
-            ring(&mut img, x - 1, y - 1, x + 2, y + 2, ANCHOR_VEIN);
+            ring(&mut img, x - 1, y - 1, x + 2, y + 2, ANCHOR_LINE);
         }
         for g in &face.glow {
             let (cx, cy, r) = (bx(g[0] as f32 * k), by(g[1] as f32 * k), g[2] as f32 * k);
@@ -1795,7 +1802,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
 // ---- The sample face ------------------------------------------------------------------------------------------------
 
 /// The engine's code-drawn sample face (spec 4.10): a 96 x 96 bust on a dark glow inside a 3 px border, two 5 x 3 eye
-/// boxes, an amber rim column on the head's right edge, one glow anchor on the chest and one vein root on the cheek;
+/// boxes, an amber rim column on the head's right edge, one glow anchor on the chest and one line root on the cheek;
 /// and its sidecar.
 pub fn sample() -> (Image, Face) {
     const N: i32 = 96;
@@ -1849,6 +1856,6 @@ pub fn sample() -> (Image, Face) {
             }
         }
     }
-    let face = Face { size: N, border: 3, eyes: vec![[38, 38, 5, 3], [53, 38, 5, 3]], blink: true, lid: None, glow: vec![[48, 80, 10]], veins: vec![[57, 47, 100, 14]], mouth: None, face: None, rim: Some([217, 119, 6]), idle: Vec::new() };
+    let face = Face { size: N, border: 3, eyes: vec![[38, 38, 5, 3], [53, 38, 5, 3]], blink: true, lid: None, glow: vec![[48, 80, 10]], lines: vec![[57, 47, 100, 14]], mouth: None, face: None, rim: Some([217, 119, 6]), idle: Vec::new() };
     (img, face)
 }

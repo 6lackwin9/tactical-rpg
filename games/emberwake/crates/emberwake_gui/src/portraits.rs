@@ -494,6 +494,8 @@ pub(crate) mod tests {
     #[test]
     fn the_kit_effect_names_are_the_engines() {
         assert_eq!(emberwake_data::PORTRAIT_EFFECTS, aegis_ui::portrait_fx::EFFECTS);
+        // FB-206 (2b): the kit's card key aliases are the engine's
+        assert_eq!(emberwake_data::CARD_KEY_ALIASES, aegis_ui::vignette::CARD_KEY_ALIASES);
         assert_eq!(emberwake_data::PORTRAIT_JOLTS, aegis_ui::portrait_fx::PORTRAIT_JOLTS);
         // PORTRAITFX1-EX: the marks and their boxes
         assert_eq!(emberwake_data::PORTRAIT_MARKS, aegis_ui::portrait_fx::MARKS);
@@ -607,7 +609,8 @@ pub(crate) mod tests {
         assert_eq!(portrait::holds(&rows, &look_of_member(&d, &gs, &m), "dialogue").len(), 1, "the member's carried HP matches below 100");
     }
 
-    /// G2: a portrait whose sidecar holds `eye_glow` draws it with no cue rows at all.
+    /// G2: a portrait whose sidecar holds `point_glow` draws it with no cue rows at all (here under its old name
+    /// `eye_glow`, as the shipped sidecars hold it: FB-206 (2b)).
     #[test]
     fn a_sidecar_idle_overlay_draws_without_cue_rows() {
         let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
@@ -624,7 +627,7 @@ pub(crate) mod tests {
             assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(10, 10, 96, 96), &PortraitOpts::default()));
         }
         let live = faces.get("ida").expect("kept").live(faces.now());
-        assert!(live.contains(&"eye_glow"), "{live:?}");
+        assert!(live.contains(&"point_glow"), "{live:?}");
     }
 
     /// G3: a character with no portrait file draws today's initial letter.

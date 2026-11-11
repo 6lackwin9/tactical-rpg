@@ -26,6 +26,9 @@ use rpgkit_rules::status;
 use rpgkit_rules::unit::BandApplied;
 use serde_json::Value;
 
+/// The trigger event whose `meter_set` skips the round's decay (PR5-26b).
+const ROUND_END: &str = "round_end";
+
 /// The holder key prefix of a meter's own lines (the log tags them `[Meter]`).
 pub const METER_KEY: &str = "meter:";
 
@@ -35,8 +38,9 @@ pub fn on(w: &World) -> bool {
 }
 
 /// One meter one unit holds this battle: its value, floor and max (U1.2-S5: the row's max, or the holder's `max_stat`
-/// value), whether a skill raised it this round (UM3), the band it is in and what that band's effects added (UM4), and
-/// the `once` rules that fired (UM5).
+/// value), whether a skill raised it this round (UM3), the band it is in and what that band's effects added (UM4), the
+/// `once` rules that fired (UM5), and (PR5-26b, FB-198 Q2 Option A) whether a `round_end` trigger's `meter_set` set it
+/// this round (its decay then skips that round).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gauge {
     pub unit: UnitId,
@@ -48,6 +52,7 @@ pub struct Gauge {
     pub band: Option<usize>,
     applied: BandApplied,
     fired: Vec<String>,
+    set_at_round_end: bool,
 }
 
 /// The battle's meters (empty in classic and without the rule), holders in unit order, each unit's meters in the
@@ -163,7 +168,7 @@ fn unit_start(w: &mut World, c: UnitId) {
             _ => start,
         };
         let value = start.clamp(def.min, max).max(floor);
-        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
+        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new(), set_at_round_end: false });
         for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
             if !w.units[c].meter_skills.contains(s) {
                 w.units[c].meter_skills.push(s.clone());
@@ -326,7 +331,8 @@ fn run_rules(res: &mut Resolver, w: &mut World, i: usize, def: &UnitMeterDef, ol
 
 /// 8.2 `meter` and UM5 `meter_set` (run by `trigger::run_effects` for `to`): a trigger's meter change on a meter `to`
 /// holds (`delta` within the row's `delta_max`, 10 by default), or a rule's set (`value`); the line is the holder's;
-/// with `rules` the move may cross rules.
+/// with `rules` the move may cross rules. PR5-26b (FB-198 Q2 Option A): a set by a `round_end` trigger row marks the
+/// gauge so this round's decay skips it (`round_end`; a `meter` delta, or a meter rule's set, marks nothing).
 #[allow(clippy::too_many_arguments)]
 pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e: &Obj, rules: bool, block: i32, fired: &mut Fired) {
     if !on(w) {
@@ -337,6 +343,9 @@ pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e:
     let Some(def) = w.cat.unit_meters.get(&meter).cloned() else { return };
     let cur = w.meters.gauges[i].value;
     let (target, what) = if value::string(e, "type", "") == rpgkit_data::METER_SET {
+        if h.row.on == ROUND_END {
+            w.meters.gauges[i].set_at_round_end = true;
+        }
         let v = value::int(e, "value", cur);
         (v, format!("{}'s {} set to {v}", w.units[to].name, def.name))
     } else {
@@ -389,13 +398,18 @@ pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) ->
 /// gives ("" = it can, or no gate): the meter below `min` (a meter the unit does not hold counts 0): `<meter name> 45
 /// < 50`. Read only under the rule unit_meters.
 pub fn gate_problem(w: &World, gate: Option<&rpgkit_data::MeterGate>, value_of: impl Fn(&str) -> Option<i32>) -> String {
-    let Some(g) = gate.filter(|_| on(w)) else { return String::new() };
+    gate_reason(w, gate, value_of).map_or_else(String::new, |r| r.to_string())
+}
+
+/// PR5-32: `gate_problem` in fields (None = it can, or no gate).
+pub fn gate_reason(w: &World, gate: Option<&rpgkit_data::MeterGate>, value_of: impl Fn(&str) -> Option<i32>) -> Option<crate::refusal::Reason> {
+    let g = gate.filter(|_| on(w))?;
     let have = value_of(&g.meter).unwrap_or(0);
     if have >= g.min {
-        return String::new();
+        return None;
     }
     let name = w.cat.unit_meters.get(&g.meter).map_or_else(|| g.meter.clone(), |m| m.name.clone());
-    format!("{name} {have} < {}", g.min)
+    Some(crate::refusal::Reason::MeterGate { meter: g.meter.clone(), name, have, min: g.min })
 }
 
 /// UM2 for the planners: `c`'s planned meter values after paying `deltas` (clamped to its floor..max; a meter it does
@@ -461,29 +475,39 @@ pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
     true
 }
 
-/// UM3: round end (rule unit_meters), after the ticks and ground hazards and before the `round_end` triggers: each
-/// active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this round,
-/// `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard); then the gained marks
-/// clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round skips every decay row of the channel meter (it counts as
-/// a gain, and its `if_guarded` rows skip too).
-pub fn round_end(res: &mut Resolver, w: &mut World) {
+/// UM3: whether each unit guarded this round (a Defend, or a held guard), read before the `round_end` triggers end the
+/// held guards (PR5-26: the decay runs after them and reads this).
+pub fn guarded_now(res: &Resolver, w: &World) -> Vec<bool> {
+    (0..w.units.len()).map(|c| res.scheduled.iter().any(|a| a.unit == c && !a.cancelled && a.command.is_defend()) || w.units[c].held_guard.is_some()).collect()
+}
+
+/// UM3: round end (rule unit_meters), after the ticks and ground hazards and (PR5-26, FB-191 Option A) after the
+/// `round_end` triggers, so a meter's own `round_end` row (a crisis `at_least` its max) reads the round's value before
+/// it decays: each active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this
+/// round, `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard, `guarded` read by
+/// `guarded_now` before the triggers); then the gained marks clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round
+/// skips every decay row of the channel meter (it counts as a gain, and its `if_guarded` rows skip too). PR5-26b (FB-198
+/// Q2 Option A, PK1_CORRUPTION 2.1): a gauge a `round_end` trigger's `meter_set` set this round (`from_effect`) skips
+/// every decay row too, so it ends the round at the set value (a crisis's Strain 50); the set marks clear here.
+pub fn round_end(res: &mut Resolver, w: &mut World, guarded: &[bool]) {
     if !on(w) {
         return;
     }
     let cat = w.cat.clone();
     let block = w.total_blocks;
     for i in 0..w.meters.gauges.len() {
-        let (c, meter, gained) = {
+        let (c, meter, gained, set_now) = {
             let g = &w.meters.gauges[i];
-            (g.unit, g.meter.clone(), g.gained)
+            (g.unit, g.meter.clone(), g.gained, g.set_at_round_end)
         };
         w.meters.gauges[i].gained = false;
+        w.meters.gauges[i].set_at_round_end = false;
         let channel_round = crate::channel::is_channel(w, c) && meter == crate::channel::meter_id(w);
         let Some(def) = cat.unit_meters.get(&meter) else { continue };
-        if def.decay.is_empty() || !w.units[c].is_active() || channel_round {
+        if def.decay.is_empty() || !w.units[c].is_active() || channel_round || set_now {
             continue;
         }
-        let guarded = res.scheduled.iter().any(|a| a.unit == c && !a.cancelled && a.command.is_defend()) || w.units[c].held_guard.is_some();
+        let guarded = guarded.get(c).copied().unwrap_or(false);
         let h = holder(c, &def.name, &def.id);
         let mut fired = Fired::new(c, "meter", None, &def.name);
         for d in &def.decay {

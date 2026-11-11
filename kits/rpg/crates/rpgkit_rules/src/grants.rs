@@ -1,6 +1,7 @@
 //! U4.2-S1 (docs/sessions/U4_PASSIVES.md, FB-25 to FB-27, FB-30; engine-only, no Godot original): the typed grant view
 //! of the passive effect grammar. A passive row's, a worn item's or a meter band's raw `effects` read once into five
-//! grant kinds: `modifier` (a target with its combine rule), `proficiency`, `grant_skill`, `grant_pool` and `trigger`.
+//! grant kinds: `modifier` (a target with its combine rule), `proficiency`, `grant_skill`, `grant_pool` and `trigger`
+//! (PK2-S1 adds the member grants `forbid_hands` and `pierce_melee`).
 //! The rows are not rewritten: this is a read-time view, and today's unit accumulators stay the evaluators
 //! (`Unit::apply_grants`), so every number is unchanged. One raw effect gives at most two grants, in row order (a
 //! `forced_move` row gives its immunity, then its tiles); an unknown type gives none.
@@ -147,22 +148,31 @@ pub enum Grant {
     /// `levels` more proficiency in gear family `gear`.
     Proficiency { gear: String, levels: i32 },
     GrantSkill(SkillGrant),
-    /// FB-26 (`meter`): the unit meter the battle spawns, its start (-1 = the row's) and floor (None = the row's min).
-    GrantPool { meter: String, start: i32, floor: Option<i32> },
+    /// FB-26 (`meter`): the unit meter the battle spawns, its start (-1 = the row's) and floor (None = the row's min);
+    /// PK2-S2: `floors`, the floor by the holder's graft count (`[1 graft, 2 grafts, ...]`; empty = none), read over
+    /// `floor` (`Unit::table_floor`).
+    GrantPool { meter: String, start: i32, floor: Option<i32>, floors: Vec<i32> },
     /// A reactive hook; its order among the unit's triggers is its limit key (`source#index`).
     Trigger(TriggerRow),
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): a member grant: equipping refuses items held in `hands` hands
+    /// (`rpgkit_data::FORBID_HANDS`; 2 = two-handed items).
+    ForbidHands { hands: i32 },
+    /// PK2-S1: a member grant: melee and bare-handed hits pierce armour (`rpgkit_data::PIERCE_MELEE`, rule pierce).
+    PierceMelee,
 }
 
 impl Grant {
     /// Whether worn gear applies it: no unlock, foresight, stagger_taken or meter from an item (gear effects are rebuilt
     /// on every sync; RULESET1 P6, HOOKS1 UM1); U3.2-S4: no proficiency either (training is the class's and the drills';
-    /// a worn item's `skill` and `stat` are rebuilt with the rest).
+    /// a worn item's `skill` and `stat` are rebuilt with the rest); PK2-S1: no member grant.
     pub fn gear_ok(&self) -> bool {
         !matches!(
             self,
             Grant::GrantSkill(SkillGrant::Unlock { .. })
                 | Grant::GrantPool { .. }
                 | Grant::Proficiency { .. }
+                | Grant::ForbidHands { .. }
+                | Grant::PierceMelee
                 | Grant::Modifier(Modifier { target: Target::Foresight | Target::StaggerTaken { .. }, .. })
         )
     }
@@ -252,10 +262,13 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         "trigger" => vec![Grant::Trigger(TriggerRow::from_obj(e))],
         "meter" => {
             let floor = e.get("floor").filter(|v| v.is_number()).map(|v| to_int(v, 0));
-            vec![Grant::GrantPool { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor }]
+            let floors = value::array(e, rpgkit_data::METER_FLOORS).iter().map(|v| to_int(v, 0)).collect();
+            vec![Grant::GrantPool { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor, floors }]
         }
         "crit" => vec![modifier(Target::Crit, value::float(e, "value", 0.0))],
         rpgkit_data::HEAL_TAKEN => vec![modifier(Target::HealTaken, int("value", 0))],
+        rpgkit_data::FORBID_HANDS => vec![Grant::ForbidHands { hands: value::int(e, "hands", 2) }],
+        rpgkit_data::PIERCE_MELEE => vec![Grant::PierceMelee],
         _ => Vec::new(),
     }
 }

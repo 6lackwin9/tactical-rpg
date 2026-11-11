@@ -15,5 +15,23 @@
 	"start_worlds": [
 		"ashlands"
 	],
-	"references": []
+	"references": [],
+	"music_keys": [
+		"menu",
+		"field",
+		"travel",
+		"town",
+		"shop",
+		"danger",
+		"combat",
+		"encounter",
+		"boss",
+		"story_opening",
+		"prologue_tension",
+		"story_escape",
+		"story_goodbye"
+	],
+	"durability": {
+		"from_act": 2
+	}
 }

@@ -388,7 +388,7 @@ impl HookMarks {
             }
         }
         out.arena = emberwake_battle::intent::arena_tells(w);
-        out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(arena_effect_text).unwrap_or_default()).collect();
+        out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(|h| arena_effect_text(w, h)).unwrap_or_default()).collect();
         out
     }
 
@@ -440,8 +440,16 @@ fn blocks_text(blocks: &[i32]) -> String {
     }
 }
 
-/// An arena hazard's effect in words (AH2: damage through guard, not armour; the status roll; stagger; a push).
-fn arena_effect_text(h: &emberwake_battle::arena::Hazard) -> String {
+/// PR5-26 (audit B8; PK1-S1 3.6): a hazard's unit meter change in words, "+15 Strain" (the meter row's name; its id
+/// when the row is gone), for each holder of that meter it acts on.
+pub(super) fn hazard_meter_text(w: &World, d: &emberwake_data::MeterDelta) -> String {
+    let name = w.cat.unit_meters.get(&d.meter).map(|m| m.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| d.meter.clone());
+    format!("{:+} {name}", d.delta)
+}
+
+/// An arena hazard's effect in words (AH2: damage through guard, not armour; the status roll; stagger; a push; PR5-26:
+/// its meter change).
+fn arena_effect_text(w: &World, h: &emberwake_battle::arena::Hazard) -> String {
     let e = &h.effect;
     let mut bits: Vec<String> = Vec::new();
     if e.damage > 0 {
@@ -465,6 +473,9 @@ fn arena_effect_text(h: &emberwake_battle::arena::Hazard) -> String {
         };
         bits.push(format!("pushes {dir} {} tile{}", p.tiles, if p.tiles == 1 { "" } else { "s" }));
     }
+    if let Some(d) = &e.meter {
+        bits.push(hazard_meter_text(w, d));
+    }
     bits.join(", ")
 }
 
@@ -483,6 +494,10 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
     }
     if !d.status.is_empty() {
         does.push(format!("{} ({}% chance)", emberwake_rules::status::display_name(&d.status), d.potency));
+    }
+    // PR5-26 (audit B8): the meter change on a holder
+    if let Some(m) = &d.meter {
+        does.push(hazard_meter_text(w, m));
     }
     if !does.is_empty() {
         let when = match (d.trap, d.on.as_str()) {

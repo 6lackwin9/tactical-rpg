@@ -30,10 +30,22 @@ pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each
 pub const RULE_NOTES_USAGE: &str = "       with ruleset= or rules=: the picked ruleset's notes (aegis rules: requires, conflicts, untested sets, ranges) print after ARGS as RULES error: / RULES warning: lines; the run still plays";
 /// PR4-1 (R3-STAGE-SIM): the help of the `stage=` key, printed apart from `usage` (`sim help`), which `sim_golden` holds.
 pub const STAGE_USAGE: &str = "       stage=0.. (0): world encounters (party, sweep, campaign) at that world stage: enemies grow by their growth_per_stage as in the campaign";
+/// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the `dulled=` values (the default dulled penalty alone; it also locks a dulled
+/// main hand's techniques, `rpgkit_battle::world::World::dulled_lock`) and the key's help, printed apart from `usage`
+/// (`sim help`), which `sim_golden` holds.
+pub const DULLED_MODES: [&str; 2] = ["power", "lock"];
+pub const DULLED_USAGE: &str = "       dulled=power|lock (power): a dulled weapon (0 durability, rule durability) loses weapon power; lock also locks its techniques";
+/// PK2-S5b: the help of the `durability=` key (the allies' seeded weapon durability), printed apart from `usage`.
+pub const DURABILITY_USAGE: &str = "       durability=0-999 (none): with the rule durability (ruleset= or rules=+durability) each ally's weapons start at that durability, so they wear and dull";
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
-pub const TUNE_PREFIXES: [&str; 4] = ["stagger_", "flank_", "break_chance_", "rest_"];
+/// PR5-26 (FB-191 (f)): `channel_` (the Channel rule's `channel_power` and `channel_ai_edge`).
+pub const TUNE_PREFIXES: [&str; 5] = ["stagger_", "flank_", "break_chance_", "rest_", "channel_"];
+/// PR5-26 (FB-191 (f)): the `tune=` keys of the ruleset's `channel_cost` (a list in the schema): the cost by AP 1, 2 and
+/// 3+, each a whole number 0-`CHANNEL_COST_MAX`.
+pub const CHANNEL_COST_KEYS: [&str; 3] = ["channel_cost_1", "channel_cost_2", "channel_cost_3"];
+pub const CHANNEL_COST_MAX: f64 = 100.0;
 /// CAMPAIGN1-SIM: the keys only the deadlines mode reads (any other mode refuses them).
 pub const DEADLINE_KEYS: [&str; 1] = ["losses"];
 /// CAMPAIGN1-SIM: `losses=` (lost tries per mission in the worst case): default and range.
@@ -95,6 +107,13 @@ pub struct SimArgs {
     /// R3-STAGE-SIM (PR4-1): the world stage (`world_stage`) world encounters are fought at: enemies grow by their
     /// unit's `growth_per_stage` as in the campaign (`rpgkit_world::battle::stage_level`). 0 = authored levels.
     pub stage: i32,
+    /// PK2-S5b: `dulled=lock`: a dulled main hand also locks its techniques in every sim battle (`World::dulled_lock`);
+    /// false (`power`, the default) keeps the dulled penalty alone.
+    pub dulled_lock: bool,
+    /// PK2-S5b: `durability=N`: each ally's wielded weapons (main hand, off-hand weapon) start every sim battle tracking
+    /// N durability (`rpgkit_battle::wear::seed`; only under a ruleset with the rule `durability`). None = no wear (catalog
+    /// allies track none).
+    pub durability: Option<i32>,
     pub elite_class: String,
     pub boss_class: String,
     pub roles: Vec<String>,
@@ -175,6 +194,8 @@ impl Default for SimArgs {
             elevel: 0,
             elevel_set: false,
             stage: 0,
+            dulled_lock: false,
+            durability: None,
             elite_class: String::new(),
             boss_class: String::new(),
             roles: strings(&ROLES),
@@ -366,7 +387,8 @@ impl SimArgs {
             }
             a.seed_count = int(s) as usize;
             a.seeds_set = true;
-        } else if a.mode == "party" || a.mode == "sweep" {
+        } else if (a.mode == "party" || a.mode == "sweep") && !a.seeds_set {
+            // PR5-26 (FB-193 (a)): `seeds=N` holds in these modes too; only without it the party default
             a.seed_count = PARTY_SEEDS;
         } else if a.mode == "feel" && !a.seeds_set {
             a.seed_count = crate::feel::FEEL_SEEDS;
@@ -715,6 +737,19 @@ impl SimArgs {
                     _ => return Err(format!("stage must be a number >= 0 (got '{value}')")),
                 }
             }
+            "dulled" => {
+                if !DULLED_MODES.contains(&value) {
+                    return Err(format!("dulled must be power or lock (got '{value}')"));
+                }
+                self.dulled_lock = value == DULLED_MODES[1];
+            }
+            "durability" => {
+                let max = rpgkit_data::DURABILITY_MAX;
+                match value.parse::<i64>() {
+                    Ok(n) if (0..=max).contains(&n) => self.durability = Some(n as i32),
+                    _ => return Err(format!("durability must be a number 0-{max} (got '{value}')")),
+                }
+            }
             "elite" | "boss" => {
                 if !ids.contains(&value) {
                     return Err(format!("{key} must be a class id of {classes} (got '{value}')"));
@@ -941,6 +976,12 @@ impl SimArgs {
         if self.stage > 0 {
             t += &format!(", stage {}", self.stage);
         }
+        if let Some(n) = self.durability {
+            t += &format!(", durability {n}");
+        }
+        if self.dulled_lock {
+            t += ", dulled lock";
+        }
         t
     }
 }
@@ -955,11 +996,15 @@ pub fn feel_roster(d: &Data, id: &str) -> Vec<String> {
 
 /// RULESET1-G2: the `tune=` keys: the kit schema's numeric ruleset fields with a TUNE_PREFIXES prefix.
 pub fn tune_keys() -> Vec<String> {
-    tune_fields().map(|f| aegis_core::json::s(f, "key")).collect()
+    tune_fields().map(|f| aegis_core::json::s(f, "key")).chain(CHANNEL_COST_KEYS.iter().map(|k| k.to_string())).collect()
 }
 
-/// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one).
+/// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one). PR5-26: a `channel_cost` key's
+/// range is 0..`CHANNEL_COST_MAX` (the row check's).
 pub fn tune_range(key: &str) -> Option<(f64, f64)> {
+    if CHANNEL_COST_KEYS.contains(&key) {
+        return Some((0.0, CHANNEL_COST_MAX));
+    }
     let f = tune_fields().find(|f| aegis_core::json::s(f, "key") == key)?;
     Some((f.get("min")?.as_f64()?, f.get("max")?.as_f64()?))
 }

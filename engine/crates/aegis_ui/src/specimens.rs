@@ -144,7 +144,10 @@ pub const THEME_TEXT_SIZES: [f32; 4] = [0.85, 1.0, 1.15, 1.3];
 /// The Portraits page: the sizes on offer (logical px), the toggles, the reactions and the stage (the largest size
 /// plus the jolt ceiling and a margin on every side).
 pub const PORTRAIT_SIZES: [i32; 6] = [96, 64, 48, 32, 24, 16];
-pub const PORTRAIT_OVERLAYS: [&str; 5] = ["glow", "veins", "eye_glow", "ash", "smoke"];
+pub const PORTRAIT_OVERLAYS: [&str; 5] = ["glow", "lines", "point_glow", "particles_rise", "drift"];
+/// The overlay toggles' labels (`PORTRAIT_OVERLAYS` order): FB-206 (2b) renamed the cue names only; the page keeps the
+/// words it always showed, so it draws byte for byte as before (the theme hashes, `tests/fixtures/theme`).
+pub const PORTRAIT_OVERLAY_LABELS: [&str; 5] = ["Glow", "Veins", "Eye glow", "Ash", "Smoke"];
 pub const PORTRAIT_STATES: [&str; 4] = ["desaturate", "tint", "fade", "still"];
 pub const PORTRAIT_REACTIONS: [&str; 3] = ["flash", "jolt.hit", "jolt.crit"];
 pub const PORTRAIT_STAGE: i32 = 96 + 2 * 6;
@@ -927,6 +930,7 @@ impl Specimens {
             x,
             fy + 4,
             col_w,
+            // the labels' words (`PORTRAIT_OVERLAY_LABELS`), kept so the page draws as before FB-206 (2b)
             "Pure functions of the clock and a seed from the key, composed at the drawn size and cached. From 96 device px everything draws; 48-95 drops breath, veins and smoke; below 48 only flashes, colour states, fade and the eye glow's core. Reduce motion stops breath, jolts, flicker and drift.",
             SMALL,
             TEXT,
@@ -944,7 +948,7 @@ impl Specimens {
             yy = head(ui, yy, title);
             let mut bx = x2;
             for name in names.iter().copied() {
-                let label = cap(&name.replace('_', " "));
+                let label = portrait_label(name);
                 let w = 12 + ui.p.text_w(&label, BODY).ceil() as i32 + 4;
                 if bx + w > right {
                     bx = x2;
@@ -1727,6 +1731,15 @@ fn sample_icon(n: i32) -> Image {
         }
     }
     Image { w: n, h: n, px }
+}
+
+/// A Portraits page toggle's label: an overlay's `PORTRAIT_OVERLAY_LABELS` entry, else `name` with `_` as spaces and
+/// its first letter in upper case.
+pub fn portrait_label(name: &str) -> String {
+    match PORTRAIT_OVERLAYS.iter().position(|o| *o == name) {
+        Some(i) => PORTRAIT_OVERLAY_LABELS[i].to_string(),
+        None => cap(&name.replace('_', " ")),
+    }
 }
 
 /// `kind` with its first letter in upper case.

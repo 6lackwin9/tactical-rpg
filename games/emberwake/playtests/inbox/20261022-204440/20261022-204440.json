@@ -69,7 +69,7 @@
       "worlds/tidewrack/world.json": "99cc74461090"
     }
   },
-  "battles": [
+  "sessions": [
     {
       "index": 0,
       "requests": [

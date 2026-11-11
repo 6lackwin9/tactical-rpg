@@ -1,17 +1,12 @@
 # World geography and the hub: the three tiers of Cinderreach
 
-Status: canon for the city layout, the Sluice Undercroft and Act 1 (2026-10-25, consistent with
-[CANON.md](../CANON.md)); the forward bases (sections 2.2-2.3) and the Act 2-3 hazards are `proposal`. Related:
-[Sunk Ward map](sunk_ward_campaign_map.md), [High Bastion map](upper_bastion_campaign_map.md) (proposal),
-[Mantle Fissure map](mantle_fissure_campaign_map.md) (proposal),
-[safehouse economy](../systems/safehouse_economy_and_triage.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`,
-`[game code]`.
+Status: `[LOCKED]` 3-tier vertical strata on `sunk_ward` (`campaign.act` `1..3`) & persistent Sluice Undercroft facility loops (`Slab`, `Hearth`, `Basin`, `Hollows/Crypts`); `[PROVISIONAL]` Act 2-3 regional hazards (`CL-05`) & story-only forward bases; **`[PLACEHOLDER]` place/facility names & aesthetic palettes** ([CANON.md](../CANON.md) Section 2.2 wins on conflict). Related: [Sunk Ward](sunk_ward_campaign_map.md), [High Bastion](upper_bastion_campaign_map.md), [Mantle Fissure](mantle_fissure_campaign_map.md), [safehouse economy](../systems/safehouse_economy_and_triage.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
 ## 1. The three tiers
 
-Cinderreach is built into the caldera of an extinct volcano whose depths hold the sleeping titan, the Low Sleep. Each
-tier is one act and one world graph `[data]` (worlds in `games/emberwake/data/worlds/`, the first `sunk_ward`; the
-Ashlands stays the kit's sample and parity world).
+Cinderreach is built into the caldera of an extinct volcano whose depths hold the sleeping titan, the Low Sleep. All
+three tiers live as act-gated region graphs (`campaign.act` 1-3) inside the single campaign world
+`games/emberwake/data/worlds/sunk_ward/` `[data]` (`ashlands` stays the classic testbed and parity world).
 
 ```text
 ==========================================================================================

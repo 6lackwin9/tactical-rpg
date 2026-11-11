@@ -10,7 +10,7 @@ use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{GRID_H, GRID_W};
 use rpgkit_data::{
     ALLY_EVENTS, ARENA_DIRS, ARENA_EFFECT_KEYS, ARENA_HAZARD_KEYS, CLASS_OVERLAY_KEYS, DECK_EFFECT, EFFECT_TO, FORCED_FROM, FORCED_IMMUNE, FORCED_KINDS, FORCED_MOVE_KEYS, FORCED_WHEN, GRANT_UNTIL,
-    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
+    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RATING_SET, RATING_SET_RANGES, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
     TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
 };
 use rpgkit_rules::ruleset;
@@ -62,6 +62,8 @@ pub const CHANNEL_POWER: (f64, f64) = (1.0, 3.0);
 pub const HP_COST_PCT: (i64, i64) = (0, 99);
 /// HEALPCT1 (FB-177): a SUPPORT skill's `heal_pct` (0 = none; 100 = the target's full max HP).
 pub const HEAL_PCT: (i64, i64) = (0, 100);
+/// PK2-S1: a skill's `uses_per_battle` (0 = no limit).
+pub const USES_PER_BATTLE: (i64, i64) = (0, 9);
 /// AH1: arena hazards per encounter, the name and line lengths, the effect numbers.
 pub const ARENA_MAX: usize = 4;
 pub const ARENA_NAME_MAX: usize = 24;
@@ -294,6 +296,26 @@ pub fn skill_triggers_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
     out
 }
 
+/// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` ({} = none): `{mark}`, a mark id of 1-24 characters.
+pub fn skill_unmark_errors(raw: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if raw.is_null() || raw.as_object().is_some_and(|o| o.is_empty()) {
+        return out;
+    }
+    let Some(o) = raw.as_object() else {
+        out.push("Unmark must be an object {\"mark\": id} ({} = none).".into());
+        return out;
+    };
+    for k in o.keys().filter(|k| !rpgkit_data::UNMARK_KEYS.contains(&k.as_str())) {
+        out.push(format!("Unmark: unknown key '{k}' (keys: {}).", rpgkit_data::UNMARK_KEYS.join(", ")));
+    }
+    let id = json::s(o, "mark");
+    if id.is_empty() || id.chars().count() > MARK_ID_MAX || !aegis_content::schema::is_id(&id) {
+        out.push(format!("Unmark: mark needs an id of 1-{MARK_ID_MAX} characters (a-z, 0-9, _, a letter first)."));
+    }
+    out
+}
+
 /// RD1: a skill's `riders` (up to 3 rows of conditions and effects; no event, no redirect).
 pub fn riders_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
     let mut out = Vec::new();
@@ -336,6 +358,14 @@ pub fn skill_errors(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     let heal_pct = json::i(e, "heal_pct", 0);
     if has("heal_pct") && !(HEAL_PCT.0..=HEAL_PCT.1).contains(&heal_pct) {
         out.push(format!("Heal % must be {}-{} (is {heal_pct}).", HEAL_PCT.0, HEAL_PCT.1));
+    }
+    // PK2-S1: the per-battle use limit and the skill form of `unmark` (PK1 3.7)
+    let uses = json::i(e, "uses_per_battle", 0);
+    if has("uses_per_battle") && !(USES_PER_BATTLE.0..=USES_PER_BATTLE.1).contains(&uses) {
+        out.push(format!("Uses per battle must be {}-{} (is {uses}; 0 = no limit).", USES_PER_BATTLE.0, USES_PER_BATTLE.1));
+    }
+    if has("unmark") {
+        out.extend(skill_unmark_errors(json::get(e, "unmark")));
     }
     let keys = ["forced_move", "hazard", "triggers", "riders", "meters", "requires_meter", "channel"];
     if keys.iter().all(|k| !has(k) || empty(k)) {
@@ -382,10 +412,10 @@ pub fn meter_gate_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
     out
 }
 
-/// PK1-S2a (PK1 4.1, 4.2): a skill's `channel` block ({} = the default: a derived marrow version when it has a single
+/// PK1-S2a (PK1 4.1, 4.2): a skill's `channel` block ({} = the default: a derived channeled version when it has a single
 /// intent): its keys, `none` and `only` (true or false, not both; `none` with nothing else), `cost` a whole 0-100,
 /// `power` 1.0-3.0, `effects` 1-4 trigger effects (as a rider's: no event); any key but `none` needs a single-intent
-/// skill (IR21: a dual-intent skill has no marrow version, and a marrow-only one is authored with one intent).
+/// skill (IR21: a dual-intent skill has no channeled version, and a channeled-only one is authored with one intent).
 pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
     let mut out = Vec::new();
     let Some(o) = set_object(raw, "Channel", &mut out) else { return out };
@@ -398,7 +428,7 @@ pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
         out.push(format!("{at}: none and only exclude each other."));
     }
     if none && ["cost", "power", "effects"].iter().any(|k| o.contains_key(*k)) {
-        out.push(format!("{at}: none (no marrow version) takes no cost, power or effects."));
+        out.push(format!("{at}: none (no channeled version) takes no cost, power or effects."));
     }
     whole_key(o, "cost", CHANNEL_COST, false, at, &mut out);
     if o.get("power").is_some_and(|v| !number_in(v, CHANNEL_POWER)) {
@@ -410,7 +440,7 @@ pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
     let input = rpgkit_rules::intent::IntentInput::of_row(e);
     if !none && !rpgkit_rules::intent::single_intent(&input) {
         let rows = rpgkit_rules::intent::derive(&input).join(" and ");
-        out.push(format!("{at}: only a single-intent skill has a marrow version or is marrow-only (this one derives {rows})."));
+        out.push(format!("{at}: only a single-intent skill has a channeled version or is channeled-only (this one derives {rows})."));
     }
     out
 }
@@ -441,6 +471,12 @@ pub fn placement_warnings(e: &Dict) -> Vec<String> {
 /// One trigger row (a skill's, or a passive or item `trigger` effect with `extra` keys such as `type`), answering one
 /// of `events`.
 pub fn trigger_row_errors(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra: &[&str]) -> Vec<String> {
+    trigger_row_errors_with(o, ctx, at, events, extra, false)
+}
+
+/// PK1-KITFIX (a): a trigger row as `trigger_row_errors`; with `meter_set` (a unit meter row's `triggers`, as its
+/// `rules`) its effects may also hold `meter_set`.
+pub fn trigger_row_errors_with(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra: &[&str], meter_set: bool) -> Vec<String> {
     let mut out = Vec::new();
     let allowed: Vec<&str> = TRIGGER_KEYS.iter().chain(extra.iter()).copied().collect();
     unknown_keys(o, &allowed, at, &mut out);
@@ -452,7 +488,7 @@ pub fn trigger_row_errors(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra:
     }
     let event = events.contains(&on.as_str()).then_some(on.as_str());
     out.extend(when_errors(json::get(o, "when"), ctx, at, Some(event.unwrap_or(""))));
-    out.extend(effects_errors(json::get(o, "effects"), ctx, at, Some(event.unwrap_or("")), false));
+    out.extend(effects_errors(json::get(o, "effects"), ctx, at, Some(event.unwrap_or("")), meter_set));
     enum_key(o, "limit", &TRIGGER_LIMITS, false, at, &mut out);
     out
 }
@@ -630,7 +666,11 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
                 magnitude_key(o, &st, at, &mut out);
             }
             whole_key(o, "potency", POTENCY, true, at, &mut out);
-            whole_key(o, "rounds", GRANT_ROUNDS, false, at, &mut out);
+            // PK1-KITFIX (b): -1 the rest of the battle, as a grant's
+            let rounds = o.get("rounds").cloned().unwrap_or(json::int(1));
+            if !whole_in(&rounds, (-1, -1)) && !whole_in(&rounds, GRANT_ROUNDS) {
+                out.push(format!("{at}: rounds must be -1 (the battle) or {}-{}.", GRANT_ROUNDS.0, GRANT_ROUNDS.1));
+            }
         }
         "guard" => {
             if !o.get("mitigation").is_some_and(|m| number_in(m, MITIGATION)) {
@@ -698,6 +738,21 @@ fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec
                 out.push(format!("{at}: mark needs an id of 1-{MARK_ID_MAX} characters (a-z, 0-9, _, a letter first)."));
             }
             whole_key(o, "value", MARK_VALUE, false, at, &mut out);
+        }
+        // PK1-KITFIX (b): a rating held at a value within its range, for 1-5 rounds or -1 the rest of the battle
+        RATING_SET => {
+            let rating = json::s(o, "rating");
+            match RATING_SET_RANGES.iter().find(|(r, _)| *r == rating) {
+                None => {
+                    let names: Vec<&str> = RATING_SET_RANGES.iter().map(|(r, _)| *r).collect();
+                    out.push(format!("{at}: rating_set needs a rating ({}).", names.join(", ")));
+                }
+                Some((_, range)) => whole_key(o, "value", *range, true, at, &mut out),
+            }
+            let rounds = o.get("rounds").cloned().unwrap_or(json::int(1));
+            if !whole_in(&rounds, (-1, -1)) && !whole_in(&rounds, GRANT_ROUNDS) {
+                out.push(format!("{at}: rounds must be -1 (the battle) or {}-{}.", GRANT_ROUNDS.0, GRANT_ROUNDS.1));
+            }
         }
         "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
         ROLL_TABLE => out.extend(roll_table_errors(o, ctx, at, meter_set)),
@@ -779,7 +834,7 @@ pub fn passive_effect_errors(e: &Dict, t: &str, ctx: &Ctx, at: &str) -> Vec<Stri
         }
         "trigger" => out.extend(trigger_row_errors(e, ctx, at, &TRIGGER_EVENTS, &["type"])),
         "meter" => {
-            unknown_keys(e, &["type", "meter", "start", "floor"], at, &mut out);
+            unknown_keys(e, &["type", "meter", "start", "floor", rpgkit_data::METER_FLOORS], at, &mut out);
             let meter = json::s(e, "meter");
             match ctx.meter(&meter) {
                 None => out.push(format!("{at}: unknown unit meter '{meter}'.")),
@@ -788,12 +843,33 @@ pub fn passive_effect_errors(e: &Dict, t: &str, ctx: &Ctx, at: &str) -> Vec<Stri
                         out.push(format!("{at}: start must be -1 (the meter's) or {}-{}.", range.0, range.1));
                     }
                     whole_key(e, "floor", range, false, at, &mut out);
+                    out.extend(floors_errors(e.get(rpgkit_data::METER_FLOORS), range, at));
                 }
             }
         }
         _ => {}
     }
     out
+}
+
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a meter effect's optional `floors`, the floor by the holder's graft count
+/// (`[1 graft, 2 grafts, ...]`, the last holding above): 1-`METER_FLOORS_MAX` whole numbers in the meter's range, never
+/// falling.
+fn floors_errors(raw: Option<&Value>, range: (i64, i64), at: &str) -> Vec<String> {
+    let Some(raw) = raw else { return Vec::new() };
+    let max = rpgkit_data::METER_FLOORS_MAX;
+    let key = rpgkit_data::METER_FLOORS;
+    let list = match raw.as_array() {
+        Some(a) if !a.is_empty() && a.len() <= max => a,
+        _ => return vec![format!("{at}: {key} is a list of 1-{max} floors (by graft count: 1, 2, ...).")],
+    };
+    if !list.iter().all(|f| whole_in(f, range)) {
+        return vec![format!("{at}: each of {key} must be a whole number {}-{}.", range.0, range.1)];
+    }
+    if list.windows(2).any(|w| json::to_int(&w[1]) < json::to_int(&w[0])) {
+        return vec![format!("{at}: {key} never falls as the graft count grows.")];
+    }
+    Vec::new()
 }
 
 // ---- Units and phase ai (1.2) ------------------------------------------------------------------------------------

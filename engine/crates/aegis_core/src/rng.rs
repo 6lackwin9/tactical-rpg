@@ -1,4 +1,4 @@
-//! Godot 4's RandomNumberGenerator (core/math/random_pcg.h, thirdparty/misc/pcg.c), bit for bit, so a seeded battle
+//! Godot 4's RandomNumberGenerator (core/math/random_pcg.h, thirdparty/misc/pcg.c), bit for bit, so a seeded session
 //! replays the same rolls as the Godot reference. Parity is judged statistically; exact rolls make the first
 //! divergence between the two engines easy to find.
 

@@ -4,7 +4,7 @@
 use crate::data::Data;
 use crate::state::{GameState, PartyState, UnitState};
 use aegis_core::json::{self, int, Dict};
-use rpgkit_data::{UnitDef, STATS};
+use rpgkit_data::{UnitDef, NO_ITEM, STATS};
 use rpgkit_rules::gear::Slot;
 use rpgkit_rules::stats::MAX_LEVEL;
 use rpgkit_rules::{build_from, Growth, Overrides, Unit, UnitBuild};
@@ -184,6 +184,12 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
     if !state.validate(d).is_empty() {
         return None;
     }
+    build_unchecked(d, state, world, auto_spend, deck)
+}
+
+/// `build_as` without the validation first (PR5-26: `UnitState::deck_errors` builds the member's automatic deck through
+/// it, so validating there would recurse); the caller answers for the state.
+pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
     // HOOKS1 CN3: the world may replace the class path (the base catalog when it does not)
     let cat = d.cat_in(world);
     let mut work = state.clone();
@@ -191,6 +197,10 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         auto_for(d, &mut work);
     }
     let mut def = cat.units.get(&work.base_unit)?.clone();
+    // PR5-26 (audit B2): a slot the member holds empty (`NO_ITEM`, `roster::stash_forbidden`) takes no default either
+    for (slot, _) in work.equipment.iter().filter(|(_, id)| *id == NO_ITEM) {
+        def.slots.insert(slot.clone(), NO_ITEM.to_string());
+    }
     def.level = work.level(d) as i32;
     def.spend = work.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
     if def.spend.is_empty() {
@@ -214,6 +224,21 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
         loadout: (!work.loadout_class.is_empty() || !work.loadout_extra.is_empty()).then(|| (work.loadout_class.clone(), work.loadout_extra.clone())),
         ranks: work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect(),
         pouch_stacks: d.ruleset(world).numbers.pouch_stacks,
+        // PK2-S1: the member's tracks (a battle mark advances them) and its permanent max HP offset
+        max_hp_offset: work.max_hp_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        tracks: work.tracks.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(i32::MAX)) as i32)).collect(),
+        // PK2-S2: the grafts in its body slots (catalog slot order) and its floor offset for this battle
+        body: work.body_items(d),
+        floor_offset: work.floor_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        // PK2-S3: the proficiency levels it trained
+        trained: work.trained.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)) as i32)).collect(),
+        // PK2-S4: its mastery levels (the techniques of the wielded family) and its forge rite; PK2-S5a: a masterwork
+        // main-hand instance opens the weapon's own technique
+        mastery: work.mastery_xp.iter().map(|(k, v)| (k.clone(), rpgkit_data::mastery::level_of(*v))).filter(|(_, l)| *l > 0).collect(),
+        masterwork: crate::weapons::masterwork_main(&work),
+        forge_rite: work.forge_rite,
+        // PK2-S5b: the durability of its wielded instances that wear (none without the rule durability)
+        wear: crate::weapons::wear_of(d, &work, world),
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms
@@ -226,16 +251,37 @@ pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck
 /// U2.2-S2 (FB-28): a member's passives, re-gathered at each build: its character's sources now (character, faction,
 /// disciplines, named items, in that order, resolved in the character's own world), then the other ids it owns (quest
 /// grants, earned ones) in saved order, each once. A new game saves the sources as they were (`new_game`), so the two
-/// agree until the data changes; then a grant added to a source reaches the existing save.
+/// agree until the data changes; then a grant added to a source reaches the existing save. PK2-S1: then its unit
+/// tracks' stage passives (`track_passives`), slotless.
 pub fn member_passives(d: &Data, state: &UnitState) -> Vec<String> {
     let world = aegis_content::split_qid(&state.lore_ref).map(|(w, _)| w).unwrap_or_default();
     let mut out = d.character_passives(character_of(d, state), &world);
-    for id in &state.passives {
+    for id in state.passives.iter().chain(&track_passives(d, state)) {
         if !out.contains(id) {
             out.push(id.clone());
         }
     }
     out
+}
+
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the passives the member's unit tracks grant: per track row (catalog order)
+/// the member is on, every stage's passive up to its stage (`UnitTrackDef::passives_to`).
+pub fn track_passives(d: &Data, state: &UnitState) -> Vec<String> {
+    d.cat.unit_tracks.values().flat_map(|t| t.passives_to(t.clamp(state.track_stage(&t.id)))).collect()
+}
+
+/// PK2-S1: the member grant `forbid_hands` its passives give (`member_passives`; 0 = none).
+pub fn forbid_hands(d: &Data, state: &UnitState) -> i32 {
+    member_passives(d, state)
+        .iter()
+        .filter_map(|id| d.cat.passives.get(id))
+        .flat_map(|p| rpgkit_rules::grants::read(&p.effects))
+        .filter_map(|g| match g {
+            rpgkit_rules::grants::Grant::ForbidHands { hands } => Some(hands),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// SKILLUI1 (the user's answer to Q2): every slotted family without a rank entry gets its highest unlocked rank now,

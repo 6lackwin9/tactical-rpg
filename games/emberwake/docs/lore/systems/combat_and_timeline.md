@@ -56,7 +56,8 @@ loop and no `SpeedTier` type; the lore's "ticks" are the engine's blocks.
 A maneuver occupies its own blocks on the strip:
 
 - **Windup**: the action's blocks (the skill's `blocks`). The impact lands at the end of the last windup block, as
-  every action lands today. A unit in windup takes double stagger and can be broken (section 5).
+  every action lands today. A unit in windup scales incoming stagger by `stagger_windup_mult` (`2.0` default; `1.0` in
+  current `timeline` ruleset tuning) and can be broken (section 5).
 - **Impact**: damage, stagger, statuses and forced movement resolve, in initiative order within the block.
 - **Recovery** (optional, per skill; 0 by default): blocks after the impact in which the unit is committed. Recovery
   is the price of heavy maneuvers; most skills have none.
@@ -99,38 +100,39 @@ start stays spent.
 
 ### 5.1 The poise bar
 
-- Max Poise = CONS x 2 + armour poise from gear (the coefficients are a planner pick; the gear values are open, see
-  gaps). CONS runs 6-18 in the stat budget, so CONS x 2 is 12-36 before armour.
-- Poise refills to the maximum at the start of every round; it breaks at 0.
+- `max_poise = 2 * CONS + armour_poise` from gear, displayed and resolved as **5 discrete Poise pips** with threshold
+  `T = max(1, roundi(max_poise / 5))` (`PK1` / `S2_POISE.md`). CONS runs 6-18 in the stat budget (`12-36` before armour).
+- An impact with `eff_stagger >= 1` chips `clamp(floor(eff_stagger / T), 1, 5)` pips; a single hit can strip up to all
+  5 pips, and Poise refills to 5 pips at round end (or immediately after a break).
 - Skills deal stagger (poise damage) on impact, separately from HP damage.
 
 ### 5.2 Stagger multipliers (they multiply)
 
 | Condition on the target | Stagger taken |
 | --- | --- |
-| In windup when struck | x2 |
+| In windup when struck | `stagger_windup_mult` (`x2.0` default; `x1.0` in current `timeline` tuning) |
 | In Flesh-Tension (Strain 50-74, Act 2 on) | x2 |
 | Holding Active Guard | x0.5 |
+| Broken on the immediately preceding round (`stagger_repeat_mult`) | x0.5 |
 
-Struck in windup while in Flesh-Tension = x4; struck in windup under Active Guard = x1. Skill texts state only their
-base stagger; the windup doubling is this general rule, never a skill rider.
+Skill texts state only their base stagger; windup, Flesh-Tension, Active Guard, and repeat-break multipliers are
+general ruleset terms, never skill riders.
 
 ### 5.3 A break and repeated breaks
 
-- **Break**: the action in windup is cancelled together with the unit's remaining blocks that round (recovery
-  included); AP already paid is lost. Nothing else: the old "-50% evasion, +25% damage taken" rider is dropped.
-- **Repeated breaks**: a unit's second break in the same round, or in the next round, costs double stagger.
-- The classic `stagger` and `stun` statuses still exist as skill effects and AP-debt penalties; a poise break is a
-  separate event, shown on the strip as a BREAK marker.
+- **Break**: at 0 pips, the action in windup is cancelled together with the unit's remaining blocks that round
+  (recovery included), AP already paid stays spent, Poise resets to 5 pips, and `stagger` (`[1, 4]`, `-4 AP` next
+  round) is queued (the old "-50% evasion, +25% damage taken" rider is dropped).
+- **Repeated breaks**: breaking a unit on consecutive rounds halves incoming `eff_stagger` (`stagger_repeat_mult = 0.5`,
+  effectively requiring double stagger to break again back-to-back) so fast stun-locks cannot chain indefinitely.
 - **Stagger intent** (user 2026-10-25, Q-50 a): a break is a tactical choice to disrupt an enemy action, not an
-  automatic lock. The lore's stagger values are rescaled to a fraction of a typical Max Poise; heavy enemy windups get
-  more poise or an unbreakable flag; an optional seeded chance to break adds some randomness, with a guaranteed break
-  at a cost (AP, a skill or Strain). The design lane specs the numbers and the cost, then the balance lane runs a sim.
+  automatic lock; heavy bosses carry high `max_poise` or `unbreakable` windups.
 
 ### 5.4 Active Guard (base move)
 
-Halves incoming stagger; 50% damage reduction through the engine's guard term, capped by its guard cap (0.9 with
-cover); from Act 2 it vents 10 extra Strain at round end. It replaces the classic `guard` skill in the timeline deck.
+Halves incoming stagger; grants **35% damage mitigation** (`0.35`, or **20%** on the Snap `Brace` variant) through the
+kit's guard term, capped by `GUARD_MITIGATION_CAP = 0.90` with cover; from Act 2 it vents 10 extra Strain at round end.
+It replaces the classic `guard` skill in the timeline deck.
 
 ## 6. Movement and forced movement
 

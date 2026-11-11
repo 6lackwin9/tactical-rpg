@@ -1,6 +1,8 @@
 //! The Character popup (party_model.gd with stats_model, level_up_model, loadout_model, gear_model): one member at a
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
+//! PR5-31: the edit rules (deck terms, classic slots and ranks, gear and pouch moves, the active squad) are the kit's
+//! (`emberwake_world::party_ops`, `roster::toggle_active`); this screen holds the drafts and presents them.
 
 use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use aegis_ui::theme::th;
@@ -9,14 +11,15 @@ use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
-use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
+use emberwake_data::{Catalog, Deck, DerivedStatDef, NO_ITEM, STATS};
 use emberwake_rules::damage;
 use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
 use emberwake_rules::gear::TIER_SOURCE;
 use emberwake_rules::unit::GEAR_EFFECT_SOURCE;
 use emberwake_rules::Unit;
-use emberwake_world::state::{off_hand_ok, stack_limit, UnitState, LOADOUT_SLOTS, POUCH_MAX};
-use emberwake_world::{progression, Data};
+use emberwake_world::party_ops::{self, draft_rank, drop_move, equip, pouch_put, pouch_take, take_off, title_case, DeckTerms, SkillSlots, Stash, DECK_KINDS};
+use emberwake_world::state::{stack_limit, UnitState, LOADOUT_SLOTS, POUCH_MAX};
+use emberwake_world::{progression, roster, Data};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 
@@ -25,18 +28,6 @@ use serde_json::{json, Value};
 pub const PORTRAIT: i32 = 48;
 
 const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
-
-/// A Skills tab draft: class slots, extra slots, the chosen rank per slotted family.
-type SkillDraft = (Vec<String>, Vec<String>, IndexMap<String, i64>);
-
-/// SKILLUI1 R2 on the draft: no entry, the highest selectable rank; an entry `c`, the highest selectable rank <= `c`,
-/// else the lowest; 0 when nothing is selectable.
-fn draft_rank(selectable: &[i32], chosen: Option<i32>) -> i32 {
-    match chosen {
-        None => selectable.last().copied().unwrap_or(0),
-        Some(c) => selectable.iter().rev().find(|&&r| r <= c).or(selectable.first()).copied().unwrap_or(0),
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum PAct {
@@ -101,6 +92,8 @@ pub struct Character {
     /// INTENT2-U: the gear draft's world plays `pouch_stacks` (the pouch holds stacks with packed counts; set with the
     /// draft).
     gear_stacks: bool,
+    /// PR5-26 review F3: the played world the gear draft reads its class defaults in (set with the draft).
+    gear_world: String,
     pending_switch: Option<(Option<String>, Option<&'static str>)>,
     /// First family row shown on the Skills tab (the wheel scrolls).
     scroll: usize,
@@ -331,479 +324,9 @@ fn derived_desc(label: &str) -> String {
         "Ranged power" => "Ranged hit power, the same way with a ranged weapon; without one, DEX alone.".into(),
         "Armor" => format!("Armor rating: gear mitigation + STR / 4; it cuts damage taken by rating / (rating + {ARMOR_K})."),
         "Debuff resist %" => "Chance to shake off a debuff: 2.5% per INT, plus the unit's own resistances.".into(),
-        "AP" => "Action points each round; a skill costs its level in AP.".into(),
+        // PR5-31: AP is a pool a round refills only in part (`status::regen_ap`), priced by `skill::ap_cost_by`
+        "AP" => "Action points: the most this unit holds; each round refills some or all of it (the battle's AP regen). A skill costs its level (1-5) in AP, Move 1 and Rest nothing, or the AP cost its row sets under the AP cost rule.".into(),
         _ => String::new(),
-    }
-}
-
-fn fits(item: &emberwake_data::ItemDef, slot: &str) -> bool {
-    emberwake_world::state::item_fits_slot(item, slot)
-}
-
-/// RULESET1 9 D6: the deck's slot kinds in bucket order: (kind, bucket header, what its slots take).
-pub(crate) const DECK_KINDS: [(&str, &str, &str); 3] = [("active", "Actives", "active skills"), ("passive", "Passives", "passives"), ("keystone", "Keystone", "keystones")];
-
-/// RULESET1 9 D1-D6 (rule `deck`; engine-only, no Godot original): what a hero may put in its deck: the owned actives
-/// (never a basic) and slottable passives and keystones, the ruleset's basics (open to all, no slot) and intents, each
-/// family's intent, the slot counts, and what an empty deck (D5 auto) or an empty active row stands for. Editing is pure
-/// on these terms (every edit starts from the deck as it plays, so a first edit pins the automatic deck), shared by the
-/// party screen and the Dojo.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct DeckTerms {
-    pub slots: emberwake_rules::ruleset::DeckSlots,
-    pub intents: Vec<String>,
-    pub basics: Vec<String>,
-    pub actives: Vec<String>,
-    pub passives: Vec<String>,
-    pub keystones: Vec<String>,
-    /// Skill family -> its intent (`round_intent`, else its kind's; actives and basics). A4.2-K1b: its primary row.
-    pub intent_of: IndexMap<String, String>,
-    /// A4.2-K1b (INTENT2 IR15, IR21): skill family -> every intent row it plays in under the ruleset (`intent::allowed`:
-    /// the derived rows under `field_intent`, else the single intent); a family missing here has `intent_of`'s alone.
-    pub rows_of: IndexMap<String, Vec<String>>,
-    /// The deck an empty deck plays as (D5 auto: the base unit's deck, else the first class-path families).
-    pub auto: Deck,
-    /// The actives an empty `active` row plays as in a deck with other keys (the loadout's families).
-    pub auto_actives: Vec<String>,
-    /// TERMS1 TU5: intent id -> its name through the catalog's `terms` (`intent_names`; empty = the defaults).
-    pub intent_names: IndexMap<String, String>,
-}
-
-/// A4.2-K1b: each family's primary intent and rows under `rs` (`intent::allowed`).
-fn rows_of<'a>(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, fams: impl Iterator<Item = &'a String>) -> (IndexMap<String, String>, IndexMap<String, Vec<String>>) {
-    let mut primary = IndexMap::new();
-    let mut rows = IndexMap::new();
-    for f in fams {
-        if let Some(s) = cat.tier_one(f) {
-            let r: Vec<String> = emberwake_rules::intent::allowed(rs, &emberwake_rules::intent::IntentInput::of_def(s), &s.round_intent).into_iter().map(String::from).collect();
-            primary.insert(f.clone(), r.first().cloned().unwrap_or_else(|| emberwake_battle::round_intent::skill_intent(s).to_string()));
-            rows.insert(f.clone(), r);
-        }
-    }
-    (primary, rows)
-}
-
-/// A4.2-K1b: the intents a deck order lists: the ruleset's, and Field under `field_intent`.
-fn order_intents(rs: &emberwake_rules::ruleset::Ruleset) -> Vec<String> {
-    let mut out = rs.numbers.intents.clone();
-    if rs.has(emberwake_rules::ruleset::FIELD_INTENT) && !out.iter().any(|i| i == "field") {
-        out.push("field".into());
-    }
-    out
-}
-
-impl DeckTerms {
-    /// A4.2-K1b (IR15): the rows family `f` plays in (its `rows_of`, else its one intent).
-    pub fn rows(&self, f: &str) -> Vec<String> {
-        self.rows_of.get(f).cloned().unwrap_or_else(|| self.intent_of.get(f).cloned().into_iter().collect())
-    }
-
-    /// Whether families `a` and `b` share a row (a follow-up joins an opener of one of its rows).
-    fn share_row(&self, a: &str, b: &str) -> bool {
-        let rb = self.rows(b);
-        self.rows(a).iter().any(|r| rb.contains(r))
-    }
-
-    /// A party member's terms under `rs`: None unless the ruleset has the deck rule (classic keeps today's tab).
-    pub fn for_member(d: &Data, m: &UnitState, world: &str, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
-        // CLASS-BASICS: the member's class basics are open beside the ruleset's (its class in that world)
-        let rule = emberwake_rules::DeckRule::of(rs)?.with_class(d.cat_in(world), &m.class_id(d));
-        let cat = &d.cat;
-        let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
-        let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
-        // FB-63 (2): the re-gathered list, as the equip check and validate read it
-        let owned_passives = progression::member_passives(d, m);
-        let of_slot = |slot: &str| -> Vec<String> { owned_passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
-        let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
-        let mut work = m.clone();
-        work.deck = Deck::default();
-        let auto_unit = progression::build_in(d, &work, world, Some(&rule))?.unit;
-        let classic = progression::build_as(d, &work, world, false, None)?.unit;
-        let auto = Deck {
-            active: auto_unit.active_families(),
-            passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
-            keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
-            order: auto_unit.deck.order.clone(),
-            follow_ups: IndexMap::new(),
-            marrow: Vec::new(),
-        };
-        // apply_deck's auto pick for an empty active row: the loadout's families the member owns, the first `active`
-        let mut auto_actives: Vec<String> = Vec::new();
-        for f in classic.active_families() {
-            if actives.contains(&f) && !auto_actives.contains(&f) {
-                auto_actives.push(f);
-            }
-        }
-        auto_actives.truncate(rule.slots.active.max(0) as usize);
-        let (intent_of, rows_of) = rows_of(cat, rs, actives.iter().chain(&basics));
-        Some(Self { slots: rule.slots, intents: order_intents(rs), basics, actives, passives, keystones, intent_of, rows_of, auto, auto_actives, intent_names: intent_names(cat) })
-    }
-
-    /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
-    /// unit as it fights now; the actives are the families it owns (no basic); a catalog unit owns the slottable
-    /// passives its deck names (D4), so any catalog passive or keystone may be named; the auto deck is the unit built
-    /// with an empty deck.
-    pub fn for_unit(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, def: &emberwake_data::UnitDef, u: &emberwake_rules::Unit) -> Option<Self> {
-        let rule = emberwake_rules::DeckRule::of(rs)?.with_class(cat, &def.class_id);
-        let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
-        let mut actives: Vec<String> = Vec::new();
-        for s in cat.skills.iter().filter(|s| !s.system && !s.basic && !emberwake_battle::skill::is_item(s)) {
-            let f = s.family_id().to_string();
-            if !actives.contains(&f) && !rule.basics.contains(&f) && !cat.is_basic_family(&f) && !cat.is_system(&f) && cat.tier_one(&f).is_some() && u.owns_skill(cat, &s.id) {
-                actives.push(f);
-            }
-        }
-        let of_slot = |slot: &str| -> Vec<String> { cat.passives.values().filter(|p| p.slot == slot).map(|p| p.id.clone()).collect() };
-        let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
-        let mut empty = def.clone();
-        empty.deck = Deck::default();
-        let auto_unit = emberwake_rules::build_unit_in(cat, &empty, 0, Some(&rule));
-        let classic = emberwake_rules::build_unit(cat, def, 0);
-        let auto = Deck { active: auto_unit.active_families(), ..Deck::default() };
-        let mut auto_actives: Vec<String> = Vec::new();
-        for f in classic.active_families() {
-            if actives.contains(&f) && !auto_actives.contains(&f) {
-                auto_actives.push(f);
-            }
-        }
-        auto_actives.truncate(rule.slots.active.max(0) as usize);
-        let (intent_of, rows_of) = rows_of(cat, rs, actives.iter().chain(&basics));
-        Some(Self { slots: rule.slots, intents: order_intents(rs), basics, actives, passives, keystones, intent_of, rows_of, auto, auto_actives, intent_names: intent_names(cat) })
-    }
-
-    /// The slots of `kind`.
-    pub fn cap(&self, kind: &str) -> usize {
-        (match kind {
-            "active" => self.slots.active,
-            "passive" => self.slots.passive,
-            _ => self.slots.keystone,
-        })
-        .max(0) as usize
-    }
-
-    /// What the member owns of `kind`.
-    pub fn owned(&self, kind: &str) -> &[String] {
-        match kind {
-            "active" => &self.actives,
-            "passive" => &self.passives,
-            _ => &self.keystones,
-        }
-    }
-
-    pub fn list<'a>(deck: &'a Deck, kind: &str) -> &'a Vec<String> {
-        match kind {
-            "active" => &deck.active,
-            "passive" => &deck.passive,
-            _ => &deck.keystone,
-        }
-    }
-
-    fn list_mut<'a>(deck: &'a mut Deck, kind: &str) -> &'a mut Vec<String> {
-        match kind {
-            "active" => &mut deck.active,
-            "passive" => &mut deck.passive,
-            _ => &mut deck.keystone,
-        }
-    }
-
-    /// The deck as it plays: an empty deck is the auto deck; an empty active row the auto actives (D5).
-    pub fn shown(&self, draft: &Deck) -> Deck {
-        if draft.is_empty() {
-            return self.auto.clone();
-        }
-        let mut d = draft.clone();
-        if d.active.is_empty() {
-            d.active = self.auto_actives.clone();
-        }
-        d
-    }
-
-    /// The deck an edit of `kind` starts from (user 2026-10-29): an actives edit (and the order editor) pins the deck as
-    /// it plays (`shown`); a passive or keystone edit keeps the actives automatic (an empty `active` row stays empty, so
-    /// later class-path actives still join), unless the deck as it plays carries an order or follow-up list (their
-    /// entries must be in `active`: then it pins; INPUT1 FL3).
-    fn base(&self, draft: &Deck, kind: &str) -> Deck {
-        let shown = self.shown(draft);
-        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() || !shown.follow_ups.is_empty() {
-            return shown;
-        }
-        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new(), marrow: Vec::new() }
-    }
-
-    /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
-    /// deck), else the deck's actives of the intent in slot order, then the basics of the intent.
-    pub fn order(&self, deck: &Deck, intent: &str) -> Vec<String> {
-        let of = |f: &&String| self.intent_of.get(*f).is_some_and(|i| i == intent);
-        // A4.2-K1b (IR15): the player's order may hold a skill in any of its rows; the auto order its primary row only
-        let in_row = |f: &&String| self.rows(f).iter().any(|i| i == intent);
-        match deck.order.get(intent).filter(|l| !l.is_empty()) {
-            Some(l) => l.iter().filter(|f| in_row(f) && (deck.active.contains(f) || self.basics.contains(f))).cloned().collect(),
-            None => deck.active.iter().chain(&self.basics).filter(of).cloned().collect(),
-        }
-    }
-
-    /// A new active joins the end of its intent's written order (an auto order takes it by itself).
-    fn ordered_in(&self, d: &mut Deck, fam: &str) {
-        let Some(intent) = self.intent_of.get(fam) else { return };
-        if let Some(l) = d.order.get_mut(intent).filter(|l| !l.is_empty()) {
-            if !l.iter().any(|f| f == fam) {
-                l.push(fam.to_string());
-            }
-        }
-    }
-
-    /// An active that leaves the deck leaves every order and follow-up list and drops its own follow-up list (an
-    /// emptied list is the auto order again; INPUT1 FL3).
-    fn unordered(d: &mut Deck, fam: &str) {
-        for l in d.order.values_mut().chain(d.follow_ups.values_mut()) {
-            l.retain(|f| f != fam);
-        }
-        d.order.retain(|_, l| !l.is_empty());
-        d.follow_ups.shift_remove(fam);
-        d.follow_ups.retain(|_, l| !l.is_empty());
-    }
-
-    /// INPUT1 FL1: the follow-up list of opener `op` as it plays (entries still in the deck, of the opener's intent);
-    /// empty when none is set (the fill reads the intent's order).
-    pub fn follow_list(&self, deck: &Deck, op: &str) -> Vec<String> {
-        if self.intent_of.get(op).is_none() {
-            return Vec::new();
-        }
-        let ok = |f: &&String| self.share_row(op, f) && (deck.active.contains(f) || self.basics.contains(f));
-        deck.follow_ups.get(op).map(|l| l.iter().filter(ok).cloned().collect()).unwrap_or_default()
-    }
-
-    /// FL3: the skills that can join `op`'s list: its intent's actives and basics in the deck (the order's entries),
-    /// those already listed left out.
-    pub fn follow_candidates(&self, deck: &Deck, op: &str) -> Vec<String> {
-        let listed = self.follow_list(deck, op);
-        let mut out: Vec<String> = Vec::new();
-        // A4.2-K1b: the orders of each of the opener's rows
-        for intent in self.rows(op) {
-            for f in self.order(deck, &intent) {
-                if !listed.contains(&f) && !out.contains(&f) {
-                    out.push(f);
-                }
-            }
-        }
-        out
-    }
-
-    /// The deck a follow-up edit of `op` starts from (it pins the deck as it plays, as an order edit does) and the list
-    /// as it plays; refused when `op` is not an opener of the deck (FL5).
-    fn follow_base(&self, draft: &Deck, op: &str) -> Result<(Deck, Vec<String>), String> {
-        let d = self.shown(draft);
-        let opener = self.rows(op).iter().any(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
-        if !opener {
-            return Err(format!("Follow-ups for {op}: not an opener in the deck."));
-        }
-        let list = self.follow_list(&d, op);
-        Ok((d, list))
-    }
-
-    fn with_follow(mut d: Deck, op: &str, list: Vec<String>) -> Deck {
-        if list.is_empty() {
-            d.follow_ups.shift_remove(op);
-        } else {
-            d.follow_ups.insert(op.to_string(), list);
-        }
-        d
-    }
-
-    /// FL3: `fam` joins `op`'s list at place `at` (None: the end); a listed one moves there. Only skills of the
-    /// opener's intent in the deck.
-    pub fn follow_add(&self, draft: &Deck, op: &str, fam: &str, at: Option<usize>) -> Result<Deck, String> {
-        let (d, mut list) = self.follow_base(draft, op)?;
-        let intent = self.intent_of.get(op).cloned().unwrap_or_default();
-        if !(d.active.iter().any(|f| f == fam) || self.basics.iter().any(|f| f == fam)) {
-            return Err(format!("Follow-ups after {op}: {fam} is not in the deck."));
-        }
-        if !self.share_row(op, fam) {
-            let has = self.intent_of.get(fam).map(|i| intent_title(&self.intent_names, i)).unwrap_or_else(|| "no intent".into());
-            return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&self.intent_names, &intent)));
-        }
-        let was = list.iter().position(|f| f == fam);
-        if let Some(i) = was {
-            list.remove(i);
-        }
-        let j = at.unwrap_or(list.len()).min(list.len());
-        if was == Some(j) {
-            return Err("Same place.".into());
-        }
-        list.insert(j, fam.to_string());
-        Ok(Self::with_follow(d, op, list))
-    }
-
-    /// FL3: takes place `k` out of `op`'s list (the last one out: the intent's order again).
-    pub fn follow_remove(&self, draft: &Deck, op: &str, k: usize) -> Result<Deck, String> {
-        let (d, mut list) = self.follow_base(draft, op)?;
-        if k >= list.len() {
-            return Err("Nothing there.".into());
-        }
-        list.remove(k);
-        Ok(Self::with_follow(d, op, list))
-    }
-
-    /// FL3 "Use the <Intent> order": empties `op`'s list.
-    pub fn follow_clear(&self, draft: &Deck, op: &str) -> Result<Deck, String> {
-        let (d, list) = self.follow_base(draft, op)?;
-        if list.is_empty() {
-            return Err("No follow-ups set: the intent's order fills.".into());
-        }
-        Ok(Self::with_follow(d, op, Vec::new()))
-    }
-
-    /// `follow.<op>.<k>`: place `k` of opener `op`'s follow-up list (`k` = the list's length: its end).
-    fn follow_key(key: &str) -> Option<(&str, usize)> {
-        let rest = key.strip_prefix("follow.").filter(|r| !r.starts_with("add."))?;
-        let (op, k) = rest.rsplit_once('.')?;
-        Some((op, k.parse().ok()?))
-    }
-
-    fn full(kind: &str) -> String {
-        let label = DECK_KINDS.iter().find(|k| k.0 == kind).map(|k| k.1).unwrap_or("Slots");
-        format!("{label} are full: drag onto a slot to replace one, or right click a slot to take it out.")
-    }
-
-    /// The click path: `id` (an owned `kind`) into the first free slot of its bucket.
-    pub fn slot(&self, draft: &Deck, kind: &str, id: &str) -> Result<Deck, String> {
-        if !self.owned(kind).iter().any(|x| x == id) {
-            return Err(format!("'{id}' is not owned."));
-        }
-        let mut d = self.base(draft, kind);
-        if Self::list(&d, kind).iter().any(|x| x == id) {
-            return Err("Already slotted.".into());
-        }
-        if Self::list(&d, kind).len() >= self.cap(kind) {
-            return Err(Self::full(kind));
-        }
-        Self::list_mut(&mut d, kind).push(id.to_string());
-        if kind == "active" {
-            self.ordered_in(&mut d, id);
-        }
-        Ok(d)
-    }
-
-    /// Takes slot `i` of `kind` out. The last active stays: an empty active row means the automatic pick (D5).
-    pub fn unslot(&self, draft: &Deck, kind: &str, i: usize) -> Result<Deck, String> {
-        let mut d = self.base(draft, kind);
-        if i >= Self::list(&d, kind).len() {
-            return Err("That slot is empty.".into());
-        }
-        if kind == "active" && d.active.len() <= 1 {
-            return Err("Keep at least one active (an empty row is the automatic pick: Use default).".into());
-        }
-        let id = Self::list_mut(&mut d, kind).remove(i);
-        Self::unordered(&mut d, &id);
-        Ok(d)
-    }
-
-    /// `deck.<kind>.<i>`: a slot.
-    fn slot_key(key: &str) -> Option<(&'static str, usize)> {
-        let (k, i) = key.strip_prefix("deck.")?.split_once('.')?;
-        Some((DECK_KINDS.iter().find(|x| x.0 == k)?.0, i.parse().ok()?))
-    }
-
-    /// `order.<intent>.<i>`: a place in an intent's order.
-    fn order_key(key: &str) -> Option<(&str, usize)> {
-        let (intent, i) = key.strip_prefix("order.")?.rsplit_once('.')?;
-        Some((intent, i.parse().ok()?))
-    }
-
-    /// The deck after dropping payload `from` (`deck.own.<kind>.<id>` from the owned list, `deck.<kind>.<i>` from a slot,
-    /// `order.<intent>.<i>` from the order editor) on `to` (`deck.<kind>.<i>`, `deck.list`, `order.<intent>.<i>`), or
-    /// why it can't be done: the same rules as the clicks (a bucket takes its own kind; a filled slot swaps or is
-    /// replaced; an order entry moves within its intent).
-    pub fn after_drop(&self, draft: &Deck, from: &str, to: &str) -> Result<Deck, String> {
-        let wrong = |kind: &str| {
-            let k = DECK_KINDS.iter().find(|x| x.0 == kind).unwrap_or(&DECK_KINDS[0]);
-            format!("{} slots take {} only.", k.1, k.2)
-        };
-        // INPUT1 FL3: a follow-up entry moves within its list; an intent skill dragged from the add row joins it there
-        if let Some((op, fam)) = from.strip_prefix("follow.add.").and_then(|r| r.split_once('.')) {
-            let (to_op, j) = Self::follow_key(to).ok_or("Drop it on a place in the same follow-up list.")?;
-            if to_op != op {
-                return Err("Each opener keeps its own follow-ups.".into());
-            }
-            return self.follow_add(draft, op, fam, Some(j));
-        }
-        if let Some((op, i)) = Self::follow_key(from) {
-            let (to_op, j) = Self::follow_key(to).ok_or("Drop it on a place in the same follow-up list.")?;
-            if to_op != op {
-                return Err("Each opener keeps its own follow-ups.".into());
-            }
-            let list = self.follow_base(draft, op)?.1;
-            let fam = list.get(i).cloned().ok_or("Nothing there.")?;
-            return self.follow_add(draft, op, &fam, Some(j.min(list.len() - 1)));
-        }
-        if let Some((intent, i)) = Self::order_key(from) {
-            let (to_intent, j) = Self::order_key(to).ok_or("Drop it on a place in the same intent's order.")?;
-            if to_intent != intent {
-                return Err("Each intent keeps its own order.".into());
-            }
-            let mut d = self.shown(draft);
-            let mut list = self.order(&d, intent);
-            if i >= list.len() {
-                return Err("Nothing there.".into());
-            }
-            if i == j {
-                return Err("Same place.".into());
-            }
-            let f = list.remove(i);
-            list.insert(j.min(list.len()), f);
-            d.order.insert(intent.to_string(), list);
-            return Ok(d);
-        }
-        if let Some((kind, id)) = from.strip_prefix("deck.own.").and_then(|r| r.split_once('.')) {
-            let (to_kind, i) = Self::slot_key(to).ok_or("Drop it on a slot.")?;
-            let shown = self.shown(draft);
-            // a slotted one moves from its own slot (swap or move, never a shifted index)
-            if let Some(j) = Self::list(&shown, kind).iter().position(|x| x == id) {
-                return self.after_drop(draft, &format!("deck.{kind}.{j}"), to);
-            }
-            if to_kind != kind {
-                return Err(wrong(to_kind));
-            }
-            if !self.owned(kind).iter().any(|x| x == id) {
-                return Err(format!("'{id}' is not owned."));
-            }
-            let mut d = self.base(draft, kind);
-            match Self::list(&d, kind).get(i).cloned() {
-                Some(old) => {
-                    Self::list_mut(&mut d, kind)[i] = id.to_string();
-                    Self::unordered(&mut d, &old);
-                }
-                None if Self::list(&d, kind).len() >= self.cap(kind) => return Err(Self::full(kind)),
-                None => Self::list_mut(&mut d, kind).push(id.to_string()),
-            }
-            if kind == "active" {
-                self.ordered_in(&mut d, id);
-            }
-            return Ok(d);
-        }
-        let (kind, i) = Self::slot_key(from).ok_or("That can't go there.")?;
-        let mut d = self.base(draft, kind);
-        if i >= Self::list(&d, kind).len() {
-            return Err("That slot is empty.".into());
-        }
-        if to == "deck.list" {
-            return self.unslot(draft, kind, i);
-        }
-        let (to_kind, j) = Self::slot_key(to).ok_or("That can't go there.")?;
-        if to_kind != kind {
-            return Err(wrong(to_kind));
-        }
-        if i == j {
-            return Err("Same slot.".into());
-        }
-        let list = Self::list_mut(&mut d, kind);
-        if j < list.len() {
-            list.swap(i, j);
-        } else {
-            let f = list.remove(i);
-            list.push(f);
-        }
-        Ok(d)
     }
 }
 
@@ -813,7 +336,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, gear_stacks: false, gear_world: String::new(), pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -859,103 +382,34 @@ impl Character {
         self.skills_loaded = true;
     }
 
-    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A); the played world's path (HOOKS1
-    /// CN3, decision "HOOKS1-UI slice 1 answers").
+    /// The member's class path families in the played world (`party_ops::path_families`).
     fn path_families(&self, cx: &Cx) -> Vec<String> {
-        let d = &cx.data;
-        let m = self.m(cx);
-        d.cat_in(&cx.gs().world_id).classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
+        party_ops::path_families(&cx.data, self.m(cx), &cx.gs().world_id)
     }
 
-    /// The highest rank of `family` the member has unlocked (with confirmed gear): what a newly slotted skill stores.
+    /// The highest unlocked rank of `family` (`party_ops::top_rank`): what a newly slotted skill stores.
     fn top_rank(&self, cx: &Cx, family: &str) -> Option<i64> {
-        progression::build_with(&cx.data, self.m(cx), &cx.gs().world_id, false).and_then(|b| b.unit.selectable_ranks(&cx.data.cat, family).last().map(|&r| r as i64))
+        party_ops::top_rank(&cx.data, self.m(cx), &cx.gs().world_id, family)
     }
 
-    /// The draft after dropping payload `from` (`skill.<f>` from the list, `slot.<g>.<i>` from a slot) on target `to`
-    /// (`slot.<g>.<i>` or `list`), or why it can't be done (SKILLUI1 section 4 drop table).
-    fn skills_after_drop(&self, cx: &Cx, from: &str, to: &str) -> Result<SkillDraft, String> {
-        let path = self.path_families(cx);
-        let (mut class, mut extra, mut ranks) = (self.class_slots.clone(), self.extra_slots.clone(), self.ranks.clone());
-        let slot_of = |key: &str| -> Option<(bool, usize)> {
-            let rest = key.strip_prefix("slot.")?;
-            let (g, i) = rest.split_once('.')?;
-            Some((g == "class", i.parse().ok()?))
-        };
-        let fits = |fam: &str, class_group: bool| !class_group || path.iter().any(|p| p == fam);
-        if let Some(fam) = from.strip_prefix("skill.") {
-            let (to_class, i) = slot_of(to).ok_or("Drop a skill on a slot.")?;
-            // A family already slotted moves from its own slot (the slot-to-slot rules: swap or move, never a shifted
-            // index), whether it was dragged from the list or from its slot.
-            if let Some(j) = class.iter().position(|f| f == fam) {
-                return self.skills_after_drop(cx, &format!("slot.class.{j}"), to);
-            }
-            if let Some(j) = extra.iter().position(|f| f == fam) {
-                return self.skills_after_drop(cx, &format!("slot.extra.{j}"), to);
-            }
-            if !fits(fam, to_class) {
-                return Err("Class slots take class path skills only.".into());
-            }
-            let list = if to_class { &mut class } else { &mut extra };
-            match list.get(i).cloned() {
-                Some(old) => {
-                    list[i] = fam.to_string();
-                    ranks.shift_remove(&old);
-                }
-                None => {
-                    let cap = if to_class { emberwake_rules::stats::MAX_CLASS_SLOTS } else { emberwake_rules::stats::MAX_EXTRA_SLOTS };
-                    if list.len() >= cap {
-                        return Err("That group is full.".into());
-                    }
-                    list.push(fam.to_string());
-                }
-            }
-            // the user's Q2 answer: a newly slotted skill stores its highest unlocked rank now
-            if let Some(r) = self.top_rank(cx, fam) {
-                ranks.insert(fam.to_string(), r);
-            }
-            return Ok((class, extra, ranks));
-        }
-        let (from_class, i) = slot_of(from).ok_or("That can't go there.")?;
-        let fam = (if from_class { &class } else { &extra }).get(i).cloned().ok_or("That slot is empty.")?;
-        if to == "list" {
-            (if from_class { &mut class } else { &mut extra }).remove(i);
-            ranks.shift_remove(&fam);
-            return Ok((class, extra, ranks));
-        }
-        let (to_class, j) = slot_of(to).ok_or("That can't go there.")?;
-        if (from_class, i) == (to_class, j) {
-            return Err("Same slot.".into());
-        }
-        let other = (if to_class { &class } else { &extra }).get(j).cloned();
-        if !fits(&fam, to_class) || other.as_ref().is_some_and(|o| !fits(o, from_class)) {
-            return Err("Class slots take class path skills only.".into());
-        }
-        match other {
-            Some(o) => {
-                (if from_class { &mut class } else { &mut extra })[i] = o;
-                (if to_class { &mut class } else { &mut extra })[j] = fam;
-            }
-            None => {
-                let cap = if to_class { emberwake_rules::stats::MAX_CLASS_SLOTS } else { emberwake_rules::stats::MAX_EXTRA_SLOTS };
-                (if from_class { &mut class } else { &mut extra }).remove(i);
-                let list = if to_class { &mut class } else { &mut extra };
-                if list.len() >= cap {
-                    return Err("That group is full.".into());
-                }
-                list.push(fam);
-            }
-        }
-        Ok((class, extra, ranks))
+    /// The classic draft as the kit edits it.
+    fn slots(&self) -> SkillSlots {
+        SkillSlots { class: self.class_slots.clone(), extra: self.extra_slots.clone(), ranks: self.ranks.clone() }
+    }
+
+    fn set_slots(&mut self, s: SkillSlots) {
+        (self.class_slots, self.extra_slots, self.ranks) = (s.class, s.extra, s.ranks);
+    }
+
+    /// The draft after dropping payload `from` on target `to` (`SkillSlots::after_drop`), or why it can't be done.
+    fn skills_after_drop(&self, cx: &Cx, from: &str, to: &str) -> Result<SkillSlots, String> {
+        self.slots().after_drop(&self.path_families(cx), from, to, &|f| self.top_rank(cx, f))
     }
 
     fn fill_default(&mut self, cx: &Cx) {
-        let mut work = self.m(cx).clone();
-        work.loadout_class.clear();
-        work.loadout_extra.clear();
-        if let Some(b) = progression::build_with(&cx.data, &work, &cx.gs().world_id, false) {
-            self.class_slots = b.unit.active_class_families.clone();
-            self.extra_slots = b.unit.active_extra_families.clone();
+        if let Some((class, extra)) = SkillSlots::default_of(&cx.data, self.m(cx), &cx.gs().world_id) {
+            self.class_slots = class;
+            self.extra_slots = extra;
         }
     }
 
@@ -963,6 +417,7 @@ impl Character {
         if self.gear.is_none() {
             self.gear = Some((self.m(cx).clone(), cx.gs().party.stash.clone()));
             self.gear_stacks = cx.data.ruleset(&cx.gs().world_id).numbers.pouch_stacks;
+            self.gear_world = cx.gs().world_id.clone();
         }
     }
 
@@ -1037,21 +492,8 @@ impl Character {
             }
             PAct::ToggleActive => {
                 let id = self.member.clone();
-                let party = &mut cx.gs_mut().party;
-                if party.active_ids.is_empty() {
-                    party.active_ids = party.members.iter().take(party.max_active as usize).map(|m| m.id.clone()).collect();
-                }
-                if let Some(i) = party.active_ids.iter().position(|x| *x == id) {
-                    if party.active_ids.len() <= 1 {
-                        show_errors(cx, vec!["Keep at least one active member.".into()]);
-                    } else {
-                        party.active_ids.remove(i);
-                    }
-                } else if party.active_ids.len() as i64 >= party.max_active {
-                    let cap = party.max_active;
-                    show_errors(cx, vec![format!("The active party holds at most {cap}.")]);
-                } else {
-                    party.active_ids.push(id);
+                if let Err(e) = roster::toggle_active(&mut cx.gs_mut().party, &id) {
+                    show_errors(cx, vec![e]);
                 }
             }
             PAct::Add(stat) => {
@@ -1089,49 +531,30 @@ impl Character {
                 // SKILLUI1 click path: the first free slot of the family's group (a class path family may use a free
                 // extra slot when the class slots are full, Q3 A); a full group says how to make room.
                 self.load_skills(cx);
-                if self.class_slots.contains(&fam) || self.extra_slots.contains(&fam) {
-                    return;
-                }
-                let on_path = self.path_families(cx).contains(&fam);
-                let class_free = self.class_slots.len() < emberwake_rules::stats::MAX_CLASS_SLOTS;
-                let extra_free = self.extra_slots.len() < emberwake_rules::stats::MAX_EXTRA_SLOTS;
-                let to_class = if on_path && class_free {
-                    true
-                } else if extra_free {
-                    false
-                } else {
-                    let group = if on_path { "Class" } else { "Extra" };
-                    cx.notice.push(format!("{group} slots are full: drag onto a slot to replace one, or right click a slot to take it out."));
-                    return;
-                };
-                self.using_default = false;
-                if to_class {
-                    self.class_slots.push(fam.clone());
-                } else {
-                    self.extra_slots.push(fam.clone());
-                }
-                // the user's Q2 answer: a newly slotted skill stores its highest unlocked rank now
-                if let Some(r) = self.top_rank(cx, &fam) {
-                    self.ranks.insert(fam, r);
+                let path = self.path_families(cx);
+                let slotted = self.slots().slot(&path, &fam, &|f| self.top_rank(cx, f));
+                match slotted {
+                    Ok(Some(s)) => {
+                        self.using_default = false;
+                        self.set_slots(s);
+                    }
+                    Ok(None) => {}
+                    Err(e) => cx.notice.push(e),
                 }
             }
             PAct::Unslot(class, i) => {
                 self.load_skills(cx);
                 self.using_default = false;
-                let list = if class { &mut self.class_slots } else { &mut self.extra_slots };
-                if i < list.len() {
-                    let fam = list.remove(i);
-                    self.ranks.shift_remove(&fam);
-                }
+                let mut s = self.slots();
+                s.unslot(class, i);
+                self.set_slots(s);
             }
             PAct::RankStep(class, i, step) => {
                 self.load_skills(cx);
                 let Some(fam) = (if class { &self.class_slots } else { &self.extra_slots }).get(i).cloned() else { return };
                 let Some(b) = progression::build_with(&d, self.m(cx), &cx.gs().world_id, false) else { return };
                 let ranks = b.unit.selectable_ranks(&d.cat, &fam);
-                let now = draft_rank(&ranks, self.ranks.get(&fam).map(|&r| r as i32));
-                let at = ranks.iter().position(|&r| r == now).unwrap_or(ranks.len().saturating_sub(1)) as i32;
-                if let Some(&next) = ranks.get((at + step).max(0) as usize).filter(|_| at + step >= 0) {
+                if let Some(next) = party_ops::rank_step(&ranks, self.ranks.get(&fam).map(|&r| r as i32), step) {
                     self.ranks.insert(fam, next as i64);
                 }
             }
@@ -1154,11 +577,7 @@ impl Character {
             PAct::FollowAdd(op, fam) => self.deck_edit(cx, |t, deck| t.follow_add(deck, &op, &fam, None)),
             PAct::FollowRemove(op, k) => self.deck_edit(cx, |t, deck| t.follow_remove(deck, &op, k)),
             PAct::FollowClear(op) => self.deck_edit(cx, |t, deck| t.follow_clear(deck, &op)),
-            PAct::OrderAuto => self.deck_edit(cx, |t, deck| {
-                let mut d = t.shown(deck);
-                d.order.clear();
-                Ok(d)
-            }),
+            PAct::OrderAuto => self.deck_edit(cx, |t, deck| Ok(t.order_auto(deck))),
             PAct::UseDefault if self.terms.is_some() => self.deck = Deck::default(),
             PAct::ConfirmSkills if self.terms.is_some() => {
                 let mut work = self.m(cx).clone();
@@ -1177,25 +596,13 @@ impl Character {
             PAct::UseDefault => {
                 self.using_default = true;
                 self.fill_default(cx);
-                let keep: Vec<String> = self.class_slots.iter().chain(&self.extra_slots).cloned().collect();
-                self.ranks.retain(|f, _| keep.contains(f));
+                let mut s = self.slots();
+                s.keep_slotted_ranks();
+                self.set_slots(s);
             }
             PAct::ResetSkills => self.skills_loaded = false,
-            PAct::ConfirmSkills => {
-                let mut work = self.m(cx).clone();
-                if self.using_default {
-                    work.loadout_class.clear();
-                    work.loadout_extra.clear();
-                } else {
-                    work.loadout_class = self.class_slots.clone();
-                    work.loadout_extra = self.extra_slots.clone();
-                }
-                // ranks for the slotted families only; every slotted family gets an entry (the user's Q2 answer)
-                let slotted: Vec<String> = self.class_slots.iter().chain(&self.extra_slots).cloned().collect();
-                work.loadout_ranks = self.ranks.iter().filter(|(f, _)| slotted.contains(f)).map(|(f, r)| (f.clone(), *r)).collect();
-                let errors = work.loadout_errors(&d, &format!("Unit '{}'", work.id));
-                if errors.is_empty() {
-                    progression::pin_ranks(&d, &mut work, &cx.gs().world_id);
+            PAct::ConfirmSkills => match self.slots().confirmed(&d, self.m(cx), &cx.gs().world_id, self.using_default) {
+                Ok(work) => {
                     let id = self.member.clone();
                     if let Some(m) = cx.gs_mut().party.member_mut(&id) {
                         m.loadout_class = work.loadout_class;
@@ -1203,21 +610,20 @@ impl Character {
                         m.loadout_ranks = work.loadout_ranks;
                     }
                     self.skills_loaded = false;
-                } else {
-                    show_errors(cx, errors);
                 }
-            }
-            PAct::Unequip(slot) => self.gear_move(cx, |d, work, stash| take_off(d, work, stash, &slot)),
-            PAct::Equip(item) => self.gear_move(cx, |d, work, stash| equip(d, work, stash, &item, None)),
+                Err(errors) => show_errors(cx, errors),
+            },
+            PAct::Unequip(slot) => self.gear_move(cx, |d, world, work, stash| take_off(d, world, work, stash, &slot)),
+            PAct::Equip(item) => self.gear_move(cx, |d, world, work, stash| equip(d, world, work, stash, &item, None)),
             PAct::PouchAdd(item) => {
                 let stacks = self.stacks_on(cx);
-                self.gear_move(cx, |d, work, stash| pouch_put(d, work, stash, &item, None, stacks))
+                self.gear_move(cx, |d, _, work, stash| pouch_put(d, work, stash, &item, None, stacks))
             }
             PAct::PouchRemove(i) => {
                 let stacks = self.stacks_on(cx);
-                self.gear_move(cx, |_, work, stash| pouch_take(work, stash, i, stacks))
+                self.gear_move(cx, |_, _, work, stash| pouch_take(work, stash, i, stacks))
             }
-            PAct::PouchPack(item, n) => self.gear_move(cx, |d, work, stash| work.pack_pouch(d, &item, n, stash).map_err(|e| named(d, &item, e))),
+            PAct::PouchPack(item, n) => self.gear_move(cx, |d, _, work, stash| party_ops::pack(d, work, stash, &item, n)),
             PAct::ResetGear => self.gear = None,
             PAct::ConfirmGear => {
                 let Some((work, stash)) = self.gear.clone() else { return };
@@ -1253,11 +659,12 @@ impl Character {
 
     /// One gear move on the draft (loaded first); a refused move shows its reason. INTENT2-U: under `pouch_stacks` the
     /// pouch is not topped up here: only the kit's auto-fill at combat start and after a fight moves copies in.
-    fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &mut UnitState, &mut Stash) -> Result<(), String>) {
+    fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &str, &mut UnitState, &mut Stash) -> Result<(), String>) {
         self.load_gear(cx);
         let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
         let (work, stash) = self.gear.as_mut().unwrap();
-        if let Err(e) = mv(&d, work, stash) {
+        if let Err(e) = mv(&d, &world, work, stash) {
             show_errors(cx, vec![e]);
         }
     }
@@ -1271,182 +678,9 @@ impl Character {
     /// The draft after the drop of payload `from` on target `to` (GEARUI1 drag and drop), or why it can't be done.
     fn after_drop(&self, d: &Data, from: &str, to: &str) -> Result<(UnitState, Stash), String> {
         let (mut work, mut stash) = self.gear.clone().ok_or("No gear draft.")?;
-        drop_move(d, &mut work, &mut stash, from, to, self.gear_stacks)?;
+        drop_move(d, &self.gear_world, &mut work, &mut stash, from, to, self.gear_stacks)?;
         Ok((work, stash))
     }
-}
-
-/// The party stash: item id -> count.
-type Stash = IndexMap<String, i64>;
-
-fn take_one(stash: &mut Stash, item: &str) {
-    let left = stash.get(item).copied().unwrap_or(0) - 1;
-    if left <= 0 {
-        stash.shift_remove(item);
-    } else {
-        stash.insert(item.to_string(), left);
-    }
-}
-
-fn give_one(stash: &mut Stash, item: String) {
-    *stash.entry(item).or_insert(0) += 1;
-}
-
-// ---- Gear moves on a draft (GearModel equip / unequip / pouch): clicks, drops and the stat preview share them ----
-
-/// Wears `item` from the stash in `slot`, or (None) the first free slot it fits, else the first it fits; what the slot
-/// held goes back to the stash.
-fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Option<&str>) -> Result<(), String> {
-    let def = d.cat.items.get(item).ok_or_else(|| format!("Unknown item '{item}'."))?;
-    if stash.get(item).copied().unwrap_or(0) < 1 {
-        return Err(format!("There is no {} in the stash.", def.name));
-    }
-    let slot = match slot {
-        Some(s) if fits(def, s) => s,
-        Some(s) => return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(s).to_lowercase())),
-        None => *LOADOUT_SLOTS.iter().find(|s| fits(def, s) && !work.equipment.contains_key(**s)).or_else(|| LOADOUT_SLOTS.iter().find(|s| fits(def, s))).ok_or_else(|| format!("{} can't be worn.", def.name))?,
-    };
-    work.can_wear(d, item, slot)?;
-    if slot == "off_hand" {
-        if let Some(main) = main_weapon(d, work).filter(|m| !off_hand_ok(Some(m), def)) {
-            return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
-        }
-    }
-    if let Some(old) = work.equipment.insert(slot.to_string(), item.to_string()) {
-        give_one(stash, old);
-    }
-    take_one(stash, item);
-    if slot == "main_hand" && def.two_handed {
-        // A shield or focus goes back to the stash (the Godot dojo's "stowed: ... is 2-Handed").
-        if let Some(off) = work.equipment.get("off_hand").cloned().filter(|o| d.cat.items.get(o).is_some_and(|o| !off_hand_ok(Some(def), o))) {
-            work.equipment.shift_remove("off_hand");
-            give_one(stash, off);
-        }
-    }
-    Ok(())
-}
-
-/// The weapon the main hand holds: the worn one, else the class default the build gives.
-fn main_weapon(d: &Data, work: &UnitState) -> Option<emberwake_data::ItemDef> {
-    match work.equipment.get("main_hand") {
-        Some(id) => d.cat.items.get(id).cloned(),
-        None => progression::build_as(d, work, "", false, None).and_then(|b| b.unit.inventory.get(emberwake_rules::gear::Slot::MainHand).map(|e| e.item.clone())),
-    }
-}
-
-/// Takes off what `slot` holds; when the main hand's class default that comes back is two-handed, a shield or focus
-/// in the off hand goes to the stash too (the two-handed rule).
-fn take_off(d: &Data, work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
-    unequip(work, stash, slot)?;
-    if slot == "main_hand" {
-        let off = work.equipment.get("off_hand").and_then(|o| d.cat.items.get(o)).cloned();
-        if let (Some(main), Some(off)) = (main_weapon(d, work), off) {
-            if !off_hand_ok(Some(&main), &off) {
-                unequip(work, stash, "off_hand")?;
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Takes off what `slot` holds (the class default comes back).
-fn unequip(work: &mut UnitState, stash: &mut Stash, slot: &str) -> Result<(), String> {
-    let item = work.equipment.shift_remove(slot).ok_or_else(|| format!("The {} slot already holds the class default.", slot.replace('_', " ")))?;
-    give_one(stash, item);
-    Ok(())
-}
-
-/// Moves the item worn in `from` to `to` (it must fit there); what `to` held moves to `from` when it fits, else to the
-/// stash.
-fn move_slot(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str) -> Result<(), String> {
-    let item = work.equipment.get(from).cloned().ok_or("That slot holds the class default.")?;
-    let def = d.cat.items.get(&item).ok_or_else(|| format!("Unknown item '{item}'."))?;
-    if from == to || !fits(def, to) {
-        return Err(format!("{} doesn't go in the {} slot.", def.name, title_case(to).to_lowercase()));
-    }
-    if to == "off_hand" {
-        let mut rest = work.clone();
-        rest.equipment.shift_remove(from);
-        if let Some(main) = main_weapon(d, &rest).filter(|m| !off_hand_ok(Some(m), def)) {
-            return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
-        }
-    }
-    work.equipment.shift_remove(from);
-    if let Some(old) = work.equipment.insert(to.to_string(), item) {
-        if d.cat.items.get(&old).is_some_and(|o| fits(o, from)) {
-            work.equipment.insert(from.to_string(), old);
-        } else {
-            give_one(stash, old);
-        }
-    }
-    Ok(())
-}
-
-/// Puts a consumable from the stash in the pouch: in place of pouch slot `at` when it is filled (that item goes back),
-/// else at the end while there is room. INTENT2-U: under `pouch_stacks` (`stacks`) it assigns the item a stack slot
-/// instead (`stack_put`).
-fn pouch_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: Option<usize>, stacks: bool) -> Result<(), String> {
-    let def = d.cat.items.get(item).ok_or_else(|| format!("Unknown item '{item}'."))?;
-    if def.item_type != "CONSUMABLE" {
-        return Err(format!("{} can't go in the battle pouch.", def.name));
-    }
-    if !def.offered_in_battle() {
-        return Err(format!("{} can't be used in battle.", def.name));
-    }
-    if stash.get(item).copied().unwrap_or(0) < 1 {
-        return Err(format!("There is no {} in the stash.", def.name));
-    }
-    if stacks {
-        return stack_put(d, work, stash, item, at);
-    }
-    match at.filter(|&i| i < work.pouch.len()) {
-        Some(i) => {
-            let old = std::mem::replace(&mut work.pouch[i], item.to_string());
-            give_one(stash, old);
-        }
-        None if work.pouch.len() >= POUCH_MAX => return Err(format!("The pouch holds at most {POUCH_MAX} items.")),
-        None => work.pouch.push(item.to_string()),
-    }
-    take_one(stash, item);
-    Ok(())
-}
-
-fn pouch_take(work: &mut UnitState, stash: &mut Stash, i: usize, stacks: bool) -> Result<(), String> {
-    if stacks {
-        return work.take_pouch_slot(i, stash).map(|_| ());
-    }
-    if i >= work.pouch.len() {
-        return Err("That pouch slot is empty.".into());
-    }
-    give_one(stash, work.pouch.remove(i));
-    Ok(())
-}
-
-/// INTENT2-U ("Stacks & Auto-Fill"): gives `item` a stack slot (the kit's `assign_pouch`: packed to `min(5,
-/// max_stack)`, a second slot of the same item refused), in place of stack slot `at` when that holds another item (its
-/// copies go back to the stash) and moved to that place (`UnitState::move_pouch_slot`). Dropped on its own slot it is a
-/// no-op. No copy moves now: the kit's auto-fill fills the slot at combat start and after a fight.
-fn stack_put(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, at: Option<usize>) -> Result<(), String> {
-    let slots = work.pouch_slots();
-    if at.is_some_and(|i| slots.get(i).is_some_and(|s| s == item)) {
-        return Ok(());
-    }
-    if let Some(i) = at.filter(|&i| i < slots.len() && !slots.iter().any(|s| s == item)) {
-        work.take_pouch_slot(i, stash)?;
-    }
-    work.assign_pouch(d, item).map_err(|e| named(d, item, e))?;
-    // the new slot's place: not always the last (a key-less slot, copies with no packed target, sorts after it)
-    if let (Some(i), Some(now)) = (at, work.pouch_slots().iter().position(|s| s == item)) {
-        if i < now {
-            work.move_pouch_slot(d, now, i)?;
-        }
-    }
-    Ok(())
-}
-
-/// A kit refusal with the item's name for its id (`'con_x' already has a pouch slot.` reads `Fire Flask already ...`).
-fn named(d: &Data, item: &str, e: String) -> String {
-    e.replace(&format!("'{item}'"), &d.item_name(item))
 }
 
 /// INTENT2-U: one pip of a pouch stack on the Party Screen.
@@ -1464,33 +698,6 @@ pub(crate) enum Pip {
 /// 5), filled for the `cur` copies in the pouch, hollow up to the `packed` count, dimmed above it.
 pub(crate) fn pouch_pips(cur: i64, packed: i64, limit: i64) -> Vec<Pip> {
     (0..limit.min(5)).map(|k| if k < cur { Pip::Filled } else if k < packed { Pip::Hollow } else { Pip::Dim }).collect()
-}
-
-/// A drop: payload `stash.<item>`, `equip.<slot>` or `pouch.<i>` on target `slot.<slot>`, `pouch.<i>` or `stash`
-/// (INTENT2-U: under `pouch_stacks`, `stacks`, a pouch index names a stack slot).
-fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: &str, stacks: bool) -> Result<(), String> {
-    let (kind, what) = from.split_once('.').unwrap_or((from, ""));
-    let (target, at) = to.split_once('.').unwrap_or((to, ""));
-    let index = |s: &str| s.parse::<usize>().map_err(|_| format!("Bad pouch slot '{s}'."));
-    match (kind, target) {
-        ("stash", "slot") => equip(d, work, stash, what, Some(at)),
-        ("stash", "pouch") => pouch_put(d, work, stash, what, Some(index(at)?), stacks),
-        ("equip", "stash") => take_off(d, work, stash, what),
-        ("equip", "slot") => move_slot(d, work, stash, what, at),
-        ("pouch", "stash") => pouch_take(work, stash, index(what)?, stacks),
-        ("pouch", "pouch") if stacks => work.move_pouch_slot(d, index(what)?, index(at)?),
-        ("pouch", "pouch") => {
-            let (i, j) = (index(what)?, index(at)?);
-            if i == j || i >= work.pouch.len() {
-                return Err("Nothing to move.".into());
-            }
-            let item = work.pouch.remove(i);
-            let j = j.min(work.pouch.len());
-            work.pouch.insert(j, item);
-            Ok(())
-        }
-        _ => Err("That can't go there.".into()),
-    }
 }
 
 impl Screen<GameCx> for Character {
@@ -1636,8 +843,8 @@ impl Screen<GameCx> for Character {
                 return;
             }
             match self.skills_after_drop(cx, from, to) {
-                Ok((class, extra, ranks)) => {
-                    (self.class_slots, self.extra_slots, self.ranks) = (class, extra, ranks);
+                Ok(s) => {
+                    self.set_slots(s);
                     self.using_default = false;
                 }
                 Err(e) => show_errors(cx, vec![e]),
@@ -1808,8 +1015,8 @@ impl Character {
         let fam_name = |f: &str| cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
         let row_of = |f: &str, rank: i32| cat.family_rows(f).into_iter().find(|s| s.tier == rank);
         let path = self.path_families(cx);
-        let max_class = emberwake_rules::stats::MAX_CLASS_SLOTS;
-        let max_extra = emberwake_rules::stats::MAX_EXTRA_SLOTS;
+        let draft = self.slots();
+        let (max_class, max_extra) = (party_ops::slot_cap(true), party_ops::slot_cap(false));
         // Left: the fixed slots, five class and three extra (SKILLUI1 section 4).
         ui.p.text(64.0, 104.0, &format!("Class slots {} / {max_class}", self.class_slots.len()), BODY + 1.0, th().info);
         ui.p.text(150.0, 104.0, if self.using_default { "Default loadout" } else { "Custom loadout" }, BODY, th().dim);
@@ -1898,9 +1105,9 @@ impl Character {
             let y = 118 + k as i32 * 22;
             let top = u.selectable_ranks(cat, f).last().copied().unwrap_or(0);
             let row = row_of(f, top);
-            let slotted = self.class_slots.contains(f) || self.extra_slots.contains(f);
-            let on_path = path.contains(f);
-            let full = !slotted && self.extra_slots.len() >= max_extra && (!on_path || self.class_slots.len() >= max_class);
+            // the click path's rule (`SkillSlots::click_group`): no free slot in the family's group
+            let slotted = draft.has(f);
+            let full = !slotted && draft.click_group(&path, f).is_err();
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
             let desc = row.map(|s| emberwake_content::source::skill_description(&s.raw, stances)).unwrap_or_default();
@@ -2202,7 +1409,8 @@ impl Character {
         ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, th().info);
         for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
             let y = 116 + i as i32 * 15;
-            let explicit = work.equipment.get(*slot).cloned();
+            // PR5-26 (audit B2): a slot left empty (`NO_ITEM`) shows empty, as no item
+            let explicit = work.equipment.get(*slot).cloned().filter(|i| i != NO_ITEM);
             let shown = explicit.clone().or_else(|| {
                 let s = emberwake_rules::gear::Slot::parse(slot)?;
                 built.as_ref().and_then(|b| b.unit.inventory.get(s).map(|e| e.item.id.clone()))
@@ -2377,13 +1585,13 @@ impl Character {
         let mouse = ui.mouse;
         if let Some(from) = ui.dragging() {
             let to = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mouse.0, mouse.1))?.drop.clone()?;
-            return drop_move(d, &mut w, &mut st, from, &to, self.gear_stacks).ok().map(|_| w);
+            return drop_move(d, &self.gear_world, &mut w, &mut st, from, &to, self.gear_stacks).ok().map(|_| w);
         }
         let hovered = ui.widgets.iter().rev().find(|x| x.action.is_some() && ui.hover(x.rect))?;
         let ok = if let Some(item) = hovered.id.strip_prefix("gear.stash.") {
-            d.cat.items.get(item).is_some_and(|i| i.is_equipment()) && equip(d, &mut w, &mut st, item, None).is_ok()
+            d.cat.items.get(item).is_some_and(|i| i.is_equipment()) && equip(d, &self.gear_world, &mut w, &mut st, item, None).is_ok()
         } else if let Some(slot) = hovered.id.strip_prefix("gear.slot.") {
-            take_off(d, &mut w, &mut st, slot).is_ok()
+            take_off(d, &self.gear_world, &mut w, &mut st, slot).is_ok()
         } else {
             false
         };
@@ -2398,7 +1606,8 @@ const FOLLOW_TOGGLE: i32 = 11;
 
 pub(crate) fn deck_json(d: &Deck) -> Value {
     let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
-    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups)})
+    // PR5-26 (audit B4): the actives marked marrow too
+    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups), "channeled": d.channeled})
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
@@ -2467,29 +1676,6 @@ fn item_numbers(def: &emberwake_data::ItemDef) -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
 }
 
-/// TERMS1 TU5: every intent's name through `cat`'s terms (the game's `terms` row, else the default), by intent id.
-pub(crate) fn intent_names(cat: &emberwake_data::Catalog) -> IndexMap<String, String> {
-    emberwake_battle::round_intent::RoundIntent::ALL.into_iter().map(|i| (i.id().to_string(), i.label(cat))).collect()
-}
-
-/// An intent id's display name ("assault" -> "Assault"; a renamed intent its `names` entry, from `intent_names`).
-fn intent_title(names: &IndexMap<String, String>, id: &str) -> String {
-    match names.get(id) {
-        Some(n) => n.clone(),
-        None => emberwake_battle::round_intent::RoundIntent::parse(id).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(id)),
-    }
-}
-
-fn title_case(slot: &str) -> String {
-    slot.split('_').map(|w| {
-        let mut c = w.chars();
-        match c.next() {
-            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-            None => String::new(),
-        }
-    }).collect::<Vec<_>>().join(" ")
-}
-
 fn roman(n: i32) -> &'static str {
     ["-", "I", "II", "III", "IV", "V"].get(n.max(0) as usize).copied().unwrap_or("V+")
 }
@@ -2497,6 +1683,8 @@ fn roman(n: i32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use emberwake_world::party_ops::intent_names;
+    use emberwake_world::state::{item_fits_slot as fits, off_hand_ok};
 
     fn setup() -> (Data, UnitState, Stash) {
         let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
@@ -2535,12 +1723,12 @@ mod tests {
     fn a_stash_item_dropped_on_a_slot_it_fits_is_worn_and_the_old_one_returns() {
         let (d, mut m, mut st) = setup();
         let (a, sword) = (first(&d, "accessory_1"), first(&d, "main_hand"));
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
         assert_eq!(m.equipment.get("accessory_1"), Some(&a));
         assert_eq!(st[&a], 1);
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
         assert_eq!(st[&a], 1, "the replaced copy came back");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{sword}"), "slot.body", false).is_err(), "a weapon is not body armour");
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{sword}"), "slot.body", false).is_err(), "a weapon is not body armour");
     }
 
     #[test]
@@ -2548,21 +1736,21 @@ mod tests {
         let (d, mut m, mut st) = setup();
         let a = first(&d, "accessory_1");
         let before = st[&a];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
-        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "equip.accessory_1", "stash", false).unwrap();
         assert!(!m.equipment.contains_key("accessory_1"));
         assert_eq!(st[&a], before);
-        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_1", "stash", false).is_err(), "a class default can't come off");
+        assert!(drop_move(&d, "", &mut m, &mut st, "equip.accessory_1", "stash", false).is_err(), "a class default can't come off");
     }
 
     #[test]
     fn a_worn_item_moves_to_another_slot_it_fits() {
         let (d, mut m, mut st) = setup();
         let a = first(&d, "accessory_1");
-        drop_move(&d, &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
-        drop_move(&d, &mut m, &mut st, "equip.accessory_1", "slot.accessory_2", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{a}"), "slot.accessory_1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "equip.accessory_1", "slot.accessory_2", false).unwrap();
         assert_eq!((m.equipment.get("accessory_1"), m.equipment.get("accessory_2")), (None, Some(&a)));
-        assert!(drop_move(&d, &mut m, &mut st, "equip.accessory_2", "slot.body", false).is_err());
+        assert!(drop_move(&d, "", &mut m, &mut st, "equip.accessory_2", "slot.body", false).is_err());
     }
 
     #[test]
@@ -2571,7 +1759,7 @@ mod tests {
         m.pouch.clear();
         let c = consumables(&d);
         let wear = first(&d, "main_hand");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{wear}"), "pouch.0", false).is_err(), "gear is not a consumable");
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{wear}"), "pouch.0", false).is_err(), "gear is not a consumable");
         st.insert(c[0].clone(), 10);
         for _ in 0..POUCH_MAX {
             pouch_put(&d, &mut m, &mut st, &c[0], None, false).unwrap();
@@ -2579,12 +1767,12 @@ mod tests {
         assert!(pouch_put(&d, &mut m, &mut st, &c[0], None, false).is_err(), "a full pouch");
         let other = c.last().unwrap().clone();
         let n = st[&c[0]];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{other}"), "pouch.1", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{other}"), "pouch.1", false).unwrap();
         assert_eq!(m.pouch[1], other);
         assert_eq!(st[&c[0]], n + 1, "the replaced one came back");
-        drop_move(&d, &mut m, &mut st, "pouch.1", "pouch.0", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "pouch.1", "pouch.0", false).unwrap();
         assert_eq!(m.pouch[0], other);
-        drop_move(&d, &mut m, &mut st, "pouch.0", "stash", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, "pouch.0", "stash", false).unwrap();
         assert_eq!(m.pouch.len(), POUCH_MAX - 1);
     }
 
@@ -2598,12 +1786,50 @@ mod tests {
         let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
         untrained.sort();
         let item = untrained.into_iter().find(|id| !m.trains(&d, id)).expect("a weapon this member has no training in").to_string();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).unwrap();
         assert_eq!(m.equipment.get("main_hand"), Some(&item));
         assert!(m.validate(&d).is_empty(), "Confirm takes it: {:?}", m.validate(&d));
         let built = progression::build_with(&d, &m, "", false).unwrap();
         let (badge, note) = wield_badge(Some(&built.unit), &d.cat.items[&item]).expect("a penalty badge");
         assert!(badge.starts_with('x') && note.contains("untrained"), "{badge} {note}");
+    }
+
+    /// PR5-26 (audit B2, B6): a member whose grant `forbid_hands` refuses two-handed items (a scratch passive here) can't
+    /// wear one from the stash or move one into a slot; a slot left empty (`NO_ITEM`) shows empty, takes an item without
+    /// giving anything back and can't be taken off again; taking off the main hand leaves it empty exactly when the
+    /// class default the build would bring back is two-handed (`UnitState::forbids_default`).
+    #[test]
+    fn a_member_forbidden_two_handers_keeps_them_off_and_its_empty_slot() {
+        let (mut d, mut m, mut st) = setup();
+        let no_2h = emberwake_data::PassiveDef { id: "t_no_2h".into(), name: "No 2H".into(), effects: vec![json!({"type": "forbid_hands", "hands": 2})], slot: String::new() };
+        std::sync::Arc::make_mut(&mut d.cat).passives.insert(no_2h.id.clone(), no_2h);
+        let mut great: Vec<&String> = d.cat.items.iter().filter(|(id, i)| i.two_handed && m.can_wear(&d, id, "main_hand").is_ok()).map(|(id, _)| id).collect();
+        great.sort();
+        let great = great.first().map(|s| s.to_string()).expect("a two-handed weapon the member can wear");
+        m.passives.push("t_no_2h".into());
+        // the first main hand item it can wear now: one-handed
+        let one = wearable(&d, &m, "main_hand");
+        assert!(m.can_wear(&d, &great, "main_hand").is_err(), "forbidden now");
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).is_err(), "no two-hander from the stash");
+        m.equipment.insert("main_hand".into(), NO_ITEM.into());
+        assert!(take_off(&d, "", &mut m, &mut st, "main_hand").is_err(), "an empty slot can't be taken off");
+        let before = st.clone();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        assert_eq!(m.equipment.get("main_hand"), Some(&one));
+        assert!(!st.contains_key(NO_ITEM) && st[&one] == before[&one] - 1, "the empty slot gives nothing back");
+        take_off(&d, "", &mut m, &mut st, "main_hand").unwrap();
+        let left = m.forbids_default(&d, "", "main_hand").then(|| NO_ITEM.to_string());
+        assert_eq!(m.equipment.get("main_hand").cloned(), left, "empty exactly when the default is a two-hander");
+        assert_eq!(st[&one], before[&one], "the worn item went back");
+        // review F1: a worn item moved into an emptied slot gives nothing back, and the slot it leaves is empty exactly
+        // when its default is a two-hander
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        m.equipment.insert("off_hand".into(), NO_ITEM.into());
+        let before = st.clone();
+        drop_move(&d, "", &mut m, &mut st, "equip.main_hand", "slot.off_hand", false).unwrap();
+        assert_eq!(m.equipment.get("off_hand"), Some(&one), "moved");
+        assert_eq!(st, before, "nothing came back to the stash (no '{NO_ITEM}')");
+        assert_eq!(m.equipment.get("main_hand").cloned(), left, "the main hand left behind: empty exactly when the default is a two-hander");
     }
 
     /// The two-handed rule (decision "Two-handed weapon and the off hand (user 2026-10-20)").
@@ -2615,13 +1841,17 @@ mod tests {
             ids.sort();
             ids.first().map(|s| s.to_string())
         };
-        let (Some(great), Some(shield)) = (pick(&m, "main_hand", true, "WEAPON"), pick(&m, "off_hand", false, "SHIELD")) else { panic!("a 2H weapon and a shield this class can wear") };
-        drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap();
+        let (Some(great), Some(one), Some(shield)) = (pick(&m, "main_hand", true, "WEAPON"), pick(&m, "main_hand", false, "WEAPON"), pick(&m, "off_hand", false, "SHIELD")) else {
+            panic!("a 2H weapon, a 1H weapon and a shield this class can wear")
+        };
+        // the member's own main hand (or its class default) may be two-handed: a one-handed weapon first frees the off hand
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap();
         let shields = st[&shield];
-        drop_move(&d, &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{great}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the shield is stowed");
         assert_eq!(st[&shield], shields + 1);
-        let err = drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap_err();
+        let err = drop_move(&d, "", &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand", false).unwrap_err();
         assert!(err.contains("both hands"), "{err}");
         let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none_or(|o| off_hand_ok(Some(&d.cat.items[&great]), &o.item)), "no default shield under the 2H weapon");
@@ -2642,11 +1872,14 @@ mod tests {
             ids.first().map(|s| s.to_string())
         };
         let staff = wear(&m, "main_hand", &|i| i.two_handed && i.item_type == "WEAPON").expect("a 2H weapon a mage can wear");
+        let one = wear(&m, "main_hand", &|i| !i.two_handed && i.item_type == "WEAPON").expect("a 1H weapon a mage can wear");
         let focus = wear(&m, "off_hand", &|i| matches!(i.weapon_type.as_str(), "orb" | "tome")).expect("a focus");
-        drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
-        drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
+        // the class default main hand may be two-handed: a one-handed weapon first frees the off hand for the focus
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap();
+        drop_move(&d, "", &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand", false).unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
-        assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap_err().contains("both hands"));
+        assert!(drop_move(&d, "", &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand", false).unwrap_err().contains("both hands"));
         let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none(), "no default orb under the staff");
         m.equipment.insert("off_hand".into(), focus);
@@ -2662,7 +1895,7 @@ mod tests {
         for slot in ["main_hand", "body", "accessory_1"] {
             let mut w = m.clone();
             let item = wearable(&d, &m, slot);
-            equip(&d, &mut w, &mut st, &item, Some(slot)).unwrap();
+            equip(&d, "", &mut w, &mut st, &item, Some(slot)).unwrap();
             changed |= sheet(&d, "", &rs, &w) != before;
         }
         assert!(changed);
@@ -2844,6 +2077,24 @@ mod tests {
             auto_actives: strs(&["lunge"]),
             intent_names: IndexMap::new(),
         }
+    }
+
+    /// PR5-26 (audit B4): the actives marked marrow survive a deck edit: a passive edit on an automatic deck keeps the
+    /// marks (its actives stay automatic), an actives edit pins the deck with them, an active that leaves the deck drops
+    /// its mark, and the agent link's deck lists them.
+    #[test]
+    fn deck_edits_keep_the_marrow_marks() {
+        let t = terms();
+        let auto = Deck { keystone: strs(&["k1"]), channeled: strs(&["lunge"]), ..Default::default() };
+        let d = t.slot(&auto, "passive", "p2").unwrap();
+        assert_eq!((d.active.clone(), d.channeled.clone()), (Vec::new(), strs(&["lunge"])), "a passive edit keeps the actives automatic and the mark");
+        let d = t.slot(&auto, "active", "cleave").unwrap();
+        assert_eq!((d.active.clone(), d.channeled.clone()), (strs(&["lunge", "cleave"]), strs(&["lunge"])), "pinned with the mark");
+        let d = t.unslot(&d, "active", 0).unwrap();
+        assert_eq!((d.active.clone(), d.channeled.clone()), (strs(&["cleave"]), Vec::new()), "the unslotted active's mark goes");
+        let d = t.after_drop(&Deck { active: strs(&["lunge", "cleave"]), channeled: strs(&["lunge"]), ..Default::default() }, "deck.own.active.wall", "deck.active.0").unwrap();
+        assert_eq!((d.active.clone(), d.channeled.clone()), (strs(&["wall", "cleave"]), Vec::new()), "a replaced active's mark goes");
+        assert_eq!(deck_json(&auto)["channeled"], json!(["lunge"]));
     }
 
     /// A4.2-K1b (INTENT2 IR15): with derived rows (`rows_of`) a dual skill fits the player's order of either row and the
@@ -3529,16 +2780,16 @@ mod pouch_stack_tests {
         let (b, c) = (others[0].clone(), others[1].clone());
         let mut m = cx.gs().party.member(&member).unwrap().clone();
         let mut st: Stash = [(a.clone(), 2), (b.clone(), 1), (c.clone(), 1)].into_iter().collect();
-        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
-        drop_move(d, &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
         let before = (m.clone(), st.clone());
-        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
         assert_eq!((m.clone(), st.clone()), before, "its own slot: nothing changes");
-        drop_move(d, &mut m, &mut st, "pouch.1", "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, "pouch.1", "pouch.0", true).unwrap();
         assert_eq!(m.pouch_slots(), [b.clone(), a.clone()], "the moved slot keeps its place");
         // a copy in the slot, as the kit's auto-fill would have put there at a fight's start
         m.pouch.push(a.clone());
-        drop_move(d, &mut m, &mut st, &format!("stash.{c}"), "pouch.1", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{c}"), "pouch.1", true).unwrap();
         assert_eq!(m.pouch_slots(), [b.clone(), c.clone()], "the dropped item takes that place");
         assert_eq!(st[&a], 3, "the replaced slot's copy came back");
         // a key-less slot (copies with no packed target, as an old save before its first fight) sorts after the keyed
@@ -3547,9 +2798,9 @@ mod pouch_stack_tests {
         let mut m = cx.gs().party.member(&member).unwrap().clone();
         m.pouch = vec![k.clone()];
         m.pouch_packed.clear();
-        drop_move(d, &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{b}"), "pouch.1", true).unwrap();
         assert_eq!(m.pouch_slots(), [b.clone(), k.clone()], "the keyed slot first, the key-less one after it");
-        drop_move(d, &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
+        drop_move(d, "", &mut m, &mut st, &format!("stash.{a}"), "pouch.0", true).unwrap();
         assert_eq!(m.pouch_slots(), [a.clone(), k.clone()], "the new item in slot 0; the key-less slot not moved");
         assert!(!m.pouch_packed.contains_key(&k), "the key-less slot untouched");
     }

@@ -5,7 +5,7 @@
 		{
 			"id": "warrior",
 			"name": "Warrior",
-			"description": "Tank: huge constitution, kite shield and plate; a wall that holds the line and hits lightly.",
+			"description": "Vanguard: huge constitution, polearm and plate; a wall that holds the line and hooks foes at reach.",
 			"art": "warrior",
 			"ai_role": "AGGRESSOR",
 			"base_shares": {
@@ -23,12 +23,12 @@
 			},
 			"proficiency": {
 				"sword": {
-					"level": 3,
+					"level": 2,
 					"scaling": 1.5
 				},
 				"mace": {
-					"level": 2,
-					"scaling": 1.5
+					"level": 1,
+					"scaling": 1.25
 				},
 				"axe": {
 					"level": 2,
@@ -49,6 +49,10 @@
 				"leather": {
 					"level": 1,
 					"scaling": 1.25
+				},
+				"polearm": {
+					"level": 3,
+					"scaling": 1.5
 				}
 			},
 			"skill_path": {
@@ -63,8 +67,8 @@
 			"basics": [
 				"brace"
 			],
-			"main_hand": "wpn_hand_axe",
-			"off_hand": "shd_kite",
+			"main_hand": "wpn_iron_billhook",
+			"off_hand": "",
 			"head": "",
 			"body": "arm_plate",
 			"accessory_1": "",
@@ -93,20 +97,20 @@
 			},
 			"proficiency": {
 				"bow": {
-					"level": 3,
+					"level": 2,
 					"scaling": 1.5
 				},
 				"crossbow": {
-					"level": 2,
+					"level": 3,
 					"scaling": 1.5
 				},
 				"dagger": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"sword": {
 					"level": 1,
 					"scaling": 1.25
+				},
+				"sword": {
+					"level": 2,
+					"scaling": 1.5
 				},
 				"leather": {
 					"level": 3,
@@ -130,7 +134,7 @@
 			"basics": [
 				"disengage_step"
 			],
-			"main_hand": "wpn_shortbow",
+			"main_hand": "stirrup_arbalest",
 			"off_hand": "",
 			"head": "",
 			"body": "arm_leather",
@@ -163,7 +167,7 @@
 					"scaling": 1.5
 				},
 				"mace": {
-					"level": 3,
+					"level": 2,
 					"scaling": 1.5
 				},
 				"hammer": {
@@ -203,7 +207,7 @@
 			"basics": [
 				"sweep_kick"
 			],
-			"main_hand": "",
+			"main_hand": "wpn_knuckles",
 			"off_hand": "",
 			"head": "",
 			"body": "arm_leather",
@@ -233,12 +237,12 @@
 			},
 			"proficiency": {
 				"mace": {
-					"level": 3,
-					"scaling": 1.5
+					"level": 1,
+					"scaling": 1.25
 				},
 				"staff": {
-					"level": 2,
-					"scaling": 1.5
+					"level": 1,
+					"scaling": 1.25
 				},
 				"dagger": {
 					"level": 1,
@@ -259,6 +263,18 @@
 				"orb": {
 					"level": 2,
 					"scaling": 1.25
+				},
+				"censer": {
+					"level": 3,
+					"scaling": 1.5
+				},
+				"bone_saw": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"scourge": {
+					"level": 2,
+					"scaling": 1.5
 				}
 			},
 			"skill_path": {
@@ -276,7 +292,7 @@
 			"basics": [
 				"tend_wounds"
 			],
-			"main_hand": "wpn_cleric_mace",
+			"main_hand": "bronze_censer",
 			"off_hand": "wpn_tome",
 			"head": "",
 			"body": "arm_cleric_vestment",
@@ -375,11 +391,11 @@
 			},
 			"proficiency": {
 				"staff": {
-					"level": 3,
+					"level": 2,
 					"scaling": 1.5
 				},
 				"wand": {
-					"level": 3,
+					"level": 2,
 					"scaling": 1.5
 				},
 				"orb": {
@@ -397,6 +413,10 @@
 				"cloth": {
 					"level": 3,
 					"scaling": 1.5
+				},
+				"sprayer": {
+					"level": 3,
+					"scaling": 1.5
 				}
 			},
 			"skill_path": {
@@ -411,8 +431,8 @@
 			"basics": [
 				"cinder_spark"
 			],
-			"main_hand": "wpn_wand",
-			"off_hand": "wpn_orb",
+			"main_hand": "brass_vitriol_sprayer",
+			"off_hand": "",
 			"head": "",
 			"body": "arm_mage_robe",
 			"accessory_1": "",

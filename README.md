@@ -3,7 +3,7 @@
 A turn-planned tactical RPG: parties plan every unit's round on a shared block timeline, then the round resolves block by
 block (stances, reach, cover, statuses, riposte, morale, boss phases) on a 12x9 grid, inside a world of regions, quests,
 dialogue, shops and travel. Since 2026-10-19 the game runs on **Aegis**, its own Rust engine (`engine/`). The Godot 4
-build it replaced is frozen in `legacy/` and stays the reference the engine is checked against.
+build it replaced is frozen in `legacy/` as an archive (no build or test reads it; engine goldens run on frozen fixtures since CLN-36..42).
 
 ## Layout
 
@@ -12,7 +12,7 @@ build it replaced is frozen in `legacy/` and stays the reference the engine is c
 | `engine/` | The Aegis engine: Rust workspace (rules, battle, world, data loader and writer, command API, CLI, GUI), engine docs. Start at [engine/README.md](engine/README.md). |
 | `games/emberwake/data/` | The game content: catalog (classes, units, skills, items, item families, passives, encounters, terrain), worlds, region maps, quests, dialogue services, XP curve, asset manifest. Edited only through `aegis content` (below). |
 | `games/emberwake/assets/` | The game's asset layer: bodies, portraits, icons, tiles, backgrounds, UI files and audio (ASSETORG2; the engine reads them over the game, kit and engine layers; `games/emberwake/assets/README.md`). |
-| `docs/` | Game design: brief, roadmap, decisions, specs, balance reports, preferences, workflow. |
+| `docs/` | Game design: brief, roadmap, decisions, specs, audits, balance reports, preferences, workflow. |
 | `legacy/` | The frozen Godot build: the whole project of `main` at 7fa10da with its own data copy ([legacy/LEGACY.md](legacy/LEGACY.md)). Branch `legacy` resumes Godot work if ever needed. |
 | `kits/` | Shared kits: `kits/rpg/` (the RPG kit: genre rules in `rpgkit_*` crates and their `schema.json` since KIT1-M, plus reusable RPG art and sound, ASSETORG2; [kits/rpg/README.md](kits/rpg/README.md)). |
 | `tools/` | `fc.sh` (gate, tests, content, sim), art and music generators, worktree helpers. |
@@ -26,7 +26,7 @@ run.bat opt a      :: a design-review option build (see the header of run.bat)
 ```
 
 Or directly from the repo root: `cargo run --release -p emberwake_gui` (main menu) or `-- screen=runner`. Saves and settings
-live in `%APPDATA%/Aegis/emberwake` (copied from `%APPDATA%/Aegis` on the first start after SPLIT1-8); Godot saves load in the engine unchanged. Controls, screens and the agent link (port 47800):
+live in `%APPDATA%/Aegis/emberwake` (save format v13; older pre-v13 and Godot saves are refused since CLN-47). Controls, screens and the agent link (port 47800):
 [engine/README.md](engine/README.md).
 
 ## Checks

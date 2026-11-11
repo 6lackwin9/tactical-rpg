@@ -1,0 +1,558 @@
+{
+	"_doc": "PR5-33 (LAYER-UP-DATA): Emberwake's sim description, read by rpgkit_sim::config (emberwake_sim::game): the Ashlands as default world and story run, branched on the steel choice (arms = ashmaw_stand, the full finale; gate = ashmaw_stand_barred); the timeline test encounters of the feel mode (RULESET1-G); the classes as the sim plays them (KITIDS1, BAL2_SIM.md sections 5, 6.2-6.4).",
+	"default_world": "ashlands",
+	"story": {
+		"world": "ashlands",
+		"branch_flag": "ashlands.steel_to_gate",
+		"choice": "steel",
+		"branches": [
+			[
+				"arms",
+				false
+			],
+			[
+				"gate",
+				true
+			]
+		],
+		"usage": "       campaign [level]   Ashlands story fights in quest order, HP carried over (level = party level, default 5): all 10 trios, both steel choices",
+		"extra_example": "4:ash_raiders"
+	},
+	"feel_encounters": [
+		"tl_duel_windup",
+		"tl_duel_reach",
+		"tl_duel_armour",
+		"tl_flank",
+		"tl_skirmish"
+	],
+	"classes": {
+		"ids": [
+			"warrior",
+			"ranger",
+			"priest",
+			"brawler",
+			"rogue",
+			"mage"
+		],
+		"default_comp": [
+			"warrior",
+			"ranger",
+			"priest",
+			"mage"
+		],
+		"trio_lead": "warrior",
+		"elite": "warrior",
+		"boss": "brawler",
+		"support_baseline": "brawler",
+		"roles": [
+			{
+				"class": "warrior",
+				"primary": "tank",
+				"secondary": [
+					"support"
+				],
+				"loadouts": [
+					{
+						"role": "tank",
+						"skills": [
+							"taunt_shout",
+							"shield_bash",
+							"intimidate",
+							"shield_wall"
+						]
+					},
+					{
+						"role": "support",
+						"skills": [
+							"taunt_shout",
+							"intimidate",
+							"shield_bash",
+							"sunder",
+							"riposte"
+						]
+					}
+				],
+				"l7_swaps": []
+			},
+			{
+				"class": "ranger",
+				"primary": "ranged",
+				"secondary": [
+					"aoe"
+				],
+				"loadouts": [
+					{
+						"role": "ranged",
+						"skills": [
+							"aimed_shot",
+							"pinning_shot",
+							"leap_back",
+							"barbed_arrow",
+							"deadeye"
+						]
+					},
+					{
+						"role": "aoe",
+						"skills": [
+							"aimed_shot",
+							"pinning_shot",
+							"leap_back",
+							"volley",
+							"deadeye"
+						]
+					}
+				],
+				"l7_swaps": []
+			},
+			{
+				"class": "priest",
+				"primary": "support",
+				"secondary": [
+					"striker"
+				],
+				"loadouts": [
+					{
+						"role": "support",
+						"skills": [
+							"rally",
+							"mend",
+							"purify",
+							"greater_mend",
+							"renewal"
+						]
+					},
+					{
+						"role": "striker",
+						"skills": [
+							"smite",
+							"rally",
+							"hex",
+							"mend",
+							"greater_mend"
+						]
+					}
+				],
+				"l7_swaps": [
+					{
+						"role": "striker",
+						"skill": "mend",
+						"with": "judgement"
+					}
+				]
+			},
+			{
+				"class": "brawler",
+				"primary": "aoe",
+				"secondary": [
+					"tank",
+					"striker"
+				],
+				"loadouts": [
+					{
+						"role": "aoe",
+						"skills": [
+							"body_blow",
+							"lunge",
+							"sweep_kick",
+							"cyclone_kick",
+							"haymaker"
+						]
+					},
+					{
+						"role": "tank",
+						"skills": [
+							"body_blow",
+							"lunge",
+							"sweep_kick",
+							"cyclone_kick",
+							"haymaker"
+						]
+					},
+					{
+						"role": "striker",
+						"skills": [
+							"body_blow",
+							"lunge",
+							"charge_in",
+							"hamstring",
+							"haymaker"
+						]
+					}
+				],
+				"l7_swaps": []
+			},
+			{
+				"class": "rogue",
+				"primary": "striker",
+				"secondary": [],
+				"loadouts": [
+					{
+						"role": "striker",
+						"skills": [
+							"quick_stab",
+							"pounce",
+							"lacerate",
+							"backflip",
+							"hamstring"
+						]
+					}
+				],
+				"l7_swaps": [
+					{
+						"role": "striker",
+						"skill": "hamstring",
+						"with": "assassinate"
+					}
+				]
+			},
+			{
+				"class": "mage",
+				"primary": "aoe",
+				"secondary": [
+					"ranged"
+				],
+				"loadouts": [
+					{
+						"role": "aoe",
+						"skills": [
+							"arcane_bolt",
+							"arc_lance",
+							"firebomb",
+							"glacial_burst",
+							"focus"
+						]
+					},
+					{
+						"role": "ranged",
+						"skills": [
+							"arcane_bolt",
+							"arc_lance",
+							"hex",
+							"focus",
+							"firebomb"
+						]
+					}
+				],
+				"l7_swaps": [
+					{
+						"role": "aoe",
+						"skill": "focus",
+						"with": "inferno"
+					}
+				]
+			}
+		],
+		"generated": [
+			{
+				"id": "mob",
+				"enemies": [
+					[
+						"brawler",
+						"minion"
+					],
+					[
+						"rogue",
+						"minion"
+					],
+					[
+						"ranger",
+						"minion"
+					],
+					[
+						"priest",
+						"minion"
+					],
+					[
+						"brawler",
+						"minion"
+					]
+				],
+				"wave": []
+			},
+			{
+				"id": "line",
+				"enemies": [
+					[
+						"warrior",
+						"standard"
+					],
+					[
+						"brawler",
+						"standard"
+					],
+					[
+						"ranger",
+						"standard"
+					],
+					[
+						"rogue",
+						"standard"
+					]
+				],
+				"wave": []
+			},
+			{
+				"id": "wave",
+				"enemies": [
+					[
+						"brawler",
+						"standard"
+					],
+					[
+						"rogue",
+						"standard"
+					],
+					[
+						"ranger",
+						"standard"
+					]
+				],
+				"wave": [
+					[
+						"brawler",
+						"minion"
+					],
+					[
+						"rogue",
+						"minion"
+					],
+					[
+						"priest",
+						"minion"
+					]
+				]
+			},
+			{
+				"id": "elite",
+				"enemies": [
+					[
+						"@elite",
+						"elite"
+					],
+					[
+						"rogue",
+						"standard"
+					],
+					[
+						"mage",
+						"standard"
+					],
+					[
+						"warrior",
+						"standard"
+					]
+				],
+				"wave": []
+			},
+			{
+				"id": "boss",
+				"enemies": [
+					[
+						"@boss",
+						"boss"
+					],
+					[
+						"ranger",
+						"standard"
+					],
+					[
+						"priest",
+						"standard"
+					]
+				],
+				"wave": [
+					[
+						"ranger",
+						"minion"
+					],
+					[
+						"priest",
+						"minion"
+					]
+				]
+			}
+		],
+		"scenarios": [
+			{
+				"id": "tank_hold",
+				"role": "tank",
+				"allies": [
+					"ranger",
+					"mage"
+				],
+				"enemies": [
+					[
+						"brawler",
+						"standard"
+					],
+					[
+						"rogue",
+						"standard"
+					],
+					[
+						"brawler",
+						"standard"
+					],
+					[
+						"rogue",
+						"standard"
+					]
+				],
+				"priority": false,
+				"block": [
+					0,
+					0
+				],
+				"tier_until": null
+			},
+			{
+				"id": "ranged_dive",
+				"role": "ranged",
+				"allies": [
+					"warrior"
+				],
+				"enemies": [
+					[
+						"rogue",
+						"standard"
+					],
+					[
+						"rogue",
+						"standard"
+					],
+					[
+						"brawler",
+						"standard"
+					]
+				],
+				"priority": false,
+				"block": [
+					0,
+					0
+				],
+				"tier_until": null
+			},
+			{
+				"id": "aoe_swarm",
+				"role": "aoe",
+				"allies": [
+					"warrior",
+					"priest"
+				],
+				"enemies": [
+					[
+						"brawler",
+						"minion"
+					],
+					[
+						"rogue",
+						"minion"
+					],
+					[
+						"brawler",
+						"minion"
+					],
+					[
+						"brawler",
+						"minion"
+					],
+					[
+						"rogue",
+						"minion"
+					],
+					[
+						"priest",
+						"minion"
+					]
+				],
+				"priority": false,
+				"block": [
+					2,
+					3
+				],
+				"tier_until": null
+			},
+			{
+				"id": "support_attrition",
+				"role": "support",
+				"allies": [
+					"warrior",
+					"brawler"
+				],
+				"enemies": [
+					[
+						"ranger",
+						"standard"
+					],
+					[
+						"brawler",
+						"standard"
+					],
+					[
+						"mage",
+						"standard"
+					],
+					[
+						"rogue",
+						"standard"
+					]
+				],
+				"priority": false,
+				"block": [
+					0,
+					0
+				],
+				"tier_until": null
+			},
+			{
+				"id": "striker_priority",
+				"role": "striker",
+				"allies": [
+					"warrior"
+				],
+				"enemies": [
+					[
+						"mage",
+						"elite"
+					],
+					[
+						"warrior",
+						"standard"
+					],
+					[
+						"warrior",
+						"standard"
+					]
+				],
+				"priority": true,
+				"block": [
+					0,
+					0
+				],
+				"tier_until": {
+					"level": 3,
+					"slot": 0,
+					"tier": "standard"
+				}
+			}
+		],
+		"s2_enemies": [
+			[
+				"ranger",
+				"standard"
+			],
+			[
+				"brawler",
+				"standard"
+			],
+			[
+				"mage",
+				"standard"
+			],
+			[
+				"rogue",
+				"standard"
+			]
+		]
+	}
+}

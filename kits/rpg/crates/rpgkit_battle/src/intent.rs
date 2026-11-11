@@ -20,7 +20,7 @@
 //!
 //! PK1-S2b (rule `channel`, PK1 4.3 item 6; engine-only): while a unit's round flag is set (a Channel round) its record
 //! shows the intent Channel (`round_intent`, term `intent_channel`) with `channel` set and the round's own row in
-//! `row_intent`, and each line of a marrow version names it with the marrow mark (`marrow`, term `marrow_mark`). Without
+//! `row_intent`, and each line of a channeled version names it with the channeled mark (`channeled`, term `channeled_mark`). Without
 //! the rule (or a Channel round) every record and the trace are unchanged.
 
 use crate::command::{CmdKind, Command};
@@ -51,11 +51,11 @@ pub struct Line {
     pub blocks: (i32, i32),
     /// RULESET1 T1: the recovery blocks booked after the impact (0 in classic; not in the trace).
     pub recovery: i32,
-    /// The action's display name ("" when arriving or idle); PK1-S2b: a marrow version's carries the marrow mark
-    /// (`channel::marrow_name`: "Cleave (Marrow)").
+    /// The action's display name ("" when arriving or idle); PK1-S2b: a channeled version's carries the channeled mark
+    /// (`channel::channeled_name`: "Cleave (Channeled)").
     pub skill: String,
-    /// PK1-S2b (PK1 4.3 item 6, rule `channel`): the action runs a marrow version (false outside a Channel round).
-    pub marrow: bool,
+    /// PK1-S2b (PK1 4.3 item 6, rule `channel`): the action runs a channeled version (false outside a Channel round).
+    pub channeled: bool,
 }
 
 /// The record of one enemy.
@@ -210,17 +210,17 @@ pub fn cell_of(cmd: &Command) -> V2 {
     }
 }
 
-/// PK1-S2b (PK1 4.3 item 6): the name a command shows in the tells: a marrow version's with the marrow mark.
+/// PK1-S2b (PK1 4.3 item 6): the name a command shows in the tells: a channeled version's with the channeled mark.
 pub fn skill_name(w: &World, cmd: &Command) -> String {
-    if cmd.marrow {
-        crate::channel::marrow_name(&w.cat, &cmd.name)
+    if cmd.channeled {
+        crate::channel::channeled_name(&w.cat, &cmd.name)
     } else {
         cmd.name.clone()
     }
 }
 
 pub fn line_of(w: &World, a: &ScheduledAction) -> Line {
-    Line { kind: kind_of(w, &a.command), target: target_of(&a.command), cell: cell_of(&a.command), blocks: (a.start, a.impact), recovery: a.end - a.impact, skill: skill_name(w, &a.command), marrow: a.command.marrow }
+    Line { kind: kind_of(w, &a.command), target: target_of(&a.command), cell: cell_of(&a.command), blocks: (a.start, a.impact), recovery: a.end - a.impact, skill: skill_name(w, &a.command), channeled: a.command.channeled }
 }
 
 /// `unit`'s live (not cancelled) scheduled actions in block order.
@@ -284,7 +284,7 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
     let reveal_all = badges_on(w) && w.plan_reveal;
     let mut rec = if actions.is_empty() {
         let kind = if on_grid_at_schedule.contains(&unit) { IDLE } else { ARRIVING };
-        Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new(), marrow: false }, revealed: enraged || reveal_all, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, channel: false, row_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
+        Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new(), channeled: false }, revealed: enraged || reveal_all, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, channel: false, row_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
     } else {
         // RULESET1 V4: a foresight range (as measured at scheduling) reveals on top of today's rule (holders in the
         // allies' order)
@@ -305,7 +305,7 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
 /// RULESET1 V5, intent UI5: the record of a party-side unit (its own plan, so always revealed). While planning
 /// (`plan` given) it reads the unit's plan entries; after the plan is committed, its scheduled actions.
 pub fn party_intent_of(w: &World, unit: UnitId, plan: Option<&Plan>, scheduled: &[ScheduledAction]) -> Intent {
-    let idle = || Line { kind: IDLE, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new(), marrow: false };
+    let idle = || Line { kind: IDLE, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new(), channeled: false };
     let mut rec = Intent { unit, line: idle(), revealed: true, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, channel: false, row_intent: None, round_target: None, maneuver: None, impacts: Vec::new() };
     match plan {
         Some(p) => {
@@ -315,7 +315,7 @@ pub fn party_intent_of(w: &World, unit: UnitId, plan: Option<&Plan>, scheduled: 
                 .entries
                 .iter()
                 .zip(&cmds)
-                .map(|(e, cmd)| Line { kind: kind_of(w, cmd), target: target_of(cmd), cell: cell_of(cmd), blocks: (e.start_block, e.end_block(w)), recovery: e.recovery, skill: skill_name(w, cmd), marrow: cmd.marrow })
+                .map(|(e, cmd)| Line { kind: kind_of(w, cmd), target: target_of(cmd), cell: cell_of(cmd), blocks: (e.start_block, e.end_block(w)), recovery: e.recovery, skill: skill_name(w, cmd), channeled: cmd.channeled })
                 .collect();
             let impacts = st.entries.iter().zip(&cmds).filter_map(|(e, cmd)| badge_kind(w, cmd).map(|k| (e.end_block(w), k))).collect();
             let refs: Vec<&Command> = cmds.iter().collect();

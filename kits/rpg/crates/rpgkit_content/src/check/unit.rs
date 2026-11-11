@@ -18,9 +18,6 @@ const GROWTH_STAT_MAX: i64 = 3;
 const ADVANCED_MIN_LEVEL: i64 = 5;
 const MIN_SCALING: f64 = 1.0;
 const MAX_SCALING: f64 = 2.0;
-/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`); U3.2-S2:
-/// read only without a family table (`skill::weapon_tokens`).
-pub const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
 /// UNITDRILL1: the unit field listing the items of its own gear it wears with no class or drill training. U3.2-S3
 /// (FB-34): retired (untrained gear is a soft wield penalty, never refused); nothing reads it, an empty list stores as no
@@ -289,6 +286,12 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
                 if !(MIN_SCALING..=MAX_SCALING).contains(&scaling) {
                     errors.push(format!("Proficiency {gear}: scaling must be {}-{}.", fixed(MIN_SCALING, 1), fixed(MAX_SCALING, 1)));
                 }
+                // PK2-S3: an entry's optional role in the class (prices a proficiency training recipe)
+                if let Some(role) = entry.get(rpgkit_data::PROF_ROLE_KEY) {
+                    if !role.as_str().is_some_and(|r| rpgkit_data::PROF_ROLES.contains(&r)) {
+                        errors.push(format!("Proficiency {gear}: role '{}' is not one of {}.", json::gstr(role), rpgkit_data::PROF_ROLES.join(", ")));
+                    }
+                }
                 if weapon_types.contains(gear) {
                     weapons += 1;
                 }
@@ -527,43 +530,64 @@ fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
         if head.is_empty() { Vec::new() } else { super::ruleset::intent_rows(head, field) }
     };
     follow_up_errors(deck.get("follow_ups"), &active, &basics, &intent_of, &mut errors);
-    marrow_errors(v, deck, &active, &owned, &mut errors);
+    channeled_errors(v, e, deck, &active, &owned, &mut errors);
     errors
 }
 
-/// PK1-S2a (PK1 4.2, rule channel): a skill row (a family's tier one) that has a marrow version: IR21 derives one intent
+/// PK1-S2a (PK1 4.2, rule channel): a skill row (a family's tier one) that has a channeled version: IR21 derives one intent
 /// for it and its `channel` sets neither `none` nor `only`.
-pub fn has_marrow_version(head: &Dict) -> bool {
+pub fn has_channeled_version(head: &Dict) -> bool {
     let ch = json::dget(head, "channel");
     !json::b(ch, "none", false) && !json::b(ch, "only", false) && rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_row(head))
 }
 
-/// PK1-S2a (PK1 4.2): a deck's `marrow` marks actives of the deck (with no `active` list: families the unit owns) that
-/// have a marrow version, none twice, no more than any ruleset with the rule channel opens (`marrow_actives`).
-fn marrow_errors(v: &View, deck: &Dict, active: &[String], owned: &[String], errors: &mut Vec<String>) {
-    let marrow = deck_list(deck, "marrow", errors);
-    repeats("Deck marrow", &marrow, &mut Vec::new(), errors);
-    for fam in &marrow {
+/// PK1-S2a (PK1 4.2): a deck's `channeled` marks actives of the deck that have a channeled version, none twice, no more than
+/// any ruleset with the rule channel opens (`channeled_actives`). PR5-26 (audit B3): with no `active` list the deck's
+/// actives are the automatic ones each channel ruleset's deck rule fills (`rpgkit_rules::unit::auto_actives`, the
+/// battle's own list, truncated to its active slots), so a mark must be among them under every such ruleset; a channel
+/// ruleset without the deck rule reads the families the unit owns.
+fn channeled_errors(v: &View, e: &Dict, deck: &Dict, active: &[String], owned: &[String], errors: &mut Vec<String>) {
+    let channeled = deck_list(deck, "channeled", errors);
+    repeats("Deck channeled", &channeled, &mut Vec::new(), errors);
+    let channel_rows: Vec<&Dict> = v.entries(ruleset::KIND).iter().filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::CHANNEL)).collect();
+    // the automatic actives per channel ruleset with the deck rule (built once, only for an automatic deck with marks)
+    let autos: Vec<(String, Vec<String>)> = if active.is_empty() && !channeled.is_empty() {
+        let row = rpgkit_data::UnitDef::from_obj(e);
+        channel_rows
+            .iter()
+            .filter_map(|r| {
+                let rule = rpgkit_rules::DeckRule::of(&ruleset::Ruleset::from_row(r))?.with_class(&v.typed, &json::s(e, "class_id"));
+                Some((json::s_or(r, "name", &json::s(r, "id")), rpgkit_rules::unit::auto_actives(&v.typed, &row, &rule)))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for fam in &channeled {
         let in_deck = if active.is_empty() { owned.contains(fam) } else { active.contains(fam) };
         if !in_deck {
-            errors.push(format!("Deck marrow: '{fam}' is not an active of the deck."));
+            errors.push(format!("Deck channeled: '{fam}' is not an active of the deck."));
+            continue;
+        }
+        if let Some((name, _)) = autos.iter().find(|(_, auto)| !auto.contains(fam)) {
+            errors.push(format!("Deck channeled: '{fam}' is not among the automatic actives the {name} ruleset's deck slots fill (list the deck's active)."));
             continue;
         }
         let head = v.get("skills", fam);
-        if !head.is_empty() && !has_marrow_version(head) {
-            errors.push(format!("Deck marrow: '{fam}' has no marrow version (it needs a single intent and no channel none or only)."));
+        if !head.is_empty() && !has_channeled_version(head) {
+            errors.push(format!("Deck channeled: '{fam}' has no channeled version (it needs a single intent and no channel none or only)."));
         }
     }
     let mut distinct: Vec<&String> = Vec::new();
-    for fam in &marrow {
+    for fam in &channeled {
         if !distinct.contains(&fam) {
             distinct.push(fam);
         }
     }
-    for r in v.entries(ruleset::KIND).iter().filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::CHANNEL)) {
-        let max = json::i(r, "marrow_actives", i64::from(ruleset::MARROW_ACTIVES));
+    for r in channel_rows {
+        let max = json::i(r, "channeled_actives", i64::from(ruleset::CHANNEL_ACTIVES));
         if distinct.len() as i64 > max {
-            errors.push(format!("Deck: {} marrow entries (the {} ruleset's marrow actives allow {max}).", distinct.len(), json::s_or(r, "name", &json::s(r, "id"))));
+            errors.push(format!("Deck: {} channeled entries (the {} ruleset's channeled actives allow {max}).", distinct.len(), json::s_or(r, "name", &json::s(r, "id"))));
         }
     }
 }
@@ -715,7 +739,21 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
         }
     }
     out.extend(role_warnings(v, &json::s(e, "ai_role"), path_has_support(v, &families), &json::s(e, "main_hand"), false));
+    out.extend(masterable_warnings(v, &class));
     out
+}
+
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a class has at most `MASTERABLE_MAX` masterable families at baseline (the
+/// main-hand weapon families of the item family table at proficiency 2 or more); one past it is a warning. Nothing
+/// without a family table.
+pub fn masterable_warnings(v: &View, class: &ClassDef) -> Vec<String> {
+    use rpgkit_data::mastery as m;
+    let fams: Vec<&String> = class.proficiency.iter().filter(|(f, p)| p.level >= m::MASTERY_PROF_MIN && m::main_hand_family(v.get("item_families", f))).map(|(f, _)| f).collect();
+    if fams.len() <= m::MASTERABLE_MAX {
+        return Vec::new();
+    }
+    let names: Vec<&str> = fams.iter().map(|f| f.as_str()).collect();
+    vec![format!("The class has {} masterable weapon families ({}); a class masters at most {} (main-hand weapon families at proficiency {}+).", fams.len(), names.join(", "), m::MASTERABLE_MAX, m::MASTERY_PROF_MIN)]
 }
 
 /// ClassUnitValidator.unit_warnings: the role mismatches for the unit's own role or its class's (derived units only).

@@ -8,7 +8,7 @@ use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, POISE, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
 use super::skill_menu::CHANNEL_TINT;
-use super::tips::{ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, REST_BLOCK};
+use super::tips::{action_channel_note, ap_blocks, ap_gauge_of, ap_held_text, channel_action, channel_block, channel_fill, planned_channel_note, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_ap_pips, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, ApPips, BlockLook, AP_PIP, REST_BLOCK};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
@@ -183,6 +183,12 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         Some(u) if w.units[u].is_active() => compiled.iter().flat_map(|st| st.entries.iter()).map(|e| e.item.is_none() && channel_block(pw, u, &w.cat.skills[e.skill])).collect(),
         _ => Vec::new(),
     };
+    // PR5-26 (audit B8): each span's Channel line (the Channel Rest, a marrow version's terms) for its hover card
+    let channel_notes: Vec<Option<String>> = match sel {
+        Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| action_channel_note(w, a)).collect(),
+        Some(u) if w.units[u].is_active() => compiled.iter().flat_map(|st| st.entries.iter()).map(|e| e.item.is_none().then(|| planned_channel_note(pw, u, e.skill)).flatten()).collect(),
+        _ => Vec::new(),
+    };
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
     // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
     let (reasons, rest, ghosts) = match sel {
@@ -302,6 +308,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 }
                 if let Some(why) = why.filter(|_| !ghost) {
                     tip.push((format!("Why: {why}"), th().dim));
+                }
+                if let Some(note) = at.and_then(|i| channel_notes.get(i)).and_then(|n| n.as_ref()) {
+                    tip.push((note.clone(), CHANNEL_TINT));
                 }
                 if let Some(gain) = rest.filter(|r| e.3 == "REST" && r.blocks > 0) {
                     tip.push((format!("{} ({} Rest block{}; the AP comes at round end)", rest_text(gain), gain.blocks, if gain.blocks == 1 { "" } else { "s" }), th().good));
@@ -584,7 +593,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             }
             // PK1-S2c (PK1 4.3 items 1-2): a Channel round says so (placeholder words and tint)
             if emberwake_battle::channel::is_channel(pw, h) {
-                lines.push((format!("{} round: marrow versions only", RoundIntent::Channel.label(&pw.cat)), CHANNEL_TINT));
+                lines.push((format!("{} round: {} versions only", RoundIntent::Channel.label(&pw.cat), super::tips::channeled_word(pw)), CHANNEL_TINT));
             }
             if !picks.is_empty() && !s.plan_confirmed {
                 lines.push((format!("Picks: {}", picks.iter().map(|p| pick_text(w, h, p)).collect::<Vec<_>>().join(", ")), th().gold));

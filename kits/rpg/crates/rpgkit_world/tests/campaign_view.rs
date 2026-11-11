@@ -34,13 +34,13 @@ fn with_ids(w: &str, rows: Value) -> Value {
 /// `alert` (a gauge in %, shown, HUD order 2), `clock` (a countdown in days, shown, order 1) and `hidden` (not shown).
 fn meters() -> Value {
     json!([
-        {"id": "alert", "name": "Inquisition Alert", "kind": "gauge", "min": 0, "max": 100, "unit": "%", "visible": true, "description": "How hard they look.",
+        {"id": "alert", "name": "Constabulary Alert", "kind": "gauge", "min": 0, "max": 100, "unit": "%", "visible": true, "description": "How hard they look.",
          "hud": {"short": "Alert", "icon": "ui/hud/alert.png", "order": 2},
          "bands": [{"id": "guarded", "name": "Guarded", "from": 0, "tone": "calm"}, {"id": "suspicious", "name": "Suspicious", "from": SUSPICIOUS, "tone": "warn"},
                    {"id": "lockdown", "name": "Lockdown", "from": LOCKDOWN, "tone": "danger"}],
          "rules": [{"id": "a_sus", "at": "suspicious", "once": true, "warn": "Watched."}, {"id": "a_lock", "at": "lockdown", "warn": "Locked."},
                    {"id": "a_last", "at": LAST, "acts": [1], "warn": "Last."}]},
-        {"id": "clock", "name": "The Red Tithing", "kind": "countdown", "min": 0, "max": 99, "unit": "days", "visible": true,
+        {"id": "clock", "name": "The Red Harvest", "kind": "countdown", "min": 0, "max": 99, "unit": "days", "visible": true,
          "hud": {"short": "Tithing", "order": 1},
          "bands": [{"id": "due", "name": "Due", "from": 0, "tone": "danger"}, {"id": "far", "name": "Far", "from": 8, "tone": "calm"}],
          "rules": [{"id": "week", "at": WEEK, "warn": "A week."}, {"id": "zero", "at": 0, "effects": [{"effect": "end", "kind": "fail", "card": "c"}]}]},
@@ -52,7 +52,7 @@ fn meters() -> Value {
 /// two-tile map and a fight marker at (1, 0).
 fn data() -> Data {
     let purse = json!({"currency": {"name": "Scrap", "icon": "ui/hud/scrap.png", "tip": "Salvaged iron."},
-                       "upkeep": {"name": "Warded Tallow", "short": "Tallow", "icon": "ui/hud/tallow.png", "tip": "1 a day."}});
+                       "upkeep": {"name": "Rendered Tallow", "short": "Tallow", "icon": "ui/hud/tallow.png", "tip": "1 a day."}});
     let worlds = json!({
         "classic": {"manifest": {"id": "classic", "start_location": "hub", "start_party": ["hero"]}, "own": {
             "locations": with_ids("classic", json!([{"id": "hub", "name": "Hub"}]))}},
@@ -96,7 +96,7 @@ fn outside_a_campaign_world_the_hud_is_todays_two_counters() {
             (ChipKind::Currency, rpgkit_data::CURRENCY_NAME.into(), rpgkit_data::CURRENCY_ICON.into(), gs.party.gold.to_string()),
             (ChipKind::Upkeep, rpgkit_data::UPKEEP_NAME.into(), rpgkit_data::UPKEEP_ICON.into(), format!("{}/{SUPPLIES_MAX}", gs.party.supplies)),
         ],
-        "W4: the Ashlands' counters"
+        "W4: the world's counters"
     );
     assert_eq!(chips[0].lines, vec![rpgkit_data::CURRENCY_TIP.to_string()]);
     assert_eq!(chips[1].lines, vec![rpgkit_data::UPKEEP_TIP.to_string()]);
@@ -111,11 +111,11 @@ fn a_campaign_hud_is_the_purse_then_the_visible_meters_by_order() {
     let ids: Vec<&str> = chips.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(ids, ["currency", "upkeep", "clock", "alert"], "P1, W4: the purse, then the meters by hud.order; `hidden` is not shown (M8)");
     assert_eq!((chips[0].title.as_str(), chips[0].icon.as_str(), chips[0].lines[0].as_str()), ("Scrap", "ui/hud/scrap.png", "Salvaged iron."));
-    assert_eq!((chips[1].title.as_str(), chips[1].icon.as_str()), ("Warded Tallow", "ui/hud/tallow.png"));
+    assert_eq!((chips[1].title.as_str(), chips[1].icon.as_str()), ("Rendered Tallow", "ui/hud/tallow.png"));
     let (clock, alert) = (&chips[2], &chips[3]);
     assert_eq!((clock.short.as_str(), clock.value.as_str(), clock.tone.as_str()), ("Tithing", "37 days", "calm"), "a countdown's days left with its unit");
     assert_eq!((alert.short.as_str(), alert.value.as_str(), alert.tone.as_str(), alert.icon.as_str()), ("Alert", "25%", "calm", "ui/hud/alert.png"));
-    assert_eq!(alert.title, "Inquisition Alert");
+    assert_eq!(alert.title, "Constabulary Alert");
     assert_eq!(alert.lines, vec!["Band: Guarded".to_string(), format!("Next: {SUSPICIOUS}% (Suspicious)"), "How hard they look.".to_string()]);
     assert_eq!(clock.lines, vec!["Band: Far".to_string(), format!("Next: {WEEK} days")]);
     // the band moves with the value; a label replaces the name (K3)

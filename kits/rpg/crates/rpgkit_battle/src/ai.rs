@@ -8,7 +8,7 @@ use crate::grid::{V2, DIRS, GRID_H, GRID_W, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
 use crate::plan::{cover_pref, expected, PlanEntry, PlanStep, SimState, Step, MAX_MOVE_BLOCKS};
 use crate::plan::Plan;
-use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent, RoundTarget};
+use crate::round_intent::{self, ManeuverKind, Opener, Pick, RoundIntent, RoundTarget};
 use crate::round_intent_plan;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{AiProfile, Role, Tactic, TargetPref, UnitId, UnitTactic, World};
@@ -87,6 +87,7 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
     let mut precast_done = false;
     let mut riposte_tried = false;
     let mut self_care_tried = false;
+    let mut unmark_tried = false;
     let band = basic_band(w, actor);
     let reach = band.1;
 
@@ -99,6 +100,13 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
         if profile.flee_ratio > 0.0 && !profile.reckless && ratio <= profile.flee_ratio && !fled {
             fled = true;
             if plan.add_step(w, actor, PlanStep::withdraw(), true).is_empty() {
+                continue;
+            }
+        }
+        // PR5-25: a party-side unit with an `unmark` skill calms a turned ally it would calm (once a plan)
+        if !unmark_tried {
+            unmark_tried = true;
+            if try_unmark(w, plan, actor) {
                 continue;
             }
         }
@@ -430,6 +438,48 @@ fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
             if plan.add_step(w, actor, PlanStep::use_item(&b.id, t), false).is_empty() {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// PR5-25 (PK1 3.7, PK2 2: a SUPPORT skill's `unmark`): the (turned ally, `unmark` skill) pairs `actor` would
+/// calm it with now (`mark::would_calm`), in the battle-start party order, then catalog order; only for a party-side
+/// actor, and none on a turned ally another unit already plans an `unmark` on this round. Deterministic, no draw.
+fn unmark_options(w: &World, plan: &Plan, actor: UnitId) -> Vec<(UnitId, SkillId)> {
+    if !w.allies.contains(&actor) {
+        return Vec::new();
+    }
+    let skills = crate::mark::unmark_skills(w, actor);
+    if skills.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for &t in w.marks.start_party() {
+        if t == actor || !w.units[t].is_active() || !w.has(t) {
+            continue;
+        }
+        let calming: Vec<SkillId> = skills.iter().copied().filter(|&sid| crate::mark::would_calm(w, t, &w.cat.skills[sid].unmark)).collect();
+        if calming.is_empty() || unmark_planned_on(w, plan, actor, t) {
+            continue;
+        }
+        out.extend(calming.into_iter().map(|sid| (t, sid)));
+    }
+    out
+}
+
+/// PR5-25: whether a unit of the party side other than `actor` already plans an `unmark` (skill or item) on `t`.
+fn unmark_planned_on(w: &World, plan: &Plan, actor: UnitId, t: UnitId) -> bool {
+    w.allies.iter().filter(|&&a| a != actor).any(|&a| {
+        plan.entries_for(w, a).iter().any(|e| e.target == Some(t) && e.item.as_ref().map_or_else(|| !w.cat.skills[e.skill].unmark.is_empty(), |i| !i.unmark.is_empty()))
+    })
+}
+
+/// PR5-25: plans the first `unmark_options` pair that fits (an ally step on the turned ally); whether one did.
+fn try_unmark(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
+    for (t, sid) in unmark_options(w, plan, actor) {
+        if plan.add_step(w, actor, PlanStep::ally(sid, t), false).is_empty() {
+            return true;
         }
     }
     false
@@ -1692,7 +1742,7 @@ pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &Ai
     if !round_intent::on(w) || !w.units[c].is_active() || !w.has(c) {
         return IntentRound::default();
     }
-    // PK1-S2b: a re-pick starts from Cold Steel (the Channel row may open Channel again)
+    // PK1-S2b: a re-pick starts from Standard (the Channel row may open Channel again)
     if crate::channel::is_channel(w, c) {
         round_intent_plan::flip_channel(w, c, false);
     }
@@ -1704,14 +1754,31 @@ pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &Ai
         }
     }
     // ENCOUNTER2 H6: a hold escape's part comes first (None without one)
+    // PR5-25: then calming a turned ally with an `unmark` skill (a Support round, row 2's tag), before any tactic
     let choice = match hold_choice(w, plan, c) {
         Some(ch) => ch,
-        None => match tactic_pick(w, plan, c, profile, tactic) {
-            Some(p) => Choice::Pick(ROW_TACTIC, p),
-            None => table(w, plan, c, profile, 0),
+        None => match unmark_pick(w, plan, c) {
+            Some(p) => Choice::Pick(ROW_SUPPORT, p),
+            None => match tactic_pick(w, plan, c, profile, tactic) {
+                Some(p) => Choice::Pick(ROW_TACTIC, p),
+                None => table(w, plan, c, profile, 0),
+            },
         },
     };
     resolve(w, plan, c, profile, choice)
+}
+
+/// PR5-25: a Support round on the first turned ally an `unmark` skill of `c` would calm (`unmark_options`), opened by
+/// that skill; None when there is none or no such round plans.
+fn unmark_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
+    for (t, sid) in unmark_options(w, plan, c) {
+        let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Unit(t));
+        p.opener = Some(Opener::Skill(sid));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
 }
 
 /// Commits `pick` for `c` as a tactic's pick would be (a failed commit goes on with the table from its first row); for
@@ -1737,9 +1804,20 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
             Choice::Pick(row, p) => match commit(w, plan, c, &p) {
                 Ok(l) => {
                     lines.extend(l);
-                    // PK1-S2b (PK1 4.4): a unit that can Channel may turn the committed round into a Channel round
-                    lines.extend(channel_row(w, plan, c, &p));
-                    return IntentRound { row, pick: Some(p), lines };
+                    // PK1-S2b (PK1 4.4): a unit that can Channel may turn the committed round into a Channel round;
+                    // PR5-26 (FB-191 (e)): at high Strain it Vents instead (`vent_row`)
+                    // (review F5: the round's pick is then the Vent's, on itself)
+                    let pick = match vent_row(w, plan, c, &p) {
+                        Some((l, vent)) => {
+                            lines.extend(l);
+                            vent
+                        }
+                        None => {
+                            lines.extend(channel_row(w, plan, c, &p));
+                            p
+                        }
+                    };
+                    return IntentRound { row, pick: Some(pick), lines };
                 }
                 Err(l) => {
                     // the trial offered it, the real set did not (IN6 dropped a buff the round relied on, or an
@@ -1762,7 +1840,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
 }
 
 /// PK1-S2b: the value the Channel row compares: the expected damage and healing of `c`'s planned round (the planner's
-/// estimates, `PlanEntry::est_damage` and `est_heal`; a marrow version's power and piercing included). An invalid round
+/// estimates, `PlanEntry::est_damage` and `est_heal`; a channeled version's power and piercing included). An invalid round
 /// is worth nothing.
 pub fn round_value(w: &World, plan: &Plan, c: UnitId) -> i64 {
     let st = plan.compile(w, c);
@@ -1780,24 +1858,99 @@ pub fn channel_meter_after(w: &World, plan: &Plan, c: UnitId) -> Option<(i32, i3
     plan.compile(w, c).meter(m).map(|v| (v, max))
 }
 
-/// PK1-S2b: whether `c`'s planned round holds a marrow version (`channel::version` of a skill with
-/// `channel::has_version`; not a `channel.only` skill, Feed or Vent).
-fn marrow_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
+/// PK1-S2b: whether `c`'s planned round holds a channeled version (`channel::version` of a skill with
+/// `channel::has_version`) or, PR5-26 (FB-191 (1)), one of its `channel.only` skills that is no meter row's skill (Feed,
+/// Vent: UM6) and not the Channel Rest: a Feed-only round does not count.
+fn channeled_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
+    let basics: Vec<&str> = w.units[c].meter_skills.iter().map(|id| w.cat.family_of(id)).collect();
     plan.compile(w, c).entries.iter().any(|e| {
         let s = &w.cat.skills[e.skill];
+        if crate::channel::only(s) {
+            return !basics.contains(&s.family_id()) && !crate::channel::is_channel_rest(w, c, e.skill) && crate::channel::problem(w, c, s).is_none();
+        }
         crate::channel::has_version(w, s) && crate::channel::version(w, c, s).is_some()
     })
 }
 
-/// PK1 4.4 (rule `channel`): the AI's Channel row. After the AI committed `p` for `c` (a Cold Steel round), a unit that
+/// PR5-26 (FB-191 (e)): the AI Vents when its channel meter is at least this percent of the meter's max.
+pub const CHANNEL_AI_VENT_PCT: i32 = 75;
+
+/// PR5-26: `c`'s Vent: the channeled-only meter row skill (UM6) that lowers the channel meter the most (the row it uses
+/// now, `round_intent_plan::family_skill`); None without one.
+pub fn vent_skill(w: &World, c: UnitId) -> Option<SkillId> {
+    let m = crate::channel::meter_id(w);
+    let drop = |sid: SkillId| -> i32 { skill::meters_by(&w.cat.skills[sid], &w.ruleset).iter().filter(|d| d.meter == m).map(|d| d.delta).sum() };
+    let mut best: Option<(SkillId, i32)> = None;
+    for id in &w.units[c].meter_skills {
+        let Some(sid) = round_intent_plan::family_skill(w, c, w.cat.family_of(id)) else { continue };
+        let d = drop(sid);
+        if crate::channel::only(&w.cat.skills[sid]) && d < 0 && best.is_none_or(|(_, b)| d < b) {
+            best = Some((sid, d));
+        }
+    }
+    best.map(|(sid, _)| sid)
+}
+
+/// PR5-26 (FB-191 (e)): the AI's Vent row. After the AI committed a (Standard) round for `c`, a unit that can Channel
+/// whose channel meter is at least `CHANNEL_AI_VENT_PCT` of its max turns the round into a Channel round on itself
+/// opened by its Vent (`vent_skill`; the planner fills the rest of the round as a Channel round does). It keeps it when
+/// the round compiles with the Vent planned (its meter gate and HP cost met); else `c`'s unit, round state and steps are
+/// put back and None (the Channel row decides). Economy's opener-only rounds are never turned (review F5), as in the
+/// Channel row. Returns the lines and the Vent's pick (on itself, in the row a self pick of it takes: Stand under
+/// `field_intent`, else Support) when kept. Deterministic: nothing draws.
+fn vent_row(w: &mut World, plan: &mut Plan, c: UnitId, committed: &IntentPick) -> Option<(Vec<String>, IntentPick)> {
+    if committed.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
+        return None;
+    }
+    let pool = crate::meter::pool(w, c, crate::channel::meter_id(w))?;
+    if pool.max <= 0 || i64::from(pool.current) * 100 < i64::from(CHANNEL_AI_VENT_PCT) * i64::from(pool.max) {
+        return None;
+    }
+    let vent = vent_skill(w, c)?;
+    let unit = w.units[c].clone();
+    let saved = w.round_states.get(&c).cloned();
+    let steps = plan.steps_of(c);
+    plan.clear(c);
+    let mut lines = round_intent_plan::flip_channel(w, c, true);
+    // PR5-26 follow-up (FB-201): the Vent on itself takes the row the planner gives a self pick of the skill
+    // (`round_intent_plan::pick_row_at`: Stand under `field_intent`, IR15; else its legacy Support row)
+    let intent = round_intent_plan::pick_row_at(w, c, &Pick::Skill { skill: vent, kind: None }, RoundTarget::Myself).unwrap_or(RoundIntent::Support);
+    let mut p = IntentPick::new(intent, RoundTarget::Myself);
+    p.opener = Some(Opener::Skill(vent));
+    let kept = match commit(w, plan, c, &p) {
+        Ok(l) => {
+            let st = plan.compile(w, c);
+            st.error_index < 0 && st.entries.iter().any(|e| e.skill == vent && e.step_index >= 0) && crate::channel::is_channel(w, c)
+        }
+        .then_some(l),
+        Err(_) => None,
+    };
+    if let Some(l) = kept {
+        lines.extend(l);
+        return Some((lines, p));
+    }
+    w.units[c] = unit;
+    match saved {
+        Some(rs) => {
+            w.round_states.insert(c, rs);
+        }
+        None => {
+            w.round_states.shift_remove(&c);
+        }
+    }
+    plan.set_steps(c, steps);
+    None
+}
+
+/// PK1 4.4 (rule `channel`): the AI's Channel row. After the AI committed `p` for `c` (a Standard round), a unit that
 /// can Channel (`channel::can_channel`; others are never touched) tries the same pick as a Channel round, as the toggle
 /// does for a member without picks: the round flag (`round_intent_plan::flip_channel`: the intent-bound buffs end), the
 /// pick's opener kept only when it opens in Channel (else the Channel order opens), the round rebuilt by the planner.
-/// It keeps the Channel round when the round compiles, plans at least one marrow version (`marrow_planned`: a Feed-only
-/// or marrow-only round does not count), its value (`round_value`) is at least the ruleset's `channel_ai_edge` (PR5-20)
-/// times the Cold Steel round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max
-/// (the crisis); else `c`'s unit, round state and steps are put back as the Cold Steel round. A Cold Steel round worth
-/// nothing (out of reach, a Guard round) has no option to beat and stays Cold Steel untried, as do Economy's
+/// It keeps the Channel round when the round compiles, plans at least one channeled version (`channeled_planned`: a Feed-only
+/// or channeled-only round does not count), its value (`round_value`) is at least the ruleset's `channel_ai_edge` (PR5-20)
+/// times the Standard round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max
+/// (the crisis); else `c`'s unit, round state and steps are put back as the Standard round. A Standard round worth
+/// nothing (out of reach, a Guard round) has no option to beat and stays Standard untried, as do Economy's
 /// opener-only rounds. Returns the flip's lines when kept. Deterministic: nothing draws.
 fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec<String> {
     if p.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
@@ -1816,7 +1969,7 @@ fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec
         Opener::Item(_) => false,
     });
     w.round_states.entry(c).or_default().opener = opener;
-    let built = build_pick(w, plan, c, p) && marrow_planned(w, plan, c);
+    let built = build_pick(w, plan, c, p) && channeled_planned(w, plan, c);
     let value = if built { round_value(w, plan, c) } else { 0 };
     let safe = channel_meter_after(w, plan, c).is_some_and(|(v, max)| v < max);
     if built && value as f64 >= w.ruleset.numbers.channel_ai_edge * cold as f64 && safe {

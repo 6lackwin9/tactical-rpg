@@ -1,94 +1,34 @@
-# The central truth (spoiler sheet)
+# The central truth & catastrophe endings (spoiler sheet)
 
-Status: canon for Option A (user 2026-10-25, Q-01): the Clerisy is a selfish elite that feeds the dreaming horror for
-its own eternal youth, while the horror is blamed for the common folk's woes. Option B stays below as the road not
-taken. The Tithing's history and what commoners know are decided (user 2026-10-25, Q-04 / Q-16: option B with b2 of
-[tithing_options.md](tithing_options.md); CANON 3.6; see "The precedent and the founding" below). Decided 2026-10-25 (user): the player gets a hint at the Embalming Cloisters (2.4) and the full reveal
-from Malachi before node 21, a fixed beat whatever the doctrine (Q-02, G-08); only the Clerisy drinks marrow (Q-03); the
-titan's raw black marrow and the rendered marrow are two substances (G-33).
+Status: **`[LOCKED]` (`2026-10-25` Option A + `2026-11-10` Lore & Endings Lock)** — canonical spoiler sheet matching [CANON.md](../CANON.md) Sections 1, 4 & 6. Option B remains at the bottom purely as historical design record.
 
-## The question
+## 1. The locked truth (`Option A` + real caldera waking catastrophe)
 
-The docs disagree on what the Red Tithing does (it pacifies the titan, or it siphons its blood) and on how the Act 3 win
-relates to the Doom loss (the win wakes the titan, yet "the titan wakes" was also the Doom loss). One truth must hold
-both together, explain Othemar alive at 64, give the Act 3 tremors a cause, and keep the three endings real choices.
+- **The Harvest Lie (`Q-01 A`, `[LOCKED]`):** The Red Tithing does keep **the Low Sleep** dreaming, and **only the dream steeps dead Unsealed remains into ageless rendered marrow**. **Lullaby Houses** (disguised as foundling charities; `Kaelen` raised there, `Cantor Ysolde` sang there) raise infants as high-potency stock while ward sweeps fill the yearly count of hundreds. Laid over dreaming veins and rendered in `Chief Anatomist Lazar`'s **Embalming Cloisters (`node 11`)**, their marrow rises up Fourth-Kiln-cast **Marrow Conduits (`node 18`)** so the **Sovereign Clerisy** (`Othemar` at `64`, plus rations for `Lazar`) does not age.
+- **Two Substances (`G-33`, `[LOCKED]`):** The titan's **raw mutagenic black marrow** (fissure seepage, `Sabina`'s `Interlude` dose, ossuary growths) mutates and calcifies living tissue; **rendered marrow** is distilled from dream-steeped Unsealed dead. Locked out of pure marrow, the **Iron Inquisition** (`Quell`, `Nemeth`, `Ruthven`) skims degrading **aberrant marrow** from older stock.
+- **Young -> Marrow, Old -> Fuel (`[LOCKED]`):** Commoners `25+` (**the Spent**) are dulled into compliance by bone-sediment communion draughts (`Sabina`'s discovery) and tallow smoke; when they die in marrow-debt without `Rock Salt` cremation, the **Tallow Guild** and **Fourth Kiln** render them into **Warded Tallow** and **bone-mortar**.
+- **Waking Truly Threatens Cinderreach (`2026-11-10` Lock):** **Waking the titan genuinely cracks the volcanic caldera and swallows Cinderreach**, and **the Shroud never breaks in any ending** (`b2`: cause of the Extinguishing 200 yr ago stays a mystery). The Clerisy's monstrous sin is *not* inventing the danger—it is **refusing to kill the titan's dream with black iron** two centuries ago so the **First Extinguishers** could stage the **first Great Tithing** and farm children forever instead.
+- **Tone Rule (`[LOCKED]`):** Children (`under 18`) are non-combat story stakes only—never fighters, graft subjects, or on-screen violence victims.
 
-What every option keeps: the Clerisy preaches that the titan beneath Cinderreach would wake and break the continent, and
-that the Tithing, sung in blood each generation, is the lullaby that keeps it asleep (hence the title, Emberwake: A
-Scarlet Lullaby). Marrow rises through brass conduits to the cathedral (where it comes from under Option A: below; the
-conduits' route is story guide gap G-32). Othemar is 64 where the
-Spent rarely pass 45. In Act 3 the cell cuts the conduits (3.2) and kills Othemar at the altar (3.5), and the titan
-stirs (the tremors); at the Dreaming Core the cell picks an ending.
+## 2. Doom Clock, Reveal Chain & Act 3 Escalation (`[LOCKED]`)
 
-## Option A: the lullaby is a harvest (the Clerisy lies about why)
+- **Escalation to the Second Great Tithing:** The cell's Act 1-2 raids starve the dream and stir tremors, terrifying `Othemar` into escalating this year's rite into a **second Great Tithing of thousands** (`2.4` relabels the clock and sets `max(days, 18)`). Soft `0d` in Acts 1-2 triggers an out-of-season **lesser tithing** (`14d` restart, `+10` Alert, claims `1` unrescued stake `Ivo`/`Ida` else `-2` `saved_youths`, `CL-04`). Act 3 hard clock (`min 12d`) hitting `0` triggers **`Extinguished`** (the Great Tithing completes; the titan never wakes in the loss).
+- **Fixed Reveal Chain (`Q-02`, `G-08`, `G-31`):**
+  1. **Act 1 hints:** `Agnes of Block 12`'s grandmother's star-tales + `Maren`'s forbidden First Great Tithing chronicle (`Q-07`) + `Quell`'s neck valve (`M2`) + `Interlude` vein/dose.
+  2. **`2.4` Embalming Cloisters (`Lazar`):** `Lullaby House` ledgers, rendering apparatus (`Sabina` knew only outer dissection, `G-31`), Great Tithing scale/cause, and `Nemeth` delivering the `M5` captive.
+  3. **`2.6` Reliquary Crypts:** Tomb and record of the **First Extinguishers** (`Key of the Mantle Chasm`).
+  4. **Act 3 (`3.2` -> `Malachi` -> `3.5`):** Cutting `Ulric`'s Conduits (`3.2`) + `Brother Malachi`'s fixed full reveal before `3.5` (regardless of Doctrine) + slaying `Othemar` at `3.5` High Altar—**which halts the Tithing and triggers the genuine caldera-waking collapse**.
 
-- Truth: the Tithing does keep the titan asleep, but asleep means dreaming, and the dream is what makes marrow. The
-  Tithing is not only a killing (user 2026-10-25, CANON 3.6): the Clerisy raises children as sacrifices, and the marrow
-  it drinks comes from the remains of the sacrificed; the younger the child, the more potent the marrow. Planner
-  refinements (CANON 3.6): the tithe-children are raised from infancy in the Clerisy's foundling houses, the Lullaby
-  Houses, where they are sung the lullaby each night and the folk see charity; Unsealed youths swept from the wards
-  fill out the yearly count. After the rite the tithed are laid in the crypts over the titan's veins, where the dream
-  steeps them; Lazar's anatomists render the remains into marrow in the Embalming Cloisters, and the conduits carry it
-  up to the cathedral; the Clerisy drinks it and does not age. Without the dream the remains are only flesh, which is
-  why the Clerisy needs the titan asleep and dreaming. Waking is not the end of the world: it is the end of the
-  harvest, and nobody knows what a waking god does. The Clerisy's fear of waking is real but self-serving.
-- The old serve too (refinement): the Spent are drugged docile and, dead, are rendered into tallow by the Guild; the
-  young become marrow, the old become fuel. The Inquisition's infusions (Quell's valve, Nemeth's) are aberrant marrow
-  from older, weaker stock, which wears the body down. A Great Tithing yields marrow for a generation.
-- Tone rule (refinement): children are stakes, never fighters or on-screen victims; the game shows the Lullaby Houses,
-  the rite, the pens and the marrow, never violence to a child.
-- Othemar: a believer turned addict; he has drunk the marrow for decades and calls his hunger theology. His last
-  sacrament is a Great Tithing large enough to keep the titan dreaming for another lifetime.
-- Doom Clock (hard in Act 3): counts to this year's rite, which the Clerisy has turned into a Great Tithing (relabelled
-  at 2.4). If it completes, the Clerisy is fed for a generation and the Unsealed of Cinderreach are gone: Extinguished.
-  The titan never wakes in the loss.
-- Act 3 tremors: cutting the conduits and stopping the Tithing starve the dream, so the titan begins to wake. The cell
-  causes the tremors; the win and the loss are no longer the same event.
-- Malachi: hears the dream and knows it is being fed; he is the source of the truth (Act 2 hint, Act 3 reveal) and
-  points the cell at the conduits.
-- Endings: A Preservation puts the waking titan into a dreamless coma with black iron (no dream, no marrow, no Clerisy,
-  no Tithing ever again). B Ascendancy takes the Clerisy's place at the source: the cell merges with the marrow and
-  becomes the new ageless masters, by choice. C Red Martyrdom: the cell gives its marrow-laden bodies to the dream as one
-  final lullaby that leaves the titan asleep but sated, so no Tithing is ever needed again (the most tragic and the most
-  generous ending).
+## 3. The Three Catastrophe-Stopping Endings at `3.6` Dreaming Core (`[LOCKED]`)
 
-### The precedent and the founding (user 2026-10-25, Q-04 / Q-16; CANON 3.6 wins on detail)
+Because stopping `Othemar` at `3.5` starves the waking titan and begins cracking Cinderreach's caldera beneath an unbroken Shroud, the squad descends to the `2x2` **Dreaming Core (`node 22`)** to stop the collapse:
 
-The Sovereign Clerisy was founded two centuries ago, in the dark of the Extinguishing, as the order that holds the
-Tithing to pacify the titan; that is its public charter. Its founding act was the first Great Tithing, held under cover
-of the Extinguishing and recorded as the titan's wrath. The founders found that the dream's marrow kept them young, and
-the harvest began; they are "the first Extinguishers", entombed in the Reliquary Crypts with the record of that night.
-The folk know only the yearly rite. What caused the Extinguishing stays a mystery. This year the cell's own raids
-starve the dream and hasten the waking, so the Clerisy turns the rite into a second Great Tithing to drug the titan
-back to sleep: the more the cell saves, the more the Clerisy needs. Losing is a second Extinguishing for the Unsealed.
+| Ending (`[LOCKED]`) | Gate & Hub Voice | How It Stops the Collapse & Its Cost |
+| --- | --- | --- |
+| **A — `Black-Iron Severance`** | Open unless Flesh-Broker (`Berek`) | Fourth-Kiln black-iron spikes are driven through the wounded Core's brainstem, killing the dream forever. **Saves Cinderreach & ends the Tithing and marrow forever**, but **kills geothermal warmth** (leaving a freezing dark caldera city) and **petrifies active marrow implants**. |
+| **B — `The Living Conduit`** | Flesh-Broker only (`Sabina`) | Grafted Severed Root wardens bind into the Core's nerve-crown as living regulators, sedating the titan **without child tithes** and **preserving Cinderreach's warmth & marrow**—at the dark cost of becoming an **immortal warden-caste** tempted to become a new Clerisy. |
+| **C — `Stone Martyrdom`** | Always open (the squad) | The deployed squad triggers total rapid ossification inside the wounded Core's heart, **petrifying both the Core and themselves into colossal black-stone pillars** that physically prop up Cinderreach's caldera forever—ending marrow and Tithings at the cost of the squad's lives. |
 
-## Option B: the lullaby is real (the Clerisy is right and also corrupt)
+## 4. Historical Design Record — Option B (Not Taken)
 
-- Truth: the Tithing truly keeps the titan from waking, and waking would break the continent. On top of that duty the
-  Clerisy skims the marrow the sleeping titan bleeds and drinks it to stay young.
-- Othemar: a tragic bureaucrat who is right about the danger and wrong about everything else; ageless by a privilege he
-  calls a burden. His Great Tithing is meant to buy a century of sleep at once.
-- Doom Clock (hard in Act 3): counts to the Great Tithing as above. Its loss is the same as Option A (the Unsealed are
-  gone), so the Doom loss still is not "the titan wakes".
-- Act 3 tremors: stopping the Tithing and cutting the conduits wake the titan, exactly as the Clerisy warned; the cell
-  must answer for the waking it caused.
-- Malachi: hears the titan's nightmares and warns that the Clerisy is right about the waking; he counsels a way to
-  sleep without the Tithing.
-- Endings: A Preservation does what the Tithing did, by steel instead of blood. B Ascendancy commands the titan instead
-  of sedating it. C Red Martyrdom replaces the Tithing forever with one willing sacrifice.
-
-## Recommendation
-
-Option A. It turns the setting's generational theme into its secret (the old literally feed on the young), explains
-Othemar's age and the conduits with one mechanism, makes the cell's Act 3 victory the cause of the tremors rather than
-a contradiction, keeps all three endings morally open (none is "the right answer" the Clerisy already knew), and gives
-Malachi and Aline's draught discovery a payoff. Option B is the safer tragedy but makes the Clerisy right, which weakens
-the Act 1-2 resistance fantasy and makes Ending A a copy of what the Clerisy already does.
-
-## What the user must decide
-
-1. Option A or B. Decided (2026-10-25, user): A.
-2. Whether the player learns the truth before the final choice (recommended: Act 2 hint at the Embalming Cloisters,
-   full reveal from Malachi before node 21).
-3. Whether ordinary Spent adults ever drink marrow (recommended: no; only the Clerisy, which keeps the draughts and the
-   marrow separate).
+*Kept for append-only history (`2026-10-25`)*: Under rejected Option B, child blood itself was the only possible lullaby and the Clerisy merely skimmed marrow on the side; `Option A` + the `2026-11-10` lock preserves the real geological danger of waking while making child-farming a deliberate, replaceable atrocity (black iron could always have killed the dream, at the cost of immortality and warmth).

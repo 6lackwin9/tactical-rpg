@@ -1574,6 +1574,7 @@
 			"name": "Twin Bone-Saws",
 			"family": "bone_saw",
 			"rarity": "UNCOMMON",
+			"theme": "inquisitor",
 			"weight": 1.5,
 			"value": 70,
 			"description": "Twin Bone-Saws.",
@@ -1646,6 +1647,7 @@
 			"name": "Prelate's Blade",
 			"family": "sword",
 			"rarity": "RARE",
+			"theme": "inquisitor",
 			"weight": 4.5,
 			"value": 120,
 			"description": "Prelate's Blade.",
@@ -1708,12 +1710,12 @@
 		},
 		{
 			"id": "sulfur_poultice",
-			"name": "Stitch-Poultice",
+			"name": "Tallow-Wax Stitch Pack",
 			"family": "consumable",
 			"rarity": "COMMON",
 			"weight": 0.5,
 			"value": 15,
-			"description": "Sulfur Stitch-Poultice: a packed dressing that closes wounds for +60 HP.",
+			"description": "A tallow-wax stitch pack: a packed dressing that closes wounds for +60 HP.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1729,12 +1731,12 @@
 		},
 		{
 			"id": "pitch_fire_bomb",
-			"name": "Pitch Fire-Bomb",
+			"name": "Pitch Censer-Pot",
 			"family": "consumable",
 			"rarity": "COMMON",
 			"weight": 1.0,
 			"value": 30,
-			"description": "Clay jar of burning pitch, 40 fire damage on impact.",
+			"description": "A clay censer-pot of burning pitch, 40 fire damage on impact.",
 			"damage_type": "fire",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1751,12 +1753,12 @@
 		},
 		{
 			"id": "brimstone_draught",
-			"name": "Brimstone Draught",
+			"name": "Brimstone Tallow Salve",
 			"family": "consumable",
 			"rarity": "COMMON",
 			"weight": 0.4,
 			"value": 25,
-			"description": "Brimstone Tallow Draught: +30% attack power (Empower) for 3 rounds.",
+			"description": "Brimstone Tallow Salve: +30% attack power (Empower) for 3 rounds.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1798,12 +1800,12 @@
 		},
 		{
 			"id": "caustic_gall_sac",
-			"name": "Gall-Sac",
+			"name": "Vitriol Bezoar",
 			"family": "material",
 			"rarity": "COMMON",
 			"weight": 0.2,
 			"value": 0,
-			"description": "A caustic gall-sac. Act 2.",
+			"description": "An acid-weeping marrow calculus from a Dredger or Crawler. Act 2.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1811,12 +1813,12 @@
 		},
 		{
 			"id": "stalker_optic_nerve",
-			"name": "Optic Nerve",
+			"name": "Amber Tapetum",
 			"family": "material",
 			"rarity": "COMMON",
 			"weight": 0.2,
 			"value": 0,
-			"description": "A stalker's optic nerve. Act 2.",
+			"description": "A petrified amber-black lens from a Render-Beast. Act 2.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1824,12 +1826,12 @@
 		},
 		{
 			"id": "inquisitor_marrow_valve",
-			"name": "Marrow Valve",
+			"name": "Brass Marrow Valve",
 			"family": "material",
 			"rarity": "RARE",
 			"weight": 0.2,
 			"value": 0,
-			"description": "An Inquisitor's marrow valve. Act 2 graft.",
+			"description": "Brass pressure-siphon hardware salvaged from Quell's Proctors. Act 2 graft.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1837,12 +1839,12 @@
 		},
 		{
 			"id": "titan_marrow_core",
-			"name": "Marrow Core",
+			"name": "Dreamer's Marrow Geode",
 			"family": "material",
 			"rarity": "RARE",
 			"weight": 0.2,
 			"value": 0,
-			"description": "The core of a marrow titan. Act 2 Apex graft.",
+			"description": "A humming crystalline marrow cluster cut from a Calcified Amalgam or Living Martyr. Act 2 Apex graft.",
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
@@ -1966,7 +1968,7 @@
 			"value": 0,
 			"description": "Kaelen's Gouged Sigil.",
 			"damage_type": "",
-			"icon_id": "",
+			"icon_id": "keepsake_kaelen",
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Keepsake: never sold.",
@@ -2005,7 +2007,7 @@
 			"value": 0,
 			"description": "Vesper's Runner Whistle.",
 			"damage_type": "",
-			"icon_id": "",
+			"icon_id": "keepsake_vesper",
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Keepsake: never sold.",
@@ -2044,7 +2046,7 @@
 			"value": 0,
 			"description": "Maren's Copyist Quill.",
 			"damage_type": "",
-			"icon_id": "",
+			"icon_id": "keepsake_maren",
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Keepsake: never sold.",
@@ -2075,7 +2077,7 @@
 			"value": 0,
 			"description": "Hollis's Focusing Monocle.",
 			"damage_type": "",
-			"icon_id": "",
+			"icon_id": "keepsake_hollis",
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Keepsake: never sold.",
@@ -2098,7 +2100,7 @@
 			"value": 0,
 			"description": "Elyse's Cracked Retort.",
 			"damage_type": "",
-			"icon_id": "",
+			"icon_id": "keepsake_elyse",
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Keepsake: never sold.",
@@ -2180,7 +2182,7 @@
 			"value": 0,
 			"description": "Dunstan's Shackle Link.",
 			"damage_type": "",
-			"icon_id": "",
+			"icon_id": "keepsake_dunstan",
 			"starter_stash": false,
 			"special": true,
 			"special_note": "Keepsake: never sold.",
@@ -2197,6 +2199,362 @@
 						"type": "resist",
 						"status": "stun",
 						"value": 30
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "con_quenched_salt",
+			"name": "Quenched Cinder Salt",
+			"family": "consumable",
+			"rarity": "RARE",
+			"weight": 0.3,
+			"value": 80,
+			"description": "A one-charge pouch of quenched cinder salt. Undoes the latest Calcification mark of this battle on a unit (the stage is not saved; a turned unit calms).",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"consumable_type": "ANTIDOTE",
+			"heal": 0,
+			"damage": 0,
+			"buff_pct": 0.0,
+			"duration": 0,
+			"use_blocks": 1,
+			"use_reach": 1,
+			"hazard": {},
+			"unmark": {
+				"mark": "calcify"
+			},
+			"max_stack": 1
+		},
+		{
+			"id": "wpn_iron_billhook",
+			"name": "Iron Billhook",
+			"family": "polearm",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 40,
+			"description": "A plain hooked polearm: reach and a steady pierce.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "slot_bone_spur",
+			"name": "Bone Spur",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Forearms): a claw or bone spur.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "slot_chitin_plate",
+			"name": "Chitin Plate",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Thoracic): hide, chitin or scale.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "slot_blood_sac",
+			"name": "Calcified Gland",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Visceral): a hardened, mineral-crusted gland.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "slot_eye_tissue",
+			"name": "Amber Lens Shard",
+			"family": "material",
+			"rarity": "UNCOMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Cranial): a resin-hard lens shard for the class rite.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "rock_salt",
+			"name": "Rock Salt",
+			"family": "material",
+			"rarity": "UNCOMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test flush material: Rock Salt for the Slab's Strain-floor flush.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "black_iron_ingot",
+			"name": "Black Iron Ingot",
+			"family": "material",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test rare material for Hearth training.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "salvage_fine",
+			"name": "Fine Salvage",
+			"family": "material",
+			"rarity": "UNCOMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Fine steel from broken-down higher-tier items.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 50
+		},
+		{
+			"id": "salvage_inquisitor",
+			"name": "Inquisitor Steel",
+			"family": "material",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Themed salvage from broken-down Inquisitor arms.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 50
+		},
+		{
+			"id": "graft_optic",
+			"name": "Optic Nerve Graft",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier I graft (Amber Tapetum): teaches Marrow Lash.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_lash"
+				}
+			]
+		},
+		{
+			"id": "graft_valve",
+			"name": "Marrow Valve Graft",
+			"family": "graft",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier II graft (Brass Marrow Valve): teaches Marrow Bolt.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 2,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_bolt"
+				}
+			]
+		},
+		{
+			"id": "graft_core",
+			"name": "Marrow Core Graft",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier III graft (Dreamer's Marrow Geode): teaches Marrow Rend.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_rend"
+				}
+			]
+		},
+		{
+			"id": "graft_litany",
+			"name": "Litany Graft",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test class piece (priest): teaches Marrow Litany.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "priest",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_litany"
+				}
+			]
+		},
+		{
+			"id": "graft_purge",
+			"name": "Inoculated Keystone (priest)",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier III keystone (priest): teaches Purge Marrow.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "priest",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "purge_marrow"
+				}
+			]
+		},
+		{
+			"id": "orlovs_flensing_talon",
+			"name": "Flensing Talon",
+			"family": "dagger",
+			"rarity": "RARE",
+			"weight": 0.9,
+			"value": 0,
+			"description": "Orlov's Flensing Talon.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "One copy per campaign.",
+			"hand": "main_1h",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 3
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"family": "throat_carver",
+						"value": 0.2
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"family": "orlovs_retribution",
+						"value": 0.2
 					}
 				}
 			],

@@ -1,6 +1,6 @@
 //! A draw list sorted by feet (engine-only, PROPS1 4.1): items pushed with the y of their feet, a group (which of
 //! two at the same feet draws later) and their left edge come back in back-to-front order. It draws nothing itself;
-//! a screen (a region map with standing props and characters, later the battle grid) sorts what it draws with it.
+//! a screen (a region map with standing props and characters, later a board grid) sorts what it draws with it.
 
 /// Items with their sort keys, in push order until `into_sorted`.
 pub struct DepthList<T> {

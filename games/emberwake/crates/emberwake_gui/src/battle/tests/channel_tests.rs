@@ -55,7 +55,7 @@ fn sid(b: &BattleScreen, id: &str) -> usize {
 
 /// The selected hero holds the test Strain meter from `strain` (0-100; its row's skills Feed: +5, a self heal; Vent:
 /// -20, gate 50, 15% of max HP; both marrow-only); the ruleset names it the channel meter and Feed the Channel Rest; the
-/// hero marks its first active with a marrow version (`marrow_actives` 1). Returns (hero, marked family or "").
+/// hero marks its first active with a marrow version (`channeled_actives` 1). Returns (hero, marked family or "").
 fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     let h = b.selected.expect("a hero");
     let sess = b.host.session.as_mut().unwrap();
@@ -71,7 +71,7 @@ fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     cat.add_skills(vec![SkillDef::from_obj(feed.as_object().unwrap()), SkillDef::from_obj(vent.as_object().unwrap())]);
     w.ruleset.numbers.channel_meter = STRAIN.into();
     w.ruleset.numbers.channel_rest = FEED.into();
-    w.ruleset.numbers.marrow_actives = 1;
+    w.ruleset.numbers.channeled_actives = 1;
     w.units[h].passive_meters.push(HeldMeter { meter: STRAIN.into(), start: strain, floor: None });
     meter::battle_start(w);
     // the first hotkey attack with a marrow version is marked marrow (whatever the shipped deck holds), else the first
@@ -81,7 +81,7 @@ fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     assert!(!marked.is_empty(), "the fixture needs a hero skill with a marrow version");
     {
         let u = &mut w.units[h];
-        u.deck.marrow = vec![marked.clone()];
+        u.deck.channeled = vec![marked.clone()];
         if !u.deck.active.contains(&marked) && u.deck_rule.is_none() {
             u.deck.active.push(marked.clone());
         }
@@ -182,8 +182,8 @@ fn the_toggle_shows_for_a_holder_only_and_flips_and_converts_the_round() {
         assert!(channel::problem(w, h, sk).is_none() && channel::version(w, h, sk).is_none(), "{} is a Cold Steel entry", sk.name);
     }
     b.draw(&mut cx, &mut g, (-500, -500), true);
-    // without the rule nobody has it, holder or not
-    let (_cx, _g, mut b) = arena("+unit_meters,+triggers,+hp_cost");
+    // without the rule nobody has it, holder or not (the shipped timeline row lists channel since PK1-S3: switched off)
+    let (_cx, _g, mut b) = arena("+unit_meters,+triggers,+hp_cost,-channel");
     let (h, _) = strain_up(&mut b, 0);
     assert!(toggle(&rows(&b, h, RoundTarget::Myself)).is_none(), "no rule channel: no toggle");
 }
@@ -244,10 +244,36 @@ fn a_channel_round_tints_the_unit_and_its_blocks() {
         assert_eq!(l.get("channel").is_some(), tinted, "{l}");
         assert_eq!(l["name"], json!(skill_text(w, h, e.skill)), "the strip's name");
         if channel::has_version(w, sk) {
-            assert_eq!(l["name"], json!(channel::marrow_name(&w.cat, &sk.name)), "a marrow version carries the mark");
+            assert_eq!(l["name"], json!(channel::channeled_name(&w.cat, &sk.name)), "a marrow version carries the mark");
         }
     }
     assert!(labels.iter().any(|l| l.get("channel").is_some()), "a Channel round plans in the Channel mode: {labels:?}");
+}
+
+/// PR5-26 (audit B8): in a Channel round the strip's hover card of a block in the Channel mode carries its Channel line
+/// (`tips::planned_channel_note`): "Marrow version: ..." on a marrow version (its power, piercing and Strain cost from
+/// `channel::version`), "<Feed> replaces Rest in a Channel round." on the Channel Rest; Cold Steel blocks carry none.
+#[test]
+fn a_channel_rounds_strip_cards_name_the_marrow_version_and_the_channel_rest() {
+    let (mut cx, mut g, mut b) = arena(RULES);
+    let (h, _) = strain_up(&mut b, 0);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    let cards = |b: &BattleScreen| b.w.iter().filter(|x| x.id.starts_with("strip.block")).map(|x| x.tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>()).collect::<Vec<_>>();
+    assert!(cards(&b).iter().flatten().all(|l| !l.starts_with("Marrow version") && !l.contains("replaces Rest")), "Cold Steel: no Channel line");
+    b.set_channel(&cx, h, RoundTarget::Myself, true);
+    let f = foe(&b);
+    pick_live_skill(&mut b, &cx, h, f);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    let w = &s(&b).w;
+    let notes: Vec<String> = s(&b).plan.entries_for(w, h).iter().filter_map(|e| crate::battle::tips::planned_channel_note(w, h, e.skill)).collect();
+    assert!(notes.iter().any(|n| n.starts_with("Marrow version: power x")), "a marrow version's line: {notes:?}");
+    let feed = &w.cat.skills[sid(&b, FEED)];
+    let rest_line = format!("{} replaces Rest in a", feed.name);
+    assert!(notes.iter().all(|n| n.starts_with("Marrow version") || n.starts_with(&rest_line)), "{notes:?}");
+    let shown: Vec<String> = cards(&b).into_iter().flatten().collect();
+    for n in &notes {
+        assert!(shown.contains(n), "{n} on a strip card: {shown:?}");
+    }
 }
 
 /// PK1 4.3 item 5: Rest's button names the Channel Rest (Feed) in a Channel round, its card says so, and no plain Rest
@@ -285,12 +311,12 @@ fn vent_shows_its_two_reasons() {
     b.set_channel(&cx, h, RoundTarget::Myself, true);
     let vent = sid(&b, VENT);
     let w = &s(&b).w;
-    let gate = meter::gate_problem(w, w.cat.skills[vent].requires_meter.as_ref(), |_| Some(low));
+    let gate: Vec<_> = meter::gate_reason(w, w.cat.skills[vent].requires_meter.as_ref(), |_| Some(low)).into_iter().collect();
     assert!(!gate.is_empty());
     let rs = rows(&b, h, RoundTarget::Myself);
     let r = skill_row(&rs, vent).expect("Vent's cell");
     assert!(!r.valid, "below the gate");
-    assert_eq!(r.detail, intent_text::menu_refusal_text(w, &gate));
+    assert_eq!(r.detail, intent_text::menu_refusal_text(&gate));
     assert_eq!(r.detail, format!("Needs Strain {VENT_GATE} or more to start: {low}"));
     assert!(tip(r).contains(&r.detail), "{:?}", tip(r));
     // the Strain to pay, the HP not
@@ -302,13 +328,14 @@ fn vent_shows_its_two_reasons() {
     let rs = rows(&b, h, RoundTarget::Myself);
     let r = skill_row(&rs, vent).expect("Vent's cell");
     assert!(!r.valid, "not the HP to pay");
-    assert_eq!(r.detail, intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(cost, cost)));
+    let hp: Vec<_> = emberwake_battle::command::hp_cost_reason(cost, cost).into_iter().collect();
+    assert_eq!(r.detail, intent_text::refusal_text(&hp));
     assert!(r.detail.starts_with("Not enough HP"), "{}", r.detail);
     // PK1-S2c-2: both short (Strain below the gate and not the HP): both reasons in words, HP first
     set_strain(&mut b, h, low);
     let rs = rows(&b, h, RoundTarget::Myself);
     let r = skill_row(&rs, vent).expect("Vent's cell");
-    let both = format!("{}{}{}", intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(cost, cost)), rip::REASONS_JOIN, intent_text::menu_refusal_text(&s(&b).w, &gate));
+    let both = format!("{}{}{}", intent_text::refusal_text(&hp), rip::REASONS_JOIN, intent_text::menu_refusal_text(&gate));
     assert!(!r.valid);
     assert_eq!(r.detail, both, "both reasons");
     assert!(tip(r).contains(&both), "{:?}", tip(r));
@@ -338,7 +365,7 @@ fn cold_steel_rows_grey_in_a_channel_round() {
             let [Pick::Skill { skill, .. }] = p[..] else { continue };
             if channel::problem(w, h, &w.cat.skills[skill]) == Some(want) {
                 assert!(!r.valid, "{} greyed", r.label);
-                assert!(!r.label.contains(&channel::marrow_name(&w.cat, "")), "a greyed Cold Steel cell keeps its own name: {}", r.label);
+                assert!(!r.label.contains(&channel::channeled_name(&w.cat, "")), "a greyed Cold Steel cell keeps its own name: {}", r.label);
                 if r.detail == want {
                     assert!(tip(&r).iter().any(|l| l == want), "{:?}", tip(&r));
                     n += 1;
@@ -422,17 +449,18 @@ fn a_past_rounds_blocks_keep_that_rounds_mode() {
     assert!(cold_acts.iter().all(|a| !a.1), "a past Cold Steel round is never tinted: {cold_acts:?}");
 }
 
-/// PK1-S2c-2 (FB-180 (b)): "Cold Steel" is the game term `cold_steel_mark`: the toggle's card reads its default name,
-/// and a `terms` row renames it there.
+/// PK1-S2c-2 (FB-180 (b)): "Cold Steel" is the game term `standard_mark`: the toggle's card reads the game's name
+/// (LAYER-DOWN-1: Emberwake's `terms` row, not the kit's neutral default), and a `terms` row renames it there.
 #[test]
 fn the_cold_steel_name_is_the_games_term() {
     let (_cx, _g, mut b) = arena(RULES);
     let (h, _) = strain_up(&mut b, 0);
-    let cold = emberwake_data::terms::default_name(emberwake_data::terms::COLD_STEEL_MARK).to_string();
+    let cold = s(&b).w.cat.term(emberwake_data::terms::STANDARD_MARK).name;
+    assert_ne!(cold, emberwake_data::terms::default_name(emberwake_data::terms::STANDARD_MARK), "the game names its standard round");
     let detail = |b: &BattleScreen| toggle(&rows(b, h, RoundTarget::Myself)).map(|r| r.detail.clone()).expect("the toggle");
     assert!(detail(&b).starts_with(&format!("{cold} round")), "{}", detail(&b));
     let cat = std::sync::Arc::make_mut(&mut b.host.session.as_mut().unwrap().w.cat);
-    let row = emberwake_data::terms::TermRow { id: emberwake_data::terms::COLD_STEEL_MARK.into(), name: "Bare Iron".into(), ..Default::default() };
+    let row = emberwake_data::terms::TermRow { id: emberwake_data::terms::STANDARD_MARK.into(), name: "Bare Iron".into(), ..Default::default() };
     cat.terms.insert(row.id.clone(), row);
     assert!(detail(&b).starts_with("Bare Iron round"), "{}", detail(&b));
 }

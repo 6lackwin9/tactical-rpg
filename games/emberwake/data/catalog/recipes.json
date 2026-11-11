@@ -1,0 +1,785 @@
+{
+	"kind": "recipes",
+	"version": 1,
+	"entries": [
+		{
+			"id": "sg_optic_forearms",
+			"name": "Optic Nerve into Forearms",
+			"description": "Graft surgery: the Optic Nerve into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_bone_spur": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_optic",
+					"slot": "forearms"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_optic_thoracic",
+			"name": "Optic Nerve into Thoracic",
+			"description": "Graft surgery: the Optic Nerve into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_chitin_plate": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_optic",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_optic_visceral",
+			"name": "Optic Nerve into Visceral",
+			"description": "Graft surgery: the Optic Nerve into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_blood_sac": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_optic",
+					"slot": "visceral"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_valve_forearms",
+			"name": "Marrow Valve into Forearms",
+			"description": "Graft surgery: the Marrow Valve into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"inquisitor_marrow_valve": 1,
+					"slot_bone_spur": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_valve",
+					"slot": "forearms"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_valve_thoracic",
+			"name": "Marrow Valve into Thoracic",
+			"description": "Graft surgery: the Marrow Valve into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"inquisitor_marrow_valve": 1,
+					"slot_chitin_plate": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_valve",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_valve_visceral",
+			"name": "Marrow Valve into Visceral",
+			"description": "Graft surgery: the Marrow Valve into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"inquisitor_marrow_valve": 1,
+					"slot_blood_sac": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_valve",
+					"slot": "visceral"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_core_forearms",
+			"name": "Marrow Core into Forearms",
+			"description": "Graft surgery: the Marrow Core into the Forearms (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_bone_spur": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_core",
+					"slot": "forearms"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_core_thoracic",
+			"name": "Marrow Core into Thoracic",
+			"description": "Graft surgery: the Marrow Core into the Thoracic (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_chitin_plate": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_core",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_core_visceral",
+			"name": "Marrow Core into Visceral",
+			"description": "Graft surgery: the Marrow Core into the Visceral (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_blood_sac": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_core",
+					"slot": "visceral"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_litany_cranial",
+			"name": "Litany into Cranial",
+			"description": "Class piece surgery (priest): needs the class rite.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_priest",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40,
+				"items": {
+					"stalker_optic_nerve": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_litany",
+					"slot": "cranial"
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "sg_purge_cranial",
+			"name": "Inoculated Keystone (priest)",
+			"description": "Tier III keystone surgery (priest): needs the class rite and 3 grafts; +1 Calcification.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.apex_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.rite_priest",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 150,
+				"items": {
+					"titan_marrow_core": 1,
+					"slot_eye_tissue": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "install",
+					"item": "graft_purge",
+					"slot": "cranial"
+				},
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": 1
+				},
+				{
+					"effect": "doctrine",
+					"axis": "flesh_broker",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "excise_cranial",
+			"name": "Excise Cranial",
+			"description": "Remove the Cranial graft (destroyed): -15% max HP for good.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 30
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "remove",
+					"slot": "cranial"
+				},
+				{
+					"effect": "max_hp_pct",
+					"pct": -15
+				}
+			]
+		},
+		{
+			"id": "excise_forearms",
+			"name": "Excise Forearms",
+			"description": "Remove the Forearms graft (destroyed): -15% max HP for good.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 30
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "remove",
+					"slot": "forearms"
+				},
+				{
+					"effect": "max_hp_pct",
+					"pct": -15
+				}
+			]
+		},
+		{
+			"id": "excise_thoracic",
+			"name": "Excise Thoracic",
+			"description": "Remove the Thoracic graft (destroyed): -15% max HP for good.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 30
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "remove",
+					"slot": "thoracic"
+				},
+				{
+					"effect": "max_hp_pct",
+					"pct": -15
+				}
+			]
+		},
+		{
+			"id": "excise_visceral",
+			"name": "Excise Visceral",
+			"description": "Remove the Visceral graft (destroyed): -15% max HP for good.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 30
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "remove",
+					"slot": "visceral"
+				},
+				{
+					"effect": "max_hp_pct",
+					"pct": -15
+				}
+			]
+		},
+		{
+			"id": "rock_salt_flush",
+			"name": "Rock Salt Flush",
+			"description": "Flush the marrow: -10 Strain floor for the next battle.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 20,
+				"items": {
+					"rock_salt": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "floor_offset",
+					"delta": -10
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "bone_scraping",
+			"name": "Bone-Scraping",
+			"description": "After Sabina's quest: -1 Calcification stage and -10% max HP for good.",
+			"npc": "sabina_kress",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.slab_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.bone_scraping",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 60,
+				"items": {
+					"calcified_bone_shard": 2
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "track",
+					"track": "calcification",
+					"delta": -1
+				},
+				{
+					"effect": "max_hp_pct",
+					"pct": -10
+				}
+			]
+		},
+		{
+			"id": "train_secondary",
+			"name": "Train: secondary family",
+			"description": "Raise a secondary weapon family from proficiency 2 to 3.",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 40
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "train_proficiency",
+					"role": "secondary",
+					"to": 3
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "train_third",
+			"name": "Train: third family",
+			"description": "Raise a third weapon family from proficiency 2 to 3.",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 80,
+				"items": {
+					"black_iron_ingot": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "train_proficiency",
+					"role": "third",
+					"to": 3
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "train_minor",
+			"name": "Train: minor family",
+			"description": "Raise a minor weapon family from proficiency 1 to 2 (very hard; mastery then starts from zero).",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.minor_quest",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 120,
+				"items": {
+					"black_iron_ingot": 1
+				}
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "train_proficiency",
+					"role": "minor",
+					"to": 2
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "drill_family",
+			"name": "Drill",
+			"description": "A drill: 25 mastery XP in a weapon family the member may master.",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 15
+			},
+			"target": "member",
+			"effects": [
+				{
+					"effect": "drill",
+					"xp": 25
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "salvage_item",
+			"name": "Break down",
+			"description": "Break an item down into Scrap and salvage matching its tier and theme.",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {},
+			"target": "item",
+			"effects": [
+				{
+					"effect": "salvage",
+					"gold": 5,
+					"tiers": {
+						"UNCOMMON": "salvage_fine",
+						"RARE": "salvage_fine",
+						"EPIC": "salvage_fine",
+						"LEGENDARY": "salvage_fine"
+					},
+					"themes": {
+						"inquisitor": "salvage_inquisitor"
+					}
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		}
+	]
+}

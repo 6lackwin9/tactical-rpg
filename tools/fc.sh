@@ -4,7 +4,8 @@
 #                                docs --all, tooltests, plannertests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
-#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt);
+#                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
+#                                (world ids, games/<id>/lore_words.txt);
 #                                kit src names no class id of a game as a string literal (games/<id>/data/catalog/classes.json)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
@@ -17,12 +18,12 @@
 #   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
 #                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
-#   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
+#   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: session=, until=, json, variant=, write=, seeds=, fallback=)
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
 #   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
 #                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
 #                                (0 pass, 1 a step failed, 2 could not start); never in the gate
-#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
+#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [rules=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
 #                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
 #   tools/fc.sh web [test|release]   the web build (WEBREL1-G1) into out/web/: emberwake_gui as wasm (test: dev tools and the page
 #                                probe; release: neither), wasm-bindgen 0.2.129, wasm-opt when installed, the bundle parts
@@ -35,6 +36,12 @@
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
 cd "$(dirname "$0")/.." || exit 1
 status=0
+# PR5-26 (audit B12): rust-toolchain.toml pins the desktop's Windows toolchain (gnullvm); on any other OS with no toolchain
+# picked, cargo and the tools it starts (tooltests' ground_compose) take `stable`
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) [ "${OS:-}" = "Windows_NT" ] || [ -n "${RUSTUP_TOOLCHAIN:-}" ] || export RUSTUP_TOOLCHAIN=stable ;;
+esac
 # A linked worktree (.git is a file) builds into its own folder, so parallel lanes never share cargo's build lock or
 # overwrite each other's binaries (.cargo/config.toml names one folder for every checkout).
 if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f .git ]; then
@@ -97,7 +104,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
       echo "[docs] no origin/develop to compare with: checking every file"; all=--all
     fi
   fi
-  for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md games/*/docs/*.md games/*/docs/specs/*.md games/*/docs/lore/*.md games/*/docs/lore/*/*.md; do
+  for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/audits/*.md docs/sessions/*.md games/*/docs/*.md games/*/docs/specs/*.md games/*/docs/lore/*.md games/*/docs/lore/*/*.md; do
     [ -f "$f" ] || continue
     case "$f" in */lore/archive/*) continue ;; esac  # archived exports keep their size
     if [ "$all" = "--all" ] || [ -n "${changed[$f]:-}" ]; then sized+=("$f"); fi
@@ -110,7 +117,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   fi
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
-  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md games/*/docs/*.md games/*/docs/*/*.md games/*/docs/lore/*/*.md games/*/data/*/README.md \
+  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/audits/*.md docs/sessions/*.md docs/decisions/*.md games/*/docs/*.md games/*/docs/*/*.md games/*/docs/lore/*/*.md games/*/data/*/README.md \
     .claude/agents/*.md .claude/skills/*/SKILL.md engine/README.md engine/docs/*.md engine/docs/*/*.md kits/*/README.md kits/*/crates/*/README.md legacy/LEGACY.md; do
     [ -f "$f" ] || continue
     total=$((total + 1))
@@ -204,27 +211,22 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       else if (FILENAME ~ /^engine\// && r ~ /^kits(\/|$)/) printf "[layers] %s:%d engine path dependency into kits/: %s\n", FILENAME, FNR, p
     }')
   [ -n "$hits" ] && { echo "$hits"; bad=1; }
-  # G3 (TERMS1 7): kit code names no lore word of a game: its world ids (folders under games/<id>/data/worlds/, any case,
-  # whole word with `_` as a separator, as G1) and the lines of games/<id>/lore_words.txt (fixed phrases, whole word, exact
-  # case; `#` comments). Scope: kit src, schema.json and kit.json; kit tests and READMEs are not scanned. One git grep per
-  # game (a world id becomes [Aa][Ss].. so both lists share one case-sensitive regex).
-  local w ws lw ex
+  # G3 (TERMS1 7, LAYER-DOWN-1): engine and kit code names no lore word of a game: its world ids (folders under
+  # games/<id>/data/worlds/) and the lines of games/<id>/lore_words.txt (fixed phrases, a space matches a space or `_`;
+  # `#` comments). Any case, whole word with `_` as a separator (as G1), so `marrow_mark` names "Marrow". Scope: the engine
+  # crates and the kit crates (src, tests and fixtures), kit schema.json and kit.json; every file in those crates is scanned (a crate README too), the docs folders are not.
+  # One git grep per game. The awk reads the pattern from ENVIRON (an awk -v value would eat its backslashes).
+  local w lp
   for id in "${ids[@]}"; do
-    ws=$(for w in "games/$id/data/worlds"/*/; do [ -d "$w" ] && basename "$w"; done | awk '{ r = ""
-      for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); r = r (c ~ /[[:alpha:]]/ ? "[" toupper(c) tolower(c) "]" : (c ~ /[[:alnum:]_-]/ ? c : "\\" c)) }
-      printf "%s%s", (NR > 1 ? "|" : ""), r }')
-    lw=$([ -f "games/$id/lore_words.txt" ] && tr -d '\r' < "games/$id/lore_words.txt" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' \
-      | sed 's/[][\.*^$+?(){}|/]/\&/g' | paste -sd'|')
-    ex=()
-    [ -n "$ws" ] && ex+=(-e "(^|[^[:alnum:]])($ws)([^[:alnum:]]|\$)")
-    [ -n "$lw" ] && ex+=(-e "(^|[^[:alnum:]_])($lw)([^[:alnum:]_]|\$)")
-    [ ${#ex[@]} -eq 0 ] && continue
-    if hits=$(git grep --untracked -n -I -E "${ex[@]}" -- 'kits/*/crates/*/src/*' 'kits/*/schema.json' 'kits/*/kit.json'); then
-      echo "$hits" | head -20 | awk -v g="$id" -v ws="$ws" -v lw="$lw" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t)
-        if (lw != "" && match(t, "(^|[^[:alnum:]_])(" lw ")([^[:alnum:]_]|$)")) x = substr(t, RSTART, RLENGTH)
-        else if (ws != "" && match(t, "(^|[^[:alnum:]])(" ws ")([^[:alnum:]]|$)")) x = substr(t, RSTART, RLENGTH)
-        else x = "?"
-        gsub(/^[^[:alnum:]]+|[^[:alnum:]]+$/, "", x); c = index(t, x); c = c > 40 ? c - 40 : 1
+    lp=$( { for w in "games/$id/data/worlds"/*/; do [ -d "$w" ] && basename "$w"; done
+        [ -f "games/$id/lore_words.txt" ] && tr -d '\r' < "games/$id/lore_words.txt" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d'
+      } | sed -e 's/[][\.*^$+?(){}|/]/\\&/g' -e 's/[[:space:]][[:space:]]*/[[:space:]_]/g' | paste -sd'|')
+    [ -z "$lp" ] && continue
+    if hits=$(git grep --untracked -n -I -i -E -e "(^|[^[:alnum:]])($lp)([^[:alnum:]]|\$)" -- engine/crates 'kits/*/crates/*' 'kits/*/schema.json' 'kits/*/kit.json'); then
+      echo "$hits" | head -20 | LP="$lp" awk -v g="$id" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t); x = "?"; c = 1
+        if (match(tolower(t), "(^|[^[:alnum:]])(" tolower(ENVIRON["LP"]) ")([^[:alnum:]]|$)")) {
+          c = RSTART; x = substr(t, RSTART, RLENGTH); gsub(/^[^[:alnum:]]+|[^[:alnum:]]+$/, "", x) }
+        c = c > 40 ? c - 40 : 1
         printf "[layers] %s:%s names lore word \"%s\" of game %s: %s\n", f[1], f[2], x, g, substr(t, c, 120) }'
       bad=1
     fi
@@ -249,7 +251,7 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       bad=1
     fi
   done
-  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word and no class id"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word or class id (CLAUDE.md Layers)"; status=1; fi
+  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; engine and kit code name no lore word, kit code no class id"; else echo "[layers] FAIL: engine and kit code must not name a game or a lore word, kit code no class id (CLAUDE.md Layers)"; status=1; fi
 }
 
 gate() {
@@ -274,11 +276,11 @@ aegis() {  # the CLI, built on demand
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
-  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [scene=] [rules=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
   local verb=run
   if [ "$1" = "shots" ]; then
     verb=shots; shift
-    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
+    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [scene=] [rules=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
   fi
   for a in "$@"; do
     case "$a" in

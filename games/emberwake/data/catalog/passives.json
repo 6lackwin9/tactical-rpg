@@ -1087,6 +1087,115 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "inoculated_test",
+			"name": "Inoculated (test)",
+			"description": "Test passive for the Dojo and sims until grafts exist: holds Strain and opens two Channel-only skills.",
+			"effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_lash"
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_bolt"
+				}
+			],
+			"slot": "passive"
+		},
+		{
+			"id": "aberrant_strain",
+			"name": "Aberrant Strain",
+			"description": "An aberrant carries Strain: its hits feed it, its crises are real.",
+			"effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0
+				}
+			],
+			"slot": "passive"
+		},
+		{
+			"id": "calcify_1",
+			"name": "Vein-Blackening",
+			"description": "Calcification I: -5 Composure, +5% resistance to every debuff.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "composure",
+					"value": -5
+				},
+				{
+					"type": "resist",
+					"status": "stagger",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "stun",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "root",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "bleed",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "weaken",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "slow",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "expose",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "poison",
+					"value": 5
+				},
+				{
+					"type": "resist",
+					"status": "burn",
+					"value": 5
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "calcify_4",
+			"name": "The Shakes",
+			"description": "Calcification IV: cannot equip two-handed weapons; melee and bare-handed attacks pierce armour.",
+			"effects": [
+				{
+					"type": "forbid_hands",
+					"hands": 2
+				},
+				{
+					"type": "pierce_melee"
+				}
+			],
+			"slot": ""
 		}
 	]
 }

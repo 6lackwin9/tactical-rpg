@@ -538,7 +538,7 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         }
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
-    errors.extend(encounter::rows_problems(e));
+    errors.extend(encounter::rows_problems(v, e));
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block (flag and then are a world encounter's)
     errors.extend(encounter::unkillable_problems(e));
     errors.extend(encounter::stay_behind_problems(v, e, true));

@@ -5,11 +5,13 @@
 //! it (`talk_state`). Shared by the region map's conversations and the battle's phase talks (ENCOUNTER2-C DT7: moved
 //! out of `region.rs`, the look unchanged); each screen maps `TalkAct` to its own action and owns its runner.
 //! SERVICES1 (SILOS1 T2): `Services`, the conversation with its shop, board, turn-in picker and rest ask, moved out of
-//! `region.rs` (the region map holds one); `ServiceScreen` hosts one on a plain backdrop (the UI Gallery).
+//! `region.rs` (the region map holds one); `ServiceScreen` hosts one on a plain backdrop (the UI Gallery). PK2-S3: and
+//! the recipe pane (`recipe.rs`) over the conversation, like the shop.
 
 use crate::board::{BoardAct, BoardPane};
 use crate::hud::{purse_word, PurseWord, HUD_H};
 use crate::portraits::{Faces, Who};
+use crate::recipe::{RecipeAct, RecipePane};
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
 use crate::shop::{ShopAct, ShopPane};
 use aegis_core::json::{self, s, s_or, Dict};
@@ -292,6 +294,8 @@ pub enum SvcAct {
     CloseBoard,
     /// A click on the board pane.
     Board(BoardAct),
+    /// A click on the recipe pane (PK2-S3; its Close goes back to the conversation).
+    Recipe(RecipeAct),
     TogglePick(String),
     PickRecipient(usize),
     ConfirmTurnIn,
@@ -309,6 +313,8 @@ pub struct Services {
     shop: ShopPane,
     /// The open board's pick and refusals (STORYUI1-U2).
     board: BoardPane,
+    /// PK2-S3: the open recipe pane's picks and last run.
+    recipe: RecipePane,
     pending: Option<Dict>,
     /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
     rest_ask: Option<i64>,
@@ -334,6 +340,11 @@ impl Services {
     /// The open board of the conversation ("" when none; STORYUI1 B3).
     pub fn board_qid(&self) -> String {
         self.runner.as_ref().filter(|r| !r.closed).map(|r| r.board_qid.clone()).unwrap_or_default()
+    }
+
+    /// PK2-S3: the character whose recipe pane is open ("" when none).
+    pub fn recipe_npc(&self) -> String {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.recipe_npc.clone()).unwrap_or_default()
     }
 
     /// The character talked to last ("" when none).
@@ -374,6 +385,7 @@ impl Services {
         self.rest_ask = None;
         self.shop = ShopPane::default();
         self.board = BoardPane::default();
+        self.recipe = RecipePane::default();
         cx.set_busy(false);
     }
 
@@ -409,10 +421,13 @@ impl Services {
     pub(crate) fn draw<A: Clone + From<SvcAct>>(&mut self, ui: &mut Ui<A>, cx: &mut Cx, view: &Dict, b: &TalkBox, veil: Rect) {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
-        let (shop_qid, board_qid) = (self.shop_qid(), self.board_qid());
+        let (shop_qid, board_qid, recipe_npc) = (self.shop_qid(), self.board_qid(), self.recipe_npc());
         if !shop_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             self.shop.draw(ui, cx, &shop_qid, |a| A::from(SvcAct::Shop(a)));
+        } else if !recipe_npc.is_empty() {
+            ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
+            self.recipe.draw(ui, cx, &recipe_npc, |a| A::from(SvcAct::Recipe(a)));
         } else if !board_qid.is_empty() {
             ui.p.fill(veil, th().game("shop_veil", SHOP_DIM));
             let bv = emberwake_world::board::view(&d, &gs, &board_qid);
@@ -467,7 +482,7 @@ impl Services {
         if self.pending.is_some() {
             return Some(k == Key::Enter && self.act(cx, SvcAct::ConfirmTurnIn));
         }
-        if !r.shop_qid.is_empty() || !r.board_qid.is_empty() {
+        if !r.shop_qid.is_empty() || !r.board_qid.is_empty() || !r.recipe_npc.is_empty() {
             return Some(false);
         }
         let view = r.view(&cx.data, cx.gs());
@@ -483,6 +498,8 @@ impl Services {
             SvcAct::Shop(ShopAct::Close)
         } else if !self.board_qid().is_empty() {
             SvcAct::CloseBoard
+        } else if !self.recipe_npc().is_empty() {
+            SvcAct::Recipe(RecipeAct::Close)
         } else if self.talking() {
             SvcAct::Farewell
         } else {
@@ -615,6 +632,17 @@ impl Services {
                 let res = r.close_board(&d, cx.gs_mut());
                 self.dialogue_result(cx, res)
             }
+            // PK2-S3: a pick or a run stays on the pane; Close goes back to the conversation
+            SvcAct::Recipe(a) => {
+                let npc = self.recipe_npc();
+                if npc.is_empty() || !self.recipe.act(cx, &npc, a) {
+                    return false;
+                }
+                self.recipe = RecipePane::default();
+                let Some(r) = self.runner.as_mut() else { return false };
+                let res = r.close_recipes(&d, cx.gs_mut());
+                self.dialogue_result(cx, res)
+            }
             SvcAct::Board(a) => match a {
                 BoardAct::Pick(q) => {
                     self.board.pick(q);
@@ -677,7 +705,9 @@ impl Services {
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "shop": if shop_qid.is_empty() { Value::Null } else { self.shop.state() }, "board": Some(board_qid.clone()).filter(|b| !b.is_empty()),
             "board_pane": if board_qid.is_empty() { Value::Null } else { self.board.state() },
-            "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() { self.faces.state() } else { json!([]) }})
+            "recipe": Some(self.recipe_npc()).filter(|n| !n.is_empty()),
+            "recipe_pane": if self.recipe_npc().is_empty() { Value::Null } else { self.recipe.state() },
+            "portraits": if self.talking() && shop_qid.is_empty() && board_qid.is_empty() && self.recipe_npc().is_empty() { self.faces.state() } else { json!([]) }})
     }
 }
 

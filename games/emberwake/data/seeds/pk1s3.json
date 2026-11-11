@@ -1,0 +1,741 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "unit_meters",
+   "entry": {
+    "id": "strain",
+    "name": "Strain",
+    "short": "Strain",
+    "description": "The marrow's pull: climbs with every marrow action and every aberrant hit, bleeds off 10 a round unless gained. At 100 it ruptures: a seeded crisis, then back to 50.",
+    "min": 0,
+    "max": 100,
+    "start": 0,
+    "delta_max": 50,
+    "show": "bar",
+    "decay": [
+     {
+      "delta": -10,
+      "unless_gained": true
+     },
+     {
+      "delta": -10,
+      "if_guarded": true
+     }
+    ],
+    "bands": [
+     {
+      "id": "dormant",
+      "name": "Dormant",
+      "from": 0,
+      "effects": [],
+      "statuses": []
+     },
+     {
+      "id": "acute",
+      "name": "Acute Resonance",
+      "from": 25,
+      "effects": [
+       {
+        "type": "crit",
+        "value": 15
+       },
+       {
+        "type": "heal_taken",
+        "value": -25
+       }
+      ],
+      "statuses": [
+       {
+        "status": "haste",
+        "magnitude": 0
+       }
+      ]
+     },
+     {
+      "id": "tension",
+      "name": "Flesh-Tension",
+      "from": 50,
+      "effects": [
+       {
+        "type": "stagger_taken",
+        "mult": 2.0
+       }
+      ],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 25
+       },
+       {
+        "status": "fortify",
+        "magnitude": 4
+       }
+      ]
+     },
+     {
+      "id": "edge",
+      "name": "Aberrant Edge",
+      "from": 75,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 50
+       }
+      ]
+     },
+     {
+      "id": "rupture",
+      "name": "Rupture",
+      "from": 100,
+      "effects": [],
+      "statuses": []
+     }
+    ],
+    "rules": [],
+    "skills": [],
+    "triggers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "feed",
+    "name": "Feed",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 0,
+    "blocks": 1,
+    "description": "Channel basic and the Channel round's Rest: +5 Strain and a heal of 4% max HP per block (healing is cut by Acute Resonance).",
+    "learned_only": true,
+    "round_intent": "support",
+    "target_mode": "SELF",
+    "heal_pct": 4,
+    "meters": [
+     {
+      "meter": "strain",
+      "delta": 5
+     }
+    ],
+    "channel": {
+     "only": true
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "vent",
+    "name": "Vent",
+    "kind": "FOCUS",
+    "level": 1,
+    "ap_cost": 0,
+    "blocks": 1,
+    "description": "Channel basic: -20 Strain for 15% of max HP; only while Strain is 50 or more.",
+    "learned_only": true,
+    "round_intent": "support",
+    "target_mode": "SELF",
+    "hp_cost_pct": 15,
+    "requires_meter": {
+     "meter": "strain",
+     "min": 50
+    },
+    "meters": [
+     {
+      "meter": "strain",
+      "delta": -20
+     }
+    ],
+    "channel": {
+     "only": true
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_lash",
+    "name": "Marrow Lash",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 2,
+    "description": "Test skill (Channel only): a piercing marrow strike. Costs 15 Strain.",
+    "learned_only": true,
+    "power_mult": 1.5,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 15
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "marrow_bolt",
+    "name": "Marrow Bolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 2,
+    "description": "Test skill (Channel only): a ranged piercing marrow bolt. Costs 25 Strain.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 1.4,
+    "armor_piercing": true,
+    "channel": {
+     "only": true,
+     "cost": 25
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "strain_bite",
+    "name": "Strain Bite",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 2,
+    "description": "Aberrant test strike: a hit that adds 15 Strain to a Strain holder.",
+    "learned_only": true,
+    "power_mult": 1.0,
+    "riders": [
+     {
+      "when": {},
+      "effects": [
+       {
+        "type": "meter",
+        "meter": "strain",
+        "delta": 15,
+        "to": "other"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "unit_meters",
+   "entry": {
+    "id": "strain",
+    "name": "Strain",
+    "short": "Strain",
+    "description": "The marrow's pull: climbs with every marrow action and every aberrant hit, bleeds off 10 a round unless gained. At 100 it ruptures: a seeded crisis, then back to 50.",
+    "min": 0,
+    "max": 100,
+    "start": 0,
+    "delta_max": 50,
+    "show": "bar",
+    "decay": [
+     {
+      "delta": -10,
+      "unless_gained": true
+     },
+     {
+      "delta": -10,
+      "if_guarded": true
+     }
+    ],
+    "bands": [
+     {
+      "id": "dormant",
+      "name": "Dormant",
+      "from": 0,
+      "effects": [],
+      "statuses": []
+     },
+     {
+      "id": "acute",
+      "name": "Acute Resonance",
+      "from": 25,
+      "effects": [
+       {
+        "type": "crit",
+        "value": 15
+       },
+       {
+        "type": "heal_taken",
+        "value": -25
+       }
+      ],
+      "statuses": [
+       {
+        "status": "haste",
+        "magnitude": 0
+       }
+      ]
+     },
+     {
+      "id": "tension",
+      "name": "Flesh-Tension",
+      "from": 50,
+      "effects": [
+       {
+        "type": "stagger_taken",
+        "mult": 2.0
+       }
+      ],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 25
+       },
+       {
+        "status": "fortify",
+        "magnitude": 4
+       }
+      ]
+     },
+     {
+      "id": "edge",
+      "name": "Aberrant Edge",
+      "from": 75,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 50
+       }
+      ]
+     },
+     {
+      "id": "rupture",
+      "name": "Rupture",
+      "from": 100,
+      "effects": [],
+      "statuses": []
+     }
+    ],
+    "rules": [],
+    "skills": [
+     "feed",
+     "vent"
+    ],
+    "triggers": [
+     {
+      "on": "round_end",
+      "when": {
+       "meter": {
+        "id": "strain",
+        "at_least": 100
+       }
+      },
+      "limit": "none",
+      "effects": [
+       {
+        "type": "roll_table",
+        "rows": [
+         {
+          "weight": 1,
+          "effects": [
+           {
+            "type": "strike_nearest",
+            "power": 1.0,
+            "then_status": "stun",
+            "then_rounds": 1
+           }
+          ]
+         },
+         {
+          "weight": 1,
+          "effects": [
+           {
+            "type": "ap",
+            "set": 0,
+            "rounds": 1,
+            "to": "self"
+           },
+           {
+            "type": "inflict",
+            "status": "bleed",
+            "potency": 100,
+            "rounds": 3,
+            "magnitude": 0,
+            "to": "self"
+           },
+           {
+            "type": "rating_set",
+            "rating": "armor",
+            "value": 0,
+            "rounds": -1,
+            "to": "self"
+           }
+          ]
+         },
+         {
+          "weight": 1,
+          "effects": [
+           {
+            "type": "mark",
+            "mark": "calcify",
+            "value": 1,
+            "to": "self"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "meter_set",
+        "meter": "strain",
+        "value": 50
+       }
+      ]
+     },
+     {
+      "on": "hit_dealt",
+      "when": {
+       "meter": {
+        "id": "strain",
+        "at_least": 75
+       }
+      },
+      "limit": "none",
+      "effects": [
+       {
+        "type": "damage",
+        "pct_of_hit": 10,
+        "to": "self"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "inoculated_test",
+    "name": "Inoculated (test)",
+    "description": "Test passive for the Dojo and sims until grafts exist: holds Strain and opens two Channel-only skills.",
+    "slot": "passive",
+    "effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_lash"
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_bolt"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "aberrant_strain",
+    "name": "Aberrant Strain",
+    "description": "An aberrant carries Strain: its hits feed it, its crises are real.",
+    "slot": "passive",
+    "effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "con_quenched_salt",
+    "name": "Quenched Cinder Salt",
+    "family": "consumable",
+    "rarity": "RARE",
+    "weight": 0.3,
+    "value": 80,
+    "description": "A one-charge pouch of quenched cinder salt. Undoes the latest Calcification mark of this battle on a unit (the stage is not saved; a turned unit calms).",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "ANTIDOTE",
+    "heal": 0,
+    "damage": 0,
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 1,
+    "use_reach": 1,
+    "hazard": {},
+    "unmark": {
+     "mark": "calcify"
+    },
+    "max_stack": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "inoculated_hero",
+    "name": "Inoculated (test)",
+    "side": "party",
+    "description": "Test hero for the Channel duel: Strain carrier with two Channel-only skills.",
+    "class_id": "warrior",
+    "level": 2,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [],
+    "loadout": [],
+    "deck": {
+     "active": [],
+     "passive": [
+      "inoculated_test"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_broadsword",
+    "off_hand": "shd_buckler",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "con_heal_potion",
+     "con_quenched_salt"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "aberrant_test",
+    "name": "Aberrant (test)",
+    "side": "enemy",
+    "description": "Aberrant test enemy: carries Strain, its bite adds Strain to a holder.",
+    "class_id": "warrior",
+    "level": 2,
+    "tier": "elite",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "strain_bite"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "strain_bite"
+     ],
+     "passive": [
+      "aberrant_strain"
+     ],
+     "order": {
+      "assault": [
+       "strain_bite",
+       "strike"
+      ]
+     }
+    },
+    "default_intent": "",
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": true,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_shortsword",
+    "off_hand": "none",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "entry": {
+    "id": "pk1_channel_duel",
+    "name": "Channel Duel",
+    "description": "PK1 test: an Inoculated hero (Strain, Channel) against an aberrant that adds Strain with every bite.",
+    "zone": "stone_arena",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [],
+    "arena_hazards": [],
+    "max_rounds": 10,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 12,
+    "start_ap": 10,
+    "rng_seed": 2026,
+    "party": [
+     "inoculated_hero"
+    ],
+    "enemies": [
+     "aberrant_test"
+    ],
+    "phases": [],
+    "script": [],
+    "pace": "auto",
+    "objective": "rout",
+    "objective_text": "",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "purse": {},
+    "guests": [],
+    "protect": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "timeline",
+    "name": "Timeline",
+    "rules": [
+     "round_intent",
+     "enemy_moves",
+     "deck",
+     "poise",
+     "ap_cost",
+     "pierce",
+     "reach",
+     "flank",
+     "plan_badges",
+     "field_intent",
+     "forced_move",
+     "ground_hazards",
+     "arena_hazards",
+     "triggers",
+     "unit_meters",
+     "hp_cost",
+     "ignore_guard",
+     "ai_tactics",
+     "execute",
+     "channel"
+    ],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [
+     "move",
+     "rest",
+     "strike",
+     "offhand_jab",
+     "active_guard"
+    ],
+    "poise_stat": "max_poise",
+    "stagger_windup_mult": 1.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.5,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {
+     "active": 3,
+     "passive": 2,
+     "keystone": 1
+    },
+    "melee_diagonal": "maneuver",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "round_end",
+    "chase": "every_skill",
+    "root_stops_chase": "on",
+    "switch_target_step": "off",
+    "stances": "off",
+    "attack_lock": "melee",
+    "move_after_blocks": 3,
+    "item_ap": 0,
+    "poise_mode": "pips",
+    "item_mitigation": "on",
+    "thrown_miss_spends": "on",
+    "pouch_stacks": "on",
+    "channel_meter": "strain",
+    "channel_rest": "feed"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "channel_duel",
+    "name": "Channel duel",
+    "description": "Inoculated test hero: Strain, Feed and Vent",
+    "gear": {
+     "main_hand": "wpn_broadsword",
+     "body": "arm_leather"
+    },
+    "pouch": [
+     "con_quenched_salt"
+    ],
+    "passives": [
+     "inoculated_test"
+    ]
+   }
+  }
+ ]
+}

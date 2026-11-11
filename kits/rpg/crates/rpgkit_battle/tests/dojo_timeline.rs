@@ -8,7 +8,7 @@
 //! timeline; the Rest AP is lost on a hero switch; the planner shows its scratch battle's AP; Rest matches by kind.
 //! S2.2-S4: under pips a break queues `stagger`, so the dummy loses its next round's action.
 
-use rpgkit_battle::dojo::{DojoSession, HEROES};
+use rpgkit_battle::dojo::DojoSession;
 use rpgkit_battle::round_intent::{self, RoundIntent};
 use rpgkit_data::{Catalog, Deck, STATS};
 use rpgkit_rules::gear::{Equipment, Slot};
@@ -17,6 +17,15 @@ use rpgkit_rules::stats::roundi;
 use rpgkit_rules::{build_unit, status};
 use serde_json::json;
 use std::sync::Arc;
+
+/// LAYER-DOWN-2: the Dojo's cast is the units the catalog marks (`dojo`); the fixture's ids.
+const HEROES: [&str; 2] = ["dojo_warrior", "dojo_ranger"];
+
+/// Unit row `u` with its Dojo part (`dojo`: hero or dummy).
+fn in_dojo(mut u: serde_json::Value, part: &str) -> serde_json::Value {
+    u["dojo"] = serde_json::json!(part);
+    u
+}
 
 const BASICS: [&str; 4] = ["move", "rest", "strike", "active_guard"];
 /// The dummy row's fixed Max Poise (P2) and the heavy attack's stagger (their rows below).
@@ -49,7 +58,7 @@ fn catalog_value() -> serde_json::Value {
         "skills": skills,
         "passives": [{"id": "t_tough", "name": "Tough", "slot": "passive", "effects": [{"type": "stat", "stat": "max_poise", "value": 5}]}],
         "items": [{"id": "t_sword", "name": "Sword", "item_type": "WEAPON", "base_power": 5}, {"id": "t_potion", "name": "Potion", "item_type": "CONSUMABLE", "starter_stash": true}],
-        "units": [unit(HEROES[0], "party", 30), unit(HEROES[1], "party", 30), unit("training_dummy", "enemy", DUMMY_POISE)],
+        "units": [in_dojo(unit(HEROES[0], "party", 30), "hero"), in_dojo(unit(HEROES[1], "party", 30), "hero"), in_dojo(unit("training_dummy", "enemy", DUMMY_POISE), "dummy")],
     })
 }
 

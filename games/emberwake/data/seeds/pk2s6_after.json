@@ -1,0 +1,79 @@
+{
+ "_waits_on": "PR5-19 blocked rows: repair and reforge recipe effects and target weapon are in RECIPE_PENDING (check refuses them); repair also waits on a scaled cost model (per missing durability, tier -> fine salvage, theme -> themed salvage; FB-218 e). Not applied.",
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "hearth_repair",
+    "name": "Repair",
+    "description": "Restore a weapon's durability. Cost scaling by missing durability, tier and theme is not modelled yet.",
+    "npc": "berek_dorn",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.hearth_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 10
+    },
+    "target": "weapon",
+    "effects": [
+     {
+      "effect": "repair"
+     },
+     {
+      "effect": "doctrine",
+      "axis": "preservationist",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "hearth_reforge",
+    "name": "Reforge",
+    "description": "Restore a weapon and make it masterwork (after Berek's quest Cold Slag, Black Iron).",
+    "npc": "berek_dorn",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.hearth_open",
+      "value": true,
+      "op": "=="
+     },
+     {
+      "kind": "flag",
+      "key": "pk2.masterwork_quest",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 100,
+     "items": {
+      "black_iron_ingot": 1
+     }
+    },
+    "target": "weapon",
+    "effects": [
+     {
+      "effect": "reforge",
+      "masterwork": true
+     },
+     {
+      "effect": "doctrine",
+      "axis": "preservationist",
+      "delta": 1
+     }
+    ]
+   }
+  }
+ ]
+}

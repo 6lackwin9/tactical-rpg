@@ -1,6 +1,6 @@
 {
   "contract": [
-    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute|channel",
+    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute|channel|durability",
     "tunable intents strings default=[\"assault\",\"guard\",\"support\",\"maneuver\"] values=assault|guard|support|maneuver needs=round_intent(refused)",
     "tunable basics refs default=[]",
     "tunable poise_stat string default=\"\"",
@@ -29,7 +29,7 @@
     "tunable channel_meter string default=\"\" needs=channel",
     "tunable channel_power float default=1.25 range=1.0..2.0 needs=channel",
     "tunable channel_cost json default=[15,25,35] needs=channel",
-    "tunable marrow_actives int default=1 range=0..3 needs=channel",
+    "tunable channeled_actives int default=1 range=0..3 needs=channel",
     "tunable channel_rest string default=\"normal\" needs=channel",
     "tunable channel_ai_edge float default=1.2 range=1.0..3.0 needs=channel",
     "tunable bleed_pct row-only default=0.06 range=0.01..0.25 (no schema entry)",
@@ -74,6 +74,7 @@
     "rule ai_tactics extension system=ai bundle=hooks requires=- conflicts=-",
     "rule execute extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule channel extension system=planning bundle=- requires=round_intent, unit_meters conflicts=-",
+    "rule durability extension system=gear bundle=- requires=- conflicts=-",
     "locked budget.rs::W_POWER gear",
     "locked budget.rs::W_MITIGATION gear",
     "locked budget.rs::W_STAT_POINT gear",
@@ -138,7 +139,7 @@
     "promoted ASSAULT_SHAPE_BLOCKS -> assault_shape_blocks",
     "promoted CHANNEL_POWER -> channel_power",
     "promoted CHANNEL_COST -> channel_cost",
-    "promoted MARROW_ACTIVES -> marrow_actives",
+    "promoted CHANNEL_ACTIVES -> channeled_actives",
     "promoted CHANNEL_AI_EDGE -> channel_ai_edge"
   ]
 }

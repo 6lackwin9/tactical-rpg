@@ -32,10 +32,10 @@ fn view(root: &Path, tileset: &str, stage_set: &str) -> View {
 
 #[test]
 fn the_id_rule() {
-    for ok in ["ab", "sunk_ward", "set_2", &"a".repeat(32)] {
+    for ok in ["ab", "deep_ward", "set_2", &"a".repeat(32)] {
         assert!(art::set_id_ok(ok), "{ok}");
     }
-    for bad in ["", "a", "Sunk", "sunk-ward", "sunk ward", "../x", &"a".repeat(33)] {
+    for bad in ["", "a", "Deep", "deep-ward", "deep ward", "../x", &"a".repeat(33)] {
         assert!(!art::set_id_ok(bad), "{bad}");
     }
     let root = scratch("ids");

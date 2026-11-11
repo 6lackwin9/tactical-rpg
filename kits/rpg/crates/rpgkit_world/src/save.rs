@@ -11,6 +11,7 @@ use crate::state::GameState;
 use aegis_core::json::{self, int, Dict};
 use aegis_save::{Format, Peek};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 pub use aegis_save::{delete, exists, is_locked, path_for};
@@ -38,6 +39,7 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
     if !over.is_empty() {
         return vec![over.to_string()];
     }
+    let state = synced(d, state);
     aegis_save::write(&SAVES, dir, slot, saved_at, || {
         let errors = state.validate(d);
         if errors.is_empty() {
@@ -48,6 +50,17 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
     })
 }
 
+/// PK2-S5a: the state a save writes: its weapon instances made to agree with the gear and the stash first
+/// (`weapons::sync`, on a copy; the state itself when instances are not active, so such a save is unchanged).
+fn synced<'a>(d: &Data, state: &'a GameState) -> Cow<'a, GameState> {
+    if !crate::weapons::active(d, state) {
+        return Cow::Borrowed(state);
+    }
+    let mut copy = state.clone();
+    crate::weapons::sync(d, &mut copy);
+    Cow::Owned(copy)
+}
+
 /// CAMPAIGN1 F5: writes the keyed save `key` (an act-start save, `campaign::act_save_key`; `aegis_save::write_keyed`:
 /// never a slot, a later write with the key replaces it). Problem strings; empty = written. Refused while the run is
 /// over (F3), like `write`.
@@ -56,6 +69,7 @@ pub fn write_keyed(d: &Data, dir: &Path, state: &GameState, key: &str, saved_at:
     if !over.is_empty() {
         return vec![over.to_string()];
     }
+    let state = synced(d, state);
     aegis_save::write_keyed(&SAVES, dir, key, saved_at, || {
         let errors = state.validate(d);
         if errors.is_empty() {
@@ -68,7 +82,12 @@ pub fn write_keyed(d: &Data, dir: &Path, state: &GameState, key: &str, saved_at:
 
 /// CAMPAIGN1 F4: reads the keyed save `key` like `read` (migrate, then validate).
 pub fn read_keyed(d: &Data, dir: &Path, key: &str) -> Result<Loaded, Vec<String>> {
-    decode(d, &aegis_save::read_keyed(dir, key)?)
+    read_keyed_with(d, dir, key, &[])
+}
+
+/// LAYER-DOWN-1: `read_keyed` with the game's renamed deck keys (`KeyAlias`).
+pub fn read_keyed_with(d: &Data, dir: &Path, key: &str, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
+    decode_with(d, &aegis_save::read_keyed(dir, key)?, deck_aliases)
 }
 
 /// Whether the keyed save `key` exists (a bad key has none).
@@ -89,17 +108,61 @@ pub struct Loaded {
 }
 
 pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
-    decode(d, &aegis_save::read(dir, slot)?)
+    read_with(d, dir, slot, &[])
+}
+
+/// LAYER-DOWN-1: a renamed key of a saved `deck`: (the key an older save holds, the `Deck::KEYS` key it now is). The
+/// kit names none of a game's old words; a game passes its own list to `read_with`, `read_keyed_with` and
+/// `decode_with` (its world façade's `save::read`) so its older saves keep loading.
+pub type KeyAlias = (&'static str, &'static str);
+
+/// LAYER-DOWN-1: `read` with the game's renamed deck keys (`KeyAlias`).
+pub fn read_with(d: &Data, dir: &Path, slot: i64, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
+    decode_with(d, &aegis_save::read(dir, slot)?, deck_aliases)
+}
+
+/// LAYER-DOWN-1: every `deck` object inside `v` (party and departed members): an old key of `aliases` becomes its new
+/// key, unless the deck holds the new key too (then both stay and the deck check refuses the old one).
+fn rename_deck_keys(v: &mut Value, aliases: &[KeyAlias]) {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o.iter_mut() {
+                if let (true, Value::Object(deck)) = (k == "deck", &mut *x) {
+                    for (old, new) in aliases {
+                        if !deck.contains_key(*new) {
+                            if let Some(list) = deck.shift_remove(*old) {
+                                deck.insert((*new).to_string(), list);
+                            }
+                        }
+                    }
+                } else {
+                    rename_deck_keys(x, aliases);
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| rename_deck_keys(x, aliases)),
+        _ => {}
+    }
 }
 
 /// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
 /// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal; CAMPAIGN1-TM2:
 /// a saved travel mode the world no longer has loads in the default mode with a warning; R4-2 M1: a member's saved
 /// deck entry the data no longer allows is dropped with a warning, `UnitState::sanitize_deck`; PR4-2: so is a loadout
-/// family, rank or worn item, `UnitState::sanitize_loadout`).
+/// family, rank or worn item, `UnitState::sanitize_loadout`; PK2-S1: so is a unit track, `UnitState::sanitize_tracks`;
+/// PK2-S2: so is a body slot entry, `UnitState::sanitize_body`).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
+    decode_with(d, text, &[])
+}
+
+/// LAYER-DOWN-1: `decode` with the game's renamed deck keys (`KeyAlias`), applied after the migration and before the
+/// state is read.
+pub fn decode_with(d: &Data, text: &str, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
-    let (data, mut warnings) = migrate(d, &envelope)?;
+    let (mut data, mut warnings) = migrate(d, &envelope)?;
+    if let (false, Some(gs)) = (deck_aliases.is_empty(), data.get_mut("game_state")) {
+        rename_deck_keys(gs, deck_aliases);
+    }
     let mut state = GameState::from_dict(d, json::dget(&data, "game_state"));
     warnings.extend(crate::story::check_loaded(d, &mut state));
     if let Some(c) = state.campaign.as_mut() {
@@ -111,9 +174,19 @@ pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     // to the stash) with a load warning too
     let party = &mut state.party;
     for m in &mut party.members {
+        // PK2-S1: a unit track the data no longer has is dropped, a stage past its row's top held there (before the
+        // loadout, whose two-handed refusal reads the stage passives)
+        warnings.extend(m.sanitize_tracks(d));
+        // PK2-S2: a body entry the data no longer allows is dropped (before the deck, which may name a graft's skill)
+        warnings.extend(m.sanitize_body(d));
         warnings.extend(m.sanitize_deck(d));
         warnings.extend(m.sanitize_loadout(d, &mut party.stash));
     }
+    // PK2-S5a: a weapon instance of an item the data no longer has as a weapon is dropped; then, once instances are
+    // active, the act-line conversion and the gear's instances (an Act 1 save, or one of a game without
+    // `durability.from_act`, loads unchanged)
+    warnings.extend(crate::weapons::sanitize(d, &mut state.party));
+    crate::weapons::sync(d, &mut state);
     let errors = state.validate(d);
     if !errors.is_empty() {
         return Err(errors);

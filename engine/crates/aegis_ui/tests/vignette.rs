@@ -328,7 +328,7 @@ fn te9_a_360_character_caption_fits_at_every_text_size() {
 
 #[test]
 fn te10_the_model_never_reads_a_clock() {
-    let mut cards: Vec<Card> = (0..3).map(|i| Card { ash: true, hold_ms: 300 * i, cue: format!("sfx/{i}.wav"), ..card(&words(90)) }).collect();
+    let mut cards: Vec<Card> = (0..3).map(|i| Card { particles_rise: true, hold_ms: 300 * i, cue: format!("sfx/{i}.wav"), ..card(&words(90)) }).collect();
     cards[1].style = Style::Text;
     let calls: Vec<Option<u32>> = vec![Some(16), Some(300), None, Some(33), Some(1000), None, Some(5), Some(700), None, Some(2000), Some(16), None, Some(4000)];
     let run = || {
@@ -364,9 +364,9 @@ fn te10_the_model_never_reads_a_clock() {
 }
 
 #[test]
-fn reduce_motion_hides_the_ash() {
-    let frame = |ash: bool, still: bool| {
-        let mut p = Player::new(reel(vec![Card { style: Style::Text, ash, top: [40, 40, 60, 255], bottom: [10, 10, 20, 255], ..card("Ash.") }]), TextSpeed::Normal);
+fn reduce_motion_hides_the_particles() {
+    let frame = |particles_rise: bool, still: bool| {
+        let mut p = Player::new(reel(vec![Card { style: Style::Text, particles_rise, top: [40, 40, 60, 255], bottom: [10, 10, 20, 255], ..card("Ash.") }]), TextSpeed::Normal);
         p.press();
         p.press();
         p.advance(2500);
@@ -376,7 +376,7 @@ fn reduce_motion_hides_the_ash() {
         drop(ui);
         g.canvas.px
     };
-    assert!(frame(true, false) != frame(false, false), "ash draws specks");
+    assert!(frame(true, false) != frame(false, false), "particles_rise draws specks");
     assert!(frame(true, true) == frame(false, false), "reduce motion draws none");
 }
 
@@ -468,13 +468,15 @@ fn ask_first_asks_before_skipping_with_yes_the_default() {
 fn a_reel_reads_from_its_json_form() {
     let r = Reel::from_json(&json!({"id": "v", "music": "none", "frame": "#102030", "cards": [
         {"style": "title", "title": "T", "top": "#010203"},
-        {"text": "Caption", "top": "#0a0b0c", "bottom": "#ffffff", "hold_ms": 99999, "fade_in_ms": -5, "cue": "sfx/x.wav", "ash": true},
+        {"text": "Caption", "top": "#0a0b0c", "bottom": "#ffffff", "hold_ms": 99999, "fade_in_ms": -5, "cue": "sfx/x.wav", "ash": true},  // FB-206 (2b): the old key of particles_rise
         {"style": "nonsense", "top": "red"}
     ]}));
     assert_eq!((r.id.as_str(), r.music.as_str(), r.frame, r.skippable, r.cards.len()), ("v", "none", [16, 32, 48, 255], true, 3));
     let d = Card::default();
     assert_eq!((r.cards[0].style, r.cards[0].top, r.cards[0].bottom), (Style::Title, [1, 2, 3, 255], [1, 2, 3, 255]), "bottom defaults to top");
-    assert_eq!((r.cards[1].style, r.cards[1].hold_ms, r.cards[1].fade_in_ms, r.cards[1].fade_out_ms, r.cards[1].ash), (Style::Image, 20000, 0, d.fade_out_ms, true), "timings are clamped to their ranges");
+    assert_eq!((r.cards[1].style, r.cards[1].hold_ms, r.cards[1].fade_in_ms, r.cards[1].fade_out_ms, r.cards[1].particles_rise), (Style::Image, 20000, 0, d.fade_out_ms, true), "timings are clamped to their ranges");
+    assert!(Card::from_json(&json!({"particles_rise": true})).particles_rise && !Card::from_json(&json!({})).particles_rise);
+    assert!(!Card::from_json(&json!({"particles_rise": false, "ash": true})).particles_rise, "the new key wins over the old one");
     assert_eq!((r.cards[2].style, r.cards[2].top), (Style::Image, d.top), "bad values read as the defaults");
     assert_eq!((vignette::hex("#ff8000"), vignette::hex("ff8000"), vignette::hex("#ff80")), (Some([255, 128, 0, 255]), None, None));
     let sample = vignette::sample_reel();
@@ -651,6 +653,7 @@ fn art_cx(layer: std::path::PathBuf) -> Cx<App> {
 #[test]
 fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
     use aegis_ui::portrait_fx::EASE_MS;
+    // the sidecar names the overlay by its old name (FB-206 (2b)): it loads as `point_glow`
     let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
     let layer = portrait_layer("idle", Some(face));
     let mut cx = art_cx(layer.to_path_buf());
@@ -663,13 +666,14 @@ fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
     let fx = s.portrait.get().expect("the speaker's portrait is kept");
     assert_eq!(fx.key, "ida", "keyed by the card's portrait key");
     let now = s.portrait.clock.now();
-    assert!(fx.level("eye_glow", now).is_some_and(|l| (l.i - 0.8).abs() < 1e-3), "the sidecar's idle eye glow, eased in");
+    assert!(fx.level("point_glow", now).is_some_and(|l| (l.i - 0.8).abs() < 1e-3), "the sidecar's idle point glow, eased in");
+    assert_eq!(fx.level("eye_glow", now), fx.level("point_glow", now), "the old name reads the same level");
     let live = fx.live(now);
-    assert!(live.contains(&"eye_glow") && live.contains(&"blink"), "{live:?}");
+    assert!(live.contains(&"point_glow") && live.contains(&"blink"), "{live:?}");
     assert!(fx.composed().is_some(), "composed");
     let st = s.state(&cx);
     assert_eq!(st["portraits"][0]["key"], json!("ida"), "{st}");
-    assert!(st["portraits"][0]["effects"].as_array().unwrap().contains(&json!("eye_glow")), "{st}");
+    assert!(st["portraits"][0]["effects"].as_array().unwrap().contains(&json!("point_glow")), "{st}");
     // the next card (no portrait): none kept
     while s.player.card_index() == 0 {
         s.player.press();
@@ -719,7 +723,7 @@ fn d3_the_plain_draw_and_the_rim_key() {
     let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {}).portrait_rim(Some([0xd9, 0x77, 0x06, 255]));
     s.draw(&mut cx, &mut g, (-1, -1), true);
     let live = s.portrait.get().expect("kept").live(0);
-    assert!(live.contains(&"rim") && !live.contains(&"blink") && !live.contains(&"eye_glow"), "{live:?}");
+    assert!(live.contains(&"rim") && !live.contains(&"blink") && !live.contains(&"point_glow"), "{live:?}");
     let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {});
     s.draw(&mut cx, &mut g, (-1, -1), true);
     assert!(!s.portrait.get().expect("kept").live(0).contains(&"rim"), "no rim key: no rim");
@@ -767,7 +771,7 @@ fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
     let c = Card::from_json(&json!({"style": "line", "speaker": "ida", "expression": "angry", "text": "Out!"}));
     assert_eq!(c.expression, "angry");
     assert_eq!(Card::from_json(&json!({"style": "line", "text": "Hi."})).expression, "", "no key: neutral");
-    let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
+    let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]});
     let layer = portrait_layer("frame", Some(face));
     std::fs::create_dir_all(layer.join(IDA_ANGRY).parent().unwrap()).unwrap();
     std::fs::copy(layer.join(IDA), layer.join(IDA_ANGRY)).unwrap();
@@ -785,7 +789,7 @@ fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
         let st = s.state(&cx);
         let now = s.portrait.clock.now();
         let fx = s.portrait.get().expect("kept");
-        (fx.expression(now).to_string(), fx.live(now).contains(&"eye_glow"), st["portraits"][0]["expression"].clone())
+        (fx.expression(now).to_string(), fx.live(now).contains(&"point_glow"), st["portraits"][0]["expression"].clone())
     };
     let (expression, glow, shown) = run(Some(frame_then_base));
     assert_eq!((expression.as_str(), shown), ("angry", json!("angry")), "the card's expression holds as a face cue");

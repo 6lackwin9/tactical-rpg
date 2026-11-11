@@ -1,14 +1,14 @@
 //! PK1-S2a (`docs/sessions/PK1_CORRUPTION.md` 4, FB-167 Q1-Q3; rule `channel`) on a scratch catalog built here (no
 //! shipped data). Expectations come from the rules and the rows below: only a holder of the channel meter can Channel,
-//! the round flag starts every round off; a marrow version exists for a single-intent skill (never a dual-intent one,
-//! a neutral kind or `channel.none`); a Channel round offers only the marrow-only skills, the class basic and the
-//! actives marked marrow (at most `marrow_actives`), a Cold Steel round no marrow-only skill; the derived cost is
+//! the round flag starts every round off; a channeled version exists for a single-intent skill (never a dual-intent one,
+//! a neutral kind or `channel.none`); a Channel round offers only the channeled-only skills, the class basic and the
+//! actives marked channeled (at most `channeled_actives`; PK2-S2: a unit with a body one per graft), a Standard round no channeled-only skill; the derived cost is
 //! `channel_cost` by AP (or `channel.cost`), paid at the start, with power x `channel_power` and armour piercing; the
 //! converting toggle keeps Moves and Rest picks, keeps each skill that has a version in the new mode, drops the others
 //! and refills the freed blocks (Feed as the Channel Rest); the first skill fixes the round's one target; Vent's gate
 //! (Strain 50 at its start) and its percent HP cost; a Channel round skips decay; a battle with the rule on and no
 //! holder plays exactly as one without it. PK1-S2b: the tells show Channel while the round flag is set and mark the
-//! marrow versions' names (the term `marrow_mark`); the AI opens Channel only past the ruleset's `channel_ai_edge` (PR5-20,
+//! channeled versions' names (the term `channeled_mark`); the AI opens Channel only past the ruleset's `channel_ai_edge` (PR5-20,
 //! FB-179; was the kit constant `ai::CHANNEL_AI_EDGE`) and while the channel meter stays below its max, for a party
 //! member and an enemy holder alike.
 
@@ -51,15 +51,15 @@ fn attack(id: &str, ap: i32, extra: Value) -> Value {
 }
 
 /// Engine skills, the universal basics (Strike, Guard), the class basic Bash, the actives (Jab 1 AP, Heavy 2 AP, Huge 3 AP,
-/// Vast 4 AP, Cleave an ARC: Field and Assault, Plain with `channel.none`, Spike marrow-only, Own with its own cost),
-/// and the strain row's skills Feed (+5, self heal) and Vent (-20, gate 50, 15% HP), both marrow-only.
+/// Vast 4 AP, Cleave an ARC: Field and Assault, Plain with `channel.none`, Spike channeled-only, Own with its own cost),
+/// and the strain row's skills Feed (+5, self heal) and Vent (-20, gate 50, 15% HP), both channeled-only.
 fn catalog() -> Catalog {
     let stats = json!({"STR": 12, "DEX": 10, "INT": 8, "CONS": 13, "PERC": 9, "KNOW": 10});
     let path = json!({"t_jab": 1, "t_heavy": 1, "t_huge": 1, "t_vast": 1, "t_cleave": 1, "t_plain": 1, "t_spike": 1, "t_own": 1, "t_brace": 1});
-    let unit = |id: &str, side: &str, deck: Value| json!({"id": id, "name": id, "class_id": "marrowkin", "level": 3, "side": side, "skill_cap": 5, "default_intent": "assault", "deck": deck});
-    let hero_deck = json!({"active": ["t_jab", "t_heavy", "t_cleave", "t_plain", "t_spike", "t_brace"], "marrow": ["t_jab", "t_heavy"]});
+    let unit = |id: &str, side: &str, deck: Value| json!({"id": id, "name": id, "class_id": "channelkin", "level": 3, "side": side, "skill_cap": 5, "default_intent": "assault", "deck": deck});
+    let hero_deck = json!({"active": ["t_jab", "t_heavy", "t_cleave", "t_plain", "t_spike", "t_brace"], "channeled": ["t_jab", "t_heavy"]});
     Catalog::from_value(&json!({
-        "classes": [{"id": "marrowkin", "name": "Marrowkin", "base_stats": stats, "growth": {}, "proficiency": {}, "skill_path": path, "basics": ["t_bash"]}],
+        "classes": [{"id": "channelkin", "name": "Channelkin", "base_stats": stats, "growth": {}, "proficiency": {}, "skill_path": path, "basics": ["t_bash"]}],
         "units": [unit("p_hero", "party", hero_deck), unit("p_ally", "party", json!({})), unit("p_foe", "enemy", json!({})), unit("p_foe2", "enemy", json!({}))],
         "skills": [
             {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "ap_cost": 1, "target_mode": "ENEMY"},
@@ -204,7 +204,7 @@ fn cell(s: &Session, c: UnitId, at: RoundTarget, id: &str) -> Option<String> {
 /// PK1 4.2, 4.3 item 1: only a unit holding the channel meter can Channel (the toggle refuses another unit and changes
 /// nothing); the toggle is free to flip both ways; the flag resets at the round start.
 #[test]
-fn only_a_holder_channels_and_every_round_starts_in_cold_steel() {
+fn only_a_holder_channels_and_every_round_starts_in_standard() {
     let mut s = session();
     assert!(channel::can_channel(&s.w, HERO), "the hero holds strain");
     assert!(!channel::can_channel(&s.w, ALLY), "the ally holds none");
@@ -223,20 +223,20 @@ fn only_a_holder_channels_and_every_round_starts_in_cold_steel() {
     assert!(!channel::can_channel(&off.w, HERO));
 }
 
-/// PK1 4.2: a marrow version exists for a single-intent skill only: never a dual-intent one (Cleave's ARC: Field and
-/// Assault), a neutral kind, `channel.none` or a marrow-only skill (it has no Cold Steel version). In a Channel round
-/// the marrow-only skills, the class basic and the first `marrow_actives` marked actives open; the universal basic and
+/// PK1 4.2: a channeled version exists for a single-intent skill only: never a dual-intent one (Cleave's ARC: Field and
+/// Assault), a neutral kind, `channel.none` or a channeled-only skill (it has no Standard version). In a Channel round
+/// the channeled-only skills, the class basic and the first `channeled_actives` marked actives open; the universal basic and
 /// an unmarked active do not.
 #[test]
-fn eligibility_is_single_intent_and_the_round_opens_its_marrow_set() {
+fn eligibility_is_single_intent_and_the_round_opens_its_channeled_set() {
     let mut s = session();
     let w = &s.w;
     assert!(channel::has_version(w, skill(w, "t_jab")));
     assert_eq!(round_intent::skill_rows(w, skill(w, "t_cleave")).len(), 2, "Cleave is dual intent");
     for id in ["t_cleave", "t_plain", "t_spike", "move", "rest"] {
-        assert!(!channel::has_version(w, skill(w, id)), "{id} has no marrow version");
+        assert!(!channel::has_version(w, skill(w, id)), "{id} has no channeled version");
     }
-    assert_eq!(channel::marked(w, HERO), ["t_jab"], "marrow_actives 1: the first mark");
+    assert_eq!(channel::marked(w, HERO), ["t_jab"], "channeled_actives 1: the first mark");
     flag(&mut s.w, HERO, true);
     let w = &s.w;
     for id in ["t_jab", "t_bash", "t_spike", "t_feed", "t_vent", "move", "rest"] {
@@ -246,21 +246,35 @@ fn eligibility_is_single_intent_and_the_round_opens_its_marrow_set() {
     for id in ["t_heavy", "strike", "guard", "t_cleave", "t_plain"] {
         assert_eq!(channel::problem(w, HERO, skill(w, id)), Some(channel::CHANNEL_ROUND), "{id}");
     }
-    // a second mark opens with marrow_actives 2
-    let mut two = session_with(rules(true, json!({"marrow_actives": 2})), true);
+    // a second mark opens with channeled_actives 2
+    let mut two = session_with(rules(true, json!({"channeled_actives": 2})), true);
     assert_eq!(channel::marked(&two.w, HERO), ["t_jab", "t_heavy"]);
     flag(&mut two.w, HERO, true);
     assert_eq!(channel::problem(&two.w, HERO, skill(&two.w, "t_heavy")), None);
-    // a Cold Steel round greys the marrow-only skills
+    // a Standard round greys the channeled-only skills
     let cold = session();
     assert_eq!(channel::problem(&cold.w, HERO, skill(&cold.w, "t_spike")), Some(channel::ONLY_CHANNEL));
     assert_eq!(channel::problem(&cold.w, HERO, skill(&cold.w, "t_jab")), None);
 }
 
-/// PK1 4.1, 4.2: the derived cost is `channel_cost` by the skill's AP (1, 2, 3+; 0 AP none), `channel.cost` replaces it;
-/// power x `channel_power` (or `channel.power`); a marrow-only skill pays only its own `channel.cost`, at power 1.
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a unit with a body marks one channeled active per graft whatever the
+/// ruleset's `channeled_actives` (its deck's marks bound it); a unit without a body keeps the ruleset's number.
 #[test]
-fn the_marrow_cost_is_by_ap_and_its_overrides_hold() {
+fn a_body_marks_one_channeled_active_per_graft() {
+    let mut s = session();
+    assert_eq!(s.w.units[HERO].graft_count, None);
+    assert_eq!(channel::marked(&s.w, HERO), ["t_jab"], "no body: channeled_actives 1");
+    let marks = ["t_jab", "t_heavy"];
+    for n in 0..=marks.len() + 1 {
+        s.w.units[HERO].graft_count = Some(n as i32);
+        assert_eq!(channel::marked(&s.w, HERO), marks[..n.min(marks.len())], "{n} grafts");
+    }
+}
+
+/// PK1 4.1, 4.2: the derived cost is `channel_cost` by the skill's AP (1, 2, 3+; 0 AP none), `channel.cost` replaces it;
+/// power x `channel_power` (or `channel.power`); a channeled-only skill pays only its own `channel.cost`, at power 1.
+#[test]
+fn the_channeled_cost_is_by_ap_and_its_overrides_hold() {
     let mut s = session();
     flag(&mut s.w, HERO, true);
     let w = &s.w;
@@ -273,46 +287,46 @@ fn the_marrow_cost_is_by_ap_and_its_overrides_hold() {
     }
     assert_eq!(channel::version(w, HERO, skill(w, "t_jab")).unwrap().power, n.channel_power);
     assert_eq!(channel::version(w, HERO, skill(w, "t_own")).unwrap().power, 2.0);
-    let spike = channel::version(w, HERO, skill(w, "t_spike")).expect("marrow-only");
+    let spike = channel::version(w, HERO, skill(w, "t_spike")).expect("channeled-only");
     assert_eq!((spike.cost, spike.power, spike.pierce), (0, 1.0, false), "as authored");
     assert_eq!(n.channel_cost_for(0), 0, "0 AP pays none");
     let feed = channel::meters_for(w, HERO, skill(w, "t_feed"));
     assert_eq!(feed.iter().map(|d| d.delta).collect::<Vec<_>>(), [FEED_GAIN], "Feed pays its own meters only");
-    // Cold Steel: no version, no cost
+    // Standard: no version, no cost
     let cold = session();
     assert!(channel::version(&cold.w, HERO, skill(&cold.w, "t_jab")).is_none());
     assert!(channel::meters_for(&cold.w, HERO, skill(&cold.w, "t_jab")).is_empty());
 }
 
-/// PK1 4.2 in resolve: a marrow Jab's command pays the cost on the channel meter at its start (marking it gained), hits
-/// at power x `channel_power` and pierces; the Cold Steel Jab does none of it.
+/// PK1 4.2 in resolve: a channeled Jab's command pays the cost on the channel meter at its start (marking it gained), hits
+/// at power x `channel_power` and pierces; the Standard Jab does none of it.
 #[test]
-fn a_marrow_version_resolves_with_its_cost_power_and_piercing() {
+fn a_channeled_version_resolves_with_its_cost_power_and_piercing() {
     let mut s = session();
     let cold = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
     flag(&mut s.w, HERO, true);
-    let marrow = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
+    let channeled = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
     let cost = s.w.ruleset.numbers.channel_cost[0];
     assert!(cold.meters.is_empty() && !cold.impact.armor_piercing);
-    assert_eq!(marrow.meters.iter().map(|d| (d.meter.as_str(), d.delta)).collect::<Vec<_>>(), [("strain", cost)]);
-    assert!(marrow.impact.armor_piercing && marrow.pierces(&s.w));
+    assert_eq!(channeled.meters.iter().map(|d| (d.meter.as_str(), d.delta)).collect::<Vec<_>>(), [("strain", cost)]);
+    assert!(channeled.impact.armor_piercing && channeled.pierces(&s.w));
     let mult = |c: &Command| match c.kind {
         command::CmdKind::Attack { skill_mult, .. } => skill_mult,
         _ => panic!("an attack"),
     };
-    assert!((mult(&marrow) - mult(&cold) * s.w.ruleset.numbers.channel_power).abs() < 1e-9);
+    assert!((mult(&channeled) - mult(&cold) * s.w.ruleset.numbers.channel_power).abs() < 1e-9);
     let mut w = s.w.clone();
     let mut res = Resolver::new(BLOCKS, 1);
-    assert!(res.schedule(HERO, marrow, 1));
+    assert!(res.schedule(HERO, channeled, 1));
     run(&mut w, &mut res, 1, 1);
     assert_eq!(meter::value(&w, HERO, "strain"), Some(cost), "paid at the start");
     assert!(w.meters.gauges.iter().any(|g| g.unit == HERO && g.gained));
 }
 
-/// PK1 4.3 item 2, 7: in a Channel round every row offers only marrow versions (Cold Steel versions greyed "Channel
-/// round"); in a Cold Steel round the marrow-only skills are greyed and no marrow version is offered.
+/// PK1 4.3 item 2, 7: in a Channel round every row offers only channeled versions (Standard versions greyed "Channel
+/// round"); in a Standard round the channeled-only skills are greyed and no channeled version is offered.
 #[test]
-fn rows_offer_only_marrow_versions_in_a_channel_round() {
+fn rows_offer_only_channeled_versions_in_a_channel_round() {
     let mut s = session();
     let at = RoundTarget::Unit(FOE);
     assert_eq!(cell(&s, HERO, at, "t_spike"), Some(channel::ONLY_CHANNEL.to_string()));
@@ -320,7 +334,7 @@ fn rows_offer_only_marrow_versions_in_a_channel_round() {
     assert_eq!(cell(&s, HERO, at, "strike"), None);
     let _ = s.set_channel(HERO, true);
     assert_eq!(cell(&s, HERO, at, "t_jab"), None, "the marked active's version");
-    assert_eq!(cell(&s, HERO, at, "t_spike"), None, "marrow-only");
+    assert_eq!(cell(&s, HERO, at, "t_spike"), None, "channeled-only");
     assert_eq!(cell(&s, HERO, at, "t_bash"), None, "the class basic's version");
     for id in ["t_heavy", "strike", "t_plain"] {
         assert_eq!(cell(&s, HERO, at, id), Some(channel::CHANNEL_ROUND.to_string()), "{id}");
@@ -329,9 +343,9 @@ fn rows_offer_only_marrow_versions_in_a_channel_round() {
 }
 
 /// PK1 4.3 item 1 (user 2026-11-10): the converting toggle. Picks Move here, Jab, Heavy, Rest: flipped to Channel, the
-/// Move, Jab (now its marrow version) and Rest (now Feed) stay, Heavy (no version: not marked within the limit) is
-/// dropped and named, and the fill refills the freed blocks with marrow versions and Feed, never a Cold Steel skill or
-/// Rest. Flipped back, the Move, Jab and Rest stay and the Cold Steel fill and Rest return (no marrow-only skill, no
+/// Move, Jab (now its channeled version) and Rest (now Feed) stay, Heavy (no version: not marked within the limit) is
+/// dropped and named, and the fill refills the freed blocks with channeled versions and Feed, never a Standard skill or
+/// Rest. Flipped back, the Move, Jab and Rest stay and the Standard fill and Rest return (no channeled-only skill, no
 /// Feed); the dropped Heavy is not restored.
 #[test]
 fn the_toggle_converts_the_plan_keeping_moves() {
@@ -356,7 +370,7 @@ fn the_toggle_converts_the_plan_keeping_moves() {
     assert_eq!(after[..3], ["move", "t_jab", "t_feed"], "the Move stays, Rest became Feed");
     assert_eq!(s.plan.compile(&s.w, HERO).blocks_left(), 0, "the freed blocks are refilled");
     for id in &after {
-        assert!(channel::problem(&s.w, HERO, skill(&s.w, id)).is_none(), "{id}: only marrow versions and neutral steps");
+        assert!(channel::problem(&s.w, HERO, skill(&s.w, id)).is_none(), "{id}: only channeled versions and neutral steps");
         assert_ne!(id, "rest", "Feed is the Channel Rest");
     }
     let (lines, _) = s.set_channel(HERO, false);
@@ -366,8 +380,8 @@ fn the_toggle_converts_the_plan_keeping_moves() {
     assert!(!back.iter().any(|id| id == "t_feed" || id == "t_spike" || id == "t_heavy"), "{back:?}");
 }
 
-/// PK1 4.3 items 4-5: a Channel round planned without picks fills in the Channel order (marrow-only first) and every
-/// block it cannot fill is Feed; a Cold Steel round fills with Rest and never Feed.
+/// PK1 4.3 items 4-5: a Channel round planned without picks fills in the Channel order (channeled-only first) and every
+/// block it cannot fill is Feed; a Standard round fills with Rest and never Feed.
 #[test]
 fn feed_is_the_fill_of_a_channel_round() {
     let mut s = session();
@@ -375,7 +389,7 @@ fn feed_is_the_fill_of_a_channel_round() {
     let (r, _) = s.set_channel(HERO, true);
     assert!(r.is_ok());
     let steps = planned(&s, HERO);
-    assert_eq!(steps[0], "t_spike", "the Channel order opens with the marrow-only skill");
+    assert_eq!(steps[0], "t_spike", "the Channel order opens with the channeled-only skill");
     assert!(steps[1..].iter().all(|id| id == "t_feed"), "AP 1 spent: Feed on every block left: {steps:?}");
     assert_eq!(steps.len() as i32, BLOCKS);
     let (_, _) = s.set_channel(HERO, false);
@@ -383,7 +397,7 @@ fn feed_is_the_fill_of_a_channel_round() {
     assert!(cold.iter().any(|id| id == "rest") && !cold.iter().any(|id| id == "t_feed"), "{cold:?}");
 }
 
-/// PK1 4.3 item 3 (TG1): the first marrow skill fixes the round's one target; a later pick on another unit is refused.
+/// PK1 4.3 item 3 (TG1): the first channeled skill fixes the round's one target; a later pick on another unit is refused.
 #[test]
 fn the_first_skill_fixes_the_target_in_a_channel_round() {
     let mut s = session();
@@ -461,7 +475,7 @@ fn vents_cell_shows_both_reasons_when_both_apply() {
 }
 
 /// PK1 4.3 items 5, 8: any Channel round skips the strain decay, every row of it: the `unless_gained` row with no gain
-/// and the `if_guarded` row while the unit guarded; a Cold Steel round decays (-10, and -10 more after a guard).
+/// and the `if_guarded` row while the unit guarded; a Standard round decays (-10, and -10 more after a guard).
 #[test]
 fn a_channel_round_skips_decay() {
     let mut s = session();
@@ -479,7 +493,7 @@ fn a_channel_round_skips_decay() {
         let mut res = Resolver::new(BLOCKS, 1);
         res.apply_round_end_effects(&mut w);
         let decay = if guarded { 2 * DECAY } else { DECAY };
-        assert_eq!(meter::value(&w, HERO, "strain"), Some(30 - decay), "a Cold Steel round (guarded {guarded})");
+        assert_eq!(meter::value(&w, HERO, "strain"), Some(30 - decay), "a Standard round (guarded {guarded})");
     }
 }
 
@@ -488,7 +502,7 @@ fn a_channel_round_skips_decay() {
 #[test]
 fn a_marked_active_comes_before_feed() {
     let mut s = session();
-    s.w.units[HERO].deck.marrow = vec!["t_brace".to_string()];
+    s.w.units[HERO].deck.channeled = vec!["t_brace".to_string()];
     s.w.units[HERO].ap = 1;
     round_intent::set_intent(&mut s.w, HERO, rpgkit_battle::round_intent::RoundIntent::Guard).expect("Stand");
     let (r, _) = s.set_channel(HERO, true);
@@ -501,7 +515,7 @@ fn a_marked_active_comes_before_feed() {
     assert_eq!(ids, ["t_brace"], "no Channel basic in the order");
 }
 
-/// Review M3: the battle reads a marrow version by IR21 as the checks do: without `field_intent` the ARC Cleave plans in
+/// Review M3: the battle reads a channeled version by IR21 as the checks do: without `field_intent` the ARC Cleave plans in
 /// one legacy row, yet it is dual intent and has no version.
 #[test]
 fn a_dual_intent_skill_has_no_version_without_field_intent() {
@@ -514,10 +528,10 @@ fn a_dual_intent_skill_has_no_version_without_field_intent() {
     assert!(channel::has_version(&s.w, skill(&s.w, "t_jab")));
 }
 
-/// PK1 4.3 item 1 (review L7): flipping back to Cold Steel drops a marrow-only pick; when the toggle drops the opener,
+/// PK1 4.3 item 1 (review L7): flipping back to Standard drops a channeled-only pick; when the toggle drops the opener,
 /// the round keeps its target and the next skill pick opens it.
 #[test]
-fn flipping_back_drops_marrow_only_picks_and_the_target_stays() {
+fn flipping_back_drops_channeled_only_picks_and_the_target_stays() {
     let mut s = session();
     let (jab, heavy, spike) = (sid(&s.w, "t_jab"), sid(&s.w, "t_heavy"), sid(&s.w, "t_spike"));
     let _ = s.set_channel(HERO, true);
@@ -601,8 +615,8 @@ fn drop_active(w: &mut World, c: UnitId, fam: &str) {
 }
 
 /// The AI's round value for `c` after a Balanced pick (`ai::round_value`), whether it kept a Channel round, and the
-/// value of the same round as a Channel round (the player's toggle converting the AI's Cold Steel round when the AI kept
-/// Cold Steel: the same planner path as the AI's trial).
+/// value of the same round as a Channel round (the player's toggle converting the AI's Standard round when the AI kept
+/// Standard: the same planner path as the AI's trial).
 fn ai_values(ruleset: &Ruleset, strain: i32) -> (i64, bool, i64, Option<(i32, i32)>) {
     let mut s = session_with(ruleset.clone(), true);
     drop_active(&mut s.w, HERO, "t_spike");
@@ -620,9 +634,9 @@ fn ai_values(ruleset: &Ruleset, strain: i32) -> (i64, bool, i64, Option<(i32, i3
     (ai::round_value(&s.w, &s.plan, HERO), true, chan, after)
 }
 
-/// PK1 4.4: the AI opens Channel only when the Channel round is worth at least `channel_ai_edge` times the Cold Steel
-/// round (and more than nothing): at `channel_power` 1.0 the marrow round is worth more (its armour piercing) but not
-/// past the edge, so it stays Cold Steel; at 1.25 and 2.0 it opens. The kept round is the toggle's conversion (its
+/// PK1 4.4: the AI opens Channel only when the Channel round is worth at least `channel_ai_edge` times the Standard
+/// round (and more than nothing): at `channel_power` 1.0 the channeled round is worth more (its armour piercing) but not
+/// past the edge, so it stays Standard; at 1.25 and 2.0 it opens. The kept round is the toggle's conversion (its
 /// value is the converted round's), the round's row stays the pick's, and the decision is the same on a re-pick.
 #[test]
 fn the_ai_opens_channel_only_past_the_edge() {
@@ -634,10 +648,10 @@ fn the_ai_opens_channel_only_past_the_edge() {
         let past = chan > 0 && chan as f64 >= r.numbers.channel_ai_edge * cold as f64;
         assert_eq!(kept, past && v < max, "power {power}: cold {cold}, channel {chan}, strain after {v}");
         if power == 1.0 {
-            assert!(chan > cold && !kept, "worth more but not past the edge: Cold Steel");
+            assert!(chan > cold && !kept, "worth more but not past the edge: Standard");
         }
         seen = (seen.0 || kept, seen.1 || !kept);
-        // a re-pick (the redraft) decides the same: it starts from Cold Steel again
+        // a re-pick (the redraft) decides the same: it starts from Standard again
         let mut s = session_with(r.clone(), true);
         drop_active(&mut s.w, HERO, "t_spike");
         let first = ai_round(&mut s, HERO);
@@ -650,20 +664,20 @@ fn the_ai_opens_channel_only_past_the_edge() {
 }
 
 /// PR5-20 (FB-179 Option A): the edge is the ruleset row's `channel_ai_edge` (default `ruleset::CHANNEL_AI_EDGE`), not a
-/// kit constant. The round that stays Cold Steel at the default (power 1.0: worth more, not past the edge) opens at an
-/// edge of 1.0; the one that opens at the default (power 2.0) stays Cold Steel at an edge just past its value ratio.
+/// kit constant. The round that stays Standard at the default (power 1.0: worth more, not past the edge) opens at an
+/// edge of 1.0; the one that opens at the default (power 2.0) stays Standard at an edge just past its value ratio.
 #[test]
 fn the_rulesets_channel_ai_edge_moves_the_decision() {
     assert_eq!(badge_rules(json!({})).numbers.channel_ai_edge, ruleset::CHANNEL_AI_EDGE);
     let (cold, kept, chan, _) = ai_values(&badge_rules(json!({"channel_power": 1.0})), 0);
-    assert!(cold > 0 && chan > cold && !kept, "default edge: Cold Steel (cold {cold}, channel {chan})");
+    assert!(cold > 0 && chan > cold && !kept, "default edge: Standard (cold {cold}, channel {chan})");
     let (_, kept, ..) = ai_values(&badge_rules(json!({"channel_power": 1.0, "channel_ai_edge": 1.0})), 0);
-    assert!(kept, "edge 1.0: a Channel round worth more than the Cold Steel round opens");
+    assert!(kept, "edge 1.0: a Channel round worth more than the Standard round opens");
     let (cold, kept, chan, _) = ai_values(&badge_rules(json!({"channel_power": 2.0})), 0);
     assert!(cold > 0 && kept, "default edge: Channel (cold {cold}, channel {chan})");
     let edge = chan as f64 / cold as f64 + 0.01;
     let (_, kept, ..) = ai_values(&badge_rules(json!({"channel_power": 2.0, "channel_ai_edge": edge})), 0);
-    assert!(!kept, "edge {edge}: past the round's ratio, Cold Steel");
+    assert!(!kept, "edge {edge}: past the round's ratio, Standard");
 }
 
 /// PK1 4.4: the AI opens Channel only while the channel meter after the round stays below its max (the crisis): with
@@ -678,14 +692,14 @@ fn the_ai_keeps_strain_below_the_max() {
     let (_, below, _, a) = ai_values(&r, max - cost - 1);
     assert!(below && a.unwrap().0 < max, "{a:?}");
     let (_, at, chan, a) = ai_values(&r, max - cost);
-    assert!(!at && chan > 0, "the Channel round would reach the max: Cold Steel ({a:?})");
+    assert!(!at && chan > 0, "the Channel round would reach the max: Standard ({a:?})");
 }
 
 /// PK1 4.3 item 6: the tells read the round flag: the hero's record shows Channel from the toggle on (with or without
-/// a skill planned), `channel` set and the round's own row in `row_intent`; each marrow version's line is marked
-/// (`marrow`, the name with the marrow mark), the Feed lines (a marrow-only skill, not a version) are not; flipping back
-/// restores the Cold Steel record. Without a Channel round the record shows the round intent and no line is marked.
-/// The hero has 2 AP, so the Channel round fits two 1 AP marrow versions and Feeds (0 AP) the rest.
+/// a skill planned), `channel` set and the round's own row in `row_intent`; each channeled version's line is marked
+/// (`channeled`, the name with the channeled mark), the Feed lines (a channeled-only skill, not a version) are not; flipping back
+/// restores the Standard record. Without a Channel round the record shows the round intent and no line is marked.
+/// The hero has 2 AP, so the Channel round fits two 1 AP channeled versions and Feeds (0 AP) the rest.
 #[test]
 fn the_tells_read_the_channel_flag() {
     let mut s = session_with(badge_rules(json!({})), true);
@@ -701,7 +715,7 @@ fn the_tells_read_the_channel_flag() {
     let row = round_intent::intent_of(&s.w, HERO);
     assert!(row.is_some());
     assert_eq!((cold.round_intent, cold.row_intent, cold.channel), (row, row, false));
-    assert!(cold.plan.iter().all(|l| !l.marrow && !l.skill.contains("(Marrow)")));
+    assert!(cold.plan.iter().all(|l| !l.channeled && !l.skill.contains("(Channeled)")));
     assert!(s.set_channel(HERO, true).0.is_ok());
     let hot = record(&s);
     assert_eq!((hot.round_intent, hot.row_intent, hot.channel), (Some(RoundIntent::Channel), row, true));
@@ -712,17 +726,17 @@ fn the_tells_read_the_channel_flag() {
         let k = skill(&s.w, id);
         if channel::has_version(&s.w, k) {
             kinds.0 += 1;
-            assert!(l.marrow, "{id}: a marrow version is marked");
-            assert_eq!(l.skill, channel::marrow_name(&s.w.cat, &k.name));
-            assert_eq!(l.skill, format!("{} (Marrow)", k.name), "the default mark");
+            assert!(l.channeled, "{id}: a channeled version is marked");
+            assert_eq!(l.skill, channel::channeled_name(&s.w.cat, &k.name));
+            assert_eq!(l.skill, format!("{} (Channeled)", k.name), "the default mark");
         } else {
-            assert!(!l.marrow && l.skill == k.name, "{id}: not a version, so no mark ({})", l.skill);
+            assert!(!l.channeled && l.skill == k.name, "{id}: not a version, so no mark ({})", l.skill);
             kinds.1 += usize::from(id == "t_feed");
         }
     }
     assert!(kinds.0 > 0 && kinds.1 > 0, "both a marked version and an unmarked Feed line ({steps:?})");
     assert!(s.set_channel(HERO, false).0.is_ok());
-    assert_eq!(record(&s), cold, "back to Cold Steel");
+    assert_eq!(record(&s), cold, "back to Standard");
     // the flag alone (no skill planned yet) shows Channel
     assert!(channel::can_channel(&s.w, HERO));
     s.w.round_states.entry(HERO).or_default().intent = None;
@@ -730,18 +744,19 @@ fn the_tells_read_the_channel_flag() {
     assert_eq!(channel::tell_intent(&s.w, HERO), Some(RoundIntent::Channel));
 }
 
-/// PK1 4.3 item 6: the mark is the game's term (`marrow_mark`'s short form): a `terms` row renames it.
+/// PK1 4.3 item 6: the mark is the game's term (`channeled_mark`'s short form): a `terms` row renames it.
 #[test]
-fn the_marrow_mark_is_the_games_term() {
+fn the_channeled_mark_is_the_games_term() {
     let plain = Catalog::from_value(&json!({}));
-    assert_eq!(channel::marrow_name(&plain, "Cleave"), "Cleave (Marrow)");
-    let named = Catalog::from_value(&json!({"terms": [{"id": "marrow_mark", "name": "Inoculated", "short": "Ino"}]}));
-    assert_eq!(channel::marrow_name(&named, "Cleave"), "Cleave (Ino)");
+    assert_eq!(channel::channeled_name(&plain, "Cleave"), "Cleave (Channeled)");
+    let named = Catalog::from_value(&json!({"terms": [{"id": "channeled_mark", "name": "Inoculated", "short": "Ino"}]}));
+    assert_eq!(channel::channeled_name(&named, "Cleave"), "Cleave (Ino)");
 }
 
 /// PK1 4.4 for an enemy holder (an aberrant): the AI table's pick and the Channel row run at the round's enemy
-/// scheduling; the enemy tells (scheduled actions) show Channel exactly while its round flag is set, with every marrow
-/// version line marked, and the meter it pays is real (it never reaches the max through a Channel round).
+/// scheduling; the enemy tells (scheduled actions) show Channel exactly while its round flag is set, with every channeled
+/// version line marked (PR5-26: or a channeled-only Spike or Vent planned), and the meter it pays is real (it never
+/// reaches the max through a Channel round).
 #[test]
 fn an_enemy_holder_channels_and_its_tells_say_so() {
     let mut channelled = false;
@@ -757,9 +772,13 @@ fn an_enemy_holder_channels_and_its_tells_say_so() {
             assert_eq!(rec.round_intent, if on { Some(RoundIntent::Channel) } else { round_intent::intent_of(&s.w, FOE) });
             assert_eq!(rec.row_intent, round_intent::intent_of(&s.w, FOE));
             if !on {
-                assert!(!rec.line.marrow && rec.plan.iter().all(|l| !l.marrow));
+                assert!(!rec.line.channeled && rec.plan.iter().all(|l| !l.channeled));
             } else {
-                assert!(rec.line.marrow || rec.plan.iter().any(|l| l.marrow));
+                // PR5-26: or a channeled-only skill other than Feed: Spike (FB-191 (1), the Channel row counts it) or Vent
+                // (FB-191 (e), the Vent row at high Strain)
+                let only: Vec<String> = s.w.cat.skills.iter().filter(|k| channel::only(k) && k.id != "t_feed").map(|k| k.name.clone()).collect();
+                let named = rec.plan.iter().chain([&rec.line]).any(|l| only.contains(&l.skill));
+                assert!(rec.line.channeled || rec.plan.iter().any(|l| l.channeled) || named, "{:?}", rec.plan);
             }
             let trace = rpgkit_battle::intent::trace(&s.w, &[rec.clone()]);
             assert_eq!(trace[0][8], json!(rec.round_intent.map_or("", |i| i.id())), "the trace's round intent slot");
@@ -777,16 +796,16 @@ fn an_enemy_holder_channels_and_its_tells_say_so() {
     assert!(channelled, "the foe opened Channel at least once");
 }
 
-/// PK1 4.4: with no Cold Steel option worth anything the AI stays Cold Steel. The hurt hero (HP at 1/3, below the
-/// default `defend_below`, 2 AP) takes the Guard row, a round of Brace worth 0; it marked Brace marrow, so the same round as a
-/// Channel round plans Brace's marrow version and Feeds the free blocks (a heal worth more than 0, past any edge of 0),
+/// PK1 4.4: with no Standard option worth anything the AI stays Standard. The hurt hero (HP at 1/3, below the
+/// default `defend_below`, 2 AP) takes the Guard row, a round of Brace worth 0; it marked Brace channeled, so the same round as a
+/// Channel round plans Brace's channeled version and Feeds the free blocks (a heal worth more than 0, past any edge of 0),
 /// which the AI must not open just to Feed. Out of reach (the advance row) the same holds.
 #[test]
-fn a_hurt_holder_out_of_reach_stays_cold_steel() {
+fn a_hurt_holder_out_of_reach_stays_standard() {
     for far in [false, true] {
         let mut s = session_with(badge_rules(json!({"channel_power": 2.0})), true);
         drop_active(&mut s.w, HERO, "t_spike");
-        s.w.units[HERO].deck.marrow = vec!["t_brace".into()];
+        s.w.units[HERO].deck.channeled = vec!["t_brace".into()];
         assert_eq!(channel::marked(&s.w, HERO), ["t_brace"]);
         if far {
             for (c, cell) in [(HERO, V2::new(0, 0)), (ALLY, V2::new(0, 1)), (FOE, V2::new(11, 7)), (FOE2, V2::new(11, 6))] {
@@ -794,13 +813,13 @@ fn a_hurt_holder_out_of_reach_stays_cold_steel() {
             }
         }
         s.w.units[HERO].hp = s.w.units[HERO].max_hp / 3;
-        // 2 AP: two Braces, then Rest (Cold Steel) or Feed (Channel) on the blocks left
+        // 2 AP: two Braces, then Rest (Standard) or Feed (Channel) on the blocks left
         s.w.units[HERO].ap = 2;
         let r = ai_round(&mut s, HERO);
         let steps = planned(&s, HERO);
         assert_eq!(r.row, "guard", "far {far}: {steps:?}");
-        assert_eq!(ai::round_value(&s.w, &s.plan, HERO), 0, "no Cold Steel option is worth anything ({steps:?})");
-        assert!(!channel::is_channel(&s.w, HERO), "nothing to beat: Cold Steel, not a Feed round ({steps:?})");
+        assert_eq!(ai::round_value(&s.w, &s.plan, HERO), 0, "no Standard option is worth anything ({steps:?})");
+        assert!(!channel::is_channel(&s.w, HERO), "nothing to beat: Standard, not a Feed round ({steps:?})");
         // the toggle's Channel round (the same planner path as the AI's trial) is worth more than 0
         assert!(s.set_channel(HERO, true).0.is_ok());
         let hot = planned(&s, HERO);
@@ -809,7 +828,7 @@ fn a_hurt_holder_out_of_reach_stays_cold_steel() {
 }
 
 /// PK1 4.4: a Channel trial the AI rejects puts the unit back as it was: an intent-bound buff the trial dropped
-/// (entering Channel is an intent change) is held again, and the steps are the Cold Steel round's.
+/// (entering Channel is an intent change) is held again, and the steps are the Standard round's.
 #[test]
 fn a_rejected_channel_round_keeps_the_intent_bound_buff() {
     // power 1.0: the Channel round is not past the edge (the_ai_opens_channel_only_past_the_edge)
@@ -830,10 +849,10 @@ fn a_rejected_channel_round_keeps_the_intent_bound_buff() {
     assert_eq!(planned(&s, HERO), steps);
 }
 
-/// PK1 4.4: Economy's opener-only round stays Cold Steel even past the edge (the given pick is the Economy pick of the
+/// PK1 4.4: Economy's opener-only round stays Standard even past the edge (the given pick is the Economy pick of the
 /// round the Balanced AI would open in Channel).
 #[test]
-fn an_economy_round_stays_cold_steel() {
+fn an_economy_round_stays_standard() {
     let r = badge_rules(json!({"channel_power": 2.0}));
     let mut s = session_with(r.clone(), true);
     drop_active(&mut s.w, HERO, "t_spike");
@@ -846,6 +865,103 @@ fn an_economy_round_stays_cold_steel() {
     let profile = e.w.profile_of(HERO);
     let got = ai::plan_given(&mut e.w, &mut e.plan, HERO, &profile, pick);
     assert!(got.pick.is_some_and(|p| p.opener_only), "the Economy pick is kept");
-    assert!(!channel::is_channel(&e.w, HERO), "opener-only rounds stay Cold Steel");
+    assert!(!channel::is_channel(&e.w, HERO), "opener-only rounds stay Standard");
 }
 
+/// PR5-26 (audit B1): a command coerced to Rest (RULESET1_INTENT TG4: its target is gone) runs no skill and no channeled
+/// version: `into_rest` clears the skill id (no `uses_per_battle` count, no used-up failure) and the channeled flag (no
+/// Channel tell), with its meter cost, as it clears the rest of the command.
+#[test]
+fn a_coerced_rest_drops_the_skill_and_the_channeled_version() {
+    let mut s = session();
+    flag(&mut s.w, HERO, true);
+    let mut cmd = command(&s.w, HERO, PlanStep::engage(sid(&s.w, "t_jab"), FOE), "t_jab");
+    assert!(cmd.channeled && cmd.skill == "t_jab" && !cmd.meters.is_empty(), "a channeled Jab before");
+    cmd.into_rest();
+    assert!(matches!(cmd.kind, command::CmdKind::Rest { .. }), "{:?}", cmd.kind);
+    assert!(cmd.skill.is_empty() && !cmd.channeled && cmd.meters.is_empty(), "skill {:?}, channeled {}", cmd.skill, cmd.channeled);
+    assert_eq!(cmd.ap_cost, 0);
+}
+
+/// PR5-26 (FB-191 (1)): the AI's Channel row counts a round whose only Channel skill is a `channel.only` attack (Spike),
+/// not only a channeled version: with every channeled version gone (no marks, the class basic `channel.none`, the marked
+/// actives out of the deck) and an edge that any planned round clears, the AI opens Channel and plans Spike; with
+/// Spike a plain skill too (`channel.none`) there is nothing to Channel with and the round stays Standard.
+#[test]
+fn the_ai_counts_a_channeled_only_attack_as_a_channel_round() {
+    for spike in [true, false] {
+        let mut s = session_with(badge_rules(json!({"channel_ai_edge": 0.01})), true);
+        let bash = sid(&s.w, "t_bash");
+        std::sync::Arc::make_mut(&mut s.w.cat).skills[bash].channel.none = true;
+        s.w.units[HERO].deck.channeled.clear();
+        for fam in ["t_jab", "t_heavy", "t_cleave", "t_plain", "t_brace"] {
+            drop_active(&mut s.w, HERO, fam);
+        }
+        if !spike {
+            let k = sid(&s.w, "t_spike");
+            let cat = std::sync::Arc::make_mut(&mut s.w.cat);
+            cat.skills[k].channel.only = false;
+            cat.skills[k].channel.none = true;
+        }
+        let _ = ai_round(&mut s, HERO);
+        let planned = planned(&s, HERO);
+        assert_eq!(channel::is_channel(&s.w, HERO), spike, "spike {spike}: {planned:?}");
+        if spike {
+            assert!(planned.iter().any(|p| p == "t_spike"), "{planned:?}");
+        }
+    }
+}
+
+/// PR5-26 (FB-191 (e)): the AI Vents at high Strain: from `ai::CHANNEL_AI_VENT_PCT` of the meter's max its round is a
+/// Channel round on itself opened by Vent (`ai::vent_skill`: the channeled-only meter skill that lowers Strain); one below
+/// it plans no Vent. A Vent its HP cannot pay (`hp_cost_pct`) is not planned either. Review F5: a Vent round's pick is
+/// the Vent's (on itself, Vent the opener); an Economy round (opener only) is never turned. PR5-26 follow-up (FB-201):
+/// the Vent pick takes the row a self pick of the skill takes, so it Vents under `field_intent` too (every timeline
+/// ruleset): Stand there (IR15: a self target is Stand's), Support without it.
+#[test]
+fn the_ai_vents_at_high_strain() {
+    let max = 100;
+    let at = ai::CHANNEL_AI_VENT_PCT * max / 100;
+    assert!(at >= VENT_GATE, "the Vent threshold clears Vent's own gate");
+    for (field, row) in [(false, RoundIntent::Support), (true, RoundIntent::Guard)] {
+        let rules = || if field { vent_field_rules() } else { badge_rules(json!({})) };
+        assert_eq!(round_intent::field_rows(&session_with(rules(), true).w), field);
+        for (strain, vents) in [(at, true), (at - 1, false), (max, true)] {
+            let mut s = session_with(rules(), true);
+            assert_eq!(ai::vent_skill(&s.w, HERO), Some(sid(&s.w, "t_vent")));
+            set_strain(&mut s.w, HERO, strain);
+            let round = ai_round(&mut s, HERO);
+            let planned = planned(&s, HERO);
+            assert_eq!(planned.first().map(String::as_str) == Some("t_vent"), vents, "field {field}, strain {strain}: {planned:?}");
+            if vents {
+                assert!(channel::is_channel(&s.w, HERO), "a Channel round");
+                assert_eq!(round_intent::intent_of(&s.w, HERO), Some(row), "field {field}");
+                // review F5: the round's pick is the Vent's
+                let pick = round.pick.expect("a pick");
+                assert_eq!((pick.intent, pick.target, pick.opener), (row, RoundTarget::Myself, Some(rpgkit_battle::round_intent::Opener::Skill(sid(&s.w, "t_vent")))));
+            }
+        }
+        // review F5: an Economy round (opener only; the Standard pick of a calm round) is never turned into a Vent round
+        let mut s = session_with(rules(), true);
+        let full = ai_round(&mut s, HERO);
+        let mut e = session_with(rules(), true);
+        set_strain(&mut e.w, HERO, max);
+        let mut pick = full.pick.expect("a pick");
+        pick.opener_only = true;
+        let profile = e.w.profile_of(HERO);
+        let got = ai::plan_given(&mut e.w, &mut e.plan, HERO, &profile, pick);
+        assert!(got.pick.is_some_and(|p| p.opener_only), "the Economy pick is kept");
+        assert!(!planned(&e, HERO).iter().any(|p| p == "t_vent") && !channel::is_channel(&e.w, HERO), "no Vent in an Economy round");
+        let mut s = session_with(rules(), true);
+        set_strain(&mut s.w, HERO, max);
+        let hurt = s.w.units[HERO].max_hp * VENT_PCT / 100;
+        s.w.units[HERO].hp = hurt.max(1);
+        let _ = ai_round(&mut s, HERO);
+        assert!(!planned(&s, HERO).iter().any(|p| p == "t_vent"), "a Vent the HP cannot pay");
+    }
+}
+
+/// `badge_rules` with `field_intent` (a timeline-style ruleset: every shipped timeline row has it).
+fn vent_field_rules() -> Ruleset {
+    rules(true, json!({"rules": [ROUND_INTENT, DECK, AP_COST, PIERCE, FIELD_INTENT, TRIGGERS, UNIT_METERS, HP_COST, CHANNEL, ruleset::PLAN_BADGES]}))
+}

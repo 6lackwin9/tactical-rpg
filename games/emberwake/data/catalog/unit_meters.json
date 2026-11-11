@@ -158,6 +158,191 @@
 					"limit": "none"
 				}
 			]
+		},
+		{
+			"id": "strain",
+			"name": "Strain",
+			"short": "Strain",
+			"description": "The marrow's pull: climbs with every marrow action and every aberrant hit, bleeds off 10 a round unless gained. At 100 it ruptures: a seeded crisis, then back to 50.",
+			"min": 0,
+			"max": 100,
+			"start": 0,
+			"delta_max": 50,
+			"show": "bar",
+			"decay": [
+				{
+					"delta": -10,
+					"unless_gained": true
+				},
+				{
+					"delta": -10,
+					"if_guarded": true
+				}
+			],
+			"bands": [
+				{
+					"id": "dormant",
+					"name": "Dormant",
+					"from": 0,
+					"effects": [],
+					"statuses": []
+				},
+				{
+					"id": "acute",
+					"name": "Acute Resonance",
+					"from": 25,
+					"effects": [
+						{
+							"type": "crit",
+							"value": 15
+						},
+						{
+							"type": "heal_taken",
+							"value": -25
+						}
+					],
+					"statuses": [
+						{
+							"status": "haste",
+							"magnitude": 0
+						}
+					]
+				},
+				{
+					"id": "tension",
+					"name": "Flesh-Tension",
+					"from": 50,
+					"effects": [
+						{
+							"type": "stagger_taken",
+							"mult": 2
+						}
+					],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 25
+						},
+						{
+							"status": "fortify",
+							"magnitude": 4
+						}
+					]
+				},
+				{
+					"id": "edge",
+					"name": "Aberrant Edge",
+					"from": 75,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 50
+						}
+					]
+				},
+				{
+					"id": "rupture",
+					"name": "Rupture",
+					"from": 100,
+					"effects": [],
+					"statuses": []
+				}
+			],
+			"rules": [],
+			"skills": [
+				"feed",
+				"vent"
+			],
+			"triggers": [
+				{
+					"on": "round_end",
+					"when": {
+						"meter": {
+							"id": "strain",
+							"at_least": 100
+						}
+					},
+					"limit": "none",
+					"effects": [
+						{
+							"type": "roll_table",
+							"rows": [
+								{
+									"weight": 1,
+									"effects": [
+										{
+											"type": "strike_nearest",
+											"power": 1,
+											"then_status": "stun",
+											"then_rounds": 1
+										}
+									]
+								},
+								{
+									"weight": 1,
+									"effects": [
+										{
+											"type": "ap",
+											"set": 0,
+											"rounds": 1,
+											"to": "self"
+										},
+										{
+											"type": "inflict",
+											"status": "bleed",
+											"potency": 100,
+											"rounds": 3,
+											"magnitude": 0,
+											"to": "self"
+										},
+										{
+											"type": "rating_set",
+											"rating": "armor",
+											"value": 0,
+											"rounds": -1,
+											"to": "self"
+										}
+									]
+								},
+								{
+									"weight": 1,
+									"effects": [
+										{
+											"type": "mark",
+											"mark": "calcify",
+											"value": 1,
+											"to": "self"
+										}
+									]
+								}
+							]
+						},
+						{
+							"type": "meter_set",
+							"meter": "strain",
+							"value": 50
+						}
+					]
+				},
+				{
+					"on": "hit_dealt",
+					"when": {
+						"meter": {
+							"id": "strain",
+							"at_least": 75
+						}
+					},
+					"limit": "none",
+					"effects": [
+						{
+							"type": "damage",
+							"pct_of_hit": 10,
+							"to": "self"
+						}
+					]
+				}
+			]
 		}
 	]
 }

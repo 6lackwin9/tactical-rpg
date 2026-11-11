@@ -9,7 +9,7 @@ use rpgkit_battle::encounter::{
     ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, BROKEN, BROKEN_KEYS, DOWNED, DOWNED_KEYS, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PARTY_NAME, PARTY_PREFIX, PICK_DEFAULTS, ROUND_KEYS, STAY_HOLD,
     STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS, SIDE_EFFECT, SIDE_EFFECT_KEYS, SIDE_TARGETS, SWAP_EFFECT, SWAP_EFFECT_KEYS, SWAP_HP, SWAP_KEEP_PCT, ENEMY_SIDE, PARTY_SIDE,
 };
-use rpgkit_battle::grid::{rows_valid, Grid, TerrainTable, GRID_H, GRID_W, V2};
+use rpgkit_battle::grid::{Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
@@ -142,7 +142,7 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         }
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
-    errors.extend(rows_problems(e));
+    errors.extend(rows_problems(v, e));
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block
     errors.extend(unkillable_problems(e));
     errors.extend(stay_behind_problems(v, e, false));
@@ -155,11 +155,11 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
 }
 
 /// ENCOUNTER2 R0: `rows` is empty (the zone's rows) or GRID_H strings of GRID_W known terrain glyphs (catalog and
-/// world encounters).
-pub fn rows_problems(e: &Dict) -> Vec<String> {
+/// world encounters; LAYER-DOWN-2: the glyphs of the catalog's terrain types, `simple::terrain_table`).
+pub fn rows_problems(v: &View, e: &Dict) -> Vec<String> {
     match json::get(e, "rows") {
         Value::Array(list) if list.is_empty() => Vec::new(),
-        Value::Array(list) if list.iter().all(Value::is_string) && rows_valid(&strings(json::get(e, "rows"))) => Vec::new(),
+        Value::Array(list) if list.iter().all(Value::is_string) && super::simple::terrain_table(v.entries("terrain")).rows_valid(&strings(json::get(e, "rows"))) => Vec::new(),
         Value::Null => Vec::new(),
         _ => vec![format!("Rows are {GRID_H} strings of {GRID_W} terrain glyphs.")],
     }

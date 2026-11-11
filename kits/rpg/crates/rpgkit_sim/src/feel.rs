@@ -48,7 +48,16 @@ pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
     ("chases_support", "Support chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Support)) as i64),
     ("items_used", "items used", |_, a| matches!(a.command.kind, CmdKind::Item { used: true, .. }) as i64),
     ("dodges", "dodges", |_, a| a.command.dodged.is_some() as i64),
+    // PR5-26 (FB-191 (f)): the Channel rule's actions that landed: channeled versions, and Vents (`is_vent`)
+    ("channeled_actions", "channeled actions", |_, a| (a.landed && a.command.channeled) as i64),
+    ("vents", "Vents", |w, a| (a.landed && is_vent(w, a)) as i64),
 ];
+
+/// PR5-26: a Vent: a channeled-only skill (`channel.only`) whose meter cost lowers the channel meter.
+fn is_vent(w: &World, a: &ScheduledAction) -> bool {
+    let m = rpgkit_battle::channel::meter_id(w);
+    !m.is_empty() && w.cat.skill(&a.command.skill).is_some_and(rpgkit_battle::channel::only) && a.command.meters.iter().any(|d| d.meter == m && d.delta < 0)
+}
 
 /// A command that started as a dash to a position tile (INPUT1 MR1, MR8), whatever came of it: it dashed, stayed on its
 /// tile, could not reach, or found the flank protected.
@@ -112,6 +121,16 @@ pub struct Side {
     pub rule_counts: IndexMap<&'static str, i64>,
     /// SIMCOUNT1: the pouch items used, by item id.
     pub items_by_id: IndexMap<String, i64>,
+    /// PR5-26 (FB-191 (f), counts=on): the Channel rule's numbers: unit-rounds played as a Channel round, the channel
+    /// meter's own triggers fired (its crisis), unit-rounds ending in each band of the channel meter (by band name; "-"
+    /// outside every band), and the poise breaks the side's units took. PR5-26 follow-up (FB-201): `crises`, the firings
+    /// of the channel meter's crisis rows (`crisis_at`: a `round_end` row that needs the meter at its max), counted as
+    /// they fire (the bands sample after a crisis reset, so they never show the max band).
+    pub channel_rounds: i64,
+    pub channel_triggers: i64,
+    pub crises: i64,
+    pub channel_bands: IndexMap<String, i64>,
+    pub breaks_taken: i64,
 }
 
 impl Side {
@@ -136,6 +155,13 @@ impl Side {
         for (k, v) in &o.items_by_id {
             *self.items_by_id.entry(k.clone()).or_default() += v;
         }
+        self.channel_rounds += o.channel_rounds;
+        self.channel_triggers += o.channel_triggers;
+        self.crises += o.crises;
+        for (k, v) in &o.channel_bands {
+            *self.channel_bands.entry(k.clone()).or_default() += v;
+        }
+        self.breaks_taken += o.breaks_taken;
     }
 
     /// SIMCOUNT1: one `RULE_COUNTERS` count (0 when nothing counted it).
@@ -155,6 +181,8 @@ impl Side {
         json!({
             "counts": counts, "per_fight": per_fight, "protected_share_pct": self.protected_share(),
             "rest_blocks_per_round": round2(ratio(self.rest_blocks, rounds)), "items_by_id": counts_json(&self.items_by_id),
+            "channel": {"rounds": self.channel_rounds, "meter_triggers": self.channel_triggers, "crises": self.crises, "bands": counts_json(&self.channel_bands)},
+            "breaks_taken": self.breaks_taken,
         })
     }
 
@@ -162,12 +190,18 @@ impl Side {
     fn rule_line(&self, name: &str, fights: i64, rounds: i64) -> String {
         let counts: Vec<String> = RULE_COUNTERS.iter().map(|(k, label, _)| format!("{label} {} ({}/fight)", self.rule_count(k), round2(ratio(self.rule_count(k), fights)))).collect();
         let items: Vec<String> = self.items_by_id.iter().map(|(k, v)| format!("{k} {v}")).collect();
+        let bands: Vec<String> = self.channel_bands.iter().map(|(k, v)| format!("{k} {v}")).collect();
         format!(
-            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}",
+            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, crises {}, rounds by band {}; breaks taken {}",
             counts.join(", "),
             self.protected_share(),
             round2(ratio(self.rest_blocks, rounds)),
-            if items.is_empty() { "-".to_string() } else { items.join(" ") }
+            if items.is_empty() { "-".to_string() } else { items.join(" ") },
+            self.channel_rounds,
+            self.channel_triggers,
+            self.crises,
+            if bands.is_empty() { "-".to_string() } else { bands.join(" ") },
+            self.breaks_taken
         )
     }
 
@@ -554,6 +588,16 @@ impl Feel {
                 c.sure_breaks += st.broke.as_ref().is_some_and(|b| b.cause == rpgkit_battle::poise::BreakCause::Sure) as i64;
             }
         }
+        // PR5-26 (FB-191 (f)): each holder of the channel meter on the field: a Channel round, and the band its meter
+        // ends the round in
+        let m = rpgkit_battle::channel::meter_id(w).to_string();
+        for c in active_units(s).into_iter().filter(|&c| !m.is_empty() && rpgkit_battle::meter::value(w, c, &m).is_some()) {
+            let channel = rpgkit_battle::channel::is_channel(w, c);
+            let band = rpgkit_battle::meter::shown(w, c).into_iter().find(|v| v.id == m).map(|v| v.band).filter(|b| !b.is_empty()).unwrap_or_else(|| "-".into());
+            let side = self.side(s, c);
+            side.channel_rounds += channel as i64;
+            *side.channel_bands.entry(band).or_default() += 1;
+        }
         for c in s.w.allies.iter().chain(&s.w.enemies).copied() {
             if let Some(p) = w.poise.get(&c).filter(|p| p.max > 0 && w.units[c].is_alive()) {
                 self.counts.bar_rounds += 1;
@@ -588,8 +632,52 @@ impl Feel {
         c.rounds.push(rounds);
         for e in s.log.iter().filter(|e| e.outcome == "BREAK") {
             *c.breaks.entry(e.status.clone()).or_default() += 1;
+            // PR5-26 (FB-191 (f)): by the broken unit's side (the entry's actor)
+            if e.actor_is_ally {
+                c.party.breaks_taken += 1;
+            } else {
+                c.enemy.breaks_taken += 1;
+            }
+        }
+        // PR5-26 (FB-191 (f)): the channel meter's own trigger rows fired this battle (its crisis), by the holder's side
+        let m = rpgkit_battle::channel::meter_id(&s.w);
+        if !m.is_empty() {
+            let prefix = format!("{}{m}#", rpgkit_battle::meter::METER_KEY);
+            for (unit, n) in s.resolver.triggers.battle_counts(&prefix) {
+                if s.w.allies.contains(&unit) {
+                    c.party.channel_triggers += i64::from(n);
+                } else {
+                    c.enemy.channel_triggers += i64::from(n);
+                }
+            }
+            // PR5-26 follow-up (FB-201): the crises among them, by the holder's side
+            if let Some(def) = s.w.cat.unit_meters.get(m) {
+                for (n, row) in def.triggers.iter().enumerate() {
+                    let Some(at) = crisis_at(row, m) else { continue };
+                    let key = format!("{}{m}#{n}", rpgkit_battle::meter::METER_KEY);
+                    for unit in 0..s.w.units.len() {
+                        let max = rpgkit_battle::meter::pool(&s.w, unit, m).map_or(def.max, |p| p.max);
+                        let fired = s.resolver.triggers.battle_count(unit, &key);
+                        if fired == 0 || at < max {
+                            continue;
+                        }
+                        if s.w.allies.contains(&unit) {
+                            c.party.crises += i64::from(fired);
+                        } else {
+                            c.enemy.crises += i64::from(fired);
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+/// PR5-26 follow-up (FB-201): a crisis row of meter `m`: a `round_end` trigger row whose `when` holds `m` at least some
+/// value (Some(that value); a crisis when it reaches the holder's max).
+fn crisis_at(row: &rpgkit_data::TriggerRow, m: &str) -> Option<i32> {
+    let cond = row.when.get("meter")?.as_object()?;
+    (row.on == "round_end" && cond.get("id").and_then(Value::as_str) == Some(m)).then(|| cond.get("at_least").and_then(Value::as_i64).unwrap_or(0) as i32)
 }
 
 /// The `feel` mode: each of the arguments' encounters (catalog encounters with a party) fought over every seed with its

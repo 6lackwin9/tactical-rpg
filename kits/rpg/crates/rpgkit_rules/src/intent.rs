@@ -130,7 +130,7 @@ pub fn allowed(rules: &Ruleset, s: &IntentInput, authored: &str) -> Vec<&'static
 }
 
 /// PK1-S2a (PK1 4.2, ACTS23 5.1 "only single-intent skills get a Channel row"): whether IR21 derives one intent for
-/// the skill, not neutral (only such a skill may have a marrow version or be marrow-only).
+/// the skill, not neutral (only such a skill may have a channeled version or be channeled-only).
 pub fn single_intent(s: &IntentInput) -> bool {
     let rows = derive(s);
     rows.len() == 1 && rows[0] != NEUTRAL

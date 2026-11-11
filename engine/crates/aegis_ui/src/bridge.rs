@@ -1,6 +1,6 @@
 //! Agent link (ENGINE_SPEC section 4.2): a localhost TCP port speaking the same JSON lines as `aegis serve`, plus
 //! GUI-only requests (ui_tree, screenshot, click). Requests are handed to the GUI loop, so the agent acts on the very
-//! battle the user is looking at. Native only (WEBREL1-E1b): the web build has no TCP or threads, so `start` there
+//! game screen the user is looking at. Native only (WEBREL1-E1b): the web build has no TCP or threads, so `start` there
 //! opens nothing and returns None (the shell runs without an agent link).
 
 use serde_json::Value;

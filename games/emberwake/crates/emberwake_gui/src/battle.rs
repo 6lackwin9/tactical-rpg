@@ -43,7 +43,7 @@ pub(crate) use marks::{party_foresight_off, seen_intents};
 #[allow(unused_imports)]
 pub(crate) use marks::FORESIGHT_OFF;
 pub(crate) use overlays::{overlay_default, Layers, OVERLAY_GROUPS};
-pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, kind_color};
+pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color};
 pub(crate) use input::skill_text;
 pub(crate) use skill_menu::CHANNEL_TINT;
 use draw::{draw, log_groups_json};
@@ -256,6 +256,8 @@ pub struct BattleScreen {
     mode: Mode,
     encounter: String,
     seed: Option<i64>,
+    /// MUSICVAR1: this battle's music request (`music::new_request`, set at each start): its variant stays the battle's.
+    music_request: u64,
     /// Arena only: the world the encounter belongs to (played with that world's characters); None = catalog.
     arena_world: Option<String>,
     /// Arena only (RULESET1-R): the ruleset picked in the Scene Runner (classic or timeline); None = the encounter's own
@@ -442,6 +444,7 @@ impl BattleScreen {
             mode,
             encounter: cx.encounter.clone(),
             seed: cx.seed,
+            music_request: 0,
             arena_world: None,
             arena_ruleset: None,
             arena_rules: String::new(),
@@ -749,7 +752,8 @@ impl Screen<GameCx> for BattleScreen {
         self.save_session(cx);
     }
 
-    /// A playtest note over the battle records its session (the recording's battle index), round, block and phase.
+    /// A playtest note over the battle records its session (the recording's session index; `session`, was `battle`
+    /// before LAYER-ENG-API), round, block and phase.
     fn note_context(&self, _cx: &Cx) -> Value {
         let Some(s) = self.host.session.as_ref() else { return Value::Null };
         let phase = match s.phase {
@@ -757,7 +761,7 @@ impl Screen<GameCx> for BattleScreen {
             Phase::Resolving => "resolving",
             Phase::Replay => "replay",
         };
-        json!({"battle": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
+        json!({"session": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
     }
 
     fn tick(&mut self, cx: &mut Cx) {
@@ -1146,13 +1150,16 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     /// MUSIC1: boss when an enemy unit has the boss tier, else combat; scoped to the battle's world and location.
+    /// MUSICVAR1: one variant per battle (`music_request`), seeded by the battle's seed.
     fn music(&self, cx: &Cx) -> Option<String> {
         let ctx = if self.host.session.as_ref().is_some_and(boss_fight) { music::BOSS } else { music::COMBAT };
-        match &self.arena_world {
-            Some(w) => music::track(cx, ctx, w, ""),
-            None if self.world_mode() => music::game_track(cx, ctx),
-            None => music::track(cx, ctx, "", ""),
-        }
+        let seed = self.host.session.as_ref().map_or(0, |s| s.def.rng_seed);
+        let (world, location) = match (&self.arena_world, cx.game.as_ref()) {
+            (Some(w), _) => (w.as_str(), ""),
+            (None, Some(g)) if self.world_mode() => (g.gs.world_id.as_str(), g.gs.location_id.as_str()),
+            _ => ("", ""),
+        };
+        music::battle_track(cx, ctx, world, location, self.music_request, seed)
     }
 
     aegis_ui::widget_plumbing!();

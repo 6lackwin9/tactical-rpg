@@ -1,0 +1,9 @@
+{
+ "steps": [
+  {
+   "op": "remove",
+   "kind": "dojo_presets",
+   "id": "channel_duel"
+  }
+ ]
+}

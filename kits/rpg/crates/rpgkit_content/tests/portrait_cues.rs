@@ -267,7 +267,7 @@ fn the_writer_stores_the_keys_that_differ_from_the_defaults() {
     let meter = store::upsert(&data, None, portrait::KIND, &dict(json!({"id": "gauge", "trigger": "meter", "effect": "tint"})), None).err().expect("refused");
     assert_eq!(meter, [portrait::METER_MESSAGE]);
     let bad = store::upsert(&data, None, portrait::KIND, &dict(json!({"id": "hp_low", "trigger": "hp", "below": 25, "effect": "fade", "color": "#ffffff"})), None).err().expect("refused");
-    assert!(bad.iter().any(|e| e.ends_with("portrait cue 'hp_low': Colour is only for flash, tint, glow, veins, eye_glow, ash, smoke (not fade).")), "{bad:?}");
+    assert!(bad.iter().any(|e| e.ends_with("portrait cue 'hp_low': Colour is only for flash, tint, glow, lines, point_glow, particles_rise, drift (not fade).")), "{bad:?}");
     assert_eq!(fs::read_to_string(&file).unwrap(), text, "a refused write puts the file back");
     // the Forge's check of one row sees the loaded rows
     let v = store::view(&data);
@@ -282,14 +282,14 @@ fn the_writer_stores_the_keys_that_differ_from_the_defaults() {
 
 #[test]
 fn the_face_chain_tries_the_expression_then_neutral_then_the_portrait() {
-    let chain = art::portrait_chain("hero", "kaelen", "knight");
+    let chain = art::portrait_chain("hero", "kestrel", "knight");
     let with = |head: &[&str]| [strs(head), chain.clone()].concat();
-    assert_eq!(art::face_chain("hero", "kaelen", "knight", "hurt"), with(&["portraits/heroes/faces/kaelen/hurt.png", "portraits/heroes/faces/kaelen/neutral.png"]));
-    assert_eq!(art::face_chain("hero", "kaelen", "knight", ""), with(&["portraits/heroes/faces/kaelen/neutral.png"]));
-    assert_eq!(art::face_chain("hero", "kaelen", "knight", "neutral"), with(&["portraits/heroes/faces/kaelen/neutral.png"]));
+    assert_eq!(art::face_chain("hero", "kestrel", "knight", "hurt"), with(&["portraits/heroes/faces/kestrel/hurt.png", "portraits/heroes/faces/kestrel/neutral.png"]));
+    assert_eq!(art::face_chain("hero", "kestrel", "knight", ""), with(&["portraits/heroes/faces/kestrel/neutral.png"]));
+    assert_eq!(art::face_chain("hero", "kestrel", "knight", "neutral"), with(&["portraits/heroes/faces/kestrel/neutral.png"]));
     assert_eq!(art::face_chain("common", "grunt", "knight/goblin", "angry"), art::portrait_chain("common", "grunt", "knight/goblin"), "a common tier has no frames");
-    assert_eq!(art::face_sidecars("portraits/heroes/faces/kaelen/hurt.png"), ["portraits/heroes/faces/kaelen/hurt.face.json", "portraits/heroes/kaelen.face.json"]);
-    assert_eq!(art::face_sidecars("portraits/heroes/kaelen.png"), ["portraits/heroes/kaelen.face.json"]);
+    assert_eq!(art::face_sidecars("portraits/heroes/faces/kestrel/hurt.png"), ["portraits/heroes/faces/kestrel/hurt.face.json", "portraits/heroes/kestrel.face.json"]);
+    assert_eq!(art::face_sidecars("portraits/heroes/kestrel.png"), ["portraits/heroes/kestrel.face.json"]);
     assert_eq!(art::face_sidecars("portraits/common/knight_base.png"), ["portraits/common/knight_base.face.json"]);
 }
 
@@ -398,5 +398,34 @@ fn a_node_and_a_line_card_take_an_expression() {
         let doc: Value = serde_json::from_str(&fs::read_to_string(store::file_of(&data, Some(W), kind)).unwrap()).unwrap();
         assert_eq!(doc["entries"][0][list][0]["expression"], entry[list][0]["expression"], "{kind}: an expression is stored");
     }
+    drop_scratch(&data);
+}
+
+/// FB-206 (2b): a row written with an old overlay name (`veins`, `eye_glow`, `ash`, `smoke`) checks, loads and fires as
+/// its canonical name (`lines`, `point_glow`, `particles_rise`, `drift`) and is the same effect for the duplicate check;
+/// a stored row loads as it is, and a write of the file stores the canonical names (writers write the new name).
+#[test]
+fn old_overlay_names_check_and_load_as_the_canonical_ones() {
+    for (old, new) in aegis_core::assets::PRIMITIVE_ALIASES {
+        let r = json!({"id": "glow_on", "trigger": "hp", "below": 30, "effect": old, "intensity": 0.5, "color": "#c084fc"});
+        assert_eq!(errors(&r), Vec::<String>::new(), "{old}: a colour is allowed as on {new}");
+        assert_eq!(PortraitCue::from_obj(&row(&r)).effect, new);
+        assert!(PORTRAIT_EFFECTS.contains(&new) && !PORTRAIT_EFFECTS.contains(&old));
+    }
+    let old_row = row(&json!({"id": "old_glow", "trigger": "hp", "below": 30, "effect": "eye_glow"}));
+    let new_row = row(&json!({"id": "new_glow", "trigger": "hp", "below": 30, "effect": "point_glow"}));
+    let found = portrait::check_rows(&[old_row, new_row], &portrait::Refs { derived: &[], faces: &faces() });
+    assert_eq!(found[1], ["Portrait cue 'old_glow' has the same trigger, match and effect."], "the old name is the same effect");
+    let data = catalog("aliases");
+    let file = data.join("catalog").join("portrait_cues.json");
+    write_catalog(&data, portrait::KIND, json!([{"id": "embers", "trigger": "hp", "below": 30, "effect": "ash", "intensity": 0.4}]));
+    let src = source::load(&data);
+    assert!(cue_errors(&src).is_empty(), "{:?}", cue_errors(&src));
+    assert!(store::check(&data).iter().all(|e| !e.contains("embers")), "{:?}", store::check(&data));
+    let typed = rpgkit_data::Catalog::from_value(&src.catalog).portrait_cues;
+    assert_eq!(typed.iter().map(|c| (c.id.as_str(), c.effect.as_str())).collect::<Vec<_>>(), [("embers", "particles_rise")]);
+    let effect_of = |id: &str| json::s(aegis_content::file::raw_entries(&file).iter().find(|e| json::s(e, "id") == id).unwrap(), "effect");
+    store::upsert(&data, None, portrait::KIND, &dict(json!({"id": "haze", "trigger": "down", "effect": "smoke", "intensity": 0.5})), None).expect("an old name is taken");
+    assert_eq!((effect_of("haze"), effect_of("embers")), ("drift".to_string(), "particles_rise".to_string()), "the writer stores the canonical names");
     drop_scratch(&data);
 }

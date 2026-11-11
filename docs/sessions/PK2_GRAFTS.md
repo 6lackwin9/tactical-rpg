@@ -18,8 +18,8 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 
 ## 2. Calcification: the unit track (kit hook (d))
 
-- **Kit**: a per-member **unit track** (unit-scope campaign meter, the refused CAMPAIGN1-DOC, `check/campaign.rs:287`): an integer stage per member, saved as an additive member key (no save VERSION bump). A track row (game data `unit_tracks`) names its stages; each stage carries a **slotless passive** (granted while the member is at that stage) and an optional **departure** (`lost` at the last stage).
-- **Game data**: `calcification`, stages I-V (CANON 2.3):
+- **Kit**: a per-member **unit track** (unit-scope campaign meter, the refused CAMPAIGN1-DOC, `check/campaign.rs:287`): an integer stage per member (party members only; enemies and guests hold marks without advancing or turning), saved as an additive member key (`tracks`, no save VERSION bump). A track row (game data `unit_tracks`) names its `mark`, its departure `cause`, and its stages; each stage carries a **slotless passive** (**cumulative**: a member at stage N holds the passives of stages `1..N`, `FB-187` (1)) and an optional **departure** (`lost` at the last stage).
+- **Game data**: `calcification` (`mark: "calcify"`, `cause: "calcified"`, `PR5-19`), stages I-V (CANON 2.3):
 
 | Stage | Name | Passive |
 | --- | --- | --- |
@@ -29,9 +29,9 @@ Extends: `E3` roster, `U3` gear, `U4` grants, `W1` services, `E2` purse and stas
 | IV | The Shakes | cannot equip two-handed weapons (bows and arbalests included); melee and bare-handed attacks pierce armour; sleeps in the Isolation Crypts (housing, PK3) |
 | V | Terminal Drift | lost (departure `lost`, cause `calcified`) when the battle settles; in battle the unit turns hostile at once (PK1 2.1) |
 
-- **Advances** (CANON 2.3, and only these): a `calcify` **mark** from a Flesh Breach (PK1; the stage takes hold from the next round, saved at settle unless undone by `unmark`); **Tier III graft surgery** (+1 at install, section 3), the Inoculated keystone included (Q-64).
-- **Undo**: Quenched Cinder Salt and the priest's Inoculated keystone in battle (PK1 `unmark`, before settle); **bone-scraping** at the Slab after Aline's quest: -1 stage and -10% max HP for good (section 4).
-- **Kit pieces**: a member grant `forbid_hands: 2` (Stage IV: equipping refuses two-handed items; an equipped two-hander goes to the stash at settle) and `pierce_melee` (melee and bare-handed hits pierce); a member **max HP offset** (permanent, from bone-scraping and excision).
+- **Advances** (CANON 2.3, and only these): a `calcify` **mark** from a Flesh Breach (PK1; the stage takes hold **at once** in battle, saved at settle unless undone by `unmark`, `FB-187` (4)); **Tier III graft surgery** (+1 at install, section 3), the Inoculated keystone included (Q-64).
+- **Undo**: Quenched Cinder Salt and the priest's Inoculated keystone (`SUPPORT` skill `unmark` with `uses_per_battle`, reaching a Stage V turned party member just like the Salt so it calms at the next round start, `PR5-25`) in battle (PK1 `unmark`, before settle); **bone-scraping** at the Slab after Aline's quest: -1 stage and -10% max HP for good (section 4).
+- **Kit pieces**: a member grant `forbid_hands: 2` (Stage IV: equipping refuses two-handed items; an equipped two-hander goes to the stash at settle) and `pierce_melee` (planned non-ranged hits pierce under rule `pierce`, `FB-187` (3)); a member **max HP offset** (`max_hp_offset`, permanent, from bone-scraping and excision).
 - **Living Martyrs** (Stage IV volunteers, Q-37) and the crypts are PK3; this track gives them their counter.
 
 ## 3. Grafts: body slots (kit hook (e))

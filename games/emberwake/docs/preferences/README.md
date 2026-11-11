@@ -1,6 +1,6 @@
 # Preferences
 
-Tushar's choices that are not formal decisions (user 2026-10-18). Firm, specific rules stay in `docs/decisions/`; these files hold the taste and defaults that design, UI and asset work should follow. A UI or asset pick Tushar approves from a set of options counts as a preference, unless the choice came from him (then it is a decision).
+Tushar's choices that are not formal decisions (user 2026-10-18). Firm, specific rules stay in `docs/decisions/`; cross-cutting heuristics for scoring options and making `[PROVISIONAL]` calls when Tushar is away live in [`docs/PRINCIPLES.md`](../../../docs/PRINCIPLES.md); these files hold the taste and defaults that design, UI and asset work should follow. A UI or asset pick Tushar approves from a set of options counts as a preference, unless the choice came from him (then it is a decision).
 
 - [design.md](design.md): game design (Design thread).
 - [ui.md](ui.md): screens, controls, layout (UI/UX thread).

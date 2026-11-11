@@ -168,6 +168,8 @@ pub fn buy(d: &Data, gs: &mut GameState, r: &str, kind: &str, id: &str, count: i
     }
     gs.party.gold -= total;
     gs.party.add_to_stash(&item, amount);
+    // PK2-S5a: a weapon bought once instances are active is a fresh instance
+    crate::weapons::sync(d, gs);
     if kind == "item" && json::i(&offer, "count", 0) != UNLIMITED {
         let sqid = json::s(shop_of(d, gs, r), "_qid");
         let mut sold_map = gs.shops.get(&sqid).map(json::dict).cloned().unwrap_or_default();
@@ -217,6 +219,8 @@ pub fn sell(d: &Data, gs: &mut GameState, r: &str, item: &str, count: i64) -> Di
     }
     let total = json::i(&row, "price", 0) * count;
     gs.party.remove_from_stash(item, count);
+    // PK2-S5a: a weapon sold takes its worst stashed instance
+    crate::weapons::sync(d, gs);
     let added = gs.party.add_gold(total);
     let mut notes = Vec::new();
     if added < total {
@@ -350,6 +354,8 @@ pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64
         work.party.gold += net;
         net
     };
+    // PK2-S5a: the weapons sold and bought (`buy`, `sell`)
+    crate::weapons::sync(d, &mut work);
     *gs = work;
     trade_result(&[], spent, earned, gold, &notes)
 }

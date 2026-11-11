@@ -6,7 +6,9 @@
 //! drawn here; `battle/board.rs` runs the passes and draws the units and markers, `battle/draw.rs` the HUD. A view change only: rules, grid,
 //! plans and every battle number stay as they are. The Flat view (the board seen from above, as before) stays a
 //! setting until the user's review (STAGE1-C removes it). LOOK1-L1: the world's stage set (`stage_set`, LOOK1 5.2-5.4)
-//! over `common_stage`, and its transition pieces on the tile corners.
+//! over `common_stage`, and its transition pieces on the tile corners. PR5-33 (LAYER-UP-DATA): the stage table is the
+//! terrain rows' look fields (`relief`, `relief_depth`, `prop`, `color`, `face`; `emberwake_data::looks::TerrainLook`),
+//! which the grid's terrain table carries per type; no table here names a terrain id.
 
 use crate::tuning::Tuning;
 use aegis_ui::art::Art;
@@ -152,53 +154,37 @@ impl Geom {
 
 // ---- The terrain stage table (3.1) -------------------------------------------------------------------------------
 
-/// How a terrain stands on the stage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    Ground,
-    /// Lower than the ground (its depth in px): its lips show the step.
-    Sunken,
-    /// A standing prop on the ground of its neighbours.
-    Standing,
-    /// A block lifted `BLOCK_LIFT` with a cap and a face.
-    Block,
-}
+/// How a terrain stands on the stage (its row's `relief`): `Ground`; `Sunken`, lower than the ground (its depth in px:
+/// its lips show the step); `Standing`, a prop on the ground of its neighbours; `Block`, lifted `BLOCK_LIFT` with a
+/// cap and a face.
+pub use emberwake_data::looks::Relief as Kind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StageRow {
+pub struct StageRow<'a> {
     pub kind: Kind,
     /// Px down (sunken), else 0.
     pub depth: i32,
-    /// The prop it shows: a ground prop (`stones` on rubble) or the standing prop (`tree`).
-    pub prop: Option<&'static str>,
+    /// The prop it shows (its row's `prop`): a ground prop or the standing prop.
+    pub prop: Option<&'a str>,
 }
 
-/// A terrain's stage row (3.1; an unknown id is ground, depth 0).
-pub fn stage_of(terrain: &str) -> StageRow {
-    let (kind, depth, prop) = match terrain {
-        "dirt" | "toxic_bog" => (Kind::Sunken, 2, None),
-        "mud" => (Kind::Sunken, 1, None),
-        "shallow_water" => (Kind::Sunken, 3, None),
-        "deep_water" | "lava" => (Kind::Sunken, 5, None),
-        "rubble" => (Kind::Ground, 0, Some("stones")),
-        "tree" => (Kind::Standing, 0, Some("tree")),
-        "wall" => (Kind::Block, 0, None),
-        _ => (Kind::Ground, 0, None),
-    };
-    StageRow { kind, depth, prop }
+/// A terrain's stage row (3.1, PR5-33: its look on `grid`'s terrain table; an unknown id is ground, depth 0).
+pub fn stage_of<'a>(grid: &'a Grid, terrain: &str) -> StageRow<'a> {
+    let look = grid.table.look(terrain);
+    StageRow { kind: look.relief, depth: look.depth, prop: (!look.prop.is_empty()).then_some(look.prop.as_str()) }
 }
 
 /// The terrain on `c` (None off the grid).
-fn at(grid: &Grid, c: V2) -> Option<&'static str> {
+fn at(grid: &Grid, c: V2) -> Option<&str> {
     grid.is_valid(c).then(|| grid.terrain_id(c))
 }
 
-fn is_ground(t: &str) -> bool {
-    matches!(stage_of(t).kind, Kind::Ground | Kind::Sunken)
+fn is_ground(grid: &Grid, t: &str) -> bool {
+    matches!(stage_of(grid, t).kind, Kind::Ground | Kind::Sunken)
 }
 
 fn is_block(grid: &Grid, c: V2) -> bool {
-    at(grid, c).is_some_and(|t| stage_of(t).kind == Kind::Block)
+    at(grid, c).is_some_and(|t| stage_of(grid, t).kind == Kind::Block)
 }
 
 /// The four neighbours in tie order: north, east, south, west.
@@ -207,8 +193,8 @@ fn neighbours(c: V2) -> [V2; 4] {
 }
 
 /// The most common of `ids` (ties: the first seen); None when empty.
-fn most_common(ids: &[&'static str]) -> Option<&'static str> {
-    let mut best: Option<(&'static str, usize)> = None;
+fn most_common<'a>(ids: &[&'a str]) -> Option<&'a str> {
+    let mut best: Option<(&'a str, usize)> = None;
     for id in ids {
         let n = ids.iter().filter(|o| *o == id).count();
         if best.is_none_or(|(_, m)| n > m) {
@@ -220,27 +206,27 @@ fn most_common(ids: &[&'static str]) -> Option<&'static str> {
 
 /// 3.2.1: the ground a standing cell shows under its prop: the terrain most of its four neighbours have among ground
 /// and sunken cells (ties: first in the order north, east, south, west); none, `grass`.
-pub fn ground_under(grid: &Grid, c: V2) -> &'static str {
-    let ids: Vec<&'static str> = neighbours(c).iter().filter_map(|n| at(grid, *n)).filter(|t| is_ground(t)).collect();
+pub fn ground_under(grid: &Grid, c: V2) -> &str {
+    let ids: Vec<&str> = neighbours(c).iter().filter_map(|n| at(grid, *n)).filter(|t| is_ground(grid, t)).collect();
     most_common(&ids).unwrap_or("grass")
 }
 
 /// The depth a lip compares with (block and standing count as 0).
-fn depth_of(t: &str) -> i32 {
-    stage_of(t).depth
+fn depth_of(grid: &Grid, t: &str) -> i32 {
+    stage_of(grid, t).depth
 }
 
 /// 3.2.2: a sunken cell's lips: the band over its top (px; 0 none) when its north neighbour is shallower, and whether
 /// its bottom row is shaded (its south neighbour is shallower).
 pub fn lips(grid: &Grid, c: V2) -> (i32, bool) {
     let Some(t) = at(grid, c) else { return (0, false) };
-    let row = stage_of(t);
+    let row = stage_of(grid, t);
     if row.kind != Kind::Sunken {
         return (0, false);
     }
     let d = row.depth;
-    let band = at(grid, V2::new(c.x, c.y - 1)).map(depth_of).filter(|n| *n < d).map_or(0, |n| d - n + 1);
-    let bottom = at(grid, V2::new(c.x, c.y + 1)).map(depth_of).is_some_and(|n| n < d);
+    let band = at(grid, V2::new(c.x, c.y - 1)).map(|n| depth_of(grid, n)).filter(|n| *n < d).map_or(0, |n| d - n + 1);
+    let bottom = at(grid, V2::new(c.x, c.y + 1)).map(|n| depth_of(grid, n)).is_some_and(|n| n < d);
     (band, bottom)
 }
 
@@ -262,35 +248,28 @@ pub fn prop_rect(cell: Rect, size: (i32, i32)) -> Rect {
 
 /// 3.4: the backdrop fallback's ground: the most common ground terrain of row 0 (ties: the first from the left);
 /// none, `grass`.
-pub fn far_ground(grid: &Grid) -> &'static str {
-    let ids: Vec<&'static str> = (0..GRID_W).filter_map(|x| at(grid, V2::new(x, 0))).filter(|t| is_ground(t)).collect();
+pub fn far_ground(grid: &Grid) -> &str {
+    let ids: Vec<&str> = (0..GRID_W).filter_map(|x| at(grid, V2::new(x, 0))).filter(|t| is_ground(grid, t)).collect();
     most_common(&ids).unwrap_or("grass")
 }
 
 /// The ground a cell shows (a standing cell the ground under its prop).
-fn shown_ground(grid: &Grid, c: V2) -> &'static str {
+fn shown_ground(grid: &Grid, c: V2) -> &str {
     let t = grid.terrain_id(c);
-    if stage_of(t).kind == Kind::Standing {
+    if stage_of(grid, t).kind == Kind::Standing {
         ground_under(grid, c)
     } else {
         t
     }
 }
 
-/// A terrain's flat colour (the fallback when no tile loads; the backdrop and face colours).
-pub fn terrain_color(id: &str) -> Rgba {
-    match id {
-        "wall" => rgb(46, 46, 54),
-        "tree" => rgb(30, 70, 40),
-        "deep_water" => rgb(30, 54, 110),
-        "shallow_water" => rgb(56, 92, 140),
-        "lava" => rgb(150, 50, 20),
-        "grass" => rgb(60, 104, 56),
-        "dirt" => rgb(104, 84, 56),
-        "sand" | "snow" => rgb(170, 160, 120),
-        "stone" | "rubble" => rgb(92, 92, 100),
-        _ => rgb(80, 82, 92),
-    }
+/// The flat colour of a terrain without a `color` of its own.
+pub const DEFAULT_TERRAIN_COLOR: Rgba = rgb(80, 82, 92);
+
+/// A terrain's flat colour (the fallback when no tile loads; the backdrop and face colours): PR5-33, its row's `color`
+/// on `grid`'s terrain table, else `DEFAULT_TERRAIN_COLOR`.
+pub fn terrain_color(grid: &Grid, id: &str) -> Rgba {
+    grid.table.look(id).color.map_or(DEFAULT_TERRAIN_COLOR, |[r, g, b]| rgb(r, g, b))
 }
 
 // ---- Art (3.2-3.5, 4.4) ------------------------------------------------------------------------------------------
@@ -342,7 +321,7 @@ pub fn backdrop_art(art: &mut Art, zone: &str) -> Option<String> {
 
 /// The standing prop a cell shows with its art (None: not a standing cell, or no art: the flat tile instead).
 fn standing_art(art: &mut Art, grid: &Grid, c: V2) -> Option<(String, (i32, i32))> {
-    let row = stage_of(grid.terrain_id(c));
+    let row = stage_of(grid, grid.terrain_id(c));
     if row.kind != Kind::Standing {
         return None;
     }
@@ -361,7 +340,8 @@ fn stage_image<'a>(art: &'a mut Art, rel: &str, set: &str, w: i32, h: i32) -> Op
     art.image(rel, w * k, h * k)
 }
 
-fn draw_tile(p: &mut Painter, art: &mut Art, id: &str, set: &str, c: V2, r: Rect) {
+fn draw_tile(p: &mut Painter, art: &mut Art, grid: &Grid, id: &str, set: &str, c: V2, r: Rect) {
+    let terrain_color = |id: &str| terrain_color(grid, id);
     match tile_art(art, id, set, c.x, c.y) {
         TileArt::Stage(rel) => match stage_image(art, &rel, set, CELL_W, CELL_H) {
             Some(img) => p.image(img, r),
@@ -389,7 +369,7 @@ fn scaled(c: Rgba, k: f32) -> Rgba {
 /// 3.4, HOOKS1 ZN3: what the backdrop pass draws for zone `zone`: its file (None: the gradient) and the gradient's
 /// ground. A code zone (or an unknown one): `backdrop_art` and the far ground, whatever `zones` holds; a data zone row
 /// (`data_zone` over `zones`): its backdrop key (`zone_backdrop`) when the file exists, and its `ground`.
-pub fn backdrop_source<'a>(art: &mut Art, grid: &Grid, zone: &str, zones: &'a IndexMap<String, ZoneDef>) -> (Option<String>, &'a str) {
+pub fn backdrop_source<'a>(art: &mut Art, grid: &'a Grid, zone: &str, zones: &'a IndexMap<String, ZoneDef>) -> (Option<String>, &'a str) {
     match data_zone(zone, zones) {
         Some(z) => (Some(zone_backdrop(zone, Some(z))).filter(|rel| art.has(rel)), z.ground.as_str()),
         None => (backdrop_art(art, zone), far_ground(grid)),
@@ -404,7 +384,7 @@ pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zo
         p.image(img, BACKDROP);
         return;
     }
-    let bottom = lerp(NIGHT, terrain_color(ground), 0.4);
+    let bottom = lerp(NIGHT, terrain_color(grid, ground), 0.4);
     for k in 0..BACKDROP.h {
         let t = k as f32 / (BACKDROP.h - 1) as f32;
         p.fill(Rect::new(BACKDROP.x, BACKDROP.y + k, BACKDROP.w, 1), lerp(NIGHT, bottom, t));
@@ -412,7 +392,7 @@ pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zo
 }
 
 /// The ground a cell's tile shows in the ground pass: a standing cell with prop art the ground under it, else its own.
-fn tile_shown(art: &mut Art, grid: &Grid, c: V2) -> &'static str {
+fn tile_shown<'g>(art: &mut Art, grid: &'g Grid, c: V2) -> &'g str {
     if standing_art(art, grid, c).is_some() {
         ground_under(grid, c)
     } else {
@@ -436,7 +416,7 @@ pub fn stage_pieces(art: &mut Art, grid: &Grid, set: &str) -> Vec<(i32, i32, Str
         }
     }
     let at = |x: i32, y: i32| cells[(y.clamp(0, GRID_H - 1) * GRID_W + x.clamp(0, GRID_W - 1)) as usize];
-    let block = |t: &str| stage_of(t).kind == Kind::Block;
+    let block = |t: &str| stage_of(grid, t).kind == Kind::Block;
     for cy in 0..=GRID_H {
         for cx in 0..=GRID_W {
             let mut grounds: Vec<&str> = [at(cx - 1, cy - 1), at(cx, cy - 1), at(cx - 1, cy), at(cx, cy)].into_iter().filter(|t| !block(t)).collect();
@@ -485,7 +465,7 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, grid_
         for x in 0..GRID_W {
             let c = V2::new(x, y);
             let shown = tile_shown(art, grid, c);
-            draw_tile(p, art, shown, set, c, stage_cell(c));
+            draw_tile(p, art, grid, shown, set, c, stage_cell(c));
         }
     }
     draw_pieces(p, art, grid, set);
@@ -504,7 +484,7 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, grid_
             if bottom {
                 p.fill(Rect::new(r.x, r.y + r.h - 1, r.w, 1), rgba(48, 34, 22, 120));
             }
-            let row = stage_of(grid.terrain_id(c));
+            let row = stage_of(grid, grid.terrain_id(c));
             if let (Kind::Ground, Some(prop)) = (row.kind, row.prop) {
                 if let Some((rel, size)) = prop_art(art, prop, x, y) {
                     if let Some(img) = art.image(&rel, size.0, size.1) {
@@ -541,26 +521,13 @@ fn lighten(c: Rgba, k: f32) -> Rgba {
     [m(0), m(1), m(2), 255]
 }
 
-/// The front face's body under a column (3.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FaceBody {
-    Wall,
-    Water,
-    Lava,
-    Earth,
-}
+/// The front face's body under a column (3.4; PR5-33: its bottom row terrain's `face`).
+pub use emberwake_data::looks::Face as FaceBody;
 
 /// 3.4: column `x`'s front face: the ground its top row lightens (row 8's shown ground) and its body.
-pub fn face_column(grid: &Grid, x: i32) -> (&'static str, FaceBody) {
+pub fn face_column(grid: &Grid, x: i32) -> (&str, FaceBody) {
     let c = V2::new(x, GRID_H - 1);
-    let t = grid.terrain_id(c);
-    let body = match t {
-        "wall" => FaceBody::Wall,
-        "shallow_water" | "deep_water" => FaceBody::Water,
-        "lava" => FaceBody::Lava,
-        _ => FaceBody::Earth,
-    };
-    (shown_ground(grid, c), body)
+    (shown_ground(grid, c), grid.table.look(grid.terrain_id(c)).face)
 }
 
 /// Pass 6: the front face (per column: the top row the ground's colour lightened 25 %, the body wall art, water,
@@ -580,7 +547,7 @@ pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
         match body {
             FaceBody::Wall => match face_art(art, set, x, GRID_H).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
                 Some(img) => p.image(img, r),
-                None => p.fill(r, scaled(terrain_color("wall"), 0.75)),
+                None => p.fill(r, scaled(terrain_color(grid, grid.terrain_id(V2::new(x, GRID_H - 1))), 0.75)),
             },
             FaceBody::Water => p.fill(r, scaled(rgb(30, 54, 110), 0.7)),
             FaceBody::Lava => {
@@ -592,7 +559,7 @@ pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
                 flecks(p, rgb(52, 36, 24));
             }
         }
-        p.fill(Rect::new(r.x, r.y, r.w, 1), lighten(terrain_color(top), 0.25));
+        p.fill(Rect::new(r.x, r.y, r.w, 1), lighten(terrain_color(grid, top), 0.25));
     }
     for k in 0..DROP_SHADOW.h {
         p.fill(Rect::new(DROP_SHADOW.x, DROP_SHADOW.y + k, DROP_SHADOW.w, 1), rgba(0, 0, 0, (120 - 15 * k).max(0) as u8));
@@ -605,7 +572,7 @@ pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2)
     let r = stage_cell(c);
     let cap = Rect::new(r.x, r.y - BLOCK_LIFT, CELL_W, CELL_H);
     let t = grid.terrain_id(c);
-    draw_tile(p, art, t, set, c, cap);
+    draw_tile(p, art, grid, t, set, c, cap);
     if block_face(grid, c) {
         let face = Rect::new(r.x, r.y + CELL_H - FACE_H, CELL_W, FACE_H);
         let drawn = match face_art(art, set, c.x, c.y).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
@@ -618,7 +585,7 @@ pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2)
         if !drawn {
             match darkened_cap(art, t, set, c) {
                 Some(img) => p.image(&img, face),
-                None => p.fill(face, scaled(terrain_color(t), 0.75)),
+                None => p.fill(face, scaled(terrain_color(grid, t), 0.75)),
             }
         }
         p.fill(Rect::new(face.x, face.y, face.w, 1), rgb(24, 24, 30));
@@ -696,7 +663,7 @@ pub fn board_items(art: &mut Art, grid: &Grid) -> Vec<Placed> {
         for x in 0..GRID_W {
             let c = V2::new(x, y);
             let r = stage_cell(c);
-            match stage_of(grid.terrain_id(c)).kind {
+            match stage_of(grid, grid.terrain_id(c)).kind {
                 Kind::Block => out.push(Placed { item: Item::Block(c), foot_y: r.y + r.h, x: r.x, rect: block_rect(grid, c) }),
                 Kind::Standing => {
                     if let Some((_, size)) = standing_art(art, grid, c) {
@@ -884,8 +851,29 @@ mod tests {
     use serde_json::json;
     use std::path::Path;
 
+    /// PR5-33: a fixture catalog's terrain rows with the look fields (the stage table 3.1 as the board was drawn when
+    /// it was a table in this file: sunken dirt, mud, shallow and deep water, lava and toxic bog; rubble's stones; the
+    /// standing tree; the wall block; the flat colours; the wall, water and lava faces).
+    fn looks() -> emberwake_data::Catalog {
+        emberwake_data::Catalog::from_value(&json!({"terrain": [
+            {"id": "grass", "color": "#3c6838"},
+            {"id": "dirt", "relief": "sunken", "relief_depth": 2, "color": "#685438"},
+            {"id": "stone", "color": "#5c5c64"},
+            {"id": "sand", "color": "#aaa078"},
+            {"id": "snow", "color": "#aaa078"},
+            {"id": "shallow_water", "relief": "sunken", "relief_depth": 3, "color": "#385c8c", "face": "water"},
+            {"id": "deep_water", "relief": "sunken", "relief_depth": 5, "color": "#1e366e", "face": "water"},
+            {"id": "mud", "relief": "sunken", "relief_depth": 1},
+            {"id": "lava", "relief": "sunken", "relief_depth": 5, "color": "#963214", "face": "lava"},
+            {"id": "wall", "relief": "block", "color": "#2e2e36", "face": "wall"},
+            {"id": "tree", "relief": "standing", "prop": "tree", "color": "#1e4628"},
+            {"id": "rubble", "prop": "stones", "color": "#5c5c64"},
+            {"id": "toxic_bog", "relief": "sunken", "relief_depth": 2},
+        ]}))
+    }
+
     fn zone(id: &str) -> Grid {
-        let mut g = Grid::new(false, Vec::new(), TerrainTable { rows: Vec::new() }, 0);
+        let mut g = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&looks()), 0);
         g.apply_zone(id);
         g
     }
@@ -944,17 +932,34 @@ mod tests {
         assert_eq!(VIEWS[0].0, "stage");
     }
 
+    /// PR5-33: the shipped terrain rows give the fixture's looks (so `TODAYS_FRAME`, drawn on `looks()`, stays the
+    /// shipped board): every terrain type of the shipped table has the look the fixture table gives it.
+    #[test]
+    fn the_shipped_terrain_rows_give_the_fixture_looks() {
+        let dir = emberwake_world::Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let shipped = TerrainTable::from_catalog(&emberwake_world::Data::open(&dir).expect("data").0.cat);
+        let fixture = TerrainTable::from_catalog(&looks());
+        for id in fixture.ids.iter().chain(&shipped.ids) {
+            assert_eq!(shipped.look(id), fixture.look(id), "{id}");
+        }
+    }
+
     #[test]
     fn the_stage_table_sorts_every_terrain() {
+        let g = zone("stone_arena");
         for id in emberwake_battle::grid::TERRAIN_IDS {
-            let row = stage_of(id);
+            let row = stage_of(&g, id);
             assert_eq!(row.depth > 0, row.kind == Kind::Sunken, "{id}: only sunken cells have a depth");
         }
-        assert_eq!(stage_of("lava"), StageRow { kind: Kind::Sunken, depth: 5, prop: None });
-        assert_eq!(stage_of("rubble").prop, Some("stones"));
-        assert_eq!(stage_of("tree").kind, Kind::Standing);
-        assert_eq!(stage_of("wall").kind, Kind::Block);
-        assert_eq!(stage_of("no_such_terrain"), StageRow { kind: Kind::Ground, depth: 0, prop: None });
+        assert_eq!(stage_of(&g, "lava"), StageRow { kind: Kind::Sunken, depth: 5, prop: None });
+        assert_eq!(stage_of(&g, "rubble").prop, Some("stones"));
+        assert_eq!(stage_of(&g, "tree").kind, Kind::Standing);
+        assert_eq!(stage_of(&g, "wall").kind, Kind::Block);
+        assert_eq!(stage_of(&g, "no_such_terrain"), StageRow { kind: Kind::Ground, depth: 0, prop: None });
+        assert_eq!((terrain_color(&g, "lava"), terrain_color(&g, "no_such_terrain")), (rgb(150, 50, 20), DEFAULT_TERRAIN_COLOR));
+        let bare = Grid::new(false, Vec::new(), TerrainTable::builtin(), 0);
+        assert!(emberwake_battle::grid::TERRAIN_IDS.iter().all(|id| stage_of(&bare, id) == StageRow { kind: Kind::Ground, depth: 0, prop: None }), "rows without looks: flat ground");
+        assert_eq!(terrain_color(&bare, "lava"), DEFAULT_TERRAIN_COLOR);
     }
 
     /// Check 2: the ground under a standing prop.
@@ -988,7 +993,7 @@ mod tests {
     fn sunken_cells_show_a_lip_under_a_shallower_north_neighbour() {
         let forest = zone("forest_clearing");
         assert_eq!((forest.terrain_id(V2::new(0, 4)), forest.terrain_id(V2::new(0, 3))), ("dirt", "grass"));
-        assert_eq!(lips(&forest, V2::new(0, 4)).0, stage_of("dirt").depth + 1, "a 3 px band");
+        assert_eq!(lips(&forest, V2::new(0, 4)).0, stage_of(&forest, "dirt").depth + 1, "a 3 px band");
         assert_eq!(lips(&forest, V2::new(0, 4)).0, 3);
         assert_eq!((forest.terrain_id(V2::new(4, 3)), forest.terrain_id(V2::new(4, 2))), ("dirt", "dirt"));
         assert_eq!(lips(&forest, V2::new(4, 3)).0, 0, "dirt under dirt: none");

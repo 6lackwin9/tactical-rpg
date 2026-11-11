@@ -23,6 +23,11 @@ pub struct Source {
     pub game: Value,
     /// E2.2-S1 (FB-53): the game-wide purse caps, from the game's manifest beside the data folder.
     pub purse: PurseCaps,
+    /// STORYMUSIC1: the game's music keys (`music_keys_of`), from the same manifest.
+    pub music_keys: Vec<String>,
+    /// PK2-S4 (FB-167 Q7 (a)): the act the standard path's growth starts in (`from_act_of`, the manifest's
+    /// `durability.from_act`; 0 = none: no mastery is gained).
+    pub from_act: i64,
     pub errors: Vec<String>,
 }
 
@@ -56,11 +61,7 @@ impl PurseCaps {
 
     /// The caps of the manifest beside `data_dir` (the game folder's `game.json`); the defaults when there is none.
     pub fn beside(data_dir: &Path) -> Self {
-        let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| vfs::is_file(p)) else { return Self::default() };
-        match read(&path, &mut Vec::new()) {
-            Some(Value::Object(m)) => Self::from_manifest(&m),
-            _ => Self::default(),
-        }
+        manifest_beside(data_dir).map_or_else(Self::default, |m| Self::from_manifest(&m))
     }
 
     /// What keeps a manifest's purse caps from being valid: a key present that is not a whole number 1 or more.
@@ -71,6 +72,82 @@ impl PurseCaps {
             .map(|k| format!("game.json: {k} must be a whole number 1 or more."))
             .collect()
     }
+}
+
+/// The game manifest object beside `data_dir` (the game folder's `game.json`), when there is one that reads as an
+/// object.
+fn manifest_beside(data_dir: &Path) -> Option<Dict> {
+    let path = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| vfs::is_file(p))?;
+    match read(&path, &mut Vec::new()) {
+        Some(Value::Object(m)) => Some(m),
+        _ => None,
+    }
+}
+
+/// STORYMUSIC1: the optional game manifest key listing the game's music keys: the music contexts its music chain
+/// resolves and the story keys a vignette or a sequence step may name before their tracks ship. Without it, only a
+/// track the asset layers hold (`audio/music/<key>.ogg`) is a music key.
+pub const MUSIC_KEYS: &str = "music_keys";
+/// PK2-S4 (FB-167 Q7 (a), `docs/sessions/PK2_GRAFTS.md` 5-6): the optional game manifest block of the standard path's
+/// switch, `durability` {`from_act`: 1-`FROM_ACT_MAX`}: weapon mastery is gained only in that act and after (and the
+/// weapon instances of PR5-13a start there). Without it no mastery is gained.
+pub const DURABILITY: &str = "durability";
+pub const FROM_ACT: &str = "from_act";
+/// The highest act `from_act` may name (the campaign's last act).
+pub const FROM_ACT_MAX: i64 = 9;
+/// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
+/// order a write keeps them.
+pub const MANIFEST_KEYS: [&str; 4] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS, DURABILITY];
+
+/// PK2-S4: the act of a game manifest object's `durability.from_act` (0: no block, or a value that is not a whole
+/// number 1-`FROM_ACT_MAX`, which `durability_problems` reports).
+pub fn from_act_of(m: &Dict) -> i64 {
+    json::dget(m, DURABILITY).get(FROM_ACT).map(json::normalize).filter(json::is_int).map(|v| json::to_int(&v)).filter(|a| (1..=FROM_ACT_MAX).contains(a)).unwrap_or(0)
+}
+
+/// PK2-S4: what keeps a manifest's `durability` from being valid: present and not an object, an unknown key in it, or a
+/// `from_act` that is not a whole number 1-`FROM_ACT_MAX`.
+pub fn durability_problems(m: &Dict) -> Vec<String> {
+    let Some(raw) = m.get(DURABILITY) else { return Vec::new() };
+    let Some(block) = raw.as_object() else { return vec![format!("game.json: {DURABILITY} must be an object {{{FROM_ACT}}}.")] };
+    let mut out: Vec<String> = block.keys().filter(|k| k.as_str() != FROM_ACT).map(|k| format!("game.json: {DURABILITY}: unknown key '{k}' (known: {FROM_ACT}).")).collect();
+    if let Some(v) = block.get(FROM_ACT).map(json::normalize) {
+        if !json::is_int(&v) || !(1..=FROM_ACT_MAX).contains(&json::to_int(&v)) {
+            out.push(format!("game.json: {DURABILITY}.{FROM_ACT} must be a whole number 1-{FROM_ACT_MAX}."));
+        }
+    }
+    out
+}
+
+/// STORYMUSIC1: the music keys of a game manifest object (`MUSIC_KEYS`, in file order): its id-shaped strings; none when
+/// the key is missing or not a list.
+pub fn music_keys_of(m: &Dict) -> Vec<String> {
+    json::get(m, MUSIC_KEYS).as_array().into_iter().flatten().filter_map(Value::as_str).filter(|k| aegis_content::schema::is_id(k)).map(String::from).collect()
+}
+
+/// STORYMUSIC1: what keeps a manifest's `music_keys` from being valid: present and not a list of music keys (a-z, 0-9,
+/// _), or a key listed twice.
+pub fn music_keys_problems(m: &Dict) -> Vec<String> {
+    let Some(raw) = m.get(MUSIC_KEYS) else { return Vec::new() };
+    let Some(list) = raw.as_array() else { return vec![format!("game.json: {MUSIC_KEYS} must be a list of music keys (a-z, 0-9, _).")] };
+    let mut out = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for x in list {
+        match x.as_str().filter(|k| aegis_content::schema::is_id(k)) {
+            None => out.push(format!("game.json: {MUSIC_KEYS}: '{}' is not a music key (a-z, 0-9, _).", gstr(x))),
+            Some(k) if seen.contains(&k) => out.push(format!("game.json: {MUSIC_KEYS}: '{k}' is listed twice.")),
+            Some(k) => seen.push(k),
+        }
+    }
+    out
+}
+
+/// The kit's problems of a game manifest object: the purse caps', the music keys' and (PK2-S4) the durability block's.
+pub fn manifest_problems(m: &Dict) -> Vec<String> {
+    let mut out = PurseCaps::problems(m);
+    out.extend(music_keys_problems(m));
+    out.extend(durability_problems(m));
+    out
 }
 
 impl Default for PurseCaps {
@@ -104,6 +181,18 @@ pub const GROUNDS_KIND: &str = crate::check::ground::KIND;
 /// R4-1 (`U2.3-TIERS`): the role template rows, loaded into the catalog beside CATALOG_KINDS after the grounds (Godot
 /// had no such kind).
 pub const UNIT_TEMPLATES_KIND: &str = crate::check::unit_template::KIND;
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the unit track rows, loaded into the catalog beside CATALOG_KINDS after the
+/// role templates (they name passives; Godot had no such kind).
+pub const UNIT_TRACKS_KIND: &str = crate::check::unit_track::KIND;
+/// PK1-KITFIX (c): the Dojo preset rows, loaded into the catalog beside CATALOG_KINDS after the unit tracks (they name
+/// items and passives; Godot's presets were code, DojoLoadouts).
+pub const DOJO_PRESETS_KIND: &str = crate::check::dojo_preset::KIND;
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the body slot rows, loaded into the catalog beside CATALOG_KINDS after the
+/// Dojo presets (Godot had no such kind).
+pub const BODY_SLOTS_KIND: &str = crate::check::body_slot::KIND;
+/// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipe rows, loaded into the catalog beside CATALOG_KINDS after the body
+/// slots (they name items, body slots and unit tracks; Godot had no such kind).
+pub const RECIPES_KIND: &str = crate::check::recipe::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -138,7 +227,10 @@ pub fn load(data_dir: &Path) -> Source {
     game.insert("item_families".into(), catalog["item_families"].clone());
     let mut cat = catalog.as_object().cloned().unwrap_or_default();
     cat.shift_remove("item_families");
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), errors }
+    let manifest = manifest_beside(data_dir);
+    let music_keys = manifest.as_ref().map(music_keys_of).unwrap_or_default();
+    let from_act = manifest.as_ref().map_or(0, from_act_of);
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.
@@ -191,6 +283,13 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert(GROUNDS_KIND.into(), Value::Array(read_grounds(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert(UNIT_TEMPLATES_KIND.into(), Value::Array(read_unit_templates(&dir, errors).into_iter().map(Value::Object).collect()));
+    let tracks = read_unit_tracks(&dir, &out, errors);
+    out.insert(UNIT_TRACKS_KIND.into(), Value::Array(tracks.into_iter().map(Value::Object).collect()));
+    let presets = read_dojo_presets(&dir, &out, errors);
+    out.insert(DOJO_PRESETS_KIND.into(), Value::Array(presets.into_iter().map(Value::Object).collect()));
+    out.insert(BODY_SLOTS_KIND.into(), Value::Array(read_body_slots(&dir, errors).into_iter().map(Value::Object).collect()));
+    let recipes = read_recipes(&dir, &out, errors);
+    out.insert(RECIPES_KIND.into(), Value::Array(recipes.into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -347,6 +446,111 @@ fn read_unit_templates(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
     kept
 }
 
+/// PK2-S1 (engine-only, beside CATALOG_KINDS): the unit track rows that pass their checks (`check::unit_track`, the
+/// passives read from `loaded`), in file order; every problem goes to `errors` and its row is skipped. A missing file is
+/// an empty table.
+fn read_unit_tracks(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{UNIT_TRACKS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(UNIT_TRACKS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let passives: Vec<Dict> = loaded.get("passives").map(json::arr).unwrap_or_default().iter().map(|p| json::dict(p).clone()).collect();
+    let checked = crate::check::unit_track::check_rows(&rows, &passives);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: unit track '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PK2-S2 (engine-only, beside CATALOG_KINDS): the body slot rows that pass their checks (`check::body_slot`), in file
+/// order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_body_slots(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{BODY_SLOTS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(BODY_SLOTS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::body_slot::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: body slot '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PK2-S3 (engine-only, beside CATALOG_KINDS): the recipe rows that pass their checks (`check::recipe`, the items, body
+/// slots and unit tracks read from `loaded`), in file order; every problem goes to `errors` and its row is skipped. A
+/// missing file is an empty table. The world refs are the whole-catalog report's (`check::recipe::world_errors`).
+fn read_recipes(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{RECIPES_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(RECIPES_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::recipe::check_rows(&rows, loaded);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: recipe '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PK1-KITFIX (c) (engine-only, beside CATALOG_KINDS): the Dojo preset rows that pass their checks
+/// (`check::dojo_preset`, the items and passives read from `loaded`), in file order; every problem goes to `errors` and
+/// its row is skipped. A missing file is an empty table.
+fn read_dojo_presets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{DOJO_PRESETS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(DOJO_PRESETS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let table = |kind: &str| -> Vec<Dict> { loaded.get(kind).map(json::arr).unwrap_or_default().iter().map(|p| json::dict(p).clone()).collect() };
+    let checked = crate::check::dojo_preset::check_rows(&rows, &table("items"), &table("passives"));
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: Dojo preset '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
 /// REGIONGROUND1 KT 1.1 (engine-only, beside CATALOG_KINDS): the ground rows that pass their checks (`check::ground`), in
 /// file order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
 fn read_grounds(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
@@ -390,7 +594,9 @@ fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, families: &[Dict], erro
     let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
     // PK1-S1: the meter ids a hazard row may name, once the meters are loaded (HOOK_KINDS reads hazards first: None)
     let meters: Option<Vec<String>> = loaded.get(rpgkit_data::UNIT_METERS_KIND).map(|m| json::arr(m).iter().map(|e| json::s(json::dict(e), "id")).collect());
-    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, derived: &derived, families, meters: meters.as_deref() });
+    // LAYER-DOWN-2: the terrain rows a zone's glyphs and ground may name (read before the hook kinds)
+    let terrain: Vec<Dict> = json::arr(json::get(loaded, "terrain")).iter().map(|e| json::dict(e).clone()).collect();
+    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, derived: &derived, families, meters: meters.as_deref(), terrain: &terrain });
     let mut kept = Vec::new();
     for (row, found) in rows.into_iter().zip(checked) {
         if found.is_empty() {
@@ -457,6 +663,26 @@ pub(crate) const RANK_KEYS: [&str; 26] = [
     "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap", "ap_cost", "recovery_blocks", "stagger", "windup_poise", "meters", "hp_cost",
 ];
 
+/// The rank modifier keys `ranked_skills` refuses with their own reason (rank names and ids are derived).
+const RANK_BANNED: [&str; 4] = ["name", "family", "tier", "id"];
+
+/// PR5-26b (FB-198 B9 Option B): a ranked skill entry's rank modifier keys that are not rank fields (`RANK_KEYS`, the
+/// schema's `"rank": true`; a modifier may also give its rank's `description`), one error each: the rank rows read only
+/// the rank fields, so such a key (e.g. `hp_cost_pct`, `uses_per_battle`) would otherwise drop silently. The loader
+/// reports them (the entry still loads) and the writer refuses them (`store`'s validate hook).
+pub(crate) fn rank_key_errors(e: &Dict) -> Vec<String> {
+    let id = sget(e, "id", "");
+    let mut out = Vec::new();
+    for (n, m) in rank_mods(e).iter().enumerate() {
+        for k in m.keys() {
+            if !RANK_KEYS.contains(&k.as_str()) && k != "description" && !RANK_BANNED.contains(&k.as_str()) {
+                out.push(format!("skill '{id}' has a rank {} modifier with '{k}', which is not a rank field; it is the same at every rank (set it on the entry).", n + 2));
+            }
+        }
+    }
+    out
+}
+
 /// ContentCatalog._read_ranked_skills: every entry expanded into its rank rows; all rank 1 rows first, then rank 2...
 fn ranked_skills(list: &[Value], at: &str, errors: &mut Vec<String>) -> Vec<Dict> {
     let mut by_rank: Vec<Vec<Dict>> = vec![Vec::new(); 5];
@@ -474,13 +700,14 @@ fn ranked_skills(list: &[Value], at: &str, errors: &mut Vec<String>) -> Vec<Dict
             }
         }
         for m in rank_mods(d) {
-            for banned in ["name", "family", "tier", "id"] {
+            for banned in RANK_BANNED {
                 if m.contains_key(banned) {
                     errors.push(format!("{at}: skill '{id}' has a rank modifier with '{banned}'; rank names and ids are derived."));
                     bad = true;
                 }
             }
         }
+        errors.extend(rank_key_errors(d).into_iter().map(|m| format!("{at}: {m}")));
         if bad {
             continue;
         }
@@ -1113,7 +1340,31 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if !level3.is_empty() {
         row.insert(rpgkit_data::ITEM_FAMILY_LEVEL3.into(), Value::from(level3));
     }
+    // PR5-28 (U3 FB-36c): the family's `range_band.max` rides on the row the same way (the reach rule's band edge; no
+    // key without a `range_band`, so the battle reads the fallback reach)
+    if let Some(max) = range_band_max(family) {
+        row.insert(rpgkit_data::ITEM_FAMILY_REACH_MAX.into(), Value::from(max));
+    }
+    // PK2-S4: the family's techniques and keystone ride on the row the same way (no key while the family has none)
+    let techniques = json::aget(family, rpgkit_data::mastery::TECHNIQUES_KEY);
+    if !techniques.is_empty() {
+        row.insert(rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES.into(), Value::Array(techniques.to_vec()));
+    }
+    let keystone = sget(family, rpgkit_data::mastery::KEYSTONE_KEY, "");
+    if !keystone.is_empty() {
+        row.insert(rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE.into(), Value::from(keystone));
+    }
+    // PK2-S5a: the family's full weapon durability rides on the row the same way (no key while the family has none)
+    let durability = json::i(family, rpgkit_data::ITEM_DURABILITY, 0);
+    if durability > 0 {
+        row.insert(rpgkit_data::ITEM_FAMILY_DURABILITY.into(), Value::from(durability));
+    }
     row
+}
+
+/// PR5-28 (U3 FB-36c): a family's `range_band.max` (None: no `range_band`, an empty one or no whole `max`).
+fn range_band_max(family: &Dict) -> Option<i64> {
+    json::dget(family, "range_band").get("max").and_then(Value::as_i64)
 }
 
 /// One row of ItemModifiers.legacy_tiers.

@@ -17,7 +17,7 @@ use rpgkit_battle::meter;
 use rpgkit_battle::plan::{Plan, PlanStep, Step};
 use rpgkit_battle::resolver::Resolver;
 use rpgkit_battle::session::{EncounterDef, Phase, Roster, Session};
-use rpgkit_battle::trigger::{self, SPASM_TAG};
+use rpgkit_battle::trigger::{self, STRIKE_TAG};
 use rpgkit_battle::world::{heal_taken, UnitId, World};
 use rpgkit_battle::{arena, mark};
 use rpgkit_data::{Catalog, HazardDef, ItemDef, PassiveDef, UnitDef};
@@ -259,12 +259,12 @@ fn the_nearest_other_unit_is_of_any_side_and_ties_go_to_the_lowest_id() {
 }
 
 /// A round-end `strike_nearest` hits the nearest unit (here the ally) with one crit draw and no AP, then the striker
-/// takes its `then_status` next round; the same seed deals the same; the line is tagged `[Spasm]`.
+/// takes its `then_status` next round; the same seed deals the same; the line is tagged `[Strike]`.
 #[test]
 fn strike_nearest_strikes_at_once_and_grants_its_status_next_round() {
     let strike = |seed: i64| {
         let mut w = session_with(&[], V2::new(6, 4), json!({})).w;
-        give(&mut w, HERO, "spasm", "round_end", json!([{"type": "strike_nearest", "power": 1.0, "then_status": "stun", "then_rounds": 1}]));
+        give(&mut w, HERO, "twitch", "round_end", json!([{"type": "strike_nearest", "power": 1.0, "then_status": "stun", "then_rounds": 1}]));
         let (ap, ally, foe) = (w.units[HERO].ap, w.units[ALLY].hp, w.units[FOE].hp);
         let mut res = Resolver::new(BLOCKS, seed);
         let draws = res.rng.draws;
@@ -279,7 +279,7 @@ fn strike_nearest_strikes_at_once_and_grants_its_status_next_round() {
     let mut one = aegis_core::rng::GodotRng::from_i64(7);
     one.randf();
     assert_eq!(draws, one.draws, "one crit roll (a randf)");
-    assert!(log.iter().any(|l| l.starts_with(&format!("{SPASM_TAG} p_hero's spasm: p_hero strikes p_ally for {dealt}"))), "{log:?}");
+    assert!(log.iter().any(|l| l.starts_with(&format!("{STRIKE_TAG} p_hero's twitch: p_hero strikes p_ally for {dealt}"))), "{log:?}");
     assert_eq!(strike(7).0, dealt, "the same seed, the same strike");
 }
 

@@ -70,6 +70,8 @@ fn assert_same(a: &Unit, b: &Unit, what: &str) {
 // (AUDIT-05: `gear_effect_source`, naming its item),
 // its `skill` to `gear_skills` (both rebuilt on every sync), and gear applies no `proficiency`. U4.2-S4 (FB-30) adds
 // the source records of the hit-time targets (`old_record`): skill_potency, stagger_taken and forced_move tiles.
+// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2) adds the two member grants of the passive grammar, passives only (gear and
+// bands drop them): `forbid_hands` (the largest `hands`) and `pierce_melee`; PR5-19 (PK2-S6) ships them in `calcify_4`.
 
 /// U4.2-S4: what `apply_modifier` records for a hit-time target (`Unit::hit_sources` / `gear_hit_sources`).
 fn old_record(u: &mut Unit, id: &str, gear: bool, target: Target, value: f64) {
@@ -191,6 +193,9 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
                 let floor = e.get("floor").filter(|v| v.is_number()).map(|v| to_int(v, 0));
                 u.passive_meters.push(HeldMeter { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor });
             }
+            // PK2-S1: the member grants (`rpgkit_data::MEMBER_GRANTS`), passives only
+            "forbid_hands" if !gear => u.forbid_hands = u.forbid_hands.max(value::int(e, "hands", 2)),
+            "pierce_melee" if !gear => u.pierce_melee = true,
             _ => {}
         }
     }

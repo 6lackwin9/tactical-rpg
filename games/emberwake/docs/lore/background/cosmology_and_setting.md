@@ -1,9 +1,6 @@
 # Cosmology and setting: the dying world of Emberwake
 
-Status: canon (2026-10-25, consistent with [CANON.md](../CANON.md)). Game: **Emberwake: A Scarlet Lullaby**. Names
-and ages follow the [cast registry](cast_registry.md); what the Red Tithing really does is the
-[central truth](central_truth.md) spoiler sheet (proposal), so this file states only what the Clerisy preaches and what
-the player sees. Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]` (see CANON.md).
+Status: `[LOCKED]` world-system rules (Extinguishing/Harvest causality, `18-24` Unsealed / `25+` Spent divide, `1/d` Tallow upkeep, `raw` vs. `rendered` marrow `G-33`); **`[PLACEHOLDER]` proper nouns, lexicon & prose** ([CANON.md](../CANON.md) Section 1 wins on conflict). Active placeholder spellings follow [cast_registry.md](cast_registry.md); spoiler sheet: [central_truth.md](central_truth.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
 ## 1. High concept
 

@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::{Deck, RosterManifest, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
+use rpgkit_data::{Deck, RosterManifest, DEPART_LIVES, MEMBER_CONDITIONS, NO_ITEM, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -36,6 +36,23 @@ pub fn stack_limit(d: &Data, item: &str) -> i64 {
 
 /// A1.2-K3 (INTENT2-K3): the saved member key of the pouch's packed targets (`UnitState::pouch_packed`).
 pub const POUCH_PACKED_KEY: &str = "pouch_packed";
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the saved member key of its unit track stages (`UnitState::tracks`) and of
+/// its permanent max HP offset (`UnitState::max_hp_offset`); each written only when set (no save VERSION bump).
+pub const TRACKS_KEY: &str = "tracks";
+pub const MAX_HP_OFFSET_KEY: &str = "max_hp_offset";
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the saved member keys of its body slots (`UnitState::body`: slot -> graft
+/// item id), its class rite (`UnitState::class_rite`) and its floor offset for the next battle
+/// (`UnitState::floor_offset`); each written only when set (no save VERSION bump).
+/// `body` is the graft body slots, not `equipment.body` (the armour slot).
+pub const BODY_KEY: &str = "body";
+pub const CLASS_RITE_KEY: &str = "class_rite";
+pub const FLOOR_OFFSET_KEY: &str = "floor_offset";
+/// PK2-S3: the member key of the trained proficiency levels (`UnitState::trained`).
+pub const TRAINED_KEY: &str = "trained";
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the member keys of its weapon mastery XP (`UnitState::mastery_xp`) and its
+/// forge rite (`UnitState::forge_rite`); each written only when set (no save VERSION bump).
+pub const MASTERY_XP_KEY: &str = "mastery_xp";
+pub const FORGE_RITE_KEY: &str = "forge_rite";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -76,6 +93,34 @@ pub struct UnitState {
     /// max_stack)`; a pouch id without an entry reads its current count). A key with no copy left keeps its slot. Saved
     /// as `pouch_packed` only when not empty (no save bump: a save without it reads the current pouch).
     pub pouch_packed: IndexMap<String, i64>,
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): unit track id -> the member's stage on it (1..the row's stages; a track
+    /// without an entry reads 0). Saved as `tracks` only when a stage is above 0 (no save bump: a save without it reads
+    /// every track at 0).
+    pub tracks: IndexMap<String, i64>,
+    /// PK2-S1: the permanent max HP offset (bone-scraping, excision; negative lowers it), added to the built max HP
+    /// (at least 1). Saved as `max_hp_offset` only when not 0.
+    pub max_hp_offset: i64,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): body slot id -> the `GRAFT` item installed there (a second slot set,
+    /// separate from `equipment`; the graft count is its length). Saved as `body` only when not empty.
+    pub body: IndexMap<String, String>,
+    /// PK2-S2: the member did its class rite, which opens the class body slots (class pieces only). Saved as
+    /// `class_rite` only when true (`set_class_rite`).
+    pub class_rite: bool,
+    /// PK2-S2 (FB-167 Q6): added to the floors a body meter's `floors` table gives in the member's next battle; the
+    /// settle clears it. Saved as `floor_offset` only when not 0.
+    pub floor_offset: i64,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the proficiency levels the member trained (a recipe's
+    /// `train_proficiency`), on top of its class's and its drills'. Saved as `trained` only when not empty.
+    pub trained: IndexMap<String, i64>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the member's weapon mastery XP in that family (a bar toward
+    /// levels 1-3, `rpgkit_data::mastery::level_of`). Saved as `mastery_xp` only when not empty.
+    pub mastery_xp: IndexMap<String, i64>,
+    /// PK2-S4: the member's forge rite is done (with mastery 3 it opens the wielded family's keystone). Saved as
+    /// `forge_rite` only when true (`set_forge_rite`).
+    pub forge_rite: bool,
+    /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): weapon slot -> the weapon instance it wields (`crate::weapons`; the
+    /// slot's `equipment` id is the instance's item). Saved as `weapons` only when not empty.
+    pub weapons: IndexMap<String, crate::weapons::Weapon>,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -91,12 +136,12 @@ fn deck_from(raw: Option<&Value>) -> (Deck, Vec<String>) {
     let mut deck = Deck::default();
     for (k, v) in o {
         match k.as_str() {
-            // PK1-S2a: `marrow` (the actives marked marrow) is a list of text too (a save without it reads none)
-            "active" | "passive" | "keystone" | "marrow" => {
+            // PK1-S2a: `channeled` (the actives marked channeled) is a list of text too (a save without it reads none)
+            "active" | "passive" | "keystone" | "channeled" => {
                 let slot = match k.as_str() {
                     "active" => &mut deck.active,
                     "passive" => &mut deck.passive,
-                    "marrow" => &mut deck.marrow,
+                    "channeled" => &mut deck.channeled,
                     _ => &mut deck.keystone,
                 };
                 match texts(v) {
@@ -157,9 +202,9 @@ fn deck_value(deck: &Deck) -> Value {
     if !follow_ups.is_empty() {
         out.insert("follow_ups".into(), Value::Object(follow_ups));
     }
-    // PK1-S2a: a deck without marrow marks writes as before
-    if !deck.marrow.is_empty() {
-        out.insert("marrow".into(), strs(&deck.marrow));
+    // PK1-S2a: a deck without channeled marks writes as before
+    if !deck.channeled.is_empty() {
+        out.insert("channeled".into(), strs(&deck.channeled));
     }
     Value::Object(out)
 }
@@ -196,7 +241,25 @@ impl UnitState {
         if !item_fits_slot(def, slot) {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
+        // PK2-S1: a member grant `forbid_hands` (a unit track's stage) refuses two-handed items
+        if rpgkit_rules::unit::forbids_hands(progression::forbid_hands(d, self), def) {
+            return Err(format!("{} is two-handed: {} can't wield two-handed items now.", def.name, progression::display_name(d, self)));
+        }
         Ok(())
+    }
+
+    /// PR5-26 (audit B2): the item slot `slot` gives the member without its own gear: its base unit's row in world
+    /// `world` (the row's item or its class's default, as a build equips it; None: empty).
+    pub fn default_item(&self, d: &Data, world: &str, slot: &str) -> Option<String> {
+        let cat = d.cat_in(world);
+        cat.units.get(&self.base_unit).and_then(|row| rpgkit_rules::unit::row_slot_item(cat, row, slot))
+    }
+
+    /// PR5-26 (audit B2): whether the member's grant `forbid_hands` refuses the default item of `slot` (`default_item`),
+    /// so a slot left to its default must hold `NO_ITEM` instead.
+    pub fn forbids_default(&self, d: &Data, world: &str, slot: &str) -> bool {
+        let hands = progression::forbid_hands(d, self);
+        hands > 0 && self.default_item(d, world, slot).and_then(|id| d.cat_in(world).items.get(&id)).is_some_and(|i| rpgkit_rules::unit::forbids_hands(hands, i))
     }
 
     /// U3.2-S3 (FB-34, FB-63 (2)): whether the member wears `item` trained: its class's training or its drill passives'
@@ -205,7 +268,17 @@ impl UnitState {
     pub fn trains(&self, d: &Data, item: &str) -> bool {
         let Some(def) = d.cat.items.get(item) else { return true };
         let class = d.cat.classes.get(&self.class_id(d));
-        class.is_none_or(|c| trained_for(&rpgkit_rules::stats::Proficiency::from_class(c).with_drills(&d.cat, &progression::member_passives(d, self)), def))
+        class.is_none_or(|c| trained_for(&self.proficiency(d, c), def))
+    }
+
+    /// PK2-S3: the member's proficiency out of battle: its class's, its drill passives' (`with_drills`) and its trained
+    /// levels (`trained`), as a build reads them.
+    pub fn proficiency(&self, d: &Data, class: &rpgkit_data::ClassDef) -> rpgkit_rules::stats::Proficiency {
+        let mut p = rpgkit_rules::stats::Proficiency::from_class(class).with_drills(&d.cat, &progression::member_passives(d, self));
+        for (gear, levels) in &self.trained {
+            p.add_bonus(gear, (*levels).clamp(0, i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)) as i32);
+        }
+        p
     }
 
     pub fn class_id(&self, d: &Data) -> String {
@@ -241,6 +314,8 @@ impl UnitState {
         }
         ids.extend(json::sget(d.entry("units", &self.base_unit), "extra_skills"));
         ids.extend(self.learned_skills.iter().cloned());
+        // PK2-S2: a graft's skill is owned while it sits in the body (a deck active may name it)
+        ids.extend(self.body_skills(d));
         rpgkit_rules::unit::families_of(&d.cat, &ids)
     }
 
@@ -285,6 +360,39 @@ impl UnitState {
         // A1.2-K3: only a member with a packed target saves `pouch_packed`
         if !self.pouch_packed.is_empty() {
             out.insert(POUCH_PACKED_KEY.into(), Value::Object(self.pouch_packed.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
+        // PK2-S1: only a member on a track saves `tracks`, only an offset saves `max_hp_offset`
+        let tracks: Dict = self.tracks.iter().filter(|(_, v)| **v != 0).map(|(k, v)| (k.clone(), int(*v))).collect();
+        if !tracks.is_empty() {
+            out.insert(TRACKS_KEY.into(), Value::Object(tracks));
+        }
+        if self.max_hp_offset != 0 {
+            out.insert(MAX_HP_OFFSET_KEY.into(), int(self.max_hp_offset));
+        }
+        // PK2-S2: only a grafted member saves `body`, only a rite `class_rite`, only an offset `floor_offset`
+        if !self.body.is_empty() {
+            out.insert(BODY_KEY.into(), Value::Object(self.body.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect()));
+        }
+        if self.class_rite {
+            out.insert(CLASS_RITE_KEY.into(), Value::Bool(true));
+        }
+        if self.floor_offset != 0 {
+            out.insert(FLOOR_OFFSET_KEY.into(), int(self.floor_offset));
+        }
+        // PK2-S3: only a trained member saves `trained`
+        if !self.trained.is_empty() {
+            out.insert(TRAINED_KEY.into(), Value::Object(self.trained.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
+        // PK2-S4: only a member with mastery XP saves `mastery_xp`, only a rite `forge_rite`
+        if !self.mastery_xp.is_empty() {
+            out.insert(MASTERY_XP_KEY.into(), Value::Object(self.mastery_xp.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
+        if self.forge_rite {
+            out.insert(FORGE_RITE_KEY.into(), Value::Bool(true));
+        }
+        // PK2-S5a: only a member wielding a weapon instance saves `weapons`
+        if !self.weapons.is_empty() {
+            out.insert(crate::weapons::MEMBER_KEY.into(), crate::weapons::member_value(&self.weapons));
         }
         Value::Object(out)
     }
@@ -331,7 +439,168 @@ impl UnitState {
             deck_problems,
             conditions: json::sget(d, "conditions"),
             pouch_packed: d.get(POUCH_PACKED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            tracks: d.get(TRACKS_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            max_hp_offset: json::i(d, MAX_HP_OFFSET_KEY, 0),
+            body: json::dget(d, BODY_KEY).iter().map(|(k, v)| (k.clone(), json::gstr(v))).collect(),
+            class_rite: json::b(d, CLASS_RITE_KEY, false),
+            floor_offset: json::i(d, FLOOR_OFFSET_KEY, 0),
+            trained: d.get(TRAINED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            mastery_xp: d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            forge_rite: json::b(d, FORGE_RITE_KEY, false),
+            weapons: crate::weapons::member_from(d),
         }
+    }
+
+    /// PK2-S4: the member's mastery level in gear type `family` (0-3, from its XP).
+    pub fn mastery_level(&self, family: &str) -> i32 {
+        rpgkit_data::mastery::level_of(self.mastery_xp.get(family).copied().unwrap_or(0))
+    }
+
+    /// PK2-S4: sets the forge rite (with mastery 3 it opens the wielded family's keystone); the rite's source (a quest, a
+    /// recipe) is the game's.
+    pub fn set_forge_rite(&mut self, done: bool) {
+        self.forge_rite = done;
+    }
+
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the graft count, the body slots in use.
+    pub fn graft_count(&self) -> usize {
+        self.body.len()
+    }
+
+    /// PK2-S2: the installed grafts in the catalog's body slot order (a slot or item the data no longer has is skipped).
+    pub fn body_items(&self, d: &Data) -> Vec<rpgkit_data::ItemDef> {
+        d.cat.body_slots.keys().filter_map(|slot| self.body.get(slot)).filter_map(|id| d.cat.items.get(id)).filter(|i| i.is_graft()).cloned().collect()
+    }
+
+    /// PK2-S2: the skills its grafts teach (their `body_effects`' `skill` grants), each once.
+    pub fn body_skills(&self, d: &Data) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for g in self.body_items(d).iter().filter_map(|i| i.graft.as_ref()) {
+            for grant in rpgkit_rules::grants::read(&g.effects) {
+                if let rpgkit_rules::grants::Grant::GrantSkill(rpgkit_rules::grants::SkillGrant::Learn(skill)) = grant {
+                    if !out.contains(&skill) {
+                        out.push(skill);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// PK2-S2: sets the class rite (it opens the class body slots); the rite's source (a quest, a recipe) is the game's.
+    pub fn set_class_rite(&mut self, done: bool) {
+        self.class_rite = done;
+    }
+
+    /// PK2-S2: why graft `item` may not sit in body slot `slot` of this member (None: it fits): a known slot, a known
+    /// `GRAFT` item, the slot's role (a class slot takes class pieces only, once the class rite is done; a monster slot
+    /// monster pieces), a class piece's class.
+    pub fn graft_misfit(&self, d: &Data, slot: &str, item: &str) -> Option<String> {
+        let Some(row) = d.cat.body_slots.get(slot) else { return Some(format!("unknown body slot '{slot}'.")) };
+        let Some(def) = d.cat.items.get(item) else { return Some(format!("unknown item '{item}' in body slot {slot}.")) };
+        let Some(g) = &def.graft else { return Some(format!("{} in body slot {slot} is not a graft.", def.name)) };
+        if g.role != row.role {
+            return Some(format!("body slot {slot} takes {} grafts; {} is a {} graft.", row.role, def.name, g.role));
+        }
+        if row.is_class() && !self.class_rite {
+            return Some(format!("body slot {slot} opens with the member's class rite."));
+        }
+        if !g.class_id.is_empty() && g.class_id != self.class_id(d) {
+            return Some(format!("{} is a piece of class '{}'.", def.name, g.class_id));
+        }
+        None
+    }
+
+    /// PK2-S2: whether the installed graft in `slot` is a keystone graft.
+    fn keystone_at(&self, d: &Data, slot: &str) -> bool {
+        self.body.get(slot).and_then(|i| d.cat.items.get(i)).and_then(|i| i.graft.as_ref()).is_some_and(|g| g.keystone)
+    }
+
+    /// PK2-S2: the body rules of a saved member: every entry fits (`graft_misfit`) and at most one keystone graft.
+    pub fn body_errors(&self, d: &Data, at: &str) -> Vec<String> {
+        let mut errors: Vec<String> = self.body.iter().filter_map(|(slot, item)| self.graft_misfit(d, slot, item)).map(|e| format!("{at}: {e}")).collect();
+        let keystones = self.body.keys().filter(|slot| self.keystone_at(d, slot)).count();
+        if keystones > 1 {
+            errors.push(format!("{at}: body holds {keystones} keystone grafts (one per member)."));
+        }
+        errors
+    }
+
+    /// PK2-S2: a loaded member's body entries the data no longer allows (`graft_misfit`, a second keystone graft) are
+    /// dropped, each with a load warning (the graft is gone; never a refusal). Returns the warnings.
+    pub fn sanitize_body(&mut self, d: &Data) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let mut kept: IndexMap<String, String> = IndexMap::new();
+        let mut keystone = false;
+        for (slot, item) in &self.body {
+            let problem = match self.graft_misfit(d, slot, item) {
+                Some(p) => Some(p),
+                None if self.keystone_at(d, slot) && keystone => Some(format!("a second keystone graft in body slot {slot}.")),
+                None => None,
+            };
+            match problem {
+                Some(p) => warnings.push(format!("Unit '{}': {p} The graft is dropped.", self.id)),
+                None => {
+                    keystone |= self.keystone_at(d, slot);
+                    kept.insert(slot.clone(), item.clone());
+                }
+            }
+        }
+        self.body = kept;
+        warnings
+    }
+
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "The surgery process", "Replacing a graft"): installs graft `item` in
+    /// body slot `slot` (no cost here: a recipe pays it): it must fit (`graft_misfit`), a keystone graft is one per
+    /// member (one in the same slot it replaces), and a top-tier graft (a keystone graft too, `GraftSpec::top_tier`)
+    /// needs `GRAFT_TOP_TIER_NEEDS` grafts first (the slot it overwrites counts). An occupied slot is overwritten: Ok(the
+    /// replaced item id, destroyed: no refund); the count and so the floor stay. Err (nothing changes) with the refusal.
+    pub fn install_graft(&mut self, d: &Data, slot: &str, item: &str) -> Result<Option<String>, String> {
+        if let Some(e) = self.graft_misfit(d, slot, item) {
+            return Err(e);
+        }
+        let g = d.cat.items.get(item).and_then(|i| i.graft.clone()).unwrap_or_default();
+        if g.keystone && self.body.keys().any(|s| s != slot && self.keystone_at(d, s)) {
+            return Err("the member already holds a keystone graft (one per member).".into());
+        }
+        let held = self.graft_count();
+        if g.top_tier() && held < rpgkit_data::GRAFT_TOP_TIER_NEEDS {
+            return Err(format!("a tier {} graft needs {} grafts first (the member holds {held}).", rpgkit_data::GRAFT_TIERS.1, rpgkit_data::GRAFT_TOP_TIER_NEEDS));
+        }
+        Ok(self.body.insert(slot.to_string(), item.to_string()))
+    }
+
+    /// PK2-S2 (excision): empties body slot `slot`; the removed item id (destroyed: no refund), None when it was empty.
+    /// The permanent max HP cost is the recipe's (`max_hp_offset`).
+    pub fn remove_graft(&mut self, slot: &str) -> Option<String> {
+        self.body.shift_remove(slot)
+    }
+
+    /// PK2-S1: the member's stage on unit track `track` (0 = not on it).
+    pub fn track_stage(&self, track: &str) -> i64 {
+        self.tracks.get(track).copied().unwrap_or(0)
+    }
+
+    /// PK2-S1: a loaded member's tracks the data no longer allows: a track id with no row is dropped, a stage past its
+    /// row's top is held at the top (each with a load warning; never a refusal). Returns the warnings.
+    pub fn sanitize_tracks(&mut self, d: &Data) -> Vec<String> {
+        let mut warnings = Vec::new();
+        let name = self.id.clone();
+        self.tracks.retain(|track, stage| match d.cat.unit_tracks.get(track) {
+            None => {
+                warnings.push(format!("Unit '{name}': unit track '{track}' is gone; its stage {stage} is dropped."));
+                false
+            }
+            Some(row) => {
+                let top = i64::from(row.top());
+                if *stage > top {
+                    warnings.push(format!("Unit '{name}': unit track '{track}' stage {stage} is held at its top stage {top}."));
+                    *stage = top;
+                }
+                true
+            }
+        });
+        warnings
     }
 
     /// ROSTER1 W1: whether the member carries condition `id`.
@@ -372,6 +641,32 @@ impl UnitState {
         if self.hp_lost < 0 {
             errors.push(format!("{at}: hp_lost must be 0 or more."));
         }
+        // PK2-S1: a stage is never below 0 (an unknown track or a stage past the row's top is dropped or held at load,
+        // `sanitize_tracks`)
+        for (track, stage) in &self.tracks {
+            if *stage < 0 {
+                errors.push(format!("{at}: track '{track}' stage must be 0 or more."));
+            }
+        }
+        // PK2-S3: a trained entry is 1..the top proficiency level
+        for (gear, levels) in &self.trained {
+            if !(1..=i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)).contains(levels) {
+                errors.push(format!("{at}: trained {gear} must be 1-{}.", rpgkit_rules::stats::PROF_MAX_LEVEL));
+            }
+        }
+        // PK2-S4: mastery XP is never below 0
+        for (gear, xp) in &self.mastery_xp {
+            if *xp < 0 {
+                errors.push(format!("{at}: mastery_xp {gear} must be 0 or more."));
+            }
+        }
+        // PK2-S5a: a weapon instance sits in a loadout slot and is whole (`weapons::sync` matches it to the gear)
+        for (slot, w) in &self.weapons {
+            if !LOADOUT_SLOTS.contains(&slot.as_str()) {
+                errors.push(format!("{at}: weapons: unknown equipment slot '{slot}'."));
+            }
+            errors.extend(w.problems(d, &at));
+        }
         for (i, c) in self.conditions.iter().enumerate() {
             if !MEMBER_CONDITIONS.contains(&c.as_str()) {
                 errors.push(format!("{at}: unknown condition '{c}' (known: {}).", MEMBER_CONDITIONS.join(", ")));
@@ -401,11 +696,16 @@ impl UnitState {
             }
         }
         errors.extend(self.loadout_errors(d, &at));
+        // PK2-S2: the body slots (an entry the data no longer allows is dropped at load, `sanitize_body`)
+        errors.extend(self.body_errors(d, &at));
         errors.extend(self.deck_problems.iter().map(|p| format!("{at}: {p}")));
         errors.extend(self.deck_errors(d, &at));
         for (slot, item) in &self.equipment {
             if !LOADOUT_SLOTS.contains(&slot.as_str()) {
                 errors.push(format!("{at}: unknown equipment slot '{slot}'."));
+            } else if item == NO_ITEM {
+                // PR5-26 (audit B2): a slot left empty in place of its default (`stash_forbidden`)
+                continue;
             } else if !d.has("items", item) {
                 errors.push(format!("{at}: unknown item '{item}' in {slot}."));
             } else if let Err(e) = self.can_wear(d, item, slot) {
@@ -748,27 +1048,66 @@ impl UnitState {
                 kept.follow_ups.insert(key.clone(), list_kept);
             }
         }
-        // PK1-S2a (PK1 4.2, rule channel): each marrow mark is an active of the deck with a marrow version (IR21 single
-        // intent, no channel none or only), none twice, within every channel ruleset's marrow actives
-        let mut bad = twice("marrow", &self.deck.marrow, &mut Vec::new(), &mut errors);
-        for (i, fam) in self.deck.marrow.iter().enumerate() {
+        // PK1-S2a (PK1 4.2, rule channel): each channeled mark is an active of the deck with a channeled version (IR21 single
+        // intent, no channel none or only), none twice, within every channel ruleset's channeled actives
+        // PR5-26 (audit B3): an automatic deck (no actives listed) marks the actives each channel ruleset's deck rule
+        // fills (the battle's own list, truncated to its active slots); with no such ruleset, the families it owns
+        let autos: Vec<(String, Vec<String>)> = if actives.is_empty() && !self.deck.channeled.is_empty() {
+            // the member as it fights: its deck (the marks keep it non-empty, so it replaces the base unit's) with no
+            // actives listed, built without the validation that called this
+            let mut work = self.clone();
+            work.deck.active.clear();
+            // PR5-26 review F3: in the member's own world (its class path there; a save holds no played world)
+            let world = aegis_content::split_qid(&self.lore_ref).map(|(w, _)| w).unwrap_or_default();
+            rules
+                .iter()
+                .filter(|r| r.has(rpgkit_rules::ruleset::CHANNEL))
+                .filter_map(|r| {
+                    let rule = rpgkit_rules::DeckRule::of(r)?;
+                    Some((r.name.clone(), progression::build_unchecked(d, &work, &world, false, Some(&rule))?.unit.active_families()))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut bad = twice("channeled", &self.deck.channeled, &mut Vec::new(), &mut errors);
+        for (i, fam) in self.deck.channeled.iter().enumerate() {
             let before = errors.len();
-            if !actives.contains(fam) {
-                errors.push(format!("{at}: deck marrow: '{fam}' is not an active of the deck."));
+            let in_deck = if !actives.is_empty() {
+                actives.contains(fam)
+            } else if autos.is_empty() {
+                owned.contains(fam)
+            } else {
+                autos.iter().all(|(_, auto)| auto.contains(fam))
+            };
+            if !in_deck {
+                errors.push(format!("{at}: deck channeled: '{fam}' is not an active of the deck."));
             } else if d.cat.tier_one(fam).is_some_and(|s| s.channel.none || s.channel.only || !rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_def(s))) {
-                errors.push(format!("{at}: deck marrow: '{fam}' has no marrow version."));
+                errors.push(format!("{at}: deck channeled: '{fam}' has no channeled version."));
             }
             bad[i] |= errors.len() > before;
         }
-        kept.marrow = keep(&self.deck.marrow, &bad);
+        kept.channeled = keep(&self.deck.channeled, &bad);
+        // PK2-S2: with body slots in the catalog a member marks one per graft, whatever the ruleset
+        if !d.cat.body_slots.is_empty() {
+            let max = self.graft_count();
+            let n = if clean { kept.channeled.len() } else { self.deck.channeled.len() };
+            if n > max {
+                errors.push(format!("{at}: deck: {n} channeled entries (one per graft; the member holds {max})."));
+                if clean {
+                    kept.channeled.truncate(max);
+                }
+            }
+            return (errors, kept);
+        }
         let channel_rows = d.cat.rulesets.values().map(rpgkit_rules::ruleset::Ruleset::from_row).filter(|r| r.has(rpgkit_rules::ruleset::CHANNEL));
         for r in channel_rows {
-            let max = r.numbers.marrow_actives.max(0);
-            let n = if clean { kept.marrow.len() } else { self.deck.marrow.len() };
+            let max = r.numbers.channeled_actives.max(0);
+            let n = if clean { kept.channeled.len() } else { self.deck.channeled.len() };
             if n as i64 > i64::from(max) {
-                errors.push(format!("{at}: deck: {n} marrow entries (the {} ruleset's marrow actives allow {max}).", r.name));
+                errors.push(format!("{at}: deck: {n} channeled entries (the {} ruleset's channeled actives allow {max}).", r.name));
                 if clean {
-                    kept.marrow.truncate(usize::try_from(max).unwrap_or(0));
+                    kept.channeled.truncate(usize::try_from(max).unwrap_or(0));
                 }
             }
         }
@@ -833,6 +1172,10 @@ impl UnitState {
         for (slot, item) in worn {
             let problem = if !LOADOUT_SLOTS.contains(&slot.as_str()) {
                 format!("unknown equipment slot '{slot}'.")
+            } else if item == NO_ITEM {
+                // PR5-26 (audit B2): an emptied slot stays empty
+                self.equipment.insert(slot, item);
+                continue;
             } else if !d.has("items", &item) {
                 format!("unknown item '{item}' in {slot}.")
             } else if let Err(e) = self.can_wear(d, &item, &slot) {
@@ -903,7 +1246,7 @@ pub struct Departed {
     pub member: UnitState,
     /// One of `rpgkit_data::DEPART_LIVES`.
     pub life: String,
-    /// One of `rpgkit_data::DEPART_CAUSES`.
+    /// One of `rpgkit_data::DEPART_CAUSES` or a unit track row's `cause` (`Catalog::depart_causes`).
     pub cause: String,
     pub encounter: String,
     pub day: i64,
@@ -984,11 +1327,14 @@ pub struct PartyState {
     /// ROSTER1 L1: the members who left (captured, dead, retired, dismissed, lost), departure order. Saved as
     /// `departed` only when not empty (the unreleased save v13 carries it: a save without it reads none).
     pub departed: Vec<Departed>,
+    /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): the weapon instances in the stash, one per stashed copy of a weapon
+    /// (`crate::weapons`). Saved as `stash_weapons` only when not empty.
+    pub stash_weapons: Vec<crate::weapons::Weapon>,
 }
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
+        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new(), stash_weapons: Vec::new() }
     }
 }
 
@@ -1085,6 +1431,10 @@ impl PartyState {
         if !self.departed.is_empty() {
             out.insert("departed".into(), Value::Array(self.departed.iter().map(Departed::to_value).collect()));
         }
+        // PK2-S5a: only a party with stashed weapon instances saves `stash_weapons`
+        if !self.stash_weapons.is_empty() {
+            out.insert(crate::weapons::STASH_KEY.into(), Value::Array(self.stash_weapons.iter().map(crate::weapons::Weapon::to_value).collect()));
+        }
         Value::Object(out)
     }
 
@@ -1112,6 +1462,7 @@ impl PartyState {
             gold: whole("gold"),
             supplies: whole("supplies"),
             departed: json::aget(d, "departed").iter().map(|x| Departed::from_dict(json::dict(x))).collect(),
+            stash_weapons: crate::weapons::stash_from(d),
         }
     }
 
@@ -1141,8 +1492,8 @@ impl PartyState {
             if !DEPART_LIVES.contains(&x.life.as_str()) {
                 errors.push(format!("Departed '{id}': unknown life '{}' (known: {}).", x.life, DEPART_LIVES.join(", ")));
             }
-            if !DEPART_CAUSES.contains(&x.cause.as_str()) {
-                errors.push(format!("Departed '{id}': unknown cause '{}' (known: {}).", x.cause, DEPART_CAUSES.join(", ")));
+            if !d.cat.depart_cause_ok(&x.cause) {
+                errors.push(format!("Departed '{id}': unknown cause '{}' (known: {}).", x.cause, d.cat.depart_causes().join(", ")));
             }
             if x.day < 0 {
                 errors.push(format!("Departed '{id}': day must be 0 or more."));
@@ -1168,6 +1519,8 @@ impl PartyState {
                 errors.push(format!("Stash count of '{k}' must be >= 1."));
             }
         }
+        // PK2-S5a: the stash instances, and no uid twice
+        errors.extend(crate::weapons::party_problems(d, self));
         let PurseCaps { supplies_max, purse_gold_cap } = self.purse;
         if self.gold < 0 || self.gold > purse_gold_cap {
             errors.push(format!("gold must be 0..{purse_gold_cap}."));

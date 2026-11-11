@@ -1,333 +1,169 @@
-# Emberwake: A Scarlet Lullaby - lore canon
+# Emberwake: A Scarlet Lullaby — Master Canon, Worldbuilding & Asset Blueprint
 
-Status: canon (2026-10-25, the consistency pass approved by the user). Title: **Emberwake: A Scarlet Lullaby** (user
-2026-10-25; replaces the subtitle "The Low Sleep" of DEC-LORE-13; the article says the Red Tithing is one lullaby among
-many, sung in blood each generation; the title need not appear in game text). The codename and paths stay `emberwake`.
+> **Master Blueprint (`2026-11-10` — Lore & Visual Hooks Locked)**: Single source of truth linking **cosmology, history, factions, strata, character backstories & visual briefs, taint/corruption progression, campaign missions, systems, and named items/organs** for design, build (`audit-build`), and `/art-ui-session` asset passes. Precedence: this file -> [DECISIONS.md](../../../../docs/DECISIONS.md) -> [PRINCIPLES.md](../../../../docs/PRINCIPLES.md) -> active specs (`ACTS23`, `PK1..3`, `CAST1`, `FOUNDER_PORTRAITS`) -> sibling [lore docs](README.md).
 
-This file is the single source the domain docs follow. Where a domain doc disagrees, this file wins; Acts 2-3 and
-later systems are `proposal` (not locked), except the systems surveyed in `docs/specs/ACTS23.md`, locked by the user on 2026-11-10 (Q-A1 (b); the Act 2-3 mission lists stay proposal; Channel reworked as a fuel row, ACTS23 section 5.1). "(planner pick)" marks a choice the approved brief did not make (the list
-to confirm is in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) section 2); open questions (section 6) must not be filled with
-invented design. Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]` (engine = technology any game needs;
-kit = a shape any story in the genre could fill; game = named by the story, mostly data). "(exists)" marks a
-genre rule that today's game crates already carry (`emberwake_rules`, `emberwake_battle`, `emberwake_world`): it is a
-`[kit hook]`, not `[engine]`, because the engine crates (`aegis_*`) hold no game rules.
+- **`[LOCKED]`**: Macro **Soot-Gothic + Early-Industrial Ossuary** aesthetic (no gunpowder firearms), world/strata/hub lexicon, historical causality & Central Truth (`Option A` + real waking catastrophe), all **6 Factions** & rim-lights, **6 Playable Founders** (backstories, clean Day 1 human visuals, Act 2 personal taints, `M5` winch beats & keepsakes), **Hub Cast** (`Sabina`, `Berek`, `Talia`, `Ivo`, `Widow Varka`), **11 Bosses**, **Street Neutrals**, **6 Act 2 Recruit Cohorts**, **Endings A/B/C**, **Relics/Ossuary Growths/Consumables**, and **all gameplay-linked mechanics**. Do not alter without user sign-off.
+- **`[PROVISIONAL]`**: Unreviewed catalog tuning numbers and Reversible Design Calls logged in `docs/DESIGN_REVIEW.md`.
+- **`[MISSING]`**: Unauthored content/art files (Sec. 6.3). Build seeds data/placeholders via `aegis content` + VFS; `/art-ui-session` replaces assets in place against these `[LOCKED]` briefs.
+- **Layers**: `[engine]` (`aegis_*`, genre-free) | `[kit hook]` (`rpgkit_*` + `schema.json`, story-free RPG) | `[data]` (`games/emberwake/data/**` via `aegis content`) | `[game code]` (`emberwake_*` thin UI shell; zero unique rules in game crates).
 
-- Names, ages, backgrounds, first appearances and place names: [cast registry](background/cast_registry.md).
-- What the Tithing really does (spoiler sheet; Option A is canon, Q-01): [central truth](background/central_truth.md).
-  The Clerisy feeds the dreaming titan for its own eternal youth (the marrow) and blames the titan for the folk's woes.
-- The story and cast in one place (who's who, story elements, reveal timeline): [story guide](STORY_GUIDE.md).
+## 1. Cosmology, Broken Laws of Nature & Historical Timeline (`[LOCKED]`)
 
-## 1. The cell in one line each
+### 1.1 Aesthetic, World Laws & Generational Divide
 
-Founders (six in the full Act 1; the first playable slice has five, Elyse joins later): Kaelen (Vanguard), Vesper
-(Gutter-Stalker), Maren (Heretic Acolyte), Hollis (Arbalestier), Dunstan "Slag-Jaw" (Slag-Brute), Elyse (Ichor
-Alchemist). Hub cast: Sister Aline Vance (Slab), Bram "Iron-Lung" Karr (Hearth), Tess Morn (courier, mission board),
-Pip (her brother). Founders' visible taints are backstory and Act 2 hooks only: Act 1 has no Strain, no Calcification
-and no countdown on any founder (the hearth line "four months" becomes a non-mechanical hook).
+- **Aesthetic Identity (`[LOCKED]`)**: **Soot-Gothic + Early-Industrial Ossuary** — late-medieval bone-liturgy, reliquaries, and iron plate colliding with tallow rendering vats, rotary bone-mills, brass pressure-valves, and pneumatic/hand-cranked foundry rigs (crossbows/arbalests & chemical sprayers; **no gunpowder firearms**).
+- **The Low Sleep (`Slumbering Root`)**: **Cinderreach** sits in a volcanic caldera atop a sleeping, dreaming titan ([cosmology](background/cosmology_and_setting.md)). Its pulse drives geothermal warmth, tremors, boiling tar-bogs, and upward seepage of **raw mutagenic black marrow** (`G-33`: mutates/calcifies flesh; distinct from **rendered marrow**). **Waking the titan genuinely cracks the caldera and swallows Cinderreach**—the Clerisy's sin is *not* inventing the danger, but refusing to kill the dream with black iron so they could harvest ageless marrow from children instead.
+- **The Shroud & Bell-Time**: Two centuries ago **the Extinguishing** (`b2`: cause stays a mystery) hid sun, moon, and stars behind a permanent bruised-violet ash canopy (**never broken in any ending**). Cathedral bells replace day/night (`travel.rs` counts days only). Only **Warded Tallow** (brimstone-treated fat burning yellow-green) repels mist-aberrations; wood or raw coal draws them.
+- **Broken Rot & Ossification**: Dead matter never rots into soil—uncremated bodies harden into black stone (**bone-mortar**) or rise over weeks as skinless **Calcified Husks** unless cremated with rationed **Rock Salt**, brimstone, and **Warded Tallow**. Families trapped in **marrow-debt** lose their uncremated Spent dead to Tallow Guild vats and Fourth Kiln bone-mills.
+- **The Unsealed (`under 25`) vs. The Spent (`25+`) (`[LOCKED]` Tone & Age Rule `CL-07`)**:
+  - **The Spent (`25+`)**: Dulled into docile compliance—not incompetence (`Q-06`)—by bone-sediment communion draughts and tallow smoke; police their own children for salt vouchers and rarely pass `45` (`Agnes` `44` is ancient; `Othemar` `64` is the visible anomaly). Rare Spent who avoided draughts (`Berek` `33`, `Sabina` `31`, `Talia` `29`, `Corvo` `29`) keep sharp minds in stiffening/scarred non-combat bodies.
+  - **The Unsealed (`under 25`)**: Elastic blood, clear minds. Playable operatives and recruits are **`18-24` only** (`RECRUIT1`; ages stay static across the ~6-week campaign, `CL-07`). Children (`under 18`: `Ivo` `12`, `Lucan` `14`, `Ida` `16`, `Wren` `14`) are **non-combat story stakes only**—never fighters, graft subjects, or on-screen violence victims.
 
-## 2. Numbers sheet
+### 1.2 Chronological History -> Present Campaign & Asset Linkage
 
-### 2.1 Combat (ruleset option "timeline"; the Ashlands keeps "classic") `[kit hook]`
-
-The ruleset is a world field (the Ashlands "classic", `sunk_ward` "timeline") with a Dojo toggle (user 2026-10-25,
-Q-52). The engine is reused with the Ashlands as the baseline: a rule incompatible with the classic rules is built as
-an option; a compatible one as an extension that can be disabled; bug fixes go to the core and may need an Ashlands
-or kit revisit. Every engine and kit system the slice needs is built before it, so the slice itself is only narrative
-choices and catalog data (Q-55, Q-56). Commands that work together chain: a follow-up skill can start in the blocks a
-previous action leaves, otherwise the unit spends them in recovery; recovery makes heavy skills a commitment (Q-54).
-
-| Rule | Canon value | Layer |
+| Era / Event | What Happened (`[LOCKED]`) | Linked Cast, Missions & Relics / Assets |
 | --- | --- | --- |
-| Round | 6 blocks, all sides resolved simultaneously; timeline strip at the TOP of the battle screen | [kit hook] (exists: `emberwake_battle::resolver`); only the strip widget is [engine] (`aegis_ui::timeline`) |
-| AP | 10 max, +4 per round; an action pays AP when it starts and lands on its last block | [kit hook] (exists) |
-| AP cost | Decoupled from speed tier: skill field `ap_cost`, default = skill level. Guideline: Cold Steel 2-4 AP, Inoculated 1-2 AP plus Strain | [kit hook] (new field), [data] values |
-| Speed tiers | Relative windups: Snap 1 block, Standard 2, Heavy 3-4; the impact lands at the end of the action's own blocks; a maneuver may add recovery blocks. No fixed tick anchors | [data] through the skill field `blocks` (exists); recovery blocks are a new [kit hook] |
-| Same-block impacts | The game's initiative order; no mutual trades (a unit stopped earlier in the block does not land) | [kit hook] (exists) |
-| Poise | Max Poise = CONS x 2 + armour poise from gear (coefficients planner pick); refills each round; break at 0. CONS runs 6-18 in the stat budget, so CONS x 2 is 12-36 before armour; the lore's stagger values (Pommel Strike 25, Jaw-Breaker 30) were set for flat bars of 30-70 and need a rescale (Q-50) | [kit hook] (new) |
-| Stagger intent | A break is a tactical choice to disrupt an enemy action (user 2026-10-25, Q-50 a): the lore's stagger values are rescaled to a fraction of a typical Max Poise and heavy enemy windups get more poise or an unbreakable flag; an optional seeded chance to break adds some randomness, with a guaranteed break at a cost (AP, a skill or Strain; the design lane specs it, then a sim) | [kit hook] |
-| Stagger multipliers | x2 if struck in windup, x2 in Flesh-Tension, x0.5 under Active Guard; they multiply (planner pick) | [kit hook] |
-| Repeated breaks | A unit's second break in the same round or in the next round costs double stagger | [kit hook] |
-| Break effect | Cancels the action in windup and the unit's remaining blocks that round; nothing else (the evasion and +25% damage riders are dropped, planner pick) | [kit hook] |
-| Active Guard | Base move: halves incoming stagger; 50% damage reduction through the guard term, capped by `GUARD_CAP` 0.9 (planner pick); vents 10 extra Strain at round end | [kit hook] |
-| Armour | The hyperbolic curve, reduction = rating / (rating + 50). Design intent (user 2026-10-25, Q-49): from Act 2, fights are hard unless the cell uses armour pierce and the other Inoculation benefits; the scale is set after a balance review; sims and the RULESET1 test data use armoured units at ratings 25-50 (this replaces the x 2 rule below for armoured units until the review), so Inoculation gives a real advantage the player weighs against its risk. Until then lore armour points x 2 = engine rating (planner pick): Flesh-Tension +2 -> +4 rating, Chitin +1 -> +2, "shreds 4 armour" -> expose 8, boss armour 3-5 -> rating 6-10 | [kit hook] (exists: `emberwake_rules::damage`), [data] ratings |
-| Pierce | Inoculated attacks ignore armour (binary, DEC-LORE-12 baseline). Today's damage type `pierce` is a type, not a bypass, so this needs an armour-bypass skill flag | [kit hook] (new flag), [data] (which skills set it) |
-| Deck | 6 slots = 3 class actives + 2 passives + 1 keystone, bucketed by kind like today's skill slots (Q-48). The basics (Move, Active Guard, Strike, Rest and the other always-on moves) take no slot and are open to every unit, as in the Ashlands (user 2026-10-25: the two base-move slots are removed) | [kit hook] (new slot type) |
-| Composure | A derived stat, not a seventh base stat (user 2026-10-25, Q-47 and Q-47a): the corruption resist, computed by its own formula from base stats plus gear, status and Calcification modifiers; shown on the unit panel; read by every corruption effect (Calcification I, the curfew chimes, the shockwave, nightmares, the Martyr mercy reward, recruit quirks). Formula and numbers: the derived-stat spec and the balance lane | [engine] formula evaluator, [kit hook] data-defined derived stats (new), [data] the Composure row |
-| Pouch, gear | Pouch 3; six gear slots MAIN, OFF, HEAD, BODY, ACC1, ACC2. Graft slots 4 (Cranial, Thoracic, Forearms, Visceral) are an Act 2 proposal (2026-11-10: Cranial opens through the class ritual for class pieces; Forearms, Thoracic and Visceral take any monster organ; a graft teaches the monster's own skill; `docs/sessions/PK2_GRAFTS.md` 3) | [kit hook] (exists: `emberwake_rules::gear`); graft slots new |
-| Reach | Melee reach 1 by default; a reach-2 rule for polearms, billhooks and scourges (user 2026-10-25, Q-70) | [kit hook] (new) |
-| Arenas | A fixed arena size (12 x 9); larger fights are connected rooms: enemies move between rooms, an escape moves the party into another room instead of off the map, and the party may fight in several rooms at once (Q-60; spec ENCOUNTER2) | [kit hook] (new) |
-| Stay-behind objectives | A hold-a-tile escape (one unit holds while the rest escape) and an impossible fight (the first unit knocked out makes a heroic stand that holds the boss while the others escape); the Crucible uses the hold-a-tile escape and the player picks who holds; the impossible fight belongs to a later mission: the first loss is a choice, later losses become fate (Q-75, Q-75a; spec ENCOUNTER2) | [kit hook] (escape and hold exist; new variants) |
-| Enemy plans | Intent tells plus impact badges by default; the full plan (speed tier, impact block, movement) with Tess's reconnaissance unlock (Q-91) | [kit hook] (tells exist) |
-| Round intent | Each member sets one intent for the round (Assault, Guard, Support, Maneuver; Channel from Act 2, reworked 2026-11-10: a 0 AP, 0 block Channel opener starts an all-marrow round in which the intent rows offer marrow versions only with Strain cost, armour pierce and a power bonus; only single-intent skills have a marrow version; the Channel kit is the graft skills, a universal marrow basic, the class basic's marrow version and the actives selected as marrow, `docs/specs/ACTS23.md` 5.1) and uses only skills of that intent; a skill has one intent even with side effects (Shield Bash is Assault); a plain move and Rest are neutral. The intent is what the existing intent tells and threat intel show, for enemies and the party alike. One target per round (self, ally, enemy or tile). Follow-ups: same-intent skills that fit wholly in the blocks left (mostly Snap), in a per-intent priority order set in the loadout; empty blocks are Rest; an auto planner fills the round, and a manual mode follows the same rules. Player units have no recovery blocks (AP limits heavy skills); enemies, with fixed move sets and no AP, keep recovery. An intent persists across rounds and may be changed at round start with no penalty; intent-bound buffs last only while that intent is active, other buffs keep their round durations across intents. Assault attacks the target and keeps it in engaged range while avoiding attacks where it can (moving in first; ranged units kite with an automatic step away, before the attack when the enemy is in melee range, after it otherwise). Guard may take cover (cover reduces damage) or enter stealth (a stealthed unit that moved is out of reach for chase and locked attacks; stealth breaks when the unit leaves Guard). Maneuver: flanking is attacking an enemy already engaged with another character, from outside its line of sight; a maneuver skill carries its own movement, so it costs no move when the target is within the skill's range; kinds Engage (get in position and attack, never face-on), Disengage (attack, then retreat to safety) and Utility (pouch items on the target). Support uses pouch items on self or an ally in range, never on enemies. The intent replaces the old stance damage multipliers and between-round switching under this ruleset (user 2026-10-25; spec RULESET1) | [kit hook] (timeline option) |
-| Cut | Evasion and accuracy rolls, facing and stealth cones (facing returns as a derived battle facing for flanks and stealth as a Guard status, both without cones or rolls: row Round intent), the d100 crisis, mutual trades, the multi-track ghost scrubber (start with impact badges on the existing strip), stance damage multipliers (DEC-LORE-11; intents replace them as the round's skill limit, row Round intent) | - |
+| **Sunlit Age (`> 200 yr` ago)** | Open sky, stars, and pre-cataclysm crag ironworks & storm-drain vaults before the Extinguishing. | `Agnes of Block 12`'s grandmother's star-tales; `Sluice Undercroft` vault; `Hollis`'s crag iron (`winch_arbalest`, `Hollis's Lever-Winch`). |
+| **The Extinguishing (`-200 yr`)** | Sky goes dark (`b2`). **The first Extinguishers** (revered as **First Apostles**) refuse to kill the titan's brainstem, stage the **first Great Tithing** of thousands under cover of "the titan's wrath", discover dream-steeped child remains yield ageless **rendered marrow**, and found the **Sovereign Clerisy**. | `Maren`'s forbidden chronicle (`copied_psalter`, `Q-07`); First Extinguishers' tomb & record in `2.6` Reliquary Crypts (`node 14`, `Key of the Mantle Chasm`). |
+| **The Long Harvest (`-200..0 yr`)** | Yearly **Red Tithing** of hundreds preached as a lullaby saving the continent. **Lullaby Houses** (disguised as foundling charities) raise infants as potent marrow stock (`Kaelen` raised there, `Ysolde` sang there); **Embalming Cloisters (`Lazar`)** render steeped dead & pump marrow up Fourth-Kiln-cast **Marrow Conduits (`node 18`, guarded by prototype Saint-Warden `Ulric`)**; **Tallow Guild & Fourth Kiln** render dead Spent into tallow & bone-mortar. | `2.4` Cloister ledgers; `3.2` Conduits (`Ulric`); `Quell`'s neck valve & `Nemeth`'s degrading aberrant marrow (skimmed by non-prelates locked out of pure marrow). |
+| **Recent Past: Hub Defections** | **1)** `Chirurgeon Sabina` (`31`) studied under `Lazar` at `21` in outer dissection (unaware of inner Cloisters, `G-31`); when she exposed bone-sediment in communion draughts, `Lazar` sent `Quell` to silence her. **2)** `Berek "Cinder-Lung" Dorn` (`33`) spent 15 yr under `Foundry-Master Jessop` casting brass conduit valves (told they were steam vents) until `Jessop` gave `14`-yo apprentice `Lucan` to the Tithing to hide a cracked batch & Berek traced the plans to the Cloisters. **3)** `Talia Rusk` (`29`) built the Ash-Crawl bone-cipher network (mentoring `Vesper` & sheltering `12`-yo `Ivo`) until `Ruthven`'s sweep crippled her leg & deafened her right ear. | `Sluice Undercroft` (`Slab` -> `M2` `slab_retorts` & `2.4` `Lazar`; `Hearth` -> `M3` `Grendel`, `2.2` `Lucan`, Act 2 `Jessop` & `3.2` Conduits; `Basin` -> `Ivo` Toll-Pen, `Widow Varka` sluice shop, `2.5` Belltower & `Ruthven`). |
+| **Recent Past: Founder Ruptures** | **1)** `Kaelen` (`21`, Lullaby-House orphan drafted at `14` into `Vane`'s Tithe-Escort Watch) catches `Vane` selling captives off-ledger to `Quell`'s vivisectors in `Order 44` & breaks `Fitch`'s jaw. **2)** `Vesper` (`18`, `Talia`'s cipher runner) runs one blind drop for `Orlov` to clear her dead parents' marrow-debt—carrying the sweep map that hung her crew & maimed `Talia`. **3)** `Maren` (`23`, St. Lyra's mortuary novice & scribe) uncovers the First Great Tithing chronicle with her mentor, whom `Quell` vivisects under `Othemar`'s seal. **4)** `Hollis` (`20`, outer-crag poacher) shoots a heavy bolt through `Ruthven`'s visor (making him "the Blind Eye") as `Ruthven`'s raid sweeps sister `Wren` (`14`) toward High Bastion. **5)** `Dunstan` (`22`, debtor stoker) tries to pull his own Spent father's corpse off `Grendel`'s bone-mill chute & takes a hot slag-ladle to the jaw. **6)** `Elyse` (`19`, Vat assayer) taps `Orlov`'s steam-lines to brew free tallow & an alum tonic that wakes her Spent mother & a tenement block, drawing `Orlov` & `Lazar`'s Purifiers. | `0a` Alley -> `M1` (`vanes_gilded_pavise`); `0b` Roof -> `M4` (`orlovs_flensing_talon`); `0c` Bridge -> `M2` (`quells_marrow_scalpel`); `M3` Mill (`grendels_slag_hammer`); `M4` Vats (`elyse` joins); `6` Act 2 dual-rituals (`CL-02`). |
+| **Campaign Present (`Day 1..End`)** | `42d` Doom Clock starts. **Act 1**: Cold Steel raids starve the dream & trigger tremors (`Int.` Amalgam + 1 raw marrow dose -> Act 2 Tier I implant); `M5` Crucible captures `1` winch founder (`Nemeth` shrugs off Cold Steel & escapes). **Act 2**: `Talia` shelters `1` class-matched runaway; `Othemar` calls a **second Great Tithing** (`2.4`: `Lazar` slain, `Nemeth` delivers captive to saint-tables, clock relabelled); `2.6` claims `Key of the Mantle Chasm`. **Act 3**: `3.2` cuts Conduits (`Ulric` slain; waking tremors escalate); `3.3` `Ysolde` slain or mediated; `3.4` Silent Ossuary (captive breaks `hostile_all` & kills `Nemeth` -> `Transcendent Relic`); `3.5` `Othemar` falls—**halting the Tithing triggers the waking collapse**; `3.6` Dreaming Core stops the collapse via **Ending A / B / C**. | `keepsake_<id>` (`M5` -> `3.4`), `dreamers_vertebra` (`Int.`), `Nemeth's Warded Cassock` (`3.4`), `High Altar` throne (`3.5`), `Dreaming Core` (`3.6`). |
 
-Board and art: STAGE1 option B, a tilted battle board of cells drawn 32x24 px (12 x 9 cells today; arena sizes:
-Q-60) with zone backdrops, 40 px units and upright props sorted with the units; "32x48 sprite" means the figure
-bounds inside the rig's 48x48 frames; the region map stays square top-down. Palette: the art bible's hex values, 16
-master hues plus at most one dark and one light step each (computed, hand-picked where a step reads badly, Q-77), plus three skin ramps chosen per character in the unit palette files (Q-78); each world picks its units' palette files (Q-80). Large units (the Amalgam, the titan, the node 20 monstrosity) use 96 x 96 frames on 2 x 2 cells (Q-79). A camera shake with limits and a reduce-motion setting serves bell tolls, heavy impacts and tremors (Q-82). Slice placeholders may start now; final art comes in the M4 pass (Q-81).
+## 2. Factions, Sociology & Vertical Geography (`[LOCKED]`)
 
-### 2.2 Strain (Act 2 on; Act 1 has none) `[kit hook]` per-unit meter, `[data]` bracket names
+### 2.1 The Six Factions & Visual Rim-Lights ([factions](background/factions_and_sociology.md))
 
-| Strain | Bracket | Effect (engine scale) |
-| --- | --- | --- |
-| 0-24 | Dormant | none |
-| 25-49 | Acute Resonance | +15% crit chance, +1 tile per move block, -25% healing received |
-| 50-74 | Flesh-Tension | +25% damage, +4 armour rating, stagger taken x2 |
-| 75-99 | Aberrant Edge | +50% damage, recoil 10% of damage dealt (planner pick: the bleed and stagger extras are dropped) |
-| 100 | Rupture | crisis roll at round end |
-
-- Gain: an Inoculated skill adds its `strain_cost` (guideline 15-35) when the action starts; hazards and eldritch attacks
-  add more.
-- Decay: at round end -10 if the unit used no Inoculated action that round, a further -10 if it held Active Guard; never
-  below the dormant floor. After battle Strain resets to the floor. Grafts raise the floor (0-50) by how many a unit has (1: 5, 2: 15, 3: 30, 4: 50; an Inoculated keystone graft takes one of the 4 slots; user 2026-11-10, `docs/sessions/PK2_GRAFTS.md` 3).
-- Caps (user 2026-10-25): Strain caps at 100 within a round and is set to 50 after a crisis (Q-62; changed from 75 by the user 2026-11-10, so crises do not chain: from 75 one more Channel round reached 100 again); the meter is a
-  generic kit meter (Q-63); aberrant enemies carry it from Act 2, humans never; Act 1 has no Strain anywhere (Q-65).
-  Installing an Inoculated keystone counts as Tier III surgery (+1 stage, Q-64).
-- Crisis `[game code]` unless the kit meter's triggers can express it: 1d3, equal odds, seeded, rolled at round end:
-  1 Unchecked Spasm (a full-power strike on the nearest unit, ally or foe, then stunned next round); 2 Biological
-  Collapse (0 AP next round, Bleed 3 rounds, armour 0 for the rest of the battle); 3 Flesh Breach (+1 Calcification
-  stage).
-
-### 2.3 Calcification (out of combat, permanent, Act 2 on) `[kit hook]` per-unit stage track
-
-Advances only through Flesh Breach and Tier III graft surgery (not by ending a battle in the Edge).
-
-| Stage | Name | Effect |
-| --- | --- | --- |
-| I | Vein-Blackening | -5 Composure, +5% debuff resistance |
-| II | Calloused Chitin | +2 armour rating, -1 tile per move block |
-| III | Sensory Rot | immune to fear and morale debuffs; -15% ranged damage beyond 3 tiles (planner pick: accuracy rolls are cut) |
-| IV | The Shakes | cannot equip two-handed weapons (bows and arbalests included); melee and bare-handed attacks pierce armour; sleeps in the Isolation Crypts |
-| V | Terminal Drift | lost: walks into the catacombs or turns hostile |
-
-The only undo: Aline's bone-scraping (unlocked by her quest), -1 stage and -10% max HP for good.
-
-### 2.4 Roster and lifecycle `[kit hook]` downed / wounded / captured / dead / retired
-
-| Rule | Canon value |
-| --- | --- |
-| Ages | Playable operatives and recruits 18-24; Unsealed = everyone under 25; children are stakes, never fighters; no combat graft surgery on anyone under 18. The Spent rarely pass 45 (Agnes, 44, is one of the oldest in the Ash-Crawl; Othemar at 64 is the exception, see the central truth) |
-| Squad | Up to 4 deployed (`PARTY_MAX` 4, [kit hook] exists). RECRUIT1 refuses a recruit once the roster holds `party_max`, so the bunk count needs a separate roster cap ([kit hook] new) |
-| Bunks | 6 at the start of Act 1 (4 filled after the prologue); Act 1 holds only the six founders (user 2026-10-25, Q-38); the bunk the Crucible empties takes the first procedural recruit at the start of Act 2; 8 through Bram's "Expanded Timber Frames" project from Act 2, chosen by the player; later hubs inherit the count. Guests take no bunk until sworn in |
-| Hub | One hub; forward bases are story only (Q-23); facility levels: the bunk project in the slice, a level tree per facility from Act 2 (Q-42); facility screens open from their keeper NPC; the Doom Clock and Alert sit on the map HUD only (Q-46) |
-| Founder at 0 HP | Downed. Act 1: after the battle a downed founder is wounded (no death, no capture). From Act 2: a downed unit bleeds out after a few rounds unless revived, and on a lost battle the downed are captured; the cell may also leave a unit behind so the rest escape (the left are captured; this is not the whole party fleeing) (user 2026-10-25, Q-32). Wounded: deploys at -20% max HP until a rest (user 2026-10-25, Q-31; a baseline the balance lane revisits);  |
-| Scripted loss | The Crucible: one founder, chosen from the four deployed, holds the winch and is taken alive by the Inquisition |
-| Corrupted-founder boss | Optional Act 3 node, only for a captured founder (the Crucible's, or one captured in Act 2) |
-| Recruits | Act 1 rescues cannot join the roster; after the Crucible sacrifice the rescued become recruitable (the first recruit may be someone rescued at the Crucible itself) and roster management unlocks beyond party selection (user 2026-10-25, Q-38, Q-93) |
-| Keepsakes | A captured or fallen unit, named or procedural, leaves a keepsake: an accessory passive carrying the character's name, far stronger than shop accessories, named ones stronger still (a roguelite thread: the perfect loadout is built over time; numbers by the balance lane) (Q-34) |
-| Living Martyrs | A fixed Calcification counter that advances on every deployment, cannot be reduced or shared, and scales their bonus; at the threshold they retire or deploy at Stage V for a last fight (an exception to Stage V = lost); something stops hoarding them for bosses (Q-37, Q-37a). They take a crypt place and no bunk (Q-36) |
-| Saved youths | A saved counter read by scenes and endings; under-18s go to Agnes's attics or Pip's runner network (Q-29) |
-
-### 2.5 Resources and upkeep `[kit hook]` resource purse, `[data]` names
-
-| Resource | Use |
-| --- | --- |
-| Scrap | The currency (replaces gold): trade, forge costs, bribes |
-| Warded Tallow | Upkeep: 1 per day of travel or rest for the whole cell. At 0: -2 starting AP in every battle until restocked; nothing else (the road-fight penalty stays an Ashlands option, Q-18); Act 3 Tallow costs more Scrap, daily use stays 1 (Q-45) |
-| Rock Salt | Stash material: Slab flushes, bribes; a Slab flush lowers the dormant Strain floor by 10 for the next battle; Quenched Cinder Salt is the rare one-charge item that prevents one Calcification advance (Q-43, Q-69; used in battle after a Flesh Breach, user 2026-11-10: the stage is not saved but its effects last the battle, and it calms a unit a Stage V breach turned hostile) |
-| Aberrant Organs | Stash materials: graft surgery (Act 2 on) |
-
-No other upkeep (per-operative, per-leg, Tallow-and-Salt and per-rest versions are dropped).
-
-### 2.6 Campaign meters `[kit hook]` meters with thresholds and triggers
-
-| Meter | Canon value |
-| --- | --- |
-| Inquisition Alert | 0-100%: 0-30 Guarded, 31-70 Suspicious, 71-99 Lockdown, 100 Breach. No siege in Act 1. Act 1 (user 2026-10-25, Q-13): Breach ends the run, but only a player who blatantly ignores the meter gets there (small Act 1 inputs, clear warnings at each threshold; the warning steps are a design-lane spec with Q-15). Acts 2-3: Alert is an active management task; Breach starts a siege of the hub; a lost siege costs facilities and forces a relocation, never a Game Over |
-| Doom Clock | The Red Tithing calendar in days, visible from Act 1 day 1 at 42 days ("six weeks"). Story (user 2026-10-25, Q-04 and Q-16; section 3.6): it counts to this year's rite, which the Clerisy turns into a Great Tithing because the cell's raids hasten the titan's waking; 2.4 reveals that and relabels the clock "the Great Tithing"; at 0 in Acts 1-2 the Clerisy holds a lesser tithing and the clock restarts. Soft in Acts 1-2 (story pressure, no fail); hard in Act 3 (fail if it reaches 0 before node 21 falls) |
-| Time costs | Route `time` 1 = 1 day on the travel clock ([kit hook] exists: `emberwake_world::travel`, `GameState.time`); a stealth leg takes 1 day more; a rest costs 1 day (planner pick; a rest advancing time is a [kit hook] extension); battles cost no days (planner pick) |
-| Doctrine | Preservationist (Bram) to Flesh-Broker (Aline), Act 2 on; gates the endings. Moved by play (grafts and high-Strain battles toward Flesh-Broker, forge projects and salt flushes toward Preservationist) and by narrative choices; some narrative options open only at thresholds; each character's lean is shown beside the cell's doctrine and hub NPC favours read it; the endings also count the choices of deceased and retired members (user 2026-10-25, Q-19, Q-19a) |
-| Checkpoints | Each act has checkpoint missions with day deadlines; a missed checkpoint gives the act a bad end because the cell could not prevent the events (Act 1: the run ends on a bad-end card, reload the act's start; from Act 2 the story goes on worse, with lasting costs; Q-20a); deadlines leave enough time to finish the act in the worst case. Every mission converges on the same climax, so optional missions and forks are free as long as checkpoints are met (user 2026-10-25, Q-20, Q-30) |
-| Act lines | Alert carries over with a floor of 30 (Q-14); the Great Tithing date found at 2.4 corrects the clock once and the rest becomes the Act 3 budget; some Act 2 side quests lock at that reveal (Q-17) |
-| Lost battles | Act 1: the cell retreats to the hub, all wounded, the mission stays, a day passes (Q-20). The final battle may be retried while any operative remains, inside the titan's dream: a beaten cell wakes at the Core's edge, its fallen return in the next attempt as dream-echoes fighting for the titan, and each attempt costs Act 3 days (Q-21, Q-21a). Sieges are fought in the hub as connected rooms (Q-22) |
-
-Fail states: the **Extinguished** screen (a failure screen, not an ending) shows when no living operative remains in
-the field or the bunks, when the Act 3 Doom Clock expires, or at an Act 1 Breach (Q-13). Not a fail: a single death, a lost siege, an Act 1-2
-clock expiry.
-
-## 3. Campaign spine
-
-### 3.1 Prologue (canon)
-
-Scripted maps outside the district graph; encounter ids `ENC-PRO-0A..0C` are new (planner pick).
-
-| # | Mission | Place | Encounter | Who joins | Teaches |
-| --- | --- | --- | --- | --- | --- |
-| 0a | The Alley | Alleyway of Cinders, Seventh Ward | ENC-PRO-0A: 2 Castellan Footmen; Captain Vane gives "Order 44" and withdraws | Kaelen (solo) | windup, guard, Pommel Strike interrupt |
-| 0b | The Rooftop | Meat Market rooftops | ENC-PRO-0B: an ambush squad | Vesper | smoke zone, root, disengage |
-| 0c | The Bridge | Canal bridge, iron mortuary cart | ENC-PRO-0C: 3 Inquisitors + a crossbowman (bestiary unit names: Q-73) | Maren, Hollis (freed from the cart) | ranged pins, field suture |
-
-Then the cell dives through the Drowned Runoff Grate (node 01) into the Sluice Undercroft: the hearth scene with Bram
-and Aline, six bunks with four filled, the Doom Clock appears at 42 days, Act 1 title card.
-
-### 3.2 Act 1 "The Young Vanguard": the Sunk Ward (canon)
-
-Missions come from Tess's dead-drop board (a hub NPC offering quests) plus node travel; the board offers the next main
-mission when the previous one is done (planner pick).
-
-| # | Mission | Node | Encounter | Joins / loses | Key choice |
-| --- | --- | --- | --- | --- | --- |
-| M1 | The Sweep | 02 Alleyway Junction 7 | ENC-EVT-01, Captain Vane (boss; breaks the sweep sealing the grates) | - | - (planner pick: the old prologue slot) |
-| M2 | The Crossroads Cages | 03 Ash-Crawl Crossroads | ENC-EVT-02, Proctor Quell: an open-air culling station, free the youths before the flagellants kill them; retorts for the Slab (Maren's hook) | - | - |
-| M3 | The Bone-Mill Raid | 04 Fourth Kiln | ENC-EVT-03, Overseer Grendel | Dunstan (bunk 5) | - |
-| M4 | The Tallow Vats | 05 Tallow Vats | ENC-EVT-04, Guild-Master Orlov (Vesper's vendetta) | Elyse (bunk 6) | - |
-| Interlude | The Awakening Fissure | 00 Sluice Undercroft | ENC-EVT-05, the Calcified Amalgam; Aline's single marrow dose (first grafting teaser) | - | Which deployed founder takes the dose; that founder starts Act 2 with that dose as their first graft (a standard Tier I graft, the Inoculation tutorial; user 2026-11-10, replacing the planner pick "starts Act 2 at Calcification I") |
-| M5 | The Crucible | 06 Crucible Watchpost to 07 Slag Gate | ENC-EVT-06, Inquisitor-Prelate Nemeth; one founder holds the Slag Gate winch; the cell escapes and Nemeth survives into Act 2 (user 2026-10-25, Q-25); he returns in Acts 2-3 (3.6) | Loses the chosen founder (captured) | Deploy four (the Crucible requires four, planner pick); choose who stays |
-
-Optional Act 1 board work: Kaelen's watchpost raid (forge bellows), Hollis's vantage points over the Crucible, Vesper's
-drainage locks (route shortcuts), Tess's "Night of the Red Pen" (rescue Pip), Agnes's "Rafters of Tenement 12", Corvo's
-gate, Brother Rook on street nodes. ENC-EVT-05 is not a siege in Act 1.
-
-### 3.3 Act transitions
-
-| Transition | Hub | Alert | Doom Clock | Switches on |
+| Faction / Order | Structural Role & Monopoly (`[LOCKED]`) | Figures & Combat Archetypes | Marrow / Tech Tie | Visual Silhouette & Rim-Light (`[LOCKED]`) |
 | --- | --- | --- | --- | --- |
-| Prologue to Act 1 | The Sluice Undercroft opens (6 bunks) | starts at 0 (planner pick) | appears at 42 days, soft | board, travel, upkeep |
-| Act 1 to Act 2 | Stays the Sluice; the Slag Gate breach opens the High Bastion graph (node 08 on); the Scribe's Crypt is a proposal forward base | open (Q-14) | stays soft | Inoculation, Strain, Calcification, grafts, Cold Steel weapon techniques (the grafts' mirror) and weapon durability (every Cold Steel attack skill wears the weapon, basics and support skills do not; marrow skills cost Strain instead; none in Act 1; `docs/specs/ACTS23.md` 5.2), recruits, doctrine, permadeath and capture, sieges, the 8-bunk project; the captured founder's keepsake (an ACC heirloom, planner pick) |
-| Act 2 to Act 3 | Stays the Sluice; the Weeping Redoubt is a proposal forward base | carries on | turns hard | a continental wave of bell resonance (resonance itself starts in Act 2 in Upper Cinderreach and 2.5 silences it there, Q-09), Act 3 hazards |
+| **Sovereign Clerisy** | Ruling theocracy; holds Red/Great Tithing, runs Lullaby Houses & Embalming Cloisters (`CL-06`). | `Othemar` (`64`), `Lazar` (`2.4`), First Extinguishers (`2.6`). | Drinks **pure rendered marrow** (`Lazar` gets rations); bone-sediment communion sedatives. | Cloth-of-gold copes, pearl ossuary lace, tall mitres/reliquaries; cold candle-white key + violet rim. |
+| **Iron Inquisition** | Clerisy terror/surveillance arm; runs stockades, vivisection slabs, bell sweeps & Hub Breach hunts. | `Ruthven` ("Blind Eye"), `Nemeth`, `Quell`; `Purifier`, `Mortuary Flagellant`, penitent `Rook`. | Excluded from pure marrow—skims **crude aberrant marrow** valves/phials (`Quell`, `Nemeth`, `Ruthven`). | Black-lacquered plate, eyeless iron/bird-beak masks, brass marrow valves; cold blue-violet phosphor rim. |
+| **Castellan Watch** | Municipal garrison enforcing curfews, ward gates & Tithing sweeps under Inquisition writ. | `Ulric` (`3.2`), `Capt. Vane` (`0a`/`M1`), `Cpl. Fitch`, neutral `Bailiff Corvo`; `Castellan Footman`, `Watch Crossbowman`, `Bailiff Enforcer`. | Poise-break shield walls, billhooks, stirrup arbalests, magnesium searchlights (`Ulric` encased in brass conduit plate). | Dented/gilded iron cuirasses, kettle helms, rust-crimson surcoats; hard red-orange torch rim. |
+| **Tallow Guild & Fourth Kiln Syndicate** | Secular industrial monopoly: renders Spent dead into **Warded Tallow**, grinds **bone-mortar**, casts brass conduits & rations **Rock Salt**. | `Orlov` (`M4`), `Grendel` (`M3`), `Jessop` (`Act 2`), fence `Widow Varka`; `Tallow Dredger`, Guild-bred `Render-Beast`. | Pressurized lard sprayers, pneumatic piston-mauls, kiln vents, bred sight-hounds. | Oiled butcher/foundry aprons, copper-green stains, brass tanks, slag chains; sickly yellow-green vat / furnace-orange rim. |
+| **The Severed Root** (Player Cell) | Unsealed (`18-24`) cell (`PARTY_MAX = 4`) guided by `3` Spent Hub mentors. Splits Act 2 into **Preservationist** (`Berek`) vs. **Flesh-Broker** (`Sabina`). | `6` barefaced Founders (`kaelen..elyse`), `6` visored/cowled Act 2 Recruit Cohorts, Hub (`Sabina`, `Berek`, `Talia`, `Ivo`). | Act 1 **Cold Steel** -> Act 2 **Hearth masterwork/techniques** vs. **Slab retort-refined bone-pins**. | Scavenged Watch iron, Ash-Crawl leathers, mortuary wool, Vat rubber coats; **warm amber Hearth tallow rim**. |
+| **Awakening Chorus & Fringe** | Apocalyptic Fissure cult (`Chorus Spire` `node 19`) singing to wake the titan & end the harvest **even if Cinderreach collapses** (`CL-06`); independent hermit `Malachi`. | `Cantor Ysolde` (`3.3` boss), `Brother Malachi` (never a boss); street artisans/Spent (`Agnes of Block 12`, `Skerrit`, `Ferrand`, `Herbalist Clemence`). | Acoustic bell/dream harmonics; `Malachi` forecasts tremors, decodes growths & mediates `3.3` for Flesh-Brokers. | Wax-crusted choir/sewer-reed robes, purple marrow slime, bone tuning-forks/spikes; bioluminescent violet-amber glow. |
 
-### 3.4 Act 2 "The First Rupture": the High Bastion (proposal)
+### 2.2 Vertical Strata, Hub Facilities & Regional Hazards (`sunk_ward` World Graph `campaign.act` `1..3`)
 
-| # | Node | Encounter | Payoff |
+- **Campaign Hub — The Sluice Undercroft (`node 01`, single persistent hub)**: Pre-Extinguishing storm-drain vault three levels under the Sunk Ward.
+  1. **Apothecary's Slab (`Chirurgeon Sabina`, `31`, Flesh-Broker)**: Act 1 triage; Act 2+ `M2` `Slab Retorts` refinement of ossuary growths into `4`-slot bone-pins/infusions, `Rock Salt` Strain-floor flushes (`-10`), and post-`2.4` **bone-scraping** (`-1` Calcification stage, `-10%` permanent max HP).
+  2. **Tinker's Hearth (`Berek "Cinder-Lung" Dorn`, `33`, Preservationist)**: Loot breakdown into `Scrap`/salvage, Act 2+ weapon durability repair, masterwork reforging (`4th` technique), weapon drills, and `Expanded Timber Frames` (`6 -> 8` bunks; `-20%` upgrade Scrap after `2.2` `Lucan` rescue).
+  3. **Water-Lock Basin (`Talia Rusk`, `29`, `Ivo`, `12` & `Widow Varka`)**: Bone-cipher mission board (`main`/`side`), `Talia`'s timeline recon & sewer flank insertion, `Rock Salt` bribes, **`Widow Varka`'s black-market sluice `Trade` shop** (opened after `Ivo`'s Act 1 Toll-Pen rescue), and `25+` bunk-free Basin guests (`Ferrand` `40`, `Herbalist Clemence` `36`, `CL-07`).
+  4. **Dry Hollows & Isolation Crypts**: `6` brick kiln bunks (`8` in Act 2; `1` `Warded Tallow`/rest day). **Isolation Crypts** house Stage IV operatives (keeping bunk) + `2` stasis slots for **Living Martyrs** (freeing bunk). *Story-only forward bases*: **Scribe's Crypt** (`Act 2`) and **Weeping Redoubt** (`Act 3`).
+- **Three Theatres & Stratum Hazards (`CL-05`)**: **Act 1 Sunk Ward (`00-07`)** — drowned slums, Fourth Kiln (`04`), Tallow Vats (`05`), Crucible Watchpost (`06`), Slag Gate (`07`); hazards: `smoke`, `tar-bogs`, `pitch_fire`, `slag runoff`. **Act 2 High Bastion (`08-15`)** — gothic clerical ridge, Gilded Blvd (`09`), Tallow Reservoir (`10`), Embalming Cloisters (`11`), Culling Stockades (`12`), Grand Belltower (`13`), Reliquary Crypts (`14-15`); hazards: **St. Lyra's curfew bells** (`+10` start Strain on Stage I+ until `2.5` Belltower), phosphor sprays. **Act 3 Mantle Fissure (`16-22`)** — petrified titan anatomy, Basalt Chasm (`17`), Marrow Conduits (`18`), Chorus Spire (`19`), Silent Ossuary (`20`), High Altar (`21`), Dreaming Core (`22`); hazards: **Mantle Resonance** (`+15` start Strain + pulse; `3.3` Chorus halves), tremors, marrow veins.
+
+## 3. Cast Dossiers, Visual Hooks & Taint Progression (`[LOCKED]`)
+
+### 3.1 The Six Playable Founders ([Portraits](../specs/FOUNDER_PORTRAITS.md), [Starter 4](narrative/prologue_and_starter_squad_lore.md), [Six Founders](narrative/six_founders_and_phase_progression.md))
+
+| ID & Join | Class & `3/2/2` Weapons | Backstory, Motivation & Antagonist Arc (`[LOCKED]`) | Clean Day 1 Visual Brief (`120px` / `48x48`, Hearth Rim) | Act 2 Inoculated Taint & `M5` Winch / Keepsake (`CL-03`) |
+| --- | --- | --- | --- | --- |
+| `kaelen` (`0a` Alley) | `warrior` -> **Vanguard** (`polearm`, `sword`, `axe`) | **Kaelen (`21`)**: Raised in a Clerisy **Lullaby House**, drafted at `14` into `Capt. Vane`'s Tithe-Escort Watch for his size; guarded sweeps believing his housemates died in holy peace until catching `Vane` selling captives off-ledger to `Quell` in `Order 44` (breaks `Fitch`'s jaw). **Arc**: `0a`/`M1` (`Vane` withdraws) -> `2.4` Lullaby ledgers shatter him + Act 2 `Vane` kill & burning 7th Ward debt ledgers. Leans `Berek`. | `base_man` tall/athletic; wavy **straw-blond** hair off brow; square jaw, light stubble, grey eyes; dented Watch plate w/ **chiselled-out cross**, **faded Lullaby wrist-number under bloodied linen**, notched **billhook** upright at right edge. | *Act 2 Taint*: chalk-white forearm bone spurs. *`M5` Winch*: jams billhook haft into winch cogs -> `keepsake_kaelen` (**Kaelen's Gouged Sigil**). |
+| `vesper` (`0b` Roof) | `rogue` -> **Gutter-Stalker** (`dagger`, `bow`, `sword`) | **Vesper (`18`)**: Orphaned to marrow-debt at `9`; `Talia`'s fastest rooftop cipher-runner. Ran one blind drop for `Orlov` to clear her parents' debt before `18`—unknowingly carrying the sweep map that hung her crew & maimed `Talia`. **Arc**: `0b` Meat Market -> `M4` corners `Orlov` (`orlov_withdraws` at `20%` HP) -> Act 2 Guild Counting-House kill & burning debt ledgers. Leans pragmatic/`Sabina`. | `base_lean` small/wiry; sleek **ink-black hair w/ ash-grey streaks** & side fringe; fox face, soot cheeks, razor smirk; bunched charcoal cowl, **slate leather-shingle jerkin**, **tin whistle at throat**, soot/wax fingers on reversed **bodkin**. | *Act 2 Taint*: cold ash-smoke curling off fingertips. *`M5` Winch*: burns last phosphorus/smoke pot at winch -> `keepsake_vesper` (**Vesper's Runner Whistle**). |
+| `maren` (`0c` Cart) | `priest` -> **Heretic Acolyte** (`censer`, `bone_saw`, `scourge`) | **Maren (`23`)**: St. Lyra's liturgical scribe **and** mortuary novice (censer, bone-saw, sutures). Devout believer until uncovering the First Great Tithing chronicle (`Q-07`) with her aged mentor, whom `Quell` vivisected under `Othemar`'s seal. **Arc**: `0c` cart -> `M2` kills `Quell` -> Act 2 St. Lyra's vault & `2.6` Reliquary tomb cipher -> `3.5` confronting `Othemar`. | `base_woman` slight stoop; thick wavy **rust-red** hair; earnest brown eyes behind **round wire spectacles (1 cracked lens)**; **slate mortuary habit w/ ripped sigil patch** & embalmer cuff, **gall-ink fingers** (clean throat!) on **bronze censer crook**. | *Act 2 Taint*: spidery black marrow-ink throat veins. *`M5` Winch*: loops censer chain through ratchet & braces bar -> `keepsake_maren` (**Maren's Copyist Quill**). |
+| `hollis` (`0c` Cart) | `ranger` -> **Arbalestier** (`crossbow`, `bow`, `sword`) | **Hollis (`20`)**: Outer-crag poacher raiding Clerisy wagons with sister `Wren` (`14`) until `Inquisitor-General Ruthven` swept the ridges; Hollis punched a heavy quarrel through `Ruthven`'s visor (**making him "the Blind Eye"**) before being chained in `0c` as `Wren` was swept toward High Bastion. **Arc**: `0c` -> `2.1` cordon -> Act 2 `Wren` convoy rescue & `Ruthven` Breach/`2.6` showdown. | `base_lean` rangy; knife-cropped **dusty dark-brown** hair; crooked nose, sparse beard; **two natural hazel eyes w/ shrapnel-scarred left squint** + **corded brass monocle at collar**, **pale horn recoil pauldron**, steel **lever-arbalest** arms & bone bolts. | *Act 2 Taint*: glowing amber tapetum pin in left eye. *`M5` Winch*: wedges steel arbalest prod into pinion -> `keepsake_hollis` (**Hollis's Focusing Monocle**). |
+| `dunstan` (`M3` bunk 5) | `brawler` -> **Slag-Brute** (`fist`, `hammer`, `mace`) | **Dunstan "Slag-Jaw" (`22`)**: Condemned to `Grendel`'s bone-mill for family marrow-debt; snapped when his own uncremated Spent father came down the mortar chute, taking `Grendel`'s molten slag-ladle across his jaw. **Arc**: Freed & kills `Grendel` in `M3` -> bonds w/ `Berek` -> shared Act 2 Fourth Kiln raid killing `Foundry-Master Jessop` & flooding mortar moulds with molten iron. Leans `Berek`. | `base_heavy` towering/bull-necked; **shaven scalp**; **right jaw slag-burned & held by black iron wire + riveted jawline strap**; bare soot shoulders w/ **Kiln debtor brand**, scorched apron, raised fists in **riveted penal cuffs w/ broken chain**. | *Act 2 Taint*: wired jaw scar fuses into black basalt-chitin. *`M5` Winch*: wedges wired jaw & chain into winch teeth -> `keepsake_dunstan` (**Dunstan's Shackle Link**). |
+| `elyse` (`M4` bunk 6) | `mage` -> **Ichor Alchemist** (`sprayer`, `staff`, `wand`) | **Elyse (`19`)**: Prodigy chemical assayer in `Orlov`'s Vats who tapped steam-lines to distill free Warded Tallow & an alum counter-tonic to wake her Spent mother—waking a tenement crew and bringing `Orlov` & `Lazar`'s Purifiers down on her still *(joins post-slice)*. **Arc**: `M4` rescue -> Slab foil w/ `Sabina` -> Act 2 `2.3`/sedative-cistern sabotage & `2.4` `Lazar` raid. | `base_woman` small in oversized coat; deeper brown skin, crooked grin; **cloud of dark curls w/ 1 fume-bleached streak** held by **forehead brass goggles**; **copper-green stained rubbered Vat coat**, sulfur/phosphorus/alum bandolier, **brass sprayer nozzle**. | *Act 2 Taint*: acid burns crystallize into violet-amber geodes. *`M5` Winch*: fuses brake housing w/ phosphorus-vitriol charge -> `keepsake_elyse` (**Elyse's Cracked Retort**). |
+
+### 3.2 Hub Cast, Antagonists, Neutrals & Act 2 Recruit Cohorts ([NPCs](background/npcs_and_questlines.md), [Bosses](../specs/CAST1_BOSSES.md))
+
+| Character / Cohort | Role & Age | Locked Backstory, Motivation & Campaign Arc | Locked Visual Hook (`120px` Portrait / Sprite) |
 | --- | --- | --- | --- |
-| 2.1 | 09 Gilded Boulevard | ENC-ACT2-01, Inquisitor-General Ruthven's checkpoint | Into Upper Cinderreach |
-| 2.2 | 12 Culling Stockades | ENC-ACT2-02, culling wagon (repeatable) | Recruits 18-24; Lucan's rescue (planner pick: one wagon) |
-| 2.3 | 10 Tallow Reservoir | ENC-ACT2-03 | +20 Warded Tallow, -30 Alert |
-| 2.4 | 11 Embalming Cloisters | ENC-ACT2-04, Chief Anatomist Lazar (Aline's quest) | Apex grafting; the Great Tithing's date and scale, and that the cell's raids caused it; the cell sees Nemeth deliver the captured founder to Lazar's anatomists and arrives too late (3.6) |
-| 2.5 | 13 Grand Belltower | ENC-ACT2-05, Bell-Warden Colossus | Silences the bells' resonance in Upper Cinderreach (conflicts with 3.3: Q-09) |
-| 2.6 | 14 Reliquary Crypts to 15 Grand Spire Gate | ENC-ACT2-06, Reliquary Guardian | Key of the Mantle Chasm; Act 3 |
+| **Chirurgeon Sabina** (`Sabina Kress`, `Slab`) | Hub Surgeon (`31`, Spent); **Flesh-Broker** voice | Studied under `Lazar` at `21` in outer dissection (`G-31`); exiled via `Quell` after exposing communion bone-sediment. Pushes retort-refined marrow implants after `M5` proves Cold Steel can't kill `Nemeth` -> `2.4` kills `Lazar` (`Sabina's Prosector Crook`, bone-scraping) -> **Ending B (`Living Conduit`)**. | Gaunt `31`-yo; **silver-templed cropped black hair**; dark oiled-green prosector collar w/ **unhooked leather surgical half-mask at neck** (no spectacles/habit!), chalk-pale sulfur knuckles, **glass retort pipettes & silver scalpels** (`/art-ui-session` `AI-05`). |
+| **Berek "Cinder-Lung" Dorn** (`Hearth`) | Hub Smith (`33`, Spent); **Preservationist** voice | Cast Fourth Kiln brass conduit valves for 15 yr under `Jessop` (told they were steam vents) until `Jessop` gave `14`-yo apprentice `Lucan` to the Tithing to hide a failed batch. Anchors `M3` (`Grendel`), `2.2` (`Lucan`), Act 2 (`Jessop` + conduit plans), `3.2` (`Ulric` Conduits) -> **Ending A (`Black-Iron Severance`)**. | Reuses `bram.png` `1:1`: barrel chest, shaggy grey-streaked mane & soot beard, **strapped right-eye iron loupe**, soot-scarred forearms, riveted cowhide apron. |
+| **Talia Rusk** (`29`), **Ivo** (`12`) & **Widow Varka** | Hub `Basin` Spymaster, Stake & Sluice Fence | `Talia` built the Ash-Crawl cipher ring until `Ruthven`'s sweep crippled her leg & deafened her right ear. **Arc (`G-19`)**: Act 1 rescues `Ivo` from Toll-Pen (lost if soft clock hits `0`, `CL-04`) -> opens `Widow Varka`'s sluice `Trade` shop -> Act 2 cracks `Ruthven`'s `2.5` Belltower & Breach hunts -> Act 3 leads Unsealed evacuation. | `Talia`: `29`-yo lines by **flash-burned right ear**, side-braid, **weathered wool dispatch cloak** (no rogue shingles!), **ash-wood underarm crutch top & bone-cipher rods** (`AI-05`). `Varka`: **waxed black mourning veil & brass salt-scales**. `Ivo`: wool cap & cipher tallies. |
+| **Arch-Prelate Othemar** (`3.5` Boss) | Clerisy Head (`64`); **Arch-Antagonist** | Theological addict kept alive 20 yr past Spent lifespan on rendered child-marrow; terrified of death & the waking titan, calling a **second Great Tithing** "salvation" -> slain at `3.5`, triggering `3.6`'s waking crisis. | Shrunken `64`-yo corpse-king w/ **half-petrified black-stone left skull & hand**, towering **cloth-of-gold & pearl-skull copes**, **gilded reliquary throne** w/ brass marrow tubes (`AI-06`). |
+| **Inquisitor-Prelate Nemeth** (`M5`, `3.4`) | Crucible / Ossuary Boss | Half-elevated zealot calcifying on second-grade aberrant marrow; takes `M5` winch founder alive for `Lazar` to earn pure marrow -> torn apart at `3.4` when broken founder goes `hostile_all` (`Nemeth's Warded Cassock`). | Placed `inquisitor_prelate_nemeth.png` `1:1`: ash-grey skin, long white hair, glowing violet eyes, **violet aberrant-marrow phial** in crimson/steel gorget. |
+| **Inquisitor-General Ruthven** (`Act 2`) | Inquisition Head ("Blind Eye") | Blinded by `Hollis`'s crag bolt; wears illegal collarbone tremor-grafts to feel footsteps/bells; hunts `Talia`'s network -> fought as Act 2 Hub Breach / `2.6` fallback boss (`CL-06`). | **4-screw windowless black-iron mask w/ deep quarrel-dent over left eye-plate**, spiked gorget over **pulsing brass collarbone grafts**, black-lacquered coat (`AI-06`). |
+| **Chief Anatomist Lazar** (`2.4` Boss) | Embalming Cloisters Head | `Sabina`'s ex-mentor; sole non-prelate fed rations of pure marrow to render Lullaby dead & build Living Saints (`M5` captive, `Ulric`) -> slain at `2.4`. | **Uncannily smooth ageless face** (contrasting gaunt `Quell`), crimson-and-pearl surgical vestments, gold mitre-cap, **multi-jointed silver embalming armature** (`AI-06`). |
+| **Warden-Inquisitor Ulric** (`3.2`) & **Cantor Ysolde** (`3.3`) | Conduit Boss & Chorus Boss | `Ulric`: prototype Saint-Warden built from `Lazar`'s surgery + `Berek`/`Jessop`'s brass plate, bolted to `3.2` Conduits (slain). `Ysolde`: ex-Lullaby choir-mistress singing to wake titan even if city falls (mediated via `Malachi` or slain). | `Ulric`: **Stage IV black-stone jaw fused into Fourth Kiln brass-iron pressure suit** w/ conduit hoses (`AI-06`). `Ysolde`: **wax-crusted pearl choir robes & shoulder bone tuning-forks** (`AI-06`). |
+| **Vane** (`M1`), **Quell** (`M2`), **Grendel** (`M3`), **Orlov** (`M4`), **Jessop** (`Act 2`) | Act 1-2 Sub-Bosses (`CL-01`) | Driven by fear of turning Spent (`25-45`): `Vane` (`38`, stiff joints, sells captives for Bastion post; withdraws `M1` -> dies Act 2); `Quell` (`34`, brass neck-valve addict; dies `M2`); `Grendel` (`41`, dies `M3`) & `Jessop` (`43`, dies Act 2) trade debtors/`Lucan` for clean rations; `Orlov` (`46`, draught-free oligarch; withdraws `M4` -> dies Act 2). | `Vane` (`captain_vane.png`), `Quell` (`proctor_quell.png`), `Orlov` (`guild_master_orlov.png`) `1:1`. `Grendel`: **iron furnace half-helm**, bone-dust mutton-chops, **pneumatic piston-maul** (`AI-06`). `Jessop`: **asbestos gilded coat, smoked lenses** (`AI-06`). |
+| **Street Neutrals & Act 2 Cohorts** | Neutrals, `25+` Guests & `18-24` Recruits | `Brother Malachi` (Fissure hermit, never boss); `Bailiff Corvo` (`29`, stone leg, sister `Ida` `16`); `Skerrit, Bone-Wright`; `Agnes of Block 12` (`44`, stone forearms/chin); `Brother Rook`; `25+` Basin guests `Ferrand` (`40`) & `Herbalist Clemence` (`36`). **Act 2 Recruits (`18-24`, `1` class-matched runaway at Act 2 start + `2.2`/extractions)**: *Turncoat Watch Levy*, *Ash-Crawl Flue-Runner*, *Apostate Charnel-Novice*, *Outwall Bolt-Man*, *Kiln Chain-Breaker*, *Vat-Still Saboteur*. | **Act 2 Recruit Cohorts wear visors, cowls, scarves, or respirator-goggles** so they never visually clone the `6` barefaced Founders. **9 Regular Mobs** (`CAST1_BESTIARY.md`) locked (`Footman`, `Crossbowman`, `Enforcer`, `Flagellant`, `Purifier`, `Dredger`, `Render-Beast`, `Ash-Crawler`, `Calcified Husk`). |
 
-Key choices: the doctrine split, Living Martyrs, the siege dilemma (defend the hub or finish the mission).
+### 3.3 Three-Tier Taint & Corruption Visual Progression (`[LOCKED]`)
 
-### 3.5 Act 3 "The Awakening Abyss": the Mantle Fissure (proposal)
+1. **Tier 1 — Act 1 Cold Steel Base (`0` Implants, `Stage 0`)**: All `6` Founders and un-implanted operatives use **100% grounded mortal human base portraits & sprites**—staying clean through Act 3 on strict Preservationist (`Berek`) runs.
+2. **Tier 2 — Act 2-3 Implants, Strain & Calcification (`aegis_ui::portrait_fx` + Inoculated Keystones)**:
+   - **Runtime `portrait_fx` Overlays**: `50+` Strain pulses `smoke`/`glow`; **Stage I (`Vein-Blackening`)** activates `veins`; **Stage II-III (`Calloused Chitin` / `Sensory Rot`)** adds basalt pallor `tint` + marrow `eye_glow` + `ash`; **Stage IV (`The Shakes`)** adds `shiver` motion + black-tear `mark`.
+   - **Founder Cranial/Inoculated Signatures**: Taking a Founder's Act 2 Inoculated/Cranial path manifests their personal taint (`Sec. 3.1`: `Kaelen` spurs, `Vesper` ash-smoke, `Maren` ink veins, `Hollis` amber lens, `Dunstan` basalt jaw, `Elyse` geode burns).
+3. **Tier 3 — Node `3.4` Silent Ossuary Saint-Weapon (`M5` Captive Only)**: `Lazar` remakes the `M5` captive into a bespoke Phase 1 Saint-Weapon -> Phase 2 `96x96` (`2x2`) fractured aberration (`Q-94`: stronger if given the `Int.` marrow dose).
 
-| # | Node | Encounter | Payoff |
+## 4. Campaign Spine, Endings & Core Systems (`[LOCKED]`)
+
+### 4.1 Mission Progression (`0a..3.6`) & Catastrophe-Stopping Endings
+
+| Stage | Mission / Node & Encounter | `[LOCKED]` System & Narrative Outcome | Key Unlocks, Relics & Payoffs |
 | --- | --- | --- | --- |
-| 3.1 | 17 Weeping Basalt Chasm | ENC-ACT3-01, Chasm Gatekeepers | Foothold |
-| 3.2 | 18 Marrow Conduits | ENC-ACT3-02, High Castellan Ulric | Conduits cut; Doom Clock +2 days |
-| 3.3 | 19 Chorus Spire (optional) | ENC-ACT3-03, Cantor Ysolde | Flesh-Brokers may turn the Chorus against the altar; Malachi mediates (planner pick) |
-| 3.4 | 20 Silent Ossuary (optional) | ENC-ACT3-04 in two phases (user 2026-10-25): Nemeth with the corrupted founder at his side, then the founder goes insane and kills everyone, Nemeth included (3.6) | Nemeth's Warded Cassock; mercy; the Transcendent Relic (upgrades the keepsake, planner pick) |
-| 3.5 | 21 High Altar | ENC-ACT3-05, Arch-Prelate Othemar | Othemar always falls here (planner pick); the Doom Clock stops |
-| 3.6 | 22 Dreaming Core | ENC-ACT3-06, the titan | Endings |
+| **Prologue** | `0a` Alley -> `0b` Roof -> `0c` Bridge -> **Hearth** | `ENC-PRO-0A..0C`; enters Sluice (`4/6` bunks, `42d` soft clock, Cold Steel only; `Sabina` & `Berek` state opposed creeds without day-1 founder taints). | `kaelen`, `vesper`, `maren`, `hollis`; `loot_poultices` (`0c`). |
+| **Act 1** (*Young Vanguard*) | `M1` Sweep (`02`) -> `M2` Cages (`03`) -> `M3` Mill (`04`) -> `M4` Vats (`05`) -> `Int.` Fissure (`00`) -> `M5` Crucible (`06->07`) | `Vane` (`25%` HP) & `Orlov` (`20%` HP) withdraw; `Quell` (`M2`) & `Grendel` (`M3`) die; `Int.` `2x2` Amalgam + **1 founder takes raw marrow dose -> Act 2 Tier I implant**; `M5` **1 of 4 deployed holds winch (captured)**, `Nemeth` shrugs off Cold Steel & escapes. Soft `0d` -> **lesser tithing** (`14d`, `+10` Alert, claims `1` unrescued stake `Ivo`/`Ida` else `-2` `saved_youths`, `CL-04`). | `dunstan` (`M3`), `elyse` (`M4`); `Ivo` -> `Widow Varka` Basin shop; `Pavise`, `Gate Pass`, `Scalpel`, `Valve`, `Slab Retorts`, `Slag-Hammer`, `Slag Plating`, `Flensing Talon`, `Retribution`, `Marrow Geode`, `Vertebra`, `keepsake_<id>`. |
+| **Act 2** (*First Rupture*) | `2.1` Blvd (`09`), `2.2` Stockades (`12`), `2.3` Reservoir (`10`), **`2.4` Cloisters (`11`)**, `2.5` Belltower (`13`), **`2.6` Reliquary (`14-15`)** + `6` Dual-Rituals | Alert floor `30`; `Talia` shelters `1` class-matched runaway (`6/6` bunks -> `8` via `Berek`); unlocks `Channel`/`Strain`/`Calcification`, `4` Slab implants, Cold Steel durability/techniques, sieges (`Ruthven`). **`2.4`**: `Lazar` slain, `Lullaby House` records found, clock relabelled *Great Tithing* (`max(days, 18)`), `Nemeth` delivers captive (`no rescue`). **`2.6`**: First Extinguishers' tomb + **Mantle Key**. | `Lucan` rescued (`2.2`); `+20` Tallow / `-30` Alert (`2.3`); Tier III Apex implants, bone-scraping & `Sabina's Prosector Crook` (`2.4`); silences curfew bells (`2.5`); `6` rituals (`CL-02`: `Vane`, `Orlov`, `Jessop`, St. Lyra's, `Wren`, cisterns). |
+| **Act 3** (*Awakening Abyss*) | `3.1` Chasm (`17`), **`3.2` Conduits (`18`)**, `3.3` Chorus (`19` opt.), **`3.4` Ossuary (`20` opt.)**, **`3.5` Altar (`21`)**, **`3.6` Core (`22`)** | **Hard Doom Clock** (`min 12d`, `0 = Extinguished`), Mantle Resonance (`+15` Strain). **`3.2`**: `Ulric` slain, cuts Conduits (`+2d`, waking tremors rise). `3.3`: `Ysolde` slain or mediated via `Malachi`. **`3.4`**: broken `M5` captive kills `Nemeth` -> `2x2` boss -> `Cassock` & `Transcendent Relic`. **`3.5`**: `Othemar` falls, clock stops—**halting the Tithing triggers the waking caldera collapse**. **`3.6`**: `2x2` Dreaming Core (retries cost Act 3 days; fallen return as dream-echoes). | **`3.6` Endings (`[LOCKED]` — Shroud stays dark)**: **A Black-Iron Severance** (`Berek`, non-Flesh-Broker: iron spikes kill Core's brainstem—saves city, ends marrow & geothermal warmth, petrifies implants); **B The Living Conduit** (`Sabina`, Flesh-Broker only: grafted wardens bind into Core's crown to sedate it without child tithes—keeps warmth & marrow, risks becoming a new Clerisy); **C Stone Martyrdom** (always open: ossify wounded Core from within, petrifying both Core and squad into black-stone pillars holding up Cinderreach). |
 
-Main path 16-17-18-21-22; 19 and 20 are optional (planner pick).
+### 4.2 Core Combat, Corruption, Cold Steel & Economy Rules (`[LOCKED]`)
 
-### 3.6 The Great Tithing and Nemeth (user 2026-10-25; "(refinement)" marks the planner's detail on the user's gist)
+- **Timeline Combat (`rulesets.timeline`, `sunk_ward`; `classic` untouched on `ashlands`)**: `6` simultaneous blocks (`Snap 1`, `Standard 2`, `Heavy 3-4` + enemy `recovery_blocks`; deterministic hit, melee `attack_lock` dodge). **AP**: `12` max, `10` start, `+4`/round (`Rest` banks `floor(0.5 * blocks)` cap `+2`, `+5` Poise/block). **5 Intents**: `Assault`, `Guard`, `Support`, `Maneuver`, `Field` + Act 2+ `0 AP` **`Channel`** toggle (`x1.25` armour-piercing marrow versions, `Strain 15/25/35`, `Rest -> Feed` `4%` heal, `Vent` at `>= 50` Strain & `15%` HP, greys items). **Poise & Armour**: `Max Poise = CONS * 2 + gear + passives` (`5` pips; break cancels windup, drops guard, queues next-round `stagger` on blocks `1 & 4`). `Active Guard` `35%` DR (`Brace` `20%`), `0.90` cap; armour `rating / (rating + 50)`; derived **Composure** (`KNOW/CONS`, corruption resist); soft wield (`0.75x` power, `+1` burden -> Initiative `8 + DEX - burden`; Move `2..4` unburdened).
+- **Inoculation vs. Cold Steel (`Act 2+`)**: **Strain (`0..100`)**: `0-24` Dormant | `25-49` Acute Resonance (`+15%` crit, `+1` move, `-25%` heal) | `50-74` Flesh-Tension (`+25%` dmg, `+4` armour, `x2` stagger) | `75-99` Aberrant Edge (`+50%` dmg, `10%` recoil) | `100` Rupture (`1d3` `roll_table` -> resets `50`: **Unchecked Spasm**, **Biological Collapse**, **Flesh Breach** `mark: "calcify"`). Decays `-10`/round (`-20` on Guard) to **implant-count floor** (`0/5/15/30/50`). **Calcification (`I..V`, ONLY via Flesh Breach or Tier III implant)**: `I` Vein-Blackening | `II` Calloused Chitin | `III` Sensory Rot | `IV` The Shakes (`forbid_hands: 2`, `pierce_melee`, Crypt housing) | `V` Terminal Drift (`hostile_all`, `lost` at settle; calmed in battle by `unmark`, undone at Slab by `-10%` HP bone-scraping). **Slab Implants (`4` `body` slots refined via `Slab Retorts`)**: `Forearms`/`Thoracic`/`Visceral` take ossuary growth -> monster skill (`Tier I/II`, `Tier III` Apex post-`2.4`); `Cranial` via class ritual -> class skill or Inoculated keystone (`-15%` HP excision; held-field fallen implanted allies yield `1` core). **Cold Steel (`Hearth`)**: `3/2/2` class families; Mastery `1/2/3` -> **Techniques `1/2/3`**, masterwork -> `4th`, Mastery `3` + forge-rite -> Cold Steel keystone; Act 2 durability (`1` attack, `2` technique, `0` = dulled `-50%`).
+- **Meters & Economy**: **Scrap** (currency), **Warded Tallow** (`1/d` travel/rest; `0` = `-2` start AP), **Rock Salt**, **Quenched Cinder Salt**, **Aberrant Organs** (ossuary growths), **Hearth/Themed Salvage**. **Alert** (`0-30` Guarded, `31-70` Suspicious, `71-99` Lockdown `150%` road fights, `100` Breach = Act 1 fail / Act 2-3 hub siege), **Doom Clock** (`42d`), **Doctrine** (`-100..+100`), **Living Martyrs** (`2` Crypt stasis slots, tick per deploy + `N` days).
 
-The Great Tithing (Q-04, Q-16, Q-12; [tithing_options.md](background/tithing_options.md) option B with b2):
+## 5. Named Relics, Signatures, Ossuary Growths & Consumables (`[LOCKED]`)
 
-- Founding: the Sovereign Clerisy was founded two centuries ago, in the dark of the Extinguishing, as the order that
-  holds the Tithing ritual to pacify the titan; that is its public charter. Its founding act was the first Great
-  Tithing, held under cover of the Extinguishing, its dead recorded as the titan's wrath. The founders found that the
-  dream's marrow kept them young, and the harvest began (the central truth, Option A). They are "the first
-  Extinguishers", entombed in the Reliquary Crypts (2.6), where the record of that night lies (Q-12 option a).
-- What the folk know: only the yearly Red Tithing (hundreds of Unsealed). The Great Tithing (thousands) is known to the
-  Clerisy's inner circle alone. What caused the Extinguishing stays a mystery (b2).
-- Why this year: the cell's own raids hasten the waking. Every tithe it frees and every station it breaks starves the
-  dream, the titan stirs, and the Clerisy turns this year's rite into a Great Tithing to drug it back to sleep. The
-  more the cell saves, the more the Clerisy needs. (refinement: the decision follows the Act 1 raids, M2 and the
-  Crucible; the player learns it at 2.4 from Lazar's records.)
-- Reveal path: Act 1, hints in Agnes's tales of the stars and Maren's forbidden texts (Q-07 option a: a chronicle of
-  the first Great Tithing); 2.4, the date, the scale and the cause; 2.6, the founders' record in the Reliquary Crypts;
-  Act 3, Malachi confirms what the dream is fed for.
-- What the Tithing is (user 2026-10-25): not only a killing. The Clerisy raises children as sacrifices for the titan,
-  and the marrow it drinks comes from the remains of the sacrificed; the younger the child, the more potent the
-  marrow. (refinement:) the tithe-children are raised from infancy in the Clerisy's foundling houses, the Lullaby
-  Houses, where they are sung the lullaby each night and the folk see charity; Unsealed youths swept from the wards
-  fill out the yearly count. After the rite the tithed are laid in the crypts over the titan's veins, where the dream
-  steeps them; Lazar's anatomists render the remains into marrow in the Embalming Cloisters, and the conduits carry it
-  up to the cathedral. Without the dream the remains are only flesh, which is why the Clerisy needs the titan asleep
-  and dreaming, and why its waking ends the harvest. The old serve too: the Spent are drugged docile and, dead, are
-  rendered into tallow by the Guild; the young become marrow, the old become fuel. The Inquisition's infusions
-  (Quell's valve, Nemeth's) are aberrant marrow from older, weaker stock, which wears the body down. A Great Tithing
-  yields marrow for a generation.
-- Tone rule (refinement): children are stakes, never fighters or on-screen victims; the game shows the Lullaby Houses,
-  the rite, the pens and the marrow, never violence to a child.
-- Endings: A Preservation ends the cycle (no dream to feed); B Ascendancy hands the cell the chronicle and the source,
-  so the next Great Tithing would be theirs to call; C Red Martyrdom sates the dream so the cycle never turns again.
-  Losing (the Extinguished screen) is a second Extinguishing for the Unsealed.
+### 5.1 Unique Campaign Relics & Story Key Items (`1` Copy per Run)
 
-Core story (user 2026-10-25): only the Clerisy drinks marrow, and the draughts suppress dissent, not competence (Q-03,
-Q-06). Two substances: the titan's raw black marrow mutates whoever touches it (veins, Aline's dose, organs), the
-rendered marrow is the Clerisy's elixir of youth (G-33); the tithed are steeped in the deep crypts, rendered in Lazar's
-Cloisters and piped up to the cathedral, the Marrow Conduits (node 18) being the deep end of that line (G-32). The
-player gets a hint and the rendering at 2.4, where Aline recognises her old order's work, and the full truth from
-Malachi before node 21, a fixed beat whatever the doctrine (Q-02, G-08, G-31). Bell resonance starts in Act 2 as the
-raids hasten the waking (Q-09). If node 20 is skipped, the captured founder stays the saint-aberration, named in the
-ending text, and Nemeth survives (G-15); only the Crucible's founder fights at Nemeth's side (Q-94). Each surviving
-founder gets an Act 2 loyalty mission (G-16); every ending states Bram's and Aline's fates (G-17). The slice ends on a
-card after the Crucible escape (Q-87); Act 1 founder hooks pay off in play (Q-28).
-
-Nemeth (Q-25, G-01, G-02):
-
-- Act 1: escapes the Crucible with the captured founder (3.2).
-- Want (refinement): his infusion is the Inquisition's crude aberrant marrow, which wears the body down; he wants the
-  Clerisy's pure marrow, rendered from the youngest tithe-children, and a place among the ageless. The captured
-  founder is his offering: he gives them to Lazar's anatomists to be made into a saint-weapon against the cell.
-- Act 2 sighting (refinement): at 2.4 the cell sees Nemeth deliver the founder to Lazar and arrives too late; this
-  also closes a rescue (Q-33 option a).
-- Act 3, node 20 the Silent Ossuary, one battle in two phases (user 2026-10-25): (1) the founder, already corrupted
-  by Lazar's anatomists, fights at Nemeth's side against the cell; (2) fighting their old teammates breaks the
-  founder's mind: they go insane and kill everyone in reach, Nemeth and his guard included, and the cell fights the
-  monstrosity alone. The win offers mercy and the Transcendent Relic. Nemeth's Warded Cassock is the fight's reward, paid when the cell wins (loot is settled on a win).
-  (refinement:) phase 1 lets the founder use their old signature moves, twisted, and the founder's lines answer the
-  cell by name; the break comes on an `hp_below` trigger on the founder with a round fallback, or earlier if Nemeth
-  falls low. Build: one encounter with phases ([kit hook] exists: `emberwake_battle::encounter`, `hp_below` with
-  `or_round`, line, status, ai and enrage effects); new and small: a phase effect that kills named units, and a
-  "hostile to all sides" AI or faction switch for the founder ([kit hook] new); the monstrosity's larger body is a
-  unit swap (Q-79 for 96 x 96 art).
-
-## 4. Endings (proposal; meaning set by the central truth)
-
-| Ending | What happens | Voice | Doctrine gate |
+| Item & Catalog ID | Slot / Family | Locked Origin & Visual Motif | Campaign Source & Story Linkage |
 | --- | --- | --- | --- |
-| A Preservation | Cold Steel: black-iron spikes sever the synapse; the titan sinks into a deep coma; humanity stays mortal and untainted | Bram | Open unless Flesh-Broker (planner pick) |
-| B Ascendancy | Transhuman: the cell merges with the titan's marrow and rules as something new | Aline | Flesh-Broker only |
-| C Red Martyrdom | The cell gives itself to break the Tithing for good | the cell | Always open (planner pick) |
-| Extinguished | Failure screen (annihilation or the Act 3 clock), not an ending | - | - |
+| **Vane's Gilded Castellan Pavise** (`vanes_gilded_pavise`) | `OFF` `shield` | Scratched candle-gold pavise painted w/ a weeping cathedral eye, bought by `Vane` selling his own men; reflects melee poise/dmg on `Active Guard`. | `M1` (`ENC-EVT-01`) `objective_reward` when `Vane` retreats. |
+| **Gate Pass Cipher** (`city_gate_pass`) & **Slab Retorts** (`slab_retorts`) | `quest` items | Brass-and-bone Watch ward seal (`M1` `key_loot`); confiscated Clerisy distillation glassware (`M2` `objective_reward`) enabling `Sabina`'s Slab refinement. | `M1` opens ward/Corvo routes; `M2` unlocks `Apothecary's Slab` recipes. |
+| **Quell's Marrow Scalpel** (`quells_marrow_scalpel`) | `MAIN` `1H` `bone_saw` | Silver-grooved vivisection saw `Quell` used on `Maren`'s mentor; vents `10` Strain on hit (Act 2) & bleeds. | `M2` (`ENC-EVT-02`) `key_loot` on `Quell`'s death. |
+| **Grendel's Pneumatic Slag-Hammer** (`grendels_slag_hammer`) & **Slag Plating** (`slag_plating`) | `MAIN` `2H` `hammer` / `BODY` `plate` | Piston-weighted bone-mill maul (`line_2` shockwave) & kiln-quenched plate taken where `Dunstan` breaks free. | `M3` (`ENC-EVT-03`) `key_loot` & `objective_reward`. |
+| **Orlov's Flensing Talon** (`orlovs_flensing_talon`) & **Orlov's Retribution** (`orlovs_retribution`) | `MAIN` `1H` `dagger` + `rogue` skill | Curved lard-vat flensing blade dropped when `Vesper` drives `Orlov` out of the Vats (`executes` bleeding targets in Act 2). | `M4` (`ENC-EVT-04`) `objective_reward` + turn-in (`orlov_withdraws`, `PR5-34`). |
+| **The Dreamer's Crystalline Vertebra** (`dreamers_vertebra`) | `ACC` `accessory` | Fossilized titan spine-ring torn from the `Calcified Amalgam` (`+30%` Inoculated dmg, locks Strain floor `20` in Act 2). | `Interlude` (`ENC-EVT-05`) `objective_reward` alongside `Sabina`'s marrow dose. |
+| **Hollis's Lever-Winch** / **Deserter's Kettle Helm** / **Sabina's Prosector Crook** | `ACC` / `HEAD` `plate` / `MAIN` `staff` | Pre-cataclysm crag ratchet (`Hollis` 7th Ward cache); `Kaelen`'s reforged Watch helm (`CL-02`); `Sabina`'s silver dissection staff (`2.4` `Lazar` raid). | Personal & milestone relics across Acts 1-2. |
+| **Key of the Mantle Chasm**, **Nemeth's Warded Cassock** & **Transcendent Relic** | `quest` / `BODY` `cloth` / `ACC` upgrade | Black-iron seal on the First Extinguishers' tomb (`2.6`); `Nemeth`'s brimstone vestments & purified saint-core (`3.4` Silent Ossuary; missed if `node 20` skipped). | `2.6` opens Act 3; `3.4` upgrades `keepsake_<id>`. |
 
-## 5. Glossary (one name per thing)
+### 5.2 Founder/Boss Signatures & Crucible Keepsakes (`CAST1_GEAR` 2, 7)
 
-| Canonical term | Meaning | Retired variants |
-| --- | --- | --- |
-| Act 1 / 2 / 3 | Campaign units; titles The Young Vanguard, The First Rupture, The Awakening Abyss | Phase 1-3, The Iron Vanguard, The Transhuman Rupture, The Blight of the Low Sleep, The Closed Four |
-| The Low Sleep | The titan's slumber and, by extension, the titan | (title "Emberwake: The Low Sleep") |
-| The Red Tithing | The recurring sacrifice of Unsealed youths of any age, children raised for it in the Lullaby Houses first; their remains become the Clerisy's marrow; the yearly rite is the one the folk know | - |
-| The Lullaby Houses | The Clerisy's foundling houses that raise tithe-children (planner refinement, 3.6) | - |
-| The Great Tithing | A Tithing of thousands, held once before at the Extinguishing (the Clerisy's founding) and again this year; known to the Clerisy's inner circle until 2.4 | - |
-| Lesser tithing | An out-of-season Tithing the Clerisy holds when the soft Doom Clock reaches 0 in Acts 1-2 | - |
-| Composure | The derived corruption resist (section 2.1) | - |
-| The Unsealed / the Spent | Under 25 / 25 and over (compliant through decades of draughts and tallow fumes) | The Caged Young, The Spent Generation (fine in prose), Docile Masses |
-| Sovereign Clerisy, Iron Inquisition, Castellan Watch, Tallow Guild, Fourth Kiln Syndicate, Severed Root, Awakening Chorus | Factions; the Watch is the Inquisition's city arm, the Syndicate the Guild's foundry arm | Hegemony, High Hegemony, Sub-Basalt Cults, Seventh Ward Watch, Castellan Guard |
-| Preservationist / Flesh-Broker | The two doctrines | The Purists, The Inoculated (as faction names) |
-| Cold Steel / Inoculated | The two skill branches | Martial path, Resonant path |
-| Strain brackets | Dormant, Acute Resonance, Flesh-Tension, Aberrant Edge, Rupture | Clear, Quiescence, Twitch, Tremor, Resonance, Rupture Verge, Rupt, CRISIS |
-| Calcification stages | Vein-Blackening, Calloused Chitin, Sensory Rot, The Shakes, Terminal Drift | Veins, Brittle, Gargoyle, Martyr, Death/Aberr, calcification "points" |
-| Scrap | Currency | Gold, Scrap Iron, black iron slag, Salvaged Slag, salvaged timber and charcoal |
-| Warded Tallow | Upkeep fuel | vials, candles, ledgers, High-Grade Warded Tallow |
-| Rock Salt | Stash material | Salt Rations, Rock-Salt Rations, Sanctified (Rock) Salt (the pouch item Sanctified Salt Sachet stays an item) |
-| Aberrant Organs | Harvested graft materials; Apex organs are Tier III | Harvested Aberrant Organs, Aberrant Marrow Organs |
-| The Sluice Undercroft | The hub | - |
-| Apothecary's Slab, Tinker's Hearth, Dry Hollows, Water-Lock Basin, Isolation Crypts | Hub facilities (the Basin is the central pool, dead-drop, launch point and guest quarters; the Crypts sit in the Dry Hollows) | Bram's Hearth/Forge, surgical rig, Water-Lock (& Siphon / Gate), Dead-Drop Basin, Central Basin, Quarantine Kiln Cell, Isolation Vaults, Quarantine Crypts |
-| Mission board | Tess's dead-drop board | - |
-| Doom Clock, Inquisition Alert | Campaign meters | Great Extinguishing (now the Extinguished failure screen) |
-| The Extinguishing / Extinguished | The event two centuries ago that put out the sun, moon and stars / the failure screen (an intended echo, kept) | the Great Extinguishing (as a name for the loss) |
-| Castellan Footman, Watch Crossbowman | The Castellan Watch's line soldier and crossbow unit | Castellan Warden (prologue), Watch Arbalestier (collided with the Arbalestier class) |
+- **Founder Signature Loadouts**: `kaelen` (`notched_billhook` `2H polearm` + `castellan_breastplate`); `vesper` (`curfew_bodkin` `dagger` + `soot_leathers`); `maren` (`bronze_censer` + `copied_psalter` `tome` + `embalmers_habit`); `hollis` (`winch_arbalest` `crossbow` + `poachers_brigandine`); `dunstan` (`penal_shackles` `fist` + `penal_foundry_apron`); `elyse` (`brass_vitriol_sprayer` `2H sprayer` + `tanners_rubbered_coat`). **Boss Arms**: `vanes_bill`, `quells_bone_saws`, `foundry_sledge`, `flensing_hooks`, `prelates_blade`.
+- **Crucible Keepsakes (`keepsake_<id>`, `ACC`, `value 0`, `~50%` founder trait; `Sec. 3.1` winch beats)**: `keepsake_kaelen` (**Kaelen's Gouged Sigil**), `keepsake_vesper` (**Vesper's Runner Whistle**), `keepsake_maren` (**Maren's Copyist Quill**), `keepsake_hollis` (**Hollis's Focusing Monocle**), `keepsake_dunstan` (**Dunstan's Shackle Link**), `keepsake_elyse` (**Elyse's Cracked Retort**).
 
-## 6. Open questions (do not fill with invented design)
+### 5.3 Ossuary Growths (Slab Retort Refinement), Hearth Salvage & Tactile Consumables (`[LOCKED]`, `PR5-35`)
 
-Every open question, with options, a recommendation, where it lives and who decides, is in
-[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) (stable ids Q-01..Q-91; the questions to decide first in its section 1, the
-planner picks to confirm in its section 2). The ones this file names: the bell-resonance contradiction
-between 3.3 and 3.4 (Q-09, no pick); Alert across act lines (Q-14); soft-clock expiry in Acts 1-2 and the Act 3 day
-budget (Q-16, Q-17); doctrine inputs and thresholds (Q-19); a fight for Inquisitor-General Ruthven (Q-26); the act of
-Bram's quest (Q-27); the Act 2 downed rule (Q-32); rescuing a captured founder in Act 2 (Q-33); keepsake numbers
-(Q-34); Living Martyrs' "+1 stage per battle" against the Calcification rule of 2.3 (Q-37); costs of the 8-bunk
-project (Q-38); the Rock Salt flush effect (Q-43); the armour scale after the balance review (Q-49); the stagger rescale (Q-50); post-crisis Strain (Q-62).
+- **Ossuary-Relic Growths (`Aberrant Organs` — half-petrified marrow growths refined in `Sabina`'s `M2` `Slab Retorts` into surgical bone-pins & marrow infusions; never wet butcher guts)**:
+  - **Black-Sinew Braid** (`Forearms` — calcified hydraulic marrow-cord from `Husks`/`Crawlers`).
+  - **Ossified Bellows** (`Thoracic` — warm black-bone breath chamber from `Husks`/`Horrors`).
+  - **Vitriol Bezoar** (`caustic_gall_sac`, `Visceral` — acid-weeping marrow calculus from `Dredgers`/`Crawlers`).
+  - **Amber Tapetum** (`stalker_optic_nerve`, `Ocular/Sensory` — petrified amber-black lens from `Render-Beasts`).
+  - **Dreamer's Marrow Geode** (`titan_marrow_core`, `Tier III Apex` — humming crystalline marrow cluster from `Amalgam` / `Living Martyrs` / `Horrors`).
+- **Hearth & Bone-Wright Salvage (`material` stash rows — cleanly separated from biological Slab growths)**: **Brass Marrow Valve** (`inquisitor_marrow_valve` — `Quell`/Proctors -> Hearth/Slab pressure-siphon hardware), **Calcified Bone Shard** (`calcified_bone_shard` — `Husks`/`M3` mill -> `Berek` & `Skerrit` quarrels/cestuses), **Render-Beast Tendon** (`render_beast_tendon` — `Render-Beasts` -> Hearth arbalest winches), **Rock Salt** (Slab flushes & bribes), **Fine / Themed Salvage** (Hearth item breakdown).
+- **Tactile Soot-Gothic Pouch Consumables (`POUCH_MAX = 3`; generic `con_heal_potion`/`con_focus_elixir`/`con_fire_bomb` are `ashlands`-only)**: **Tallow-Wax Stitch Pack** (`sulfur_poultice`, Snap `+60` HP + bleed/poison seal), **Brimstone Tallow Salve** (`brimstone_draught`, Snap `empower`), **Pitch Censer-Pot** (`pitch_fire_bomb`, `3x3` fire), **Magnesium Flare-Tube** (Snap `3x3` `20` poise break), plus Act 2 **Snapped Alum Inhaler** (Snap `-25` Strain; replaces salt-sachet overlap), **Lead-Sealed Communion Wafer** (Snap `-40` Strain, `-2` AP next round), **Raw Marrow Splinter** (Snap `+30` Strain), and **Quenched Cinder Salt** (`con_quenched_salt`, Snap `unmark` rubbed into calcifying wounds to halt Stage V Terminal Drift).
+- **Visual Geometry (`[LOCKED]`)**: `640x360` logical canvas, `STAGE1` `32x24` cells (`12x9`), `40 px` figures in `48x48` frames (`96x96` on `2x2` footprints: `Amalgam`, `Node 20` monstrosity, `Dreaming Core`), `Alt` outline, shake + `reduce_motion`; `16` master hues (`<= 1` dark/light step), world/skin ramps, faction rim-lights (`Sec. 2.1`).
 
-Decided on 2026-10-25 (user; rows in `games/emberwake/docs/decisions/lore.md`): the central truth is Option A (Q-01);
-an Act 1 Breach ends the run only for a player who ignores the meter (Q-13); Nemeth escapes the Crucible (Q-25);
-wounded = -20% max HP until a rest (Q-31); Composure is not a base stat (Q-47); the deck is bucketed slot kinds (Q-48); the
-slice and its dilemma follow the roadmap (Q-83, Q-84, Q-85). Also 2026-10-25: the Great Tithing's story, the
-Clerisy's founding and Nemeth's arc (section 3.6; Q-04, Q-12, Q-16, Q-25 follow-up); Composure returns as a derived
-stat, the corruption resist (Q-47a).
+## 6. Canonical Glossary & Lore->Asset Execution Checklist
+
+### 6.1 Canonical Terms vs. Retired Variants (Enforced by `audit-build` & `consistency-audit`)
+
+| Canonical Locked Term | Retired Variants (Never Use in New `sunk_ward` Data, UI, or Docs) |
+| --- | --- |
+| `Emberwake: A Scarlet Lullaby` / `Act 1 / 2 / 3` (*Young Vanguard*, *First Rupture*, *Awakening Abyss*) | Emberwake: The Low Sleep (as title), Phase 1-3, Iron Vanguard, Transhuman Rupture, Blight of the Low Sleep, Closed Four |
+| `The Low Sleep` (`Slumbering Root`) / `The Extinguishing` / `Extinguished` (fail screen) | Great Extinguishing (as fail screen or meter), Great Sunder Fissure (use `Mantle Fissure`) |
+| `Black-Iron Severance` (Ending A) / `The Living Conduit` (Ending B) / `Stone Martyrdom` (Ending C) | Sever the Clerisy, Drown the Leviathan, Red Martyrdom (4 bodies sating titan), Shroud-breaking sunlight ending |
+| `The Unsealed` (`under 25`) / `the Spent` (`25+`) / `Preservationist` / `Flesh-Broker` / `Cold Steel` / `Inoculated` (`Channel`) | Caged Young, Docile Masses, The Purists, The Inoculated (as faction), Martial path, Resonant path, Lucan lung-graft |
+| `Sovereign Clerisy`, `Iron Inquisition`, `Castellan Watch`, `Tallow Guild`, `Fourth Kiln Syndicate`, `Severed Root`, `Awakening Chorus` | Hegemony, High Hegemony, Sub-Basalt Cults, Seventh Ward Watch, Castellan Guard, Crucible Kiln (`Crucible` = Watchpost `06` only) |
+| `Chirurgeon Sabina` (`Sabina Kress`), `Berek "Cinder-Lung" Dorn`, `Talia Rusk`, `Ivo`, `Widow Varka`, `Skerrit, Bone-Wright`, `Agnes of Block 12`, `Herbalist Clemence` | Sister Aline / Aline Vance, Bram "Iron-Lung" Karr, Tess Morn / Tessia, Pip, Madame Sallow, "Nails" Skerrit, Old Mother Agnes, Sister Clemence, Bran, Torin |
+| `Kaelen`, `Vesper`, `Maren`, `Hollis`, `Dunstan`, `Elyse`, `Othemar`, `Ruthven`, `Nemeth`, `Lazar`, `Ulric`, `Quell`, `Vane` (`Capt. Vane` only), `Orlov`, `Grendel`, `Jessop`, `Ysolde`, `Malachi` | High Archon/Castellan/Sergeant/Foundry-Master Vane, Vaelen, Bastion, Malakar, Melchior, Kenneth, Morik, Orin, Theresa, Lyda, Lyra, Castellan Warden, Watch Arbalestier |
+| `Dreamer's Marrow Geode`, `Black-Sinew Braid`, `Ossified Bellows`, `Vitriol Bezoar`, `Amber Tapetum` / `Brass Marrow Valve` / `Tallow-Wax Stitch Pack`, `Snapped Alum Inhaler`, `Lead-Sealed Communion Wafer`, `Raw Marrow Splinter`, `Quenched Cinder Salt` | Caustic Gall-Sac, Stalker Optic Nerve (as display names), Sanctified Salt Sachet, Black-Bile Ampoule, Gold, Scrap Iron, Salvaged Slag, Salt Rations |
+
+### 6.2 Resolved Lore Ambiguities (`CL-01..07` — All `[LOCKED]` `2026-11-10`)
+
+- **`CL-01` (`[LOCKED]`)**: `Capt. Vane` (`25%` HP in `M1`) & `Guild-Master Orlov` (`20%` HP in `M4`) withdraw for Act 2 personal-quest kills; `Quell` (`M2`), `Grendel` (`M3`), `Jessop` (Act 2), `Lazar` (`2.4`), & `Ulric` (`3.2`) die.
+- **`CL-02` (`[LOCKED]`)**: `6` Act 2 dual-rituals (`kaelen` vs. `Vane` & debt ledgers; `vesper` vs. `Orlov` & Guild Counting-House; `maren` St. Lyra's vault; `hollis` `Wren` convoy & `Ruthven`; `dunstan`+`Berek` vs. `Jessop` & mortar floor; `elyse` sedative cisterns).
+- **`CL-03` (`[LOCKED]`)**: All `6` `keepsake_<id>` names (`Sec. 5.2`) & `M5` winch stay-behind beats (`Sec. 3.1`) locked.
+- **`CL-04` (`[LOCKED]`)**: Soft `0d` triggers **lesser tithing** (`14d`, `+10` Alert, claims `1` unrescued stake `Ivo`/`Ida` else `-2` `saved_youths`); `2.4` sets `max(days, 18)`; Act 3 hard clock floors at `min 12d`.
+- **`CL-05` (`[LOCKED]`)**: Act 2 curfew bells give Stage I+ `+10` start Strain until `2.5` Belltower; Act 3 Mantle Resonance gives `+15` start Strain + pulse (`3.3` Chorus halves).
+- **`CL-06` (`[LOCKED]`)**: Clerisy runs Lullaby Houses, `Lazar` renders, Guild breeds `Render-Beasts`, `Ruthven` = Act 2 Breach/`2.6` fallback boss, `Ysolde`'s Chorus sings to wake titan even if city falls (`Malachi` mediates on Flesh-Broker runs).
+- **`CL-07` (`[LOCKED]`)**: Operative ages static (`18-24`); `25+` rescues (`Ferrand` `40`, `Herbalist Clemence` `36`) stay bunk-free Basin guests; `Talia` shelters `1` class-matched visored/cowled `18-24` runaway at Act 2 start.
+
+### 6.3 Stage 2 Asset & Content Pipeline (`Lore Locked -> /art-ui-session & Build`)
+
+1. **Passes `L1..L4` Complete (`[LOCKED]` `2026-11-10`)**: World aesthetic, history, 6 factions, 6 Founders, Hub Cast, 11 Bosses, Neutrals, 6 Act 2 Recruit Cohorts, 3-tier Taint visuals, Ossuary Growths/Consumables, and Endings `A/B/C` are locked above.
+2. **Art/UI Queue (`ART_UI_REQUESTS.md` -> `/art-ui-session` + `fc.sh scenario shots` / `fc.sh sim`)**: `AI-01..03` (polearm rig, `gen_music.py`, story music) + **`AI-04`** (6 clean Day 1 Founder portraits & face sheets per `FOUNDER_PORTRAITS.md`), **`AI-05`** (`Chirurgeon Sabina` & `Talia Rusk` pushed Hub portraits + `Widow Varka`/`Ivo`; `bram.png` reused as `berek`), **`AI-06`** (7 Boss portraits: `Grendel`, `Jessop`, `Ruthven`, `Lazar`, `Ulric`, `Ysolde`, `Othemar`; keeping `Vane`, `Quell`, `Orlov`, `Nemeth` `1:1`).
+3. **Build Queue (`docs/READY.md` -> `aegis content`)**: `PR5-34` (`SUNKWARD-FIX1`) + **`PR5-35` (`LORE1-DATA`: sync `"Tess"` -> `"Talia"` in `meters.json`, Ossuary Growth & Tactile Consumable names in `items.json`)**, then `M2b` Act 1 missions, `PK2` implants/recipes/techniques, and `PK4..8` Acts 2-3 content.

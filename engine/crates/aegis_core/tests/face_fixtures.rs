@@ -74,5 +74,5 @@ fn t1_the_sidecar_the_tool_wrote_parses_clean() {
     let width = png_width(&root.join("portraits/heroes/good.png"));
     assert_eq!(face.size, width, "set takes size from the PNG's width");
     assert!(face_problems(&face, width).is_empty(), "{:?}", face_problems(&face, width));
-    assert!(!face.eyes.is_empty() && !face.glow.is_empty() && !face.veins.is_empty() && !face.idle.is_empty(), "the fixture uses every anchor kind");
+    assert!(!face.eyes.is_empty() && !face.glow.is_empty() && !face.lines.is_empty() && !face.idle.is_empty(), "the fixture uses every anchor kind");
 }

@@ -773,6 +773,7 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
     // trigger's) and the `guard` status instance
     crate::trigger::end_guard(w, t);
     let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default(), stagger_queued };
+    res.note_event(crate::event::EventKind::Break { unit: t });
     res.log.push(break_line(w, t, &b));
     b
 }

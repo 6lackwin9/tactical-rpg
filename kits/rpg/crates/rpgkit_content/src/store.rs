@@ -28,8 +28,12 @@ pub use aegis_content::store::Outcome;
 fn content_storage(kind: &str, full: &Dict) -> Dict {
     use crate::check::unit::{GROWTH_PER_STAGE, WEARS_UNTRAINED};
     use rpgkit_data::TEMPLATE_FIELD;
+    // LAYER-DOWN-2: a field the schema marks `omit_default` is left out while it holds its default (as the world writer
+    // does), so rows written before it existed re-save byte for byte (units `dojo`, terrain `glyph`)
+    let omit_default: Vec<(String, Value)> = source::fields("content", kind).iter().map(json::dict).filter(|f| json::b(f, "omit_default", false)).map(|f| (json::s(f, "key"), json::get(f, "default").clone())).collect();
     to_storage(source::schema(), "content", kind, full, |key, v| {
-        (key == "system" && !json::to_bool(v))
+        omit_default.iter().any(|(k, d)| k == key && v == d)
+            || (key == "system" && !json::to_bool(v))
             || (key == "origin" && gstr(v) == "system")
             || (key == WEARS_UNTRAINED && json::strings(v).is_empty())
             || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)
@@ -73,7 +77,7 @@ fn ruleset_storage(full: &Dict) -> Dict {
 
 /// PK1-S2a (PK1 4.1): the ruleset row fields of the rule `channel`, stored only when set off their defaults.
 /// PR5-20 adds `channel_ai_edge` (FB-179).
-pub const RULESET_CHANNEL_FIELDS: [&str; 6] = ["channel_meter", "channel_power", "channel_cost", "marrow_actives", "channel_rest", "channel_ai_edge"];
+pub const RULESET_CHANNEL_FIELDS: [&str; 6] = ["channel_meter", "channel_power", "channel_cost", "channeled_actives", "channel_rest", "channel_ai_edge"];
 
 /// P1.2-S1 (FB-51): a terrain row stores `walkable` and `stops_forced_move` only when it gives them (`entry`, the
 /// stored shape); a row without them reads their fallbacks (`source::TERRAIN_FALLBACK_KEYS`), so it re-saves byte for
@@ -84,13 +88,15 @@ fn terrain_storage(entry: &Dict, full: &Dict) -> Dict {
     row
 }
 
-/// U3.2-S4: a family row stores its Level-2 bonus and Level-3 passive as no key while they are empty (the defaults), so a
-/// row written before they existed re-saves byte for byte.
+/// U3.2-S4: a family row stores its Level-2 bonus and Level-3 passive (PR5-28: and its `range_band`; PK2-S4: its
+/// `techniques` and `keystone`) as no key while they are empty (the defaults), so a row written before they existed
+/// re-saves byte for byte.
 fn family_storage(full: &Dict) -> Dict {
     let mut row = content_storage("item_families", full);
     row.retain(|k, v| match k.as_str() {
-        "level2_bonus" => v.as_object().is_some_and(|m| !m.is_empty()),
-        "level3_passive" => !gstr(v).is_empty(),
+        "level2_bonus" | "range_band" => v.as_object().is_some_and(|m| !m.is_empty()),
+        "level3_passive" | "keystone" => !gstr(v).is_empty(),
+        "techniques" => v.as_array().is_some_and(|a| !a.is_empty()),
         _ => true,
     });
     row
@@ -183,10 +189,12 @@ pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
 }
 
 /// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule,
-/// U3.2-S2 the family's engine rules, U3.2-S4 its Level-2 bonus and Level-3 passive).
-const ITEM_DERIVED: [&str; 16] = [
+/// U3.2-S2 the family's engine rules, U3.2-S4 its Level-2 bonus and Level-3 passive, PR5-28 its `range_band.max`, PK2-S4
+/// its techniques and keystone, PK2-S5a its weapon durability).
+const ITEM_DERIVED: [&str; 20] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE,
-    rpgkit_data::ITEM_FAMILY_RULES, rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3,
+    rpgkit_data::ITEM_FAMILY_RULES, rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX,
+    rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES, rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE, rpgkit_data::ITEM_FAMILY_DURABILITY,
 ];
 
 /// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections (one
@@ -272,13 +280,27 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             Ok(row.into_iter().filter(|(k, v)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand) || unset_shape(k, v))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),
-        k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
+        k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &canonical_cue(kind, content(kind, entry)))),
         k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
         "terrain" => Ok(terrain_storage(entry, &content(kind, entry))),
         "classes" => Ok(class_storage(&content(kind, entry))),
         k if k == rpgkit_data::UNIT_METERS_KIND => Ok(meter_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
+}
+
+/// FB-206 (2b): a portrait cue row whose effect is an old overlay name (`veins`, `eye_glow`, `ash`, `smoke`) with its
+/// canonical name (`aegis_core::assets::canonical_primitive`), so the schema's options take it and the writer stores the
+/// new name; any other row (or kind) unchanged.
+fn canonical_cue(kind: &str, mut row: Dict) -> Dict {
+    if kind == source::PORTRAIT_KIND {
+        let effect = sget(&row, "effect", "");
+        let canonical = aegis_core::assets::canonical_primitive(&effect);
+        if canonical != effect {
+            row.insert("effect".into(), Value::String(canonical.to_string()));
+        }
+    }
+    row
 }
 
 // ---- Files -------------------------------------------------------------------------------------------------------
@@ -303,9 +325,10 @@ pub const GAME_KINDS: [GameKind; 3] = [
 
 /// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1), the
 /// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the expression effects (PORTRAITFX1-EX), the combat hook
-/// kinds (HOOKS1), the terms (TERMS1), the grounds (REGIONGROUND1), the role templates (R4-1), game-data kinds).
-const BASE_KINDS: [&str; 21] = [
-    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, source::GROUNDS_KIND, source::UNIT_TEMPLATES_KIND, "maps", "quests", "services",
+/// kinds (HOOKS1), the terms (TERMS1), the grounds (REGIONGROUND1), the role templates (R4-1), the unit tracks
+/// (PK2-S1), the Dojo presets (PK1-KITFIX), the body slots (PK2-S2), the recipes (PK2-S3), game-data kinds).
+const BASE_KINDS: [&str; 25] = [
+    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, source::GROUNDS_KIND, source::UNIT_TEMPLATES_KIND, source::UNIT_TRACKS_KIND, source::DOJO_PRESETS_KIND, source::BODY_SLOTS_KIND, source::RECIPES_KIND, "maps", "quests", "services",
 ];
 
 fn game_kind(kind: &str) -> Option<GameKind> {
@@ -456,12 +479,17 @@ impl Hooks for RpgContent {
     fn validate(&self, world: Option<&str>, kind: &str, entry: &Dict) -> Result<Dict, Vec<String>> {
         let section = if world.is_some() { "world" } else { "content" };
         let game = world.is_none() && game_kind(kind).is_some();
-        let full = if world.is_some() { normalize(fields("world", kind), entry, true) } else if game { game_storage(kind, entry) } else { content(kind, entry) };
+        let full = if world.is_some() { normalize(fields("world", kind), entry, true) } else if game { game_storage(kind, entry) } else { canonical_cue(kind, content(kind, entry)) };
         if world.is_none() && kind == source::PORTRAIT_KIND && sget(&full, "trigger", "") == rpgkit_data::PORTRAIT_METER_TRIGGER {
             // PORTRAITFX1 5.1: the reserved trigger is refused with its reason, not as an unknown option
             return Err(vec![crate::check::portrait::METER_MESSAGE.into()]);
         }
-        let errors = field_errors(source::schema(), if game { "none" } else { section }, kind, &full);
+        let mut errors = field_errors(source::schema(), if game { "none" } else { section }, kind, &full);
+        if world.is_none() && kind == "skills" {
+            // PR5-26b (FB-198 B9 Option B): the writer keeps only rank fields in a rank modifier, so another key is
+            // refused rather than dropped
+            errors.extend(source::rank_key_errors(entry));
+        }
         if errors.is_empty() {
             Ok(full)
         } else {
@@ -495,16 +523,16 @@ impl Hooks for RpgContent {
 
     /// E2.2-S2 (FB-110 Option A): the game-wide purse caps are kit keys of the game manifest.
     fn manifest_keys(&self) -> &'static [&'static str] {
-        &source::PurseCaps::KEYS
+        &source::MANIFEST_KEYS
     }
 
     fn manifest_problems(&self, manifest: &Dict) -> Vec<String> {
-        source::PurseCaps::problems(manifest)
+        source::manifest_problems(manifest)
     }
 }
 
 /// E2.2-S2 (FB-110): merges `patch` into the game manifest at `path` (`aegis content manifest`): the engine keys and the
-/// kit's (`PurseCaps::KEYS`), checked by both.
+/// kit's (`source::MANIFEST_KEYS`: the purse caps, STORYMUSIC1's `music_keys`, PK2-S4's `durability`), checked by both.
 pub fn set_manifest(path: &Path, patch: &Dict) -> Result<aegis_content::manifest::Manifest, Vec<String>> {
     aegis_content::store::set_manifest(&RpgContent, path, patch)
 }
@@ -531,6 +559,7 @@ fn view_of(data_dir: &Path, src: &source::Source) -> crate::check::View {
     view.terrain_file = vfs::is_file(data_dir.join("catalog/terrain.json"));
     view.load_errors = src.errors.clone();
     view.purse = src.purse;
+    view.music_keys = src.music_keys.clone();
     view
 }
 

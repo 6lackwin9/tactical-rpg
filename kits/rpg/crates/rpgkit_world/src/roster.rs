@@ -9,12 +9,12 @@
 
 use crate::data::Data;
 use crate::progression;
-use crate::state::{Departed, GameState, PartyState, RosterCaps, UnitState};
+use crate::state::{Departed, GameState, PartyState, RosterCaps, UnitState, LOADOUT_SLOTS};
 use aegis_core::json;
 use rpgkit_battle::encounter::{PartyFate, STAY_THEN};
 use rpgkit_battle::session::Session;
 use rpgkit_battle::world::AiProfile;
-use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
+use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, NO_ITEM, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
 use rpgkit_rules::Unit;
 use serde_json::Value;
 
@@ -69,6 +69,11 @@ pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Optio
     // AUDIT-04: `build_as` laid the character's default intent over the base unit's
     let default_intent = built.def.default_intent.clone();
     let mut unit = built.unit;
+    // PK2-S5b: wear is tracked only while weapon instances are active (the campaign act reached, `weapons::active`);
+    // the build reads the rule and the manifest key but not the act
+    if !unit.wear.is_empty() && !crate::weapons::active(d, gs) {
+        unit.wear.clear();
+    }
     let max = unit.max_hp as i64;
     let mut hp = progression::start_hp(max, m.hp_lost);
     if m.has_condition(WOUNDED) {
@@ -95,17 +100,30 @@ pub struct HeroEnd {
     /// ENCOUNTER2 S3's fate (None for a unit `party_fates` does not list).
     pub fate: Option<PartyFate>,
     /// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.5): the marks the battle recorded on it (mark id, value), in order
-    /// (`rpgkit_battle::mark`); the settle shows them (`battle::apply`'s `marks`), PK2 consumes them.
+    /// (`rpgkit_battle::mark`); the settle shows them (`battle::apply`'s `marks`) and PK2-S1 moves the member's unit
+    /// tracks by them (`settle_tracks`).
     pub marks: Vec<(String, i64)>,
+    /// PK2-S1 (FB-174 (5)): the unit track whose departure stage turned the member on everyone, when it still fights
+    /// everyone at the battle end (`rpgkit_battle::mark::hostile_at_end`; "" = it does not): the settle departs it.
+    pub hostile: String,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the main-hand weapon families it attacked with this battle
+    /// (`rpgkit_battle::world::World::weapon_attacks`): the settle's mastery use (`mastery::settle`).
+    pub attacked: Vec<String>,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the durability the battle spent from the weapon instances it wields
+    /// (slot save key, amount; slot order, spent slots only; `rpgkit_battle::wear::spent`): the settle takes it from the
+    /// wielded instances, each held at 0 or more (`weapons::wear`).
+    pub worn: Vec<(String, i64)>,
 }
 
 /// The ends of session `s`'s fielded members: `members` (member id, unloaded pouch ids) in the order they were fielded,
-/// paired with the session's allies in order (the heroes come first; guests follow and have no member).
+/// paired with the battle-start party side in order (the heroes come first; guests follow and have no member). PK2-S1
+/// (FB-174 (5)): the start side, not today's allies, so a hero a unit track turned on everyone (no longer an ally)
+/// keeps its member.
 pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd> {
     let fates = s.party_fates();
     members
         .iter()
-        .zip(&s.w.allies)
+        .zip(s.w.marks.start_party())
         .map(|((member, unloaded), &a)| {
             let u = &s.w.units[a];
             HeroEnd {
@@ -117,6 +135,9 @@ pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd>
                 unloaded: unloaded.clone(),
                 fate: fates.iter().find(|(c, _)| *c == a).map(|(_, f)| *f),
                 marks: s.w.marks.of(a).into_iter().map(|(m, v)| (m, i64::from(v))).collect(),
+                hostile: rpgkit_battle::mark::hostile_at_end(&s.w, a),
+                attacked: s.w.weapon_attacks.get(&a).cloned().unwrap_or_default(),
+                worn: rpgkit_battle::wear::spent(&s.w, a),
             }
         })
         .collect()
@@ -164,6 +185,117 @@ pub struct Settled {
     pub departed: Vec<(String, String)>,
     /// A1.2-K3: the Results lines of the pouch slots auto-fill left short (`auto_fill`).
     pub stash_short: Vec<String>,
+    /// PK2-S1: the unit tracks the battle's marks moved (`settle_tracks`), in order.
+    pub tracks: Vec<TrackMove>,
+    /// PK2-S1: the worn items a member grant `forbid_hands` sent to the stash (member, item id).
+    pub stashed: Vec<(String, String)>,
+    /// PR5-26 review F2: the slots left empty (`NO_ITEM`) because the grant refuses their default (member, slot).
+    pub cleared: Vec<(String, String)>,
+    /// PK2-S2: the items fallen members left in the stash (member, item id; `fallen_remains`).
+    pub remains: Vec<(String, String)>,
+    /// PK2-S4: the weapon mastery the members who came home gained by use (`mastery::settle`), in order.
+    pub mastery: Vec<crate::mastery::Gain>,
+}
+
+/// PK2-S1: a member's unit track stage moved at the settle.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrackMove {
+    pub member: String,
+    pub track: String,
+    pub from: i64,
+    pub to: i64,
+}
+
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2, FB-174 (5)): the unit tracks of fielded member `e` at the settle (before
+/// `then` and the rule row): its battle marks left after any `unmark` move each track whose `mark` they are (summed,
+/// held within the row; `out.tracks`). Returns the departure it settles with (life, cause): a track at a stage with a
+/// departure (catalog order; Stage V), else a hero still hostile at the battle end (`HeroEnd::hostile`) with its
+/// track's departure. None for anyone else or a member no longer in the party.
+fn settle_tracks(d: &Data, gs: &mut GameState, e: &HeroEnd, out: &mut Settled) -> Option<(String, String)> {
+    let m = gs.party.member_mut(&e.member)?;
+    for t in d.cat.unit_tracks.values().filter(|t| !t.mark.is_empty()) {
+        let sum: i64 = e.marks.iter().filter(|(id, _)| *id == t.mark).map(|(_, v)| *v).sum();
+        if sum == 0 {
+            continue;
+        }
+        let from = m.track_stage(&t.id);
+        let to = i64::from(t.clamp(from + sum));
+        if to == from {
+            continue;
+        }
+        if to == 0 {
+            m.tracks.shift_remove(&t.id);
+        } else {
+            m.tracks.insert(t.id.clone(), to);
+        }
+        out.tracks.push(TrackMove { member: e.member.clone(), track: t.id.clone(), from, to });
+    }
+    let at_departure = d.cat.unit_tracks.values().find(|t| !t.departure_at(t.clamp(m.track_stage(&t.id))).is_empty());
+    if let Some(t) = at_departure {
+        return Some((t.departure_at(t.clamp(m.track_stage(&t.id))).to_string(), t.cause.clone()));
+    }
+    let t = d.cat.unit_tracks.get(&e.hostile)?;
+    Some((t.departure_at(t.top()).to_string(), t.cause.clone()))
+}
+
+/// PK2-S1: the worn items member `id`'s member grant `forbid_hands` refuses go to the stash (a stage reached in the
+/// battle; PK2 9 default 5). Returns the item ids. PR5-26 (audit B2): a slot whose default (its base unit's or class's
+/// item, `UnitState::forbids_default`) the grant refuses too holds `NO_ITEM` after, so the build leaves it empty instead
+/// of equipping the default again (the default is no stash item: nothing goes to the stash for it). Returns the stashed
+/// item ids and (review F2) the slots so emptied.
+fn stash_forbidden(d: &Data, gs: &mut GameState, id: &str) -> (Vec<String>, Vec<String>) {
+    let world = gs.world_id.clone();
+    let Some(m) = gs.party.member(id) else { return (Vec::new(), Vec::new()) };
+    let hands = progression::forbid_hands(d, m);
+    if hands == 0 {
+        return (Vec::new(), Vec::new());
+    }
+    let forbidden = |item: &str| d.cat.items.get(item).is_some_and(|i| rpgkit_rules::unit::forbids_hands(hands, i));
+    let mut moves: Vec<(String, Option<String>, bool)> = Vec::new();
+    for slot in LOADOUT_SLOTS {
+        let stash = match m.equipment.get(slot) {
+            Some(item) if item == NO_ITEM || !forbidden(item) => continue,
+            Some(item) => Some(item.clone()),
+            None => None,
+        };
+        let empty = m.forbids_default(d, &world, slot);
+        if stash.is_some() || empty {
+            moves.push((slot.to_string(), stash, empty));
+        }
+    }
+    let (mut items, mut cleared) = (Vec::new(), Vec::new());
+    for (slot, stash, empty) in moves {
+        let Some(m) = gs.party.member_mut(id) else { break };
+        m.equipment.shift_remove(&slot);
+        if empty {
+            m.equipment.insert(slot.clone(), NO_ITEM.to_string());
+            cleared.push(slot);
+        }
+        if let Some(item) = stash {
+            gs.party.add_to_stash(&item, 1);
+            items.push(item);
+        }
+    }
+    (items, cleared)
+}
+
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "Losing a grafted unit"): a member who just departed `dead` while the party
+/// holds the field (`FightEnd::field_held`) leaves its body's item in the stash: its character's `remains`, else its
+/// class's (`ClassDef::remains`; "" = none, an unknown item = none); `out.remains` names it. A captured member, a
+/// unit track's departure (`lost`) and a fight the party does not hold leave nothing; its installed grafts are lost with
+/// it (the body is no gear: `depart` stashes none).
+fn fallen_remains(d: &Data, gs: &mut GameState, f: &FightEnd, member: &str, life: &str, out: &mut Settled) {
+    if life != DEAD || !f.field_held() {
+        return;
+    }
+    let Some(record) = gs.party.departed.iter().rev().find(|r| r.member.id == member) else { return };
+    let own = json::s(d.resolve(&gs.world_id, "characters", &record.member.lore_ref), rpgkit_data::REMAINS_KEY);
+    let item = if own.is_empty() { d.cat.classes.get(&record.member.class_id(d)).map(|c| c.remains.clone()).unwrap_or_default() } else { own };
+    if item.is_empty() || !d.has("items", &item) {
+        return;
+    }
+    gs.party.add_to_stash(&item, 1);
+    out.remains.push((member.to_string(), item));
 }
 
 /// ENCOUNTER2 W3, 3.2's first row: the life `then` gives a stayer or stander (`capture`: captured, `kill`: dead) and its
@@ -291,14 +423,24 @@ pub fn auto_fill_at_start(d: &Data, gs: &mut GameState, world: &str) -> Vec<Stri
 /// is HEAL1's `hp_after` (a loss heals, as the wake does) written back against the unwounded max (W2). Before the table
 /// (L5's `then`, ENCOUNTER2 W3, every world, with or without a row): with `stay_behind.then` `capture` or `kill` each
 /// stayer or stander departs captured or dead (cause `stayed` or `stood`, gear and pouch to the stash, the keepsake).
+/// PK2-S1: first of all each member's unit tracks (`settle_tracks`: the marks move the stages; a departure stage or a
+/// hero still hostile at the end departs it, `lost` for the track's cause), then the worn items its `forbid_hands`
+/// refuses go to the stash. PK2-S5b: before everything the battle's weapon wear comes off the wielded instances
+/// (`HeroEnd::worn`, `weapons::wear`).
 /// `battle::apply` calls it first, so every runner's `after_fight` settles the party before the rewards and
 /// CAMPAIGN1's battle tick and its retreat (L5: the retreat then moves a cell that already carries the loss).
 pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Settled {
+    // PK2-S5b: first the wear the battle spent comes off the wielded instances (before a departure or `forbid_hands`
+    // moves them to the stash)
+    crate::weapons::wear(gs, ends);
     let mut out = settle_fates(d, gs, f, ends);
     // A1.2-K3 (INTENT2-K3): after every departure, the members who came home top their pouches up from the stash (the
     // fight's world), so a departing member takes nothing and only survivors are named short
     let home: Vec<String> = ends.iter().map(|e| e.member.clone()).filter(|m| !out.departed.iter().any(|(x, _)| x == m) && gs.party.member(m).is_some()).collect();
     out.stash_short = auto_fill(d, gs, &f.world, &home);
+    // PK2-S4: the members who came home gain mastery in the families they attacked with (from `durability.from_act`)
+    let came_home: Vec<&HeroEnd> = ends.iter().filter(|e| home.contains(&e.member)).collect();
+    out.mastery = crate::mastery::settle(d, gs, &came_home);
     out
 }
 
@@ -308,13 +450,26 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
     for e in ends {
         if let Some(m) = gs.party.member_mut(&e.member) {
             m.pouch = e.pouch.iter().chain(&e.unloaded).cloned().collect();
+            // PK2-S2 (FB-167 Q6): the floor offset held for this battle only
+            m.floor_offset = 0;
         }
     }
     let mut home: Vec<&HeroEnd> = Vec::new();
     for e in ends {
+        // PK2-S1: the unit tracks first: a departure stage (or a hero still hostile at the end) departs the member
+        if let Some((life, cause)) = settle_tracks(d, gs, e, &mut out) {
+            if depart(d, gs, &e.member, &life, &cause, &f.encounter).is_ok() {
+                out.departed.push((e.member.clone(), life));
+                continue;
+            }
+        }
+        let (items, cleared) = stash_forbidden(d, gs, &e.member);
+        out.stashed.extend(items.into_iter().map(|item| (e.member.clone(), item)));
+        out.cleared.extend(cleared.into_iter().map(|slot| (e.member.clone(), slot)));
         if let Some((life, cause)) = then_departs(f, e) {
             if depart(d, gs, &e.member, life, cause, &f.encounter).is_ok() {
                 out.departed.push((e.member.clone(), life.to_string()));
+                fallen_remains(d, gs, f, &e.member, life, &mut out);
                 continue;
             }
         }
@@ -340,6 +495,7 @@ fn settle_fates(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) ->
         let (value, cause) = settle_value(&row, f, e);
         if value == CAPTURED || value == DEAD {
             if depart(d, gs, &e.member, &value, cause, &f.encounter).is_ok() {
+                fallen_remains(d, gs, f, &e.member, &value, &mut out);
                 out.departed.push((e.member.clone(), value));
             }
             continue;
@@ -380,12 +536,15 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
                 unloaded: Vec::new(),
                 fate: Some(if hp > 0 { PartyFate::Standing } else { PartyFate::Downed }),
                 marks: Vec::new(),
+                hostile: String::new(),
+                attacked: Vec::new(),
+                worn: Vec::new(),
             })
         })
         .collect()
 }
 
-/// L2, RQ2 (a): member `id` leaves the party with `life` (`DEPART_LIVES`) for `cause` (`DEPART_CAUSES`) in encounter
+/// L2, RQ2 (a): member `id` leaves the party with `life` (`DEPART_LIVES`) for `cause` (`Catalog::depart_causes`) in encounter
 /// `encounter` ("" outside a battle): out of `members` and `active_ids` (its bunk is free: bunk use counts members),
 /// its worn and carried gear and its pouch to the stash (its state keeps them as its record), recorded in
 /// `party.departed` with the day (`gs.time`); then KS1, KS2: when the act's keepsake lives hold `life` and its
@@ -395,15 +554,18 @@ pub fn depart(d: &Data, gs: &mut GameState, id: &str, life: &str, cause: &str, e
     if !DEPART_LIVES.contains(&life) {
         return Err(format!("Unknown life '{life}' (known: {}).", DEPART_LIVES.join(", ")));
     }
-    if !DEPART_CAUSES.contains(&cause) {
-        return Err(format!("Unknown cause '{cause}' (known: {}).", DEPART_CAUSES.join(", ")));
+    if !d.cat.depart_cause_ok(cause) {
+        return Err(format!("Unknown cause '{cause}' (known: {}).", d.cat.depart_causes().join(", ")));
     }
     let Some(at) = gs.party.members.iter().position(|m| m.id == id) else {
         return Err(format!("'{id}' is not a party member."));
     };
     let lives = manifest(d, &gs.world_id).keepsake_lives(act(gs)).to_vec();
-    let member = gs.party.members.remove(at);
+    let mut member = gs.party.members.remove(at);
     gs.party.active_ids.retain(|a| a != id);
+    // PK2-S5a: its weapon instances go to the stash with its gear (the record keeps none)
+    let held: Vec<crate::weapons::Weapon> = std::mem::take(&mut member.weapons).into_values().collect();
+    gs.party.stash_weapons.extend(held);
     let gear: Vec<String> = member.equipment.values().chain(&member.carried).chain(&member.pouch).cloned().collect();
     for item in gear {
         if d.has("items", &item) {
@@ -429,6 +591,27 @@ pub fn on_rest(party: &mut PartyState) {
     for m in party.members.iter_mut() {
         m.conditions.retain(|c| c != WOUNDED);
     }
+}
+
+/// The squad's active size (party_model.gd toggle; PR5-31 moved it from the game's party screen with no rule change):
+/// member `id` joins or leaves the active members. An empty active list (every member up to `max_active` fights) is
+/// first written out as those members; the last active member stays, and the list holds at most `max_active`. Err: why
+/// not (the written-out list is kept).
+pub fn toggle_active(party: &mut PartyState, id: &str) -> Result<(), String> {
+    if party.active_ids.is_empty() {
+        party.active_ids = party.members.iter().take(party.max_active as usize).map(|m| m.id.clone()).collect();
+    }
+    if let Some(i) = party.active_ids.iter().position(|x| *x == id) {
+        if party.active_ids.len() <= 1 {
+            return Err("Keep at least one active member.".into());
+        }
+        party.active_ids.remove(i);
+    } else if party.active_ids.len() as i64 >= party.max_active {
+        return Err(format!("The active party holds at most {}.", party.max_active));
+    } else {
+        party.active_ids.push(id.to_string());
+    }
+    Ok(())
 }
 
 // ---- bunks, joining, the fight minimum, read keys (slice 4) ----

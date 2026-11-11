@@ -69,7 +69,7 @@ pub trait Game {
 }
 
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
-aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
+aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
 aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
@@ -306,7 +306,7 @@ fn link(raw: &[String]) -> Result<()> {
 /// `aegis replay <recording.json>`: replays a playtest recording's sessions on fresh command hosts (PLAYTEST1 on the
 /// engine). Lines start with `§`. Exit 0 when every checkpoint matches (stale content only warns), 1 on a divergence or
 /// a broken request, 2 when the recording does not load.
-///   battle=K            only session K (default every one)
+///   session=K           only session K (default every one; `battle=K` is its old name, LAYER-ENG-KEYS)
 ///   until=N             stop after N requests (what a take-over replays before the player goes on)
 ///   json                one JSON report instead of the lines
 ///   variant=<file>      {"at", "remove"?, "requests": [...], "then"?: "stop" | "recorded"}: run the session with
@@ -316,6 +316,16 @@ fn link(raw: &[String]) -> Result<()> {
 ///   seeds=a..b | a,b    re-run the recorded requests under each seed (at most 200; seed_key=seed names the starting
 ///                       request's key); a failed request ends the run as broken@<index>, or with fallback=<json> sends
 ///                       that request instead; prints each result and the counts
+/// `aegis replay`'s `session=K`, or its old name `battle=K` (LAYER-ENG-KEYS); both at once is refused.
+pub fn replay_session_arg(args: &Args) -> Result<Option<usize>> {
+    let raw = match (args.keys.get("session"), args.keys.get("battle")) {
+        (Some(_), Some(_)) => bail!("session=K or its old name battle=K, not both"),
+        (Some(k), None) | (None, Some(k)) => Some(k),
+        (None, None) => None,
+    };
+    raw.map(|k| k.parse()).transpose().context("session=K")
+}
+
 fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
     use aegis_host::playtest::{self, Recording, Variant, Verdict};
     let path = PathBuf::from(args.pos(1).context("usage: aegis replay <recording.json>")?);
@@ -328,10 +338,10 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
     };
     let changes = game.data_dir(args).map(|d| aegis_content::fingerprint::changes(&rec.content, &aegis_content::fingerprint::of(&d))).unwrap_or(Value::Null);
     let changed: Vec<String> = ["added", "removed", "changed"].iter().flat_map(|k| changes[*k].as_array().cloned().unwrap_or_default().into_iter().map(move |p| format!("{k} {}", p.as_str().unwrap_or("")))).collect();
-    let only: Option<usize> = args.keys.get("battle").map(|b| b.parse()).transpose().context("battle=K")?;
-    let picked: Vec<(usize, &playtest::Session)> = rec.battles.iter().enumerate().filter(|(i, _)| only.is_none_or(|k| k == *i)).collect();
+    let only: Option<usize> = replay_session_arg(args)?;
+    let picked: Vec<(usize, &playtest::Session)> = rec.sessions.iter().enumerate().filter(|(i, _)| only.is_none_or(|k| k == *i)).collect();
     if picked.is_empty() {
-        eprintln!("§ load error: the recording has no battle {}", only.map(|k| k.to_string()).unwrap_or_default());
+        eprintln!("§ load error: the recording has no session {}", only.map(|k| k.to_string()).unwrap_or_default());
         std::process::exit(2);
     }
     let json_out = args.flag("json");
@@ -346,7 +356,7 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
             let more = if changed.len() > 8 { format!(" and {} more", changed.len() - 8) } else { String::new() };
             format!("stale: {}{more}", changed[..changed.len().min(8)].join(", "))
         };
-        println!("§ recording {} ({} battles, {} notes), content {content}", rec.id, rec.battles.len(), rec.notes.len());
+        println!("§ recording {} ({} sessions, {} notes), content {content}", rec.id, rec.sessions.len(), rec.notes.len());
     }
     if args.flag("trail-report") {
         let report = aegis_host::trail::build(&rec.trail, rec.trail_dropped, &rec.notes);
@@ -364,7 +374,7 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
         bail!("until= applies to a plain replay, not to seeds= or variant=");
     }
     if args.keys.contains_key("variant") && picked.len() > 1 {
-        bail!("a variant patches one battle: name it with battle=K");
+        bail!("a variant patches one session: name it with session=K");
     }
     if let Some(seeds) = args.keys.get("seeds") {
         let seeds = playtest::parse_seeds(seeds, 200).map_err(anyhow::Error::msg)?;
@@ -379,13 +389,13 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
             for &seed in &seeds {
                 let result = playtest::sweep_one(game.driver(args)?.as_mut(), s, &key, seed, fallback.as_ref());
                 if !json_out {
-                    println!("§ battle {i} seed {seed}: {result}");
+                    println!("§ session {i} seed {seed}: {result}");
                 }
                 *counts.entry(result.clone()).or_default() += 1;
-                out.push(json!({"battle": i, "seed": seed, "result": result}));
+                out.push(json!({"session": i, "seed": seed, "result": result}));
             }
             if !json_out {
-                println!("§ battle {i} summary: {}", counts.iter().map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(", "));
+                println!("§ session {i} summary: {}", counts.iter().map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(", "));
             }
         }
         if json_out {
@@ -400,12 +410,12 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
             let run = playtest::run_variant(game.driver(args)?.as_mut(), s, &variant);
             if !json_out {
                 for d in &run.diffs {
-                    println!("§ battle {i} {d}");
+                    println!("§ session {i} {d}");
                 }
                 if let Some((at, e)) = &run.broken {
-                    println!("§ battle {i} broken at request {at}: {e}");
+                    println!("§ session {i} broken at request {at}: {e}");
                 }
-                println!("§ battle {i} end: recorded {} -> variant {}", s.result(), run.session.result());
+                println!("§ session {i} end: recorded {} -> variant {}", s.result(), run.session.result());
             }
             failed |= run.broken.is_some();
             runs.push((*i, run));
@@ -413,13 +423,13 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
         if let Some(dir) = args.keys.get("write") {
             let dir = PathBuf::from(dir);
             let mut out = Recording::new(&playtest::new_id(&dir, playtest::now_secs()), "agent", rec.content.clone());
-            out.parent = json!({"id": rec.id, "battle": runs.first().map(|(i, _)| *i).unwrap_or(0), "at": variant.at});
-            out.battles = runs.iter().map(|(_, r)| r.session.clone()).collect();
+            out.parent = json!({"id": rec.id, "session": runs.first().map(|(i, _)| *i).unwrap_or(0), "at": variant.at});
+            out.sessions = runs.iter().map(|(_, r)| r.session.clone()).collect();
             let p = out.save(&dir).map_err(anyhow::Error::msg)?;
             println!("§ wrote {}", p.display());
         }
         if json_out {
-            let rows: Vec<Value> = runs.iter().map(|(i, r)| json!({"battle": i, "diffs": r.diffs, "broken": r.broken.as_ref().map(|(a, e)| json!({"at": a, "error": e})), "end": r.session.end})).collect();
+            let rows: Vec<Value> = runs.iter().map(|(i, r)| json!({"session": i, "diffs": r.diffs, "broken": r.broken.as_ref().map(|(a, e)| json!({"at": a, "error": e})), "end": r.session.end})).collect();
             println!("{}", json!({"recording": rec.id, "stale": changes, "variant": rows}));
         }
         if failed {
@@ -443,20 +453,20 @@ fn replay<G: Game>(game: &G, args: &Args) -> Result<()> {
         if !json_out {
             for c in &checks {
                 match c["verdict"].as_str() {
-                    Some("diverge") => println!("§ battle {i} at {}: diverge {} {} -> {}", c["at"], c["path"].as_str().unwrap_or(""), c["recorded"], c["replayed"]),
-                    other => println!("§ battle {i} at {}: {}", c["at"], other.unwrap_or("")),
+                    Some("diverge") => println!("§ session {i} at {}: diverge {} {} -> {}", c["at"], c["path"].as_str().unwrap_or(""), c["recorded"], c["replayed"]),
+                    other => println!("§ session {i} at {}: {}", c["at"], other.unwrap_or("")),
                 }
             }
             if let Some((at, e)) = &report.broken {
-                println!("§ battle {i} broken at request {at}: {e}");
+                println!("§ session {i} broken at request {at}: {e}");
             }
-            println!("§ battle {i}: {} ({} requests, recorded end {})", if report.matched() { "match" } else { "differs" }, report.sent, s.result());
+            println!("§ session {i}: {} ({} requests, recorded end {})", if report.matched() { "match" } else { "differs" }, report.sent, s.result());
         }
         failed |= !report.matched();
-        rows.push(json!({"battle": i, "match": report.matched(), "sent": report.sent, "checks": checks, "broken": report.broken.as_ref().map(|(a, e)| json!({"at": a, "error": e})), "end": s.end}));
+        rows.push(json!({"session": i, "match": report.matched(), "sent": report.sent, "checks": checks, "broken": report.broken.as_ref().map(|(a, e)| json!({"at": a, "error": e})), "end": s.end}));
     }
     if json_out {
-        println!("{}", json!({"recording": rec.id, "stale": changes, "battles": rows}));
+        println!("{}", json!({"recording": rec.id, "stale": changes, "sessions": rows}));
     }
     if failed {
         std::process::exit(1);

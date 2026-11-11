@@ -427,6 +427,13 @@ pub struct Results {
     stash_short: Vec<String>,
     /// PK1-S1 (`battle::apply`'s `marks`): the marks the battle recorded on members (member, mark, value).
     marks: Vec<(String, String, i64)>,
+    /// PR5-26 (audit B8; PK2-S1 `battle::apply`'s `tracks` and `stashed`): the unit tracks the marks moved (member,
+    /// track, from, to) and the worn items a member grant sent to the stash (member, item).
+    tracks: Vec<(String, String, i64, i64)>,
+    stashed: Vec<(String, String)>,
+    /// PR5-26 review F2 (`battle::apply`'s `cleared`): the slots left empty because their default is refused (member,
+    /// slot).
+    cleared: Vec<(String, String)>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -482,6 +489,35 @@ pub fn mark_lines(d: &emberwake_world::Data, gs: &GameState, marks: &[(String, S
             format!("{name} is marked: {}.", list.join(", "))
         })
         .collect()
+}
+
+/// PR5-26 (audit B8; PK2-S1): the settle's lines: each track move ("Mara's Track rises to stage 2 (Two)." or "falls
+/// to") and each worn item a member grant sent to the stash ("Mara can't wield Great Staff now: it went to the
+/// stash."), then (review F2) each slot left empty because its default is refused ("Mara's main hand is empty: Mara
+/// can't wield Iron Billhook now."). A member who left reads by its departed record.
+pub fn settle_lines(d: &emberwake_world::Data, gs: &GameState, tracks: &[(String, String, i64, i64)], stashed: &[(String, String)], cleared: &[(String, String)]) -> Vec<String> {
+    let name = |member: &str| {
+        let departed = || gs.party.departed.iter().rev().find(|x| x.member.id == member).map(|x| progression::display_name(d, &x.member));
+        gs.party.member(member).map(|m| progression::display_name(d, m)).or_else(departed).unwrap_or_else(|| member.to_string())
+    };
+    let mut out: Vec<String> = tracks
+        .iter()
+        .map(|(member, track, from, to)| {
+            let row = d.cat.unit_tracks.get(track);
+            let track_name = row.map(|t| t.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| track.clone());
+            let stage = row.and_then(|t| t.stage(i32::try_from(*to).unwrap_or(0))).map(|st| format!(" ({})", st.name)).unwrap_or_default();
+            let moves = if to > from { "rises to" } else { "falls to" };
+            format!("{}'s {track_name} {moves} stage {to}{stage}.", name(member))
+        })
+        .collect();
+    out.extend(stashed.iter().map(|(member, item)| format!("{} can't wield {} now: it went to the stash.", name(member), d.item_name(item))));
+    // review F2: a slot left empty, its default refused ("Mara's main hand is empty: she can't wield Iron Billhook now.")
+    out.extend(cleared.iter().map(|(member, slot)| {
+        let default = gs.party.member(member).and_then(|m| m.default_item(d, &gs.world_id, slot)).map(|i| d.item_name(&i));
+        let why = default.map(|i| format!(": {} can't wield {i} now", name(member))).unwrap_or_default();
+        format!("{}'s {} is empty{why}.", name(member), slot.replace('_', " "))
+    }));
+    out
 }
 
 /// REWARD1 section 7: the tally line ("Foes defeated: 3 of 5 (2 slain, 1 surrendered)."), the outcome's note, and the
@@ -561,6 +597,9 @@ impl Results {
             departed: json::aget(res, "departed").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "life"))).collect(),
             stash_short: json::sget(res, "stash_short"),
             marks: json::aget(res, "marks").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "mark"), json::i(x, "value", 0))).collect(),
+            tracks: json::aget(res, "tracks").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "track"), json::i(x, "from", 0), json::i(x, "to", 0))).collect(),
+            stashed: json::aget(res, "stashed").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "item"))).collect(),
+            cleared: json::aget(res, "cleared").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "slot"))).collect(),
             w: Vec::new(),
         }
     }
@@ -634,8 +673,8 @@ impl Screen<GameCx> for Results {
             ui.p.text(24.0, y as f32, text, BODY + 1.0, th().dim);
             y += line;
         }
-        // PK1-S1: the marks the battle left on members
-        for text in mark_lines(&d, &gs, &self.marks) {
+        // PK1-S1: the marks the battle left on members; PR5-26 (PK2-S1): the tracks they moved and the items stashed
+        for text in mark_lines(&d, &gs, &self.marks).into_iter().chain(settle_lines(&d, &gs, &self.tracks, &self.stashed, &self.cleared)) {
             ui.p.text(24.0, y as f32, &text, BODY + 1.0, th().foe);
             y += line;
         }
@@ -689,6 +728,16 @@ impl Screen<GameCx> for Results {
         // PK1-S1: only when the battle left marks (the state of a battle without them reads as before)
         if !self.marks.is_empty() {
             out["marks"] = json!(self.marks.iter().map(|(m, k, v)| json!({"member": m, "mark": k, "value": v})).collect::<Vec<_>>());
+        }
+        // PR5-26 (PK2-S1): only when the settle moved a track or stashed an item
+        if !self.tracks.is_empty() {
+            out["tracks"] = json!(self.tracks.iter().map(|(m, t, f, to)| json!({"member": m, "track": t, "from": f, "to": to})).collect::<Vec<_>>());
+        }
+        if !self.stashed.is_empty() {
+            out["stashed"] = json!(self.stashed.iter().map(|(m, i)| json!({"member": m, "item": i})).collect::<Vec<_>>());
+        }
+        if !self.cleared.is_empty() {
+            out["cleared"] = json!(self.cleared.iter().map(|(m, slot)| json!({"member": m, "slot": slot})).collect::<Vec<_>>());
         }
         out
     }
@@ -794,6 +843,36 @@ mod tests {
         assert_clean(&mut r, &mut cx, "results with marks");
         let none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
         assert!(none.state(&cx).get("marks").is_none());
+    }
+
+    /// PR5-26 (audit B8; PK2-S1): the results draw the settle's track moves, stashed items and (review F2) emptied
+    /// slots (`battle::apply`'s `tracks`, `stashed` and `cleared`) after the mark lines, and the state lists them; no keys, no lines and no state keys. A
+    /// track id the catalog lacks reads as itself (test-only ids, no shipped content).
+    #[test]
+    fn the_results_draw_the_track_moves_and_stashed_items() {
+        let mut cx = game_cx();
+        let member = cx.gs().party.members[0].id.clone();
+        let name = progression::display_name(&cx.data, &cx.gs().party.members[0]);
+        let item = cx.data.cat.items.keys().next().cloned().expect("an item");
+        let item_name = cx.data.item_name(&item);
+        let marks = json!([{"member": member, "mark": "t_mark", "value": 1}]);
+        let tracks = json!([{"member": member, "track": "t_track", "from": 1, "to": 2}, {"member": member, "track": "t_other", "from": 3, "to": 2}]);
+        let stashed = json!([{"member": member, "item": item}]);
+        let cleared = json!([{"member": member, "slot": "main_hand"}]);
+        let res = json::obj([("ok", json!(true)), ("marks", marks), ("tracks", tracks.clone()), ("stashed", stashed.clone()), ("cleared", cleared.clone())]);
+        let mut r = Results::new(&res, "won", &Dict::new());
+        let t = texts(&frame(&mut r, &mut cx, &mut gfx(), 1.0));
+        let at = |s: &str| t.iter().position(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        let (up, down) = (format!("{name}'s t_track rises to stage 2."), format!("{name}'s t_other falls to stage 2."));
+        let gone = format!("{name} can't wield {item_name} now: it went to the stash.");
+        // review F2: the emptied slot names the default the member can't wield (rule-derived: its played world's)
+        let default = cx.gs().party.members[0].default_item(&cx.data, &cx.gs().world_id, "main_hand").map(|i| cx.data.item_name(&i));
+        let empty = format!("{name}'s main hand is empty{}.", default.map(|i| format!(": {name} can't wield {i} now")).unwrap_or_default());
+        assert!(at(&format!("{name} is marked: t_mark +1.")) < at(&up) && at(&up) < at(&down) && at(&down) < at(&gone) && at(&gone) < at(&empty), "{t:?}");
+        assert_eq!((r.state(&cx)["tracks"].clone(), r.state(&cx)["stashed"].clone(), r.state(&cx)["cleared"].clone()), (tracks, stashed, cleared));
+        assert_clean(&mut r, &mut cx, "results with track moves");
+        let none = Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new());
+        assert!(none.state(&cx).get("tracks").is_none() && none.state(&cx).get("stashed").is_none() && none.state(&cx).get("cleared").is_none());
     }
 
     /// A game whose party has at least `n` members (copies of the first under new ids, test-only members).

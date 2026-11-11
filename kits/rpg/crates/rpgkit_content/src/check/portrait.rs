@@ -84,7 +84,9 @@ pub fn check_rows(rows: &[Dict], refs: &Refs) -> Vec<Vec<String>> {
 
 /// Two rows with the same trigger, the same match and the same effect.
 fn same_cue(a: &Dict, b: &Dict) -> bool {
-    ["trigger", "effect"].iter().chain(MATCH_KEYS.iter()).all(|k| json::deep_equal(json::get(a, k), json::get(b, k)))
+    // an old overlay name is the same effect as its canonical one (FB-206 (2b))
+    let effect = |e: &Dict| aegis_core::assets::canonical_primitive(&json::s(e, "effect")).to_string();
+    effect(a) == effect(b) && ["trigger"].iter().chain(MATCH_KEYS.iter()).all(|k| json::deep_equal(json::get(a, k), json::get(b, k)))
 }
 
 /// The own problems of one (normalized) row.
@@ -106,7 +108,8 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
         // an unknown or reserved trigger has no match to check
         match_errors(e, &trigger, refs, &mut out);
     }
-    let effect = json::s(e, "effect");
+    // FB-206 (2b): an old overlay name (`veins`, `eye_glow`, `ash`, `smoke`) is checked as its canonical one
+    let effect = aegis_core::assets::canonical_primitive(&json::s(e, "effect")).to_string();
     let state = trigger != "event" && PORTRAIT_TRIGGERS.contains(&trigger.as_str());
     if state && ONE_SHOT_EFFECTS.contains(&effect.as_str()) {
         // a state row holds (ms 0) and never fires, so a one-shot reaction would never run

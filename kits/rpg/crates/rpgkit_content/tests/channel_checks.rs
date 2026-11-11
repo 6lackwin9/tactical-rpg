@@ -3,7 +3,7 @@
 //! rule is one error: a skill's `channel` (keys, `none` / `only`, `cost`, `power`, `effects`; single intent only), its
 //! `requires_meter` (a known meter, a `min` in its range) and `hp_cost_pct` (0-99); a ruleset row's Channel numbers
 //! (`channel_cost` three whole numbers, `channel_meter` and `channel_rest` naming rows, the rule needing a meter); a
-//! unit deck's `marrow` (actives with a marrow version, none twice, at most `marrow_actives`). The schema and the code
+//! unit deck's `channeled` (actives with a channeled version, none twice, at most `channeled_actives`). The schema and the code
 //! name the same fields and kinds; the writer stores the Channel numbers at their defaults as no key.
 
 use aegis_content::schema::fields;
@@ -103,7 +103,7 @@ fn the_schema_and_the_code_name_the_channel_fields() {
     assert_eq!(default("channel_meter"), json!(n.channel_meter));
     assert_eq!(default("channel_power"), json!(n.channel_power));
     assert_eq!(default("channel_cost"), json!(n.channel_cost));
-    assert_eq!(default("marrow_actives"), json!(n.marrow_actives));
+    assert_eq!(default("channeled_actives"), json!(n.channeled_actives));
     assert_eq!(default("channel_rest"), json!(n.channel_rest));
     assert_eq!(default("channel_ai_edge"), json!(n.channel_ai_edge));
     let options = |kind: &str, key: &str| json::aget(&field_of(kind, key), "options").iter().map(json::gstr).collect::<Vec<_>>();
@@ -127,13 +127,13 @@ fn the_valid_forms_check_clean() {
         ("skills", "jab", json!({"channel": {"only": true, "cost": 10}})),
         ("skills", "feed", json!({"requires_meter": {"meter": "strain", "min": 50}, "hp_cost_pct": 15})),
         ("skills", "feed", json!({"requires_meter": {}})),
-        ("units", "drillman", json!({"deck": {"active": ["jab", "thrust"], "marrow": ["jab"]}})),
+        ("units", "drillman", json!({"deck": {"active": ["jab", "thrust"], "channeled": ["jab"]}})),
     ];
     for (kind, id, change) in ok {
         assert_eq!(errors_of(&v, kind, id, &change), Vec::<String>::new(), "{kind} {id} {change}");
     }
     let all = store::check(&data);
-    assert!(!all.iter().any(|e| e.starts_with("rulesets:") || e.contains("unit_meters.json")), "the ruleset row's Channel fields; Feed (+5, marrow-only) as a meter skill: {all:?}");
+    assert!(!all.iter().any(|e| e.starts_with("rulesets:") || e.contains("unit_meters.json")), "the ruleset row's Channel fields; Feed (+5, channeled-only) as a meter skill: {all:?}");
 }
 
 #[test]
@@ -145,21 +145,21 @@ fn each_broken_rule_is_one_error() {
         ("skills", "jab", json!({"channel": {"free": true}}), "Channel: unknown key 'free' (keys: none, only, cost, effects, power)."),
         ("skills", "jab", json!({"channel": {"none": 1}}), "Channel: none must be true or false."),
         ("skills", "jab", json!({"channel": {"none": true, "only": true}}), "Channel: none and only exclude each other."),
-        ("skills", "jab", json!({"channel": {"none": true, "cost": 5}}), "Channel: none (no marrow version) takes no cost, power or effects."),
+        ("skills", "jab", json!({"channel": {"none": true, "cost": 5}}), "Channel: none (no channeled version) takes no cost, power or effects."),
         ("skills", "jab", json!({"channel": {"cost": 101}}), "Channel: cost must be a whole number 0-100."),
         ("skills", "jab", json!({"channel": {"power": 0.5}}), "Channel: power must be 1-3."),
         ("skills", "jab", json!({"channel": {"effects": []}}), "Channel: effects holds 1-4 effects."),
-        ("skills", "cleave", json!({"channel": {"only": true}}), "Channel: only a single-intent skill has a marrow version or is marrow-only (this one derives field and assault)."),
+        ("skills", "cleave", json!({"channel": {"only": true}}), "Channel: only a single-intent skill has a channeled version or is channeled-only (this one derives field and assault)."),
         ("skills", "cleave", json!({"channel": {"cost": 5}}), "only a single-intent skill"),
         ("skills", "feed", json!({"requires_meter": {"meter": "fury", "min": 1}}), "Meter gate: unknown unit meter 'fury'."),
         ("skills", "feed", json!({"requires_meter": {"meter": "strain"}}), "Meter gate: min is required (0-100)."),
         ("skills", "feed", json!({"requires_meter": {"meter": "strain", "min": 101}}), "Meter gate: min must be a whole number 0-100."),
         ("skills", "feed", json!({"requires_meter": {"meter": "strain", "min": 50, "max": 60}}), "Meter gate: unknown key 'max' (keys: meter, min)."),
         ("skills", "feed", json!({"hp_cost_pct": 100}), "HP cost % must be 0-99 (is 100)."),
-        ("units", "drillman", json!({"deck": {"active": ["jab"], "marrow": ["thrust"]}}), "Deck marrow: 'thrust' is not an active of the deck."),
-        ("units", "drillman", json!({"deck": {"active": ["jab", "cleave"], "marrow": ["cleave"]}}), "Deck marrow: 'cleave' has no marrow version"),
-        ("units", "drillman", json!({"deck": {"active": ["jab", "thrust"], "marrow": ["jab", "thrust"]}}), "Deck: 2 marrow entries (the Timeline ruleset's marrow actives allow 1)."),
-        ("units", "drillman", json!({"deck": {"active": ["jab"], "marrow": ["jab", "jab"]}}), "Deck marrow lists 'jab' twice."),
+        ("units", "drillman", json!({"deck": {"active": ["jab"], "channeled": ["thrust"]}}), "Deck channeled: 'thrust' is not an active of the deck."),
+        ("units", "drillman", json!({"deck": {"active": ["jab", "cleave"], "channeled": ["cleave"]}}), "Deck channeled: 'cleave' has no channeled version"),
+        ("units", "drillman", json!({"deck": {"active": ["jab", "thrust"], "channeled": ["jab", "thrust"]}}), "Deck: 2 channeled entries (the Timeline ruleset's channeled actives allow 1)."),
+        ("units", "drillman", json!({"deck": {"active": ["jab"], "channeled": ["jab", "jab"]}}), "Deck channeled lists 'jab' twice."),
     ];
     let mut failures = Vec::new();
     for (kind, id, change, want) in &cases {
@@ -169,6 +169,25 @@ fn each_broken_rule_is_one_error() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// PR5-26 (audit B3): an automatic deck (no `active` list) marks the actives the channel ruleset's deck rule fills (the
+/// battle's own list, `rpgkit_rules::unit::auto_actives`, truncated to the active slots): with two active slots a mark
+/// on an automatic active checks clean, a mark on an owned family past the slots is one error.
+#[test]
+fn an_automatic_decks_marks_are_its_automatic_actives() {
+    let (_s, data) = scratch("auto");
+    catalog(&data, timeline(json!({"deck_slots": {"active": 2, "passive": 0, "keystone": 0}})));
+    let v = store::view(&data);
+    let rule = rpgkit_rules::DeckRule::of(&ruleset::Ruleset::from_row(v.get(ruleset::KIND, "timeline"))).unwrap().with_class(&v.typed, "drill");
+    let auto = rpgkit_rules::unit::auto_actives(&v.typed, &rpgkit_data::UnitDef::from_obj(v.get("units", "drillman")), &rule);
+    let owned = ["jab", "thrust", "cleave"];
+    assert_eq!(auto.len(), 2, "truncated to the slots: {auto:?}");
+    let inside = auto.iter().find(|f| *f != "cleave").expect("a single-intent automatic active");
+    let past = owned.iter().find(|f| !auto.iter().any(|a| a == *f)).expect("an owned family past the slots");
+    assert_eq!(errors_of(&v, "units", "drillman", &json!({"deck": {"channeled": [inside]}})), Vec::<String>::new(), "{inside}");
+    let errors = errors_of(&v, "units", "drillman", &json!({"deck": {"channeled": [past]}}));
+    assert!(errors.len() == 1 && errors[0].contains(&format!("Deck channeled: '{past}' is not among the automatic actives")), "{errors:?}");
 }
 
 /// A ruleset row's Channel numbers: `channel_cost` three whole numbers 0-100; the rule needs a `channel_meter`; the meter
@@ -212,5 +231,5 @@ fn the_writer_stores_the_channel_numbers_only_when_set() {
     let set = store::catalog_storage(ruleset::KIND, &row(json!({"channel_meter": "strain", "channel_cost": [10, 20, 30], "channel_rest": "feed", "channel_ai_edge": 1.5})), &[]).unwrap();
     assert_eq!((json::s(&set, "channel_meter"), json::get(&set, "channel_cost").clone(), json::s(&set, "channel_rest")), ("strain".to_string(), json!([10, 20, 30]), "feed".to_string()));
     assert_eq!(json::get(&set, "channel_ai_edge"), &json!(1.5), "PR5-20: a set AI edge is kept");
-    assert!(!set.contains_key("channel_power") && !set.contains_key("marrow_actives"));
+    assert!(!set.contains_key("channel_power") && !set.contains_key("channeled_actives"));
 }

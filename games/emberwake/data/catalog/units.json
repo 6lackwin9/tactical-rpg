@@ -135,7 +135,8 @@
 				"con_heal_potion",
 				"con_fire_bomb"
 			],
-			"loot": []
+			"loot": [],
+			"dojo": "hero"
 		},
 		{
 			"id": "dojo_ranger",
@@ -178,7 +179,8 @@
 				"con_focus_elixir",
 				"con_heal_potion"
 			],
-			"loot": []
+			"loot": [],
+			"dojo": "hero"
 		},
 		{
 			"id": "goblin_brawler",
@@ -647,7 +649,8 @@
 			"pouch": [
 				"none"
 			],
-			"loot": []
+			"loot": [],
+			"dojo": "dummy"
 		},
 		{
 			"id": "rogue",
@@ -2496,13 +2499,15 @@
 			"extra_skills": [
 				"brimstone_cauterize",
 				"tourniquet_tonic",
-				"resilience_ward"
+				"resilience_ward",
+				"thurible_smite"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"brimstone_cauterize",
-					"tourniquet_tonic"
+					"tourniquet_tonic",
+					"thurible_smite"
 				],
 				"order": {
 					"support": [
@@ -2510,6 +2515,7 @@
 						"brimstone_cauterize"
 					],
 					"assault": [
+						"thurible_smite",
 						"strike"
 					],
 					"guard": [
@@ -2893,6 +2899,207 @@
 					"count": 1
 				}
 			]
+		},
+		{
+			"id": "inoculated_hero",
+			"name": "Inoculated (test)",
+			"side": "party",
+			"description": "Test hero for the Channel duel: Strain carrier with two Channel-only skills.",
+			"class_id": "warrior",
+			"level": 2,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"tl_hook_thrust"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"taunt_shout",
+					"tl_hook_thrust"
+				],
+				"channeled": [
+					"tl_hook_thrust"
+				],
+				"passive": [
+					"inoculated_test"
+				]
+			},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.0,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_broadsword",
+			"off_hand": "shd_buckler",
+			"head": "",
+			"body": "arm_leather",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"con_heal_potion",
+				"con_quenched_salt"
+			],
+			"loot": []
+		},
+		{
+			"id": "aberrant_test",
+			"name": "Aberrant (test)",
+			"side": "enemy",
+			"description": "Aberrant test enemy: carries Strain, its bite adds Strain to a holder.",
+			"class_id": "warrior",
+			"level": 2,
+			"tier": "elite",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"strain_bite"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"strain_bite"
+				],
+				"passive": [
+					"aberrant_strain"
+				],
+				"order": {
+					"assault": [
+						"strain_bite",
+						"strike"
+					]
+				}
+			},
+			"default_intent": "",
+			"ai_role": "AGGRESSOR",
+			"target_pref": "NEAREST",
+			"flee_ratio": 0.0,
+			"defend_below": 0.0,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": true,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_shortsword",
+			"off_hand": "none",
+			"head": "",
+			"body": "arm_leather",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"loot": []
+		},
+		{
+			"id": "mara_voss",
+			"name": "Mara Voss",
+			"side": "party",
+			"description": "Ashlands captain: a Warrior with her own hatchet and kite shield.",
+			"class_id": "warrior",
+			"level": 5,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [
+				"taunt_shout",
+				"shield_bash",
+				"riposte",
+				"intimidate",
+				"shield_wall"
+			],
+			"deck": {},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_hand_axe",
+			"off_hand": "shd_kite",
+			"head": "",
+			"body": "",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [],
+			"loot": []
+		},
+		{
+			"id": "tithe_captive",
+			"name": "Tithe Captive",
+			"side": "party",
+			"description": "A chained debtor awaiting the Red Tithing.",
+			"class_id": "rogue",
+			"level": 1,
+			"tier": "minion",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "rogue/base",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [],
+			"deck": {},
+			"default_intent": "",
+			"ai_role": "SKIRMISHER",
+			"target_pref": "NEAREST",
+			"flee_ratio": 1.0,
+			"defend_below": 0.0,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "none",
+			"off_hand": "none",
+			"head": "",
+			"body": "none",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"loot": []
 		}
 	]
 }

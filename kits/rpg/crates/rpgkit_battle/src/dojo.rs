@@ -1,5 +1,5 @@
-//! The gear dojo's sandbox (DojoSession, scripts/dojo/dojo_session.gd, with DojoBreakdown and DojoLoadouts): two catalog
-//! heroes and a training dummy, a shared stash, and the battle's own rules applied one action at a time. Strike with a
+//! The gear dojo's sandbox (DojoSession, scripts/dojo/dojo_session.gd, with DojoBreakdown and DojoLoadouts): the catalog
+//! heroes and training dummy (LAYER-DOWN-2: the units the catalog marks, `cast_of`), a shared stash, and the battle's own rules applied one action at a time. Strike with a
 //! hand, use any catalog skill (AP, stance switch, guard, focus, rest, statuses), let the dummy strike back, roll rounds,
 //! shift stances, use the battle pouch, benchmark a skill, equip from the stash (class training, slot fit and the
 //! two-handed rule as everywhere), apply loadout presets, switch the ready weapon and spend attribute points. Every
@@ -14,8 +14,8 @@ use crate::session::{EncounterDef, Prebuilt, Session};
 use crate::skill;
 use crate::world::{AiProfile, UnitId};
 use aegis_core::rng::GodotRng;
-use rpgkit_data::{Catalog, Deck, ItemDef, SkillDef, UnitDef, STATS};
-use rpgkit_rules::{build_from, UnitBuild};
+use rpgkit_data::{Catalog, Deck, DojoPresetDef, ItemDef, SkillDef, UnitDef, STATS};
+use rpgkit_rules::{build_from, Overrides, UnitBuild};
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
 use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for, Equipment, Slot};
@@ -33,9 +33,14 @@ pub const ROUND_AP_REGEN: i32 = 4;
 /// The battle AP pool.
 pub const HERO_AP: i32 = 12;
 pub const RNG_SEED: i64 = 1337;
-/// The heroes and the dummy (catalog units).
-pub const HEROES: [&str; 2] = ["dojo_warrior", "dojo_ranger"];
-pub const DUMMY: &str = "training_dummy";
+/// LAYER-DOWN-2: the Dojo's cast, from the catalog's unit rows (their `dojo` key, `rpgkit_data::UNIT_DOJO_KEY`): the
+/// heroes (`UNIT_DOJO_HERO`) in catalog order, and the first dummy (`UNIT_DOJO_DUMMY`; None: no unit is the dummy, so
+/// the Dojo strikes a blank one and the planner has no board). No unit id is named in code.
+pub fn cast_of(cat: &Catalog) -> (Vec<String>, Option<String>) {
+    let heroes = cat.units.values().filter(|u| u.dojo == rpgkit_data::UNIT_DOJO_HERO).map(|u| u.id.clone()).collect();
+    let dummy = cat.units.values().find(|u| u.dojo == rpgkit_data::UNIT_DOJO_DUMMY).map(|u| u.id.clone());
+    (heroes, dummy)
+}
 /// RULESET1_INTENT UI4: the planner's scratch board (the battle grid): the hero's, the dummy's and the second
 /// dummy's first tiles, and the round's blocks.
 pub const PLAN_HERO: V2 = V2::new(3, 4);
@@ -103,27 +108,12 @@ pub struct Alloc {
     pub free: i32,
 }
 
-/// A loadout preset (DojoLoadouts): gear per slot and pouch items, taken from the stash when there, else made.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Preset {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub desc: &'static str,
-    pub gear: &'static [(&'static str, &'static str)],
-    pub pouch: &'static [&'static str],
+/// PK1-KITFIX (c), LAYER-DOWN-2: the presets the Dojo lists (DojoLoadouts.get_presets): the catalog's `dojo_presets`
+/// rows in file order (gear per slot and pouch items, taken from the stash when there, else made; the passives held
+/// while applied). The kit has no built-in preset: a game without rows lists none.
+pub fn presets_of(cat: &Catalog) -> Vec<DojoPresetDef> {
+    cat.dojo_presets.values().cloned().collect()
 }
-
-/// DojoLoadouts.get_presets (item ids for the Godot ItemCatalog makers).
-pub const PRESETS: [Preset; 8] = [
-    Preset { id: "sword_board", name: "Sword & Board", desc: "1H Broadsword, Buckler, Brigandine, Ring of the Bear", gear: &[("main_hand", "wpn_broadsword"), ("off_hand", "shd_buckler"), ("body", "arm_leather"), ("accessory_1", "acc_bear_ring")], pouch: &["con_heal_potion", "con_fire_bomb"] },
-    Preset { id: "claymore_tank", name: "Claymore Bruiser", desc: "2H Iron Claymore, Plate Cuirass, Ring of the Bear (Tier 1 test)", gear: &[("main_hand", "wpn_claymore"), ("body", "arm_plate"), ("accessory_1", "acc_bear_ring")], pouch: &["con_heal_potion", "con_focus_elixir"] },
-    Preset { id: "claymore_backup", name: "Claymore + Backup Blade", desc: "2H Iron Claymore with an Iron Shortsword off-hand: Switch Weapon (1 block) to use either", gear: &[("main_hand", "wpn_claymore"), ("off_hand", "wpn_shortsword"), ("body", "arm_leather"), ("accessory_1", "acc_bear_ring")], pouch: &["con_heal_potion"] },
-    Preset { id: "titan_deficit", name: "Titan Hammer (Deficit)", desc: "2H Titan Warhammer with Plate - stresses deficit & burden penalties", gear: &[("main_hand", "wpn_warhammer"), ("body", "arm_plate")], pouch: &[] },
-    Preset { id: "dual_wield", name: "Dual Wield", desc: "Broadsword + Iron Shortsword off-hand, Brigandine, Ring of the Bear", gear: &[("main_hand", "wpn_broadsword"), ("off_hand", "wpn_shortsword"), ("body", "arm_leather"), ("accessory_1", "acc_bear_ring")], pouch: &["con_heal_potion"] },
-    Preset { id: "archer", name: "Archer", desc: "2H Oak Shortbow with a Shadow Dagger backup (Switch Weapon to go melee), Brigandine, Swiftness Amulet", gear: &[("main_hand", "wpn_shortbow"), ("off_hand", "wpn_dagger"), ("body", "arm_leather"), ("accessory_2", "acc_swift_amulet")], pouch: &["con_focus_elixir", "con_heal_potion"] },
-    Preset { id: "duelist", name: "Blade & Dagger", desc: "1H Broadsword + Shadow Dagger off-hand (Dual Strike), Brigandine, Swiftness Amulet", gear: &[("main_hand", "wpn_broadsword"), ("off_hand", "wpn_dagger"), ("body", "arm_leather"), ("accessory_2", "acc_swift_amulet")], pouch: &["con_heal_potion"] },
-    Preset { id: "arcanist", name: "Arcanist", desc: "1H Wand with a Mystic Tome off-hand (a tome needs a one-handed main hand; the 2H staff leaves the off hand empty)", gear: &[("main_hand", "wpn_wand"), ("off_hand", "wpn_tome")], pouch: &["con_focus_elixir"] },
-];
 
 pub fn stance_label(s: Stance) -> &'static str {
     match s {
@@ -237,10 +227,14 @@ pub struct DojoSession {
     pub ruleset: Ruleset,
     /// RULESET1-G: each hero's catalog unit id (rebuilds start from it).
     pub hero_ids: Vec<String>,
+    /// LAYER-DOWN-2: the dummy's catalog unit id (`cast_of`; None: a blank dummy, no planner board).
+    pub dummy_id: Option<String>,
     /// The attribute points spent on each hero here (a rebuild spends them again).
     spent: Vec<IndexMap<String, i32>>,
     /// Each hero's deck set here (None = its catalog row's; RULESET1 9 D5).
     decks: Vec<Option<Deck>>,
+    /// PK1-KITFIX (c): the passives each hero holds from the preset applied last (empty = none; a rebuild keeps them).
+    pub preset_passives: Vec<Vec<String>>,
     /// RULESET1 5 (rule `poise`): each hero's and the dummy's poise bar (refilled each round).
     pub hero_poise: Vec<PoiseState>,
     pub dummy_poise: PoiseState,
@@ -261,7 +255,8 @@ impl DojoSession {
         let mut hero_ids = Vec::new();
         // CLN-44: the Dojo starts on the catalog's classic row; AUDIT-03: its heroes are built under its wield terms
         let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
-        for id in HEROES {
+        let (cast, dummy_id) = cast_of(&cat);
+        for id in &cast {
             let Some(def) = cat.units.get(id) else { continue };
             let mut u = build_from(&cat, UnitBuild::row(def, 0, None).with_wield(ruleset.numbers.wield())).unit;
             u.max_ap = HERO_AP;
@@ -273,7 +268,7 @@ impl DojoSession {
         let n = heroes.len();
         // AUDIT-12: the dummy under the same wield terms as the heroes
         let wield = ruleset.numbers.wield();
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_from(&cat, UnitBuild::row(d, 0, None).with_wield(wield)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None).with_wield(wield)).unit);
+        let mut dummy = dummy_id.as_ref().and_then(|d| cat.units.get(d)).map(|d| build_from(&cat, UnitBuild::row(d, 0, None).with_wield(wield)).unit).unwrap_or_else(|| build_from(&cat, UnitBuild::row(&UnitDef::from_obj(&Default::default()), 0, None).with_wield(wield)).unit);
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;
@@ -301,8 +296,10 @@ impl DojoSession {
             fx: Vec::new(),
             ruleset,
             hero_ids,
+            dummy_id,
             spent: vec![IndexMap::new(); n],
             decks: vec![None; n],
+            preset_passives: vec![Vec::new(); n],
             hero_poise: vec![PoiseState::default(); n],
             dummy_poise: PoiseState::default(),
             dummy_windup: false,
@@ -417,9 +414,9 @@ impl DojoSession {
         if !self.ruleset.has(ruleset::ROUND_INTENT) {
             return Err(format!("{} rules have no round intents", self.ruleset.name));
         }
-        let Some(dummy_def) = self.cat.units.get(DUMMY) else { return Err(format!("no '{DUMMY}' unit in the catalog")) };
+        let Some((dummy_id, dummy_def)) = self.dummy_id.as_ref().and_then(|d| self.cat.units.get(d).map(|u| (d.clone(), u))) else { return Err("no Dojo dummy unit in the catalog (a unit with dojo \"dummy\")".into()) };
         let hero_def = self.hero_def(self.active).unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
-        let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [DUMMY], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
+        let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [dummy_id], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
         let def = EncounterDef::from_obj_with(row.as_object().expect("an object"), self.ruleset.clone());
         let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into(), default_intent: d.default_intent.clone() };
         let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
@@ -510,7 +507,9 @@ impl DojoSession {
                     notes.push("flank".to_string());
                 }
                 let imp = Impact::of(sk);
-                if imp.armor_piercing && w.ruleset.has(ruleset::PIERCE) {
+                // PR5-26 (audit B5): a melee hit of a unit with the member grant `pierce_melee` too
+                let melee_pierce = crate::command::pierces_melee(w, c, w.units[c].attack_range > 1 && !skill::is_off_hand(sk));
+                if (imp.armor_piercing && w.ruleset.has(ruleset::PIERCE)) || melee_pierce {
                     notes.push("armour pierced".to_string());
                 }
                 if imp.stagger > 0 && w.ruleset.has(ruleset::POISE) {
@@ -837,7 +836,9 @@ impl DojoSession {
         let Some(def) = self.hero_def(i) else { return };
         let rule = self.deck_rule();
         // U3.2-S3: under the Dojo ruleset's wield terms
-        let mut u = build_from(&self.cat, UnitBuild { wield: self.ruleset.numbers.wield(), ..UnitBuild::row(&def, 0, rule.as_ref()) }).unit;
+        // PK1-KITFIX (c): plus the passives of the preset applied last
+        let over = Overrides { passives: self.preset_passives[i].clone(), ..Overrides::default() };
+        let mut u = build_from(&self.cat, UnitBuild { wield: self.ruleset.numbers.wield(), over, ..UnitBuild::row(&def, 0, rule.as_ref()) }).unit;
         u.inventory = self.heroes[i].inventory.clone();
         for (st, pts) in &self.spent[i] {
             *u.stats.core.entry(st.clone()).or_insert(0) += pts;
@@ -1025,8 +1026,9 @@ impl DojoSession {
             "ATTACK" => {
                 let ranged = self.hero().inventory.main_weapon().is_some_and(|m| m.is_ranged_weapon()) && !skill::is_off_hand(&s);
                 let mult = self.hero().power_for(&s);
-                // RULESET1 A2: an armour-piercing hit under the rule pierce
-                let pierce = Impact::of(&s).armor_piercing && self.ruleset.has(ruleset::PIERCE);
+                // RULESET1 A2: an armour-piercing hit under the rule pierce; PR5-26 (audit B5): a melee hit of a hero
+                // with the member grant `pierce_melee` too (`command::pierces_melee`)
+                let pierce = (Impact::of(&s).armor_piercing || (self.hero().pierce_melee && !ranged)) && self.ruleset.has(ruleset::PIERCE);
                 let guarding = self.dummy.guard > 0.0;
                 let mut hit = if skill::deals_damage(&s) {
                     Some(self.apply_hit_by(&s.name, ranged, skill::is_off_hand(&s), mult, pierce))
@@ -1364,7 +1366,8 @@ impl DojoSession {
         let mut out: Vec<String> = Vec::new();
         for id in &self.stash {
             let Some(item) = self.cat.items.get(id) else { continue };
-            if out.contains(id) || !item_fits_slot(item, slot) {
+            // PR5-26 (audit B6): not an item the hero's `forbid_hands` refuses
+            if out.contains(id) || !item_fits_slot(item, slot) || self.hero().forbids(item) {
                 continue;
             }
             if slot == "off_hand" && !off_hand_ok(main.as_ref(), item) {
@@ -1405,6 +1408,13 @@ impl DojoSession {
         if !item_fits_slot(&item, slot_key) {
             if announce {
                 self.fail("Equip", &format!("{} cannot be equipped in the {} slot", item.name, slot_label(slot_key)));
+            }
+            return false;
+        }
+        // PR5-26 (audit B6): the hero's member grant `forbid_hands` refuses two-handed items (`Unit::forbids`)
+        if self.hero().forbids(&item) {
+            if announce {
+                self.fail("Equip", &format!("{} is two-handed: {} can't wield two-handed items now", item.name, self.hero().name));
             }
             return false;
         }
@@ -1472,35 +1482,52 @@ impl DojoSession {
         self.log_event("EVENT", "Clear Gear", "All gear and pouch items returned to stash", 0, "STASHED");
     }
 
+    /// PK1-KITFIX (c): the presets this Dojo lists (`presets_of` its catalog).
+    pub fn presets(&self) -> Vec<DojoPresetDef> {
+        presets_of(&self.cat)
+    }
+
     /// DojoSession.apply_loadout: everything to the stash, then the preset's pieces (from the stash, else made) and
-    /// pouch; pieces the hero can't use are skipped and named.
+    /// pouch; pieces the hero can't use are skipped and named. PK1-KITFIX (c): any preset `presets` lists; when its
+    /// passives differ from the ones the hero holds from the last preset, the hero is rebuilt with them first (HP, AP
+    /// and poise refill), so a preset without passives drops the last one's.
     pub fn apply_preset(&mut self, id: &str) {
-        let Some(p) = PRESETS.iter().find(|p| p.id == id) else { return };
+        let Some(p) = self.presets().into_iter().find(|p| p.id == id) else { return };
         self.stow_all();
+        let i = self.active;
+        if self.preset_passives[i] != p.passives {
+            self.preset_passives[i] = p.passives.clone();
+            self.alloc = None;
+            self.rebuild(i);
+        }
         let (mut equipped, mut skipped) = (0, Vec::new());
-        for (slot, item) in p.gear {
+        for (slot, item) in &p.gear {
             // A piece not in the stash is made for the hero (and dropped when it is skipped).
             if self.equip_internal(item, slot, false) {
                 equipped += 1;
             } else {
-                skipped.push(self.cat.items.get(*item).map(|i| i.name.clone()).unwrap_or_else(|| item.to_string()));
+                skipped.push(self.cat.items.get(item).map(|i| i.name.clone()).unwrap_or_else(|| item.to_string()));
             }
         }
-        for item in p.pouch {
-            let Some(def) = self.cat.items.get(*item).cloned() else { continue };
+        for item in &p.pouch {
+            let Some(def) = self.cat.items.get(item).cloned() else { continue };
             self.take_from_stash(item);
             self.hero_mut().inventory.add_to_pouch(&def);
         }
         self.changed();
         let mut detail = format!("{}: {equipped} pieces equipped", p.name);
-        let mut breakdown = format!("[color=#4ade80]Applied loadout [b]{}[/b][/color]\n{}", p.name, p.desc);
+        let mut breakdown = format!("[color=#4ade80]Applied loadout [b]{}[/b][/color]\n{}", p.name, p.description);
+        if !p.passives.is_empty() {
+            let names: Vec<String> = p.passives.iter().map(|id| self.cat.passives.get(id).map_or_else(|| id.clone(), |d| d.name.clone())).collect();
+            breakdown += &format!("\nPassives: {}", names.join(", "));
+        }
         if !skipped.is_empty() {
             detail += &format!(" • skipped {}", skipped.join(", "));
             breakdown += &format!("\n[color=#f87171]Skipped (not eligible for {}): {}[/color]", self.hero().name, skipped.join(", "));
         }
         let target = self.hero().name.clone();
         self.log_action("EVENT", "Quick Setup", &detail, equipped, "LOADOUT", &breakdown, &target, false);
-        self.fx("glow", true, p.name, Tone::Good);
+        self.fx("glow", true, &p.name, Tone::Good);
     }
 
     pub fn add_to_pouch(&mut self, id: &str) -> bool {
@@ -1647,12 +1674,18 @@ pub fn breakdown_strike(title: &str, attacker: &str, target: &Unit, res: &Hit, a
                 parts.push(format!("[color=#a855f7]Training +{}[/color]", p.training_pwr));
             }
             lines.push(format!("1. Weapon Power: [color=#e2e8f0]{}[/color] ({})", p.total_w_power, parts.join(", ")));
+            // PK2-S5b: the weapon power before a dulled weapon's factor (the lines below show it last)
+            let worn = if p.dulled { p.weapon_power / rpgkit_rules::gear::DULLED_POWER_MULT } else { p.weapon_power };
             if p.pen_ratio > 0.0 {
-                lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), p.weapon_power));
+                lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), worn));
             }
             // U3.2-S3 (FB-33): the proficiency 0 factor, after any deficit
             if p.untrained {
-                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, p.weapon_power));
+                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, worn));
+            }
+            // PK2-S5b: a dulled weapon instance's factor, last
+            if p.dulled {
+                lines.push(format!("   [color=#f87171]Dulled x{:.2} = {:.1}[/color]", rpgkit_rules::gear::DULLED_POWER_MULT, p.weapon_power));
             }
         } else {
             lines.push("1. Weapon Power: 0 (this weapon doesn't suit the attack)".into());

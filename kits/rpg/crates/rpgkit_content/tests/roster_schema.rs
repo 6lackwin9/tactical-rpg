@@ -55,24 +55,24 @@ fn manifest(roster: Value, party_max: i64) -> Value {
     json!({"id": W, "name": "Ward", "extends": [], "connects": [], "start_location": "hub", "party_max": party_max, "roster": roster, "version": 1})
 }
 
-fn kaelen() -> Value {
-    json!({"id": "kaelen", "name": "Kaelen", "role": "party", "base_unit": "hero", "keepsake": "sigil"})
+fn kestrel() -> Value {
+    json!({"id": "kestrel", "name": "Kestrel", "role": "party", "base_unit": "hero", "keepsake": "sigil"})
 }
 
 fn crucible() -> Value {
-    json!({"id": "crucible", "name": "The Crucible", "party": ["kaelen"], "enemies": ["warden"], "party_min": 4})
+    json!({"id": "crucible", "name": "The Gauntlet", "party": ["kestrel"], "enemies": ["warden"], "party_min": 4})
 }
 
 fn bram() -> Value {
     json!({"id": "bram", "name": "Bram", "start": "start", "services": false, "nodes": [{"id": "start", "text": "Well?", "choices": [
-        {"text": "Join us.", "to": "", "effects": [{"effect": "recruit", "character": "kaelen", "level": "average"}]},
-        {"text": "Who is left?", "to": "", "requires": [{"key": "roster.kaelen", "value": "captured"}, {"key": "roster.bunks_free", "op": ">=", "value": 1}]},
+        {"text": "Join us.", "to": "", "effects": [{"effect": "recruit", "character": "kestrel", "level": "average"}]},
+        {"text": "Who is left?", "to": "", "requires": [{"key": "roster.kestrel", "value": "captured"}, {"key": "roster.bunks_free", "op": ">=", "value": 1}]},
         {"text": "Leave.", "to": ""}
     ]}]})
 }
 
 /// A scratch roster world: a class, a party unit, four keepsake candidates (one good, three broken), the manifest, a
-/// location, the founder and an npc, the Crucible and Bram's dialogue.
+/// location, the founder and an npc, the Gauntlet and Bram's dialogue.
 fn roster_world(tag: &str, party_max: i64) -> PathBuf {
     let (scratch_dir, data) = scratch(tag);
     scratch_dir.until_thread_end();
@@ -82,7 +82,7 @@ fn roster_world(tag: &str, party_max: i64) -> PathBuf {
     write_catalog(&data, "items", json!([acc("sigil", "ACCESSORY", 0, true), acc("strap", "ACCESSORY", 0, true), acc("trinket", "ACCESSORY", 2, true), acc("charm", "ACCESSORY", 0, false), acc("blade", "WEAPON", 0, true)]));
     fs::write(aegis_content::world::manifest_path(&data, W), manifest(roster(), party_max).to_string()).unwrap();
     write_kind(&data, "locations", json!([{"id": "hub", "name": "Hub", "rest": true}]));
-    write_kind(&data, "characters", json!([kaelen(), {"id": "tess", "name": "Tess", "role": "npc", "base_unit": "hero"}, {"id": "warden", "name": "Warden", "role": "enemy", "base_unit": "brute"}]));
+    write_kind(&data, "characters", json!([kestrel(), {"id": "tess", "name": "Tess", "role": "npc", "base_unit": "hero"}, {"id": "warden", "name": "Warden", "role": "enemy", "base_unit": "brute"}]));
     write_kind(&data, "encounters", json!([crucible()]));
     write_kind(&data, "dialogues", json!([bram()]));
     data
@@ -140,7 +140,7 @@ fn the_section_5_1_roster_world_checks_clean() {
     assert_eq!(check::world::roster_errors(&v, W, v.worlds.manifest(W)), Vec::<String>::new());
     let wired = check::world::manifest_errors(&v, W);
     assert!(wired.is_empty(), "{wired:?}");
-    for (kind, e) in [("characters", kaelen()), ("dialogues", bram())] {
+    for (kind, e) in [("characters", kestrel()), ("dialogues", bram())] {
         let found = errors_of(&v, kind, &e);
         assert!(found.is_empty(), "{kind}: {found:?}");
     }
@@ -203,7 +203,7 @@ fn each_bad_roster_field_is_one_error() {
 fn a_keepsake_is_a_special_unsellable_accessory_on_a_party_character() {
     let data = roster_world("keepsake", 4);
     let v = store::view(&data);
-    let k = kaelen();
+    let k = kestrel();
     let cases: Vec<(&str, Value, &str)> = vec![
         ("not an accessory", with(&k, &["keepsake"], json!("blade")), "Keepsake: 'blade' must be an accessory."),
         ("value 2", with(&k, &["keepsake"], json!("trinket")), "Keepsake: 'trinket' must have value 0 (a keepsake is never sold)."),
@@ -254,7 +254,7 @@ fn the_recruit_level_and_the_roster_read_keys_are_checked() {
         assert!(added(&v, "dialogues", &d, &with(&d, &key, json!(ok))).is_empty(), "{ok}");
     }
     one(added(&v, "dialogues", &d, &with(&d, &key, json!("roster.ghost"))), "'roster.ghost' names no member of this world", "an unknown member");
-    for bad in ["roster.departed", "roster.departed.exiled", "roster.kaelen.hp", "roster."] {
+    for bad in ["roster.departed", "roster.departed.exiled", "roster.kestrel.hp", "roster."] {
         one(added(&v, "dialogues", &d, &with(&d, &key, json!(bad))), "is not a roster read key", bad);
     }
     drop_scratch(&data);
@@ -289,8 +289,8 @@ fn roster_read_keys_parse() {
     assert_eq!(roster_read_key("roster.living"), Some(RosterRead::Living));
     assert_eq!(roster_read_key("roster.bunks_free"), Some(RosterRead::BunksFree));
     assert_eq!(roster_read_key("roster.departed.dead"), Some(RosterRead::Departed("dead")));
-    assert_eq!(roster_read_key("roster.kaelen"), Some(RosterRead::Member("kaelen")));
-    for bad in ["roster.departed", "roster.departed.gone", "roster.", "roster.Kaelen", "roster.a.b", "meter.alert", "living"] {
+    assert_eq!(roster_read_key("roster.kestrel"), Some(RosterRead::Member("kestrel")));
+    for bad in ["roster.departed", "roster.departed.gone", "roster.", "roster.Kestrel", "roster.a.b", "meter.alert", "living"] {
         assert_eq!(roster_read_key(bad), None, "{bad}");
     }
 }
@@ -311,15 +311,15 @@ fn the_writer_stores_the_roster_fields() {
     // a character keepsake through upsert (a rule problem is the content check's, as every entry rule: only shape
     // problems block a world entry's write)
     let file = store::file_of(&data, Some(W), "characters");
-    store::upsert(&data, Some(W), "characters", &dict(kaelen()), None).expect("a founder with a keepsake");
+    store::upsert(&data, Some(W), "characters", &dict(kestrel()), None).expect("a founder with a keepsake");
     let stored = fs::read_to_string(&file).unwrap();
     assert_eq!(store::resave_text(&data, Some(W), "characters").unwrap(), stored, "a re-save without changes is byte-identical");
     assert!(source::load(&data).worlds[W]["own"]["characters"].as_array().unwrap().iter().any(|c| c["keepsake"] == "sigil"));
     let keepsake_problems = |data: &Path| store::check(data).into_iter().filter(|p| p.contains("Keepsake")).collect::<Vec<_>>();
     assert_eq!(keepsake_problems(&data), Vec::<String>::new());
-    store::upsert(&data, Some(W), "characters", &dict(with(&kaelen(), &["keepsake"], json!("trinket"))), None).expect("stored");
+    store::upsert(&data, Some(W), "characters", &dict(with(&kestrel(), &["keepsake"], json!("trinket"))), None).expect("stored");
     let found = keepsake_problems(&data);
-    assert!(found.len() == 1 && found[0].contains("ward/characters:kaelen") && found[0].contains("must have value 0"), "{found:?}");
+    assert!(found.len() == 1 && found[0].contains("ward/characters:kestrel") && found[0].contains("must have value 0"), "{found:?}");
     drop_scratch(&data);
 }
 

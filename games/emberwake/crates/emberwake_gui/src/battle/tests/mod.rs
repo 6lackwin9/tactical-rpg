@@ -1,4 +1,5 @@
 mod pacing_tests;
+mod data_looks_tests;
 mod windup_tests;
 mod skill_menu_tests;
 mod field_rows_tests;
@@ -24,6 +25,8 @@ mod portrait_panel_tests;
 mod portrait_timeline_tests;
 mod strip_block_tests;
 mod channel_tests;
+mod music_tests;
+mod cue_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};
@@ -45,16 +48,20 @@ use emberwake_world::Data;
 use serde_json::json;
 use std::sync::Arc;
 
+/// PR5-33: the skill row's `clip` first, then the family row's `attack_clips` (one target) or `area_clips` (an area),
+/// then `attack`; a support plays `cast`; other commands none.
 #[test]
 fn an_action_picks_the_rig_clip_of_its_skill_kind_and_weapon() {
-    assert_eq!(action_clips("shield_bash", "attack", "sword"), ["shield_bash", "attack"], "a skill with its own clip first");
-    assert_eq!(action_clips("cyclone_kick", "area", ""), ["sweep_kick", "sweep_kick", "kick", "jab", "attack"]);
-    assert_eq!(action_clips("strike", "attack", "fist"), ["jab", "attack"], "fists jab");
-    assert_eq!(action_clips("caustic_vomit", "attack", ""), ["spit", "jab", "attack"], "the crawler spits, other bodies fall back");
-    assert_eq!(action_clips("strike", "attack", "bow"), ["attack"]);
-    assert_eq!(action_clips("volley", "area", "bow"), ["attack"]);
-    assert_eq!(action_clips("mend", "support", "mace"), ["cast"]);
-    assert!(action_clips("guard", "", "sword").is_empty(), "guards play through the stance, moves through the slide");
+    let fists = emberwake_data::FamilyLook { attack_clips: vec!["jab".into()], area_clips: vec!["sweep_kick".into(), "kick".into(), "jab".into()], ..Default::default() };
+    let plain = emberwake_data::FamilyLook::default();
+    assert_eq!(action_clips("shield_bash", "attack", Some(&plain)), ["shield_bash", "attack"], "a skill with its own clip first");
+    assert_eq!(action_clips("sweep_kick", "area", Some(&fists)), ["sweep_kick", "sweep_kick", "kick", "jab", "attack"]);
+    assert_eq!(action_clips("", "attack", Some(&fists)), ["jab", "attack"], "fists jab");
+    assert_eq!(action_clips("spit", "attack", Some(&fists)), ["spit", "jab", "attack"], "the crawler spits, other bodies fall back");
+    assert_eq!(action_clips("", "attack", Some(&plain)), ["attack"]);
+    assert_eq!(action_clips("", "area", None), ["attack"], "no family row");
+    assert_eq!(action_clips("", "support", Some(&fists)), ["cast"]);
+    assert!(action_clips("", "", Some(&fists)).is_empty(), "guards play through the stance, moves through the slide");
 }
 
 /// The rig's sheets face right: a token facing left (FACE1) shows the sheet frame mirrored, its outline with it; one
@@ -355,7 +362,7 @@ fn tokens_follow_the_battle_step_by_step() {
                 // FX1 4.2 step 1: an attacker that moved in this step (a dash, a charge, an Engage carry) strikes after its slide
                 let at = if a.slide.is_some_and(|(_, t0)| t0 == now) { now + a.slide_ms(300) } else { now };
                 assert_eq!(want.1, at);
-                assert!(want.0.last() == Some(&"attack"), "{:?} ends with the generic attack", want.0);
+                assert!(want.0.last().map(String::as_str) == Some("attack"), "{:?} ends with the generic attack", want.0);
             }
         }
     }
@@ -756,21 +763,28 @@ fn a_boss_tier_enemy_makes_a_boss_fight() {
     assert!(!fight("courtyard_skirmish"));
 }
 
+/// PR5-32: a log line's sound comes from its typed event (`event::EventKind`), never its words.
 #[test]
 fn log_lines_pick_their_sounds() {
-    assert_eq!(sound_of("[Attack] Rook struck Goblin for 7 (HP 3/10)"), Some("hit"));
-    assert_eq!(sound_of("[Attack] Rook struck Goblin for 14 CRIT (HP 0/10)"), Some("crit"));
-    assert_eq!(sound_of("[Attack] Rook struck Goblin for 0 (HP 10/10)"), Some("mitigated"));
-    assert_eq!(sound_of("[Attack Miss] Rook: target no longer in combat"), Some("miss"));
-    assert_eq!(sound_of("[Area Miss] Mage hit nobody"), Some("miss"));
-    assert_eq!(sound_of("[Status] Hex -> Goblin (inflicts poison)"), Some("debuff"));
-    assert_eq!(sound_of("[Status] Hex -> Goblin (resisted poison)"), None);
-    assert_eq!(sound_of("[Status] Bard -> Rook (inflicts haste)"), None);
-    assert_eq!(sound_of("[Defend] Rook raises guard (40% less damage)"), Some("defend"));
-    assert_eq!(sound_of("[Defend] Rook's guard was broken"), None);
-    assert_eq!(sound_of("[Support] Cleric used Mend on Rook: healed 6"), Some("heal"));
-    assert_eq!(sound_of("[Move] Rook moved 2 of 2 tiles to (3, 4)"), Some("move_step"));
-    assert_eq!(sound_of("[Rest] Rook AP 3/4"), None);
+    use emberwake_battle::event::EventKind as E;
+    let status = |s: &str, landed: bool| E::Status { status: s.into(), landed };
+    assert_eq!(sound_of(&E::Hit { crit: false, zero: false }), Some("hit"));
+    assert_eq!(sound_of(&E::Hit { crit: true, zero: false }), Some("crit"));
+    assert_eq!(sound_of(&E::Hit { crit: true, zero: true }), Some("crit"), "a crit for 0 is a crit");
+    assert_eq!(sound_of(&E::Hit { crit: false, zero: true }), Some("mitigated"));
+    assert_eq!(sound_of(&E::Miss), Some("miss"));
+    assert_eq!(sound_of(&E::Dodged), None);
+    assert_eq!(sound_of(&status("poison", true)), Some("debuff"));
+    assert_eq!(sound_of(&status("poison", false)), None, "resisted");
+    assert_eq!(sound_of(&status("haste", true)), None, "a buff");
+    assert_eq!(sound_of(&status("", false)), None, "no roll");
+    assert_eq!(sound_of(&E::LostBlock { status: "stun".into() }), None);
+    assert_eq!(sound_of(&E::Guard { broken: false }), Some("defend"));
+    assert_eq!(sound_of(&E::Guard { broken: true }), None);
+    assert_eq!(sound_of(&E::Focus), Some("buff"));
+    assert_eq!(sound_of(&E::Support), Some("heal"));
+    assert_eq!(sound_of(&E::Move), Some("move_step"));
+    assert_eq!(sound_of(&E::Break { unit: 0 }), None);
 }
 
 /// FX1-L1: plays the ambush step by step (the party on the aggressive preset) until a single step leaves a pending
@@ -836,7 +850,7 @@ fn a_hit_shows_on_the_board_at_its_impact_not_at_the_pop() {
     assert!(at >= i.t0, "the impact comes after t0");
     if i.delivery == crate::fx::Delivery::Melee {
         let actor_clips = unit_clips(&mut cx, &b, i.actor);
-        let clip = i.clips.iter().copied().find(|c| actor_clips.clip(c).is_some());
+        let clip = i.clips.iter().find(|c| actor_clips.clip(c).is_some());
         let want = clip.and_then(|c| actor_clips.clip(c).unwrap().impact_ms()).unwrap_or(cx.tuning.value.melee_hit_ms);
         assert_eq!(at, i.t0 + want, "a blow lands at its clip's impact frame");
     }

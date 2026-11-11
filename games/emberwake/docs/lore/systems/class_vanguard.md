@@ -1,11 +1,11 @@
 # The Vanguard (engine class `warrior`)
 
-Status: canon for the Cold Steel branch and Kaelen's Act 1 kit; proposal for the Inoculated branch (Act 2 on).
+Status: `[LOCKED]` class role, `3/2/2` weapons & Act 1 Cold Steel kit; `[PROVISIONAL]` Act 2 Inoculated tree; **`[PLACEHOLDER]` Section 4 founder name, backstory, taint & look** ([CANON.md](../CANON.md) 3.1 wins).
 Conventions (timing, armour scale, flat damage values) are in the [classes index](classes_and_skill_trees.md)
 section 3; rules in [combat and the timeline](combat_and_timeline.md).
 
 Former garrison infantry, Watch deserters and castellan runaways in dented, scavenged plate: masters of narrow
-corridors, shield walls and poise breaks. Profile: high HP, heavy armour, high poise.
+corridors, reach-2 billhook control, and poise breaks (`polearm 3 / sword 2 / axe 2`, `WEAPONROSTER1`). Profile: high HP, heavy armour, high poise.
 
 ## 1. Tree
 
@@ -51,7 +51,7 @@ an Act 2 hook; no mechanics in Act 1). Joins: prologue 0a.
 | --- | --- | --- | --- |
 | Castellan's Penance (trait) | innate | when an adjacent ally is targeted by an attack, Kaelen raises Active Guard as a free Snap reaction and takes 35% of that hit on his own armour | 1 `[kit hook]` reaction, redirect |
 | Notched Billhook Sunder (variant of Sunder and Pin) | 4 AP, Heavy 3 +1 rec, reach 1, single | his weighted billhook winds up one block faster (Heavy 3, not 4); expose 8 and root as the base skill; Clerisy or Inquisition targets are also disarmed (-50% damage dealt for 1 round; the nearest engine status, `weaken`, caps at 25% today) | 1 `[data]` |
-| Seventh Ward Bulwark (signature) | 3 AP, Heavy 3 +1 rec, self and a 3-tile line | plants his tower shield: 30 damage and stagger 35 to every foe in front; a 3-tile barrier for 2 rounds that enemies cannot cross; allies behind it gain +50% mitigation and cannot be targeted by ranged attacks | 1 `[kit hook]` barrier |
+| Seventh Ward Bulwark (signature) | 3 AP, Heavy 3 +1 rec, self and a 3-tile line | drives his weighted billhook and an iron trench-pavise into the flags: 30 damage and stagger 35 to every foe in front; a 3-tile barrier for 2 rounds that enemies cannot cross; allies behind it gain Active Guard mitigation (+35% baseline) and cannot be targeted by ranged attacks | 1 `[kit hook]` barrier |
 
 ## 5. Notes
 

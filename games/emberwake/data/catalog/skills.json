@@ -20,7 +20,8 @@
 			"description": "Melee jab with the off-hand weapon (or bare hands) at distance 1: ranged units' point-blank answer.",
 			"basic": true,
 			"power_mult": 0.5,
-			"weapon_hand": "off"
+			"weapon_hand": "off",
+			"clip": "jab"
 		},
 		{
 			"id": "shield_bash",
@@ -33,6 +34,8 @@
 			"power_mult": 0.8,
 			"status_effect": "stagger",
 			"status_potency": 70,
+			"fx": "bash_ring",
+			"clip": "shield_bash",
 			"ranks": [
 				{
 					"level": 3,
@@ -78,7 +81,8 @@
 			"blocks": 2,
 			"description": "Hits the 3 tiles in a line from you (aim at an adjacent tile). Friendly fire!",
 			"area": "LINE",
-			"power_mult": 0.9
+			"power_mult": 0.9,
+			"fx": "ground_wave"
 		},
 		{
 			"id": "volley",
@@ -96,6 +100,7 @@
 			"reach_max": 3,
 			"area": "PLUS",
 			"power_mult": 0.7,
+			"fx": "arrow_volley",
 			"ranks": [
 				{
 					"level": 3,
@@ -123,6 +128,7 @@
 			"reach_max": 2,
 			"area": "BURST",
 			"power_mult": 0.6,
+			"fx": "fire_lob",
 			"ranks": [
 				{
 					"level": 4,
@@ -321,6 +327,7 @@
 			],
 			"min_proficiency": 1,
 			"power_mult": 1.1,
+			"fx": "arcane_orb",
 			"ranks": [
 				{
 					"level": 2,
@@ -350,6 +357,7 @@
 			"power_mult": 0.6,
 			"status_effect": "stagger",
 			"status_potency": 90,
+			"fx": "curse_orb",
 			"ranks": [
 				{
 					"level": 3,
@@ -380,6 +388,8 @@
 			"power_mult": 2.0,
 			"status_effect": "stun",
 			"status_potency": 50,
+			"fx": "heavy_blow",
+			"clip": "haymaker",
 			"ranks": [
 				{
 					"level": 4,
@@ -478,6 +488,7 @@
 			"learned_only": true,
 			"target_mode": "ALLY",
 			"grant_status": "haste",
+			"fx": "rally_ring",
 			"ranks": [
 				{
 					"level": 2,
@@ -502,6 +513,7 @@
 			"status_rounds": 2,
 			"target_mode": "SELF",
 			"grant_status": "taunt",
+			"fx": "rally_ring",
 			"ranks": [
 				{
 					"level": 2,
@@ -599,6 +611,7 @@
 			"cleanse_statuses": [
 				"stun"
 			],
+			"fx": "cleanse_motes",
 			"ranks": [
 				{
 					"level": 3,
@@ -645,6 +658,8 @@
 			"learned_only": true,
 			"area": "RING",
 			"power_mult": 0.8,
+			"fx": "sweep",
+			"clip": "sweep_kick",
 			"ranks": [
 				{
 					"level": 3,
@@ -730,6 +745,7 @@
 			"reach_min": 2,
 			"reach_max": 3,
 			"power_mult": 0.8,
+			"fx": "falling_orb",
 			"ranks": [
 				{
 					"level": 2,
@@ -796,6 +812,7 @@
 			"power_mult": 1.2,
 			"status_effect": "stagger",
 			"status_potency": 40,
+			"fx": "falling_orb",
 			"ranks": [
 				{
 					"level": 4,
@@ -1004,6 +1021,7 @@
 			"min_proficiency": 1,
 			"area": "LINE",
 			"power_mult": 0.9,
+			"fx": "beam",
 			"ranks": [
 				{
 					"level": 3,
@@ -1059,6 +1077,8 @@
 			"power_mult": 0.9,
 			"status_effect": "stagger",
 			"status_potency": 50,
+			"fx": "sweep",
+			"clip": "sweep_kick",
 			"ranks": [
 				{
 					"level": 4,
@@ -1093,6 +1113,7 @@
 			"status_effect": "bleed",
 			"status_potency": 50,
 			"status_rounds": 2,
+			"fx": "fire_lob",
 			"ranks": [
 				{
 					"level": 5,
@@ -1126,6 +1147,7 @@
 			"power_mult": 0.6,
 			"status_effect": "root",
 			"status_potency": 60,
+			"fx": "frost_lob",
 			"ranks": [
 				{
 					"level": 4,
@@ -1294,6 +1316,7 @@
 			"status_magnitude": 6,
 			"status_rounds": 2,
 			"grant_status": "fortify",
+			"fx": "ward_ring",
 			"ranks": [
 				{
 					"level": 3,
@@ -1370,6 +1393,7 @@
 			],
 			"min_proficiency": 1,
 			"disrupt": "STANCE_BREAK",
+			"fx": "heavy_blow",
 			"ranks": [
 				{
 					"level": 3,
@@ -2476,7 +2500,8 @@
 			"status_effect": "poison",
 			"status_potency": 70,
 			"status_magnitude": 4,
-			"status_rounds": 2
+			"status_rounds": 2,
+			"clip": "spit"
 		},
 		{
 			"id": "bone_club_slam",
@@ -2856,6 +2881,262 @@
 			"reach_max": 3,
 			"area": "PLUS",
 			"power_mult": 0.5
+		},
+		{
+			"id": "feed",
+			"name": "Feed",
+			"kind": "SUPPORT",
+			"level": 1,
+			"ap_cost": 0,
+			"blocks": 1,
+			"description": "Channel basic and the Channel round's Rest: +5 Strain and a heal of 4% max HP per block (healing is cut by Acute Resonance).",
+			"learned_only": true,
+			"round_intent": "support",
+			"target_mode": "SELF",
+			"heal_pct": 4,
+			"meters": [
+				{
+					"meter": "strain",
+					"delta": 5
+				}
+			],
+			"channel": {
+				"only": true
+			}
+		},
+		{
+			"id": "vent",
+			"name": "Vent",
+			"kind": "FOCUS",
+			"level": 1,
+			"ap_cost": 0,
+			"blocks": 1,
+			"description": "Channel basic: -50 Strain for 10% of max HP; only while Strain is 50 or more.",
+			"learned_only": true,
+			"round_intent": "support",
+			"meters": [
+				{
+					"meter": "strain",
+					"delta": -50
+				}
+			],
+			"hp_cost_pct": 10,
+			"requires_meter": {
+				"meter": "strain",
+				"min": 50
+			},
+			"channel": {
+				"only": true
+			}
+		},
+		{
+			"id": "marrow_lash",
+			"name": "Marrow Lash",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 2,
+			"description": "Test skill (Channel only): a piercing marrow strike. Costs 15 Strain.",
+			"learned_only": true,
+			"power_mult": 1.5,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 15
+			}
+		},
+		{
+			"id": "marrow_bolt",
+			"name": "Marrow Bolt",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Test skill (Channel only): a ranged piercing marrow bolt. Costs 25 Strain.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.4,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 25
+			}
+		},
+		{
+			"id": "strain_bite",
+			"name": "Strain Bite",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 2,
+			"description": "Aberrant test strike: a hit that adds 15 Strain to a Strain holder.",
+			"learned_only": true,
+			"riders": [
+				{
+					"when": {},
+					"effects": [
+						{
+							"type": "meter",
+							"meter": "strain",
+							"delta": 15,
+							"to": "other"
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "marrow_rend",
+			"name": "Marrow Rend",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Test skill (Channel only, Tier III budget): a tearing marrow strike. Costs 35 Strain.",
+			"learned_only": true,
+			"power_mult": 2.0,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 35
+			}
+		},
+		{
+			"id": "marrow_litany",
+			"name": "Marrow Litany",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Test skill (Channel only, priest class piece): a marrow-fed strike. Costs 20 Strain.",
+			"learned_only": true,
+			"power_mult": 1.3,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 20
+			}
+		},
+		{
+			"id": "purge_marrow",
+			"name": "Purge Marrow",
+			"kind": "SUPPORT",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "Test skill (priest Inoculated keystone): undoes the latest Calcification mark of this battle on a unit. Once a battle.",
+			"learned_only": true,
+			"reach_max": 1,
+			"unmark": {
+				"mark": "calcify"
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "tq_polearm_hook",
+			"name": "Hook Rend (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (polearm family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"reach_max": 2,
+			"power_mult": 1.6,
+			"stagger": 8
+		},
+		{
+			"id": "tq_crossbow_volley",
+			"name": "Bolt Volley (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (crossbow family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.6
+		},
+		{
+			"id": "tq_fist_breaker",
+			"name": "Rib Breaker (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (fist family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"power_mult": 1.6,
+			"stagger": 8
+		},
+		{
+			"id": "tq_dagger_flurry",
+			"name": "Flurry Cut (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (dagger family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"power_mult": 1.6
+		},
+		{
+			"id": "tq_censer_swing",
+			"name": "Censer Swing (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (censer family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"power_mult": 1.6,
+			"stagger": 6
+		},
+		{
+			"id": "tq_sprayer_jet",
+			"name": "Pressure Jet (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (sprayer family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.6
+		},
+		{
+			"id": "thurible_smite",
+			"name": "Thurible Smite",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Assault, Standard: a swing of the censer, {power} power, {stagger} stagger.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"weapon_types": [
+				"censer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.3,
+			"stagger": 6
 		}
 	]
 }

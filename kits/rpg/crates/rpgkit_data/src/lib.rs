@@ -15,12 +15,24 @@ use aegis_core::value::*;
 use indexmap::IndexMap;
 use serde_json::Value;
 
+pub mod body_slot;
+pub mod dojo_preset;
+pub mod looks;
+pub mod mastery;
+pub mod recipe;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
+pub mod unit_track;
+pub use body_slot::{BodySlotDef, GraftSpec, BODY_ROLES, BODY_ROLE_CLASS, BODY_ROLE_MONSTER, BODY_EFFECTS_KEY, BODY_SLOTS_KIND, BODY_SLOTS_MAX, GRAFT, GRAFT_TIERS, GRAFT_TOP_TIER_NEEDS};
+pub use looks::{FamilyLook, TerrainLook};
+pub use mastery::{MasteryBook, Technique, MASTERY_BOOK};
+pub use recipe::{RecipeCost, RecipeDef, PROF_ROLES, RECIPES_KIND, RECIPE_SERVICE, RECIPE_TARGETS};
+pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
 pub use unit_template::{UnitTemplate, TEMPLATE_CLASS, TEMPLATE_FIELD, UNIT_TEMPLATES_KIND};
+pub use unit_track::{TrackStage, UnitTrackDef, TRACK_DEPARTURES, TRACK_STAGES_MAX, TRACK_STAGE_KEYS, UNIT_TRACKS_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -125,6 +137,12 @@ pub struct ClassDef {
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "Losing a grafted unit"): the item a fallen member of the class leaves
+    /// (its character's `remains` first; "" = none).
+    pub remains: String,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> its role in the class (`PROF_ROLES`: main, secondary, third,
+    /// minor; a proficiency entry's optional `role`), which prices a `train_proficiency` recipe. No entry = no role.
+    pub proficiency_roles: IndexMap<String, String>,
 }
 
 impl ClassDef {
@@ -170,6 +188,10 @@ impl ClassDef {
             basics: strings(o, "basics"),
             loadout,
             pouch: strings(o, "pouch"),
+            remains: string(o, REMAINS_KEY, ""),
+            proficiency_roles: obj(o, "proficiency")
+                .map(|m| m.iter().filter_map(|(k, v)| v.as_object().map(|e| (k.clone(), string(e, PROF_ROLE_KEY, "")))).filter(|(_, r)| !r.is_empty()).collect())
+                .unwrap_or_default(),
         }
     }
 
@@ -254,7 +276,16 @@ pub struct UnitDef {
     pub default_intent: String,
     /// HOOKS1 AT2 (rule ai_tactics): the unit's AI tactics (TACTICS ids, in order).
     pub tactics: Vec<String>,
+    /// LAYER-DOWN-2: the unit's part in the gear Dojo (`UNIT_DOJO_KEY`: `UNIT_DOJO_HERO`, `UNIT_DOJO_DUMMY`, "" = none).
+    pub dojo: String,
 }
+
+/// LAYER-DOWN-2: the unit row key naming the gear Dojo's cast (the heroes in catalog order, the first dummy).
+pub const UNIT_DOJO_KEY: &str = "dojo";
+/// LAYER-DOWN-2: a Dojo hero (`UNIT_DOJO_KEY`).
+pub const UNIT_DOJO_HERO: &str = "hero";
+/// LAYER-DOWN-2: the Dojo's training dummy (`UNIT_DOJO_KEY`).
+pub const UNIT_DOJO_DUMMY: &str = "dummy";
 
 /// A unit's or party member's deck (RULESET1 9 D5, field `deck`): skill families in the active slots, passive ids in
 /// the passive and keystone slots, and per round intent the families in the order the planner fills them. Missing or
@@ -269,14 +300,14 @@ pub struct Deck {
     /// INPUT1 FL1 (`follow_ups`): opener family -> the families the planner's fill tries first after it, in the
     /// player's priority (written order kept; an empty list is no list).
     pub follow_ups: IndexMap<String, Vec<String>>,
-    /// PK1-S2a (`marrow`, PK1 4.2, rule channel): the actives whose marrow version opens in a Channel round (written
-    /// order; at most the ruleset's `marrow_actives` of them are read).
-    pub marrow: Vec<String>,
+    /// PK1-S2a (`channeled`, PK1 4.2, rule channel): the actives whose channeled version opens in a Channel round (written
+    /// order; at most the ruleset's `channeled_actives` of them are read).
+    pub channeled: Vec<String>,
 }
 
 impl Deck {
     /// The deck keys, in their stored order.
-    pub const KEYS: [&'static str; 6] = ["active", "passive", "keystone", "order", "follow_ups", "marrow"];
+    pub const KEYS: [&'static str; 6] = ["active", "passive", "keystone", "order", "follow_ups", "channeled"];
 
     /// From a `deck` value (anything but an object is the empty deck; lists keep their strings; an empty
     /// `follow_ups` list is dropped, FL1).
@@ -286,7 +317,7 @@ impl Deck {
         let follow_ups = obj(o, "follow_ups")
             .map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).filter(|(_, l)| !l.is_empty()).collect())
             .unwrap_or_default();
-        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups, marrow: strings(o, "marrow") }
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups, channeled: strings(o, "channeled") }
     }
 
     /// True when every key is empty (the auto deck).
@@ -296,7 +327,7 @@ impl Deck {
             && self.keystone.is_empty()
             && self.order.values().all(Vec::is_empty)
             && self.follow_ups.values().all(Vec::is_empty)
-            && self.marrow.is_empty()
+            && self.channeled.is_empty()
     }
 
     /// INPUT1 FL1: the follow-up list set for opener family `fam` (None: no list, the fill reads the order).
@@ -343,6 +374,7 @@ impl UnitDef {
             poise: int(o, "poise", -1),
             default_intent: string(o, "default_intent", ""),
             tactics: strings(o, "tactics"),
+            dojo: string(o, UNIT_DOJO_KEY, ""),
         }
     }
 }
@@ -440,8 +472,17 @@ pub struct SkillDef {
     pub hp_cost_pct: i32,
     /// PK1-S2a (rule unit_meters): the meter value the skill needs at its start (None = no gate).
     pub requires_meter: Option<MeterGate>,
-    /// PK1-S2a (rule channel): the skill's marrow version block (the default: a derived version for a single-intent skill).
+    /// PK1-S2a (rule channel): the skill's channeled version block (the default: a derived version for a single-intent skill).
     pub channel: ChannelSpec,
+    /// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` `{mark}`, the consumable's effect as a skill: the mark id
+    /// whose latest entry on the target this battle it removes ("" = none).
+    pub unmark: String,
+    /// PK2-S1: how many times a unit may use the skill in one battle (0 = no limit).
+    pub uses_per_battle: i32,
+    /// PR5-33: the look key the game shows when the skill is used (`looks::FX_KEY`; "" = by kind and weapon).
+    pub fx: String,
+    /// PR5-33: the body clip the actor tries first (`looks::CLIP_KEY`; "" = by kind and weapon).
+    pub clip: String,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -521,6 +562,10 @@ impl SkillDef {
             hp_cost_pct: int(o, "hp_cost_pct", 0),
             requires_meter: obj(o, "requires_meter").and_then(MeterGate::from_obj),
             channel: obj(o, "channel").map(ChannelSpec::from_obj).unwrap_or_default(),
+            unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            uses_per_battle: int(o, "uses_per_battle", 0),
+            fx: string(o, looks::FX_KEY, ""),
+            clip: string(o, looks::CLIP_KEY, ""),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -585,6 +630,9 @@ pub struct ItemDef {
     /// U3.2-S4 (U3 "Level 3 (Master)"): the family's mastery passive id (the resolved row's `ITEM_FAMILY_LEVEL3` key; ""
     /// = none).
     pub level3_passive: String,
+    /// PR5-28 (U3 FB-36c): the family's `range_band.max` (the resolved row's `ITEM_FAMILY_REACH_MAX` key; 0 = the family
+    /// has no `range_band`, the reach rule then reads its fallback `rpgkit_rules::unit::REACH_WEAPON_REACH`).
+    pub family_reach_max: i32,
     /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
     pub hazard: Option<HazardPlace>,
     /// A1.2-K3 (INTENT2 section 6, INTENT2-K3): a thrown consumable's one authored area shape (`NONE` = single target;
@@ -597,8 +645,31 @@ pub struct ItemDef {
     /// PK1-S1 (3.7): a consumable's `unmark` `{mark}`: the mark id whose latest entry on the target this battle it
     /// removes ("" = none).
     pub unmark: String,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `GRAFT` item's body fields (None for any other item type).
+    pub graft: Option<GraftSpec>,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): the item's theme id (a faction's arms; "" = none), which picks the
+    /// themed salvage a `salvage` recipe gives for it.
+    pub theme: String,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a `MASTERY_BOOK` item's family and XP (None for any other item type).
+    pub book: Option<MasteryBook>,
+    /// PK2-S4: the family's techniques (the resolved row's `mastery::ITEM_FAMILY_TECHNIQUES` key; mastery n opens the
+    /// first n) and its keystone skill (`ITEM_FAMILY_KEYSTONE`; "" = none).
+    pub family_techniques: Vec<Technique>,
+    pub family_keystone: String,
+    /// PK2-S4: the weapon's own technique, open while a masterwork instance of it is wielded (None = none).
+    pub technique: Option<Technique>,
+    /// PK2-S5a: the weapon's own full durability (`ITEM_DURABILITY`; 0 = its family's) and its family's
+    /// (`ITEM_FAMILY_DURABILITY`; 0 = none); `max_durability` reads them.
+    pub durability: i32,
+    pub family_durability: i32,
     pub raw: Obj,
 }
+
+/// PK2-S3: a class proficiency entry's role key (`ClassDef::proficiency_roles`).
+pub const PROF_ROLE_KEY: &str = "role";
+
+/// PK2-S2: the class and character key naming the item a fallen member leaves (`ClassDef::remains`).
+pub const REMAINS_KEY: &str = "remains";
 
 /// A1.2-K3: the `area` of a single-target consumable (the schema default; the writer stores no key for it).
 pub const ITEM_AREA_NONE: &str = "NONE";
@@ -619,6 +690,18 @@ pub const ITEM_FAMILY_RULES: &str = "family_rules";
 pub const ITEM_FAMILY_LEVEL2: &str = "family_level2_bonus";
 /// U3.2-S4: the resolved item row's key that carries its family's `level3_passive` (as `ITEM_FAMILY_LEVEL2`).
 pub const ITEM_FAMILY_LEVEL3: &str = "family_level3_passive";
+/// PR5-28 (U3 FB-36c): the resolved item row's key that carries its family's `range_band.max` (written by the loader only
+/// when the family has a `range_band`; the writer leaves it out of the stored form).
+pub const ITEM_FAMILY_REACH_MAX: &str = "family_reach_max";
+/// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6-7): a weapon's full durability key (an item family row's for its weapons, a
+/// WEAPON item's own over it; 0 = none) and the resolved row's key carrying the family's (left out of the stored form).
+pub const ITEM_DURABILITY: &str = "durability";
+pub const ITEM_FAMILY_DURABILITY: &str = "family_durability";
+/// PK2-S5a: the top of a full durability (the schema's range is 0 to it).
+pub const DURABILITY_MAX: i64 = 999;
+/// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): a dulled weapon (its instance at 0 durability) swings at this share of its
+/// weapon power (default 0.5: -50%; no brackets in between; `rpgkit_rules::damage::attack_power`).
+pub const DULLED_POWER_MULT: f64 = 0.5;
 
 /// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
 /// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at
@@ -726,13 +809,42 @@ impl ItemDef {
             family_rules,
             level2_bonus: obj(o, ITEM_FAMILY_LEVEL2).map(FamilyBonus::from_obj).unwrap_or_default(),
             level3_passive: string(o, ITEM_FAMILY_LEVEL3, ""),
+            family_reach_max: int(o, ITEM_FAMILY_REACH_MAX, 0),
             hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
             area: string(o, "area", ITEM_AREA_NONE),
             affects: Affects::parse(&string(o, "affects", "")),
             max_stack: int(o, "max_stack", 1),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            graft: (string(o, "item_type", "") == GRAFT).then(|| GraftSpec::from_obj(o)),
+            theme: string(o, "theme", ""),
+            book: (string(o, "item_type", "") == MASTERY_BOOK).then(|| MasteryBook::from_obj(o)),
+            family_techniques: Technique::list(o, mastery::ITEM_FAMILY_TECHNIQUES),
+            family_keystone: string(o, mastery::ITEM_FAMILY_KEYSTONE, ""),
+            technique: Technique::one(o, mastery::TECHNIQUE_KEY),
+            durability: int(o, ITEM_DURABILITY, 0).max(0),
+            family_durability: int(o, ITEM_FAMILY_DURABILITY, 0).max(0),
             raw: o.clone(),
         }
+    }
+
+    /// PK2-S5a: whether the item becomes a weapon instance once the manifest's `durability.from_act` is reached (item
+    /// type `WEAPON`, main hand or off hand; shields, armour, accessories and consumables stay plain ids).
+    pub fn is_weapon(&self) -> bool {
+        self.item_type == "WEAPON"
+    }
+
+    /// PK2-S5a: the weapon's full durability: its own, else its family's (0 = none: it never wears).
+    pub fn max_durability(&self) -> i32 {
+        if self.durability > 0 {
+            self.durability
+        } else {
+            self.family_durability
+        }
+    }
+
+    /// PK2-S2: whether the item is a body piece (item type `GRAFT`).
+    pub fn is_graft(&self) -> bool {
+        self.graft.is_some()
     }
 
     /// U3.2-S2: whether the item's family has engine rule `rule`.
@@ -915,6 +1027,22 @@ pub struct Catalog {
     /// R4-1 (`U2.3-TIERS`, FB-78): the role templates (kind `unit_templates`; engine-only), keyed by role (the first
     /// row of a role wins; the content check refuses a second). No row for a role = its units keep their class's stats.
     pub unit_templates: IndexMap<String, UnitTemplate>,
+    /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the unit tracks (kind `unit_tracks`; engine-only), keyed by id. No row =
+    /// no member holds a track.
+    pub unit_tracks: IndexMap<String, UnitTrackDef>,
+    /// PK1-KITFIX (c): the Dojo's data presets (kind `dojo_presets`; engine-only), keyed by id in file order. No row =
+    /// the Dojo lists its built-in presets only.
+    pub dojo_presets: IndexMap<String, DojoPresetDef>,
+    /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the body slots (kind `body_slots`; engine-only), keyed by id in file
+    /// order. No row = no member holds a body slot (the graft count, its floor and its channeled limit stay off).
+    pub body_slots: IndexMap<String, BodySlotDef>,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipes (kind `recipes`; engine-only), keyed by id in file order. No
+    /// row = no NPC offers the recipe service.
+    pub recipes: IndexMap<String, RecipeDef>,
+    /// PR5-33: the look of each weapon family's strikes (kind `item_families`), keyed by family id in file order: the
+    /// rows of the value `from_value` reads, or `set_family_looks` (the world data passes its families, which the
+    /// resolved catalog leaves out). No row = the game's default look.
+    pub family_looks: IndexMap<String, FamilyLook>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -970,9 +1098,21 @@ impl Catalog {
         for t in rows(UNIT_TEMPLATES_KIND).iter().map(UnitTemplate::from_obj) {
             cat.unit_templates.entry(t.role.clone()).or_insert(t);
         }
+        cat.unit_tracks = rows(UNIT_TRACKS_KIND).iter().map(UnitTrackDef::from_obj).map(|t| (t.id.clone(), t)).collect();
+        cat.body_slots = rows(BODY_SLOTS_KIND).iter().map(BodySlotDef::from_obj).map(|b| (b.id.clone(), b)).collect();
+        cat.recipes = rows(RECIPES_KIND).iter().map(RecipeDef::from_obj).map(|r| (r.id.clone(), r)).collect();
+        for p in rows(DOJO_PRESETS_KIND).iter().map(DojoPresetDef::from_obj) {
+            cat.dojo_presets.entry(p.id.clone()).or_insert(p);
+        }
+        cat.set_family_looks(rows("item_families").iter());
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
+    }
+
+    /// PR5-33: the family looks from item family rows `families` (`FamilyLook::from_obj`, keyed by id; replaces any).
+    pub fn set_family_looks<'a>(&mut self, families: impl Iterator<Item = &'a Obj>) {
+        self.family_looks = families.map(|o| (string(o, "id", ""), FamilyLook::from_obj(o))).collect();
     }
 
     /// Appends skills after the authored ones (a battle's synthetic item skills) and re-indexes.
@@ -1004,6 +1144,23 @@ impl Catalog {
             Some(row) => row.term(),
             None => Term::default_of(id),
         }
+    }
+
+    /// PK2-S1: the departure causes a save may record: `DEPART_CAUSES`, then each unit track row's `cause` (the game's
+    /// word, named in its data), each once.
+    pub fn depart_causes(&self) -> Vec<String> {
+        let mut out: Vec<String> = DEPART_CAUSES.iter().map(|c| c.to_string()).collect();
+        for t in self.unit_tracks.values() {
+            if !t.cause.is_empty() && !out.contains(&t.cause) {
+                out.push(t.cause.clone());
+            }
+        }
+        out
+    }
+
+    /// `cause` is one of `depart_causes`.
+    pub fn depart_cause_ok(&self, cause: &str) -> bool {
+        DEPART_CAUSES.contains(&cause) || self.unit_tracks.values().any(|t| !t.cause.is_empty() && t.cause == cause)
     }
 
     pub fn skill(&self, id: &str) -> Option<&SkillDef> {
@@ -1280,6 +1437,7 @@ pub const DEPART_LIVES: [&str; 5] = ["captured", "dead", "retired", "dismissed",
 /// KS1, 11.1: the lives that pay a keepsake (`keepsakes.on`, a rule row's `keepsakes_on`).
 pub const KEEPSAKE_LIVES: [&str; 3] = ["captured", "dead", "lost"];
 /// 11.4: why a member departed (`party.departed[].cause`).
+/// PK2-S1: a unit track row's `cause` is a known cause too (`Catalog::depart_cause_ok`); the game names it in its data.
 pub const DEPART_CAUSES: [&str; 7] = ["stayed", "stood", "downed", "bled_out", "lost_battle", "story", "roster"];
 /// L4: the HP of members who come home (`carry` = HEAL1's carry-over, `full` = back to full).
 pub const HP_AFTER: [&str; 2] = ["carry", "full"];
@@ -1457,8 +1615,11 @@ pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
 /// 4.2: a card's style.
 pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
 /// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`; FX1 5.1: a
-/// card's camera `shake`.
-pub const CARD_KEYS: [&str; 16] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake"];
+/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks) was `ash`, still taken (`CARD_KEY_ALIASES`).
+pub const CARD_KEYS: [&str; 16] = ["style", "image", "top", "bottom", "particles_rise", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake"];
+/// FB-206 (2b): the old card keys still taken, (old, key of `CARD_KEYS`): the kit's copy of the engine's
+/// `aegis_ui::vignette::CARD_KEY_ALIASES` (a GUI test keeps them equal); a card holding both names is refused.
+pub const CARD_KEY_ALIASES: [(&str, &str); 1] = [("ash", "particles_rise")];
 /// FX1 5.1: the camera shake presets a card's `shake` and a phase's shake effect may name: the kit's copy of the
 /// engine's `aegis_ui::fx::SHAKE_PRESETS` (the content crates do not depend on `aegis_ui`; a GUI test keeps them equal).
 pub const SHAKE_PRESETS: [&str; 5] = ["jolt", "heavy", "toll", "tremor", "quake"];
@@ -1479,12 +1640,15 @@ pub const FADE_IN_MS: i64 = 600;
 pub const FADE_OUT_MS: i64 = 400;
 /// 4.1: the default frame (letterbox and fade) colour, also a card backdrop's default top.
 pub const FRAME_COLOUR: &str = "#0a0b10";
-/// 4.1: a vignette's `music` that means silence ("" keeps the music playing; anything else is a track).
+/// 4.1: a vignette's `music` that means silence ("" keeps the music playing; anything else is a track, STORYMUSIC1: or
+/// a music key).
 pub const MUSIC_NONE: &str = "none";
 /// 4.1: a vignette's music track ends with this (a path under the asset layers' `audio/`).
 pub const MUSIC_EXT: &str = ".ogg";
 /// 4.1, 4.2: the asset folder music tracks and card cues sit under.
 pub const AUDIO_DIR: &str = "audio/";
+/// STORYMUSIC1: the folder under `AUDIO_DIR` a music key's track sits in (`music/<key>.ogg`).
+pub const MUSIC_DIR: &str = "music/";
 /// W3: the token kinds of a card text, `{flag:KEY}` (the flag's value as text) and `{member:KEY}` (the name of the
 /// member or character whose id the flag holds).
 pub const TOKEN_KINDS: [&str; 2] = ["flag", "member"];
@@ -1524,15 +1688,40 @@ pub const BOARD_INTRO_MAX: usize = 160;
 /// 4.7: the service line id of the board choice.
 pub const BOARD_SERVICE: &str = "board";
 
-/// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`).
+/// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`). STORYMUSIC1: every kind takes
+/// an optional `music` (as a vignette's: "" keeps the music playing).
 pub fn step_keys(kind: &str) -> &'static [&'static str] {
     match kind {
-        "vignette" => &["kind", "vignette"],
-        "fight" => &["kind", "encounter", "on_lost", "on_fled"],
-        "effects" => &["kind", "effects"],
-        "enter" => &["kind", "location", "anchor"],
-        "end" => &["kind", "to"],
+        "vignette" => &["kind", "vignette", "music"],
+        "fight" => &["kind", "encounter", "on_lost", "on_fled", "music"],
+        "effects" => &["kind", "effects", "music"],
+        "enter" => &["kind", "location", "anchor", "music"],
+        "end" => &["kind", "to", "music"],
         _ => &["kind"],
+    }
+}
+
+/// STORYMUSIC1: what a vignette's or a sequence step's `music` asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MusicAsk<'a> {
+    /// "": the music playing goes on.
+    Keep,
+    /// `MUSIC_NONE`.
+    Silence,
+    /// A track under the asset layers' `AUDIO_DIR`, ending `MUSIC_EXT` (`music/town.ogg`).
+    Track(&'a str),
+    /// A music key: one of the game's music keys (its manifest's `music_keys`: its music contexts and story keys) or a
+    /// track's key (`music/<key>.ogg`); the game resolves it through its music chain.
+    Key(&'a str),
+}
+
+/// STORYMUSIC1: the ask of a `music` value.
+pub fn music_ask(music: &str) -> MusicAsk<'_> {
+    match music {
+        "" => MusicAsk::Keep,
+        MUSIC_NONE => MusicAsk::Silence,
+        m if m.ends_with(MUSIC_EXT) => MusicAsk::Track(m),
+        m => MusicAsk::Key(m),
     }
 }
 
@@ -1588,12 +1777,13 @@ pub const PORTRAIT_EVENTS: [&str; 11] = ["hit", "crit", "guard_hit", "heal", "br
 /// PORTRAITFX2 5.3: the event whose rows read `min_level` (the skill's level).
 pub const PORTRAIT_SKILL_EVENT: &str = "skill";
 /// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
-/// crates do not depend on the UI, so a game test keeps the two equal).
-pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"];
+/// crates do not depend on the UI, so a game test keeps the two equal). FB-206 (2b): a row's old overlay name
+/// (`aegis_core::assets::PRIMITIVE_ALIASES`: `veins`, `eye_glow`, `ash`, `smoke`) reads as its canonical one.
+pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"];
 /// 5.1: the jolt presets (`aegis_ui::portrait_fx::PORTRAIT_JOLTS`).
 pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
 /// 5.1: the effects whose colour a row may set.
-pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "veins", "eye_glow", "ash", "smoke"];
+pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "lines", "point_glow", "particles_rise", "drift"];
 /// 5.1, 6.2: the screens that draw portraits (a row's `surfaces`; none listed = all).
 pub const PORTRAIT_SURFACES: [&str; 4] = ["dialogue", "roster", "panel", "timeline"];
 /// PORTRAITFX2 FL1: the plain face (`face_chain`'s fallback frame; "" draws it too).
@@ -1639,7 +1829,7 @@ pub struct PortraitCue {
     pub below: i32,
     /// `derived`: the drop in percent from the value without statuses (at least); 0 = not used.
     pub drop_pct: i32,
-    /// One of PORTRAIT_EFFECTS.
+    /// One of PORTRAIT_EFFECTS (an old overlay name read as its canonical one).
     pub effect: String,
     pub intensity: f64,
     /// Event rows: how long the effect runs (0 = the jolt preset's own); state rows: 0.
@@ -1671,7 +1861,7 @@ impl PortraitCue {
             stat: string(o, "stat", ""),
             below: int(o, "below", 0),
             drop_pct: int(o, "drop_pct", 0),
-            effect: string(o, "effect", "flash"),
+            effect: aegis_core::assets::canonical_primitive(&string(o, "effect", "flash")).to_string(),
             intensity: float(o, "intensity", 1.0),
             ms: int(o, "ms", 0),
             preset: string(o, "preset", ""),
@@ -1849,7 +2039,7 @@ pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", 
 /// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
 /// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
 /// `mark` join.
-pub const TRIGGER_EFFECTS: [(&str, &[&str]); 17] = [
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 18] = [
     ("ap", &["value", "set", "rounds", "to"]),
     ("grant", &["status", "rounds", "magnitude", "until", "to"]),
     ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
@@ -1867,7 +2057,17 @@ pub const TRIGGER_EFFECTS: [(&str, &[&str]); 17] = [
     (ROLL_TABLE, &["rows"]),
     (STRIKE_NEAREST, &["power", "then_status", "then_rounds"]),
     (MARK, &["mark", "value", "to"]),
+    (RATING_SET, &["rating", "value", "rounds", "to"]),
 ];
+/// PK1-KITFIX (b, FB-184 A): a rating held at a value `{rating, value, rounds}` (rounds 1-5 or -1 the rest of the
+/// battle): while it holds, the rating is the value whatever the statuses raising or lowering it add (a later set of
+/// the same rating replaces it).
+pub const RATING_SET: &str = "rating_set";
+/// PK1-KITFIX (b): the ratings a `rating_set` names (the status table's `rating` words; `guard` is not one: a guard
+/// comes from the Defend command, held guards and the guard status, so it has no single value to hold) and each one's
+/// value range: `armor` the Armor Rating (points), `attack_power` the statuses' attack factor (a percent: 100 = as
+/// without them), `move_rate` the tiles a Walk moves per block.
+pub const RATING_SET_RANGES: [(&str, (i64, i64)); 3] = [("armor", (0, 200)), ("attack_power", (0, 300)), ("move_rate", (1, 9))];
 /// PK1-S1 (docs/sessions/PK1_CORRUPTION.md 3.3): a weapon strike resolved at once on the nearest other unit of any side
 /// (no AP, no plan), then an optional status on the striker for its next rounds.
 pub const STRIKE_NEAREST: &str = "strike_nearest";
@@ -1875,6 +2075,18 @@ pub const STRIKE_NEAREST: &str = "strike_nearest";
 pub const MARK: &str = "mark";
 /// PK1-S1 (3.7): a consumable's `unmark` `{mark}` removes the target's latest mark of that id this battle; its keys.
 pub const UNMARK_KEYS: [&str; 1] = ["mark"];
+/// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the member grants of the passive grammar (passives only; gear, bands and
+/// meters may not carry them): `forbid_hands` `{hands: 2}` (equipping refuses items held in that many hands; a worn one
+/// goes to the stash at the settle) and `pierce_melee` `{}` (melee and bare-handed hits pierce armour, rule pierce).
+pub const FORBID_HANDS: &str = "forbid_hands";
+pub const PIERCE_MELEE: &str = "pierce_melee";
+pub const MEMBER_GRANTS: [&str; 2] = [FORBID_HANDS, PIERCE_MELEE];
+/// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `meter` effect's optional floor table by the holder's graft count
+/// (`[1 graft, 2 grafts, ...]`; a count past the table reads its last floor; no graft = no table floor), and its length.
+pub const METER_FLOORS: &str = "floors";
+pub const METER_FLOORS_MAX: usize = 8;
+/// PK2-S1: the `hands` a `forbid_hands` grant may name (two-handed items only so far).
+pub const FORBID_HANDS_VALUES: [i64; 1] = [2];
 /// PK1-S1 (3.2): the events whose trigger knows the hit it answers (a `damage` effect's `pct_of_hit` reads it; a rider
 /// reads the hit it rode on).
 pub const HIT_EVENTS: [&str; 4] = ["hit_taken", "guarded_hit", "hit_dealt", "kill"];
@@ -2056,9 +2268,9 @@ impl MeterGate {
     }
 }
 
-/// PK1-S2a (PK1 4.1, rule channel): a skill's `channel` block: `none` (no marrow version), `only` (marrow only: open
+/// PK1-S2a (PK1 4.1, rule channel): a skill's `channel` block: `none` (no channeled version), `only` (channeled only: open
 /// only in a Channel round), `cost` (replaces the derived channel meter cost), `power` (replaces `channel_power`) and
-/// `effects` (trigger effects run as a rider on each unit the marrow version lands on).
+/// `effects` (trigger effects run as a rider on each unit the channeled version lands on).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ChannelSpec {
     pub none: bool,

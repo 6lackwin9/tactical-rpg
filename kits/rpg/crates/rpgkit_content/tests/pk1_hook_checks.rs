@@ -209,7 +209,7 @@ fn each_broken_row_rule_is_one_error() {
 fn the_loader_checks_a_hazard_meter_shape_before_the_meters_load() {
     let row: Dict = json!({"id": "miasma", "name": "Miasma", "origin": "system", "meter": {"meter": "rage", "delta": 5}}).as_object().unwrap().clone();
     fn found(row: &Dict, meters: Option<&[String]>) -> Vec<String> {
-        let refs = hook_kinds::Refs { skills: &[], derived: &[], families: &[], meters };
+        let refs = hook_kinds::Refs { skills: &[], derived: &[], families: &[], meters, terrain: &[] };
         hook_kinds::check_rows(HAZARDS_KIND, std::slice::from_ref(row), &refs).remove(0)
     }
     let known = vec!["tension".to_string()];

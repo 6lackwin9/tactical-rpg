@@ -81,11 +81,19 @@ pub struct Resolver {
     /// S2.2-S3 (FB-85, Guard Option 1C): each (unit, block) of this round whose block started guarded (a running Defend,
     /// a held guard or a `guard` status raised its guard), cleared with the round; the sim's feel mode counts them.
     pub guarded: Vec<(UnitId, i32)>,
+    /// PR5-32: the typed events of the log's lines (`event`; one per line a screen reacts to, keyed by its index in
+    /// `log`). The log's text is unchanged by them.
+    pub events: Vec<crate::event::BattleEvent>,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new(), guarded: Vec::new() }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new(), guarded: Vec::new(), events: Vec::new() }
+    }
+
+    /// PR5-32: records `kind` for the line the log takes next.
+    pub fn note_event(&mut self, kind: crate::event::EventKind) {
+        self.events.push(crate::event::BattleEvent { line: self.log.len(), kind });
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -158,6 +166,46 @@ impl Resolver {
         resolving
     }
 
+    /// PK2-S1: the command `i` starting now runs a skill with `uses_per_battle` (0 = no limit): used up already, it is
+    /// cancelled with a log line (true); its use is counted once its costs are paid (`count_use`).
+    fn used_up(&mut self, w: &mut World, i: usize) -> bool {
+        let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
+        let Some(limit) = w.cat.skill(&id).map(|s| s.uses_per_battle).filter(|&n| n > 0) else { return false };
+        if w.skill_uses.get(&(c, id)).copied().unwrap_or(0) < limit {
+            return false;
+        }
+        self.scheduled[i].cancelled = true;
+        let msg = format!("[Action Failed] {}'s {} is used up this battle.", w.units[c].name, self.scheduled[i].command.name);
+        self.notes.push((i, msg.clone()));
+        self.log.push(msg);
+        true
+    }
+
+    /// PK2-S1: counts one use of the command's skill when it has a `uses_per_battle` limit. PK2-S4: an attack skill (not
+    /// an item) started by a hero built from member state (`Unit::rank_choice`) records its main-hand weapon's family
+    /// (`World::weapon_attacks`). PK2-S5b: the weapon it swings wears (`wear::spend`).
+    fn count_use(&self, w: &mut World, i: usize) {
+        let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
+        let Some(s) = w.cat.skill(&id) else { return };
+        let attack = crate::skill::kind(s) == crate::skill::Kind::Attack && !crate::skill::is_item(s);
+        if s.uses_per_battle > 0 {
+            *w.skill_uses.entry((c, id)).or_insert(0) += 1;
+        }
+        let u = &w.units[c];
+        let family = u.inventory.get(rpgkit_rules::gear::Slot::MainHand).filter(|e| e.item.item_type == "WEAPON").map(|e| e.weapon_type().to_string()).filter(|f| !f.is_empty());
+        if let Some(family) = family.filter(|_| attack && u.rank_choice.is_some()) {
+            let list = w.weapon_attacks.entry(c).or_default();
+            if !list.contains(&family) {
+                list.push(family);
+            }
+        }
+        // PK2-S5b: the weapon it swings wears (rule durability; nothing tracked, nothing spent)
+        if !w.units[c].wear.is_empty() {
+            let s = s.clone();
+            crate::wear::spend(w, c, &s);
+        }
+    }
+
     /// Commands starting now pay AP (skill + stance switch; debt allowed; RULESET1 T11: not the units `pays_ap` spares),
     /// enter their stance and run on_start.
     /// ATTACKLOCK1: under `attack_lock` the block's dashes start after its other actions and read the tiles as they
@@ -186,11 +234,17 @@ impl Resolver {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
+            // PK2-S1: a skill with `uses_per_battle` the unit has used up fails at its start (no AP)
+            if self.used_up(w, i) {
+                continue;
+            }
             // HOOKS1 UM2: a meter cost the unit cannot pay now fails the command unpaid (rule unit_meters; nothing in
             // classic)
             if crate::meter::unpaid(self, w, i) {
                 continue;
             }
+            // PK2-S1: the costs are paid, so the use counts (a command failing unpaid keeps its use)
+            self.count_use(w, i);
             let a = &self.scheduled[i];
             let total = a.command.ap_cost + a.command.stance_switch_cost;
             if w.pays_ap(c) {
@@ -208,11 +262,16 @@ impl Resolver {
             if lock_on && opening.is_none() && self.scheduled[i].command.dashes_at_start() {
                 opening = Some(w.grid.positions.clone());
             }
+            let moves_before = (self.scheduled[i].command.moved, self.scheduled[i].command.dashed);
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
             if lock_on {
                 self.scheduled[i].command.lock_tile(w, opening.as_deref());
             }
             if !msg.is_empty() {
+                // PR5-32: a dash or chase line (the start moved the unit) is a move
+                if (self.scheduled[i].command.moved, self.scheduled[i].command.dashed) != moves_before {
+                    self.note_event(crate::event::EventKind::Move);
+                }
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
@@ -266,6 +325,9 @@ impl Resolver {
         crate::poise::resolve_hits(self, w, idx);
         let cmd = &self.scheduled[idx].command;
         if !cmd.log.is_empty() {
+            if let Some(kind) = cmd.cue.clone() {
+                self.events.push(crate::event::BattleEvent { line: self.log.len(), kind });
+            }
             self.log.push(cmd.log.clone());
         }
         // HOOKS1 AT2: who the action's hits took HP from, for next round's `brace_after_hit` (rule ai_tactics)
@@ -373,10 +435,13 @@ impl Resolver {
         self.log.extend(lines);
         // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
         crate::ground::round_end(self, w);
-        // HOOKS1 UM3: the meters' decay, while this round's Defends and held guards are still known (rule unit_meters)
-        crate::meter::round_end(self, w);
-        // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
+        // HOOKS1 UM3: this round's Defends and held guards, for the meters' decay below (the triggers end the held guards)
+        let guarded = crate::meter::guarded_now(self, w);
+        // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic).
+        // PR5-26 (FB-191 Option A): before the decay, so a meter's `round_end` row reads the round's value
         crate::trigger::round_end(self, w);
+        // HOOKS1 UM3: the meters' decay (rule unit_meters)
+        crate::meter::round_end(self, w, &guarded);
         // S1.2-S4: every held guard ends with the round (a multi-round guard goes on as its `guard` status)
         for &c in &self.registered {
             w.units[c].held_guard = None;
