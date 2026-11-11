@@ -323,10 +323,12 @@ ROLLTABLE1 (2026-11-10): `roll_table` is also a trigger effect (`rows` of `{weig
 
 PK1-S1 (2026-11-10): trigger effects also `strike_nearest`, `mark`, `ap` (`set`, `rounds`) and `damage` `pct_of_hit`; a `hazards` row and an arena `effect` take `meter` {meter, delta} (a holder's meter change); unit-meter bands take `heal_taken` (bands only); meter-rule effects take the new trigger effects. On `ally_hit` a `roll_table` cannot hold a `guard` (PR5-16).
 
-PK1-S2a (2026-11-10): skill fields `channel` {none, only, cost, power, effects}, `requires_meter` {meter, min}, `hp_cost_pct`; rule `channel` with ruleset fields `channel_meter`, `channel_power`, `channel_cost`, `marrow_actives`, `channel_rest`; a meter row's `skills` may raise the meter when `channel.only`.
+PK1-S2a (2026-11-10, renamed `PR5-29` 2026-11-11): skill fields `channel` {none, only, cost, power, effects}, `requires_meter` {meter, min}, `hp_cost_pct`; rule `channel` with ruleset fields `channel_meter`, `channel_power`, `channel_cost`, `channeled_actives`, `channel_rest`; a meter row's `skills` may raise the meter when `channel.only`.
 
-PK1-S2b (2026-11-10): the game term `marrow_mark` names a marrow version ("Name (Marrow)").
+PK1-S2b (2026-11-10, renamed `PR5-29` 2026-11-11): the game terms `channeled_mark` (Emberwake: `(Marrow)`) and `standard_mark` (Emberwake: `Cold Steel`) name the channeled and standard versions.
 
 HEALPCT1 (2026-11-10): skill field `heal_pct` (SUPPORT; a percent of the target's max HP added after the heal formula; `heal_taken` applies); ruleset field `channel_ai_edge`.
 
 SKILL-UNMARK-TURNED (2026-11-10): a `SUPPORT` skill's `unmark` (as a consumable's) reaches a battle-start party member now `hostile_all` and calms it at the next round start; under `round_intent` a `Support` round may target that member while the unit holds a usable `unmark` skill or item; the party AI uses its `unmark` skill on a turned member it would calm.
+
+AUDIT-PR5-BUGS / R14-SPEC-CLEANUP (2026-11-10, `PR5-26`, `PR5-28`): round end runs `round_end` triggers before unit-meter decay so a crisis `at_least` the meter's max fires first; the AI Vents from `75%` of the channel meter's max on the planner's self row (`Stand` under `field_intent`), and its Channel row scores `channel.only` attacks; a reach weapon family's optional `range_band` `{min: 1, max: 2..6}` sets `family_reach_max` (fallback `REACH_WEAPON_REACH = 2`).
