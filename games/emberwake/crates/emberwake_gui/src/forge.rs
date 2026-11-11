@@ -138,7 +138,15 @@ impl Forge {
             (false, "skills") => {
                 if let Some(sk) = cat.skill(id) {
                     line(format!("{} [{}]", sk.name, sk.grade), th().gold);
-                    line(format!("Cost: {} AP, {} block{}", sk.level, sk.blocks, if sk.blocks == 1 { "" } else { "s" }), th().text);
+                    // PR5-31: the AP rule's cost (`ap_cost`: the level, Move 1, Rest nothing), and each catalog ruleset
+                    // that prices it otherwise (`ap_cost_by`: the row's `ap_cost` under the AP cost rule)
+                    let ap = emberwake_battle::skill::ap_cost(sk, None);
+                    let other: Vec<String> = cat.rulesets.values().map(emberwake_rules::ruleset::Ruleset::from_row).filter_map(|rs| {
+                        let by = emberwake_battle::skill::ap_cost_by(sk, None, &rs);
+                        (by != ap).then(|| format!("{} {by} AP", rs.id))
+                    }).collect();
+                    let other = if other.is_empty() { String::new() } else { format!(" ({})", other.join(", ")) };
+                    line(format!("Cost: {ap} AP{other}, {} block{}", sk.blocks, if sk.blocks == 1 { "" } else { "s" }), th().text);
                     line(format!("Kind: {}   Stance: {}", sk.kind, sk.stance), th().text);
                     line(format!("Family: {}, tier {}", cat.family_of(id), sk.tier), th().text);
                     line(format!("Targets: {}, reach {}-{}", sk.target_mode, sk.reach_min, sk.reach_max), th().text);

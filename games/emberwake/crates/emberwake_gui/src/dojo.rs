@@ -10,7 +10,7 @@ use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_ui::window::{Desk, Frac, Layout, Win};
-use crate::party::{DeckTerms, DECK_KINDS};
+use emberwake_world::party_ops::{DeckTerms, DECK_KINDS};
 use emberwake_battle::dojo::{stance_label, DojoSession, Fx, PlanSetup, PlanView, Tone, SLOTS};
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::round_intent::{ManeuverKind, RoundIntent};
@@ -291,11 +291,7 @@ impl Dojo {
             DAct::DeckUnslot(kind, i) => self.deck_edit(|t, d| t.unslot(d, kind, i)),
             DAct::OrderUp(intent, k) => self.deck_edit(|t, d| t.after_drop(d, &format!("order.{intent}.{k}"), &format!("order.{intent}.{}", k.saturating_sub(1)))),
             DAct::DeckDefault => s.set_deck(Deck::default()),
-            DAct::OrderAuto => self.deck_edit(|t, d| {
-                let mut d = t.shown(d);
-                d.order.clear();
-                Ok(d)
-            }),
+            DAct::OrderAuto => self.deck_edit(|t, d| Ok(t.order_auto(d))),
             DAct::FollowOpen(op) => self.follow_open = if self.follow_open.as_deref() == Some(op.as_str()) { None } else { Some(op) },
             DAct::FollowAdd(op, fam) => self.deck_edit(|t, d| t.follow_add(d, &op, &fam, None)),
             DAct::FollowRemove(op, k) => self.deck_edit(|t, d| t.follow_remove(d, &op, k)),

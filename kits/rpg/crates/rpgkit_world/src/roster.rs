@@ -593,6 +593,27 @@ pub fn on_rest(party: &mut PartyState) {
     }
 }
 
+/// The squad's active size (party_model.gd toggle; PR5-31 moved it from the game's party screen with no rule change):
+/// member `id` joins or leaves the active members. An empty active list (every member up to `max_active` fights) is
+/// first written out as those members; the last active member stays, and the list holds at most `max_active`. Err: why
+/// not (the written-out list is kept).
+pub fn toggle_active(party: &mut PartyState, id: &str) -> Result<(), String> {
+    if party.active_ids.is_empty() {
+        party.active_ids = party.members.iter().take(party.max_active as usize).map(|m| m.id.clone()).collect();
+    }
+    if let Some(i) = party.active_ids.iter().position(|x| *x == id) {
+        if party.active_ids.len() <= 1 {
+            return Err("Keep at least one active member.".into());
+        }
+        party.active_ids.remove(i);
+    } else if party.active_ids.len() as i64 >= party.max_active {
+        return Err(format!("The active party holds at most {}.", party.max_active));
+    } else {
+        party.active_ids.push(id.to_string());
+    }
+    Ok(())
+}
+
 // ---- bunks, joining, the fight minimum, read keys (slice 4) ----
 
 /// BK7: world `w`'s resolved roster settings (its party max and `roster` block), kept on the party (never saved).

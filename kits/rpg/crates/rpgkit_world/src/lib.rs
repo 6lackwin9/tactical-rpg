@@ -11,6 +11,7 @@ pub mod dialogue;
 pub mod explore;
 pub mod mastery;
 pub mod new_game;
+pub mod party_ops;
 pub mod progression;
 pub mod purse;
 pub mod quest;
