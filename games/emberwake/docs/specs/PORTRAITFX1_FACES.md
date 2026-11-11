@@ -1,7 +1,6 @@
 # PORTRAITFX1 expression sheets: prompts
 
-Status: PORTRAITFX1-XA batch 1 PLACED 2026-11-01 (the seven aligned sets are in the game's portraits folders with sidecars) (re-queued 2026-11-01 with the accessory rule, a stronger Angry cell and Bram's loupe line) (the seven characters with their own ART3 portraits; the six founders wait for
-FOUNDERPORT1-P). Laid out like [ART3_PROMPTS.md](ART3_PROMPTS.md): the shared style block (the 2x2 template of
+Status: PORTRAITFX1-XA batch 1 PLACED 2026-11-01 (synced `2026-11-11` to canonical `CANON.md` 3.2 Hub NPC IDs `talia_rusk`, `berek_dorn`, `sabina_kress` for `PR5-39` & `AI-05`; `berek_dorn` keeps his loupe rule `1:1`). Laid out like [ART3_PROMPTS.md](ART3_PROMPTS.md): the shared style block (the 2x2 template of
 `docs/specs/PORTRAITFX1_TASKS.md` 2.4.2, own-portrait wording, the four cells fixed), then one section per id with
 its character lines from ART3_PROMPTS.md; the sent prompt is the style block, a blank line, the id's block. Each
 `reference:` line names the character's own portrait (sent as the reference image, never as prompt text). Cells:
@@ -22,43 +21,43 @@ The four variations are:
 - Bottom-Right: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in.
 ```
 
-## Tess (`tess`)
+## Talia Rusk (`talia_rusk`)
 
-reference: art_src/tess.png
+reference: art_src/talia_rusk.png
 
-Hub NPC (non-combat), the founders' portraits row. The game: Tess Morn, the cell's dead-drop courier; runs the mission
-board at the Water-Lock Basin; Vesper's former runner contact; deaf in one ear from an Inquisition flash-bomb.
+Hub NPC (non-combat). The game: Talia Rusk (29), crippled cipher spymaster who runs the dead-drop mission board at the
+Water-Lock Basin; mentored Vesper and shelters Ivo; deaf in her right ear from Ruthven's Inquisition sweep.
 
 ```text
-Character: Tess Morn, Dead-Drop Courier. Stylization warm and readable: large, bright, alert eyes, a small pointed chin, expressive dark brows, a quick lopsided half-smile, a sharp, lively face with soot smudges and a few freckles. A young woman of nineteen, an adult, wiry and compact. Long, thick, wild dark-brown hair: one messy loose braid over her left shoulder, the rest falling free in tangled strands, swept back behind her right ear. Her right ear, the deaf one, on the near side toward the viewer (the left side of the picture), is fully visible and not covered by hair: scarred and notched at the rim, the skin round it and down onto her jaw puckered, shiny and pinkish-pale from an old burn from a flash-bomb, clearly readable at small size. Patched leather shingle-armour of overlapping scraps over greasy wool wraps, a courier's satchel strap across the chest with a rolled message tube.
-Mood: quick, wary, determined.
-Main colours: boiled leather brown and rotting oak, grey wool wraps, a small tallow amber accent.
+Character: Talia Rusk, Cipher Spymaster of the Basin. Stylization warm and readable: sharp observant eyes, weathered late-twenties lines around the mouth and brow, a small pointed chin, expressive dark brows, a dry guarded half-smile. A Spent woman of twenty-nine, lean and tough. Dark-brown hair pulled back in a low utilitarian knot with stray soot-dulled strands, swept completely clear of her right ear. Her right ear, the deaf one on the near side toward the viewer (the left side of the picture), is fully visible: scarred and notched at the rim, puckered pale burn tissue running onto her jaw from an Inquisition flash-pot. Heavy grey-brown wool dispatch cloak pinned over patched leather, bone-cipher tally rods at her collar, the carved top of an ash-wood underarm crutch resting against her near shoulder.
+Mood: sharp, watchful, unsentimental.
+Main colours: damp wool grey-brown and boiled leather, carved pale bone rods, tallow amber rim light.
 ```
 
-## Bram (`bram`)
+## Berek Dorn (`berek_dorn`)
 
-reference: art_src/bram.png
+reference: art_src/berek_dorn.png
 
-Hub NPC (non-combat), the founders' portraits row. The game: Bram "Iron-Lung" Karr, the smith at the Tinker's Hearth;
-a former master foundryman, lungs ruined, mind intact.
+Hub NPC (non-combat). The game: Berek "Cinder-Lung" Dorn (33), the smith at the Tinker's Hearth and Preservationist
+voice; former Fourth Kiln master valve-caster, lungs ruined, mind intact.
 
 ```text
-Character: Bram "Iron-Lung" Karr, Tinker of the Hearth. Stylization warm and readable: a big square head, a huge barrel chest and wide shoulders, a broad flattened nose, a heavy kind-but-tired brow over deep-set eyes. A man in his thirties who looks older. A wild, shaggy mane of dark-brown hair streaked with grey, worn loose to the shoulders, and a big bushy soot-streaked beard; a thick, scarred throat. An iron jeweller's loupe strapped over his right eye. The iron loupe stays strapped over his right eye in every cell, also when the eyes are squeezed shut. A scorched cowhide apron studded with riveted pouches over a rolled-sleeve work shirt, soot and burn marks on his forearms. Warm forge glow on one side of his face.
+Character: Berek "Cinder-Lung" Dorn, Smith of the Tinker's Hearth. Stylization warm and readable: a big square head, a huge barrel chest and wide shoulders, a broad flattened nose, a heavy kind-but-tired brow over deep-set eyes. A man in his early thirties who looks older. A wild, shaggy mane of dark-brown hair streaked with grey, worn loose to the shoulders, and a big bushy soot-streaked beard; a thick, scarred throat. An iron jeweller's loupe strapped over his right eye. The iron loupe stays strapped over his right eye in every cell, also when the eyes are squeezed shut. A scorched cowhide apron studded with riveted pouches over a rolled-sleeve work shirt, soot and burn marks on his forearms. Warm forge glow on one side of his face.
 Mood: gruff, steady, stubborn.
 Main colours: boiled leather and scorched cowhide brown, scavenged iron, tallow amber forge glow.
 ```
 
-## Sister Aline (`aline`)
+## Chirurgeon Sabina (`sabina_kress`)
 
-reference: art_src/aline.png
+reference: art_src/sabina_kress.png
 
-Hub NPC (non-combat), the founders' portraits row. The game: Sister Aline Vance, surgeon at the Apothecary's Slab and
-the Flesh-Broker voice; a former Anointed Prosector of the Hall of Holy Dissection.
+Hub NPC (non-combat). The game: Chirurgeon Sabina Kress (31), surgeon at the Apothecary's Slab and the Flesh-Broker
+voice; exiled outer-ward anatomist who once studied under Chief Anatomist Lazar.
 
 ```text
-Character: Sister Aline, Surgeon of the Apothecary's Slab. Stylization readable but cool: a long elegant neck, a long narrow face with high sharp cheekbones and hollow cheeks, large cool calculating eyes under straight dark brows, a small firm mouth. A tall, gaunt woman in her mid-twenties. Cropped soot-black hair, cut short and severe with a razor, ragged at the nape, one longer lock falling over her brow; bareheaded, no veil and no wimple. A clerical habit with its holy emblem cut away and defaced, under a stiff leather embalmer's apron stained with vitriol. A bandolier of silver scalpels and bone cannulas across the chest; sulfur-yellow stained fingertips on one hand raised near the strap. Faint early black-violet veins creeping up the side of her neck.
-Mood: cold, pragmatic, unflinching.
-Main colours: bleached linen and damp basalt habit, boiled leather apron, polished steel scalpels, a hint of blight violet.
+Character: Chirurgeon Sabina Kress, Surgeon of the Apothecary's Slab. Stylization readable but cool: a long narrow face with high sharp cheekbones and hollow cheeks, severe silver-grey eyes under straight dark brows, a small clinical mouth, no spectacles. A tall, gaunt woman of thirty-one. Cropped soot-black hair streaked with early silver at both temples, bareheaded, no veil and no wimple. A high-collared dark oiled-green prosector coat over a vitriol-stained leather surgical apron, an unhooked dark leather surgical half-mask hanging loose from one collar button, a bandolier of glass pipettes and polished steel scalpels across the chest, sulfur-stained fingertips.
+Mood: clinical, unsentimental, unflinching.
+Main colours: dark oiled prosector green and damp basalt, boiled leather apron, polished steel scalpels, faint amber-green glass pipettes.
 ```
 
 ## Captain Vane (`captain_vane`)

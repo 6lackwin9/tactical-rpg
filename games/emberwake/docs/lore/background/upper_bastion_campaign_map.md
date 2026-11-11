@@ -91,7 +91,7 @@ Both cost `1` Warded Tallow per day (`CANON` 4.2); Act 2 raises the **Alert floo
 
 Every Founder has an Act 2 personal reckoning offering **Cold Steel vs. Inoculated** completion (`CL-02`). **Survivor Inheritance (`CL-09`)**: if that Founder was captured on the `M5` winch or fell in Act 2 (`roster.departed.<id>`), the mission **never vanishes**—their closest Hub mentor and surviving cellmates inherit the raid, paying cell-wide Hearth/Slab relics and Doctrine shifts instead of that Founder's personal keystone:
 
-1. **`Kaelen` (or `Berek` + cell)**: Hunts **`Capt. Vane`** in the Seventh Ward Watch garrison (`Vane` dies; burns or leverages his Bastion debt ledgers -> `Deserter's Kettle Helm` / cell-wide Watch plate).
+1. **`Kaelen` (or `Berek` + cell)**: Hunts **`Capt. Vane`** in the Seventh Ward Castellan Watch garrison (`Vane` dies; burns or leverages his Bastion debt ledgers -> `Deserter's Kettle Helm` / cell-wide Watch plate).
 2. **`Vesper` (or `Talia` + cell)**: Corners **`Guild-Master Orlov`** in his Guild Counting-House (`Orlov` dies; seizes `+10` `Warded Tallow` & tallow ledgers).
 3. **`Maren` (or `Sabina` + cell)**: Unseals St. Lyra's Scriptorium Forbidden Vault using `M2`'s cipher rubbings.
 4. **`Hollis` (or `Talia` + cell)**: Intercepts `Ruthven`'s decoy convoy to rescue `Hollis`'s `14`-yo sister **`Wren`** into Basin shelter.

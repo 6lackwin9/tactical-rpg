@@ -39,7 +39,7 @@ lullaby is a harvest). No new character is named. Part of the [story guide](../S
 | [factions](factions_and_sociology.md) 2.1 | Bells summon the city to the plazas; the hierarchs choose; the date is the Doom Clock; size and frequency were open |
 | [onboarding](../narrative/new_game_onboarding_and_intro.md) 2, slide 3 | "Sung in young blood each generation"; no number on screen |
 | [prologue](../narrative/prologue_and_starter_squad_lore.md) 2.1, 4 | Kaelen's dawn sweep "for the coming Red Tithing" took sixteen apprentices; at the hearth Vesper says "The Red Tithing is in six weeks" |
-| [npcs](npcs_and_questlines.md) 2.3, 3.1, 3.2, 4.4 | Pip is held in the Toll-Pen for the Tithing; Othemar preaches it as an agonising necessity; Ida "will be taken at the next Tithing"; Agnes keeps her grandmother's tales of the stars |
+| [npcs](npcs_and_questlines.md) 2.3, 3.1, 3.2, 4.4 | Ivo is held in the Toll-Pen for the Tithing; Othemar preaches it as an agonising necessity; Ida "will be taken at the next Tithing"; Agnes keeps her grandmother's tales of the stars |
 | [central truth](central_truth.md) option A | Each Tithing feeds the dream that bleeds the Clerisy's marrow; Othemar's last sacrament is a Great Tithing to keep the titan dreaming another lifetime; if it completes, the Clerisy is fed for a generation and the Unsealed of Cinderreach are gone |
 | [High Bastion](upper_bastion_campaign_map.md) 4.4 | Mission 2.4 (the Embalming Cloisters) finds documents with the true Tithing date |
 | [High Bastion](upper_bastion_campaign_map.md) 4.6 | The Reliquary Crypts hold "the tomb of the first Extinguishers" (Q-12, open) |
@@ -57,7 +57,7 @@ lesser tithing is when the yearly rite comes once a year and the campaign spans 
   harvest large enough to last.
 - Acts 1-2, soft clock at 0: the Clerisy holds a lesser tithing (hundreds or fewer, taken from the pens) to keep the
   dream fed while the pens fill for the Great one, and the clock restarts at a new count (days: balance lane). Story
-  cost: any named stake not yet freed is taken (story guide G-20: Pip, Ida), and the freed-youth count drops (Q-29).
+  cost: any named stake not yet freed is taken (story guide G-20: Ivo, Ida), and the freed-youth count drops (Q-29).
   Tithings out of season are themselves a sign that something is wrong.
 - Mission 2.4: the documents give the Great Tithing's date and scale; the clock is corrected once and becomes the Act 3
   budget (Q-17 option a); it turns hard in Act 3 and stops when Othemar falls at node 21.
@@ -72,8 +72,8 @@ lesser tithing is when the yearly rite comes once a year and the campaign spans 
 - The player learns: mission 2.4 (the documents: thousands, and the date), Act 3 (Malachi explains why the dream needs
   it, Q-02 rec).
 - Doom Clock: as section 2; the clock is labelled "the Red Tithing" until 2.4, then "the Great Tithing".
-- Endings: A Preservation ends a harvest that has just escalated; B Ascendancy puts the cell in the seat of an elite
-  that was ready to take thousands; C Red Martyrdom answers the largest Tithing with a willing one.
+- Endings: A Black-Iron Severance ends a harvest that has just escalated; B The Living Conduit puts the cell in the
+  seat of wardens binding the Core without child tithes; C Stone Martyrdom petrifies Core and squad into stone pillars.
 - Cost and risk: the cheapest (no history to write; nothing changes in Act 1). The reveal is about scale only, and
   Maren's texts (Q-07), Agnes's tales and the Reliquary tomb (Q-12) stay without a payoff.
 
@@ -92,9 +92,9 @@ lesser tithing is when the yearly rite comes once a year and the campaign spans 
   that Great Tithing); Act 3, Malachi confirms what the dream is fed for.
 - Doom Clock: as section 2. The Extinguished failure screen becomes a real echo: losing means a second Extinguishing
   for the Unsealed.
-- Endings: A Preservation ends the cycle for good (no dream to feed); B Ascendancy hands the cell the chronicle and the
-  source, so the next Great Tithing would be theirs to call; C Red Martyrdom sates the dream so the cycle never turns
-  again.
+- Endings (`CANON.md` 4.1): A Black-Iron Severance kills the Core's brainstem so the cycle ends for good; B The Living
+  Conduit binds grafted wardens to sedate the Core without child tithes (carrying the chronicle's temptation); C Stone
+  Martyrdom ossifies Core and squad into black-stone pillars holding up Cinderreach.
 - Cost and risk: more history to keep consistent; pays off four open threads already in the docs (Agnes, Q-07, Q-12,
   the Extinguished echo). If Maren is the captured founder, her Act 1 hint is lost, so 2.4 and 2.6 must carry the
   reveal alone.
@@ -146,6 +146,6 @@ the central truth, Mantle Fissure 2.1 and narrative_agency 3.4.
 
 1. Option A, B or C (recommended: B). Decided (2026-10-25, user): B.
 2. If B: b1 or b2 (recommended: b2). Decided (2026-10-25, user): b2.
-3. Does a lesser tithing take a named stake not yet freed (Pip, Ida)? Recommended: yes (story guide G-20). Open.
+3. Does a lesser tithing take a named stake not yet freed (Ivo, Ida)? Recommended: yes (story guide G-20). Open.
 4. Does the visible clock change its label from "the Red Tithing" to "the Great Tithing" at 2.4? Recommended: yes.
    Decided (2026-10-25, user; CANON 2.6): yes.

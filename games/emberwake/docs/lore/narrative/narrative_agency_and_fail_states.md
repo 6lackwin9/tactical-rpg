@@ -12,7 +12,7 @@ The cast is a resilient ensemble: the `6` Founders have personal arcs across Act
 
 | Founder | World Tie | Act 1 Hook (`CL-08`) | Act 2 Reckoning & Survivor Inheritance (`CL-02`, `CL-09`) |
 | --- | --- | --- | --- |
-| `Kaelen` (`Vanguard`, `24`) | Seventh Ward Watch deserter who refused `Vane`'s Order 44 | `M1` (`Vane` withdraws) + *"Seventh Ward Bellows"* (`Slag Plating` + Hearth discount) | Hunts `Capt. Vane` & Watch debt ledgers *(inherited by `Berek` + cell)* |
+| `Kaelen` (`Vanguard`, `24`) | Castellan Watch deserter (Seventh Ward) who refused `Vane`'s Order 44 | `M1` (`Vane` withdraws) + *"Seventh Ward Bellows"* (`Slag Plating` + Hearth discount) | Hunts `Capt. Vane` & Watch debt ledgers *(inherited by `Berek` + cell)* |
 | `Vesper` (`Gutter-Stalker`, `21`) | Ash-Crawl curfew runner whose brother died on `Orlov`'s tallow tithe | `M4` (`Orlov` withdraws) + *"Sluice Lock-Ciphers"* (`0`-Alert Siphon Shortcut) | Raids `Orlov`'s Counting-House *(inherited by `Talia` + cell)* |
 | `Maren` (`Heretic Acolyte`, `22`) | Defrocked St. Lyra's copyist whose mentor `Quell` vivisected | `M2` (`Quell` slain, saved captives -> `+1` `Rock Salt`) + *"Liturgical Cipher Rubbings"* | Unseals St. Lyra's Forbidden Vault *(inherited by `Sabina` + cell)* |
 | `Hollis` (`Arbalestier`, `23`) | Crag poacher whose bolt blinded `Ruthven` while `Wren` (`14`) was taken | *"The Crag-Sight Overlook"* (`Lever-Winch` + delays `M5` R3 wave -> R4) | Frees `Wren` from Bastion convoy *(inherited by `Talia` + cell)* & faces `Ruthven` at `2.6` |

@@ -14,7 +14,7 @@ room.
 
 | Resource | Kind | Use | Comes from | Layer |
 | --- | --- | --- | --- | --- |
-| Scrap | currency (replaces gold) | trade, forge costs, bribes | encounter purses, foundry and Watch spoils, sales to Madame Sallow | `[kit hook]` resource purse; `[data]` name |
+| Scrap | currency (replaces gold) | trade, forge costs, bribes | encounter purses, foundry and Watch spoils, sales to Widow Varka | `[kit hook]` resource purse; `[data]` name |
 | Warded Tallow | upkeep | 1 per day of travel or rest for the whole cell; at 0 every battle starts at -2 AP until restocked | Tallow Guild shipments, Inquisitor stores, the vats (ENC-EVT-02, -04), ENC-ACT2-03 (+20) | `[kit hook]` resource purse |
 | Rock Salt | stash material | Slab flushes (effect: CANON open question), bribes | mortuary carts, cathedral salt cellars, bone-mills | `[data]` `material` item |
 | Aberrant Organs | stash materials | graft surgery (Act 2 on); Apex organs are Tier III | aberrations, elite Inquisitors, bosses | `[data]` `material` items |
@@ -32,15 +32,15 @@ and the zero-Tallow AP penalty are the purse hook `[kit hook]`. Rock Salt and or
 
 | Facility | Keeper | Act 1 | Act 2 on (proposal) | Layer |
 | --- | --- | --- | --- | --- |
-| Apothecary's Slab | Sister Aline Vance | treats the wounded (a wounded founder deploys at -20% max HP until a rest, Q-31); the ENC-EVT-05 marrow dose | graft surgery (organs, raises the Strain floor 0-50), Rock Salt flushes, bone-scraping (-1 Calcification stage, -10% max HP, after her quest) | `[kit hook]` facility + exchange recipes |
-| Tinker's Hearth | Bram "Iron-Lung" Karr | forges and reinforces gear for Scrap and materials | the "Expanded Timber Frames" project (bunks 6 -> 8, player's choice, Act 2 on, a Scrap cost from the balance lane; Q-38) | `[kit hook]` facility with levels + exchange recipes |
+| Apothecary's Slab | Chirurgeon Sabina | treats the wounded (a wounded founder deploys at -20% max HP until a rest, Q-31) | graft surgery (organs, raises the Strain floor 0-50), Rock Salt flushes, bone-scraping (-1 Calcification stage, -10% max HP, after her quest) | `[kit hook]` facility + exchange recipes |
+| Tinker's Hearth | Berek "Cinder-Lung" Dorn | forges and reinforces gear for Scrap and materials | the "Expanded Timber Frames" project (bunks 6 -> 8, player's choice, Act 2 on, a Scrap cost from the balance lane; Q-38) | `[kit hook]` facility with levels + exchange recipes |
 | Dry Hollows | - | six bunks for the six founders only (Q-38), rest (1 day, 1 Warded Tallow, full HP) | eight bunks after the project | `[kit hook]` bunks |
 | Isolation Crypts (in the Dry Hollows) | - | none | Stage IV operatives sleep here | `[kit hook]` |
-| Water-Lock Basin | Tess Morn | the launch point (to the district map), Tess's dead-drop board | guest quarters | `[kit hook]` mission board |
+| Water-Lock Basin | Talia Rusk | the launch point (to the district map), Talia's dead-drop board, Widow Varka's sluice trade (after Ivo's rescue) | guest quarters | `[kit hook]` mission board |
 
 ### 2.1 The Apothecary's Slab
 
-A brick cistern turned illegal surgery and dissection theatre: bone saws, sulfur pans, tallow candles. Aline is the
+A brick cistern turned illegal surgery and dissection theatre: bone saws, sulfur pans, tallow candles. Sabina is the
 Flesh-Broker voice.
 
 - Graft installation (Act 2 on, proposal): spend an Aberrant Organ to install an Inoculated skill; each graft raises the
@@ -54,7 +54,7 @@ Flesh-Broker voice.
 
 ### 2.2 The Tinker's Hearth
 
-A dry drain chamber with a charcoal forge, anvils and racks of scavenged garrison weapons. Bram is the Preservationist
+A dry drain chamber with a charcoal forge, anvils and racks of scavenged garrison weapons. Berek is the Preservationist
 voice.
 
 - Forging (proposal): Scrap and materials into weapons and armour of the Cold Steel families (billhooks, bodkins,
@@ -78,15 +78,15 @@ Warded Tallow against the drain mists.
 
 A drowned iron sluice gate and spillway, the central pool where bone ciphers are fished out of the upper city's flues.
 
-- Tess's dead-drop board: the mission board (CANON 3.2): it offers the next main mission when the previous one is done,
+- Talia's dead-drop board: the mission board (CANON 3.2): it offers the current tier's main missions (`2`-tier Act 1 diamond, `CL-08`),
   plus optional board work (CANON 3.2). The mission board is a kit hook built before the slice (no stand-in, Q-55);
-  Tess is the board's keeper on the region map `[data]`.
+  Talia is the board's keeper on the region map `[data]`.
 - Launch: leaving through the Basin opens the district map (world map).
 - Squad: pick up to four (the Character screen's active toggle) and their loadouts before leaving.
 - Alert: bribes in Scrap or Rock Salt can lower the Inquisition Alert (one of the meter's inputs, Q-15; amounts by the
   balance lane).
 - Guests (Act 2 on): lodge here without a bunk; examples Ferrand the Clock-Smith (+10% re-tempering speed at the Hearth)
-  and Sister Clemence (-20% Rock Salt cost of Slab flushes).
+  and Herbalist Clemence (-20% Rock Salt cost of Slab flushes).
 
 ## 3. Campaign meters
 
@@ -116,7 +116,7 @@ the record.
 | Resource purse | named currency and upkeep with zero-effects | before the slice (gold and supplies under engine names) |
 | Hub facilities with levels | a facility, its keeper, its level and its projects | before the slice as far as the slice uses it (the keeper as a dialogue NPC) |
 | Exchange recipes | inputs (items, Scrap) to outputs (item, upgrade, unlock) | before the slice if the slice forges; else Act 2 (dialogue `requires`, `take`, `give`) |
-| Mission board | offers, the next main mission, optional work | before the slice (Tess's dialogue behind flags) |
+| Mission board | offers, the next main mission, optional work | before the slice (Talia's dialogue behind flags) |
 | Unit lifecycle | downed / wounded / captured / dead / retired, bunk count | before the slice: downed, wounded, captured, the bunk count; dead and retired from Act 2 |
 | Campaign meters | Doom Clock, Alert, thresholds, triggers, inputs, warnings | before the slice (flags set by dialogue and quests) |
 

@@ -28,9 +28,9 @@ or `Nav::Reset`; screens never call each other). A fight pushes the battle scree
 | Lore name | Real screen (file, type) | Layer | Change the lore needs |
 | --- | --- | --- | --- |
 | District map (the Sunk Ward node graph) | world map, `worldmap.rs` `WorldMap` on `emberwake_world::travel` (pins, routes with times, road fights, camp, enter) | `[kit hook]` exists | `[data]` nodes 00-07, backdrop, route times in days; meters on the HUD bar `[kit hook]` |
-| Walkable places: the Sluice Undercroft, mission streets, interiors | region map, `region.rs` `RegionMap` (square top-down tiles, 16 logical px; markers, NPCs, chests, exits, roamers, click-to-walk) | `[kit hook]` exists | `[data]` the Undercroft as a location with Aline, Bram and Tess as NPC markers; the map stays square top-down |
+| Walkable places: the Sluice Undercroft, mission streets, interiors | region map, `region.rs` `RegionMap` (square top-down tiles, 16 logical px; markers, NPCs, chests, exits, roamers, click-to-walk) | `[kit hook]` exists | `[data]` the Undercroft as a location with Sabina, Berek and Talia as NPC markers; the map stays square top-down |
 | Dialogue | the region map's bottom box (`talk_layout`, `draw_talk`; portrait, choices with lock reasons) | `[kit hook]` exists | `[data]` lines; stand-in for crafting and the board (section 3) |
-| Black market (Madame Sallow), forge and slab trades | the shop's three-column trade, `shop.rs` `Trade` / `ShopPane` | `[kit hook]` exists | currency shown as Scrap (purse hook) |
+| Black market (Widow Varka), forge and slab trades | the shop's three-column trade, `shop.rs` `Trade` / `ShopPane` | `[kit hook]` exists | currency shown as Scrap (purse hook) |
 | "Hub" menu (party, journal, save) | in-game menu, `hub.rs` `Hub` (doors Party, Journal, Save, Load, Settings, Quit, Return to map) | `[kit hook]` exists | none: this is not the safehouse |
 | Operative dossier and deck | Character, `party.rs` `Character` (tabs Stats, Level up, Skills, Gear; Gear holds the pouch and the stash) | `[kit hook]` exists | Poise and armour poise in Stats; Composure, a derived stat (CANON 2.1; data-defined derived stats `[kit hook]`); Strain floor and Calcification stage (Act 2) `[kit hook]`; deck slots (section 4) |
 | Quest journal | `hub.rs` `Journal` | `[kit hook]` exists | none |
@@ -53,9 +53,9 @@ in M0-M1, before the slice ([roadmap](../specs/full_game_systems_roadmap.md) sec
 | Bunks (the Dry Hollows) | 6 (later 8) bunks with each operative's state: ready, wounded, captured (memorial), Isolation Crypts; dismiss and retire | `[kit hook]` unit lifecycle | before the slice if the slice shows bunks (wounded, the Crucible capture); dismiss, retire and the Crypts from Act 2 |
 | Facility (Tinker's Hearth, Apothecary's Slab) | keeper, level, projects (the bunk project), exchange recipes | `[kit hook]` facility + recipes | before the slice for the Hearth's forge if the slice sells forging; the bunk project from Act 2 |
 | Slab patient view | the anatomical silhouette with four graft regions (Act 2) | `[game code]` | Act 2 |
-| Mission board (Tess's dead-drop board) | the next main mission and optional board work | `[kit hook]` | before the slice |
+| Mission board (Talia's dead-drop board) | the next main mission and optional board work | `[kit hook]` | before the slice |
 | Vignette player | the opening vignette cards, the hearth scene card, act title cards, the Doom Clock's first appearance | `[kit hook]` (images and timed text on the engine painter) | before the slice |
-| Endings | Ending A Preservation, B Ascendancy, C Red Martyrdom (Act 3, proposal) | `[kit hook]` vignette player, `[data]` cards | Act 3 |
+| Endings | Ending A Black-Iron Severance, B The Living Conduit, C Stone Martyrdom (Act 3, `CANON.md` 3.6) | `[kit hook]` vignette player, `[data]` cards | Act 3 |
 | Extinguished | the failure screen: an Act 1 Breach (Q-13), no living operative (Act 2 on), or the Act 3 Doom Clock runs out | `[kit hook]` | before the slice (the Act 1 Breach) |
 | Campaign meters | Doom Clock and Inquisition Alert on the map HUD bar, beside Scrap and Tallow, with a clear warning at each Alert threshold | `[kit hook]` | before the slice |
 
@@ -95,7 +95,7 @@ from the [art bible](../specs/art_and_visual_style.md).
    founders, the Character screen's deck with slot kinds, and Bunks and Facility as far as the slice uses them.
 2. M1, combat sandbox: the battle screen with the "timeline" ruleset option, poise, chains and impact badges, run from
    the Dojo and the Scene Runner arena on ENC-PRO-0A (Kaelen against the two Castellan Footmen).
-3. M2, the slice as data: the Undercroft as a region map with Aline, Bram and Tess; the Sunk Ward world map with day
+3. M2, the slice as data: the Undercroft as a region map with Sabina, Berek and Talia; the Sunk Ward world map with day
    costs and Tallow upkeep; no dialogue stand-ins.
 4. Later: the Slab patient view and the Bunks project (Act 2), Endings (Act 3).
 

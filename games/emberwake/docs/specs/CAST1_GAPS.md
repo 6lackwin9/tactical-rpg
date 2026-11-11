@@ -30,9 +30,9 @@ meanwhile (the lore part is deferred, not faked) and waits for the planner to de
 | G15 | A status that bites when the unit moves | Vivisection, Barbed Quarrel | open | bleed | no |
 | G16 | Terrain change by a skill (rubble, tiles set alight) | Foundry Shatter, Pulverizer, Slag Tempering | open (HOOKS1 FM4 leaves walls whole) | none | no |
 | G17 | New status rows and item effects: Blind as a range cap (Q-56), Flammable, mark, frenzy, AP loss; consumables that cleanse | Flash-Bomb, Choke-Gas, Grease Pot, the Stitch-Poultice's cleanse, Ocular Lock (Act 2) | open (guard strip is resolved by HOOKS1 `end_guard`) | the Staggered status, poison, slow; heal only | no |
-| G18 | Cheat-death once, a phase trigger on it, a phase `heal` (Q-74) | Quell's marrow valve | resolved: HOOKS1 10.2 (HOOKS1-Q, after the slice, HQ13 a) | - | no (M2b) |
+| G18 | Cheat-death once, a phase trigger on it, a phase `heal` (Q-74) | Brass Marrow Valve (`Quell`'s neck-valve surge; relic retired per `CL-02`) | resolved: HOOKS1 10.2 (HOOKS1-Q, after the slice, HQ13 a) | - | no (M2b) |
 | G19 | Capstone unlock by a phase | Vane, Quell, Grendel, Orlov, the Amalgam | resolved: HOOKS1 10.1 (HOOKS1-U, phase effect `deck`) | - | yes (Grendel) |
-| G20 | A per-member start buff picked by the player; a "member deployed" dialogue condition | Aline's marrow dose (Q-66 b) | open | the pick is a flag only; no buff in the fight | no |
+| G20 | A per-member start buff picked by the player; a "member deployed" dialogue condition | Sabina's Act 1 marrow dose (retired per `CL-02`: Founders stay 100% Cold Steel in Act 1) | retired (`CL-02`) | - | no |
 | G21 | Multi-cell units, 96 x 96 frames (Q-79) | the Calcified Amalgam | open: BIGUNIT1 (idea row) | 1 cell (CQ15 a) | no |
 | G22 | Sunk Ward zones and backdrops | every encounter | resolved: HOOKS1 13 (HOOKS1-Z; rows HOOKS1_TASKS 2.3); backdrop art open (CAST1_ASSETS N10, M4, asked first) | STAGE1's gradient per zone | yes |
 | G23 | A minimum deployed party for an encounter | the Crucible needs four (CANON 3.2) | resolved: ROSTER1 BK6 (`party_min` 4) | - | yes |

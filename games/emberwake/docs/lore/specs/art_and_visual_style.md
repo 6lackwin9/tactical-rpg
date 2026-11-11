@@ -119,16 +119,16 @@ asset preferences.
 
 ## 7. Character briefs
 
-### 7.1 Founders
+### 7.1 Founders (Day 1 clean mortal humans; Act 2 Inoculated taint in parentheses)
 
 | Founder | Brief |
 | --- | --- |
-| Kaelen | Dented kettle helm, notched billhook, rag-bound left forearm over white bone spurs |
-| Vesper | Ragged chimney cowl, twin bodkin daggers, smoke at the fingertips, an unnaturally long shadow |
-| Maren | Scribe's habit cut short, ink-stained fingers, censer crook, cracked round spectacles, black veins at the throat (the butcher apron and bone-saw went with the dissection background to Aline) |
-| Hollis | Hunting brigandine, horn recoil pauldron, lever arbalest, a crude grafted eye with a thin red glint |
-| Dunstan "Slag-Jaw" | Penal iron wrist cuffs, a slag-burned jaw wired with scrap, heavy shoulders, coal-shovel knuckles |
-| Elyse | Brass goggles, wicker chemical bandolier, vitriol-stained coat, a pressurised acid nozzle |
+| Kaelen | Dented Watch plate with a chiselled-out cross, faded Lullaby wrist-number under bloodied linen, notched billhook (Act 2 taint: chalk-white forearm bone spurs) |
+| Vesper | Bunched charcoal cowl, slate leather-shingle jerkin, tin runner whistle at the throat, reversed bodkin daggers (Act 2 taint: cold ash-smoke at the fingertips) |
+| Maren | Slate mortuary habit with a ripped sigil patch, gall-ink fingers, cracked round wire spectacles, bronze censer crook, clean throat (Act 2 taint: black marrow-ink throat veins; outer-dissection surgical background belongs to Chirurgeon Sabina) |
+| Hollis | Hunting brigandine, pale horn recoil pauldron, steel lever-arbalest, shrapnel-scarred left squint with a corded brass monocle at the collar (Act 2 taint: glowing amber tapetum pin in the left eye) |
+| Dunstan "Slag-Jaw" | Riveted penal iron cuffs with broken chain, right jaw slag-burned and held by black iron wire and a riveted strap, Kiln debtor brand (Act 2 taint: wired jaw scar fuses into black basalt-chitin) |
+| Elyse | Forehead brass goggles, sulfur/phosphorus/alum bandolier, copper-green stained rubbered Vat coat, pressurised brass sprayer nozzle (Act 2 taint: acid burns crystallise into violet-amber geodes) |
 
 ### 7.2 Adversaries
 

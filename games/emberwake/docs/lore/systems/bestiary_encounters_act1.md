@@ -82,9 +82,7 @@ is index gap 1.
 
 ## ENC-EVT-05: The Awakening Fissure (Act 1 interlude)
 
-- Concept: the floor beneath the Sluice Undercroft cracks open on a throbbing vein of the titan. Not a siege in Act 1.
-  Aline gives one deployed founder her single marrow dose (the first grafting teaser); that founder starts Act 2 at
-  Calcification Stage I (CANON 3.2). What the dose does inside this fight: Open, see gaps.
+- Concept: causal Marrow Back-Surge under the Sluice Undercroft triggered by disrupting the Fourth Kiln (`M3`) and Tallow Vats (`M4`) pressure lines (`CL-08`). Not an Alert siege in Act 1; Chirurgeon Sabina extracts raw marrow samples from the slain Amalgam, opening Act 2 Slab grafting (`CL-02`: Founders stay 100% Cold Steel in Act 1).
 - Old layout 12 x 12: uneven cavern, black bone pillars (full cover), violet mist pools.
 - Roster: the Calcified Amalgam; 3 Ash-Crawlers; 2 Calcified Husks.
 - Arena rule, Aberrant Proximity: +5 Strain per round to every operative in the chamber (Act 2 on; idle in Act 1).

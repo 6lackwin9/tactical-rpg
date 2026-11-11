@@ -77,15 +77,15 @@ Act 1, which has no corruption.
 
 ## 4. The Slab and the Hearth (hub side)
 
-- **Graft surgery** `[kit hook]` exchange recipe, `[data]` recipes: at the Apothecary's Slab, Sister Aline installs a
+- **Graft surgery** `[kit hook]` exchange recipe, `[data]` recipes: at the Apothecary's Slab, Chirurgeon Sabina installs a
   harvested Aberrant Organ; the operative learns the matching Inoculated skill and the dormant floor rises. Tier III
   (Apex organs) also advances Calcification by one stage. Details in [skill
   acquisition](skill_acquisition_and_loadout_systems.md).
 - **Flushes** `[data]` (`PK2`): Slab flushes spend Rock Salt to lower the operative's dormant Strain floor by `10`
   (`strain_floor_delta: -10`, clamped at `0`) for the next battle only.
-- **Bone-scraping** `[kit hook]`: the only undo, unlocked by Sister Aline's quest ("Anatomy of a Living Saint"): -1
+- **Bone-scraping** `[kit hook]`: the only undo, unlocked by Chirurgeon Sabina's quest ("Anatomy of a Living Saint"): -1
   Calcification stage and -10% max HP for good.
-- **Tincture of Still Blood** `[data]` pouch item on a kit status (also unlocked by Sister Aline's quest): holds the
+- **Tincture of Still Blood** `[data]` pouch item on a kit status (also unlocked by Chirurgeon Sabina's quest): holds the
   user's Strain at its current value for one round, so a burst cannot cross into Rupture that round.
 
 ## 5. Cut / later

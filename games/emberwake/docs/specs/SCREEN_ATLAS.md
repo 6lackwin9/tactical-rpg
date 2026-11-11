@@ -61,7 +61,7 @@ Every screen below lists the exact relative paths resolved across **Engine (`E` 
 | Prologue 0a Intro (The Alley) | `G` | `backgrounds/story/intro_1.png` | `portraits/heroes/kaelen.png` |
 | Prologue 0b Intro (The Rooftop) | `G` | `backgrounds/story/intro_2.png` | `portraits/heroes/vesper.png` |
 | Prologue 0c Intro (Canal Bridge) | `G` | `backgrounds/story/meat_market.png` | `portraits/heroes/maren.png`, `portraits/bosses/captain_vane.png` |
-| Undercroft Arrival (Tallow Hearth) | `G` | `backgrounds/story/hearth.png` | `portraits/npcs/sabina.png` (placeholder `aline.png` until `AI-05`) |
+| Undercroft Arrival (Tallow Hearth) | `G` | `backgrounds/story/hearth.png` | `portraits/npcs/sabina_kress.png` (`PR5-39` placeholder until `AI-05`) |
 
 ### 3.4 Screen 3 & 4: `RegionMap`, `hud_bar`, `TalkBox`, `BoardPane`, `ShopPane` & `RecipePane`
 
@@ -71,7 +71,7 @@ Every screen below lists the exact relative paths resolved across **Engine (`E` 
 | HUD Right Action Buttons | `K` / `E` | `ui/hud/{party,journal,stash,menu}.png`, `E: ui/help.png` | `hud.rs` (5 `18×18` icon buttons) |
 | Region Legend & Map Markers | `K` | `ui/markers/{npc,encounter,roamer,chest,chest_open,exit,exit_locked,lore,poi,objective,world_map}.png` | `region.rs` `"Here (N)"` list & map markers (consolidated per `ASSETORG3-K`) |
 | NPC Service Badges | `K` | `ui/services/{shop,recruit,recipe}.png`, `ui/badges/{quest,ready}.png` | `region.rs` overhead & legend row badges |
-| Hub NPC Portraits | `G` | `portraits/npcs/{sabina,berek,talia}.png` (legacy `{aline,bram,tess}.png` until `AI-05`) | `talk.rs` `64×64` left column, `board.rs`, `shop.rs`, `recipe.rs` |
+| Hub NPC Portraits | `G` | `portraits/npcs/{sabina_kress,berek_dorn,talia_rusk}.png` (`PR5-39` placeholders until `AI-05`) | `talk.rs` `64×64` left column, `board.rs`, `shop.rs`, `recipe.rs` |
 | Hub NPC Map Sprites | `K` + `G` | `K: units/priest/base` + `G: palettes/maren.json` (`Sabina`)<br>`K: units/warrior/2h_hammer` + `G: palettes/grendel.json` (`Berek`)<br>`K: units/rogue/base` + `G: palettes/captive.json` (`Talia`) | `region.rs` standing character tokens |
 | Region Tileset | `G` (over `E`) | `G: tilesets/sunk_ward/{floor,wall,shallow_water}/v<n>.png` (fallback `E: tilesets/common/...`) | `region.rs` ground & boundary walls |
 
@@ -132,7 +132,7 @@ Every screen below lists the exact relative paths resolved across **Engine (`E` 
 
 1. **Already Generated on Disk (Update `CAST1_ASSETS.md` to mark complete)**:
    - All 6 Founder portraits (`portraits/heroes/{kaelen,vesper,maren,hollis,dunstan,elyse}.png`) and their 8-expression face sheets (`portraits/heroes/faces/<id>/*.png`) are present in `games/emberwake/assets/` (`CAST1_ASSETS.md` Section 1 still listed old Ashlands hero placeholders `bryn_hale`, `kit_vane`, `alda_wren`, `tev_quill`, `dagny_coal`, `sella_marsh`).
-   - All 3 Hub NPC portraits (`portraits/npcs/{aline,bram,tess}.png`) and their 4-expression face sheets are present on disk.
+   - All 3 Hub NPC portraits (`portraits/npcs/{sabina_kress,berek_dorn,talia_rusk}.png` via `PR5-39`, repainted in place by `AI-05`) and their 4-expression face sheets are tracked on disk.
    - `portraits/bosses/captain_vane.png` (+ expression faces) is present on disk (`CAST1_ASSETS.md` Section 3 still listed `brask_toller.png`).
    - All 7 battle zone backdrops (`backgrounds/battle/{alley,rooftops,canal,foundry,tallow_vats,undercroft,watchpost}.png`) and 6 story backdrops (`backgrounds/story/{intro_1..4,hearth,meat_market}.png`) are present on disk.
 2. **Remaining Optional Art Upgrades (Tracked for `Post-R4`)**:

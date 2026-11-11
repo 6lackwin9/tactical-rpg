@@ -62,7 +62,7 @@ Character has a tiny but highly readable silhouette with exaggerated key movemen
 ### Klein: the whole prompt (the main local model)
 
 Since LOCALGEN2 (user 2026-10-26) the main local model is FLUX.2 [klein] 4B in ComfyUI, the default backend of
-`localgen.py`. It needs no short form: its Qwen3 4B text encoder reads the whole prompt (Bram's recorded prompt is
+`localgen.py`. It needs no short form: its Qwen3 4B text encoder reads the whole prompt (Berek's recorded prompt is
 about 870 tokens by the tool's estimate, which the record keeps as `tokens_estimate`), so nothing is cut. `run` sends
 the character block first, then the shared style block without its "Use the attached image" line (a text-to-image
 run attaches no image, and the rest of that line speaks of it). `localgen.py prompt <id>` prints it.
@@ -80,12 +80,12 @@ For the OpenVINO draft model (LOCALGEN1, `--backend openvino`: LCM Dreamshaper v
 encoder reads 77 tokens, 75 of them the prompt's own, and drops the rest without a word, so the long image-API blocks
 above do not fit. `localgen.py prompt <id>` builds the short form from a prompts-file block and lists what it cut;
 `run` and `vary` send that form and keep the cut list in the take's record (`cut`). When a detail that makes the
-character is cut (Tess's burned ear is), write the prompt by hand and pass it as `--prompt`.
+character is cut (Talia's burned ear is), write the prompt by hand and pass it as `--prompt`.
 
 The short form is only for models whose text encoders are all CLIP (LCM, SD 1.5 and SDXL; the tool reads the family
 from the model folder's `model_index.json`). FLUX gets the whole block, subject first, then the style block without
 its line about the attached reference. Its T5 encoder reads 256 tokens, though, and one ART3 character block nearly
-fills that (Bram's is 245 by FLUX's own tokenizer), so the style block mostly falls off; the record's `cut` says how
+fills that (Berek's is 245 by FLUX's own tokenizer), so the style block mostly falls off; the record's `cut` says how
 much. The rules for the short form, from the 2026-10-25 and 2026-10-26 runs:
 
 - Subject first, style last. A style-first prompt made the small model draw a game scene instead of a portrait.
@@ -103,11 +103,11 @@ much. The rules for the short form, from the 2026-10-25 and 2026-10-26 runs:
 head and shoulders portrait of <who: age, build, adult>, <two or three face features>, <hair>, <signature detail>, <lead clothing>, <mood> expression, stylized dark fantasy character art, facing right, amber rim light, plain dark background
 ```
 
-Worked example, Tess by hand (71 tokens; the automatic form spends its words on her eyes and armour and loses the
+Worked example, Talia by hand (71 tokens; the automatic form spends its words on her eyes and cloak and loses the
 ear):
 
 ```text
-head and shoulders portrait of a wiry adult woman of nineteen, sharp lively freckled face, lopsided half-smile, wild dark-brown hair in one loose braid, burn-scarred notched right ear, patched leather armour, courier satchel strap, stylized dark fantasy character art, facing right, amber rim light, plain dark background
+head and shoulders portrait of a lean adult woman of twenty-nine, sharp observant weathered face, guarded half-smile, dark-brown hair in a low knot, burn-scarred notched right ear, wool dispatch cloak, ash-wood crutch top, stylized dark fantasy character art, facing right, amber rim light, plain dark background
 ```
 
 ## Props and objects

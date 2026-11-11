@@ -41,7 +41,7 @@ three tiers live as act-gated region graphs (`campaign.act` 1-3) inside the sing
 One hub for the whole campaign is preferred for scope: the Sluice Undercroft. The Scribe's Crypt (Act 2) and the
 Weeping Redoubt (Act 3) stay `proposal` forward bases, used only if the story needs one. Bunks: 6 at the start of
 Act 1 (4 filled after the prologue); Act 1 holds only the six founders, and the bunk the Crucible empties takes the
-first procedural recruit at the start of Act 2 (user 2026-10-25, Q-38); 8 only through Bram's "Expanded Timber Frames"
+first procedural recruit at the start of Act 2 (user 2026-10-25, Q-38); 8 only through Berek's "Expanded Timber Frames"
 project from Act 2, chosen by the player; a forward base inherits the count `[kit hook]` hub facilities with levels,
 `[data]` project costs (Scrap, by the balance lane). Guests take no bunk until sworn in. Squad: up to 4 deployed
 `[kit hook]` (exists: `PARTY_MAX`).
@@ -59,15 +59,15 @@ with levels do not exist yet `[kit hook]`.
 
 An old municipal storm-drain three levels beneath the basalt cobbles of Lower Cinderreach.
 
-1. **The Apothecary's Slab** (Sister Aline): a granite embalming slab. Act 1: trauma surgery for wounded founders
+1. **The Apothecary's Slab** (Chirurgeon Sabina): a granite embalming slab. Act 1: trauma surgery for wounded founders
    `[kit hook]` unit lifecycle (a wounded founder deploys at -20% max HP until a rest, user 2026-10-25, Q-31; a
    baseline the balance lane revisits). Act 2 on: graft surgery,
    Rock Salt flushes (effect open) and, after her quest, bone-scraping (-1 Calcification stage, -10% max HP for good)
    `[kit hook]` exchange recipes, `[data]`.
-2. **The Tinker's Hearth** (Bram "Iron-Lung" Karr): a ventless charcoal forge with water baffles. Cold Steel
+2. **The Tinker's Hearth** (Berek "Cinder-Lung" Dorn): a ventless charcoal forge with water baffles. Cold Steel
    re-tempering, shield reinforcement, stagger weighting and the bunk project, paid in Scrap `[kit hook]` exchange
    recipes and facility levels, `[data]`.
-3. **The Water-Lock Basin** (Tess): the central pool behind a submerged portcullis with charcoal baffles; the dead-drop
+3. **The Water-Lock Basin** (Talia Rusk): the central pool behind a submerged portcullis with charcoal baffles; the dead-drop
    for bone-ciphers, the mission board, the launch point onto the district graph and the guest quarters `[kit hook]`
    mission board, `[data]` quests.
 4. **The Dry Hollows:** six brick kiln bunks for rest and recovery `[kit hook]` HEAL1 rest (exists), 1 Warded Tallow per
@@ -78,9 +78,8 @@ An old municipal storm-drain three levels beneath the basalt cobbles of Lower Ci
 
 Found in the flooded catacombs beneath St. Lyra's Cathedral, reached from node 08 (the Slag Gate breach).
 
-- It does not add bunks: the count is inherited (6, or 8 after Bram's project).
-- **Graft surgery:** the old text put "Aline's surgical rig" (Apex grafting) here; with one hub preferred, Apex grafting
-  is the Apothecary's Slab after Act 2 M2.4. Which facilities a forward base copies from the Sluice is open (see gaps).
+- It does not add bunks: the count is inherited (6, or 8 after Berek's project).
+- **Graft surgery:** Apex grafting opens at Sabina's Apothecary's Slab after Act 2 M2.4. Which facilities a forward base copies from the Sluice is open (see gaps).
 - **The Courier Blind:** intercepts church dispatches and shows Inquisition patrol routes and culling wagon positions
   on the district map `[kit hook]` world-map markers, `[data]`.
 
@@ -88,7 +87,7 @@ Found in the flooded catacombs beneath St. Lyra's Cathedral, reached from node 0
 
 A fortified cavern hammered into the petrified marrow arches beside the Mantle Fissure (node 16).
 
-- **The Quench-Anvil:** Bram's expedition forge, burning titan ichor to forge Black-Iron penetrators and stagger
+- **The Quench-Anvil:** Berek's expedition forge, burning titan ichor to forge Black-Iron penetrators and stagger
   counterweights `[data]` recipes.
 - **The Ward-Lantern Rig:** a Warded Tallow beacon that keeps the Abyss's atmospheric Strain off resting operatives
   `[kit hook]` hub facility, `[data]`.

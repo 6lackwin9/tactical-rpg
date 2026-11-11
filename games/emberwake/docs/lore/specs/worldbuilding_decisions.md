@@ -4,8 +4,8 @@ Status: canon (2026-10-25). The brainstorm's own decision log: DEC-LORE-01..16 w
 user's design session with Gemini and are kept as written, with superseded parts marked "Superseded (2026-10-25)";
 DEC-LORE-17 on record the user's 2026-10-25 decisions (the lore consistency pass). Settled rows are copied by the
 planner into `games/emberwake/docs/decisions/lore.md`, which is the project's record. Names follow the
-[cast registry](../background/cast_registry.md) (the 2026-10-25 renames are applied below: Bran -> Hollis, Torin ->
-Dunstan, Inquisitor-General Vaelen -> Ruthven, Madame Vespera -> Sallow). Numbers: [CANON.md](../CANON.md).
+[cast registry](../background/cast_registry.md) (the 2026-10-25 and 2026-11-10 renames are applied below: Bran -> Hollis,
+Torin -> Dunstan, Vaelen -> Ruthven, Vespera / Sallow -> Widow Varka, Aline / Bram / Tess / Pip -> Sabina / Berek / Talia / Ivo). Numbers: [CANON.md](../CANON.md).
 
 ## 1. The setting pivot (2026-10-24)
 
@@ -55,9 +55,10 @@ Superseded (2026-10-25): the pivot does not replace the Ashlands; they stay as t
 
 ### DEC-LORE-05: Hub and campaign geography
 
-- Decision: the haven is the Sluice Undercroft with four wings: the Apothecary's Slab (Sister Aline: surgery, Strain
-  flushes, grafts), the Tinker's Hearth (Bram: Cold Steel forging, stagger tuning, demolition), the Water-Lock Basin
-  (storage, dead-drops, Tess's board) and the Dry Hollows (bunks, the Isolation Crypts).
+- Decision: the haven is the Sluice Undercroft with four wings: the Apothecary's Slab (Chirurgeon Sabina: surgery,
+  Strain flushes, implants), the Tinker's Hearth (Berek "Cinder-Lung" Dorn: Cold Steel forging, stagger tuning,
+  demolition), the Water-Lock Basin (storage, dead-drops, Talia Rusk's board, Widow Varka's fence) and the Dry Hollows
+  (bunks, the Isolation Crypts).
 - Decision: the Act 1 theatre is the Sunk Ward: Ash-Crawl Tenements, Tallow Vats, Crucible Watchpost, Slag Gate.
 
 ### DEC-LORE-06: Codebase and file isolation
@@ -126,12 +127,13 @@ Superseded (2026-10-25): the pivot does not replace the Ashlands; they stay as t
 
 ### DEC-LORE-15: Equipment families, consumables and cast
 
-- Decision: 8 weapon families (4 Cold Steel, 4 Inoculated), a battle pouch for Strain and poise consumables, 9 named
+- Decision: 8 weapon families (4 Cold Steel, 4 Inoculated), a battle pouch for Strain and poise consumables, named
   relics, a monster-part harvest economy; a city cast beyond the hub (Arch-Prelate Othemar, Inquisitor-General Ruthven,
-  Madame Sallow, Bailiff Corvo, Old Mother Agnes, Brother Malachi, Lucan). Detail:
+  Widow Varka, Bailiff Corvo, Agnes of Block 12, Brother Malachi, Lucan). Detail:
   [items_gear_and_progression.md](../systems/items_gear_and_progression.md),
   [npcs_and_questlines.md](../background/npcs_and_questlines.md).
-- Superseded in part (2026-10-25): the pouch holds 3 (the engine's pouch), not 4.
+- Superseded in part (2026-10-25): the pouch holds 3 (the engine's pouch), not 4; weapon families later consolidated to
+  14 Cold Steel families with Slab implants in `body` slots (`CANON.md` 4.2, 6.1).
 
 ### DEC-LORE-16: Three-tier campaign map
 
@@ -139,7 +141,7 @@ Superseded (2026-10-25): the pivot does not replace the Ashlands; they stay as t
   bunks); Act 2 the High Bastion (Upper Cinderreach, 8 nodes, ends at the Reliquary Crypts; relay the Scribe's Crypt, 8
   bunks); Act 3 the Mantle Fissure (8 nodes, the Doom Clock, ends at the Dreaming Core; base the Weeping Redoubt).
 - Superseded in part (2026-10-25): one hub through the campaign is preferred; the Scribe's Crypt and the Weeping
-  Redoubt are proposal forward bases (DEC-LORE-39); the 8th bunk comes from Bram's project (DEC-LORE-32).
+  Redoubt are proposal forward bases (DEC-LORE-39); the 8th bunk comes from Berek's project (DEC-LORE-32).
 
 ## 3. Decisions of 2026-10-25 (user, the lore consistency pass)
 
@@ -150,25 +152,25 @@ Superseded (2026-10-25): the pivot does not replace the Ashlands; they stay as t
 | DEC-LORE-19 | The new combat rules are an evolution of the existing resolver as a switchable ruleset option, "timeline" against "classic"; classic stays for the Ashlands. Answers open query 1 |
 | DEC-LORE-20 | Speed tiers are relative windups: the impact lands at the end of the action's own blocks (Snap 1, Standard 2, Heavy 3-4); a maneuver may add recovery blocks; no fixed tick anchors |
 | DEC-LORE-21 | Six founders in the full Act 1; the first playable slice has five (the Ichor Alchemist, Elyse, joins later). "The Closed Four" is retired |
-| DEC-LORE-22 | Playable operatives are 18-24; the Unsealed are everyone under 25; the Tithing takes Unsealed youths of any age; children (Pip, Lucan) are stakes and non-combat NPCs; no combat graft surgery on anyone under 18 |
+| DEC-LORE-22 | Playable operatives are 18-24; the Unsealed are everyone under 25; the Tithing takes Unsealed youths of any age; children (Ivo, Wren, Lucan) are stakes and non-combat NPCs; no combat graft surgery on anyone under 18 |
 | DEC-LORE-23 | 0 HP = downed; after a battle a downed founder is wounded in Act 1; permadeath and capture start in Act 2; the Crucible sacrifice is the one scripted Act 1 loss |
 | DEC-LORE-24 | No gold: Scrap is the currency; Warded Tallow is upkeep (1 per day of travel or rest; replaces supplies); Rock Salt and the monster organs are stash materials; 0 Tallow = -2 starting AP until restocked; other upkeep versions dropped |
 | DEC-LORE-25 | Visual target STAGE1 option B (tilted 32x24 board, zone backdrops, 40 px units, upright props sorted with the units); "32x48 sprite" = figure bounds in the rig's 48x48 frames; the region map stays square top-down; the art bible's hex values win; a skin ramp is added; 16 master hues plus at most one dark and one light step each |
 | DEC-LORE-26 | A siege is never a Game Over: a lost siege costs facilities and forces a relocation; no siege in Act 1 |
 | DEC-LORE-27 | Doom Clock: a visible calendar from day 1 (the Tithing in six weeks); soft in Acts 1-2, hard in Act 3; travel costs days through the existing travel clock |
-| DEC-LORE-28 | Endings: A Preservation (the titan put back into a deep coma), B Ascendancy (merge with the titan's marrow), C Red Martyrdom (the cell gives itself to break the Tithing); "Extinguished" is the failure screen, not an ending; doctrine gates which endings are open |
+| DEC-LORE-28 | Endings (`CANON.md` 4.1; Shroud stays dark): A Black-Iron Severance (Berek, non-Flesh-Broker: iron spikes kill the Core's brainstem), B The Living Conduit (Sabina, Flesh-Broker: grafted wardens sedate the Core without child tithes), C Stone Martyrdom (always open: ossify Core and squad into black-stone pillars holding up Cinderreach); "Extinguished" is the failure screen, not an ending |
 | DEC-LORE-29 | The corrupted-founder boss is optional and exists only for a captured founder (the Crucible's, or one captured in Act 2) |
-| DEC-LORE-30 | Missions are picked on Tess's dead-drop board (a hub NPC offering quests) plus node travel on the district map |
+| DEC-LORE-30 | Missions are picked on Talia's dead-drop board (a hub NPC offering quests) plus node travel on the district map |
 | DEC-LORE-31 | The Crucible sacrifice is chosen from the four founders deployed there (deployment is the decision) |
-| DEC-LORE-32 | Bunks: 6 at the start of Act 1 (Bram's "four dry bunks" is fixed); 8 through a Bram forge project the player chooses; later hubs inherit the count; up to 4 deployed |
+| DEC-LORE-32 | Bunks: 6 at the start of Act 1 (Berek's "four dry bunks" is fixed); 8 through a Berek forge project the player chooses; later hubs inherit the count; up to 4 deployed |
 | DEC-LORE-33 | Prologue = missions 0a-0c (alley, rooftop, bridge): Kaelen alone, Vesper joins on the rooftop, Maren and Hollis are freed from an iron mortuary cart at the bridge; then the hearth scene; then Act 1 mission 1. Proctor Quell's crossroads fight (ENC-EVT-02) is its own Act 1 mission |
 | DEC-LORE-34 | Dunstan joins in the bone-mill raid (`sunk_ward` M3); Elyse at the Tallow Vats with Orlov (M4); the first grafting teaser is the ENC-EVT-05 Amalgam interlude in the hub (the "elite Castellan in mission 5" variant is dropped) |
-| DEC-LORE-35 | The founders' visible taints are backstory and Act 2 hooks only in Act 1 (no mechanics, 0% corruption): Kaelen's spurs come from an involuntary Inquisition graft trial; Hollis's eye is a crude field graft he regrets |
+| DEC-LORE-35 | Superseded (2026-11-10, `CANON.md` 3.1, 3.3): all six founders are 100% clean mortal humans on Day 1 (0% corruption, no Day-1 marrow taint); personal physical taints manifest only in Act 2+ when taking Inoculated/Cranial surgery |
 | DEC-LORE-36 | Strain: brackets 0-24 Dormant, 25-49 Acute Resonance, 50-74 Flesh-Tension, 75-99 Aberrant Edge, 100 Rupture; the crisis is the 3-outcome table rolled at round end; -10 per round without an Inoculated action, Active Guard vents 10 more; reset to the floor after battle. Calcification advances through Flesh Breach and Tier III grafts only; stages I-V with one name set |
 | DEC-LORE-37 | Combat rules: a stagger cancels the action and the unit's remaining blocks that round; poise from a formula (CONS-based plus armour), refilled each round, a repeat break in the same or next round costs double; the engine's initiative order (no mutual trades); the hyperbolic armour curve with the lore's armour rescaled to it; deck = 2 base moves + 3 class actives + 2 passives + 1 keystone (8 slots); AP cost decoupled from tier (`ap_cost`, default = level); timeline strip at the top. Cut: evasion and accuracy rolls, facing, backstab and stealth cones, the d100 crisis, mutual trades, the multi-track ghost scrubber (impact badges on the existing strip first) |
 | DEC-LORE-38 | One phase name set: Act 1 "The Young Vanguard", Act 2 "The First Rupture", Act 3 "The Awakening Abyss" |
 | DEC-LORE-39 | One hub through the campaign (the Sluice, renamed per act only if the story needs a forward base); the Scribe's Crypt and the Weeping Redoubt stay proposal forward bases |
-| DEC-LORE-40 | Names: every on-stage character has a distinct first letter and sound within the founders and hub cast and no near-collision anywhere; the registry ([cast_registry.md](../background/cast_registry.md)) is canon. Duplicate backgrounds split: Aline keeps the dissection hall and the draught discovery, Maren is a defrocked scriptorium scribe; Vesper is a curfew runner and thief, Tess the cell's courier; Bram from the Syndicate forge, Dunstan from the bone-mill, Lucan from the Tallow Vats. Adults who avoided communion keep their minds but cannot fight (Bram, Aline, Corvo) |
+| DEC-LORE-40 | Names: every on-stage character has a distinct first letter and sound within the founders and hub cast and no near-collision anywhere; the registry ([cast_registry.md](../background/cast_registry.md)) is canon (refined 2026-11-10: Chirurgeon Sabina Kress, Berek "Cinder-Lung" Dorn, Talia Rusk, Ivo, Widow Varka, Agnes of Block 12, Skerrit, Bone-Wright). Sabina keeps outer dissection (`Lazar`'s apprentice) and the communion-sediment discovery; Maren is a St. Lyra's scriptorium scribe and mortuary novice; Vesper is a curfew cipher-runner, Talia the cell's Basin spymaster; Berek from the Fourth Kiln forge, Dunstan from the bone-mill, Lucan from the Tallow Vats. Spent adults cannot channel marrow (Berek, Sabina, Corvo) |
 | DEC-LORE-41 | Layer rule: engine = technology any game needs (rendering, screens, saves, assets, the timeline widget); kit = a shape any story in the genre could fill (campaign meters with thresholds and triggers, unit lifecycle, hub facilities with levels, resource purse, exchange recipes, ruleset options, event triggers, mission board, vignette player); game = named by the story, mostly data filling kit hooks, game code only for mechanics nothing else could use. Every lore system line carries a tag `[engine]`, `[kit hook]`, `[data]` or `[game code]` |
 | DEC-LORE-42 | The library lives in `games/emberwake/docs/lore/` and follows CLAUDE.md: repo-relative links, a `Status:` line per doc (canon, proposal, archive), markdownlint-clean, at most about 300 lines / 25 KB per doc; CANON.md wins over the domain docs; the raw export moved to `archive/`; supersedes DEC-LORE-06 |
 

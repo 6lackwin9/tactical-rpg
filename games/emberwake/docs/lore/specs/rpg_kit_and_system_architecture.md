@@ -113,8 +113,8 @@ features are `proposal`.
 | Warded Tallow upkeep | supplies (per time unit, camp cost, `start_supplies`) | extend: the name per world; the 0-stock effect becomes an option (today +50% encounter chance; Emberwake -2 starting AP) | `[kit hook]`, `[data]` |
 | Rock Salt, Aberrant Organs | stash items | exists | `[data]` |
 | Inquisition Alert, Doom Clock, doctrine | numeric flags and reputation bands | new: a generic meter system with thresholds, triggers, inputs (mission tags, bribes, story amounts), a warning at each threshold and effects such as Lockdown (visible, soft or hard; Q-15) | `[engine]` if game-agnostic, else `[kit hook]`; `[data]` |
-| Tess's dead-drop board | quests and dialogue `start_quest` | new: a mission board listing a giver's offers | `[kit hook]`, `[data]` |
-| The Undercroft hub and facilities with levels | a world location on the region map, NPC markers, shops | new: facilities with levels and projects (Bram's 8-bunk frames) | `[kit hook]`, `[data]` |
+| Talia's dead-drop board | quests and dialogue `start_quest` | new: a mission board listing a giver's offers | `[kit hook]`, `[data]` |
+| The Undercroft hub and facilities with levels | a world location on the region map, NPC markers, shops | new: facilities with levels and projects (Berek's 8-bunk frames) | `[kit hook]`, `[data]` |
 | Bunks 6 to 8 | roster unbounded, `party_max` 4 active | new: a roster cap raised by a facility level (Act 1: six founders only; the 8-bunk level from Act 2, Q-38) | `[kit hook]` |
 | Downed, wounded, captured, dead, retired | downed in battle; HEAL1 rally and wake | new: the unit lifecycle after battle (states, effects, recovery) | `[kit hook]` |
 | Founders join | RECRUIT1 `recruit` effect, world characters | exists | `[data]` |

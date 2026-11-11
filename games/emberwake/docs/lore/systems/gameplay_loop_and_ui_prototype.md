@@ -12,8 +12,8 @@ fight (rounds of 6 blocks).
 
 | Step | What the player does | Screen | Layer |
 | --- | --- | --- | --- |
-| 1. The Sluice Undercroft | talk to Aline (Slab), Bram (Hearth) and Tess (board); rest in the Dry Hollows (1 day, 1 Warded Tallow, full HP); pick up to four and their gear, pouch and deck | region map (the Undercroft), Character | `[data]` NPCs and dialogue; `[kit hook]` facilities, bunks |
-| 2. Tess's dead-drop board | take the next main mission (offered when the previous one is done) or optional board work | the mission board (built before the slice, Q-55) | `[kit hook]` mission board |
+| 1. The Sluice Undercroft | talk to Sabina (Slab), Berek (Hearth) and Talia (board); rest in the Dry Hollows (1 day, 1 Warded Tallow, full HP); pick up to four and their gear, pouch and deck | region map (the Undercroft), Character | `[data]` NPCs and dialogue; `[kit hook]` facilities, bunks |
+| 2. Talia's dead-drop board | take the next main mission (offered when the previous tier is done) or optional board work | the mission board (built before the slice, Q-55) | `[kit hook]` mission board |
 | 3. The district map | travel the Sunk Ward node graph: each route leg costs 1 day (stealth +1) and 1 Warded Tallow per day; road fights can trigger | world map | `[kit hook]` exists (travel clock, road fights); `[data]` nodes 00-07 |
 | 4. The mission site | walk streets and interiors, meet patrols (roamer markers; no sight cones), loot chests, start the fight | region map | `[kit hook]` exists |
 | 5. The fight | section 2 | battle | `[engine]` timeline, `[kit hook]` ruleset "timeline" |
@@ -77,7 +77,7 @@ enemy card on the right, the status bar and log at the bottom; the board in the 
 | Path | Steps | Gives |
 | --- | --- | --- |
 | A. Arena first | run ENC-PRO-0A (Kaelen against two Castellan Footmen) in the Scene Runner arena with the "timeline" ruleset; then ENC-PRO-0B and -0C | the feel of windups, breaks and guard fastest, no campaign plumbing |
-| B. Vertical slice | prologue 0a-0c, the hearth scene, the Sunk Ward graph, Tess's board, Act 1 M3, one dilemma, M5 | the whole Act 1 loop, slower to first play |
+| B. Vertical slice | prologue 0a-0c, the hearth scene, the Sunk Ward graph, Talia's board, Act 1 M3, one dilemma, M5 | the whole Act 1 loop, slower to first play |
 
 Settled by the roadmap's milestones (user 2026-10-25): A first (M1, combat feel in the Dojo), then B (M2, the slice of
 [the roadmap](../specs/full_game_systems_roadmap.md) section 1, Q-83, Q-84). The slice runs from the prologue at level 1,
