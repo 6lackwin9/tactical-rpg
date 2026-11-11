@@ -384,7 +384,7 @@ impl<G: Context> Shell<G> {
         let top = self.stack.last().unwrap();
         let infos = top.widgets();
         let ctl = info_at(&infos, self.mouse).map(trail_ctl).unwrap_or(Value::Null);
-        let mut stamp = json!({"scene": top.id(), "battle": -1, "round": 0, "block": 0, "phase": "", "mouse": [self.mouse.0, self.mouse.1], "viewport": self.top_view().canvas(), "ctl": ctl});
+        let mut stamp = json!({"scene": top.id(), "session": -1, "round": 0, "block": 0, "phase": "", "mouse": [self.mouse.0, self.mouse.1], "viewport": self.top_view().canvas(), "ctl": ctl});
         if let Some(ctx) = top.note_context(&self.cx).as_object() {
             for (k, v) in ctx {
                 stamp[k] = v.clone();
@@ -1048,6 +1048,14 @@ impl<G: Context> Shell<G> {
     /// Agent link requests.
     fn bridge(&mut self, body: &Value) -> Value {
         self.agent = true;
+        // An old widget id (`id`, a drag's `to`) is read as its new name (LAYER-ENG-API, `recordings::ID_ALIASES`).
+        let mut renamed = None;
+        for key in ["id", "to"] {
+            if let Some(new) = body[key].as_str().and_then(crate::recordings::canonical_id) {
+                renamed.get_or_insert_with(|| body.clone())[key] = json!(new);
+            }
+        }
+        let body = renamed.as_ref().unwrap_or(body);
         let reply = self.bridge_cmd(body);
         // Screens the command opened never move the pointer (ASKNO2).
         self.pointer_pending = false;
@@ -2827,6 +2835,37 @@ mod tests {
         let state = s.stack.last().unwrap().state(&s.cx);
         assert_eq!(state["recordings"].as_array().map(Vec::len), Some(2), "the user copy and the repo copy: {state}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// LAYER-ENG-API (PR5-29c): the session picker is `recordings.session` and its state key `session`; the agent link
+    /// still takes the old id `recordings.battle` (and its options), read as the new one.
+    #[test]
+    fn the_session_picker_answers_its_new_and_old_ids() {
+        let _queues = crate::playtest::test_queues();
+        let dir = aegis_core::scratch::Scratch::vacant("shell_recordings_ids");
+        let mut s = shell();
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, json!({"total": "a"}));
+        for scene in ["first", "second"] {
+            let session = aegis_host::playtest::Session { requests: vec![json!({"cmd": "new", "scene": scene})], checkpoints: Vec::new(), end: json!({"result": "won", "at": 1}) };
+            s.cx.playtest.put_session(&mut None, session);
+        }
+        let browser = crate::recordings::Recordings::new(&s.cx, launch, |_| Value::Null, Vec::new());
+        s.stack.push(Box::new(browser));
+        s.frame();
+        let picked = |s: &Shell<App>| s.stack.last().unwrap().state(&s.cx);
+        assert_eq!(picked(&s)["session"], json!(0), "{}", picked(&s));
+        assert!(picked(&s).get("battle").is_none(), "the state writes the new key only: {}", picked(&s));
+        let open = s.bridge(&json!({"cmd": "click", "id": "recordings.battle"}));
+        assert_eq!((open["ok"].clone(), open["clicked"].clone()), (json!(true), json!("recordings.session")), "{open}");
+        s.frame();
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.battle.opt.1"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(picked(&s)["session"], json!(1), "the old option id picks the second session");
+        s.bridge(&json!({"cmd": "click", "id": "recordings.session"}));
+        s.frame();
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "recordings.session.opt.0"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(picked(&s)["session"], json!(0), "the new option id picks the first session");
     }
 
     /// PORT-PLAYTEST trail: with recording on, the shell logs clicks (the control and whether anything took it), the

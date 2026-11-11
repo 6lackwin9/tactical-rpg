@@ -752,7 +752,8 @@ impl Screen<GameCx> for BattleScreen {
         self.save_session(cx);
     }
 
-    /// A playtest note over the battle records its session (the recording's battle index), round, block and phase.
+    /// A playtest note over the battle records its session (the recording's session index; `session`, was `battle`
+    /// before LAYER-ENG-API), round, block and phase.
     fn note_context(&self, _cx: &Cx) -> Value {
         let Some(s) = self.host.session.as_ref() else { return Value::Null };
         let phase = match s.phase {
@@ -760,7 +761,7 @@ impl Screen<GameCx> for BattleScreen {
             Phase::Resolving => "resolving",
             Phase::Replay => "replay",
         };
-        json!({"battle": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
+        json!({"session": self.slot.map_or(-1, |i| i as i64), "round": s.current_round, "block": s.current_block, "phase": phase})
     }
 
     fn tick(&mut self, cx: &mut Cx) {

@@ -288,7 +288,7 @@ impl Audio {
 
     /// The track to play for one music request of `rel` (MUSICVAR1): `rel` itself when it has no variants, else one of
     /// `music_variants(rel)`. The same request keeps its pick; a new one picks with `pick_variant` from `seed` (the
-    /// game's battle seed, say), never the previous request's pick. `request`: the game's id of the request (a battle);
+    /// game's session seed, say), never the previous request's pick. `request`: the game's id of the request (a session);
     /// None: a request lasts while its pick is the wanted music (`music`; before the pick first plays, while the music
     /// wanted at the pick is still wanted), so the next one starts once another track (or silence) is wanted after the
     /// pick played, or the seed changed. Works without a device.

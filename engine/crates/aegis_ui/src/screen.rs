@@ -447,14 +447,15 @@ pub trait Screen<G> {
     fn resume(&mut self, _cx: &mut Cx<G>) {}
     /// A text field of this screen changed while being typed into (`Ui::text_field`): the screen keeps the text.
     fn text_changed(&mut self, _cx: &mut Cx<G>, _id: &str, _text: &str) {}
-    /// What a playtest note taken over this screen records about it (a battle: its session, round, block, phase).
+    /// What a playtest note taken over this screen records about it (a game's play screen: its session, round, block,
+    /// phase).
     fn note_context(&self, _cx: &Cx<G>) -> Value {
         Value::Null
     }
     /// Called when the screen leaves the stack (popped, a new stack, the window closing): its last chance to keep
     /// what it holds (a playtest session).
     fn leave(&mut self, _cx: &mut Cx<G>) {}
-    /// An agent link command the shell does not know (the battle screen's command API); None when not handled.
+    /// An agent link command the shell does not know (a game screen's own command API); None when not handled.
     fn command(&mut self, _cx: &Cx<G>, _body: &Value) -> Option<Value> {
         None
     }

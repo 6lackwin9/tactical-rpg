@@ -1,9 +1,12 @@
 //! The playtest recordings browser (PLAYTEST1-L in-game playback; a kit screen a game opens from its tools): the
 //! recording toggle, the recordings of the user folder and of the repo folders the game names (badge `repo`) newest
-//! first with a stale badge, a recording's battles and notes, Play back (watch a battle to its end), Take over (the
-//! battle replayed to a round, then played on as a new session that names its parent), Open folder and Copy to repo.
+//! first with a stale badge, a recording's sessions and notes, Play back (watch a session to its end), Take over (the
+//! session replayed to a round, then played on as a new session that names its parent), Open folder and Copy to repo.
 //! A note's row opens it whole with a Copy button (PLAYUI1-T, `NoteView`). The game supplies the screen a session plays
 //! in (`Launch`) and its content fingerprint.
+//!
+//! LAYER-ENG-API (PR5-29c): the session picker was `recordings.battle` (`ID_ALIASES`: the agent link still takes the
+//! old id) and its state key `battle` is `session`; the words the pane draws stay (`SESSION_LABELS`).
 
 use crate::canvas::Rect;
 use crate::playtest::TAGS;
@@ -17,6 +20,39 @@ use std::path::{Path, PathBuf};
 pub const ID: &str = "recordings";
 /// The settings key of the recording toggle.
 pub const SETTING: &str = "record_playtests";
+/// Old widget ids of this screen the agent link still takes (old, new; LAYER-ENG-API): an id that is the old one or
+/// starts with it and a dot (the picker's options) is read as the new one.
+pub const ID_ALIASES: [(&str, &str); 1] = [("recordings.battle", "recordings.session")];
+/// The words the pane draws for sessions: the picker's header and the list's count ("3 battles"). They predate
+/// LAYER-ENG-API and stay as drawn because the recordings pane's pixel hashes pin them
+/// (`tests/fixtures/theme/pane_hashes.json`); renaming them is a theme re-record.
+pub const SESSION_LABELS: SessionLabels = SessionLabels { header: "BATTLE", count: "battles" };
+/// The keys of a session's first request that name its scene, first found wins: `scene`, then a command set's
+/// `encounter` (the RPG kit's `new` request; a read alias, LAYER-ENG-API).
+pub const SCENE_KEYS: [&str; 2] = ["scene", "encounter"];
+
+/// See `SESSION_LABELS`.
+pub struct SessionLabels {
+    /// Above the session picker.
+    pub header: &'static str,
+    /// After a recording's session count in the list.
+    pub count: &'static str,
+}
+
+/// `id` with an old widget id of this screen read as its new one (`ID_ALIASES`); None when it names no old id.
+pub fn canonical_id(id: &str) -> Option<String> {
+    ID_ALIASES.iter().find_map(|(old, new)| match id.strip_prefix(old) {
+        Some("") => Some(new.to_string()),
+        Some(rest) if rest.starts_with('.') => Some(format!("{new}{rest}")),
+        _ => None,
+    })
+}
+
+/// The scene a session plays (`SCENE_KEYS` in its first request), "?" when none names it.
+pub fn session_scene(session: &Session) -> &str {
+    let first = session.requests.first();
+    SCENE_KEYS.iter().find_map(|k| first.and_then(|r| r[*k].as_str())).unwrap_or("?")
+}
 
 /// The game's screen for a recorded session: take-over None = watch it to its end; Some((parent, at)) = replay `at`
 /// requests, then play on as a new session whose end names `parent`. None when the game cannot show it.
@@ -26,7 +62,7 @@ pub type Launch<G> = fn(&mut Cx<G>, &Session, Option<(Value, usize)>) -> Option<
 enum Act {
     Toggle,
     Pick(usize),
-    Battle(usize),
+    Session(usize),
     Round(usize),
     PlayBack,
     TakeOver,
@@ -52,14 +88,15 @@ pub struct Recordings<G> {
     repo: Vec<PathBuf>,
     items: Vec<Item>,
     pick: usize,
-    battle: usize,
+    /// The picked session of the picked recording.
+    session_pick: usize,
     round: usize,
     pub message: String,
     w: Vec<Widget<Act>>,
 }
 
 /// Where a take-over can start in `session`: (label, requests to replay): round 1 after the opening request, then
-/// after each concluded round that did not end the battle.
+/// after each concluded round that did not end the session.
 pub fn take_over_points(session: &Session) -> Vec<(String, usize)> {
     let mut out = vec![("Round 1".to_string(), 1)];
     for c in &session.checkpoints {
@@ -84,7 +121,7 @@ pub fn open_folder(path: &Path) -> Result<(), String> {
 
 impl<G> Recordings<G> {
     pub fn new(cx: &Cx<G>, launch: Launch<G>, content: fn(&Cx<G>) -> Value, repo: Vec<PathBuf>) -> Self {
-        let mut s = Self { launch, content, repo, items: Vec::new(), pick: 0, battle: 0, round: 0, message: String::new(), w: Vec::new() };
+        let mut s = Self { launch, content, repo, items: Vec::new(), pick: 0, session_pick: 0, round: 0, message: String::new(), w: Vec::new() };
         s.refresh(cx);
         s
     }
@@ -104,7 +141,7 @@ impl<G> Recordings<G> {
     }
 
     fn session(&self) -> Option<&Session> {
-        self.picked().and_then(|r| r.sessions.get(self.battle))
+        self.picked().and_then(|r| r.sessions.get(self.session_pick))
     }
 
     fn act(&mut self, cx: &mut Cx<G>, a: Act) {
@@ -123,30 +160,30 @@ impl<G> Recordings<G> {
             }
             Act::Pick(i) => {
                 self.pick = i;
-                self.battle = 0;
+                self.session_pick = 0;
                 self.round = 0;
             }
-            Act::Battle(i) => {
-                self.battle = i;
+            Act::Session(i) => {
+                self.session_pick = i;
                 self.round = 0;
             }
             Act::Round(i) => self.round = i,
             Act::PlayBack | Act::TakeOver => {
                 let (Some(rec), Some(session)) = (self.picked(), self.session()) else {
-                    self.message = "Pick a recording with a battle.".into();
+                    self.message = "Pick a recording with a session.".into();
                     return;
                 };
                 let session = session.clone();
                 let take = match a {
                     Act::TakeOver => {
                         let at = take_over_points(&session).get(self.round).map_or(1, |p| p.1);
-                        Some((json!({"recording": rec.id, "session": self.battle, "at": at}), at))
+                        Some((json!({"recording": rec.id, "session": self.session_pick, "at": at}), at))
                     }
                     _ => None,
                 };
                 match (self.launch)(cx, &session, take) {
                     Some(screen) => cx.nav.push(Nav::Push(screen)),
-                    None => self.message = "This battle cannot be shown.".into(),
+                    None => self.message = "This session cannot be shown.".into(),
                 }
             }
             Act::OpenFolder => {
@@ -212,7 +249,7 @@ impl<G> Screen<G> for Recordings<G> {
                         badges.push("stale");
                     }
                     let badge = if badges.is_empty() { String::new() } else { format!(" [{}]", badges.join(", ")) };
-                    (format!("{id}  {} battles, {} notes{badge}", rec.sessions.len(), rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
+                    (format!("{id}  {} {}, {} notes{badge}", rec.sessions.len(), SESSION_LABELS.count, rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
                 }
                 Err(_) => (format!("{id}  (unreadable)"), t.foe),
             };
@@ -220,7 +257,7 @@ impl<G> Screen<G> for Recordings<G> {
         }
         ui.scroll_end();
         if self.items.is_empty() {
-            ui.p.text(left.x as f32 + 8.0, left.y as f32 + 8.0, if on { "No recordings yet: play a battle." } else { "No recordings. Turn recording on." }, BODY, t.dim);
+            ui.p.text(left.x as f32 + 8.0, left.y as f32 + 8.0, if on { "No recordings yet: play to record one." } else { "No recordings. Turn recording on." }, BODY, t.dim);
         }
         // Right: the picked recording.
         let right = Rect::new(232, 50, 396, 300);
@@ -243,26 +280,26 @@ impl<G> Screen<G> for Recordings<G> {
                     y += 9;
                 }
                 y += 2;
-                ui.p.text(x as f32, y as f32, "BATTLE", SMALL, t.info);
+                ui.p.text(x as f32, y as f32, SESSION_LABELS.header, SMALL, t.info);
                 y += 9;
                 let labels: Vec<String> = rec
                     .sessions
                     .iter()
                     .enumerate()
                     .map(|(i, b)| {
-                        let enc = b.requests.first().and_then(|r| r["encounter"].as_str()).unwrap_or("?");
+                        let enc = session_scene(b);
                         let child = if b.end["parent"].is_null() { "" } else { " (take-over)" };
                         format!("{}. {enc}: {}, {} rounds{child}", i + 1, b.result(), b.checkpoints.len())
                     })
                     .collect();
-                self.battle = self.battle.min(labels.len().saturating_sub(1));
-                ui.select("recordings.battle", Rect::new(x, y, 240, 14), &labels, self.battle, Act::Battle, !labels.is_empty(), Vec::new());
-                ui.button_tip("recordings.play", Rect::new(x + 246, y, 60, 14), "Play back", Act::PlayBack, !labels.is_empty(), tip("Play back", "Replays the battle to its end and shows it (watched, not recorded)."));
+                self.session_pick = self.session_pick.min(labels.len().saturating_sub(1));
+                ui.select("recordings.session", Rect::new(x, y, 240, 14), &labels, self.session_pick, Act::Session, !labels.is_empty(), Vec::new());
+                ui.button_tip("recordings.play", Rect::new(x + 246, y, 60, 14), "Play back", Act::PlayBack, !labels.is_empty(), tip("Play back", "Replays the session to its end and shows it (watched, not recorded)."));
                 y += 18;
-                let points: Vec<String> = rec.sessions.get(self.battle).map(take_over_points).unwrap_or_default().into_iter().map(|p| p.0).collect();
+                let points: Vec<String> = rec.sessions.get(self.session_pick).map(take_over_points).unwrap_or_default().into_iter().map(|p| p.0).collect();
                 self.round = self.round.min(points.len().saturating_sub(1));
                 ui.select("recordings.round", Rect::new(x, y, 120, 14), &points, self.round, Act::Round, !points.is_empty(), Vec::new());
-                ui.button_tip("recordings.take_over", Rect::new(x + 126, y, 60, 14), "Take over", Act::TakeOver, !points.is_empty(), tip("Take over", "Replays the battle to the chosen round, then you play on: a new session that names this one as its parent."));
+                ui.button_tip("recordings.take_over", Rect::new(x + 126, y, 60, 14), "Take over", Act::TakeOver, !points.is_empty(), tip("Take over", "Replays the session to the chosen round, then you play on: a new session that names this one as its parent."));
                 y += 20;
                 ui.p.text(x as f32, y as f32, &format!("NOTES ({})", rec.notes.len()), SMALL, t.info);
                 y += 9;
@@ -306,7 +343,7 @@ impl<G> Screen<G> for Recordings<G> {
 
     fn state(&self, cx: &Cx<G>) -> Value {
         json!({"on": cx.playtest.on, "recordings": self.items.iter().map(|i| i.path.file_stem().map(|s| s.to_string_lossy().to_string())).collect::<Vec<_>>(),
-            "pick": self.pick, "battle": self.battle, "round": self.round, "message": self.message,
+            "pick": self.pick, "session": self.session_pick, "round": self.round, "message": self.message,
             "error": self.items.get(self.pick).and_then(|i| i.rec.as_ref().err()).map(|e| e.detail.as_str())})
     }
 

@@ -1,6 +1,6 @@
 //! Two-layer drawing at the window's real resolution. Layout is in logical units; `View` maps them to physical pixels,
 //! and a screen's `Grid` says which units it writes (LAYOUT720-E1: the old 640x360 design canvas, or the grid `GRID`).
-//! The battlefield is pixel art scaled with nearest sampling; panels and text are drawn
+//! The game world is pixel art scaled with nearest sampling; panels and text are drawn
 //! smooth at full resolution (anti-aliased Open Sans, rounded panels), like the Godot HUD. LOOK1-E1: three faces
 //! (`Typeface`: body, display, mono; the theme's fonts, `Fonts::sync`) and nine-slice frames (`Painter::nine`).
 

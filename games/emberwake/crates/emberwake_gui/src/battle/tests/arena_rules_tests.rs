@@ -50,3 +50,17 @@ fn the_arena_diagonal_melee_pick_reaches_the_battle_and_survives_restart() {
     let timeline = Ruleset::of(&cx.data.cat, TIMELINE).expect("the catalog's timeline row");
     assert_eq!(row.host.session.as_ref().unwrap().w.ruleset.melee_diagonal(), timeline.melee_diagonal(), "the row's value");
 }
+
+/// LAYER-ENG-API (PR5-29c): a playtest note over the battle names the recording's session under `session` (the engine
+/// shell's stamp key; `battle` before), with the battle's own round, block and phase; no `battle` key.
+#[test]
+fn a_note_over_the_battle_names_its_session_round_block_and_phase() {
+    let cx = crate::hud::hud_tests::game_cx();
+    let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+    let b = BattleScreen::arena(&cx, None, &encounter);
+    let s = b.host.session.as_ref().expect("the battle starts");
+    let ctx = b.note_context(&cx);
+    assert_eq!(ctx["session"], json!(-1), "not recorded: no session slot: {ctx}");
+    assert_eq!((ctx["round"].clone(), ctx["block"].clone(), ctx["phase"].clone()), (json!(s.current_round), json!(s.current_block), json!("planning")), "{ctx}");
+    assert!(ctx.get("battle").is_none(), "{ctx}");
+}
