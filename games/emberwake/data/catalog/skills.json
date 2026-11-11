@@ -2886,16 +2886,16 @@
 			"level": 1,
 			"ap_cost": 0,
 			"blocks": 1,
-			"description": "Channel basic: -20 Strain for 15% of max HP; only while Strain is 50 or more.",
+			"description": "Channel basic: -50 Strain for 10% of max HP; only while Strain is 50 or more.",
 			"learned_only": true,
 			"round_intent": "support",
 			"meters": [
 				{
 					"meter": "strain",
-					"delta": -20
+					"delta": -50
 				}
 			],
-			"hp_cost_pct": 15,
+			"hp_cost_pct": 10,
 			"requires_meter": {
 				"meter": "strain",
 				"min": 50

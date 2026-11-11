@@ -466,7 +466,12 @@ impl Hooks for RpgContent {
             // PORTRAITFX1 5.1: the reserved trigger is refused with its reason, not as an unknown option
             return Err(vec![crate::check::portrait::METER_MESSAGE.into()]);
         }
-        let errors = field_errors(source::schema(), if game { "none" } else { section }, kind, &full);
+        let mut errors = field_errors(source::schema(), if game { "none" } else { section }, kind, &full);
+        if world.is_none() && kind == "skills" {
+            // PR5-26b (FB-198 B9 Option B): the writer keeps only rank fields in a rank modifier, so another key is
+            // refused rather than dropped
+            errors.extend(source::rank_key_errors(entry));
+        }
         if errors.is_empty() {
             Ok(full)
         } else {

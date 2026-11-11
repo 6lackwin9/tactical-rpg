@@ -26,6 +26,9 @@ use rpgkit_rules::status;
 use rpgkit_rules::unit::BandApplied;
 use serde_json::Value;
 
+/// The trigger event whose `meter_set` skips the round's decay (PR5-26b).
+const ROUND_END: &str = "round_end";
+
 /// The holder key prefix of a meter's own lines (the log tags them `[Meter]`).
 pub const METER_KEY: &str = "meter:";
 
@@ -35,8 +38,9 @@ pub fn on(w: &World) -> bool {
 }
 
 /// One meter one unit holds this battle: its value, floor and max (U1.2-S5: the row's max, or the holder's `max_stat`
-/// value), whether a skill raised it this round (UM3), the band it is in and what that band's effects added (UM4), and
-/// the `once` rules that fired (UM5).
+/// value), whether a skill raised it this round (UM3), the band it is in and what that band's effects added (UM4), the
+/// `once` rules that fired (UM5), and (PR5-26b, FB-198 Q2 Option A) whether a `round_end` trigger's `meter_set` set it
+/// this round (its decay then skips that round).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gauge {
     pub unit: UnitId,
@@ -48,6 +52,7 @@ pub struct Gauge {
     pub band: Option<usize>,
     applied: BandApplied,
     fired: Vec<String>,
+    set_at_round_end: bool,
 }
 
 /// The battle's meters (empty in classic and without the rule), holders in unit order, each unit's meters in the
@@ -163,7 +168,7 @@ fn unit_start(w: &mut World, c: UnitId) {
             _ => start,
         };
         let value = start.clamp(def.min, max).max(floor);
-        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new() });
+        w.meters.gauges.push(Gauge { unit: c, meter: meter.clone(), value, floor, max, gained: false, band: None, applied: BandApplied::default(), fired: Vec::new(), set_at_round_end: false });
         for s in def.skills.iter().filter(|s| cat.skill(s).is_some()) {
             if !w.units[c].meter_skills.contains(s) {
                 w.units[c].meter_skills.push(s.clone());
@@ -326,7 +331,8 @@ fn run_rules(res: &mut Resolver, w: &mut World, i: usize, def: &UnitMeterDef, ol
 
 /// 8.2 `meter` and UM5 `meter_set` (run by `trigger::run_effects` for `to`): a trigger's meter change on a meter `to`
 /// holds (`delta` within the row's `delta_max`, 10 by default), or a rule's set (`value`); the line is the holder's;
-/// with `rules` the move may cross rules.
+/// with `rules` the move may cross rules. PR5-26b (FB-198 Q2 Option A): a set by a `round_end` trigger row marks the
+/// gauge so this round's decay skips it (`round_end`; a `meter` delta, or a meter rule's set, marks nothing).
 #[allow(clippy::too_many_arguments)]
 pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e: &Obj, rules: bool, block: i32, fired: &mut Fired) {
     if !on(w) {
@@ -337,6 +343,9 @@ pub fn from_effect(res: &mut Resolver, w: &mut World, h: &Holder, to: UnitId, e:
     let Some(def) = w.cat.unit_meters.get(&meter).cloned() else { return };
     let cur = w.meters.gauges[i].value;
     let (target, what) = if value::string(e, "type", "") == rpgkit_data::METER_SET {
+        if h.row.on == ROUND_END {
+            w.meters.gauges[i].set_at_round_end = true;
+        }
         let v = value::int(e, "value", cur);
         (v, format!("{}'s {} set to {v}", w.units[to].name, def.name))
     } else {
@@ -472,7 +481,9 @@ pub fn guarded_now(res: &Resolver, w: &World) -> Vec<bool> {
 /// it decays: each active holder's decay rows in order (`unless_gained` skips a row when a skill raised the meter this
 /// round, `if_guarded` applies it only when the unit guarded this round: a Defend, or a held guard, `guarded` read by
 /// `guarded_now` before the triggers); then the gained marks clear. PK1-S2a (PK1 4.3 items 5, 8): a unit's Channel round
-/// skips every decay row of the channel meter (it counts as a gain, and its `if_guarded` rows skip too).
+/// skips every decay row of the channel meter (it counts as a gain, and its `if_guarded` rows skip too). PR5-26b (FB-198
+/// Q2 Option A, PK1_CORRUPTION 2.1): a gauge a `round_end` trigger's `meter_set` set this round (`from_effect`) skips
+/// every decay row too, so it ends the round at the set value (a crisis's Strain 50); the set marks clear here.
 pub fn round_end(res: &mut Resolver, w: &mut World, guarded: &[bool]) {
     if !on(w) {
         return;
@@ -480,14 +491,15 @@ pub fn round_end(res: &mut Resolver, w: &mut World, guarded: &[bool]) {
     let cat = w.cat.clone();
     let block = w.total_blocks;
     for i in 0..w.meters.gauges.len() {
-        let (c, meter, gained) = {
+        let (c, meter, gained, set_now) = {
             let g = &w.meters.gauges[i];
-            (g.unit, g.meter.clone(), g.gained)
+            (g.unit, g.meter.clone(), g.gained, g.set_at_round_end)
         };
         w.meters.gauges[i].gained = false;
+        w.meters.gauges[i].set_at_round_end = false;
         let channel_round = crate::channel::is_channel(w, c) && meter == crate::channel::meter_id(w);
         let Some(def) = cat.unit_meters.get(&meter) else { continue };
-        if def.decay.is_empty() || !w.units[c].is_active() || channel_round {
+        if def.decay.is_empty() || !w.units[c].is_active() || channel_round || set_now {
             continue;
         }
         let guarded = guarded.get(c).copied().unwrap_or(false);

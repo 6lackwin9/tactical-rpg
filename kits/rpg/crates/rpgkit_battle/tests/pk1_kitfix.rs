@@ -166,8 +166,9 @@ fn the_crisis_sets_its_meter_holds_the_armour_and_bleeds_for_the_battle() {
 
 /// PR5-26 (FB-191 Option A): the battle's round end runs the `round_end` triggers before the meters' decay, so a
 /// Strain at MAX with a decay row (-DECAY a round, not gained) fires the crisis (the armour held at 0, Strain set to
-/// AFTER) and then decays from AFTER; a Strain one below MAX decays without a crisis. (Decay first would take MAX below
-/// the crisis's `at_least` before it reads it.)
+/// AFTER); a Strain one below MAX decays without a crisis. (Decay first would take MAX below the crisis's `at_least`
+/// before it reads it.) PR5-26b (FB-198 Q2 Option A, PK1_CORRUPTION 2.1): the crisis's `meter_set` skips that round's
+/// decay, so Strain ends the round at AFTER (no decay line), and the next round decays from AFTER as usual.
 #[test]
 fn the_round_end_crisis_reads_the_meter_before_it_decays() {
     const DECAY: i32 = 10;
@@ -177,16 +178,57 @@ fn the_round_end_crisis_reads_the_meter_before_it_decays() {
         w.meters.gauges.iter_mut().find(|g| g.unit == HERO && g.meter == "strain").expect("a gauge").value = start;
         let mut res = registered();
         res.apply_round_end_effects(&mut w);
-        let after = if crisis { AFTER - DECAY } else { start - DECAY };
+        let after = if crisis { AFTER } else { start - DECAY };
         assert_eq!(meter::value(&w, HERO, "strain"), Some(after), "start {start}: {:?}", res.log);
         assert_eq!(armor_rating(&w.units[HERO]) == 0, crisis, "start {start}: the crisis held the armour");
-        let set = res.log.iter().position(|l| l.contains(&format!("set to {AFTER}")));
-        let decay = res.log.iter().position(|l| l.contains("decays"));
-        assert_eq!(set.is_some(), crisis, "{:?}", res.log);
+        assert_eq!(res.log.iter().any(|l| l.contains(&format!("set to {AFTER}"))), crisis, "{:?}", res.log);
+        assert_eq!(res.log.iter().any(|l| l.contains("decays")), !crisis, "the set skips the round's decay: {:?}", res.log);
         if crisis {
-            assert!(set < decay, "the crisis before the decay: {:?}", res.log);
+            // the set mark lasts one round: the next round end (no crisis below MAX) decays from AFTER
+            let mut res = registered();
+            res.apply_round_end_effects(&mut w);
+            assert_eq!(meter::value(&w, HERO, "strain"), Some(AFTER - DECAY), "the next round decays: {:?}", res.log);
         }
     }
+}
+
+/// PR5-26b (FB-198 Q2 Option A): only a `round_end` trigger's `meter_set` skips the decay. A `round_end` trigger that
+/// raises the meter (a `meter` delta, not a set) leaves the decay on (PR5-26's order: raise, then decay); a set by a
+/// trigger on another event (a `round_start` row) marks nothing for the round's end. Per meter: the hero's crisis
+/// skips its Strain's decay only, its Tension decays the same round.
+#[test]
+fn only_a_round_end_set_skips_the_decay() {
+    const DECAY: i32 = 10;
+    const RAISE: i32 = 5;
+    const BASE: i32 = 60;
+    let decay = || vec![json!({"delta": -DECAY}).as_object().unwrap().clone()];
+    // a round_end raise: not a set, the decay still runs (BASE + RAISE - DECAY)
+    let mut w = session(&["tension"]).w;
+    std::sync::Arc::make_mut(&mut w.cat).unit_meters.get_mut("tension").expect("the tension row").decay = decay();
+    w.meters.gauges.iter_mut().find(|g| g.unit == HERO && g.meter == "tension").expect("a gauge").value = BASE;
+    give(&mut w, HERO, "swell", "round_end", json!([{"type": "meter", "meter": "tension", "delta": RAISE}]));
+    let mut res = registered();
+    res.apply_round_end_effects(&mut w);
+    assert_eq!(meter::value(&w, HERO, "tension"), Some(BASE + RAISE - DECAY), "{:?}", res.log);
+    // a set by a round_start row: the round's end still decays it (BASE - DECAY)
+    let mut w = session(&["tension"]).w;
+    std::sync::Arc::make_mut(&mut w.cat).unit_meters.get_mut("tension").expect("the tension row").decay = decay();
+    give(&mut w, HERO, "reset", "round_start", json!([{"type": "meter_set", "meter": "tension", "value": BASE}]));
+    let mut res = registered();
+    trigger::round_start(&mut res, &mut w);
+    assert_eq!(meter::value(&w, HERO, "tension"), Some(BASE), "{:?}", res.log);
+    res.apply_round_end_effects(&mut w);
+    assert_eq!(meter::value(&w, HERO, "tension"), Some(BASE - DECAY), "{:?}", res.log);
+    // per meter: the hero's crisis set skips Strain's decay only; its Tension decays the same round
+    let mut w = session(&["strain", "tension"]).w;
+    let cat = std::sync::Arc::make_mut(&mut w.cat);
+    cat.unit_meters.get_mut("strain").expect("the strain row").decay = decay();
+    cat.unit_meters.get_mut("tension").expect("the tension row").decay = decay();
+    w.meters.gauges.iter_mut().find(|g| g.unit == HERO && g.meter == "tension").expect("a gauge").value = BASE;
+    let mut res = registered();
+    res.apply_round_end_effects(&mut w);
+    assert_eq!(meter::value(&w, HERO, "strain"), Some(AFTER), "{:?}", res.log);
+    assert_eq!(meter::value(&w, HERO, "tension"), Some(BASE - DECAY), "{:?}", res.log);
 }
 
 // ---- (b) inflict for the battle ---------------------------------------------------------------------------------------

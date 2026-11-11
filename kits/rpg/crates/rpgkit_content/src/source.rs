@@ -570,6 +570,26 @@ pub(crate) const RANK_KEYS: [&str; 26] = [
     "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap", "ap_cost", "recovery_blocks", "stagger", "windup_poise", "meters", "hp_cost",
 ];
 
+/// The rank modifier keys `ranked_skills` refuses with their own reason (rank names and ids are derived).
+const RANK_BANNED: [&str; 4] = ["name", "family", "tier", "id"];
+
+/// PR5-26b (FB-198 B9 Option B): a ranked skill entry's rank modifier keys that are not rank fields (`RANK_KEYS`, the
+/// schema's `"rank": true`; a modifier may also give its rank's `description`), one error each: the rank rows read only
+/// the rank fields, so such a key (e.g. `hp_cost_pct`, `uses_per_battle`) would otherwise drop silently. The loader
+/// reports them (the entry still loads) and the writer refuses them (`store`'s validate hook).
+pub(crate) fn rank_key_errors(e: &Dict) -> Vec<String> {
+    let id = sget(e, "id", "");
+    let mut out = Vec::new();
+    for (n, m) in rank_mods(e).iter().enumerate() {
+        for k in m.keys() {
+            if !RANK_KEYS.contains(&k.as_str()) && k != "description" && !RANK_BANNED.contains(&k.as_str()) {
+                out.push(format!("skill '{id}' has a rank {} modifier with '{k}', which is not a rank field; it is the same at every rank (set it on the entry).", n + 2));
+            }
+        }
+    }
+    out
+}
+
 /// ContentCatalog._read_ranked_skills: every entry expanded into its rank rows; all rank 1 rows first, then rank 2...
 fn ranked_skills(list: &[Value], at: &str, errors: &mut Vec<String>) -> Vec<Dict> {
     let mut by_rank: Vec<Vec<Dict>> = vec![Vec::new(); 5];
@@ -587,13 +607,14 @@ fn ranked_skills(list: &[Value], at: &str, errors: &mut Vec<String>) -> Vec<Dict
             }
         }
         for m in rank_mods(d) {
-            for banned in ["name", "family", "tier", "id"] {
+            for banned in RANK_BANNED {
                 if m.contains_key(banned) {
                     errors.push(format!("{at}: skill '{id}' has a rank modifier with '{banned}'; rank names and ids are derived."));
                     bad = true;
                 }
             }
         }
+        errors.extend(rank_key_errors(d).into_iter().map(|m| format!("{at}: {m}")));
         if bad {
             continue;
         }
