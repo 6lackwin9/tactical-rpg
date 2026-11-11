@@ -707,8 +707,8 @@ pub(crate) mod tests {
     /// The chain of a picked file stops at it (its frames first); a common file is only itself.
     #[test]
     fn a_picked_file_chain_ends_at_the_file() {
-        let who = Who::file("portraits/npcs/tess.png");
-        assert_eq!(who.chain("hurt"), ["portraits/npcs/faces/tess/hurt.png", "portraits/npcs/faces/tess/neutral.png", "portraits/npcs/tess.png"]);
+        let who = Who::file("portraits/npcs/talia_rusk.png");
+        assert_eq!(who.chain("hurt"), ["portraits/npcs/faces/talia_rusk/hurt.png", "portraits/npcs/faces/talia_rusk/neutral.png", "portraits/npcs/talia_rusk.png"]);
         assert_eq!(Who::file("portraits/common/beast_render_beast.png").chain("hurt"), ["portraits/common/beast_render_beast.png"]);
         assert_eq!(hue_name("#d97706"), "Tallow Amber");
         assert_eq!(hue_name("#123456"), "");

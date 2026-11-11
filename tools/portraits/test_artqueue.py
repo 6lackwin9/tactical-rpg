@@ -28,8 +28,8 @@ BG = (18, 14, 18)
 
 def faces_md(ref):
     return ("# Faces\n\n```text\n" + STYLE + "\n```\n\n"
-            "## Tess (`tess`)\n\nreference: `" + ref.as_posix() + "`\n\n```text\nTess, a burned ear.\n```\n\n"
-            "## Bram (`bram`)\n\n```text\nBram, no reference line.\n```\n")
+            "## Talia (`talia_rusk`)\n\nreference: `" + ref.as_posix() + "`\n\n```text\nTess, a burned ear.\n```\n\n"
+            "## Berek (`berek_dorn`)\n\n```text\nBram, no reference line.\n```\n")
 
 
 def portrait_png(path, size=(1024, 1024), mark=True):
@@ -53,7 +53,7 @@ class Base(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.pipe = self.tmp / "pipe"
         self.src = self.tmp / "art_src"; self.src.mkdir()
-        self.ref = self.tmp / "tess_src.png"; portrait_png(self.ref, mark=False)
+        self.ref = self.tmp / "talia_rusk_src.png"; portrait_png(self.ref, mark=False)
         self.extra_ref = self.tmp / "style.png"; portrait_png(self.extra_ref, mark=False)
         self.md = self.tmp / "faces.md"; self.md.write_text(faces_md(self.ref), encoding="utf-8")
         old_src, old_call = G.SRC, G.call
@@ -94,25 +94,25 @@ class Base(unittest.TestCase):
 
 class Requests(Base):
     def test_request_shape_faces(self):
-        self.run_cli("request", "tess", "--faces", "--prompts", str(self.md), "--n", "2", "--ref",
+        self.run_cli("request", "talia_rusk", "--faces", "--prompts", str(self.md), "--n", "2", "--ref",
                      str(self.extra_ref), "--task", "PORTRAITFX1-XA", "--record", "faction=castellan")
         [path] = self.queued()
-        self.assertRegex(path.name, r"^tess_faces_q\d+\.json$")
+        self.assertRegex(path.name, r"^talia_rusk_faces_q\d+\.json$")
         req = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual(req["prompt"], G.prompts(self.md, True)["tess"])
+        self.assertEqual(req["prompt"], G.prompts(self.md, True)["talia_rusk"])
         self.assertNotIn("reference:", req["prompt"])
         refs = (self.pipe / "refs").resolve()
         self.assertEqual(req["references"], [(refs / self.ref.name).as_posix(), (refs / self.extra_ref.name).as_posix()])
         self.assertTrue(all(pathlib.Path(r).is_absolute() for r in req["references"]))
         self.assertEqual((req["n"], req["aspect_ratio"], req["style_hints"]), (2, "1:1", ""))
         meta = req["metadata"]
-        self.assertEqual((meta["asset_id"], meta["route"], meta["task"]), ("tess", "faces", "PORTRAITFX1-XA"))
+        self.assertEqual((meta["asset_id"], meta["route"], meta["task"]), ("talia_rusk", "faces", "PORTRAITFX1-XA"))
         self.assertEqual(meta["record"]["kind"], "faces")
         self.assertEqual(meta["record"]["faction"], "castellan")
         self.assertEqual(sorted(p.name for p in self.pipe.iterdir()), sorted([*Q.FOLDERS, Q.REFS]))
 
     def test_faces_without_reference_line_is_skipped(self):
-        out = self.run_cli("request", "bram", "--faces", "--prompts", str(self.md))
+        out = self.run_cli("request", "berek_dorn", "--faces", "--prompts", str(self.md))
         self.assertIn("no reference: line", out)
         self.assertFalse(self.pipe.exists())
 
@@ -135,12 +135,12 @@ class Requests(Base):
             self.run_cli("text", "lost", "--text", "Lost.", "--ref", str(self.tmp / "nope.png"))
         self.assertEqual(self.queued() if self.pipe.exists() else [], [])
         md = self.tmp / "gone.md"; md.write_text(faces_md(self.tmp / "gone.png"), encoding="utf-8")
-        out = self.run_cli("request", "tess", "--faces", "--prompts", str(md))
+        out = self.run_cli("request", "talia_rusk", "--faces", "--prompts", str(md))
         self.assertIn("no reference image", out)
         self.assertEqual(self.queued() if self.pipe.exists() else [], [])
 
     def test_dry_run_writes_nothing(self):
-        out = self.run_cli("request", "tess", "--faces", "--prompts", str(self.md), "--dry-run")
+        out = self.run_cli("request", "talia_rusk", "--faces", "--prompts", str(self.md), "--dry-run")
         self.assertIn("would queue", out)
         self.assertFalse(self.pipe.exists())
 
@@ -311,14 +311,14 @@ class Ingest(Base):
         self.assertEqual(len(list(self.src.glob("bryn_hale_gen*_1.png"))), 1)
 
     def test_faces_naming_with_n(self):
-        path = self.queue_one("request", "tess", "--faces", "--prompts", str(self.md), "--n", "2")
+        path = self.queue_one("request", "talia_rusk", "--faces", "--prompts", str(self.md), "--n", "2")
         name, _ = self.fake_antigravity(path, {f"{path.stem}_1.png": portrait_png,
                                                f"{path.stem}_2.png": portrait_png})
         buf = io.StringIO()
         with redirect_stdout(buf):
             Q.ingest_one(self.pipe, name, now=1700000000)
         for k in (1, 2):
-            art = self.src / f"tess_faces_gen1700000000_{k}.png"
+            art = self.src / f"talia_rusk_faces_gen1700000000_{k}.png"
             self.assertTrue(art.is_file(), art.name)
             rec = json.loads(art.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual((rec["kind"], rec["n"]), ("faces", k))

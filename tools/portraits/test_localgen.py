@@ -268,7 +268,7 @@ class Record(unittest.TestCase):
             self.assertEqual(sheet.size, (2 * 60 * 2, 2 * (60 + 34)))
 
     def test_take_name(self):
-        self.assertEqual(localgen.take_path(generate.SRC, "tess", 2, 1792950000).name, "tess_loc1792950000_2.png")
+        self.assertEqual(localgen.take_path(generate.SRC, "talia_rusk", 2, 1792950000).name, "talia_rusk_loc1792950000_2.png")
 
 
 class DryRun(unittest.TestCase):
@@ -423,8 +423,8 @@ class KleinRecord(unittest.TestCase):
         self.assertNotIn("change", face)
 
     def test_face_take_name(self):
-        self.assertEqual(localgen.face_path(generate.SRC, "tess", "angry", 1, 1792950000).name,
-                         "tess_face_angry_loc1792950000_1.png")
+        self.assertEqual(localgen.face_path(generate.SRC, "talia_rusk", "angry", 1, 1792950000).name,
+                         "talia_rusk_face_angry_loc1792950000_1.png")
 
 
 class KleinDryRun(unittest.TestCase):

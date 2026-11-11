@@ -1961,7 +1961,7 @@
 		},
 		{
 			"id": "keepsake_kaelen",
-			"name": "Gouged Sigil",
+			"name": "Kaelen's Gouged Sigil",
 			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2000,7 +2000,7 @@
 		},
 		{
 			"id": "keepsake_vesper",
-			"name": "Runner Whistle",
+			"name": "Vesper's Runner Whistle",
 			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2039,7 +2039,7 @@
 		},
 		{
 			"id": "keepsake_maren",
-			"name": "Copyist Quill",
+			"name": "Maren's Copyist Quill",
 			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2070,7 +2070,7 @@
 		},
 		{
 			"id": "keepsake_hollis",
-			"name": "Focusing Monocle",
+			"name": "Hollis's Focusing Monocle",
 			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2093,7 +2093,7 @@
 		},
 		{
 			"id": "keepsake_elyse",
-			"name": "Cracked Retort",
+			"name": "Elyse's Cracked Retort",
 			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2175,7 +2175,7 @@
 		},
 		{
 			"id": "keepsake_dunstan",
-			"name": "Shackle Link",
+			"name": "Dunstan's Shackle Link",
 			"family": "accessory",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2313,7 +2313,7 @@
 		},
 		{
 			"id": "black_iron_ingot",
-			"name": "Black Iron Ingot",
+			"name": "Black-Iron Bar",
 			"family": "material",
 			"rarity": "RARE",
 			"weight": 0.2,
@@ -2352,7 +2352,7 @@
 		},
 		{
 			"id": "graft_optic",
-			"name": "Optic Nerve Graft",
+			"name": "Amber Tapetum Pin",
 			"family": "graft",
 			"rarity": "COMMON",
 			"weight": 0.5,
@@ -2386,7 +2386,7 @@
 		},
 		{
 			"id": "graft_valve",
-			"name": "Marrow Valve Graft",
+			"name": "Siphon-Valve Pin",
 			"family": "graft",
 			"rarity": "UNCOMMON",
 			"weight": 0.5,
@@ -2420,7 +2420,7 @@
 		},
 		{
 			"id": "graft_core",
-			"name": "Marrow Core Graft",
+			"name": "Dreamer's Geode Pin",
 			"family": "graft",
 			"rarity": "RARE",
 			"weight": 0.5,

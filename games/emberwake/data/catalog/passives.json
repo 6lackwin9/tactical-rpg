@@ -784,7 +784,7 @@
 		},
 		{
 			"id": "marrow_valve",
-			"name": "Marrow Valve",
+			"name": "Brass Marrow Valve",
 			"description": "An illegal marrow valve in his neck. Once, it will not let him fall.",
 			"effects": [
 				{
@@ -897,7 +897,7 @@
 		},
 		{
 			"id": "cinder_childs_reflex",
-			"name": "Cinder-Child's Reflex",
+			"name": "Gutter-Runner's Reflex",
 			"description": "Hasted for a round when an attack on her finds nothing; a Throat-Carver kill returns 2 AP.",
 			"effects": [
 				{

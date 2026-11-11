@@ -2406,7 +2406,7 @@ def st_meat_market():
 
 
 def st_hearth():
-    # the Sluice Undercroft: ribbed vaults receding, the Water-Lock Basin, Bram's forge glowing at the Tinker's Hearth
+    # the Sluice Undercroft: ribbed vaults receding, the Water-Lock Basin, Berek's forge glowing at the Tinker's Hearth
     rng, img = st_canvas(ST_W, ST_H, VOID, mix(VOID, BASALT, 0.6), "story_hearth", 4)
     vx, vy = 560, 300
     for k in range(5, -1, -1):   # vault rings from the back to the front

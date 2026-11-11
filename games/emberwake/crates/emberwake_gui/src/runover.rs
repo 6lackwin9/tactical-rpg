@@ -915,7 +915,7 @@ pub(crate) mod tests {
     #[test]
     fn the_notice_and_the_run_over_screen_read_clean_at_every_text_size() {
         let mut cx = camp_cx(0, 30);
-        let long = "One more loud job and they find the grate. The run would end: quiet jobs and bribes at Tess lower Alert, a rest does not.";
+        let long = "One more loud job and they find the grate. The run would end: quiet jobs and bribes with Talia lower Alert, a rest does not.";
         audit_clean(&mut CampaignNotice::new("Inquisition Alert: Lockdown", "danger", long), &mut cx);
         let d = cx.data.clone();
         campaign::apply_effects(&d, cx.gs_mut(), &[json::dict(&json!({"effect": "end", "kind": "fail", "card": "", "text": long})).clone()], &mut Vec::new());

@@ -25,7 +25,7 @@
 #   localgen.py faces <id>... [--exprs hurt angry afraid] [--src DIR] [--n N] [--seed S] [same options]
 #       the PORTRAITFX1 expression cells (the PORTRAITFX1_TASKS 2.4.2 cell lines) as Klein edits of <src>/<id>.png
 #       (default art_src/), written as <out>/<id>_face_<expr>_loc<time>_<n>.png.
-#       --keep [ID=]TEXT (repeatable) names a detail the edit must keep (Bram's loupe: the edits dropped it), for that
+#       --keep [ID=]TEXT (repeatable) names a detail the edit must keep (Berek's loupe: the edits dropped it), for that
 #       id or, without ID=, for every id; a `keep` list in the source record <src>/<id>.json adds to it.
 #   Takes of run and vary go to <out>/<id>_loc<time>_<n>.png (default out: art_src/). All jobs are queued first, then
 #   collected. The record: generate.py's keys (model "local:flux-2-klein-4b", reference = the source image of an
@@ -1079,7 +1079,7 @@ def parser():
     f.add_argument("--exprs", nargs="+", choices=list(CELLS), default=list(CELLS))
     f.add_argument("--src", help="folder of the source portraits <id>.png (default art_src/)")
     f.add_argument("--keep", action="append", default=[], metavar="[ID=]TEXT",
-                   help="a detail the edit must keep (e.g. bram=his iron jeweller's loupe over his right eye); "
+                   help="a detail the edit must keep (e.g. berek_dorn=his iron jeweller's loupe over his right eye); "
                         "without ID= for every id; adds to the `keep` list of the source record")
     s = sub.add_parser("sheet"); s.add_argument("out"); s.add_argument("images", nargs="+")
     s.add_argument("--cols", type=int, default=4)

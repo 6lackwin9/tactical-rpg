@@ -58,16 +58,16 @@ class Faces(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="faces_test_"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root = self.tmp / "portraits"
-        self.src = self.tmp / "tess_faces_gen1_1.png"
+        self.src = self.tmp / "talia_rusk_faces_gen1_1.png"
         sheet().save(self.src)
 
     def run_faces(self, **kw):
         kw.setdefault("faction", "hearth")
-        return sheets.slice_faces(self.src, "tess", kw.pop("tier", "npc"), root=self.root, **kw)
+        return sheets.slice_faces(self.src, "talia_rusk", kw.pop("tier", "npc"), root=self.root, **kw)
 
     def test_four_240_frames_in_cell_order(self):
         written = self.run_faces()
-        out = self.root / "npcs" / "faces" / "tess"
+        out = self.root / "npcs" / "faces" / "talia_rusk"
         self.assertEqual(written, [out / f"{n}.png" for n in sheets.FACE_CELLS])
         for name in sheets.FACE_CELLS:
             im = Image.open(out / f"{name}.png")
@@ -76,13 +76,13 @@ class Faces(unittest.TestCase):
             got = hue_of(im)
             self.assertIsNotNone(got, name)
             self.assertLess(min(abs(got - want), 1 - abs(got - want)), 0.05, f"{name}: its own quadrant's head")
-        self.assertFalse((self.root / "npcs" / "tess.png").exists(), "no base without --base")
+        self.assertFalse((self.root / "npcs" / "talia_rusk.png").exists(), "no base without --base")
 
     def test_base_writes_the_neutral_frame_as_the_portrait(self):
         written = self.run_faces(tier="heroes", base=True)
-        base = self.root / "heroes" / "tess.png"
+        base = self.root / "heroes" / "talia_rusk.png"
         self.assertEqual(written[-1], base)
-        neutral = Image.open(self.root / "heroes" / "faces" / "tess" / "neutral.png")
+        neutral = Image.open(self.root / "heroes" / "faces" / "talia_rusk" / "neutral.png")
         self.assertIsNone(ImageChops.difference(Image.open(base).convert("RGBA"), neutral.convert("RGBA")).getbbox())
 
     def test_frames_equal_pixelize_of_each_quadrant_with_the_one_crop(self):
@@ -92,7 +92,7 @@ class Faces(unittest.TestCase):
         sheet(mark=False).save(clean)
         for name, box in zip(sheets.FACE_CELLS, sheets.face_boxes((SIZE, SIZE), crop)):
             want, _ = X.pixelize(clean, crop=box, mark=False, faction="hearth")
-            got = Image.open(self.root / "npcs" / "faces" / "tess" / f"{name}.png").convert("RGBA")
+            got = Image.open(self.root / "npcs" / "faces" / "talia_rusk" / f"{name}.png").convert("RGBA")
             self.assertIsNone(ImageChops.difference(got, want.convert("RGBA")).getbbox(),
                               f"{name}: pixelize of its quadrant with the crop, the mark cleared first")
 
@@ -125,31 +125,31 @@ class Faces(unittest.TestCase):
     def test_faction_from_the_sheet_record(self):
         self.src.with_suffix(".json").write_text(json.dumps({"kind": "faces", "faction": "clerisy"}), encoding="utf-8")
         self.assertEqual(sheets.face_faction(self.src, "no_such_id_xt"), "clerisy")
-        sheets.slice_faces(self.src, "tess", "npc", root=self.root)
+        sheets.slice_faces(self.src, "talia_rusk", "npc", root=self.root)
         want, _ = X.pixelize(self.src, crop=sheets.face_boxes((SIZE, SIZE))[0], mark=False, faction="clerisy")
-        got = Image.open(self.root / "npcs" / "faces" / "tess" / "neutral.png").convert("RGBA")
+        got = Image.open(self.root / "npcs" / "faces" / "talia_rusk" / "neutral.png").convert("RGBA")
         self.assertIsNone(ImageChops.difference(got, want.convert("RGBA")).getbbox(), "the clerisy backdrop")
 
     def test_contact_shows_the_portrait_as_it_was(self):
         folder = self.root / "npcs"; folder.mkdir(parents=True)
-        old = Image.new("RGBA", (240, 240), (250, 0, 250, 255)); old.save(folder / "tess.png")
+        old = Image.new("RGBA", (240, 240), (250, 0, 250, 255)); old.save(folder / "talia_rusk.png")
         out = self.tmp / "contact.png"
         written = self.run_faces(base=True, contact_out=out)
         self.assertEqual(written[-1], out)
         im = Image.open(out).convert("RGB")
         self.assertEqual(im.size, (8 + 5 * 248, 8 + 240 + 14 + 8))
         self.assertEqual(im.getpixel((8 + 120, 8 + 120)), (250, 0, 250), "the old portrait, not the new base")
-        frame = Image.open(folder / "faces" / "tess" / "afraid.png").convert("RGB")
+        frame = Image.open(folder / "faces" / "talia_rusk" / "afraid.png").convert("RGB")
         self.assertEqual(im.getpixel((8 + 4 * 248 + 120, 8 + 120)), frame.getpixel((120, 120)), "afraid last")
 
     def test_cli(self):
-        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "tess", "boss", "--base",
+        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "talia_rusk", "boss", "--base",
                             "--crop", "0,0,200,200", "--faction", "guild", "--root", str(self.root)],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(len(r.stdout.strip().splitlines()), 5, r.stdout)
-        self.assertTrue((self.root / "bosses" / "tess.png").is_file())
-        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "tess", "common",
+        self.assertTrue((self.root / "bosses" / "talia_rusk.png").is_file())
+        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "talia_rusk", "common",
                             "--root", str(self.root)], capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("unknown tier", r.stderr)
@@ -172,14 +172,14 @@ class Scale(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="faces_scale_"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root = self.tmp / "portraits"
-        self.src = self.tmp / "tess_faces_gen1_1.png"
+        self.src = self.tmp / "talia_rusk_faces_gen1_1.png"
         sheet().save(self.src)
 
     def run_faces(self, **kw):
-        return sheets.slice_faces(self.src, "tess", "npc", root=self.root, faction="hearth", **kw)
+        return sheets.slice_faces(self.src, "talia_rusk", "npc", root=self.root, faction="hearth", **kw)
 
     def frame(self, name):
-        return Image.open(self.root / "npcs" / "faces" / "tess" / f"{name}.png").convert("RGBA")
+        return Image.open(self.root / "npcs" / "faces" / "talia_rusk" / f"{name}.png").convert("RGBA")
 
     def test_no_palette_pass_and_frame_drawn(self):
         self.run_faces(reduce="scale")
@@ -243,9 +243,9 @@ class Scale(unittest.TestCase):
         afraid = self.frame("afraid")
         self.assertTrue(any(c[:3] == (250, 250, 250) for _, c in afraid.getcolors(1 << 16)), "the edit's colour")
         plain = self.tmp / "plain"
-        sheets.slice_faces(self.src, "tess", "npc", root=plain, faction="hearth", reduce="scale")
+        sheets.slice_faces(self.src, "talia_rusk", "npc", root=plain, faction="hearth", reduce="scale")
         for name in ("neutral", "hurt", "angry"):
-            other = Image.open(plain / "npcs" / "faces" / "tess" / f"{name}.png").convert("RGBA")
+            other = Image.open(plain / "npcs" / "faces" / "talia_rusk" / f"{name}.png").convert("RGBA")
             self.assertIsNone(ImageChops.difference(self.frame(name), other).getbbox(), f"{name} untouched")
         with self.assertRaises(ValueError):
             self.run_faces(reduce="scale", cells={"happy": edit})
@@ -259,12 +259,12 @@ class Scale(unittest.TestCase):
     def test_custom_cell_names_write_the_right_files(self):
         names = ["determined", "happy", "sad", "surprised"]
         self.run_faces(reduce="scale", names=names)
-        d = self.root / "npcs" / "faces" / "tess"
+        d = self.root / "npcs" / "faces" / "talia_rusk"
         self.assertEqual(sorted(p.stem for p in d.glob("*.png")), sorted(names))
         plain = self.tmp / "plain"
-        sheets.slice_faces(self.src, "tess", "npc", root=plain, faction="hearth", reduce="scale")
+        sheets.slice_faces(self.src, "talia_rusk", "npc", root=plain, faction="hearth", reduce="scale")
         for new, old in zip(names, sheets.FACE_CELLS):
-            other = Image.open(plain / "npcs" / "faces" / "tess" / f"{old}.png").convert("RGBA")
+            other = Image.open(plain / "npcs" / "faces" / "talia_rusk" / f"{old}.png").convert("RGBA")
             self.assertIsNone(ImageChops.difference(self.frame(new), other).getbbox(), new)
         out = self.tmp / "c2.png"
         self.run_faces(reduce="scale", names=names, contact_out=out)
@@ -291,18 +291,18 @@ class Scale(unittest.TestCase):
         ref = self.tmp / "ref.png"
         neutral.save(ref)
         lines = []
-        sheets.slice_faces(src, "tess", "npc", root=self.root, faction="hearth", reduce="scale",
+        sheets.slice_faces(src, "talia_rusk", "npc", root=self.root, faction="hearth", reduce="scale",
                            names=["determined", "happy", "sad", "surprised"], align_ref=ref, report=lines.append)
         self.assertEqual([l.split(":")[0] for l in lines], ["determined", "happy", "sad", "surprised"])
         self.assertTrue(all(abs(float(l.split("scale ")[1].split()[0]) - 1 / 0.9) < 0.02 for l in lines), lines)
         with self.assertRaises(ValueError):
-            sheets.slice_faces(src, "tess", "npc", root=self.root, reduce="scale", align_ref=self.tmp / "none.png")
+            sheets.slice_faces(src, "talia_rusk", "npc", root=self.root, reduce="scale", align_ref=self.tmp / "none.png")
         with self.assertRaises(ValueError):
-            sheets.slice_faces(src, "tess", "npc", root=self.root, align_ref=ref)
+            sheets.slice_faces(src, "talia_rusk", "npc", root=self.root, align_ref=ref)
 
     def test_contact_and_cli(self):
         out = self.tmp / "c.png"
-        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "tess", "npc", "--reduce",
+        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "talia_rusk", "npc", "--reduce",
                             "scale", "--align", "--cell", f"afraid={self.src}", "--contact", str(out), "--faction",
                             "hearth", "--root", str(self.root)], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)

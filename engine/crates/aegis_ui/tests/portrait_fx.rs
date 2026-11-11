@@ -154,21 +154,21 @@ fn e2_first_rel_and_the_sidecar_of_the_pngs_own_layer() {
 #[test]
 fn e3_the_same_key_and_time_give_the_same_pixels_and_the_seed_is_fnv1a() {
     assert_eq!((fnv1a64(""), fnv1a64("a")), (0xcbf29ce484222325, 0xaf63dc4c8601ec8c), "the published FNV-1a 64 vectors");
-    assert_eq!(PortraitFx::new("tess").seed, fnv1a64("tess"));
+    assert_eq!(PortraitFx::new("innkeeper").seed, fnv1a64("innkeeper"));
     assert_eq!(seed_of("unit_7"), fnv1a64("unit_7"));
     let (img, face) = sample();
     let mut rig = Rig::new();
     let draws: Vec<Image> = (0..2)
         .map(|_| {
-            let mut fx = PortraitFx::new("tess");
+            let mut fx = PortraitFx::new("innkeeper");
             fx.hold(&[cue("glow"), cue("particles_rise")], 0);
             rig.compose(&mut fx, &img, Some(&face), 96, 4321, PortraitOpts::default())
         })
         .collect();
     assert_eq!(draws[0], draws[1], "two portraits of one key at one time draw the same pixels");
     let first = |key: &str| blink_starts(seed_of(key), 20_000)[0];
-    assert_ne!(first("tess"), first("bram"), "two keys blink at different times");
-    for key in ["tess", "bram"] {
+    assert_ne!(first("innkeeper"), first("merchant"), "two keys blink at different times");
+    for key in ["innkeeper", "merchant"] {
         assert_eq!(first(key), (2600.0 + 3400.0 * hash01(seed_of(key), 200) as f64).round() as u64);
     }
 }

@@ -4,8 +4,8 @@
 	"entries": [
 		{
 			"id": "sg_optic_forearms",
-			"name": "Optic Nerve into Forearms",
-			"description": "Graft surgery: the Optic Nerve into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"name": "Amber Tapetum Pin into Forearms",
+			"description": "Graft surgery: the Amber Tapetum Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -38,8 +38,8 @@
 		},
 		{
 			"id": "sg_optic_thoracic",
-			"name": "Optic Nerve into Thoracic",
-			"description": "Graft surgery: the Optic Nerve into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"name": "Amber Tapetum Pin into Thoracic",
+			"description": "Graft surgery: the Amber Tapetum Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -72,8 +72,8 @@
 		},
 		{
 			"id": "sg_optic_visceral",
-			"name": "Optic Nerve into Visceral",
-			"description": "Graft surgery: the Optic Nerve into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"name": "Amber Tapetum Pin into Visceral",
+			"description": "Graft surgery: the Amber Tapetum Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -106,8 +106,8 @@
 		},
 		{
 			"id": "sg_valve_forearms",
-			"name": "Marrow Valve into Forearms",
-			"description": "Graft surgery: the Marrow Valve into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+			"name": "Siphon-Valve Pin into Forearms",
+			"description": "Graft surgery: the Siphon-Valve Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -140,8 +140,8 @@
 		},
 		{
 			"id": "sg_valve_thoracic",
-			"name": "Marrow Valve into Thoracic",
-			"description": "Graft surgery: the Marrow Valve into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+			"name": "Siphon-Valve Pin into Thoracic",
+			"description": "Graft surgery: the Siphon-Valve Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -174,8 +174,8 @@
 		},
 		{
 			"id": "sg_valve_visceral",
-			"name": "Marrow Valve into Visceral",
-			"description": "Graft surgery: the Marrow Valve into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+			"name": "Siphon-Valve Pin into Visceral",
+			"description": "Graft surgery: the Siphon-Valve Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -208,8 +208,8 @@
 		},
 		{
 			"id": "sg_core_forearms",
-			"name": "Marrow Core into Forearms",
-			"description": "Graft surgery: the Marrow Core into the Forearms (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+			"name": "Dreamer's Geode Pin into Forearms",
+			"description": "Graft surgery: the Dreamer's Geode Pin into the Forearms (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -253,8 +253,8 @@
 		},
 		{
 			"id": "sg_core_thoracic",
-			"name": "Marrow Core into Thoracic",
-			"description": "Graft surgery: the Marrow Core into the Thoracic (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+			"name": "Dreamer's Geode Pin into Thoracic",
+			"description": "Graft surgery: the Dreamer's Geode Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
 			"npc": "sabina_kress",
 			"requires": [
 				{
@@ -298,8 +298,8 @@
 		},
 		{
 			"id": "sg_core_visceral",
-			"name": "Marrow Core into Visceral",
-			"description": "Graft surgery: the Marrow Core into the Visceral (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+			"name": "Dreamer's Geode Pin into Visceral",
+			"description": "Graft surgery: the Dreamer's Geode Pin into the Visceral (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
 			"npc": "sabina_kress",
 			"requires": [
 				{

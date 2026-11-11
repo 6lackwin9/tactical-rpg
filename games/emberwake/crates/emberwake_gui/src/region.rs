@@ -1910,10 +1910,10 @@ mod tests {
     /// the game's faces (PORTRAITFX2 FL4: `Catalog::faces`).
     #[test]
     fn portrait_sidecars_and_expression_frames_follow_the_layout() {
-        for ok in ["portraits/npcs/tess.png", "portraits/npcs/tess.face.json", "portraits/common/beast_render_beast.face.json", "portraits/heroes/faces/kaelen/hurt.png", "portraits/bosses/faces/proctor_quell/neutral.face.json"] {
+        for ok in ["portraits/npcs/talia_rusk.png", "portraits/npcs/talia_rusk.face.json", "portraits/common/beast_render_beast.face.json", "portraits/heroes/faces/kaelen/hurt.png", "portraits/bosses/faces/proctor_quell/neutral.face.json"] {
             assert!(layout_ok(ok), "{ok}");
         }
-        for stray in ["portraits/npcs/tess.json", "portraits/heroes/faces/kaelen/smirk.png", "portraits/common/faces/beast/hurt.png", "portraits/npcs/faces/tess.png", "portraits/npcs/faces/tess/hurt/a.png", "portraits/npcs/faces/tess/hurt.jpg"] {
+        for stray in ["portraits/npcs/talia_rusk.json", "portraits/heroes/faces/kaelen/smirk.png", "portraits/common/faces/beast/hurt.png", "portraits/npcs/faces/talia_rusk.png", "portraits/npcs/faces/talia_rusk/hurt/a.png", "portraits/npcs/faces/talia_rusk/hurt.jpg"] {
             assert!(!layout_ok(stray), "{stray}");
         }
     }

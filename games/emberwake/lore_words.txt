@@ -30,3 +30,31 @@ Cold Steel
 Marrow
 Spasm
 Calcification
+# CANON.md locked proper nouns (PR5-39 CANON-CLEANUP; CANON.md 3.2, 6.1)
+Cinderreach
+Othemar
+Ruthven
+Lazar
+Ulric
+Orlov
+Jessop
+Ysolde
+Malachi
+Sabina
+Berek
+Talia
+Widow Varka
+Sovereign Clerisy
+Tallow Guild
+Fourth Kiln
+Severed Root
+Awakening Chorus
+Slumbering Root
+Lullaby House
+# Retired cast names (CANON.md 6.1; G3 blocks their return to engine and kit code)
+Sister Aline
+Aline
+Bram
+Tess
+Tessia
+Vaelen
