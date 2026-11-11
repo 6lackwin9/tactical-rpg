@@ -325,13 +325,14 @@ files (the Godot build's) are refused with that reason.
   through the loader). A right click (back) always counts as handled. A panic that ends the process is reported but
   not written (no frame follows it); panics the process survives are.
 - Notes: the screenshot is a JPEG (quality 85) from the engine's own encoder; the stamp has the screen, mouse,
-  viewport, the control under the mouse and the battle's slot, round, block and phase.
-- Playback differs from Godot's: Play back replays the battle to its end and shows the final state (the battle's
+  viewport, the control under the mouse and the active session's (`NoteContext.session`, `PR5-29c`; legacy `battle` on load) slot, round, step and phase.
+- Playback differs from Godot's: Play back replays the session to its end and shows the final state (the battle's
   own replay of the last round and its log), not a round-by-round viewer with a notes drop-down (PLAYBACK2). Take
-  over picks Round 1 or After round N; the new session's `end.parent` names {recording, battle, at}. Scenarios (H)
+  over picks Round 1 or After round N; the new session's `end.parent` names `{recording, session, at}` (`PR5-29a/c`). Scenarios (H)
   are not listed (none exist).
 - Recording can be turned on and off while the app runs (the browser's toggle; the setting is now the engine's).
 - Not ported yet: party battles of the world map (PLAYTEST2).
 | none | `aegis_ui` `MenuStyle::Text` and `text_button` rows, `panes::backdrop` compose-and-blit cache, `Kit::mouse_moved`, `focus::hover_target`, `shows_ring`, `click_keeps_focus`, the left-edge anchor in `focus::toward` (LOOK1-M1, engine-only) | `aegis_ui/tests/panes.rs`, `shell.rs` and `emberwake_gui/src/menus.rs` inline tests; new in the port, no Godot counterpart |
 | none | `aegis_ui` `window`, `timeline`, `recordings`, `vignette`, `notes`, `pips` colours through `theme::th()`, 14 more roles, `vignette::default_frame` (LOOK1-E1B, engine-only; the ported windows and timeline look the same under the default theme) | `aegis_ui/tests/theme_panes.rs` |
 | none | `aegis_ui` `ground` (compose, cache, blit, `soft_ellipse`) and the `ground_compose` bin (REGIONGROUND1-E1, engine-only; presentation, no rule reads it); `rpgkit_content` `ground::plan`, `check/ground.rs` (the `grounds` rows, G1-G10), `check/assets.rs` `ground_errors` and `ground_warnings` (A16-A20), `art::ground_dirs`, `ground_px`, `boundary_dirs`, `source::ground_patch_full`, `rpgkit_data::GroundDef` (REGIONGROUND1-K, engine-only; Godot had no ground layer; presentation only, so no parity check names these keys and none retires) | `aegis_ui/tests/ground.rs`; new in the port, no Godot counterpart |; engine-only; `rpgkit_content/tests/ground_checks.rs`, `rpgkit_world/tests/ground_walking.rs`, `emberwake_world/tests/store.rs` |
+| none | `rpgkit_world` `PK2` grafts, recipes, mastery, and weapon instances (`PK2-S1..S5b`, `PR5-8..13b`, engine-only): additive member save keys `tracks`, `max_hp_offset`, `body`, `floor_offset`, `proficiencies`, `mastery`, `weapon_gear` and party `weapons` (`WeaponInstance {uid, item, durability, masterwork}` behind `game.json` `durability.from_act`, no save `VERSION` bump; Act 1 saves load unchanged), plus `emberwake_gui/src/recipe.rs` `RecipePane` on `RegionMap` and `ServiceScreen` | `rpgkit_world/tests/{unit_tracks,body_grafts,recipes,mastery,weapon_instances,weapon_wear}.rs`; engine-only, no Godot counterpart |

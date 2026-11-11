@@ -21,7 +21,7 @@ The main menu's screen id is `main_menu`.
 
 Wait for the end with `{"step": "wait", "until": {"path": "state.outcome", "ne": ""}, "timeout_ms": 240000}`: `state.outcome` is empty
 until the fight ends. `tl_flank` on the Timeline ruleset took about 11 s on the key in a window, and 12 s with none at 15 fps, in a dev build.
-A fight on one ruleset: launch with `{"screen": "arena", "encounter": "tl_flank", "ruleset": "timeline"}`. Any other `screen` with a `ruleset`, or an unknown ruleset, stops the game at launch.
+A fight on one ruleset: launch with `{"screen": "arena", "scene": "tl_flank", "ruleset": "timeline"}` (`"encounter"` and `"rules"` are accepted as load aliases). Any other `screen` with a `ruleset`, or an unknown ruleset, stops the game at launch.
 
 ## The Scene Runner's arena
 

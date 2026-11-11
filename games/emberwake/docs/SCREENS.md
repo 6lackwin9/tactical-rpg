@@ -83,6 +83,10 @@ The rules behind every player screen come from `emberwake_world`, checked by the
   hover card lists `Job: <name>` per job.
 - UI Gallery, Mission board entry (Screens): the pane on a sample board without a game (every section, deadlines, Accept moves
   an offered quest to Under way).
+- Recipe service pane (`PK2-S3`, `emberwake_gui/src/recipe.rs` `RecipePane`): an NPC dialogue `recipe` service (`ui/services/recipe.png`
+  overhead and legend badge) opens `RecipePane` in the shop/board slot over the dimmed `RegionMap` or `ServiceScreen`, listing
+  authored `recipes` rows with target pickers (member, weapon instance, or item), purse/stash cost and requirement checks,
+  refusal reason lines, and Apply / Close (`Esc` or right click returns to the conversation).
 - Settings, Gameplay tab: Text speed (Slow, Normal, Fast, Instant) and Reduce motion (engine keys `text_speed`, `reduce_motion`).
 - UI Gallery, Vignette player entry: a reel picker (the engine's sample, then every world's vignettes as written) in the game's card
   palette.
