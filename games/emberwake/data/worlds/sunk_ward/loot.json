@@ -1,0 +1,138 @@
+{
+	"kind": "loot",
+	"version": 1,
+	"entries": [
+		{
+			"id": "loot_gilded_pavise",
+			"name": "Gilded Pavise",
+			"description": "Captain Vane's candle-gold bribe-shield.",
+			"reward_kind": "item",
+			"ref": "vanes_gilded_pavise",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_gate_pass",
+			"name": "Gate Pass Cipher",
+			"description": "A Castellan footman's cipher for the checkpoint gates.",
+			"reward_kind": "item",
+			"ref": "city_gate_pass",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_marrow_scalpel",
+			"name": "Marrow Scalpel",
+			"description": "Proctor Quell's marrow scalpel.",
+			"reward_kind": "item",
+			"ref": "quells_marrow_scalpel",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_marrow_valve",
+			"name": "Marrow Valve",
+			"description": "The brass valve cut from Quell's neck.",
+			"reward_kind": "item",
+			"ref": "inquisitor_marrow_valve",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_slab_retorts",
+			"name": "Slab Retorts",
+			"description": "Titration retorts from the Crossroads cages.",
+			"reward_kind": "item",
+			"ref": "slab_retorts",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_slag_hammer",
+			"name": "Slag-Hammer",
+			"description": "Overseer Grendel's slag-hammer.",
+			"reward_kind": "item",
+			"ref": "grendels_slag_hammer",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_slag_plating",
+			"name": "Slag Plating",
+			"description": "Cooled slag plating from the Fourth Kiln.",
+			"reward_kind": "item",
+			"ref": "slag_plating",
+			"count": 1,
+			"rarity": "rare",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_flensing_talon",
+			"name": "Flensing Talon",
+			"description": "Dropped as Guild-Master Orlov fled the vats.",
+			"reward_kind": "item",
+			"ref": "orlovs_flensing_talon",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_orlovs_retribution",
+			"name": "Orlov's Retribution",
+			"description": "Orlov's flensing technique, taken at the M4 turn-in.",
+			"reward_kind": "skill",
+			"ref": "orlovs_retribution",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_marrow_core",
+			"name": "Marrow Core",
+			"description": "The core of the Calcified Amalgam.",
+			"reward_kind": "item",
+			"ref": "titan_marrow_core",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_dreamers_vertebra",
+			"name": "Dreamer's Vertebra",
+			"description": "A vertebra from the Undercroft fissure.",
+			"reward_kind": "item",
+			"ref": "dreamers_vertebra",
+			"count": 1,
+			"rarity": "unique",
+			"requires_flags": [],
+			"tags": []
+		},
+		{
+			"id": "loot_poultices",
+			"name": "Stitch-Poultices",
+			"description": "Field poultices.",
+			"reward_kind": "item",
+			"ref": "sulfur_poultice",
+			"count": 2,
+			"rarity": "common",
+			"requires_flags": [],
+			"tags": []
+		}
+	]
+}

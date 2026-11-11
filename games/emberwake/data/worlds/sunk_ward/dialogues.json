@@ -1,0 +1,276 @@
+{
+	"kind": "dialogues",
+	"version": 1,
+	"entries": [
+		{
+			"id": "dlg_talk_0b_smoke",
+			"name": "Rooftop: follow the smoke",
+			"speaker": "vesper",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "vesper",
+					"text": "Smoke on the chimneys. Follow my draught, Kaelen, and they lose us in it.",
+					"next": "n1"
+				},
+				{
+					"id": "n1",
+					"speaker": "kaelen",
+					"text": "Stay low. Guard each other.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_0c_cart",
+			"name": "Bridge: the cart",
+			"speaker": "maren",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "maren",
+					"text": "The lock is iron and the seal is warm. Hold the bridge while I work it.",
+					"next": "n1"
+				},
+				{
+					"id": "n1",
+					"speaker": "hollis",
+					"text": "Get me a clear line down the canal rail.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_corvo",
+			"name": "Corvo's Gate: forced",
+			"speaker": "kaelen",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "kaelen",
+					"text": "No more tolls. Force the Third Ward gate.",
+					"next": "n1"
+				},
+				{
+					"id": "n1",
+					"speaker": "vesper",
+					"text": "So much for quiet.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m1_vane",
+			"name": "The Sweep: Vane",
+			"speaker": "kaelen",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "kaelen",
+					"text": "Order 44 and a candle-gold shield, Vane. Your Seventh Ward sold its own.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m1_retreat",
+			"name": "The Sweep: Vane withdraws",
+			"speaker": "captain_vane",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "captain_vane",
+					"text": "Seal the grates behind me. The Watch remembers every face.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m2_cages",
+			"name": "The Cages: Maren",
+			"speaker": "maren",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "maren",
+					"text": "Those cage seals are cipher work. Keep the flagellants off the locks!",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m2_valve",
+			"name": "The Cages: the valve",
+			"speaker": "maren",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "maren",
+					"text": "That silver saw. He used it on my mentor. Cut him down before the surge settles.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m3_grendel",
+			"name": "Bone-Mill: Dunstan",
+			"speaker": "dunstan",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "dunstan",
+					"text": "My father's bones went down that chute. I will smash it before I die.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m4_orlov",
+			"name": "Tallow Vats: Vesper",
+			"speaker": "vesper",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "vesper",
+					"text": "The tallow tithe killed my brother, an ash-sweeper. Count the fat that bought it, Orlov.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m4_elyse",
+			"name": "Tallow Vats: Elyse",
+			"speaker": "elyse",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "elyse",
+					"text": "Hold the catwalk. I know these vats' pressure better than he does.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m4_retreat",
+			"name": "Tallow Vats: Orlov withdraws",
+			"speaker": "guild_master_orlov",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "guild_master_orlov",
+					"text": "Remember my name when the tallow runs short.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_int_surge",
+			"name": "Back-Surge: Kaelen",
+			"speaker": "kaelen",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "kaelen",
+					"text": "The drain-vault has ruptured. Every valve we shut drove the marrow back down here, and now it is climbing the floor.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m5_cold_steel",
+			"name": "The Crucible: Nemeth",
+			"speaker": "inquisitor_prelate_nemeth",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "inquisitor_prelate_nemeth",
+					"text": "Cold steel cannot finish me. Kneel at the winch.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		},
+		{
+			"id": "dlg_talk_m5_winch",
+			"name": "The Crucible: the winch",
+			"speaker": "kaelen",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "kaelen",
+					"text": "Someone hold that winch! The rest of you, run and do not look back.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"talk"
+			]
+		}
+	]
+}
