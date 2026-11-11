@@ -1,0 +1,441 @@
+{
+	"kind": "vignettes",
+	"version": 1,
+	"entries": [
+		{
+			"id": "vg_open",
+			"name": "The Red Tithing",
+			"music": "story_opening",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "title",
+					"title": "Emberwake",
+					"subtitle": "A Scarlet Lullaby",
+					"hold_ms": 3000,
+					"fade_in_ms": 1500
+				},
+				{
+					"style": "image",
+					"image": "backgrounds/story/intro_1.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "Two centuries ago the stars and the sun went out. In their place hangs the Shroud. No morning comes. Time is kept only by the cathedral bells.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "image",
+					"image": "backgrounds/story/intro_2.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "Beneath the basalt sleeps the Low Sleep, an ancient dreaming leviathan whose nightmares shake the earth and bleed marrow into the wells.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "image",
+					"image": "backgrounds/story/intro_3.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "The Clerisy says that if the titan wakes, the world breaks, and that the Red Tithing, sung in young blood each generation, is the lullaby that keeps it asleep. Those who live past five-and-twenty are spent, docile and blind.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "image",
+					"image": "backgrounds/story/intro_4.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "In the Seventh Ward, a garrison guard refuses to lock the cages.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				}
+			],
+			"tags": [
+				"prologue"
+			]
+		},
+		{
+			"id": "vg_meat_market",
+			"name": "The Lower Meat Market",
+			"music": "story_escape",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/meat_market.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "Kaelen runs the Lower Meat Market past boiling rendering cauldrons. Hollow-eyed, grey-veined Spent stand in silent queues with wooden bowls, trading curfew tallies for communion draughts and grey salt. Not one of them looks up.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "text",
+					"text": "Whistles shriek behind him. Three scourge-bearers in mortuary grey are already on the rooftops, and the smoke over the chimneys is moving the wrong way.",
+					"top": "#0a0b10",
+					"bottom": "#1e232d"
+				}
+			],
+			"tags": [
+				"prologue"
+			]
+		},
+		{
+			"id": "vg_bridge_cart",
+			"name": "The Mortuary Cart",
+			"music": "danger",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/vn_bridge_stage.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "The canal bridge. An iron mortuary cart stands on the span, its shutters chained, and two prisoners rattle inside.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "line",
+					"speaker": "vesper",
+					"text": "Chain's black iron. Lever it at the hasp and keep your thumbs out of the way."
+				},
+				{
+					"style": "line",
+					"speaker": "kaelen",
+					"text": "Watch crossbow on the far rail. Whoever is in there, they've been in there since the bell."
+				},
+				{
+					"style": "line",
+					"speaker": "maren",
+					"text": "Please. Whatever you are, break it. They have the Scriptorium seals on this cart, and they do not use them for the living."
+				},
+				{
+					"style": "line",
+					"speaker": "hollis",
+					"text": "Left your sister in a ward, did you? Mine's in a convoy. Get this lid off and give me back my arbalest."
+				},
+				{
+					"style": "text",
+					"text": "The hasp gives. Footmen on both banks. The cart's captives climb out swinging.",
+					"top": "#0a0b10",
+					"bottom": "#1e232d"
+				}
+			],
+			"tags": [
+				"prologue"
+			]
+		},
+		{
+			"id": "vg_debate_1",
+			"name": "Hub Debate: What Keeps Us Alive",
+			"music": "town",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/hearth.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "The Sluice Undercroft. Four fugitives wash up wet to the bone, and a brazier smells of tallow and brass. Four bunks filled of six. Forty-two days on the slate.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "Shake the canal off by the coals, youngsters. The Fourth Kiln valves are pumping something beneath this city, and I cast the throats. Put your faith in honest tempered steel. Iron doesn't dream."
+				},
+				{
+					"style": "line",
+					"speaker": "sabina_kress",
+					"text": "Steel is a blunt answer, Berek. I have opened what the Tithing leaves behind. Cold steel alone will not kill a Prelate who drinks what the sleeper bleeds. Bring me what the dead leave and I will teach the living to use it.",
+					"expression": "determined"
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "And turn them into the things we're running from. You'd pin a stranger's bone into a child and call it medicine.",
+					"expression": "angry"
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "Enough. Both of you are arguing over a hearth with forty-two days on the slate. Eat first. Then I'll show these four what the board looks like."
+				},
+				{
+					"style": "line",
+					"speaker": "kaelen",
+					"text": "I knocked a captain's iron aside tonight and the whole Ward heard it. I'd like to know what we are keeping alive before I ask who's right."
+				},
+				{
+					"style": "line",
+					"speaker": "vesper",
+					"text": "Alive, mostly. Berek's iron, Sabina's knives, Talia's rods. Pick the one that doesn't bleed you for it.",
+					"expression": "happy"
+				},
+				{
+					"style": "line",
+					"speaker": "maren",
+					"text": "I copied the chronicle for the Clerisy for six years. If a hearth like this is all that stands between us and the Red Tithing, I want to know what it burns.",
+					"expression": "sad"
+				},
+				{
+					"style": "line",
+					"speaker": "hollis",
+					"text": "I want to know who is stealing the grates, so I can shoot him.",
+					"expression": "determined"
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "The board opens with two jobs, and I want both before anything else moves. Alleyway Junction Seven, where Captain Vane has sealed the grates. The Ash-Crawl Crossroads, where Proctor Quell is emptying cages. Either one first. Both done."
+				}
+			],
+			"tags": [
+				"debate",
+				"hub"
+			]
+		},
+		{
+			"id": "vg_int_surge",
+			"name": "The Awakening Fissure",
+			"music": "danger",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/hearth.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "Four valves shut: the Watch grates, the titration cages, the bone-mill chutes and the rendering vats. The raw condensate that fed them has nowhere left to go but down.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600,
+					"shake": "quake"
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "That's pressure. That's not a pipe knocking, that's a conduit with nowhere to vent. Get the bunks clear!",
+					"expression": "afraid"
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "Eyes on the floor. It's lifting. Everyone who can hold a weapon, with me."
+				},
+				{
+					"style": "text",
+					"text": "The floor of the Sluice Undercroft splits. Something calcified and enormous drags itself up through the stone, and the drains behind it begin to crawl.",
+					"top": "#0a0b10",
+					"bottom": "#1e232d"
+				}
+			],
+			"tags": [
+				"interlude"
+			]
+		},
+		{
+			"id": "vg_debate_2",
+			"name": "Hub Debate: The Price of Our Raids",
+			"music": "town",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/hearth.png",
+					"top": "#0a0b10",
+					"bottom": "#2c1546",
+					"text": "The Undercroft floor lies open. Bone-sediment crust glitters in the brazier light. The smell is brass and marrow.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "Look at that stone. Every valve we shut, the pressure went somewhere. We did this with honest iron and a good plan."
+				},
+				{
+					"style": "line",
+					"speaker": "sabina_kress",
+					"text": "No, we did it by starving the dream. Every cage we empty, every vat we flood, the city's marrow arteries back up and the Clerisy gets desperate. Cold steel gave this to us and I would like it written on the wall.",
+					"expression": "determined"
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "Then write what else it gave us. The Calcified Amalgam dead on the floor. A dreamer's vertebra for the Slab. A map of what lies under the Ward. We pay the price either way. I'd rather know what it buys."
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "It buys a worse Tithing, Talia, if the Clerisy decides to answer us. You've read the sweep tallies.",
+					"expression": "angry"
+				},
+				{
+					"style": "line",
+					"speaker": "sabina_kress",
+					"text": "If we are the cause of a worse rite, then we will be the ones to answer for it. Not the Founders who bled for it. Not the children."
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "The Crucible is next. Nemeth holds the Slag Gate, and the only door out of the Ward is behind him. Eat, rest, bind what the Fissure left. We move when the bells change."
+				}
+			],
+			"tags": [
+				"debate",
+				"hub"
+			]
+		},
+		{
+			"id": "vg_m5_gate",
+			"name": "The Winch",
+			"music": "story_goodbye",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/vn_hearth_stage.png",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"text": "The Crucible Watchpost. The winch chain screams. The Slag Gate rises a hand's width, then a forearm, then enough for a body to roll under.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600,
+					"shake": "heavy"
+				},
+				{
+					"style": "text",
+					"text": "{member:sunk_ward.crucible_stayed} held the winch. Inquisitor-Prelate Nemeth did not strike them down. He took the stayer alive, the way a man takes a coin he intends to spend.",
+					"top": "#0a0b10",
+					"bottom": "#1e232d",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": ""
+						}
+					]
+				},
+				{
+					"style": "text",
+					"text": "Beyond the Slag Gate the ward ends. The ash falls, and the cathedral bells ring a new hour over Upper Cinderreach.",
+					"top": "#0a0b10",
+					"bottom": "#1e232d"
+				}
+			],
+			"tags": [
+				"m5"
+			]
+		},
+		{
+			"id": "vg_debate_3",
+			"name": "Hub Debate: The Empty Bunk",
+			"music": "story_goodbye",
+			"frame": "#0a0b10",
+			"skippable": true,
+			"once": false,
+			"cards": [
+				{
+					"style": "image",
+					"image": "backgrounds/story/hearth.png",
+					"top": "#0a0b10",
+					"bottom": "#2c1546",
+					"text": "The Sluice Undercroft, a day and a night later. The brazier burns low. One bunk is made, and nobody has slept in it.",
+					"fade_in_ms": 1200,
+					"fade_out_ms": 600
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "I told you iron doesn't dream. It doesn't weep either. I'd trade every valve I ever cast to have that bunk slept in tonight."
+				},
+				{
+					"style": "line",
+					"speaker": "sabina_kress",
+					"text": "Cold steel bounced off Nemeth, Berek. I watched. He does not die of anything you or I can swing. If we want to reach what he took, we have to learn what he drinks.",
+					"expression": "sad"
+				},
+				{
+					"style": "line",
+					"speaker": "berek_dorn",
+					"text": "That's how they got the prelates. That's how they got whoever he took.",
+					"expression": "angry"
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "It is a question for another day. Tonight there are five of us and a gate, and by the next bell there will be a stranger at the Basin door. Eighteen, twenty-four, cowled to the eyes, asking to be taught."
+				},
+				{
+					"style": "line",
+					"speaker": "kaelen",
+					"text": "We left them there. We opened the Gate and one of us stayed on the winch. I will not forget how that sounded.",
+					"expression": "sad",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": "kaelen"
+						}
+					]
+				},
+				{
+					"style": "line",
+					"speaker": "vesper",
+					"text": "Nobody forgets. We carry it. We send a keepsake home to their bunk and we keep the door open.",
+					"expression": "determined",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": "vesper"
+						}
+					]
+				},
+				{
+					"style": "line",
+					"speaker": "maren",
+					"text": "The chronicle says the Clerisy took thousands. I have never counted what it costs to take one. Tonight I'm counting.",
+					"expression": "sad",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": "maren"
+						}
+					]
+				},
+				{
+					"style": "line",
+					"speaker": "talia_rusk",
+					"text": "Then we count together. Berek will frame the bunks, Sabina will lay out her knives, and I'll bring in the first runaway. The Bastion is next."
+				}
+			],
+			"tags": [
+				"debate",
+				"hub"
+			]
+		}
+	]
+}

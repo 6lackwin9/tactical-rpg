@@ -26,6 +26,176 @@
 			],
 			"then": [],
 			"tags": []
+		},
+		{
+			"id": "t_m1_won",
+			"name": "The Sweep is broken",
+			"on": "battle",
+			"encounter": "enc_evt_01",
+			"outcome": "won",
+			"location": "",
+			"when": [],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.m1_done",
+					"value": true
+				}
+			],
+			"then": [],
+			"tags": []
+		},
+		{
+			"id": "t_m2_won",
+			"name": "The Crossroads cages are open",
+			"on": "battle",
+			"encounter": "enc_evt_02",
+			"outcome": "won",
+			"location": "",
+			"when": [],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.m2_done",
+					"value": true
+				}
+			],
+			"then": [
+				{
+					"dialogue": "dlg_post_m2",
+					"speaker": "maren"
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "t_m3_won",
+			"name": "The Bone-Mill is wrecked",
+			"on": "battle",
+			"encounter": "enc_evt_03",
+			"outcome": "won",
+			"location": "",
+			"when": [],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.m3_done",
+					"value": true
+				}
+			],
+			"then": [
+				{
+					"dialogue": "dlg_post_m3",
+					"speaker": "dunstan"
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "t_m4_won",
+			"name": "The Tallow Vats are out",
+			"on": "battle",
+			"encounter": "enc_evt_04",
+			"outcome": "won",
+			"location": "",
+			"when": [],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.m4_done",
+					"value": true
+				}
+			],
+			"then": [
+				{
+					"dialogue": "dlg_post_m4",
+					"speaker": "elyse"
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "t_interlude",
+			"name": "The marrow back-surge",
+			"on": "any",
+			"encounter": "",
+			"outcome": "any",
+			"location": "",
+			"when": [
+				{
+					"key": "sunk_ward.m3_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.m4_done",
+					"value": true
+				}
+			],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.interlude_started",
+					"value": true
+				}
+			],
+			"then": [
+				{
+					"dialogue": "dlg_int_dose",
+					"speaker": "sabina_kress"
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "t_m5_won",
+			"name": "The Slag Gate opens",
+			"on": "battle",
+			"encounter": "enc_evt_06",
+			"outcome": "won",
+			"location": "",
+			"when": [],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.m5_done",
+					"value": true
+				},
+				{
+					"effect": "sequence",
+					"sequence": "seq_after_m5"
+				}
+			],
+			"then": [],
+			"tags": []
+		},
+		{
+			"id": "t_m5_overlook_won",
+			"name": "The Slag Gate opens",
+			"on": "battle",
+			"encounter": "enc_evt_06_overlook",
+			"outcome": "won",
+			"location": "",
+			"when": [],
+			"once": true,
+			"effects": [
+				{
+					"effect": "set_flag",
+					"key": "sunk_ward.m5_done",
+					"value": true
+				},
+				{
+					"effect": "sequence",
+					"sequence": "seq_after_m5"
+				}
+			],
+			"then": [],
+			"tags": []
 		}
 	]
 }

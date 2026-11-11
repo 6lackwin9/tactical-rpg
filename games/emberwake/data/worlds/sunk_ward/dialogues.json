@@ -271,6 +271,990 @@
 			"tags": [
 				"talk"
 			]
+		},
+		{
+			"id": "dlg_sabina",
+			"name": "Sabina at the Slab",
+			"speaker": "sabina_kress",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Chirurgeon Sabina does not look up from the silver scalpel she is wiping on a strip of grey linen. \"Mind the floor. It is wet, and not always with water.\"",
+					"choices": [
+						{
+							"text": "What do you do down here?",
+							"to": "work"
+						},
+						{
+							"text": "What do the Spent drink?",
+							"to": "draught",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_draught_told",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "What did you ask me not to touch?",
+							"to": "retorts",
+							"requires": [
+								{
+									"kind": "items",
+									"item": "slab_retorts",
+									"count": 1
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_retorts_told",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "What do you make of the Prelate's valve?",
+							"to": "valve",
+							"requires": [
+								{
+									"kind": "items",
+									"item": "inquisitor_marrow_valve",
+									"count": 1
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_valve_told",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "work",
+					"text": "\"I cut what Cinderreach cuts into the young, and sometimes I put it back. The Slab does not open all at once. Bring me what the dead leave, and a cell that can stand to know what it is carrying, and I will see.\"",
+					"next": "n0"
+				},
+				{
+					"id": "draught",
+					"text": "\"The communion draught. Bone-sediment, ground fine, stirred into watered wine. I was an outer-ward prosector at twenty-one. I found the sediment in the commoners' draughts and said so, and Chief Anatomist Lazar sent Proctor Quell to teach me manners. The Spent are not old. They are fed.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.sabina_draught_told",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "retorts",
+					"text": "\"Quell's own retorts. I know that glass. A man who kept Maren's mentor alive on a table long enough to learn what he could take. The Slab can use them. I would rather it did not have to.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.sabina_retorts_told",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "valve",
+					"text": "\"Brass, hot to the touch, hungry. The Inquisition skims aberrant marrow, rots on it, and calls the rot purity. The Clerisy drinks the pure part. Keep that where I can look at it, and not near the Founders until I say.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.sabina_valve_told",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_berek",
+			"name": "Berek at the Hearth",
+			"speaker": "berek_dorn",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Berek Dorn turns the loupe on his right eye toward you and lets a rivet drop into a tin. \"Coals are hot. Don't breathe in. My lungs can take what yours can't.\"",
+					"choices": [
+						{
+							"text": "What are you forging?",
+							"to": "forge"
+						},
+						{
+							"text": "What did you cast for the Kiln?",
+							"to": "valves",
+							"unless": [
+								{
+									"key": "sunk_ward.berek_valves_told",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "Grendel's Slag-Hammer. Can you read it?",
+							"to": "hammer",
+							"requires": [
+								{
+									"kind": "items",
+									"item": "grendels_slag_hammer",
+									"count": 1
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.berek_hammer_told",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "forge",
+					"text": "\"Honest steel. Billhooks, heaters, the odd bodkin. Nothing fancy, nothing that dreams. When there's coin and a spare hour I'll put an edge back on whatever you bring. Not yet, though. I do the hard work in daylight, and there isn't any.\"",
+					"next": "n0"
+				},
+				{
+					"id": "valves",
+					"text": "\"Fifteen years, valves. Brass throats for what I swore were steam vents. Then Foundry-Master Jessop handed my apprentice Lucan to the Tithing to cover a cracked batch, and I traced the plans. They were made to pump a child's marrow up into the Cloisters. I won't say more until I've found where the pipe goes.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.berek_valves_told",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "hammer",
+					"text": "\"Pneumatic piston-maul. Grendel's weight in black iron, and a lighter touch than it has any right to. I know the casting. I know the man. I would love to wear it, and I would love not to.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.berek_hammer_told",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_talia",
+			"name": "Talia at the cipher board",
+			"speaker": "talia_rusk",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Talia Rusk does not turn her head to look at you. She turns the left ear, the one that still hears. \"The board is on the wall. Chalk is ink down here. Read it twice.\"",
+					"choices": [
+						{
+							"text": "How do the ciphers work?",
+							"to": "cipher"
+						},
+						{
+							"text": "Who is Ivo?",
+							"to": "ivo_ask",
+							"requires": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": false
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.talia_ivo_told",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "Ivo is home.",
+							"to": "ivo_home",
+							"requires": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.talia_ivo_thanks",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "About that leg...",
+							"to": "leg",
+							"unless": [
+								{
+									"key": "sunk_ward.talia_leg_told",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "cipher",
+					"text": "\"Bone rods, notches by the quarter-hour. Each rod is a runner. Each notch is a drop. If the Watch burns a rod, they've burned the runner, so keep the rods clean.\"",
+					"next": "n0"
+				},
+				{
+					"id": "ivo_ask",
+					"text": "\"Twelve. The fastest courier I ever taught after Vesper. The Watch has him in the Seventh Ward Toll-Pen with a number chalked on his shirt. If the Tithing hits zero first, they take him and not a slate lies. Find the pen. Don't make me ask you twice.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.talia_ivo_told",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "ivo_home",
+					"text": "She is quiet for a moment, and her fingers stop on the rod. \"Then Varka can open her shelves. The Leaking Vat is yours now, and the Basin will trade without a question. Thank you. I mean that.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.talia_ivo_thanks",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "leg",
+					"text": "\"Ruthven's sweep, a magnesium flash-charge, and a crutch of ash-wood. The leg is a bad joke and the ear is worse. I can hear a bone-cipher click at forty paces and nothing on my right. Don't stand there.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.talia_leg_told",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_varka",
+			"name": "Widow Varka at the Leaking Vat",
+			"speaker": "widow_varka",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Behind a veil of waxed black crepe, Widow Varka lays a pair of brass salt-scales on the sluice rail. \"Everything has a price, dear. Mine are fair, and so is my memory.\"",
+					"choices": [
+						{
+							"text": "What do you sell?",
+							"to": "stock"
+						},
+						{
+							"text": "Why open the Basin to us?",
+							"to": "ivo",
+							"requires": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.varka_ivo_told",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "stock",
+					"text": "\"Rock Salt. Warded Tallow, by the day. Poultices. Whatever the Clerisy has sworn is not for sale, and is. I do not ask what you intend to burn.\"",
+					"next": "n0"
+				},
+				{
+					"id": "ivo",
+					"text": "\"The boy ran my messages before Talia hid him. A woman remembers who feeds a child. The Basin trades with whoever brought him home. That is all the sentiment I can afford.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.varka_ivo_told",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_ivo",
+			"name": "Ivo at the Basin",
+			"speaker": "ivo",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Ivo sits cross-legged on the Basin steps, still wearing the Toll-Pen number on his shirt. He is twelve, and he is not smiling. \"Talia says you took the lock off the pen.\"",
+					"choices": [
+						{
+							"text": "You're safe.",
+							"to": "safe"
+						},
+						{
+							"text": "What did you see in the pen?",
+							"to": "pen",
+							"unless": [
+								{
+									"key": "sunk_ward.ivo_pen_told",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "safe",
+					"text": "\"Ash-Crawl runners aren't safe. We're quick.\" He almost smiles. \"I'll run for you if you want. Whistle twice.\"",
+					"next": "n0"
+				},
+				{
+					"id": "pen",
+					"text": "\"They count you in tallies of four. When the count's short, they pick the smallest. I counted the sentries instead. There's a gap at the third bell, when they change the chalk.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.ivo_pen_told",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_skerrit",
+			"name": "Skerrit, Bone-Wright",
+			"speaker": "skerrit_bone_wright",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A hunchbacked figure mutters over a bench of calcified shards, forging a seal onto a strip of bone. \"Mind the dust. It bites.\"",
+					"choices": [
+						{
+							"text": "What do you make?",
+							"to": "make"
+						},
+						{
+							"text": "Dunstan sent me. Chain-gang wedges.",
+							"to": "wedges",
+							"requires": [
+								{
+									"key": "sunk_ward.wedges_done",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.skerrit_open",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "make",
+					"text": "\"Quarrels that open mail. Cestuses with barbs for the knuckles. Bone is dull, bone is honest, bone doesn't dream. Bring shards and a cause.\"",
+					"next": "n0"
+				},
+				{
+					"id": "wedges",
+					"text": "\"Black-iron wedges from the Fourth Kiln. Heavy enough to split a mould and fine enough to cut a cestus. Tell the big fellow I owe him. Tell Berek I owe him more.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.skerrit_open",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_corvo_gate",
+			"name": "Bailiff Corvo at the Third Ward gate",
+			"speaker": "bailiff_corvo",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Bailiff Corvo leans on the gate-post with a stiff leg that has already turned to grey stone to the knee. \"Third Ward gate. You want through, you leave something at the post. Salt or Scrap. I don't care who for.\"",
+					"choices": [
+						{
+							"text": "Rock Salt for the gate.",
+							"to": "bribed",
+							"requires": [
+								{
+									"kind": "items",
+									"item": "rock_salt",
+									"count": 1
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "take",
+									"items": {
+										"rock_salt": 1
+									}
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_bribed",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								},
+								{
+									"effect": "meter_add",
+									"meter": "alert",
+									"delta": -20
+								}
+							]
+						},
+						{
+							"text": "Thirty Scrap for the gate.",
+							"to": "bribed_scrap",
+							"requires": [
+								{
+									"kind": "gold",
+									"min": 30
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "take",
+									"gold": 30
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_bribed",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								},
+								{
+									"effect": "meter_add",
+									"meter": "alert",
+									"delta": -20
+								}
+							]
+						},
+						{
+							"text": "No more tolls. Force the Third Ward gate.",
+							"to": "",
+							"unless": [
+								{
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_forced",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								},
+								{
+									"effect": "fight",
+									"encounter": "enc_job_corvo_gate"
+								}
+							]
+						},
+						{
+							"text": "What do you keep behind the gate?",
+							"to": "ida",
+							"unless": [
+								{
+									"key": "sunk_ward.corvo_ida_told",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "bribed",
+					"text": "He takes the salt, tucks it into a ledger he doesn't write in, and nods. \"Patrols cut short on the Third Ward side tonight. My sister Ida is sixteen and the Tithing is looking for sixteens. If it ever goes badly, don't make it worse.\"",
+					"next": "n0"
+				},
+				{
+					"id": "bribed_scrap",
+					"text": "He pockets the Scrap, tucks it into a ledger he doesn't write in, and nods. \"Patrols cut short on the Third Ward side tonight. My sister Ida is sixteen and the Tithing is looking for sixteens. If it ever goes badly, don't make it worse.\"",
+					"next": "n0"
+				},
+				{
+					"id": "ida",
+					"text": "\"My sister. Ida. Sixteen. I keep the gate so I can keep her indoors. I kept my mind on clean water. It buys me a stone leg and a few more months.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.corvo_ida_told",
+							"value": true
+						}
+					]
+				}
+			],
+			"services": true,
+			"tags": []
+		},
+		{
+			"id": "dlg_post_m2",
+			"name": "The cages at the Crossroads",
+			"speaker": "maren",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "maren",
+					"text": "Maren kneels by the broken cages and presses grey linen to the cage seals, copying the Clerisy's cipher letter by letter. The cages are open. How many came out walking?",
+					"choices": [
+						{
+							"text": "Both cages answered.",
+							"to": "two",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.m2_captive_saved",
+									"value": true
+								},
+								{
+									"effect": "add_flag",
+									"key": "sunk_ward.saved_youths",
+									"delta": 2
+								},
+								{
+									"effect": "give",
+									"items": {
+										"rock_salt": 2
+									}
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.m2_counted",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "One cage answered.",
+							"to": "one",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.m2_captive_saved",
+									"value": true
+								},
+								{
+									"effect": "add_flag",
+									"key": "sunk_ward.saved_youths",
+									"delta": 1
+								},
+								{
+									"effect": "give",
+									"items": {
+										"rock_salt": 1
+									}
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.m2_counted",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "Neither cage answered.",
+							"to": "none",
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.m2_counted",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "two",
+					"speaker": "maren",
+					"text": "Two cell-mates, brown-faced and coughing, grin crookedly as they slip Maren a pinch of Rock Salt each. \"For the cipher,\" says one. \"For the next cage.\" The cage-seal rubbings are legible, and they are not the Clerisy's words.",
+					"end": true
+				},
+				{
+					"id": "one",
+					"speaker": "maren",
+					"text": "One cell-mate stays, rubbing their wrists. They press a grain of Rock Salt into Maren's palm and say nothing at all. She copies the seal anyway.",
+					"end": true
+				},
+				{
+					"id": "none",
+					"speaker": "maren",
+					"text": "Maren folds the linen away without a word. \"I'll copy what's left. The names will still be on the seals.\"",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"scene"
+			]
+		},
+		{
+			"id": "dlg_post_m3",
+			"name": "The Bone-Mill's chain gang",
+			"speaker": "dunstan",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "dunstan",
+					"text": "Dunstan stands in the mill-yard with his jaw wired shut and a broken slag-ladle in one fist. Nobody has asked him to speak. He holds the ladle out, handle first.",
+					"choices": [
+						{
+							"text": "You're one of us now. Take the next bunk.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "dunstan",
+									"level": "average"
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.dunstan_joined",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "joined",
+					"speaker": "dunstan",
+					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"scene"
+			]
+		},
+		{
+			"id": "dlg_post_m4",
+			"name": "The Tallow Vats' counter-tonic",
+			"speaker": "elyse",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "elyse",
+					"text": "Elyse wipes copper-green still-sludge from her goggles and grins crookedly through the smoke. \"My mother's tenement is awake, Orlov's guild is a fortnight short of tallow, and I think I need to sit down.\"",
+					"choices": [
+						{
+							"text": "Come to the Undercroft. Take the next bunk.",
+							"to": "joined",
+							"effects": [
+								{
+									"effect": "recruit",
+									"character": "elyse",
+									"level": "average"
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.elyse_joined",
+									"value": true
+								}
+							]
+						}
+					]
+				},
+				{
+					"id": "joined",
+					"speaker": "elyse",
+					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"scene"
+			]
+		},
+		{
+			"id": "dlg_int_dose",
+			"name": "Sabina's emergency dose",
+			"speaker": "sabina_kress",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"speaker": "sabina_kress",
+					"text": "Chirurgeon Sabina has a vial of black-green marrow in one hand and a scalpel in the other. The floor is already humming. \"One of you may take this. Stage One. A pin's head start on what is coming. You will not thank me. Choose.\"",
+					"choices": [
+						{
+							"text": "Kaelen takes the dose.",
+							"to": "end_dose",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose_to",
+									"value": "kaelen"
+								},
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Vesper takes the dose.",
+							"to": "end_dose",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose_to",
+									"value": "vesper"
+								},
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Maren takes the dose.",
+							"to": "end_dose",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose_to",
+									"value": "maren"
+								},
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Hollis takes the dose.",
+							"to": "end_dose",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose_to",
+									"value": "hollis"
+								},
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Dunstan or Elyse...",
+							"to": "more"
+						}
+					]
+				},
+				{
+					"id": "more",
+					"speaker": "sabina_kress",
+					"text": "She turns the vial in the brazier light, waiting.",
+					"choices": [
+						{
+							"text": "Dunstan takes the dose.",
+							"to": "end_dose",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose_to",
+									"value": "dunstan"
+								},
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Elyse takes the dose.",
+							"to": "end_dose",
+							"unless": [
+								{
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose",
+									"value": true
+								},
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.sabina_dose_to",
+									"value": "elyse"
+								},
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Nobody takes it.",
+							"to": "end_none",
+							"effects": [
+								{
+									"effect": "sequence",
+									"sequence": "seq_interlude"
+								}
+							]
+						},
+						{
+							"text": "Back.",
+							"to": "n0"
+						}
+					]
+				},
+				{
+					"id": "end_dose",
+					"speaker": "sabina_kress",
+					"text": "The vial goes down a throat. Sabina does not watch.",
+					"end": true
+				},
+				{
+					"id": "end_none",
+					"speaker": "sabina_kress",
+					"text": "\"Then you fight without.\" The vial goes back under the linen.",
+					"end": true
+				}
+			],
+			"services": false,
+			"tags": [
+				"scene"
+			]
 		}
 	]
 }

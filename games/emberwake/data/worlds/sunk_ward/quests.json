@@ -1,0 +1,526 @@
+{
+	"kind": "quests",
+	"version": 1,
+	"entries": [
+		{
+			"id": "q_a1_m1",
+			"name": "The Sweep",
+			"description": "Captain Vane has sealed the Seventh Ward grates and the Watch is selling captives for a Bastion commission. Break the sweep at Alleyway Junction 7.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Break Vane's sweep at Alleyway Junction 7",
+					"location": "alleyway_junction_7",
+					"encounter": "enc_evt_01"
+				}
+			],
+			"reward": "Talia's thanks, a poultice, and Vane's gate cipher.",
+			"template": "a1_main_raid",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "main",
+			"show_locked": true,
+			"closed_text": ""
+		},
+		{
+			"id": "q_a1_m2",
+			"name": "The Crossroads Cages",
+			"description": "Proctor Quell runs an open-air titration pen at the Ash-Crawl Crossroads, and the Flagellants cull the cages by the bell. Free them.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Free the cages at the Ash-Crawl Crossroads",
+					"location": "ash_crawl_crossroads",
+					"encounter": "enc_evt_02"
+				}
+			],
+			"reward": "Talia's thanks, a poultice, and Quell's retorts for the Slab.",
+			"template": "a1_main_raid",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "main",
+			"show_locked": true,
+			"closed_text": ""
+		},
+		{
+			"id": "q_a1_m3",
+			"name": "The Bone-Mill Raid",
+			"description": "Overseer Grendel grinds uncremated Spent into bone-mortar at the Fourth Kiln. Wreck the mill and free the chain gang.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Wreck the Bone-Mill at the Fourth Kiln",
+					"location": "fourth_kiln",
+					"encounter": "enc_evt_03"
+				}
+			],
+			"reward": "Talia's thanks, a poultice, and a new bunk.",
+			"template": "a1_main_raid",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m1_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.m2_done",
+					"value": true
+				}
+			],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "main",
+			"show_locked": true,
+			"closed_text": "Clear the Sweep and the Cages first."
+		},
+		{
+			"id": "q_a1_m4",
+			"name": "The Tallow Vats",
+			"description": "Guild-Master Orlov brings Render-Beasts and Dredgers to burn out a young chemist at the Tallow Vats. Cut through and find her.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Cut through the Tallow Vats and find the chemist",
+					"location": "tallow_vats",
+					"encounter": "enc_evt_04"
+				}
+			],
+			"reward": "Talia's thanks, a poultice, and Orlov's Retribution; five days of Warded Tallow wait in Orlov's stores.",
+			"template": "a1_main_raid",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m1_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.m2_done",
+					"value": true
+				}
+			],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [
+				"loot_orlovs_retribution"
+			],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "main",
+			"show_locked": true,
+			"closed_text": "Clear the Sweep and the Cages first."
+		},
+		{
+			"id": "q_a1_m5",
+			"name": "The Drowned Sluice",
+			"description": "Inquisitor-Prelate Nemeth holds the Crucible Watchpost and the Slag Gate behind it. Open the gate. One of you holds the winch.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Hold the Crucible and open the Slag Gate",
+					"location": "crucible_watchpost",
+					"encounter": "enc_evt_06"
+				}
+			],
+			"reward": "Talia's thanks. The Bastion waits beyond the gate.",
+			"template": "a1_main_raid",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.interlude_done",
+					"value": true
+				}
+			],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [
+				{
+					"id": "hollis_overlook",
+					"when_flags": [
+						{
+							"key": "sunk_ward.hollis_overlook",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"set": {
+						"description": "Hollis dropped the Crucible's outer counterweight and the gate's reinforcements will arrive a round late. Open the Slag Gate. One of you holds the winch.",
+						"steps": {
+							"0": {
+								"encounter": "enc_evt_06_overlook"
+							}
+						}
+					}
+				}
+			],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "main",
+			"show_locked": true,
+			"closed_text": "Something under the Undercroft must be answered first."
+		},
+		{
+			"id": "q_a1_corvo",
+			"name": "Corvo's Gate",
+			"description": "Bailiff Corvo keeps the Third Ward gate. Settle the toll with Scrap or Rock Salt, or break it open and risk his sister Ida.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Settle the toll at the Third Ward gate",
+					"flag": "sunk_ward.corvo_settled",
+					"value": true
+				}
+			],
+			"reward": "Talia's thanks, and either a quiet gate or a loud one.",
+			"template": "a1_flag_job",
+			"turn_in": "",
+			"requires_flags": [],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": ""
+		},
+		{
+			"id": "q_a1_red_pen",
+			"name": "The Night of the Red Pen",
+			"description": "Talia's courier Ivo, twelve, is chalked into the Seventh Ward Toll-Pen at the Ash-Crawl Crossroads. Take him out before the Tithing clock runs down.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Bring Ivo out of the Toll-Pen",
+					"flag": "sunk_ward.ivo_rescued",
+					"value": true
+				}
+			],
+			"reward": "Talia's thanks, and Widow Varka's shelves.",
+			"template": "a1_flag_job",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.debate1_seen",
+					"value": true
+				}
+			],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": ""
+		},
+		{
+			"id": "q_hook_bellows",
+			"name": "The Seventh Ward Bellows",
+			"description": "Kaelen's old Watch armory cache lies beneath Alleyway Junction 7, with a bellows nobody was told to burn. Take it, and a plate Berek can rework.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Raid the old Watch armory cache at Alleyway Junction 7",
+					"flag": "sunk_ward.bellows_cache",
+					"value": true
+				}
+			],
+			"reward": "Slag Plating, and cheaper coals at Berek's Hearth.",
+			"template": "a1_flag_job_plating",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m1_done",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.bellows_done",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": "Break the Sweep first."
+		},
+		{
+			"id": "q_hook_lock_ciphers",
+			"name": "The Sluice Lock-Ciphers",
+			"description": "Vesper knows the flood-lock tablets under the Drowned Runoff Grate. Map them and the drains give the cell a quiet road of its own.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Map the forgotten flood-locks at the Drowned Runoff Grate",
+					"flag": "sunk_ward.lock_ciphers_mapped",
+					"value": true
+				}
+			],
+			"reward": "A permanent Siphon Shortcut with no Alert on the road.",
+			"template": "a1_flag_job",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.debate1_seen",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.lock_ciphers_done",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": ""
+		},
+		{
+			"id": "q_hook_rubbings",
+			"name": "Liturgical Cipher Rubbings",
+			"description": "Maren will decode the cage-seal rubbings from the Crossroads. Take them to St. Lyra's hidden reliquary flue.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Take the cage-seal rubbings at the Ash-Crawl Crossroads",
+					"flag": "sunk_ward.rubbings_taken",
+					"value": true
+				}
+			],
+			"reward": "Maren's clue to St. Lyra's flue, for Act 2.",
+			"template": "a1_flag_job",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m2_done",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.rubbings_done",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": "Free the Crossroads cages first."
+		},
+		{
+			"id": "q_hook_overlook",
+			"name": "The Crag-Sight Overlook",
+			"description": "Hollis wants the chimney sightlines above the Crucible and the outer counterweight cut. The Prelate's reinforcements arrive a round late.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Secure the Crag-Sight Overlook above the Crucible",
+					"flag": "sunk_ward.hollis_overlook",
+					"value": true
+				}
+			],
+			"reward": "Hollis's Lever-Winch, and a gate wave that arrives a round late.",
+			"template": "a1_flag_job",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.interlude_done",
+					"value": true
+				}
+			],
+			"complete_flags": [],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": "Something under the Undercroft must be answered first."
+		},
+		{
+			"id": "q_hook_wedges",
+			"name": "Chain-Gang Wedges",
+			"description": "Dunstan will pull the black-iron wedges from the ruined mill. Skerrit, Bone-Wright wants them.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Pull the black-iron wedges from the Fourth Kiln",
+					"flag": "sunk_ward.wedges_pulled",
+					"value": true
+				}
+			],
+			"reward": "Rock Salt, and Skerrit's bone-shard recipes.",
+			"template": "a1_flag_job_salt",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.dunstan_joined",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.wedges_done",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": "Free the Bone-Mill's chain gang first."
+		},
+		{
+			"id": "q_hook_counter_still",
+			"name": "The Tenement Counter-Still",
+			"description": "Elyse will check her awakened mother's tenement block and distil tallow. The Vats' leftover stills are hot.",
+			"giver": "",
+			"faction": "",
+			"region": "sunk_ward_quarter",
+			"requires": [],
+			"steps": [
+				{
+					"text": "Check the counter-still at the Tallow Vats",
+					"flag": "sunk_ward.still_checked",
+					"value": true
+				}
+			],
+			"reward": "Five days of Warded Tallow.",
+			"template": "a1_flag_job",
+			"turn_in": "",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.elyse_joined",
+					"value": true
+				}
+			],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.still_done",
+					"value": true
+				}
+			],
+			"auto_start": false,
+			"links": {},
+			"variants": [],
+			"loot_pool": [],
+			"loot_picks": 1,
+			"reputation": {},
+			"tags": [],
+			"board": "talia_board",
+			"track": "side",
+			"show_locked": true,
+			"closed_text": "Cut through the Tallow Vats first."
+		}
+	]
+}

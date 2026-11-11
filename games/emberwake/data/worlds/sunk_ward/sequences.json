@@ -1,0 +1,168 @@
+{
+	"kind": "sequences",
+	"version": 1,
+	"entries": [
+		{
+			"id": "new_game",
+			"name": "The Seventh Ward, the Meat Market, the Canal, the Hearth",
+			"steps": [
+				{
+					"kind": "vignette",
+					"vignette": "vg_open",
+					"music": "story_opening"
+				},
+				{
+					"kind": "fight",
+					"encounter": "enc_pro_0a",
+					"on_lost": "retry",
+					"music": "prologue_tension"
+				},
+				{
+					"kind": "vignette",
+					"vignette": "vg_meat_market",
+					"music": "story_escape"
+				},
+				{
+					"kind": "effects",
+					"effects": [
+						{
+							"effect": "recruit",
+							"character": "vesper"
+						}
+					]
+				},
+				{
+					"kind": "fight",
+					"encounter": "enc_pro_0b",
+					"on_lost": "retry",
+					"music": "danger"
+				},
+				{
+					"kind": "vignette",
+					"vignette": "vg_bridge_cart"
+				},
+				{
+					"kind": "effects",
+					"effects": [
+						{
+							"effect": "recruit",
+							"character": "maren"
+						},
+						{
+							"effect": "recruit",
+							"character": "hollis"
+						}
+					]
+				},
+				{
+					"kind": "fight",
+					"encounter": "enc_pro_0c",
+					"on_lost": "retry",
+					"music": "danger"
+				},
+				{
+					"kind": "vignette",
+					"vignette": "vg_debate_1",
+					"music": "town"
+				},
+				{
+					"kind": "effects",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.debate1_seen",
+							"value": true
+						}
+					]
+				},
+				{
+					"kind": "enter",
+					"location": "sluice_undercroft",
+					"anchor": "spawn"
+				}
+			],
+			"tags": [
+				"prologue"
+			]
+		},
+		{
+			"id": "seq_interlude",
+			"name": "The Awakening Fissure",
+			"steps": [
+				{
+					"kind": "vignette",
+					"vignette": "vg_int_surge",
+					"music": "danger"
+				},
+				{
+					"kind": "fight",
+					"encounter": "enc_evt_05",
+					"on_lost": "retry",
+					"music": "boss"
+				},
+				{
+					"kind": "effects",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.interlude_done",
+							"value": true
+						}
+					]
+				},
+				{
+					"kind": "vignette",
+					"vignette": "vg_debate_2",
+					"music": "town"
+				},
+				{
+					"kind": "enter",
+					"location": "sluice_undercroft",
+					"anchor": "spawn"
+				}
+			],
+			"tags": [
+				"interlude"
+			]
+		},
+		{
+			"id": "seq_after_m5",
+			"name": "Beyond the Slag Gate",
+			"steps": [
+				{
+					"kind": "vignette",
+					"vignette": "vg_m5_gate",
+					"music": "story_goodbye"
+				},
+				{
+					"kind": "vignette",
+					"vignette": "vg_debate_3",
+					"music": "story_goodbye"
+				},
+				{
+					"kind": "effects",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "pk2.slab_open",
+							"value": true
+						},
+						{
+							"effect": "set_flag",
+							"key": "pk2.hearth_open",
+							"value": true
+						}
+					]
+				},
+				{
+					"kind": "enter",
+					"location": "sluice_undercroft",
+					"anchor": "spawn"
+				}
+			],
+			"tags": [
+				"m5"
+			]
+		}
+	]
+}

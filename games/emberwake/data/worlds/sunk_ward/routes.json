@@ -40,8 +40,8 @@
 		},
 		{
 			"id": "kiln_link",
-			"name": "PLACEHOLDER kiln link",
-			"from": "drowned_runoff_grate",
+			"name": "The pipe duct",
+			"from": "alleyway_junction_7",
 			"to": "fourth_kiln",
 			"two_way": true,
 			"time": 1,
@@ -52,7 +52,16 @@
 			"elites": [],
 			"elite_pct": 5,
 			"scripted": [],
-			"requires_flags": [],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m1_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.m2_done",
+					"value": true
+				}
+			],
 			"unless_flags": [],
 			"tags": []
 		},
@@ -70,15 +79,47 @@
 			"elites": [],
 			"elite_pct": 5,
 			"scripted": [],
-			"requires_flags": [],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.interlude_done",
+					"value": true
+				}
+			],
 			"unless_flags": [],
 			"tags": []
 		},
 		{
 			"id": "crossroads_link",
-			"name": "PLACEHOLDER crossroads link",
+			"name": "The slum alleys",
 			"from": "ash_crawl_crossroads",
-			"to": "crucible_watchpost",
+			"to": "tallow_vats",
+			"two_way": true,
+			"time": 1,
+			"zone": "",
+			"encounter_pct": 15,
+			"repeat_pct": -1,
+			"encounters": [],
+			"elites": [],
+			"elite_pct": 5,
+			"scripted": [],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m1_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.m2_done",
+					"value": true
+				}
+			],
+			"unless_flags": [],
+			"tags": []
+		},
+		{
+			"id": "water_siphon",
+			"name": "The water siphon",
+			"from": "drowned_runoff_grate",
+			"to": "alleyway_junction_7",
 			"two_way": true,
 			"time": 1,
 			"zone": "",
@@ -91,6 +132,103 @@
 			"requires_flags": [],
 			"unless_flags": [],
 			"tags": []
+		},
+		{
+			"id": "convoy_track",
+			"name": "The convoy track",
+			"from": "tallow_vats",
+			"to": "crucible_watchpost",
+			"two_way": true,
+			"time": 1,
+			"zone": "",
+			"encounter_pct": 15,
+			"repeat_pct": -1,
+			"encounters": [],
+			"elites": [],
+			"elite_pct": 5,
+			"scripted": [],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.interlude_done",
+					"value": true
+				}
+			],
+			"unless_flags": [],
+			"tags": []
+		},
+		{
+			"id": "high_gorge",
+			"name": "The high gorge",
+			"from": "crucible_watchpost",
+			"to": "slag_gate",
+			"two_way": true,
+			"time": 1,
+			"zone": "",
+			"encounter_pct": 15,
+			"repeat_pct": -1,
+			"encounters": [],
+			"elites": [],
+			"elite_pct": 5,
+			"scripted": [],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m5_done",
+					"value": true
+				}
+			],
+			"unless_flags": [],
+			"tags": []
+		},
+		{
+			"id": "third_ward_road",
+			"name": "The Third Ward road",
+			"from": "drowned_runoff_grate",
+			"to": "corvos_gate",
+			"two_way": true,
+			"time": 1,
+			"zone": "",
+			"encounter_pct": 15,
+			"repeat_pct": -1,
+			"encounters": [],
+			"elites": [],
+			"elite_pct": 5,
+			"scripted": [],
+			"requires_flags": [],
+			"unless_flags": [],
+			"tags": []
+		},
+		{
+			"id": "siphon_shortcut",
+			"name": "The Siphon Shortcut",
+			"from": "drowned_runoff_grate",
+			"to": "tallow_vats",
+			"two_way": true,
+			"time": 1,
+			"zone": "",
+			"encounter_pct": 0,
+			"repeat_pct": -1,
+			"encounters": [],
+			"elites": [],
+			"elite_pct": 5,
+			"scripted": [],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.m1_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.m2_done",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.lock_ciphers_done",
+					"value": true
+				}
+			],
+			"unless_flags": [],
+			"tags": [
+				"siphon"
+			]
 		}
 	]
 }

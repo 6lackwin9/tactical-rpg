@@ -1,12 +1,14 @@
 {
 	"id": "sunk_ward",
 	"name": "The Sunk Ward",
-	"tagline": "PLACEHOLDER: the lowest quarter of Cinderreach.",
+	"tagline": "Act 1, The Young Vanguard: the lowest quarter of Cinderreach.",
 	"description": "Act 1, The Young Vanguard: the cell fights up from the Sluice Undercroft through the Sunk Ward to the Slag Gate.",
 	"extends": [],
 	"connects": [],
 	"start_location": "sluice_undercroft",
-	"start_party": [],
+	"start_party": [
+		"kaelen"
+	],
 	"party_max": 4,
 	"start_gold": 60,
 	"start_supplies": 10,
@@ -47,6 +49,7 @@
 		"to": "sluice_undercroft",
 		"days": 1
 	},
+	"start_sequence": "new_game",
 	"classes": {
 		"warrior": {
 			"name": "Vanguard",
@@ -80,6 +83,15 @@
 		}
 	},
 	"roster": {
+		"bunks": 6,
+		"bunks_max": 8,
+		"keepsakes": {
+			"on": [
+				"captured",
+				"dead",
+				"lost"
+			]
+		},
 		"rules": [
 			{
 				"acts": [

@@ -5,7 +5,7 @@
 		{
 			"id": "sluice_undercroft",
 			"name": "The Sluice Undercroft",
-			"description": "The hub: a flooded undercroft with six bunks and a hearth, below the Sunk Ward.",
+			"description": "Node 00, the hub: a flooded undercroft with six bunks, a brazier, the Tinker's Hearth, the Apothecary's Slab and the Water-Lock Basin, below the Sunk Ward.",
 			"kind": "town",
 			"region": "sunk_ward_quarter",
 			"exits": [
@@ -15,112 +15,717 @@
 				}
 			],
 			"encounters": [],
-			"map": "",
+			"map": "walled_town",
 			"zone_bindings": {},
-			"markers": [],
-			"map_pos": [],
+			"markers": [
+				{
+					"id": "gate",
+					"kind": "exit",
+					"anchor": "gate",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "drowned_runoff_grate",
+					"label": "Down the sluice gate",
+					"to_anchor": "west_in"
+				},
+				{
+					"id": "road",
+					"kind": "exit",
+					"anchor": "road",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Sunk Ward"
+				},
+				{
+					"id": "sabina",
+					"kind": "npc",
+					"anchor": "npc_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "sabina_kress"
+				},
+				{
+					"id": "berek",
+					"kind": "npc",
+					"anchor": "npc_b",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "berek_dorn"
+				},
+				{
+					"id": "talia",
+					"kind": "npc",
+					"anchor": "npc_c",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "talia_rusk"
+				},
+				{
+					"id": "varka",
+					"kind": "npc",
+					"anchor": "npc_d",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "widow_varka"
+				},
+				{
+					"id": "ivo",
+					"kind": "npc",
+					"anchor": "lore_a",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.ivo_rescued",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "ivo"
+				}
+			],
+			"map_pos": [
+				0.5,
+				0.9
+			],
 			"rest": true,
 			"tags": []
 		},
 		{
 			"id": "drowned_runoff_grate",
 			"name": "Drowned Runoff Grate",
-			"description": "Node 01: the egress and checkpoint where the drains meet the streets.",
-			"kind": "wild",
+			"description": "Node 01: the egress and checkpoint where the drains meet the streets. Flood-lock tablets stand under the silt.",
+			"kind": "gate",
 			"region": "sunk_ward_quarter",
-			"exits": [
+			"exits": [],
+			"encounters": [],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
 				{
-					"to": "sluice_undercroft",
-					"label": "down the sluice gate"
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the drains"
 				},
 				{
-					"to": "ash_crawl_crossroads",
-					"label": "the drain flue"
-				},
-				{
-					"to": "fourth_kiln",
-					"label": "toward the kiln (PLACEHOLDER link; the lore route runs via Alleyway Junction 7)"
+					"id": "lock_tablet",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.lock_ciphers_mapped",
+							"value": true
+						}
+					],
+					"label": "A forgotten flood-lock tablet",
+					"note": "Vesper wipes the silt off a bronze lock-plate and reads the old sluice routes aloud. The drains answer."
 				}
 			],
-			"encounters": [],
-			"map": "",
-			"zone_bindings": {},
-			"markers": [],
-			"map_pos": [],
+			"map_pos": [
+				0.5,
+				0.75
+			],
 			"rest": false,
 			"tags": []
 		},
 		{
 			"id": "ash_crawl_crossroads",
 			"name": "Ash-Crawl Crossroads",
-			"description": "Node 03: an open-air culling station where the slum alleys meet.",
+			"description": "Node 03: an open-air culling station where the slum alleys meet, with the Seventh Ward Toll-Pen beside the cages.",
 			"kind": "wild",
 			"region": "sunk_ward_quarter",
-			"exits": [
+			"exits": [],
+			"encounters": [
+				"enc_evt_02"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
 				{
-					"to": "drowned_runoff_grate",
-					"label": "the drain flue"
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Ash-Crawl"
 				},
 				{
-					"to": "crucible_watchpost",
-					"label": "toward the Watchpost (PLACEHOLDER link; the lore route runs via the Tallow Vats)"
+					"id": "cages",
+					"kind": "encounter",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.m2_done",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "enc_evt_02",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "toll_pen",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.ivo_rescued",
+							"value": true
+						}
+					],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.ivo_rescued",
+							"value": true
+						}
+					],
+					"label": "The Seventh Ward Toll-Pen",
+					"note": "A boy with a chalked number on his shirt counts sentries on his fingers. The lock gives. He keeps counting until the grate is behind you."
+				},
+				{
+					"id": "rubbings",
+					"kind": "point",
+					"anchor": "ruin_lore",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.m2_done",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.rubbings_taken",
+							"value": true
+						}
+					],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.rubbings_taken",
+							"value": true
+						}
+					],
+					"label": "The cage-seal rubbings",
+					"note": "Maren spreads grey linen over the open cage seals and rubs. The Clerisy's cipher rises in white lines. St. Lyra's name is in it."
 				}
 			],
-			"encounters": [],
-			"map": "",
-			"zone_bindings": {},
-			"markers": [],
-			"map_pos": [],
+			"map_pos": [
+				0.67,
+				0.58
+			],
 			"rest": false,
 			"tags": []
 		},
 		{
 			"id": "fourth_kiln",
 			"name": "The Fourth Kiln",
-			"description": "Node 04: the bone-mill that mortars the Inquisition's watch-posts.",
+			"description": "Node 04: the bone-mill that mortars the Inquisition's watch-posts out of uncremated Spent.",
 			"kind": "wild",
 			"region": "sunk_ward_quarter",
-			"exits": [
+			"exits": [],
+			"encounters": [
+				"enc_evt_03"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
 				{
-					"to": "drowned_runoff_grate",
-					"label": "back to the grate"
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Fourth Kiln"
 				},
 				{
-					"to": "crucible_watchpost",
-					"label": "the flue climb"
+					"id": "bone_mill",
+					"kind": "encounter",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.m3_done",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "enc_evt_03",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "skerrit",
+					"kind": "npc",
+					"anchor": "camp_npc",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.m3_done",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "skerrit_bone_wright"
+				},
+				{
+					"id": "wedge_pile",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.dunstan_joined",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.wedges_pulled",
+							"value": true
+						}
+					],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.wedges_pulled",
+							"value": true
+						}
+					],
+					"label": "A pile of black-iron wedges",
+					"note": "Dunstan lifts the splitting wedges from the ruined mill one at a time, like a man picking his own name out of a ledger."
 				}
 			],
-			"encounters": [],
-			"map": "",
-			"zone_bindings": {},
-			"markers": [],
-			"map_pos": [],
+			"map_pos": [
+				0.33,
+				0.38
+			],
 			"rest": false,
 			"tags": []
 		},
 		{
 			"id": "crucible_watchpost",
 			"name": "Crucible Watchpost",
-			"description": "Node 06: the fortified post above the Slag Gate.",
+			"description": "Node 06: the fortified post above the Slag Gate, with the winch that lifts it.",
 			"kind": "fortress",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [
+				"enc_evt_06",
+				"enc_evt_06_overlook"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
+				{
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Crucible"
+				},
+				{
+					"id": "crucible",
+					"kind": "encounter",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.hollis_overlook",
+							"value": true
+						},
+						{
+							"key": "sunk_ward.m5_done",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "enc_evt_06",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "crucible_overlook",
+					"kind": "encounter",
+					"anchor": "site_a",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.hollis_overlook",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.m5_done",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "enc_evt_06_overlook",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "overlook",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.interlude_done",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.hollis_overlook",
+							"value": true
+						}
+					],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.hollis_overlook",
+							"value": true
+						}
+					],
+					"label": "The Crag-Sight Overlook",
+					"note": "Hollis climbs the chimney stack and drops the outer counterweight from the gutter. The gate's reinforcements will have to take the long way round."
+				}
+			],
+			"map_pos": [
+				0.5,
+				0.2
+			],
+			"rest": false,
+			"tags": []
+		},
+		{
+			"id": "alleyway_junction_7",
+			"name": "Alleyway Junction 7",
+			"description": "Node 02: a street crossing in the Seventh Ward where Captain Vane has sealed the grates.",
+			"kind": "wild",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [
+				"enc_evt_01"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
+				{
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Seventh Ward"
+				},
+				{
+					"id": "sweep",
+					"kind": "encounter",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.m1_done",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "enc_evt_01",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "bellows_cache",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.m1_done",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.bellows_cache",
+							"value": true
+						}
+					],
+					"label": "The old Watch armory cache",
+					"note": "Behind a loose course of bricks: Kaelen's old Watch cache, a soot-black bellows and a heavy plate for Berek to rework."
+				}
+			],
+			"map_pos": [
+				0.33,
+				0.58
+			],
+			"rest": false,
+			"tags": []
+		},
+		{
+			"id": "tallow_vats",
+			"name": "The Tallow Vats",
+			"description": "Node 05: the Guild's rendering vats and still-rooms, where Tallow Dredgers boil the district's dead.",
+			"kind": "wild",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [
+				"enc_evt_04"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
+				{
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Tallow Vats"
+				},
+				{
+					"id": "vats",
+					"kind": "encounter",
+					"anchor": "site_b",
+					"requires_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.m4_done",
+							"value": true
+						}
+					],
+					"sets_flags": [],
+					"encounter": "enc_evt_04",
+					"trigger": "proximity",
+					"radius": 2,
+					"once": false
+				},
+				{
+					"id": "orlov_stores",
+					"kind": "chest",
+					"anchor": "ruin_chest",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.m4_done",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.orlov_stores_taken",
+							"value": true
+						}
+					],
+					"items": {},
+					"gold": 0,
+					"supplies": 5
+				},
+				{
+					"id": "counter_still",
+					"kind": "point",
+					"anchor": "altar",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.elyse_joined",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.still_checked",
+							"value": true
+						}
+					],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.still_checked",
+							"value": true
+						}
+					],
+					"label": "Elyse's counter-still",
+					"note": "A coil of copper pipe and a leaking alum drum in the corner of a tenement block. Elyse tips a measure of clean tallow into a flask and corks it with her thumb."
+				},
+				{
+					"id": "still_stores",
+					"kind": "chest",
+					"anchor": "ruin_lore",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.still_checked",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [
+						{
+							"key": "sunk_ward.still_stores_taken",
+							"value": true
+						}
+					],
+					"items": {},
+					"gold": 0,
+					"supplies": 5
+				}
+			],
+			"map_pos": [
+				0.67,
+				0.38
+			],
+			"rest": false,
+			"tags": []
+		},
+		{
+			"id": "slag_gate",
+			"name": "The Slag Gate",
+			"description": "Node 07: the gate out of the Sunk Ward, beneath the Crucible Watchpost. Beyond it lies Upper Cinderreach.",
+			"kind": "gate",
 			"region": "sunk_ward_quarter",
 			"exits": [
 				{
-					"to": "fourth_kiln",
-					"label": "the flue climb"
-				},
-				{
-					"to": "ash_crawl_crossroads",
-					"label": "back to the crossroads"
+					"to": "crucible_watchpost",
+					"label": "the high gorge"
 				}
 			],
 			"encounters": [],
 			"map": "",
 			"zone_bindings": {},
 			"markers": [],
-			"map_pos": [],
+			"map_pos": [
+				0.5,
+				0.07
+			],
 			"rest": false,
 			"tags": []
+		},
+		{
+			"id": "corvos_gate",
+			"name": "Corvo's Gate",
+			"description": "Node 1d: the Third Ward gate, where Bailiff Corvo keeps a bribable post.",
+			"kind": "gate",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [
+				"enc_job_corvo_gate"
+			],
+			"map": "gorge_ruins",
+			"zone_bindings": {},
+			"markers": [
+				{
+					"id": "world_map",
+					"kind": "exit",
+					"anchor": "east",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the Third Ward road"
+				},
+				{
+					"id": "corvo",
+					"kind": "npc",
+					"anchor": "camp_npc",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "bailiff_corvo"
+				}
+			],
+			"map_pos": [
+				0.85,
+				0.75
+			],
+			"rest": false,
+			"tags": []
+		},
+		{
+			"id": "alleyway_of_cinders",
+			"name": "The Alleyway of Cinders",
+			"description": "Prologue 0a: a narrow Seventh Ward alley, night, rain and a sputtering warded tallow lantern.",
+			"kind": "wild",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [],
+			"map": "",
+			"zone_bindings": {},
+			"markers": [],
+			"map_pos": [
+				0.12,
+				0.25
+			],
+			"rest": false,
+			"tags": [
+				"prologue"
+			]
+		},
+		{
+			"id": "meat_market_rooftops",
+			"name": "Meat Market Rooftops",
+			"description": "Prologue 0b: the slate roofs above the Lower Meat Market.",
+			"kind": "wild",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [],
+			"map": "",
+			"zone_bindings": {},
+			"markers": [],
+			"map_pos": [
+				0.12,
+				0.4
+			],
+			"rest": false,
+			"tags": [
+				"prologue"
+			]
+		},
+		{
+			"id": "canal_bridge",
+			"name": "The Canal Bridge",
+			"description": "Prologue 0c: an iron bridge over the canal where a mortuary cart stands chained.",
+			"kind": "wild",
+			"region": "sunk_ward_quarter",
+			"exits": [],
+			"encounters": [],
+			"map": "",
+			"zone_bindings": {},
+			"markers": [],
+			"map_pos": [
+				0.12,
+				0.55
+			],
+			"rest": false,
+			"tags": [
+				"prologue"
+			]
 		}
 	]
 }

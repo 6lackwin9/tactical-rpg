@@ -7,7 +7,7 @@
 			"name": "The Alley",
 			"description": "Prologue: a curfew sweep in the Alleyway of Cinders.",
 			"intro": "The curfew bell tolls and two Castellan Footmen close the alley.",
-			"location": "",
+			"location": "alleyway_of_cinders",
 			"zone": "alley",
 			"arena": "CLOSED",
 			"exits": [
@@ -97,7 +97,7 @@
 			"name": "The Rooftop",
 			"description": "Prologue: the Meat Market rooftops; Vesper joins.",
 			"intro": "Three Mortuary Flagellants rush across the slates.",
-			"location": "",
+			"location": "meat_market_rooftops",
 			"zone": "rooftops",
 			"arena": "CLOSED",
 			"exits": [
@@ -186,7 +186,7 @@
 			"name": "The Bridge",
 			"description": "Prologue: the canal bridge; Maren and Hollis are freed from the iron cart.",
 			"intro": "Footmen hold the canal bridge against the cart's captives.",
-			"location": "",
+			"location": "canal_bridge",
 			"zone": "canal",
 			"arena": "CLOSED",
 			"exits": [
@@ -281,7 +281,7 @@
 			"name": "Corvo's Gate",
 			"description": "The loud answer to Bailiff Corvo's toll.",
 			"intro": "The Third Ward gate is held by a Bailiff's picked men.",
-			"location": "",
+			"location": "corvos_gate",
 			"zone": "alley",
 			"arena": "CLOSED",
 			"exits": [
@@ -386,7 +386,7 @@
 			"name": "The Sweep",
 			"description": "M1, Tier 1: Captain Vane's grate sweep at Junction 7.",
 			"intro": "Vane's sweep is closing the grates, wall by wall.",
-			"location": "",
+			"location": "alleyway_junction_7",
 			"zone": "alley",
 			"arena": "CLOSED",
 			"exits": [
@@ -925,7 +925,7 @@
 			"name": "The Tallow Vats",
 			"description": "M4, Tier 2: Guild-Master Orlov's rendering vats; Elyse joins.",
 			"intro": "Boiling fat and greased catwalks: Orlov's floor.",
-			"location": "",
+			"location": "tallow_vats",
 			"zone": "tallow_vats",
 			"arena": "CLOSED",
 			"exits": [

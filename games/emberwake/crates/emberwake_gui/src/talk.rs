@@ -934,4 +934,84 @@ mod tests {
         *cx.gs_mut() = start;
         assert!(checked, "nobody in the first playable world has a farewell reply: nothing to check");
     }
+
+    /// PR5-38 ACT1-STORY (shipped data): a New game in `sunk_ward` played through its Prologue (story fights settled
+    /// `won` with no battle) stands in the hub; the hub's region map draws; Talia's board reply opens the BoardPane, the
+    /// Slab's and the Hearth's shop replies the ShopPane; no recipe reply before M5, and with the effects of the
+    /// post-M5 sequence applied Sabina's recipe reply opens the RecipePane; the WorldMap shows the hub and the way out,
+    /// not Tier 2.
+    #[test]
+    fn the_sunk_ward_hub_opens_its_panes_and_the_world_map() {
+        use emberwake_world::{battle, new_game, story};
+        const W: &str = "sunk_ward";
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = cx.data.clone();
+        let gs = new_game::create_for_world(&d, W, 1).expect("a new sunk_ward game");
+        crate::screens::enter_game(&mut cx, gs, -1, Vec::new());
+        cx.nav.clear();
+        {
+            let gs = cx.gs_mut();
+            for _ in 0..200 {
+                if !story::is_running(gs) {
+                    break;
+                }
+                if let Some(fight) = story::fight(&d, gs) {
+                    let r = battle::finish_world(&d, gs, story::FIGHT_SOURCE, &fight, "won", None);
+                    assert!(json::b(&r, "ok", false), "{r:?}");
+                } else if !json::b(&story::step_done(&d, gs), "ok", false) {
+                    let r = story::finish(&d, gs);
+                    assert!(json::b(&r, "ok", false), "{r:?}");
+                }
+            }
+        }
+        assert!(!story::is_running(cx.gs()), "the Prologue ends");
+        assert_eq!(cx.gs().location_id, format!("{W}:sluice_undercroft"));
+        let hub = cx.data.resolve(W, "locations", "sluice_undercroft").clone();
+        let mut map = crate::region::RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let npc_markers: Vec<String> = emberwake_world::explore::markers_of(&hub).iter().filter(|m| s(m, "kind") == "npc").map(|m| format!("marker.{}", s(m, "id"))).collect();
+        assert!(map.widgets().iter().any(|w| npc_markers.iter().any(|id| w["id"] == json!(id))), "the hub map draws its people: {npc_markers:?}");
+        // a service reply of `who`, clicked: the host with its pane open; None when `who` offers no such reply
+        let open = |cx: &mut Cx, g: &mut Gfx, who: &str, service: &str| -> Option<ServiceScreen> {
+            let mut host = ServiceScreen::default();
+            host.talk(cx, who);
+            frame(&mut host, cx, g, 1.0);
+            let choices = json::aget(json::dict(&host.state(cx)["dialogue"]), "choices").to_vec();
+            let k = choices.iter().position(|c| s(json::dict(c), "service") == service)?;
+            host.click_id(cx, &format!("choice.{k}")).expect("the service reply");
+            frame(&mut host, cx, g, 1.0);
+            Some(host)
+        };
+        let has = |host: &ServiceScreen, id: &str| host.widgets().iter().any(|w| w["id"] == id);
+        let host = open(&mut cx, &mut g, "talia_rusk", "board").expect("Talia's board reply");
+        assert_eq!(host.state(&cx)["board"], json!(format!("{W}:talia_board")));
+        assert!(has(&host, "board"), "the BoardPane draws");
+        for (who, shop) in [("sabina_kress", "sabina_slab"), ("berek_dorn", "berek_hearth")] {
+            let host = open(&mut cx, &mut g, who, "shop").unwrap_or_else(|| panic!("{who}'s shop reply"));
+            assert!(host.state(&cx)["shop"].is_object() && has(&host, "shop"), "{shop}: the ShopPane opens");
+            assert!(open(&mut cx, &mut g, who, "recipe").is_none(), "{who}: no recipe reply before M5");
+        }
+        // the post-M5 sequence's own effects (the PK2 flags), applied as its effects step applies them
+        let after_m5 = cx.data.resolve(W, "sequences", "seq_after_m5").clone();
+        let effects: Vec<Dict> = json::aget(&after_m5, "steps")
+            .iter()
+            .map(json::dict)
+            .filter(|st| s(st, "kind") == "effects")
+            .flat_map(|st| json::aget(st, "effects").iter().map(|fx| json::dict(fx).clone()).collect::<Vec<_>>())
+            .collect();
+        assert!(!effects.is_empty(), "seq_after_m5 has an effects step");
+        let (mut notes, mut events) = (Vec::new(), Vec::new());
+        emberwake_world::dialogue::apply_effects(&d, cx.gs_mut(), &effects, &mut notes, &mut events);
+        for who in ["sabina_kress", "berek_dorn"] {
+            let host = open(&mut cx, &mut g, who, "recipe").unwrap_or_else(|| panic!("{who}'s recipe reply after M5"));
+            assert_eq!(host.state(&cx)["recipe"], json!(format!("{W}:{who}")));
+            assert!(has(&host, "recipe"), "{who}: the RecipePane draws");
+        }
+        let mut wm = crate::worldmap::WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let node = |id: &str| format!("node.{W}.{id}");
+        assert!(wm.widgets().iter().any(|w| w["id"] == json!(node("sluice_undercroft"))), "the WorldMap shows the hub");
+        assert!(wm.widgets().iter().any(|w| w["id"] == json!(node("drowned_runoff_grate"))), "and the way out");
+        assert!(!wm.widgets().iter().any(|w| w["id"] == json!(node("fourth_kiln"))), "not Tier 2");
+    }
 }
