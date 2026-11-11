@@ -247,3 +247,10 @@ FB-01 to FB-206 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
 
 UN-01 to UN-11 are closed and moved to the archive (2026-11-08). New notes start at UN-12.
+
+### UN-12: CI no longer runs the full gate on develop pushes (user 2026-11-11)
+
+- **For**: design
+- **Status**: open
+- **Note**: GitHub Actions stopped starting jobs at 2026-11-10 23:52 UTC ("recent account payments have failed or your spending limit needs to be increased"): the private repo used its free-plan 2,000 Actions minutes, about 1,800 of them on `gate.yml` (157 runs in November, a full 12-18 min gate on every `develop` push). The user is making the repo public and asked that `develop` pushes no longer run the full gate (pushes to `main` stay). Done in `.github/workflows/gate.yml`: `on.push.branches` is `[main]` (was `[main, develop]`), plus `workflow_dispatch` for a run on request; PRs into `main` still run it, so the release PR stays the CI check (`gate` required on `main`). Every landing already runs `tools/fc.sh gate` locally first. Release PR #62 (PR5-7..PR5-35) waits on CI; once Actions runs again it merges and the web build deploys.
+- **Ask**: record the decision (e.g. "CI on release PRs and main only") in `docs/decisions/workflow.md` and adjust `docs/workflow/cloud.md` (the release section's note that each `develop` push restarted CI) and `docs/workflow/desktop.md` if they describe CI on `develop`.

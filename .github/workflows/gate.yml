@@ -1,4 +1,5 @@
-# Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main and on pushes to main: the docs lint,
+# Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main, on pushes to main and on request
+# (Actions > gate > Run workflow): the docs lint,
 # then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate
 # and check_project.ps1; no Godot step since CLN-42). Docs-only pushes to main skip it; `gate` is the required check on main.
 # The `web` job (WEBREL1-P1, PRs only) is advisory and outside `gate`; the deploy is web.yml (docs/workflow/web.md).
@@ -8,8 +9,11 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, develop]
+    # not develop (user 2026-11-11): every landing already passes tools/fc.sh gate before it lands, and a full CI gate on
+    # each develop push used up the private repo's Actions minutes; the release PR into main runs it once per batch
+    branches: [main]
     paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
 
 concurrency:
   group: gate-${{ github.ref }}
