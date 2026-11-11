@@ -3118,6 +3118,25 @@
 			"reach_min": 2,
 			"reach_max": 3,
 			"power_mult": 1.6
+		},
+		{
+			"id": "thurible_smite",
+			"name": "Thurible Smite",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Assault, Standard: a swing of the censer, {power} power, {stagger} stagger.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"weapon_types": [
+				"censer"
+			],
+			"min_proficiency": 1,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.3,
+			"stagger": 6
 		}
 	]
 }

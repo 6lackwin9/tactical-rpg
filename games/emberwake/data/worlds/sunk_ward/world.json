@@ -14,7 +14,7 @@
 	"ruleset": "timeline",
 	"plan_reveal_flag": "",
 	"campaign": {
-		"start_act": 0,
+		"start_act": 1,
 		"act_saves": true
 	},
 	"purse": {
@@ -50,7 +50,7 @@
 	"classes": {
 		"warrior": {
 			"name": "Vanguard",
-			"description": "Former garrison infantry in dented plate: masters of narrow corridors, shield walls and poise breaks.",
+			"description": "Former garrison infantry in dented plate: billhook and halberd men who hold narrow corridors and break poise with two-handed polearms.",
 			"skill_path": {}
 		},
 		"rogue": {

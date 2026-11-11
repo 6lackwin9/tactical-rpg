@@ -2499,13 +2499,15 @@
 			"extra_skills": [
 				"brimstone_cauterize",
 				"tourniquet_tonic",
-				"resilience_ward"
+				"resilience_ward",
+				"thurible_smite"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"brimstone_cauterize",
-					"tourniquet_tonic"
+					"tourniquet_tonic",
+					"thurible_smite"
 				],
 				"order": {
 					"support": [
@@ -2513,6 +2515,7 @@
 						"brimstone_cauterize"
 					],
 					"assault": [
+						"thurible_smite",
 						"strike"
 					],
 					"guard": [
@@ -3054,6 +3057,48 @@
 			"accessory_1": "",
 			"accessory_2": "",
 			"pouch": [],
+			"loot": []
+		},
+		{
+			"id": "tithe_captive",
+			"name": "Tithe Captive",
+			"side": "party",
+			"description": "A chained debtor awaiting the Red Tithing.",
+			"class_id": "rogue",
+			"level": 1,
+			"tier": "minion",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "rogue/base",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [],
+			"deck": {},
+			"default_intent": "",
+			"ai_role": "SKIRMISHER",
+			"target_pref": "NEAREST",
+			"flee_ratio": 1.0,
+			"defend_below": 0.0,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "none",
+			"off_hand": "none",
+			"head": "",
+			"body": "none",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
 			"loot": []
 		}
 	]

@@ -11,7 +11,7 @@
 			"max": 100,
 			"start": 0,
 			"unit": "%",
-			"visible": false,
+			"visible": true,
 			"scope": "campaign",
 			"bands": [
 				{
@@ -133,10 +133,10 @@
 			"description": "Days until the Inquisition's next tithing rite.",
 			"kind": "countdown",
 			"min": 0,
-			"max": 99,
-			"start": 99,
+			"max": 42,
+			"start": 42,
 			"unit": "days",
-			"visible": false,
+			"visible": true,
 			"scope": "campaign",
 			"bands": [
 				{

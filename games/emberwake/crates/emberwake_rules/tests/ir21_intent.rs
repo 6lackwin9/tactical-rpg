@@ -5,7 +5,8 @@
 //! SWEEP, so the shipped data has 26 = 8 + 18 dual rows and the FB-101 per-intent totals directly; R2-W2b CLASS-BASICS
 //! (FB-133) added three class basics, one row per intent shape (a Maneuver, a self-targetable SUPPORT and a PLUS
 //! attack at range), so 28 = 9 + 19; PR5-7 (PK1-S3) added five single-intent Channel test skills (2 Stand, 3 Assault); PR5-19 (PK2-S6) added nine (the
-//! self-targetable SUPPORT `purge_marrow`, so 29 = 10 + 19, and eight single-target attacks in Assault). Read-only: the rows are game data, so the test lives in the game's façade crate.
+//! self-targetable SUPPORT `purge_marrow`, so 29 = 10 + 19, and eight single-target attacks in Assault); PR5-34 (SUNKWARD-FIX1) added
+//! one (the single-target censer attack `thurible_smite`, Assault; the dual counts stay). Read-only: the rows are game data, so the test lives in the game's façade crate.
 
 use emberwake_data::Catalog;
 use emberwake_rules::intent::{self, IntentInput, ASSAULT, FIELD, MANEUVER, STAND, SUPPORT};
@@ -103,7 +104,7 @@ fn the_fb101_split_ships_with_its_shapes_and_no_sweep_remains() {
 #[test]
 fn shipped_data_gives_28_dual_and_the_intent_totals() {
     let rows = rows();
-    assert_eq!(rows.len(), 147, "IR21 covers all 147 skills (129 + brace, W2-4 slice 4 / FB-119, + 3 class basics, CLASS-BASICS, + 5 PK1-S3 Channel test skills, + 9 PR5-19 PK2-S6 graft and technique skills)");
+    assert_eq!(rows.len(), 148, "IR21 covers all 148 skills (129 + brace, W2-4 slice 4 / FB-119, + 3 class basics, CLASS-BASICS, + 5 PK1-S3 Channel test skills, + 9 PR5-19 PK2-S6 graft and technique skills, + thurible_smite, PR5-34 SUNKWARD-FIX1)");
     let brace = rows.iter().find(|r| id(r) == "brace").expect("brace shipped");
     assert_eq!(derive(brace), [STAND], "brace (DEFEND, guard) is single-intent Stand: the dual counts stay");
     // CLASS-BASICS (FB-133): each new class basic derives by its shape, one per intent list
@@ -124,15 +125,21 @@ fn shipped_data_gives_28_dual_and_the_intent_totals() {
         let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
         assert_eq!(derive(r), [ASSAULT], "{i}: IR21 by its row");
     }
+    // PR5-34 (SUNKWARD-FIX1): the censer attack thurible_smite (single target, no shape, round_intent assault) is
+    // Assault; the dual counts stay
+    let smite = rows.iter().find(|r| id(r) == "thurible_smite").expect("thurible_smite shipped");
+    assert_eq!(smite.get("kind").and_then(Value::as_str), Some("ATTACK"), "thurible_smite is an ATTACK");
+    assert_eq!(area(smite), "", "thurible_smite is single target");
+    assert_eq!(derive(smite), [ASSAULT], "thurible_smite: IR21 by its row");
     let ss = ids_with(&rows, &[SUPPORT, STAND]).len();
     let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
     let dual = rows.iter().filter(|r| derive(r).len() == 2).count();
     assert_eq!((dual, ss, fa), (29, 10, 19), "29 = 10 Support,Stand + 19 Field,Assault");
     let totals: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| primary(&rows, i)).collect();
-    assert_eq!(totals, [70, 24, 19, 14, 15, 5], "FB-101 totals by primary intent (+ brace in Stand, + the 3 class basics in Field, Support, Maneuver, + the 5 PK1-S3 skills: 3 in Assault, 2 in Stand, + the 9 PK2-S6 skills: 8 in Assault, 1 in Support): Assault, Field, Stand, Support, Maneuver, Neutral");
+    assert_eq!(totals, [71, 24, 19, 14, 15, 5], "FB-101 totals by primary intent (+ brace in Stand, + the 3 class basics in Field, Support, Maneuver, + the 5 PK1-S3 skills: 3 in Assault, 2 in Stand, + the 9 PK2-S6 skills: 8 in Assault, 1 in Support, + PR5-34 thurible_smite in Assault): Assault, Field, Stand, Support, Maneuver, Neutral");
     assert_eq!(totals.iter().sum::<usize>(), rows.len(), "every skill has exactly one primary");
     let listed: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| listing(&rows, i)).collect();
-    assert_eq!(listed, [89, 24, 29, 14, 15, 5], "a dual row lists under both intents: 19 Field,Assault add to Assault, 10 Support,Stand to Stand");
+    assert_eq!(listed, [90, 24, 29, 14, 15, 5], "a dual row lists under both intents: 19 Field,Assault add to Assault, 10 Support,Stand to Stand (PR5-34 thurible_smite: Assault 89 -> 90)");
     assert_eq!(listed.iter().sum::<usize>(), rows.len() + dual, "each dual row counts twice");
 }
 

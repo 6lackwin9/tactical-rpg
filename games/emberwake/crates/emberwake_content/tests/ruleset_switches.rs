@@ -11,7 +11,9 @@
 //! order, then the unit steps of `r41s2.json` (R4-1 slice 2: `template` on the caster units) and `r42.json` (R4-2 L2:
 //! `brace` leaves `founder_kaelen`'s extra skills), then the `rulesets` step of `pk1s3.json` (PR5-7 PK1-S3: `channel`
 //! appended to the `timeline` rules with `channel_meter` strain and `channel_rest` feed), then the `rulesets` step of
-//! `pk2s6.json` (PR5-19 PK2-S6: the extension rule `durability` added to the `timeline` rules) last.
+//! `pk2s6.json` (PR5-19 PK2-S6: the extension rule `durability` added to the `timeline` rules), then the unit steps
+//! of `sunkfix1.json` (PR5-34 SUNKWARD-FIX1: `founder_maren` gains `thurible_smite` in her extra skills, active deck
+//! and `assault` order) last.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
@@ -69,6 +71,10 @@ const PK1S3_SEED: &str = "pk1s3.json";
 /// PR5-19 (PK2-S6): the seed that added the extension rule `durability` to the `timeline` rules (after the PK1-S3
 /// seed). The loader keeps the rules in the register's order, so where the seed lists it does not matter here.
 const PK2S6_SEED: &str = "pk2s6.json";
+
+/// PR5-34 (SUNKWARD-FIX1): the seed that gave `founder_maren` the censer attack `thurible_smite` (extra skills, active
+/// deck, `assault` order) and added the unit `tithe_captive` (after the PK2-S6 seed; no ruleset row changes).
+const SUNKFIX1_SEED: &str = "sunkfix1.json";
 
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
@@ -234,8 +240,20 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, ruleset::KIND, e, None).unwrap_or_else(|err| panic!("PK2-S6 row '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the PK2-S6 rulesets step over it gives the shipped rows");
+    // PR5-34 (SUNKWARD-FIX1): the seed's units steps (founder_maren's new skill and deck, the new unit tithe_captive)
+    let sunkfix1 = seed_rows(SUNKFIX1_SEED, "units");
+    assert!(sunkfix1.iter().any(|e| json::s(e, "id") == "founder_maren"), "the SUNKWARD-FIX1 seed re-decks founder_maren");
+    assert!(seed_entries(SUNKFIX1_SEED).is_empty(), "the SUNKWARD-FIX1 seed changes no ruleset row");
+    for e in &sunkfix1 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("SUNKWARD-FIX1 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the SUNKWARD-FIX1 units steps leave the shipped ruleset rows");
     let seeded = store::view(&tmp);
-    let units = reordered.iter().map(|u| json::s(u, "id")).chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")));
+    let units = reordered
+        .iter()
+        .map(|u| json::s(u, "id"))
+        .chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")))
+        .chain(sunkfix1.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }

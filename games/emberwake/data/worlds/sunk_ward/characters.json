@@ -19,7 +19,7 @@
 			"passives": [
 				"polearm_drill"
 			],
-			"temperament": "traitors_discipline",
+			"temperament": "castellans_penance",
 			"default_intent": "guard",
 			"named_items": [],
 			"keepsake": "keepsake_kaelen",
@@ -45,7 +45,7 @@
 			"passives": [
 				"censer_drill"
 			],
-			"temperament": "marrow_valve",
+			"temperament": "copyist_of_st_lyras",
 			"default_intent": "support",
 			"named_items": [],
 			"keepsake": "keepsake_maren",
@@ -71,7 +71,7 @@
 			"passives": [
 				"sprayer_drill"
 			],
-			"temperament": "vat_masters_grease",
+			"temperament": "volatile_reaction_catalyst",
 			"default_intent": "assault",
 			"named_items": [],
 			"keepsake": "keepsake_elyse",
@@ -227,6 +227,226 @@
 			"tags": [
 				"pk2_test"
 			]
+		},
+		{
+			"id": "vesper",
+			"name": "Vesper",
+			"title": "",
+			"role": "party",
+			"base_unit": "founder_vesper",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [],
+			"temperament": "cinder_childs_reflex",
+			"default_intent": "maneuver",
+			"named_items": [],
+			"keepsake": "keepsake_vesper",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "hollis",
+			"name": "Hollis",
+			"title": "",
+			"role": "party",
+			"base_unit": "founder_hollis",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [],
+			"temperament": "crag_hawkeye",
+			"default_intent": "assault",
+			"named_items": [],
+			"keepsake": "keepsake_hollis",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "dunstan",
+			"name": "Dunstan",
+			"title": "Slag-Jaw",
+			"role": "party",
+			"base_unit": "founder_dunstan",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [],
+			"temperament": "foundry_wired_spite",
+			"default_intent": "assault",
+			"named_items": [],
+			"keepsake": "keepsake_dunstan",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "overseer_grendel",
+			"name": "Overseer Grendel",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "overseer_grendel",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [
+				"molten_slag_tempering"
+			],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "guild_master_orlov",
+			"name": "Guild-Master Orlov",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "guild_master_orlov",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [
+				"vat_masters_grease"
+			],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {
+				"hp_pct": 20
+			},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "calcified_amalgam",
+			"name": "The Calcified Amalgam",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "calcified_amalgam",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [
+				"amalgam_carapace"
+			],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {
+				"hp_pct": 60
+			},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "inquisitor_prelate_nemeth",
+			"name": "Inquisitor-Prelate Nemeth",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "inquisitor_prelate_nemeth",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [
+				"marrow_infused"
+			],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "bailiff_enforcer",
+			"name": "Bailiff Enforcer",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "bailiff_enforcer",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [
+				"unyielding_authority"
+			],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
+		},
+		{
+			"id": "calcified_husk",
+			"name": "Calcified Husk",
+			"title": "",
+			"role": "enemy",
+			"base_unit": "calcified_husk",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "",
+			"personality": "",
+			"faction": "",
+			"home": "",
+			"disciplines": [],
+			"passives": [
+				"calcified_frame"
+			],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": []
 		}
 	]
 }
