@@ -370,6 +370,11 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     if json::s(e, "item_type") == rpgkit_data::GRAFT {
         out.extend(graft_problems(v, e));
     }
+    // PK2-S3: a theme (the salvage it gives) is an id
+    let theme = json::s(e, "theme");
+    if !theme.is_empty() && !json::id_ok(&theme) {
+        out.push(format!("Theme '{theme}' must be an id (lowercase a-z, 0-9 and _)."));
+    }
     if !inherit {
         out.extend(legacy_errors(v, e));
         return out;

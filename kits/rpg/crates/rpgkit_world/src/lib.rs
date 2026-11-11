@@ -13,6 +13,7 @@ pub mod new_game;
 pub mod progression;
 pub mod purse;
 pub mod quest;
+pub mod recipe;
 pub mod rolls;
 pub mod roster;
 pub mod save;

@@ -35,6 +35,7 @@ mod music;
 mod party;
 mod portraits;
 mod props;
+mod recipe;
 mod region;
 #[cfg(feature = "dev_tools")]
 mod runner;

@@ -1269,6 +1269,9 @@ pub struct Growth {
     pub body: Vec<rpgkit_data::ItemDef>,
     /// PK2-S2 (FB-167 Q6): the member's floor offset for the next battle (`Unit::floor_offset`).
     pub floor_offset: i32,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the proficiency levels the member trained (a recipe), on
+    /// top of its class's and its drills' (`Proficiency::add_bonus`; the level still tops out at `PROF_MAX_LEVEL`).
+    pub trained: IndexMap<String, i32>,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1377,6 +1380,10 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
             // offset
             u.tracks = (!cat.unit_tracks.is_empty()).then(|| g.tracks.clone());
             u.max_hp_offset = g.max_hp_offset;
+            // PK2-S3: the trained proficiency levels, before the gear is read
+            for (gear, levels) in &g.trained {
+                u.stats.proficiency.add_bonus(gear, *levels);
+            }
             for sk in &g.learned_skills {
                 u.learn_skill_checked(cat, sk, false);
             }

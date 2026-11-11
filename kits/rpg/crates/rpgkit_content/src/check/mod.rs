@@ -9,6 +9,7 @@ pub mod campaign;
 pub mod derived;
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod recipe;
 pub mod expression_fx;
 pub mod dialogue;
 pub mod encounter;
@@ -294,6 +295,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // PK2-S2: the row checks the loader applies (the id, name, role, origin; unique ids, the row count)
         return body_slot::entry_errors(v, &content(kind, entry), current_id);
     }
+    if kind == recipe::KIND {
+        // PK2-S3: the row checks the loader applies (the cost, the effects and their refs; unique ids), then the world refs
+        return recipe::entry_errors(v, &content(kind, entry), current_id);
+    }
     if kind == dojo_preset::KIND {
         // PK1-KITFIX (c): the row checks the loader applies (the gear slots and items, the pouch, the passives, unique ids)
         return dojo_preset::entry_errors(v, &content(kind, entry), current_id);
@@ -477,6 +482,10 @@ pub fn validate_all(v: &View) -> Report {
         add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::missing_pools(v, e));
         // PK1-S2a: the Channel meter and Channel Rest name rows
         add(&format!("{}:{}", ruleset::KIND, json::s(e, "id")), ruleset::channel_refs(v, e));
+    }
+    // PK2-S3: a recipe's offering character and its `requires` (the world refs)
+    for e in v.entries(recipe::KIND) {
+        add(&format!("{}:{}", recipe::KIND, json::s(e, "id")), recipe::world_errors(v, e));
     }
     add("load", v.load_errors.clone());
     problems

@@ -232,6 +232,8 @@ impl Data {
                 "farewell" => "Farewell.",
                 // STORYUI1 4.7 (no Godot line)
                 "board" => "Show me the board.",
+                // PK2-S3 (no Godot line)
+                "recipe" => "What work can you do for us?",
                 _ => "",
             }
             .into(),

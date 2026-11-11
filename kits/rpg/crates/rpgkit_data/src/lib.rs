@@ -17,11 +17,13 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod recipe;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
 pub mod unit_track;
 pub use body_slot::{BodySlotDef, GraftSpec, BODY_ROLES, BODY_ROLE_CLASS, BODY_ROLE_MONSTER, BODY_EFFECTS_KEY, BODY_SLOTS_KIND, BODY_SLOTS_MAX, GRAFT, GRAFT_TIERS, GRAFT_TOP_TIER_NEEDS};
+pub use recipe::{RecipeCost, RecipeDef, PROF_ROLES, RECIPES_KIND, RECIPE_SERVICE, RECIPE_TARGETS};
 pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 pub use unit_budget::ClassShares;
@@ -134,6 +136,9 @@ pub struct ClassDef {
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3, "Losing a grafted unit"): the item a fallen member of the class leaves
     /// (its character's `remains` first; "" = none).
     pub remains: String,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> its role in the class (`PROF_ROLES`: main, secondary, third,
+    /// minor; a proficiency entry's optional `role`), which prices a `train_proficiency` recipe. No entry = no role.
+    pub proficiency_roles: IndexMap<String, String>,
 }
 
 impl ClassDef {
@@ -180,6 +185,9 @@ impl ClassDef {
             loadout,
             pouch: strings(o, "pouch"),
             remains: string(o, REMAINS_KEY, ""),
+            proficiency_roles: obj(o, "proficiency")
+                .map(|m| m.iter().filter_map(|(k, v)| v.as_object().map(|e| (k.clone(), string(e, PROF_ROLE_KEY, "")))).filter(|(_, r)| !r.is_empty()).collect())
+                .unwrap_or_default(),
         }
     }
 
@@ -629,8 +637,14 @@ pub struct ItemDef {
     pub unmark: String,
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `GRAFT` item's body fields (None for any other item type).
     pub graft: Option<GraftSpec>,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): the item's theme id (a faction's arms; "" = none), which picks the
+    /// themed salvage a `salvage` recipe gives for it.
+    pub theme: String,
     pub raw: Obj,
 }
+
+/// PK2-S3: a class proficiency entry's role key (`ClassDef::proficiency_roles`).
+pub const PROF_ROLE_KEY: &str = "role";
 
 /// PK2-S2: the class and character key naming the item a fallen member leaves (`ClassDef::remains`).
 pub const REMAINS_KEY: &str = "remains";
@@ -771,6 +785,7 @@ impl ItemDef {
             max_stack: int(o, "max_stack", 1),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
             graft: (string(o, "item_type", "") == GRAFT).then(|| GraftSpec::from_obj(o)),
+            theme: string(o, "theme", ""),
             raw: o.clone(),
         }
     }
@@ -969,6 +984,9 @@ pub struct Catalog {
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the body slots (kind `body_slots`; engine-only), keyed by id in file
     /// order. No row = no member holds a body slot (the graft count, its floor and its channeled limit stay off).
     pub body_slots: IndexMap<String, BodySlotDef>,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipes (kind `recipes`; engine-only), keyed by id in file order. No
+    /// row = no NPC offers the recipe service.
+    pub recipes: IndexMap<String, RecipeDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -1026,6 +1044,7 @@ impl Catalog {
         }
         cat.unit_tracks = rows(UNIT_TRACKS_KIND).iter().map(UnitTrackDef::from_obj).map(|t| (t.id.clone(), t)).collect();
         cat.body_slots = rows(BODY_SLOTS_KIND).iter().map(BodySlotDef::from_obj).map(|b| (b.id.clone(), b)).collect();
+        cat.recipes = rows(RECIPES_KIND).iter().map(RecipeDef::from_obj).map(|r| (r.id.clone(), r)).collect();
         for p in rows(DOJO_PRESETS_KIND).iter().map(DojoPresetDef::from_obj) {
             cat.dojo_presets.entry(p.id.clone()).or_insert(p);
         }

@@ -47,6 +47,8 @@ pub const MAX_HP_OFFSET_KEY: &str = "max_hp_offset";
 pub const BODY_KEY: &str = "body";
 pub const CLASS_RITE_KEY: &str = "class_rite";
 pub const FLOOR_OFFSET_KEY: &str = "floor_offset";
+/// PK2-S3: the member key of the trained proficiency levels (`UnitState::trained`).
+pub const TRAINED_KEY: &str = "trained";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -103,6 +105,9 @@ pub struct UnitState {
     /// PK2-S2 (FB-167 Q6): added to the floors a body meter's `floors` table gives in the member's next battle; the
     /// settle clears it. Saved as `floor_offset` only when not 0.
     pub floor_offset: i64,
+    /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the proficiency levels the member trained (a recipe's
+    /// `train_proficiency`), on top of its class's and its drills'. Saved as `trained` only when not empty.
+    pub trained: IndexMap<String, i64>,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -250,7 +255,17 @@ impl UnitState {
     pub fn trains(&self, d: &Data, item: &str) -> bool {
         let Some(def) = d.cat.items.get(item) else { return true };
         let class = d.cat.classes.get(&self.class_id(d));
-        class.is_none_or(|c| trained_for(&rpgkit_rules::stats::Proficiency::from_class(c).with_drills(&d.cat, &progression::member_passives(d, self)), def))
+        class.is_none_or(|c| trained_for(&self.proficiency(d, c), def))
+    }
+
+    /// PK2-S3: the member's proficiency out of battle: its class's, its drill passives' (`with_drills`) and its trained
+    /// levels (`trained`), as a build reads them.
+    pub fn proficiency(&self, d: &Data, class: &rpgkit_data::ClassDef) -> rpgkit_rules::stats::Proficiency {
+        let mut p = rpgkit_rules::stats::Proficiency::from_class(class).with_drills(&d.cat, &progression::member_passives(d, self));
+        for (gear, levels) in &self.trained {
+            p.add_bonus(gear, (*levels).clamp(0, i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)) as i32);
+        }
+        p
     }
 
     pub fn class_id(&self, d: &Data) -> String {
@@ -351,6 +366,10 @@ impl UnitState {
         if self.floor_offset != 0 {
             out.insert(FLOOR_OFFSET_KEY.into(), int(self.floor_offset));
         }
+        // PK2-S3: only a trained member saves `trained`
+        if !self.trained.is_empty() {
+            out.insert(TRAINED_KEY.into(), Value::Object(self.trained.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
         Value::Object(out)
     }
 
@@ -401,6 +420,7 @@ impl UnitState {
             body: json::dget(d, BODY_KEY).iter().map(|(k, v)| (k.clone(), json::gstr(v))).collect(),
             class_rite: json::b(d, CLASS_RITE_KEY, false),
             floor_offset: json::i(d, FLOOR_OFFSET_KEY, 0),
+            trained: d.get(TRAINED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
         }
     }
 
@@ -588,6 +608,12 @@ impl UnitState {
         for (track, stage) in &self.tracks {
             if *stage < 0 {
                 errors.push(format!("{at}: track '{track}' stage must be 0 or more."));
+            }
+        }
+        // PK2-S3: a trained entry is 1..the top proficiency level
+        for (gear, levels) in &self.trained {
+            if !(1..=i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)).contains(levels) {
+                errors.push(format!("{at}: trained {gear} must be 1-{}.", rpgkit_rules::stats::PROF_MAX_LEVEL));
             }
         }
         for (i, c) in self.conditions.iter().enumerate() {

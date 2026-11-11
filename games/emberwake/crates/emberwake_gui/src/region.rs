@@ -1783,6 +1783,8 @@ pub(crate) fn services_text(services: &[&str]) -> String {
             "board" => emberwake_world::board::BADGE_TEXT,
             "shop" => "Shop",
             "recruit" => "Recruits",
+            // PK2-S3: the recipe service
+            "recipe" => "Recipes",
             _ => "",
         })
         .collect::<Vec<_>>()
@@ -1790,7 +1792,7 @@ pub(crate) fn services_text(services: &[&str]) -> String {
 }
 
 /// The drawn stand-in of a service icon: today's `?` and `!` badges (a board with work is the `!`, STORYUI1 B4), a coin
-/// for a shop, a plus for recruits.
+/// for a shop, a sheet with lines for recipes (PK2-S3), a plus for recruits.
 pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
     let (cx_, cy_, sz) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
     match service {
@@ -1802,6 +1804,15 @@ pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
         "shop" => {
             ui.p.circle(cx_, cy_, sz * 0.45, rgb(150, 110, 30));
             ui.p.circle(cx_, cy_, sz * 0.33, th().gold);
+        }
+        "recipe" => {
+            let (w, h) = (sz * 0.6, sz * 0.8);
+            let sheet = Rect::new((cx_ - w / 2.0).round() as i32, (cy_ - h / 2.0).round() as i32, w.round().max(1.0) as i32, h.round().max(1.0) as i32);
+            ui.p.fill(sheet, th().text);
+            for k in 1..=3 {
+                let y = cy_ - h / 2.0 + h * k as f32 / 4.0;
+                ui.p.line(cx_ - w * 0.35, y, cx_ + w * 0.35, y, th().dim, 0.0);
+            }
         }
         _ => {
             ui.p.line(cx_ - sz * 0.4, cy_, cx_ + sz * 0.4, cy_, th().good, 0.0);

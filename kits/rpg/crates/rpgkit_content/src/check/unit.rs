@@ -286,6 +286,12 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
                 if !(MIN_SCALING..=MAX_SCALING).contains(&scaling) {
                     errors.push(format!("Proficiency {gear}: scaling must be {}-{}.", fixed(MIN_SCALING, 1), fixed(MAX_SCALING, 1)));
                 }
+                // PK2-S3: an entry's optional role in the class (prices a proficiency training recipe)
+                if let Some(role) = entry.get(rpgkit_data::PROF_ROLE_KEY) {
+                    if !role.as_str().is_some_and(|r| rpgkit_data::PROF_ROLES.contains(&r)) {
+                        errors.push(format!("Proficiency {gear}: role '{}' is not one of {}.", json::gstr(role), rpgkit_data::PROF_ROLES.join(", ")));
+                    }
+                }
                 if weapon_types.contains(gear) {
                     weapons += 1;
                 }

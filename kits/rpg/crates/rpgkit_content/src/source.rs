@@ -159,6 +159,9 @@ pub const DOJO_PRESETS_KIND: &str = crate::check::dojo_preset::KIND;
 /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the body slot rows, loaded into the catalog beside CATALOG_KINDS after the
 /// Dojo presets (Godot had no such kind).
 pub const BODY_SLOTS_KIND: &str = crate::check::body_slot::KIND;
+/// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 4): the recipe rows, loaded into the catalog beside CATALOG_KINDS after the body
+/// slots (they name items, body slots and unit tracks; Godot had no such kind).
+pub const RECIPES_KIND: &str = crate::check::recipe::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -252,6 +255,8 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     let presets = read_dojo_presets(&dir, &out, errors);
     out.insert(DOJO_PRESETS_KIND.into(), Value::Array(presets.into_iter().map(Value::Object).collect()));
     out.insert(BODY_SLOTS_KIND.into(), Value::Array(read_body_slots(&dir, errors).into_iter().map(Value::Object).collect()));
+    let recipes = read_recipes(&dir, &out, errors);
+    out.insert(RECIPES_KIND.into(), Value::Array(recipes.into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -455,6 +460,32 @@ fn read_body_slots(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: body slot '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PK2-S3 (engine-only, beside CATALOG_KINDS): the recipe rows that pass their checks (`check::recipe`, the items, body
+/// slots and unit tracks read from `loaded`), in file order; every problem goes to `errors` and its row is skipped. A
+/// missing file is an empty table. The world refs are the whole-catalog report's (`check::recipe::world_errors`).
+fn read_recipes(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{RECIPES_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(RECIPES_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::recipe::check_rows(&rows, loaded);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: recipe '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

@@ -230,6 +230,8 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
         // PK2-S2: the grafts in its body slots (catalog slot order) and its floor offset for this battle
         body: work.body_items(d),
         floor_offset: work.floor_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        // PK2-S3: the proficiency levels it trained
+        trained: work.trained.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)) as i32)).collect(),
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms
