@@ -1,105 +1,69 @@
-# Cast and place registry
+# Cast, cohort and place registry
 
-Status: `[LOCKED]` roles, stable IDs, join/encounter slots & tone rule; **`[PLACEHOLDER]` names, epithets, ages, backstories & taints** (follows [CANON.md](../CANON.md) Section 3). Keep 100% data-driven in `characters.json` / `terms.json`; use this registry's single spelling while active so placeholder copy never drifts across retired variants ("Renamed from"). Arcs and fates per act: [who's who](who_is_who.md).
+Status: **`[LOCKED]` (`2026-11-10` Lore & Visual Hooks Session)** — canonical roles, stable IDs, names, ages, one-line backstories, Act 2 recruit cohorts, and places (follows [CANON.md](../CANON.md) Sections 2-3 & 6). Keep 100% data-driven in `characters.json` / `terms.json`; never use retired variants ("Renamed from"). Arcs and fates per act: [who's who](who_is_who.md).
 
-Naming & tone rule (`[LOCKED]`): playable operatives are `18-24` (Unsealed `under 25`); children (`under 18`) are stakes and non-combat NPCs only—never fighters, graft subjects, or on-screen violence victims. Active placeholder rule: within the founders and hub cast every first letter and sound stays distinct, with no place/person collisions.
+Naming & tone rule (`[LOCKED]`, `CL-07`): playable operatives and recruits are **`18-24` only** (Unsealed `under 25`; ages stay static across the ~6-week campaign). Children (`under 18`: `Ivo` `12`, `Lucan` `14`, `Ida` `16`, `Wren` `14`) are **non-combat story stakes only**—never fighters, graft subjects, or on-screen violence victims. All 6 Founders start **100% clean mortal human on Day 1** (zero bone spurs, glowing eyes, black throat veins, or smoke fingertips in Act 1).
 
-## Founders (`[LOCKED]` class & join slot, `[PLACEHOLDER]` name, age & backstory)
+## 1. Playable founders (`[LOCKED]`, barefaced Day 1 humans)
 
-| Name | Class | Age | Background (one line) | First appearance | Renamed from |
+| Name & ID | Class | Age | Locked background & clean Day 1 hook | First appearance | Renamed from |
 | --- | --- | --- | --- | --- | --- |
-| Kaelen | Vanguard (warrior) | 21 | Junior guardsman of the Seventh Ward Castellan Watch (oath at 17); deserted when told to cripple a girl in a Tithing sweep and broke Corporal Fitch's jaw. Left-forearm bone spurs from an involuntary Inquisition graft trial (backstory, Act 2 hook, no mechanics) | Prologue 0a | - |
-| Vesper | Gutter-Stalker (rogue) | 18 | Ash-Crawl curfew runner and thief; her parents died of black-lung and were rendered at the Tallow Vats; Orlov's Guild paid the informant who sold out her runner ring (planner pick, merges three versions); Tess was her runner contact. Smoke fingertips and a wandering shadow (backstory) | Prologue 0b | - |
-| Maren | Heretic Acolyte (priest) | 23 | Defrocked scriptorium scribe of St. Lyra's who copied the forbidden texts; denounced by Proctor Quell, defrocked under Othemar's seal, sent toward the dissection crypts; knows Aline only by reputation. Black throat veins from years of marrow-ink (planner pick; backstory) | Prologue 0c | "Sister Maren" (drops the title, planner pick) |
-| Hollis | Arbalestier (ranger) | 20 | Crag poacher from the limestone ridges outside Cinderreach; shot the Castellan commander who dragged his sister Wren to the cages; taken in chains. A crude night-stalker eye graft he cut in himself and regrets (backstory, Act 2 hook) | Prologue 0c | Bran |
-| Dunstan "Slag-Jaw" | Slag-Brute (brawler) | 22 | Stoker at the Fourth Kiln bone-mill under Overseer Grendel; jaw burned by slag and wired with scrap; on the penal chain gang after cracking an overseer's skull | Act 1 M3 | Torin "Slag-Jaw" |
-| Elyse | Ichor Alchemist (mage) | 19 | Hedge chemist brewing counterfeit tallow and anti-sedative tonics in a still beneath the Tallow Vats; cornered by a purge | Act 1 M4 (not in the first playable slice) | - |
+| `Kaelen` (`kaelen`) | Vanguard (`warrior`) | 21 | Raised in a Clerisy **Lullaby House**, drafted at `14` into `Capt. Vane`'s Tithe-Escort Watch; guarded sweeps believing housemates died in sacred peace until catching `Vane` selling captives off-ledger to `Quell` in `Order 44` (breaks `Fitch`'s jaw; chiselled cross, Lullaby wrist-number under linen; clean human Day 1) | Prologue `0a` | - |
+| `Vesper` (`vesper`) | Gutter-Stalker (`rogue`) | 18 | Orphaned to marrow-debt at `9`; `Talia Rusk`'s fastest cipher-runner; ran one blind drop for `Orlov` to clear her parents' debt before `18`, unknowingly carrying the sweep map that hung her crew & maimed `Talia` (tin whistle at throat; clean human Day 1) | Prologue `0b` | - |
+| `Maren` (`maren`) | Heretic Acolyte (`priest`) | 23 | St. Lyra's liturgical scribe **and** mortuary novice (censer, bone-saw, sutures); uncovered the First Great Tithing chronicle with her mentor, whom `Quell` vivisected under `Othemar`'s seal (cracked spectacles, gall-ink fingers, clean throat Day 1) | Prologue `0c` | Sister Maren |
+| `Hollis` (`hollis`) | Arbalestier (`ranger`) | 20 | Outer-crag poacher raiding Clerisy wagons with sister `Wren` (`14`); punched a heavy quarrel through `Ruthven`'s visor (**making him "the Blind Eye"**) before being chained in `0c` as `Wren` was swept toward High Bastion (natural hazel eyes + shrapnel squint, corded brass monocle) | Prologue `0c` | Bran |
+| `Dunstan "Slag-Jaw"` (`dunstan`) | Slag-Brute (`brawler`) | 22 | Debtor stoker in `Grendel`'s bone-mill; snapped when his own uncremated Spent father came down the mortar chute, taking `Grendel`'s molten slag-ladle across his right jaw (iron-wired jaw, Kiln brand, penal cuffs; clean human Day 1) | Act 1 `M3` | Torin "Slag-Jaw" |
+| `Elyse` (`elyse`) | Ichor Alchemist (`mage`) | 19 | Prodigy chemical assayer in `Orlov`'s Vats who tapped steam-lines to distill free Warded Tallow & an alum counter-tonic to wake her Spent mother—waking a tenement crew & drawing `Orlov` + `Lazar`'s Purifiers *(joins post-slice)* | Act 1 `M4` | - |
 
-## Hub cast (non-combat, the Sluice Undercroft)
+## 2. Hub cast (non-combat, the Sluice Undercroft)
 
-| Name | Role | Age | Background (one line) | First appearance | Renamed from |
+| Name | Role | Age | Locked background (one line) | First appearance | Renamed from |
 | --- | --- | --- | --- | --- | --- |
-| Sister Aline Vance | Surgeon at the Apothecary's Slab; Flesh-Broker voice | 26 | Former Anointed Prosector of the Hall of Holy Dissection; found that the communion draughts are laced with bone sediment; keeps her mind with her own counter-draught; early veins | Hearth scene | - |
-| Bram "Iron-Lung" Karr | Smith at the Tinker's Hearth; Preservationist voice | 33 | Master foundryman of the Fourth Kiln Syndicate forge; lungs ruined, mind intact; his apprentice Lucan was seized as flesh-stock | Hearth scene | - |
-| Tess Morn | Dead-drop courier; runs the mission board at the Water-Lock Basin | 19 | The cell's courier and Vesper's former runner contact; deaf in the right ear from a flash-bomb; her brother Pip waits in the Seventh Ward Toll-Pen | Act 1 hub | Tessia "Tess" Morn, Madame Tessia |
-| Pip | Tess's brother; later runs the runner network | 12 | Caught in a curfew sweep, held for the Tithing (a stake) | Act 1, Tess's quest (planner pick) | - |
+| `Chirurgeon Sabina` (`Sabina Kress`) | Surgeon at the Apothecary's Slab; **Flesh-Broker** voice | 31 | Studied under `Lazar` at `21` in outer dissection (unaware of inner Cloisters, `G-31`); exiled via `Quell` after exposing communion bone-sediment; silver-templed hair, oiled-green prosector collar, unhooked half-mask | Hearth scene | Sister Aline Vance / Sister Aline |
+| `Berek "Cinder-Lung" Dorn` | Smith at the Tinker's Hearth; **Preservationist** voice | 33 | Cast Fourth Kiln brass conduit valves for `15` yr under `Jessop` (told they were steam vents) until `Jessop` gave `14`-yo apprentice `Lucan` to the Tithing to hide a cracked batch; reuses `bram.png` `1:1` | Hearth scene | Bram "Iron-Lung" Karr |
+| `Talia Rusk` | Spymaster & mission board anchor at the Water-Lock Basin | 29 | Built the Ash-Crawl bone-cipher ring (mentoring `Vesper` & sheltering `Ivo`) until `Ruthven`'s sweep crippled her leg & deafened her right ear; wool dispatch cloak, ash-wood crutch | Act 1 hub | Tess Morn, Tessia "Tess" Morn |
+| `Ivo` | `Talia`'s sheltered ward (non-combat stake) | 12 | Caught in a curfew sweep & held in the Seventh Ward Toll-Pen for the Tithing; rescue opens `Widow Varka`'s Basin sluice trade | Act 1 (`Talia`'s job) | Pip |
+| `Widow Varka` | Black-market sluice fence (`Trade` shop at the Basin / Leaking Vat) | 42 | Salt-widow running black-market sluice trade once `Ivo` is freed; waxed black mourning veil & brass salt-scales | Act 1 (after `Ivo` rescue) | Madame Sallow, Madame Vespera |
 
-## The regime (Sovereign Clerisy, Iron Inquisition, Castellan Watch)
+## 3. The regime (Sovereign Clerisy, Iron Inquisition, Castellan Watch)
 
-| Name | Role | Age | Background (one line) | First appearance | Renamed from |
+| Name | Role | Age | Locked background (one line) | First appearance | Renamed from |
 | --- | --- | --- | --- | --- | --- |
-| Arch-Prelate Othemar | Head of the Clerisy, overseer of the Red Tithing; arch-antagonist | 64 | Kept alive past his years by the Clerisy's marrow (see [central truth](central_truth.md)); half his skull calcified; wheeled iron sedan chair | Named in the prologue; on stage Act 3 M3.5 | High Archon Vane |
-| Inquisitor-General Ruthven | Commander of the Iron Inquisition, "the Blind Eye" | - | Eyeless iron mask; preaches purity while carrying illegal grafts; his Render-Beast packs hunt at Lockdown | Named in Act 1; on stage Act 2 M2.1 | Inquisitor-General Vaelen, General Vaelen |
-| Captain Vane | Kaelen's former commanding officer; ENC-EVT-01 boss | - | Sold his own men to the Inquisition for a church commission; leads the sweep hunting Kaelen | Prologue 0a (pursuer); boss Act 1 M1 | Castellan Miller (the cold-open pursuer) |
-| Corporal Fitch | Kaelen's squad corporal (off stage) | - | Gave the order to break the girl's knees; Kaelen broke his jaw | Mentioned in 0a | Sergeant Vane |
-| Proctor Quell | ENC-EVT-02 boss, "the Scalpel of St. Lyra's" | - | Inquisitor vivisector with an illegal marrow valve in his neck; denounced Maren and oversaw her mentor's autopsy | Act 1 M2 | Proctor Malakar |
-| Inquisitor-Prelate Nemeth | ENC-EVT-06 boss at the Crucible Watchpost; ENC-ACT3-04 phase 1 (node 20) | - | Marrow-infused commander whom cold steel cannot finish; takes the sacrificed founder alive and escapes with them (CANON 3.6) | Act 1 M5 | High Inquisitor Bastion, "an Inquisitor Prelate" |
-| Chief Anatomist Lazar | ENC-ACT2-04 boss | - | Heads the Embalming Cloisters laboratory of Aline's former order, where his anatomists render the tithed into marrow (CANON 3.6, refinement) | Act 2 M2.4 | Chief Anatomist Melchior, Dr. Melchior |
-| High Castellan Ulric | ENC-ACT3-02 boss | - | Reconstructed inquisitor guarding the marrow conduits | Act 3 M3.2 | High Castellan Vane |
-| Bailiff Corvo | Third Ward gatekeeper; bribable neutral, non-combat | 29 | Stage II calcified leg; keeps his mind by paying for clean water; his sister Ida is marked for the Tithing | Act 1 (Third Ward gate) | - |
+| `Arch-Prelate Othemar` | Head of the Clerisy; `ENC-ACT3-05` (`3.5`) boss | 64 | Theological marrow addict kept alive `20` yr past Spent lifespan; half-petrified black-stone left skull & hand in a gilded reliquary throne; calls the second Great Tithing | Named in prologue; boss `3.5` | High Archon Vane |
+| `Inquisitor-General Ruthven` | Head of the Iron Inquisition, "the Blind Eye" | 44 | Blinded by `Hollis`'s crag bolt (`4`-screw dented iron mask); wears illegal collarbone tremor-grafts; hunts `Talia`'s network; Act 2 Hub Breach / `2.6` fallback boss (`CL-06`) | Named Act 1; on stage `2.1` | Inquisitor-General Vaelen |
+| `Inquisitor-Prelate Nemeth` | `M5` Crucible & `3.4` Silent Ossuary Phase 1 boss | 39 | Half-elevated zealot calcifying on aberrant marrow; takes `M5` winch founder alive for `Lazar` to earn pure marrow; killed by broken captive at `3.4` | Act 1 `M5` | High Inquisitor Bastion |
+| `Chief Anatomist Lazar` | Head of Embalming Cloisters; `2.4` boss | 45 | `Sabina`'s ex-mentor; sole non-prelate fed rations of pure marrow (smooth ageless face, silver embalming armature); renders Lullaby dead & remakes `M5` captive | Act 2 `2.4` | Chief Anatomist Melchior |
+| `Warden-Inquisitor Ulric` | Marrow Conduits guardian; `3.2` boss | 37 | Prototype Saint-Warden built from `Lazar`'s surgery + Fourth Kiln brass conduit plate over Stage IV black stone | Act 3 `3.2` | High Castellan Ulric, High Castellan Vane |
+| `Captain Vane` | `Kaelen`'s former Watch CO; `M1` boss | 38 | Stiffening joints (`38`); sold captives off-ledger to `Quell` for a Bastion post; withdraws at `25%` HP in `M1` -> slain in `Kaelen`'s Act 2 ritual (`CL-01`) | Prologue `0a`; boss `M1` | Castellan Miller |
+| `Corporal Fitch` | `Kaelen`'s squad corporal (off stage) | 30 | Enforced `Vane`'s off-ledger sweep in `Order 44`; `Kaelen` broke his jaw | Mentioned in `0a` | Sergeant Vane |
+| `Proctor Quell` | Inquisition vivisector; `M2` boss | 34 | Brass neck-valve aberrant-marrow addict; vivisected `Maren`'s mentor & exiled `Sabina`; dies in `M2` (`CL-01`) | Act 1 `M2` | Proctor Malakar |
+| `Bailiff Corvo` | Third Ward gatekeeper; bribable Spent neutral | 29 | Stage II calcified leg; kept his mind on clean water; bribes/schedules protect sister `Ida` (`16`) | Act 1 (Third Ward gate) | - |
 
-## The Tallow Guild and the Fourth Kiln Syndicate
+## 4. Tallow Guild, Fourth Kiln Syndicate, Chorus, Neutrals & Act 2 Cohorts
 
-| Name | Role | Age | Background (one line) | First appearance | Renamed from |
+| Name / Cohort | Role | Age | Locked background (one line) | First appearance | Renamed from |
 | --- | --- | --- | --- | --- | --- |
-| Guild-Master Orlov | ENC-EVT-04 boss, "the Ash-Crawl Butcher" | - | Owns the rendering pipelines of the Sunk Ward; Vesper's enemy | Act 1 M4 | - |
-| Overseer Grendel | ENC-EVT-03 boss | - | Bone-mill slaver who branded Dunstan | Act 1 M3 | - |
-| Foundry-Master Jessop | Boss of Bram's personal quest | - | Master of the Fourth Kiln casting floor, Bram's former employer | Bram's quest (act open: [Q-27](../questions/open_world_and_campaign.md#campaign-and-meters)) | Foundry-Master Vane |
-| Madame Sallow | Black-market broker, "the Grease Queen", proprietor of the Leaking Vat | middle-aged | Sells contraband; buys stolen ledgers and insignia for Scrap | Act 1 (planner pick) | Madame Vespera |
+| `Guild-Master Orlov` | Tallow Guild oligarch; `M4` boss | 46 | Draught-free oligarch controlling tallow vats & marrow-debt ledgers; tricked `Vesper` into carrying the sweep map; withdraws at `20%` HP in `M4` -> slain in Act 2 (`CL-01`) | Act 1 `M4` | - |
+| `Overseer Grendel` | Fourth Kiln bone-mill slaver; `M3` boss | 41 | Trades debtor corpses for clean rations; slag-burned `Dunstan`'s jaw with a ladle; iron furnace half-helm & piston-maul; dies in `M3` | Act 1 `M3` | - |
+| `Foundry-Master Jessop` | Fourth Kiln master caster; Act 2 boss | 43 | Cast brass marrow conduits for the Cloisters & gave `14`-yo `Lucan` to the Tithing to hide a cracked batch; dies in `Berek`+`Dunstan`'s Act 2 raid | Act 2 (`Berek`+`Dunstan` raid) | Foundry-Master Vane |
+| `Cantor Ysolde` | Awakening Chorus leader; `3.3` boss | 35 | Former Lullaby House choir-mistress singing in `Chorus Spire` (`node 19`) to wake the titan & end the harvest even if Cinderreach collapses (`CL-06`) | Act 3 `3.3` | Choral Patriarch Malachi |
+| `Brother Malachi` | Fissure apostate hermit (never a boss) | 38 | Half-hears the titan's dream; forecasts tremors, decodes growths, mediates `3.3` for Flesh-Brokers & delivers the full harvest reveal before `3.5` | Act 1 (post-`Interlude`) | - |
+| `Brother Rook` | Wandering Inquisition penitent | 22 | Mutilated acolyte who helped his sister flee a culling transport; trades liturgical drainage ciphers | Act 1 street nodes | Brother Kenneth |
+| `Skerrit, Bone-Wright` | Tenement bone-wright & seal forger | 37 | Crafts armour-shredding quarrels & cestuses from `Calcified Bone Shards` | Act 1 | "Nails" Skerrit, "Nails" Morik |
+| `Agnes of Block 12` | Spent tenement matriarch | 44 | Petrified forearms/chin; keeps her grandmother's star-tales & hides Unsealed children in Block 12 attics | Act 1 side quest | Old Mother Agnes |
+| `Lucan`, `Ida`, `Wren` | Non-combat Unsealed stakes (`under 18`) | 14, 16, 14 | `Lucan` (`Berek`'s apprentice rescued at `2.2`); `Ida` (`Corvo`'s sister, lost with `Ivo` on soft `0d` if unrescued); `Wren` (`Hollis`'s sister rescued in Act 2 convoy raid) | Act 1-2 | Lyra (`Ida`), Lyda (`Wren`) |
+| `Ferrand` & `Herbalist Clemence` | `25+` non-combat Basin guests (`CL-07`) | 40, 36 | Stay bunk-free Water-Lock Basin guests (`+10%` Hearth re-tempering; `-20%` Slab `Rock Salt` flush cost); never sworn into `18-24` combat bunks | Act 2 | Orin; Sister Clemence, Sister Theresa |
+| **6 Act 2 Recruit Cohorts** | Sworn `18-24` operatives (`visored/cowled`) | 18-24 | *Turncoat Watch Levy* (`warrior`), *Ash-Crawl Flue-Runner* (`rogue`), *Apostate Charnel-Novice* (`priest`), *Outwall Bolt-Man* (`ranger`), *Kiln Chain-Breaker* (`brawler`), *Vat-Still Saboteur* (`mage`); `Talia` shelters `1` class-matched runaway at Act 2 start (`CL-07`) | Act 2 start & wagon raids | - |
 
-The Fourth Kiln Syndicate is the Tallow Guild's foundry and bone-mill arm (planner pick): Bram worked its upper forge,
-Dunstan its bone-mill, so both come from node 04 without sharing a past.
-
-## Neutrals, heretics and the Awakening Chorus
-
-| Name | Role | Age | Background (one line) | First appearance | Renamed from |
-| --- | --- | --- | --- | --- | --- |
-| Brother Rook | Wandering penitent; trades hymn-ciphers for water | under 25 | Inquisition acolyte mutilated for helping his sister flee a culling transport | Act 1 street nodes | Brother Kenneth |
-| "Nails" Skerrit | Bone-carver; quarrels and bodkins from Calcified Bone Shards | - | Hunchbacked tenement outlaw and forger of church seals | Act 1 | "Nails" Morik |
-| Brother Malachi | Friendly hermit of the Fissure; titan lorekeeper | - | Apostate whose mind half-hears the titan's dream; forecasts tremors, decodes organs; never a boss | Act 1, after the ENC-EVT-05 interlude opens his catacombs (planner pick) | - (the cult-boss role moved to Cantor Ysolde) |
-| Cantor Ysolde | Leader of the Awakening Chorus; ENC-ACT3-03 boss | - | Sings the titan awake from the Chorus Spire | Act 3 M3.3 | the "Brother Malachi (Choral Patriarch)" role |
-
-## Commoners, children and guests
-
-| Name | Role | Age | Background (one line) | First appearance | Renamed from |
-| --- | --- | --- | --- | --- | --- |
-| Old Mother Agnes | Tenement matriarch; hides children in the attics of Tenement Block 12 | 44 | One of the oldest in the Ash-Crawl; keeps her grandmother's tales of the stars (the Extinguishing was two centuries ago; planner pick) | Act 1 side quest | - |
-| Lucan | Bram's former apprentice | 14 | Tallow Vats vat-boy whom Bram took as apprentice (planner pick); seized as flesh-stock for a prelate's lung graft | Act 2, culling-wagon rescue | - |
-| Ida | Corvo's sister (stake) | 16 | Shows marrow sensitivity; marked for the Tithing | Act 1 (Corvo) | Lyra |
-| Wren | Hollis's sister (off stage) | 14 at his capture | Escaped into the crags | Mentioned in the prologue | Lyda |
-| Ferrand the Clock-Smith | Example safehouse guest | - | +10% re-tempering speed while a guest | Act 2 | Orin the Clock-Smith |
-| Sister Clemence | Example safehouse guest, heretic herbalist | - | -20% Rock Salt cost of Slab flushes while a guest | Act 2 | Sister Theresa |
-
-A guest who can be sworn in must be 18-24; Ferrand and Clemence ages are open
-([Q-39](../questions/open_world_and_campaign.md#roster-and-lifecycle)).
-
-## Known near-collisions kept
-
-- Captain Vane, Sister Aline Vance and Vesper share a V and Vane/Vance differ by one letter; the brief keeps all three.
-  Recommendation: call Aline "Sister Aline" in all text (surname only in her dossier).
-- The Slumbering Root (heretics' name for the titan) and the Severed Root (the cell) echo on purpose: the cell names
-  itself the root cut from the sleeper (planner pick).
-- The Extinguishing (the event two centuries ago) and Extinguished (the failure screen) echo on purpose; the
-  "first Extinguishers" of the Reliquary Crypts add a third word on the stem (kept: they are the Clerisy's founders,
-  [Q-12](../questions/open_world_and_campaign.md#story-and-world) option a, decided with Q-04 on 2026-10-25; CANON 3.6).
-- Unit names (final check 2026-10-25): the Watch's crossbow unit is the Watch Crossbowman, so "Arbalestier" names only
-  the class; the prologue soldiers of 0a are Castellan Footmen (no "Castellan Warden" unit). Hollis's trait is Crag
-  Hawkeye and his relic Hollis's Lever-Winch (the old "Clocktower" names recalled his retired clocktower origin).
-
-## Places
+## 5. Places (`[LOCKED]`)
 
 | Canonical place | Notes | Renamed from |
 | --- | --- | --- |
-| Cinderreach | The city; Lower (Sunk Ward), Upper (High Bastion), Sub-Basalt (Mantle Fissure) | - |
-| The Sunk Ward | Act 1 region, Lower Cinderreach | - |
-| The High Bastion | Act 2 region, Upper Cinderreach; "Bastion" now names only this region | the Crucible boss "High Inquisitor Bastion" was renamed |
-| The Mantle Fissure | Act 3 region, the Sub-Basalt Abyss | Great Sunder Fissure |
-| St. Lyra's Cathedral | The one High Cathedral (planner pick); its scriptorium is Maren's origin; the Scribe's Crypt lies beneath it | High Cathedral (same place) |
-| The Scriptorium of St. Lyra's | Maren's former post | St. Agnes Chapel (collided with Old Mother Agnes) |
-| The Crucible Watchpost | Act 1 node 06; the only "Crucible" | - |
-| The Fourth Kiln | Act 1 node 04; Syndicate forge and bone-mill | Crucible Kiln (Bram's quest site: the Fourth Kiln casting floor) |
-| The Chorus Spire | Act 3 node 19 | Awakening Chorus Redoubt, Chorus Redoubt (collided with the Weeping Redoubt) |
-| The Silent Ossuary | Act 3 node 20 | Silent Crypt of the Apostles, Apostles' Crypt (collided with the Act 2 Reliquary Crypts of the First Apostles) |
-| The Dreaming Core | Act 3 node 22 | Node 23 (there was no node 22) |
-| The Lullaby Houses | The Clerisy's foundling houses that raise tithe-children from infancy (planner refinement, CANON 3.6); no node or map yet | - |
-| Seventh Ward, Third Ward, Ash-Crawl Tenements, Tenement Block 12, Seventh Ward Toll-Pen, the Leaking Vat | Sunk Ward locations | - |
+| `Cinderreach` | Volcanic caldera city: `Sunk Ward` (Act 1), `High Bastion` (Act 2), `Mantle Fissure` (Act 3) | - |
+| `The Sluice Undercroft` | Persistent cell hub (`node 01`): `Apothecary's Slab`, `Tinker's Hearth`, `Water-Lock Basin`, `Dry Hollows`, `Isolation Crypts` | - |
+| `St. Lyra's Cathedral` & `Scriptorium` | High Bastion seat of `Othemar`; `Maren`'s former post; `Scribe's Crypt` beneath it | High Cathedral, St. Agnes Chapel |
+| `The Fourth Kiln` (`node 04`) & `Tallow Vats` (`node 05`) | Syndicate forge/bone-mill (`Berek`, `Dunstan`, `Grendel`, `Jessop`) & `Orlov`'s rendering vats (`Elyse`) | Crucible Kiln |
+| `The Crucible Watchpost` (`node 06`) & `Slag Gate` (`node 07`) | Act 1 `M5` climax (`Nemeth`, winch sacrifice); the only "Crucible" | - |
+| `Embalming Cloisters` (`node 11`), `Grand Belltower` (`node 13`), `Reliquary Crypts` (`14-15`) | Act 2 milestones (`Lazar` `2.4`, curfew bells `2.5`, First Extinguishers' tomb `2.6`) | - |
+| `Marrow Conduits` (`node 18`), `Chorus Spire` (`node 19`), `Silent Ossuary` (`node 20`), `High Altar` (`node 21`), `Dreaming Core` (`node 22`) | Act 3 Mantle Fissure nodes (`Ulric`, `Ysolde`, `Nemeth`+captive, `Othemar`, Endings `A/B/C`) | Awakening Chorus Redoubt, Apostles' Crypt, Node 23 |
+| `The Lullaby Houses` | Clerisy foundling houses raising tithe-infants as marrow stock (`Kaelen` raised there; `Ysolde` sang there; ledgers at `2.4`) | - |

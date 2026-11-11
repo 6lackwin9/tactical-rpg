@@ -30,28 +30,29 @@ doc disagrees with it, CANON wins.
 6. Open questions: every gap and open question is in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) with a stable id
    (Q-01 ...), options, a recommendation, where it lives and who decides; its section 1 lists the questions to decide
    first, its section 2 the planner picks to confirm. Domain docs keep their own "Gaps" sections as pointers.
-7. Status words and maturity tags: each doc has a `Status:` line (`canon`, `proposal`, `archive` or `open`), and
-   [CANON.md](CANON.md) tags individual elements as `[LOCKED]` (narrative spine + gameplay-linked mechanics),
-   `[PROVISIONAL]` (buildable Design defaults awaiting user lock), `[PLACEHOLDER]` (unfinalized cast/faction backstories,
-   names, voices and visual look & feel kept data-driven) or `[MISSING]` (unauthored slots).
+7. Status words and maturity tags: each doc has a `Status:` line, and [CANON.md](CANON.md) tags elements as `[LOCKED]`
+   (macro aesthetic, lexicon, history, factions, all cast backstories & visual hooks, 3-tier taint, Endings `A/B/C`,
+   relics/ossuary growths/consumables, and gameplay-linked mechanics — locked `2026-11-10`), `[PROVISIONAL]` (unreviewed
+   tuning numbers & Reversible Design Calls in `docs/DESIGN_REVIEW.md`), or `[MISSING]` (unauthored content/art files
+   queued in `READY.md` & `ART_UI_REQUESTS.md`).
 8. Writing rules: repo-relative links, plain statements (no marketing tone), markdownlint-clean
-   (`bash tools/fc.sh docs`), at most about 300 lines / 25 KB per doc (split by domain behind a short index). History is
-   append-only: superseded text is marked or moved to `archive/`, never deleted.
+   (`bash tools/fc.sh docs`), at most about 300 lines / 25 KB per sibling doc (split by domain behind a short index).
+   History is append-only: superseded text is marked or moved to `archive/`, never deleted.
 
 ## 2. Folder layout
 
 ```text
 games/emberwake/docs/lore/
   README.md        this index
-  CANON.md         master worldbuilding, history timeline, factions, strata, cast dossiers, systems, named items/organs, glossary & Lore->Asset pipeline
-  OPEN_QUESTIONS.md  every open question with an id (index: decide first, planner picks)
-  STORY_GUIDE.md   the story, who's who, story elements, reveal timeline and story gaps in one place
-  modules/         lore modules: independent lore and events, decided alone, connected later (index README.md)
+  CANON.md         master worldbuilding, history timeline, factions, strata, cast dossiers, visual hooks, systems, ossuary items & endings
+  OPEN_QUESTIONS.md  open combat/tuning/scope question index (lore questions Q-01..Q-40 locked 2026-11-10)
+  STORY_GUIDE.md   the story, belief vs. truth, acts, endings, and resolved story ledger G-01..G-33
+  modules/         lore modules: independent lore seeds LM-01..LM-17
   questions/       the open questions by area (two parts)
-  background/      cast and places, setting, factions, geography, the three district maps, NPCs, the central truth
-  narrative/       acts, prologue, founders, choices, fail states, onboarding
+  background/      cast & cohorts, setting, factions, geography, district maps, NPCs, central truth
+  narrative/       acts, prologue, founders, choices, cohorts/martyrs, fail states, onboarding
   systems/         combat, corruption, classes (index + parts), loadouts, rules, balance, roster, loop, screens,
-                   bestiary (index + parts), hub, items
+                   bestiary (index + parts), hub, items/ossuary growths
   specs/           decision log, kit and system architecture, systems roadmap, art and visual style, naming guide
   archive/         superseded sources (master_specification.md)
 ```
@@ -62,98 +63,79 @@ games/emberwake/docs/lore/
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [CANON.md](CANON.md) | master blueprint (`[LOCKED]` / `[PROVISIONAL]` / `[PLACEHOLDER]`) | Cosmology, chronological history -> mission linkage, factions, strata/hub, full cast dossiers, campaign spine, systems, named relics/keepsakes/organs, glossary, `CL-01..07` & Lore -> Asset pipeline |
-| [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | open | Index of every open question (Q-01..Q-91): decide first, planner picks to confirm (P-01..P-29) |
-| [STORY_GUIDE.md](STORY_GUIDE.md) | `[LOCKED]` spine / `[PLACEHOLDER]` copy | The story in one page, belief against truth, the acts, Nemeth traced, story elements, reveal timeline, story gaps G-01..G-33 |
-| [modules/README.md](modules/README.md) | open | Lore modules: the format, and the seeds LM-01..LM-17 from the `3 lore` questions and story gaps |
-| - part: [open_world_and_campaign.md](questions/open_world_and_campaign.md) | open | Story and world, campaign and meters, roster and lifecycle, hub and economy (Q-01..Q-46) |
-| - part: [open_systems_and_scope.md](questions/open_systems_and_scope.md) | open | Combat and rules, Strain and Calcification, items, enemies, art, slice scope, process (Q-47..Q-91) |
-| [worldbuilding_decisions.md](specs/worldbuilding_decisions.md) | canon | The brainstorm's decision log: DEC-LORE-01..16 (2026-10-24, superseded parts marked) and the 2026-10-25 decisions from DEC-LORE-17 on |
-| [rpg_kit_and_system_architecture.md](specs/rpg_kit_and_system_architecture.md) | canon | The layer rule; which existing system carries each lore feature, which kit hooks to add, what is game code; corrected module names |
-| [full_game_systems_roadmap.md](specs/full_game_systems_roadmap.md) | canon (Acts 2-3 sections proposal) | The first playable slice "Sunk Ward, first night", milestones M0-M4 with layer tags, the Acts 2-3 systems |
-| [art_and_visual_style.md](specs/art_and_visual_style.md) | `[LOCKED]` geometry / `[PLACEHOLDER]` aesthetics | One palette (16 hues, steps, skin ramp), the STAGE1 option B board, sprite bounds, decals, animation, UI and audio direction |
-| [naming_and_asset_guide.md](specs/naming_and_asset_guide.md) | canon | How named things are named (ids, asset briefs, faction and role sounds, distinctness, one source of truth) |
-| [master_specification.md](archive/master_specification.md) | archive | The raw design export of 2026-10-24; superseded by the domain docs and CANON.md |
+| [CANON.md](CANON.md) | **`[LOCKED]` master blueprint (`2026-11-10`)** | Cosmology, chronological history -> mission linkage, 6 factions & rim-lights, strata/hub, full cast & visual briefs, 3-tier taint, systems, relics/ossuary growths/consumables, Endings `A/B/C`, `CL-01..07` & Asset pipeline |
+| [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | open (tuning/scope) | Index of open questions (`Q-01..Q-91`; lore items locked in `CANON.md`) |
+| [STORY_GUIDE.md](STORY_GUIDE.md) | **`[LOCKED]` (`2026-11-10`)** | The story in one page, belief vs. truth, acts, Endings `A/B/C`, and closed story ledger `G-01..G-33` |
+| [modules/README.md](modules/README.md) | open | Lore module seeds `LM-01..LM-17` |
+| - part: [open_world_and_campaign.md](questions/open_world_and_campaign.md) | open (historical log) | World/campaign/roster/hub question archive (`Q-01..Q-46`) |
+| - part: [open_systems_and_scope.md](questions/open_systems_and_scope.md) | open | Combat/rules, Strain/Calcification, items, enemies, art, slice scope (`Q-47..Q-91`) |
+| [worldbuilding_decisions.md](specs/worldbuilding_decisions.md) | canon | Brainstorm decision log (`DEC-LORE-01..17+`) |
+| [rpg_kit_and_system_architecture.md](specs/rpg_kit_and_system_architecture.md) | canon | Layer boundaries (`engine -> kit -> data -> game code`) |
+| [full_game_systems_roadmap.md](specs/full_game_systems_roadmap.md) | canon | Playable slice milestones `M0-M4` & Acts 2-3 systems |
+| [art_and_visual_style.md](specs/art_and_visual_style.md) | **`[LOCKED]`** | Soot-Gothic + Early-Industrial Ossuary aesthetic, 16-hue palette, `STAGE1` `32x24` board, sprite bounds & rim-lights |
+| [naming_and_asset_guide.md](specs/naming_and_asset_guide.md) | canon | Naming conventions, IDs, silhouette distinctness, single source of truth |
+| [master_specification.md](archive/master_specification.md) | archive | Superseded raw export (`2026-10-24`) |
 
 ### 3.2 Background (`background/`)
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [cast_registry.md](background/cast_registry.md) | `[LOCKED]` roles / `[PLACEHOLDER]` names & bios | Every named character and place: role, age, one-line background, first appearance, former names |
-| [central_truth.md](background/central_truth.md) | `[LOCKED]` (Option A) | Spoiler sheet: what the Red Tithing really does, the precedent and the Clerisy's founding, and how the endings relate (Option A chosen, Q-01) |
-| [who_is_who.md](background/who_is_who.md) | `[LOCKED]` spine / `[PLACEHOLDER]` wants | Every named character's want, first appearance, arc per act and fate (part of the story guide) |
-| [tithing_options.md](background/tithing_options.md) | `[LOCKED]` (user 2026-10-25): option B with b2 | The Great Tithing's story context: what commoners know, why now, precedent |
-| [cosmology_and_setting.md](background/cosmology_and_setting.md) | `[LOCKED]` rules / `[PLACEHOLDER]` lexicon | The Low Sleep titan, the Shroud, the Stagnation of Mortality, the lexicon |
-| [factions_and_sociology.md](background/factions_and_sociology.md) | `[LOCKED]` roles / `[PLACEHOLDER]` aesthetics | Sovereign Clerisy, Iron Inquisition, Castellan Watch, Tallow Guild, Fourth Kiln Syndicate, the Spent, the Severed Root, the doctrines |
-| [world_geography_and_hub.md](background/world_geography_and_hub.md) | `[LOCKED]` strata & hub / `[PROVISIONAL]` hazards | Cinderreach's three strata, the Sluice Undercroft and its facilities, the hazard list; forward bases as story-only |
-| [sunk_ward_campaign_map.md](background/sunk_ward_campaign_map.md) | canon (`[PLACEHOLDER]` copy) | Act 1: the Sunk Ward node graph, route rules, the Alert meter, missions M1-M5 and the interlude (`ENC-EVT-01..06`) |
-| [upper_bastion_campaign_map.md](background/upper_bastion_campaign_map.md) | `[PROVISIONAL]` (`2.4/2.6` `[LOCKED]`) | Act 2: the High Bastion graph, rooftop and street routes, culling wagons, `ENC-ACT2-01..06` |
-| [mantle_fissure_campaign_map.md](background/mantle_fissure_campaign_map.md) | `[PROVISIONAL]` (`3.2/3.4-3.6` `[LOCKED]`) | Act 3: the Mantle Fissure graph, the hard Doom Clock, tremors, `ENC-ACT3-01..06`, the endings' stage |
-| [npcs_and_questlines.md](background/npcs_and_questlines.md) | `[LOCKED]` facilities / `[PLACEHOLDER]` personas | The hub cast's quests and the city's cast (regime, guild, neutrals, commoners) |
+| [cast_registry.md](background/cast_registry.md) | **`[LOCKED]` (`2026-11-10`)** | Every named character, `18-24` Act 2 cohort, `25+` guest, and place + retired names |
+| [central_truth.md](background/central_truth.md) | **`[LOCKED]` (`Option A` + waking crisis)** | Spoiler sheet: Lullaby harvest, First Extinguishers, caldera-waking collapse, and Endings `A/B/C` |
+| [who_is_who.md](background/who_is_who.md) | **`[LOCKED]` (`2026-11-10`)** | Every character's motivation, Act 1-3 arc, `M5` winch/keepsake, and fate |
+| [tithing_options.md](background/tithing_options.md) | **`[LOCKED]` (`B+b2`)** | Great Tithing precedent & Extinguishing mystery |
+| [cosmology_and_setting.md](background/cosmology_and_setting.md) | **`[LOCKED]`** | Low Sleep titan, unbroken Shroud, Broken Rot, Unsealed (`under 25`) vs. Spent (`25+`) |
+| [factions_and_sociology.md](background/factions_and_sociology.md) | **`[LOCKED]`** | All 6 factions, monopolies, marrow access, and visual rim-lights |
+| [world_geography_and_hub.md](background/world_geography_and_hub.md) | **`[LOCKED]`** | Three strata, Sluice Undercroft (`Sabina`, `Berek`, `Talia`, `Ivo`, `Widow Varka`), hazards (`CL-05`) |
+| [sunk_ward_campaign_map.md](background/sunk_ward_campaign_map.md) | **`[LOCKED]`** | Act 1 Sunk Ward graph, Alert, `M1-M5` & `Interlude` |
+| [upper_bastion_campaign_map.md](background/upper_bastion_campaign_map.md) | **`[LOCKED]` spine** | Act 2 High Bastion graph, curfew bells, `2.1-2.6` & 6 dual-rituals |
+| [mantle_fissure_campaign_map.md](background/mantle_fissure_campaign_map.md) | **`[LOCKED]` spine** | Act 3 Mantle Fissure graph, hard clock (`min 12d`), Mantle Resonance, `3.1-3.6` |
+| [npcs_and_questlines.md](background/npcs_and_questlines.md) | **`[LOCKED]` (`2026-11-10`)** | Hub mentors (`Sabina`, `Berek`, `Talia`/`Ivo`/`Widow Varka`), regime bosses & street neutrals |
 
 ### 3.3 Narrative (`narrative/`)
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [campaign_narrative_structure.md](narrative/campaign_narrative_structure.md) | `[LOCKED]` spine | The three acts: The Young Vanguard, The First Rupture, The Awakening Abyss |
-| [new_game_onboarding_and_intro.md](narrative/new_game_onboarding_and_intro.md) | `[LOCKED]` flow / `[PLACEHOLDER]` copy | The intro vignette, the cold open in the rain, prologue missions 0a-0c |
-| [prologue_and_starter_squad_lore.md](narrative/prologue_and_starter_squad_lore.md) | `[LOCKED]` spine / `[PLACEHOLDER]` dossiers | Dossiers of Kaelen, Vesper, Maren and Hollis; the hearth scene |
-| [recruits_and_prologue_architecture.md](narrative/recruits_and_prologue_architecture.md) | `[LOCKED]` lifecycle | How the prologue converges on the hub; guests; Living Martyrs |
-| [six_founders_and_phase_progression.md](narrative/six_founders_and_phase_progression.md) | `[LOCKED]` progression / `[PLACEHOLDER]` bios | The six founders and where each joins in Act 1; the first grafting teaser; the doctrine divide |
-| [narrative_choices_and_dilemmas.md](narrative/narrative_choices_and_dilemmas.md) | `[LOCKED]` gates / `[PROVISIONAL]` numbers | The Crucible sacrifice and the later dilemmas (doctrine, Living Martyrs, siege priority, the Tithing) |
-| [narrative_agency_and_fail_states.md](narrative/narrative_agency_and_fail_states.md) | `[LOCKED]` rules | The ensemble rule, downed and wounded founders, the Extinguished failure screen |
+| [campaign_narrative_structure.md](narrative/campaign_narrative_structure.md) | **`[LOCKED]`** | Three-act structure: *Young Vanguard*, *First Rupture*, *Awakening Abyss* |
+| [new_game_onboarding_and_intro.md](narrative/new_game_onboarding_and_intro.md) | **`[LOCKED]` spine** | Four-slide vignette, rain cold open, prologue `0a-0c` |
+| [prologue_and_starter_squad_lore.md](narrative/prologue_and_starter_squad_lore.md) | **`[LOCKED]` (`2026-11-10`)** | Clean Day 1 human starter 4 dossiers (`Kaelen`, `Vesper`, `Maren`, `Hollis`) & Hearth scene |
+| [recruits_and_prologue_architecture.md](narrative/recruits_and_prologue_architecture.md) | **`[LOCKED]` (`2026-11-10`)** | Prologue lessons, 6 visored/cowled `18-24` Act 2 cohorts, `25+` Basin guests (`Ferrand`, `Clemence`), Living Martyrs |
+| [six_founders_and_phase_progression.md](narrative/six_founders_and_phase_progression.md) | **`[LOCKED]` (`2026-11-10`)** | All 6 Founders, 3-tier taint visuals, Doctrines, and `CL-05` stratum hazards |
+| [narrative_choices_and_dilemmas.md](narrative/narrative_choices_and_dilemmas.md) | **`[LOCKED]` (`2026-11-10`)** | All 6 `M5` winch beats & keepsakes, 6 dual-rituals, Martyrs, `Ruthven` sieges, Endings `A/B/C` |
+| [narrative_agency_and_fail_states.md](narrative/narrative_agency_and_fail_states.md) | **`[LOCKED]`** | Ensemble rule, wounded/captured/lost lifecycle, `Extinguished` screen |
 
 ### 3.4 Systems (`systems/`)
 
-The two large docs are split by domain: the class trees and the bestiary are short indexes linking their parts
-(`class_*.md`, `bestiary_*.md`, listed under their index below); link the index, not a part.
+The class trees and bestiary are short indexes linking their parts (`class_*.md`, `bestiary_*.md`); link the index, not a part.
 
 | Doc | Status | What it holds |
 | --- | --- | --- |
-| [combat_and_timeline.md](systems/combat_and_timeline.md) | `[LOCKED]` ruleset | The "timeline" ruleset: 6 blocks per round, speed tiers as relative windups, poise and breaks, Active Guard, impact badges |
-| [magic_and_corruption.md](systems/magic_and_corruption.md) | `[LOCKED]` mechanics | Cold Steel and Inoculated, Strain brackets, the 1d3 crisis, Calcification stages I-V |
-| [classes_and_skill_trees.md](systems/classes_and_skill_trees.md) | `[LOCKED]` roles / `[PROVISIONAL]` trees | Index of the six classes' Cold Steel and Inoculated trees and the founders' signatures (split into parts) |
-| - part: [class_vanguard.md](systems/class_vanguard.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Vanguard (`warrior`) and Kaelen |
-| - part: [class_gutter_stalker.md](systems/class_gutter_stalker.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Gutter-Stalker (`rogue`) and Vesper |
-| - part: [class_arbalestier.md](systems/class_arbalestier.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Arbalestier (`ranger`) and Hollis |
-| - part: [class_slag_brute.md](systems/class_slag_brute.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Slag-Brute (`brawler`) and Dunstan |
-| - part: [class_heretic_acolyte.md](systems/class_heretic_acolyte.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Heretic Acolyte (`priest`) and Maren |
-| - part: [class_ichor_alchemist.md](systems/class_ichor_alchemist.md) | `[LOCKED]` kit / `[PLACEHOLDER]` founder bio | The Ichor Alchemist (`mage`) and Elyse |
-| [skill_acquisition_and_loadout_systems.md](systems/skill_acquisition_and_loadout_systems.md) | canon | Learning skills at the Hearth and the Slab; the 8-slot deck |
-| [rules_engine_architecture.md](systems/rules_engine_architecture.md) | canon | The battle math against the real rules: armour curve, Strain gain, poise, interrupts |
-| [risk_reward_and_corruption_balance.md](systems/risk_reward_and_corruption_balance.md) | canon | The balance axes: AP density, reliability against burst, Strain surfing, roster lifespan |
-| [roster_expansion_and_lifecycle.md](systems/roster_expansion_and_lifecycle.md) | canon | Bunks 6 to 8, recruits, downed / wounded / captured / dead / retired |
-| [gameplay_loop_and_ui_prototype.md](systems/gameplay_loop_and_ui_prototype.md) | canon | The expedition loop, the combat loop, the Dojo prototype |
-| [screen_architecture_and_separation_plan.md](systems/screen_architecture_and_separation_plan.md) | canon | Which screens the game needs and which existing screens carry them |
-| [enemy_bestiary_and_ai.md](systems/enemy_bestiary_and_ai.md) | canon | Index of the bestiary, named bosses and encounter events (split into parts) |
-| - part: [bestiary_castellan_watch.md](systems/bestiary_castellan_watch.md) | proposal (names canon) | Castellan Footman, Watch Crossbowman, Bailiff Enforcer; Captain Vane |
-| - part: [bestiary_iron_inquisition.md](systems/bestiary_iron_inquisition.md) | proposal (names canon) | Flagellant, Purifier, Proctor; Proctor Quell, Inquisitor-Prelate Nemeth |
-| - part: [bestiary_tallow_guild.md](systems/bestiary_tallow_guild.md) | proposal (names canon) | Dredger, Render-Beast, Guild Carver; Guild-Master Orlov, Overseer Grendel |
-| - part: [bestiary_aberrations.md](systems/bestiary_aberrations.md) | proposal (names canon) | Ash-Crawler, Calcified Husk, Marrow Horror; the Calcified Amalgam |
-| - part: [bestiary_encounters_act1.md](systems/bestiary_encounters_act1.md) | canon (rosters proposal) | ENC-PRO-0A..0C and ENC-EVT-01..06 |
-| [safehouse_economy_and_triage.md](systems/safehouse_economy_and_triage.md) | canon | The Undercroft's facilities, Scrap, Warded Tallow, Rock Salt and organs, hub screens |
-| [items_gear_and_progression.md](systems/items_gear_and_progression.md) | canon | Weapon families, armour profiles, pouch consumables, monster parts, named relics |
+| [combat_and_timeline.md](systems/combat_and_timeline.md) | **`[LOCKED]`** | `timeline` ruleset: 6 blocks, windups, 5-pip Poise & breaks, `Active Guard`, Intents |
+| [magic_and_corruption.md](systems/magic_and_corruption.md) | **`[LOCKED]`** | Cold Steel vs. Inoculated (`Channel`), Strain `0..100`, `1d3` Rupture, Calcification `I..V` |
+| [classes_and_skill_trees.md](systems/classes_and_skill_trees.md) | **`[LOCKED]` roles / `[PROVISIONAL]` trees** | Index of the 6 classes (`class_vanguard.md` .. `class_ichor_alchemist.md`; `CANON.md` Sec. 3.1 governs founder bios) |
+| [skill_acquisition_and_loadout_systems.md](systems/skill_acquisition_and_loadout_systems.md) | canon | Hearth & Slab skill acquisition and deck slots |
+| [rules_engine_architecture.md](systems/rules_engine_architecture.md) | canon | Armour curve, Strain gain, Poise, interrupts |
+| [risk_reward_and_corruption_balance.md](systems/risk_reward_and_corruption_balance.md) | canon | AP density, Strain surfing, roster lifespan |
+| [roster_expansion_and_lifecycle.md](systems/roster_expansion_and_lifecycle.md) | canon | Bunks `6 -> 8`, cohorts, downed/wounded/captured/lost |
+| [gameplay_loop_and_ui_prototype.md](systems/gameplay_loop_and_ui_prototype.md) | canon | Expedition loop & combat loop |
+| [screen_architecture_and_separation_plan.md](systems/screen_architecture_and_separation_plan.md) | canon | Screen ownership across engine, kit, and game shell |
+| [enemy_bestiary_and_ai.md](systems/enemy_bestiary_and_ai.md) | **`[LOCKED]` roster** | Index of the 9 regular mobs, unit-bosses & 11 named bosses (`CAST1_BESTIARY.md`, `CAST1_BOSSES.md`) |
+| [safehouse_economy_and_triage.md](systems/safehouse_economy_and_triage.md) | **`[LOCKED]`** | Sluice Undercroft rooms (`Sabina`, `Berek`, `Talia`, `Widow Varka`), Scrap, Warded Tallow, Rock Salt |
+| [items_gear_and_progression.md](systems/items_gear_and_progression.md) | **`[LOCKED]` (`2026-11-10`)** | `3/2/2` families, Tactile Consumables, Ossuary Growths (`Slab Retorts`) vs. Hearth Salvage, Relics & Keepsakes |
 
-## 4. Quick reference (matches CANON.md sections 1-3)
+## 4. Quick reference (matches CANON.md sections 1-6)
 
-| Parameter | Canon value | Layer |
+| Parameter | Locked Canon Value (`2026-11-10`) | Layer |
 | --- | --- | --- |
-| Title | Emberwake: A Scarlet Lullaby (`[LOCKED]`; codename `emberwake`) | - |
-| Acts | Act 1 The Young Vanguard (Sunk Ward, `[LOCKED]`), Act 2 The First Rupture (High Bastion, spine `[LOCKED]`, lineup `[PROVISIONAL]`), Act 3 The Awakening Abyss (Mantle Fissure, spine `[LOCKED]`, lineup `[PROVISIONAL]`) | `[data]` |
-| Ages | Playable operatives 18-24 (`[LOCKED]`); Unsealed under 25; children are stakes, never fighters; no combat graft surgery under 18 | `[data]` |
-| Founders & cast | 6 Founder class roles/weapon lineups `[LOCKED]` (`kaelen`, `vesper`, `maren`, `hollis`, `dunstan`, `elyse`; `elyse` joins at M4); all names, ages, backstories, voices and look & feel are `[PLACEHOLDER]` | `[data]` |
-| Squad & bunks | Up to 4 deployed (`PARTY_MAX` 4); 6 bunks in Act 1 (4 filled after prologue), 8 through Act 2 Hearth project | `[kit hook]` |
-| Ruleset | `timeline` for `sunk_ward`, `classic` for Ashlands | `[kit hook]` |
-| Round & AP | 6 simultaneous blocks, timeline strip at top; 12 max AP (`start_ap: 10` on timeline fights), +4 regen/round; Rest banks +0.5 AP/block (cap +2) + 5 Poise/block | `[kit hook]` + `[engine]` strip |
-| Intents & Channel | 5 Round Intents (`Assault`, `Guard`, `Support`, `Maneuver`, `Field`) + Act 2 `0 AP` converting `Channel` toggle for Strain carriers | `[kit hook]` + `[data]` |
-| Poise | `CONS * 2 + gear poise + passives`, quantized into 5 discrete pips; break cancels windup + remaining blocks, drops guard, queues `stagger` (locks blocks 1 & 4 next round) | `[kit hook]` |
-| Armour & Guard | `Active Guard` 35% DR (`Brace` 20% / 2 rounds), 0.90 cap with cover; armour `rating / (rating + 50)`, binary marrow `pierce` | `[kit hook]` |
-| Deck & gear | 3 actives + 2 passives + 1 keystone (5 universal basics + 1 class basic free); Pouch 3; 6 gear slots + 4 Act 2 `body` graft slots; Act 2 weapon instances with durability & mastery techniques | `[kit hook]` |
-| Strain (Act 2 on) | 0-24 Dormant, 25-49 Acute Resonance, 50-74 Flesh-Tension, 75-99 Aberrant Edge, 100 Rupture; -10 decay without marrow (-10 more under Active Guard) to graft-count floor (`0/5/15/30/50`) | `[kit hook]` + `[data]` |
-| Crisis | Seeded 1d3 `roll_table` at round end (resets Strain to 50): Unchecked Spasm, Biological Collapse, Flesh Breach | `[kit hook]` + `[data]` |
-| Calcification (Act 2 on) | Cumulative `unit_tracks` I-V (Vein-Blackening .. Terminal Drift); advances via Flesh Breach or Tier III grafts; undone in battle by `unmark`, at hub by bone-scraping | `[kit hook]` + `[data]` |
-| Founder at 0 HP | Downed; wounded (-20% max HP until rest) in Act 1; bleed-out, capture and permadeath from Act 2; M5 Crucible is the one scripted Act 1 winch capture | `[kit hook]` |
-| Resources | Scrap (currency + common salvage), Warded Tallow (1/day; at 0: -2 starting AP), Rock Salt, Quenched Cinder Salt, Aberrant Organs, Fine/Themed Salvage | `[kit hook]` + `[data]` |
-| Campaign meters | Inquisition Alert (0-100, Act 2+ floor 30; Act 1 Breach ends run, Act 2-3 Breach starts hub room-chain siege), Doom Clock (42d, soft Acts 1-2, hard Act 3), Doctrine (`-100..+100`) | `[kit hook]` |
-| Endings & fail | Endings A Preservation, B Ascendancy, C Red Martyrdom (`[LOCKED]` gates, `[MISSING]` prose); `Extinguished` failure screen | `[kit hook]` + `[data]` |
-| Board and art | `[LOCKED]` geometry: `640x360` canvas, `STAGE1` `32x24` cells (`12x9`), `40 px` figures in `48x48` frames (`96x96` on `2x2` footprints); `[PLACEHOLDER]` palettes, portraits and costumes | `[engine]` + `[data]` |
+| Title & aesthetic | **Emberwake: A Scarlet Lullaby** (`emberwake`); **Soot-Gothic + Early-Industrial Ossuary** (no gunpowder firearms; unbroken Shroud) | - |
+| Acts | Act 1 *The Young Vanguard* (`Sunk Ward`), Act 2 *The First Rupture* (`High Bastion`), Act 3 *The Awakening Abyss* (`Mantle Fissure`) | `[data]` |
+| Ages & cohorts | Operatives `18-24` static (`CL-07`); `6` barefaced Day 1 human Founders + `6` visored/cowled Act 2 cohorts (`1` sheltered by `Talia` at Act 2 start); `25+` guests (`Ferrand` `40`, `Herbalist Clemence` `36`) stay bunk-free; `under 18` = non-combat stakes only | `[data]` |
+| Hub cast | **Sluice Undercroft**: `Chirurgeon Sabina` (`31`, Slab), `Berek "Cinder-Lung" Dorn` (`33`, Hearth), `Talia Rusk` (`29`) + `Ivo` (`12`) + `Widow Varka` (`42`, Basin `Trade` shop) | `[data]` |
+| Squad & bunks | `PARTY_MAX = 4`; `6` Dry Hollows bunks in Act 1 (`8` via `Berek` in Act 2) + `2` Isolation Crypt stasis slots for Living Martyrs | `[kit hook]` |
+| Ruleset & AP | `timeline` (`sunk_ward`), `classic` (`ashlands`); `6` blocks, `12` max AP (`10` start, `+4`/round; `Rest` `+0.5` AP/block cap `+2`, `+5` Poise/block); `5` Intents + Act 2 `0 AP` `Channel` | `[kit hook]` + `[engine]` |
+| Poise & Guard | `CONS * 2 + gear + passives` (`5` pips; break cancels windup & queues `stagger` on blocks `1 & 4`); `Active Guard` `35%` DR (`Brace` `20%`), `0.90` cap; armour `rating / (rating + 50)` | `[kit hook]` |
+| Corruption & 3-tier taint | Tier 1 clean Day 1 human -> Tier 2 `portrait_fx` + Founder Inoculated taints (`Strain 0..100`, `1d3` Rupture, `Calcification I..V`, `Slab Retorts` `4` bone-pin slots) -> Tier 3 `3.4` `2x2` Saint-Weapon | `[engine]` + `[kit hook]` + `[data]` |
+| Resources & items | `Scrap`, `Warded Tallow` (`1/d`), `Rock Salt`, `Quenched Cinder Salt`, **Ossuary Growths** (`Dreamer's Marrow Geode`, `Black-Sinew Braid`, `Ossified Bellows`, `Vitriol Bezoar`, `Amber Tapetum`), **Hearth Salvage** (`Brass Marrow Valve`, `Calcified Bone Shard`, `Render-Beast Tendon`) | `[kit hook]` + `[data]` |
+| Meters & clocks | Alert (`0-100`, Act 2+ floor `30`, Breach = Act 1 fail / Act 2 `Ruthven` siege), Doom Clock (`42d`; soft `0d` lesser tithing `14d` `+10` Alert claims `Ivo`/`Ida`; `2.4` `max(days, 18)`; Act 3 hard `min 12d`), Doctrine (`-100..+100`) | `[kit hook]` |
+| Endings & fail | **A `Black-Iron Severance`** (`Berek`), **B `The Living Conduit`** (`Sabina`), **C `Stone Martyrdom`** (always open); `Extinguished` fail screen | `[kit hook]` + `[data]` |
+| Board & art | `640x360` canvas, `STAGE1` `32x24` cells (`12x9`), `40 px` in `48x48` (`96x96` on `2x2`), `120px` portraits (`AI-04..06`) | `[engine]` + `[data]` |
