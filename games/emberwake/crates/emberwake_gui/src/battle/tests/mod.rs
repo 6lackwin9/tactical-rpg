@@ -25,6 +25,7 @@ mod portrait_timeline_tests;
 mod strip_block_tests;
 mod channel_tests;
 mod music_tests;
+mod cue_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};
@@ -757,21 +758,28 @@ fn a_boss_tier_enemy_makes_a_boss_fight() {
     assert!(!fight("courtyard_skirmish"));
 }
 
+/// PR5-32: a log line's sound comes from its typed event (`event::EventKind`), never its words.
 #[test]
 fn log_lines_pick_their_sounds() {
-    assert_eq!(sound_of("[Attack] Rook struck Goblin for 7 (HP 3/10)"), Some("hit"));
-    assert_eq!(sound_of("[Attack] Rook struck Goblin for 14 CRIT (HP 0/10)"), Some("crit"));
-    assert_eq!(sound_of("[Attack] Rook struck Goblin for 0 (HP 10/10)"), Some("mitigated"));
-    assert_eq!(sound_of("[Attack Miss] Rook: target no longer in combat"), Some("miss"));
-    assert_eq!(sound_of("[Area Miss] Mage hit nobody"), Some("miss"));
-    assert_eq!(sound_of("[Status] Hex -> Goblin (inflicts poison)"), Some("debuff"));
-    assert_eq!(sound_of("[Status] Hex -> Goblin (resisted poison)"), None);
-    assert_eq!(sound_of("[Status] Bard -> Rook (inflicts haste)"), None);
-    assert_eq!(sound_of("[Defend] Rook raises guard (40% less damage)"), Some("defend"));
-    assert_eq!(sound_of("[Defend] Rook's guard was broken"), None);
-    assert_eq!(sound_of("[Support] Cleric used Mend on Rook: healed 6"), Some("heal"));
-    assert_eq!(sound_of("[Move] Rook moved 2 of 2 tiles to (3, 4)"), Some("move_step"));
-    assert_eq!(sound_of("[Rest] Rook AP 3/4"), None);
+    use emberwake_battle::event::EventKind as E;
+    let status = |s: &str, landed: bool| E::Status { status: s.into(), landed };
+    assert_eq!(sound_of(&E::Hit { crit: false, zero: false }), Some("hit"));
+    assert_eq!(sound_of(&E::Hit { crit: true, zero: false }), Some("crit"));
+    assert_eq!(sound_of(&E::Hit { crit: true, zero: true }), Some("crit"), "a crit for 0 is a crit");
+    assert_eq!(sound_of(&E::Hit { crit: false, zero: true }), Some("mitigated"));
+    assert_eq!(sound_of(&E::Miss), Some("miss"));
+    assert_eq!(sound_of(&E::Dodged), None);
+    assert_eq!(sound_of(&status("poison", true)), Some("debuff"));
+    assert_eq!(sound_of(&status("poison", false)), None, "resisted");
+    assert_eq!(sound_of(&status("haste", true)), None, "a buff");
+    assert_eq!(sound_of(&status("", false)), None, "no roll");
+    assert_eq!(sound_of(&E::LostBlock { status: "stun".into() }), None);
+    assert_eq!(sound_of(&E::Guard { broken: false }), Some("defend"));
+    assert_eq!(sound_of(&E::Guard { broken: true }), None);
+    assert_eq!(sound_of(&E::Focus), Some("buff"));
+    assert_eq!(sound_of(&E::Support), Some("heal"));
+    assert_eq!(sound_of(&E::Move), Some("move_step"));
+    assert_eq!(sound_of(&E::Break { unit: 0 }), None);
 }
 
 /// FX1-L1: plays the ambush step by step (the party on the aggressive preset) until a single step leaves a pending

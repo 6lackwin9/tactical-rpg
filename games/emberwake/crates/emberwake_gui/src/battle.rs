@@ -43,7 +43,7 @@ pub(crate) use marks::{party_foresight_off, seen_intents};
 #[allow(unused_imports)]
 pub(crate) use marks::FORESIGHT_OFF;
 pub(crate) use overlays::{overlay_default, Layers, OVERLAY_GROUPS};
-pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, kind_color};
+pub(crate) use tips::{action_rows, ap_lines, channel_action, channel_block, channel_fill, channeled_word, kind_color};
 pub(crate) use input::skill_text;
 pub(crate) use skill_menu::CHANNEL_TINT;
 use draw::{draw, log_groups_json};

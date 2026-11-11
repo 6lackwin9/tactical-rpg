@@ -98,10 +98,12 @@ impl BattleScreen {
         let hp_before = std::mem::replace(&mut self.last_hp, hps);
         let log = &self.session().resolver.log;
         let lines: Vec<String> = log.iter().skip(self.log_seen).cloned().collect();
+        // PR5-32: the new lines' typed events: the sounds, impact modifiers and breaks read them, never the words
+        let events: Vec<emberwake_battle::event::EventKind> = emberwake_battle::event::since(&self.session().resolver.events, self.log_seen).cloned().collect();
         // PORTRAITFX1-P (5.3): the step's portrait events, fired with its feedback (at the impact, rule I)
         let mut portrait = if hp_before.len() == self.last_hp.len() { emberwake_battle::portrait::session_step_events(self.session(), &hp_before, &lines) } else { Vec::new() };
-        for line in &lines {
-            if let Some(key) = sound_of(line) {
+        for e in &events {
+            if let Some(key) = sound_of(e) {
                 sounds.push(format!("sfx/{key}.wav"));
             }
         }
@@ -125,8 +127,8 @@ impl BattleScreen {
         match pending {
             Some(mut i) => {
                 i.traces = traces;
-                i.mods = fx::Mods::of(&lines, !struck.is_empty());
-                i.broke = fx::broke(&lines);
+                i.mods = fx::Mods::of(&events, !struck.is_empty());
+                i.broke = fx::broke(&events);
                 (i.after, i.floats, i.struck, i.sounds) = (after, floats, struck, sounds);
                 i.marks = self.session().w.units.iter().map(|u| fx::marks_of(&u.st)).collect();
                 i.portrait = portrait;
@@ -134,7 +136,7 @@ impl BattleScreen {
             }
             None => {
                 // 4.5 row 2: a break whose step has no action to land shakes at once (not under skip animations, 4.6)
-                if !skip && fx::broke(&lines) {
+                if !skip && fx::broke(&events) {
                     let now = self.clock.now();
                     let seed = { let s = self.session(); fx::shake_seed(s.current_round, s.current_block, fx::BREAK_KEY) };
                     self.shake(cx, fx::HEAVY, now, seed);

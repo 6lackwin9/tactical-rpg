@@ -378,7 +378,8 @@ pub(crate) fn channel_note(w: &World, s: &emberwake_data::SkillDef, channel_rest
     if cost != 0 {
         bits.push(super::marks::hazard_meter_text(w, &emberwake_data::MeterDelta { meter: w.ruleset.numbers.channel_meter.clone(), delta: cost }));
     }
-    Some(format!("Marrow version: {}", bits.join(", ")))
+    // PR5-32: the channeled mark's name is the game's term (`channeled_mark`: "Marrow")
+    Some(format!("{} version: {}", w.cat.term(emberwake_data::terms::CHANNELED_MARK).name, bits.join(", ")))
 }
 
 /// PR5-26: `channel_note` for a planned entry of `u` (skill `sid`) in the live round (the round flag's mode).
@@ -398,6 +399,12 @@ pub(crate) fn action_channel_note(w: &World, a: &emberwake_battle::resolver::Sch
     let cost: i32 = a.command.meters.iter().filter(|d| d.meter == n.channel_meter).map(|d| d.delta).sum();
     let marrow = a.command.channeled.then(|| (s.channel.power.unwrap_or(n.channel_power), a.command.impact.armor_piercing, cost));
     channel_note(w, s, rest, marrow)
+}
+
+/// PR5-32 (TERMS1 TM3): the channeled mark's word inside a sentence ("marrow version"): the game's `channeled_mark`
+/// term (its `word`; the battle's catalog).
+pub(crate) fn channeled_word(w: &World) -> String {
+    w.cat.term(emberwake_data::terms::CHANNELED_MARK).word
 }
 
 /// PK1-S2c (placeholder, user 2026-11-10): a block colour in a Channel round's mode: `c` blended halfway to the Channel

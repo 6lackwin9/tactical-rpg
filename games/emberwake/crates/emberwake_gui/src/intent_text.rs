@@ -4,6 +4,7 @@
 
 use emberwake_battle::grid::NO_CELL;
 use emberwake_battle::intent::{Intent, Line, ARRIVING, IDLE};
+use emberwake_battle::refusal::Reason;
 use emberwake_battle::round_intent::{ManeuverKind, RoundTarget};
 use emberwake_battle::world::World;
 
@@ -117,47 +118,27 @@ pub fn hp_cost_text(cost: i32) -> String {
     }
 }
 
-/// HOOKS1 HC1 (HOOKS1-UI slice 3): a planner refusal in words: the HP-cost refusal (`command::hp_cost_problem`,
-/// "HP 9 <= cost 10") reads "Not enough HP: 9, it costs 10"; any other reason as the planner gave it.
-pub fn refusal_text(reason: &str) -> String {
-    let parsed = reason.strip_prefix("HP ").and_then(|r| r.split_once(" <= cost ")).and_then(|(hp, cost)| Some((hp.parse::<i32>().ok()?, cost.parse::<i32>().ok()?)));
-    match parsed {
-        Some((hp, cost)) if emberwake_battle::command::hp_cost_problem(hp, cost) == reason => format!("Not enough HP: {hp}, it costs {cost}"),
-        _ => reason.to_string(),
-    }
+/// HOOKS1 HC1 (HOOKS1-UI slice 3): a planner refusal in words, read from its fields (PR5-32: `refusal::Reason`, never
+/// the kit's text): the HP cost reads "Not enough HP: 9, it costs 10"; any other reason as the planner gave it. The
+/// classic menu's (the host's `probe` "reasons"), each reason so, joined with `REASONS_JOIN`.
+pub fn refusal_text(reasons: &[Reason]) -> String {
+    let one = |r: &Reason| match r {
+        Reason::HpCost { hp, cost } => format!("Not enough HP: {hp}, it costs {cost}"),
+        r => r.to_string(),
+    };
+    reasons.iter().map(one).collect::<Vec<_>>().join(emberwake_battle::round_intent_plan::REASONS_JOIN)
 }
 
-/// PK1-S2c (PK1 4.3 item 5, Vent's two reasons): a skill-menu refusal in words: the HP cost's as `refusal_text`
-/// ("Not enough HP: 9, it costs 10"), a meter gate's (`meter::gate_problem`, "Strain 30 < 50") "Needs Strain 50 or
-/// more to start: 30"; any other reason as the planner gave it. PK1-S2c-2: two reasons that both apply (the kit joins
-/// them with `REASONS_JOIN`) each in words, joined the same way.
-pub fn menu_refusal_text(w: &World, reason: &str) -> String {
-    let join = emberwake_battle::round_intent_plan::REASONS_JOIN;
-    if reason.contains(join) {
-        return reason.split(join).map(|r| one_refusal_text(w, r)).collect::<Vec<_>>().join(join);
-    }
-    one_refusal_text(w, reason)
-}
-
-/// One reason of `menu_refusal_text` in words.
-fn one_refusal_text(w: &World, reason: &str) -> String {
-    let hp = refusal_text(reason);
-    if hp != reason {
-        return hp;
-    }
-    let gate = reason.rsplit_once(" < ").and_then(|(left, min)| {
-        let (name, have) = left.rsplit_once(' ')?;
-        Some((name, have.parse::<i32>().ok()?, min.parse::<i32>().ok()?))
-    });
-    if let Some((name, have, min)) = gate {
-        if let Some(def) = w.cat.unit_meters.values().find(|m| m.name == name) {
-            let g = emberwake_data::MeterGate { meter: def.id.clone(), min };
-            if emberwake_battle::meter::gate_problem(w, Some(&g), |_| Some(have)) == reason {
-                return format!("Needs {name} {min} or more to start: {have}");
-            }
-        }
-    }
-    reason.to_string()
+/// PK1-S2c (PK1 4.3 item 5, Vent's two reasons): a skill-menu refusal in words, read from its fields (PR5-32): the HP
+/// cost's as `refusal_text` ("Not enough HP: 9, it costs 10"), a meter gate's "Needs Strain 50 or more to start: 30"
+/// (the meter's own name); any other reason as the planner gave it. PK1-S2c-2: two reasons that both apply each in
+/// words, joined as the kit joins them (`REASONS_JOIN`).
+pub fn menu_refusal_text(reasons: &[Reason]) -> String {
+    let one = |r: &Reason| match r {
+        Reason::MeterGate { name, have, min, .. } => format!("Needs {name} {min} or more to start: {have}"),
+        r => refusal_text(std::slice::from_ref(r)),
+    };
+    reasons.iter().map(one).collect::<Vec<_>>().join(emberwake_battle::round_intent_plan::REASONS_JOIN)
 }
 
 /// INPUT1 MR4: a skill's range in words for its menu row tip and hover card: "Range 2: dash to a flank, then hit" or

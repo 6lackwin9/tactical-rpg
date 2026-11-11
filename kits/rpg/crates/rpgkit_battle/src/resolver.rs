@@ -81,11 +81,19 @@ pub struct Resolver {
     /// S2.2-S3 (FB-85, Guard Option 1C): each (unit, block) of this round whose block started guarded (a running Defend,
     /// a held guard or a `guard` status raised its guard), cleared with the round; the sim's feel mode counts them.
     pub guarded: Vec<(UnitId, i32)>,
+    /// PR5-32: the typed events of the log's lines (`event`; one per line a screen reacts to, keyed by its index in
+    /// `log`). The log's text is unchanged by them.
+    pub events: Vec<crate::event::BattleEvent>,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new(), guarded: Vec::new() }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new(), guarded: Vec::new(), events: Vec::new() }
+    }
+
+    /// PR5-32: records `kind` for the line the log takes next.
+    pub fn note_event(&mut self, kind: crate::event::EventKind) {
+        self.events.push(crate::event::BattleEvent { line: self.log.len(), kind });
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -254,11 +262,16 @@ impl Resolver {
             if lock_on && opening.is_none() && self.scheduled[i].command.dashes_at_start() {
                 opening = Some(w.grid.positions.clone());
             }
+            let moves_before = (self.scheduled[i].command.moved, self.scheduled[i].command.dashed);
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
             if lock_on {
                 self.scheduled[i].command.lock_tile(w, opening.as_deref());
             }
             if !msg.is_empty() {
+                // PR5-32: a dash or chase line (the start moved the unit) is a move
+                if (self.scheduled[i].command.moved, self.scheduled[i].command.dashed) != moves_before {
+                    self.note_event(crate::event::EventKind::Move);
+                }
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
@@ -312,6 +325,9 @@ impl Resolver {
         crate::poise::resolve_hits(self, w, idx);
         let cmd = &self.scheduled[idx].command;
         if !cmd.log.is_empty() {
+            if let Some(kind) = cmd.cue.clone() {
+                self.events.push(crate::event::BattleEvent { line: self.log.len(), kind });
+            }
             self.log.push(cmd.log.clone());
         }
         // HOOKS1 AT2: who the action's hits took HP from, for next round's `brace_after_hit` (rule ai_tactics)

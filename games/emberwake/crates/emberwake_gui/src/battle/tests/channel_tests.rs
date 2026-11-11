@@ -311,12 +311,12 @@ fn vent_shows_its_two_reasons() {
     b.set_channel(&cx, h, RoundTarget::Myself, true);
     let vent = sid(&b, VENT);
     let w = &s(&b).w;
-    let gate = meter::gate_problem(w, w.cat.skills[vent].requires_meter.as_ref(), |_| Some(low));
+    let gate: Vec<_> = meter::gate_reason(w, w.cat.skills[vent].requires_meter.as_ref(), |_| Some(low)).into_iter().collect();
     assert!(!gate.is_empty());
     let rs = rows(&b, h, RoundTarget::Myself);
     let r = skill_row(&rs, vent).expect("Vent's cell");
     assert!(!r.valid, "below the gate");
-    assert_eq!(r.detail, intent_text::menu_refusal_text(w, &gate));
+    assert_eq!(r.detail, intent_text::menu_refusal_text(&gate));
     assert_eq!(r.detail, format!("Needs Strain {VENT_GATE} or more to start: {low}"));
     assert!(tip(r).contains(&r.detail), "{:?}", tip(r));
     // the Strain to pay, the HP not
@@ -328,13 +328,14 @@ fn vent_shows_its_two_reasons() {
     let rs = rows(&b, h, RoundTarget::Myself);
     let r = skill_row(&rs, vent).expect("Vent's cell");
     assert!(!r.valid, "not the HP to pay");
-    assert_eq!(r.detail, intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(cost, cost)));
+    let hp: Vec<_> = emberwake_battle::command::hp_cost_reason(cost, cost).into_iter().collect();
+    assert_eq!(r.detail, intent_text::refusal_text(&hp));
     assert!(r.detail.starts_with("Not enough HP"), "{}", r.detail);
     // PK1-S2c-2: both short (Strain below the gate and not the HP): both reasons in words, HP first
     set_strain(&mut b, h, low);
     let rs = rows(&b, h, RoundTarget::Myself);
     let r = skill_row(&rs, vent).expect("Vent's cell");
-    let both = format!("{}{}{}", intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(cost, cost)), rip::REASONS_JOIN, intent_text::menu_refusal_text(&s(&b).w, &gate));
+    let both = format!("{}{}{}", intent_text::refusal_text(&hp), rip::REASONS_JOIN, intent_text::menu_refusal_text(&gate));
     assert!(!r.valid);
     assert_eq!(r.detail, both, "both reasons");
     assert!(tip(r).contains(&both), "{:?}", tip(r));

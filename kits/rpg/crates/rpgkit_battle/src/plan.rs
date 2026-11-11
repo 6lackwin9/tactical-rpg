@@ -408,6 +408,8 @@ pub struct SimState {
     pub entries: Vec<PlanEntry>,
     pub error_index: i32,
     pub error_text: String,
+    /// PR5-32: `error_text` in fields when the refusal has them (the HP cost, a meter gate; None = text only).
+    pub error_reason: Option<crate::refusal::Reason>,
     pub dry_entry: i32,
     pub dry_step: i32,
     /// RULESET1_INTENT TG1: the round target the steps so far act on (the unit's set one, else the first step's).
@@ -490,16 +492,28 @@ impl Plan {
 
     /// Appends `step` if it compiles (and, with allow_dry false, does not run into AP debt); "" or the reason.
     pub fn add_step(&mut self, w: &World, c: UnitId, step: Step, allow_dry: bool) -> String {
+        crate::refusal::text(&self.add_step_why(w, c, step, allow_dry))
+    }
+
+    /// PR5-32: `add_step` with the reason in fields (empty = added; `refusal::text` gives `add_step`'s text).
+    pub fn add_step_why(&mut self, w: &World, c: UnitId, step: Step, allow_dry: bool) -> Vec<crate::refusal::Reason> {
+        use crate::refusal::Reason;
         let mut steps = self.steps_of(c);
         steps.push(step);
         self.set_steps(c, steps.clone());
         let st = self.compile(w, c);
-        let problem = if st.error_index >= 0 { st.error_text.clone() } else if !allow_dry && st.runs_dry() { "Not enough AP.".to_string() } else { String::new() };
-        if !problem.is_empty() {
+        let why = if st.error_index >= 0 {
+            vec![st.error_reason.clone().unwrap_or_else(|| Reason::Text(st.error_text.clone()))]
+        } else if !allow_dry && st.runs_dry() {
+            vec![Reason::Text("Not enough AP.".to_string())]
+        } else {
+            Vec::new()
+        };
+        if !why.is_empty() {
             steps.pop();
             self.set_steps(c, steps);
         }
-        problem
+        why
     }
 
     pub fn remove_step(&mut self, c: UnitId, index: usize) {
@@ -550,6 +564,7 @@ impl Plan {
             entries: Vec::new(),
             error_index: -1,
             error_text: String::new(),
+            error_reason: None,
             dry_entry: -1,
             dry_step: -1,
             round_target: w.round_states.get(&c).and_then(|r| r.target).filter(|_| round_intent::on(w)),
@@ -588,9 +603,11 @@ impl Plan {
             let ap_before = st.ap_left;
             let problem = self.apply(w, c, &mut st, step, i as i32);
             if !problem.is_empty() {
+                let reason = st.error_reason.take();
                 st = backup;
                 st.error_index = i as i32;
                 st.error_text = problem;
+                st.error_reason = reason;
                 break;
             }
             if st.ap_left < 0 && ap_before >= 0 && st.dry_step < 0 {
@@ -640,14 +657,14 @@ impl Plan {
                 return p.to_string();
             }
             // HOOKS1 HC1: a skill is refused while the HP left is at or below its HP cost (rule hp_cost)
-            let p = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, c, s));
-            if !p.is_empty() {
-                return p;
+            if let Some(r) = command::hp_cost_reason(st.hp_left, command::hp_cost_for(w, c, s)) {
+                st.error_reason = Some(r.clone());
+                return r.to_string();
             }
             // PK1-S2a: a meter gate the planned meter at the step's start does not meet (rule unit_meters)
-            let p = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
-            if !p.is_empty() {
-                return p;
+            if let Some(r) = crate::meter::gate_reason(w, s.requires_meter.as_ref(), |m| st.meter(m)) {
+                st.error_reason = Some(r.clone());
+                return r.to_string();
             }
             // PK2-S1: a skill used up this battle (`uses_per_battle`), the steps planned before this one included
             let planned = st.entries.iter().filter(|e| e.step_index >= 0 && e.skill == sid).count();

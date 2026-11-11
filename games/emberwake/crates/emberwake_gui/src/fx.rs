@@ -17,6 +17,7 @@ use crate::stage::{Geom, View};
 use crate::tuning::Tuning;
 use aegis_ui::canvas::Rgba;
 use aegis_ui::fx::{Beam, Effect, Flash, Layer, Look, Looped, Orbit, Prim, Projectile, Pt, Ring, Shake, ShakeTable, Sparks, Trail, MAX_LIVE};
+use emberwake_battle::event::EventKind;
 use emberwake_battle::grid::V2;
 
 /// Weapon families whose strikes at range read as arcane (4.3 rule 2).
@@ -593,8 +594,9 @@ pub fn style(a: Act) -> Style {
     }
 }
 
-/// The impact modifiers of a step (4.3) from its resolver log lines and whether any HP fell: a crit (an `[Attack]` line
-/// with " CRIT"), a miss (`[Attack Miss]`, `[Area Miss]`) and a hit for 0 (an `[Attack]` line that lowered no HP).
+/// The impact modifiers of a step (4.3) from its resolver log lines' typed events (PR5-32: `event::EventKind`, never
+/// the lines' words) and whether any HP fell: a crit (a hit with a critical), a miss (an attack that found nobody) and a
+/// hit for 0 (a hit while no HP fell).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Mods {
     pub crit: bool,
@@ -603,11 +605,11 @@ pub struct Mods {
 }
 
 impl Mods {
-    pub fn of(lines: &[String], hp_fell: bool) -> Mods {
-        let attack = |l: &String| l.starts_with("[Attack]");
-        let miss = lines.iter().any(|l| l.starts_with("[Attack Miss]") || l.starts_with("[Area Miss]"));
-        let crit = lines.iter().any(|l| attack(l) && l.contains(" CRIT"));
-        Mods { crit, zero: !miss && !hp_fell && lines.iter().any(attack), miss }
+    pub fn of(events: &[EventKind], hp_fell: bool) -> Mods {
+        let miss = events.contains(&EventKind::Miss);
+        let crit = events.iter().any(|e| matches!(e, EventKind::Hit { crit: true, .. }));
+        let hit = events.iter().any(|e| matches!(e, EventKind::Hit { .. }));
+        Mods { crit, zero: !miss && !hp_fell && hit, miss }
     }
 }
 
@@ -859,14 +861,14 @@ pub fn seed_of(round: i32, block: i32, idx: usize, unit: usize) -> u64 {
 pub const HEAVY: &str = "heavy";
 
 /// 4.5 rows 1-2: an impact shakes `heavy` when its skill takes 3 or more blocks and it lowered HP, or the step broke a
-/// unit (a `[Break]` line); crits do not shake (FQ5).
+/// unit (a break event); crits do not shake (FQ5).
 pub fn heavy_shake(blocks: i32, hit: bool, broke: bool) -> bool {
     (blocks >= 3 && hit) || broke
 }
 
-/// A `[Break]` line among the step's resolver lines (RULESET1 P9).
-pub fn broke(lines: &[String]) -> bool {
-    lines.iter().any(|l| l.starts_with("[Break]"))
+/// A break among the step's typed events (RULESET1 P9; PR5-32: `EventKind::Break`, never the line's words).
+pub fn broke(events: &[EventKind]) -> bool {
+    events.iter().any(|e| matches!(e, EventKind::Break { .. }))
 }
 
 /// 4.5 row 3: of the presets the newly fired phases' `shake` effects name, the strongest (by `px`, then `ms`) in the
@@ -1220,16 +1222,15 @@ mod tests {
         es.iter().filter_map(|e| if let aegis_ui::fx::Prim::Sparks(s) = e.prim { Some(s) } else { None }).collect()
     }
 
-    /// L8 (4.3): a crit (an `[Attack]` line with " CRIT") doubles the sparks and makes the second colour the crit hue; a
+    /// L8 (4.3): a crit (a hit event with a critical) doubles the sparks and makes the second colour the crit hue; a
     /// hit for 0 halves them in Steel; a miss has none; the ring stays.
     #[test]
     fn a_crit_doubles_the_sparks_in_the_crit_hue_and_a_hit_for_0_halves_them() {
         let t = tuning();
-        let lines = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        let crit = Mods::of(&lines(&["[Attack] Rook struck Gob for 9 CRIT (HP 1/10)"]), true);
-        let zero = Mods::of(&lines(&["[Attack] Rook struck Gob for 0 (HP 10/10)"]), false);
-        let miss = Mods::of(&lines(&["[Attack Miss] Rook: target no longer in combat"]), false);
-        let plain = Mods::of(&lines(&["[Attack] Rook struck Gob for 4 (HP 6/10)"]), true);
+        let crit = Mods::of(&[EventKind::Hit { crit: true, zero: false }], true);
+        let zero = Mods::of(&[EventKind::Hit { crit: false, zero: true }], false);
+        let miss = Mods::of(&[EventKind::Miss], false);
+        let plain = Mods::of(&[EventKind::Hit { crit: false, zero: false }], true);
         assert_eq!((crit.crit, zero.zero, miss.miss, plain), (true, true, true, Mods::default()));
         let mace = melee_style("mace");
         let base = mace.hit.sparks.unwrap();
@@ -1274,7 +1275,7 @@ mod tests {
     fn heavy_hits_and_breaks_shake_and_phases_take_the_strongest() {
         assert!(heavy_shake(3, true, false) && !heavy_shake(2, true, false) && !heavy_shake(3, false, false));
         assert!(heavy_shake(1, false, true), "a break");
-        assert!(broke(&["[Break] Gob is broken".to_string()]) && !broke(&["[Attack] x".to_string()]));
+        assert!(broke(&[EventKind::Break { unit: 1 }]) && !broke(&[EventKind::Hit { crit: false, zero: false }]));
         let table = ShakeTable::default();
         assert_eq!(strongest(["toll", "tremor"], &table), table.get("tremor"), "the same px, the longer one");
         assert_eq!(strongest(["quake", "jolt"], &table), table.get("quake"));

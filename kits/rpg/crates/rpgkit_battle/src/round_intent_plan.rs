@@ -15,6 +15,7 @@ use crate::command;
 use crate::grid::{V2, GRID_H, GRID_W};
 use crate::path::{self, Cells};
 use crate::plan::{carries, Mode, Plan, PlanStep, SimState, Step};
+use crate::refusal::Reason;
 use crate::round_intent::{self, Aim, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
@@ -1135,6 +1136,8 @@ pub struct PickOption {
     pub ap: i32,
     pub blocks: i32,
     pub problem: Option<String>,
+    /// PR5-32: `problem` in fields (`refusal::text` of them is `problem`; empty when it can be picked).
+    pub reasons: Vec<Reason>,
     pub ap_short: Option<i32>,
     pub drops: Vec<String>,
     /// The target the picks go on (the menu's own, or for a `menu_options` cell the one its skill or item acts on).
@@ -1145,25 +1148,32 @@ pub struct PickOption {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Refusal {
     text: String,
+    /// PR5-32: `text` in fields (`refusal::text` of them is `text`).
+    reasons: Vec<Reason>,
     ap_short: Option<i32>,
 }
 
 impl Refusal {
     /// IF6 d: "AP <free> < <cost>" (the free AP shown from 0), `cost - free` short.
     fn ap(free: i32, cost: i32) -> Refusal {
-        Refusal { text: format!("AP {} < {cost}", free.max(0)), ap_short: Some(cost - free) }
+        Refusal { ap_short: Some(cost - free), ..Refusal::from(format!("AP {} < {cost}", free.max(0))) }
+    }
+
+    /// PR5-32: a refusal of `reasons` (each reason's text, joined with `REASONS_JOIN`).
+    fn of(reasons: Vec<Reason>) -> Refusal {
+        Refusal { text: crate::refusal::text(&reasons), reasons, ap_short: None }
     }
 }
 
 impl From<String> for Refusal {
     fn from(text: String) -> Refusal {
-        Refusal { text, ap_short: None }
+        Refusal { reasons: vec![Reason::Text(text.clone())], text, ap_short: None }
     }
 }
 
 impl From<&str> for Refusal {
     fn from(text: &str) -> Refusal {
-        Refusal { text: text.to_string(), ap_short: None }
+        Refusal::from(text.to_string())
     }
 }
 
@@ -1821,10 +1831,10 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
     // VISCLAR1-D: the Move goes in the first slot left, where the block it replaced would have started; only Rest follows
     let mut kept: Vec<Step> = Vec::new();
     if let Some(a) = &after {
-        let p = plan.add_step(w, c, a.step.clone(), false);
-        if !p.is_empty() {
+        let why = plan.add_step_why(w, c, a.step.clone(), false);
+        if !why.is_empty() {
             plan.set_steps(c, Vec::new());
-            return Err((a.index, p.into()));
+            return Err((a.index, Refusal::of(why)));
         }
         kept.push(a.step.clone());
         let rest = crate::channel::rest_skill(w, c);
@@ -1883,10 +1893,10 @@ fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool
     let mark = plan.steps_of(c).len();
     let n = before.entries.len();
     for step in steps {
-        let p = plan.add_step(w, c, step, true);
-        if !p.is_empty() {
+        let why = plan.add_step_why(w, c, step, true);
+        if !why.is_empty() {
             plan.truncate(c, mark);
-            return Err(p.into());
+            return Err(Refusal::of(why));
         }
     }
     let st = plan.compile(w, c);
@@ -1968,15 +1978,13 @@ impl Builder<'_> {
                 if ap > ap_free {
                     return Err(Refusal::ap(ap_free, ap));
                 }
-                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, self.c, s));
+                let hp = command::hp_cost_reason(st.hp_left, command::hp_cost_for(w, self.c, s));
                 // PK1-S2a: the meter gate at the pick's start (Vent: Strain below 50), then the costs; PK1-S2c-2 (PK1
                 // 4.3 item 5): both reasons when both apply ("<hp>; <gate>"), each alone as before
-                let gate = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
-                match (hp.is_empty(), gate.is_empty()) {
-                    (false, false) => return Err(format!("{hp}{REASONS_JOIN}{gate}").into()),
-                    (false, true) => return Err(hp.into()),
-                    (true, false) => return Err(gate.into()),
-                    (true, true) => {}
+                let gate = crate::meter::gate_reason(w, s.requires_meter.as_ref(), |m| st.meter(m));
+                let why: Vec<Reason> = hp.into_iter().chain(gate).collect();
+                if !why.is_empty() {
+                    return Err(Refusal::of(why));
                 }
                 let meter = crate::meter::cost_problem(w, &crate::channel::meters_for(w, self.c, s), |m| st.meter(m));
                 if !meter.is_empty() {
@@ -2208,6 +2216,42 @@ pub fn preview_plan(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &
     trial(w, plan, c, at, picks).map_err(String::from)
 }
 
+/// PR5-32 (A4.2-K1b, INTENT2-U): the row an entry's impact tiles are marked in under the Field rows: an area item's or an
+/// area attack skill's entry with tiles, in the Assault row when it is locked on a target (it follows its target), else
+/// in the round's `intent` (a Field throw or aim); None for any other entry.
+pub fn area_mark(w: &World, e: &crate::plan::PlanEntry, intent: RoundIntent) -> Option<RoundIntent> {
+    let s = &w.cat.skills[e.skill];
+    let area = e.item.is_some() || (skill::kind(s) == Kind::Attack && skill::is_area(s));
+    (area && !e.cells.is_empty()).then_some(if e.target.is_some() { RoundIntent::Assault } else { intent })
+}
+
+/// PR5-32: `entries`' area marks (`area_mark`): each one's impact tiles and row, in entry order (the battle screen's
+/// planned areas and its hover preview).
+pub fn area_marks<'a>(w: &World, entries: impl IntoIterator<Item = &'a crate::plan::PlanEntry>, intent: RoundIntent) -> Vec<(Vec<V2>, RoundIntent)> {
+    entries.into_iter().filter_map(|e| area_mark(w, e, intent).map(|row| (e.cells.clone(), row))).collect()
+}
+
+/// PR5-32 (A4.2-K1b: the hovered area row previews its impact tiles): the area marks `picks` on `at` would add for
+/// `c` (`preview_plan`, then `area_marks` of the picked skills' and items' entries); empty without the Field rows, for
+/// picks with no area skill or item, or a refused pick. Nothing changes.
+pub fn area_preview(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Vec<(Vec<V2>, RoundIntent)> {
+    let area = |p: &Pick| match p {
+        Pick::Skill { skill, .. } => skill::is_area(&w.cat.skills[*skill]),
+        Pick::Item(id) => command::pouch_item(w, c, id).is_some_and(|i| command::item_area_on(w, i)),
+        _ => false,
+    };
+    if !round_intent::field_rows(w) || !picks.iter().any(area) {
+        return Vec::new();
+    }
+    let Ok((w2, p2)) = preview_plan(w, plan, c, at, picks) else { return Vec::new() };
+    let Some(intent) = round_intent::intent_of(&w2, c) else { return Vec::new() };
+    let picked = |e: &&crate::plan::PlanEntry| match &e.item {
+        Some(i) => picks.iter().any(|p| matches!(p, Pick::Item(id) if *id == i.id)),
+        None => picks.iter().any(|p| matches!(p, Pick::Skill { skill, .. } if *skill == e.skill)),
+    };
+    area_marks(&w2, p2.entries_for(&w2, c).iter().filter(picked), intent)
+}
+
 /// A scratch copy of `plan` (as `preview` makes): its steps, path penalties, goal preferences and AI pressure.
 pub fn copy_plan(plan: &Plan) -> Plan {
     plan_copy(plan)
@@ -2384,15 +2428,15 @@ fn row_meta(w: &World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> (Option<Ro
 fn option_of(w: &World, plan: &Plan, c: UnitId, picks: Vec<Pick>, at: RoundTarget, base: (i32, i32)) -> PickOption {
     let (intent, kind) = row_meta(w, c, at, &picks);
     let held = picks_of(w, c).iter().any(Pick::holds_target);
-    let (problem, ap_short, ap, blocks) = match trial(w, plan, c, at, &picks) {
+    let (problem, reasons, ap_short, ap, blocks) = match trial(w, plan, c, at, &picks) {
         Ok((w2, p2)) => {
             let now = picked_cost(&w2, &p2, c);
-            (None, None, now.0 - base.0, now.1 - base.1)
+            (None, Vec::new(), None, now.0 - base.0, now.1 - base.1)
         }
-        Err(e) => (Some(e.text), e.ap_short, 0, 0),
+        Err(e) => (Some(e.text), e.reasons, e.ap_short, 0, 0),
     };
     let drops = intent.filter(|_| !held).map(|i| round_intent::would_drop(w, c, i)).unwrap_or_default();
-    PickOption { picks, intent, kind, ap, blocks, problem, ap_short, drops, at }
+    PickOption { picks, intent, kind, ap, blocks, problem, reasons, ap_short, drops, at }
 }
 
 /// VISCLAR1-D (decisions "Battle view answers, part 2", "Intent framework answers"): the icon menu's cells for `c`, the same
@@ -2420,18 +2464,21 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
             return option_of(w, plan, c, r.clone(), *t, base);
         }
         // no row on this target: after an opener the pick's own refusal ("Only Assault skills"), else what it needs
-        let why = if held && want.is_none_or(|i| round_intent::intent_of(w, c) == Some(i)) { option_of(w, plan, c, vec![p.clone()], at, base).problem } else { None };
+        let why = if held && want.is_none_or(|i| round_intent::intent_of(w, c) == Some(i)) { Some(option_of(w, plan, c, vec![p.clone()], at, base)).filter(|o| o.problem.is_some()) } else { None };
         let (intent, kind) = row_meta(w, c, at, std::slice::from_ref(&p));
         let intent = want.or(intent);
-        let problem = why.unwrap_or_else(|| match want {
+        let (problem, reasons) = why.map(|o| (o.problem.unwrap_or_default(), o.reasons)).unwrap_or_else(|| {
+            let text = match want {
             Some(RoundIntent::Field) => "Target a tile (or an enemy's tile) to use this".to_string(),
             Some(RoundIntent::Assault) => "Target an enemy to use this".to_string(),
             // INTENT2-U: an item's Stand cell is used on yourself, its Support cell on an ally
             Some(RoundIntent::Guard) => "Target yourself to use this".to_string(),
             Some(RoundIntent::Support) => "Target an ally to use this".to_string(),
             _ => target_hint(w, c, &p),
+            };
+            (text.clone(), vec![Reason::Text(text)])
         });
-        PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), ap_short: None, drops: Vec::new(), at }
+        PickOption { picks: vec![p], intent, kind, ap: 0, blocks: 0, problem: Some(problem), reasons, ap_short: None, drops: Vec::new(), at }
     };
     let cell = |p: Pick, same: &dyn Fn(&Pick) -> bool| cell_in(p, same, None);
     let mut out = Vec::new();
@@ -2481,7 +2528,7 @@ pub fn menu_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         // the fade is wider than the pick's own rule: a dash has moved the unit too, though ET5 lets a step follow it
         let mut o = option_of(w, plan, c, vec![if held { Pick::StepAfter(p) } else { Pick::MoveHere(p) }], at, base);
         if let Some(why) = move_refusal(w, plan, c).filter(|_| o.problem.is_none()) {
-            o = PickOption { problem: Some(why), ap: 0, blocks: 0, ..o };
+            o = PickOption { reasons: vec![Reason::Text(why.clone())], problem: Some(why), ap: 0, blocks: 0, ..o };
         }
         out.push(o);
     }

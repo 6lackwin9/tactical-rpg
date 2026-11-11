@@ -398,13 +398,18 @@ pub fn cost_problem(w: &World, deltas: &[MeterDelta], value_of: impl Fn(&str) ->
 /// gives ("" = it can, or no gate): the meter below `min` (a meter the unit does not hold counts 0): `<meter name> 45
 /// < 50`. Read only under the rule unit_meters.
 pub fn gate_problem(w: &World, gate: Option<&rpgkit_data::MeterGate>, value_of: impl Fn(&str) -> Option<i32>) -> String {
-    let Some(g) = gate.filter(|_| on(w)) else { return String::new() };
+    gate_reason(w, gate, value_of).map_or_else(String::new, |r| r.to_string())
+}
+
+/// PR5-32: `gate_problem` in fields (None = it can, or no gate).
+pub fn gate_reason(w: &World, gate: Option<&rpgkit_data::MeterGate>, value_of: impl Fn(&str) -> Option<i32>) -> Option<crate::refusal::Reason> {
+    let g = gate.filter(|_| on(w))?;
     let have = value_of(&g.meter).unwrap_or(0);
     if have >= g.min {
-        return String::new();
+        return None;
     }
     let name = w.cat.unit_meters.get(&g.meter).map_or_else(|| g.meter.clone(), |m| m.name.clone());
-    format!("{name} {have} < {}", g.min)
+    Some(crate::refusal::Reason::MeterGate { meter: g.meter.clone(), name, have, min: g.min })
 }
 
 /// UM2 for the planners: `c`'s planned meter values after paying `deltas` (clamped to its floor..max; a meter it does

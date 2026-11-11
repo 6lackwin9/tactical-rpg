@@ -296,14 +296,8 @@ pub(super) fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Opt
     }
     let Some(intent) = ri::intent_of(w, h) else { return Some(o) };
     if ri::field_rows(w) {
-        for e in st.entries.iter().filter(|e| !e.cells.is_empty() && e.step_index >= 0) {
-            let s = &w.cat.skills[e.skill];
-            // INTENT2-U: an area item's Field row marks its tiles as a Field skill's
-            if e.item.is_some() || (emberwake_battle::skill::kind(s) == Kind::Attack && emberwake_battle::skill::is_area(s)) {
-                let row = if e.target.is_some() { RoundIntent::Assault } else { intent };
-                o.areas.push((e.cells.clone(), row));
-            }
-        }
+        // INTENT2-U: an area item's Field row marks its tiles as a Field skill's (PR5-32: the kit's `area_marks`)
+        o.areas.extend(emberwake_battle::round_intent_plan::area_marks(w, st.entries.iter().filter(|e| e.step_index >= 0), intent));
     }
     o.valid = (0..w.units.len())
         .filter(|&u| on_field(u) && Some(ri::normalize(h, RoundTarget::Unit(u))) != target)

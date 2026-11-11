@@ -593,7 +593,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             }
             // PK1-S2c (PK1 4.3 items 1-2): a Channel round says so (placeholder words and tint)
             if emberwake_battle::channel::is_channel(pw, h) {
-                lines.push((format!("{} round: marrow versions only", RoundIntent::Channel.label(&pw.cat)), CHANNEL_TINT));
+                lines.push((format!("{} round: {} versions only", RoundIntent::Channel.label(&pw.cat), super::tips::channeled_word(pw)), CHANNEL_TINT));
             }
             if !picks.is_empty() && !s.plan_confirmed {
                 lines.push((format!("Picks: {}", picks.iter().map(|p| pick_text(w, h, p)).collect::<Vec<_>>().join(", ")), th().gold));

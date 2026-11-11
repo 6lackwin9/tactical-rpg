@@ -737,7 +737,8 @@ fn plan_view(s: &Session, only: Option<UnitId>) -> Value {
     Value::Object(out)
 }
 
-/// The step as the next input of `unit`, without changing the plan: {valid, reason, ap, blocks, entries}.
+/// The step as the next input of `unit`, without changing the plan: {valid, reason, reasons (PR5-32: the reason in
+/// fields), ap, blocks, entries}.
 fn probe(s: &mut Session, req: &Value) -> Value {
     let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("probe needs a party unit") };
     let step = match req.get("step").map(|v| step_from(s, v)) {
@@ -748,7 +749,8 @@ fn probe(s: &mut Session, req: &Value) -> Value {
     let had_entry = s.plan.sequences.contains_key(&u);
     let before = s.plan.steps_of(u);
     let base = s.plan.compile(&s.w, u).entries.len();
-    let problem = s.plan.add_step(&s.w, u, step, true);
+    let why = s.plan.add_step_why(&s.w, u, step, true);
+    let problem = rpgkit_battle::refusal::text(&why);
     let result = if problem.is_empty() {
         let st = s.plan.compile(&s.w, u);
         let added: Vec<Value> = st.entries[base..]
@@ -758,7 +760,8 @@ fn probe(s: &mut Session, req: &Value) -> Value {
         let ap: i32 = st.entries[base..].iter().map(|e| e.total_ap()).sum();
         json!({"ok": true, "valid": true, "ap": ap, "ap_left": st.ap_left, "entries": added})
     } else {
-        json!({"ok": true, "valid": false, "reason": problem})
+        // PR5-32: the reason in fields too ("reasons": `refusal::Reason::to_json` each), for screens that word it
+        json!({"ok": true, "valid": false, "reason": problem, "reasons": why.iter().map(rpgkit_battle::refusal::Reason::to_json).collect::<Vec<_>>()})
     };
     if had_entry {
         s.plan.set_steps(u, before);

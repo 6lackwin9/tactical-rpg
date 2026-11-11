@@ -252,6 +252,8 @@ pub struct Command {
     pub locked: Option<(UnitId, V2)>,
     /// ATTACKLOCK1: the target that had left the locked tile at the last execution's impact (the swing missed it).
     pub dodged: Option<UnitId>,
+    /// PR5-32: what the line in `log` did, in fields (`event::EventKind`; None = no screen reacts to it), set with `log`.
+    pub cue: Option<crate::event::EventKind>,
 }
 
 impl Command {
@@ -315,6 +317,7 @@ impl Command {
             diagonal_hit: false,
             locked: None,
             dodged: None,
+            cue: None,
         }
     }
 
@@ -485,11 +488,13 @@ impl Command {
                 self.set_attack_result(0, false, None);
                 if !w.units[src].is_active() {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Action Failed] {src_name} cannot act");
                     return;
                 }
                 let Some(t) = effective_target(w, src, target).filter(|t| w.units[*t].is_active()) else {
                     self.failed = true;
+                    self.cue = Some(crate::event::EventKind::Miss);
                     self.log = format!("[Attack Miss] {src_name}: target no longer in combat");
                     return;
                 };
@@ -497,6 +502,7 @@ impl Command {
                 if round_intent::hidden(w, t) {
                     self.failed = true;
                     self.evaded = Some(t);
+                    self.cue = None;
                     self.log = format!("[Lost] {src_name} loses {}", w.units[t].name);
                     return;
                 }
@@ -504,6 +510,7 @@ impl Command {
                 // riposte, exploit or flank count); the command kept its blocks
                 if self.missed {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Flank Protected] {src_name}'s {} misses {}: its flank is protected", self.name, w.units[t].name);
                     return;
                 }
@@ -514,12 +521,14 @@ impl Command {
                     self.failed = true;
                     self.dodged = Some(t);
                     self.evaded = Some(t);
+                    self.cue = Some(crate::event::EventKind::Dodged);
                     self.log = format!("[Dodged] {} left {cell} before {src_name}'s {} landed", w.units[t].name, self.name);
                     return;
                 }
                 let band = reach_band(w, src, min_range, max_range);
                 if !in_reach(w, src, t, band, self.diagonal) {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Attack Out of Range] {src_name} cannot reach {}", w.units[t].name);
                     return;
                 }
@@ -547,6 +556,7 @@ impl Command {
                     self.struck.push(crate::trigger::Struck { target: t, damage: taken, ranged });
                 }
                 let mut detail = String::new();
+                let mut rolled = None;
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
                     // U1.2-S3b: the actor's KNOW term (ruleset `know_potency`; 0 = potency off)
                     let bonus = status::know_bonus(&w.units[src], w.ruleset.numbers.know_potency);
@@ -554,8 +564,10 @@ impl Command {
                     let spec = status::EffectSpec::inflict(&self.status_effect, self.status_potency, status_rounds, self.status_magnitude, &src_name);
                     let ok = status::apply_effect(&mut w.units[t], &spec, status::Timing::Next, bonus, Some(rng));
                     detail = format!(" ({} {})", if ok { "inflicts" } else { "resisted" }, self.status_effect);
+                    rolled = Some(ok);
                 }
                 if !damaging {
+                    self.cue = Some(crate::event::EventKind::Status { status: rolled.as_ref().map_or_else(String::new, |_| self.status_effect.clone()), landed: rolled == Some(true) });
                     self.log = format!("[Status] {src_name} -> {}{detail}", w.units[t].name);
                     return;
                 }
@@ -568,6 +580,7 @@ impl Command {
                     self.exploited.push((t, matched.0.clone()));
                 }
                 let tu = &w.units[t];
+                self.cue = Some(crate::event::EventKind::Hit { crit, zero: taken == 0 });
                 self.log = format!("[Attack] {src_name} struck {} for {taken}{}{detail} (HP {}/{})", tu.name, if crit { " CRIT" } else { "" }, tu.hp, tu.max_hp);
             }
             CmdKind::Area { cells, skill_mult, status_rounds, affects, target, splash, shape, band, .. } => {
@@ -576,6 +589,7 @@ impl Command {
                 let mut crits = Vec::new();
                 if !w.units[src].is_active() {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Action Failed] {src_name} cannot act");
                     return;
                 }
@@ -646,6 +660,13 @@ impl Command {
                         self.exploited.push((v, matched.0.clone()));
                     }
                 }
+                self.cue = if hits == 0 && skill_mult <= 0.0 && self.hazard.is_some() && crate::ground::on(w) {
+                    None
+                } else if hits == 0 {
+                    Some(crate::event::EventKind::Miss)
+                } else {
+                    Some(crate::event::EventKind::Hit { crit: !crits.is_empty(), zero: total == 0 })
+                };
                 if let CmdKind::Area { last_damage, last_hits, crit_hits, .. } = &mut self.kind {
                     *last_damage = total;
                     *last_hits = hits;
@@ -666,6 +687,7 @@ impl Command {
                     return;
                 }
                 if guard_broken {
+                    self.cue = Some(crate::event::EventKind::Guard { broken: true });
                     self.log = format!("[Defend] {src_name}'s guard was broken");
                     return;
                 }
@@ -673,6 +695,7 @@ impl Command {
                 // keeps the larger of it and the skill's own
                 let u = &mut w.units[src];
                 u.guard = u.guard.max(mitigation);
+                self.cue = Some(crate::event::EventKind::Guard { broken: false });
                 self.log = if mitigation > 0.0 { format!("[Defend] {src_name} raises guard ({}% less damage)", (mitigation * 100.0).round() as i32) } else { format!("[Defend] {src_name} holds a defensive stance") };
                 if queue_later_guard(&mut w.units[src], guard_rounds, later_mitigation, &src_name) {
                     self.log += &format!("; guard holds {} more round{}", guard_rounds - 1, if guard_rounds == 2 { "" } else { "s" });
@@ -683,6 +706,7 @@ impl Command {
                     return;
                 }
                 w.units[src].apply_attack_boost(boost, rounds);
+                self.cue = Some(crate::event::EventKind::Focus);
                 self.log = format!("[Focus] {src_name} x{boost} for {rounds} rounds");
             }
             CmdKind::Rest { recover_ap } => {
@@ -697,9 +721,11 @@ impl Command {
                 crate::poise::restore(w, src, self.block_cost.max(1));
                 let u = &mut w.units[src];
                 u.ap = u.max_ap.min(u.ap + recover_ap);
+                self.cue = None;
                 self.log = format!("[Rest] {src_name} AP {}/{}", u.ap, u.max_ap);
             }
             CmdKind::StatusBlock { status } => {
+                self.cue = Some(crate::event::EventKind::LostBlock { status: status.clone() });
                 self.log = format!("[Status] {src_name} is {status} and loses this block");
             }
             CmdKind::Support { target, skill, .. } => {
@@ -708,16 +734,19 @@ impl Command {
                 }
                 if !w.units[src].is_active() {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Action Failed] {src_name} cannot act (unit is inactive).");
                     return;
                 }
                 if !w.units[target].is_active() {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Support Failed] {src_name}'s {} has no target left.", self.name);
                     return;
                 }
                 if !support_in_reach(w, src, target, skill) {
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Support Failed] {src_name} cannot reach {} with {}.", w.units[target].name, self.name);
                     return;
                 }
@@ -751,6 +780,7 @@ impl Command {
                     parts.push(if done.unmarked.is_empty() { format!("no {} to undo", s.unmark) } else { done.unmarked.clone() });
                 }
                 let who = if target == src { "themselves".to_string() } else { t.name.clone() };
+                self.cue = Some(crate::event::EventKind::Support);
                 self.log = format!("[Support] {src_name} used {} on {who}: {}", self.name, if parts.is_empty() { "no effect".to_string() } else { parts.join(", ") });
                 if let CmdKind::Support { last_heal, last_status, last_cleansed, .. } = &mut self.kind {
                     (*last_heal, *last_status, *last_cleansed) = (done.healed, done.status, done.cleansed);
@@ -771,10 +801,12 @@ impl Command {
                         if let CmdKind::Item { used, .. } = &mut self.kind {
                             *used = true;
                         }
+                        self.cue = None;
                         self.log = format!("[Item] {src_name} threw {} and missed: {problem}.", item.name);
                         return;
                     }
                     self.failed = true;
+                    self.cue = None;
                     self.log = format!("[Item] {} not used: {problem}.", item.name);
                     return;
                 }
@@ -788,9 +820,11 @@ impl Command {
                         if let CmdKind::Item { used, .. } = &mut self.kind {
                             *used = true;
                         }
+                        self.cue = None;
                         self.log = format!("[Item] {src_name} threw {} and missed: {name} is hidden.", item.name);
                     } else {
                         self.failed = true;
+                        self.cue = None;
                         self.log = format!("[Item] {} not used: {name} is hidden.", item.name);
                     }
                     return;
@@ -831,6 +865,7 @@ impl Command {
                 if let CmdKind::Item { used, last_heal, last_damage, last_boost, .. } = &mut self.kind {
                     (*used, *last_heal, *last_damage, *last_boost) = (true, heal, dmg, boost);
                 }
+                self.cue = None;
                 self.log = format!("[Item] {src_name} used {} on {who}: {}", item.name, if parts.is_empty() { "no effect".into() } else { parts.join(", ") });
             }
             CmdKind::Target { target } => {
@@ -838,16 +873,19 @@ impl Command {
                     return;
                 }
                 w.units[src].active_target = target;
+                self.cue = None;
                 self.log = match target { Some(t) => format!("[Target] {src_name} locks on {}", w.units[t].name), None => format!("[Target] {src_name} clears its target") };
             }
             CmdKind::Walk { path, expected_start, goal, .. } => {
                 if !w.has(src) {
+                    self.cue = None;
                     self.log = format!("[Move Failed] {src_name} could not execute movement (inactive or off grid).");
                     return;
                 }
                 let start = w.pos(src);
                 let (moved, cut, blocker, notes) = walk(w, rng, src, &path, expected_start, goal);
                 let end = w.grid.pos(src).unwrap_or(NO_CELL);
+                self.cue = Some(crate::event::EventKind::Move);
                 self.log = if w.units[src].is_withdrawn {
                     format!("[Withdrawal] {src_name} moved from {start} and safely WITHDREW through Exit!")
                 } else if moved == 0 && cut {
@@ -874,20 +912,24 @@ impl Command {
                     (*landed, *moved_tiles) = (false, 0);
                 }
                 if !w.has(src) {
+                    self.cue = None;
                     self.log = format!("[Disengage Failed] {src_name} cannot jump (inactive or off grid).");
                     return;
                 }
                 if w.units[src].has_status("root") {
+                    self.cue = None;
                     self.log = format!("[Disengage Failed] {src_name} is rooted and can't jump.");
                     return;
                 }
                 let from = w.pos(src);
                 let dist = from.dist(dest);
                 if dist > max_tiles {
+                    self.cue = None;
                     self.log = format!("[Disengage Failed] {src_name} can't reach {dest} ({dist} tiles, the jump covers {max_tiles}).");
                     return;
                 }
                 if !w.jump_unit(src, dest) {
+                    self.cue = None;
                     self.log = format!("[Disengage Failed] {src_name} can't land on {dest}.");
                     return;
                 }
@@ -895,6 +937,7 @@ impl Command {
                     (*landed, *moved_tiles) = (true, dist);
                 }
                 round_intent::note_moved(w, src);
+                self.cue = Some(crate::event::EventKind::Move);
                 self.log = format!("[Disengage] {src_name} jumped {dist} tile{} from {from} to {dest}", if dist == 1 { "" } else { "s" });
                 for note in hazard_on_enter(w, rng, src, &[dest]) {
                     self.log += &format!(" {note}");
@@ -913,6 +956,7 @@ impl Command {
         let src_name = w.units[src].name.clone();
         if !w.units[src].is_active() || pouch_item(w, src, &item.id).is_none() {
             self.failed = true;
+            self.cue = None;
             self.log = format!("[Item] {} not used: {} can't act or has none left.", item.name, src_name);
             return;
         }
@@ -942,6 +986,7 @@ impl Command {
             }
             if !w.ruleset.numbers.thrown_miss_spends {
                 self.failed = true;
+                self.cue = None;
                 self.log = format!("[Item] {} not used: {miss}.", item.name);
                 return;
             }
@@ -949,6 +994,7 @@ impl Command {
             if let CmdKind::Item { used, .. } = &mut self.kind {
                 *used = true;
             }
+            self.cue = None;
             self.log = format!("[Item] {src_name} threw {} and missed: {miss}.", item.name);
             return;
         };
@@ -973,6 +1019,7 @@ impl Command {
             parts.push(format!("{} {dealt} (HP {}/{}){}", t.name, t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
         }
         let at = if field { format!("{centre}") } else { w.units[target].name.clone() };
+        self.cue = None;
         self.log = format!("[Item] {src_name} threw {} at {at}: {}", item.name, if parts.is_empty() { "hit no one".to_string() } else { parts.join(", ") });
         if let CmdKind::Item { used, last_damage, struck_units, .. } = &mut self.kind {
             (*used, *last_damage, *struck_units) = (true, total, struck);
@@ -1057,6 +1104,9 @@ impl Command {
         };
         let note = carried_retreat(w, rng, src, target, self.carry_range, cell);
         if !note.is_empty() {
+            if self.log.is_empty() {
+                self.cue = None;
+            }
             self.log = if self.log.is_empty() { note } else { format!("{} {note}", self.log) };
         }
     }
@@ -1686,11 +1736,12 @@ pub fn hp_cost_for(w: &World, c: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
 
 /// HOOKS1 HC1: why a unit at `hp` cannot use a skill costing `cost` HP ("" = it can): HP at or below the cost.
 pub fn hp_cost_problem(hp: i32, cost: i32) -> String {
-    if cost > 0 && hp <= cost {
-        format!("HP {hp} <= cost {cost}")
-    } else {
-        String::new()
-    }
+    hp_cost_reason(hp, cost).map_or_else(String::new, |r| r.to_string())
+}
+
+/// PR5-32: `hp_cost_problem` in fields (None = it can).
+pub fn hp_cost_reason(hp: i32, cost: i32) -> Option<crate::refusal::Reason> {
+    (cost > 0 && hp <= cost).then_some(crate::refusal::Reason::HpCost { hp, cost })
 }
 
 /// HOOKS1 IG1: skill `s`'s hits skip the guard (the rule ignore_guard and the ATTACK flag `ignore_guard`).

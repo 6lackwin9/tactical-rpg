@@ -134,9 +134,9 @@ fn the_hp_cost_shows_on_the_strip_and_the_popup() {
     let rows = b.options_for(h, "foe", Some(f), None);
     let refused = rows.iter().find(|r| r.tip.iter().any(|t| t.0 == text)).expect("the costly step");
     assert!(!refused.valid);
-    assert_eq!(refused.detail, intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(COST, COST)));
-    assert_eq!(intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(9, 10)), "Not enough HP: 9, it costs 10");
-    assert_eq!(intent_text::refusal_text("Out of reach"), "Out of reach");
+    assert_eq!(refused.detail, intent_text::refusal_text(&emberwake_battle::command::hp_cost_reason(COST, COST).into_iter().collect::<Vec<_>>()));
+    assert_eq!(intent_text::refusal_text(&[emberwake_battle::refusal::Reason::HpCost { hp: 9, cost: 10 }]), "Not enough HP: 9, it costs 10");
+    assert_eq!(intent_text::refusal_text(&[emberwake_battle::refusal::Reason::Text("Out of reach".into())]), "Out of reach");
 }
 
 /// Classic: no meter, no held guard, no HP cost shows and the state has no `meters` or `held_guards` key.
