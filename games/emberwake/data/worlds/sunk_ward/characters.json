@@ -179,6 +179,54 @@
 			"dialogue": "",
 			"gone_flags": [],
 			"tags": []
+		},
+		{
+			"id": "sabina_kress",
+			"name": "Chirurgeon Sabina",
+			"title": "Slab Surgeon",
+			"role": "npc",
+			"base_unit": "priest",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "Runs the Slab: graft surgery, excision, flushes and bone-scraping.",
+			"personality": "",
+			"faction": "",
+			"home": "sluice_undercroft",
+			"disciplines": [],
+			"passives": [],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": [
+				"pk2_test"
+			]
+		},
+		{
+			"id": "berek_dorn",
+			"name": "Berek \"Cinder-Lung\" Dorn",
+			"title": "Hearth Smith",
+			"role": "npc",
+			"base_unit": "warrior",
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"background": "Runs the Hearth: training, drills, salvage, repair and reforge.",
+			"personality": "",
+			"faction": "",
+			"home": "sluice_undercroft",
+			"disciplines": [],
+			"passives": [],
+			"named_items": [],
+			"keepsake": "",
+			"tuning": {},
+			"dialogue": "",
+			"gone_flags": [],
+			"tags": [
+				"pk2_test"
+			]
 		}
 	]
 }

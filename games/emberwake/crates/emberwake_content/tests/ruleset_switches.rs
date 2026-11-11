@@ -10,11 +10,12 @@
 //! to the classes, `flank_cut` leaves the `timeline` basics, four founder deck orders change) replays next, in its
 //! order, then the unit steps of `r41s2.json` (R4-1 slice 2: `template` on the caster units) and `r42.json` (R4-2 L2:
 //! `brace` leaves `founder_kaelen`'s extra skills), then the `rulesets` step of `pk1s3.json` (PR5-7 PK1-S3: `channel`
-//! appended to the `timeline` rules with `channel_meter` strain and `channel_rest` feed) last.
+//! appended to the `timeline` rules with `channel_meter` strain and `channel_rest` feed), then the `rulesets` step of
+//! `pk2s6.json` (PR5-19 PK2-S6: the extension rule `durability` added to the `timeline` rules) last.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
-use emberwake_rules::ruleset::{self, AttackLock, Chase, PoiseMode, RestAp, Ruleset, AI_TACTICS, ARENA_HAZARDS, BY_RULES_FIELDS, CHANNEL, CHANNEL_REST_NORMAL, CLASSIC, EXECUTE, FORCED_MOVE, GROUND_HAZARDS, HP_COST, IGNORE_GUARD, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
+use emberwake_rules::ruleset::{self, AttackLock, Chase, PoiseMode, RestAp, Ruleset, AI_TACTICS, ARENA_HAZARDS, BY_RULES_FIELDS, CHANNEL, CHANNEL_REST_NORMAL, CLASSIC, DURABILITY, EXECUTE, FORCED_MOVE, GROUND_HAZARDS, HP_COST, IGNORE_GUARD, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -64,6 +65,10 @@ const R42_SEED: &str = "r42.json";
 /// PR5-7 (PK1-S3): the seed that appended `channel` to the `timeline` rules and set its `channel_meter` and
 /// `channel_rest` (after the R4-2 seed).
 const PK1S3_SEED: &str = "pk1s3.json";
+
+/// PR5-19 (PK2-S6): the seed that added the extension rule `durability` to the `timeline` rules (after the PK1-S3
+/// seed). The loader keeps the rules in the register's order, so where the seed lists it does not matter here.
+const PK2S6_SEED: &str = "pk2s6.json";
 
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
@@ -132,10 +137,18 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in &entries {
         store::upsert(&tmp, None, ruleset::KIND, e, None).unwrap_or_else(|err| panic!("seed row '{}': {err:?}", json::s(e, "id")));
     }
+    // PR5-19 (PK2-S6): the seed pk2s6 added the durability rule to the timeline rules later (no number changes)
+    let pk2s6 = seed_entries(PK2S6_SEED);
+    assert!(!pk2s6.is_empty(), "the PK2-S6 seed upserts a ruleset row");
+    let mut pre_pk2s6 = before.clone();
+    for (id, r) in pre_pk2s6.iter_mut().filter(|(id, _)| id == TIMELINE) {
+        assert!(r.rules.contains(&DURABILITY), "ruleset '{id}' lists the durability rule PK2-S6 adds");
+        r.rules.retain(|x| *x != DURABILITY);
+    }
     // PR5-7 (PK1-S3): the seed pk1s3 appended channel to the timeline rules and set its channel meter and Rest later
     let pk1s3 = seed_entries(PK1S3_SEED);
     assert!(!pk1s3.is_empty(), "the PK1-S3 seed upserts a ruleset row");
-    let mut pre_pk1s3 = before.clone();
+    let mut pre_pk1s3 = pre_pk2s6.clone();
     for (id, r) in pre_pk1s3.iter_mut().filter(|(id, _)| id == TIMELINE) {
         assert_eq!(r.rules.last().copied(), Some(CHANNEL), "ruleset '{id}' ends with the channel rule PK1-S3 appends");
         r.rules.pop();
@@ -215,7 +228,12 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in &pk1s3 {
         store::upsert(&tmp, None, ruleset::KIND, e, None).unwrap_or_else(|err| panic!("PK1-S3 row '{}': {err:?}", json::s(e, "id")));
     }
-    assert_eq!(rows(&tmp), before, "the PK1-S3 rulesets step over it gives the shipped rows");
+    assert_eq!(rows(&tmp), pre_pk2s6, "the PK1-S3 rulesets step over it gives the rows before PK2-S6");
+    // PR5-19 (PK2-S6): the seed's rulesets step gives the shipped rows back
+    for e in &pk2s6 {
+        store::upsert(&tmp, None, ruleset::KIND, e, None).unwrap_or_else(|err| panic!("PK2-S6 row '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the PK2-S6 rulesets step over it gives the shipped rows");
     let seeded = store::view(&tmp);
     let units = reordered.iter().map(|u| json::s(u, "id")).chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")));
     for id in units {

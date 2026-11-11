@@ -1574,6 +1574,7 @@
 			"name": "Twin Bone-Saws",
 			"family": "bone_saw",
 			"rarity": "UNCOMMON",
+			"theme": "inquisitor",
 			"weight": 1.5,
 			"value": 70,
 			"description": "Twin Bone-Saws.",
@@ -1646,6 +1647,7 @@
 			"name": "Prelate's Blade",
 			"family": "sword",
 			"rarity": "RARE",
+			"theme": "inquisitor",
 			"weight": 4.5,
 			"value": 120,
 			"description": "Prelate's Blade.",
@@ -2243,6 +2245,280 @@
 			"scaling_stat": "STR",
 			"modifiers": [],
 			"tiers": []
+		},
+		{
+			"id": "slot_bone_spur",
+			"name": "Bone Spur",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Forearms): a claw or bone spur.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "slot_chitin_plate",
+			"name": "Chitin Plate",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Thoracic): hide, chitin or scale.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "slot_blood_sac",
+			"name": "Calcified Gland",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Visceral): a hardened, mineral-crusted gland.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "slot_eye_tissue",
+			"name": "Amber Lens Shard",
+			"family": "material",
+			"rarity": "UNCOMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test slot material (Cranial): a resin-hard lens shard for the class rite.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "rock_salt",
+			"name": "Rock Salt",
+			"family": "material",
+			"rarity": "UNCOMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test flush material: Rock Salt for the Slab's Strain-floor flush.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "black_iron_ingot",
+			"name": "Black Iron Ingot",
+			"family": "material",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Test rare material for Hearth training.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "salvage_fine",
+			"name": "Fine Salvage",
+			"family": "material",
+			"rarity": "UNCOMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Fine steel from broken-down higher-tier items.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 50
+		},
+		{
+			"id": "salvage_inquisitor",
+			"name": "Inquisitor Steel",
+			"family": "material",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Themed salvage from broken-down Inquisitor arms.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 50
+		},
+		{
+			"id": "graft_optic",
+			"name": "Optic Nerve Graft",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier I graft (Stalker Optic Nerve): teaches Marrow Lash.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_lash"
+				}
+			]
+		},
+		{
+			"id": "graft_valve",
+			"name": "Marrow Valve Graft",
+			"family": "graft",
+			"rarity": "UNCOMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier II graft (Inquisitor Marrow Valve): teaches Marrow Bolt.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 2,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_bolt"
+				}
+			]
+		},
+		{
+			"id": "graft_core",
+			"name": "Marrow Core Graft",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier III graft (Titan Marrow Core): teaches Marrow Rend.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "monster",
+			"keystone": false,
+			"class_id": "",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_rend"
+				}
+			]
+		},
+		{
+			"id": "graft_litany",
+			"name": "Litany Graft",
+			"family": "graft",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test class piece (priest): teaches Marrow Litany.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 1,
+			"body_role": "class",
+			"keystone": false,
+			"class_id": "priest",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "marrow_litany"
+				}
+			]
+		},
+		{
+			"id": "graft_purge",
+			"name": "Inoculated Keystone (priest)",
+			"family": "graft",
+			"rarity": "RARE",
+			"weight": 0.5,
+			"value": 0,
+			"description": "Test Tier III keystone (priest): teaches Purge Marrow.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"tier": 3,
+			"body_role": "class",
+			"keystone": true,
+			"class_id": "priest",
+			"body_effects": [
+				{
+					"type": "meter",
+					"meter": "strain",
+					"start": 0,
+					"floor": 0,
+					"floors": [
+						5,
+						15,
+						30,
+						50
+					]
+				},
+				{
+					"type": "skill",
+					"skill": "purge_marrow"
+				}
+			]
 		}
 	]
 }

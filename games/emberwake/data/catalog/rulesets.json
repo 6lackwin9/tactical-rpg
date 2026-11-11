@@ -25,6 +25,7 @@
 				"ignore_guard",
 				"ai_tactics",
 				"execute",
+				"durability",
 				"channel"
 			],
 			"intents": [

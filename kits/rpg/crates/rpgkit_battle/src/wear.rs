@@ -8,8 +8,8 @@
 //! (`damage::attack_power`). The sims seed wear on their catalog allies (`seed`, sim key `durability=N`) and read it
 //! back (`tally`). The sims' alternative (`World::dulled_lock`, sim key `dulled=lock`) also locks the
 //! techniques that swing a dulled weapon (`problem`). The spend goes back to the world through
-//! `rpgkit_world::roster::HeroEnd::worn` and is taken from the instances at the settle. Without the rule (every shipped
-//! ruleset today) the session clears every unit's wear at the start (`clear_without_rule`), so nothing is spent, dulled
+//! `rpgkit_world::roster::HeroEnd::worn` and is taken from the instances at the settle. Without the rule (a ruleset that
+//! does not list it) the session clears every unit's wear at the start (`clear_without_rule`), so nothing is spent, dulled
 //! or locked and the battle runs as before.
 
 use crate::skill::{self, Kind};

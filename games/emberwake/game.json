@@ -30,5 +30,8 @@
 		"prologue_tension",
 		"story_escape",
 		"story_goodbye"
-	]
+	],
+	"durability": {
+		"from_act": 2
+	}
 }

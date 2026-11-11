@@ -1,0 +1,26 @@
+{
+	"kind": "body_slots",
+	"version": 1,
+	"entries": [
+		{
+			"id": "cranial",
+			"name": "Cranial",
+			"role": "class"
+		},
+		{
+			"id": "forearms",
+			"name": "Forearms",
+			"role": "monster"
+		},
+		{
+			"id": "thoracic",
+			"name": "Thoracic",
+			"role": "monster"
+		},
+		{
+			"id": "visceral",
+			"name": "Visceral",
+			"role": "monster"
+		}
+	]
+}

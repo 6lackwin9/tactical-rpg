@@ -2960,6 +2960,139 @@
 					]
 				}
 			]
+		},
+		{
+			"id": "marrow_rend",
+			"name": "Marrow Rend",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Test skill (Channel only, Tier III budget): a tearing marrow strike. Costs 35 Strain.",
+			"learned_only": true,
+			"power_mult": 2.0,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 35
+			}
+		},
+		{
+			"id": "marrow_litany",
+			"name": "Marrow Litany",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Test skill (Channel only, priest class piece): a marrow-fed strike. Costs 20 Strain.",
+			"learned_only": true,
+			"power_mult": 1.3,
+			"armor_piercing": true,
+			"channel": {
+				"only": true,
+				"cost": 20
+			}
+		},
+		{
+			"id": "purge_marrow",
+			"name": "Purge Marrow",
+			"kind": "SUPPORT",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "Test skill (priest Inoculated keystone): undoes the latest Calcification mark of this battle on a unit. Once a battle.",
+			"learned_only": true,
+			"reach_max": 1,
+			"unmark": {
+				"mark": "calcify"
+			},
+			"uses_per_battle": 1
+		},
+		{
+			"id": "tq_polearm_hook",
+			"name": "Hook Rend (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (polearm family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"reach_max": 2,
+			"power_mult": 1.6,
+			"stagger": 8
+		},
+		{
+			"id": "tq_crossbow_volley",
+			"name": "Bolt Volley (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (crossbow family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.6
+		},
+		{
+			"id": "tq_fist_breaker",
+			"name": "Rib Breaker (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (fist family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"power_mult": 1.6,
+			"stagger": 8
+		},
+		{
+			"id": "tq_dagger_flurry",
+			"name": "Flurry Cut (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (dagger family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"power_mult": 1.6
+		},
+		{
+			"id": "tq_censer_swing",
+			"name": "Censer Swing (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (censer family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"power_mult": 1.6,
+			"stagger": 6
+		},
+		{
+			"id": "tq_sprayer_jet",
+			"name": "Pressure Jet (test)",
+			"kind": "ATTACK",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"recovery_blocks": 1,
+			"description": "Test technique (sprayer family, Cold Steel rounds only): a heavy single-intent strike.",
+			"learned_only": true,
+			"round_intent": "assault",
+			"reach_min": 2,
+			"reach_max": 3,
+			"power_mult": 1.6
 		}
 	]
 }
