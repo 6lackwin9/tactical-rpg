@@ -152,6 +152,9 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
                 out.push(args::RULE_NOTES_USAGE.to_string());
                 // PR4-1: the same, for `stage=`
                 out.push(args::STAGE_USAGE.to_string());
+                // PK2-S5b: the same, for `dulled=`
+                out.push(args::DULLED_USAGE.to_string());
+                out.push(args::DURABILITY_USAGE.to_string());
             }
             return out;
         }

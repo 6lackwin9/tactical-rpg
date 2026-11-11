@@ -153,6 +153,7 @@ fn end(member: &str, attacked: &[&str]) -> HeroEnd {
         marks: Vec::new(),
         hostile: String::new(),
         attacked: attacked.iter().map(|s| s.to_string()).collect(),
+        worn: Vec::new(),
     }
 }
 

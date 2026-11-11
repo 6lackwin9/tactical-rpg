@@ -691,6 +691,9 @@ pub const ITEM_DURABILITY: &str = "durability";
 pub const ITEM_FAMILY_DURABILITY: &str = "family_durability";
 /// PK2-S5a: the top of a full durability (the schema's range is 0 to it).
 pub const DURABILITY_MAX: i64 = 999;
+/// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): a dulled weapon (its instance at 0 durability) swings at this share of its
+/// weapon power (default 0.5: -50%; no brackets in between; `rpgkit_rules::damage::attack_power`).
+pub const DULLED_POWER_MULT: f64 = 0.5;
 
 /// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
 /// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at

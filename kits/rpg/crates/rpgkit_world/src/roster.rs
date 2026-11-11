@@ -69,6 +69,11 @@ pub fn field_unit(d: &Data, gs: &GameState, m: &UnitState, world: &str) -> Optio
     // AUDIT-04: `build_as` laid the character's default intent over the base unit's
     let default_intent = built.def.default_intent.clone();
     let mut unit = built.unit;
+    // PK2-S5b: wear is tracked only while weapon instances are active (the campaign act reached, `weapons::active`);
+    // the build reads the rule and the manifest key but not the act
+    if !unit.wear.is_empty() && !crate::weapons::active(d, gs) {
+        unit.wear.clear();
+    }
     let max = unit.max_hp as i64;
     let mut hp = progression::start_hp(max, m.hp_lost);
     if m.has_condition(WOUNDED) {
@@ -104,6 +109,10 @@ pub struct HeroEnd {
     /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the main-hand weapon families it attacked with this battle
     /// (`rpgkit_battle::world::World::weapon_attacks`): the settle's mastery use (`mastery::settle`).
     pub attacked: Vec<String>,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the durability the battle spent from the weapon instances it wields
+    /// (slot save key, amount; slot order, spent slots only; `rpgkit_battle::wear::spent`): the settle takes it from the
+    /// wielded instances, each held at 0 or more (`weapons::wear`).
+    pub worn: Vec<(String, i64)>,
 }
 
 /// The ends of session `s`'s fielded members: `members` (member id, unloaded pouch ids) in the order they were fielded,
@@ -128,6 +137,7 @@ pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd>
                 marks: s.w.marks.of(a).into_iter().map(|(m, v)| (m, i64::from(v))).collect(),
                 hostile: rpgkit_battle::mark::hostile_at_end(&s.w, a),
                 attacked: s.w.weapon_attacks.get(&a).cloned().unwrap_or_default(),
+                worn: rpgkit_battle::wear::spent(&s.w, a),
             }
         })
         .collect()
@@ -415,10 +425,14 @@ pub fn auto_fill_at_start(d: &Data, gs: &mut GameState, world: &str) -> Vec<Stri
 /// stayer or stander departs captured or dead (cause `stayed` or `stood`, gear and pouch to the stash, the keepsake).
 /// PK2-S1: first of all each member's unit tracks (`settle_tracks`: the marks move the stages; a departure stage or a
 /// hero still hostile at the end departs it, `lost` for the track's cause), then the worn items its `forbid_hands`
-/// refuses go to the stash.
+/// refuses go to the stash. PK2-S5b: before everything the battle's weapon wear comes off the wielded instances
+/// (`HeroEnd::worn`, `weapons::wear`).
 /// `battle::apply` calls it first, so every runner's `after_fight` settles the party before the rewards and
 /// CAMPAIGN1's battle tick and its retreat (L5: the retreat then moves a cell that already carries the loss).
 pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Settled {
+    // PK2-S5b: first the wear the battle spent comes off the wielded instances (before a departure or `forbid_hands`
+    // moves them to the stash)
+    crate::weapons::wear(gs, ends);
     let mut out = settle_fates(d, gs, f, ends);
     // A1.2-K3 (INTENT2-K3): after every departure, the members who came home top their pouches up from the stash (the
     // fight's world), so a departing member takes nothing and only survivors are named short
@@ -524,6 +538,7 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
                 marks: Vec::new(),
                 hostile: String::new(),
                 attacked: Vec::new(),
+                worn: Vec::new(),
             })
         })
         .collect()

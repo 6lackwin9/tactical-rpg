@@ -1674,12 +1674,18 @@ pub fn breakdown_strike(title: &str, attacker: &str, target: &Unit, res: &Hit, a
                 parts.push(format!("[color=#a855f7]Training +{}[/color]", p.training_pwr));
             }
             lines.push(format!("1. Weapon Power: [color=#e2e8f0]{}[/color] ({})", p.total_w_power, parts.join(", ")));
+            // PK2-S5b: the weapon power before a dulled weapon's factor (the lines below show it last)
+            let worn = if p.dulled { p.weapon_power / rpgkit_rules::gear::DULLED_POWER_MULT } else { p.weapon_power };
             if p.pen_ratio > 0.0 {
-                lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), p.weapon_power));
+                lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), worn));
             }
             // U3.2-S3 (FB-33): the proficiency 0 factor, after any deficit
             if p.untrained {
-                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, p.weapon_power));
+                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, worn));
+            }
+            // PK2-S5b: a dulled weapon instance's factor, last
+            if p.dulled {
+                lines.push(format!("   [color=#f87171]Dulled x{:.2} = {:.1}[/color]", rpgkit_rules::gear::DULLED_POWER_MULT, p.weapon_power));
             }
         } else {
             lines.push("1. Weapon Power: 0 (this weapon doesn't suit the attack)".into());

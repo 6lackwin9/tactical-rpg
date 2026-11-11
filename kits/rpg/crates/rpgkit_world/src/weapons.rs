@@ -11,6 +11,10 @@
 //! instances keep their order. A class
 //! default (no saved gear in a slot) is no owned weapon and never an instance. Every key is written only when it holds
 //! an instance, so a game without `durability.from_act`, or an act before it, saves as before (no save version bump).
+//!
+//! PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): a fielded member carries its wielded instances' durability into the
+//! battle (`wear_of`, `Growth::wear`; `rpgkit_battle::wear` spends it), and the settle takes the battle's spend off
+//! those instances, each held at 0 (`wear`, from `HeroEnd::worn`).
 
 use crate::data::Data;
 use crate::roster;
@@ -235,6 +239,40 @@ pub fn wielded<'a>(m: &'a UnitState, slot: &str) -> Option<&'a Weapon> {
 /// Whether member `m`'s main hand wields a masterwork instance (its own technique opens, `Unit::masterwork`).
 pub fn masterwork_main(m: &UnitState) -> bool {
     wielded(m, MAIN_HAND).is_some_and(|w| w.masterwork)
+}
+
+/// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): slot -> the durability of each weapon instance member `m` wields whose
+/// item wears (`full` more than 0), under world `world` whose ruleset lists the rule `durability` with a manifest
+/// `durability.from_act` (`Growth::wear`; empty otherwise, so the unit tracks nothing). A slot keyed by a name the gear
+/// does not know is skipped.
+pub fn wear_of(d: &Data, m: &UnitState, world: &str) -> IndexMap<rpgkit_rules::gear::Slot, i32> {
+    if d.from_act <= 0 || !d.ruleset(world).has(rpgkit_rules::ruleset::DURABILITY) {
+        return IndexMap::new();
+    }
+    m.weapons
+        .keys()
+        .filter_map(|slot| {
+            let w = wielded(m, slot)?;
+            let s = rpgkit_rules::gear::Slot::parse(slot)?;
+            (full(d, &w.item) > 0).then(|| (s, w.durability.clamp(0, i64::from(i32::MAX)) as i32))
+        })
+        .collect()
+}
+
+/// PK2-S5b: the battle's wear (`HeroEnd::worn`) comes off the instances each fielded member still in the party wields
+/// in those slots, each held at 0 or more. Nothing to take, nothing changes.
+pub fn wear(gs: &mut GameState, ends: &[roster::HeroEnd]) {
+    for e in ends.iter().filter(|e| !e.worn.is_empty()) {
+        let Some(m) = gs.party.members.iter_mut().find(|m| m.id == e.member) else { continue };
+        for (slot, n) in &e.worn {
+            if wielded(m, slot).is_none() {
+                continue;
+            }
+            if let Some(w) = m.weapons.get_mut(slot) {
+                w.durability = (w.durability - (*n).max(0)).max(0);
+            }
+        }
+    }
 }
 
 /// Equipment by uid: member `member` wields the stashed instance `uid` in `slot`, which must hold the same item; the

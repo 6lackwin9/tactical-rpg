@@ -6,11 +6,17 @@
 //! own, else its family's); a shop buy and loot add fresh full instances; a sale takes the worst stashed instance;
 //! gear moved between a slot and the stash keeps its instance; a departed member's instances go to the stash; the
 //! stash and the slots refer to them by uid (`weapons::wield`); a masterwork main hand opens the weapon's own technique
-//! in the build. Expectations derive from the rows below and the kit's rules, not from printed numbers.
+//! in the build. PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): a member built for a world whose ruleset lists the rule
+//! carries the durability of its wielded instances that wear into the battle (`Unit::wear`), and the settle takes the
+//! battle's spend (`HeroEnd::worn`) off those instances, each held at 0. Expectations derive from the rows below and the
+//! kit's rules, not from printed numbers.
 
 use aegis_core::json;
 use rpgkit_world::weapons::{self, Weapon, MEMBER_KEY, STASH_KEY, UID_PREFIX};
 use rpgkit_world::state::{PartyState, UnitState};
+use rpgkit_battle::encounter::PartyFate;
+use rpgkit_rules::gear::Slot;
+use rpgkit_world::roster::{FightEnd, HeroEnd};
 use rpgkit_world::{battle, campaign, new_game, progression, roster, save, shop, Data, GameState};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -355,4 +361,108 @@ fn a_huge_uid_number_never_overflows_the_next_uid() {
     assert!(json::b(&r, "ok", false), "{r:?}");
     assert!(weapons::find(&gs.party, &huge).is_some(), "a long uid stays valid");
     uids_unique(&gs);
+}
+
+/// The end of a won battle for member `member` that spent `worn` (slot, amount) from its weapons.
+fn worn_end(member: &str, worn: &[(&str, i64)]) -> HeroEnd {
+    HeroEnd {
+        member: member.into(),
+        hp: 10,
+        max_hp: 10,
+        alive: true,
+        pouch: Vec::new(),
+        unloaded: Vec::new(),
+        fate: None,
+        marks: Vec::new(),
+        hostile: String::new(),
+        attacked: Vec::new(),
+        worn: worn.iter().map(|(s, n)| (s.to_string(), *n)).collect(),
+    }
+}
+
+/// The wear a member built for world `w` carries into a battle (slot, durability at the start).
+fn wear(d: &Data, gs: &GameState) -> Vec<(Slot, i32)> {
+    progression::build_in(d, hero(gs), "w", None).expect("builds").unit.wear.iter().map(|(s, w)| (*s, w.start)).collect()
+}
+
+#[test]
+fn a_fielded_member_carries_its_wielded_instances_durability() {
+    let d = data();
+    let mut gs = game(&d, FROM_ACT - 1);
+    assert!(wear(&d, &gs).is_empty(), "before the act: no instances, no wear");
+    set_act(&d, &mut gs, FROM_ACT);
+    let full = FAMILY_DURABILITY as i32;
+    assert_eq!(wear(&d, &gs), [(Slot::MainHand, full), (Slot::OffHand, full)], "the blade and the tome (the cap is no weapon)");
+    gs.party.members[0].weapons.get_mut("main_hand").unwrap().durability = 0;
+    assert_eq!(wear(&d, &gs)[0], (Slot::MainHand, 0), "an instance at 0 enters dulled");
+    let u = progression::build_in(&d, hero(&gs), "w", None).expect("builds").unit;
+    assert!(u.dulled(Slot::MainHand) && !u.dulled(Slot::OffHand));
+    // a weapon that never wears (the axe: no durability anywhere) is not tracked
+    gs.party.members[0].equipment.insert("main_hand".into(), "axe".into());
+    weapons::sync(&d, &mut gs);
+    assert_eq!(wear(&d, &gs), [(Slot::OffHand, full)], "only the tome wears");
+    // the same instances under a ruleset without the rule (or a game without the manifest key): nothing tracked
+    let plain = data_with("plain");
+    let mut kept = game(&plain, FROM_ACT);
+    weapons::sync_party(&plain, &mut kept.party);
+    assert!(!hero(&kept).weapons.is_empty() && wear(&plain, &kept).is_empty(), "no rule, no wear");
+    let mut no_key = data();
+    no_key.from_act = 0;
+    let mut gs = game(&d, FROM_ACT);
+    weapons::sync(&d, &mut gs);
+    assert!(wear(&no_key, &gs).is_empty(), "no manifest key, no wear");
+}
+
+#[test]
+fn the_settle_takes_the_battle_wear_off_the_wielded_instances() {
+    let d = data();
+    let mut gs = game(&d, FROM_ACT);
+    weapons::sync(&d, &mut gs);
+    let id = hero(&gs).id.clone();
+    let main = |gs: &GameState| weapons::wielded(hero(gs), "main_hand").expect("the blade").clone();
+    let (uid, full) = (main(&gs).uid, main(&gs).durability);
+    let stash_before = gs.party.stash_weapons.clone();
+    roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[("main_hand", 2)])]);
+    assert_eq!((main(&gs).uid, main(&gs).durability), (uid.clone(), full - 2), "the same instance, worn by the spend");
+    assert_eq!(gs.party.stash_weapons, stash_before, "the stash is untouched");
+    // a spend past what is left holds the instance at 0 (dulled); the off hand's too
+    let off = weapons::wielded(hero(&gs), "off_hand").expect("the tome").durability;
+    roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[("main_hand", full), ("off_hand", off + 1)])]);
+    assert_eq!((main(&gs).durability, weapons::wielded(hero(&gs), "off_hand").unwrap().durability), (0, 0));
+    // no spend, nothing changes
+    let before = gs.party.clone();
+    roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[])]);
+    assert_eq!(gs.party.members[0].weapons, before.members[0].weapons);
+}
+
+/// A fielded member tracks wear only while instances are active: the act reached too (`weapons::active`), not just
+/// the rule and the manifest key the build reads.
+#[test]
+fn a_member_fielded_before_the_act_tracks_no_wear() {
+    let d = data();
+    let mut gs = game(&d, FROM_ACT);
+    weapons::sync(&d, &mut gs);
+    let fielded = |gs: &GameState| roster::field_unit(&d, gs, hero(gs), "w").expect("fields").unit.wear.len();
+    assert_eq!(fielded(&gs), 2, "the blade and the tome");
+    gs.campaign.as_mut().expect("a campaign world").act = FROM_ACT - 1;
+    assert!(!wear(&d, &gs).is_empty() && fielded(&gs) == 0, "the build still reads the instances; the field does not");
+}
+
+/// The settle takes the wear before a departure moves the member's instances to the stash: the departed hero's blade
+/// reaches the stash worn.
+#[test]
+fn the_settle_takes_the_wear_before_a_departure_stashes_the_instances() {
+    let d = data();
+    let mut gs = game(&d, FROM_ACT);
+    weapons::sync(&d, &mut gs);
+    let id = hero(&gs).id.clone();
+    let blade = weapons::wielded(hero(&gs), "main_hand").expect("the blade").clone();
+    let mut end = worn_end(&id, &[("main_hand", 2)]);
+    end.fate = Some(PartyFate::Stayed);
+    let f = FightEnd { then: "capture".into(), ..FightEnd::new("won", "w") };
+    let settled = roster::settle_party(&d, &mut gs, &f, &[end]);
+    assert!(settled.departed.iter().any(|(m, _)| *m == id), "the stayer was captured: {:?}", settled.departed);
+    let stashed = weapons::find(&gs.party, &blade.uid).expect("the blade went to the stash");
+    assert!(gs.party.stash_weapons.iter().any(|w| w.uid == blade.uid));
+    assert_eq!(stashed.durability, blade.durability - 2, "worn before it was stashed");
 }

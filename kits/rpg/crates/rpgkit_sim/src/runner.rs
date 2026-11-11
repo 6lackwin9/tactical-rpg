@@ -89,6 +89,10 @@ pub struct FightRes {
     pub party_hp: IndexMap<String, i32>,
     pub party_max: IndexMap<String, i32>,
     pub reward: RewardRec,
+    /// PK2-S5b (`durability=N`): the durability the party spent this fight and how many of its weapons ended dulled (0
+    /// without wear).
+    pub worn: i64,
+    pub dulled: i32,
 }
 
 /// Mean scores of a matchup: bin, hp, n (fights counted).
@@ -337,6 +341,12 @@ impl<'a> Runner<'a> {
         let roster = SimRoster { d: self.d, units: &self.units, characters };
         let def = EncounterDef::from_obj_with(&entry, self.fight_ruleset());
         let mut s = Session::start(self.d.cat.clone(), def, &roster);
+        // PK2-S5b: `dulled=lock` (the sims' alternative dulled mode) and `durability=N` (the allies' weapons wear)
+        s.w.dulled_lock = self.args.dulled_lock;
+        if let Some(n) = self.args.durability {
+            let allies = s.w.allies.clone();
+            rpgkit_battle::wear::seed(&mut s.w, &allies, n);
+        }
         self.prepare(&mut s, jitter.as_mut());
         for &a in &s.w.allies.clone() {
             if let Some(&hp) = self.start_hp.get(&s.w.units[a].name) {
@@ -388,6 +398,7 @@ impl<'a> Runner<'a> {
         let r = side_hp_frac(&s.w, &s.w.enemies);
         let survivors = s.w.allies.iter().filter(|&&c| s.w.units[c].is_active()).count() as i32;
         let won = s.outcome == "won";
+        let (worn, dulled) = rpgkit_battle::wear::tally(&s.w, &s.w.allies);
         let res = FightRes {
             ok: true,
             skipped: false,
@@ -404,6 +415,8 @@ impl<'a> Runner<'a> {
             party_hp: s.w.allies.iter().map(|&c| (s.w.units[c].name.clone(), s.w.units[c].hp)).collect(),
             party_max: s.w.allies.iter().map(|&c| (s.w.units[c].name.clone(), s.w.units[c].max_hp)).collect(),
             reward: self.reward_of(&s),
+            worn,
+            dulled,
         };
         if let Some(f) = self.feel.as_mut() {
             f.end(&s, rounds);

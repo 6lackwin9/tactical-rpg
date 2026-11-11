@@ -1,7 +1,7 @@
 //! PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6) on a scratch catalog built here (no shipped data): the rule `durability`
 //! switches weapon instances on in the world (`rpgkit_world::weapons`, tests in `rpgkit_world/tests/weapon_instances.rs`);
-//! the battle reads nothing of it yet (the durability spend is PK2-S5b), so a fight under a timeline row with the rule
-//! plays the same log and HP as the same row without it.
+//! a fight of units that track no weapon wear (catalog units; PK2-S5b's spend needs a member's wielded instance,
+//! `tests/durability.rs`) under a timeline row with the rule plays the same log and HP as the same row without it.
 
 use indexmap::IndexMap;
 use rpgkit_battle::session::{EncounterDef, Phase, Session};
@@ -68,6 +68,6 @@ fn a_fight_plays_the_same_with_or_without_the_rule() {
     let (log, hp) = play(row(&base));
     assert!(!log.is_empty(), "the fight resolved some blocks");
     let with: Vec<&str> = base.iter().copied().chain([DURABILITY]).collect();
-    assert_eq!(play(row(&with)), (log, hp), "the battle reads nothing of durability yet");
+    assert_eq!(play(row(&with)), (log, hp), "no tracked wear, nothing of durability is read");
     assert_eq!(play(row(&[DURABILITY])), play(row(&[])), "nor over a row with no other rule");
 }

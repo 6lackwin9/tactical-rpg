@@ -61,6 +61,8 @@ pub struct AttackPower {
     /// `untrained_power_mult` (`untrained_mult`), stacking with the deficit ratio.
     pub untrained: bool,
     pub untrained_mult: f64,
+    /// PK2-S5b: the swung weapon instance is dulled (0 durability): its weapon power took `gear::DULLED_POWER_MULT`.
+    pub dulled: bool,
     pub stat_name: String,
     pub stat_val: i32,
     pub unit_scaling: f64,
@@ -125,6 +127,12 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                     res.untrained_mult = if pen.untrained { pen.untrained_mult } else { 0.0 };
                 }
                 res.weapon_power = if pen.penalized { total as f64 * pen.factor() } else { total as f64 };
+                // PK2-S5b: a dulled weapon instance swings at `DULLED_POWER_MULT` of its weapon power (`Unit::wear`;
+                // nothing tracked, nothing changes)
+                if !u.wear.is_empty() && u.swung_slot(offhand).is_some_and(|s| u.dulled(s)) {
+                    res.dulled = true;
+                    res.weapon_power *= crate::gear::DULLED_POWER_MULT;
+                }
             }
             res.stat_name = stat_name.to_string();
             res.stat_val = u.stats.stat(stat_name, ctx);

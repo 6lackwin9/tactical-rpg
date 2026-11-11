@@ -369,6 +369,10 @@ pub struct Unit {
     /// from the saved main hand, not on a mid-battle swap, unlike `techniques`), also in
     /// `keystone_skills`; standard rounds only.
     pub mastery_keystone: String,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): the wear of the weapon instances it wields that wear (slot -> wear;
+    /// `Growth::wear`). Empty = none tracked (a catalog unit, an enemy, a guest, a member without instances, or a
+    /// battle whose ruleset lacks the rule `durability`): nothing is spent and nothing is dulled.
+    pub wear: IndexMap<Slot, crate::gear::Wear>,
 }
 
 impl Unit {
@@ -455,6 +459,7 @@ impl Unit {
             masterwork: false,
             techniques: Vec::new(),
             mastery_keystone: String::new(),
+            wear: IndexMap::new(),
         }
     }
 
@@ -676,6 +681,18 @@ impl Unit {
     pub fn technique_problem(&self, skill_id: &str) -> Option<&'static str> {
         let t = self.technique(skill_id)?;
         t.grip_problem(self.inventory.get(Slot::MainHand).is_some_and(|e| e.item.two_handed))
+    }
+
+    /// PK2-S5b: the slot of the weapon a hit swings (`damage::weapon_for`): the off hand's weapon for an off-hand hit,
+    /// else the ready weapon's slot (the off hand while a 2H pair's off-hand weapon is ready). None: no weapon there.
+    pub fn swung_slot(&self, offhand: bool) -> Option<Slot> {
+        let slot = if offhand || self.inventory.is_offhand_active() { Slot::OffHand } else { Slot::MainHand };
+        crate::damage::weapon_for(self, offhand).map(|_| slot)
+    }
+
+    /// PK2-S5b: whether the weapon instance in `slot` is dulled (tracked and at 0 durability; `wear`).
+    pub fn dulled(&self, slot: Slot) -> bool {
+        self.wear.get(&slot).is_some_and(|w| w.dulled())
     }
 
     /// U3.2-S4 (U3 Level 2 and Level 3): each worn gear family once, at the unit's proficiency in it: from level 2 its
@@ -1339,6 +1356,10 @@ pub struct Growth {
     pub masterwork: bool,
     /// PK2-S4: the member's forge rite is done (with mastery 3 the wielded family's keystone opens, `Unit::mastery_keystone`).
     pub forge_rite: bool,
+    /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): slot -> the durability of the weapon instance the member wields there,
+    /// for instances that wear (`Unit::wear`; a slot holding no weapon is skipped). Empty = none (weapon instances off,
+    /// or a ruleset without the rule `durability`).
+    pub wear: IndexMap<Slot, i32>,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1474,6 +1495,8 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
                     u.inventory.unequip(Slot::OffHand);
                 }
             }
+            // PK2-S5b: the wear of the wielded weapon instances that wear (a slot holding no weapon now is skipped)
+            u.wear = g.wear.iter().filter(|(s, _)| u.inventory.get(**s).is_some_and(Equipment::is_weapon)).map(|(s, d)| (*s, crate::gear::Wear { start: (*d).max(0), spent: 0 })).collect();
             u.inventory.pouch.clear();
             u.inventory.pouch_stacks = g.pouch_stacks;
             for item in g.pouch.iter().filter(|i| i.item_type == "CONSUMABLE") {

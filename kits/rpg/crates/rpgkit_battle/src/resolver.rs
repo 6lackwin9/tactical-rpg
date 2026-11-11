@@ -175,7 +175,7 @@ impl Resolver {
 
     /// PK2-S1: counts one use of the command's skill when it has a `uses_per_battle` limit. PK2-S4: an attack skill (not
     /// an item) started by a hero built from member state (`Unit::rank_choice`) records its main-hand weapon's family
-    /// (`World::weapon_attacks`).
+    /// (`World::weapon_attacks`). PK2-S5b: the weapon it swings wears (`wear::spend`).
     fn count_use(&self, w: &mut World, i: usize) {
         let (c, id) = (self.scheduled[i].unit, self.scheduled[i].command.skill.clone());
         let Some(s) = w.cat.skill(&id) else { return };
@@ -190,6 +190,11 @@ impl Resolver {
             if !list.contains(&family) {
                 list.push(family);
             }
+        }
+        // PK2-S5b: the weapon it swings wears (rule durability; nothing tracked, nothing spent)
+        if !w.units[c].wear.is_empty() {
+            let s = s.clone();
+            crate::wear::spend(w, c, &s);
         }
     }
 

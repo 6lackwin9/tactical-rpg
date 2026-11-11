@@ -143,8 +143,13 @@ pub fn opens(w: &World, c: UnitId, s: &SkillDef) -> bool {
 /// item) in a Channel round is "Channel round", a channeled-only skill in a Standard round "Only in a Channel round".
 /// None without the rule. PK2-S4: first, with or without the rule, a technique whose grip tag does not fit the
 /// main-hand weapon (`Unit::technique_problem`); a technique in a Channel round is "Channel round" (`opens`).
+/// PK2-S5b: then, under the sims' `World::dulled_lock`, a technique that swings a dulled weapon (`wear::problem`).
 pub fn problem(w: &World, c: UnitId, s: &SkillDef) -> Option<&'static str> {
     if let Some(p) = w.units.get(c).and_then(|u| u.technique_problem(&s.id)) {
+        return Some(p);
+    }
+    // PK2-S5b: the sims' alternative dulled mode locks the techniques that swing a dulled weapon (`wear::problem`)
+    if let Some(p) = crate::wear::problem(w, c, s) {
         return Some(p);
     }
     if !on(w) {
