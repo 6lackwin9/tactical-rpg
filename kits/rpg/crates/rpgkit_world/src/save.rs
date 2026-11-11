@@ -11,6 +11,7 @@ use crate::state::GameState;
 use aegis_core::json::{self, int, Dict};
 use aegis_save::{Format, Peek};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 pub use aegis_save::{delete, exists, is_locked, path_for};
@@ -38,6 +39,7 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
     if !over.is_empty() {
         return vec![over.to_string()];
     }
+    let state = synced(d, state);
     aegis_save::write(&SAVES, dir, slot, saved_at, || {
         let errors = state.validate(d);
         if errors.is_empty() {
@@ -48,6 +50,17 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
     })
 }
 
+/// PK2-S5a: the state a save writes: its weapon instances made to agree with the gear and the stash first
+/// (`weapons::sync`, on a copy; the state itself when instances are not active, so such a save is unchanged).
+fn synced<'a>(d: &Data, state: &'a GameState) -> Cow<'a, GameState> {
+    if !crate::weapons::active(d, state) {
+        return Cow::Borrowed(state);
+    }
+    let mut copy = state.clone();
+    crate::weapons::sync(d, &mut copy);
+    Cow::Owned(copy)
+}
+
 /// CAMPAIGN1 F5: writes the keyed save `key` (an act-start save, `campaign::act_save_key`; `aegis_save::write_keyed`:
 /// never a slot, a later write with the key replaces it). Problem strings; empty = written. Refused while the run is
 /// over (F3), like `write`.
@@ -56,6 +69,7 @@ pub fn write_keyed(d: &Data, dir: &Path, state: &GameState, key: &str, saved_at:
     if !over.is_empty() {
         return vec![over.to_string()];
     }
+    let state = synced(d, state);
     aegis_save::write_keyed(&SAVES, dir, key, saved_at, || {
         let errors = state.validate(d);
         if errors.is_empty() {
@@ -168,6 +182,11 @@ pub fn decode_with(d: &Data, text: &str, deck_aliases: &[KeyAlias]) -> Result<Lo
         warnings.extend(m.sanitize_deck(d));
         warnings.extend(m.sanitize_loadout(d, &mut party.stash));
     }
+    // PK2-S5a: a weapon instance of an item the data no longer has as a weapon is dropped; then, once instances are
+    // active, the act-line conversion and the gear's instances (an Act 1 save, or one of a game without
+    // `durability.from_act`, loads unchanged)
+    warnings.extend(crate::weapons::sanitize(d, &mut state.party));
+    crate::weapons::sync(d, &mut state);
     let errors = state.validate(d);
     if !errors.is_empty() {
         return Err(errors);

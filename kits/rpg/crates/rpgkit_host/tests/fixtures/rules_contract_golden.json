@@ -1,6 +1,6 @@
 {
   "contract": [
-    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute|channel",
+    "tunable rules strings default=[] values=round_intent|enemy_moves|deck|poise|ap_cost|pierce|reach|flank|plan_badges|field_intent|forced_move|ground_hazards|arena_hazards|triggers|unit_meters|hp_cost|ignore_guard|ai_tactics|execute|channel|durability",
     "tunable intents strings default=[\"assault\",\"guard\",\"support\",\"maneuver\"] values=assault|guard|support|maneuver needs=round_intent(refused)",
     "tunable basics refs default=[]",
     "tunable poise_stat string default=\"\"",
@@ -74,6 +74,7 @@
     "rule ai_tactics extension system=ai bundle=hooks requires=- conflicts=-",
     "rule execute extension system=hooks bundle=hooks requires=- conflicts=-",
     "rule channel extension system=planning bundle=- requires=round_intent, unit_meters conflicts=-",
+    "rule durability extension system=gear bundle=- requires=- conflicts=-",
     "locked budget.rs::W_POWER gear",
     "locked budget.rs::W_MITIGATION gear",
     "locked budget.rs::W_STAT_POINT gear",

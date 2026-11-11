@@ -170,8 +170,9 @@ fn a_valid_row_loads_and_reads_as_its_rules_and_numbers() {
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());
     let cat = rpgkit_data::Catalog::from_value(&src.catalog);
     let r = Ruleset::of(&cat, "timeline").expect("the row");
-    // (every rule but PK1-S2a's channel, which needs a unit meter row: tests/channel_checks.rs checks its row)
-    assert_eq!(r.rules, REGISTER.iter().map(|x| x.id).filter(|id| *id != ruleset::CHANNEL).collect::<Vec<_>>(), "every rule, in register order");
+    // (every rule but PK1-S2a's channel, which needs a unit meter row: tests/channel_checks.rs checks its row, and
+    // PK2-S5a's durability, a world rule: rpgkit_world/tests/weapon_instances.rs)
+    assert_eq!(r.rules, REGISTER.iter().map(|x| x.id).filter(|id| ![ruleset::CHANNEL, ruleset::DURABILITY].contains(id)).collect::<Vec<_>>(), "every rule, in register order");
     assert!(!r.stances(), "round_intent makes the classic stances inert");
     assert_eq!((r.numbers.break_chance_scale, r.numbers.poise_stat.as_str()), (0.5, "max_poise"));
     assert_eq!((r.numbers.deck_slots.active, r.numbers.deck_slots.passive, r.numbers.deck_slots.keystone), (3, 2, 1));

@@ -445,6 +445,8 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     if !events.is_empty() {
         out.insert("campaign".into(), Value::Array(events));
     }
+    // PK2-S5a: loot weapons are fresh instances (full durability), gear the settle stashed keeps its instance
+    crate::weapons::sync(d, gs);
     out
 }
 
@@ -573,6 +575,8 @@ pub fn begin_fight(d: &Data, gs: &mut GameState, encounter_ref: &str) -> Result<
         return Err(short);
     }
     let lines = roster::auto_fill_at_start(d, gs, &world);
+    // PK2-S5a: the fielded members wield their gear's instances (a masterwork main hand opens its technique)
+    crate::weapons::sync(d, gs);
     Ok((world, lines))
 }
 

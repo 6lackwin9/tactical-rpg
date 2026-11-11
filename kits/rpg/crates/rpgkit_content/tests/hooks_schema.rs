@@ -183,11 +183,11 @@ fn the_schema_and_the_code_name_the_same_fields_kinds_options_and_rules() {
         assert_eq!(shown, strs(kinds), "{key}: the schema's `when` names the same kinds");
     }
     // the rule register: the nine ids, extensions, after RULESET1's, and the ruleset row's options list them
-    // (PK1-S2a: the rule channel follows them)
+    // (PK1-S2a: the rule channel follows them, then PK2-S5a's durability)
     let ids: Vec<&str> = REGISTER.iter().map(|r| r.id).collect();
     let at = ids.iter().position(|i| *i == HOOK_RULES[0]).expect("the hook rules");
     assert_eq!(ids[at..at + HOOK_RULES.len()].to_vec(), HOOK_RULES.to_vec());
-    assert_eq!(ids[at + HOOK_RULES.len()..].to_vec(), [ruleset::CHANNEL]);
+    assert_eq!(ids[at + HOOK_RULES.len()..].to_vec(), [ruleset::CHANNEL, ruleset::DURABILITY]);
     assert!(REGISTER[at..].iter().all(|r| r.kind == RuleKind::Extension), "every hook rule is an extension");
     assert_eq!(options("content", ruleset::KIND, "rules"), strs(&ids));
     assert!(HOOK_RULES.iter().all(|r| !Ruleset::classic().has(r)), "classic has none");

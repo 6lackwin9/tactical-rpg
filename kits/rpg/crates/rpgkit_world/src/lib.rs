@@ -24,6 +24,7 @@ pub mod state;
 pub mod story;
 pub mod terms;
 pub mod travel;
+pub mod weapons;
 
 pub use data::Data;
 pub use state::{GameState, PartyState, UnitState};

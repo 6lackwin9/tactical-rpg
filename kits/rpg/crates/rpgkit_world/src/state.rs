@@ -118,6 +118,9 @@ pub struct UnitState {
     /// PK2-S4: the member's forge rite is done (with mastery 3 it opens the wielded family's keystone). Saved as
     /// `forge_rite` only when true (`set_forge_rite`).
     pub forge_rite: bool,
+    /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): weapon slot -> the weapon instance it wields (`crate::weapons`; the
+    /// slot's `equipment` id is the instance's item). Saved as `weapons` only when not empty.
+    pub weapons: IndexMap<String, crate::weapons::Weapon>,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -387,6 +390,10 @@ impl UnitState {
         if self.forge_rite {
             out.insert(FORGE_RITE_KEY.into(), Value::Bool(true));
         }
+        // PK2-S5a: only a member wielding a weapon instance saves `weapons`
+        if !self.weapons.is_empty() {
+            out.insert(crate::weapons::MEMBER_KEY.into(), crate::weapons::member_value(&self.weapons));
+        }
         Value::Object(out)
     }
 
@@ -440,6 +447,7 @@ impl UnitState {
             trained: d.get(TRAINED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             mastery_xp: d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
             forge_rite: json::b(d, FORGE_RITE_KEY, false),
+            weapons: crate::weapons::member_from(d),
         }
     }
 
@@ -651,6 +659,13 @@ impl UnitState {
             if *xp < 0 {
                 errors.push(format!("{at}: mastery_xp {gear} must be 0 or more."));
             }
+        }
+        // PK2-S5a: a weapon instance sits in a loadout slot and is whole (`weapons::sync` matches it to the gear)
+        for (slot, w) in &self.weapons {
+            if !LOADOUT_SLOTS.contains(&slot.as_str()) {
+                errors.push(format!("{at}: weapons: unknown equipment slot '{slot}'."));
+            }
+            errors.extend(w.problems(d, &at));
         }
         for (i, c) in self.conditions.iter().enumerate() {
             if !MEMBER_CONDITIONS.contains(&c.as_str()) {
@@ -1312,11 +1327,14 @@ pub struct PartyState {
     /// ROSTER1 L1: the members who left (captured, dead, retired, dismissed, lost), departure order. Saved as
     /// `departed` only when not empty (the unreleased save v13 carries it: a save without it reads none).
     pub departed: Vec<Departed>,
+    /// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6): the weapon instances in the stash, one per stashed copy of a weapon
+    /// (`crate::weapons`). Saved as `stash_weapons` only when not empty.
+    pub stash_weapons: Vec<crate::weapons::Weapon>,
 }
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
+        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), purse: PurseCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new(), stash_weapons: Vec::new() }
     }
 }
 
@@ -1413,6 +1431,10 @@ impl PartyState {
         if !self.departed.is_empty() {
             out.insert("departed".into(), Value::Array(self.departed.iter().map(Departed::to_value).collect()));
         }
+        // PK2-S5a: only a party with stashed weapon instances saves `stash_weapons`
+        if !self.stash_weapons.is_empty() {
+            out.insert(crate::weapons::STASH_KEY.into(), Value::Array(self.stash_weapons.iter().map(crate::weapons::Weapon::to_value).collect()));
+        }
         Value::Object(out)
     }
 
@@ -1440,6 +1462,7 @@ impl PartyState {
             gold: whole("gold"),
             supplies: whole("supplies"),
             departed: json::aget(d, "departed").iter().map(|x| Departed::from_dict(json::dict(x))).collect(),
+            stash_weapons: crate::weapons::stash_from(d),
         }
     }
 
@@ -1496,6 +1519,8 @@ impl PartyState {
                 errors.push(format!("Stash count of '{k}' must be >= 1."));
             }
         }
+        // PK2-S5a: the stash instances, and no uid twice
+        errors.extend(crate::weapons::party_problems(d, self));
         let PurseCaps { supplies_max, purse_gold_cap } = self.purse;
         if self.gold < 0 || self.gold > purse_gold_cap {
             errors.push(format!("gold must be 0..{purse_gold_cap}."));

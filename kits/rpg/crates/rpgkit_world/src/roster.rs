@@ -546,8 +546,11 @@ pub fn depart(d: &Data, gs: &mut GameState, id: &str, life: &str, cause: &str, e
         return Err(format!("'{id}' is not a party member."));
     };
     let lives = manifest(d, &gs.world_id).keepsake_lives(act(gs)).to_vec();
-    let member = gs.party.members.remove(at);
+    let mut member = gs.party.members.remove(at);
     gs.party.active_ids.retain(|a| a != id);
+    // PK2-S5a: its weapon instances go to the stash with its gear (the record keeps none)
+    let held: Vec<crate::weapons::Weapon> = std::mem::take(&mut member.weapons).into_values().collect();
+    gs.party.stash_weapons.extend(held);
     let gear: Vec<String> = member.equipment.values().chain(&member.carried).chain(&member.pouch).cloned().collect();
     for item in gear {
         if d.has("items", &item) {

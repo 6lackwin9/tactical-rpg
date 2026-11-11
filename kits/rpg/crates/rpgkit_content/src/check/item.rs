@@ -34,10 +34,10 @@ const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delt
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 18] = [
+const DERIVED_KEYS: [&str; 19] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES,
     rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX, rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES,
-    rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE,
+    rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE, rpgkit_data::ITEM_FAMILY_DURABILITY,
 ];
 const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
@@ -378,6 +378,8 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     if let Some(t) = e.get(rpgkit_data::mastery::TECHNIQUE_KEY).filter(|t| t.as_object().is_none_or(|o| !o.is_empty())) {
         out.extend(technique_entry_errors(v, t, "Masterwork technique"));
     }
+    // PK2-S5a: a weapon's own full durability
+    out.extend(durability_problems(e));
     // PK2-S3: a theme (the salvage it gives) is an id
     let theme = json::s(e, "theme");
     if !theme.is_empty() && !json::id_ok(&theme) {
@@ -493,6 +495,20 @@ fn technique_entry_errors(v: &View, raw: &Value, label: &str) -> Vec<String> {
     let grip = json::s(t, "grip");
     if !GRIPS.contains(&grip.as_str()) {
         out.push(format!("{label}: grip '{grip}' is not one of \"\", 1h, 2h."));
+    }
+    out
+}
+
+/// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6-7): a full `durability` (an item family's for its weapons, a weapon item's
+/// own) is a whole number 0 to `DURABILITY_MAX`, and only on a WEAPON row (only weapons become instances).
+fn durability_problems(row: &Dict) -> Vec<String> {
+    let Some(raw) = row.get(rpgkit_data::ITEM_DURABILITY) else { return Vec::new() };
+    let n = json::normalize(raw);
+    let mut out = Vec::new();
+    if !json::is_int(&n) || !(0..=rpgkit_data::DURABILITY_MAX).contains(&json::to_int(&n)) {
+        out.push(format!("Durability must be a whole number 0-{}.", rpgkit_data::DURABILITY_MAX));
+    } else if json::to_int(&n) > 0 && json::s(row, "item_type") != "WEAPON" {
+        out.push("Durability needs a WEAPON (only weapons become instances).".into());
     }
     out
 }
@@ -1215,6 +1231,7 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
     }
     out.extend(mastery_problems(v, f, &t));
     out.extend(technique_problems(v, f));
+    out.extend(durability_problems(f));
     out.extend(range_band_problems(f));
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
     let users: Vec<&Dict> = v.entries("items").iter().filter(|i| json::s(i, "family") == old_id).collect();

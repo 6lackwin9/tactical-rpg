@@ -55,6 +55,12 @@ pub const EXECUTE: &str = "execute";
 /// `round_intent` and `unit_meters`; inert while no unit holds the meter. It retires the old `channel` round intent
 /// (no ruleset lists it, no skill sets it).
 pub const CHANNEL: &str = "channel";
+/// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6, FB-167 Q7 (a)): weapon instances: from the act the game's manifest names
+/// (`durability.from_act`), every owned weapon is an instance `{uid, item, durability, masterwork}` (the world's
+/// `weapons` module: the act-line conversion, shop and loot instances, equipment and stash by uid; a masterwork main
+/// hand opens its own technique). The world reads it from its ruleset; inert without the manifest key and in battle
+/// (the durability spend is PK2-S5b).
+pub const DURABILITY: &str = "durability";
 
 /// An option is incompatible with classic (on only under its ruleset); an extension is compatible and inert without
 /// data, still off in classic so classic cannot drift when data is added, and may be switched on or off one by one
@@ -88,7 +94,7 @@ const fn rule_of(id: &'static str, kind: RuleKind, system: &'static str, bundle:
 }
 
 /// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order, with its metadata (BASERULES1-M).
-pub const REGISTER: [Rule; 20] = [
+pub const REGISTER: [Rule; 21] = [
     Rule {
         conflicts: &["stances=on", "switch_target_step=on"],
         ..rule_of(ROUND_INTENT, RuleKind::Option, "planning", "intent_core", &["round_intent.rs", "golden"], "one intent and target a round, follow-ups, facing, flanks drawn")
@@ -112,6 +118,7 @@ pub const REGISTER: [Rule; 20] = [
     rule_of(AI_TACTICS, RuleKind::Extension, "ai", "hooks", &["tactics.rs"], "target preferences and unit tactics"),
     rule_of(EXECUTE, RuleKind::Extension, "hooks", "hooks", &["execute.rs"], "the hp_below exploit"),
     Rule { requires: &[ROUND_INTENT, UNIT_METERS], ..rule_of(CHANNEL, RuleKind::Extension, "planning", "", &["channel.rs"], "Channel rounds: channeled versions, the converting toggle, Channel Rest") },
+    rule_of(DURABILITY, RuleKind::Extension, "gear", "", &["weapon_instances.rs"], "weapon instances from the manifest's durability.from_act"),
 ];
 
 /// The register entry of `id`.
@@ -1045,7 +1052,7 @@ pub fn bundle(id: &str) -> Option<&'static Bundle> {
 
 /// The rule sets kit tests fight (library 4, `[poise, flank]` left out: it is read only, and flank is inert there); a
 /// row listing another set is untested together (a warning).
-pub const TESTED_SETS: [&[&str]; 24] = [
+pub const TESTED_SETS: [&[&str]; 25] = [
     &[],
     &[ROUND_INTENT],
     &[ROUND_INTENT, FLANK],
@@ -1080,6 +1087,12 @@ pub const TESTED_SETS: [&[&str]; 24] = [
     &[
         ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FIELD_INTENT, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS,
         TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE, CHANNEL,
+    ],
+    // PK2-S5a: the timeline row once the PK2 data slice lists durability (tests/weapon_instances.rs fights it; the
+    // battle reads nothing of it until PK2-S5b)
+    &[
+        ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FIELD_INTENT, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS,
+        TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE, CHANNEL, DURABILITY,
     ],
 ];
 

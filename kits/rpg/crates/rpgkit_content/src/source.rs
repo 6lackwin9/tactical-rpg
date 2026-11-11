@@ -1354,6 +1354,11 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if !keystone.is_empty() {
         row.insert(rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE.into(), Value::from(keystone));
     }
+    // PK2-S5a: the family's full weapon durability rides on the row the same way (no key while the family has none)
+    let durability = json::i(family, rpgkit_data::ITEM_DURABILITY, 0);
+    if durability > 0 {
+        row.insert(rpgkit_data::ITEM_FAMILY_DURABILITY.into(), Value::from(durability));
+    }
     row
 }
 

@@ -650,6 +650,10 @@ pub struct ItemDef {
     pub family_keystone: String,
     /// PK2-S4: the weapon's own technique, open while a masterwork instance of it is wielded (None = none).
     pub technique: Option<Technique>,
+    /// PK2-S5a: the weapon's own full durability (`ITEM_DURABILITY`; 0 = its family's) and its family's
+    /// (`ITEM_FAMILY_DURABILITY`; 0 = none); `max_durability` reads them.
+    pub durability: i32,
+    pub family_durability: i32,
     pub raw: Obj,
 }
 
@@ -681,6 +685,12 @@ pub const ITEM_FAMILY_LEVEL3: &str = "family_level3_passive";
 /// PR5-28 (U3 FB-36c): the resolved item row's key that carries its family's `range_band.max` (written by the loader only
 /// when the family has a `range_band`; the writer leaves it out of the stored form).
 pub const ITEM_FAMILY_REACH_MAX: &str = "family_reach_max";
+/// PK2-S5a (`docs/sessions/PK2_GRAFTS.md` 6-7): a weapon's full durability key (an item family row's for its weapons, a
+/// WEAPON item's own over it; 0 = none) and the resolved row's key carrying the family's (left out of the stored form).
+pub const ITEM_DURABILITY: &str = "durability";
+pub const ITEM_FAMILY_DURABILITY: &str = "family_durability";
+/// PK2-S5a: the top of a full durability (the schema's range is 0 to it).
+pub const DURABILITY_MAX: i64 = 999;
 
 /// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
 /// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at
@@ -800,7 +810,24 @@ impl ItemDef {
             family_techniques: Technique::list(o, mastery::ITEM_FAMILY_TECHNIQUES),
             family_keystone: string(o, mastery::ITEM_FAMILY_KEYSTONE, ""),
             technique: Technique::one(o, mastery::TECHNIQUE_KEY),
+            durability: int(o, ITEM_DURABILITY, 0).max(0),
+            family_durability: int(o, ITEM_FAMILY_DURABILITY, 0).max(0),
             raw: o.clone(),
+        }
+    }
+
+    /// PK2-S5a: whether the item becomes a weapon instance once the manifest's `durability.from_act` is reached (item
+    /// type `WEAPON`, main hand or off hand; shields, armour, accessories and consumables stay plain ids).
+    pub fn is_weapon(&self) -> bool {
+        self.item_type == "WEAPON"
+    }
+
+    /// PK2-S5a: the weapon's full durability: its own, else its family's (0 = none: it never wears).
+    pub fn max_durability(&self) -> i32 {
+        if self.durability > 0 {
+            self.durability
+        } else {
+            self.family_durability
         }
     }
 
