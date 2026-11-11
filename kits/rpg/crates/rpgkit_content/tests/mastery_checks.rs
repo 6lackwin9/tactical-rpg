@@ -131,7 +131,12 @@ fn a_book_names_a_main_hand_weapon_family_and_a_weapon_technique_is_checked() {
     let v = store::view(&data);
     let errors = |id: &str| check::validate_entry(&v, "items", v.get("items", id), id);
     assert!(errors("b_sword").is_empty(), "{:?}", errors("b_sword"));
-    assert_eq!(Catalog::from_value(&source::load(&data).catalog).items["b_sword"].book.as_ref().map(|b| (b.family.clone(), b.xp)), Some(("t_sword".to_string(), 30)));
+    let cat = Catalog::from_value(&source::load(&data).catalog);
+    assert_eq!(cat.items["b_sword"].book.as_ref().map(|b| (b.family.clone(), b.xp)), Some(("t_sword".to_string(), 30)));
+    // PK2-FOLLOWUP (PR5-36): a book naming no XP gives the default (+150), the schema's and the kit's alike
+    let book_xp = aegis_content::schema::fields(source::schema(), "content", "items").iter().map(json::dict).find(|f| json::s(f, "key") == rpgkit_data::mastery::BOOK_XP_KEY).map(|f| json::i(f, "default", 0));
+    assert_eq!(book_xp, Some(i64::from(rpgkit_data::mastery::BOOK_XP_DEFAULT)));
+    assert_eq!(cat.items["b_orb"].book.as_ref().map(|b| b.xp), Some(i64::from(rpgkit_data::mastery::BOOK_XP_DEFAULT)));
     assert!(errors("b_orb").contains(&"Mastery family 'orb' is not a main-hand weapon family (only those gain mastery).".to_string()), "{:?}", errors("b_orb"));
     assert!(errors("b_none").contains(&"A mastery book names the weapon family it trains (mastery_family).".to_string()), "{:?}", errors("b_none"));
     assert!(errors("i_bad").contains(&"Masterwork technique: unknown skill 't_zz'.".to_string()), "{:?}", errors("i_bad"));

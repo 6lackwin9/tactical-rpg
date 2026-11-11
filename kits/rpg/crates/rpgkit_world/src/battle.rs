@@ -548,6 +548,26 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
             let mastery = settled.mastery.iter().map(|g| json::obj([("member", g.member.clone().into()), ("family", g.family.clone().into()), ("from", int(g.from)), ("to", int(g.to)), ("level", int(i64::from(g.level())))]).into()).collect();
             out.insert("mastery".into(), Value::Array(mastery));
         }
+        // PK2-FOLLOWUP (FB-218 (d)): the wear the battle took off the weapon instances, and which ended dulled
+        if !settled.wear.is_empty() {
+            let wear = settled
+                .wear
+                .iter()
+                .map(|w| {
+                    json::obj([
+                        ("member", w.member.clone().into()),
+                        ("slot", w.slot.clone().into()),
+                        ("uid", w.uid.clone().into()),
+                        ("item", w.item.clone().into()),
+                        ("worn", int(w.from - w.to)),
+                        ("durability", int(w.to)),
+                        ("dulled", Value::Bool(w.dulled())),
+                    ])
+                    .into()
+                })
+                .collect();
+            out.insert("wear".into(), Value::Array(wear));
+        }
     }
     if let Some(b) = stay.as_ref().filter(|b| !b.flag.is_empty()) {
         let err = quest::set_flag(d, gs, &b.flag, Value::String(first_stayer));
@@ -717,8 +737,9 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
 /// track, from, to}] (the unit tracks the marks moved) and `stashed` [{member, item}] (worn items a `forbid_hands`
 /// sent to the stash). PR5-26 (review F2): `cleared` [{member, slot}] (a slot left empty, its default refused).
 /// PK2-S2: `remains` [{member, item}] (what a fallen member left in the stash, the field held). PK2-S4: `mastery`
-/// [{member, family, from, to, level}] (the weapon mastery the members gained by use).
-pub const PARTY_KEYS: [&str; 11] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared", "remains", "mastery"];
+/// [{member, family, from, to, level}] (the weapon mastery the members gained by use). PK2-FOLLOWUP: `wear` [{member,
+/// slot, uid, item, worn, durability, dulled}] (the battle's wear on the weapon instances; only when some was taken).
+pub const PARTY_KEYS: [&str; 12] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared", "remains", "mastery", "wear"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

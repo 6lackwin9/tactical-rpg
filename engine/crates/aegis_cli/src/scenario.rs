@@ -3,7 +3,7 @@
 //! window that does not take the focus when the file or `window=1` asks.
 //!   aegis scenario check [<file> | all]                                       parse the files; no game starts
 //!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]
-//!   aegis scenario shots <name> [screen=] [scene=] [rules=] [seed=] [do=<a>,<b>,...] [the same keys as run]
+//!   aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
 //! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
 //! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. Nothing here runs in the gate
@@ -70,20 +70,26 @@ pub enum Status {
     Waiting(String),
 }
 
-/// How the game starts (`launch` in the file): `scene` is the game's id of what the screen opens on, `rules` the
-/// game's id of the rules it plays by (only with `screen` arena); both reach the game as the launch keys `scene=` and
-/// `rules=`.
+/// How the game starts (`launch` in the file): `scene` is the game's id of what the screen opens on, `ruleset` the
+/// game's id of the ruleset it plays by (only with `screen` arena); both reach the game as the launch keys `scene=` and
+/// `ruleset=`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Launch {
     pub screen: String,
     pub scene: Option<String>,
     pub seed: Option<u64>,
-    pub rules: Option<String>,
+    pub ruleset: Option<String>,
 }
 
-/// LAYER-ENG-KEYS (PR5-29a): the launch keys' genre-free names and the old names they had, which still load (in a file
-/// and as `shots` keys); a launch giving both names of one key is refused.
-pub const LAUNCH_ALIASES: [(&str, &str); 2] = [("scene", "encounter"), ("rules", "ruleset")];
+/// LAYER-ENG-KEYS (PR5-29a): the launch keys' primary names and the other names they load under (in a file and, except
+/// `RULES_ARG`, as `shots` keys); a launch giving both names of one key is refused. PK2-FOLLOWUP (PR5-36, FB-223 (a)):
+/// `ruleset` is the primary name again (a ruleset is not a genre word) and `rules`, PR5-29a's name for it, only loads
+/// from a scenario file.
+pub const LAUNCH_ALIASES: [(&str, &str); 2] = [("scene", "encounter"), ("ruleset", "rules")];
+
+/// The command-line key that is never a launch alias: on every binary `rules=<-id,+id>` adjusts a ruleset's rules, so
+/// `shots` refuses it as a launch key rather than read it as the ruleset id (FB-223).
+pub const RULES_ARG: &str = "rules";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
@@ -476,7 +482,7 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Status::Active
         }
     };
-    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, rules: None };
+    let mut launch = Launch { screen: "menu".into(), scene: None, seed: None, ruleset: None };
     if let Some(l) = o.get("launch") {
         match l.as_object() {
             None => p.push("launch: an object".into()),
@@ -492,7 +498,7 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
                 if l.contains_key("seed") {
                     launch.seed = Some(int_of(l, "seed", None, (0, u64::MAX), "launch", p));
                 }
-                launch.rules = aliased_text(l, "rules", p);
+                launch.ruleset = aliased_text(l, "ruleset", p);
             }
         }
     }
@@ -546,8 +552,8 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
     if window && has_clip(&steps) {
         p.push("scenario: a 'clip' is taken in a run with no window, and this one has 'window' true".into());
     }
-    if launch.rules.is_some() && launch.screen != "arena" {
-        p.push("launch: 'rules' comes with 'screen' arena".into());
+    if launch.ruleset.is_some() && launch.screen != "arena" {
+        p.push("launch: 'ruleset' comes with 'screen' arena".into());
     }
     let counted = steps_counted(&steps);
     if counted > STEPS_MAX {
@@ -744,8 +750,8 @@ pub fn plan(s: &Scenario, size: (u32, u32), game_id: &str, exe: &Path, data: Opt
     if let Some(n) = s.launch.seed {
         args.push(format!("seed={n}"));
     }
-    if let Some(r) = &s.launch.rules {
-        args.push(format!("rules={r}"));
+    if let Some(r) = &s.launch.ruleset {
+        args.push(format!("ruleset={r}"));
     }
     if let Some(d) = data {
         args.push(format!("data={}", d.display()));
@@ -1363,7 +1369,7 @@ fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
 }
 
 const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
-const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [rules=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [scene=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
@@ -1461,12 +1467,15 @@ pub fn do_steps(list: &str) -> std::result::Result<Vec<Value>, String> {
     Ok(steps)
 }
 
-/// The scenario `shots` runs: named `name`, launched as the keys say (`scene=`, `rules=`, or their old names
-/// `encounter=`, `ruleset=`, `LAUNCH_ALIASES`).
+/// The scenario `shots` runs: named `name`, launched as the keys say (`scene=` or its old name `encounter=`, and
+/// `ruleset=`, `LAUNCH_ALIASES`); `rules=` is refused (`RULES_ARG`: a rule adjustment, never the ruleset id).
 pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, Vec<String>> {
+    if let Some(v) = args.keys.get(RULES_ARG) {
+        return Err(vec![format!("shots: '{RULES_ARG}={v}' adjusts rules (+id,-id) and is no launch key; name the ruleset with 'ruleset=<id>'")]);
+    }
     let steps = do_steps(&args.key("do", "")).map_err(|e| vec![e])?;
     let mut launch = json!({"screen": args.key("screen", "menu")});
-    for k in LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old]) {
+    for k in LAUNCH_ALIASES.iter().flat_map(|(k, old)| [*k, *old]).filter(|k| *k != RULES_ARG) {
         if let Some(v) = args.keys.get(k) {
             launch[k] = json!(v);
         }

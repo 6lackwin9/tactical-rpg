@@ -153,3 +153,17 @@ fn feel_runs_the_timeline_test_encounters() {
         assert_eq!(r["encounters"][e]["fights"], serde_json::json!(1), "{e}: one fight (quick)");
     }
 }
+
+/// PK2-FOLLOWUP (PR5-36, FB-220): the party mode prints the party's weapon wear per encounter only when `durability=`
+/// is given (so `sim_golden`'s lines hold); the line reads the run's own sums.
+#[test]
+fn the_party_mode_reports_the_wear_only_with_durability() {
+    let d = data();
+    let line = |extra: &str| emberwake_sim::run(&d, &argv(&format!("party 1 1 enc=mob ruleset=timeline metrics=off {extra}")));
+    let plain = line("");
+    assert!(!plain.iter().any(|l| l.contains(" wear: ")), "{plain:?}");
+    let worn = line("durability=0");
+    let wear: Vec<&String> = worn.iter().filter(|l| l.starts_with("  mob wear: worn ")).collect();
+    assert_eq!(wear.len(), 1, "{worn:?}");
+    assert!(wear[0].contains(", dulled ") && !wear[0].contains("dulled 0 "), "durability=0 dulls every tracked weapon: {}", wear[0]);
+}

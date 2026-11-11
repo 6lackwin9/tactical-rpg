@@ -37,6 +37,9 @@ pub const DULLED_MODES: [&str; 2] = ["power", "lock"];
 pub const DULLED_USAGE: &str = "       dulled=power|lock (power): a dulled weapon (0 durability, rule durability) loses weapon power; lock also locks its techniques";
 /// PK2-S5b: the help of the `durability=` key (the allies' seeded weapon durability), printed apart from `usage`.
 pub const DURABILITY_USAGE: &str = "       durability=0-999 (none): with the rule durability (ruleset= or rules=+durability) each ally's weapons start at that durability, so they wear and dull";
+/// PK2-FOLLOWUP (PR5-36, FB-218 (c), FB-220): the help of the `mastery=` key (the allies' main-hand family mastery),
+/// printed apart from `usage`.
+pub const MASTERY_USAGE: &str = "       mastery=0-3 (none): each ally holds that weapon mastery in its main-hand family, so that many of the family's techniques open (dulled=lock can bite)";
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
@@ -114,6 +117,10 @@ pub struct SimArgs {
     /// N durability (`rpgkit_battle::wear::seed`; only under a ruleset with the rule `durability`). None = no wear (catalog
     /// allies track none).
     pub durability: Option<i32>,
+    /// PK2-FOLLOWUP: `mastery=N`: each ally holds mastery N (0-3) in its main-hand weapon family at every sim battle
+    /// start (`rpgkit_battle::sim::apply_mastery`), so the family's first N techniques open. None = catalog units hold
+    /// no mastery.
+    pub mastery: Option<i32>,
     pub elite_class: String,
     pub boss_class: String,
     pub roles: Vec<String>,
@@ -196,6 +203,7 @@ impl Default for SimArgs {
             stage: 0,
             dulled_lock: false,
             durability: None,
+            mastery: None,
             elite_class: String::new(),
             boss_class: String::new(),
             roles: strings(&ROLES),
@@ -750,6 +758,13 @@ impl SimArgs {
                     _ => return Err(format!("durability must be a number 0-{max} (got '{value}')")),
                 }
             }
+            "mastery" => {
+                let max = rpgkit_data::mastery::MASTERY_MAX;
+                match value.parse::<i32>() {
+                    Ok(n) if (0..=max).contains(&n) => self.mastery = Some(n),
+                    _ => return Err(format!("mastery must be a number 0-{max} (got '{value}')")),
+                }
+            }
             "elite" | "boss" => {
                 if !ids.contains(&value) {
                     return Err(format!("{key} must be a class id of {classes} (got '{value}')"));
@@ -981,6 +996,9 @@ impl SimArgs {
         }
         if self.dulled_lock {
             t += ", dulled lock";
+        }
+        if let Some(n) = self.mastery {
+            t += &format!(", mastery {n}");
         }
         t
     }

@@ -347,6 +347,11 @@ impl<'a> Runner<'a> {
             let allies = s.w.allies.clone();
             rpgkit_battle::wear::seed(&mut s.w, &allies, n);
         }
+        // PK2-FOLLOWUP: `mastery=N` (the allies' main-hand family mastery, so techniques open)
+        if let Some(n) = self.args.mastery {
+            let allies = s.w.allies.clone();
+            rpgkit_battle::sim::apply_mastery(&mut s.w, &allies, n);
+        }
         self.prepare(&mut s, jitter.as_mut());
         for &a in &s.w.allies.clone() {
             if let Some(&hp) = self.start_hp.get(&s.w.units[a].name) {

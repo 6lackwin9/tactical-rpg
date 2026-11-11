@@ -260,6 +260,17 @@ pub fn json_close(a: &Value, b: &Value) -> bool {
     }
 }
 
+/// PK2-FOLLOWUP (PR5-36, FB-218 (c), FB-220): the sims' `mastery=N`: every unit of `units` that wields a main-hand
+/// weapon gets mastery `n` (0-3) in that weapon's family, so its first n family techniques open (catalog units hold no
+/// mastery). A unit with no main-hand weapon is left as it is.
+pub fn apply_mastery(w: &mut World, units: &[UnitId], n: i32) {
+    for &c in units {
+        let Some(u) = w.units.get_mut(c) else { continue };
+        let Some(family) = u.inventory.get(rpgkit_rules::gear::Slot::MainHand).filter(|e| e.item.item_type == "WEAPON").map(|e| e.weapon_type().to_string()) else { continue };
+        u.set_mastery(&family, n);
+    }
+}
+
 /// SimRunner.apply_pouch (ITEMUSE1 rule 9): every party unit's battle pouch becomes `ids` (catalog consumables,
 /// unknown ids skipped) and its AI profile may use items. Enemies keep use_items off.
 pub fn apply_pouch(w: &mut World, ids: &[String]) {

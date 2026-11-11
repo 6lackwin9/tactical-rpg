@@ -1070,12 +1070,12 @@ fn a_file_that_cannot_run_as_written_is_a_problem() {
     v["window"] = json!(true);
     assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("clip")), "a clip needs no window, even inside a repeat");
     let mut v = minimal(json!([{"step": "back"}]));
-    v["launch"] = json!({"screen": "runner", "rules": "r1"});
-    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("rules")));
-    v["launch"] = json!({"rules": "r1"});
-    assert!(parse("x", &v).is_err(), "the default screen is not the arena");
     v["launch"] = json!({"screen": "runner", "ruleset": "r1"});
-    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("rules")), "the old name is held to the same rule");
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("ruleset")));
+    v["launch"] = json!({"ruleset": "r1"});
+    assert!(parse("x", &v).is_err(), "the default screen is not the arena");
+    v["launch"] = json!({"screen": "runner", "rules": "r1"});
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("ruleset")), "the alias is held to the same rule");
 }
 
 #[test]
@@ -1108,34 +1108,49 @@ fn a_pause_waits_and_never_past_the_runs_timeout() {
 #[test]
 fn a_launch_names_its_rules() {
     let mut v = minimal(json!([{"step": "back"}]));
-    v["launch"] = json!({"screen": "arena", "scene": "e1", "rules": "r1"});
+    v["launch"] = json!({"screen": "arena", "scene": "e1", "ruleset": "r1"});
     let p = scenario::plan(&parse("x", &v).unwrap(), (1280, 720), "somegame", Path::new("game.exe"), None, 4567, Path::new("scratch_root"));
-    assert!(p.args.contains(&"rules=r1".to_string()) && p.args.contains(&"scene=e1".to_string()), "{:?}", p.args);
-    v["launch"]["rules"] = json!(3);
+    assert!(p.args.contains(&"ruleset=r1".to_string()) && p.args.contains(&"scene=e1".to_string()), "{:?}", p.args);
+    v["launch"]["ruleset"] = json!(3);
     assert!(parse("x", &v).is_err());
 }
 
-/// LAYER-ENG-KEYS (PR5-29a): a file with the launch keys' old names loads as the new ones, and the game is launched
-/// with the new keys either way; a launch giving both names of one key is refused.
+/// LAYER-ENG-KEYS (PR5-29a), PK2-FOLLOWUP (PR5-36, FB-223 (a)): a file with the launch keys' other names (`encounter`,
+/// and PR5-29a's `rules` for the ruleset) loads as the primary ones, and the game is launched with `scene=` and
+/// `ruleset=` either way; a launch giving both names of one key is refused.
 #[test]
 fn the_old_launch_key_names_still_load() {
     let mut v = minimal(json!([{"step": "back"}]));
-    v["launch"] = json!({"screen": "arena", "scene": "e1", "rules": "r1", "seed": 3});
+    v["launch"] = json!({"screen": "arena", "scene": "e1", "ruleset": "r1", "seed": 3});
     let new = parse("x", &v).unwrap();
-    v["launch"] = json!({"screen": "arena", "encounter": "e1", "ruleset": "r1", "seed": 3});
+    v["launch"] = json!({"screen": "arena", "encounter": "e1", "rules": "r1", "seed": 3});
     let old = parse("x", &v).unwrap();
     assert_eq!(old.launch, new.launch);
-    assert_eq!((new.launch.scene.as_deref(), new.launch.rules.as_deref()), (Some("e1"), Some("r1")));
+    assert_eq!((new.launch.scene.as_deref(), new.launch.ruleset.as_deref()), (Some("e1"), Some("r1")));
     let p = scenario::plan(&old, (1280, 720), "somegame", Path::new("game.exe"), None, 4567, Path::new("scratch_root"));
-    assert!(p.args.contains(&"scene=e1".to_string()) && p.args.contains(&"rules=r1".to_string()), "{:?}", p.args);
-    assert!(!p.args.iter().any(|a| a.starts_with("encounter=") || a.starts_with("ruleset=")), "the game hears only the new keys: {:?}", p.args);
+    assert!(p.args.contains(&"scene=e1".to_string()) && p.args.contains(&"ruleset=r1".to_string()), "{:?}", p.args);
+    assert!(!p.args.iter().any(|a| a.starts_with("encounter=") || a.starts_with("rules=")), "the game hears only the primary keys: {:?}", p.args);
     for (key, old) in scenario::LAUNCH_ALIASES {
         v["launch"] = json!({"screen": "arena", key: "a", old: "b"});
         let problems = parse("x", &v).unwrap_err();
         assert!(problems.iter().any(|p| p.contains(key) && p.contains(old) && p.contains("both")), "{key}/{old}: {problems:?}");
     }
+    v["launch"] = json!({"screen": "menu", "rules": "r1"});
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("'ruleset' comes with 'screen' arena")), "the alias is checked as the key");
     v["launch"] = json!({"screen": "arena", "fight": "e1"});
     assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("unknown key 'fight'")));
+}
+
+/// PK2-FOLLOWUP (FB-223 (a)): on the command line `rules=` adjusts rules (`+id,-id`) on every binary, so `shots` never
+/// reads it as the ruleset id: `ruleset=<id>` names the ruleset and `rules=` is refused with the reason.
+#[test]
+fn shots_never_read_rules_as_the_ruleset() {
+    let s = scenario::shots_scenario("fight", &keys(&["screen=arena", "ruleset=timeline"])).unwrap();
+    assert_eq!(s.launch.ruleset.as_deref(), Some("timeline"));
+    for raw in [vec!["screen=arena", "rules=timeline"], vec!["screen=arena", "ruleset=timeline", "rules=+durability"]] {
+        let problems = scenario::shots_scenario("fight", &keys(&raw)).unwrap_err();
+        assert!(problems.iter().any(|p| p.contains("rules=") && p.contains("ruleset=<id>")), "{raw:?}: {problems:?}");
+    }
 }
 
 // ---- the proof helper ----
@@ -1151,11 +1166,11 @@ fn proof_shots_turn_a_short_list_into_steps() {
     assert_eq!(s.steps, parse("menu", &json!({"id": "menu", "steps": [{"step": "shot", "name": "shot"}]})).unwrap().steps, "one shot when none is named");
     assert!(!s.window);
 
-    let s = scenario::shots_scenario("fight", &keys(&["screen=arena", "scene=e1", "rules=r1", "seed=4", "do=screen:a_b,shot:start,key:a,widget:w,pause:50,click:c,hover:h,clip:play:6:100"])).unwrap();
-    assert_eq!((s.launch.screen.as_str(), s.launch.scene.as_deref(), s.launch.rules.as_deref(), s.launch.seed), ("arena", Some("e1"), Some("r1"), Some(4)));
-    // LAYER-ENG-KEYS: the old key names work as `shots` keys too; both names of one key are refused.
+    let s = scenario::shots_scenario("fight", &keys(&["screen=arena", "scene=e1", "ruleset=r1", "seed=4", "do=screen:a_b,shot:start,key:a,widget:w,pause:50,click:c,hover:h,clip:play:6:100"])).unwrap();
+    assert_eq!((s.launch.screen.as_str(), s.launch.scene.as_deref(), s.launch.ruleset.as_deref(), s.launch.seed), ("arena", Some("e1"), Some("r1"), Some(4)));
+    // LAYER-ENG-KEYS: the old scene name works as a `shots` key too; both names of one key are refused.
     let old = scenario::shots_scenario("fight", &keys(&["screen=arena", "encounter=e1", "ruleset=r1", "seed=4"])).unwrap();
-    assert_eq!((old.launch.scene.as_deref(), old.launch.rules.as_deref()), (Some("e1"), Some("r1")));
+    assert_eq!((old.launch.scene.as_deref(), old.launch.ruleset.as_deref()), (Some("e1"), Some("r1")));
     assert!(scenario::shots_scenario("fight", &keys(&["screen=arena", "scene=e1", "encounter=e2"])).is_err());
     assert!(scenario::shots_scenario("fight", &keys(&["screen=arena", "rules=r1", "ruleset=r2"])).is_err());
     let kinds = json!([

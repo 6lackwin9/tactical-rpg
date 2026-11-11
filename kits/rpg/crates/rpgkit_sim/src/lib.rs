@@ -156,6 +156,8 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
                 // PK2-S5b: the same, for `dulled=`
                 out.push(args::DULLED_USAGE.to_string());
                 out.push(args::DURABILITY_USAGE.to_string());
+                // PK2-FOLLOWUP: the same, for `mastery=`
+                out.push(args::MASTERY_USAGE.to_string());
             }
             return out;
         }

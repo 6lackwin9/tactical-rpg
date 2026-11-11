@@ -6,8 +6,9 @@
 //! lowering needs a stage), `max_hp_pct` (a percent of the max HP now, for good), `floor_offset` (a member with a
 //! graft), `train_proficiency` (one level of a family of the class role, from `to - 1`; saved as `trained`, read by the
 //! build), `salvage` (the stash item broken down into gold and the salvage its rarity and theme name), `doctrine`
-//! (reserved: nothing changes but the cost); `repair` and `reforge` are refused (weapon instances are not built); PK2-S4's
-//! `drill` is refused while mastery is closed (its runs are `tests/mastery.rs`').
+//! (reserved: nothing changes but the cost); a `weapon` recipe is refused while weapon instances are not active (its
+//! runs are `tests/weapon_recipes.rs`'); PK2-S4's `drill` is refused while mastery is closed (its runs are
+//! `tests/mastery.rs`').
 
 use aegis_core::json;
 use rpgkit_world::dialogue::DialogueRunner;
@@ -294,6 +295,27 @@ fn training_raises_one_family_of_the_role_by_a_level() {
     assert!(refused(&d, &mut gs, SMITH, "train_minor", &Pick { family: "bow".into(), ..pick }).contains("not a minor family"));
 }
 
+/// PK2-FOLLOWUP (FB-212 (d)): the pane's one family picker. A row lists the families its pick may name (`families`:
+/// a role holding more than one), and each row reads the pick with `pick_for`, so a minor family picked for the minor
+/// training never refuses a row with a single family (the secondary training) and the minor row runs on the pick.
+#[test]
+fn one_family_pick_serves_every_row_of_the_pane() {
+    let d = data();
+    let mut gs = game(&d);
+    let pick = Pick { family: "mace".into(), ..on_hero(&gs) };
+    let fams = |id: &str| recipe::families(&d, &gs, &d.cat.recipes[id], &pick);
+    assert_eq!((fams("train_minor"), fams("train_secondary")), (vec!["mace".to_string(), "dagger".to_string()], Vec::<String>::new()), "the class's two minors; one secondary needs no pick");
+    assert_eq!(recipe::pick_for(&d, &gs, &d.cat.recipes["train_secondary"], &pick).family, "", "a row that does not offer the family reads it unnamed");
+    let view = recipe::view(&d, &gs, SMITH, &pick);
+    let row = |id: &str| view.iter().map(json::dict).find(|r| json::s(r, "id") == id).cloned().unwrap();
+    assert_eq!(json::sget(&row("train_minor"), "families"), ["mace", "dagger"]);
+    assert!(json::b(&row("train_minor"), "ready", false) && json::b(&row("train_secondary"), "ready", false), "both rows ready under one pick: {view:?}");
+    let minor = recipe::pick_for(&d, &gs, &d.cat.recipes["train_minor"], &pick);
+    ok(&d, &mut gs, SMITH, "train_minor", &minor);
+    let class = d.cat.classes["drill"].clone();
+    assert_eq!((hero(&gs).proficiency(&d, &class).level_of("mace"), hero(&gs).proficiency(&d, &class).level_of("dagger")), (2, 1), "the picked minor trained");
+}
+
 #[test]
 fn salvage_breaks_an_item_into_gold_and_its_tier_and_theme_salvage() {
     let d = data();
@@ -314,7 +336,7 @@ fn salvage_breaks_an_item_into_gold_and_its_tier_and_theme_salvage() {
 }
 
 #[test]
-fn doctrine_is_reserved_and_the_unbuilt_effects_are_refused() {
+fn doctrine_is_reserved_and_a_weapon_recipe_waits_on_weapon_instances() {
     let d = data();
     let mut gs = game(&d);
     let pick = on_hero(&gs);
@@ -326,8 +348,9 @@ fn doctrine_is_reserved_and_the_unbuilt_effects_are_refused() {
     assert_eq!((gs.party.gold, gs.party.stash.contains_key("plain_blade")), (GOLD, false), "a doctrine beside a salvage applies nothing");
     // PK2-S4: `drill` is built; without the manifest's `durability.from_act` no mastery is gained (tests/mastery.rs)
     assert_eq!(refused(&d, &mut gs, SMITH, "drill_it", &pick), rpgkit_world::mastery::NOT_YET_TEXT);
-    assert!(refused(&d, &mut gs, SMITH, "repair_it", &pick).contains("needs weapon instances"));
+    // PK2-FOLLOWUP: `repair` is built, but this world has no `durability.from_act`, so no weapon is an instance
+    assert_eq!(refused(&d, &mut gs, SMITH, "repair_it", &pick), recipe::NO_WEAPONS_TEXT);
     let view = recipe::view(&d, &gs, SMITH, &pick);
     let row = view.iter().map(json::dict).find(|r| json::s(r, "id") == "repair_it").unwrap();
-    assert!(!json::b(row, "ready", true) && json::s(row, "reason").contains("weapon instances"), "the pane shows why");
+    assert!(!json::b(row, "ready", true) && json::s(row, "reason") == recipe::NO_WEAPONS_TEXT && json::sget(row, "targets").is_empty(), "the pane shows why");
 }

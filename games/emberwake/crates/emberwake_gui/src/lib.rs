@@ -3,10 +3,11 @@
 //! journal, battle results, battle); the agent link (TCP, `aegis link`) also reaches the battle command API while a
 //! battle is open. The desktop program is `src/main.rs` (`run_native`); the web build is this library as a `cdylib`
 //! (`web`, WEBREL1-G1), which reads the same launch keys from the page's URL query.
-//!   emberwake [screen=menu|arena|runner] [scene=goblin_skirmish] [rules=<id>] [seed=N] [port=47800] [data=<export dir>] [saves=<dir>]
+//!   emberwake [screen=menu|arena|runner] [scene=goblin_skirmish] [ruleset=<id>] [seed=N] [port=47800] [data=<export dir>] [saves=<dir>]
 //!             [headless=WxH [fps=N] [dpr=X] [idle_exit=S]]
-//! `scene=` (old name `encounter=`): the encounter `screen=arena` plays; `rules=` (old name `ruleset=`): the ruleset it
-//! plays by (default the encounter's own); both names of one key at once are refused (PR5-29a). `headless=`: no window
+//! `scene=` (old name `encounter=`): the encounter `screen=arena` plays (both names at once are refused, PR5-29a);
+//! `ruleset=`: the ruleset it plays by (default the encounter's own); `rules=` is refused (it adjusts rules on every
+//! command line, never names the ruleset; PR5-36, FB-223 (a)). `headless=`: no window
 //! and no sound device; the frames stay in memory and the agent link draws them out (`aegis_ui::shell::headless`).
 //! `screen=arena` and `screen=runner` need the dev tools (cargo feature `dev_tools`, default on; `DEV_TOOLS`).
 //! Keys: arrows / W A S D move, E interact, Esc back or game menu, Enter confirm, F12 screenshot; battle keys as listed
@@ -90,8 +91,8 @@ fn force_shipped_views(settings: &mut serde_json::Value, screen: Option<&str>) {
     }
 }
 
-/// LAYER-ENG-KEYS (PR5-29a): the engine's scenario driver launches with `scene=` (the encounter) and `rules=` (the
-/// ruleset id); the old keys `encounter=` and `ruleset=` still work (URLs, hand launches). Both names at once is refused.
+/// LAYER-ENG-KEYS (PR5-29a): the engine's scenario driver launches with `scene=` (the encounter) and `ruleset=` (the
+/// ruleset id); the old key `encounter=` still works (URLs, hand launches). Both names at once is refused.
 fn launch_key<'a>(args: &'a [(String, String)], key: &str, old: &str) -> Result<Option<&'a str>> {
     match (arg(args, key), arg(args, old)) {
         (Some(_), Some(_)) => anyhow::bail!("{key}= or its old name {old}=, not both"),
@@ -99,11 +100,15 @@ fn launch_key<'a>(args: &'a [(String, String)], key: &str, old: &str) -> Result<
     }
 }
 
-/// `rules=` (or `ruleset=`): only `screen=arena` plays by one a launch names; anywhere else it would be ignored, so it
-/// is refused.
+/// `ruleset=`: only `screen=arena` plays by one a launch names; anywhere else it would be ignored, so it is refused.
+/// PK2-FOLLOWUP (PR5-36, FB-223 (a)): `rules=` adjusts rules (`+id,-id`) on every command line and never names the
+/// ruleset; the launch has no rule adjustment, so it is refused rather than read as the id (PR5-29a's launch name).
 fn arena_ruleset<'a>(args: &'a [(String, String)]) -> Result<Option<&'a str>> {
-    match (launch_key(args, "rules", "ruleset")?, arg(args, "screen")) {
-        (Some(_), screen) if screen != Some("arena") => anyhow::bail!("rules= comes with screen=arena"),
+    if let Some(v) = arg(args, "rules") {
+        anyhow::bail!("rules={v} adjusts rules and is no launch key; name the ruleset with ruleset=<id>");
+    }
+    match (arg(args, "ruleset"), arg(args, "screen")) {
+        (Some(_), screen) if screen != Some("arena") => anyhow::bail!("ruleset= comes with screen=arena"),
         (ruleset, _) => Ok(ruleset),
     }
 }
@@ -258,10 +263,11 @@ mod tests {
         assert_eq!(arena_ruleset(&args(&[])).unwrap(), None);
         assert!(arena_ruleset(&args(&[("ruleset", "r")])).is_err());
         assert!(arena_ruleset(&args(&[("screen", "runner"), ("ruleset", "r")])).is_err());
-        // LAYER-ENG-KEYS: the engine's driver passes `rules=`; the old `ruleset=` still works; both is refused.
-        assert_eq!(arena_ruleset(&args(&[("screen", "arena"), ("rules", "r")])).unwrap(), Some("r"));
-        assert!(arena_ruleset(&args(&[("screen", "runner"), ("rules", "r")])).is_err());
-        assert!(arena_ruleset(&args(&[("screen", "arena"), ("rules", "r"), ("ruleset", "r")])).is_err());
+        // PK2-FOLLOWUP (FB-223 (a)): the engine's driver passes `ruleset=`; `rules=` never names the ruleset.
+        for list in [&[("screen", "arena"), ("rules", "r")][..], &[("screen", "arena"), ("ruleset", "r"), ("rules", "+x")], &[("screen", "runner"), ("rules", "r")]] {
+            let e = arena_ruleset(&args(list)).unwrap_err().to_string();
+            assert!(e.contains("ruleset=<id>"), "{list:?}: {e}");
+        }
     }
 
     #[test]

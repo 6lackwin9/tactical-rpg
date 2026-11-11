@@ -18,6 +18,8 @@ pub const MASTERY_BOOK: &str = "MASTERY_BOOK";
 /// The book's family and XP keys.
 pub const BOOK_FAMILY_KEY: &str = "mastery_family";
 pub const BOOK_XP_KEY: &str = "mastery_xp";
+/// PK2-FOLLOWUP (PR5-36): a book's XP when its row names none (the schema's default of `mastery_xp`).
+pub const BOOK_XP_DEFAULT: i32 = 150;
 /// The family row's technique list key, its keystone key, and the weapon row's own (masterwork) technique key.
 pub const TECHNIQUES_KEY: &str = "techniques";
 pub const KEYSTONE_KEY: &str = "keystone";
@@ -93,7 +95,7 @@ pub struct MasteryBook {
 
 impl MasteryBook {
     pub fn from_obj(o: &Obj) -> Self {
-        Self { family: string(o, BOOK_FAMILY_KEY, ""), xp: i64::from(int(o, BOOK_XP_KEY, 0)) }
+        Self { family: string(o, BOOK_FAMILY_KEY, ""), xp: i64::from(int(o, BOOK_XP_KEY, BOOK_XP_DEFAULT)) }
     }
 }
 

@@ -79,5 +79,28 @@
 			"skill_path": {}
 		}
 	},
+	"roster": {
+		"rules": [
+			{
+				"acts": [
+					0,
+					1
+				],
+				"downed_won": "wounded",
+				"downed_left": "wounded",
+				"downed_lost": "wounded",
+				"standing_lost": "wounded",
+				"wounded_max_hp_pct": 20
+			},
+			{
+				"acts": [],
+				"downed_won": "wounded",
+				"downed_left": "dead",
+				"downed_lost": "dead",
+				"standing_lost": "wounded",
+				"wounded_max_hp_pct": 20
+			}
+		]
+	},
 	"version": 1
 }

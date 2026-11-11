@@ -422,17 +422,22 @@ fn the_settle_takes_the_battle_wear_off_the_wielded_instances() {
     let main = |gs: &GameState| weapons::wielded(hero(gs), "main_hand").expect("the blade").clone();
     let (uid, full) = (main(&gs).uid, main(&gs).durability);
     let stash_before = gs.party.stash_weapons.clone();
-    roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[("main_hand", 2)])]);
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[("main_hand", 2)])]);
     assert_eq!((main(&gs).uid, main(&gs).durability), (uid.clone(), full - 2), "the same instance, worn by the spend");
     assert_eq!(gs.party.stash_weapons, stash_before, "the stash is untouched");
+    // PK2-FOLLOWUP (FB-218 (d)): the settle names the wear it took (the result key `wear`)
+    let moved: Vec<(&str, &str, i64, i64, bool)> = settled.wear.iter().map(|w| (w.slot.as_str(), w.uid.as_str(), w.from, w.to, w.dulled())).collect();
+    assert_eq!(moved, [("main_hand", uid.as_str(), full, full - 2, false)]);
     // a spend past what is left holds the instance at 0 (dulled); the off hand's too
     let off = weapons::wielded(hero(&gs), "off_hand").expect("the tome").durability;
-    roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[("main_hand", full), ("off_hand", off + 1)])]);
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[("main_hand", full), ("off_hand", off + 1)])]);
     assert_eq!((main(&gs).durability, weapons::wielded(hero(&gs), "off_hand").unwrap().durability), (0, 0));
-    // no spend, nothing changes
+    assert_eq!(settled.wear.iter().map(|w| (w.slot.as_str(), w.to, w.dulled())).collect::<Vec<_>>(), [("main_hand", 0, true), ("off_hand", 0, true)], "both dulled");
+    // no spend, nothing changes and nothing is named
     let before = gs.party.clone();
-    roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[])]);
+    let settled = roster::settle_party(&d, &mut gs, &FightEnd::new("won", "w"), &[worn_end(&id, &[])]);
     assert_eq!(gs.party.members[0].weapons, before.members[0].weapons);
+    assert!(settled.wear.is_empty());
 }
 
 /// A fielded member tracks wear only while instances are active: the act reached too (`weapons::active`), not just

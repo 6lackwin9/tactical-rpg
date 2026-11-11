@@ -50,6 +50,8 @@ pub enum PAct {
     ConfirmSkills,
     Unequip(String),
     Equip(String),
+    /// PK2-FOLLOWUP (PR5-36, FB-214 (f)): the hero reads a `MASTERY_BOOK` from the stash (`mastery::read_book`).
+    ReadBook(String),
     PouchAdd(String),
     PouchRemove(usize),
     /// INTENT2-U (`pouch_stacks`): set pouch slot item's packed count (`UnitState::set_packed`, `1..min(5, max_stack)`).
@@ -615,6 +617,7 @@ impl Character {
             },
             PAct::Unequip(slot) => self.gear_move(cx, |d, world, work, stash| take_off(d, world, work, stash, &slot)),
             PAct::Equip(item) => self.gear_move(cx, |d, world, work, stash| equip(d, world, work, stash, &item, None)),
+            PAct::ReadBook(item) => self.read_book(cx, &item),
             PAct::PouchAdd(item) => {
                 let stacks = self.stacks_on(cx);
                 self.gear_move(cx, |d, _, work, stash| pouch_put(d, work, stash, &item, None, stacks))
@@ -666,6 +669,34 @@ impl Character {
         let (work, stash) = self.gear.as_mut().unwrap();
         if let Err(e) = mv(&d, &world, work, stash) {
             show_errors(cx, vec![e]);
+        }
+    }
+
+    /// PK2-FOLLOWUP (PR5-36, FB-214 (f)): the hero reads mastery book `item` from the party stash (the kit's
+    /// `mastery::read_book`: its family's mastery XP at the proficiency rate; refused below proficiency 2, at mastery 3
+    /// or before mastery opens). The read applies at once (no Confirm); an open gear draft follows it (one copy fewer in
+    /// its stash, the hero's mastery), so the draft stays clean. A refusal shows its reason.
+    fn read_book(&mut self, cx: &mut Cx, item: &str) {
+        let d = cx.data.clone();
+        let id = self.member.clone();
+        let res = emberwake_world::mastery::read_book(&d, cx.gs_mut(), &id, item);
+        if !json::b(&res, "ok", false) {
+            show_errors(cx, json::sget(&res, "errors"));
+            return;
+        }
+        let xp = cx.gs().party.member(&id).map(|m| m.mastery_xp.clone()).unwrap_or_default();
+        if let Some((work, stash)) = self.gear.as_mut() {
+            work.mastery_xp = xp;
+            let left = stash.get(item).copied().unwrap_or(0) - 1;
+            if left > 0 {
+                stash.insert(item.to_string(), left);
+            } else {
+                stash.shift_remove(item);
+            }
+        }
+        for n in json::sget(&res, "notes") {
+            cx.log(n.clone());
+            cx.notice.push(n);
         }
     }
 
@@ -1476,10 +1507,13 @@ impl Character {
                 (Some(PAct::Equip((*id).clone())), "Click to wear it, or drag it onto a slot.")
             } else if def.item_type == "CONSUMABLE" {
                 (Some(PAct::PouchAdd((*id).clone())), "Click to put one in the battle pouch, or drag it onto a pouch slot.")
+            } else if def.item_type == emberwake_data::MASTERY_BOOK {
+                // PK2-FOLLOWUP (FB-214 (f)): a mastery book is read, not worn (a click, no drag)
+                (Some(PAct::ReadBook((*id).clone())), "Click to read it: this hero gains its weapon family's mastery (proficiency 2 or more, not yet mastery 3).")
             } else {
                 (None, "Not wearable.")
             };
-            let movable = act.is_some();
+            let movable = act.as_ref().is_some_and(|a| !matches!(a, PAct::ReadBook(_)));
             // U3.2-S3 (FB-34): every item shows (training is no gate); one the hero would wear under a wield penalty
             // carries the badge, and its card says why
             let badge = wield_badge(built.as_ref().map(|b| &b.unit), def);
@@ -2053,6 +2087,64 @@ mod tests {
         c.draft.insert(STATS[0].to_string(), 1);
         let q = ask(&mut c, &mut cx, PAct::ConfirmLevel);
         assert_eq!(q.state(&cx)["default"], json!("yes"), "spending points is not a discard");
+    }
+
+    // ---- PK2-FOLLOWUP (PR5-36, FB-214 (f)): reading a mastery book from the stash ----------------------------------
+
+    /// A scratch world (no shipped data): a class at sword proficiency 2 and axe 1, a sword book naming no XP (the
+    /// default) and an axe book; mastery opens from act 2, where the game plays.
+    fn book_cx() -> (Cx, String) {
+        const FROM_ACT: i64 = 2;
+        let with_ids = |rows: Value| -> Value {
+            Value::Array(rows.as_array().unwrap().iter().map(|r| {
+                let mut r = r.as_object().unwrap().clone();
+                let id = r["id"].as_str().unwrap().to_string();
+                r.insert("_world".into(), json!("ward"));
+                r.insert("_qid".into(), json!(format!("ward:{id}")));
+                Value::Object(r)
+            }).collect())
+        };
+        let catalog = json!({
+            "classes": [{"id": "fighter", "name": "Fighter", "proficiency": {"sword": {"level": 2}, "axe": {"level": 1}}}],
+            "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
+            "items": [{"id": "sword_book", "name": "Sword Book", "item_type": emberwake_data::MASTERY_BOOK, "mastery_family": "sword"},
+                {"id": "axe_book", "name": "Axe Book", "item_type": emberwake_data::MASTERY_BOOK, "mastery_family": "axe"}]
+        });
+        let families = json!([{"id": "sword", "item_type": "WEAPON", "hands": ["main_1h"]}, {"id": "axe", "item_type": "WEAPON", "hands": ["main_1h"]}]);
+        let worlds = json!({"ward": {"manifest": {"id": "ward", "name": "Ward", "start_location": "hub", "start_party": ["hero"], "campaign": {"start_act": 1}}, "own": {
+            "locations": with_ids(json!([{"id": "hub", "name": "Hub"}])),
+            "characters": with_ids(json!([{"id": "hero", "name": "Hero", "role": "party", "base_unit": "hero"}]))
+        }}});
+        let mut d = Data::from_values(&catalog, &worlds, &json!({"item_families": families}));
+        d.from_act = FROM_ACT;
+        let mut cx = crate::story::tests::story_cx(d.clone());
+        let mut gs = emberwake_world::new_game::create_for_world(&d, "ward", 1).expect("a new game");
+        gs.campaign.as_mut().expect("a campaign world").act = FROM_ACT;
+        gs.party.add_to_stash("sword_book", 2);
+        gs.party.add_to_stash("axe_book", 1);
+        crate::screens::enter_game(&mut cx, gs, -1, Vec::new());
+        cx.nav.clear();
+        let member = cx.gs().party.members[0].id.clone();
+        (cx, member)
+    }
+
+    #[test]
+    fn a_mastery_book_is_read_from_the_stash() {
+        use emberwake_data::mastery::{scaled, BOOK_XP_DEFAULT};
+        let (mut cx, member) = book_cx();
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "gear");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(c.widgets().iter().any(|w| w["id"] == "gear.stash.sword_book" && w["enabled"] == json!(true)), "the book's stash row is clickable");
+        c.click_id(&mut cx, "gear.stash.sword_book").expect("the row");
+        let xp = |cx: &Cx, fam: &str| cx.gs().party.members[0].mastery_xp.get(fam).copied().unwrap_or(0);
+        assert_eq!((xp(&cx, "sword"), cx.gs().party.stash["sword_book"]), (scaled(i64::from(BOOK_XP_DEFAULT), 2), 1), "+the default XP at the proficiency 2 rate, one copy used");
+        assert!(!c.has_draft(&cx), "the open gear draft follows the read: nothing to confirm");
+        c.act(&mut cx, PAct::ReadBook("axe_book".into()));
+        assert_eq!((xp(&cx, "axe"), cx.gs().party.stash["axe_book"]), (0, 1), "below proficiency 2: refused, the book kept");
+        cx.gs_mut().party.members[0].mastery_xp.insert("sword".into(), emberwake_world::mastery::xp_cap());
+        c.act(&mut cx, PAct::ReadBook("sword_book".into()));
+        assert_eq!(cx.gs().party.stash["sword_book"], 1, "at mastery 3: refused, the book kept");
     }
 
     // ---- RULESET1 9 D6: the deck view ------------------------------------------------------------------------------

@@ -665,6 +665,14 @@ impl Unit {
         out
     }
 
+    /// PK2-FOLLOWUP (PR5-36, the sims' `mastery=N`): sets the unit's mastery level in gear type `family` (clamped to
+    /// 0-3; a unit without mastery gets it) and reopens its techniques, as a member built with that mastery would hold.
+    pub fn set_mastery(&mut self, family: &str, level: i32) {
+        let level = level.clamp(0, rpgkit_data::mastery::MASTERY_MAX);
+        self.mastery.get_or_insert_with(IndexMap::new).insert(family.to_string(), level);
+        self.techniques = self.open_techniques();
+    }
+
     /// PK2-S4: the open technique of skill `skill_id` (None: not a technique now).
     pub fn technique(&self, skill_id: &str) -> Option<&Technique> {
         self.techniques.iter().find(|t| t.skill == skill_id)

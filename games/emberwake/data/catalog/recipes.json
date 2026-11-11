@@ -780,6 +780,81 @@
 					"delta": 1
 				}
 			]
+		},
+		{
+			"id": "hearth_repair",
+			"name": "Repair",
+			"description": "Restore a weapon's durability: Scrap scaled by the missing durability; higher tiers also need fine salvage, Inquisitor arms Inquisitor steel.",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {},
+			"target": "weapon",
+			"effects": [
+				{
+					"effect": "repair",
+					"gold": 10,
+					"count": 1,
+					"tiers": {
+						"UNCOMMON": "salvage_fine",
+						"RARE": "salvage_fine",
+						"EPIC": "salvage_fine",
+						"LEGENDARY": "salvage_fine"
+					},
+					"themes": {
+						"inquisitor": "salvage_inquisitor"
+					}
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
+		},
+		{
+			"id": "hearth_reforge",
+			"name": "Reforge",
+			"description": "Restore a weapon and make it masterwork (after Berek's quest Cold Slag, Black Iron).",
+			"npc": "berek_dorn",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "pk2.hearth_open",
+					"value": true,
+					"op": "=="
+				},
+				{
+					"kind": "flag",
+					"key": "pk2.masterwork_quest",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 100,
+				"items": {
+					"black_iron_ingot": 1
+				}
+			},
+			"target": "weapon",
+			"effects": [
+				{
+					"effect": "reforge",
+					"masterwork": true
+				},
+				{
+					"effect": "doctrine",
+					"axis": "preservationist",
+					"delta": 1
+				}
+			]
 		}
 	]
 }

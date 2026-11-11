@@ -231,6 +231,11 @@ pub fn find<'a>(party: &'a PartyState, uid: &str) -> Option<&'a Weapon> {
     all(party).into_iter().find(|w| w.uid == uid)
 }
 
+/// PK2-FOLLOWUP (PR5-36): the instance with uid `uid` to change (a recipe's `repair` or `reforge`), wherever it is.
+pub fn find_mut<'a>(party: &'a mut PartyState, uid: &str) -> Option<&'a mut Weapon> {
+    party.members.iter_mut().flat_map(|m| m.weapons.values_mut()).chain(party.stash_weapons.iter_mut()).find(|w| w.uid == uid)
+}
+
 /// The instance member `m` wields in `slot` (None: no instance there, or one of another item than the slot holds).
 pub fn wielded<'a>(m: &'a UnitState, slot: &str) -> Option<&'a Weapon> {
     m.weapons.get(slot).filter(|w| m.equipment.get(slot) == Some(&w.item))
@@ -259,20 +264,44 @@ pub fn wear_of(d: &Data, m: &UnitState, world: &str) -> IndexMap<rpgkit_rules::g
         .collect()
 }
 
+/// PK2-FOLLOWUP (PR5-36, FB-218 (d)): one instance's wear at a settle (the result key `wear`): the member, the slot,
+/// the instance and its item, its durability before and after; `to` 0 is dulled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WearMove {
+    pub member: String,
+    pub slot: String,
+    pub uid: String,
+    pub item: String,
+    pub from: i64,
+    pub to: i64,
+}
+
+impl WearMove {
+    /// Whether the weapon ends the settle dulled (at 0).
+    pub fn dulled(&self) -> bool {
+        self.to <= 0
+    }
+}
+
 /// PK2-S5b: the battle's wear (`HeroEnd::worn`) comes off the instances each fielded member still in the party wields
-/// in those slots, each held at 0 or more. Nothing to take, nothing changes.
-pub fn wear(gs: &mut GameState, ends: &[roster::HeroEnd]) {
+/// in those slots, each held at 0 or more. Nothing to take, nothing changes. PK2-FOLLOWUP: returns each instance's move
+/// (a spend of 0 is none), in member and slot order.
+pub fn wear(gs: &mut GameState, ends: &[roster::HeroEnd]) -> Vec<WearMove> {
+    let mut out = Vec::new();
     for e in ends.iter().filter(|e| !e.worn.is_empty()) {
         let Some(m) = gs.party.members.iter_mut().find(|m| m.id == e.member) else { continue };
         for (slot, n) in &e.worn {
-            if wielded(m, slot).is_none() {
+            if wielded(m, slot).is_none() || *n <= 0 {
                 continue;
             }
             if let Some(w) = m.weapons.get_mut(slot) {
-                w.durability = (w.durability - (*n).max(0)).max(0);
+                let from = w.durability;
+                w.durability = (w.durability - n).max(0);
+                out.push(WearMove { member: e.member.clone(), slot: slot.clone(), uid: w.uid.clone(), item: w.item.clone(), from, to: w.durability });
             }
         }
     }
+    out
 }
 
 /// Equipment by uid: member `member` wields the stashed instance `uid` in `slot`, which must hold the same item; the

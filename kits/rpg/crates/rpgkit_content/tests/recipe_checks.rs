@@ -1,7 +1,7 @@
 //! PK2-S3 (`docs/sessions/PK2_GRAFTS.md` sections 4, 5): the catalog kind `recipes`, a class proficiency entry's `role`
 //! and an item's `theme`, on a scratch data folder built here (no shipped data). A missing file is an empty table; a
-//! recipe row's checks (id, name, npc, target, cost, effects: known, their keys and target, their refs, the effects whose
-//! system is not built yet) and across rows (unique ids); the world refs (the offering character, the `requires`
+//! recipe row's checks (id, name, npc, target, cost, effects: known, their keys and target, their refs; PK2-FOLLOWUP:
+//! `repair`, `reforge`, `forge_rite`, a masterwork reforge's `requires`) and across rows (unique ids); the world refs (the offering character, the `requires`
 //! conditions) in the whole-catalog report and the Forge's check; the loader keeps the rows that pass and they reach
 //! `Catalog::recipes`; the writer takes a row and re-saves it byte for byte.
 
@@ -117,7 +117,7 @@ fn each_recipe_mistake_has_its_text() {
 }
 
 #[test]
-fn the_unbuilt_effects_are_refused_until_their_system_lands() {
+fn the_weapon_and_rite_effects_are_built_and_checked() {
     let (_scratch, data) = scratch("pending");
     base_rows(&data);
     let v = store::view(&data);
@@ -126,9 +126,27 @@ fn the_unbuilt_effects_are_refused_until_their_system_lands() {
     assert!(check(fx(json!([{"effect": "drill", "xp": 10}]))).is_empty());
     assert_eq!(check(fx(json!([{"effect": "drill", "xp": 0}]))), ["Effect 1 (drill): xp must be a whole number 1..999."]);
     assert_eq!(check(fx(json!([{"effect": "drill"}]))), ["Effect 1 (drill): xp must be a whole number 1..999."]);
+    // PK2-FOLLOWUP (PR5-36): nothing waits any more; `repair` {gold, count, tiers, themes}, `reforge` {masterwork} on a
+    // weapon, `forge_rite` on a member
+    assert!(rpgkit_data::recipe::RECIPE_PENDING.is_empty());
     let weapon = |effects: Value| with(with(surgery("r_one"), "target", json!("weapon")), "effects", effects);
-    assert_eq!(check(weapon(json!([{"effect": "repair"}]))), ["Effect 1 (repair): needs weapon instances, which this build does not have yet."]);
-    assert_eq!(check(weapon(json!([{"effect": "reforge", "masterwork": true}]))), ["Effect 1 (reforge): needs weapon instances, which this build does not have yet."]);
+    assert!(check(weapon(json!([{"effect": "repair"}]))).is_empty(), "a bare repair: the recipe's cost alone");
+    assert!(check(weapon(json!([{"effect": "repair", "gold": 20, "count": 2, "tiers": {"RARE": "fine"}, "themes": {"order": "core"}}]))).is_empty());
+    assert_eq!(check(weapon(json!([{"effect": "repair", "gold": -1}]))), ["Effect 1 (repair): gold must be a whole number 0..9999999."]);
+    assert_eq!(check(weapon(json!([{"effect": "repair", "count": 0}]))), ["Effect 1 (repair): count must be a whole number 1..99."]);
+    assert_eq!(check(weapon(json!([{"effect": "repair", "tiers": {"SHINY": "fine"}}]))), ["Effect 1 (repair): tiers key 'SHINY' is not one of COMMON, UNCOMMON, RARE, EPIC, LEGENDARY."]);
+    assert_eq!(check(weapon(json!([{"effect": "repair", "themes": {"order": "nope"}}]))), ["Effect 1 (repair): themes order: unknown item 'nope'."]);
+    assert_eq!(check(weapon(json!([{"effect": "repair", "xp": 1}]))), ["Effect 1 (repair): unknown key 'xp'."]);
+    assert_eq!(check(fx(json!([{"effect": "repair"}]))), ["Effect 1 (repair): works on a weapon, but the recipe's target is member."]);
+    assert!(check(weapon(json!([{"effect": "reforge"}]))).is_empty());
+    assert_eq!(check(weapon(json!([{"effect": "reforge", "masterwork": 1}]))), ["Effect 1 (reforge): masterwork must be true or false."]);
+    // masterwork forging opens with a quest: the row names its gate
+    let gate = json!([{"kind": "flag", "key": "forge_open", "value": true, "op": "=="}]);
+    assert!(check(with(weapon(json!([{"effect": "reforge", "masterwork": true}])), "requires", gate)).is_empty());
+    assert_eq!(check(weapon(json!([{"effect": "reforge", "masterwork": true}]))), ["A masterwork reforge needs requires (what opens masterwork forging, such as a quest flag)."]);
+    assert!(check(fx(json!([{"effect": "forge_rite"}]))).is_empty());
+    assert_eq!(check(fx(json!([{"effect": "forge_rite", "family": "sword"}]))), ["Effect 1 (forge_rite): unknown key 'family'."]);
+    assert_eq!(check(weapon(json!([{"effect": "forge_rite"}]))), ["Effect 1 (forge_rite): works on a member, but the recipe's target is weapon."]);
 }
 
 #[test]
@@ -154,9 +172,9 @@ fn the_writer_takes_a_recipe() {
     let (_scratch, data) = scratch("writer");
     base_rows(&data);
     let file = data.join("catalog").join(format!("{RECIPES_KIND}.json"));
-    let weapon = with(with(surgery("r_weapon"), "target", json!("weapon")), "effects", json!([{"effect": "repair"}]));
-    let refused = store::upsert(&data, None, RECIPES_KIND, &dict(weapon), None).err().expect("a pending effect is refused");
-    assert!(refused.iter().any(|e| e.ends_with("needs weapon instances, which this build does not have yet.")), "{refused:?}");
+    let weapon = with(with(surgery("r_weapon"), "target", json!("weapon")), "effects", json!([{"effect": "reforge", "masterwork": true}]));
+    let refused = store::upsert(&data, None, RECIPES_KIND, &dict(weapon), None).err().expect("an ungated masterwork reforge is refused");
+    assert!(refused.iter().any(|e| e.ends_with("A masterwork reforge needs requires (what opens masterwork forging, such as a quest flag).")), "{refused:?}");
     store::upsert(&data, None, RECIPES_KIND, &dict(surgery("r_one")), None).expect("a valid row");
     let text = fs::read_to_string(&file).unwrap();
     assert_eq!(store::resave_text(&data, None, RECIPES_KIND).unwrap(), text, "a re-save without changes is byte-identical");

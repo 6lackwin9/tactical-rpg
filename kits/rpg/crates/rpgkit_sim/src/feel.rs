@@ -12,7 +12,9 @@
 //! driver. `armor=` and `tune=` change the run's in-memory units and ruleset only.
 //!
 //! SIMCOUNT1: `counts=on` adds the rule counts of `RULE_COUNTERS` per side to each block and to FEEL_JSON. It is a key, not
-//! the default, because `sim_golden` holds the default lines. A new count is one row of that table.
+//! the default, because `sim_golden` holds the default lines. A new count is one row of that table. PK2-FOLLOWUP
+//! (PR5-36): it also reports each side's weapon wear (`worn`, `dulled`; non-zero only with `durability=` under the rule
+//! `durability`, which `feel` applies as every mode does).
 //!
 //! The runner calls the hooks (`start`, `planned`, `round_end`, `end`) while it fights; they only read the session.
 
@@ -131,6 +133,10 @@ pub struct Side {
     pub crises: i64,
     pub channel_bands: IndexMap<String, i64>,
     pub breaks_taken: i64,
+    /// PK2-FOLLOWUP (PR5-36, FB-218 (c-e), FB-220): the durability the side's tracked weapons spent and how many ended a
+    /// fight dulled (`rpgkit_battle::wear::tally`; 0 without `durability=` and the rule `durability`).
+    pub worn: i64,
+    pub dulled: i64,
 }
 
 impl Side {
@@ -162,6 +168,8 @@ impl Side {
             *self.channel_bands.entry(k.clone()).or_default() += v;
         }
         self.breaks_taken += o.breaks_taken;
+        self.worn += o.worn;
+        self.dulled += o.dulled;
     }
 
     /// SIMCOUNT1: one `RULE_COUNTERS` count (0 when nothing counted it).
@@ -182,7 +190,7 @@ impl Side {
             "counts": counts, "per_fight": per_fight, "protected_share_pct": self.protected_share(),
             "rest_blocks_per_round": round2(ratio(self.rest_blocks, rounds)), "items_by_id": counts_json(&self.items_by_id),
             "channel": {"rounds": self.channel_rounds, "meter_triggers": self.channel_triggers, "crises": self.crises, "bands": counts_json(&self.channel_bands)},
-            "breaks_taken": self.breaks_taken,
+            "breaks_taken": self.breaks_taken, "wear": {"worn": self.worn, "dulled": self.dulled},
         })
     }
 
@@ -192,7 +200,7 @@ impl Side {
         let items: Vec<String> = self.items_by_id.iter().map(|(k, v)| format!("{k} {v}")).collect();
         let bands: Vec<String> = self.channel_bands.iter().map(|(k, v)| format!("{k} {v}")).collect();
         format!(
-            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, crises {}, rounds by band {}; breaks taken {}",
+            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, crises {}, rounds by band {}; breaks taken {}; worn {}, dulled {}",
             counts.join(", "),
             self.protected_share(),
             round2(ratio(self.rest_blocks, rounds)),
@@ -201,7 +209,9 @@ impl Side {
             self.channel_triggers,
             self.crises,
             if bands.is_empty() { "-".to_string() } else { bands.join(" ") },
-            self.breaks_taken
+            self.breaks_taken,
+            self.worn,
+            self.dulled
         )
     }
 
@@ -630,6 +640,12 @@ impl Feel {
             _ => c.capped += 1,
         }
         c.rounds.push(rounds);
+        // PK2-FOLLOWUP: each side's weapon wear this fight (counts=on)
+        for (side, units) in [(&mut c.party, &s.w.allies), (&mut c.enemy, &s.w.enemies)] {
+            let (worn, dulled) = rpgkit_battle::wear::tally(&s.w, units);
+            side.worn += worn;
+            side.dulled += i64::from(dulled);
+        }
         for e in s.log.iter().filter(|e| e.outcome == "BREAK") {
             *c.breaks.entry(e.status.clone()).or_default() += 1;
             // PR5-26 (FB-191 (f)): by the broken unit's side (the entry's actor)

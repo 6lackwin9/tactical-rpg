@@ -195,6 +195,9 @@ pub struct Settled {
     pub remains: Vec<(String, String)>,
     /// PK2-S4: the weapon mastery the members who came home gained by use (`mastery::settle`), in order.
     pub mastery: Vec<crate::mastery::Gain>,
+    /// PK2-FOLLOWUP (PR5-36, FB-218 (d)): the battle's wear taken off the wielded weapon instances (`weapons::wear`), in
+    /// order (a weapon at 0 is dulled).
+    pub wear: Vec<crate::weapons::WearMove>,
 }
 
 /// PK2-S1: a member's unit track stage moved at the settle.
@@ -432,8 +435,9 @@ pub fn auto_fill_at_start(d: &Data, gs: &mut GameState, world: &str) -> Vec<Stri
 pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Settled {
     // PK2-S5b: first the wear the battle spent comes off the wielded instances (before a departure or `forbid_hands`
     // moves them to the stash)
-    crate::weapons::wear(gs, ends);
+    let wear = crate::weapons::wear(gs, ends);
     let mut out = settle_fates(d, gs, f, ends);
+    out.wear = wear;
     // A1.2-K3 (INTENT2-K3): after every departure, the members who came home top their pouches up from the stash (the
     // fight's world), so a departing member takes nothing and only survivors are named short
     let home: Vec<String> = ends.iter().map(|e| e.member.clone()).filter(|m| !out.departed.iter().any(|(x, _)| x == m) && gs.party.member(m).is_some()).collect();

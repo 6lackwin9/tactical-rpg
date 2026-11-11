@@ -304,7 +304,52 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
     errors.extend(path_errors(v, json::get(e, "skill_path")));
     errors.extend(class_basics_errors(v, e));
     errors.extend(loadout_errors(v, e));
+    errors.extend(duplicate_skill_errors(v, &ClassDef::from_obj(e), None));
     errors
+}
+
+/// PK2-FOLLOWUP (PR5-36, FB-214 (e)): the skills a unit owns come from its class path, its `extra_skills` and the
+/// techniques (and keystone) of its class's masterable families (`masterable_families`); a skill family owned through
+/// two of them is refused (a technique is standard-round only and grip-greyed, so the same skill on the path would
+/// read two ways). A class row checks its path against its techniques (`extra` None); a derived unit row checks its
+/// `extra_skills` against both (the class's own clash is the class row's; a fixed unit owns no path). One message per
+/// family and pair.
+fn duplicate_skill_errors(v: &View, class: &ClassDef, extra: Option<&[String]>) -> Vec<String> {
+    let path: Vec<String> = class.path_steps().into_iter().map(|(_, s)| s).collect();
+    let techniques: Vec<String> = masterable_families(v, class)
+        .iter()
+        .flat_map(|f| {
+            let row = v.get("item_families", f);
+            let mut ids: Vec<String> = json::arr(json::get(row, rpgkit_data::mastery::TECHNIQUES_KEY)).iter().map(|t| json::s(json::dict(t), "skill")).collect();
+            ids.push(json::s(row, rpgkit_data::mastery::KEYSTONE_KEY));
+            ids
+        })
+        .filter(|id| !id.is_empty())
+        .collect();
+    let pairs: Vec<(&str, &[String], &str, &[String])> = match extra {
+        None => vec![("the class path", &path, "a technique", &techniques)],
+        Some(extra) => vec![("the extra skills", extra, "the class path", &path), ("the extra skills", extra, "a technique", &techniques)],
+    };
+    let mut out = Vec::new();
+    for (a_label, a, b_label, b) in pairs {
+        let b_families: Vec<&str> = b.iter().map(|id| v.typed.family_of(id)).collect();
+        let mut seen: Vec<&str> = Vec::new();
+        for id in a {
+            let fam = v.typed.family_of(id);
+            if b_families.contains(&fam) && !seen.contains(&fam) {
+                seen.push(fam);
+                out.push(format!("Skill '{id}' is in both {a_label} and {b_label} (family '{fam}'); a unit owns each skill once."));
+            }
+        }
+    }
+    out
+}
+
+/// PK2-S4: the class's masterable families (main-hand weapon families of the item family table at proficiency 2 or
+/// more), in its proficiency order.
+fn masterable_families(v: &View, class: &ClassDef) -> Vec<String> {
+    use rpgkit_data::mastery as m;
+    class.proficiency.iter().filter(|(f, p)| p.level >= m::MASTERY_PROF_MIN && m::main_hand_family(v.get("item_families", f))).map(|(f, _)| f.clone()).collect()
 }
 
 /// CLASS-BASICS (user 2026-11-08): a class's `basics` are skill ids, each a tier 1 skill (an unknown id, an engine skill
@@ -343,6 +388,10 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
     errors.extend(loadout_errors(v, e));
     if let Some(a) = arch.filter(|_| !fixed_mode) {
         errors.extend(skill_loadout_errors(v, e, a));
+    }
+    // a fixed unit owns its extra skills alone (no class path, no mastery), so only a derived unit can repeat one
+    if let Some(a) = arch.filter(|_| !fixed_mode) {
+        errors.extend(duplicate_skill_errors(v, a, Some(&json::sget(e, "extra_skills"))));
     }
     errors.extend(requires_errors(v, e, arch));
     errors.extend(template_errors(v, e));
@@ -748,7 +797,7 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
 /// without a family table.
 pub fn masterable_warnings(v: &View, class: &ClassDef) -> Vec<String> {
     use rpgkit_data::mastery as m;
-    let fams: Vec<&String> = class.proficiency.iter().filter(|(f, p)| p.level >= m::MASTERY_PROF_MIN && m::main_hand_family(v.get("item_families", f))).map(|(f, _)| f).collect();
+    let fams = masterable_families(v, class);
     if fams.len() <= m::MASTERABLE_MAX {
         return Vec::new();
     }
