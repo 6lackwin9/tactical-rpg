@@ -7,8 +7,9 @@
 //! the member's max HP now), `floor_offset` (for the member's next battle; a member with a graft), `train_proficiency`
 //! (one level in a family of the class role, from `to - 1` to `to`), `doctrine` (reserved: nothing yet); the item
 //! effect `salvage` (the picked stash item broken down into the effect's gold plus the salvage item its rarity and its
-//! theme name). `drill`, `repair` and `reforge` wait on systems not built yet (weapon mastery, weapon instances): a
-//! recipe with one is refused (and the content check refuses the row).
+//! theme name). PK2-S4: `drill` {xp} (mastery XP in the picked family, or the member's only masterable one, scaled by
+//! its proficiency rate; `mastery::gain`, from `durability.from_act`). `repair` and `reforge` wait on weapon instances:
+//! a recipe with one is refused (and the content check refuses the row).
 
 use crate::data::Data;
 use crate::dialogue;
@@ -20,7 +21,8 @@ use rpgkit_data::recipe::{self as r, RecipeDef, TARGET_ITEM, TARGET_MEMBER, TARG
 use serde_json::Value;
 
 /// What a run works on: the party member (a `member` recipe), the stash item (an `item` recipe) and, for a
-/// `train_proficiency` recipe whose class role holds more than one family, the family ("" = the only one).
+/// `train_proficiency` recipe whose class role holds more than one family or a `drill` for a member with more than one
+/// masterable family, the family ("" = the only one).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Pick {
     pub member: String,
@@ -196,6 +198,15 @@ fn member_effect(d: &Data, gs: &mut GameState, name: &str, fx: &Dict, pick: &Pic
             m.floor_offset += json::i(fx, "delta", 0);
         }
         r::FX_TRAIN => train(d, m, &who, fx, &pick.family, notes)?,
+        r::FX_DRILL => {
+            // PK2-S4: mastery XP in the picked family (or the member's only masterable one), scaled by its rate
+            let family = crate::mastery::drill_family(d, m, &pick.family);
+            if !crate::mastery::open(d, gs) {
+                return Err(crate::mastery::NOT_YET_TEXT.into());
+            }
+            let g = crate::mastery::gain(d, gs, &pick.member, &family?, json::i(fx, "xp", 0))?;
+            notes.push(crate::mastery::note(d, gs, &g));
+        }
         other => return Err(format!("Unknown recipe effect '{other}'.")),
     }
     Ok(())

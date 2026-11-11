@@ -101,6 +101,9 @@ pub struct HeroEnd {
     /// PK2-S1 (FB-174 (5)): the unit track whose departure stage turned the member on everyone, when it still fights
     /// everyone at the battle end (`rpgkit_battle::mark::hostile_at_end`; "" = it does not): the settle departs it.
     pub hostile: String,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the main-hand weapon families it attacked with this battle
+    /// (`rpgkit_battle::world::World::weapon_attacks`): the settle's mastery use (`mastery::settle`).
+    pub attacked: Vec<String>,
 }
 
 /// The ends of session `s`'s fielded members: `members` (member id, unloaded pouch ids) in the order they were fielded,
@@ -124,6 +127,7 @@ pub fn hero_ends(s: &Session, members: &[(String, Vec<String>)]) -> Vec<HeroEnd>
                 fate: fates.iter().find(|(c, _)| *c == a).map(|(_, f)| *f),
                 marks: s.w.marks.of(a).into_iter().map(|(m, v)| (m, i64::from(v))).collect(),
                 hostile: rpgkit_battle::mark::hostile_at_end(&s.w, a),
+                attacked: s.w.weapon_attacks.get(&a).cloned().unwrap_or_default(),
             }
         })
         .collect()
@@ -179,6 +183,8 @@ pub struct Settled {
     pub cleared: Vec<(String, String)>,
     /// PK2-S2: the items fallen members left in the stash (member, item id; `fallen_remains`).
     pub remains: Vec<(String, String)>,
+    /// PK2-S4: the weapon mastery the members who came home gained by use (`mastery::settle`), in order.
+    pub mastery: Vec<crate::mastery::Gain>,
 }
 
 /// PK2-S1: a member's unit track stage moved at the settle.
@@ -418,6 +424,9 @@ pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]
     // fight's world), so a departing member takes nothing and only survivors are named short
     let home: Vec<String> = ends.iter().map(|e| e.member.clone()).filter(|m| !out.departed.iter().any(|(x, _)| x == m) && gs.party.member(m).is_some()).collect();
     out.stash_short = auto_fill(d, gs, &f.world, &home);
+    // PK2-S4: the members who came home gain mastery in the families they attacked with (from `durability.from_act`)
+    let came_home: Vec<&HeroEnd> = ends.iter().filter(|e| home.contains(&e.member)).collect();
+    out.mastery = crate::mastery::settle(d, gs, &came_home);
     out
 }
 
@@ -514,6 +523,7 @@ pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec
                 fate: Some(if hp > 0 { PartyFate::Standing } else { PartyFate::Downed }),
                 marks: Vec::new(),
                 hostile: String::new(),
+                attacked: Vec::new(),
             })
         })
         .collect()

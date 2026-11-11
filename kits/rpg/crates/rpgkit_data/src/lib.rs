@@ -17,12 +17,14 @@ use serde_json::Value;
 
 pub mod body_slot;
 pub mod dojo_preset;
+pub mod mastery;
 pub mod recipe;
 pub mod terms;
 pub mod unit_budget;
 pub mod unit_template;
 pub mod unit_track;
 pub use body_slot::{BodySlotDef, GraftSpec, BODY_ROLES, BODY_ROLE_CLASS, BODY_ROLE_MONSTER, BODY_EFFECTS_KEY, BODY_SLOTS_KIND, BODY_SLOTS_MAX, GRAFT, GRAFT_TIERS, GRAFT_TOP_TIER_NEEDS};
+pub use mastery::{MasteryBook, Technique, MASTERY_BOOK};
 pub use recipe::{RecipeCost, RecipeDef, PROF_ROLES, RECIPES_KIND, RECIPE_SERVICE, RECIPE_TARGETS};
 pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
@@ -640,6 +642,14 @@ pub struct ItemDef {
     /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): the item's theme id (a faction's arms; "" = none), which picks the
     /// themed salvage a `salvage` recipe gives for it.
     pub theme: String,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a `MASTERY_BOOK` item's family and XP (None for any other item type).
+    pub book: Option<MasteryBook>,
+    /// PK2-S4: the family's techniques (the resolved row's `mastery::ITEM_FAMILY_TECHNIQUES` key; mastery n opens the
+    /// first n) and its keystone skill (`ITEM_FAMILY_KEYSTONE`; "" = none).
+    pub family_techniques: Vec<Technique>,
+    pub family_keystone: String,
+    /// PK2-S4: the weapon's own technique, open while a masterwork instance of it is wielded (None = none).
+    pub technique: Option<Technique>,
     pub raw: Obj,
 }
 
@@ -786,6 +796,10 @@ impl ItemDef {
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
             graft: (string(o, "item_type", "") == GRAFT).then(|| GraftSpec::from_obj(o)),
             theme: string(o, "theme", ""),
+            book: (string(o, "item_type", "") == MASTERY_BOOK).then(|| MasteryBook::from_obj(o)),
+            family_techniques: Technique::list(o, mastery::ITEM_FAMILY_TECHNIQUES),
+            family_keystone: string(o, mastery::ITEM_FAMILY_KEYSTONE, ""),
+            technique: Technique::one(o, mastery::TECHNIQUE_KEY),
             raw: o.clone(),
         }
     }

@@ -4,7 +4,7 @@ use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_core::value::to_int;
-use rpgkit_data::{Catalog, ClassDef, Deck, UnitDef, UnitTemplate, NO_ITEM};
+use rpgkit_data::{Catalog, ClassDef, Deck, Technique, UnitDef, UnitTemplate, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
@@ -354,8 +354,21 @@ pub struct Unit {
     /// `floors` table gives (0 = none).
     pub floor_offset: i32,
     /// PK2-S2: the skills its keystone grafts teach: open without an active slot, each taking one of the deck's keystone
-    /// slots (`slotted`).
+    /// slots (`slotted`). PK2-S4: or the wielded family's keystone (`mastery_keystone`).
     pub keystone_skills: Vec<String>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a party member's weapon mastery levels (gear type -> 1-3). None = the
+    /// unit holds no mastery (a catalog unit, an enemy, a guest, a member with no mastery level and no masterwork main
+    /// hand): no technique opens.
+    pub mastery: Option<IndexMap<String, i32>>,
+    /// PK2-S4: the main-hand weapon is a masterwork instance (its own `technique` opens; weapon instances, PR5-13a).
+    pub masterwork: bool,
+    /// PK2-S4: the techniques open now: the main-hand weapon family's first n at mastery n, then a masterwork weapon's
+    /// own; rebuilt on every sync. Owned and open without a slot, standard rounds only, greyed under the wrong grip.
+    pub techniques: Vec<Technique>,
+    /// PK2-S4: the wielded family's keystone the unit holds (mastery 3 and its forge rite; "" = none; set once at build
+    /// from the saved main hand, not on a mid-battle swap, unlike `techniques`), also in
+    /// `keystone_skills`; standard rounds only.
+    pub mastery_keystone: String,
 }
 
 impl Unit {
@@ -438,6 +451,10 @@ impl Unit {
             graft_count: None,
             floor_offset: 0,
             keystone_skills: Vec::new(),
+            mastery: None,
+            masterwork: false,
+            techniques: Vec::new(),
+            mastery_keystone: String::new(),
         }
     }
 
@@ -618,6 +635,47 @@ impl Unit {
             self.apply_effects(cat, &fx, &src, true);
         }
         self.apply_family_bonuses(cat);
+        self.techniques = self.open_techniques();
+    }
+
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the techniques open now (`techniques`): none without mastery or a main-hand
+    /// weapon; else the weapon family's first n techniques at mastery n (at most 3), then the weapon's own technique when
+    /// it is a masterwork instance, each skill once.
+    fn open_techniques(&self) -> Vec<Technique> {
+        let (Some(levels), Some(main)) = (&self.mastery, self.inventory.get(Slot::MainHand)) else { return Vec::new() };
+        if main.item.item_type != "WEAPON" {
+            return Vec::new();
+        }
+        let level = levels.get(main.weapon_type()).copied().unwrap_or(0).clamp(0, rpgkit_data::mastery::MASTERY_MAX);
+        let mut out: Vec<Technique> = main.item.family_techniques.iter().take(level as usize).cloned().collect();
+        if let Some(own) = main.item.technique.as_ref().filter(|_| self.masterwork) {
+            out.push(own.clone());
+        }
+        let mut seen: Vec<String> = Vec::new();
+        out.retain(|t| {
+            let fresh = !seen.contains(&t.skill);
+            seen.push(t.skill.clone());
+            fresh
+        });
+        out
+    }
+
+    /// PK2-S4: the open technique of skill `skill_id` (None: not a technique now).
+    pub fn technique(&self, skill_id: &str) -> Option<&Technique> {
+        self.techniques.iter().find(|t| t.skill == skill_id)
+    }
+
+    /// PK2-S4: whether `skill_id` is a technique open now or the unit's wielded-family keystone: owned and open without
+    /// a slot, usable only in standard rounds (never in a Channel round).
+    pub fn technique_skill(&self, skill_id: &str) -> bool {
+        self.technique(skill_id).is_some() || (!self.mastery_keystone.is_empty() && self.mastery_keystone == skill_id)
+    }
+
+    /// PK2-S4: why technique `skill_id` is greyed now (None: it fits, or it is no technique): its grip tag against the
+    /// main-hand weapon's grip (`Technique::grip_problem`).
+    pub fn technique_problem(&self, skill_id: &str) -> Option<&'static str> {
+        let t = self.technique(skill_id)?;
+        t.grip_problem(self.inventory.get(Slot::MainHand).is_some_and(|e| e.item.two_handed))
     }
 
     /// U3.2-S4 (U3 Level 2 and Level 3): each worn gear family once, at the unit's proficiency in it: from level 2 its
@@ -925,7 +983,8 @@ impl Unit {
     /// HOOKS1 UM6: a meter skill the battle gave is open without a slot.
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
         // PK2-S2: a keystone graft's skill sits in the keystone slot, open without an active slot
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.keystone_skill(skill_id) {
+        // PK2-S4: a technique is open without a slot while its weapon is wielded
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.keystone_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
@@ -976,7 +1035,8 @@ impl Unit {
             let basic = cat.is_basic_family(&fam) || rule.basics.contains(&fam);
             // U3.2-S4 (OFFHAND1): a family owned only through worn gear takes no slot (it is open while worn)
             // PK2-S2: nor does a keystone graft's (it sits in the keystone slot)
-            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id) && !self.keystone_skill(&s.id));
+            // PK2-S4: nor does a technique (open while its weapon is wielded)
+            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id) && !self.gear_skill(&s.id) && !self.keystone_skill(&s.id) && !self.technique_skill(&s.id));
             if !basic && owned && !actives.contains(&fam) {
                 actives.push(fam);
             }
@@ -991,7 +1051,8 @@ impl Unit {
 
     /// HOOKS1 UM6: a meter skill the battle gave is owned (before the deck rule's closed basics).
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) {
+        // PK2-S4: a technique open now is owned
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         if let Some(open) = self.deck_basic(cat, skill_id) {
@@ -1272,6 +1333,12 @@ pub struct Growth {
     /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the proficiency levels the member trained (a recipe), on
     /// top of its class's and its drills' (`Proficiency::add_bonus`; the level still tops out at `PROF_MAX_LEVEL`).
     pub trained: IndexMap<String, i32>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the member's weapon mastery level (1-3; `Unit::mastery`).
+    pub mastery: IndexMap<String, i32>,
+    /// PK2-S4: the member's main-hand weapon is a masterwork instance (`Unit::masterwork`; weapon instances, PR5-13a).
+    pub masterwork: bool,
+    /// PK2-S4: the member's forge rite is done (with mastery 3 the wielded family's keystone opens, `Unit::mastery_keystone`).
+    pub forge_rite: bool,
 }
 
 /// U2.2-S2 (FB-12): everything one unit is built from. A static unit (an NPC, a named enemy, a Dojo or sim unit) is its
@@ -1363,6 +1430,16 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
         }
         _ => Vec::new(),
     };
+    // PK2-S4: a member's mastery, and the wielded family's keystone before its passives (it takes a keystone slot)
+    if let Some(g) = &b.growth {
+        // a member without mastery (and no masterwork) holds none, so its unit reads as before
+        u.mastery = (!g.mastery.is_empty() || g.masterwork).then(|| g.mastery.clone());
+        u.masterwork = g.masterwork;
+        u.mastery_keystone = mastery_keystone(&u, g);
+        if !u.mastery_keystone.is_empty() {
+            u.keystone_skills.push(u.mastery_keystone.clone());
+        }
+    }
     for id in &b.over.passives {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);
@@ -1424,6 +1501,22 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     }
     apply_tuning(&mut u, &b.over.tuning);
     BuiltUnit { unit: u, pouch_unloaded, loadout_error }
+}
+
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5, the standard-path keystone): the keystone member `g` holds ("" = none): the
+/// main-hand weapon family's keystone (the member's saved main hand, else its row's) at mastery 3 once its forge rite is
+/// done, and only while no keystone graft holds the keystone (a unit holds one keystone, of either path).
+fn mastery_keystone(u: &Unit, g: &Growth) -> String {
+    if !g.forge_rite || !u.keystone_skills.is_empty() {
+        return String::new();
+    }
+    let saved = g.equipment.iter().find(|(s, _)| *s == Slot::MainHand).map(|(_, i)| i);
+    let Some(main) = saved.or_else(|| u.inventory.get(Slot::MainHand).map(|e| &e.item)) else { return String::new() };
+    let level = g.mastery.get(&main.weapon_type).copied().unwrap_or(0);
+    if main.item_type != "WEAPON" || level < rpgkit_data::mastery::MASTERY_MAX {
+        return String::new();
+    }
+    main.family_keystone.clone()
 }
 
 /// WorldFactory.apply_character's tuning: max HP by `hp_pct` percent, then power, armour, initiative (key `speed`) and AP
@@ -1833,7 +1926,7 @@ impl Unit {
     /// The level gate of can_use: basics (under the deck rule the ruleset's basics, D1), engine skills, meter skills
     /// (HOOKS1 UM6) and hand-built units are never gated.
     pub fn tier_unlocked(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
-        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.gear_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
+        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.gear_skill(&skill.id) || self.technique_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
             return true;
         }
         self.stats.level >= self.skill_unlock_level(cat, skill)

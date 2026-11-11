@@ -132,7 +132,7 @@ fn classic_does_not_auto_fill_and_start_fixes_missing_targets() {
 }
 
 fn end(member: &str, pouch: &[&str], fate: PartyFate) -> HeroEnd {
-    HeroEnd { member: member.into(), hp: 10, max_hp: 10, alive: true, pouch: pouch.iter().map(|s| s.to_string()).collect(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new() }
+    HeroEnd { member: member.into(), hp: 10, max_hp: 10, alive: true, pouch: pouch.iter().map(|s| s.to_string()).collect(), unloaded: Vec::new(), fate: Some(fate), marks: Vec::new(), hostile: String::new(), attacked: Vec::new() }
 }
 
 /// INTENT2-K3 at battle end: `settle_party` auto-fills only the members who came home, after every departure: a stayer

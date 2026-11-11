@@ -49,6 +49,10 @@ pub const CLASS_RITE_KEY: &str = "class_rite";
 pub const FLOOR_OFFSET_KEY: &str = "floor_offset";
 /// PK2-S3: the member key of the trained proficiency levels (`UnitState::trained`).
 pub const TRAINED_KEY: &str = "trained";
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): the member keys of its weapon mastery XP (`UnitState::mastery_xp`) and its
+/// forge rite (`UnitState::forge_rite`); each written only when set (no save VERSION bump).
+pub const MASTERY_XP_KEY: &str = "mastery_xp";
+pub const FORGE_RITE_KEY: &str = "forge_rite";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
 
 pub fn is_tactic(id: &str) -> bool {
@@ -108,6 +112,12 @@ pub struct UnitState {
     /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the proficiency levels the member trained (a recipe's
     /// `train_proficiency`), on top of its class's and its drills'. Saved as `trained` only when not empty.
     pub trained: IndexMap<String, i64>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> the member's weapon mastery XP in that family (a bar toward
+    /// levels 1-3, `rpgkit_data::mastery::level_of`). Saved as `mastery_xp` only when not empty.
+    pub mastery_xp: IndexMap<String, i64>,
+    /// PK2-S4: the member's forge rite is done (with mastery 3 it opens the wielded family's keystone). Saved as
+    /// `forge_rite` only when true (`set_forge_rite`).
+    pub forge_rite: bool,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -370,6 +380,13 @@ impl UnitState {
         if !self.trained.is_empty() {
             out.insert(TRAINED_KEY.into(), Value::Object(self.trained.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
         }
+        // PK2-S4: only a member with mastery XP saves `mastery_xp`, only a rite `forge_rite`
+        if !self.mastery_xp.is_empty() {
+            out.insert(MASTERY_XP_KEY.into(), Value::Object(self.mastery_xp.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
+        }
+        if self.forge_rite {
+            out.insert(FORGE_RITE_KEY.into(), Value::Bool(true));
+        }
         Value::Object(out)
     }
 
@@ -421,7 +438,20 @@ impl UnitState {
             class_rite: json::b(d, CLASS_RITE_KEY, false),
             floor_offset: json::i(d, FLOOR_OFFSET_KEY, 0),
             trained: d.get(TRAINED_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            mastery_xp: d.get(MASTERY_XP_KEY).filter(|v| v.is_object()).map(json::ints).unwrap_or_default(),
+            forge_rite: json::b(d, FORGE_RITE_KEY, false),
         }
+    }
+
+    /// PK2-S4: the member's mastery level in gear type `family` (0-3, from its XP).
+    pub fn mastery_level(&self, family: &str) -> i32 {
+        rpgkit_data::mastery::level_of(self.mastery_xp.get(family).copied().unwrap_or(0))
+    }
+
+    /// PK2-S4: sets the forge rite (with mastery 3 it opens the wielded family's keystone); the rite's source (a quest, a
+    /// recipe) is the game's.
+    pub fn set_forge_rite(&mut self, done: bool) {
+        self.forge_rite = done;
     }
 
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): the graft count, the body slots in use.
@@ -614,6 +644,12 @@ impl UnitState {
         for (gear, levels) in &self.trained {
             if !(1..=i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)).contains(levels) {
                 errors.push(format!("{at}: trained {gear} must be 1-{}.", rpgkit_rules::stats::PROF_MAX_LEVEL));
+            }
+        }
+        // PK2-S4: mastery XP is never below 0
+        for (gear, xp) in &self.mastery_xp {
+            if *xp < 0 {
+                errors.push(format!("{at}: mastery_xp {gear} must be 0 or more."));
             }
         }
         for (i, c) in self.conditions.iter().enumerate() {

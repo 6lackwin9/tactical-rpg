@@ -34,7 +34,8 @@ pub const PROF_ROLES: [&str; 4] = ["main", "secondary", "third", "minor"];
 /// body slot, an occupied slot overwritten and its graft destroyed), `remove` (empties a body slot, its graft
 /// destroyed), `track` (moves the member's stage on a unit track), `max_hp_pct` (a permanent max HP offset, a percent of
 /// its max HP), `floor_offset` (added to the member's floor offset for its next battle), `train_proficiency` (one
-/// proficiency level in a family of the class role, up to `to`), `drill` (mastery XP), `doctrine` (a delta a later
+/// proficiency level in a family of the class role, up to `to`), `drill` (PK2-S4: `xp` mastery XP in a family the member
+/// may master, scaled by its proficiency rate), `doctrine` (a delta a later
 /// system reads; reserved, does nothing yet), `repair` and `reforge` (a weapon instance; `masterwork` makes it
 /// masterwork, behind the recipe's `requires`), `salvage` (breaks a stash item down: `gold`, plus the salvage item its
 /// rarity names in `tiers` and the one its theme names in `themes`).
@@ -63,8 +64,8 @@ pub const FX_REPAIR: &str = "repair";
 pub const FX_REFORGE: &str = "reforge";
 pub const FX_SALVAGE: &str = "salvage";
 /// The effects whose system is not built yet (effect, the missing system): the check refuses them and a run refuses
-/// the recipe, until the system lands (weapon mastery, weapon instances).
-pub const RECIPE_PENDING: [(&str, &str); 3] = [(FX_DRILL, "weapon mastery"), (FX_REPAIR, "weapon instances"), (FX_REFORGE, "weapon instances")];
+/// the recipe, until the system lands (weapon instances). PK2-S4 built `drill` (weapon mastery).
+pub const RECIPE_PENDING: [(&str, &str); 2] = [(FX_REPAIR, "weapon instances"), (FX_REFORGE, "weapon instances")];
 
 /// An effect's keys besides `effect` (None: not a recipe effect).
 pub fn effect_keys(effect: &str) -> Option<&'static [&'static str]> {

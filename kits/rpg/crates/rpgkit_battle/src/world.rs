@@ -292,6 +292,10 @@ pub struct World {
     /// PK2-S1: (unit, skill catalog id) -> how many times the unit started that skill this battle (only skills with a
     /// `uses_per_battle` are counted; `mark::uses_problem`).
     pub skill_uses: IndexMap<(UnitId, String), i32>,
+    /// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): unit -> the main-hand weapon families it started an attack skill with
+    /// this battle, each once (only heroes built from member state, `Unit::rank_choice`): the settle's mastery use
+    /// (`rpgkit_world::roster::HeroEnd::attacked`).
+    pub weapon_attacks: IndexMap<UnitId, Vec<String>>,
 }
 
 /// PHASEFX1 (ACTS23 PK6 hook l, engine-only): who fights whom once a phase `side` turned units `hostile_all`. A rogue

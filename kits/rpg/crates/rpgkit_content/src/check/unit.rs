@@ -739,7 +739,21 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
         }
     }
     out.extend(role_warnings(v, &json::s(e, "ai_role"), path_has_support(v, &families), &json::s(e, "main_hand"), false));
+    out.extend(masterable_warnings(v, &class));
     out
+}
+
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a class has at most `MASTERABLE_MAX` masterable families at baseline (the
+/// main-hand weapon families of the item family table at proficiency 2 or more); one past it is a warning. Nothing
+/// without a family table.
+pub fn masterable_warnings(v: &View, class: &ClassDef) -> Vec<String> {
+    use rpgkit_data::mastery as m;
+    let fams: Vec<&String> = class.proficiency.iter().filter(|(f, p)| p.level >= m::MASTERY_PROF_MIN && m::main_hand_family(v.get("item_families", f))).map(|(f, _)| f).collect();
+    if fams.len() <= m::MASTERABLE_MAX {
+        return Vec::new();
+    }
+    let names: Vec<&str> = fams.iter().map(|f| f.as_str()).collect();
+    vec![format!("The class has {} masterable weapon families ({}); a class masters at most {} (main-hand weapon families at proficiency {}+).", fams.len(), names.join(", "), m::MASTERABLE_MAX, m::MASTERY_PROF_MIN)]
 }
 
 /// ClassUnitValidator.unit_warnings: the role mismatches for the unit's own role or its class's (derived units only).

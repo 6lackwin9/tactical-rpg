@@ -125,7 +125,8 @@ pub fn marked(w: &World, c: UnitId) -> Vec<String> {
 /// PK1 4.2: whether skill `s` opens for `c` in a Channel round: a neutral kind (Move, Rest), a `channel.only` skill,
 /// or the channeled version of its class basic or of an active it marked channeled.
 pub fn opens(w: &World, c: UnitId, s: &SkillDef) -> bool {
-    if skill::is_item(s) {
+    // PK2-S4: a technique (and the wielded family's keystone) is standard rounds only
+    if skill::is_item(s) || w.units[c].technique_skill(&s.id) {
         return false;
     }
     if neutral(s) || only(s) {
@@ -140,8 +141,12 @@ pub fn opens(w: &World, c: UnitId, s: &SkillDef) -> bool {
 
 /// PK1 4.3 items 1-2, 7: why `c` may not plan `s` in its round's mode (None: it may): a Standard version (or an
 /// item) in a Channel round is "Channel round", a channeled-only skill in a Standard round "Only in a Channel round".
-/// None without the rule.
+/// None without the rule. PK2-S4: first, with or without the rule, a technique whose grip tag does not fit the
+/// main-hand weapon (`Unit::technique_problem`); a technique in a Channel round is "Channel round" (`opens`).
 pub fn problem(w: &World, c: UnitId, s: &SkillDef) -> Option<&'static str> {
+    if let Some(p) = w.units.get(c).and_then(|u| u.technique_problem(&s.id)) {
+        return Some(p);
+    }
     if !on(w) {
         return None;
     }

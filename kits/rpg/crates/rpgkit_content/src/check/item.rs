@@ -34,9 +34,10 @@ const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delt
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 16] = [
+const DERIVED_KEYS: [&str; 18] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES,
-    rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX,
+    rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX, rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES,
+    rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE,
 ];
 const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
@@ -370,6 +371,13 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     if json::s(e, "item_type") == rpgkit_data::GRAFT {
         out.extend(graft_problems(v, e));
     }
+    // PK2-S4: a mastery book's family; a weapon's own (masterwork) technique
+    if json::s(e, "item_type") == rpgkit_data::MASTERY_BOOK {
+        out.extend(book_problems(v, e));
+    }
+    if let Some(t) = e.get(rpgkit_data::mastery::TECHNIQUE_KEY).filter(|t| t.as_object().is_none_or(|o| !o.is_empty())) {
+        out.extend(technique_entry_errors(v, t, "Masterwork technique"));
+    }
     // PK2-S3: a theme (the salvage it gives) is an id
     let theme = json::s(e, "theme");
     if !theme.is_empty() && !json::id_ok(&theme) {
@@ -452,6 +460,72 @@ fn graft_problems(v: &View, e: &Dict) -> Vec<String> {
         if rpgkit_data::MEMBER_GRANTS.contains(&t.as_str()) {
             out.push(format!("Body effects: Effect {}: '{t}' is a passive's member grant; a graft can't carry it.", i + 1));
         }
+    }
+    out
+}
+
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a `MASTERY_BOOK` item names the main-hand weapon family it trains (its XP
+/// range is the schema's).
+fn book_problems(v: &View, e: &Dict) -> Vec<String> {
+    let family = json::s(e, rpgkit_data::mastery::BOOK_FAMILY_KEY);
+    if family.is_empty() {
+        return vec!["A mastery book names the weapon family it trains (mastery_family).".into()];
+    }
+    let row = v.get("item_families", &family);
+    if !v.entries("item_families").is_empty() && !rpgkit_data::mastery::main_hand_family(row) {
+        return vec![format!("Mastery family '{family}' is not a main-hand weapon family (only those gain mastery).")];
+    }
+    Vec::new()
+}
+
+/// PK2-S4: one technique `{skill, grip}` (`label` names it in the messages): an object with a known skill and a grip tag
+/// of `mastery::GRIPS`, no other key.
+fn technique_entry_errors(v: &View, raw: &Value, label: &str) -> Vec<String> {
+    use rpgkit_data::mastery::GRIPS;
+    let Some(t) = raw.as_object() else { return vec![format!("{label} must be an object {{\"skill\", \"grip\"}}.")] };
+    let mut out: Vec<String> = t.keys().filter(|k| !["skill", "grip"].contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}' (skill, grip).")).collect();
+    let skill = json::s(t, "skill");
+    if skill.is_empty() {
+        out.push(format!("{label} names a skill."));
+    } else if !v.has("skills", &skill) {
+        out.push(format!("{label}: unknown skill '{skill}'."));
+    }
+    let grip = json::s(t, "grip");
+    if !GRIPS.contains(&grip.as_str()) {
+        out.push(format!("{label}: grip '{grip}' is not one of \"\", 1h, 2h."));
+    }
+    out
+}
+
+/// PK2-S4 (`docs/sessions/PK2_GRAFTS.md` 5): a family's `techniques` (0-3 techniques, each skill once) and `keystone`
+/// (a known skill, the schema's ref check) only on a main-hand WEAPON family (the families that gain mastery).
+fn technique_problems(v: &View, f: &Dict) -> Vec<String> {
+    use rpgkit_data::mastery as m;
+    let mut out = Vec::new();
+    let raw = json::get(f, m::TECHNIQUES_KEY);
+    let list: &[Value] = match raw {
+        Value::Array(a) => a,
+        Value::Null => &[],
+        _ => {
+            out.push("Techniques must be a list of {\"skill\", \"grip\"}.".into());
+            &[]
+        }
+    };
+    let keystone = json::s(f, m::KEYSTONE_KEY);
+    if (!list.is_empty() || !keystone.is_empty()) && !m::main_hand_family(f) {
+        out.push("Techniques and a keystone need a main-hand WEAPON family (only those gain mastery).".into());
+    }
+    if list.len() > m::MASTERY_MAX as usize {
+        out.push(format!("A family lists at most {} techniques (one per mastery level); it lists {}.", m::MASTERY_MAX, list.len()));
+    }
+    let mut seen: Vec<String> = Vec::new();
+    for (i, t) in list.iter().enumerate() {
+        out.extend(technique_entry_errors(v, t, &format!("Technique {}", i + 1)));
+        let skill = json::s(json::dict(t), "skill");
+        if !skill.is_empty() && seen.contains(&skill) {
+            out.push(format!("Technique {}: '{skill}' is listed twice.", i + 1));
+        }
+        seen.push(skill);
     }
     out
 }
@@ -1140,6 +1214,7 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
         }
     }
     out.extend(mastery_problems(v, f, &t));
+    out.extend(technique_problems(v, f));
     out.extend(range_band_problems(f));
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
     let users: Vec<&Dict> = v.entries("items").iter().filter(|i| json::s(i, "family") == old_id).collect();

@@ -42,6 +42,9 @@ pub struct Data {
     pub xp: XpCurve,
     /// E2.2-S1 (FB-53a): the game-wide purse caps (the manifest's beside the data folder; the defaults from values).
     pub purse: rpgkit_content::source::PurseCaps,
+    /// PK2-S4 (FB-167 Q7 (a)): the act weapon mastery is gained from (the manifest's `durability.from_act`; 0 = never,
+    /// also from values).
+    pub from_act: i64,
     /// HOOKS1 CN3: per world whose `classes` overlay replaces a class path, the catalog with those paths (built at load;
     /// other worlds build with `cat`).
     world_cats: IndexMap<String, Arc<Catalog>>,
@@ -72,6 +75,7 @@ impl Data {
         let src = rpgkit_content::source::load(dir);
         let mut d = Self::from_values(&src.catalog, &src.worlds, &src.game);
         d.purse = src.purse;
+        d.from_act = src.from_act;
         Ok((d, src.errors))
     }
 
@@ -114,6 +118,7 @@ impl Data {
             services: dicts(json::get(g, "services")),
             xp,
             purse: rpgkit_content::source::PurseCaps::default(),
+            from_act: 0,
             world_cats: IndexMap::new(),
         };
         d.refresh_world_cats();

@@ -120,7 +120,7 @@ fn game(d: &Data, members: Vec<UnitState>) -> GameState {
 
 fn end(member: &str, marks: &[(&str, i64)], hostile: &str) -> HeroEnd {
     let marks = marks.iter().map(|(m, v)| (m.to_string(), *v)).collect();
-    HeroEnd { member: member.into(), hp: 10, max_hp: 10, alive: true, pouch: Vec::new(), unloaded: Vec::new(), fate: None, marks, hostile: hostile.into() }
+    HeroEnd { member: member.into(), hp: 10, max_hp: 10, alive: true, pouch: Vec::new(), unloaded: Vec::new(), fate: None, marks, hostile: hostile.into(), attacked: Vec::new() }
 }
 
 #[test]

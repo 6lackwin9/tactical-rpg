@@ -25,6 +25,9 @@ pub struct Source {
     pub purse: PurseCaps,
     /// STORYMUSIC1: the game's music keys (`music_keys_of`), from the same manifest.
     pub music_keys: Vec<String>,
+    /// PK2-S4 (FB-167 Q7 (a)): the act the standard path's growth starts in (`from_act_of`, the manifest's
+    /// `durability.from_act`; 0 = none: no mastery is gained).
+    pub from_act: i64,
     pub errors: Vec<String>,
 }
 
@@ -85,9 +88,36 @@ fn manifest_beside(data_dir: &Path) -> Option<Dict> {
 /// resolves and the story keys a vignette or a sequence step may name before their tracks ship. Without it, only a
 /// track the asset layers hold (`audio/music/<key>.ogg`) is a music key.
 pub const MUSIC_KEYS: &str = "music_keys";
+/// PK2-S4 (FB-167 Q7 (a), `docs/sessions/PK2_GRAFTS.md` 5-6): the optional game manifest block of the standard path's
+/// switch, `durability` {`from_act`: 1-`FROM_ACT_MAX`}: weapon mastery is gained only in that act and after (and the
+/// weapon instances of PR5-13a start there). Without it no mastery is gained.
+pub const DURABILITY: &str = "durability";
+pub const FROM_ACT: &str = "from_act";
+/// The highest act `from_act` may name (the campaign's last act).
+pub const FROM_ACT_MAX: i64 = 9;
 /// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
 /// order a write keeps them.
-pub const MANIFEST_KEYS: [&str; 3] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS];
+pub const MANIFEST_KEYS: [&str; 4] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS, DURABILITY];
+
+/// PK2-S4: the act of a game manifest object's `durability.from_act` (0: no block, or a value that is not a whole
+/// number 1-`FROM_ACT_MAX`, which `durability_problems` reports).
+pub fn from_act_of(m: &Dict) -> i64 {
+    json::dget(m, DURABILITY).get(FROM_ACT).map(json::normalize).filter(json::is_int).map(|v| json::to_int(&v)).filter(|a| (1..=FROM_ACT_MAX).contains(a)).unwrap_or(0)
+}
+
+/// PK2-S4: what keeps a manifest's `durability` from being valid: present and not an object, an unknown key in it, or a
+/// `from_act` that is not a whole number 1-`FROM_ACT_MAX`.
+pub fn durability_problems(m: &Dict) -> Vec<String> {
+    let Some(raw) = m.get(DURABILITY) else { return Vec::new() };
+    let Some(block) = raw.as_object() else { return vec![format!("game.json: {DURABILITY} must be an object {{{FROM_ACT}}}.")] };
+    let mut out: Vec<String> = block.keys().filter(|k| k.as_str() != FROM_ACT).map(|k| format!("game.json: {DURABILITY}: unknown key '{k}' (known: {FROM_ACT}).")).collect();
+    if let Some(v) = block.get(FROM_ACT).map(json::normalize) {
+        if !json::is_int(&v) || !(1..=FROM_ACT_MAX).contains(&json::to_int(&v)) {
+            out.push(format!("game.json: {DURABILITY}.{FROM_ACT} must be a whole number 1-{FROM_ACT_MAX}."));
+        }
+    }
+    out
+}
 
 /// STORYMUSIC1: the music keys of a game manifest object (`MUSIC_KEYS`, in file order): its id-shaped strings; none when
 /// the key is missing or not a list.
@@ -112,10 +142,11 @@ pub fn music_keys_problems(m: &Dict) -> Vec<String> {
     out
 }
 
-/// The kit's problems of a game manifest object: the purse caps' and the music keys'.
+/// The kit's problems of a game manifest object: the purse caps', the music keys' and (PK2-S4) the durability block's.
 pub fn manifest_problems(m: &Dict) -> Vec<String> {
     let mut out = PurseCaps::problems(m);
     out.extend(music_keys_problems(m));
+    out.extend(durability_problems(m));
     out
 }
 
@@ -196,8 +227,10 @@ pub fn load(data_dir: &Path) -> Source {
     game.insert("item_families".into(), catalog["item_families"].clone());
     let mut cat = catalog.as_object().cloned().unwrap_or_default();
     cat.shift_remove("item_families");
-    let music_keys = manifest_beside(data_dir).map(|m| music_keys_of(&m)).unwrap_or_default();
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, errors }
+    let manifest = manifest_beside(data_dir);
+    let music_keys = manifest.as_ref().map(music_keys_of).unwrap_or_default();
+    let from_act = manifest.as_ref().map_or(0, from_act_of);
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.
@@ -1311,6 +1344,15 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     // key without a `range_band`, so the battle reads the fallback reach)
     if let Some(max) = range_band_max(family) {
         row.insert(rpgkit_data::ITEM_FAMILY_REACH_MAX.into(), Value::from(max));
+    }
+    // PK2-S4: the family's techniques and keystone ride on the row the same way (no key while the family has none)
+    let techniques = json::aget(family, rpgkit_data::mastery::TECHNIQUES_KEY);
+    if !techniques.is_empty() {
+        row.insert(rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES.into(), Value::Array(techniques.to_vec()));
+    }
+    let keystone = sget(family, rpgkit_data::mastery::KEYSTONE_KEY, "");
+    if !keystone.is_empty() {
+        row.insert(rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE.into(), Value::from(keystone));
     }
     row
 }

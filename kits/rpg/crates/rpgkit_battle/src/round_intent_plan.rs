@@ -81,8 +81,11 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
             fams
         }
     };
-    // U3.2-S4 (OFFHAND1): the worn items' skills too, open while worn
-    for id in w.units[c].meter_skills.iter().chain(&w.units[c].gear_skills) {
+    // U3.2-S4 (OFFHAND1): the worn items' skills too, open while worn (PK2-S4: and the techniques open now, then the
+    // wielded family's keystone)
+    let u = &w.units[c];
+    let techniques: Vec<String> = u.techniques.iter().map(|t| t.skill.clone()).chain(std::iter::once(u.mastery_keystone.clone()).filter(|k| !k.is_empty())).collect();
+    for id in u.meter_skills.iter().chain(&u.gear_skills).chain(&techniques) {
         let fam = w.cat.family_of(id).to_string();
         if !out.contains(&fam) {
             out.push(fam);
@@ -120,8 +123,9 @@ pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
             }
         }
     }
-    // PK1-S2a: a Standard round leaves the channeled-only skills out (nothing is left out without the rule channel)
-    if crate::channel::on(w) {
+    // PK1-S2a: a Standard round leaves the channeled-only skills out (nothing is left out without the rule channel);
+    // PK2-S4: a technique under the wrong grip is left out with or without it
+    if crate::channel::on(w) || !w.units[c].techniques.is_empty() {
         out.retain(|&sid| crate::channel::problem(w, c, &w.cat.skills[sid]).is_none());
     }
     out

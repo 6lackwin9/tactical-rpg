@@ -232,6 +232,11 @@ pub(crate) fn build_unchecked(d: &Data, state: &UnitState, world: &str, auto_spe
         floor_offset: work.floor_offset.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
         // PK2-S3: the proficiency levels it trained
         trained: work.trained.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)) as i32)).collect(),
+        // PK2-S4: its mastery levels (the techniques of the wielded family) and its forge rite; a masterwork main hand
+        // comes with the weapon instances (PR5-13a)
+        mastery: work.mastery_xp.iter().map(|(k, v)| (k.clone(), rpgkit_data::mastery::level_of(*v))).filter(|(_, l)| *l > 0).collect(),
+        masterwork: false,
+        forge_rite: work.forge_rite,
     };
     let over = Overrides { passives: member_passives(d, &work), ..Overrides::default() };
     // U3.2-S3: the gear is read under the world's ruleset's wield terms

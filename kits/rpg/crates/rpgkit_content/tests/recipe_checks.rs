@@ -122,7 +122,10 @@ fn the_unbuilt_effects_are_refused_until_their_system_lands() {
     base_rows(&data);
     let v = store::view(&data);
     let check = |e: Value| check::validate_entry(&v, RECIPES_KIND, &dict(e), "");
-    assert_eq!(check(fx(json!([{"effect": "drill", "xp": 10}]))), ["Effect 1 (drill): needs weapon mastery, which this build does not have yet."]);
+    // PK2-S4: `drill` is built (weapon mastery): its xp is checked, nothing refuses it
+    assert!(check(fx(json!([{"effect": "drill", "xp": 10}]))).is_empty());
+    assert_eq!(check(fx(json!([{"effect": "drill", "xp": 0}]))), ["Effect 1 (drill): xp must be a whole number 1..999."]);
+    assert_eq!(check(fx(json!([{"effect": "drill"}]))), ["Effect 1 (drill): xp must be a whole number 1..999."]);
     let weapon = |effects: Value| with(with(surgery("r_one"), "target", json!("weapon")), "effects", effects);
     assert_eq!(check(weapon(json!([{"effect": "repair"}]))), ["Effect 1 (repair): needs weapon instances, which this build does not have yet."]);
     assert_eq!(check(weapon(json!([{"effect": "reforge", "masterwork": true}]))), ["Effect 1 (reforge): needs weapon instances, which this build does not have yet."]);
@@ -151,8 +154,9 @@ fn the_writer_takes_a_recipe() {
     let (_scratch, data) = scratch("writer");
     base_rows(&data);
     let file = data.join("catalog").join(format!("{RECIPES_KIND}.json"));
-    let refused = store::upsert(&data, None, RECIPES_KIND, &dict(fx(json!([{"effect": "drill", "xp": 1}]))), None).err().expect("a pending effect is refused");
-    assert!(refused.iter().any(|e| e.ends_with("needs weapon mastery, which this build does not have yet.")), "{refused:?}");
+    let weapon = with(with(surgery("r_weapon"), "target", json!("weapon")), "effects", json!([{"effect": "repair"}]));
+    let refused = store::upsert(&data, None, RECIPES_KIND, &dict(weapon), None).err().expect("a pending effect is refused");
+    assert!(refused.iter().any(|e| e.ends_with("needs weapon instances, which this build does not have yet.")), "{refused:?}");
     store::upsert(&data, None, RECIPES_KIND, &dict(surgery("r_one")), None).expect("a valid row");
     let text = fs::read_to_string(&file).unwrap();
     assert_eq!(store::resave_text(&data, None, RECIPES_KIND).unwrap(), text, "a re-save without changes is byte-identical");

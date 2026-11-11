@@ -6,7 +6,8 @@
 //! lowering needs a stage), `max_hp_pct` (a percent of the max HP now, for good), `floor_offset` (a member with a
 //! graft), `train_proficiency` (one level of a family of the class role, from `to - 1`; saved as `trained`, read by the
 //! build), `salvage` (the stash item broken down into gold and the salvage its rarity and theme name), `doctrine`
-//! (reserved: nothing changes but the cost); `drill`, `repair` and `reforge` are refused (their systems are not built).
+//! (reserved: nothing changes but the cost); `repair` and `reforge` are refused (weapon instances are not built); PK2-S4's
+//! `drill` is refused while mastery is closed (its runs are `tests/mastery.rs`').
 
 use aegis_core::json;
 use rpgkit_world::dialogue::DialogueRunner;
@@ -323,7 +324,8 @@ fn doctrine_is_reserved_and_the_unbuilt_effects_are_refused() {
     gs.party.add_to_stash("plain_blade", 1);
     ok(&d, &mut gs, SMITH, "break_doctrine", &Pick { item: "plain_blade".into(), ..Pick::default() });
     assert_eq!((gs.party.gold, gs.party.stash.contains_key("plain_blade")), (GOLD, false), "a doctrine beside a salvage applies nothing");
-    assert!(refused(&d, &mut gs, SMITH, "drill_it", &pick).contains("needs weapon mastery"));
+    // PK2-S4: `drill` is built; without the manifest's `durability.from_act` no mastery is gained (tests/mastery.rs)
+    assert_eq!(refused(&d, &mut gs, SMITH, "drill_it", &pick), rpgkit_world::mastery::NOT_YET_TEXT);
     assert!(refused(&d, &mut gs, SMITH, "repair_it", &pick).contains("needs weapon instances"));
     let view = recipe::view(&d, &gs, SMITH, &pick);
     let row = view.iter().map(json::dict).find(|r| json::s(r, "id") == "repair_it").unwrap();

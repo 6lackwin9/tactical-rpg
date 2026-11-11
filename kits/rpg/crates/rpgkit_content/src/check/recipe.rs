@@ -212,6 +212,13 @@ fn effect_errors(name: &str, fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> 
             }
         }
         r::FX_SALVAGE => out.extend(salvage_errors(fx, at, loaded)),
+        r::FX_DRILL => {
+            // PK2-S4: the mastery XP before the member's proficiency rate
+            let (lo, hi) = rpgkit_data::mastery::MASTERY_XP_RANGE;
+            if !whole_in(fx.get("xp"), lo, hi) {
+                out.push(format!("{at}: xp must be a whole number {lo}..{hi}."));
+            }
+        }
         _ => {}
     }
     out
