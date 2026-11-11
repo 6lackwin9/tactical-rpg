@@ -412,10 +412,10 @@ pub fn meter_gate_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
     out
 }
 
-/// PK1-S2a (PK1 4.1, 4.2): a skill's `channel` block ({} = the default: a derived marrow version when it has a single
+/// PK1-S2a (PK1 4.1, 4.2): a skill's `channel` block ({} = the default: a derived channeled version when it has a single
 /// intent): its keys, `none` and `only` (true or false, not both; `none` with nothing else), `cost` a whole 0-100,
 /// `power` 1.0-3.0, `effects` 1-4 trigger effects (as a rider's: no event); any key but `none` needs a single-intent
-/// skill (IR21: a dual-intent skill has no marrow version, and a marrow-only one is authored with one intent).
+/// skill (IR21: a dual-intent skill has no channeled version, and a channeled-only one is authored with one intent).
 pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
     let mut out = Vec::new();
     let Some(o) = set_object(raw, "Channel", &mut out) else { return out };
@@ -428,7 +428,7 @@ pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
         out.push(format!("{at}: none and only exclude each other."));
     }
     if none && ["cost", "power", "effects"].iter().any(|k| o.contains_key(*k)) {
-        out.push(format!("{at}: none (no marrow version) takes no cost, power or effects."));
+        out.push(format!("{at}: none (no channeled version) takes no cost, power or effects."));
     }
     whole_key(o, "cost", CHANNEL_COST, false, at, &mut out);
     if o.get("power").is_some_and(|v| !number_in(v, CHANNEL_POWER)) {
@@ -440,7 +440,7 @@ pub fn channel_errors(raw: &Value, e: &Dict, ctx: &Ctx) -> Vec<String> {
     let input = rpgkit_rules::intent::IntentInput::of_row(e);
     if !none && !rpgkit_rules::intent::single_intent(&input) {
         let rows = rpgkit_rules::intent::derive(&input).join(" and ");
-        out.push(format!("{at}: only a single-intent skill has a marrow version or is marrow-only (this one derives {rows})."));
+        out.push(format!("{at}: only a single-intent skill has a channeled version or is channeled-only (this one derives {rows})."));
     }
     out
 }

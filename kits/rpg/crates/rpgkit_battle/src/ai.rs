@@ -1742,7 +1742,7 @@ pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &Ai
     if !round_intent::on(w) || !w.units[c].is_active() || !w.has(c) {
         return IntentRound::default();
     }
-    // PK1-S2b: a re-pick starts from Cold Steel (the Channel row may open Channel again)
+    // PK1-S2b: a re-pick starts from Standard (the Channel row may open Channel again)
     if crate::channel::is_channel(w, c) {
         round_intent_plan::flip_channel(w, c, false);
     }
@@ -1840,7 +1840,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
 }
 
 /// PK1-S2b: the value the Channel row compares: the expected damage and healing of `c`'s planned round (the planner's
-/// estimates, `PlanEntry::est_damage` and `est_heal`; a marrow version's power and piercing included). An invalid round
+/// estimates, `PlanEntry::est_damage` and `est_heal`; a channeled version's power and piercing included). An invalid round
 /// is worth nothing.
 pub fn round_value(w: &World, plan: &Plan, c: UnitId) -> i64 {
     let st = plan.compile(w, c);
@@ -1858,10 +1858,10 @@ pub fn channel_meter_after(w: &World, plan: &Plan, c: UnitId) -> Option<(i32, i3
     plan.compile(w, c).meter(m).map(|v| (v, max))
 }
 
-/// PK1-S2b: whether `c`'s planned round holds a marrow version (`channel::version` of a skill with
+/// PK1-S2b: whether `c`'s planned round holds a channeled version (`channel::version` of a skill with
 /// `channel::has_version`) or, PR5-26 (FB-191 (1)), one of its `channel.only` skills that is no meter row's skill (Feed,
 /// Vent: UM6) and not the Channel Rest: a Feed-only round does not count.
-fn marrow_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
+fn channeled_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
     let basics: Vec<&str> = w.units[c].meter_skills.iter().map(|id| w.cat.family_of(id)).collect();
     plan.compile(w, c).entries.iter().any(|e| {
         let s = &w.cat.skills[e.skill];
@@ -1875,7 +1875,7 @@ fn marrow_planned(w: &World, plan: &Plan, c: UnitId) -> bool {
 /// PR5-26 (FB-191 (e)): the AI Vents when its channel meter is at least this percent of the meter's max.
 pub const CHANNEL_AI_VENT_PCT: i32 = 75;
 
-/// PR5-26: `c`'s Vent: the marrow-only meter row skill (UM6) that lowers the channel meter the most (the row it uses
+/// PR5-26: `c`'s Vent: the channeled-only meter row skill (UM6) that lowers the channel meter the most (the row it uses
 /// now, `round_intent_plan::family_skill`); None without one.
 pub fn vent_skill(w: &World, c: UnitId) -> Option<SkillId> {
     let m = crate::channel::meter_id(w);
@@ -1891,7 +1891,7 @@ pub fn vent_skill(w: &World, c: UnitId) -> Option<SkillId> {
     best.map(|(sid, _)| sid)
 }
 
-/// PR5-26 (FB-191 (e)): the AI's Vent row. After the AI committed a (Cold Steel) round for `c`, a unit that can Channel
+/// PR5-26 (FB-191 (e)): the AI's Vent row. After the AI committed a (Standard) round for `c`, a unit that can Channel
 /// whose channel meter is at least `CHANNEL_AI_VENT_PCT` of its max turns the round into a Channel round on itself
 /// opened by its Vent (`vent_skill`; the planner fills the rest of the round as a Channel round does). It keeps it when
 /// the round compiles with the Vent planned (its meter gate and HP cost met); else `c`'s unit, round state and steps are
@@ -1942,15 +1942,15 @@ fn vent_row(w: &mut World, plan: &mut Plan, c: UnitId, committed: &IntentPick) -
     None
 }
 
-/// PK1 4.4 (rule `channel`): the AI's Channel row. After the AI committed `p` for `c` (a Cold Steel round), a unit that
+/// PK1 4.4 (rule `channel`): the AI's Channel row. After the AI committed `p` for `c` (a Standard round), a unit that
 /// can Channel (`channel::can_channel`; others are never touched) tries the same pick as a Channel round, as the toggle
 /// does for a member without picks: the round flag (`round_intent_plan::flip_channel`: the intent-bound buffs end), the
 /// pick's opener kept only when it opens in Channel (else the Channel order opens), the round rebuilt by the planner.
-/// It keeps the Channel round when the round compiles, plans at least one marrow version (`marrow_planned`: a Feed-only
-/// or marrow-only round does not count), its value (`round_value`) is at least the ruleset's `channel_ai_edge` (PR5-20)
-/// times the Cold Steel round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max
-/// (the crisis); else `c`'s unit, round state and steps are put back as the Cold Steel round. A Cold Steel round worth
-/// nothing (out of reach, a Guard round) has no option to beat and stays Cold Steel untried, as do Economy's
+/// It keeps the Channel round when the round compiles, plans at least one channeled version (`channeled_planned`: a Feed-only
+/// or channeled-only round does not count), its value (`round_value`) is at least the ruleset's `channel_ai_edge` (PR5-20)
+/// times the Standard round's, and the channel meter after it (`channel_meter_after`) stays below the meter's max
+/// (the crisis); else `c`'s unit, round state and steps are put back as the Standard round. A Standard round worth
+/// nothing (out of reach, a Guard round) has no option to beat and stays Standard untried, as do Economy's
 /// opener-only rounds. Returns the flip's lines when kept. Deterministic: nothing draws.
 fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec<String> {
     if p.opener_only || !crate::channel::can_channel(w, c) || crate::channel::is_channel(w, c) {
@@ -1969,7 +1969,7 @@ fn channel_row(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Vec
         Opener::Item(_) => false,
     });
     w.round_states.entry(c).or_default().opener = opener;
-    let built = build_pick(w, plan, c, p) && marrow_planned(w, plan, c);
+    let built = build_pick(w, plan, c, p) && channeled_planned(w, plan, c);
     let value = if built { round_value(w, plan, c) } else { 0 };
     let safe = channel_meter_after(w, plan, c).is_some_and(|(v, max)| v < max);
     if built && value as f64 >= w.ruleset.numbers.channel_ai_edge * cold as f64 && safe {

@@ -527,28 +527,28 @@ fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
         if head.is_empty() { Vec::new() } else { super::ruleset::intent_rows(head, field) }
     };
     follow_up_errors(deck.get("follow_ups"), &active, &basics, &intent_of, &mut errors);
-    marrow_errors(v, e, deck, &active, &owned, &mut errors);
+    channeled_errors(v, e, deck, &active, &owned, &mut errors);
     errors
 }
 
-/// PK1-S2a (PK1 4.2, rule channel): a skill row (a family's tier one) that has a marrow version: IR21 derives one intent
+/// PK1-S2a (PK1 4.2, rule channel): a skill row (a family's tier one) that has a channeled version: IR21 derives one intent
 /// for it and its `channel` sets neither `none` nor `only`.
-pub fn has_marrow_version(head: &Dict) -> bool {
+pub fn has_channeled_version(head: &Dict) -> bool {
     let ch = json::dget(head, "channel");
     !json::b(ch, "none", false) && !json::b(ch, "only", false) && rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_row(head))
 }
 
-/// PK1-S2a (PK1 4.2): a deck's `marrow` marks actives of the deck that have a marrow version, none twice, no more than
-/// any ruleset with the rule channel opens (`marrow_actives`). PR5-26 (audit B3): with no `active` list the deck's
+/// PK1-S2a (PK1 4.2): a deck's `channeled` marks actives of the deck that have a channeled version, none twice, no more than
+/// any ruleset with the rule channel opens (`channeled_actives`). PR5-26 (audit B3): with no `active` list the deck's
 /// actives are the automatic ones each channel ruleset's deck rule fills (`rpgkit_rules::unit::auto_actives`, the
 /// battle's own list, truncated to its active slots), so a mark must be among them under every such ruleset; a channel
 /// ruleset without the deck rule reads the families the unit owns.
-fn marrow_errors(v: &View, e: &Dict, deck: &Dict, active: &[String], owned: &[String], errors: &mut Vec<String>) {
-    let marrow = deck_list(deck, "marrow", errors);
-    repeats("Deck marrow", &marrow, &mut Vec::new(), errors);
+fn channeled_errors(v: &View, e: &Dict, deck: &Dict, active: &[String], owned: &[String], errors: &mut Vec<String>) {
+    let channeled = deck_list(deck, "channeled", errors);
+    repeats("Deck channeled", &channeled, &mut Vec::new(), errors);
     let channel_rows: Vec<&Dict> = v.entries(ruleset::KIND).iter().filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::CHANNEL)).collect();
     // the automatic actives per channel ruleset with the deck rule (built once, only for an automatic deck with marks)
-    let autos: Vec<(String, Vec<String>)> = if active.is_empty() && !marrow.is_empty() {
+    let autos: Vec<(String, Vec<String>)> = if active.is_empty() && !channeled.is_empty() {
         let row = rpgkit_data::UnitDef::from_obj(e);
         channel_rows
             .iter()
@@ -560,31 +560,31 @@ fn marrow_errors(v: &View, e: &Dict, deck: &Dict, active: &[String], owned: &[St
     } else {
         Vec::new()
     };
-    for fam in &marrow {
+    for fam in &channeled {
         let in_deck = if active.is_empty() { owned.contains(fam) } else { active.contains(fam) };
         if !in_deck {
-            errors.push(format!("Deck marrow: '{fam}' is not an active of the deck."));
+            errors.push(format!("Deck channeled: '{fam}' is not an active of the deck."));
             continue;
         }
         if let Some((name, _)) = autos.iter().find(|(_, auto)| !auto.contains(fam)) {
-            errors.push(format!("Deck marrow: '{fam}' is not among the automatic actives the {name} ruleset's deck slots fill (list the deck's active)."));
+            errors.push(format!("Deck channeled: '{fam}' is not among the automatic actives the {name} ruleset's deck slots fill (list the deck's active)."));
             continue;
         }
         let head = v.get("skills", fam);
-        if !head.is_empty() && !has_marrow_version(head) {
-            errors.push(format!("Deck marrow: '{fam}' has no marrow version (it needs a single intent and no channel none or only)."));
+        if !head.is_empty() && !has_channeled_version(head) {
+            errors.push(format!("Deck channeled: '{fam}' has no channeled version (it needs a single intent and no channel none or only)."));
         }
     }
     let mut distinct: Vec<&String> = Vec::new();
-    for fam in &marrow {
+    for fam in &channeled {
         if !distinct.contains(&fam) {
             distinct.push(fam);
         }
     }
     for r in channel_rows {
-        let max = json::i(r, "marrow_actives", i64::from(ruleset::MARROW_ACTIVES));
+        let max = json::i(r, "channeled_actives", i64::from(ruleset::CHANNEL_ACTIVES));
         if distinct.len() as i64 > max {
-            errors.push(format!("Deck: {} marrow entries (the {} ruleset's marrow actives allow {max}).", distinct.len(), json::s_or(r, "name", &json::s(r, "id"))));
+            errors.push(format!("Deck: {} channeled entries (the {} ruleset's channeled actives allow {max}).", distinct.len(), json::s_or(r, "name", &json::s(r, "id"))));
         }
     }
 }

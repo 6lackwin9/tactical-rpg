@@ -48,12 +48,12 @@ pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
     ("chases_support", "Support chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Support)) as i64),
     ("items_used", "items used", |_, a| matches!(a.command.kind, CmdKind::Item { used: true, .. }) as i64),
     ("dodges", "dodges", |_, a| a.command.dodged.is_some() as i64),
-    // PR5-26 (FB-191 (f)): the Channel rule's actions that landed: marrow versions, and Vents (`is_vent`)
-    ("marrow_actions", "marrow actions", |_, a| (a.landed && a.command.marrow) as i64),
+    // PR5-26 (FB-191 (f)): the Channel rule's actions that landed: channeled versions, and Vents (`is_vent`)
+    ("channeled_actions", "channeled actions", |_, a| (a.landed && a.command.channeled) as i64),
     ("vents", "Vents", |w, a| (a.landed && is_vent(w, a)) as i64),
 ];
 
-/// PR5-26: a Vent: a marrow-only skill (`channel.only`) whose meter cost lowers the channel meter.
+/// PR5-26: a Vent: a channeled-only skill (`channel.only`) whose meter cost lowers the channel meter.
 fn is_vent(w: &World, a: &ScheduledAction) -> bool {
     let m = rpgkit_battle::channel::meter_id(w);
     !m.is_empty() && w.cat.skill(&a.command.skill).is_some_and(rpgkit_battle::channel::only) && a.command.meters.iter().any(|d| d.meter == m && d.delta < 0)

@@ -1,7 +1,7 @@
 # ==============================================================================
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
 # Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader and content-writer
-# suites and the engine goldens, then the layer check (engine and kit crates name no game, KIT1-G; kit code names no lore word, TERMS1 G3), the whole docs check and the tools/tiles tests (both run by tools/fc.sh, so one copy of each). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
+# suites and the engine goldens, then the layer check (engine and kit crates name no game, KIT1-G; engine and kit code name no lore word, TERMS1 G3; kit code no class id, G4), the whole docs check and the tools/tiles tests (both run by tools/fc.sh, so one copy of each). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (
     [switch]$VerboseOutput,   # print the full cargo output
@@ -114,40 +114,60 @@ foreach ($m in $manifests) {
         elseif ($m -like 'engine/*' -and $full.StartsWith($kitsRoot, [StringComparison]::OrdinalIgnoreCase)) { $layerHits += "${m}:$n engine path dependency into kits/: $p" }
     }
 }
-# TERMS1 G3 (docs/specs/TERMS1.md 7), same as `tools/fc.sh layers`: kit code (src, schema.json, kit.json; not tests or
-# READMEs) names no lore word of a game: its world ids (folders under games/<id>/data/worlds/, any case, `_` as a separator)
-# and the lines of games/<id>/lore_words.txt (fixed phrases, whole word, exact case, `#` comments). One git grep per game.
+# TERMS1 G3 (docs/specs/TERMS1.md 7, LAYER-DOWN-1), same as `tools/fc.sh layers`: engine and kit code (engine and kit
+# crates: src, tests and fixtures; kit schema.json and kit.json; not READMEs or docs) names no lore word of a game: its
+# world ids (folders under games/<id>/data/worlds/) and the lines of games/<id>/lore_words.txt (fixed phrases, a space
+# matches a space or `_`, `#` comments); any case, whole word with `_` as a separator. One git grep per game.
 foreach ($id in $gameIds) {
     $gameDir = Join-Path (Join-Path $projectRoot "games") $id
-    $worlds = @(Get-ChildItem -Path (Join-Path $gameDir "data/worlds") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-        -join ($_.Name.ToCharArray() | ForEach-Object { $c = [string]$_; if ($c -match '[A-Za-z]') { "[$($c.ToUpper())$($c.ToLower())]" } elseif ($c -match '[A-Za-z0-9_-]') { $c } else { "\$c" } }) })
+    $words = @(Get-ChildItem -Path (Join-Path $gameDir "data/worlds") -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
     $loreFile = Join-Path $gameDir "lore_words.txt"
-    $lore = @(if (Test-Path $loreFile) { Get-Content $loreFile | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ } |
-        ForEach-Object { [regex]::Replace($_, '[\]\[\\.*^$+?(){}|/]', '\$0') } })
-    $ws = $worlds -join '|'; $lw = $lore -join '|'
-    $args3 = @()
-    if ($ws) { $args3 += @('-e', "(^|[^[:alnum:]])($ws)([^[:alnum:]]|$)") }
-    if ($lw) { $args3 += @('-e', "(^|[^[:alnum:]_])($lw)([^[:alnum:]_]|$)") }
-    if ($args3.Count -eq 0) { continue }
-    $hits = & git grep --untracked -n -I -E @args3 -- 'kits/*/crates/*/src/*' 'kits/*/schema.json' 'kits/*/kit.json'
+    if (Test-Path $loreFile) { $words += @(Get-Content $loreFile | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }) }
+    $lp = ($words | ForEach-Object { [regex]::Replace($_, '[\]\[\\.*^$+?(){}|/]', '\$0') -replace '\s+', '[[:space:]_]' }) -join '|'
+    if (-not $lp) { continue }
+    $hits = & git grep --untracked -n -I -i -E -e "(^|[^[:alnum:]])($lp)([^[:alnum:]]|$)" -- engine/crates 'kits/*/crates/*' 'kits/*/schema.json' 'kits/*/kit.json'
+    $netLp = $lp.Replace('[[:space:]_]', '[\s_]')
     foreach ($h in @($hits)) {
         if ($h -match '^([^:]*):(\d+):(.*)$') {
             $file = $Matches[1]; $line = $Matches[2]; $text = $Matches[3]
-            $m = $null
-            if ($lw) { $m = [regex]::Match($text, "(?<![A-Za-z0-9_])($lw)(?![A-Za-z0-9_])") }
-            if (-not ($m -and $m.Success) -and $ws) { $m = [regex]::Match($text, "(?<![A-Za-z0-9])($ws)(?![A-Za-z0-9])") }
-            $word = if ($m -and $m.Success) { $m.Groups[1].Value } else { "?" }
-            $at = if ($m -and $m.Success) { [Math]::Max(0, $m.Index - 40) } else { 0 }
+            $m = [regex]::Match($text, "(?<![A-Za-z0-9])($netLp)(?![A-Za-z0-9])", 'IgnoreCase')
+            $word = if ($m.Success) { $m.Groups[1].Value } else { "?" }
+            $at = if ($m.Success) { [Math]::Max(0, $m.Index - 40) } else { 0 }
             $layerHits += "${file}:$line names lore word `"$word`" of game ${id}: $($text.Substring($at, [Math]::Min(120, $text.Length - $at)))"
+        }
+    }
+}
+# G4 (KITIDS1, SILOS1 T4), same as `tools/fc.sh layers`: kit code assumes no class of a game: the entry ids of
+# games/<id>/data/catalog/classes.json (the writer's form: one `"id"` line per entry, three tabs in) as a whole string
+# literal ("<id>"), exact case; kit src only. git grep finds the bare ids (a pattern with a quote does not survive the
+# native argument passing of Windows PowerShell), then a .NET regex keeps the quoted literals.
+foreach ($id in $gameIds) {
+    $cfRel = "games/$id/data/catalog/classes.json"
+    $cf = Join-Path $projectRoot $cfRel
+    if (-not (Test-Path $cf)) { continue }
+    $classIds = @(Get-Content $cf | ForEach-Object { if ($_ -match '^\t\t\t"id": "([^"]*)",?$') { $Matches[1] } })
+    if ($classIds.Count -eq 0) {
+        $layerHits += "${cfRel}: no class id found (expected the writer's form: one `"id`" line per entry, three tabs in)"
+        continue
+    }
+    $cs = ($classIds | ForEach-Object { [regex]::Replace($_, '[\]\[\\.*^$+?(){}|/]', '\$0') }) -join '|'
+    $hits = & git grep --untracked -n -I -E -e "($cs)" -- 'kits/*/crates/*/src/*'
+    foreach ($h in @($hits)) {
+        if ($h -match '^([^:]*):(\d+):(.*)$') {
+            $file = $Matches[1]; $line = $Matches[2]; $text = $Matches[3]
+            $m = [regex]::Match($text, "`"($cs)`"")
+            if (-not $m.Success) { continue }
+            $at = [Math]::Max(0, $m.Index - 40)
+            $layerHits += "${file}:$line names class id $($m.Value) of game ${id}: $($text.Substring($at, [Math]::Min(120, $text.Length - $at)))"
         }
     }
 }
 if ($layerHits.Count -gt 0) {
     $layerHits | Select-Object -First 40 | ForEach-Object { Write-Host "  [layers] $_" -ForegroundColor Red }
-    Write-Host "=== [FAILED] layers: engine and kit code must not name a game, kit code no lore word (CLAUDE.md Layers) ===" -ForegroundColor Red
+    Write-Host "=== [FAILED] layers: engine and kit code must not name a game or a lore word, kit code no class id (CLAUDE.md Layers) ===" -ForegroundColor Red
     exit 1
 }
-if (-not $Quiet) { Write-Host "  -> layers ok: engine and kit crates name no game ($($gameIds -join ', ')); kit code names no lore word" -ForegroundColor Green }
+if (-not $Quiet) { Write-Host "  -> layers ok: engine and kit crates name no game ($($gameIds -join ', ')); engine and kit code name no lore word, kit code no class id" -ForegroundColor Green }
 
 $script:bash = Find-Bash
 if (-not $script:bash) {

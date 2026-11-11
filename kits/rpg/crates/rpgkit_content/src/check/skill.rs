@@ -20,7 +20,7 @@ const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "des
 /// the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK; then
 /// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`
 /// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`; PK1-S2a: `hp_cost_pct` and
-/// `requires_meter` in `cost`, the marrow version's `channel` in its own section, every authored kind; HEALPCT1:
+/// `requires_meter` in `cost`, the channeled version's `channel` in its own section, every authored kind; HEALPCT1:
 /// `heal_pct` in `support`; PK2-S1: `unmark` in `support`, `uses_per_battle` in `cost`).
 const SECTION_FIELDS: [(&str, &[&str]); 22] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),

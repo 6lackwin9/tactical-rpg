@@ -1,0 +1,82 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "inoculated_hero",
+    "name": "Inoculated (test)",
+    "side": "party",
+    "description": "Test hero for the Channel duel: Strain carrier with two Channel-only skills.",
+    "class_id": "warrior",
+    "level": 2,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "tl_hook_thrust"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "taunt_shout",
+      "tl_hook_thrust"
+     ],
+     "channeled": [
+      "tl_hook_thrust"
+     ],
+     "passive": [
+      "inoculated_test"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_broadsword",
+    "off_hand": "shd_buckler",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "con_heal_potion",
+     "con_quenched_salt"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terms",
+   "entry": {
+    "id": "channeled_mark",
+    "name": "Marrow",
+    "word": "marrow"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "terms",
+   "entry": {
+    "id": "standard_mark",
+    "name": "Cold Steel",
+    "word": "cold steel"
+   }
+  }
+ ]
+}

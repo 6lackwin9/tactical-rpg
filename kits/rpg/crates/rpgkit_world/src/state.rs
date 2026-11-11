@@ -102,12 +102,12 @@ fn deck_from(raw: Option<&Value>) -> (Deck, Vec<String>) {
     let mut deck = Deck::default();
     for (k, v) in o {
         match k.as_str() {
-            // PK1-S2a: `marrow` (the actives marked marrow) is a list of text too (a save without it reads none)
-            "active" | "passive" | "keystone" | "marrow" => {
+            // PK1-S2a: `channeled` (the actives marked channeled) is a list of text too (a save without it reads none)
+            "active" | "passive" | "keystone" | "channeled" => {
                 let slot = match k.as_str() {
                     "active" => &mut deck.active,
                     "passive" => &mut deck.passive,
-                    "marrow" => &mut deck.marrow,
+                    "channeled" => &mut deck.channeled,
                     _ => &mut deck.keystone,
                 };
                 match texts(v) {
@@ -168,9 +168,9 @@ fn deck_value(deck: &Deck) -> Value {
     if !follow_ups.is_empty() {
         out.insert("follow_ups".into(), Value::Object(follow_ups));
     }
-    // PK1-S2a: a deck without marrow marks writes as before
-    if !deck.marrow.is_empty() {
-        out.insert("marrow".into(), strs(&deck.marrow));
+    // PK1-S2a: a deck without channeled marks writes as before
+    if !deck.channeled.is_empty() {
+        out.insert("channeled".into(), strs(&deck.channeled));
     }
     Value::Object(out)
 }
@@ -824,11 +824,11 @@ impl UnitState {
                 kept.follow_ups.insert(key.clone(), list_kept);
             }
         }
-        // PK1-S2a (PK1 4.2, rule channel): each marrow mark is an active of the deck with a marrow version (IR21 single
-        // intent, no channel none or only), none twice, within every channel ruleset's marrow actives
+        // PK1-S2a (PK1 4.2, rule channel): each channeled mark is an active of the deck with a channeled version (IR21 single
+        // intent, no channel none or only), none twice, within every channel ruleset's channeled actives
         // PR5-26 (audit B3): an automatic deck (no actives listed) marks the actives each channel ruleset's deck rule
         // fills (the battle's own list, truncated to its active slots); with no such ruleset, the families it owns
-        let autos: Vec<(String, Vec<String>)> = if actives.is_empty() && !self.deck.marrow.is_empty() {
+        let autos: Vec<(String, Vec<String>)> = if actives.is_empty() && !self.deck.channeled.is_empty() {
             // the member as it fights: its deck (the marks keep it non-empty, so it replaces the base unit's) with no
             // actives listed, built without the validation that called this
             let mut work = self.clone();
@@ -846,8 +846,8 @@ impl UnitState {
         } else {
             Vec::new()
         };
-        let mut bad = twice("marrow", &self.deck.marrow, &mut Vec::new(), &mut errors);
-        for (i, fam) in self.deck.marrow.iter().enumerate() {
+        let mut bad = twice("channeled", &self.deck.channeled, &mut Vec::new(), &mut errors);
+        for (i, fam) in self.deck.channeled.iter().enumerate() {
             let before = errors.len();
             let in_deck = if !actives.is_empty() {
                 actives.contains(fam)
@@ -857,21 +857,21 @@ impl UnitState {
                 autos.iter().all(|(_, auto)| auto.contains(fam))
             };
             if !in_deck {
-                errors.push(format!("{at}: deck marrow: '{fam}' is not an active of the deck."));
+                errors.push(format!("{at}: deck channeled: '{fam}' is not an active of the deck."));
             } else if d.cat.tier_one(fam).is_some_and(|s| s.channel.none || s.channel.only || !rpgkit_rules::intent::single_intent(&rpgkit_rules::intent::IntentInput::of_def(s))) {
-                errors.push(format!("{at}: deck marrow: '{fam}' has no marrow version."));
+                errors.push(format!("{at}: deck channeled: '{fam}' has no channeled version."));
             }
             bad[i] |= errors.len() > before;
         }
-        kept.marrow = keep(&self.deck.marrow, &bad);
+        kept.channeled = keep(&self.deck.channeled, &bad);
         let channel_rows = d.cat.rulesets.values().map(rpgkit_rules::ruleset::Ruleset::from_row).filter(|r| r.has(rpgkit_rules::ruleset::CHANNEL));
         for r in channel_rows {
-            let max = r.numbers.marrow_actives.max(0);
-            let n = if clean { kept.marrow.len() } else { self.deck.marrow.len() };
+            let max = r.numbers.channeled_actives.max(0);
+            let n = if clean { kept.channeled.len() } else { self.deck.channeled.len() };
             if n as i64 > i64::from(max) {
-                errors.push(format!("{at}: deck: {n} marrow entries (the {} ruleset's marrow actives allow {max}).", r.name));
+                errors.push(format!("{at}: deck: {n} channeled entries (the {} ruleset's channeled actives allow {max}).", r.name));
                 if clean {
-                    kept.marrow.truncate(usize::try_from(max).unwrap_or(0));
+                    kept.channeled.truncate(usize::try_from(max).unwrap_or(0));
                 }
             }
         }

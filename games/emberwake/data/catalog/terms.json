@@ -1,0 +1,20 @@
+{
+	"kind": "terms",
+	"version": 1,
+	"entries": [
+		{
+			"id": "channeled_mark",
+			"name": "Marrow",
+			"short": "",
+			"word": "marrow",
+			"tip": ""
+		},
+		{
+			"id": "standard_mark",
+			"name": "Cold Steel",
+			"short": "",
+			"word": "cold steel",
+			"tip": ""
+		}
+	]
+}

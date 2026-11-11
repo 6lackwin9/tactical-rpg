@@ -55,7 +55,7 @@ fn sid(b: &BattleScreen, id: &str) -> usize {
 
 /// The selected hero holds the test Strain meter from `strain` (0-100; its row's skills Feed: +5, a self heal; Vent:
 /// -20, gate 50, 15% of max HP; both marrow-only); the ruleset names it the channel meter and Feed the Channel Rest; the
-/// hero marks its first active with a marrow version (`marrow_actives` 1). Returns (hero, marked family or "").
+/// hero marks its first active with a marrow version (`channeled_actives` 1). Returns (hero, marked family or "").
 fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     let h = b.selected.expect("a hero");
     let sess = b.host.session.as_mut().unwrap();
@@ -71,7 +71,7 @@ fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     cat.add_skills(vec![SkillDef::from_obj(feed.as_object().unwrap()), SkillDef::from_obj(vent.as_object().unwrap())]);
     w.ruleset.numbers.channel_meter = STRAIN.into();
     w.ruleset.numbers.channel_rest = FEED.into();
-    w.ruleset.numbers.marrow_actives = 1;
+    w.ruleset.numbers.channeled_actives = 1;
     w.units[h].passive_meters.push(HeldMeter { meter: STRAIN.into(), start: strain, floor: None });
     meter::battle_start(w);
     // the first hotkey attack with a marrow version is marked marrow (whatever the shipped deck holds), else the first
@@ -81,7 +81,7 @@ fn strain_up(b: &mut BattleScreen, strain: i32) -> (usize, String) {
     assert!(!marked.is_empty(), "the fixture needs a hero skill with a marrow version");
     {
         let u = &mut w.units[h];
-        u.deck.marrow = vec![marked.clone()];
+        u.deck.channeled = vec![marked.clone()];
         if !u.deck.active.contains(&marked) && u.deck_rule.is_none() {
             u.deck.active.push(marked.clone());
         }
@@ -244,7 +244,7 @@ fn a_channel_round_tints_the_unit_and_its_blocks() {
         assert_eq!(l.get("channel").is_some(), tinted, "{l}");
         assert_eq!(l["name"], json!(skill_text(w, h, e.skill)), "the strip's name");
         if channel::has_version(w, sk) {
-            assert_eq!(l["name"], json!(channel::marrow_name(&w.cat, &sk.name)), "a marrow version carries the mark");
+            assert_eq!(l["name"], json!(channel::channeled_name(&w.cat, &sk.name)), "a marrow version carries the mark");
         }
     }
     assert!(labels.iter().any(|l| l.get("channel").is_some()), "a Channel round plans in the Channel mode: {labels:?}");
@@ -364,7 +364,7 @@ fn cold_steel_rows_grey_in_a_channel_round() {
             let [Pick::Skill { skill, .. }] = p[..] else { continue };
             if channel::problem(w, h, &w.cat.skills[skill]) == Some(want) {
                 assert!(!r.valid, "{} greyed", r.label);
-                assert!(!r.label.contains(&channel::marrow_name(&w.cat, "")), "a greyed Cold Steel cell keeps its own name: {}", r.label);
+                assert!(!r.label.contains(&channel::channeled_name(&w.cat, "")), "a greyed Cold Steel cell keeps its own name: {}", r.label);
                 if r.detail == want {
                     assert!(tip(&r).iter().any(|l| l == want), "{:?}", tip(&r));
                     n += 1;
@@ -448,17 +448,18 @@ fn a_past_rounds_blocks_keep_that_rounds_mode() {
     assert!(cold_acts.iter().all(|a| !a.1), "a past Cold Steel round is never tinted: {cold_acts:?}");
 }
 
-/// PK1-S2c-2 (FB-180 (b)): "Cold Steel" is the game term `cold_steel_mark`: the toggle's card reads its default name,
-/// and a `terms` row renames it there.
+/// PK1-S2c-2 (FB-180 (b)): "Cold Steel" is the game term `standard_mark`: the toggle's card reads the game's name
+/// (LAYER-DOWN-1: Emberwake's `terms` row, not the kit's neutral default), and a `terms` row renames it there.
 #[test]
 fn the_cold_steel_name_is_the_games_term() {
     let (_cx, _g, mut b) = arena(RULES);
     let (h, _) = strain_up(&mut b, 0);
-    let cold = emberwake_data::terms::default_name(emberwake_data::terms::COLD_STEEL_MARK).to_string();
+    let cold = s(&b).w.cat.term(emberwake_data::terms::STANDARD_MARK).name;
+    assert_ne!(cold, emberwake_data::terms::default_name(emberwake_data::terms::STANDARD_MARK), "the game names its standard round");
     let detail = |b: &BattleScreen| toggle(&rows(b, h, RoundTarget::Myself)).map(|r| r.detail.clone()).expect("the toggle");
     assert!(detail(&b).starts_with(&format!("{cold} round")), "{}", detail(&b));
     let cat = std::sync::Arc::make_mut(&mut b.host.session.as_mut().unwrap().w.cat);
-    let row = emberwake_data::terms::TermRow { id: emberwake_data::terms::COLD_STEEL_MARK.into(), name: "Bare Iron".into(), ..Default::default() };
+    let row = emberwake_data::terms::TermRow { id: emberwake_data::terms::STANDARD_MARK.into(), name: "Bare Iron".into(), ..Default::default() };
     cat.terms.insert(row.id.clone(), row);
     assert!(detail(&b).starts_with("Bare Iron round"), "{}", detail(&b));
 }

@@ -120,7 +120,7 @@ fn intent_names_read_the_games_terms() {
         let w = &sess.w;
         assert_eq!(RoundIntent::Assault.label(&w.cat), assault);
         assert_eq!(crate::party::intent_names(&w.cat).get("assault").map(String::as_str), Some(assault), "the deck screens' names (party, Dojo)");
-        let line = emberwake_battle::intent::Line { kind: "", target: None, cell: V2::new(0, 0), blocks: (0, 0), recovery: 0, skill: String::new(), marrow: false };
+        let line = emberwake_battle::intent::Line { kind: "", target: None, cell: V2::new(0, 0), blocks: (0, 0), recovery: 0, skill: String::new(), channeled: false };
         let rec = emberwake_battle::intent::Intent { unit: d, line, revealed: false, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1,
             round_intent: Some(RoundIntent::Assault), channel: false, row_intent: Some(RoundIntent::Assault), round_target: Some(RoundTarget::Unit(f)), maneuver: None, impacts: Vec::new() };
         assert_eq!(intent_text::round_head(w, &rec), Some(format!("{assault}: {}", w.units[f].name)));

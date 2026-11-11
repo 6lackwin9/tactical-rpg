@@ -329,7 +329,7 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
     for (i, t) in list("triggers", "Triggers", SKILL_ROWS_MAX, out).iter().enumerate() {
         out.extend(trigger_row_errors_with(t, ctx, &format!("Trigger {}", i + 1), &TRIGGER_EVENTS, &[], true));
     }
-    // UM6: a meter skill spends this meter (a negative delta on it); PK1-S2a (FB-167 Q8): a marrow-only one (`channel.only`,
+    // UM6: a meter skill spends this meter (a negative delta on it); PK1-S2a (FB-167 Q8): a channeled-only one (`channel.only`,
     // the Channel basics Feed and Vent) moves it either way (a delta on it)
     for s in json::sget(e, "skills") {
         let row = refs.skills.iter().find(|r| json::s(r, "id") == s);

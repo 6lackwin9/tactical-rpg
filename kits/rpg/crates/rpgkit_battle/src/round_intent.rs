@@ -119,8 +119,8 @@ pub struct RoundState {
     /// the fill did, so accepting keeps the tile; a pick from the menu still repositions. Cleared with the picks.
     pub accepted: Vec<usize>,
     /// PK1-S2a (PK1 4.3, FB-167 Q1 (a), rule `channel`): the round is a Channel round (its skills plan and resolve as
-    /// marrow versions; `crate::channel`); set by the converting toggle (`round_intent_plan::set_channel`), cleared at
-    /// every round start (every round starts in Cold Steel). In no trace or save.
+    /// channeled versions; `crate::channel`); set by the converting toggle (`round_intent_plan::set_channel`), cleared at
+    /// every round start (every round starts in Standard). In no trace or save.
     pub channel: bool,
 }
 
@@ -424,7 +424,7 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.picks.clear();
         rs.accepted.clear();
         rs.fill = None;
-        // PK1-S2a (PK1 4.3 item 1): every round starts in Cold Steel
+        // PK1-S2a (PK1 4.3 item 1): every round starts in Standard
         rs.channel = false;
     }
     lines

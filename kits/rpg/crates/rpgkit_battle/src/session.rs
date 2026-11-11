@@ -1560,7 +1560,7 @@ impl Session {
     }
 
     /// PK1-S2a (PK1 4.3 item 1): the converting Channel toggle (`round_intent_plan::set_channel`) while planning: flips
-    /// member `c`'s round to Channel (`on`) or back to Cold Steel and converts its plan; the lines (buffs ended, picks
+    /// member `c`'s round to Channel (`on`) or back to Standard and converts its plan; the lines (buffs ended, picks
     /// dropped) go to `events`. Refused outside planning or for a unit that cannot Channel (nothing changes then).
     pub fn set_channel(&mut self, c: UnitId, on: bool) -> (Result<Vec<String>, String>, Vec<(UnitId, String)>) {
         if self.phase != Phase::Planning || self.plan_confirmed {

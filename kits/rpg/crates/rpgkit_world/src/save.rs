@@ -68,7 +68,12 @@ pub fn write_keyed(d: &Data, dir: &Path, state: &GameState, key: &str, saved_at:
 
 /// CAMPAIGN1 F4: reads the keyed save `key` like `read` (migrate, then validate).
 pub fn read_keyed(d: &Data, dir: &Path, key: &str) -> Result<Loaded, Vec<String>> {
-    decode(d, &aegis_save::read_keyed(dir, key)?)
+    read_keyed_with(d, dir, key, &[])
+}
+
+/// LAYER-DOWN-1: `read_keyed` with the game's renamed deck keys (`KeyAlias`).
+pub fn read_keyed_with(d: &Data, dir: &Path, key: &str, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
+    decode_with(d, &aegis_save::read_keyed(dir, key)?, deck_aliases)
 }
 
 /// Whether the keyed save `key` exists (a bad key has none).
@@ -89,7 +94,41 @@ pub struct Loaded {
 }
 
 pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
-    decode(d, &aegis_save::read(dir, slot)?)
+    read_with(d, dir, slot, &[])
+}
+
+/// LAYER-DOWN-1: a renamed key of a saved `deck`: (the key an older save holds, the `Deck::KEYS` key it now is). The
+/// kit names none of a game's old words; a game passes its own list to `read_with`, `read_keyed_with` and
+/// `decode_with` (its world façade's `save::read`) so its older saves keep loading.
+pub type KeyAlias = (&'static str, &'static str);
+
+/// LAYER-DOWN-1: `read` with the game's renamed deck keys (`KeyAlias`).
+pub fn read_with(d: &Data, dir: &Path, slot: i64, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
+    decode_with(d, &aegis_save::read(dir, slot)?, deck_aliases)
+}
+
+/// LAYER-DOWN-1: every `deck` object inside `v` (party and departed members): an old key of `aliases` becomes its new
+/// key, unless the deck holds the new key too (then both stay and the deck check refuses the old one).
+fn rename_deck_keys(v: &mut Value, aliases: &[KeyAlias]) {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o.iter_mut() {
+                if let (true, Value::Object(deck)) = (k == "deck", &mut *x) {
+                    for (old, new) in aliases {
+                        if !deck.contains_key(*new) {
+                            if let Some(list) = deck.shift_remove(*old) {
+                                deck.insert((*new).to_string(), list);
+                            }
+                        }
+                    }
+                } else {
+                    rename_deck_keys(x, aliases);
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| rename_deck_keys(x, aliases)),
+        _ => {}
+    }
 }
 
 /// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
@@ -98,8 +137,17 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 /// deck entry the data no longer allows is dropped with a warning, `UnitState::sanitize_deck`; PR4-2: so is a loadout
 /// family, rank or worn item, `UnitState::sanitize_loadout`; PK2-S1: so is a unit track, `UnitState::sanitize_tracks`).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
+    decode_with(d, text, &[])
+}
+
+/// LAYER-DOWN-1: `decode` with the game's renamed deck keys (`KeyAlias`), applied after the migration and before the
+/// state is read.
+pub fn decode_with(d: &Data, text: &str, deck_aliases: &[KeyAlias]) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
-    let (data, mut warnings) = migrate(d, &envelope)?;
+    let (mut data, mut warnings) = migrate(d, &envelope)?;
+    if let (false, Some(gs)) = (deck_aliases.is_empty(), data.get_mut("game_state")) {
+        rename_deck_keys(gs, deck_aliases);
+    }
     let mut state = GameState::from_dict(d, json::dget(&data, "game_state"));
     warnings.extend(crate::story::check_loaded(d, &mut state));
     if let Some(c) = state.campaign.as_mut() {

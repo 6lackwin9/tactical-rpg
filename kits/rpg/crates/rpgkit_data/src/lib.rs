@@ -273,14 +273,14 @@ pub struct Deck {
     /// INPUT1 FL1 (`follow_ups`): opener family -> the families the planner's fill tries first after it, in the
     /// player's priority (written order kept; an empty list is no list).
     pub follow_ups: IndexMap<String, Vec<String>>,
-    /// PK1-S2a (`marrow`, PK1 4.2, rule channel): the actives whose marrow version opens in a Channel round (written
-    /// order; at most the ruleset's `marrow_actives` of them are read).
-    pub marrow: Vec<String>,
+    /// PK1-S2a (`channeled`, PK1 4.2, rule channel): the actives whose channeled version opens in a Channel round (written
+    /// order; at most the ruleset's `channeled_actives` of them are read).
+    pub channeled: Vec<String>,
 }
 
 impl Deck {
     /// The deck keys, in their stored order.
-    pub const KEYS: [&'static str; 6] = ["active", "passive", "keystone", "order", "follow_ups", "marrow"];
+    pub const KEYS: [&'static str; 6] = ["active", "passive", "keystone", "order", "follow_ups", "channeled"];
 
     /// From a `deck` value (anything but an object is the empty deck; lists keep their strings; an empty
     /// `follow_ups` list is dropped, FL1).
@@ -290,7 +290,7 @@ impl Deck {
         let follow_ups = obj(o, "follow_ups")
             .map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).filter(|(_, l)| !l.is_empty()).collect())
             .unwrap_or_default();
-        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups, marrow: strings(o, "marrow") }
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups, channeled: strings(o, "channeled") }
     }
 
     /// True when every key is empty (the auto deck).
@@ -300,7 +300,7 @@ impl Deck {
             && self.keystone.is_empty()
             && self.order.values().all(Vec::is_empty)
             && self.follow_ups.values().all(Vec::is_empty)
-            && self.marrow.is_empty()
+            && self.channeled.is_empty()
     }
 
     /// INPUT1 FL1: the follow-up list set for opener family `fam` (None: no list, the fill reads the order).
@@ -444,7 +444,7 @@ pub struct SkillDef {
     pub hp_cost_pct: i32,
     /// PK1-S2a (rule unit_meters): the meter value the skill needs at its start (None = no gate).
     pub requires_meter: Option<MeterGate>,
-    /// PK1-S2a (rule channel): the skill's marrow version block (the default: a derived version for a single-intent skill).
+    /// PK1-S2a (rule channel): the skill's channeled version block (the default: a derived version for a single-intent skill).
     pub channel: ChannelSpec,
     /// PK2-S1 (PK1 3.7, FB-174 (6)): a SUPPORT skill's `unmark` `{mark}`, the consumable's effect as a skill: the mark id
     /// whose latest entry on the target this battle it removes ("" = none).
@@ -2148,9 +2148,9 @@ impl MeterGate {
     }
 }
 
-/// PK1-S2a (PK1 4.1, rule channel): a skill's `channel` block: `none` (no marrow version), `only` (marrow only: open
+/// PK1-S2a (PK1 4.1, rule channel): a skill's `channel` block: `none` (no channeled version), `only` (channeled only: open
 /// only in a Channel round), `cost` (replaces the derived channel meter cost), `power` (replaces `channel_power`) and
-/// `effects` (trigger effects run as a rider on each unit the marrow version lands on).
+/// `effects` (trigger effects run as a rider on each unit the channeled version lands on).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ChannelSpec {
     pub none: bool,

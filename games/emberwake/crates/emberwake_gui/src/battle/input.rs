@@ -153,12 +153,12 @@ fn pick_label(s: &Session, h: usize, picks: &[rip::Pick]) -> String {
 }
 
 /// PK1-S2c (PK1 4.3 item 6): skill `sid` as `c` plans it now: a marrow version's name with the marrow mark
-/// (`channel::marrow_name`, as the tells name it) when its Channel round offers that version, else its own (a Cold
+/// (`channel::channeled_name`, as the tells name it) when its Channel round offers that version, else its own (a Cold
 /// Steel skill greyed in a Channel round keeps its name).
 pub(crate) fn skill_text(w: &World, c: usize, sid: usize) -> String {
     let s = &w.cat.skills[sid];
     if emberwake_battle::channel::has_version(w, s) && emberwake_battle::channel::version(w, c, s).is_some() && emberwake_battle::channel::problem(w, c, s).is_none() {
-        emberwake_battle::channel::marrow_name(&w.cat, &s.name)
+        emberwake_battle::channel::channeled_name(&w.cat, &s.name)
     } else {
         s.name.clone()
     }
@@ -1027,10 +1027,10 @@ fn channel_row(w: &World, h: usize) -> Option<Row> {
     Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None })
 }
 
-/// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `cold_steel_mark` (its
+/// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `standard_mark` (its
 /// `terms` row, else "Cold Steel").
 pub(super) fn cold_steel_name(w: &World) -> String {
-    w.cat.term(emberwake_data::terms::COLD_STEEL_MARK).name
+    w.cat.term(emberwake_data::terms::STANDARD_MARK).name
 }
 
 /// The channel meter's name (its unit meter row's, else its id).

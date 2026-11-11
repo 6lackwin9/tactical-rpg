@@ -274,7 +274,7 @@ impl PlanEntry {
                         s.blocks,
                         CmdKind::Attack {
                             target: self.target,
-                            // PK1-S2a: a marrow version's power factor (1 outside a Channel round)
+                            // PK1-S2a: a channeled version's power factor (1 outside a Channel round)
                             skill_mult: u.power_for(s) * crate::channel::power(w, actor, s),
                             use_offhand: skill::is_off_hand(s),
                             follow_tiles: if self.chase && s.dash_tiles <= 0 && self.carry == Carry::None { 1 } else { 0 },
@@ -335,15 +335,15 @@ impl PlanEntry {
             cmd.riders = s.riders.clone();
             cmd.hp_cost = command::hp_cost_for(w, actor, s);
             cmd.ignore_guard = command::ignores_guard(w, s);
-            // HOOKS1 UM2: the meter changes (set only under the rule unit_meters); PK1-S2a: a marrow version's channel
+            // HOOKS1 UM2: the meter changes (set only under the rule unit_meters); PK1-S2a: a channeled version's channel
             // cost after them, and the meter gate
             cmd.meters = crate::channel::meters_for(w, actor, s);
             cmd.gate = s.requires_meter.clone().filter(|_| crate::meter::on(w));
-            // PK1-S2a (PK1 4.2): a marrow version pierces armour (attacks) and runs its `channel.effects` as a rider
+            // PK1-S2a (PK1 4.2): a channeled version pierces armour (attacks) and runs its `channel.effects` as a rider
             if let Some(v) = crate::channel::version(w, actor, s) {
-                // PK1-S2b: the tells name a marrow version (the twin of a Cold Steel skill, not a marrow-only skill such
-                // as Feed or Vent) with the marrow mark
-                cmd.marrow = crate::channel::has_version(w, s);
+                // PK1-S2b: the tells name a channeled version (the twin of a Standard skill, not a channeled-only skill such
+                // as Feed or Vent) with the channeled mark
+                cmd.channeled = crate::channel::has_version(w, s);
                 if v.pierce {
                     cmd.impact.armor_piercing = true;
                 }
@@ -635,7 +635,7 @@ impl Plan {
                 let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
                 return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, rpgkit_rules::unit::rank_numeral(rank));
             }
-            // PK1-S2a (rule channel): a Cold Steel version in a Channel round, a marrow-only skill in a Cold Steel one
+            // PK1-S2a (rule channel): a Standard version in a Channel round, a channeled-only skill in a Standard one
             if let Some(p) = crate::channel::problem(w, c, s) {
                 return p.to_string();
             }
@@ -1624,7 +1624,7 @@ impl Plan {
         if cost > 0 {
             st.hp_left = (st.hp_left - cost).max(1);
         }
-        // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters; PK1-S2a: with a marrow
+        // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters; PK1-S2a: with a channeled
         // version's channel cost)
         crate::meter::spend(w, c, &mut st.meters_left, &crate::channel::meters_for(w, c, s));
         // RULESET1_INTENT RS2, FU3, CLN-45: with `rest_ap` round_end Rest pays only at round end, so no AP returns
@@ -1643,10 +1643,10 @@ impl Plan {
         }
         // HOOKS1 EX1: an execute entry counts when the foe's HP share meets it now (rule execute)
         let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
-        // PK1-S2b: a marrow version's armour piercing counts in the estimate (the AI's Channel row compares them)
+        // PK1-S2b: a channeled version's armour piercing counts in the estimate (the AI's Channel row compares them)
         let version = crate::channel::version(w, c, s);
         let hit = expected_with(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult, version.as_ref().is_some_and(|v| v.pierce));
-        // PK1-S2a: a marrow version's power factor (none outside a Channel round)
+        // PK1-S2a: a channeled version's power factor (none outside a Channel round)
         match version.map(|v| v.power).filter(|p| *p != 1.0) {
             Some(p) => (hit as f64 * p).round() as i32,
             None => hit,
@@ -1872,7 +1872,7 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
     expected_with(w, c, foe, sid, stance, cover, power_scale, false)
 }
 
-/// `expected`, with `pierce` adding armour piercing (PK1-S2b: a marrow version's, `channel::Version::pierce`) to the
+/// `expected`, with `pierce` adding armour piercing (PK1-S2b: a channeled version's, `channel::Version::pierce`) to the
 /// skill's own; either counts only under the rule pierce, as the resolver reads it.
 #[allow(clippy::too_many_arguments)]
 pub fn expected_with(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<Stance>, cover: f64, power_scale: f64, pierce: bool) -> i32 {

@@ -19,11 +19,11 @@ pub const INTENT_MANEUVER: &str = "intent_maneuver";
 pub const INTENT_CHANNEL: &str = "intent_channel";
 /// INTENT2 IR2 (A4.2-K1b): the Field intent's term (a tile target; rule `field_intent`).
 pub const INTENT_FIELD: &str = "intent_field";
-/// PK1-S2b (PK1 4.3 item 6): the mark a marrow version's name carries in the tells ("Cleave (Marrow)"; rule `channel`).
-pub const MARROW_MARK: &str = "marrow_mark";
+/// PK1-S2b (PK1 4.3 item 6): the mark a channeled version's name carries in the tells ("Cleave (Channeled)"; rule `channel`).
+pub const CHANNELED_MARK: &str = "channeled_mark";
 /// PK1-S2c-2 (PK1 4.3, FB-180 (b)): the name of a round that is not a Channel round (the Channel toggle's card and the
-/// planner's words: "Cold Steel round").
-pub const COLD_STEEL_MARK: &str = "cold_steel_mark";
+/// planner's words: "Standard round").
+pub const STANDARD_MARK: &str = "standard_mark";
 
 /// TM1: who names a term.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,8 +61,8 @@ pub const REGISTER: [TermDef; 10] = [
     game(INTENT_MANEUVER, "Maneuver", "maneuver"),
     game(INTENT_CHANNEL, "Channel", "channel"),
     game(INTENT_FIELD, "Field", "field"),
-    game(MARROW_MARK, "Marrow", "marrow"),
-    game(COLD_STEEL_MARK, "Cold Steel", "cold steel"),
+    game(CHANNELED_MARK, "Channeled", "channeled"),
+    game(STANDARD_MARK, "Standard", "standard"),
 ];
 
 /// The register row of `id`, if any.

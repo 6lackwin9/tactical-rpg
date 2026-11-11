@@ -1,8 +1,10 @@
 # Lore words of Emberwake for the layer check G3 (docs/specs/TERMS1.md 7; `tools/fc.sh layers`, check_project.ps1).
-# Kit code (kits/*/crates/*/src, kits/*/schema.json, kits/*/kit.json) must not name any of these.
-# One name or phrase per line, matched as a fixed string, whole word, case-sensitive. Proper nouns and coined phrases
-# only: a plain English word is listed only inside its lore phrase ("Warded Tallow", not "Tallow").
-# The world ids (the folders under data/worlds/) are checked as well, case-insensitive; they are not listed here.
+# Engine and kit code (engine/crates, kits/*/crates incl. tests, kits/*/schema.json, kits/*/kit.json) must not name any of these.
+# One name or phrase per line, matched as a fixed string, whole word, any case (`_` counts as a word break, and a space
+# matches a space or `_`, so "Cold Steel" catches cold_steel_mark). Proper nouns and coined words only: a plain English
+# word is listed only inside its lore phrase ("Warded Tallow", not "Tallow"); a coined word that is also English (Marrow, Spasm,
+# Quell, Vane) matches in any case, so engine and kit code avoid it in ordinary names too (no `weather_vane`).
+# The world ids (the folders under data/worlds/) are checked the same way; they are not listed here.
 Kaelen
 Vesper
 Maren
@@ -24,3 +26,7 @@ Castellan
 Inquisition
 Warded Tallow
 Red Tithing
+Cold Steel
+Marrow
+Spasm
+Calcification

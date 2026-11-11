@@ -90,7 +90,7 @@ fn the_replies_carry_the_marks_tracks_and_use_limits() {
     let (hero, mate) = (st["units"][0].clone(), st["units"][1].clone());
     assert_eq!(hero["marks"], json!([[MARK, 1]]), "{hero}");
     assert!(hero["tracks"]["t_track"].as_i64().is_some_and(|n| n >= 2), "{hero}");
-    for k in ["marks", "tracks", "skill_uses", "channel", "marrow", "forbid_hands", "pierce_melee"] {
+    for k in ["marks", "tracks", "skill_uses", "channel", "channeled", "forbid_hands", "pierce_melee"] {
         assert!(mate.get(k).is_none(), "the mate holds no {k}: {mate}");
     }
     let s = h.commands.session.as_ref().unwrap();
@@ -105,5 +105,5 @@ fn the_replies_carry_the_marks_tracks_and_use_limits() {
     let st = h.handle(&json!({"cmd": "state"}))["state"].clone();
     assert_eq!(st["units"][1]["skill_uses"], json!({"t_inoculate": 1}));
     let strike = h.handle(&json!({"cmd": "skills", "unit": 1}))["skills"].as_array().unwrap().iter().find(|r| r["skill"] == "strike").cloned().unwrap();
-    assert!(strike.get("uses_per_battle").is_none() && strike.get("unmark").is_none() && strike.get("marrow").is_none(), "{strike}");
+    assert!(strike.get("uses_per_battle").is_none() && strike.get("unmark").is_none() && strike.get("channeled").is_none(), "{strike}");
 }

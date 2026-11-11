@@ -2921,7 +2921,7 @@
 					"taunt_shout",
 					"tl_hook_thrust"
 				],
-				"marrow": [
+				"channeled": [
 					"tl_hook_thrust"
 				],
 				"passive": [

@@ -921,7 +921,7 @@ pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Hol
                 crate::meter::from_effect(res, w, h, to, e, rules, block, fired);
                 continue;
             }
-            // PK1-S1 (3.3): a weapon strike outside the plan, logged `[Spasm]`
+            // PK1-S1 (3.3): a weapon strike outside the plan, logged `[Strike]`
             rpgkit_data::STRIKE_NEAREST => {
                 let (l, dealt, rows) = strike_nearest(res, w, h, to, e);
                 res.log.push(l.clone());
@@ -985,13 +985,13 @@ pub fn nearest_other(w: &World, c: UnitId) -> Option<UnitId> {
 }
 
 /// The tag of a `strike_nearest` effect's log line.
-pub const SPASM_TAG: &str = "[Spasm]";
+pub const STRIKE_TAG: &str = "[Strike]";
 
 /// PK1-S1 (3.3): the `strike_nearest` effect of holder `h` on unit `c`: `c` strikes `nearest_other` at once with its
 /// weapon as riposte's counter does (`command::roll_hit`, one crit draw, `power` x weaken x empower, its weapon's reach
 /// deciding ranged, the cover between them; mitigated by the hit), no AP and no plan, raising no event (depth 1); then
 /// `then_status` (if any) is granted to `c` for its next `then_rounds` rounds (never rolled), struck or not. Returns
-/// the `[Spasm]` line, the HP taken and its journal rows.
+/// the `[Strike]` line, the HP taken and its journal rows.
 fn strike_nearest(res: &mut Resolver, w: &mut World, h: &Holder, c: UnitId, e: &Obj) -> (String, i32, Vec<(UnitId, i32)>) {
     let name = w.units[c].name.clone();
     let (mut dealt, mut rows) = (0, Vec::new());
@@ -1019,7 +1019,7 @@ fn strike_nearest(res: &mut Resolver, w: &mut World, h: &Holder, c: UnitId, e: &
         status::apply_effect(&mut w.units[c], &spec, status::Timing::Next, 0.0, None);
         what += &format!(", then {} next round{}", status::display_name(&st), if rounds > 1 { format!(" for {rounds} rounds") } else { String::new() });
     }
-    (format!("{SPASM_TAG} {}'s {}: {what}", w.units[h.unit].name, h.source), dealt, rows)
+    (format!("{STRIKE_TAG} {}'s {}: {what}", w.units[h.unit].name, h.source), dealt, rows)
 }
 
 /// PK1-S1 (3.4): the `Fired::on` of an `ap` set's line at the round start (the metrics count no new firing).

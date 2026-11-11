@@ -221,10 +221,10 @@ pub struct Command {
     /// PK1-S2a: the skill's meter gate (`requires_meter`), tested at the command's start before any cost (set only under
     /// the rule `unit_meters`).
     pub gate: Option<rpgkit_data::MeterGate>,
-    /// PK1-S2b (PK1 4.3 item 6): the command runs a marrow version (`channel::version` of a skill with
+    /// PK1-S2b (PK1 4.3 item 6): the command runs a channeled version (`channel::version` of a skill with
     /// `channel::has_version`: never a `channel.only` skill; set only in a Channel round).
-    /// The tells name it with the marrow mark (`channel::marrow_name`); no rule reads it.
-    pub marrow: bool,
+    /// The tells name it with the channeled mark (`channel::channeled_name`); no rule reads it.
+    pub channeled: bool,
     /// INPUT1 MR10: the band test counts a diagonal neighbour of the target as distance 1 (`round_intent::diagonal`).
     pub diagonal: bool,
     /// INPUT1 MR1: the position a carried Engage dashes to (None = none, or not a skill with a position).
@@ -302,7 +302,7 @@ impl Command {
             guard_bypassed: false,
             meters: Vec::new(),
             gate: None,
-            marrow: false,
+            channeled: false,
             diagonal: false,
             position: None,
             carry_range: 0,
@@ -333,7 +333,7 @@ impl Command {
             }
     }
 
-    /// The skill's own armour piercing (or a marrow version's) under the rule pierce.
+    /// The skill's own armour piercing (or a channeled version's) under the rule pierce.
     fn pierces_by_skill(&self, w: &World) -> bool {
         self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
@@ -1096,9 +1096,9 @@ impl Command {
         self.meters.clear();
         self.gate = None;
         // PR5-26 (audit B1): a coerced Rest runs no skill (no `uses_per_battle` count or used-up failure) and no
-        // marrow version (no Channel tell)
+        // channeled version (no Channel tell)
         self.skill.clear();
-        self.marrow = false;
+        self.channeled = false;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.

@@ -4,7 +4,8 @@
 #                                docs --all, tooltests, plannertests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
-#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt);
+#                                engine and kit crates (src, tests), schema.json and kit.json name no lore word, any case
+#                                (world ids, games/<id>/lore_words.txt);
 #                                kit src names no class id of a game as a string literal (games/<id>/data/catalog/classes.json)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
@@ -103,7 +104,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
       echo "[docs] no origin/develop to compare with: checking every file"; all=--all
     fi
   fi
-  for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md games/*/docs/*.md games/*/docs/specs/*.md games/*/docs/lore/*.md games/*/docs/lore/*/*.md; do
+  for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/audits/*.md docs/sessions/*.md games/*/docs/*.md games/*/docs/specs/*.md games/*/docs/lore/*.md games/*/docs/lore/*/*.md; do
     [ -f "$f" ] || continue
     case "$f" in */lore/archive/*) continue ;; esac  # archived exports keep their size
     if [ "$all" = "--all" ] || [ -n "${changed[$f]:-}" ]; then sized+=("$f"); fi
@@ -116,7 +117,7 @@ docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB 
   fi
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
-  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md games/*/docs/*.md games/*/docs/*/*.md games/*/docs/lore/*/*.md games/*/data/*/README.md \
+  for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/audits/*.md docs/sessions/*.md docs/decisions/*.md games/*/docs/*.md games/*/docs/*/*.md games/*/docs/lore/*/*.md games/*/data/*/README.md \
     .claude/agents/*.md .claude/skills/*/SKILL.md engine/README.md engine/docs/*.md engine/docs/*/*.md kits/*/README.md kits/*/crates/*/README.md legacy/LEGACY.md; do
     [ -f "$f" ] || continue
     total=$((total + 1))
@@ -210,27 +211,22 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       else if (FILENAME ~ /^engine\// && r ~ /^kits(\/|$)/) printf "[layers] %s:%d engine path dependency into kits/: %s\n", FILENAME, FNR, p
     }')
   [ -n "$hits" ] && { echo "$hits"; bad=1; }
-  # G3 (TERMS1 7): kit code names no lore word of a game: its world ids (folders under games/<id>/data/worlds/, any case,
-  # whole word with `_` as a separator, as G1) and the lines of games/<id>/lore_words.txt (fixed phrases, whole word, exact
-  # case; `#` comments). Scope: kit src, schema.json and kit.json; kit tests and READMEs are not scanned. One git grep per
-  # game (a world id becomes [Aa][Ss].. so both lists share one case-sensitive regex).
-  local w ws lw ex
+  # G3 (TERMS1 7, LAYER-DOWN-1): engine and kit code names no lore word of a game: its world ids (folders under
+  # games/<id>/data/worlds/) and the lines of games/<id>/lore_words.txt (fixed phrases, a space matches a space or `_`;
+  # `#` comments). Any case, whole word with `_` as a separator (as G1), so `marrow_mark` names "Marrow". Scope: the engine
+  # crates and the kit crates (src, tests and fixtures), kit schema.json and kit.json; every file in those crates is scanned (a crate README too), the docs folders are not.
+  # One git grep per game. The awk reads the pattern from ENVIRON (an awk -v value would eat its backslashes).
+  local w lp
   for id in "${ids[@]}"; do
-    ws=$(for w in "games/$id/data/worlds"/*/; do [ -d "$w" ] && basename "$w"; done | awk '{ r = ""
-      for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); r = r (c ~ /[[:alpha:]]/ ? "[" toupper(c) tolower(c) "]" : (c ~ /[[:alnum:]_-]/ ? c : "\\" c)) }
-      printf "%s%s", (NR > 1 ? "|" : ""), r }')
-    lw=$([ -f "games/$id/lore_words.txt" ] && tr -d '\r' < "games/$id/lore_words.txt" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' \
-      | sed 's/[][\.*^$+?(){}|/]/\&/g' | paste -sd'|')
-    ex=()
-    [ -n "$ws" ] && ex+=(-e "(^|[^[:alnum:]])($ws)([^[:alnum:]]|\$)")
-    [ -n "$lw" ] && ex+=(-e "(^|[^[:alnum:]_])($lw)([^[:alnum:]_]|\$)")
-    [ ${#ex[@]} -eq 0 ] && continue
-    if hits=$(git grep --untracked -n -I -E "${ex[@]}" -- 'kits/*/crates/*/src/*' 'kits/*/schema.json' 'kits/*/kit.json'); then
-      echo "$hits" | head -20 | awk -v g="$id" -v ws="$ws" -v lw="$lw" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t)
-        if (lw != "" && match(t, "(^|[^[:alnum:]_])(" lw ")([^[:alnum:]_]|$)")) x = substr(t, RSTART, RLENGTH)
-        else if (ws != "" && match(t, "(^|[^[:alnum:]])(" ws ")([^[:alnum:]]|$)")) x = substr(t, RSTART, RLENGTH)
-        else x = "?"
-        gsub(/^[^[:alnum:]]+|[^[:alnum:]]+$/, "", x); c = index(t, x); c = c > 40 ? c - 40 : 1
+    lp=$( { for w in "games/$id/data/worlds"/*/; do [ -d "$w" ] && basename "$w"; done
+        [ -f "games/$id/lore_words.txt" ] && tr -d '\r' < "games/$id/lore_words.txt" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d'
+      } | sed -e 's/[][\.*^$+?(){}|/]/\\&/g' -e 's/[[:space:]][[:space:]]*/[[:space:]_]/g' | paste -sd'|')
+    [ -z "$lp" ] && continue
+    if hits=$(git grep --untracked -n -I -i -E -e "(^|[^[:alnum:]])($lp)([^[:alnum:]]|\$)" -- engine/crates 'kits/*/crates/*' 'kits/*/schema.json' 'kits/*/kit.json'); then
+      echo "$hits" | head -20 | LP="$lp" awk -v g="$id" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t); x = "?"; c = 1
+        if (match(tolower(t), "(^|[^[:alnum:]])(" tolower(ENVIRON["LP"]) ")([^[:alnum:]]|$)")) {
+          c = RSTART; x = substr(t, RSTART, RLENGTH); gsub(/^[^[:alnum:]]+|[^[:alnum:]]+$/, "", x) }
+        c = c > 40 ? c - 40 : 1
         printf "[layers] %s:%s names lore word \"%s\" of game %s: %s\n", f[1], f[2], x, g, substr(t, c, 120) }'
       bad=1
     fi
@@ -255,7 +251,7 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       bad=1
     fi
   done
-  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word and no class id"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word or class id (CLAUDE.md Layers)"; status=1; fi
+  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; engine and kit code name no lore word, kit code no class id"; else echo "[layers] FAIL: engine and kit code must not name a game or a lore word, kit code no class id (CLAUDE.md Layers)"; status=1; fi
 }
 
 gate() {

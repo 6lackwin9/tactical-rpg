@@ -512,7 +512,7 @@ pub fn state_of(s: &Session) -> Value {
 }
 
 /// PR5-26 (audit B10): unit `i`'s PK1 / PK2 keys on its state row `v`, each only when set: `channel` (a holder of
-/// the channel meter: whether its round is a Channel round), `marrow` (its deck's marked actives), `meters` (meter id ->
+/// the channel meter: whether its round is a Channel round), `channeled` (its deck's marked actives), `meters` (meter id ->
 /// value), `marks` ([[mark, value]] this battle), `skill_uses` (skill id -> uses this battle), `tracks` (track id ->
 /// stage), `forbid_hands`, `pierce_melee`.
 fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
@@ -521,8 +521,8 @@ fn pk_state(s: &Session, i: UnitId, v: &mut Value) {
     if rpgkit_battle::channel::can_channel(w, i) {
         v["channel"] = json!(rpgkit_battle::channel::is_channel(w, i));
     }
-    if !u.deck.marrow.is_empty() {
-        v["marrow"] = json!(u.deck.marrow);
+    if !u.deck.channeled.is_empty() {
+        v["channeled"] = json!(u.deck.channeled);
     }
     let meters: serde_json::Map<String, Value> = w.meters.gauges.iter().filter(|g| g.unit == i).map(|g| (g.meter.clone(), json!(g.value))).collect();
     if !meters.is_empty() {
@@ -569,9 +569,9 @@ fn intel_json(s: &Session, r: &intent::Intent) -> Value {
         if l.cell != NO_CELL {
             v["cell"] = json!([l.cell.x, l.cell.y]);
         }
-        // PK1-S2b: a marrow version's line says so (only then, so other replies keep their shape)
-        if l.marrow {
-            v["marrow"] = json!(true);
+        // PK1-S2b: a channeled version's line says so (only then, so other replies keep their shape)
+        if l.channeled {
+            v["channeled"] = json!(true);
         }
         v
     };
@@ -647,7 +647,7 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
                 row["hp_cost"] = json!(hp);
             }
             // PR5-26 (audit B10): PK2-S1's use limit (with the uses left) and `unmark`, PK1-S2's Channel terms (a
-            // marrow-only skill; the marrow version this unit would run now), each only when set
+            // channeled-only skill; the channeled version this unit would run now), each only when set
             if sk.uses_per_battle > 0 {
                 let used = w.skill_uses.get(&(u, sk.id.clone())).copied().unwrap_or(0);
                 row["uses_per_battle"] = json!(sk.uses_per_battle);
@@ -660,7 +660,7 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
                 row["channel_only"] = json!(true);
             }
             if let Some(v) = rpgkit_battle::channel::version(w, u, sk).filter(|_| !rpgkit_battle::channel::only(sk)) {
-                row["marrow"] = json!({"cost": v.cost, "power": v.power, "pierce": v.pierce});
+                row["channeled"] = json!({"cost": v.cost, "power": v.power, "pierce": v.pierce});
             }
             out.push(row);
         }

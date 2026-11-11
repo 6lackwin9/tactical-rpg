@@ -282,14 +282,14 @@ fn the_writer_stores_the_keys_that_differ_from_the_defaults() {
 
 #[test]
 fn the_face_chain_tries_the_expression_then_neutral_then_the_portrait() {
-    let chain = art::portrait_chain("hero", "kaelen", "knight");
+    let chain = art::portrait_chain("hero", "kestrel", "knight");
     let with = |head: &[&str]| [strs(head), chain.clone()].concat();
-    assert_eq!(art::face_chain("hero", "kaelen", "knight", "hurt"), with(&["portraits/heroes/faces/kaelen/hurt.png", "portraits/heroes/faces/kaelen/neutral.png"]));
-    assert_eq!(art::face_chain("hero", "kaelen", "knight", ""), with(&["portraits/heroes/faces/kaelen/neutral.png"]));
-    assert_eq!(art::face_chain("hero", "kaelen", "knight", "neutral"), with(&["portraits/heroes/faces/kaelen/neutral.png"]));
+    assert_eq!(art::face_chain("hero", "kestrel", "knight", "hurt"), with(&["portraits/heroes/faces/kestrel/hurt.png", "portraits/heroes/faces/kestrel/neutral.png"]));
+    assert_eq!(art::face_chain("hero", "kestrel", "knight", ""), with(&["portraits/heroes/faces/kestrel/neutral.png"]));
+    assert_eq!(art::face_chain("hero", "kestrel", "knight", "neutral"), with(&["portraits/heroes/faces/kestrel/neutral.png"]));
     assert_eq!(art::face_chain("common", "grunt", "knight/goblin", "angry"), art::portrait_chain("common", "grunt", "knight/goblin"), "a common tier has no frames");
-    assert_eq!(art::face_sidecars("portraits/heroes/faces/kaelen/hurt.png"), ["portraits/heroes/faces/kaelen/hurt.face.json", "portraits/heroes/kaelen.face.json"]);
-    assert_eq!(art::face_sidecars("portraits/heroes/kaelen.png"), ["portraits/heroes/kaelen.face.json"]);
+    assert_eq!(art::face_sidecars("portraits/heroes/faces/kestrel/hurt.png"), ["portraits/heroes/faces/kestrel/hurt.face.json", "portraits/heroes/kestrel.face.json"]);
+    assert_eq!(art::face_sidecars("portraits/heroes/kestrel.png"), ["portraits/heroes/kestrel.face.json"]);
     assert_eq!(art::face_sidecars("portraits/common/knight_base.png"), ["portraits/common/knight_base.face.json"]);
 }
 

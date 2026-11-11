@@ -1,7 +1,7 @@
 //! PR5-26 (FB-191 (f)) on a scratch catalog built here (no shipped data): the sim reaches the Channel rule. `tune=` sets
 //! `channel_power`, `channel_ai_edge` and the three `channel_cost` numbers (`channel_cost_1..3`, whole, 0-100) on the
 //! run's ruleset; every Channel `tune=` key the refusal names is one `Numbers::set` takes. `counts=on` adds per side
-//! the Channel counts: marrow actions and Vents (`RULE_COUNTERS`), Channel rounds, the channel meter's own triggers
+//! the Channel counts: channeled actions and Vents (`RULE_COUNTERS`), Channel rounds, the channel meter's own triggers
 //! (its crisis), the rounds by the meter's band and the poise breaks the side took; the sides' breaks add up to the
 //! run's breaks and each holder's round ends in one band. PR5-26 follow-up (FB-201): `crises` counts the firings of the
 //! meter's crisis rows (a `round_end` row at its max) as they fire, not the other meter triggers.
@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 const MAX: i32 = 100;
 
 /// Every unit holds Strain (the ruleset's `unit_pools`; decay 10 a round, a crisis at MAX setting it to 50, bands calm
-/// and edge) and marks Heavy marrow; Feed (+5) and Vent (-20, gate 50) are the meter's skills.
+/// and edge) and marks Heavy channeled; Feed (+5) and Vent (-20, gate 50) are the meter's skills.
 fn data() -> Data {
     Data::from_values(&catalog(), &json!({}), &json!({}))
 }
@@ -24,7 +24,7 @@ fn catalog() -> Value {
     let atk = |id: &str, blocks: i32, ap: i32, stagger: i32| json!({"id": id, "name": id, "kind": "ATTACK", "round_intent": "assault", "level": 1, "blocks": blocks, "ap_cost": ap, "power_mult": 1.0, "stagger": stagger, "target_mode": "ENEMY"});
     let unit = |id: &str, side: &str| {
         json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 120, "speed": 12, "attack_range": 1, "skill_cap": 5, "poise": 30, "extra_skills": ["t_heavy", "t_jab"],
-            "deck": {"marrow": ["t_heavy"]}})
+            "deck": {"channeled": ["t_heavy"]}})
     };
     let enc = |id: &str, party: &[&str], enemies: &[&str]| json!({"id": id, "name": id, "zone": "stone_arena", "arena": "CLOSED", "max_rounds": 8, "total_blocks": 6, "ap_regen": 4, "unit_ap": 10, "party": party, "enemies": enemies});
     let crisis = json!({"on": "round_end", "when": {"meter": {"id": "strain", "at_least": MAX}}, "limit": "none", "effects": [{"type": "meter_set", "meter": "strain", "value": 50}]});
@@ -104,9 +104,9 @@ fn counts_on_reports_the_channel_numbers_per_side() {
         let rounds = c["rounds"].as_i64().unwrap();
         assert!(rounds <= bands, "{side}: Channel rounds are holder rounds");
         channel_rounds += rounds;
-        let marrow = t[side]["rule_counts"]["counts"]["marrow_actions"].as_i64().unwrap();
+        let channeled = t[side]["rule_counts"]["counts"]["channeled_actions"].as_i64().unwrap();
         let vents = t[side]["rule_counts"]["counts"]["vents"].as_i64().unwrap();
-        assert!(rounds > 0 || (marrow == 0 && vents == 0), "{side}: marrow actions and Vents only in Channel rounds");
+        assert!(rounds > 0 || (channeled == 0 && vents == 0), "{side}: channeled actions and Vents only in Channel rounds");
         assert!(c["meter_triggers"].as_i64().unwrap() >= 0);
     }
     assert!(channel_rounds > 0, "past an edge of 1 at power 2 the AI Channels: {t}");

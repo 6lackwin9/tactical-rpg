@@ -35,14 +35,14 @@ fn write_kind(data: &Path, kind: &str, entries: Value) {
     fs::write(store::file_of(data, Some(W), kind), json!({"kind": kind, "version": 1, "entries": entries}).to_string()).unwrap();
 }
 
-/// The manifest blocks of the spec's section 4.1 (the asset lane's `sunk_ward` shape, with fixture names).
+/// The manifest blocks of the spec's section 4.1 (the asset lane's campaign world shape, with fixture names).
 fn manifest() -> Value {
     json!({
         "id": W, "name": "Ward", "extends": [], "connects": [], "start_location": "hub",
         "campaign": {"start_act": 0, "act_saves": true},
         "purse": {
             "currency": {"name": "Scrap", "icon": "ui/hud/scrap.png", "tip": "Salvaged iron."},
-            "upkeep": {"name": "Warded Tallow", "short": "Tallow", "icon": "ui/hud/tallow.png", "tip": "1 a day.", "per_day": 1, "at_zero": {"road_pct": 100, "start_ap": -2}}
+            "upkeep": {"name": "Rendered Tallow", "short": "Tallow", "icon": "ui/hud/tallow.png", "tip": "1 a day.", "per_day": 1, "at_zero": {"road_pct": 100, "start_ap": -2}}
         },
         "rest": {"days": 1, "cost": 1, "where": "rest_places", "on_enter": false, "needs_upkeep": false},
         "defeat": {"mode": "retreat", "to": "hub", "days": 1},
@@ -52,7 +52,7 @@ fn manifest() -> Value {
 
 fn alert() -> Value {
     json!({
-        "id": "alert", "name": "Inquisition Alert", "kind": "gauge", "min": 0, "max": 100, "start": 0, "unit": "%", "visible": false,
+        "id": "alert", "name": "Constabulary Alert", "kind": "gauge", "min": 0, "max": 100, "start": 0, "unit": "%", "visible": false,
         "bands": [
             {"id": "guarded", "name": "Guarded", "from": 0, "tone": "calm"},
             {"id": "suspicious", "name": "Suspicious", "from": 31, "tone": "warn"},
@@ -78,7 +78,7 @@ fn alert() -> Value {
 
 fn doom() -> Value {
     json!({
-        "id": "doom_clock", "name": "The Red Tithing", "kind": "countdown", "min": 0, "max": 99, "start": 0, "unit": "days",
+        "id": "doom_clock", "name": "The Red Harvest", "kind": "countdown", "min": 0, "max": 99, "start": 0, "unit": "days",
         "bands": [{"id": "due", "name": "Due", "from": 0, "tone": "danger"}, {"id": "near", "name": "Near", "from": 1, "tone": "warn"}, {"id": "far", "name": "Far", "from": 8, "tone": "calm"}],
         "rules": [
             {"id": "d_week", "at": 7, "warn": "Seven days."},
@@ -242,8 +242,8 @@ fn each_bad_meter_field_is_one_error() {
         ("a modifier band unknown", gauge.clone(), with(&gauge, &["modifiers", "0", "bands"], json!(["riot"])), "band 'riot'"),
         ("a modifier encounter unknown", gauge.clone(), with(&gauge, &["modifiers", "0", "road_encounters"], json!([["ghost", 10]])), "unknown encounter 'ghost'"),
         ("a floor above max", gauge.clone(), with(&gauge, &["floors", "0", "min"], json!(130)), "min must be a whole number in min..max"),
-        ("a HUD short over 16", gauge.clone(), with(&gauge, &["hud", "short"], json!("Inquisition Alert!")), "short is longer than 16"),
-        ("a name over 32", gauge.clone(), with(&gauge, &["name"], json!("The Inquisition's Alert Level Gauge")), "Name is longer than 32"),
+        ("a HUD short over 16", gauge.clone(), with(&gauge, &["hud", "short"], json!("Constabulary Alert!")), "short is longer than 16"),
+        ("a name over 32", gauge.clone(), with(&gauge, &["name"], json!("The Constabulary's Alert Level Gauge")), "Name is longer than 32"),
         ("a rule effect naming an unknown meter", gauge.clone(), with(&gauge, &["rules", "2", "effects", "0"], json!({"effect": "meter_add", "meter": "heat", "delta": 5})), "unknown meter 'heat'"),
         ("a rule then item with two keys", clock.clone(), with(&clock, &["rules", "1", "then", "0"], json!({"vignette": "v_x", "battle": "raid"})), "exactly one of vignette, battle or dialogue"),
     ];
@@ -398,7 +398,7 @@ fn the_manifest_blocks_read_with_their_defaults() {
     let block = |k: &str| json::dget(&m, k).clone();
     assert!(CampaignManifest::from_obj(&block("campaign")).on);
     let p = Purse::from_obj(&block("purse"));
-    assert_eq!((p.currency.name.as_str(), p.upkeep.name.as_str(), p.upkeep.short.as_str(), p.road_pct, p.start_ap), ("Scrap", "Warded Tallow", "Tallow", 100, -2));
+    assert_eq!((p.currency.name.as_str(), p.upkeep.name.as_str(), p.upkeep.short.as_str(), p.road_pct, p.start_ap), ("Scrap", "Rendered Tallow", "Tallow", 100, -2));
     assert_eq!(Purse::from_obj(&dict(json!({"upkeep": {"name": "Rations"}}))).upkeep.short, "Rations", "short defaults to the name");
     assert_eq!(RestRule::from_obj(&block("rest")), RestRule { days: 1, cost: 1, place: "rest_places".into(), on_enter: false, needs_upkeep: false });
     assert_eq!(DefeatRule::from_obj(&block("defeat")), DefeatRule { mode: "retreat".into(), to: "hub".into(), days: 1 });

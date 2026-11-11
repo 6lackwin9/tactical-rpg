@@ -359,7 +359,7 @@ pub(crate) fn channel_block(w: &World, u: usize, s: &emberwake_data::SkillDef) -
 /// marrow-only skill (`channel::only`: Feed, Vent; only a Channel round plans one). It reads the action alone, never
 /// the live round flag, so a past round's segments keep that round's mode.
 pub(crate) fn channel_action(w: &World, a: &emberwake_battle::resolver::ScheduledAction) -> bool {
-    a.command.marrow || w.cat.skill(&a.command.skill).is_some_and(emberwake_battle::channel::only)
+    a.command.channeled || w.cat.skill(&a.command.skill).is_some_and(emberwake_battle::channel::only)
 }
 
 /// PR5-26 (audit B8; PK1 4.3 items 5, 6): the strip's Channel line for a block of skill `s`: the Channel Rest in a
@@ -396,7 +396,7 @@ pub(crate) fn action_channel_note(w: &World, a: &emberwake_battle::resolver::Sch
     let n = &w.ruleset.numbers;
     let rest = emberwake_battle::channel::only(s) && !n.channel_rest.is_empty() && w.cat.family_of(&s.id) == n.channel_rest.as_str();
     let cost: i32 = a.command.meters.iter().filter(|d| d.meter == n.channel_meter).map(|d| d.delta).sum();
-    let marrow = a.command.marrow.then(|| (s.channel.power.unwrap_or(n.channel_power), a.command.impact.armor_piercing, cost));
+    let marrow = a.command.channeled.then(|| (s.channel.power.unwrap_or(n.channel_power), a.command.impact.armor_piercing, cost));
     channel_note(w, s, rest, marrow)
 }
 

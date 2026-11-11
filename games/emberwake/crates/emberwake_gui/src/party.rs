@@ -424,7 +424,7 @@ impl DeckTerms {
         let auto_active = auto_unit.active_families();
         let auto = Deck {
             // PR5-26 (audit B4): the base unit's marrow marks among the automatic actives
-            marrow: auto_unit.deck.marrow.iter().filter(|f| auto_active.contains(f)).cloned().collect(),
+            channeled: auto_unit.deck.channeled.iter().filter(|f| auto_active.contains(f)).cloned().collect(),
             active: auto_active,
             passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
             keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
@@ -532,7 +532,7 @@ impl DeckTerms {
             return shown;
         }
         // PR5-26 (audit B4): the actives marked marrow stay (they mark the automatic actives)
-        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new(), marrow: shown.marrow }
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new(), channeled: shown.channeled }
     }
 
     /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
@@ -560,7 +560,7 @@ impl DeckTerms {
     /// An active that leaves the deck leaves every order and follow-up list and drops its own follow-up list (an
     /// emptied list is the auto order again; INPUT1 FL3). PR5-26 (audit B4): and its marrow mark.
     fn unordered(d: &mut Deck, fam: &str) {
-        d.marrow.retain(|f| f != fam);
+        d.channeled.retain(|f| f != fam);
         for l in d.order.values_mut().chain(d.follow_ups.values_mut()) {
             l.retain(|f| f != fam);
         }
@@ -2428,7 +2428,7 @@ const FOLLOW_TOGGLE: i32 = 11;
 pub(crate) fn deck_json(d: &Deck) -> Value {
     let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
     // PR5-26 (audit B4): the actives marked marrow too
-    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups), "marrow": d.marrow})
+    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups), "channeled": d.channeled})
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
@@ -2927,16 +2927,16 @@ mod tests {
     #[test]
     fn deck_edits_keep_the_marrow_marks() {
         let t = terms();
-        let auto = Deck { keystone: strs(&["k1"]), marrow: strs(&["lunge"]), ..Default::default() };
+        let auto = Deck { keystone: strs(&["k1"]), channeled: strs(&["lunge"]), ..Default::default() };
         let d = t.slot(&auto, "passive", "p2").unwrap();
-        assert_eq!((d.active.clone(), d.marrow.clone()), (Vec::new(), strs(&["lunge"])), "a passive edit keeps the actives automatic and the mark");
+        assert_eq!((d.active.clone(), d.channeled.clone()), (Vec::new(), strs(&["lunge"])), "a passive edit keeps the actives automatic and the mark");
         let d = t.slot(&auto, "active", "cleave").unwrap();
-        assert_eq!((d.active.clone(), d.marrow.clone()), (strs(&["lunge", "cleave"]), strs(&["lunge"])), "pinned with the mark");
+        assert_eq!((d.active.clone(), d.channeled.clone()), (strs(&["lunge", "cleave"]), strs(&["lunge"])), "pinned with the mark");
         let d = t.unslot(&d, "active", 0).unwrap();
-        assert_eq!((d.active.clone(), d.marrow.clone()), (strs(&["cleave"]), Vec::new()), "the unslotted active's mark goes");
-        let d = t.after_drop(&Deck { active: strs(&["lunge", "cleave"]), marrow: strs(&["lunge"]), ..Default::default() }, "deck.own.active.wall", "deck.active.0").unwrap();
-        assert_eq!((d.active.clone(), d.marrow.clone()), (strs(&["wall", "cleave"]), Vec::new()), "a replaced active's mark goes");
-        assert_eq!(deck_json(&auto)["marrow"], json!(["lunge"]));
+        assert_eq!((d.active.clone(), d.channeled.clone()), (strs(&["cleave"]), Vec::new()), "the unslotted active's mark goes");
+        let d = t.after_drop(&Deck { active: strs(&["lunge", "cleave"]), channeled: strs(&["lunge"]), ..Default::default() }, "deck.own.active.wall", "deck.active.0").unwrap();
+        assert_eq!((d.active.clone(), d.channeled.clone()), (strs(&["wall", "cleave"]), Vec::new()), "a replaced active's mark goes");
+        assert_eq!(deck_json(&auto)["channeled"], json!(["lunge"]));
     }
 
     /// A4.2-K1b (INTENT2 IR15): with derived rows (`rows_of`) a dual skill fits the player's order of either row and the

@@ -102,7 +102,7 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
 /// a skill in any of its rows; the auto order holds only skills whose primary row is the intent (a second row is by
 /// pick or by the player's order).
 pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
-    // PK1-S2a (PK1 4.3 item 4): a Channel round fills in the Channel order (marrow versions only)
+    // PK1-S2a (PK1 4.3 item 4): a Channel round fills in the Channel order (channeled versions only)
     if crate::channel::is_channel(w, c) {
         return crate::channel::order(w, c, intent, &auto_families(w, c));
     }
@@ -120,7 +120,7 @@ pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
             }
         }
     }
-    // PK1-S2a: a Cold Steel round leaves the marrow-only skills out (nothing is left out without the rule channel)
+    // PK1-S2a: a Standard round leaves the channeled-only skills out (nothing is left out without the rule channel)
     if crate::channel::on(w) {
         out.retain(|&sid| crate::channel::problem(w, c, &w.cat.skills[sid]).is_none());
     }
@@ -144,7 +144,7 @@ pub fn follow_order(w: &World, c: UnitId, intent: RoundIntent, opener: Option<&O
     let mut out: Vec<SkillId> = Vec::new();
     for f in list.iter().filter(|f| in_deck.contains(f)) {
         if let Some(s) = family_skill(w, c, f) {
-            // A4.2-K1b (IR15): a follow-up list may hold a skill in any of its rows (PK1-S2a: not a marrow-only one)
+            // A4.2-K1b (IR15): a follow-up list may hold a skill in any of its rows (PK1-S2a: not a channeled-only one)
             if round_intent::skill_rows(w, &w.cat.skills[s]).contains(&intent.id()) && !out.contains(&s) && crate::channel::problem(w, c, &w.cat.skills[s]).is_none() {
                 out.push(s);
             }
@@ -665,7 +665,7 @@ impl<'a> Builder<'a> {
     fn skill_opener(&self, plan: &Plan, st: &SimState, sid: SkillId) -> Result<Vec<Step>, String> {
         let w = self.w;
         let s = self.skill(sid);
-        // PK1-S2a: the round's mode (Channel or Cold Steel) offers only its versions
+        // PK1-S2a: the round's mode (Channel or Standard) offers only its versions
         if let Some(p) = crate::channel::problem(w, self.c, s) {
             return Err(p.into());
         }
@@ -792,7 +792,7 @@ impl<'a> Builder<'a> {
     fn item_opener(&self, plan: &Plan, st: &SimState, id: &str) -> Result<Vec<Step>, String> {
         let w = self.w;
         let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", w.units[self.c].name)) };
-        // PK1-S2a: items have no marrow version, so a Channel round has none
+        // PK1-S2a: items have no channeled version, so a Channel round has none
         if let Some(p) = crate::channel::item_problem(w, self.c) {
             return Err(p.into());
         }
@@ -968,7 +968,7 @@ impl<'a> Builder<'a> {
                 // HOOKS1 HC1: a skill whose HP cost the unit's HP left does not exceed is refused (rule hp_cost)
                 let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_for(w, self.c, s));
                 // HOOKS1 UM2: a skill whose meter cost the planned meters do not cover is refused (rule unit_meters;
-                // PK1-S2a: its meter gate first, then the costs with a marrow version's channel cost)
+                // PK1-S2a: its meter gate first, then the costs with a channeled version's channel cost)
                 let gate = crate::meter::gate_problem(w, s.requires_meter.as_ref(), |m| st.meter(m));
                 let meter = if gate.is_empty() { crate::meter::cost_problem(w, &crate::channel::meters_for(w, self.c, s), |m| st.meter(m)) } else { gate };
                 // PK2-S1: a skill used up this battle (`uses_per_battle`), the plan's uses included
@@ -1527,13 +1527,13 @@ pub fn clear_picks(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), Str
 }
 
 /// PK1-S2a (PK1 4.3 item 1, user 2026-11-10): the converting Channel toggle: flips `c`'s round to Channel (`on`) or
-/// back to Cold Steel, any time while planning (it never locks). Only a unit that can Channel (`channel::can_channel`)
+/// back to Standard, any time while planning (it never locks). Only a unit that can Channel (`channel::can_channel`)
 /// has it. Entering Channel counts as an intent change (IN6: the intent-bound buffs end; the lines name them). The plan
 /// converts: every Move and Rest pick stays where it is, each skill pick that has a version in the new mode stays (the
 /// same skill, target and anchor, now resolving as that version), a skill or item without one is dropped, and the
 /// member is rebuilt from the picks left (a pick that then no longer fits is dropped with every pick after it, as
-/// `rebuild_later` does), so the fill refills the freed blocks for the new mode (marrow versions and the Channel Rest
-/// in Channel; the Cold Steel fill and Rest back in Cold Steel); a member without picks is planned again from its
+/// `rebuild_later` does), so the fill refills the freed blocks for the new mode (channeled versions and the Channel Rest
+/// in Channel; the Standard fill and Rest back in Standard); a member without picks is planned again from its
 /// intent. Then every later member is rebuilt (PL8). Returns the lines (buffs ended, picks dropped) and the later
 /// members' refusals; Err when the unit cannot Channel. Flipping to the mode it is in changes nothing.
 pub fn set_channel(w: &mut World, plan: &mut Plan, c: UnitId, on: bool) -> (Result<Vec<String>, String>, Vec<(UnitId, String)>) {
@@ -1943,7 +1943,7 @@ impl Builder<'_> {
         match p {
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
-                // PK1-S2a (PK1 4.3 item 2): a Channel round offers only marrow versions, a Cold Steel round none
+                // PK1-S2a (PK1 4.3 item 2): a Channel round offers only channeled versions, a Standard round none
                 if let Some(p) = crate::channel::problem(w, self.c, s) {
                     return Err(p.into());
                 }

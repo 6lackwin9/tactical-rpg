@@ -266,7 +266,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"move": ["strike"]}}}), "Follow-ups for 'move': not an opener in the deck."),
         ("units", "drillman", json!({"deck": {"follow_ups": ["strike"]}}), "Deck follow_ups must be an object"),
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"thrust": "strike"}}}), "Follow-ups for 'thrust' must be a list of skill families."),
-        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups, marrow."),
+        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups, channeled."),
         ("units", "drillman", json!({"deck": []}), "Deck must be an object"),
         // item families (1.6)
         ("item_families", "polearm", json!({"engine_rules": ["reach", "always_ranged"]}), "reach is for melee families; it can't go with always_ranged."),
