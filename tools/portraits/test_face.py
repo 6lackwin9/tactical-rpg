@@ -19,8 +19,8 @@ import face  # noqa: E402
 
 FIX = HERE / "fixtures" / "face"
 GOOD = FIX / "portraits" / "heroes" / "good.png"
-GOOD_ARGS = ["--fresh", "--eyes", "18,20,5,3", "27,20,5,3", "--glow", "24,38,6", "--veins", "30,30,45,10",
-             "--idle", "eye_glow:#c084fc:0.8", "glow::0.5"]
+GOOD_ARGS = ["--fresh", "--eyes", "18,20,5,3", "27,20,5,3", "--glow", "24,38,6", "--lines", "30,30,45,10",
+             "--idle", "point_glow:#c084fc:0.8", "glow::0.5"]
 
 
 def img(path):
@@ -147,8 +147,8 @@ class Face(unittest.TestCase):
             self.assertEqual(im.getpixel(((x + w) * k - 1, (y + h) * k - 1)), face.EYE, "its bottom-right")
         for x, y, r in side["glow"]:
             self.assertEqual(im.getpixel((x * k, y * k)), face.GLOW, "the glow centre")
-        for x, y, deg, ln in side["veins"]:
-            self.assertEqual(im.getpixel((x * k, y * k)), face.VEIN, "the vein root")
+        for x, y, deg, ln in side["lines"]:
+            self.assertEqual(im.getpixel((x * k, y * k)), face.LINE, "the line root")
 
     def test_t3_contact_tiles_each_portrait_at_4x(self):
         out = self.tmp / "contact.png"
@@ -163,6 +163,23 @@ class Face(unittest.TestCase):
         self.assertEqual(sheet.getpixel((x * k, y * k)), face.EYE, "the first tile carries its anchors")
         src = img(plain).convert("RGBA")
         self.assertEqual(sheet.getpixel((w * k + 20 * k, 20 * k)), src.getpixel((20, 20)), "no sidecar: the bare portrait")
+
+    def test_fb206_old_names_read_as_the_new_ones_and_set_writes_the_new_ones(self):
+        old = {"size": 48, "eyes": [[18, 20, 5, 3]], "veins": [[30, 30, 45, 10]],
+               "idle": [{"effect": "veins"}, {"effect": "eye_glow"}, {"effect": "ash"}, {"effect": "smoke"}]}
+        new = {"size": 48, "eyes": [[18, 20, 5, 3]], "lines": [[30, 30, 45, 10]],
+               "idle": [{"effect": "lines"}, {"effect": "point_glow"}, {"effect": "particles_rise"}, {"effect": "drift"}]}
+        self.assertEqual(face.parse_face(old), face.parse_face(new))
+        self.assertEqual(face.parse_face(dict(new, veins=[]))[1],
+                         ["the face sidecar holds both 'lines' and its old name 'veins' (keep 'lines')."])
+        png = self.copy()
+        face.face_file(png).write_text(json.dumps(old), encoding="utf-8")
+        code, _, _ = run("set", png, "--veins", "28,28,90,8")
+        self.assertEqual(code, 0)
+        side = json.loads(face.face_file(png).read_text(encoding="utf-8"))
+        self.assertNotIn("veins", side)
+        self.assertEqual(side["lines"], [[28, 28, 90, 8]], "--veins is the old spelling of --lines")
+        self.assertEqual([o["effect"] for o in side["idle"]], ["lines", "point_glow", "particles_rise", "drift"])
 
 
 if __name__ == "__main__":

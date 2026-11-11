@@ -280,13 +280,27 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             Ok(row.into_iter().filter(|(k, v)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand) || unset_shape(k, v))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(family_storage(&source::derive_family(&content(kind, entry)))),
-        k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
+        k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &canonical_cue(kind, content(kind, entry)))),
         k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
         "terrain" => Ok(terrain_storage(entry, &content(kind, entry))),
         "classes" => Ok(class_storage(&content(kind, entry))),
         k if k == rpgkit_data::UNIT_METERS_KIND => Ok(meter_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
+}
+
+/// FB-206 (2b): a portrait cue row whose effect is an old overlay name (`veins`, `eye_glow`, `ash`, `smoke`) with its
+/// canonical name (`aegis_core::assets::canonical_primitive`), so the schema's options take it and the writer stores the
+/// new name; any other row (or kind) unchanged.
+fn canonical_cue(kind: &str, mut row: Dict) -> Dict {
+    if kind == source::PORTRAIT_KIND {
+        let effect = sget(&row, "effect", "");
+        let canonical = aegis_core::assets::canonical_primitive(&effect);
+        if canonical != effect {
+            row.insert("effect".into(), Value::String(canonical.to_string()));
+        }
+    }
+    row
 }
 
 // ---- Files -------------------------------------------------------------------------------------------------------
@@ -465,7 +479,7 @@ impl Hooks for RpgContent {
     fn validate(&self, world: Option<&str>, kind: &str, entry: &Dict) -> Result<Dict, Vec<String>> {
         let section = if world.is_some() { "world" } else { "content" };
         let game = world.is_none() && game_kind(kind).is_some();
-        let full = if world.is_some() { normalize(fields("world", kind), entry, true) } else if game { game_storage(kind, entry) } else { content(kind, entry) };
+        let full = if world.is_some() { normalize(fields("world", kind), entry, true) } else if game { game_storage(kind, entry) } else { canonical_cue(kind, content(kind, entry)) };
         if world.is_none() && kind == source::PORTRAIT_KIND && sget(&full, "trigger", "") == rpgkit_data::PORTRAIT_METER_TRIGGER {
             // PORTRAITFX1 5.1: the reserved trigger is refused with its reason, not as an unknown option
             return Err(vec![crate::check::portrait::METER_MESSAGE.into()]);

@@ -12,7 +12,7 @@ use aegis_content::schema::is_id;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_data::{
-    music_ask, split_token, step_keys, MusicAsk, AUDIO_DIR, CARDS_MAX, CARD_KEYS, CARD_STYLES, CARD_SUBTITLE_MAX, CARD_TEXT_MAX, CARD_TITLE_MAX, END_TO, FADE_MS_MAX, FIGHT_OUTCOMES, HOLD_MS_MAX, LAST_STEP_KINDS, MUSIC_DIR, MUSIC_EXT, MUSIC_NONE, STEPS_MAX, STEP_EFFECTS_MAX, STEP_KINDS, TOKEN_KINDS,
+    music_ask, split_token, step_keys, MusicAsk, AUDIO_DIR, CARDS_MAX, CARD_KEYS, CARD_KEY_ALIASES, CARD_STYLES, CARD_SUBTITLE_MAX, CARD_TEXT_MAX, CARD_TITLE_MAX, END_TO, FADE_MS_MAX, FIGHT_OUTCOMES, HOLD_MS_MAX, LAST_STEP_KINDS, MUSIC_DIR, MUSIC_EXT, MUSIC_NONE, STEPS_MAX, STEP_EFFECTS_MAX, STEP_KINDS, TOKEN_KINDS,
 };
 use serde_json::Value;
 
@@ -96,7 +96,13 @@ fn card_errors(v: &View, w: &str, i: usize, raw: &Value) -> Vec<String> {
     let Some(c) = raw.as_object() else {
         return vec![format!("{label} must be an object {{\"style\", ...}}.")];
     };
-    let mut errors: Vec<String> = c.keys().filter(|k| !CARD_KEYS.contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}'.")).collect();
+    let old_key = |k: &str| CARD_KEY_ALIASES.iter().any(|(old, _)| *old == k);
+    let mut errors: Vec<String> = c.keys().filter(|k| !CARD_KEYS.contains(&k.as_str()) && !old_key(k)).map(|k| format!("{label}: unknown key '{k}'.")).collect();
+    for (old, new) in CARD_KEY_ALIASES {
+        if c.contains_key(old) && c.contains_key(new) {
+            errors.push(format!("{label}: both {new} and its old name {old} (keep {new})."));
+        }
+    }
     let style = c.get("style").map(gstr).unwrap_or_else(|| CARD_STYLES[0].to_string());
     if !CARD_STYLES.contains(&style.as_str()) {
         errors.push(format!("{label}: style '{style}' is not one of {}.", CARD_STYLES.join(", ")));
@@ -113,8 +119,10 @@ fn card_errors(v: &View, w: &str, i: usize, raw: &Value) -> Vec<String> {
             errors.push(format!("{label}: {key} '{}' must be #rrggbb.", gstr(x)));
         }
     }
-    if c.get("ash").is_some_and(|x| !x.is_boolean()) {
-        errors.push(format!("{label}: ash must be true or false."));
+    for key in ["particles_rise", "ash"] {
+        if c.get(key).is_some_and(|x| !x.is_boolean()) {
+            errors.push(format!("{label}: {key} must be true or false."));
+        }
     }
     match style.as_str() {
         "title" if !has("title") => errors.push(format!("{label}: a title card needs a title.")),

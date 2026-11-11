@@ -1,10 +1,10 @@
 # Portrait anchors (PORTRAITFX1-T): writes and checks the face sidecar `<portrait>.face.json` beside a portrait PNG
-# (the format of aegis_core::assets 4.1: eye boxes, glow anchors, vein roots, the rim key, idle overlays, all in image
+# (the format of aegis_core::assets 4.1: eye boxes, glow anchors, line roots, the rim key, idle overlays, all in image
 # px) and draws review pictures so the anchors can be read off and checked by eye.
 #
 #   face.py grid PNG OUT                   the portrait at 4x, a line every 8 image px, a label every 40
 #   face.py set PNG [--eyes x,y,w,h ...] [--no-blink | --blink] [--lid #rrggbb] [--glow x,y,r ...]
-#               [--veins x,y,deg,len ...] [--mouth x,y,w,h] [--face x,y,w,h] [--rim #rrggbb] [--border n]
+#               [--lines x,y,deg,len ...] [--mouth x,y,w,h] [--face x,y,w,h] [--rim #rrggbb] [--border n]
 #               [--idle effect[:#rrggbb[:intensity]] ...] [--fresh]
 #                                          writes the sidecar beside the PNG (`size` from its width); keys not given
 #                                          keep the existing sidecar's values (--fresh: start from a blank one);
@@ -16,7 +16,9 @@
 #
 # The rules mirror `parse_face` and `face_problems` (aegis_core/src/assets.rs) message for message; the fixtures in
 # fixtures/face/ with their expected_check.txt are asserted by both this tool's test (test_face.py) and the engine's
-# (aegis_core/tests/face_fixtures.rs), which keeps the two in step.
+# (aegis_core/tests/face_fixtures.rs), which keeps the two in step. FB-206 (2b): the overlay primitives have generic
+# names; a sidecar with the old ones (`veins`, `eye_glow`, `ash`, `smoke`) still reads (PRIMITIVE_ALIASES, the key
+# alias FACE_KEY_ALIASES), and `set` writes the new ones (`--veins` is an old spelling of `--lines`).
 # Standard library and Pillow only, so the tool can be ported to Rust (decision "Art tools in Python, portable to Rust").
 import argparse
 import json
@@ -30,16 +32,18 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LAYERS = [ROOT / "games" / "emberwake" / "assets", ROOT / "kits" / "rpg" / "assets"]
 
-FACE_KEYS = ["size", "border", "eyes", "blink", "lid", "glow", "veins", "mouth", "face", "rim", "idle"]
+FACE_KEYS = ["size", "border", "eyes", "blink", "lid", "glow", "lines", "mouth", "face", "rim", "idle"]
+FACE_KEY_ALIASES = [("veins", "lines")]
 IDLE_KEYS = ["effect", "color", "intensity"]
-IDLE_OVERLAYS = ["glow", "veins", "eye_glow", "ash", "smoke"]
+IDLE_OVERLAYS = ["glow", "lines", "point_glow", "particles_rise", "drift"]
+PRIMITIVE_ALIASES = [("veins", "lines"), ("eye_glow", "point_glow"), ("ash", "particles_rise"), ("smoke", "drift")]
 FACE_SIZE_MIN, FACE_SIZE_MAX = 16, 1024
 SCALE = 4
 
-# Review colours (RGBA): eye boxes, glow anchors, vein roots, the mouth, the inner rect, grid lines and labels.
+# Review colours (RGBA): eye boxes, glow anchors, line roots, the mouth, the inner rect, grid lines and labels.
 EYE = (0, 255, 255, 255)
 GLOW = (255, 0, 255, 255)
-VEIN = (255, 255, 0, 255)
+LINE = (255, 255, 0, 255)
 MOUTH = (255, 128, 0, 255)
 FACE = (120, 255, 120, 255)
 INNER = (255, 255, 255, 160)
@@ -135,14 +139,27 @@ def _one_box(v, key, p):
     return nums
 
 
+def canonical_primitive(name):
+    """An old primitive name's new one (PRIMITIVE_ALIASES), any other name unchanged."""
+    return dict(PRIMITIVE_ALIASES).get(name, name)
+
+
 def parse_face(v):
     """(face dict, []) or (None, problems): the keys and their types, as `parse_face` reads them."""
     p = []
     if not isinstance(v, dict):
         return None, ["a face sidecar must be an object {size, eyes, ...}."]
+    olds = dict(FACE_KEY_ALIASES)
     for k in v:
-        if k not in FACE_KEYS:
+        if k not in FACE_KEYS and k not in olds:
             p.append(f"the face sidecar has no key '{k}' (keys: {', '.join(FACE_KEYS)}).")
+    for old, new in FACE_KEY_ALIASES:
+        if old in v and new in v:
+            p.append(f"the face sidecar holds both '{new}' and its old name '{old}' (keep '{new}').")
+    v = dict(v)
+    for old, new in FACE_KEY_ALIASES:
+        if old in v and new not in v:
+            v[new] = v[old]
     if "size" in v:
         size = whole(v["size"])
         if size is None:
@@ -167,7 +184,7 @@ def parse_face(v):
             p.append("blink must be true or false.")
     lid = _colour_or_empty(v, "lid", "lid", p)
     glow = _tuples(v, "glow", 3, "[x, y, r]", p)
-    veins = _tuples(v, "veins", 4, "[x, y, deg, len]", p)
+    lines = _tuples(v, "lines", 4, "[x, y, deg, len]", p)
     mouth = _one_box(v, "mouth", p)
     face_box = _one_box(v, "face", p)
     rim = _colour_or_empty(v, "rim", "rim", p)
@@ -186,6 +203,7 @@ def parse_face(v):
                 if not isinstance(effect, str):
                     p.append(f"idle entry {n}: effect must be a name.")
                     effect = ""
+                effect = canonical_primitive(effect)
                 color = _colour_or_empty(e, "color", f"idle entry {n}: color", p)
                 intensity = 1.0
                 if "intensity" in e:
@@ -199,7 +217,7 @@ def parse_face(v):
             p.append("idle must be a list of {effect, color, intensity}.")
     if p:
         return None, p
-    return {"size": size, "border": border, "eyes": eyes, "blink": blink, "lid": lid, "glow": glow, "veins": veins,
+    return {"size": size, "border": border, "eyes": eyes, "blink": blink, "lid": lid, "glow": glow, "lines": lines,
             "mouth": mouth, "face": face_box, "rim": rim, "idle": idle}, []
 
 
@@ -231,15 +249,15 @@ def face_problems(face, png_w):
             out.append(f"glow anchor {n} centre ({x}, {y}) must lie inside the inner rect ({lo}-{hi}).")
         if not 4 <= r <= tdiv(s, 2):
             out.append(f"glow anchor {n} radius must be 4-{tdiv(s, 2)} (is {r}).")
-    if len(face["veins"]) > 3:
-        out.append(f"veins holds at most 3 roots (has {len(face['veins'])}).")
-    for n, (x, y, deg, ln) in enumerate(face["veins"], 1):
+    if len(face["lines"]) > 3:
+        out.append(f"lines holds at most 3 roots (has {len(face['lines'])}).")
+    for n, (x, y, deg, ln) in enumerate(face["lines"], 1):
         if not inside(x, y):
-            out.append(f"vein root {n} ({x}, {y}) must lie inside the inner rect ({lo}-{hi}).")
+            out.append(f"line root {n} ({x}, {y}) must lie inside the inner rect ({lo}-{hi}).")
         if not -180 <= deg <= 360:
-            out.append(f"vein root {n} deg must be -180-360 (is {deg}).")
+            out.append(f"line root {n} deg must be -180-360 (is {deg}).")
         if not 6 <= ln <= tdiv(s, 2):
-            out.append(f"vein root {n} len must be 6-{tdiv(s, 2)} (is {ln}).")
+            out.append(f"line root {n} len must be 6-{tdiv(s, 2)} (is {ln}).")
     if face["mouth"] is not None:
         x, y, w, h = face["mouth"]
         if x < lo or y < lo or x + w > hi or y + h > hi or w < 1 or h < 1:
@@ -258,10 +276,10 @@ def face_problems(face, png_w):
             out.append(f"idle '{e}' is not an overlay (one of {', '.join(IDLE_OVERLAYS)}).")
         if e == "glow" and not face["glow"]:
             out.append("idle glow needs a glow anchor.")
-        elif e == "veins" and not face["veins"]:
-            out.append("idle veins needs a vein root.")
-        elif e == "eye_glow" and not face["eyes"]:
-            out.append("idle eye_glow needs an eye box.")
+        elif e == "lines" and not face["lines"]:
+            out.append("idle lines needs a line root.")
+        elif e == "point_glow" and not face["eyes"]:
+            out.append("idle point_glow needs an eye box.")
         if not f32(0.05) <= o["intensity"] <= 1.0:
             out.append(f"idle '{e}' intensity must be 0.05-1.0 (is {f32_text(o['intensity'])}).")
     return out
@@ -337,7 +355,7 @@ def dump(face):
     """The sidecar text: every key of FACE_KEYS in order, one per line, lists written flat; `face` only when set
     (PORTRAITFX1-EX: the sidecars written before it keep their bytes)."""
     data = {"size": face["size"], "border": face["border"], "eyes": face["eyes"], "blink": face["blink"],
-            "lid": hex_of(face["lid"]), "glow": face["glow"], "veins": face["veins"], "mouth": face["mouth"] or []}
+            "lid": hex_of(face["lid"]), "glow": face["glow"], "lines": face["lines"], "mouth": face["mouth"] or []}
     if face["face"] is not None:
         data["face"] = face["face"]
     data |= {"rim": hex_of(face["rim"]),
@@ -381,6 +399,9 @@ def set_face(png, a):
     raw = {}
     if side.exists() and not a.fresh:
         raw = json.loads(side.read_text(encoding="utf-8"))
+        for old, new in FACE_KEY_ALIASES:  # a sidecar written before the rename: its old key becomes the new one
+            if old in raw and new not in raw:
+                raw[new] = raw.pop(old)
     raw["size"] = width
     if a.border is not None:
         raw["border"] = a.border
@@ -392,8 +413,8 @@ def set_face(png, a):
         raw["lid"] = a.lid
     if a.glow is not None:
         raw["glow"] = [_ints(t, 3, "--glow") for t in a.glow]
-    if a.veins is not None:
-        raw["veins"] = [_ints(t, 4, "--veins") for t in a.veins]
+    if a.lines is not None:
+        raw["lines"] = [_ints(t, 4, "--lines") for t in a.lines]
     if a.mouth is not None:
         raw["mouth"] = [] if a.mouth == "" else _ints(a.mouth, 4, "--mouth")
     if a.face is not None:
@@ -426,7 +447,7 @@ def box(d, x, y, w, h, colour, scale):
 
 
 def draw_anchors(im, face, scale=SCALE):
-    """The inner rect, eye boxes, glow circles (centre dot), vein roots (a dot and a line of `len` along `deg`), the
+    """The inner rect, eye boxes, glow circles (centre dot), line roots (a dot and a line of `len` along `deg`), the
     mouth box and the face box over a portrait already scaled by `scale`."""
     ov = Image.new("RGBA", im.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
@@ -438,11 +459,11 @@ def draw_anchors(im, face, scale=SCALE):
         cx, cy = (x + 0.5) * scale, (y + 0.5) * scale
         d.ellipse([cx - r * scale, cy - r * scale, cx + r * scale, cy + r * scale], outline=GLOW)
         box(d, x, y, 1, 1, GLOW, scale)
-    for x, y, deg, ln in face["veins"]:
+    for x, y, deg, ln in face["lines"]:
         cx, cy = (x + 0.5) * scale, (y + 0.5) * scale
         t = math.radians(deg)
-        d.line([cx, cy, cx + math.cos(t) * ln * scale, cy + math.sin(t) * ln * scale], fill=VEIN, width=1)
-        box(d, x, y, 1, 1, VEIN, scale)
+        d.line([cx, cy, cx + math.cos(t) * ln * scale, cy + math.sin(t) * ln * scale], fill=LINE, width=1)
+        box(d, x, y, 1, 1, LINE, scale)
     if face["mouth"] is not None:
         box(d, *face["mouth"], MOUTH, scale)
     if face.get("face") is not None:
@@ -531,7 +552,7 @@ def main(argv=None):
     s.add_argument("--blink", dest="blink", action="store_true")
     s.add_argument("--lid", metavar="#rrggbb")
     s.add_argument("--glow", nargs="*", metavar="x,y,r")
-    s.add_argument("--veins", nargs="*", metavar="x,y,deg,len")
+    s.add_argument("--lines", "--veins", dest="lines", nargs="*", metavar="x,y,deg,len")
     s.add_argument("--mouth", metavar="x,y,w,h")
     s.add_argument("--face", metavar="x,y,w,h", help="the face box of the expression effects (\"\": none, derived from the eyes)")
     s.add_argument("--rim", metavar="#rrggbb")

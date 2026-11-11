@@ -44,7 +44,7 @@ fn reel_a() -> Value {
     json!({
         "id": "reel_a", "name": "Reel A", "music": "music/theme_1.ogg", "frame": "#0a0b10", "skippable": true, "once": false,
         "cards": [
-            {"style": "image", "image": "backgrounds/story/card_1.png", "top": "#0a0b10", "bottom": "#2c1546", "ash": true, "text": "First card.", "fade_in_ms": 1200, "hold_ms": 3500, "fade_out_ms": 600},
+            {"style": "image", "image": "backgrounds/story/card_1.png", "top": "#0a0b10", "bottom": "#2c1546", "particles_rise": true, "text": "First card.", "fade_in_ms": 1200, "hold_ms": 3500, "fade_out_ms": 600},
             {"style": "text", "top": "#1e232d", "text": "{member:picked} stayed on day {flag:campaign.day}.", "when": [{"kind": "flag", "key": "picked", "op": "!=", "value": ""}]},
             {"style": "title", "title": "Test Title", "subtitle": "Test Subtitle", "hold_ms": 3000},
             {"style": "line", "speaker": "keeper_a", "text": "A line.", "cue": "sfx/cue_1.wav"}
@@ -237,7 +237,10 @@ fn each_bad_vignette_or_card_field_is_one_error() {
         ("an image on a text card", with(&g, &["cards", "1", "image"], json!("backgrounds/x.png")), "Card 2: image is for an image card only."),
         ("a top not a colour", with(&g, &["cards", "0", "top"], json!("#12")), "Card 1: top '#12' must be #rrggbb."),
         ("a bottom not a colour", with(&g, &["cards", "0", "bottom"], json!("red")), "Card 1: bottom 'red' must be #rrggbb."),
-        ("ash not a bool", with(&g, &["cards", "0", "ash"], json!("yes")), "ash must be true or false."),
+        ("particles_rise not a bool", with(&g, &["cards", "0", "particles_rise"], json!("yes")), "particles_rise must be true or false."),
+        // FB-206 (2b): the old key `ash` is still read and checked; both names on one card are refused
+        ("ash not a bool", with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!("yes")), "Card 1: ash must be true or false."),
+        ("both names", with(&g, &["cards", "0", "ash"], json!(true)), "Card 1: both particles_rise and its old name ash (keep particles_rise)."),
         ("a title card without a title", with(&g, &["cards", "2", "title"], json!("")), "Card 3: a title card needs a title."),
         ("a title over 48", with(&g, &["cards", "2", "title"], json!(long(49))), "title is longer than 48 characters."),
         ("a subtitle over 80", with(&g, &["cards", "2", "subtitle"], json!(long(81))), "subtitle is longer than 80 characters."),
@@ -268,6 +271,7 @@ fn each_bad_vignette_or_card_field_is_one_error() {
     let full: Vec<Value> = (0..24).map(|_| json!({"style": "text", "text": "x"})).collect();
     assert!(added(&v, "vignettes", &g, &with(&g, &["cards"], json!(full))).is_empty());
     assert!(added(&v, "vignettes", &g, &with(&g, &["music"], json!("none"))).is_empty(), "none is silence");
+    assert!(added(&v, "vignettes", &g, &with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!(true))).is_empty(), "the old key ash is taken");
     drop_scratch(&data);
 }
 

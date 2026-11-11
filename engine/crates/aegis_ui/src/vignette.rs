@@ -1,6 +1,6 @@
 //! The vignette player (STORYUI1-E, docs/specs/STORYUI1.md 5.1): engine-only, no Godot source. A reel of still cards
 //! (four styles: a picture and a caption, text on the backdrop, a title card, a speaker's line), each run through fade
-//! in, typing, hold and fade out, with a typewriter at the player's text speed, skip, sound cues and drifting ash over
+//! in, typing, hold and fade out, with a typewriter at the player's text speed, skip, sound cues and falling specks over
 //! a code-drawn backdrop. The model (`Player`) moves only through `advance(ms)`, `press()` and `skip()`, so tests drive
 //! it without a clock; `draw` paints a card on the 640 x 360 stage in the caller's `Palette`; `VignetteScreen` is the
 //! full screen that measures the frame time, plays the cues and runs its `on_done` callback when the reel ends or is
@@ -47,9 +47,11 @@ pub const PORTRAIT: i32 = 64;
 /// Room kept under a caption box for the "Click to continue" hint.
 pub const HINT_ROOM: i32 = 18;
 pub const HINT: &str = "Click to continue";
-/// Ash (V11): specks per card and their fall in logical px per second.
-pub const ASH_SPECKS: u32 = 24;
-pub const ASH_FALL: f32 = 6.0;
+/// Particles (V11, the card key `particles_rise`): specks per card and their fall in logical px per second.
+pub const PARTICLE_SPECKS: u32 = 24;
+pub const PARTICLE_FALL: f32 = 6.0;
+/// FB-206 (2b): the card keys a reader still takes under their old name, (old, new).
+pub const CARD_KEY_ALIASES: [(&str, &str); 1] = [("ash", "particles_rise")];
 /// The frame and backdrop colour when a reel or card names none: the theme's `stage`.
 pub fn default_frame() -> Rgba {
     th().stage
@@ -133,7 +135,7 @@ impl TextSpeed {
     }
 }
 
-/// The shared reduce-motion setting (no drifting ash; other moving effects read the same key).
+/// The shared reduce-motion setting (no falling specks; other moving effects read the same key).
 pub fn reduce_motion(settings: &Settings) -> bool {
     settings.v[REDUCE_MOTION].as_bool().unwrap_or(false)
 }
@@ -184,8 +186,8 @@ pub struct Card {
     /// The code-drawn backdrop, a vertical gradient.
     pub top: Rgba,
     pub bottom: Rgba,
-    /// Drifting ash specks over the backdrop.
-    pub ash: bool,
+    /// Falling specks over the backdrop (card key `particles_rise`, old name `ash`).
+    pub particles_rise: bool,
     pub title: String,
     pub subtitle: String,
     /// The typed text (the caption, the line, the text card's text).
@@ -216,7 +218,7 @@ impl Default for Card {
             image: String::new(),
             top: default_frame(),
             bottom: default_frame(),
-            ash: false,
+            particles_rise: false,
             title: String::new(),
             subtitle: String::new(),
             text: String::new(),
@@ -238,9 +240,9 @@ fn ms_of(d: &json::Dict, key: &str, fallback: u32, max: u32) -> u32 {
 }
 
 impl Card {
-    /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, ash, title, subtitle, text,
-    /// fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake; PORTRAITFX1's expression); bad values fall back to the
-    /// defaults. `speaker`, `portrait`, `portrait_key` and `when` are the caller's to resolve.
+    /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, particles_rise, title,
+    /// subtitle, text, fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake; PORTRAITFX1's expression); bad values fall
+    /// back to the defaults; an old key (`CARD_KEY_ALIASES`) reads as its new one when the new one is absent. `speaker`, `portrait`, `portrait_key` and `when` are the caller's to resolve.
     pub fn from_json(v: &Value) -> Card {
         let d = json::dict(v);
         let base = Card::default();
@@ -250,7 +252,7 @@ impl Card {
             image: json::s(d, "image"),
             top,
             bottom: hex(&json::s(d, "bottom")).unwrap_or(top),
-            ash: json::b(d, "ash", false),
+            particles_rise: json::b(d, "particles_rise", json::b(d, "ash", false)),
             title: json::s(d, "title"),
             subtitle: json::s(d, "subtitle"),
             text: json::s(d, "text"),
@@ -316,7 +318,7 @@ pub fn sample_reel() -> Reel {
     Reel {
         id: "sample".into(),
         cards: vec![
-            Card { style: Style::Image, top: dusk.0, bottom: dusk.1, ash: true, text: "An image card: a picture area and a caption that types out letter by letter. No picture is named, so the backdrop fills the picture area, with drifting ash.".into(), fade_in_ms: 1000, hold_ms: 3000, cue: "sfx/ui_confirm.wav".into(), ..Card::default() },
+            Card { style: Style::Image, top: dusk.0, bottom: dusk.1, particles_rise: true, text: "An image card: a picture area and a caption that types out letter by letter. No picture is named, so the backdrop fills the picture area, with drifting ash.".into(), fade_in_ms: 1000, hold_ms: 3000, cue: "sfx/ui_confirm.wav".into(), ..Card::default() },
             Card { style: Style::Text, top: slate.0, bottom: slate.1, text: "A text card: the text sits centred on the backdrop. This one waits for a click, Space or Enter; Esc or a right click skips the reel.".into(), ..Card::default() },
             Card { style: Style::Title, top: dusk.0, bottom: dusk.0, title: "Title card".into(), subtitle: "A subtitle under the title, between two rules".into(), fade_in_ms: 800, hold_ms: 2500, fade_out_ms: 600, ..Card::default() },
             Card { style: Style::Line, top: slate.0, bottom: slate.1, speaker: "A speaker".into(), text: "A line card: the speaker's portrait sits left of the caption box, the name above the line. Without a portrait file the frame stays empty.".into(), fade_in_ms: 300, fade_out_ms: 300, ..Card::default() },
@@ -363,7 +365,7 @@ pub struct Player {
     phase: Phase,
     /// Milliseconds in the current phase.
     t: u32,
-    /// Milliseconds since the current card started (the ash drift).
+    /// Milliseconds since the current card started (the specks' fall).
     card_ms: u64,
     /// Cues of the cards started since the last `take_cues`.
     cues: Vec<String>,
@@ -627,7 +629,7 @@ fn backdrop(p: &mut Painter, r: Rect, top: Rgba, bottom: Rgba) {
     }
 }
 
-/// A small deterministic hash (splitmix64) for the ash specks.
+/// A small deterministic hash (splitmix64) for the falling specks.
 fn mixed(seed: u64) -> u64 {
     let mut z = seed.wrapping_add(0x9e37_79b9_7f4a_7c15);
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -635,11 +637,12 @@ fn mixed(seed: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// Ash (V11): `ASH_SPECKS` specks seeded by the card index, falling `ASH_FALL` px a second, wrapping inside `r`.
-fn ash(p: &mut Painter, r: Rect, card: usize, card_ms: u64) {
-    let fall = card_ms as f32 / 1000.0 * ASH_FALL;
+/// Particles (V11): `PARTICLE_SPECKS` specks seeded by the card index, falling `PARTICLE_FALL` px a second, wrapping
+/// inside `r`.
+fn particles(p: &mut Painter, r: Rect, card: usize, card_ms: u64) {
+    let fall = card_ms as f32 / 1000.0 * PARTICLE_FALL;
     let mote = th().mote;
-    for i in 0..ASH_SPECKS as u64 {
+    for i in 0..PARTICLE_SPECKS as u64 {
         let h = mixed(((card as u64) << 8) | i);
         let x = r.x + (h % r.w.max(1) as u64) as i32;
         let y0 = ((h >> 16) % r.h.max(1) as u64) as f32;
@@ -753,7 +756,7 @@ impl CardPortrait {
     }
 }
 
-/// Draws the player's card on the whole stage (V9): the frame colour, the backdrop or the picture, the ash (unless
+/// Draws the player's card on the whole stage (V9): the frame colour, the backdrop or the picture, the falling specks (unless
 /// `reduce_motion`), the card's texts, the hint in a hold that waits, and the fade cover. Widgets are the caller's.
 /// While the card's shake runs (FX1 5.2) the picture area, the caption box, the title, line and text-card texts and the
 /// portrait move by its offset; the frame, the stage backdrop gradient, the hint and the fade cover stay put. A line
@@ -798,8 +801,8 @@ pub fn draw_with<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Pal
         }
         None => backdrop(&mut ui.p, area, c.top, c.bottom),
     }
-    if c.ash && !reduce_motion {
-        ash(&mut ui.p, area, pl.card_index(), pl.card_ms());
+    if c.particles_rise && !reduce_motion {
+        particles(&mut ui.p, area, pl.card_index(), pl.card_ms());
     }
     if c.style != Style::Image {
         ui.p.shift(dx, dy);

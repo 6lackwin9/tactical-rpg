@@ -25,7 +25,7 @@ use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
-use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
+use aegis_ui::specimens::{portrait_label, KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
 use aegis_ui::timeline::Timeline;
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, SMALL, TITLE, W};
 use aegis_ui::vignette;
@@ -206,7 +206,7 @@ fn face_summary(face: Option<&aegis_core::assets::Face>) -> String {
     if !f.eyes.is_empty() {
         out += if f.blink { ", blinks" } else { ", no blink" };
     }
-    out += &format!("; {} glow, {} vein root{}", f.glow.len(), f.veins.len(), if f.veins.len() == 1 { "" } else { "s" });
+    out += &format!("; {} glow, {} line root{}", f.glow.len(), f.lines.len(), if f.lines.len() == 1 { "" } else { "s" });
     if let Some(c) = f.rim {
         out += &format!("; rim #{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
     }
@@ -483,7 +483,8 @@ impl PortraitPage {
             yy = head(ui, yy, title);
             let mut bx = x3;
             for name in names.iter().copied() {
-                let l = label(name);
+                // an overlay keeps the label it always had (`PORTRAIT_OVERLAY_LABELS`, FB-206 (2b))
+                let l = if PORTRAIT_OVERLAYS.contains(&name) { portrait_label(name) } else { label(name) };
                 let w = 12 + ui.p.text_w(&l, BODY).ceil() as i32 + 4;
                 if bx + w > right && bx > x3 {
                     bx = x3;

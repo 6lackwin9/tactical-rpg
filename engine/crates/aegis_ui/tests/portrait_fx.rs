@@ -161,7 +161,7 @@ fn e3_the_same_key_and_time_give_the_same_pixels_and_the_seed_is_fnv1a() {
     let draws: Vec<Image> = (0..2)
         .map(|_| {
             let mut fx = PortraitFx::new("tess");
-            fx.hold(&[cue("glow"), cue("ash")], 0);
+            fx.hold(&[cue("glow"), cue("particles_rise")], 0);
             rig.compose(&mut fx, &img, Some(&face), 96, 4321, PortraitOpts::default())
         })
         .collect();
@@ -277,7 +277,7 @@ fn e6_blinks_close_the_eye_boxes_on_their_schedule_even_under_reduce_motion() {
 }
 
 #[test]
-fn e7_overlays_glow_veins_eye_glow_and_ash() {
+fn e7_overlays_glow_lines_point_glow_and_particles() {
     let mut rig = Rig::new();
     let n = 96;
     let flat = framed(n, |_, _| GREY);
@@ -292,9 +292,9 @@ fn e7_overlays_glow_veins_eye_glow_and_ash() {
     assert!(((x0 + x1 + 1) as f32 / 2.0 - (lo + 0.5 * h)).abs() <= 1.0 && ((y0 + y1 + 1) as f32 / 2.0 - (lo + 0.7 * h)).abs() <= 1.0, "centre ({x0}-{x1}, {y0}-{y1})");
     assert!(((x1 - x0 + 1) as f32 / 2.0 - 0.15 * n as f32).abs() <= 1.0, "radius 0.15 size");
 
-    // Veins: nothing at their start, full length at 1800 ms, nothing beyond len from the root.
+    // Lines: nothing at their start, full length at 1800 ms, nothing beyond len from the root.
     let root = (48.0f32, 48.0f32);
-    let face = Face { veins: vec![[48, 48, 0, 30]], ..Face::plain(n) };
+    let face = Face { lines: vec![[48, 48, 0, 30]], ..Face::plain(n) };
     let reach = |img: &Image| -> f32 {
         let mut far = 0.0f32;
         for y in 0..n {
@@ -306,42 +306,43 @@ fn e7_overlays_glow_veins_eye_glow_and_ash() {
         }
         far
     };
-    let mut veins = PortraitFx::new("veins");
-    veins.hold(&[cue("veins")], 0);
-    assert_eq!(rig.compose(&mut veins, &flat, Some(&face), n, 0, PortraitOpts::default()), flat, "nothing at the start");
-    let half = reach(&rig.compose(&mut veins, &flat, Some(&face), n, 900, PortraitOpts::default()));
-    let full = reach(&rig.compose(&mut veins, &flat, Some(&face), n, VEIN_GROW_MS, PortraitOpts::default()));
+    // the portrait keys (so the seeds) these checks always used
+    let mut lines = PortraitFx::new("veins");
+    lines.hold(&[cue("lines")], 0);
+    assert_eq!(rig.compose(&mut lines, &flat, Some(&face), n, 0, PortraitOpts::default()), flat, "nothing at the start");
+    let half = reach(&rig.compose(&mut lines, &flat, Some(&face), n, 900, PortraitOpts::default()));
+    let full = reach(&rig.compose(&mut lines, &flat, Some(&face), n, LINE_GROW_MS, PortraitOpts::default()));
     assert!((30.0 * 0.8..=30.0 + 2.0).contains(&full), "full length at 1800 ms, within len (+ the breath): {full}");
     assert!(half < full, "still growing half way: {half} < {full}");
     let mut steady = PortraitFx::new("veins");
-    steady.hold(&[cue("veins")], 0);
+    steady.hold(&[cue("lines")], 0);
     let r = reach(&rig.compose(&mut steady, &flat, Some(&face), n, 300, reduce()));
     assert!((24.0..=30.0).contains(&r), "reduce motion: full length at once, never past len: {r}");
 
-    // Eye glow burns through a closed blink.
+    // The point glow burns through a closed blink.
     let (img, eyes) = eye_face(true);
     let first = blink_starts(seed_of("glowing"), 20_000)[0];
     let mut lit = PortraitFx::new("glowing");
-    lit.hold(&[cue("eye_glow")], 0);
+    lit.hold(&[cue("point_glow")], 0);
     let shut = rig.compose(&mut PortraitFx::new("glowing"), &img, Some(&eyes), n, first + 75, reduce());
     let burning = rig.compose(&mut lit, &img, Some(&eyes), n, first + 75, reduce());
     assert_eq!(at(&shut, 42, 41), SKIN);
     assert_ne!(at(&burning, 42, 41), SKIN, "the eye glow is drawn after the lids");
 
-    // Ash: min(32, round(18 i)) specks (halved at the reduced tier); none of ash or smoke under reduce motion.
+    // Particles: min(32, round(18 i)) specks (halved at the reduced tier); none of particles or drift under reduce motion.
     for (i, want) in [(1.0f32, 18usize), (0.3, 5), (2.0, 32)] {
-        assert_eq!(ash_specks(1, 500, i, Tier::Full, n, 3, 93).len(), want, "i {i}");
+        assert_eq!(particle_specks(1, 500, i, Tier::Full, n, 3, 93).len(), want, "i {i}");
     }
-    assert_eq!(ash_specks(1, 500, 1.0, Tier::Reduced, 64, 2, 62).len(), 9);
-    let mut ash = PortraitFx::new("ash");
-    ash.hold(&[cue("ash")], 0);
-    let out = rig.compose(&mut ash, &flat, None, n, 600, PortraitOpts::default());
-    let specks = ash_specks(ash.seed, tq(600), 1.0, Tier::Full, n, 3, 93);
+    assert_eq!(particle_specks(1, 500, 1.0, Tier::Reduced, 64, 2, 62).len(), 9);
+    let mut falling = PortraitFx::new("ash");
+    falling.hold(&[cue("particles_rise")], 0);
+    let out = rig.compose(&mut falling, &flat, None, n, 600, PortraitOpts::default());
+    let specks = particle_specks(falling.seed, tq(600), 1.0, Tier::Full, n, 3, 93);
     assert_eq!(specks.len(), 18);
     assert!(specks.iter().all(|&(x, y)| at(&out, x, y) != GREY), "every speck shows");
     let mut drift = PortraitFx::new("ash");
-    drift.hold(&[cue("ash"), cue("smoke")], 0);
-    assert_eq!(rig.compose(&mut drift, &flat, None, n, 600, reduce()), flat, "ash and smoke: none under reduce motion");
+    drift.hold(&[cue("particles_rise"), cue("drift")], 0);
+    assert_eq!(rig.compose(&mut drift, &flat, None, n, 600, reduce()), flat, "particles and drift: none under reduce motion");
 }
 
 #[test]
@@ -441,15 +442,15 @@ fn e11_tiers_draw_exactly_their_effects() {
     assert_eq!((Tier::of(95), Tier::of(48), Tier::of(47)), (Tier::Reduced, Tier::Reduced, Tier::Minimal));
     let all: Vec<&str> = BASE_LIFE.iter().chain(EFFECTS.iter()).copied().collect();
     assert_eq!(Tier::Full.effects(), all);
-    assert_eq!(Tier::Reduced.effects(), all.iter().copied().filter(|e| !["breath", "veins", "smoke"].contains(e)).collect::<Vec<_>>());
-    assert_eq!(Tier::Minimal.effects(), ["flash", "desaturate", "tint", "fade", "eye_glow", "face"]);
+    assert_eq!(Tier::Reduced.effects(), all.iter().copied().filter(|e| !["breath", "lines", "drift"].contains(e)).collect::<Vec<_>>());
+    assert_eq!(Tier::Minimal.effects(), ["flash", "desaturate", "tint", "fade", "point_glow", "face"]);
 
     let mut rig = Rig::new();
-    let face = Face { eyes: vec![[40, 40, 6, 4]], glow: vec![[48, 70, 10]], veins: vec![[50, 50, 90, 20]], rim: Some([217, 119, 6]), ..Face::plain(96) };
+    let face = Face { eyes: vec![[40, 40, 6, 4]], glow: vec![[48, 70, 10]], lines: vec![[50, 50, 90, 20]], rim: Some([217, 119, 6]), ..Face::plain(96) };
     for side in [96, 64, 40] {
         let src = rows(side);
         let mut fx = PortraitFx::new("tiers");
-        fx.hold(&["glow", "veins", "eye_glow", "ash", "smoke", "desaturate", "tint", "fade"].map(cue), 0);
+        fx.hold(&["glow", "lines", "point_glow", "particles_rise", "drift", "desaturate", "tint", "fade"].map(cue), 0);
         fx.fire(cue("flash").with_ms(1000), 300);
         fx.fire(Cue::parse("jolt", "crit").unwrap(), 300);
         rig.compose(&mut fx, &src, Some(&face), side, 310, PortraitOpts::default());
@@ -516,7 +517,7 @@ fn e13_the_border_moves_only_with_the_jolt_flash_covers_and_fade_multiplies() {
     let mut rig = Rig::new();
     let (img, face) = sample();
     let n = 96;
-    let all = ["glow", "veins", "eye_glow", "ash", "smoke", "desaturate", "tint"].map(cue);
+    let all = ["glow", "lines", "point_glow", "particles_rise", "drift", "desaturate", "tint"].map(cue);
     let first = blink_starts(seed_of("order"), 20_000)[0];
     let mut fx = PortraitFx::new("order");
     fx.hold(&all, 0);
@@ -551,7 +552,7 @@ fn e13_the_border_moves_only_with_the_jolt_flash_covers_and_fade_multiplies() {
 
 #[test]
 fn e14_cue_names_parse_and_the_lists_hold_the_spec_names() {
-    assert_eq!(EFFECTS, ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"]);
+    assert_eq!(EFFECTS, ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"]);
     assert_eq!(PORTRAIT_JOLTS, ["hit", "crit"]);
     assert!(Cue::parse("sparkle", "").is_none(), "an unknown effect");
     assert!(Cue::parse("jolt", "boom").is_none() && Cue::parse("jolt", "").is_none(), "an unknown or missing jolt preset");
@@ -1276,7 +1277,7 @@ fn mo10_the_anchored_layers_follow_the_motion_and_ash_does_not() {
     let ash = |m: Motion, rig: &mut Rig| {
         let mut fx = PortraitFx::new("mo10");
         fx.set_base_motion(m);
-        fx.hold(&[cue("ash")], 0);
+        fx.hold(&[cue("particles_rise")], 0);
         rig.compose(&mut fx, &src, None, 96, 1000, PortraitOpts::default())
     };
     let still_ash = ash(calm, &mut rig);
@@ -1337,4 +1338,39 @@ fn mo_the_kit_page_offers_the_motion_samples() {
     assert!(recs.iter().any(|t| t.text.starts_with("Motion wince:") && t.text.contains("entry")), "the foot names the entry");
     let (_, parts) = state_motion(&k.portrait.fx.borrow(), k.portrait.clock.now());
     assert!(parts.contains(&"entry".to_string()), "{parts:?}");
+}
+
+/// FB-206 (2b): a cue or a sidecar written with the old overlay names (`veins`, `eye_glow`, `ash`, `smoke`) draws byte
+/// for byte what the canonical names draw, and reads as the canonical names everywhere (cue, key, level, live list).
+#[test]
+fn old_overlay_names_draw_exactly_what_the_canonical_names_draw() {
+    for (old, new) in aegis_core::assets::PRIMITIVE_ALIASES {
+        let c = Cue::parse(old, "").expect("an old name parses");
+        assert_eq!((c.effect, c.key.as_str()), (new, new));
+        let idle = aegis_core::assets::IdleOverlay { effect: old.into(), color: None, intensity: 0.5 };
+        assert_eq!(Cue::idle(&idle).map(|c| (c.effect, c.key)), Some((new, format!("idle.{new}"))), "a face built in code with an old name");
+    }
+    let sidecar = |lines: &str, names: [&str; 4]| {
+        let v = json!({"size": 96, "eyes": [[40, 40, 6, 4]], "glow": [[48, 70, 10]], lines: [[50, 50, 90, 20]],
+            "idle": names.iter().zip([0.7, 0.5, 0.6, 0.4]).map(|(e, i)| json!({"effect": e, "intensity": i})).collect::<Vec<_>>()});
+        aegis_core::assets::parse_face(&v).unwrap()
+    };
+    let old_face = sidecar("veins", ["veins", "eye_glow", "ash", "smoke"]);
+    let new_face = sidecar("lines", ["lines", "point_glow", "particles_rise", "drift"]);
+    let mut rig = Rig::new();
+    let src = rows(96);
+    for side in [96, 64, 40] {
+        let draw = |face: &Face, held: &[&str], rig: &mut Rig| {
+            let mut fx = PortraitFx::new("aliases");
+            let mut cues = idle_cues(face);
+            cues.extend(held.iter().map(|e| Cue::parse(e, "").unwrap().with_key(&format!("cue.{e}"))));
+            fx.hold(&cues, 0);
+            let img = rig.compose(&mut fx, &src, Some(face), side, 2500, PortraitOpts::default());
+            (img, fx.live(2500), ["lines", "point_glow", "particles_rise", "drift"].map(|e| fx.level(e, 2500)))
+        };
+        let old = draw(&old_face, &["veins", "smoke"], &mut rig);
+        let new = draw(&new_face, &["lines", "drift"], &mut rig);
+        assert_eq!(old, new, "side {side}: same pixels, live list and levels");
+        assert!(new.1.iter().all(|e| !["veins", "eye_glow", "ash", "smoke"].contains(e)), "{:?}", new.1);
+    }
 }
