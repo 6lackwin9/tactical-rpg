@@ -19,8 +19,6 @@ const HANDS: [&str; 3] = ["main_1h", "main_2h", "off"];
 /// ItemFamilies.OFF_CATEGORIES: the off-hand families the family check allows (U3.2-S2: still a closed list; its
 /// message prints it in this order, and the loader derives an off-hand family's category from its id).
 pub const OFF_CATEGORIES: [&str; 3] = ["shield", "orb", "tome"];
-/// The focus gear types of a pre-family (flat) catalog (`legacy_errors`; with a family table the rule `focus` decides).
-pub const FOCUS_TYPES: [&str; 2] = ["orb", "tome"];
 const ARMOR_SLOTS: [&str; 2] = ["HEAD", "BODY"];
 const ACCESSORY_SLOTS: [&str; 2] = ["ACCESSORY_1", "ACCESSORY_2"];
 const SCALING_STATS: [&str; 3] = ["STR", "DEX", "INT"];
@@ -588,8 +586,10 @@ fn tier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
             }
             WHEN_PROFICIENCY => {
                 let gear = json::s_or(when, "gear", &json::s(family, "id"));
-                if !super::skill::GEAR_TYPES.contains(&gear.as_str()) {
-                    out.push(format!("Tier {n}: '{gear}' is not a gear type ({}).", super::skill::GEAR_TYPES.join(", ")));
+                // LAYER-DOWN-2: the family table's gear tokens (the schema's list without one), listed in the schema's order
+                let tokens = super::skill::listed_gear_tokens(v.entries("item_families"));
+                if !tokens.contains(&gear) {
+                    out.push(format!("Tier {n}: '{gear}' is not a gear type ({}).", tokens.join(", ")));
                 }
                 value = json::i(when, "level", 0);
                 range_problem(&mut out, value, 1, PROF_MAX_LEVEL, n, "proficiency level");
@@ -725,6 +725,15 @@ fn unmark_problems(e: &Dict) -> Vec<String> {
     out
 }
 
+/// LAYER-DOWN-2: the focus gear tokens: the families with the engine rule `focus`, in table order; a pre-family catalog
+/// (no family table, `legacy_errors`) reads the legacy family rules' focus tokens (`rpgkit_data::LEGACY_FAMILY_RULES`).
+pub fn focus_tokens(families: &[Dict]) -> Vec<String> {
+    if families.is_empty() {
+        return rpgkit_data::LEGACY_FAMILY_RULES.iter().filter(|(_, r)| *r == rpgkit_data::FOCUS_RULE).map(|(g, _)| g.to_string()).collect();
+    }
+    crate::source::families_with_rule(families, rpgkit_data::FOCUS_RULE)
+}
+
 /// ItemValidator._legacy_errors: the pre-family rules of a flat row (no item families in the catalog).
 fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
@@ -734,10 +743,11 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
     let off = json::s(e, "off_hand_category");
     let two = json::b(e, "two_handed", false);
     let equip = EQUIP_TYPES.contains(&t.as_str());
-    if t != "WEAPON" && FOCUS_TYPES.contains(&gear.as_str()) && equip {
+    let focus = focus_tokens(&[]);
+    if t != "WEAPON" && focus.contains(&gear) && equip {
         errors.push("Orb and tome are weapon types (item type WEAPON).".into());
     }
-    if FOCUS_TYPES.contains(&off.as_str()) && gear != off {
+    if focus.contains(&off) && gear != off {
         errors.push(format!("Off-hand category '{off}' needs the matching gear type '{off}'."));
     }
     if equip {
@@ -762,7 +772,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
             if two && !off.is_empty() {
                 errors.push("Hand conflict: a two-handed weapon (main_2h) can't also be an off-hand category weapon (off).".into());
             }
-            if FOCUS_TYPES.contains(&gear.as_str()) {
+            if focus.contains(&gear) {
                 if slot != "OFF_HAND" {
                     errors.push("Orb and tome weapons are off-hand only (use the OFF_HAND slot).".into());
                 }
@@ -1010,8 +1020,12 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
     let mut out = Vec::new();
     let t = item_type_of(f);
     let id = json::s(f, "id");
-    let gear_types = &super::skill::GEAR_TYPES;
-    if GEAR_TYPES.contains(&t.as_str()) && !gear_types.contains(&id.as_str()) {
+    // LAYER-DOWN-2: with a family table a gear family's id is its gear token (a new family adds one; any id but the
+    // reserved `unarmed`); a catalog without one keeps the schema's tokens (`skill::listed_gear_tokens`)
+    let families = v.entries("item_families");
+    let gear_types = super::skill::listed_gear_tokens(families);
+    let named = if families.is_empty() { gear_types.contains(&id) } else { aegis_content::schema::is_id(&id) && id != super::skill::UNARMED_TOKEN };
+    if GEAR_TYPES.contains(&t.as_str()) && !named {
         out.push(format!("A {t} family is named after its gear token (one of {}).", gear_types.join(", ")));
     }
     let hands = hands_of(f);
@@ -1312,19 +1326,6 @@ pub fn family_warnings(f: &Dict) -> Vec<String> {
         }
     }
     out
-}
-
-/// ItemValidator.family_set_errors (validate_all): every gear token has its family (but the optional ones, RULESET1-S).
-pub fn family_set_errors(families: &[Dict]) -> Vec<String> {
-    if families.is_empty() {
-        return Vec::new();
-    }
-    let ids: Vec<String> = families.iter().map(|f| json::s(f, "id")).collect();
-    super::skill::GEAR_TYPES
-        .iter()
-        .filter(|g| !super::skill::OPTIONAL_GEAR_TYPES.contains(g) && !ids.iter().any(|i| i == *g))
-        .map(|g| format!("Gear token '{g}' has no item family (every Proficiency gear type needs one)."))
-        .collect()
 }
 
 /// ContentCatalog._prepare("item_families"): ItemFamilies.derive of the normalized row.

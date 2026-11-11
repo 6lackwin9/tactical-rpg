@@ -1,11 +1,12 @@
 //! Weapon type options added after the Godot freeze (RULESET1-S `polearm`, `scourge`; CAST1-S `censer`, `bone_saw`,
-//! `sprayer`): each is an items `weapon_type` option, a gear token and an optional one (no family needed until data
-//! uses it); a family named after it passes the gear token rule; every other gear token still needs its family.
-//! Scratch data folders only.
+//! `sprayer`) and LAYER-DOWN-2 (the family table names the gear tokens): each listed type is an items `weapon_type`
+//! option and a pre-family gear token; the field reads its options from the family table; a family named after any id
+//! (a listed type or a new one) passes the gear token rule, an id that cannot be a token does not. Scratch data folders
+//! only.
 
 use aegis_content::schema::fields;
 use aegis_core::json::{self, gstr};
-use rpgkit_content::check::{self, item, skill};
+use rpgkit_content::check::{self, skill};
 use rpgkit_content::{source, store};
 use serde_json::{json, Value};
 use std::fs;
@@ -14,34 +15,24 @@ use std::path::PathBuf;
 /// The CAST1-S weapon types (CAST1_GEAR section 1).
 const NEW_TYPES: [&str; 3] = ["censer", "bone_saw", "sprayer"];
 
-fn weapon_type_options() -> Vec<String> {
-    let f = fields(source::schema(), "content", "items").iter().map(json::dict).find(|f| json::s(f, "key") == "weapon_type").expect("content.items.weapon_type").clone();
-    json::aget(&f, "options").iter().map(gstr).collect()
+fn weapon_type_field() -> json::Dict {
+    fields(source::schema(), "content", "items").iter().map(json::dict).find(|f| json::s(f, "key") == "weapon_type").expect("content.items.weapon_type").clone()
 }
 
 #[test]
-fn each_new_type_is_an_option_a_gear_token_and_optional() {
-    let options = weapon_type_options();
+fn each_new_type_is_an_option_and_a_pre_family_gear_token() {
+    let f = weapon_type_field();
+    let options: Vec<String> = json::aget(&f, "options").iter().map(gstr).collect();
     for t in NEW_TYPES {
         assert!(options.iter().any(|o| o == t), "{t}: an items weapon_type option");
-        assert!(skill::GEAR_TYPES.contains(&t), "{t}: a gear token");
-        assert!(skill::OPTIONAL_GEAR_TYPES.contains(&t), "{t}: needs no family until data uses it");
+        assert!(skill::schema_gear_tokens().iter().any(|g| g == t), "{t}: a pre-family gear token");
     }
-    // the schema options are "" then the gear tokens in the code's order
+    // the schema options are "" then the pre-family gear tokens; with a family table the field reads the table
     let mut want = vec![String::new()];
-    want.extend(skill::GEAR_TYPES.iter().map(|g| g.to_string()));
-    assert_eq!(options, want, "the schema and the code list the same gear tokens in the same order");
-}
-
-#[test]
-fn only_the_required_gear_tokens_need_a_family() {
-    let family = |id: &str| json!({"id": id}).as_object().cloned().unwrap();
-    let required: Vec<&str> = skill::GEAR_TYPES.iter().copied().filter(|g| !skill::OPTIONAL_GEAR_TYPES.contains(g)).collect();
-    let all: Vec<_> = required.iter().map(|g| family(g)).collect();
-    assert!(item::family_set_errors(&all).is_empty(), "the new types are not asked for");
-    let missing = required[0];
-    let fewer: Vec<_> = required[1..].iter().map(|g| family(g)).collect();
-    assert_eq!(item::family_set_errors(&fewer), [format!("Gear token '{missing}' has no item family (every Proficiency gear type needs one).")]);
+    want.extend(skill::schema_gear_tokens());
+    assert_eq!(options, want, "the field's options are the pre-family gear tokens in their order");
+    assert_eq!(json::s(&f, "options_from"), "gear_types");
+    assert_eq!(skill::gear_tokens(&[]), skill::schema_gear_tokens(), "no family table: the schema's tokens");
 }
 
 /// The three families as CAST1_GEAR section 1 gives them (hand, scaling stats, damage type, base power, range, block
@@ -59,7 +50,7 @@ fn families() -> Value {
 }
 
 #[test]
-fn a_family_named_after_a_new_type_passes_the_gear_token_rule() {
+fn a_family_names_its_own_gear_token() {
     let t = aegis_core::scratch::Scratch::vacant("rpgkit_weapon_types");
     let _ = fs::remove_dir_all(&t);
     let data: PathBuf = t.join("data");
@@ -73,10 +64,19 @@ fn a_family_named_after_a_new_type_passes_the_gear_token_rule() {
         let errors = check::validate_entry(&v, "item_families", &e, id);
         assert!(!errors.iter().any(|m| m.contains("gear token")), "{id}: {errors:?}");
     }
-    // a family named after no gear token is still refused
-    let mut bogus = v.get("item_families", "censer").clone();
-    bogus.insert("id".into(), json!("thurible"));
-    let errors = check::validate_entry(&v, "item_families", &bogus, "thurible");
-    assert!(errors.iter().any(|m| m.starts_with("A WEAPON family is named after its gear token")), "{errors:?}");
+    // LAYER-DOWN-2: a family named after no listed type adds its own token
+    let mut thurible = v.get("item_families", "censer").clone();
+    thurible.insert("id".into(), json!("thurible"));
+    let errors = check::validate_entry(&v, "item_families", &thurible, "");
+    assert!(!errors.iter().any(|m| m.contains("gear token")), "{errors:?}");
+    // an id that cannot be a gear token is refused, the table's tokens listed (the schema's order first)
+    for bad in ["", "Bad Id!", "unarmed"] {
+        let mut row = thurible.clone();
+        row.insert("id".into(), json!(bad));
+        let errors = check::validate_entry(&v, "item_families", &row, "");
+        let want = format!("A WEAPON family is named after its gear token (one of {}).", skill::listed_gear_tokens(v.entries("item_families")).join(", "));
+        assert!(errors.contains(&want), "{bad}: {errors:?}");
+    }
+    assert_eq!(skill::listed_gear_tokens(v.entries("item_families")), ["censer", "bone_saw", "sprayer"], "the schema's order, then the table's others");
     let _ = fs::remove_dir_all(&t);
 }

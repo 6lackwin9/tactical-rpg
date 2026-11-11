@@ -28,8 +28,12 @@ pub use aegis_content::store::Outcome;
 fn content_storage(kind: &str, full: &Dict) -> Dict {
     use crate::check::unit::{GROWTH_PER_STAGE, WEARS_UNTRAINED};
     use rpgkit_data::TEMPLATE_FIELD;
+    // LAYER-DOWN-2: a field the schema marks `omit_default` is left out while it holds its default (as the world writer
+    // does), so rows written before it existed re-save byte for byte (units `dojo`, terrain `glyph`)
+    let omit_default: Vec<(String, Value)> = source::fields("content", kind).iter().map(json::dict).filter(|f| json::b(f, "omit_default", false)).map(|f| (json::s(f, "key"), json::get(f, "default").clone())).collect();
     to_storage(source::schema(), "content", kind, full, |key, v| {
-        (key == "system" && !json::to_bool(v))
+        omit_default.iter().any(|(k, d)| k == key && v == d)
+            || (key == "system" && !json::to_bool(v))
             || (key == "origin" && gstr(v) == "system")
             || (key == WEARS_UNTRAINED && json::strings(v).is_empty())
             || (key == GROWTH_PER_STAGE && json::to_int(v) == 0)

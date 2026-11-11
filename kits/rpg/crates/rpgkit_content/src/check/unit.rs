@@ -18,9 +18,6 @@ const GROWTH_STAT_MAX: i64 = 3;
 const ADVANCED_MIN_LEVEL: i64 = 5;
 const MIN_SCALING: f64 = 1.0;
 const MAX_SCALING: f64 = 2.0;
-/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`); U3.2-S2:
-/// read only without a family table (`skill::weapon_tokens`).
-pub const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
 /// UNITDRILL1: the unit field listing the items of its own gear it wears with no class or drill training. U3.2-S3
 /// (FB-34): retired (untrained gear is a soft wield penalty, never refused); nothing reads it, an empty list stores as no

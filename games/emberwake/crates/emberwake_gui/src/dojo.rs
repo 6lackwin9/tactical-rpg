@@ -1464,7 +1464,7 @@ mod tests {
         assert!(dojo.s.ruleset.has(emberwake_rules::ruleset::DECK) && dojo.state(&cx).get("deck").is_some(), "a deck rule: decks rebuilt and shown");
     }
 
-    /// PK1-KITFIX (c): Quick setup lists the built-in presets with the catalog's dojo_presets rows over them; picking a
+    /// PK1-KITFIX (c), LAYER-DOWN-2: Quick setup lists the catalog's dojo_presets rows (no built-in presets); picking a
     /// data row applies it (the hero holds its passive). The row is test-only, on this test's own copy of the data; its
     /// passive is the first passive id in order.
     #[test]
@@ -1473,9 +1473,9 @@ mod tests {
         let mut ids: Vec<String> = cx.data.cat.passives.keys().cloned().collect();
         ids.sort();
         let passive = ids.first().cloned().expect("a passive");
-        // the list before the test row: the built-in presets and the shipped rows, however many ship
+        // the list before the test row: the shipped rows, however many ship
         let baseline = Dojo::new(&cx).s.presets().len();
-        assert!(baseline >= emberwake_battle::dojo::PRESETS.len(), "the built-in presets are listed");
+        assert_eq!(baseline, cx.data.cat.dojo_presets.len(), "the shipped rows are listed");
         let mut data = (*cx.app.data).clone();
         let row = emberwake_data::DojoPresetDef::from_obj(json!({"id": "t_gui_preset", "name": "GUI Test Preset", "passives": [passive]}).as_object().unwrap());
         data.edit_cat(|cat| {

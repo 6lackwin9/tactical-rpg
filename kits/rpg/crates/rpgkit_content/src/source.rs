@@ -501,7 +501,9 @@ fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, families: &[Dict], erro
     let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
     // PK1-S1: the meter ids a hazard row may name, once the meters are loaded (HOOK_KINDS reads hazards first: None)
     let meters: Option<Vec<String>> = loaded.get(rpgkit_data::UNIT_METERS_KIND).map(|m| json::arr(m).iter().map(|e| json::s(json::dict(e), "id")).collect());
-    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, derived: &derived, families, meters: meters.as_deref() });
+    // LAYER-DOWN-2: the terrain rows a zone's glyphs and ground may name (read before the hook kinds)
+    let terrain: Vec<Dict> = json::arr(json::get(loaded, "terrain")).iter().map(|e| json::dict(e).clone()).collect();
+    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills, derived: &derived, families, meters: meters.as_deref(), terrain: &terrain });
     let mut kept = Vec::new();
     for (row, found) in rows.into_iter().zip(checked) {
         if found.is_empty() {

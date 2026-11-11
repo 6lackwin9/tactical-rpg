@@ -74,7 +74,7 @@
 pub mod rules;
 
 use rpgkit_battle::command;
-use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL, TERRAIN_IDS};
+use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL};
 use rpgkit_battle::intent;
 use rpgkit_battle::plan::{PlanStep, Step};
 use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, Pick, RoundIntent, RoundTarget};
@@ -485,7 +485,7 @@ pub fn state_of(s: &Session) -> Value {
         pk_state(s, i, v);
     }
     let rows: Vec<String> = (0..GRID_H)
-        .map(|y| (0..GRID_W).map(|x| TERRAIN_IDS.iter().position(|t| *t == w.grid.terrain_id(V2::new(x, y))).map(|i| ".,:os*~WmL#T=rfpi".chars().nth(i).unwrap()).unwrap_or('.')).collect())
+        .map(|y| (0..GRID_W).map(|x| w.grid.glyph(V2::new(x, y))).collect())
         .collect();
     let mut state = json!({
         "encounter": s.def.id, "round": s.current_round, "max_rounds": s.def.max_rounds, "block": s.current_block,

@@ -58,13 +58,44 @@ impl std::fmt::Display for V2 {
     }
 }
 
-/// Terrain.Type in enum order (ids are the lower-case names; the catalog keys).
+/// Terrain.Type in enum order (ids are the lower-case names; the catalog keys): the built-in terrain types, the code
+/// zones' alphabet (`GLYPHS`) and the types of a catalog without terrain rows. LAYER-DOWN-2: a catalog's terrain rows
+/// add their new types after these (`terrain_ids`, `TerrainTable::ids`); the battle reads the table, not this list.
 pub const TERRAIN_IDS: [&str; 17] = [
     "floor", "grass", "dirt", "stone", "sand", "snow", "shallow_water", "deep_water", "mud", "lava", "wall", "tree", "bridge", "rubble",
     "burning_ground", "toxic_bog", "ice",
 ];
 /// The terrain glyph per type, in TERRAIN_IDS order (CombatZones' row glyphs; also the glyphs of authored rows).
 pub const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
+/// LAYER-DOWN-2: the terrain row key giving a new type its board glyph (one character; a built-in type keeps its
+/// `GLYPHS` one and leaves the key empty).
+pub const GLYPH_KEY: &str = "glyph";
+
+/// LAYER-DOWN-2: the terrain types of a catalog whose terrain rows have the ids `row_ids` (in file order): the built-in
+/// types (`TERRAIN_IDS`, in their order, so a built-in type keeps its index), then each new row id once in file order.
+pub fn terrain_ids_of<'a>(row_ids: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut out: Vec<String> = TERRAIN_IDS.iter().map(|t| t.to_string()).collect();
+    for id in row_ids {
+        if !id.is_empty() && !out.iter().any(|t| t == id) {
+            out.push(id.to_string());
+        }
+    }
+    out
+}
+
+/// LAYER-DOWN-2: the terrain types of catalog `cat` (`terrain_ids_of` its terrain rows).
+pub fn terrain_ids(cat: &Catalog) -> Vec<String> {
+    terrain_ids_of(cat.terrain.keys().map(String::as_str))
+}
+
+/// LAYER-DOWN-2: the board glyph of terrain type `id` with row `row`: a built-in type's `GLYPHS` one, else the row's
+/// `glyph` (its first character; None when it has none, so no board row can place the type).
+pub fn glyph_of(id: &str, row: Option<&value::Obj>) -> Option<char> {
+    match TERRAIN_IDS.iter().position(|t| *t == id) {
+        Some(i) => Some(GLYPHS[i]),
+        None => row.and_then(|r| value::string(r, GLYPH_KEY, "").chars().next()),
+    }
+}
 /// P1.2-S1: the missing-key fallback of a terrain row's `walkable` (and of a type with no row): deep water, lava, wall
 /// and tree block. The rules read the row's `walkable` (`TerrainTable`); this only fills a row that leaves it out (the
 /// frozen kit's rows, a row written before the field existed).
@@ -126,20 +157,32 @@ pub struct TerrainRow {
     pub hazard: Option<Hazard>,
 }
 
-/// Terrain numbers per type: the catalog row, else the code defaults.
+/// Terrain numbers per type: the catalog row, else the code defaults. LAYER-DOWN-2: one entry per type of the
+/// catalog (`terrain_ids`: the built-in types, then the rows' new ones), with its id and board glyph.
 #[derive(Debug, Clone)]
 pub struct TerrainTable {
     pub rows: Vec<TerrainRow>,
+    /// LAYER-DOWN-2: the type id of each row (a grid tile's terrain index points here).
+    pub ids: Vec<String>,
+    /// LAYER-DOWN-2: the board glyph of each row (None: a new type without one).
+    pub glyphs: Vec<Option<char>>,
 }
 
 impl TerrainTable {
+    /// The built-in types with their code defaults (a catalog without terrain rows).
+    pub fn builtin() -> Self {
+        Self::from_catalog(&Catalog::default())
+    }
+
     pub fn from_catalog(cat: &Catalog) -> Self {
-        let rows = TERRAIN_IDS
+        let ids = terrain_ids(cat);
+        let glyphs = ids.iter().map(|id| glyph_of(id, cat.terrain.get(id))).collect();
+        let rows = ids
             .iter()
             .enumerate()
             .map(|(i, id)| {
                 let default_cost = if SLOW.contains(&i) { 2 } else { 1 };
-                let Some(r) = cat.terrain.get(*id) else {
+                let Some(r) = cat.terrain.get(id) else {
                     let (walkable, stops_forced_move) = terrain_walk_keys(id, None, None);
                     return TerrainRow { walkable, stops_forced_move, move_cost: if walkable { default_cost } else { 1 }, cover_guard: 0.0, hazard: None };
                 };
@@ -163,7 +206,22 @@ impl TerrainTable {
                 }
             })
             .collect();
-        Self { rows }
+        Self { rows, ids, glyphs }
+    }
+
+    /// LAYER-DOWN-2: the type index of board glyph `ch` (None: no type has it).
+    pub fn index_of_glyph(&self, ch: char) -> Option<usize> {
+        self.glyphs.iter().position(|g| *g == Some(ch))
+    }
+
+    /// LAYER-DOWN-2: the type index of terrain id `id`.
+    pub fn index_of(&self, id: &str) -> Option<usize> {
+        self.ids.iter().position(|t| t == id)
+    }
+
+    /// ENCOUNTER2 R0 over this table's glyphs: GRID_H strings of GRID_W glyphs of its types.
+    pub fn rows_valid(&self, rows: &[String]) -> bool {
+        rows.len() == GRID_H as usize && rows.iter().all(|r| r.chars().count() == GRID_W as usize && r.chars().all(|c| self.index_of_glyph(c).is_some()))
     }
 }
 
@@ -185,7 +243,8 @@ pub fn zone_rows(zone: &str) -> Option<[&'static str; 9]> {
     })
 }
 
-/// ENCOUNTER2 R0: authored terrain rows are GRID_H strings of GRID_W known terrain glyphs.
+/// ENCOUNTER2 R0: authored terrain rows are GRID_H strings of GRID_W known terrain glyphs (the built-in types'; a
+/// catalog's own types: `TerrainTable::rows_valid`).
 pub fn rows_valid(rows: &[String]) -> bool {
     rows.len() == GRID_H as usize && rows.iter().all(|r| r.chars().count() == GRID_W as usize && r.chars().all(|c| GLYPHS.contains(&c)))
 }
@@ -224,9 +283,9 @@ impl Grid {
     /// else a code zone's rows (unchanged), else the data zone row's (`zones`, kind `zones`: its rows when valid, else
     /// 9 rows of floor); an unknown zone is floor. The zone still picks the backdrop and tiles.
     pub fn apply_board(&mut self, zone: &str, rows: &[String], zones: &IndexMap<String, ZoneDef>) {
-        if rows_valid(rows) {
+        if self.table.rows_valid(rows) {
             self.apply_rows(rows.iter().map(String::as_str));
-        } else if let Some(z) = data_zone(zone, zones).filter(|z| rows_valid(&z.rows)) {
+        } else if let Some(z) = data_zone(zone, zones).filter(|z| self.table.rows_valid(&z.rows)) {
             self.apply_rows(z.rows.iter().map(String::as_str));
         } else {
             self.apply_zone(zone);
@@ -238,7 +297,7 @@ impl Grid {
         self.terrain = vec![0; (GRID_W * GRID_H) as usize];
         for (y, row) in rows.into_iter().enumerate().take(GRID_H as usize) {
             for (x, ch) in row.chars().enumerate().take(GRID_W as usize) {
-                self.terrain[y * GRID_W as usize + x] = GLYPHS.iter().position(|g| *g == ch).unwrap_or(0);
+                self.terrain[y * GRID_W as usize + x] = self.table.index_of_glyph(ch).unwrap_or(0);
             }
         }
     }
@@ -252,12 +311,16 @@ impl Grid {
         &self.table.rows[t]
     }
 
-    pub fn terrain_id(&self, c: V2) -> &'static str {
-        if self.is_valid(c) {
-            TERRAIN_IDS[self.terrain[(c.y * GRID_W + c.x) as usize]]
-        } else {
-            "floor"
-        }
+    /// The terrain type id of tile `c` (the table's; "floor" off the grid).
+    pub fn terrain_id(&self, c: V2) -> &str {
+        let t = if self.is_valid(c) { self.terrain[(c.y * GRID_W + c.x) as usize] } else { 0 };
+        self.table.ids.get(t).map_or("floor", String::as_str)
+    }
+
+    /// LAYER-DOWN-2: the board glyph of tile `c` (the table's; '.' when its type has none or off the grid).
+    pub fn glyph(&self, c: V2) -> char {
+        let t = if self.is_valid(c) { self.terrain[(c.y * GRID_W + c.x) as usize] } else { 0 };
+        self.table.glyphs.get(t).copied().flatten().unwrap_or('.')
     }
 
     pub fn is_walkable(&self, c: V2) -> bool {

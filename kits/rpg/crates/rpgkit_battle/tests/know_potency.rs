@@ -9,7 +9,7 @@
 use aegis_core::rng::GodotRng;
 use indexmap::IndexMap;
 use rpgkit_battle::command::{CmdKind, Command};
-use rpgkit_battle::dojo::{DojoSession, HEROES};
+use rpgkit_battle::dojo::DojoSession;
 use rpgkit_battle::ground::Placed;
 use rpgkit_battle::grid::{GRID_W, NO_CELL, V2};
 use rpgkit_battle::plan::{Plan, PlanStep, Step};
@@ -22,6 +22,15 @@ use rpgkit_rules::stats::roundi;
 use rpgkit_rules::{status, Unit};
 use serde_json::{json, Value};
 use std::sync::Arc;
+
+/// LAYER-DOWN-2: the Dojo's cast is the units the catalog marks (`dojo`); the fixture's ids.
+const HEROES: [&str; 2] = ["dojo_warrior", "dojo_ranger"];
+
+/// Unit row `u` with its Dojo part (`dojo`: hero or dummy).
+fn in_dojo(mut u: serde_json::Value, part: &str) -> serde_json::Value {
+    u["dojo"] = serde_json::json!(part);
+    u
+}
 
 const BLOCKS: i32 = 6;
 const HP: i32 = 5000;
@@ -58,7 +67,7 @@ fn catalog() -> Catalog {
     };
     Catalog::from_value(&json!({
         "skills": skills,
-        "units": [unit("p_hero", "party", 14), unit("p_foe", "enemy", 10), unit(HEROES[0], "party", 12), unit(HEROES[1], "party", 12), unit("training_dummy", "enemy", 10)],
+        "units": [unit("p_hero", "party", 14), unit("p_foe", "enemy", 10), in_dojo(unit(HEROES[0], "party", 12), "hero"), in_dojo(unit(HEROES[1], "party", 12), "hero"), in_dojo(unit("training_dummy", "enemy", 10), "dummy")],
         "hazards": [{"id": "k_hex_ground", "name": "Hex Ground", "on": "enter", "status": "weaken", "potency": POTENCY, "magnitude": 10, "status_rounds": 1, "affects": "foes", "duration": 3}],
         "terrain": [{"id": "mud", "name": "Mud", "hazard_status": "weaken", "hazard_potency": POTENCY, "hazard_on": "enter"}]
     }))

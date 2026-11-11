@@ -538,35 +538,61 @@ fn template_warnings(template: &str, entry: &Dict) -> Vec<String> {
 
 const MAX_CLASS_TIER: i64 = 3;
 const MAX_UNLOCK_OFFSET: i64 = 8;
-const UNARMED_TOKEN: &str = "unarmed";
+pub(crate) const UNARMED_TOKEN: &str = "unarmed";
 const CLEANSE_ALL: &str = "all";
 const HEAL_STATS: [&str; 2] = ["INT", "KNOW"];
-/// Proficiency.gear_types(); RULESET1-S (TQ8) adds the reach-2 weapon types `polearm` and `scourge`, CAST1-S the weapon
-/// types `censer`, `bone_saw` and `sprayer`.
-pub const GEAR_TYPES: [&str; 21] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield", "plate", "leather", "cloth"];
-/// Gear types added after the Godot freeze that need no item family until data uses them (ItemValidator.family_set_errors
-/// asks a family of every other gear type).
-pub const OPTIONAL_GEAR_TYPES: [&str; 5] = ["polearm", "scourge", "censer", "bone_saw", "sprayer"];
 /// The item types whose family id is a gear token (a weapon type, a shield, an armour), and of those the hand ones.
 const GEAR_ITEM_TYPES: [&str; 3] = ["WEAPON", "SHIELD", "ARMOR"];
 const HAND_ITEM_TYPES: [&str; 2] = ["WEAPON", "SHIELD"];
+/// LAYER-DOWN-2: the schema field whose options are the gear tokens of a catalog without a family table.
+const GEAR_FIELD: (&str, &str) = ("items", "weapon_type");
+/// LAYER-DOWN-2: the armour tokens among the pre-family gear tokens (a pre-family catalog has no item type per token;
+/// `weapon_tokens` leaves these out).
+const PRE_FAMILY_ARMOR: [&str; 3] = ["plate", "leather", "cloth"];
+
+/// LAYER-DOWN-2: the gear tokens of a catalog without a family table (a pre-family catalog, read like
+/// ItemValidator._legacy_errors), in their listed order: the kit schema's items `weapon_type` options without "" (the
+/// field reads its options from the family table, `options_from` `gear_types`; its own list is this fallback). No Rust
+/// list names a gear type.
+pub fn schema_gear_tokens() -> Vec<String> {
+    let f = fields("content", GEAR_FIELD.0).iter().map(json::dict).find(|f| json::s(f, "key") == GEAR_FIELD.1).cloned().unwrap_or_default();
+    json::aget(&f, "options").iter().filter_map(Value::as_str).filter(|o| !o.is_empty()).map(String::from).collect()
+}
 
 /// U3.2-S2: the gear tokens of a family table (Proficiency.gear_types): the ids of its WEAPON, SHIELD and ARMOR families
-/// in table order. No family table (a pre-family catalog, read like ItemValidator._legacy_errors) reads `GEAR_TYPES`.
+/// in table order. No family table (a pre-family catalog) reads `schema_gear_tokens` (LAYER-DOWN-2).
 pub fn gear_tokens(families: &[Dict]) -> Vec<String> {
-    tokens_of(families, &GEAR_ITEM_TYPES, &GEAR_TYPES)
+    if families.is_empty() {
+        return schema_gear_tokens();
+    }
+    tokens_of(families, &GEAR_ITEM_TYPES)
 }
 
 /// U3.2-S2: the weapon tokens of a family table (Proficiency.WEAPON_TYPES, the hand gear): the ids of its WEAPON and
-/// SHIELD families in table order (the gear tokens without the armour). No family table reads `unit::WEAPON_TYPES`.
+/// SHIELD families in table order (the gear tokens without the armour). No family table: `schema_gear_tokens` without
+/// the armour ones (LAYER-DOWN-2).
 pub fn weapon_tokens(families: &[Dict]) -> Vec<String> {
-    tokens_of(families, &HAND_ITEM_TYPES, &super::unit::WEAPON_TYPES)
+    if families.is_empty() {
+        return schema_gear_tokens().into_iter().filter(|g| !PRE_FAMILY_ARMOR.contains(&g.as_str())).collect();
+    }
+    tokens_of(families, &HAND_ITEM_TYPES)
 }
 
-fn tokens_of(families: &[Dict], types: &[&str], legacy: &[&str]) -> Vec<String> {
+/// LAYER-DOWN-2: the gear tokens as the check messages list them: the family table's gear tokens in the schema's listed
+/// order (`schema_gear_tokens`), then the table's other gear families in table order (a family the schema does not
+/// list); no family table: the schema's list. The tokens are the table's (`gear_tokens`); only the order is the schema's.
+pub fn listed_gear_tokens(families: &[Dict]) -> Vec<String> {
+    let listed = schema_gear_tokens();
     if families.is_empty() {
-        return legacy.iter().map(|g| g.to_string()).collect();
+        return listed;
     }
+    let tokens = gear_tokens(families);
+    let mut out: Vec<String> = listed.into_iter().filter(|g| tokens.contains(g)).collect();
+    out.extend(tokens.into_iter().filter(|g| !out.contains(g)).collect::<Vec<_>>());
+    out
+}
+
+fn tokens_of(families: &[Dict], types: &[&str]) -> Vec<String> {
     families.iter().filter(|f| types.contains(&crate::source::item_type_of(f).as_str())).map(|f| json::s(f, "id")).collect()
 }
 

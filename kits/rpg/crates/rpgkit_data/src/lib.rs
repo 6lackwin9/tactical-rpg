@@ -258,7 +258,16 @@ pub struct UnitDef {
     pub default_intent: String,
     /// HOOKS1 AT2 (rule ai_tactics): the unit's AI tactics (TACTICS ids, in order).
     pub tactics: Vec<String>,
+    /// LAYER-DOWN-2: the unit's part in the gear Dojo (`UNIT_DOJO_KEY`: `UNIT_DOJO_HERO`, `UNIT_DOJO_DUMMY`, "" = none).
+    pub dojo: String,
 }
+
+/// LAYER-DOWN-2: the unit row key naming the gear Dojo's cast (the heroes in catalog order, the first dummy).
+pub const UNIT_DOJO_KEY: &str = "dojo";
+/// LAYER-DOWN-2: a Dojo hero (`UNIT_DOJO_KEY`).
+pub const UNIT_DOJO_HERO: &str = "hero";
+/// LAYER-DOWN-2: the Dojo's training dummy (`UNIT_DOJO_KEY`).
+pub const UNIT_DOJO_DUMMY: &str = "dummy";
 
 /// A unit's or party member's deck (RULESET1 9 D5, field `deck`): skill families in the active slots, passive ids in
 /// the passive and keystone slots, and per round intent the families in the order the planner fills them. Missing or
@@ -347,6 +356,7 @@ impl UnitDef {
             poise: int(o, "poise", -1),
             default_intent: string(o, "default_intent", ""),
             tactics: strings(o, "tactics"),
+            dojo: string(o, UNIT_DOJO_KEY, ""),
         }
     }
 }

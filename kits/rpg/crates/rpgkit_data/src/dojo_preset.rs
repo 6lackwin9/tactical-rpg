@@ -1,9 +1,7 @@
 //! Dojo presets as data (PK1-KITFIX (c), FB-184 Option A; engine-only, no Godot original): the gear Dojo's quick
-//! loadouts (kind `dojo_presets`): gear per slot and pouch items, as the kit's built-in presets
-//! (`rpgkit_battle::dojo::PRESETS`), plus passives the hero holds while the preset is applied (a test passive that
-//! grants a meter, for example). The Dojo lists the built-in presets with the data rows over them: a row with a
-//! built-in id replaces it in place, a new id is added after them. The kind ships without rows until the asset lane
-//! fills it, so the Dojo shows its built-in presets only.
+//! loadouts (kind `dojo_presets`): gear per slot and pouch items, plus passives the hero holds while the preset is
+//! applied (a test passive that grants a meter, for example). LAYER-DOWN-2: the Dojo lists the rows in file order
+//! (`rpgkit_battle::dojo::presets_of`); the kit has no built-in preset (the game's former built-ins are its rows).
 
 use crate::LOADOUT_SLOTS;
 use aegis_core::value::*;

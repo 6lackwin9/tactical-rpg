@@ -3,11 +3,20 @@
 //! cannot equip one (`equip`; `Unit::forbids`), a one-handed weapon still equips; a hero with `pierce_melee` pierces
 //! armour with a melee hit on the dummy under the rule pierce (the hit's breakdown says so), never without the rule.
 
-use rpgkit_battle::dojo::{DojoSession, HEROES};
+use rpgkit_battle::dojo::DojoSession;
 use rpgkit_data::Catalog;
 use rpgkit_rules::ruleset::{Ruleset, PIERCE, TIMELINE};
 use serde_json::json;
 use std::sync::Arc;
+
+/// LAYER-DOWN-2: the Dojo's cast is the units the catalog marks (`dojo`); the fixture's ids.
+const HEROES: [&str; 2] = ["dojo_warrior", "dojo_ranger"];
+
+/// Unit row `u` with its Dojo part (`dojo`: hero or dummy).
+fn in_dojo(mut u: serde_json::Value, part: &str) -> serde_json::Value {
+    u["dojo"] = serde_json::json!(part);
+    u
+}
 
 fn catalog() -> Catalog {
     let unit = |id: &str, side: &str| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 400, "speed": 12, "attack_range": 1, "skill_cap": 5, "armor": 20});
@@ -22,7 +31,7 @@ fn catalog() -> Catalog {
             {"id": "t_great", "name": "Great Club", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "club", "two_handed": true, "base_power": 12, "starter_stash": true},
             {"id": "t_club", "name": "Club", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "club", "base_power": 6, "starter_stash": true}
         ],
-        "units": [unit(HEROES[0], "party"), unit(HEROES[1], "party"), unit("training_dummy", "enemy")],
+        "units": [in_dojo(unit(HEROES[0], "party"), "hero"), in_dojo(unit(HEROES[1], "party"), "hero"), in_dojo(unit("training_dummy", "enemy"), "dummy")],
     }))
 }
 

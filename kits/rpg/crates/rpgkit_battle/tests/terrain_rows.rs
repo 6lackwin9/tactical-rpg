@@ -3,7 +3,8 @@
 //! the fallback the code fixed before (`grid::terrain_walkable`: deep water, lava, wall and tree block), and
 //! `stops_forced_move` reads not walkable; an explicit value is read as given: pathfinding routes over a row made
 //! walkable and around one made unwalkable, and a forced move collides before a walkable tile whose row stops forced
-//! moves.
+//! moves. LAYER-DOWN-2: a catalog row with a new id and its glyph adds a terrain type after the built-in ones, which
+//! an encounter's rows place and the battle reads like any other.
 
 use indexmap::IndexMap;
 use rpgkit_battle::command::Command;
@@ -209,4 +210,41 @@ fn terrain_hazard_rolls_match_the_direct_call() {
         }
     }
     assert!(landed.contains(&true) && landed.contains(&false), "potency {potency} both lands and is resisted");
+}
+
+/// LAYER-DOWN-2: a new terrain type is a row (a new id and its glyph): the table lists it after the built-in types
+/// (theirs unchanged), an encounter's rows place it by its glyph and the battle reads its row.
+#[test]
+fn a_new_terrain_row_is_a_type_the_battle_plays() {
+    let mut rows = bare_rows();
+    rows.push(json!({"id": "t_bog", "name": "Bog", "glyph": "b", "walkable": false, "cover_guard": 0.3}));
+    let t = table(rows.clone());
+    assert_eq!(t.ids[..TERRAIN_IDS.len()], TERRAIN_IDS.map(String::from)[..], "the built-in types keep their indices");
+    assert_eq!((t.ids.last().map(String::as_str), t.glyphs.last().copied().flatten()), (Some("t_bog"), Some('b')));
+    let board: Vec<String> = (0..9).map(|y| if y == 4 { "....b.......".to_string() } else { "............".to_string() }).collect();
+    assert!(t.rows_valid(&board) && !rpgkit_battle::grid::rows_valid(&board), "the glyph is the catalog's, not a built-in one");
+    let s = session_with_rows(rows, &board);
+    let cell = V2::new(4, 4);
+    assert_eq!((s.w.grid.terrain_id(cell), s.w.grid.glyph(cell)), ("t_bog", 'b'));
+    assert!(!s.w.grid.is_walkable(cell) && s.w.grid.stops_forced_move(cell), "its row: not walkable, so it stops forced moves");
+    assert!((s.w.grid.cover_guard(cell) - 0.3).abs() < 1e-9);
+    assert_eq!(s.w.grid.terrain_id(V2::new(5, 4)), "floor");
+    // a row without a glyph adds the type, but no board can place it
+    let mut bare = bare_rows();
+    bare.push(json!({"id": "t_mist", "name": "Mist"}));
+    let t = table(bare);
+    assert_eq!((t.ids.last().map(String::as_str), t.glyphs.last().copied().flatten()), (Some("t_mist"), None));
+}
+
+/// `session` with the encounter's authored terrain rows `board`.
+fn session_with_rows(rows: Vec<Value>, board: &[String]) -> Session {
+    let unit = |id: &str, side: &str| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 100, "speed": 10, "attack_range": 1, "skill_cap": 5});
+    let skills = vec![
+        json!({"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"}),
+        json!({"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true}),
+        json!({"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2}),
+    ];
+    let cat = Catalog::from_value(&json!({"skills": skills, "units": [unit("t_hero", "party"), unit("t_foe", "enemy")], "terrain": rows}));
+    let row = json!({"id": "t_board", "name": "Board", "party": ["t_hero"], "enemies": ["t_foe"], "total_blocks": BLOCKS, "unit_ap": 10, "max_rounds": 2, "rows": board});
+    Session::start(Arc::new(cat), EncounterDef::from_obj(row.as_object().unwrap()), &IndexMap::new())
 }

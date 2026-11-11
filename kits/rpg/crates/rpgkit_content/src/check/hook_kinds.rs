@@ -9,7 +9,7 @@ use crate::source::fields;
 use aegis_content::schema::is_id;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_battle::grid::{rows_valid, TERRAIN_IDS, ZONE_IDS};
+use rpgkit_battle::grid::ZONE_IDS;
 use rpgkit_data::{BAND_EFFECTS, HAZARDS_KIND, HAZARD_AFFECTS, HAZARD_ON, HEAL_TAKEN, METER_DELTA_CAP, METER_PIPS_MAX, METER_SHOW, TRIGGER_EVENTS, UNIT_METERS_KIND, ZONES_KIND};
 use rpgkit_rules::status;
 use serde_json::Value;
@@ -46,6 +46,8 @@ pub struct Refs<'a> {
     /// PK1-S1 (3.6): the unit meter ids a hazard row's `meter` may name (None: not loaded yet, as when the loader reads
     /// the hazards before the meters; only its shape is checked then).
     pub meters: Option<&'a [String]>,
+    /// LAYER-DOWN-2: the loaded terrain rows (a zone's glyphs and `ground` name their types; empty = the built-in types).
+    pub terrain: &'a [Dict],
 }
 
 /// The noun of a row of `kind` in load messages.
@@ -116,7 +118,7 @@ pub fn row_errors(kind: &str, e: &Dict, ctx: &Ctx, refs: &Refs) -> Vec<String> {
             out.extend(super::hooks::hazard_meter_errors(e.get("meter"), refs.meters, "Hazard"));
         }
         UNIT_METERS_KIND => meter_errors(e, ctx, refs, &mut out),
-        ZONES_KIND => zone_errors(e, &mut out),
+        ZONES_KIND => zone_errors(e, refs.terrain, &mut out),
         _ => {}
     }
     out
@@ -390,14 +392,15 @@ fn band_effect_errors(raw: &Value, at: &str, refs: &Refs, out: &mut Vec<String>)
 
 // ---- zones (ZN1-ZN2) ---------------------------------------------------------------------------------------------
 
-fn zone_errors(e: &Dict, out: &mut Vec<String>) {
+fn zone_errors(e: &Dict, terrain: &[Dict], out: &mut Vec<String>) {
+    let table = super::simple::terrain_table(terrain);
     let id = json::s(e, "id");
     if ZONE_IDS.contains(&id.as_str()) {
         out.push(format!("ID '{id}' is a code zone (the 8 code zones stay code: {}).", ZONE_IDS.join(", ")));
     }
     let rows = json::get(e, "rows");
     let ok = match rows {
-        Value::Array(a) => a.is_empty() || (a.iter().all(Value::is_string) && rows_valid(&json::strings(rows))),
+        Value::Array(a) => a.is_empty() || (a.iter().all(Value::is_string) && table.rows_valid(&json::strings(rows))),
         _ => false,
     };
     if !ok {
@@ -408,8 +411,8 @@ fn zone_errors(e: &Dict, out: &mut Vec<String>) {
         out.push(format!("Backdrop '{backdrop}' must be \"\" or an asset key (a relative .png path, no spaces or ..)."));
     }
     let ground = json::s(e, "ground");
-    if !TERRAIN_IDS.contains(&ground.as_str()) {
-        out.push(format!("Ground: '{ground}' is not a terrain id ({}).", TERRAIN_IDS.join(", ")));
+    if table.index_of(&ground).is_none() {
+        out.push(format!("Ground: '{ground}' is not a terrain id ({}).", table.ids.join(", ")));
     }
 }
 
@@ -425,5 +428,5 @@ pub fn entry_errors(v: &View, kind: &str, e: &Dict, current_id: &str) -> Vec<Str
     rows.push(e.clone());
     let derived = v.derived_ids();
     let meters = v.ids(UNIT_METERS_KIND);
-    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), derived: &derived, families: v.entries("item_families"), meters: Some(&meters) }).pop().unwrap_or_default()
+    check_rows(kind, &rows, &Refs { skills: v.entries("skills"), derived: &derived, families: v.entries("item_families"), meters: Some(&meters), terrain: v.entries("terrain") }).pop().unwrap_or_default()
 }

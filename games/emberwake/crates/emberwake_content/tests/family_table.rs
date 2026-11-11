@@ -1,11 +1,12 @@
 //! U3.2-S2: the family table drives the gear rules with no change to this game's results. On the shipped data and on the
 //! goldens' frozen family table (`emberwake_sim/tests/fixtures/sim_data.json`): the gear and weapon tokens the content
-//! check derives from the table are the code lists it replaced (as sets; the table lists them in its own order), every
+//! check derives from the table are the pre-family lists (as sets; the table lists them in its own order; LAYER-DOWN-2: the
+//! kit schema's tokens, no code list), every
 //! off-hand category is one of the check's off-hand families, and every shipped item and skill reads the same gear
 //! behaviour from its family's engine rules as from the pre-family reading (the legacy rules of its gear token).
 
 use aegis_core::json::Dict;
-use emberwake_content::check::{item, skill, unit};
+use emberwake_content::check::{item, skill};
 use emberwake_content::source;
 use emberwake_data::{ItemDef, SkillDef, ITEM_FAMILY_RULES, ITEM_REACH_RULE, REACH_ENGINE_RULE, SKILL_SPELL_SOURCE};
 use emberwake_rules::gear::{off_hand_ok, Equipment};
@@ -39,18 +40,24 @@ fn tables() -> Vec<(&'static str, Vec<Dict>)> {
 }
 
 #[test]
-fn the_derived_token_lists_are_the_code_lists() {
+fn the_derived_token_lists_are_the_pre_family_lists() {
+    // LAYER-DOWN-2: the pre-family lists are the kit schema's gear tokens (`skill::schema_gear_tokens`) and the legacy
+    // family rules' focus tokens; the kit code lists them no more
+    let pre_family = skill::gear_tokens(&[]);
+    let pre_weapons = skill::weapon_tokens(&[]);
     for (name, families) in tables() {
         assert!(!families.is_empty(), "{name}: a family table");
-        assert_eq!(sorted(skill::gear_tokens(&families)), sorted_consts(&skill::GEAR_TYPES), "{name}: the gear tokens");
-        assert_eq!(sorted(skill::weapon_tokens(&families)), sorted_consts(&unit::WEAPON_TYPES), "{name}: the weapon tokens");
+        assert_eq!(sorted(skill::gear_tokens(&families)), sorted(pre_family.clone()), "{name}: the gear tokens");
+        assert_eq!(sorted(skill::weapon_tokens(&families)), sorted(pre_weapons.clone()), "{name}: the weapon tokens");
+        // the messages list the table's tokens in the pre-family order (checks_golden)
+        assert_eq!(skill::listed_gear_tokens(&families), pre_family, "{name}: the listed order");
         let off: Vec<String> = families.iter().map(|f| aegis_core::json::s(f, "off_hand_category")).filter(|c| !c.is_empty()).collect();
         assert_eq!(sorted(off), sorted_consts(&item::OFF_CATEGORIES), "{name}: the off-hand categories");
-        assert_eq!(sorted(source::families_with_rule(&families, emberwake_data::FOCUS_RULE)), sorted_consts(&item::FOCUS_TYPES), "{name}: the focus types");
+        assert_eq!(sorted(item::focus_tokens(&families)), sorted(item::focus_tokens(&[])), "{name}: the focus types");
     }
-    // without a family table the check reads the code lists
-    assert_eq!(skill::gear_tokens(&[]), skill::GEAR_TYPES.map(String::from));
-    assert_eq!(skill::weapon_tokens(&[]), unit::WEAPON_TYPES.map(String::from));
+    // without a family table the check reads the schema's list (the hand gear without the armour)
+    assert_eq!(skill::gear_tokens(&[]), skill::schema_gear_tokens());
+    assert_eq!(pre_weapons.len() + 3, pre_family.len());
 }
 
 /// The pre-family row of a resolved item: no family rules (so the legacy reading), the old loader's reach key.

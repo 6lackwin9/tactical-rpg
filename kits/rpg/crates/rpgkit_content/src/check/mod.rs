@@ -156,6 +156,8 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
         "status_buff" => std::iter::once(String::new()).chain(rpgkit_rules::status::ROWS.iter().filter(|r| r.buff && !r.grant.is_empty()).map(|r| r.id.to_string())).collect(),
+        // LAYER-DOWN-2: an item's gear type (items `weapon_type`): "", then the family table's gear tokens in their listed order
+        "gear_types" => std::iter::once(String::new()).chain(skill::listed_gear_tokens(v.entries("item_families"))).collect(),
         "weapon_types" => skill::gear_tokens(v.entries("item_families")).into_iter().chain(std::iter::once("unarmed".to_string())).collect(),
         "debuffs_or_all" => rpgkit_rules::status::debuffs().into_iter().map(String::from).chain(std::iter::once("all".to_string())).collect(),
         _ => json::aget(f, "options").iter().map(gstr).collect(),
@@ -319,7 +321,7 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     match kind {
         "skills" => errors.extend(skill::entry_errors(v, &e)),
         "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false, &hooks::Ctx::of(v))),
-        "terrain" => errors.extend(simple::terrain_errors(&e)),
+        "terrain" => errors.extend(simple::terrain_errors(v, &e, current_id)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
         "units" => {
             errors.extend(unit::unit_errors(v, &e));
@@ -428,8 +430,8 @@ pub type Report = IndexMap<String, Vec<String>>;
 
 /// ContentCatalog.validate_all: every entry's errors, the map templates' prop and ground checks (PROPS1, REGIONGROUND1,
 /// `maps:<id>`), then the
-/// rules across entries (required skills, one family per gear token, skill families that fold, a row per terrain
-/// type) and the load problems.
+/// rules across entries (required skills, skill families that fold, a row per terrain type; LAYER-DOWN-2: no
+/// fixed gear token set asks a family any more, the family table names the tokens) and the load problems.
 pub fn validate_all(v: &View) -> Report {
     let mut problems = Report::new();
     for kind in KINDS {
@@ -455,7 +457,6 @@ pub fn validate_all(v: &View) -> Report {
         }
     };
     add("skills:required", skill::required_errors(v));
-    add("item_families:required", item::family_set_errors(v.entries("item_families")));
     add("skills:fold", skill::collapse(v.entries("skills")).1);
     if v.terrain_file {
         add("terrain:missing", simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}'.")).collect());

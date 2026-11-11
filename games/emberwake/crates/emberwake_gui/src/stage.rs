@@ -189,7 +189,7 @@ pub fn stage_of(terrain: &str) -> StageRow {
 }
 
 /// The terrain on `c` (None off the grid).
-fn at(grid: &Grid, c: V2) -> Option<&'static str> {
+fn at(grid: &Grid, c: V2) -> Option<&str> {
     grid.is_valid(c).then(|| grid.terrain_id(c))
 }
 
@@ -207,8 +207,8 @@ fn neighbours(c: V2) -> [V2; 4] {
 }
 
 /// The most common of `ids` (ties: the first seen); None when empty.
-fn most_common(ids: &[&'static str]) -> Option<&'static str> {
-    let mut best: Option<(&'static str, usize)> = None;
+fn most_common<'a>(ids: &[&'a str]) -> Option<&'a str> {
+    let mut best: Option<(&'a str, usize)> = None;
     for id in ids {
         let n = ids.iter().filter(|o| *o == id).count();
         if best.is_none_or(|(_, m)| n > m) {
@@ -220,8 +220,8 @@ fn most_common(ids: &[&'static str]) -> Option<&'static str> {
 
 /// 3.2.1: the ground a standing cell shows under its prop: the terrain most of its four neighbours have among ground
 /// and sunken cells (ties: first in the order north, east, south, west); none, `grass`.
-pub fn ground_under(grid: &Grid, c: V2) -> &'static str {
-    let ids: Vec<&'static str> = neighbours(c).iter().filter_map(|n| at(grid, *n)).filter(|t| is_ground(t)).collect();
+pub fn ground_under(grid: &Grid, c: V2) -> &str {
+    let ids: Vec<&str> = neighbours(c).iter().filter_map(|n| at(grid, *n)).filter(|t| is_ground(t)).collect();
     most_common(&ids).unwrap_or("grass")
 }
 
@@ -262,13 +262,13 @@ pub fn prop_rect(cell: Rect, size: (i32, i32)) -> Rect {
 
 /// 3.4: the backdrop fallback's ground: the most common ground terrain of row 0 (ties: the first from the left);
 /// none, `grass`.
-pub fn far_ground(grid: &Grid) -> &'static str {
-    let ids: Vec<&'static str> = (0..GRID_W).filter_map(|x| at(grid, V2::new(x, 0))).filter(|t| is_ground(t)).collect();
+pub fn far_ground(grid: &Grid) -> &str {
+    let ids: Vec<&str> = (0..GRID_W).filter_map(|x| at(grid, V2::new(x, 0))).filter(|t| is_ground(t)).collect();
     most_common(&ids).unwrap_or("grass")
 }
 
 /// The ground a cell shows (a standing cell the ground under its prop).
-fn shown_ground(grid: &Grid, c: V2) -> &'static str {
+fn shown_ground(grid: &Grid, c: V2) -> &str {
     let t = grid.terrain_id(c);
     if stage_of(t).kind == Kind::Standing {
         ground_under(grid, c)
@@ -389,7 +389,7 @@ fn scaled(c: Rgba, k: f32) -> Rgba {
 /// 3.4, HOOKS1 ZN3: what the backdrop pass draws for zone `zone`: its file (None: the gradient) and the gradient's
 /// ground. A code zone (or an unknown one): `backdrop_art` and the far ground, whatever `zones` holds; a data zone row
 /// (`data_zone` over `zones`): its backdrop key (`zone_backdrop`) when the file exists, and its `ground`.
-pub fn backdrop_source<'a>(art: &mut Art, grid: &Grid, zone: &str, zones: &'a IndexMap<String, ZoneDef>) -> (Option<String>, &'a str) {
+pub fn backdrop_source<'a>(art: &mut Art, grid: &'a Grid, zone: &str, zones: &'a IndexMap<String, ZoneDef>) -> (Option<String>, &'a str) {
     match data_zone(zone, zones) {
         Some(z) => (Some(zone_backdrop(zone, Some(z))).filter(|rel| art.has(rel)), z.ground.as_str()),
         None => (backdrop_art(art, zone), far_ground(grid)),
@@ -412,7 +412,7 @@ pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zo
 }
 
 /// The ground a cell's tile shows in the ground pass: a standing cell with prop art the ground under it, else its own.
-fn tile_shown(art: &mut Art, grid: &Grid, c: V2) -> &'static str {
+fn tile_shown<'g>(art: &mut Art, grid: &'g Grid, c: V2) -> &'g str {
     if standing_art(art, grid, c).is_some() {
         ground_under(grid, c)
     } else {
@@ -551,7 +551,7 @@ pub enum FaceBody {
 }
 
 /// 3.4: column `x`'s front face: the ground its top row lightens (row 8's shown ground) and its body.
-pub fn face_column(grid: &Grid, x: i32) -> (&'static str, FaceBody) {
+pub fn face_column(grid: &Grid, x: i32) -> (&str, FaceBody) {
     let c = V2::new(x, GRID_H - 1);
     let t = grid.terrain_id(c);
     let body = match t {
@@ -885,7 +885,7 @@ mod tests {
     use std::path::Path;
 
     fn zone(id: &str) -> Grid {
-        let mut g = Grid::new(false, Vec::new(), TerrainTable { rows: Vec::new() }, 0);
+        let mut g = Grid::new(false, Vec::new(), TerrainTable::builtin(), 0);
         g.apply_zone(id);
         g
     }

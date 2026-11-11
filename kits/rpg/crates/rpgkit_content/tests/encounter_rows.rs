@@ -94,7 +94,7 @@ fn board_of<'a>(rows: impl IntoIterator<Item = &'a str>) -> Vec<&'static str> {
 }
 
 /// Every tile's terrain id on `g`, row-major.
-fn board(g: &Grid) -> Vec<&'static str> {
+fn board(g: &Grid) -> Vec<&str> {
     (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).map(|c| g.terrain_id(c)).collect()
 }
 

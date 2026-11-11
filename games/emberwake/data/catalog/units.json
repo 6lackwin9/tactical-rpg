@@ -135,7 +135,8 @@
 				"con_heal_potion",
 				"con_fire_bomb"
 			],
-			"loot": []
+			"loot": [],
+			"dojo": "hero"
 		},
 		{
 			"id": "dojo_ranger",
@@ -178,7 +179,8 @@
 				"con_focus_elixir",
 				"con_heal_potion"
 			],
-			"loot": []
+			"loot": [],
+			"dojo": "hero"
 		},
 		{
 			"id": "goblin_brawler",
@@ -647,7 +649,8 @@
 			"pouch": [
 				"none"
 			],
-			"loot": []
+			"loot": [],
+			"dojo": "dummy"
 		},
 		{
 			"id": "rogue",

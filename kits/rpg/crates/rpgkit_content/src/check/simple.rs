@@ -2,19 +2,45 @@
 
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
-use rpgkit_battle::grid::{terrain_walkable, TERRAIN_IDS};
+use rpgkit_battle::grid::{glyph_of, terrain_walkable, TerrainTable, GLYPH_KEY, GLYPHS, TERRAIN_IDS};
 use rpgkit_rules::status;
 use serde_json::Value;
 
 const TRIGGERS: [&str; 3] = ["enter", "round_end", "both"];
 
-/// TerrainValidator.entry_errors of a normalized terrain row.
-pub fn terrain_errors(e: &Dict) -> Vec<String> {
+/// LAYER-DOWN-2: the battle's terrain table of the loaded terrain rows `rows` (the built-in types, then the rows' new
+/// ones with their glyphs; `grid::TerrainTable::from_catalog`).
+pub fn terrain_table(rows: &[Dict]) -> TerrainTable {
+    let mut cat = rpgkit_data::Catalog::default();
+    cat.terrain = rows.iter().map(|r| (json::s(r, "id"), r.clone())).collect();
+    TerrainTable::from_catalog(&cat)
+}
+
+/// TerrainValidator.entry_errors of a normalized terrain row. LAYER-DOWN-2: any id names a terrain type (a built-in one
+/// or a new one); a new type needs its board glyph, one character no other type has; a built-in type keeps its own.
+pub fn terrain_errors(v: &super::View, e: &Dict, current_id: &str) -> Vec<String> {
     let mut errors = Vec::new();
     let id = json::s(e, "id");
-    if !TERRAIN_IDS.contains(&id.as_str()) {
+    if !aegis_content::schema::is_id(&id) {
         errors.push(format!("Unknown terrain type '{id}'."));
         return errors;
+    }
+    let glyph = json::s(e, GLYPH_KEY);
+    match TERRAIN_IDS.iter().position(|t| *t == id) {
+        Some(i) if !glyph.is_empty() => errors.push(format!("Built-in terrain type '{id}' keeps its glyph '{}' (leave the glyph empty).", GLYPHS[i])),
+        Some(_) => {}
+        None => {
+            if glyph.chars().count() != 1 || glyph.chars().any(char::is_whitespace) {
+                errors.push(format!("Terrain type '{id}' needs a one-character glyph (its letter in encounter and zone rows)."));
+            } else {
+                let ch = glyph.chars().next();
+                let others = v.entries("terrain").iter().filter(|r| { let o = json::s(r, "id"); o != id && o != current_id });
+                let taken = TERRAIN_IDS.iter().map(|t| t.to_string()).filter(|t| *t != id && glyph_of(t, None) == ch).chain(others.filter(|r| glyph_of(&json::s(r, "id"), Some(r)) == ch).map(|r| json::s(r, "id"))).next();
+                if let Some(other) = taken {
+                    errors.push(format!("Glyph '{glyph}' is taken by terrain type '{other}'."));
+                }
+            }
+        }
     }
     // P1.2-S1: the row's `walkable`, else its missing-key fallback
     let walkable = e.get("walkable").map_or_else(|| terrain_walkable(&id), json::to_bool);
