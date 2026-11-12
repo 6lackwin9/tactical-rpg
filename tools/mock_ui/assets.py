@@ -150,6 +150,16 @@ def hex_to_rgb(h: str) -> tuple[int, int, int]:
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
+# Mock-only palettes (slot -> hex) for placeholder bodies that have no palette file in the game: kept here, not in
+# games/emberwake/assets, because no game data names them.
+MOCK_PALETTES: dict[str, dict[str, str]] = {
+    # Chirurgeon Sabina on the bareheaded wenn_tallow body (CANON 3.2: cropped black hair, dark oiled-green prosector
+    # coat, boiled-leather surgical apron, steel scalpels; no habit, no veil). The priest body read as a habit.
+    "sabina_mock": {"main": "#2f3d32", "accent": "#9ca3af", "leg": "#1e232d", "skin": "#d4a988", "hair": "#14171f",
+                    "glove": "#d9cbb4", "leather": "#92400e", "boot": "#2c221e"},
+}
+
+
 def load_unit_sheet(body_key: str, palette_id: str = "") -> tuple[Any, dict[str, Any]]:
     """
     Loads `units/<body_key>/clips.json` and `sheet.png` from layered assets and
@@ -164,8 +174,11 @@ def load_unit_sheet(body_key: str, palette_id: str = "") -> tuple[Any, dict[str,
     sheet = Image.open(sheet_path).convert("RGBA")
     if palette_id:
         try:
-            pal_path = find_asset(f"units/{body_key}/palettes/{palette_id}.json")
-            slots = json.loads(pal_path.read_text(encoding="utf-8")).get("slots", {})
+            if palette_id in MOCK_PALETTES:
+                slots = MOCK_PALETTES[palette_id]
+            else:
+                pal_path = find_asset(f"units/{body_key}/palettes/{palette_id}.json")
+                slots = json.loads(pal_path.read_text(encoding="utf-8")).get("slots", {})
             swap_map = {
                 base_pal[slot_name]: hex_to_rgb(target_hex)
                 for slot_name, target_hex in slots.items()
@@ -319,7 +332,7 @@ UNIT_BODIES: dict[str, tuple[str, str]] = {
     "hollis": ("ranger/base", "hollis"),
     "dunstan": ("brawler/base", "dunstan"),
     "elyse": ("ranger/wenn_tallow", "elyse"),
-    "sabina": ("priest/base", "maren"),
+    "sabina": ("ranger/wenn_tallow", "sabina_mock"),
     "berek": ("warrior/2h_hammer", "grendel"),
     "talia": ("rogue/base", "captive"),
     "watchman": ("warrior/1h_buckler", "castellan_watch"),

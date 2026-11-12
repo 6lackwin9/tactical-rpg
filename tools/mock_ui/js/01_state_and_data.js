@@ -214,7 +214,7 @@ const STATE = {
       hp: 44, maxHp: 44, guard: 12, poise: 5, maxPoise: 5, ap: 6, speed: 11,
       stats: { Might: 15, Agility: 11, Knowledge: 13, Will: 12, Awareness: 10 },
       meterName: 'Bile Phial', meter: 40, maxMeter: 100,
-      weapon: 'Surgeon\'s Billhook', armor: 'Waxed Brigandine', trinket: 'Blood-Stained Lancet',
+      weapon: 'Notched Billhook', armor: 'Dented Cuirass', trinket: 'Gouged Sigil',
       pouch: [
         { name: 'Tallow-Wax Stitch Pack', pips: 2, icon: 'cauterize', desc: 'Snap: +60 HP field suture' },
         { name: 'Bile Flask', pips: 2, icon: 'volatile_flask', desc: 'Throw 3-tile Poison/Burn pool' }
@@ -385,7 +385,7 @@ const SKILLS = {
   // Signature Actives
   billhook_hook:  { id: 'billhook_hook', name: 'Billhook Drag', row: 'Maneuver', blocks: 2, ap: 3, range: 2, shape: 'Line', dmg: 12, poiseDmg: 2, pull: 1, icon: 'billhook_hook', desc: 'Pull target 1 tile closer, deal 12 dmg & 2 Poise dmg.' },
   billhook_sunder:{ id: 'billhook_sunder', name: 'Arterial Sunder', row: 'Assault', blocks: 3, ap: 3, range: 1, shape: 'Arc', dmg: 16, poiseDmg: 2, status: 'bleed', icon: 'billhook_sunder', desc: 'Heavy 3-tile Arc cleave: 16 dmg, 2 Poise, inflicts Bleed.' },
-  iron_brace:     { id: 'iron_brace', name: 'Surgeon\'s Brace', row: 'Guard', blocks: 2, ap: 2, range: 0, shape: 'Self', guard: 16, heal: 6, icon: 'iron_brace', desc: 'Gain +16 Guard, heal 6 HP, and anchor against Push/Pull.' },
+  iron_brace:     { id: 'iron_brace', name: 'Iron Brace', row: 'Guard', blocks: 2, ap: 2, range: 0, shape: 'Self', guard: 16, heal: 6, icon: 'iron_brace', desc: 'Gain +16 Guard, heal 6 HP, and anchor against Push/Pull.' },
   shadow_step:    { id: 'shadow_step', name: 'Shadow Step', row: 'Maneuver', blocks: 1, ap: 2, range: 4, shape: 'Single', dmg: 11, poiseDmg: 1, icon: 'shadow_step', desc: 'Teleport behind target within 4 tiles and strike for 11 dmg.' },
   throat_slit:    { id: 'throat_slit', name: 'Crimson Lullaby', row: 'Assault', blocks: 2, ap: 3, range: 1, shape: 'Single', dmg: 18, poiseDmg: 2, status: 'bleed', icon: 'throat_slit', desc: 'High-lethality backstab: 18 dmg (+8 if target is Bleeding or Broken).' },
   ash_cloud_fade: { id: 'ash_cloud_fade', name: 'Ash-Cloud Fade', row: 'Guard', blocks: 1, ap: 2, range: 0, shape: 'Ring', guard: 10, icon: 'ash_cloud_fade', desc: 'Drop soot ring (RING shape): gain +10 Guard & Evasion.' },
@@ -741,7 +741,7 @@ const DIALOGUES = {
         ]
       },
       corvo_seal_fail: {
-        text: '"Wait a breath—this wax is still warm from a surgeon\'s lamp! Crossbows, load! Gut the counterfeiters!"',
+        text: '"Wait a breath—this wax is still warm from a scribe\'s lamp! Crossbows, load! Gut the counterfeiters!"',
         replies: [
           { label: '1. [Ambush!] Enter Battle at Corvo\'s Gate (M2).', action: () => launchEncounter('enc_m2') }
         ]
@@ -767,14 +767,14 @@ const STORIES = {
       {
         vignetteStyle: 'Title',
         speaker: 'Kaelen',
-        speakerTitle: 'Watch Deserter · Seventh Sluice Dispensary',
+        speakerTitle: 'Watch Deserter · Seventh Ward Tithe-Escort',
         portrait: 'kaelen',
         mood: 'neutral',
         emotion: 'Somber Resolve',
         bgFilter: 'brightness(0.96) contrast(1.04)',
         bgVariantLabel: 'Stage A · Wet Cobblestone Alley & Distant Foundry Glow',
         shake: null,
-        stageAction: 'Camera frames the rain-slicked alley cobblestones outside Kaelen\'s tenement surgery.',
+        stageAction: 'Camera frames the rain-slicked alley cobblestones where Kaelen has gone to ground since Order 44.',
         leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: true, pose: 'relaxed', emotion: 'Grim Resolve', reactionFx: 'solemn_glow', anim: 'breathe' },
         rightActor: null,
         mapUnits: [
@@ -794,7 +794,7 @@ const STORIES = {
         bgFilter: 'brightness(1.02) contrast(1.08) sepia(0.08)',
         bgVariantLabel: 'Stage B · Lantern Flare on the Alley Stones (Shake: Light)',
         shake: 'Light Shake (FX1)',
-        stageAction: 'Iron boots splinter the surgery door; a Castellan Watchman plants his halberd on the wet flagstones.',
+        stageAction: 'Watch whistles shrill down the lane; a Castellan Watchman rounds the corner and plants his halberd on the wet flagstones.',
         leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: false, pose: 'sneaking', emotion: 'Low Guard / Alert', reactionFx: 'alert_shock', anim: 'breathe' },
         rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, pose: 'weapons_drawn', emotion: 'Barking Orders', reactionFx: 'anger_burst', anim: 'shake' },
         mapUnits: [
@@ -802,7 +802,7 @@ const STORIES = {
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: true, emote: '⚔' },
           { id: 'w2', unitKey: 'crossbow', name: 'Watch Arbalest', isHero: false, x: 9, y: 3, speaking: false, emote: '🎯' }
         ],
-        text: '"Surgeon Kaelen! By writ of Captain Vane, your dispensary is forfeit for refusing to sign the Red Tithing certificates. Lay down your instruments and present your wrists for the iron!"'
+        text: '"Kaelen! Deserter of the Seventh Ward Watch! Corporal Fitch drinks his supper through a reed because of you. By writ of Captain Vane, drop the billhook and present your wrists for the iron!"'
       },
       {
         vignetteStyle: 'Image',
@@ -814,7 +814,7 @@ const STORIES = {
         bgFilter: 'brightness(1.06) contrast(1.12)',
         bgVariantLabel: 'Stage C · Cold Steel Glint & Tallow Lamp Rim',
         shake: 'Medium Pulse (FX1)',
-        stageAction: 'Kaelen swings his Surgeon\'s Billhook forward into combat guard stance across the wet stone floor.',
+        stageAction: 'Kaelen swings his notched billhook forward into combat guard stance across the wet stone floor.',
         leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: true, pose: 'weapons_drawn', emotion: 'Weapons Drawn', lunge: true, reactionFx: 'steel_flash', anim: 'lunge' },
         rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, pose: 'weapons_drawn', emotion: 'Braced', reactionFx: 'alert_shock', anim: 'breathe' },
         mapUnits: [
@@ -822,7 +822,7 @@ const STORIES = {
           { id: 'w1', unitKey: 'watchman', name: 'Watch Halberdier', isHero: false, x: 6, y: 4, speaking: false, emote: '🛡' },
           { id: 'w2', unitKey: 'crossbow', name: 'Watch Arbalest', isHero: false, x: 9, y: 3, speaking: false, emote: null }
         ],
-        text: '"You brought shackles to an operating room, halberdier. Come closer—let us see how Castellan mail holds against a bone-saw and a billhook."'
+        text: '"Seven years I carried that writ, halberdier. I know what Vane sells at the end of it. Come closer—let us see how Castellan mail holds against the hook that guarded his sweeps."'
       }
     ],
     nextLabel: 'Transition to Combat: Prologue 0a — The Alley',
@@ -935,7 +935,7 @@ const STORIES = {
           { id: 'vane', unitKey: 'vane', name: 'Captain Vane', isHero: false, x: 8, y: 4, speaking: true, emote: '💢' },
           { id: 'w1', unitKey: 'watchman', name: 'Bridge Halberdier', isHero: false, x: 7, y: 3, speaking: false, emote: '🛡' }
         ],
-        text: '"A disgraced sawbones, a gutter cutthroat, and two deserters. Hold the spillway, Watchmen! The river takes them tonight!"'
+        text: '"A Watch deserter, a gutter cutthroat, a heretic scribe and a crag poacher. Hold the spillway, Watchmen! The river takes them tonight!"'
       }
     ],
     nextLabel: 'Transition to Combat: Prologue 0c — Canal Bridge',
@@ -1001,7 +1001,7 @@ const COMBAT_BARKS = {
       mood: 'angry',
       focusUnitId: 'f_watch1',
       mechanicHint: 'Map → Combat Transition: Units are already in position on the 12×9 Alley grid. Click [Engage Combat] to slide in the Foresight Timeline & Action HUD.',
-      text: '"Crossbowman, cover the rain-trough! If the sawbones raises that billhook, pin him to his own surgery door!"'
+      text: '"Crossbowman, cover the rain-trough! If the deserter raises that billhook, pin him to the alley wall!"'
     },
     boss_phase2: {
       badge: 'IN-COMBAT SCRIPTED EVENT · LAST STAND',
@@ -1043,7 +1043,7 @@ const COMBAT_BARKS = {
       mood: 'angry',
       focusUnitId: 'f_bailiff',
       mechanicHint: 'Map → Combat Transition: Camera locks onto the 12×9 Rooftop grid before sliding in the Combat HUD.',
-      text: '"Hold the chimney ridge! Whoever brings me the surgeon\'s billhook gets a double ration of tallow and silver!"'
+      text: '"Hold the chimney ridge! Whoever brings me the deserter\'s billhook gets a double ration of tallow and silver!"'
     },
     boss_phase2: {
       badge: 'BOSS / ELITE PHASE TRANSFORMATION (50% HP)',
@@ -1085,7 +1085,7 @@ const COMBAT_BARKS = {
       mood: 'angry',
       focusUnitId: 'f_vane',
       mechanicHint: 'Map → Combat Transition: Confrontation on the live 12×9 Canal Bridge map; clicking [Engage Combat] slides in the Top Timeline & Bottom Action HUD.',
-      text: '"Lock shields across the spillway grate! Neither the surgeon nor his alchemist crosses into the Undercroft alive!"'
+      text: '"Lock shields across the spillway grate! Neither the deserter nor the cart\'s heretics cross into the Undercroft alive!"'
     },
     boss_phase2: {
       badge: '⚡ BOSS PHASE 2 TRANSFORMATION · 50% HP THRESHOLD',
@@ -1206,12 +1206,12 @@ const COMBAT_BARKS = {
     pre_battle: {
       badge: 'PRE-COMBAT MAP CONFRONTATION · CRUCIBLE CLIMAX',
       speaker: 'Prelate Nemeth',
-      speakerTitle: 'Act I Boss · High Inquisitor of the Rubric',
+      speakerTitle: 'Act I Boss · Iron Inquisition',
       portrait: 'nemeth',
       mood: 'angry',
       focusUnitId: 'f_nemeth',
       mechanicHint: 'Map → Combat Transition: Great Sluice Winch objective active at tile (6,4).',
-      text: '"So the disgraced surgeon climbs out of the sewer at last. Proctor Quell, hold the Great Sluice Winch—in three tolls of the bell, the Undercroft drowns!"'
+      text: '"So Vane\'s deserter climbs out of the sewer at last. Purifiers, hold the Great Sluice Winch—in three tolls of the bell, the Undercroft drowns!"'
     },
     boss_phase2: {
       badge: '🔥 ACT I BOSS PHASE 2 TRANSFORMATION · SCARLET CONSECRATION',
