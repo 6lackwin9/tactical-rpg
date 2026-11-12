@@ -173,12 +173,18 @@
 					],
 					"effects": [
 						{
+							"effect": "meter_add",
+							"meter": "alert",
+							"delta": 10
+						},
+						{
 							"effect": "add_flag",
 							"key": "lesser_tithings",
 							"delta": 1
 						}
 					],
-					"restart_days": 14
+					"restart_days": 14,
+					"warn": "The Red Tithing falls early: a lesser tithing, and the Inquisition's Alert rises by 10."
 				}
 			],
 			"inputs": [],

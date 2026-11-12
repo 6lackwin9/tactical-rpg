@@ -428,6 +428,46 @@
 				},
 				{
 					"style": "line",
+					"speaker": "hollis",
+					"text": "I have put a quarrel through a visor before. I would trade it to keep that winch turning.",
+					"expression": "sad",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": "hollis"
+						}
+					]
+				},
+				{
+					"style": "text",
+					"text": "Dunstan sets his broken slag-ladle on the made bunk, handle first. His wired jaw does not move.",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": "dunstan"
+						}
+					]
+				},
+				{
+					"style": "line",
+					"speaker": "elyse",
+					"text": "I make tonics for the Spent. I have nothing that makes a winch hold.",
+					"expression": "sad",
+					"when": [
+						{
+							"kind": "flag",
+							"key": "sunk_ward.crucible_stayed",
+							"op": "!=",
+							"value": "elyse"
+						}
+					]
+				},
+				{
+					"style": "line",
 					"speaker": "talia_rusk",
 					"text": "Then we count together. Berek will frame the bunks, Sabina will lay out her knives, and I'll bring in the first runaway. The Bastion is next."
 				}

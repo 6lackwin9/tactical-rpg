@@ -632,6 +632,10 @@
 									"value": true
 								}
 							]
+						},
+						{
+							"text": "Leave.",
+							"to": "bye"
 						}
 					]
 				},
@@ -651,9 +655,15 @@
 							"value": true
 						}
 					]
+				},
+				{
+					"id": "bye",
+					"speaker": "ivo",
+					"text": "They let you go.",
+					"end": true
 				}
 			],
-			"services": true,
+			"services": false,
 			"tags": []
 		},
 		{
@@ -831,6 +841,10 @@
 									"value": true
 								}
 							]
+						},
+						{
+							"text": "Leave.",
+							"to": "bye"
 						}
 					]
 				},
@@ -855,9 +869,15 @@
 							"value": true
 						}
 					]
+				},
+				{
+					"id": "bye",
+					"speaker": "bailiff_corvo",
+					"text": "Corvo waves you off the post.",
+					"end": true
 				}
 			],
-			"services": true,
+			"services": false,
 			"tags": []
 		},
 		{
@@ -869,21 +889,24 @@
 				{
 					"id": "n0",
 					"speaker": "maren",
-					"text": "Maren kneels by the broken cages and presses grey linen to the cage seals, copying the Clerisy's cipher letter by letter. The cages are open. How many came out walking?",
+					"text": "Maren kneels by the broken cages and presses grey linen to the cage seals, copying the Clerisy's cipher letter by letter. The cages are open.",
 					"choices": [
 						{
-							"text": "Both cages answered.",
+							"text": "Two cell-mates walked out of the cages.",
 							"to": "two",
+							"requires": [
+								{
+									"kind": "flag",
+									"key": "sunk_ward.saved_youths",
+									"op": ">=",
+									"value": 2
+								}
+							],
 							"effects": [
 								{
 									"effect": "set_flag",
 									"key": "sunk_ward.m2_captive_saved",
 									"value": true
-								},
-								{
-									"effect": "add_flag",
-									"key": "sunk_ward.saved_youths",
-									"delta": 2
 								},
 								{
 									"effect": "give",
@@ -899,18 +922,27 @@
 							]
 						},
 						{
-							"text": "One cage answered.",
+							"text": "One cell-mate walked out of the cages.",
 							"to": "one",
+							"requires": [
+								{
+									"kind": "flag",
+									"key": "sunk_ward.saved_youths",
+									"op": ">=",
+									"value": 1
+								},
+								{
+									"kind": "flag",
+									"key": "sunk_ward.saved_youths",
+									"op": "<",
+									"value": 2
+								}
+							],
 							"effects": [
 								{
 									"effect": "set_flag",
 									"key": "sunk_ward.m2_captive_saved",
 									"value": true
-								},
-								{
-									"effect": "add_flag",
-									"key": "sunk_ward.saved_youths",
-									"delta": 1
 								},
 								{
 									"effect": "give",
@@ -926,8 +958,16 @@
 							]
 						},
 						{
-							"text": "Neither cage answered.",
+							"text": "Nobody walked out of the cages.",
 							"to": "none",
+							"requires": [
+								{
+									"kind": "flag",
+									"key": "sunk_ward.saved_youths",
+									"op": "<",
+									"value": 1
+								}
+							],
 							"effects": [
 								{
 									"effect": "set_flag",
@@ -994,7 +1034,7 @@
 				{
 					"id": "joined",
 					"speaker": "dunstan",
-					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed.",
+					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed. Open Party (P) to swap them into the squad from the bench.",
 					"end": true
 				}
 			],
@@ -1035,7 +1075,7 @@
 				{
 					"id": "joined",
 					"speaker": "elyse",
-					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper.",
+					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper. Open Party (P) to swap them into the squad from the bench.",
 					"end": true
 				}
 			],
@@ -1194,6 +1234,13 @@
 									"effect": "sequence",
 									"sequence": "seq_interlude"
 								}
+							],
+							"requires": [
+								{
+									"kind": "flag",
+									"key": "sunk_ward.dunstan_joined",
+									"value": true
+								}
 							]
 						},
 						{
@@ -1220,15 +1267,12 @@
 									"effect": "sequence",
 									"sequence": "seq_interlude"
 								}
-							]
-						},
-						{
-							"text": "Nobody takes it.",
-							"to": "end_none",
-							"effects": [
+							],
+							"requires": [
 								{
-									"effect": "sequence",
-									"sequence": "seq_interlude"
+									"kind": "flag",
+									"key": "sunk_ward.elyse_joined",
+									"value": true
 								}
 							]
 						},
@@ -1242,12 +1286,6 @@
 					"id": "end_dose",
 					"speaker": "sabina_kress",
 					"text": "The vial goes down a throat. Sabina does not watch.",
-					"end": true
-				},
-				{
-					"id": "end_none",
-					"speaker": "sabina_kress",
-					"text": "\"Then you fight without.\" The vial goes back under the linen.",
 					"end": true
 				}
 			],

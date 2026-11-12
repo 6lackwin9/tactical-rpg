@@ -535,14 +535,9 @@
 				"gold_max": 30,
 				"once": true
 			},
-			"key_loot": [
-				{
-					"loot": "loot_gate_pass",
-					"kill": "castellan_footman"
-				}
-			],
+			"key_loot": [],
 			"objective_reward": {
-				"loot": "loot_gilded_pavise",
+				"loot": "loot_gate_pass",
 				"once": true
 			},
 			"guests": [],
@@ -751,6 +746,10 @@
 			],
 			"party_min": 0,
 			"protect": [],
+			"survivors": {
+				"flag": "sunk_ward.saved_youths",
+				"unit": "tithe_captive"
+			},
 			"tags": [
 				"main",
 				"loud"

@@ -121,17 +121,25 @@
 		{
 			"id": "t_interlude",
 			"name": "The marrow back-surge",
-			"on": "any",
+			"on": "enter",
 			"encounter": "",
 			"outcome": "any",
-			"location": "",
+			"location": "sluice_undercroft",
 			"when": [
 				{
-					"key": "sunk_ward.m3_done",
+					"key": "sunk_ward.m3_turned_in",
 					"value": true
 				},
 				{
-					"key": "sunk_ward.m4_done",
+					"key": "sunk_ward.m4_turned_in",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.dunstan_joined",
+					"value": true
+				},
+				{
+					"key": "sunk_ward.elyse_joined",
 					"value": true
 				}
 			],
