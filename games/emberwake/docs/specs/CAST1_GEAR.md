@@ -167,17 +167,17 @@ No loot row pays a keepsake: the six `loot_keepsake_<founder>` rows of the first
 
 | Id | Name | Kind | Ref | Count | Rarity | Requires flags | Paid by |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `loot_gilded_pavise` | Gilded Pavise | item | `vanes_gilded_pavise` | 1 | unique | - | `enc_evt_01` objective reward |
-| `loot_gate_pass` | Gate Pass Cipher | item | `city_gate_pass` | 1 | unique | - | `enc_evt_01` key loot (a footman) |
+| `loot_gilded_pavise` | Gilded Pavise | item | `vanes_gilded_pavise` | 1 | unique | - | `enc_evt_01` win (`q_a1_m1` / `objective_reward`) |
+| `loot_gate_pass` | Gate Pass Cipher | item | `city_gate_pass` | 1 | unique | - | `enc_evt_01` objective reward |
 | `loot_marrow_scalpel` | Marrow Scalpel | item | `quells_marrow_scalpel` | 1 | unique | - | `enc_evt_02` key loot (Quell) |
-| `loot_marrow_valve` | Marrow Valve | item | `inquisitor_marrow_valve` | 1 | rare | - | `enc_evt_02` key loot (Quell) |
+| `loot_marrow_valve` | Brass Marrow Valve | item | `inquisitor_marrow_valve` | 1 | rare | - | `enc_evt_02` key loot (Quell) |
 | `loot_slab_retorts` | Slab Retorts | item | `slab_retorts` | 1 | unique | - | `enc_evt_02` objective reward |
 | `loot_slag_hammer` | Slag-Hammer | item | `grendels_slag_hammer` | 1 | unique | - | `enc_evt_03` key loot (Grendel) |
 | `loot_slag_plating` | Slag Plating | item | `slag_plating` | 1 | rare | - | `enc_evt_03` objective reward |
-| `loot_flensing_talon` | Flensing Talon | item | `orlovs_flensing_talon` | 1 | unique | - | `enc_evt_04` key loot (Orlov) |
-| `loot_orlovs_retribution` | Orlov's Retribution | skill | `orlovs_retribution` | 1 | unique | - | `enc_evt_04` key loot (Orlov), CQ10 |
-| `loot_marrow_core` | Marrow Core | item | `titan_marrow_core` | 1 | unique | - | `enc_evt_05` key loot (the Amalgam) |
+| `loot_flensing_talon` | Orlov's Flensing Talon | item | `orlovs_flensing_talon` | 1 | unique | - | `enc_evt_04` objective reward |
+| `loot_orlovs_retribution` | Orlov's Retribution | skill | `orlovs_retribution` | 1 | unique | - | `M4` quest turn-in (`CQ10`) |
+| `loot_marrow_core` | Dreamer's Marrow Geode | item | `titan_marrow_core` | 1 | unique | - | `enc_evt_05` key loot (the Amalgam) |
 | `loot_dreamers_vertebra` | Dreamer's Vertebra | item | `dreamers_vertebra` | 1 | unique | - | `enc_evt_05` objective reward |
-| `loot_poultices` | Stitch-Poultices | item | `sulfur_poultice` | 2 | common | - | `enc_pro_0c`, `enc_job_corvo_gate` objective rewards |
+| `loot_poultices` | Tallow-Wax Stitch Pack | item | `sulfur_poultice` | 2 | common | - | `enc_pro_0c`, `enc_job_corvo_gate` objective rewards |
 
 Unit `loot` tables (catalog units, one roll per defeated unit) are in CAST1_BESTIARY and CAST1_BOSSES.

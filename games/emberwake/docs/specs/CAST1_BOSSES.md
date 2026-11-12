@@ -49,7 +49,7 @@ Nemeth's TOUGHEST (HOOKS1 AT1) sends him at the sturdiest melee founder, the one
 | `flensing_hook_drag` | Hook Drag | ATTACK | assault | 2 | 1 | 0.9 | 8 | 1-3 | expose potency 80, magnitude 6, 2 rounds | Orlov |
 | `scalding_cataclysm` | Cataclysm | ATTACK | assault | 3 | 2 | 1.8 | 15 | 1-2 | area BURST; bleed potency 80, 2 rounds; `forced_move` pull 1 | Orlov (capstone) |
 | `ossified_spine_volley` | Spine Volley | ATTACK | assault | 2 | 2 | 1.0 | 10 | 1-3 | area BURST; bleed potency 70, 2 rounds | the Amalgam |
-| `tendril_flail` | Tendril Flail | ATTACK | assault | 2 | 1 | 0.9 | 10 | 1-1 | area SWEEP | the Amalgam |
+| `tendril_flail` | Tendril Flail | ATTACK | guard | 2 | 1 | 0.9 | 10 | 1-1 | area SWEEP | the Amalgam |
 | `ossification_bloom` | Bone Bloom | ATTACK | assault | 4 | 1 | 1.5 | 15 | 0-3 | area BURST; `unbreakable`; root potency 80, 1 round | the Amalgam (capstone) |
 | `sanctified_decapitation` | Decapitation | ATTACK | assault | 3 | 2 | 2.4 | 15 | 1-1 | `unbreakable`; `ignore_guard` | Nemeth |
 | `prelates_censure` | Censure | ATTACK | assault | 2 | 1 | 1.0 | 10 | 1-1 | weaken potency 80, magnitude 20, 2 rounds | Nemeth |
@@ -78,19 +78,19 @@ Every Act 1 boss encounter pairs mechanical phase triggers with 1-2 line charact
   - `vane_taunt` `{"kind": "round", "round": 1}`: `talk` (`kaelen` -> `dlg_talk_m1_vane`, calling out Vane's candle-gold Bastion bribe-shield and Order 44).
   - `execution_wall` trigger `{"kind": "hp_below", "unit": "captain_vane", "pct": 50, "or_round": 3}`, effects
     line `"Lock shields! Seventh Ward, with me!"`, wave [`footman_shieldbearer`, `footman_shieldbearer`] label
-    `"Shield-bearers lock the wall"`, enrage `captain_vane` 15, deck `{"unit": "captain_vane", "add":
+    `"Shield-bearers lock the wall"`, enrage `captain_vane` 15 (`pause_autoplay: true`), deck `{"unit": "captain_vane", "add":
     ["execution_wall"], "order": {"assault": ["execution_wall", "gilded_billhook_sunder"]}}`.
   - `vane_withdraws` (`CL-01`): `hp_below` 25, effects line `"This isn't over, deserter."`, `talk` (`captain_vane` -> `dlg_talk_m1_retreat`), ai `{"unit": "captain_vane", "flee_ratio": 1.0}`.
-- Reward: `vanes_gilded_pavise` is the objective reward (paid on a win whether he fled or fell); Vane's final reckoning is Kaelen's (or Berek's inherited, `CL-09`) Act 2 quest.
+- Reward: `city_gate_pass` is the objective reward and `vanes_gilded_pavise` is delivered on win (both awarded whether he fled or fell); Vane's final reckoning is Kaelen's (or Berek's inherited, `CL-09`) Act 2 quest.
 
 ### 3.2 Proctor Quell (M2, `enc_evt_02`; Tier 1): the brass marrow valve
 
 - Deck: active [`sanctified_vivisection`, `inquisitorial_parry`]; order assault [`sanctified_vivisection`], guard
   [`inquisitorial_parry`, `active_guard`]; capstone `transfusion_pulse` (unlocked by the valve).
-- Character passives: `bone_saw_drill`; `marrow_valve` "Marrow Valve" (`slot` ""): resist `bleed` 25; its inspect description
+- Character passives: `bone_saw_drill`; `marrow_valve` "Valve Overpressure" (`slot` "", distinguishing it from the item `inquisitor_marrow_valve` "Brass Marrow Valve"): resist `bleed` 25; its inspect description
   is the pre-fight tell: `"An illegal brass marrow valve in his neck: when cut low, he floods his veins for one frantic surge."`
 - The valve (`CL-08`, `P-COMBAT-03` — zero immortality/burst-heal stall): phase `marrow_valve` trigger
-  `{"kind": "hp_below", "unit": "proctor_quell", "pct": 35, "or_round": 4}`, effects line `"The brass valve in Quell's neck hisses open—raw condensate floods his veins!"`, `talk` (`maren` -> `dlg_talk_m2_valve`, naming the silver saw Quell used on her Scriptorium mentor), status `{"unit": "proctor_quell", "status": "regen", "rounds": 3, "magnitude": 15}`, enrage 15, deck `{"unit": "proctor_quell", "add": ["transfusion_pulse"], "order": {"assault": ["transfusion_pulse", "sanctified_vivisection"]}}`. No Strain in Act 1; Quell fights to the death (`CL-01`).
+  `{"kind": "hp_below", "unit": "proctor_quell", "pct": 35, "or_round": 4}`, effects line `"The brass valve in Quell's neck hisses open—raw condensate floods his veins!"`, `talk` (`maren` -> `dlg_talk_m2_valve`, naming the silver saw Quell used on her Scriptorium mentor), status `{"unit": "proctor_quell", "status": "regen", "rounds": 3, "magnitude": 10}`, enrage 15 (`pause_autoplay: true`), deck `{"unit": "proctor_quell", "add": ["transfusion_pulse"], "order": {"assault": ["transfusion_pulse", "sanctified_vivisection"]}}`. No Strain in Act 1; Quell fights to the death (`CL-01`).
 - Opening & cull phases:
   - `quell_taunt` `{"kind": "round", "round": 1}`: `talk` (`maren` -> `dlg_talk_m2_cages`).
   - `cull_1` `{"kind": "round", "round": 3}`: line `"A flagellant raises the scourge over the first cage."`, kill `{"units": ["tithe_captive_a"], "by": "mortuary_flagellant", "within": 0}`.
@@ -105,7 +105,7 @@ Every Act 1 boss encounter pairs mechanical phase triggers with 1-2 line charact
   max_blocks 0.
 - Phases:
   - `mill_oath` `{"kind": "round", "round": 1}`: `talk` (`dunstan` -> `dlg_talk_m3_grendel`, swearing to smash the chute that ground his Spent father's bones).
-  - `pulverizer` `{"kind": "hp_below", "unit": "overseer_grendel", "pct": 50, "or_round": 4}`: line `"Feed them to the mill!"`, enrage 20, deck `{"unit": "overseer_grendel", "add": ["bone_mill_pulverizer"], "order": {"assault": ["bone_mill_pulverizer", "pneumatic_hammer_strike", "coal_shovel_jab"]}}`.
+  - `pulverizer` `{"kind": "hp_below", "unit": "overseer_grendel", "pct": 50, "or_round": 4}`: line `"Feed them to the mill!"`, enrage 20 (`pause_autoplay: true`), deck `{"unit": "overseer_grendel", "add": ["bone_mill_pulverizer"], "order": {"assault": ["bone_mill_pulverizer", "pneumatic_hammer_strike", "coal_shovel_jab"]}}`.
   The vents are the encounter's `arena_hazards` row `slag_vents` (`CAST1_ENCOUNTERS` 2). Grendel dies in `M3` (`CL-01`); Dunstan is an AI guest here and joins post-fight.
 
 ### 3.4 Guild-Master Orlov (M4, `enc_evt_04`; Tier 2): the vendetta
@@ -115,7 +115,7 @@ Every Act 1 boss encounter pairs mechanical phase triggers with 1-2 line charact
 - Trait `vat_masters_grease` "Vat-Master's Grease" (`slot` ""): resist `burn` 100, `poison` 50; the arena's `toxic_bog` tiles around his start stand in for his grease floor.
 - Phases:
   - `orlov_taunt` `{"kind": "round", "round": 1}`: `talk` (`vesper` -> `dlg_talk_m4_orlov`, calling out the tallow tithe that killed her ash-sweeper brother, answered by guest `elyse` on `dlg_talk_m4_elyse`).
-  - `cataclysm` `hp_below` 40 (`or_round: 4`): line `"Into the vats, the lot of you!"`, enrage 20, deck `{"unit": "guild_master_orlov", "add": ["scalding_cataclysm"], "order": {"assault": ["scalding_cataclysm", "pressurized_lard_spray", "flensing_hook_drag"]}}`.
+  - `cataclysm` `hp_below` 40 (`or_round: 4`): line `"Into the vats, the lot of you!"`, enrage 20 (`pause_autoplay: true`), deck `{"unit": "guild_master_orlov", "add": ["scalding_cataclysm"], "order": {"assault": ["scalding_cataclysm", "pressurized_lard_spray", "flensing_hook_drag"]}}`.
   - `orlov_withdraws` `hp_below` 20 (`CL-01`): line `"Back to the upper vats—seal the sluices!"`, `talk` (`guild_master_orlov` -> `dlg_talk_m4_retreat`), `flee_ratio` `1.0` on `guild_master_orlov` so he retreats into Upper Cinderreach for Vesper's (or Talia's inherited, `CL-09`) Act 2 reckoning.
 - Vendetta (`CL-01`, `PR5-34`): `objective_reward` grants `loot_flensing_talon` (`orlovs_flensing_talon`, dropped as he flees) and the M4 turn-in awards `loot_orlovs_retribution` + `+5` `Warded Tallow` whether Orlov fled or fell before fleeing.
 
@@ -128,7 +128,7 @@ Every Act 1 boss encounter pairs mechanical phase triggers with 1-2 line charact
 - Phases:
   - `surge_breach` `{"kind": "round", "round": 1}`: `talk` (`kaelen` -> `dlg_talk_int_surge`, reacting to the ruptured drain-vault and `Sabina`'s emergency dose).
   - `bells` `{"kind": "round", "round": 2}`: line `"The cathedral bells toll. The Amalgam shudders in answer."` (camera shake cue).
-  - `bloom` `hp_below` 30: line `"Bone spires split the floor."`, enrage 25, deck `{"unit": "calcified_amalgam", "add": ["ossification_bloom"], "order": {"assault": ["ossification_bloom", "ossified_spine_volley", "tendril_flail"]}}`.
+  - `bloom` `hp_below` 30: line `"Bone spires split the floor."`, enrage 25 (`pause_autoplay: true`), deck `{"unit": "calcified_amalgam", "add": ["ossification_bloom"], "order": {"assault": ["ossification_bloom", "ossified_spine_volley", "tendril_flail"]}}`.
 
 ### 3.6 Inquisitor-Prelate Nemeth (M5, `enc_evt_06`): the Crucible
 
@@ -139,7 +139,7 @@ Every Act 1 boss encounter pairs mechanical phase triggers with 1-2 line charact
   `root` 75. With the encounter's `unkillable` (ENCOUNTER2 S1) he cannot be finished: `"Cold steel cannot finish him."`
 - Phases:
   - arrival `gate_reinforcements` `{"kind": "arrival", "round": 3, "block": 1}` (shifted to `round: 4` in `enc_evt_06_overlook` when Hollis completed *"The Crag-Sight Overlook"*, `sunk_ward.hollis_overlook`, `CL-08`): wave [`castellan_footman`, `castellan_footman`] label `"The watchpost empties"`.
-  - `infusion` `hp_below` `inquisitor_prelate_nemeth` 50 or round 4: line `"Cold steel cannot finish me."`, `talk` (`inquisitor_prelate_nemeth` -> `dlg_talk_m5_cold_steel`, answered by `kaelen`/`hollis` on `dlg_talk_m5_winch`), status `steadfast` 2 rounds on Nemeth, enrage 20.
+  - `infusion` `hp_below` `inquisitor_prelate_nemeth` 50 or round 4: line `"Cold steel cannot finish me."`, `talk` (`inquisitor_prelate_nemeth` -> `dlg_talk_m5_cold_steel`, answered by `kaelen`/`hollis` on `dlg_talk_m5_winch`), status `steadfast` 2 rounds on Nemeth, enrage 20 (`pause_autoplay: true`).
   - `gate_closing` round 6: line `"The gate! Now, or never!"`.
 - The escape, the winch and the capture are the encounter's (`stay_behind`, `party_min`, `CAST1_ENCOUNTERS`); Nemeth's
   Warded Cassock drops at node `20` (`3.4` Silent Ossuary, `CANON` 5.1).

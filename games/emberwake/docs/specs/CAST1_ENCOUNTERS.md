@@ -15,7 +15,7 @@ listed; `timeout_outcome` "fled" unless listed; `rows` as in section 4 (the enco
 HOOKS1 ZN3). `party` lists the expected founders (previews and sims); the campaign fights with the active party.
 `location` ids come from the M0 skeleton (`alleyway_junction_7`, `ash_crawl_crossroads`,
 `fourth_kiln`, `tallow_vats`, `crucible_watchpost`, `sluice_undercroft`; prologue places `alleyway_of_cinders`,
-`meat_market_rooftops`, `canal_bridge`; the job's `third_ward_gate`); "" where the skeleton has none yet.
+`meat_market_rooftops`, `canal_bridge`; the job's `corvos_gate`); "" where the skeleton has none yet.
 
 - `zone`: the `zones` rows of HOOKS1_TASKS 2.3 (`alley`, `rooftops`, `canal`, `foundry`, `tallow_vats`,
   `undercroft`, `watchpost`); no backdrop file in the slice, so STAGE1's gradient draws from the row's `ground`
@@ -53,7 +53,7 @@ HOOKS1 ZN3). `party` lists the expected founders (previews and sims); the campai
 | Key | `enc_job_corvo_gate` (the dilemma's fight, CQ9) | `enc_evt_03` (M3) | `enc_evt_06` (M5) |
 | --- | --- | --- | --- |
 | `name` | Corvo's Gate | The Bone-Mill Raid | The Crucible |
-| `zone`, `location` | `alley`, `third_ward_gate` | `foundry`, `fourth_kiln` | `watchpost`, `crucible_watchpost` |
+| `zone`, `location` | `alley`, `corvos_gate` | `foundry`, `fourth_kiln` | `watchpost`, `crucible_watchpost` |
 | `party` | active party (`4` deployed) | active party (`4` deployed; includes `elyse` if `M4` ran first) | active party (`4` deployed from `6` Founders) |
 | `party_min` | 0 | 0 | 4 (ROSTER1 BK6) |
 | `enemies` | `castellan_footman` x2, `watch_crossbowman`, `bailiff_enforcer` | `overseer_grendel`, `tallow_dredger` x2, `bailiff_enforcer` | `inquisitor_prelate_nemeth`, `inquisitorial_purifier` x2, `castellan_footman` x2, `watch_crossbowman` x2 |
@@ -113,15 +113,15 @@ HOOKS1 ZN3). `party` lists the expected founders (previews and sims); the campai
 | `morale` | true; `morale_leader` `captain_vane`; `morale_break` 50 | false | false | false |
 | `phases` | `vane_taunt` (`talk` R1 `kaelen`), `execution_wall`, `vane_withdraws` (`CL-01`) | `quell_taunt` (`talk` R1 `maren`), `cull_1`, `cull_2`, `marrow_valve` (`hp_below: 35`) | `orlov_taunt` (`talk` R1 `vesper`), `cataclysm`, `orlov_withdraws` (`CL-01`) | `surge_breach` (`talk` R1), `bells`, `bloom` |
 | `purse` | 30 | 25 | 100 | 0 |
-| `key_loot` | [{"loot": "loot_gate_pass", "kill": "castellan_footman"}] | [{"loot": "loot_marrow_scalpel", "kill": "proctor_quell"}, {"loot": "loot_marrow_valve", "kill": "proctor_quell"}] | [] | [{"loot": "loot_marrow_core", "kill": "calcified_amalgam"}] |
-| `objective_reward` | {"loot": "loot_gilded_pavise", "once": true} | {"loot": "loot_slab_retorts", "once": true} | {"loot": "loot_flensing_talon", "once": true} (plus quest `loot_orlovs_retribution` on M4 completion) | {"loot": "loot_dreamers_vertebra", "once": true} |
+| `key_loot` | [] | [{"loot": "loot_marrow_scalpel", "kill": "proctor_quell"}, {"loot": "loot_marrow_valve", "kill": "proctor_quell"}] | [] | [{"loot": "loot_marrow_core", "kill": "calcified_amalgam"}] |
+| `objective_reward` | {"loot": "loot_gate_pass", "once": true} (plus `loot_gilded_pavise` on M1 win) | {"loot": "loot_slab_retorts", "once": true} | {"loot": "loot_flensing_talon", "once": true} (plus quest `loot_orlovs_retribution` on M4 completion) | {"loot": "loot_dreamers_vertebra", "once": true} |
 | `tags` | ["main", "loud"] | ["main", "loud"] | ["main", "loud"] | ["main"] |
 
 Purse values are `{"gold_min": n, "gold_max": n, "once": true}` (Scrap is the purse's currency name, CAMPAIGN1 P1).
 
 - M2 captives (`CQ6 a`, `CL-08`): world characters `tithe_captive_a` "Caged Unsealed" and `tithe_captive_b` "Caged Unsealed"
   (role npc) on catalog unit `tithe_captive` (side party, class rogue, level 1, tier minion, gear all `none`,
-  `flee_ratio` 1.0, `deck` {}); adults `18-24` by the tone rule. Each captive alive at the win (`cull_1` round 3, `cull_2`
+  `flee_ratio` 0.0 so they stay in their cages until culled or battle won, `deck` {}); adults `18-24` by the tone rule. Each captive alive at the win (`cull_1` round 3, `cull_2`
   round 5) adds `+1` to `saved_youths` (`youths_saved`) **and awards `+1` `Rock Salt`** in the post-fight dialogue as
   Maren decodes their cage seals (`CL-08`, unlocking *"Liturgical Cipher Rubbings"*). Proctor Quell's brass neck-valve
   triggers cleanly at `hp_below: 35` (`or_round: 4`) without immortality/self-heal stalls (`CAST1_BOSSES` 3.2, `P-COMBAT-03`).

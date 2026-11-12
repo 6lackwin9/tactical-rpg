@@ -11,7 +11,7 @@ A scenario checks that the built game still works end to end. A rule or a screen
 | --- | --- |
 | `aegis scenario check [<file> or all]` | Parses the files. No game starts. Exit 1 on a problem, each naming the file and step |
 | `aegis scenario run <id, all or a .json path> [size=WxH] [out=<dir>] [slow=N] [exe=<program>] [data=<dir>] [window=1] [fps=N] [dpr=X]` | Runs them |
-| `aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]`, plus the keys of `run` (`encounter=` and `rules=` accepted as aliases) | Proof shots of a fight or screen, with no file to write |
+| `aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]`, plus the keys of `run` (`encounter=` accepted as alias; `rules=` refused on CLI) | Proof shots of a fight or screen, with no file to write |
 | `tools/fc.sh scenario check [<file> or all]` | The same check |
 | `tools/fc.sh scenario <id, all or a .json path> [profile=dev or release]`, plus the keys of `run` | Builds the game and the CLI in one profile, then runs |
 | `tools/fc.sh scenario shots <name>`, plus the keys of `shots` | The same for proof shots |

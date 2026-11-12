@@ -55,7 +55,7 @@ The prologue maps (`0a–0c`) are scripted and sit outside this graph; Vesper's 
 
 - **Cost:** a route leg costs 1 day on the travel clock `[kit hook]` (`travel.rs`), and 1
   Warded Tallow per day `[kit hook]` resource purse (`CANON` 4.2).
-- **Road encounters:** each route has a road-encounter chance (`15%` standard `encounter_pct`), raised to `150%` under Lockdown (`Alert 71-99`); at `0` Warded Tallow, every battle starts at `-2` AP.
+- **Road encounters:** each route has a road-encounter chance (`0%` on Act 1 `sunk_ward` urban routes until road encounter pools ship; `15%` target base rate in Act 2+, raised to `150%` under Lockdown `Alert 71-99`); at `0` Warded Tallow, every battle starts at `-2` AP.
 - **Stealth or forced march** (chosen per leg) `[kit hook]`, `[data]`:
   - stealth (default): under fog and chimney soot; lower encounter risk; `+1` day;
   - forced march: no extra day, `+5%` Alert per leg and a guaranteed roamer encounter while Alert is `50%` or more.
@@ -159,7 +159,7 @@ Illustrative field names following `sunk_ward/{locations,routes}.json`:
     { "id": "slag_gate", "name": "The Slag Gate", "kind": "gate", "region": "sunk_ward" }
   ],
   "routes": [
-    { "id": "water_siphon", "from": "drowned_runoff_grate", "to": "alleyway_junction_7", "two_way": true, "time": 1, "encounter_pct": 15 }
+    { "id": "water_siphon", "from": "drowned_runoff_grate", "to": "alleyway_junction_7", "two_way": true, "time": 1, "encounter_pct": 0 }
   ]
 }
 ```
@@ -168,5 +168,5 @@ Illustrative field names following `sunk_ward/{locations,routes}.json`:
 
 - **M2 freed captives (`CL-08`)**: Each surviving `tithe_captive` (`18-24`) grants `+1` `saved_youths` and `+1` `Rock Salt` + cipher rubbings.
 - **Orlov's vendetta (`CL-01`, `PR5-34`)**: `Orlov` withdraws at `20%` HP (`orlov_withdraws`), dropping `orlovs_flensing_talon` + `orlovs_retribution` (`+5` `Warded Tallow` on turn-in) so he survives for Act 2.
-- **Board job nodes (`CL-08`)**: Assigned in Section 3.6 above (`01` Siphon Shortcut, `02` Bellows, `03` Red Pen & Cipher Rubbings, `04` Wedges, `05` Counter-Still, `06` Crag-Sight Overlook, `third_ward_gate` Corvo).
+- **Board job nodes (`CL-08`)**: Assigned in Section 3.6 above (`01` Siphon Shortcut, `02` Bellows, `03` Red Pen & Cipher Rubbings, `04` Wedges, `05` Counter-Still, `06` Crag-Sight Overlook, `corvos_gate` Corvo).
 - **Wounded & Keepsakes (`PR5-34`, `PR5-35`)**: Act 1 `wounded` (`-20%` max HP until rested) and all `6` `keepsake_<id>` items are authored (`CANON` 5.2).
