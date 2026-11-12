@@ -340,7 +340,37 @@ impl<'a> Runner<'a> {
             left.iter().chain(right).chain(&waves).filter_map(|id| self.defs.get(id).and_then(|d| d.character.clone()).map(|c| (id.clone(), c))).collect();
         let roster = SimRoster { d: self.d, units: &self.units, characters };
         let def = EncounterDef::from_obj_with(&entry, self.fight_ruleset());
-        let mut s = Session::start(self.d.cat.clone(), def, &roster);
+        let s = Session::start(self.d.cat.clone(), def, &roster);
+        self.play(s, round_limit, jitter.as_mut())
+    }
+
+    /// WORLD-SIM1 (PR5-42): one battle of encounter `id` as world `world` resolves it, with its authored side
+    /// (`rpgkit_world::battle::authored_fight`: the encounter's `party` and `guests` as the world's characters at their
+    /// authored levels, the world's units, phases and fields; the `stage=` stage), seed `seed`, the round limit as `fight`'s
+    /// (`rounds_override`, else `cap`), the world's ruleset unless the arguments pick one (`SimArgs::ruleset_for`).
+    /// `jitter=` shuffles the party order and the start tiles as in `fight`. Not fought (a default result and a SIM
+    /// line) when the encounter does not resolve.
+    pub fn fight_world(&mut self, world: &str, id: &str, seed: i64) -> FightRes {
+        let d = self.d;
+        let Some((mut def, roster)) = rpgkit_world::battle::authored_fight(d, world, id, i64::from(self.args.stage)) else {
+            self.print(format!("SIM unknown world encounter {world}/{id}"));
+            return FightRes::default();
+        };
+        let mut jitter = self.args.jitter.then(|| GodotRng::from_i64(seed.wrapping_mul(JITTER_SALT).wrapping_add(1)));
+        if let Some(r) = jitter.as_mut() {
+            def.party = shuffled(&def.party, r);
+        }
+        let round_limit = if self.rounds_override > 0 { self.rounds_override } else { self.args.cap };
+        def.max_rounds = round_limit;
+        def.rng_seed = seed;
+        def.ruleset = self.args.ruleset_for(Some(&d.ruleset(world)));
+        let s = Session::start(d.cat.clone(), def, &roster);
+        self.play(s, round_limit, jitter.as_mut())
+    }
+
+    /// The fight of a started session `s` (`fight`, `fight_world`): the sim keys' changes, the driver's rounds up to
+    /// `round_limit`, the feel mode's hooks and the metrics, then the scores.
+    fn play(&mut self, mut s: Session, round_limit: i32, jitter: Option<&mut GodotRng>) -> FightRes {
         // PK2-S5b: `dulled=lock` (the sims' alternative dulled mode) and `durability=N` (the allies' weapons wear)
         s.w.dulled_lock = self.args.dulled_lock;
         if let Some(n) = self.args.durability {
@@ -352,7 +382,7 @@ impl<'a> Runner<'a> {
             let allies = s.w.allies.clone();
             rpgkit_battle::sim::apply_mastery(&mut s.w, &allies, n);
         }
-        self.prepare(&mut s, jitter.as_mut());
+        self.prepare(&mut s, jitter);
         for &a in &s.w.allies.clone() {
             if let Some(&hp) = self.start_hp.get(&s.w.units[a].name) {
                 let u = &mut s.w.units[a];

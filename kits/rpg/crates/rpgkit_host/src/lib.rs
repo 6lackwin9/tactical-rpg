@@ -209,11 +209,11 @@ impl Battle {
 
     fn new_world_battle(&mut self, world: &str, local: &str, req: &Value) -> Value {
         let Some(d) = self.data.clone() else { return err("this host has no world data: world encounters need the GUI or a data folder") };
-        let entry = d.resolve(world, "encounters", local);
-        if entry.is_empty() {
+        // WORLD-SIM1: the one authored-side builder (`aegis battle world:` and `sim feel world:` share it)
+        let Some((mut def, roster)) = rpgkit_world::battle::authored_fight(&d, world, local, 0) else {
             return err(format!("unknown encounter '{local}' in world '{world}'"));
-        }
-        let mut def = rpgkit_world::battle::encounter_def(&d, world, entry);
+        };
+        let entry = d.resolve(world, "encounters", local);
         if let Some(seed) = req.get("seed").and_then(Value::as_i64) {
             def.rng_seed = seed;
         }
@@ -227,8 +227,6 @@ impl Battle {
             Ok(t) => def.tactics = t,
             Err(e) => return err(e),
         }
-        def.id = format!("{world}:{local}");
-        let roster = rpgkit_world::battle::WorldRoster::new(&d, world);
         let s = Session::start(d.cat.clone(), def, &roster);
         let state = state_of(&s);
         self.begin(s);
