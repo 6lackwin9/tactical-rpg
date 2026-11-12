@@ -255,6 +255,10 @@ This section records every option explored, Tushar's exact feedback, why rejecte
 - **Request for Design and Build: intro plus loop body**: the engine restarts a track at its start (MUSIC1 rule 5), so "play the intro once, then loop a body" (Tushar's first choice for the menu theme) needs loop points in the engine, for example the Vorbis comment tags `LOOPSTART` and `LOOPLENGTH` in samples (a common convention), read by the music player and written by `tools/mock_ui/music.py`.
 - **Gap for Design and Build**: no context plays music on the story stage or in vignettes yet (`encounter` has no caller), so the story tracks in the slice list (opening vignette, Meat Market, escape sting, the Crucible goodbye, the end card, stingers) need a story-music hook before they can be heard in game; the Art/UI session can make them for the mock UI meanwhile.
 
+### 3.10 Request inbox log (2026-11-12)
+
+- **AI-02 done (cloud session, 2026-11-12)**: `tools/gen_music.py` no longer has a `menu_theme` key or synth function, so a run with no arguments renders only the synthesized world tracks and kit mood loops and can never overwrite the shipped Flow `menu_theme.ogg`; `--list` checked. The music README and the game assets README say so.
+
 ---
 
 ## 4. Screen-by-Screen UI Decisions Summary (`emberwake_screen_flow.html`)

@@ -99,7 +99,7 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
   28 px (X3, side and views), no new colour but the gold motes and no new palette slot (X5); `--review` adds
   `<body>_windup_board.png`, `<body>_windup_strike.gif`, `<body>_windups.gif` and `<body>_stagger_dazed.gif` (X6).
 - `python tools/gen_music.py [track ...] [--layer kit|game] [--root DIR] [--list]`: the music (numpy and ffmpeg);
-  `menu_theme` and the world tracks land here, the mood loops in the kit.
+  the world tracks land here, the mood loops in the kit (`menu_theme` is a Flow Music track, not generated).
 - Check a regeneration without touching the committed files: run `gen_art.py --root DIR` and
   `export_units.py --root DIR` into an empty folder `DIR`, then `gen_art.py --compare DIR [--spot OUT]`. It lists
   missing or extra paths and PNG size differences (pixels may drift with numpy and Pillow, so bytes are not compared
