@@ -139,3 +139,31 @@ fn a_settle_without_a_battle_counts_every_guest_and_a_hand_tally_leaves_the_flag
     battle::finish_world(&d, &mut gs, trigger::FIGHT_SOURCE, &fight("rescue"), "won", Some(&hand));
     assert_eq!(gs.flag(SAVED), Some(&json::int(7)), "no guests known: the flag is left as it is");
 }
+
+/// The fight `enc` started headlessly and settled `won` after `change` acted on the units of guest ref `who`.
+fn settle_after(d: &Data, enc: &str, who: &str, change: impl Fn(&mut rpgkit_battle::session::Session, usize)) -> GameState {
+    let mut gs = state(d);
+    let mut f = battle::begin_world(d, &mut gs, &fight(enc)).unwrap_or_else(|e| panic!("{enc} starts: {e}"));
+    for c in f.session.units_of_ref(who) {
+        change(&mut f.session, c);
+    }
+    let tally = f.tally();
+    let res = battle::finish_world(d, &mut gs, trigger::FIGHT_SOURCE, &fight(enc), "won", Some(&tally));
+    assert!(json::b(&res, "ok", false), "{res:?}");
+    gs
+}
+
+/// Review nit: a guest that fled the field mid-battle lived (counted); one that turned hostile (a phase `side` swap:
+/// its side changed and it left the session's guests, as `Session` does it) did not.
+#[test]
+fn a_fled_guest_counts_and_a_guest_turned_hostile_does_not() {
+    let d = data();
+    let all = GUESTS.len() as i64;
+    let gs = settle_after(&d, "rescue_all", "aide", |s, c| s.w.units[c].is_withdrawn = true);
+    assert_eq!(gs.flag(ALL), Some(&json::int(all)), "fled: still alive, still counted");
+    let gs = settle_after(&d, "rescue_all", "aide", |s, c| {
+        assert!(s.w.set_side(c, rpgkit_battle::encounter::ENEMY_SIDE), "the aide turns");
+        s.guests.retain(|&g| g != c);
+    });
+    assert_eq!(gs.flag(ALL), Some(&json::int(all - 1)), "turned hostile: not a survivor of the party's side");
+}

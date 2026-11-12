@@ -1092,32 +1092,34 @@ impl DialogueRunner {
     }
 
     /// ACT1-HOOKS1 (FB-241 a): a scene (`open_scene`) that may not be left without choosing: it is open, offers no
-    /// farewell reply, and has a reply to pick: an open one on the node shown, or any reply on a node its `next` lines
-    /// lead to. Read from the tree alone (no dialogue id is special). A node whose replies are all locked or hidden may
-    /// be left (never a dead end); a conversation with a person (`open`) always may be.
+    /// farewell reply, and has a reply that can be taken now (`answerable`) on the node shown, or on a node its `next`
+    /// lines lead to (read with the state as it is now). Read from the tree alone (no dialogue id is special). A node
+    /// whose replies are all locked, hidden or refused (an unaffordable `take`, a blocked `fight`, ...) may be left
+    /// (never a dead end); a conversation with a person (`open`) always may be.
     pub fn must_choose(&self, d: &Data, gs: &GameState) -> bool {
         if !self.scene || self.closed {
             return false;
         }
-        let visible = self.visible(d, gs);
-        if visible.iter().any(|(c, _)| json::s(c, "_service") == "farewell") {
+        if self.visible(d, gs).iter().any(|(c, _)| json::s(c, "_service") == "farewell") {
             return false;
         }
-        let node = self.node(d, gs, &self.node_id);
-        if !json::arr(&json::normalize(json::get(&node, "choices"))).is_empty() {
-            return visible.iter().any(|(_, locked)| !locked);
-        }
-        let mut seen = vec![self.node_id.clone()];
-        let mut next = json::s(&node, "next");
-        while !next.is_empty() && !seen.contains(&next) {
-            let ahead = self.node(d, gs, &next);
-            if !json::arr(&json::normalize(json::get(&ahead, "choices"))).is_empty() {
-                return true;
+        let mut seen: Vec<String> = Vec::new();
+        let mut id = self.node_id.clone();
+        while !id.is_empty() && !seen.contains(&id) {
+            let node = self.node(d, gs, &id);
+            if !json::arr(&json::normalize(json::get(&node, "choices"))).is_empty() {
+                return self.choices_of(d, gs, &id).iter().any(|c| self.answerable(d, gs, c));
             }
-            seen.push(next);
-            next = json::s(&ahead, "next");
+            seen.push(id);
+            id = json::s(&node, "next");
         }
         false
+    }
+
+    /// ACT1-HOOKS1: reply `c` can be taken now: shown (not a recruit of a member), open, and its effects pass the
+    /// choice's precheck (`choose` would not refuse it).
+    fn answerable(&self, d: &Data, gs: &GameState, c: &Dict) -> bool {
+        !recruits_member(d, gs, c) && choice_open(d, gs, c) && self.precheck(d, gs, &effects_of(c)).is_empty()
     }
 }
 

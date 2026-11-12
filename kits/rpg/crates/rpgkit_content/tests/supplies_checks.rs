@@ -25,9 +25,9 @@ fn quest_rewards_take_supplies_in_range() {
     assert!(quest::rewards_errors(&v, &json!({"supplies": 3, "gold": 5})).is_empty());
     assert!(quest::rewards_errors(&v, &json!({"supplies": TOP})).is_empty(), "the purse's top");
     let want = format!("Rewards supplies must be a whole number 0..{TOP}.");
-    assert_eq!(quest::rewards_errors(&v, &json!({"supplies": TOP + 1})), [want.clone()]);
-    assert_eq!(quest::rewards_errors(&v, &json!({"supplies": -1})), [want.clone()]);
-    assert_eq!(quest::rewards_errors(&v, &json!({"supplies": "lots"})), [want]);
+    for bad in [json!(TOP + 1), json!(-1), json!("lots")] {
+        assert_eq!(quest::rewards_errors(&v, &json!({"supplies": bad})), std::slice::from_ref(&want), "{bad}");
+    }
 }
 
 #[test]

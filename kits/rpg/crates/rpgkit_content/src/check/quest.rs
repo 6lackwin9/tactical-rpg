@@ -94,7 +94,7 @@ pub fn reward_ref_error(v: &View, kind: &str, r: &str) -> String {
 pub fn rewards_errors(v: &View, raw: &Value) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(rewards) = json::normalize(raw).as_object().cloned() else {
-        errors.push("Rewards must be an object {xp, items, passives, skills, gold}.".into());
+        errors.push("Rewards must be an object {xp, items, passives, skills, gold, supplies}.".into());
         return errors;
     };
     for key in rewards.keys().filter(|k| !REWARD_KEYS.contains(&k.as_str())) {
