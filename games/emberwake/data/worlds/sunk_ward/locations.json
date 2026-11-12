@@ -574,27 +574,6 @@
 					],
 					"label": "Elyse's counter-still",
 					"note": "A coil of copper pipe and a leaking alum drum in the corner of a tenement block. Elyse tips a measure of clean tallow into a flask and corks it with her thumb."
-				},
-				{
-					"id": "still_stores",
-					"kind": "chest",
-					"anchor": "ruin_lore",
-					"requires_flags": [
-						{
-							"key": "sunk_ward.still_checked",
-							"value": true
-						}
-					],
-					"unless_flags": [],
-					"sets_flags": [
-						{
-							"key": "sunk_ward.still_stores_taken",
-							"value": true
-						}
-					],
-					"items": {},
-					"gold": 0,
-					"supplies": 5
 				}
 			],
 			"map_pos": [
@@ -655,7 +634,12 @@
 					"kind": "npc",
 					"anchor": "camp_npc",
 					"requires_flags": [],
-					"unless_flags": [],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.corvo_forced",
+							"value": true
+						}
+					],
 					"sets_flags": [],
 					"character": "bailiff_corvo"
 				}

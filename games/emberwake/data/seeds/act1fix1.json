@@ -1,0 +1,3689 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "tithe_captive",
+    "name": "Tithe Captive",
+    "side": "party",
+    "description": "A chained debtor awaiting the Red Tithing.",
+    "class_id": "rogue",
+    "level": 1,
+    "tier": "minion",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "rogue/base",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [],
+    "loadout": [],
+    "deck": {},
+    "default_intent": "",
+    "ai_role": "SKIRMISHER",
+    "target_pref": "NEAREST",
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "none",
+    "off_hand": "none",
+    "head": "",
+    "body": "none",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "none"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "marrow_valve",
+    "name": "Valve Overpressure",
+    "description": "An illegal brass marrow valve in his neck: when cut low, he floods his veins for one frantic surge.",
+    "effects": [
+     {
+      "type": "resist",
+      "status": "bleed",
+      "value": 25
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "notched_billhook",
+    "name": "Notched Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A garrison billhook, its hook notched by use: a two-handed pole-arm for holding a narrow corridor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "castellan_breastplate",
+    "name": "Dented Cuirass",
+    "family": "plate",
+    "rarity": "COMMON",
+    "weight": 8.0,
+    "value": 60,
+    "description": "A Castellan Watch cuirass, dented and hammered back into shape.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "curfew_bodkin",
+    "name": "Curfew Bodkin",
+    "family": "dagger",
+    "rarity": "COMMON",
+    "weight": 0.8,
+    "value": 35,
+    "description": "A thin curfew-runner's dagger, made to be drawn and gone before the Watch arrives.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 11
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "soot_leathers",
+    "name": "Soot Leathers",
+    "family": "leather",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 30,
+    "description": "Hard leathers blackened by kiln soot, stiff but light enough to run in.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bronze_censer",
+    "name": "Bronze Censer",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 40,
+    "description": "A bronze censer on a chain: an embalmer's bowl for hot coals and burning resin.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 10
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "copied_psalter",
+    "name": "Copied Psalter",
+    "family": "tome",
+    "rarity": "COMMON",
+    "weight": 1.0,
+    "value": 35,
+    "description": "A hand-copied psalter, its margins crowded with a scribe's corrections.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "KNOW",
+      "value": 11
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "status_potency",
+       "value": 5
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "embalmers_habit",
+    "name": "Embalmer's Habit",
+    "family": "cloth",
+    "rarity": "COMMON",
+    "weight": 1.2,
+    "value": 40,
+    "description": "A stained embalmer's habit, cut loose for working over the dead.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "group": "heal",
+       "value": 0.1
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "bleed",
+       "value": 15
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "winch_arbalest",
+    "name": "Winch Arbalest",
+    "family": "crossbow",
+    "rarity": "COMMON",
+    "weight": 4.5,
+    "value": 55,
+    "description": "A crag arbalest with a winch crank: slow to span, hard to answer at range.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "range",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "poachers_brigandine",
+    "name": "Poacher's Coat",
+    "family": "leather",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 40,
+    "description": "A poacher's riveted leather coat, patched along every seam.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penal_shackles",
+    "name": "Penal Shackles",
+    "family": "fist",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 20,
+    "description": "Riveted penal shackles worn as cestuses: the chain cut away, the iron kept for the knuckles.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penal_foundry_apron",
+    "name": "Foundry Apron",
+    "family": "leather",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 35,
+    "description": "A heavy foundry apron of scorched hide, worn by kiln stokers.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 2
+     },
+     {
+      "kind": "adjust",
+      "field": "burden",
+      "delta": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "brass_vitriol_sprayer",
+    "name": "Brass Sprayer",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 3.5,
+    "value": 50,
+    "description": "A brass pressure tank and hose with a pole nozzle, charged with caustic vitriol.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "tanners_rubbered_coat",
+    "name": "Rubbered Coat",
+    "family": "cloth",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 30,
+    "description": "A tanner's rubbered coat, tacky and chemical-stained, made to shed spills and sprays.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "poison",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_hookbill",
+    "name": "Watch Hookbill",
+    "family": "axe",
+    "rarity": "COMMON",
+    "weight": 2.0,
+    "value": 30,
+    "description": "A Watch hookbill: a long-hafted axe-hook for pulling men off walls.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_heater",
+    "name": "Heater Shield",
+    "family": "shield",
+    "rarity": "COMMON",
+    "weight": 3.5,
+    "value": 35,
+    "description": "A Watch heater shield, its paint worn to bare steel at the rim.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": -1
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 11
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_cuirass",
+    "name": "Watch Cuirass",
+    "family": "plate",
+    "rarity": "COMMON",
+    "weight": 8.0,
+    "value": 50,
+    "description": "A Castellan Watch cuirass of riveted plate, issued to the grate-guards.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_gambeson",
+    "name": "Watch Gambeson",
+    "family": "leather",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 25,
+    "description": "A quilted Watch gambeson, padded thick against crossbow and blade.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "stirrup_arbalest",
+    "name": "Stirrup Arbalest",
+    "family": "crossbow",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A stirrup arbalest, spanned with a foot in the iron loop and a heave of the back.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 11
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bailiff_maul",
+    "name": "Bailiff's Maul",
+    "family": "hammer",
+    "rarity": "COMMON",
+    "weight": 6.5,
+    "value": 60,
+    "description": "A bailiff's maul: a short iron-headed hammer for gates and kneecaps.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 13
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penitent_scourge",
+    "name": "Penitent Scourge",
+    "family": "scourge",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 20,
+    "description": "A penitent's scourge of barbed wire tails on a handle wrapped in vestment cloth.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "pyre_nozzle",
+    "name": "Pyre Nozzle",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 45,
+    "description": "A pole nozzle that sprays burning oil in a long stream.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "INT",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "warded_apron",
+    "name": "Warded Apron",
+    "family": "leather",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A leather apron stamped with warding marks, worn at the vats.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "boning_knife",
+    "name": "Boning Knife",
+    "family": "dagger",
+    "rarity": "COMMON",
+    "weight": 0.8,
+    "value": 20,
+    "description": "A narrow boning knife from a rendering floor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "skinners_apron",
+    "name": "Skinner's Apron",
+    "family": "leather",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 20,
+    "description": "A skinner's apron, stiff with old grease and cut from many hides.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bone_club",
+    "name": "Bone Club",
+    "family": "mace",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 0,
+    "description": "A calcified bone gripped at the narrow end and swung wide.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "vanes_bill",
+    "name": "Executioner Bill",
+    "family": "polearm",
+    "rarity": "UNCOMMON",
+    "weight": 5.0,
+    "value": 90,
+    "description": "Captain Vane's executioner's bill: a long billhook with a gilded haft.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "quells_bone_saws",
+    "name": "Twin Bone-Saws",
+    "family": "bone_saw",
+    "rarity": "UNCOMMON",
+    "theme": "inquisitor",
+    "weight": 1.5,
+    "value": 70,
+    "description": "Proctor Quell's twin bone-saws, their teeth clogged with old marrow.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "foundry_sledge",
+    "name": "Foundry Sledge",
+    "family": "hammer",
+    "rarity": "COMMON",
+    "weight": 7.0,
+    "value": 70,
+    "description": "A foundry sledge, its head scored by slag.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 15
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "flensing_hooks",
+    "name": "Flensing Hooks",
+    "family": "axe",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 60,
+    "description": "A pair of flensing hooks from a rendering floor, swung on short hafts.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "prelates_blade",
+    "name": "Prelate's Blade",
+    "family": "sword",
+    "rarity": "RARE",
+    "theme": "inquisitor",
+    "weight": 4.5,
+    "value": 120,
+    "description": "A prelate's sword, narrow and plain, kept clean for ceremony.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "slag_plating",
+    "name": "Slag Plating",
+    "family": "plate",
+    "rarity": "UNCOMMON",
+    "weight": 9.0,
+    "value": 90,
+    "description": "Kiln-quenched plate, heavy with slag and still faintly warm to the touch.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 2
+     },
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 13
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 15
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "quells_marrow_scalpel",
+    "name": "Marrow Scalpel",
+    "family": "bone_saw",
+    "rarity": "RARE",
+    "weight": 1.5,
+    "value": 0,
+    "description": "Proctor Quell's marrow scalpel, its blade stained black-green.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "status_potency",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_kaelen",
+    "name": "Kaelen's Gouged Sigil",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A Watch sigil with its Castellan device gouged out. Kaelen's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_kaelen",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "CONS",
+      "value": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "stagger",
+       "value": 20
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "stun",
+       "value": 20
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_vesper",
+    "name": "Vesper's Runner Whistle",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A runner's whistle on a cord. Vesper's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_vesper",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "DEX",
+      "value": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "slow",
+       "value": 25
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "root",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_maren",
+    "name": "Maren's Copyist Quill",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A copyist's quill worn to a stub. Maren's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_maren",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "group": "heal",
+       "value": 0.1
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_hollis",
+    "name": "Hollis's Focusing Monocle",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A corded brass monocle that sharpens the long shot. Hollis's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_hollis",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "PERC",
+      "value": 3
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_elyse",
+    "name": "Elyse's Cracked Retort",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A cracked glass retort that still smells of alum. Elyse's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_elyse",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "INT",
+      "value": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "status_potency",
+       "value": 10
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_dunstan",
+    "name": "Dunstan's Shackle Link",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A single link of slag-black shackle chain. Dunstan's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_dunstan",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "max_poise",
+      "value": 12
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "stun",
+       "value": 30
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "orlovs_flensing_talon",
+    "name": "Flensing Talon",
+    "family": "dagger",
+    "rarity": "RARE",
+    "weight": 0.9,
+    "value": 0,
+    "description": "Guild-Master Orlov's flensing talon: a curved rendering blade, hooked to open what it catches.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "throat_carver",
+       "value": 0.2
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "orlovs_retribution",
+       "value": 0.2
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "slot_bone_spur",
+    "name": "Bone Spur",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A claw or bone spur, kept as surgery stock for the Forearms.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "slot_chitin_plate",
+    "name": "Chitin Plate",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "Hide, chitin or scale cut for the Thoracic: surgery stock.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "slot_blood_sac",
+    "name": "Calcified Gland",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A hardened, mineral-crusted gland, kept as surgery stock for the Visceral.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "slot_eye_tissue",
+    "name": "Amber Lens Shard",
+    "family": "material",
+    "rarity": "UNCOMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A resin-hard lens shard for the Cranial, needed for the class rite.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "rock_salt",
+    "name": "Rock Salt",
+    "family": "material",
+    "rarity": "UNCOMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "Coarse grey rock salt: it flushes the marrow at the Slab, and it passes as a bribe at the gates.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "black_iron_ingot",
+    "name": "Black-Iron Bar",
+    "family": "material",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A bar of black iron, rare and heavy: Berek's Hearth uses it for training and reforging.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_optic",
+    "name": "Amber Tapetum Pin",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Amber Tapetum Pin, a Tier I graft: an eye-shine membrane set in at the Slab. Teaches Marrow Lash.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_lash"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_valve",
+    "name": "Siphon-Valve Pin",
+    "family": "graft",
+    "rarity": "UNCOMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Siphon-Valve Pin, a Tier II graft: a brass marrow valve fitted as a pin. Teaches Marrow Bolt.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 2,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_bolt"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_core",
+    "name": "Dreamer's Geode Pin",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "Dreamer's Geode Pin, a Tier III graft: a shard of marrow geode set in as a pin. Teaches Marrow Rend.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "monster",
+    "keystone": false,
+    "class_id": "",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_rend"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_litany",
+    "name": "Litany Graft",
+    "family": "graft",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A priest's class graft, set in the Cranial. Teaches Marrow Litany.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 1,
+    "body_role": "class",
+    "keystone": false,
+    "class_id": "priest",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "marrow_litany"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "graft_purge",
+    "name": "Inoculated Keystone (priest)",
+    "family": "graft",
+    "rarity": "RARE",
+    "weight": 0.5,
+    "value": 0,
+    "description": "A priest's Tier III keystone graft, set in the Cranial. Teaches Purge Marrow.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "tier": 3,
+    "body_role": "class",
+    "keystone": true,
+    "class_id": "priest",
+    "body_effects": [
+     {
+      "type": "meter",
+      "meter": "strain",
+      "start": 0,
+      "floor": 0,
+      "floors": [
+       5,
+       15,
+       30,
+       50
+      ]
+     },
+     {
+      "type": "skill",
+      "skill": "purge_marrow"
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "render_beast_tendon",
+    "name": "Render-Beast Tendon",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "Tough tendon from a Render-Beast: winch cord for the Hearth's arbalests.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "hearth_repair",
+    "name": "Repair",
+    "description": "Restore a weapon's durability: Scrap scaled by the missing durability; higher tiers also need fine salvage, Inquisitor arms Inquisitor steel.",
+    "npc": "berek_dorn",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "pk2.hearth_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {},
+    "target": "weapon",
+    "effects": [
+     {
+      "effect": "repair",
+      "gold": 10,
+      "count": 2,
+      "tiers": {
+       "UNCOMMON": "salvage_fine",
+       "RARE": "salvage_fine",
+       "EPIC": "salvage_fine",
+       "LEGENDARY": "salvage_fine"
+      },
+      "themes": {
+       "inquisitor": "salvage_inquisitor"
+      }
+     },
+     {
+      "effect": "doctrine",
+      "axis": "preservationist",
+      "delta": 1
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "entry": {
+    "id": "a1_flag_job_tallow",
+    "name": "Act 1 side-hook (Warded Tallow)",
+    "description": "Do one errand at a ward node; paid in Warded Tallow.",
+    "objectives": [
+     {
+      "kind": "flag"
+     }
+    ],
+    "rewards": {
+     "xp": 60,
+     "gold": 20,
+     "supplies": 5
+    },
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "sequences",
+   "entry": {
+    "id": "seq_after_m5",
+    "name": "Beyond the Slag Gate",
+    "steps": [
+     {
+      "kind": "vignette",
+      "vignette": "vg_m5_gate",
+      "music": "story_goodbye"
+     },
+     {
+      "kind": "vignette",
+      "vignette": "vg_debate_3",
+      "music": "story_goodbye"
+     },
+     {
+      "kind": "effects",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "pk2.slab_open",
+        "value": true
+       },
+       {
+        "effect": "set_flag",
+        "key": "pk2.hearth_open",
+        "value": true
+       },
+       {
+        "effect": "set_act",
+        "act": 2
+       }
+      ]
+     },
+     {
+      "kind": "enter",
+      "location": "sluice_undercroft",
+      "anchor": "spawn"
+     }
+    ],
+    "tags": [
+     "m5"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "entry": {
+    "id": "dlg_int_dose",
+    "name": "Sabina's emergency dose",
+    "speaker": "sabina_kress",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "sabina_kress",
+      "text": "Chirurgeon Sabina has a vial of black-green marrow in one hand and a scalpel in the other. The floor is already humming. \"One of you may take this. Stage One. A pin's head start on what is coming. You will not thank me. Choose.\"",
+      "choices": [
+       {
+        "text": "Kaelen takes the dose.",
+        "to": "end_dose",
+        "unless": [
+         {
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose_to",
+          "value": "kaelen"
+         },
+         {
+          "effect": "sequence",
+          "sequence": "seq_interlude"
+         }
+        ]
+       },
+       {
+        "text": "Vesper takes the dose.",
+        "to": "end_dose",
+        "unless": [
+         {
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose_to",
+          "value": "vesper"
+         },
+         {
+          "effect": "sequence",
+          "sequence": "seq_interlude"
+         }
+        ]
+       },
+       {
+        "text": "Maren takes the dose.",
+        "to": "end_dose",
+        "unless": [
+         {
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose_to",
+          "value": "maren"
+         },
+         {
+          "effect": "sequence",
+          "sequence": "seq_interlude"
+         }
+        ]
+       },
+       {
+        "text": "Hollis takes the dose.",
+        "to": "end_dose",
+        "unless": [
+         {
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose_to",
+          "value": "hollis"
+         },
+         {
+          "effect": "sequence",
+          "sequence": "seq_interlude"
+         }
+        ]
+       },
+       {
+        "text": "Dunstan or Elyse...",
+        "to": "more"
+       }
+      ]
+     },
+     {
+      "id": "more",
+      "speaker": "sabina_kress",
+      "text": "She turns the vial in the brazier light, waiting.",
+      "choices": [
+       {
+        "text": "Dunstan takes the dose.",
+        "to": "end_dose",
+        "unless": [
+         {
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose_to",
+          "value": "dunstan"
+         },
+         {
+          "effect": "sequence",
+          "sequence": "seq_interlude"
+         }
+        ],
+        "requires": [
+         {
+          "kind": "flag",
+          "key": "sunk_ward.dunstan_joined",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Elyse takes the dose.",
+        "to": "end_dose",
+        "unless": [
+         {
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.sabina_dose_to",
+          "value": "elyse"
+         },
+         {
+          "effect": "sequence",
+          "sequence": "seq_interlude"
+         }
+        ],
+        "requires": [
+         {
+          "kind": "flag",
+          "key": "sunk_ward.elyse_joined",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Back.",
+        "to": "n0"
+       }
+      ]
+     },
+     {
+      "id": "end_dose",
+      "speaker": "sabina_kress",
+      "text": "The vial goes down a throat. Sabina does not watch.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "scene"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "entry": {
+    "id": "dlg_post_m2",
+    "name": "The cages at the Crossroads",
+    "speaker": "maren",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "maren",
+      "text": "Maren kneels by the broken cages and presses grey linen to the cage seals, copying the Clerisy's cipher letter by letter. The cages are open.",
+      "choices": [
+       {
+        "text": "Two cell-mates walked out of the cages.",
+        "to": "two",
+        "requires": [
+         {
+          "kind": "flag",
+          "key": "sunk_ward.saved_youths",
+          "op": ">=",
+          "value": 2
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.m2_captive_saved",
+          "value": true
+         },
+         {
+          "effect": "give",
+          "items": {
+           "rock_salt": 2
+          }
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.m2_counted",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "One cell-mate walked out of the cages.",
+        "to": "one",
+        "requires": [
+         {
+          "kind": "flag",
+          "key": "sunk_ward.saved_youths",
+          "op": ">=",
+          "value": 1
+         },
+         {
+          "kind": "flag",
+          "key": "sunk_ward.saved_youths",
+          "op": "<",
+          "value": 2
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.m2_captive_saved",
+          "value": true
+         },
+         {
+          "effect": "give",
+          "items": {
+           "rock_salt": 1
+          }
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.m2_counted",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Nobody walked out of the cages.",
+        "to": "none",
+        "requires": [
+         {
+          "kind": "flag",
+          "key": "sunk_ward.saved_youths",
+          "op": "<",
+          "value": 1
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.m2_counted",
+          "value": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "two",
+      "speaker": "maren",
+      "text": "Two cell-mates, brown-faced and coughing, grin crookedly as they slip Maren a pinch of Rock Salt each. \"For the cipher,\" says one. \"For the next cage.\" The cage-seal rubbings are legible, and they are not the Clerisy's words.",
+      "end": true
+     },
+     {
+      "id": "one",
+      "speaker": "maren",
+      "text": "One cell-mate stays, rubbing their wrists. They press a grain of Rock Salt into Maren's palm and say nothing at all. She copies the seal anyway.",
+      "end": true
+     },
+     {
+      "id": "none",
+      "speaker": "maren",
+      "text": "Maren folds the linen away without a word. \"I'll copy what's left. The names will still be on the seals.\"",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "scene"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "entry": {
+    "id": "dlg_post_m3",
+    "name": "The Bone-Mill's chain gang",
+    "speaker": "dunstan",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "dunstan",
+      "text": "Dunstan stands in the mill-yard with his jaw wired shut and a broken slag-ladle in one fist. Nobody has asked him to speak. He holds the ladle out, handle first.",
+      "choices": [
+       {
+        "text": "You're one of us now. Take the next bunk.",
+        "to": "joined",
+        "effects": [
+         {
+          "effect": "recruit",
+          "character": "dunstan",
+          "level": "average"
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.dunstan_joined",
+          "value": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "joined",
+      "speaker": "dunstan",
+      "text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed. Open Party (P) to swap them into the squad from the bench.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "scene"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "entry": {
+    "id": "dlg_post_m4",
+    "name": "The Tallow Vats' counter-tonic",
+    "speaker": "elyse",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "elyse",
+      "text": "Elyse wipes copper-green still-sludge from her goggles and grins crookedly through the smoke. \"My mother's tenement is awake, Orlov's guild is a fortnight short of tallow, and I think I need to sit down.\"",
+      "choices": [
+       {
+        "text": "Come to the Undercroft. Take the next bunk.",
+        "to": "joined",
+        "effects": [
+         {
+          "effect": "recruit",
+          "character": "elyse",
+          "level": "average"
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.elyse_joined",
+          "value": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "joined",
+      "speaker": "elyse",
+      "text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper. Open Party (P) to swap them into the squad from the bench.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "scene"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "entry": {
+    "id": "dlg_ivo",
+    "name": "Ivo at the Basin",
+    "speaker": "ivo",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Ivo sits cross-legged on the Basin steps, still wearing the Toll-Pen number on his shirt. He is twelve, and he is not smiling. \"Talia says you took the lock off the pen.\"",
+      "choices": [
+       {
+        "text": "You're safe.",
+        "to": "safe"
+       },
+       {
+        "text": "What did you see in the pen?",
+        "to": "pen",
+        "unless": [
+         {
+          "key": "sunk_ward.ivo_pen_told",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Leave.",
+        "to": "bye"
+       }
+      ]
+     },
+     {
+      "id": "safe",
+      "text": "\"Ash-Crawl runners aren't safe. We're quick.\" He almost smiles. \"I'll run for you if you want. Whistle twice.\"",
+      "next": "n0"
+     },
+     {
+      "id": "pen",
+      "text": "\"They count you in tallies of four. When the count's short, they pick the smallest. I counted the sentries instead. There's a gap at the third bell, when they change the chalk.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.ivo_pen_told",
+        "value": true
+       }
+      ]
+     },
+     {
+      "id": "bye",
+      "speaker": "ivo",
+      "text": "They let you go.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "entry": {
+    "id": "dlg_corvo_gate",
+    "name": "Bailiff Corvo at the Third Ward gate",
+    "speaker": "bailiff_corvo",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Bailiff Corvo leans on the gate-post with a stiff leg that has already turned to grey stone to the knee. \"Third Ward gate. You want through, you leave something at the post. Salt or Scrap. I don't care who for.\"",
+      "choices": [
+       {
+        "text": "Rock Salt for the gate.",
+        "to": "bribed",
+        "requires": [
+         {
+          "kind": "items",
+          "item": "rock_salt",
+          "count": 1
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "take",
+          "items": {
+           "rock_salt": 1
+          }
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_bribed",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         },
+         {
+          "effect": "meter_add",
+          "meter": "alert",
+          "delta": -20
+         }
+        ]
+       },
+       {
+        "text": "Thirty Scrap for the gate.",
+        "to": "bribed_scrap",
+        "requires": [
+         {
+          "kind": "gold",
+          "min": 30
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "take",
+          "gold": 30
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_bribed",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         },
+         {
+          "effect": "meter_add",
+          "meter": "alert",
+          "delta": -20
+         }
+        ]
+       },
+       {
+        "text": "No more tolls. Force the Third Ward gate.",
+        "to": "",
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_forced",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         },
+         {
+          "effect": "fight",
+          "encounter": "enc_job_corvo_gate"
+         }
+        ]
+       },
+       {
+        "text": "What do you keep behind the gate?",
+        "to": "ida",
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_ida_told",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Leave.",
+        "to": "bye"
+       }
+      ]
+     },
+     {
+      "id": "bribed",
+      "text": "He takes the salt, tucks it into a ledger he doesn't write in, and nods. \"Patrols cut short on the Third Ward side tonight. My sister Ida is sixteen and the Tithing is looking for sixteens. If it ever goes badly, don't make it worse.\"",
+      "next": "n0"
+     },
+     {
+      "id": "bribed_scrap",
+      "text": "He pockets the Scrap, tucks it into a ledger he doesn't write in, and nods. \"Patrols cut short on the Third Ward side tonight. My sister Ida is sixteen and the Tithing is looking for sixteens. If it ever goes badly, don't make it worse.\"",
+      "next": "n0"
+     },
+     {
+      "id": "ida",
+      "text": "\"My sister. Ida. Sixteen. I keep the gate so I can keep her indoors. I kept my mind on clean water. It buys me a stone leg and a few more months.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.corvo_ida_told",
+        "value": true
+       }
+      ]
+     },
+     {
+      "id": "bye",
+      "speaker": "bailiff_corvo",
+      "text": "Corvo waves you off the post.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "vignettes",
+   "entry": {
+    "id": "vg_debate_3",
+    "name": "Hub Debate: The Empty Bunk",
+    "music": "story_goodbye",
+    "frame": "#0a0b10",
+    "skippable": true,
+    "once": false,
+    "cards": [
+     {
+      "style": "image",
+      "image": "backgrounds/story/hearth.png",
+      "top": "#0a0b10",
+      "bottom": "#2c1546",
+      "text": "The Sluice Undercroft, a day and a night later. The brazier burns low. One bunk is made, and nobody has slept in it.",
+      "fade_in_ms": 1200,
+      "fade_out_ms": 600
+     },
+     {
+      "style": "line",
+      "speaker": "berek_dorn",
+      "text": "I told you iron doesn't dream. It doesn't weep either. I'd trade every valve I ever cast to have that bunk slept in tonight."
+     },
+     {
+      "style": "line",
+      "speaker": "sabina_kress",
+      "text": "Cold steel bounced off Nemeth, Berek. I watched. He does not die of anything you or I can swing. If we want to reach what he took, we have to learn what he drinks.",
+      "expression": "sad"
+     },
+     {
+      "style": "line",
+      "speaker": "berek_dorn",
+      "text": "That's how they got the prelates. That's how they got whoever he took.",
+      "expression": "angry"
+     },
+     {
+      "style": "line",
+      "speaker": "talia_rusk",
+      "text": "It is a question for another day. Tonight there are five of us and a gate, and by the next bell there will be a stranger at the Basin door. Eighteen, twenty-four, cowled to the eyes, asking to be taught."
+     },
+     {
+      "style": "line",
+      "speaker": "kaelen",
+      "text": "We left them there. We opened the Gate and one of us stayed on the winch. I will not forget how that sounded.",
+      "expression": "sad",
+      "when": [
+       {
+        "kind": "flag",
+        "key": "sunk_ward.crucible_stayed",
+        "op": "!=",
+        "value": "kaelen"
+       }
+      ]
+     },
+     {
+      "style": "line",
+      "speaker": "vesper",
+      "text": "Nobody forgets. We carry it. We send a keepsake home to their bunk and we keep the door open.",
+      "expression": "determined",
+      "when": [
+       {
+        "kind": "flag",
+        "key": "sunk_ward.crucible_stayed",
+        "op": "!=",
+        "value": "vesper"
+       }
+      ]
+     },
+     {
+      "style": "line",
+      "speaker": "maren",
+      "text": "The chronicle says the Clerisy took thousands. I have never counted what it costs to take one. Tonight I'm counting.",
+      "expression": "sad",
+      "when": [
+       {
+        "kind": "flag",
+        "key": "sunk_ward.crucible_stayed",
+        "op": "!=",
+        "value": "maren"
+       }
+      ]
+     },
+     {
+      "style": "line",
+      "speaker": "hollis",
+      "text": "I have put a quarrel through a visor before. I would trade it to keep that winch turning.",
+      "expression": "sad",
+      "when": [
+       {
+        "kind": "flag",
+        "key": "sunk_ward.crucible_stayed",
+        "op": "!=",
+        "value": "hollis"
+       }
+      ]
+     },
+     {
+      "style": "text",
+      "text": "Dunstan sets his broken slag-ladle on the made bunk, handle first. His wired jaw does not move.",
+      "when": [
+       {
+        "kind": "flag",
+        "key": "sunk_ward.crucible_stayed",
+        "op": "!=",
+        "value": "dunstan"
+       }
+      ]
+     },
+     {
+      "style": "line",
+      "speaker": "elyse",
+      "text": "I make tonics for the Spent. I have nothing that makes a winch hold.",
+      "expression": "sad",
+      "when": [
+       {
+        "kind": "flag",
+        "key": "sunk_ward.crucible_stayed",
+        "op": "!=",
+        "value": "elyse"
+       }
+      ]
+     },
+     {
+      "style": "line",
+      "speaker": "talia_rusk",
+      "text": "Then we count together. Berek will frame the bunks, Sabina will lay out her knives, and I'll bring in the first runaway. The Bastion is next."
+     }
+    ],
+    "tags": [
+     "debate",
+     "hub"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "triggers",
+   "entry": {
+    "id": "t_interlude",
+    "name": "The marrow back-surge",
+    "on": "enter",
+    "encounter": "",
+    "outcome": "any",
+    "location": "sluice_undercroft",
+    "when": [
+     {
+      "key": "sunk_ward.m3_turned_in",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.m4_turned_in",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.dunstan_joined",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.elyse_joined",
+      "value": true
+     }
+    ],
+    "once": true,
+    "effects": [
+     {
+      "effect": "set_flag",
+      "key": "sunk_ward.interlude_started",
+      "value": true
+     }
+    ],
+    "then": [
+     {
+      "dialogue": "dlg_int_dose",
+      "speaker": "sabina_kress"
+     }
+    ],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "entry": {
+    "id": "q_a1_m3",
+    "name": "The Bone-Mill Raid",
+    "description": "Overseer Grendel grinds uncremated Spent into bone-mortar at the Fourth Kiln. Wreck the mill and free the chain gang.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Wreck the Bone-Mill at the Fourth Kiln",
+      "location": "fourth_kiln",
+      "encounter": "enc_evt_03"
+     }
+    ],
+    "reward": "Talia's thanks, a poultice, and a new bunk.",
+    "template": "a1_main_raid",
+    "turn_in": "",
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m1_done",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.m2_done",
+      "value": true
+     }
+    ],
+    "complete_flags": [
+     {
+      "key": "sunk_ward.m3_turned_in",
+      "value": true
+     }
+    ],
+    "auto_start": false,
+    "links": {},
+    "variants": [],
+    "loot_pool": [],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "main",
+    "show_locked": true,
+    "closed_text": "Clear the Sweep and the Cages first."
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "entry": {
+    "id": "q_a1_m4",
+    "name": "The Tallow Vats",
+    "description": "Guild-Master Orlov brings Render-Beasts and Dredgers to burn out a young chemist at the Tallow Vats. Cut through and find her.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Cut through the Tallow Vats and find the chemist",
+      "location": "tallow_vats",
+      "encounter": "enc_evt_04"
+     }
+    ],
+    "reward": "Talia's thanks, a poultice, and Orlov's Retribution; five days of Warded Tallow wait in Orlov's stores.",
+    "template": "a1_main_raid",
+    "turn_in": "",
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m1_done",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.m2_done",
+      "value": true
+     }
+    ],
+    "complete_flags": [
+     {
+      "key": "sunk_ward.m4_turned_in",
+      "value": true
+     }
+    ],
+    "auto_start": false,
+    "links": {},
+    "variants": [],
+    "loot_pool": [
+     "loot_orlovs_retribution"
+    ],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "main",
+    "show_locked": true,
+    "closed_text": "Clear the Sweep and the Cages first."
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "entry": {
+    "id": "q_a1_m1",
+    "name": "The Sweep",
+    "description": "Captain Vane has sealed the Seventh Ward grates and the Watch is selling captives for a Bastion commission. Break the sweep at Alleyway Junction 7.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Break Vane's sweep at Alleyway Junction 7",
+      "location": "alleyway_junction_7",
+      "encounter": "enc_evt_01"
+     }
+    ],
+    "reward": "Talia's thanks, a poultice, and Vane's gate cipher.",
+    "template": "a1_main_raid",
+    "turn_in": "",
+    "requires_flags": [],
+    "complete_flags": [],
+    "auto_start": false,
+    "links": {},
+    "variants": [],
+    "loot_pool": [
+     "loot_gilded_pavise"
+    ],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "main",
+    "show_locked": true,
+    "closed_text": ""
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "entry": {
+    "id": "q_hook_counter_still",
+    "name": "The Tenement Counter-Still",
+    "description": "Elyse will check her awakened mother's tenement block and distil tallow. The Vats' leftover stills are hot.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Check the counter-still at the Tallow Vats",
+      "flag": "sunk_ward.still_checked",
+      "value": true
+     }
+    ],
+    "reward": "Five days of Warded Tallow.",
+    "template": "a1_flag_job_tallow",
+    "turn_in": "",
+    "requires_flags": [
+     {
+      "key": "sunk_ward.elyse_joined",
+      "value": true
+     }
+    ],
+    "complete_flags": [
+     {
+      "key": "sunk_ward.still_done",
+      "value": true
+     }
+    ],
+    "auto_start": false,
+    "links": {},
+    "variants": [],
+    "loot_pool": [],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "side",
+    "show_locked": true,
+    "closed_text": "Cut through the Tallow Vats first."
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "shops",
+   "entry": {
+    "id": "varka_trade",
+    "name": "The Leaking Vat",
+    "keeper": "widow_varka",
+    "stock": [
+     {
+      "item": "rock_salt",
+      "count": -1,
+      "price": 25,
+      "requires_flags": []
+     },
+     {
+      "item": "sulfur_poultice",
+      "count": -1,
+      "price": -1,
+      "requires_flags": []
+     },
+     {
+      "item": "calcified_bone_shard",
+      "count": -1,
+      "price": 20,
+      "requires_flags": []
+     },
+     {
+      "item": "con_quenched_salt",
+      "count": 2,
+      "price": -1,
+      "requires_flags": [
+       {
+        "key": "pk2.slab_open",
+        "value": true
+       }
+      ]
+     }
+    ],
+    "loot": [],
+    "buy_mult": 1.0,
+    "supply_price": 8,
+    "sell_mult": 0.5,
+    "buys": [
+     "WEAPON",
+     "SHIELD",
+     "ARMOR",
+     "ACCESSORY",
+     "CONSUMABLE",
+     "MATERIAL"
+    ],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.ivo_rescued",
+      "value": true
+     }
+    ],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "entry": {
+    "id": "enc_evt_01",
+    "name": "The Sweep",
+    "description": "M1, Tier 1: Captain Vane's grate sweep at Junction 7.",
+    "intro": "Vane's sweep is closing the grates, wall by wall.",
+    "location": "alleyway_junction_7",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "####..######",
+     "#..r..#....#",
+     "#.....#..r.#",
+     "#..........#",
+     "..r.....r...",
+     "#..........#",
+     "#.r...#....#",
+     "#.....#..r.#",
+     "####..######"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "captain_vane",
+     "castellan_footman",
+     "castellan_footman",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "vane_taunt",
+      "name": "Kaelen answers Vane",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m1_vane",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "execution_wall",
+      "name": "The Execution Wall",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "captain_vane",
+       "pct": 50,
+       "or_round": 3
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Lock shields! Seventh Ward, with me!"
+       },
+       {
+        "type": "wave",
+        "units": [
+         "footman_shieldbearer",
+         "footman_shieldbearer"
+        ],
+        "label": "Shield-bearers lock the wall"
+       },
+       {
+        "type": "enrage",
+        "unit": "captain_vane",
+        "power": 15
+       },
+       {
+        "type": "deck",
+        "unit": "captain_vane",
+        "add": [
+         "execution_wall"
+        ],
+        "order": {
+         "assault": [
+          "execution_wall",
+          "gilded_billhook_sunder"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "vane_withdraws",
+      "name": "Vane withdraws",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "captain_vane",
+       "pct": 25
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "This isn't over, deserter."
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m1_retreat",
+        "speaker": "captain_vane"
+       },
+       {
+        "type": "ai",
+        "unit": "captain_vane",
+        "flee_ratio": 1
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Break Vane's sweep before the grates are sealed.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": true,
+    "morale_break": 50,
+    "morale_leader": "captain_vane",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 30,
+     "gold_max": 30,
+     "once": true
+    },
+    "key_loot": [],
+    "objective_reward": {
+     "loot": "loot_gate_pass",
+     "once": true
+    },
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main",
+     "loud"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "entry": {
+    "id": "enc_evt_02",
+    "name": "The Crossroads Cages",
+    "description": "M2, Tier 1: Proctor Quell's titration cages at the Ash-Crawl Crossroads.",
+    "intro": "Flagellants circle the cages while Quell works.",
+    "location": "ash_crawl_crossroads",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "#....##....#",
+     "#.f......f.#",
+     "#...r..r...#",
+     "#....##....#",
+     ".....##.....",
+     "#....##....#",
+     "#...r..r...#",
+     "#.f......f.#",
+     "#....##....#"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "proctor_quell",
+     "inquisitorial_purifier",
+     "mortuary_flagellant",
+     "mortuary_flagellant"
+    ],
+    "phases": [
+     {
+      "id": "quell_taunt",
+      "name": "Maren reads the cage seals",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m2_cages",
+        "speaker": "maren"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "cull_1",
+      "name": "The first cull",
+      "trigger": {
+       "kind": "round",
+       "round": 3
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "A flagellant raises the scourge over the first cage."
+       },
+       {
+        "type": "kill",
+        "units": [
+         "tithe_captive_a"
+        ],
+        "by": "mortuary_flagellant",
+        "within": 0
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "cull_2",
+      "name": "The second cull",
+      "trigger": {
+       "kind": "round",
+       "round": 5
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Another cage falls silent."
+       },
+       {
+        "type": "kill",
+        "units": [
+         "tithe_captive_b"
+        ],
+        "by": "mortuary_flagellant",
+        "within": 0
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "marrow_valve",
+      "name": "The brass valve",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "proctor_quell",
+       "pct": 35,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The brass valve in Quell's neck hisses open\u2014raw condensate floods his veins!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m2_valve",
+        "speaker": "maren"
+       },
+       {
+        "type": "status",
+        "unit": "proctor_quell",
+        "status": "regen",
+        "rounds": 3,
+        "magnitude": 10
+       },
+       {
+        "type": "enrage",
+        "unit": "proctor_quell",
+        "power": 15
+       },
+       {
+        "type": "deck",
+        "unit": "proctor_quell",
+        "add": [
+         "transfusion_pulse"
+        ],
+        "order": {
+         "assault": [
+          "transfusion_pulse",
+          "sanctified_vivisection"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Free the cages before the flagellants cull them.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 25,
+     "gold_max": 25,
+     "once": true
+    },
+    "key_loot": [
+     {
+      "loot": "loot_marrow_scalpel",
+      "kill": "proctor_quell"
+     },
+     {
+      "loot": "loot_marrow_valve",
+      "kill": "proctor_quell"
+     }
+    ],
+    "objective_reward": {
+     "loot": "loot_slab_retorts",
+     "once": true
+    },
+    "guests": [
+     "tithe_captive_a",
+     "tithe_captive_b"
+    ],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main",
+     "loud"
+    ],
+    "survivors": {
+     "flag": "sunk_ward.saved_youths",
+     "unit": "tithe_captive"
+    }
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "sluice_gate",
+    "name": "The submerged sluice gate",
+    "from": "sluice_undercroft",
+    "to": "drowned_runoff_grate",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "drain_flue",
+    "name": "The drain flue",
+    "from": "drowned_runoff_grate",
+    "to": "ash_crawl_crossroads",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "kiln_link",
+    "name": "The pipe duct",
+    "from": "alleyway_junction_7",
+    "to": "fourth_kiln",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m1_done",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.m2_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "flue_climb",
+    "name": "The flue climb",
+    "from": "fourth_kiln",
+    "to": "crucible_watchpost",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.interlude_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "crossroads_link",
+    "name": "The slum alleys",
+    "from": "ash_crawl_crossroads",
+    "to": "tallow_vats",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m1_done",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.m2_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "water_siphon",
+    "name": "The water siphon",
+    "from": "drowned_runoff_grate",
+    "to": "alleyway_junction_7",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "convoy_track",
+    "name": "The convoy track",
+    "from": "tallow_vats",
+    "to": "crucible_watchpost",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.interlude_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "high_gorge",
+    "name": "The high gorge",
+    "from": "crucible_watchpost",
+    "to": "slag_gate",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m5_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "third_ward_road",
+    "name": "The Third Ward road",
+    "from": "drowned_runoff_grate",
+    "to": "corvos_gate",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m1_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "entry": {
+    "id": "siphon_shortcut",
+    "name": "The Siphon Shortcut",
+    "from": "drowned_runoff_grate",
+    "to": "tallow_vats",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 0,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [
+     {
+      "key": "sunk_ward.m1_done",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.m2_done",
+      "value": true
+     },
+     {
+      "key": "sunk_ward.lock_ciphers_done",
+      "value": true
+     }
+    ],
+    "unless_flags": [],
+    "tags": [
+     "siphon"
+    ]
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "entry": {
+    "id": "corvos_gate",
+    "name": "Corvo's Gate",
+    "description": "Node 1d: the Third Ward gate, where Bailiff Corvo keeps a bribable post.",
+    "kind": "gate",
+    "region": "sunk_ward_quarter",
+    "exits": [],
+    "encounters": [
+     "enc_job_corvo_gate"
+    ],
+    "map": "gorge_ruins",
+    "zone_bindings": {},
+    "markers": [
+     {
+      "id": "world_map",
+      "kind": "exit",
+      "anchor": "east",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "to": "world_map",
+      "label": "World map: the Third Ward road"
+     },
+     {
+      "id": "corvo",
+      "kind": "npc",
+      "anchor": "camp_npc",
+      "requires_flags": [],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.corvo_forced",
+        "value": true
+       }
+      ],
+      "sets_flags": [],
+      "character": "bailiff_corvo"
+     }
+    ],
+    "map_pos": [
+     0.85,
+     0.75
+    ],
+    "rest": false,
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "entry": {
+    "id": "tallow_vats",
+    "name": "The Tallow Vats",
+    "description": "Node 05: the Guild's rendering vats and still-rooms, where Tallow Dredgers boil the district's dead.",
+    "kind": "wild",
+    "region": "sunk_ward_quarter",
+    "exits": [],
+    "encounters": [
+     "enc_evt_04"
+    ],
+    "map": "gorge_ruins",
+    "zone_bindings": {},
+    "markers": [
+     {
+      "id": "world_map",
+      "kind": "exit",
+      "anchor": "east",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "to": "world_map",
+      "label": "World map: the Tallow Vats"
+     },
+     {
+      "id": "vats",
+      "kind": "encounter",
+      "anchor": "site_b",
+      "requires_flags": [],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.m4_done",
+        "value": true
+       }
+      ],
+      "sets_flags": [],
+      "encounter": "enc_evt_04",
+      "trigger": "proximity",
+      "radius": 2,
+      "once": false
+     },
+     {
+      "id": "orlov_stores",
+      "kind": "chest",
+      "anchor": "ruin_chest",
+      "requires_flags": [
+       {
+        "key": "sunk_ward.m4_done",
+        "value": true
+       }
+      ],
+      "unless_flags": [],
+      "sets_flags": [
+       {
+        "key": "sunk_ward.orlov_stores_taken",
+        "value": true
+       }
+      ],
+      "items": {},
+      "gold": 0,
+      "supplies": 5
+     },
+     {
+      "id": "counter_still",
+      "kind": "point",
+      "anchor": "altar",
+      "requires_flags": [
+       {
+        "key": "sunk_ward.elyse_joined",
+        "value": true
+       }
+      ],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.still_checked",
+        "value": true
+       }
+      ],
+      "sets_flags": [
+       {
+        "key": "sunk_ward.still_checked",
+        "value": true
+       }
+      ],
+      "label": "Elyse's counter-still",
+      "note": "A coil of copper pipe and a leaking alum drum in the corner of a tenement block. Elyse tips a measure of clean tallow into a flask and corks it with her thumb."
+     }
+    ],
+    "map_pos": [
+     0.67,
+     0.38
+    ],
+    "rest": false,
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "meters",
+   "entry": {
+    "id": "doom_clock",
+    "name": "The Red Tithing",
+    "description": "Days until the Inquisition's next tithing rite.",
+    "kind": "countdown",
+    "min": 0,
+    "max": 42,
+    "start": 42,
+    "unit": "days",
+    "visible": true,
+    "scope": "campaign",
+    "bands": [
+     {
+      "id": "due",
+      "name": "Due",
+      "from": 0,
+      "tone": "danger"
+     },
+     {
+      "id": "near",
+      "name": "Near",
+      "from": 1,
+      "tone": "warn"
+     },
+     {
+      "id": "far",
+      "name": "Far",
+      "from": 8,
+      "tone": "calm"
+     }
+    ],
+    "rules": [
+     {
+      "id": "d_week",
+      "at": 7,
+      "warn": "PLACEHOLDER: Seven days to the Red Tithing."
+     },
+     {
+      "id": "d_zero",
+      "at": 0,
+      "acts": [
+       1,
+       2
+      ],
+      "effects": [
+       {
+        "effect": "meter_add",
+        "meter": "alert",
+        "delta": 10
+       },
+       {
+        "effect": "add_flag",
+        "key": "lesser_tithings",
+        "delta": 1
+       }
+      ],
+      "restart_days": 14,
+      "warn": "The Red Tithing falls early: a lesser tithing, and the Inquisition's Alert rises by 10."
+     }
+    ],
+    "inputs": [],
+    "modifiers": [],
+    "floors": [],
+    "hud": {
+     "short": "Tithing",
+     "icon": "ui/hud/doom_clock.png",
+     "order": 1
+    },
+    "tags": []
+   },
+   "world": "sunk_ward"
+  }
+ ]
+}

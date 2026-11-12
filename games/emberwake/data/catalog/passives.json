@@ -784,8 +784,8 @@
 		},
 		{
 			"id": "marrow_valve",
-			"name": "Brass Marrow Valve",
-			"description": "An illegal marrow valve in his neck. Once, it will not let him fall.",
+			"name": "Valve Overpressure",
+			"description": "An illegal brass marrow valve in his neck: when cut low, he floods his veins for one frantic surge.",
 			"effects": [
 				{
 					"type": "resist",

@@ -15,7 +15,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-7, PR5-9 to PR5-13b, PR5-18, PR5-19, PR5-26 to PR5-35 | done, released to `main` in #62 (FB-190 to FB-234, answered @cf3d93b4) | `main` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-11) |
 | PR5-36 (parts 1, 2, 4), PR5-37, PR5-38, PR5-39 | done (FB-235 to FB-241, answered @6edec2a1) | `develop` | full rows in `docs/archive/FEEDBACK_CLOSED.md` (FB-235 to FB-241); follow-ups queued as PR5-40 to PR5-42 |
 | PR5-40 `ACT1-HOOKS1` | done (FB-242; FB-243 questions): mandatory scenes refuse Back / Esc, New Game preselects `start_worlds[0]`, encounter `survivors` count, `supplies` grants, shop `discount`; 0 golden diffs | `develop` | - |
-| PR5-41 `ACT1-DATA1`, PR5-42 `WORLD-SIM1` | queued, in sequence (user 2026-11-12) | - | PR5-41 next |
+| PR5-41 `ACT1-DATA1` | building (FB-244 limit-blocker: 6 clauses need hooks or numbers; FB-245 readings): data seed `act1fix1` applied, acceptance tests in progress | `claude/gifted-wozniak-2nf3xr` | the pure-data clauses land; the blocked ones wait for Design |
+| PR5-42 `WORLD-SIM1` | queued (after PR5-41) | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -38,6 +39,14 @@ FB-01 to FB-241 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: The specs are silent on these; built defaults: the shop discount is one `{requires_flags, mult}` object (not a list, so no stacking rule was needed) and lowers stock and loot buy prices only, not the supply price (its help text says it ignores multipliers) nor sell prices; the `survivors` flag is set on every outcome (won, lost, fled) and a guest that fled the field counts as surviving (M2's captive gets `flee_ratio` 0 in PR5-41, so this does not matter there).
 - **Recommendation**: (a) keep supplies out of the discount (alternative: the discount covers supplies too); (b) keep fled guests as survivors (alternative: count only guests on the field at the end; or a content-check warning when `survivors` sits on an encounter whose guests can flee); (c) AUDIT-08's refusal only says the weapon is already a masterwork (alternative: point to the plain reforge / repair); (d) AUDIT-05 checks the overlay path against techniques and keystone only (alternative: also re-check units' `extra_skills` against the overlay path).
+
+### FB-244: PR5-41 `ACT1-DATA1` clauses blocked on missing hooks or numbers
+
+- **Spec**: READY Section 1 row PR5-41 (1), (2), (4); `PK2_GRAFTS.md` 3; CL-04; FB-241 (c-d)
+- **Kind**: limit-blocker
+- **Status**: open
+- **Finding**: The seed `act1fix1.json` lands every separable pure-data clause; these six are parked, with no dialogue workaround. (1) **Tier I marrow graft to the dosed Founder in `enc_evt_05`**: dialogue, trigger and sequence effects have no install or grant-skill effect (`install` is a recipe effect only; encounter `start_status` / `phases` grant nothing), and dialogues have no per-character "deployed / in party" condition, so "only deployed Founders" is approximated by the `*_joined` flags on the Dunstan and Elyse choices. (2) **`d_zero` stake claim** (CL-04: claim 1 unrescued Ivo / Ida stake, else `-2 saved_youths`): meter-rule effects are unconditional and no flag records an Ida-at-risk stake or an Ivo-lost consumer; the +10 Alert and the warning line landed. (3) **Bellows Hearth discount** on `berek_hearth`: the shop `discount` field (PR5-40) and the gate flag `sunk_ward.bellows_done` (set by `q_hook_bellows`) exist, but no spec gives the `mult` (CANON: "cuts Berek's early Hearth Scrap costs"). (4) **Hollis's Lever-Winch**: CANON gives only "ACC, -1 block Heavy Winch Sunder"; item modifiers have no per-skill block-cost effect, no stats are given, no `sunk_ward` world items file exists, and `q_hook_overlook` / the `overlook` point grant nothing today. (5) **Snapped Alum Inhaler**: consumables have no strain-vent field (CANON: vent -25 strain, Snap); no grant point named. (6) **Skerrit's barbed cestus and quarrel recipes**: the recipe kind and `dlg_skerrit` (`skerrit_open`) exist, but no item stats, costs or recipe numbers are given.
+- **Recommendation**: (1) Option A (recommended): a kit campaign effect `install {member_from_flag, item}` usable in dialogue / sequence effects, then the dose scene installs a Tier I marrow graft; Option B: an encounter-level grant keyed on `sunk_ward.sabina_dose_to`. Plus a dialogue condition "character in party / deployed" (kit). (2) Kit: conditional meter-rule effects (a `when` on a meter rule effect), plus the stake flags in data. (3) Design gives the `mult` (0.1-1.0; e.g. 0.8). (4)-(6) Design gives the item and recipe numbers (CAST1_GEAR style rows); (4) also needs a kit modifier for per-skill block or AP cost, (5) a kit consumable field for strain venting. Queue the kit hooks as one row and the data as a follow-up seed.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

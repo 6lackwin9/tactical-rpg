@@ -800,7 +800,7 @@
 				{
 					"effect": "repair",
 					"gold": 10,
-					"count": 1,
+					"count": 2,
 					"tiers": {
 						"UNCOMMON": "salvage_fine",
 						"RARE": "salvage_fine",

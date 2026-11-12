@@ -25,7 +25,9 @@
 			"auto_start": false,
 			"links": {},
 			"variants": [],
-			"loot_pool": [],
+			"loot_pool": [
+				"loot_gilded_pavise"
+			],
 			"loot_picks": 1,
 			"reputation": {},
 			"tags": [],
@@ -94,7 +96,12 @@
 					"value": true
 				}
 			],
-			"complete_flags": [],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.m3_turned_in",
+					"value": true
+				}
+			],
 			"auto_start": false,
 			"links": {},
 			"variants": [],
@@ -135,7 +142,12 @@
 					"value": true
 				}
 			],
-			"complete_flags": [],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.m4_turned_in",
+					"value": true
+				}
+			],
 			"auto_start": false,
 			"links": {},
 			"variants": [],
@@ -496,7 +508,7 @@
 				}
 			],
 			"reward": "Five days of Warded Tallow.",
-			"template": "a1_flag_job",
+			"template": "a1_flag_job_tallow",
 			"turn_in": "",
 			"requires_flags": [
 				{

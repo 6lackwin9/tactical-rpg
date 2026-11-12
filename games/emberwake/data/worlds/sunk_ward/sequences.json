@@ -151,6 +151,10 @@
 							"effect": "set_flag",
 							"key": "pk2.hearth_open",
 							"value": true
+						},
+						{
+							"effect": "set_act",
+							"act": 2
 						}
 					]
 				},
