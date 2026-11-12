@@ -58,6 +58,29 @@ pub fn buy_price(s: &Dict, value: i64, fixed: i64, rb: i64) -> i64 {
     ((num + 9999) / 10000).max(1)
 }
 
+/// ACT1-HOOKS1 (FB-241 c): the shop field `discount` `{"requires_flags", "mult"}` (`{}` = none).
+pub const DISCOUNT: &str = "discount";
+
+/// ACT1-HOOKS1: the shop's buy-price factor in percent now: its `discount.mult` while every `discount.requires_flags`
+/// condition holds, else 100 (no discount, also for `{}`). It lowers the stock and loot prices; the supply price stays
+/// fixed (it ignores every multiplier) and sell prices are unchanged.
+pub fn discount_pct(gs: &GameState, s: &Dict) -> i64 {
+    let disc = json::dget(s, DISCOUNT);
+    if disc.is_empty() || !quest::all_hold(gs, json::get(disc, "requires_flags")) {
+        return 100;
+    }
+    mult(disc, "mult", 1.0)
+}
+
+/// ACT1-HOOKS1: a buy price after the discount `pct` (percent): ceil(price x pct / 100), at least 1; the price itself
+/// at 100.
+pub fn discounted(price: i64, pct: i64) -> i64 {
+    if pct >= 100 || price <= 0 {
+        return price;
+    }
+    ((price * pct + 99) / 100).max(1)
+}
+
 pub fn sell_price(s: &Dict, value: i64, rs: i64) -> i64 {
     value.max(0) * mult(s, "sell_mult", 0.5) * rs / 10000
 }
@@ -79,6 +102,7 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
     let s = shop_of(d, gs, r);
     let sqid = json::s(s, "_qid");
     let rb = rep::buy_pct(keeper_band(d, gs, s));
+    let off = discount_pct(gs, s);
     for raw in json::arr(&json::normalize(json::get(s, "stock"))) {
         let st = json::dict(raw);
         if !quest::all_hold(gs, json::get(st, "requires_flags")) {
@@ -87,7 +111,7 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
         let item = json::s(st, "item");
         let count = json::i(st, "count", UNLIMITED);
         let left = if count == UNLIMITED { UNLIMITED } else { (count - sold(gs, &sqid, &item)).max(0) };
-        let price = buy_price(s, value_of(d, &item), json::i(st, "price", DERIVED), rb);
+        let price = discounted(buy_price(s, value_of(d, &item), json::i(st, "price", DERIVED), rb), off);
         out.push(json::obj([("kind", "item".into()), ("id", item.clone().into()), ("item", item.into()), ("count", int(count)), ("price", int(price)), ("left", int(left))]));
     }
     for raw in json::arr(&json::normalize(json::get(s, "loot"))) {
@@ -102,7 +126,7 @@ pub fn offers(d: &Data, gs: &GameState, r: &str) -> Vec<Dict> {
             ("id", lqid.into()),
             ("item", json::s(loot, "ref").into()),
             ("count", int(json::i(loot, "count", 1))),
-            ("price", int(json::i(l, "price", 1))),
+            ("price", int(discounted(json::i(l, "price", 1), off))),
             ("left", int(1)),
         ]));
     }

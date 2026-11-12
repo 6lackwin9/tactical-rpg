@@ -383,6 +383,8 @@ pub struct DialogueRunner {
     pub closed: bool,
     pub start: String,
     pub services: bool,
+    /// ACT1-HOOKS1: opened as a queued scene (`open_scene`), not a visit (`must_choose`).
+    pub scene: bool,
     pub node_id: String,
     pub shop_qid: String,
     /// STORYUI1 B3: the board whose pane is open over the conversation ("" = none), like `shop_qid`.
@@ -436,7 +438,7 @@ impl DialogueRunner {
     /// to ("" = none: the tree's and the nodes' own speakers), no services (a scene, not a visit). Refused for an
     /// unknown ref or a speaker who is gone, as `open`.
     pub fn open_scene(d: &Data, gs: &mut GameState, dialogue_ref: &str, speaker_ref: &str) -> Self {
-        let mut r = Self::default();
+        let mut r = Self { scene: true, ..Default::default() };
         if !speaker_ref.is_empty() {
             let c = d.resolve(&gs.world_id, "characters", speaker_ref);
             if c.is_empty() {
@@ -1088,6 +1090,35 @@ impl DialogueRunner {
         };
         self.with_notes(res)
     }
+
+    /// ACT1-HOOKS1 (FB-241 a): a scene (`open_scene`) that may not be left without choosing: it is open, offers no
+    /// farewell reply, and has a reply to pick: an open one on the node shown, or any reply on a node its `next` lines
+    /// lead to. Read from the tree alone (no dialogue id is special). A node whose replies are all locked or hidden may
+    /// be left (never a dead end); a conversation with a person (`open`) always may be.
+    pub fn must_choose(&self, d: &Data, gs: &GameState) -> bool {
+        if !self.scene || self.closed {
+            return false;
+        }
+        let visible = self.visible(d, gs);
+        if visible.iter().any(|(c, _)| json::s(c, "_service") == "farewell") {
+            return false;
+        }
+        let node = self.node(d, gs, &self.node_id);
+        if !json::arr(&json::normalize(json::get(&node, "choices"))).is_empty() {
+            return visible.iter().any(|(_, locked)| !locked);
+        }
+        let mut seen = vec![self.node_id.clone()];
+        let mut next = json::s(&node, "next");
+        while !next.is_empty() && !seen.contains(&next) {
+            let ahead = self.node(d, gs, &next);
+            if !json::arr(&json::normalize(json::get(&ahead, "choices"))).is_empty() {
+                return true;
+            }
+            seen.push(next);
+            next = json::s(&ahead, "next");
+        }
+        false
+    }
 }
 
 /// DialogueRunner.apply's body for one effect (STORYUI1 Q3: factored out with no change to the conversation), shared by
@@ -1111,7 +1142,11 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
             quest::start(d, gs, &json::s(fx, "quest"));
         }
         "give" => {
-            let rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
+            let mut rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
+            // ACT1-HOOKS1 (FB-241 c): a `give` may hand over travel supplies (capped by the purse, the rest a note)
+            if json::i(fx, "supplies", 0) > 0 {
+                rewards.insert("supplies".into(), int(json::i(fx, "supplies", 0)));
+            }
             let given = quest::reward_apply(d, gs, &rewards, "", &[]);
             notes.extend(json::sget(&given, "notes"));
         }

@@ -45,6 +45,8 @@ pub struct Data {
     /// PK2-S4 (FB-167 Q7 (a)): the act weapon mastery is gained from (the manifest's `durability.from_act`; 0 = never,
     /// also from values).
     pub from_act: i64,
+    /// ACT1-HOOKS1 (FB-241 c): the game manifest's `start_worlds` (`new_game::default_world`; empty from values).
+    pub start_worlds: Vec<String>,
     /// HOOKS1 CN3: per world whose `classes` overlay replaces a class path, the catalog with those paths (built at load;
     /// other worlds build with `cat`).
     world_cats: IndexMap<String, Arc<Catalog>>,
@@ -76,6 +78,7 @@ impl Data {
         let mut d = Self::from_values(&src.catalog, &src.worlds, &src.game);
         d.purse = src.purse;
         d.from_act = src.from_act;
+        d.start_worlds = src.start_worlds;
         Ok((d, src.errors))
     }
 
@@ -122,6 +125,7 @@ impl Data {
             xp,
             purse: rpgkit_content::source::PurseCaps::default(),
             from_act: 0,
+            start_worlds: Vec::new(),
             world_cats: IndexMap::new(),
         };
         d.refresh_world_cats();

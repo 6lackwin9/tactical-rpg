@@ -15,6 +15,10 @@ const LOOT_KEYS: [&str; 2] = ["loot", "price"];
 const COUNT_MAX: i64 = 99;
 const PRICE_MAX: i64 = 99999;
 const SUPPLY_PRICE_MAX: i64 = 999;
+/// ACT1-HOOKS1: the shop field of the flag-gated discount (`rpgkit_world::shop::DISCOUNT`), its keys and least `mult`.
+const DISCOUNT: &str = "discount";
+const DISCOUNT_KEYS: [&str; 2] = ["requires_flags", "mult"];
+const DISCOUNT_MIN: f64 = 0.1;
 /// Every item type but QUEST (ItemFamilies.ITEM_TYPES order).
 const BUY_TYPES: [&str; 6] = ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY", "CONSUMABLE", "MATERIAL"];
 
@@ -38,6 +42,29 @@ pub fn shop_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     }
     errors.extend(buys_errors(e.get("buys").unwrap_or(&empty)));
     errors.extend(condition_errors(e.get("requires_flags").unwrap_or(&empty), "Open when"));
+    errors.extend(discount_errors(e.get(DISCOUNT).unwrap_or(&Value::Object(Dict::new()))));
+    errors
+}
+
+/// ACT1-HOOKS1 (FB-241 c): the shop's flag-gated `discount` `{"requires_flags", "mult"}` (`{}` = none): its keys, at
+/// least one flag condition, and `mult` 0.1..1.0 with at most two decimals (a discount, never a markup).
+fn discount_errors(raw: &Value) -> Vec<String> {
+    let Some(disc) = raw.as_object() else {
+        return vec!["Discount must be an object {requires_flags, mult}.".into()];
+    };
+    if disc.is_empty() {
+        return Vec::new();
+    }
+    let mut errors: Vec<String> = disc.keys().filter(|k| !DISCOUNT_KEYS.contains(&k.as_str())).map(|k| format!("Discount: unknown key '{k}'.")).collect();
+    let conds = disc.get("requires_flags").cloned().unwrap_or(Value::Array(Vec::new()));
+    if json::arr(&json::normalize(&conds)).is_empty() {
+        errors.push("Discount needs at least one flag condition (requires_flags).".into());
+    }
+    errors.extend(condition_errors(&conds, "Discount requires flags"));
+    match disc.get("mult") {
+        None => errors.push("Discount needs a mult (0.1..1.0).".into()),
+        Some(m) => errors.extend(mult_errors(m, "Discount mult", DISCOUNT_MIN, 1.0)),
+    }
     errors
 }
 

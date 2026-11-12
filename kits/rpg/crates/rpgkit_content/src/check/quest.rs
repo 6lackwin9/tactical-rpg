@@ -6,7 +6,8 @@ use super::View;
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 
-const REWARD_KEYS: [&str; 5] = ["xp", "items", "passives", "skills", "gold"];
+/// ACT1-HOOKS1 (FB-241 c): `supplies` (travel supplies, 0..the purse's top) joined the reward keys.
+const REWARD_KEYS: [&str; 6] = ["xp", "items", "passives", "skills", "gold", "supplies"];
 const XP_MAX: i64 = 2000;
 const GOLD_MAX: i64 = 5000;
 const ITEM_COUNT_MAX: i64 = 99;
@@ -89,7 +90,7 @@ pub fn reward_ref_error(v: &View, kind: &str, r: &str) -> String {
     }
 }
 
-/// QuestRules.rewards_errors: a reward object {xp, items, passives, skills, gold}.
+/// QuestRules.rewards_errors: a reward object {xp, items, passives, skills, gold, supplies}.
 pub fn rewards_errors(v: &View, raw: &Value) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(rewards) = json::normalize(raw).as_object().cloned() else {
@@ -109,6 +110,12 @@ pub fn rewards_errors(v: &View, raw: &Value) -> Vec<String> {
     if let Some(gold) = rewards.get("gold") {
         if !json::is_int(gold) || !(0..=GOLD_MAX).contains(&json::to_int(gold)) {
             errors.push(format!("Rewards gold must be a whole number 0..{GOLD_MAX}."));
+        }
+    }
+    if let Some(supplies) = rewards.get("supplies") {
+        let top = crate::source::PurseCaps::SUPPLIES_MAX;
+        if !json::is_int(supplies) || !(0..=top).contains(&json::to_int(supplies)) {
+            errors.push(format!("Rewards supplies must be a whole number 0..{top}."));
         }
     }
     if let Some(items) = rewards.get("items") {

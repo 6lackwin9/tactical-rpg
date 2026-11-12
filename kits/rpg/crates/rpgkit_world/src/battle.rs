@@ -250,6 +250,52 @@ pub struct Tally {
     pub party: Vec<roster::HeroEnd>,
     /// The world whose encounter was fought (`roster::field_unit`'s world; "" = `fight_world`).
     pub world: String,
+    /// ACT1-HOOKS1 (FB-241 c): how the battle left each party-side guest (the encounter's `guests`), for its
+    /// `survivors` flag. None = not known (a tally built by hand): the flag is left as it is.
+    pub guests: Option<Vec<GuestEnd>>,
+}
+
+/// ACT1-HOOKS1: one party-side guest at the battle's end: its encounter ref and whether it lived (alive and still on
+/// the party's side; a guest that fled the field lived, one that turned hostile did not).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuestEnd {
+    pub unit_ref: String,
+    pub alive: bool,
+}
+
+/// ACT1-HOOKS1: the world encounter field `{"flag", "unit"}` (`{}` = none): at every settle the flag is set to the
+/// number of guests (of `unit`: a guest's ref, character id or base unit; "" = every guest) that lived.
+pub const SURVIVORS: &str = "survivors";
+
+/// ACT1-HOOKS1: the guests of `s` (its encounter's `guests` refs, spawn order) as the battle left them.
+pub fn guest_ends(s: &Session) -> Vec<GuestEnd> {
+    s.def
+        .guests
+        .iter()
+        .flat_map(|r| s.units_of_ref(r).into_iter().map(move |c| (r, c)))
+        .map(|(r, c)| GuestEnd { unit_ref: r.clone(), alive: s.guests.contains(&c) && s.w.units[c].is_alive() })
+        .collect()
+}
+
+/// ACT1-HOOKS1: guest ref `r` (an encounter's guest in `world`) is of `unit`: "" (every guest), the ref itself, or its
+/// character's id or base unit.
+fn guest_of(d: &Data, world: &str, r: &str, unit: &str) -> bool {
+    if unit.is_empty() || r == unit {
+        return true;
+    }
+    let c = d.resolve(world, "characters", r);
+    json::s(c, "id") == unit || json::s(c, "base_unit") == unit
+}
+
+/// ACT1-HOOKS1 (FB-241 c): the encounter's `survivors` flag set (on every outcome) to how many guests of its `unit`
+/// lived; nothing when the encounter names no flag or the tally does not know its guests.
+fn record_survivors(d: &Data, gs: &mut GameState, enc: &Dict, tally: &Tally) {
+    let block = json::dget(enc, SURVIVORS);
+    let flag = json::s(block, "flag");
+    let Some(guests) = tally.guests.as_ref().filter(|_| !flag.is_empty()) else { return };
+    let (world, unit) = (json::s_or(enc, "_world", &gs.world_id), json::s(block, "unit"));
+    let n = guests.iter().filter(|g| g.alive && guest_of(d, &world, &g.unit_ref, &unit)).count() as i64;
+    quest::set_flag(d, gs, &flag, int(n));
 }
 
 impl Tally {
@@ -267,13 +313,15 @@ impl Tally {
     /// `members`: member id and unloaded pouch ids, in the order they were fielded), fought in world `world`. Every
     /// screen or headless runner that plays a world fight passes this to its runner's `after_fight`.
     pub fn of_world_fight(s: &Session, members: &[(String, Vec<String>)], world: &str) -> Self {
-        Tally { party: roster::hero_ends(s, members), world: world.to_string(), ..Self::from_session(s) }
+        Tally { party: roster::hero_ends(s, members), world: world.to_string(), guests: Some(guest_ends(s)), ..Self::from_session(s) }
     }
 
-    /// REWARD1 2.5, no battle: won = every roster enemy killed; lost and fled = every one standing.
+    /// REWARD1 2.5, no battle: won = every roster enemy killed; lost and fled = every one standing. Every guest of
+    /// the encounter lived (ACT1-HOOKS1).
     pub fn default_for(d: &Data, world: &str, encounter_qid: &str, outcome: &str) -> Self {
         let fate = if outcome == "won" { Fate::Killed } else { Fate::Standing };
-        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), ..Default::default() }
+        let guests = json::sget(d.resolve(world, "encounters", encounter_qid), "guests").into_iter().map(|r| GuestEnd { unit_ref: r, alive: true }).collect();
+        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), guests: Some(guests), ..Default::default() }
     }
 
     /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster.
@@ -341,6 +389,8 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let enc_world = json::s_or(&enc, "_world", &world);
     // 1. the party side first (ROSTER1 3.2 and L5, ENCOUNTER2 W1-W4): before the XP, the quest hook and the tick
     let (party_keys, party_notes) = settle_party_side(d, gs, &enc, encounter_qid, outcome, tally);
+    // ACT1-HOOKS1 (FB-241 c): the guests that lived, on every outcome
+    record_survivors(d, gs, &enc, tally);
     let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);

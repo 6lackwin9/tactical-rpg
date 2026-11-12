@@ -415,8 +415,9 @@ fn party_line(party: &[(String, String, i64)]) -> String {
 }
 
 impl NewGameScreen {
+    /// ACT1-HOOKS1 (FB-241 c): the manifest's first playable start world is picked first (`new_game::default_world`).
     pub fn new(cx: &Cx) -> Self {
-        Self { selected: new_game::playable_worlds(&cx.data).first().cloned().unwrap_or_default(), w: Vec::new() }
+        Self { selected: new_game::default_world(&cx.data), w: Vec::new() }
     }
 
     fn party_of(cx: &Cx, world: &str) -> Vec<(String, String, i64)> {
@@ -2051,5 +2052,21 @@ mod tests {
         enter_is_no(&mut cx, &mut g, "Starting a new game replaces your autosave");
         assert!(cx.is_dirty(), "no new game");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ACT1-HOOKS1 (FB-241 c): New game picks the game manifest's first playable `start_worlds` entry (read from
+    /// `game.json` beside the data folder), not the first playable world; with no list it picks the first playable world
+    /// as before. Read from the shipped manifest, never named here.
+    #[test]
+    fn new_game_preselects_the_manifests_first_start_world() {
+        let dir = scratch("new_game_start");
+        let mut cx = cx(dir.to_path_buf());
+        let manifest = aegis_content::manifest::Manifest::read(&cx.data_dir.parent().expect("the game folder").join(aegis_content::manifest::FILE)).expect("game.json");
+        let playable = new_game::playable_worlds(&cx.data);
+        let want = manifest.start_worlds.iter().find(|w| playable.contains(w)).cloned().expect("the manifest names a playable start world");
+        assert_eq!(cx.data.start_worlds, manifest.start_worlds, "the data carries the manifest's list");
+        assert_eq!(NewGameScreen::new(&cx).state(&cx)["selected"], json!(want), "the first playable start world");
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").start_worlds.clear();
+        assert_eq!(NewGameScreen::new(&cx).state(&cx)["selected"], json!(playable[0]), "no list: the first playable world");
     }
 }
