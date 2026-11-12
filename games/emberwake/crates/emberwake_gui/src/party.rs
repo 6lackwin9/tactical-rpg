@@ -963,11 +963,7 @@ impl Character {
             }
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
-        let mut rows = derived(d, &cx.gs().world_id, &party_ruleset(cx), m);
-        // AUDIT-04 (PR5-40): the PK2 numbers it has (mastery, techniques, keystone, weapon durability), read only
-        let pk2 = pk2_rows(d, &cx.gs().world_id, m);
-        let pk2_from = rows.len();
-        rows.extend(pk2);
+        let rows = derived(d, &cx.gs().world_id, &party_ruleset(cx), m);
         let label_x = 250f32.max(table_right + 6.0);
         let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
@@ -976,13 +972,18 @@ impl Character {
         for (i, r) in rows.iter().enumerate() {
             let y = 143.0 + i as f32 * step;
             ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
-            // AUDIT-04: a PK2 row's text fits the frame (a number row draws as before)
-            if i >= pk2_from {
-                ui.p.text_fit(value_x, y, &r.shown, BODY + 1.0, 604.0 - value_x, th().text);
-            } else {
-                ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
-            }
+            ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
             ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
+        }
+        // AUDIT-04 (PR5-40): the PK2 numbers it has (mastery, techniques, keystone, weapon durability), read only, as one
+        // compact line between the stat table (its last row ends at 245) and the passives (256): the derived rows keep
+        // their step; the hover card and the detail pane hold every row in full
+        let pk2 = pk2_rows(d, &cx.gs().world_id, m);
+        if !pk2.is_empty() {
+            let line = format!("Mastery: {}", pk2.iter().map(|(_, short)| short.as_str()).collect::<Vec<_>>().join(" · "));
+            ui.p.text_fit(68.0, PK2_Y as f32, &line, BODY + 1.0, label_x - 78.0, th().text);
+            let card: Vec<String> = pk2.iter().map(|(r, _)| format!("{}: {}. {}", r.label, r.shown, r.desc)).collect();
+            ui.push("stats.pk2", "row", line, Rect::new(66, PK2_Y - 1, (label_x - 74.0) as i32, 256 - (PK2_Y - 1)), true, false, None, tip("Mastery and weapons", &card.join(" ")));
         }
         // the re-gathered list (FB-63 (2); a hero's temperament is not in the save)
         let owned = progression::member_passives(d, m);
@@ -1680,34 +1681,39 @@ fn instance_note(d: &Data, m: &UnitState, slot: &str) -> String {
     weapons::wielded(m, slot).map_or_else(String::new, |w| format!(" ({}/{}{})", w.durability, weapons::full(d, &w.item), if w.masterwork { " MW" } else { "" }))
 }
 
-/// AUDIT-04 (PR5-40): the member's PK2 numbers as read-only rows after the derived ones on the Stats tab, only those
-/// it has: its weapon mastery per family (level and XP), the techniques and the mastery keystone open now (as the
-/// built unit holds them), and each wielded weapon instance's durability (MW = masterwork).
-fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<DRow> {
-    let row = |label: &str, shown: String, desc: &str| DRow { label: label.into(), value: 0, shown, desc: desc.into() };
+/// AUDIT-04 (PR5-40): the top of the Stats tab's PK2 line (`pk2_rows`), under the stat table and over the passives.
+const PK2_Y: i32 = 246;
+
+/// AUDIT-04 (PR5-40): the member's PK2 numbers, read only, for the Stats tab's PK2 line, only those it has: its weapon
+/// mastery per family (level and XP), the techniques and the mastery keystone open now (as the built unit holds them),
+/// and each wielded weapon instance's durability (MW = masterwork).
+fn pk2_rows(d: &Data, world: &str, m: &UnitState) -> Vec<(DRow, String)> {
+    let row = |label: &str, shown: String, desc: &str, short: String| (DRow { label: label.into(), value: 0, shown, desc: desc.into() }, short);
     let skill = |id: &str| d.cat.skill(id).map_or_else(|| id.to_string(), |s| s.name.clone());
+    let top = emberwake_data::mastery::MASTERY_MAX;
     let mut out = Vec::new();
-    let mastery: Vec<String> = m
-        .mastery_xp
-        .iter()
-        .filter(|(_, xp)| **xp > 0)
-        .map(|(f, xp)| format!("{} {} ({xp} XP)", s_or(d.entry("item_families", f), "name", f), emberwake_data::mastery::level_of(*xp)))
-        .collect();
-    if !mastery.is_empty() {
-        out.push(row("Mastery", mastery.join(", "), "Weapon mastery by family: its level (1-3) and XP, gained by using the family's weapons and by reading its books."));
+    let family = |f: &str| s_or(d.entry("item_families", f), "name", f);
+    let mastered: Vec<(&String, &i64)> = m.mastery_xp.iter().filter(|(_, xp)| **xp > 0).collect();
+    if !mastered.is_empty() {
+        let full: Vec<String> = mastered.iter().map(|(f, xp)| format!("{} {} ({xp} XP)", family(f), emberwake_data::mastery::level_of(**xp))).collect();
+        let short: Vec<String> = mastered.iter().map(|(f, xp)| format!("{} {}", family(f), emberwake_data::mastery::level_of(**xp))).collect();
+        out.push(row("Mastery", full.join(", "), &format!("Weapon mastery by family: its level (1-{top}) and XP, gained by using the family's weapons and by reading its books."), short.join(", ")));
     }
     if let Some(b) = progression::build_with(d, m, world, false) {
         let open: Vec<String> = b.unit.techniques.iter().map(|t| skill(&t.skill)).collect();
         if !open.is_empty() {
-            out.push(row("Techniques", open.join(", "), "The techniques open now: the main-hand family's at its mastery level, then a masterwork weapon's own. Standard rounds only."));
+            let n = open.len();
+            out.push(row("Techniques", open.join(", "), "The techniques open now: the main-hand family's at its mastery level, then a masterwork weapon's own. Standard rounds only.", format!("{n} tech")));
         }
         if !b.unit.mastery_keystone.is_empty() {
-            out.push(row("Keystone", skill(&b.unit.mastery_keystone), "The wielded family's keystone (mastery 3 and its forge rite). Standard rounds only."));
+            out.push(row("Keystone", skill(&b.unit.mastery_keystone), &format!("The wielded family's keystone (mastery {top} and its forge rite). Standard rounds only."), "key".into()));
         }
     }
-    let worn: Vec<String> = m.weapons.keys().filter_map(|slot| weapons::wielded(m, slot).map(|w| format!("{}{}", d.item_name(&w.item), instance_note(d, m, slot)))).collect();
-    if !worn.is_empty() {
-        out.push(row("Weapons", worn.join(", "), "The wielded weapons' durability (worn down in battle, restored by repair); MW: a masterwork."));
+    let wielded: Vec<(&String, &weapons::Weapon)> = m.weapons.keys().filter_map(|slot| weapons::wielded(m, slot).map(|w| (slot, w))).collect();
+    if !wielded.is_empty() {
+        let full: Vec<String> = wielded.iter().map(|(slot, w)| format!("{}{}", d.item_name(&w.item), instance_note(d, m, slot))).collect();
+        let short: Vec<String> = wielded.iter().map(|(slot, _)| instance_note(d, m, slot).trim().trim_matches(|c| c == '(' || c == ')').to_string()).collect();
+        out.push(row("Weapons", full.join(", "), "The wielded weapons' durability (worn down in battle, restored by repair); MW: a masterwork.", short.join(", ")));
     }
     out
 }
@@ -2238,12 +2244,14 @@ mod tests {
         };
         let catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter", "skill_path": {}, "proficiency": {"sword": {"level": 2, "role": "main"}}}],
-            "skills": [{"id": "own_cut", "name": "Own Cut", "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"}],
+            "skills": [{"id": "own_cut", "name": "Own Cut", "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"},
+                {"id": "fam_cut", "name": "Family Cut", "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"},
+                {"id": "key_cut", "name": "Key Cut", "kind": "ATTACK", "level": 1, "blocks": 1, "target_mode": "ENEMY"}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
-            "items": [sword("blade", json!({})), sword("mw_blade", json!({"technique": {"skill": "own_cut"}}))],
+            "items": [sword("blade", json!({})), sword("mw_blade", json!({"technique": {"skill": "own_cut"}, "family_techniques": [{"skill": "fam_cut"}], "family_keystone": "key_cut"}))],
             "rulesets": [{"id": "steel", "name": "Steel", "rules": ["durability"]}]
         });
-        let families = json!([{"id": "sword", "item_type": "WEAPON", "hands": ["main_1h"]}]);
+        let families = json!([{"id": "sword", "item_type": "WEAPON", "hands": ["main_1h"], "techniques": [{"skill": "fam_cut"}], "keystone": "key_cut"}]);
         let worlds = json!({"ward": {"manifest": {"id": "ward", "name": "Ward", "ruleset": "steel", "start_location": "hub", "start_party": ["hero"], "campaign": {"start_act": 1}}, "own": {
             "locations": with_ids(json!([{"id": "hub", "name": "Hub"}])),
             "characters": with_ids(json!([{"id": "hero", "name": "Hero", "role": "party", "base_unit": "hero"}]))
@@ -2299,13 +2307,77 @@ mod tests {
         // the Stats tab reads it back (read only)
         let mut c = Character::new(&cx, &member, "stats");
         crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
-        assert!(slot_widget(&c, "stats.derived.Techniques").is_some_and(|w| w.text.contains("Own Cut")), "the open technique shows");
-        assert!(slot_widget(&c, "stats.derived.Weapons").is_some_and(|w| w.text.contains("MW")), "the wielded masterwork shows");
-        assert!(slot_widget(&c, "stats.derived.Mastery").is_none() && slot_widget(&c, "stats.derived.Keystone").is_none(), "no mastery XP, no keystone: no rows");
+        let card = |c: &Character| slot_widget(c, "stats.pk2").map(|w| w.tip.get(1).map(|l| l.0.clone()).unwrap_or_default());
+        let line = slot_widget(&c, "stats.pk2").expect("the PK2 line").text.clone();
+        assert!(line.contains("1 tech") && line.contains("30/30 MW") && !line.contains("key"), "{line}");
+        let full = card(&c).unwrap();
+        assert!(full.contains("Techniques: Own Cut") && full.contains("Weapons: mw_blade (30/30 MW)") && !full.contains("Mastery:"), "{full}");
         cx.gs_mut().party.members[0].mastery_xp.insert("sword".into(), 1);
         crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
         let lvl = emberwake_data::mastery::level_of(1);
-        assert!(slot_widget(&c, "stats.derived.Mastery").is_some_and(|w| w.text.contains(&format!("sword {lvl} (1 XP)"))), "mastery by family");
+        assert!(card(&c).unwrap().contains(&format!("Mastery: sword {lvl} (1 XP)")), "mastery by family");
+    }
+
+    /// AUDIT-04 review (PR5-40): a member with all four PK2 rows (mastery 3 with the forge rite: the family's techniques
+    /// and keystone, a masterwork main hand) reads them on one line between the stat table and the passives; the
+    /// derived rows keep their step (as without the line) and no two rows of the tab overlap; the hover card holds every
+    /// row in full. With `AEGIS_REVIEW_DIR` set it writes the tab at 1280 x 720 as `stats_tab.png` there.
+    #[test]
+    fn the_pk2_line_fits_between_the_stats_and_the_passives() {
+        use emberwake_data::mastery::MASTERY_LEVEL_XP;
+        let (mut cx, member) = masterwork_cx();
+        let before = {
+            let mut c = Character::new(&cx, &member, "stats");
+            c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+            c.w.iter().filter(|w| w.id.starts_with("stats.derived.")).map(|w| w.rect).collect::<Vec<_>>()
+        };
+        {
+            let gs = cx.gs_mut();
+            let m = &mut gs.party.members[0];
+            m.equipment.insert("main_hand".into(), "mw_blade".into());
+            m.equipment.insert("off_hand".into(), NO_ITEM.into());
+            m.mastery_xp.insert("sword".into(), *MASTERY_LEVEL_XP.last().unwrap());
+            m.forge_rite = true;
+            gs.party.stash.insert("blade".into(), 1);
+            gs.party.stash.shift_remove("mw_blade");
+        }
+        let d = cx.data.clone();
+        weapons::sync(&d, cx.gs_mut());
+        let m = cx.gs().party.members[0].clone();
+        assert_eq!(pk2_rows(&d, &cx.gs().world_id, &m).iter().map(|(r, _)| r.label.as_str()).collect::<Vec<_>>(), ["Mastery", "Techniques", "Keystone", "Weapons"], "all four rows");
+        let mut c = Character::new(&cx, &member, "stats");
+        let mut g = crate::hud::hud_tests::gfx();
+        if let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") {
+            g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+            g.view = aegis_ui::painter::View::fit(1280, 720);
+            c.draw(&mut cx, &mut g, (-500, -500), true);
+            let file = std::fs::File::create(std::path::Path::new(&out).join("stats_tab.png")).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        } else {
+            c.draw(&mut cx, &mut g, (-500, -500), true);
+        }
+        let derived: Vec<Rect> = c.w.iter().filter(|w| w.id.starts_with("stats.derived.")).map(|w| w.rect).collect();
+        assert_eq!(derived, before, "the derived rows keep their places and step");
+        let line = slot_widget(&c, "stats.pk2").expect("the PK2 line");
+        assert!(line.text.contains("key") && line.text.contains("MW"), "{}", line.text);
+        let full = &line.tip[1].0;
+        for label in ["Mastery:", "Techniques:", "Keystone:", "Weapons:"] {
+            assert!(full.contains(label), "the card holds {label}: {full}");
+        }
+        let rows: Vec<(String, Rect)> = c.w.iter().filter(|w| w.id.starts_with("stats.")).map(|w| (w.id.clone(), w.rect)).collect();
+        for (i, (id, r)) in rows.iter().enumerate() {
+            assert!(r.y + r.h <= 275, "{id} {r:?} above the detail pane");
+            for (other, o) in &rows[i + 1..] {
+                let x = r.intersect(*o);
+                assert!(x.w == 0 || x.h == 0, "{id} {r:?} overlaps {other} {o:?}");
+            }
+        }
+        // the painter's line height at the tab's text size (`Painter::line_h`: size x 1.28 at scale 1)
+        let text_h = ((BODY + 1.0) * 1.28).ceil() as i32;
+        assert!(line.rect.h + 1 >= text_h, "the line's room ({}) holds a line of text ({text_h})", line.rect.h + 1);
     }
 
     // ---- RULESET1 9 D6: the deck view ------------------------------------------------------------------------------
