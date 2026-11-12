@@ -1,0 +1,43 @@
+# Art/UI prompt batch (2026-11-12)
+
+Every image the Art/UI inbox (`games/emberwake/docs/specs/ART_UI_REQUESTS.md`) still needs, as ready-to-run prompts.
+Each file is laid out the way `tools/portraits/generate.py` reads prompt files: a style block, then one
+`## Name (`id`)` section per asset. Run any of them with `--dry-run` first, which needs no key.
+Every result is checked by eye before it is kept (`ART_PROMPT_TEMPLATES.md`, "Mandatory post-generation visual
+review"). Placeholders are replaced **in place**: the same path, size and format.
+
+| Inbox | Asset | File | Route and command | Target |
+| --- | --- | --- | --- | --- |
+| AI-04 | 6 founder portraits | [ai04_founders.md](ai04_founders.md) | `generate.py run <model> kaelen vesper maren hollis dunstan elyse --n 2 --prompts art_src/prompts/ai04_founders.md`, then `pixelize.py` | `portraits/heroes/<id>.png` |
+| AI-04 | 6 founder expression sheets | [ai_faces.md](ai_faces.md) | after the pick: `generate.py run <model> <id> --faces --prompts art_src/prompts/ai_faces.md`; `sheets.py faces <sheet> <id> hero --faction hearth` | `portraits/heroes/faces/<id>/*.png` |
+| AI-05 | Talia Rusk, Widow Varka, Ivo | [ai_portraits.md](ai_portraits.md) | `generate.py run <model> talia_rusk widow_varka ivo --n 2 --prompts art_src/prompts/ai_portraits.md` | `portraits/npcs/<id>.png` |
+| AI-05 | Chirurgeon Sabina | `ART3_PROMPTS.md` | `generate.py run <model> sabina_kress --n 2 --prompts games/emberwake/docs/specs/ART3_PROMPTS.md` | `portraits/npcs/sabina_kress.png` |
+| AI-05 | Talia and Sabina sheets | `PORTRAITFX1_FACES.md` | `generate.py run <model> talia_rusk sabina_kress --faces` | `portraits/npcs/faces/<id>/*.png` |
+| AI-06 | 7 boss portraits | [ai_portraits.md](ai_portraits.md) | `generate.py run <model> overseer_grendel foundry_master_jessop inquisitor_general_ruthven chief_anatomist_lazar warden_inquisitor_ulric cantor_ysolde arch_prelate_othemar --n 2 --prompts art_src/prompts/ai_portraits.md` | `portraits/bosses/<id>.png` |
+| AI-06 | 7 boss expression sheets | [ai_faces.md](ai_faces.md) | after the picks: `--faces --prompts art_src/prompts/ai_faces.md`; `sheets.py faces <sheet> <id> boss --faction <f>` | `portraits/bosses/faces/<id>/*.png` |
+| AI-07 | `recipe` service badge | [ai_icons.md](ai_icons.md) `services_hud_1` | `generate.py run <model> services_hud_1 --file art_src/prompts/ai_icons.md --no-ref`; `cut_ai_sheets.py services_hud_1 <sheet>` | `kits/rpg/assets/ui/services/recipe.png` (32) |
+| AI-07 | 6 keepsake icons | [ai_icons.md](ai_icons.md) `keepsakes_1` | `generate.py run <model> keepsakes_1 --file art_src/prompts/ai_icons.md --no-ref`; `cut_ai_sheets.py keepsakes_1 <sheet>` | `items/accessory/keepsake_<id>.png` (96) |
+| AI-08 | Calcified Amalgam, Bailiff Enforcer | [ai_portraits.md](ai_portraits.md) | `generate.py run <model> calcified_amalgam bailiff_enforcer --n 2 --prompts art_src/prompts/ai_portraits.md` | `portraits/bosses/calcified_amalgam.png`, `portraits/elites/bailiff_enforcer.png` |
+| AI-10 | M5 Slag Gate CG | [ai10_cg.md](ai10_cg.md) | Flow scene prompt (no `@` character: the stayer must stay anonymous); Gemini fallback with Nemeth attached | `backgrounds/story/vg_m5_gate.png` (1120 x 472) |
+| AI-11 | 4 HUD chips | [ai_icons.md](ai_icons.md) `services_hud_1` | the same sheet as the recipe badge | `ui/hud/{scrap,tallow,alert,doom_clock}.png` (14) |
+
+Paths without a layer prefix are under `games/emberwake/assets/`. The image queue (`tools/portraits/artqueue.py
+request`, Drive `image_pipeline/queue/`) takes the same prompt text when the Gemini web app runs instead of the API;
+attach the reference each section names (`art_src/mara_voss.png` for portraits, the picked portrait for sheets).
+
+## Not prompts in this batch
+
+- **Story and VN stage sprites (user 2026-11-12)**: no full-body or keyframe-animation generation for now. A story
+  actor without signed-off VN art plays its **code-rig animation** (the battle body from `tools/sprites`, scaled up) as
+  the placeholder: the mock UI's story stage does this (`ART_UI_STUDIO.md` 3.10). So Sabina's full body
+  (`portraits/full_body/sabina_kress.png`, AI-05) waits; the old Aline art stays at that path until then.
+- **AI-01** (the `warrior/2h_polearm` look): battle bodies are drawn by the code rig (`tools/sprites/rig.py`,
+  `export_units.py`), not by an image model, so it is rig work for a later session, not a prompt.
+- **AI-03** (story music): Flow Music Compose prompts, a separate batch (`art_src/music/prompts/`).
+
+## Cutting the 3 x 3 icon sheets
+
+`tools/portraits/sheets.py slice` only knows its own 4 x 4 ART2 sheets, so [cut_ai_sheets.py](cut_ai_sheets.py) cuts
+these two with the same helpers (`cells_of`, `key_out`, `snap`, `pixelize.mode_reduce`). It writes a `<sheet>_cells.png`
+contact sheet beside the input; `--pick name=cell` takes a spare cell (7-9) instead of the first take, and `--out DIR`
+writes a review copy instead of the repository files.

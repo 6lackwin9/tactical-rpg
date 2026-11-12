@@ -163,6 +163,7 @@ const STATE = {
   storyCardIdx: 0,
   storyMode: 'vn_stage',        // 'vn_stage' | 'map_stage' | 'vignette_reel'
   storyActorStyle: 'full_sprite', // 'full_sprite' | 'bust_cutout' | 'backdrop_only'
+  storyRigPlaceholder: 'others', // 'others' | 'all' | 'off': code-rig animation for actors without signed-off VN art (user 2026-11-12)
   storyRigPose: 'auto',         // 'auto' (use actor.pose) | 'relaxed' | 'sneaking' | 'weapons_drawn'
   storyRigEngine: 'pose_c',     // 'pose_c' (3-Pose Sheet + Multi-Zone Deformer Rig) | 'atlas_b' (Exploded 13-Part Spine2D Atlas) | 'slice_a' (Single-Sprite 10-Part Auto-Slice) | 'compare_bc' (Side-by-Side Compare)
   storyDeformerBoost: 1.0,      // 1.0 (Normal 1x) | 2.2 (Limit-Test 2.2x) | 3.2 (Extreme 3.2x Stress-Test)

@@ -2177,6 +2177,39 @@ function resolveActorRigKey(unitKey) {
   return unitKey;
 }
 
+// Rig placeholder (user 2026-11-12): a story actor without signed-off VN art plays its code-rig battle animation
+// (`ASSETS.unitClips`, the `tools/sprites` body scaled up) instead of a generated full-body sprite.
+// STATE.storyRigPlaceholder: 'others' (everyone but VN_SIGNED_OFF), 'all', or 'off' (the experimental VN rigs).
+const VN_SIGNED_OFF = new Set(['kaelen']);
+const STORY_RIG_SCALE = 6; // 48 px rig frame -> 288 px slot
+
+function usesRigPlaceholder(actor) {
+  const mode = STATE.storyRigPlaceholder || 'others';
+  if (mode === 'off' || !(ASSETS.unitClips || {})[actor.unitKey]) return false;
+  return mode === 'all' || !VN_SIGNED_OFF.has(actor.unitKey);
+}
+
+function storyRigClipFor(actor, pose, isActive) {
+  const clips = ASSETS.unitClips[actor.unitKey];
+  let id = 'idle';
+  let slow = 1;
+  if (STATE.storyWalkMode && STATE.storyWalkMode !== 'off' && isActive) id = 'walk';
+  else if (pose === 'sneaking') { id = 'walk'; slow = 1.6; }
+  else if (pose === 'weapons_drawn') id = (isActive && (actor.lunge || STATE.storyReactionOverride === 'steel_flash')) ? 'attack' : 'windup';
+  if (!clips[id]) id = 'idle';
+  const clip = clips[id];
+  return { id, frames: clip.frames, ms: Math.round(clip.ms * slow), strip: clip.strip, size: clips.frame[0] * STORY_RIG_SCALE };
+}
+
+function renderStoryRigPlaceholder(actor, side, rig, filterStr) {
+  const flip = side === 'right' ? 'scaleX(-1)' : 'none';
+  return `<div class="story-rig-ph" title="Rig placeholder: ${actor.unitKey} · ${rig.id}"
+       style="width:${rig.size}px;height:${rig.size}px;position:relative;z-index:2;filter:${filterStr};transform:${flip};
+              background-image:url(${rig.strip});background-repeat:no-repeat;background-size:${rig.frames * rig.size}px ${rig.size}px;
+              image-rendering:pixelated;--strip-end:-${rig.frames * rig.size}px;
+              animation:storyRigStrip ${rig.ms}ms steps(${rig.frames}) infinite;"></div>`;
+}
+
 function renderStoryActorSlot(actor, side) {
   if (!actor) return `<div style="width:310px;height:345px;pointer-events:none;"></div>`;
   const style = STATE.storyActorStyle || 'full_sprite';
@@ -2210,6 +2243,7 @@ function renderStoryActorSlot(actor, side) {
   const fxLayers = renderReactionFxOverlay(activeFx, isActive, side, activePose);
   const poseMeta = VTUBER_POSE_TARGETS[activePose] || VTUBER_POSE_TARGETS.relaxed;
   const poseBadgeCol = activePose === 'weapons_drawn' ? '#fbbf24' : (activePose === 'sneaking' ? '#38bdf8' : '#9ca3af');
+  const rigPh = usesRigPlaceholder(actor) ? storyRigClipFor(actor, activePose, isActive) : null;
 
   return `
     <div style="display:flex;flex-direction:column;align-items:center;position:relative;width:310px;height:345px;justify-content:flex-end;">
@@ -2219,6 +2253,7 @@ function renderStoryActorSlot(actor, side) {
 
         ${fxLayers.back}
 
+        ${rigPh ? renderStoryRigPlaceholder(actor, side, rigPh, filterStr) : `
         <!-- 60fps Live2D / VTuber-Style Deformer & Joint Rig Canvas (340×340 internal resolution) -->
         <canvas class="vn-vtuber-canvas pixel"
                 width="340" height="340"
@@ -2229,7 +2264,7 @@ function renderStoryActorSlot(actor, side) {
                 data-pose="${activePose}"
                 data-active="${isActive ? '1' : '0'}"
                 data-debug="${STATE.storyShowRigDebug ? '1' : '0'}"
-                style="width:288px;height:288px;filter:${filterStr};position:relative;z-index:2;"></canvas>
+                style="width:288px;height:288px;filter:${filterStr};position:relative;z-index:2;"></canvas>`}
 
         ${fxLayers.front}
       </div>
@@ -2239,7 +2274,7 @@ function renderStoryActorSlot(actor, side) {
         <span class="font-title" style="font-size:12.5px;color:${isActive ? 'var(--gold)' : '#9ca3af'};">${actor.name}</span>
         <span style="font-size:10px;color:var(--dim);">· ${actor.emotion || actor.title || ''}</span>
         <span class="font-mono" style="padding:1px 5px;border-radius:3px;background:rgba(17,24,39,0.95);border:1px solid ${poseBadgeCol};color:${poseBadgeCol};font-size:8.5px;">
-          ${poseMeta.label}
+          ${rigPh ? `RIG · ${rigPh.id}` : poseMeta.label}
         </span>
       </div>
     </div>
