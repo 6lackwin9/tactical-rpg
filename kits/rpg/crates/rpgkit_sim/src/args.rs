@@ -24,7 +24,10 @@ pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
 pub const FEEL_COUNTS_KEY: &str = "counts";
 /// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
 /// `usage`.
-pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id";
+pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id; the hook counts (feel::HOOK_COUNTERS), skills landed, intents by unit, and per encounter arena strikes, windup breaks by skill, phases fired and fights with each count";
+/// WORLD-SIM1 (PR5-42): the help of the feel mode's world encounters, printed apart from `usage` (`sim help`, a refused
+/// feel line): `sim_golden` holds `usage`.
+pub const FEEL_WORLD_USAGE: &str = "       feel world:<world>/<id> (or enc=world:<world>/<id>, or world=<world> enc=<id>): a world encounter with its authored party and guests at their authored levels, by its world's ruleset unless ruleset= picks one (stage= grows its enemies; armor= refuses it)";
 /// BASERULES1-M2 (FB-40, library section 7): the help of the ruleset notes, printed apart from `usage` (`sim help`), which
 /// `sim_golden` holds.
 pub const RULE_NOTES_USAGE: &str = "       with ruleset= or rules=: the picked ruleset's notes (aegis rules: requires, conflicts, untested sets, ranges) print after ARGS as RULES error: / RULES warning: lines; the run still plays";
@@ -349,6 +352,7 @@ impl SimArgs {
         let mut metrics_set = false;
         let mut distance_set = false;
         let mut enc_set = false;
+        let mut world_refs: Vec<String> = Vec::new();
         // world= first: enc= ids resolve against it whatever the token order.
         for raw in argv {
             let w = raw.trim();
@@ -365,6 +369,11 @@ impl SimArgs {
                 a.quick = true;
                 continue;
             }
+            // WORLD-SIM1 (PR5-42): a positional world reference (`sim feel world:<world>/<id>`) is an `enc=` entry
+            if token.starts_with(REF_PREFIX) && !token.contains('=') {
+                world_refs.push(token.to_string());
+                continue;
+            }
             let Some((key, value)) = token.split_once('=') else {
                 positional.push(token.to_string());
                 continue;
@@ -373,6 +382,13 @@ impl SimArgs {
             metrics_set |= key == "metrics";
             distance_set |= key == "distance";
             enc_set |= key == "enc";
+        }
+        if !world_refs.is_empty() {
+            // after any `enc=` list, in the order given
+            let before = if enc_set { std::mem::take(&mut a.encounters) } else { Vec::new() };
+            a.key(d, "enc", &world_refs.join(","))?;
+            a.encounters.splice(0..0, before);
+            enc_set = true;
         }
         if let Some(m) = positional.first() {
             a.mode = m.clone();
@@ -452,21 +468,46 @@ impl SimArgs {
         Ok(a)
     }
 
-    /// RULESET1-G (RULESET1_TASKS 3): the `feel` mode's defaults: the timeline ruleset unless `ruleset=` is given, the
-    /// game's feel encounters unless `enc=` is given; every encounter must be a catalog encounter with a party.
+    /// RULESET1-G (RULESET1_TASKS 3): the `feel` mode's defaults: the game's feel encounters unless `enc=` is given;
+    /// every encounter must be a catalog encounter with a party or (WORLD-SIM1, PR5-42) a world encounter
+    /// (`world:<world>/<id>`) with an authored `party`. Without `ruleset=` a catalog encounter plays by the timeline
+    /// ruleset and a world encounter by its world's (`Data::ruleset`, as in play); the run's encounters must agree on
+    /// that default, and it becomes the run's ruleset (so `preset=`, `tune=` and the header read it). `armor=` changes
+    /// catalog units only, so it refuses a world encounter (its units are the world's characters).
     fn feel_defaults(&mut self, d: &Data, enc_set: bool) -> Result<(), String> {
-        if self.ruleset_id.is_empty() {
-            self.ruleset_id = rpgkit_rules::ruleset::TIMELINE.into();
-        }
         if !enc_set {
             if self.game.feel_encounters.is_empty() {
                 return Err("feel needs enc=<catalog encounters with a party> (the game names no default)".into());
             }
             self.encounters = self.game.feel_encounters.clone();
         }
+        let mut defaults: Vec<String> = Vec::new();
         for e in &self.encounters {
-            if d.cat.encounters.get(e).is_none_or(|row| aegis_core::json::sget(row, "party").is_empty()) {
-                return Err(format!("feel: '{e}' is not a catalog encounter with a party"));
+            let default = match parse_ref(e, &self.world) {
+                Some((w, id)) => {
+                    if aegis_core::json::sget(d.resolve(&w, "encounters", &id), "party").is_empty() {
+                        return Err(format!("feel: '{e}' is a world encounter with no authored party"));
+                    }
+                    if let Some(u) = self.armor.keys().next() {
+                        return Err(format!("armor: '{u}' changes a catalog unit; world encounter '{e}' fights the world's characters"));
+                    }
+                    d.ruleset(&w).id
+                }
+                None => {
+                    if d.cat.encounters.get(e).is_none_or(|row| aegis_core::json::sget(row, "party").is_empty()) {
+                        return Err(format!("feel: '{e}' is not a catalog encounter with a party"));
+                    }
+                    rpgkit_rules::ruleset::TIMELINE.to_string()
+                }
+            };
+            if !defaults.contains(&default) {
+                defaults.push(default);
+            }
+        }
+        if self.ruleset_id.is_empty() {
+            match defaults.as_slice() {
+                [one] => self.ruleset_id = one.clone(),
+                _ => return Err(format!("feel: the encounters play by different rulesets ({}); pick one with ruleset=", defaults.join(", "))),
             }
         }
         Ok(())
