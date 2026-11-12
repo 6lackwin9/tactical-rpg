@@ -72,6 +72,11 @@
 							"effect": "set_flag",
 							"key": "sunk_ward.debate1_seen",
 							"value": true
+						},
+						{
+							"effect": "clock_start",
+							"meter": "doom_clock",
+							"days": 42
 						}
 					]
 				},
