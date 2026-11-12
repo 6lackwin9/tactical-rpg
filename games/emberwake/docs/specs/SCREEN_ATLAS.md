@@ -67,7 +67,7 @@ Every screen below lists the exact relative paths resolved across **Engine (`E` 
 
 | Element | Layer | Relative Path | Used In |
 | --- | --- | --- | --- |
-| HUD Currency & Supply Icons | `K` | `ui/hud/{gold,supplies}.png` | `hud.rs` (`Scrap`, `Tallow` chips) |
+| HUD Currency, Supply & Meter Icons | `G` (`K` fallback) | `G: ui/hud/{scrap,tallow,alert,doom_clock}.png` (placeholders in `PR5-41`, `AI-11`); `K: ui/hud/{gold,supplies}.png` (`ashlands`) | `hud.rs` (`Scrap`, `Tallow`, `Watch Alert`, `Red Tithing` chips) |
 | HUD Right Action Buttons | `K` / `E` | `ui/hud/{party,journal,stash,menu}.png`, `E: ui/help.png` | `hud.rs` (5 `18×18` icon buttons) |
 | Region Legend & Map Markers | `K` | `ui/markers/{npc,encounter,roamer,chest,chest_open,exit,exit_locked,lore,poi,objective,world_map}.png` | `region.rs` `"Here (N)"` list & map markers (consolidated per `ASSETORG3-K`) |
 | NPC Service Badges | `K` | `ui/services/{shop,recruit,recipe}.png`, `ui/badges/{quest,ready}.png` | `region.rs` overhead & legend row badges |

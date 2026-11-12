@@ -52,6 +52,8 @@ The **Design Session is the sole governance authority**; the **Build Session is 
 | **Golden Fixtures** | Re-record **only** the behavioral goldens named in `READY.md`'s `Acceptance Test` column (plus purely mechanical schema/contract field-count updates in `checks_golden` / `rules_contract_golden` when adding a spec-mandated field). | Re-recording an unnamed behavioral golden (`rules_golden`, `timeline_golden`, `sim_golden`, `phasefold_golden`, `journey_golden`), OR inventing a code workaround to avoid moving a golden when the spec itself causes the move. |
 | **Ambiguities & Edge Cases** | Internal Rust/engine plumbing choices (helper names, module split, test structure) with zero behavioral or schema impact. | Guessing gameplay/design intent when two specs disagree or when a spec clause breaks an existing invariant. |
 
+- **Data-row blockers (`Kind: limit-blocker`, never `suggestion`)**: When a `Layer: data` row needs an unqueued engine/kit/game code hook (e.g., an effect type, trigger gate, UI guard, or shop discount), never ship a manual player self-report dialogue workaround or silently drop pure-data clauses—land the clean pure-data parts if separable and log the missing hook as `Kind: limit-blocker`.
+
 ## 5. Structured Feedback Protocol (`docs/FEEDBACK.md` Section 2)
 
 Every `FB-nn` item in `docs/FEEDBACK.md` must use one of three structured `Kind` templates (or separate sub-blocks if a slice has both a `docs-delta` and a `suggestion`/`limit-blocker`):
