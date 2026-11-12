@@ -6,8 +6,8 @@ function renderSceneRunner() {
     { id: 'enc_0a', name: 'enc_pro_0a · The Alley (Kaelen Solo)', sub: '2 foes · Watch Halberdier + Arbalest' },
     { id: 'enc_0b', name: 'enc_pro_0b · The Rooftop (+Vesper)', sub: '3 foes · Bailiff + 2 Slate Marksmen' },
     { id: 'enc_0c', name: 'enc_pro_0c · The Sluice Bridge (+Maren, +Hollis)', sub: '3 foes · Captain Vane Boss Cordon' },
-    { id: 'enc_m2', name: 'enc_m2_corvo · Third Ward Toll Gate', sub: '3 foes · Gate-Sergeant Corvo + Purifier' },
-    { id: 'enc_m3', name: 'enc_m3_bonemill · The Fourth Kiln (Bone-Mill)', sub: '3 foes · Foreman Grendel + Slag Vents' },
+    { id: 'enc_m2', name: 'enc_m2_corvo · Third Ward Toll Gate', sub: '3 foes · Bailiff Corvo + Purifier' },
+    { id: 'enc_m3', name: 'enc_m3_bonemill · The Fourth Kiln (Bone-Mill)', sub: '3 foes · Overseer Grendel + Slag Vents' },
     { id: 'enc_m5', name: 'enc_m5_crucible · Crucible Watchpost (Climax)', sub: '3 foes · Prelate Nemeth + Proctor Quell' }
   ];
   const ashEncs = [
@@ -52,7 +52,7 @@ function renderSceneRunner() {
                  onclick="STATE.screen='region';STATE.regionId='sluice_undercroft';render();">
               <div>
                 <div style="font-size:7.5px;color:var(--text);font-weight:bold;">Location: sluice_undercroft</div>
-                <div style="font-size:6.5px;color:var(--dim);">Hub Sanctuary · Aline, Bram, Tess & 6 Bunks</div>
+                <div style="font-size:6.5px;color:var(--dim);">Hub Sanctuary · Sabina, Berek, Talia & 6 Bunks</div>
               </div>
               <span class="rust-btn" style="height:14px;font-size:6.5px;">Enter ▸</span>
             </div>
@@ -60,7 +60,7 @@ function renderSceneRunner() {
                  onclick="STATE.screen='region';STATE.regionId='corvos_gate';render();">
               <div>
                 <div style="font-size:7.5px;color:var(--text);font-weight:bold;">Location: corvos_gate (Ash-Crawl Street)</div>
-                <div style="font-size:6.5px;color:var(--dim);">Decision A4 Parley RegionMap · Sergeant Corvo</div>
+                <div style="font-size:6.5px;color:var(--dim);">Decision A4 Parley RegionMap · Bailiff Corvo</div>
               </div>
               <span class="rust-btn" style="height:14px;font-size:6.5px;">Enter ▸</span>
             </div>
@@ -178,7 +178,7 @@ const VTUBER_ANATOMY_CONFIG = {
     hipR: [180, 220], kneeR: [184, 270], ankleR: [188, 316], toeR: [204, 330],
     torsoL: 124, torsoR: 186, hipY: 214, legSplitX: 158
   },
-  aline: {
+  sabina: {
     head: [168, 52], neck: [166, 96], chest: [166, 146], pelvis: [166, 208],
     shoulderL: [134, 114], elbowL: [128, 152], handL: [128, 190],
     shoulderR: [192, 116], elbowR: [198, 152], handR: [192, 160],
@@ -2852,7 +2852,7 @@ function renderRegionScreen() {
           <!-- Left Column (76px): 64x64 Portrait + Speaker Name + Band -->
           <div style="width:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;">
             <div class="portrait-box gold-rim" style="width:60px;height:60px;">
-              <img src="${ASSETS.portraits[dlg.portrait] || ASSETS.portraits.aline}" class="pixel">
+              <img src="${ASSETS.portraits[dlg.portrait] || ASSETS.portraits.sabina}" class="pixel">
             </div>
             <div class="font-title" style="font-size:7.5px;color:var(--gold);margin-top:3px;text-align:center;line-height:1.1;">${dlg.name}</div>
             <div style="font-size:5.5px;color:var(--dim);text-align:center;line-height:1.15;margin-top:1px;">${dlg.band}</div>
@@ -2951,9 +2951,9 @@ function renderBoardModal() {
         <!-- Header: Title left, Keeper name + X button right (board.rs) -->
         <div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span class="font-title" style="font-size:11px;color:var(--gold);">Sluice Pillar Notice Board</span>
+            <span class="font-title" style="font-size:11px;color:var(--gold);">Talia\'s Cipher Board</span>
             <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:7px;color:var(--dim);">Keeper: Night-Runner Tess</span>
+              <span style="font-size:7px;color:var(--dim);">Keeper: Talia Rusk</span>
               ${closeBtn640("STATE.modal=null;render();", "Close [Esc / Right-Click]")}
             </div>
           </div>
@@ -3034,33 +3034,33 @@ function acceptBoardQuest(qId, goMap) {
 }
 
 // ============================================================================
-// SCREEN 4B: SHOP MODAL (`shop.rs` — Sister Aline Apothecary & Bram Forge)
+// SCREEN 4B: SHOP MODAL (`shop.rs` — Chirurgeon Sabina's Slab & Berek's Hearth)
 // ============================================================================
 const SHOP_STOCK = {
-  aline: {
-    title: 'Sister Aline\'s Apothecary & Triage',
-    sub: 'Surgical draughts, coagulants, and refined tallow for the Hearth.',
+  sabina: {
+    title: 'The Apothecary\'s Slab',
+    sub: 'Stitch packs, brimstone salves, and refined tallow for the Hearth.',
     items: [
-      { name: 'Coagulant Vial (2-Pip Belt)', cost: 15, kind: 'Consumable', desc: 'Restores 15 HP & cures Bleed during battle (0B Free action).' },
+      { name: 'Tallow-Wax Stitch Pack', cost: 12, kind: 'Consumable', desc: 'A packed field dressing that closes wounds for +60 HP (Snap).' },
       { name: 'Refined Hearth Tallow (+1 Supply)', cost: 20, kind: 'Campaign Supply', desc: 'Adds +1 Tallow for resting at The Dry Hollows and curing Wounds.' },
-      { name: 'Laudanum Tincture (2-Pip Belt)', cost: 18, kind: 'Consumable', desc: 'Restores 18 HP and grants +1 Poise pip immediately.' },
-      { name: 'Brimstone Salve (1-Pip Belt)', cost: 12, kind: 'Consumable', desc: 'Purges Burn & Poison and grants +6 Guard.' }
+      { name: 'Brimstone Tallow Salve', cost: 20, kind: 'Consumable', desc: '+30% attack power (Empower) for 3 rounds (Snap).' },
+      { name: 'Pitch Censer-Pot', cost: 25, kind: 'Consumable', desc: 'A clay censer-pot of burning pitch: 40 fire damage on impact.' }
     ]
   },
-  bram: {
-    title: 'Bram\'s Slag-Heap Anvil',
-    sub: 'Tempered Sunk Ward steel, reinforced brigandines, and belt rigs.',
+  berek: {
+    title: 'The Tinker\'s Hearth',
+    sub: 'Salvaged Watch steel, quenched in heavy tallow and rehafted.',
     items: [
-      { name: 'Tallow-Quenched Billhook (+2 Might)', cost: 35, kind: 'Weapon · Kaelen', desc: 'Upgrades Kaelen\'s Billhook Drag damage by +3 and Poise break by +1.' },
-      { name: 'Serrated Gutting Pair (+2 Agility)', cost: 30, kind: 'Weapon · Vesper', desc: 'Adds +1 Bleed stack on Flank Cut and Crimson Lullaby.' },
-      { name: 'Kiln-Plate Gorget (+6 Guard)', cost: 25, kind: 'Armor · Vanguard', desc: 'Increases starting battle Guard by +6.' },
-      { name: 'Smuggler\'s Rigging (+1 Belt Pip)', cost: 28, kind: 'Trinket', desc: 'Reinforced leather loops for carrying heavy flasks.' }
+      { name: 'Notched Billhook', cost: 35, kind: 'Weapon · Kaelen', desc: 'Kaelen\'s signature 2H polearm, rehafted at the Hearth.' },
+      { name: 'Curfew Bodkin', cost: 30, kind: 'Weapon · Vesper', desc: 'Vesper\'s signature dagger: a narrow curfew-watch spike.' },
+      { name: 'Watch Cuirass', cost: 25, kind: 'Armor · Vanguard', desc: 'Salvaged Castellan Watch plate, quenched in heavy tallow.' },
+      { name: 'Stirrup Arbalest', cost: 28, kind: 'Weapon · Hollis', desc: 'A Watch arbalest with a foot-stirrup crank.' }
     ]
   }
 };
 
 function renderShopModal() {
-  const shop = SHOP_STOCK[STATE.shopKeeper] || SHOP_STOCK.aline;
+  const shop = SHOP_STOCK[STATE.shopKeeper] || SHOP_STOCK.sabina;
   const selItem = shop.items[STATE.shopSelIdx] || shop.items[0];
 
   return `
@@ -3072,8 +3072,8 @@ function renderShopModal() {
             <div style="font-size:6.8px;color:var(--dim);">${shop.sub}</div>
           </div>
           <div style="display:flex;gap:4px;align-items:center;">
-            <button class="rust-btn ${STATE.shopKeeper==='aline'?'primary':''}" onclick="openShop('aline')">Aline (Apothecary)</button>
-            <button class="rust-btn ${STATE.shopKeeper==='bram'?'primary':''}" onclick="openShop('bram')">Bram (Forge)</button>
+            <button class="rust-btn ${STATE.shopKeeper==='sabina'?'primary':''}" onclick="openShop('sabina')">Sabina (Slab)</button>
+            <button class="rust-btn ${STATE.shopKeeper==='berek'?'primary':''}" onclick="openShop('berek')">Berek (Hearth)</button>
             ${closeBtn640("STATE.modal=null;render();", "Close [Esc / Right-Click]")}
           </div>
         </div>
@@ -3113,7 +3113,7 @@ function renderShopModal() {
 }
 
 function buyShopItem(idx) {
-  const shop = SHOP_STOCK[STATE.shopKeeper] || SHOP_STOCK.aline;
+  const shop = SHOP_STOCK[STATE.shopKeeper] || SHOP_STOCK.sabina;
   const it = shop.items[idx];
   if (!it || STATE.scrap < it.cost) return;
   STATE.scrap -= it.cost;

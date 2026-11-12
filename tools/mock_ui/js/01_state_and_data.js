@@ -101,7 +101,7 @@ const STATE = {
       title: 'Slot 1 · Act I: Chronicles of the Sunk Ward',
       act: 'Act I · Chronicles of the Sunk Ward',
       place: 'Third Ward · Ash-Crawl Crossroads',
-      lead: 'Lead: Parley with Gate-Sergeant Corvo',
+      lead: 'Lead: Parley with Bailiff Corvo',
       day: 2,
       tithe: 16,
       scrap: 45,
@@ -184,18 +184,18 @@ const STATE = {
   hereOpen: true,
   playerTile: { x: 7, y: 6 },
   targetTile: null,
-  talkNpcId: 'aline',        // active NPC in bottom TalkBox
+  talkNpcId: 'sabina',        // active NPC in bottom TalkBox
   talkNodeId: 'root',
   rollBanner: null,          // { label, roll, mod, total, dc, passed }
   eventLog: [
     'Entered The Sluice Undercroft.',
     'The Tallow Hearth burns low (3 Tallow left).',
-    'Sister Aline has surgical draughts for trade.'
+    'Chirurgeon Sabina has stitch packs for trade.'
   ],
 
   // BoardPane (`board.rs`) & ShopPane (`shop.rs`)
   boardSelId: 'q_corvo',
-  shopKeeper: 'aline',       // 'aline' | 'bram'
+  shopKeeper: 'sabina',       // 'sabina' | 'berek'
   shopSelIdx: 0,
 
   // WorldMap (`worldmap.rs`)
@@ -208,14 +208,14 @@ const STATE = {
   // Roster (6 Founders — 4 Active, 2 Reserve in The Dry Hollows)
   roster: {
     kaelen: {
-      id: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', classId: 'warrior', roleName: 'Vanguard',
+      id: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', classId: 'warrior', roleName: 'Vanguard',
       level: 2, xp: 140, active: true, wounded: false,
       hp: 44, maxHp: 44, guard: 12, poise: 5, maxPoise: 5, ap: 6, speed: 11,
       stats: { Might: 15, Agility: 11, Knowledge: 13, Will: 12, Awareness: 10 },
       meterName: 'Bile Phial', meter: 40, maxMeter: 100,
       weapon: 'Surgeon\'s Billhook', armor: 'Waxed Brigandine', trinket: 'Blood-Stained Lancet',
       pouch: [
-        { name: 'Coagulant Vial', pips: 2, icon: 'cauterize', desc: 'Heal 15 HP & cure Bleed (0B Free)' },
+        { name: 'Tallow-Wax Stitch Pack', pips: 2, icon: 'cauterize', desc: 'Snap: +60 HP field suture' },
         { name: 'Bile Flask', pips: 2, icon: 'volatile_flask', desc: 'Throw 3-tile Poison/Burn pool' }
       ],
       basics: ['move', 'rest', 'strike', 'active_guard', 'disengage', 'shield_bash'],
@@ -249,7 +249,7 @@ const STATE = {
       meterName: 'Alembic Heat', meter: 50, maxMeter: 100,
       weapon: 'Censer & Bone Saw', armor: 'Alchemist Apron', trinket: 'Sulfur Phial',
       pouch: [
-        { name: 'Laudanum Draught', pips: 2, icon: 'field_mend', desc: 'Restore 18 HP & +1 Poise' },
+        { name: 'Brimstone Tallow Salve', pips: 2, icon: 'field_mend', desc: 'Snap: Empower +30% for 3 rounds' },
         { name: 'Tallow Salve', pips: 1, icon: 'cauterize', desc: 'Clear Burn/Poison & +6 Guard' }
       ],
       basics: ['move', 'rest', 'strike', 'active_guard', 'disengage', 'field_mend'],
@@ -315,16 +315,16 @@ const STATE = {
       id: 'q_corvo', section: 'Main', title: 'Corvo\'s Gate (The Third Ward Toll)',
       status: 'Under way', deadlineDays: 4, rewardScrap: 45, rewardTallow: 1,
       where: 'Third Ward Gate / Ash-Crawl Crossroads', nodeId: 'n_corvo',
-      summary: 'Gate-Sergeant Corvo has chained the Sluice grate and demanded thirty Scrap or a certified Tallow Guild seal before nightfall.',
-      nowStep: 'Travel to Third Ward Gate and parley with Sergeant Corvo (Pay 30 Scrap, Forge Seal [KNOW >= 12], or Break the Gate).',
+      summary: 'Bailiff Corvo has chained the Sluice grate and demanded thirty Scrap or a certified Tallow Guild seal before nightfall.',
+      nowStep: 'Travel to Third Ward Gate and parley with Bailiff Corvo (Pay 30 Scrap, Forge Seal [KNOW >= 12], or Break the Gate).',
       thenStep: 'Open the mid-ward supply artery to reach The Fourth Kiln.'
     },
     {
       id: 'q_bonemill', section: 'Main', title: 'The Bone-Mill Raid (M3)',
       status: 'On offer', deadlineDays: 6, rewardScrap: 80, rewardTallow: 2,
       where: 'The Fourth Kiln (Bone-Mill)', nodeId: 'n_kiln',
-      summary: 'Foreman Grendel and Guild Master Orlov are rendering debtors in the Fourth Kiln to meet the Red Tithing quota.',
-      nowStep: 'Breach the Fourth Kiln floor, survive the rhythmic Slag Vents, and break Foreman Grendel.',
+      summary: 'Overseer Grendel and Guild-Master Orlov are rendering debtors in the Fourth Kiln to meet the Red Tithing quota.',
+      nowStep: 'Breach the Fourth Kiln floor, survive the rhythmic Slag Vents, and break Overseer Grendel.',
       thenStep: 'Seize the Tallow Guild ledger and unlock the Crucible Watchpost.'
     },
     {
@@ -339,9 +339,9 @@ const STATE = {
       id: 'q_grate', section: 'Jobs', title: 'Clear the Drowned Runoff Grate',
       status: 'On offer', deadlineDays: 3, rewardScrap: 35, rewardTallow: 1,
       where: 'Drowned Runoff Grate', nodeId: 'n_grate',
-      summary: 'Feral Render-Beasts and Ash-Crawlers are nesting in the lower runoff grate, choking Sister Aline\'s herb intake.',
+      summary: 'Feral Render-Beasts and Ash-Crawlers are nesting in the lower runoff grate, choking Chirurgeon Sabina\'s herb intake.',
       nowStep: 'Eliminate the pack in the sunken canal basin.',
-      thenStep: 'Return to Sister Aline for discounted surgical draughts.'
+      thenStep: 'Return to Chirurgeon Sabina for discounted stitch packs.'
     }
   ],
 
@@ -462,8 +462,8 @@ const ENCOUNTERS = {
   },
   enc_m2: {
     id: 'enc_m2', title: 'M2: Corvo\'s Gate (Third Ward Toll)', backdrop: 'alley',
-    subtitle: 'Dilemma Escalation — You refused Sergeant Corvo\'s extortion at the toll gate.',
-    objective: 'Defeat Gate-Sergeant Corvo & his Tallow Enforcers.',
+    subtitle: 'Dilemma Escalation — You refused Bailiff Corvo\'s extortion at the toll gate.',
+    objective: 'Defeat Bailiff Corvo & his Tallow Enforcers.',
     nextStory: null,
     walls: [[6,0],[6,1],[6,2],[6,6],[6,7],[6,8]],
     water: [[4,7],[5,7]],
@@ -475,7 +475,7 @@ const ENCOUNTERS = {
       { id: 'hollis', x: 1, y: 3 }
     ],
     foes: [
-      { id: 'f_corvo', unitKey: 'bailiff', portrait: 'bailiff', name: 'Gate-Sergeant Corvo', role: 'Mini-Boss · Toll Warden', hp: 52, maxHp: 52, guard: 18, poise: 5, maxPoise: 5, x: 7, y: 4, intent: 'area', intentName: 'Tax-Collector\'s Maul (B2-B5 · 15 dmg)', passive: 'Extortionist\'s Plate: Starts with 18 Guard; drops 45 Scrap.' },
+      { id: 'f_corvo', unitKey: 'bailiff', portrait: 'bailiff', name: 'Bailiff Corvo', role: 'Mini-Boss · Toll Warden', hp: 52, maxHp: 52, guard: 18, poise: 5, maxPoise: 5, x: 7, y: 4, intent: 'area', intentName: 'Tax-Collector\'s Maul (B2-B5 · 15 dmg)', passive: 'Extortionist\'s Plate: Starts with 18 Guard; drops 45 Scrap.' },
       { id: 'f_flayer1', unitKey: 'flayer', portrait: 'flayer', name: 'Tallow Guild Flayer', role: 'Skirmisher', hp: 28, maxHp: 28, guard: 6, poise: 3, maxPoise: 3, x: 8, y: 3, intent: 'attack', intentName: 'Boning Knife Flurry (B1-B3 · 11 dmg)', passive: 'Render-Blade: Inflicts 2 Bleed on unguarded HP.' },
       { id: 'f_purifier', unitKey: 'purifier', portrait: 'purifier', name: 'Inquisitorial Purifier', role: 'Caster', hp: 26, maxHp: 26, guard: 8, poise: 3, maxPoise: 3, x: 9, y: 5, intent: 'support', intentName: 'Censer Benediction (B2-B4 · +12 Guard)', passive: 'Sanctified Tallow: Allies within 2 tiles resist Burn.' }
     ]
@@ -483,7 +483,7 @@ const ENCOUNTERS = {
   enc_m3: {
     id: 'enc_m3', title: 'M3: The Fourth Kiln (Bone-Mill Raid)', backdrop: 'foundry',
     subtitle: 'Every even round, Slag Vents erupt for 10 Burn damage & -2 Poise!',
-    objective: 'Defeat Foreman Grendel & break the Bone-Mill.',
+    objective: 'Defeat Overseer Grendel & break the Bone-Mill.',
     nextStory: null,
     walls: [[4,2],[4,6],[8,2],[8,6]],
     water: [],
@@ -499,7 +499,7 @@ const ENCOUNTERS = {
       { id: 'hollis', x: 1, y: 2 }
     ],
     foes: [
-      { id: 'f_grendel', unitKey: 'grendel', portrait: 'orlov', name: 'Foreman Grendel', role: 'Boss · Kiln Overseer', hp: 72, maxHp: 72, guard: 20, poise: 5, maxPoise: 5, x: 8, y: 4, intent: 'area', intentName: 'Bone-Mill Pulverizer (B3-B6 · 19 dmg + Push)', passive: 'Slag-Tempered: Takes 0 Burn from Slag Vents; Shoves foes onto vents.' },
+      { id: 'f_grendel', unitKey: 'grendel', portrait: 'orlov', name: 'Overseer Grendel', role: 'Boss · Kiln Overseer', hp: 72, maxHp: 72, guard: 20, poise: 5, maxPoise: 5, x: 8, y: 4, intent: 'area', intentName: 'Bone-Mill Pulverizer (B3-B6 · 19 dmg + Push)', passive: 'Slag-Tempered: Takes 0 Burn from Slag Vents; Shoves foes onto vents.' },
       { id: 'f_husk', unitKey: 'husk', portrait: 'husk', name: 'Calcified Husk', role: 'Brute', hp: 38, maxHp: 38, guard: 14, poise: 4, maxPoise: 4, x: 6, y: 3, intent: 'attack', intentName: 'Ossified Slam (B2-B4 · 12 dmg)', passive: 'Brittle Shell: Loses all Guard when Poise breaks.' },
       { id: 'f_flag', unitKey: 'flagellant', portrait: 'flagellant', name: 'Penitent Flagellant', role: 'Berserker', hp: 30, maxHp: 30, guard: 0, poise: 3, maxPoise: 3, x: 6, y: 5, intent: 'attack', intentName: 'Rapturous Scourge (B1-B3 · 14 dmg)', passive: 'Martyr\'s Ecstasy: Gains +3 Speed when Bleeding or Burning.' }
     ]
@@ -622,38 +622,38 @@ function initBattle(encId) {
 initBattle('enc_0c');
 
 // ============================================================================
-// DIALOGUE TREES (`talk.rs` — Sister Aline, Bram, Tess, Dry Hollows, Corvo)
+// DIALOGUE TREES (`talk.rs` — Chirurgeon Sabina, Berek, Talia, Dry Hollows, Corvo)
 // ============================================================================
 const DIALOGUES = {
-  aline: {
-    name: 'Sister Aline',
-    band: 'Order of the Ashen Leech · Apothecary',
-    portrait: 'aline',
+  sabina: {
+    name: 'Chirurgeon Sabina',
+    band: 'The Apothecary at the Slab · Chirurgeon',
+    portrait: 'sabina',
     nodes: {
       root: {
-        text: '"Keep your boots out of the runoff trough, Kaelen. The Castellan\'s Purifiers dumped quicklime in the Third Ward sluice at dawn. Half the debtors coming down the steps have blistered lungs—and my last crate of coagulant is locked behind Sergeant Corvo\'s toll gate."',
+        text: '"Keep your boots out of the runoff trough, Kaelen. The Castellan\'s Purifiers dumped quicklime in the Third Ward sluice at dawn. Half the debtors coming down the steps have blistered lungs—and my last crate of stitch packs is locked behind Bailiff Corvo\'s toll gate."',
         replies: [
-          { label: '1. [Trade] Browse Apothecary Draughts & Surgical Supplies.', action: () => openShop('aline') },
-          { label: '2. [Roll: KNOW >= 12] Inspect her quicklime burns & synthesize a neutralizing wash.', action: () => runSkillRoll('Knowledge', 13, 12, 'aline_roll_ok', 'aline_roll_fail') },
+          { label: '1. [Trade] Browse the Slab\'s Stitch Packs & Salves.', action: () => openShop('sabina') },
+          { label: '2. [Roll: KNOW >= 12] Inspect her quicklime burns & synthesize a neutralizing wash.', action: () => runSkillRoll('Knowledge', 13, 12, 'sabina_roll_ok', 'sabina_roll_fail') },
           { label: '3. "Tell me about the Red Tithing countdown."', next: 'tithing' },
-          { label: '4. Step back from the operating table.', action: () => { STATE.talkNpcId = null; render(); } }
+          { label: '4. Step back from the Slab.', action: () => { STATE.talkNpcId = null; render(); } }
         ]
       },
       tithing: {
         text: '"Eighteen days until Prelate Nemeth opens the Great Sluice and flushes the Undercroft into the river. Every raid you run burns clock—and if the Hearth goes cold for lack of Tallow, wounds won\'t knit between sorties."',
         replies: [
-          { label: '1. [Trade] Open Apothecary Shop.', action: () => openShop('aline') },
+          { label: '1. [Trade] Open the Apothecary\'s Slab.', action: () => openShop('sabina') },
           { label: '2. Back to previous topics.', next: 'root' }
         ]
       },
-      aline_roll_ok: {
-        text: '"Look at that hand—steady as the old Ward College days. Using sulfur-ash to precipitates the lime out of the tallow... Take this Coagulant Vial and 15 Scrap from the infirmary coffer, Surgeon."',
+      sabina_roll_ok: {
+        text: '"Look at that hand—steadier than the Watch ever taught you. Sulfur-ash precipitates the lime out of the tallow... Take this Tallow-Wax Stitch Pack and 15 Scrap from the Slab\'s coffer, Kaelen."',
         replies: [
-          { label: '1. Pocket the 15 Scrap & open Apothecary Shop.', action: () => { STATE.scrap += 15; openShop('aline'); } },
+          { label: '1. Pocket the 15 Scrap & open the Apothecary\'s Slab.', action: () => { STATE.scrap += 15; openShop('sabina'); } },
           { label: '2. Return to the Undercroft.', next: 'root' }
         ]
       },
-      aline_roll_fail: {
+      sabina_roll_fail: {
         text: '"Careful! The mixture boils over the brass basin. Leave the alchemy to Maren until your hands stop shaking, Kaelen."',
         replies: [
           { label: '1. Return.', next: 'root' }
@@ -661,32 +661,32 @@ const DIALOGUES = {
       }
     }
   },
-  bram: {
-    name: 'Bram the Stoker',
-    band: 'Slag-Heap Anvil · Quartermaster & Smith',
-    portrait: 'bram',
+  berek: {
+    name: 'Berek Dorn',
+    band: 'The Tinker at the Hearth · Smith',
+    portrait: 'berek',
     nodes: {
       root: {
         text: '"Brought more bent Castellan iron down the steps? Good. Their halberds are soft-core trash, but once I quench \'em in heavy tallow they\'ll split a Bailiff\'s gorget in two. Watch your belt pouches too—five pips is all a rigging harness holds before it drags you under."',
         replies: [
-          { label: '1. [Forge & Trade] Reforge Weapons, Armor & Belt Pouches.', action: () => openShop('bram') },
+          { label: '1. [Forge & Trade] Reforge Weapons, Armor & Belt Pouches.', action: () => openShop('berek') },
           { label: '2. [Squad & Gear] Open Character & 5-Pip Belt Loadouts [P].', action: () => { STATE.modal = 'party'; render(); } },
           { label: '3. "What\'s waiting for us at the Fourth Kiln?"', next: 'kiln_intel' }
         ]
       },
       kiln_intel: {
-        text: '"Foreman Grendel wired the floor grates to the main blast furnace. Every second round, those Slag Vents blow white-hot. Use Kaelen\'s Billhook Drag or Dunstan\'s Cinder Shove to haul their own Purifiers onto the grates before they vent!"',
+        text: '"Overseer Grendel wired the floor grates to the main blast furnace. Every second round, those Slag Vents blow white-hot. Use Kaelen\'s Billhook Drag or Dunstan\'s Cinder Shove to haul their own Purifiers onto the grates before they vent!"',
         replies: [
-          { label: '1. [Forge & Trade] Open Slag-Heap Anvil.', action: () => openShop('bram') },
+          { label: '1. [Forge & Trade] Open the Tinker\'s Hearth.', action: () => openShop('berek') },
           { label: '2. Back.', next: 'root' }
         ]
       }
     }
   },
-  tess: {
-    name: 'Night-Runner Tess',
-    band: 'Sunk Ward Informant · Notice Board Keeper',
-    portrait: 'tess',
+  talia: {
+    name: 'Talia Rusk',
+    band: 'Basin Spymaster · Cipher Board Keeper',
+    portrait: 'talia',
     nodes: {
       root: {
         text: '"Three runners went up the chimney-ladders at dusk; only Vesper came back dry. I\'ve pinned the active Ward contracts to the sluice pillar. Watch the red ink—when a contract\'s deadline runs out, the Watch seals that block for good."',
@@ -721,7 +721,7 @@ const DIALOGUES = {
     }
   },
   corvo: {
-    name: 'Gate-Sergeant Corvo',
+    name: 'Bailiff Corvo',
     band: 'Castellan Watch · Third Ward Toll-Keeper',
     portrait: 'bailiff',
     nodes: {
@@ -734,7 +734,7 @@ const DIALOGUES = {
         ]
       },
       corvo_seal_ok: {
-        text: 'Corvo squints at the tallow-stamped parchment in the rain, then spits into the canal. "Guild Master Orlov\'s mark, right enough. Raise the grate, boys! Don\'t linger in the Ash-Crawl." (+25 XP, Gate Unlocked without bloodshed!)',
+        text: 'Corvo squints at the tallow-stamped parchment in the rain, then spits into the canal. "Guild-Master Orlov\'s mark, right enough. Raise the grate, boys! Don\'t linger in the Ash-Crawl." (+25 XP, Gate Unlocked without bloodshed!)',
         replies: [
           { label: '1. Proceed to the Sunk Ward District Map (Fourth Kiln unlocked).', action: () => { markQuestDone('q_corvo'); STATE.screen = 'worldmap'; render(); } }
         ]
@@ -766,7 +766,7 @@ const STORIES = {
       {
         vignetteStyle: 'Title',
         speaker: 'Kaelen',
-        speakerTitle: 'Disgraced Surgeon · Seventh Sluice Dispensary',
+        speakerTitle: 'Watch Deserter · Seventh Sluice Dispensary',
         portrait: 'kaelen',
         mood: 'neutral',
         emotion: 'Somber Resolve',
@@ -774,7 +774,7 @@ const STORIES = {
         bgVariantLabel: 'Stage A · Wet Cobblestone Alley & Distant Foundry Glow',
         shake: null,
         stageAction: 'Camera frames the rain-slicked alley cobblestones outside Kaelen\'s tenement surgery.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, pose: 'relaxed', emotion: 'Grim Resolve', reactionFx: 'solemn_glow', anim: 'breathe' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: true, pose: 'relaxed', emotion: 'Grim Resolve', reactionFx: 'solemn_glow', anim: 'breathe' },
         rightActor: null,
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: true, emote: '...' },
@@ -794,7 +794,7 @@ const STORIES = {
         bgVariantLabel: 'Stage B · Lantern Flare on the Alley Stones (Shake: Light)',
         shake: 'Light Shake (FX1)',
         stageAction: 'Iron boots splinter the surgery door; a Castellan Watchman plants his halberd on the wet flagstones.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'sneaking', emotion: 'Low Guard / Alert', reactionFx: 'alert_shock', anim: 'breathe' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: false, pose: 'sneaking', emotion: 'Low Guard / Alert', reactionFx: 'alert_shock', anim: 'breathe' },
         rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: true, pose: 'weapons_drawn', emotion: 'Barking Orders', reactionFx: 'anger_burst', anim: 'shake' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 4, speaking: false, emote: '!' },
@@ -806,7 +806,7 @@ const STORIES = {
       {
         vignetteStyle: 'Image',
         speaker: 'Kaelen',
-        speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+        speakerTitle: 'Watch Deserter · Vanguard Founder',
         portrait: 'kaelen',
         mood: 'determined',
         emotion: 'Weapons Drawn',
@@ -814,7 +814,7 @@ const STORIES = {
         bgVariantLabel: 'Stage C · Cold Steel Glint & Tallow Lamp Rim',
         shake: 'Medium Pulse (FX1)',
         stageAction: 'Kaelen swings his Surgeon\'s Billhook forward into combat guard stance across the wet stone floor.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: true, pose: 'weapons_drawn', emotion: 'Weapons Drawn', lunge: true, reactionFx: 'steel_flash', anim: 'lunge' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: true, pose: 'weapons_drawn', emotion: 'Weapons Drawn', lunge: true, reactionFx: 'steel_flash', anim: 'lunge' },
         rightActor: { unitKey: 'watchman', portrait: 'watchman', name: 'Watch Halberdier', title: 'Castellan Enforcer', active: false, pose: 'weapons_drawn', emotion: 'Braced', reactionFx: 'alert_shock', anim: 'breathe' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: true, emote: '⚔' },
@@ -848,7 +848,7 @@ const STORIES = {
         shake: null,
         stageAction: 'Vesper and Kaelen crouch low in a stealth stance along the wet stone roof ridge.',
         leftActor: { unitKey: 'vesper', portrait: 'vesper', name: 'Vesper', title: 'Cutthroat Scout', active: true, pose: 'sneaking', emotion: 'Sneaking', reactionFx: 'alert_shock', anim: 'hop' },
-        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'sneaking', emotion: 'Sneaking', reactionFx: 'solemn_glow', anim: 'breathe' },
+        rightActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: false, pose: 'sneaking', emotion: 'Sneaking', reactionFx: 'solemn_glow', anim: 'breathe' },
         mapUnits: [
           { id: 'vesper', unitKey: 'vesper', name: 'Vesper', isHero: true, x: 2, y: 2, speaking: true, emote: '💬' },
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 2, y: 5, speaking: false, emote: null },
@@ -924,7 +924,7 @@ const STORIES = {
         bgVariantLabel: 'Stage B · Vane\'s Halberd Planted on the Bridge Stones (Shake: Heavy)',
         shake: 'Heavy Shake (FX1)',
         stageAction: 'Captain Vane swings his gilded halberd into executioner\'s guard at (8,4) as Kaelen raises his billhook.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'weapons_drawn', emotion: 'Weapons Drawn', reactionFx: 'steel_flash', anim: 'breathe' },
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: false, pose: 'weapons_drawn', emotion: 'Weapons Drawn', reactionFx: 'steel_flash', anim: 'breathe' },
         rightActor: { unitKey: 'vane', portrait: 'vane', name: 'Captain Vane', title: 'Watch Commander', active: true, pose: 'weapons_drawn', emotion: 'Executioner\'s Stance', lunge: true, reactionFx: 'anger_burst', anim: 'lunge' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 3, y: 4, speaking: false, emote: '⚔' },
@@ -951,22 +951,22 @@ const STORIES = {
     cards: [
       {
         vignetteStyle: 'Image',
-        speaker: 'Sister Aline',
-        speakerTitle: 'Order of the Ashen Leech · Sanctuary Apothecary',
-        portrait: 'aline',
+        speaker: 'Chirurgeon Sabina',
+        speakerTitle: 'The Apothecary at the Slab · Chirurgeon',
+        portrait: 'sabina',
         mood: 'determined',
         emotion: 'Solemn Welcome',
         bgFilter: 'brightness(1.02) contrast(1.05)',
         bgVariantLabel: 'Stage A · Warm Tallow Hearth & Dry Sanctuary Flagstones',
         shake: null,
-        stageAction: 'The iron grate bars shut behind the squad; Sister Aline steps across the dry sanctuary flagstones beside the Tallow Hearth.',
-        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Disgraced Surgeon', active: false, pose: 'relaxed', emotion: 'Relaxed / Weary', reactionFx: 'solemn_glow', anim: 'breathe' },
-        rightActor: { unitKey: 'aline', portrait: 'aline', name: 'Sister Aline', title: 'Sanctuary Apothecary', active: true, pose: 'relaxed', emotion: 'Solemn Welcome', reactionFx: 'solemn_glow', anim: 'hop' },
+        stageAction: 'The iron grate bars shut behind the squad; Chirurgeon Sabina steps across the dry sanctuary flagstones beside the Tallow Hearth.',
+        leftActor: { unitKey: 'kaelen', portrait: 'kaelen', name: 'Kaelen', title: 'Watch Deserter', active: false, pose: 'relaxed', emotion: 'Relaxed / Weary', reactionFx: 'solemn_glow', anim: 'breathe' },
+        rightActor: { unitKey: 'sabina', portrait: 'sabina', name: 'Chirurgeon Sabina', title: 'The Apothecary at the Slab', active: true, pose: 'relaxed', emotion: 'Solemn Welcome', reactionFx: 'solemn_glow', anim: 'hop' },
         mapUnits: [
           { id: 'kaelen', unitKey: 'kaelen', name: 'Kaelen', isHero: true, x: 6, y: 5, speaking: false, emote: null },
-          { id: 'aline', unitKey: 'aline', name: 'Sister Aline', isHero: true, x: 4, y: 4, speaking: true, emote: '🔥' },
-          { id: 'bram', unitKey: 'bram', name: 'Bram the Stoker', isHero: true, x: 10, y: 4, speaking: false, emote: '⚒' },
-          { id: 'tess', unitKey: 'tess', name: 'Night-Runner Tess', isHero: true, x: 8, y: 3, speaking: false, emote: '📜' }
+          { id: 'sabina', unitKey: 'sabina', name: 'Chirurgeon Sabina', isHero: true, x: 4, y: 4, speaking: true, emote: '🔥' },
+          { id: 'berek', unitKey: 'berek', name: 'Berek Dorn', isHero: true, x: 10, y: 4, speaking: false, emote: '⚒' },
+          { id: 'talia', unitKey: 'talia', name: 'Talia Rusk', isHero: true, x: 8, y: 3, speaking: false, emote: '📜' }
         ],
         text: '"Bar the iron grate and stir the Tallow Hearth. You\'re below the Castellan\'s sightlines now, Kaelen—but Prelate Nemeth has decreed the Red Tithing in eighteen days. If we don\'t break the Fourth Kiln and seize the Crucible Winch, the entire Sunk Ward drowns."'
       }
@@ -975,7 +975,7 @@ const STORIES = {
     onFinish: () => {
       STATE.screen = 'region';
       STATE.regionId = 'sluice_undercroft';
-      STATE.talkNpcId = 'aline';
+      STATE.talkNpcId = 'sabina';
       STATE.talkNodeId = 'root';
       render();
     }
@@ -1015,7 +1015,7 @@ const COMBAT_BARKS = {
     elite_intro: {
       badge: 'ELITE ENCOUNTER · BEFORE ENGAGING',
       speaker: 'Kaelen',
-      speakerTitle: 'Disgraced Surgeon · Tactical Assessment',
+      speakerTitle: 'Watch Deserter · Tactical Assessment',
       portrait: 'kaelen',
       mood: 'determined',
       focusUnitId: 'f_watch1',
@@ -1025,7 +1025,7 @@ const COMBAT_BARKS = {
     elite_aftermath: {
       badge: 'ELITE ENCOUNTER · AFTER BREAKING ELITE',
       speaker: 'Kaelen',
-      speakerTitle: 'Disgraced Surgeon · Alley Cleared',
+      speakerTitle: 'Watch Deserter · Alley Cleared',
       portrait: 'kaelen',
       mood: 'neutral',
       focusUnitId: 'kaelen',
@@ -1109,7 +1109,7 @@ const COMBAT_BARKS = {
     elite_aftermath: {
       badge: 'ELITE ENCOUNTER · AFTER BREAKING ESCORT',
       speaker: 'Kaelen',
-      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      speakerTitle: 'Watch Deserter · Vanguard Founder',
       portrait: 'kaelen',
       mood: 'determined',
       focusUnitId: 'f_vane',
@@ -1120,7 +1120,7 @@ const COMBAT_BARKS = {
   enc_m2: {
     pre_battle: {
       badge: 'PRE-COMBAT MAP CONFRONTATION · PARLEY ESCALATION',
-      speaker: 'Gate-Sergeant Corvo',
+      speaker: 'Bailiff Corvo',
       speakerTitle: 'Mini-Boss · Third Ward Toll Warden',
       portrait: 'bailiff',
       mood: 'angry',
@@ -1130,7 +1130,7 @@ const COMBAT_BARKS = {
     },
     boss_phase2: {
       badge: '⚡ MINI-BOSS PHASE 2 TRANSFORMATION · 50% HP',
-      speaker: 'Gate-Sergeant Corvo',
+      speaker: 'Bailiff Corvo',
       speakerTitle: 'Phase 2: "Extortionist\'s Fury" · Toll Bell Rung',
       portrait: 'bailiff',
       mood: 'hurt',
@@ -1141,7 +1141,7 @@ const COMBAT_BARKS = {
     elite_intro: {
       badge: 'ELITE ENCOUNTER · BEFORE ENGAGING PURIFIER',
       speaker: 'Kaelen',
-      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      speakerTitle: 'Watch Deserter · Vanguard Founder',
       portrait: 'kaelen',
       mood: 'determined',
       focusUnitId: 'f_purifier',
@@ -1156,13 +1156,13 @@ const COMBAT_BARKS = {
       mood: 'happy',
       focusUnitId: 'vesper',
       mechanicHint: 'Elite Bounty Claimed: +45 Scrap recovered from Corvo\'s iron drumhead.',
-      text: '"Forty-five Scrap in the toll drumhead AND Sister Aline\'s confiscated coagulant crate! Pleasure doing business with you, Sergeant Corvo."'
+      text: '"Forty-five Scrap in the toll drumhead AND Chirurgeon Sabina\'s confiscated stitch-pack crate! Pleasure doing business with you, Bailiff Corvo."'
     }
   },
   enc_m3: {
     pre_battle: {
       badge: 'PRE-COMBAT MAP CONFRONTATION · FOURTH KILN',
-      speaker: 'Foreman Grendel',
+      speaker: 'Overseer Grendel',
       speakerTitle: 'Boss · Bone-Mill Overseer',
       portrait: 'orlov',
       mood: 'angry',
@@ -1172,7 +1172,7 @@ const COMBAT_BARKS = {
     },
     boss_phase2: {
       badge: '⚡ BOSS PHASE 2 TRANSFORMATION · OVERPRESSURE',
-      speaker: 'Foreman Grendel',
+      speaker: 'Overseer Grendel',
       speakerTitle: 'Phase 2: "Kiln Overpressure" · All Vents Active',
       portrait: 'orlov',
       mood: 'angry',
@@ -1193,11 +1193,11 @@ const COMBAT_BARKS = {
     elite_aftermath: {
       badge: 'ELITE ENCOUNTER · AFTER SHATTERING HUSK',
       speaker: 'Kaelen',
-      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      speakerTitle: 'Watch Deserter · Vanguard Founder',
       portrait: 'kaelen',
       mood: 'determined',
       focusUnitId: 'kaelen',
-      mechanicHint: 'Husk Shattered: Clear line of sight to hook Foreman Grendel onto the central Slag Vent at (7,4).',
+      mechanicHint: 'Husk Shattered: Clear line of sight to hook Overseer Grendel onto the central Slag Vent at (7,4).',
       text: '"The Husk\'s shell is cracked. Now drag Grendel onto his own furnace grate before the next vent blows!"'
     }
   },
@@ -1225,7 +1225,7 @@ const COMBAT_BARKS = {
     elite_intro: {
       badge: 'ELITE ENCOUNTER · BEFORE ENGAGING PROCTOR QUELL',
       speaker: 'Kaelen',
-      speakerTitle: 'Disgraced Surgeon · Vanguard Founder',
+      speakerTitle: 'Watch Deserter · Vanguard Founder',
       portrait: 'kaelen',
       mood: 'determined',
       focusUnitId: 'f_quell',
@@ -1256,9 +1256,9 @@ const REGIONS = {
     cols: 16,
     rows: 10,
     entities: [
-      { id: 'aline', kind: 'npc', name: 'Sister Aline', role: 'Apothecary & Triage', x: 4, y: 4, unitKey: 'aline', badge: 'service_shop' },
-      { id: 'bram',  kind: 'npc', name: 'Bram the Stoker', role: 'Slag-Heap Anvil', x: 11, y: 4, unitKey: 'bram', badge: 'service_shop' },
-      { id: 'tess',  kind: 'npc', name: 'Night-Runner Tess', role: 'Notice Board & Intel', x: 8, y: 3, unitKey: 'tess', badge: 'badge_quest' },
+      { id: 'sabina', kind: 'npc', name: 'Chirurgeon Sabina', role: 'Apothecary & Triage', x: 4, y: 4, unitKey: 'sabina', badge: 'service_shop' },
+      { id: 'berek',  kind: 'npc', name: 'Berek Dorn', role: 'Tinker\'s Hearth', x: 11, y: 4, unitKey: 'berek', badge: 'service_shop' },
+      { id: 'talia',  kind: 'npc', name: 'Talia Rusk', role: 'Cipher Board & Intel', x: 8, y: 3, unitKey: 'talia', badge: 'badge_quest' },
       { id: 'bunks', kind: 'bunks', name: 'The Dry Hollows', role: '6 Bunks · Rest & Squad', x: 4, y: 7, unitKey: 'dunstan', badge: 'service_recruit' },
       { id: 'exit',  kind: 'exit', name: 'Sluice Steps (World Map)', role: 'Ascend to District Map', x: 13, y: 7, icon: 'marker_exit' }
     ]
@@ -1270,7 +1270,7 @@ const REGIONS = {
     cols: 16,
     rows: 10,
     entities: [
-      { id: 'corvo', kind: 'npc', name: 'Gate-Sergeant Corvo', role: 'Parley / Toll Dilemma', x: 9, y: 4, unitKey: 'bailiff', badge: 'badge_quest' },
+      { id: 'corvo', kind: 'npc', name: 'Bailiff Corvo', role: 'Parley / Toll Dilemma', x: 9, y: 4, unitKey: 'bailiff', badge: 'badge_quest' },
       { id: 'ambush_enc', kind: 'encounter', name: 'Storm the Toll Gate', role: 'Combat: M2 Corvo\'s Gate', x: 11, y: 4, unitKey: 'flayer', badge: 'intent_attack' },
       { id: 'smuggler_chest', kind: 'chest', name: 'Submerged Smuggler Crate', role: 'Loot: +20 Scrap', x: 5, y: 7, icon: 'marker_chest' },
       { id: 'exit', kind: 'exit', name: 'Return to District Map', role: 'World Map', x: 2, y: 5, icon: 'marker_exit' }
@@ -1285,9 +1285,9 @@ const WORLD_NODES = [
   {
     id: 'n_sluice', name: '00 · The Sluice Undercroft', kind: 'town', pin: 'pin_town',
     x: 115, y: 225, days: 0, mode: 'Hub',
-    desc: 'Flooded vaulted sanctuary beneath the Seventh Sluice. Houses the Tallow Hearth, Sister Aline\'s Apothecary, Bram\'s Forge, Tess\'s Notice Board, and The Dry Hollows (6 Bunks).',
+    desc: 'Flooded vaulted sanctuary beneath the Seventh Sluice. Houses the Tallow Hearth, Chirurgeon Sabina\'s Slab, Berek\'s Tinker\'s Hearth, Talia\'s Cipher Board, and The Dry Hollows (6 Bunks).',
     edges: ['n_grate', 'n_corvo'],
-    onEnter: () => { STATE.screen = 'region'; STATE.regionId = 'sluice_undercroft'; STATE.talkNpcId = 'aline'; STATE.talkNodeId = 'root'; render(); }
+    onEnter: () => { STATE.screen = 'region'; STATE.regionId = 'sluice_undercroft'; STATE.talkNpcId = 'sabina'; STATE.talkNodeId = 'root'; render(); }
   },
   {
     id: 'n_grate', name: '01 · Drowned Runoff Grate', kind: 'ruin', pin: 'pin_ruin',
@@ -1300,7 +1300,7 @@ const WORLD_NODES = [
   {
     id: 'n_corvo', name: '02 · Third Ward Gate (Corvo\'s Toll)', kind: 'gate', pin: 'pin_gate',
     x: 245, y: 170, days: 1, mode: 'Parley RegionMap + Battle',
-    desc: 'Fortified toll portcullis held by Gate-Sergeant Corvo. Entering opens the Ash-Crawl street RegionMap for parley, stat-check forgery, or combat (Decision A4).',
+    desc: 'Fortified toll portcullis held by Bailiff Corvo. Entering opens the Ash-Crawl street RegionMap for parley, stat-check forgery, or combat (Decision A4).',
     edges: ['n_sluice', 'n_grate', 'n_cross', 'n_kiln'],
     quest: true,
     onEnter: () => { STATE.screen = 'region'; STATE.regionId = 'corvos_gate'; STATE.playerTile = { x: 4, y: 5 }; STATE.talkNpcId = 'corvo'; STATE.talkNodeId = 'root'; render(); }
@@ -1315,7 +1315,7 @@ const WORLD_NODES = [
   {
     id: 'n_kiln', name: '04 · The Fourth Kiln (Bone-Mill)', kind: 'fortress', pin: 'pin_fortress',
     x: 375, y: 195, days: 2, mode: 'Raid (M3 Slag Vents)',
-    desc: 'Industrial rendering furnace overseen by Foreman Grendel. Rhythmic Slag Vents erupt every even round across the foundry floor.',
+    desc: 'Industrial rendering furnace overseen by Overseer Grendel. Rhythmic Slag Vents erupt every even round across the foundry floor.',
     edges: ['n_corvo', 'n_cross', 'n_crucible'],
     quest: true,
     onEnter: () => launchEncounter('enc_m3')
@@ -1323,7 +1323,7 @@ const WORLD_NODES = [
   {
     id: 'n_crucible', name: '06 · Crucible Watchpost (Climax)', kind: 'fortress', pin: 'pin_fortress',
     x: 435, y: 95, days: 2, mode: 'Act I Boss Climax (M5)',
-    desc: 'High Inquisitor-Prelate Nemeth\'s bastion above the Great Sluice Winch. Seize the Winch tile (6,4) or break Prelate Nemeth in Phase 2 Consecration.',
+    desc: 'Inquisitor-Prelate Nemeth\'s bastion above the Great Sluice Winch. Seize the Winch tile (6,4) or break Prelate Nemeth in Phase 2 Consecration.',
     edges: ['n_cross', 'n_kiln'],
     quest: true,
     onEnter: () => launchEncounter('enc_m5')

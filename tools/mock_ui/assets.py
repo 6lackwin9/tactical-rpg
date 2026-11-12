@@ -270,7 +270,7 @@ def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
             elif char_key == "vane":
                 pivot = [132, 162]
                 is_weap = x <= 122 and 140 <= y <= 305
-            elif char_key == "aline":
+            elif char_key == "sabina":
                 pivot = [192, 160]
                 is_weap = x >= 200 and 120 <= y <= 245
 
@@ -369,9 +369,9 @@ def build_asset_bundle() -> dict[str, Any]:
             "hollis": load_scaled_uri("portraits/heroes/hollis.png", (120, 120)),
             "dunstan": load_scaled_uri("portraits/heroes/dunstan.png", (120, 120)),
             "elyse": load_scaled_uri("portraits/heroes/elyse.png", (120, 120)),
-            "aline": load_scaled_uri("portraits/npcs/aline.png", (120, 120)),
-            "bram": load_scaled_uri("portraits/npcs/bram.png", (120, 120)),
-            "tess": load_scaled_uri("portraits/npcs/tess.png", (120, 120)),
+            "sabina": load_scaled_uri("portraits/npcs/sabina_kress.png", (120, 120)),
+            "berek": load_scaled_uri("portraits/npcs/berek_dorn.png", (120, 120)),
+            "talia": load_scaled_uri("portraits/npcs/talia_rusk.png", (120, 120)),
             "vane": load_scaled_uri("portraits/bosses/captain_vane.png", (120, 120)),
             "quell": load_scaled_uri("portraits/bosses/proctor_quell.png", (120, 120)),
             "orlov": load_scaled_uri("portraits/bosses/guild_master_orlov.png", (120, 120)),
@@ -395,7 +395,7 @@ def build_asset_bundle() -> dict[str, Any]:
             "vane": split_vtuber_layers("vane", "portraits/full_body/vane.png"),
             "vesper": split_vtuber_layers("vesper", "portraits/full_body/vesper.png"),
             "maren": split_vtuber_layers("maren", "portraits/full_body/maren.png"),
-            "aline": split_vtuber_layers("aline", "portraits/full_body/aline.png"),
+            "sabina": split_vtuber_layers("sabina", "portraits/full_body/sabina_kress.png"),
             "watchman": split_vtuber_layers("watchman", "portraits/full_body/watchman.png"),
         },
         "partsAtlas": {
@@ -423,9 +423,9 @@ def build_asset_bundle() -> dict[str, Any]:
             "hollis": extract_unit_frames("ranger/base", "hollis"),
             "dunstan": extract_unit_frames("brawler/base", "dunstan"),
             "elyse": extract_unit_frames("ranger/wenn_tallow", "elyse"),
-            "aline": extract_unit_frames("priest/base", "maren"),
-            "bram": extract_unit_frames("warrior/2h_hammer", "grendel"),
-            "tess": extract_unit_frames("rogue/base", "captive"),
+            "sabina": extract_unit_frames("priest/base", "maren"),
+            "berek": extract_unit_frames("warrior/2h_hammer", "grendel"),
+            "talia": extract_unit_frames("rogue/base", "captive"),
             "watchman": extract_unit_frames("warrior/1h_buckler", "castellan_watch"),
             "crossbow": extract_unit_frames("ranger/base", "castellan_watch"),
             "bailiff": extract_unit_frames("warrior/2h_hammer", "bailiff"),
@@ -453,9 +453,9 @@ def build_asset_bundle() -> dict[str, Any]:
         ("hollis", "portraits/heroes/faces/hollis"),
         ("dunstan", "portraits/heroes/faces/dunstan"),
         ("elyse", "portraits/heroes/faces/elyse"),
-        ("aline", "portraits/npcs/faces/aline"),
-        ("bram", "portraits/npcs/faces/bram"),
-        ("tess", "portraits/npcs/faces/tess"),
+        ("sabina", "portraits/npcs/faces/sabina_kress"),
+        ("berek", "portraits/npcs/faces/berek_dorn"),
+        ("talia", "portraits/npcs/faces/talia_rusk"),
         ("vane", "portraits/bosses/faces/captain_vane"),
         ("quell", "portraits/bosses/faces/proctor_quell"),
         ("orlov", "portraits/bosses/faces/guild_master_orlov"),

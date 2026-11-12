@@ -34,7 +34,7 @@ function jumpScreen(target) {
   } else if (target === 'region_hub') {
     STATE.screen = 'region';
     STATE.regionId = 'sluice_undercroft';
-    STATE.talkNpcId = 'aline';
+    STATE.talkNpcId = 'sabina';
     STATE.talkNodeId = 'root';
   } else if (target === 'region_corvo') {
     STATE.screen = 'region';
@@ -49,7 +49,7 @@ function jumpScreen(target) {
     STATE.screen = 'region';
     STATE.regionId = 'sluice_undercroft';
     STATE.modal = 'shop';
-    STATE.shopKeeper = 'aline';
+    STATE.shopKeeper = 'sabina';
   } else if (target === 'party') {
     if (STATE.screen === 'main_menu' || STATE.screen === 'story' || STATE.screen === 'load_slots') STATE.screen = 'region';
     STATE.modal = 'party';
@@ -161,7 +161,7 @@ function resolveCorvoToll() {
   if (STATE.scrap >= 30) {
     STATE.scrap -= 30;
     markQuestDone('q_corvo');
-    STATE.eventLog.unshift('Paid 30 Scrap toll to Sergeant Corvo. Third Ward Gate opened.');
+    STATE.eventLog.unshift('Paid 30 Scrap toll to Bailiff Corvo. Third Ward Gate opened.');
     STATE.screen = 'worldmap';
     STATE.worldNodeId = 'n_kiln';
     render();
@@ -371,7 +371,7 @@ function renderHudBar(placeTitle) {
         <button class="hud-icon-btn ${STATE.modal==='board'?'active':''}" title="Notice Board / Quests [J]" onclick="STATE.modal = STATE.modal==='board'?null:'board';render();">
           <img src="${ASSETS.ui.journal}" class="pixel">
         </button>
-        <button class="hud-icon-btn ${STATE.modal==='shop'?'active':''}" title="Quartermaster / Stash [I]" onclick="openShop('bram')">
+        <button class="hud-icon-btn ${STATE.modal==='shop'?'active':''}" title="Quartermaster / Stash [I]" onclick="openShop('berek')">
           <img src="${ASSETS.ui.stash}" class="pixel">
         </button>
         <button class="hud-icon-btn" title="District World Map [M]" onclick="STATE.screen='worldmap';STATE.modal=null;render();">
