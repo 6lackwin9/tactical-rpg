@@ -14,13 +14,30 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-1 to PR5-6, PR5-8, PR5-16, PR5-17, PR5-20 to PR5-25 | done (FB-168 to FB-189, FB-194 to FB-196, answered) | `develop` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-10) |
 | PR5-7, PR5-9 to PR5-13b, PR5-18, PR5-19, PR5-26 to PR5-35 | done, released to `main` in #62 (FB-190 to FB-234, answered @cf3d93b4) | `main` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-11) |
 | PR5-36 (parts 1, 2, 4), PR5-37, PR5-38, PR5-39 | done (FB-235 to FB-241, answered @6edec2a1) | `develop` | full rows in `docs/archive/FEEDBACK_CLOSED.md` (FB-235 to FB-241); follow-ups queued as PR5-40 to PR5-42 |
-| PR5-40 `ACT1-HOOKS1`, PR5-41 `ACT1-DATA1`, PR5-42 `WORLD-SIM1` | queued (cloud Build Session, 2026-11-12) | - | dispatch plan awaiting user confirmation |
+| PR5-40 `ACT1-HOOKS1` | done (FB-242; FB-243 questions): mandatory scenes refuse Back / Esc, New Game preselects `start_worlds[0]`, encounter `survivors` count, `supplies` grants, shop `discount`; 0 golden diffs | `develop` | - |
+| PR5-41 `ACT1-DATA1`, PR5-42 `WORLD-SIM1` | queued, in sequence (user 2026-11-12) | - | PR5-41 next |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
 FB-01 to FB-241 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-12). New items start at FB-242. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+
+### FB-242: PR5-40 `ACT1-HOOKS1` landed
+
+- **Spec**: READY Section 1 row PR5-40; FB-241 (a, c-d) answer (the `PR5-40` squash commit on `develop`, 2026-11-12)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: (1) Kit `DialogueRunner::scene` / `must_choose` (`rpgkit_world/src/dialogue.rs`): a queued scene that is open, offers no farewell and has a reply that can actually be picked (unlocked and passing `precheck`, on the current node or one reached through `next`) refuses Back, Esc, right-click and Farewell in `emberwake_gui/src/talk.rs` `Services::back`; a scene with nothing pickable can still be left, so it never traps the player; no dialogue ids named. (2) `Source.start_worlds` / `Data.start_worlds` and `new_game::default_world`: New Game preselects the manifest's first playable start world (`sunk_ward`), else the first playable world. (3) World encounter `survivors` {`flag`, `unit`} (schema `omit_default`) sets an int flag at every settle to the guests that lived (`battle::Tally.guests`, `GuestEnd`); `supplies` in quest template `rewards` and the dialogue `give` effect (`quest::reward_apply`, capped by `supplies_max`); world shop `discount` {`requires_flags`, `mult` 0.1..1.0} (`omit_default`) prices stock and loot at ceil(price x mult), min 1, in `shop::offers` (pane, buy and trade). The content check now validates every quest template's rewards (`rewards_errors` existed but was not called). Tests: 5 kit `rpgkit_world` files (`scene_must_choose`, `start_worlds`, `guest_survivors`, `supplies_grants`, `shop_discount`), 3 kit `rpgkit_content` (`survivors_checks`, `shop_discount_checks`, `supplies_checks`), `emberwake_world/tests/act1_hooks.rs`, GUI `talk::tests::back_and_esc_leave_a_scene_with_a_reply_to_pick_open`, `menus::tests::new_game_preselects_the_manifests_first_start_world`. 0 golden diffs; no shipped data touched. Seed shapes for PR5-41: `enc_evt_02` `"survivors": {"flag": "sunk_ward.saved_youths", "unit": "tithe_captive"}`; `{"effect": "give", "supplies": 3}`; template `"rewards": {"supplies": 3}`; shop `"discount": {"requires_flags": [{"key": "<flag>", "value": true}], "mult": 0.8}`.
+- **Recommendation**: GAME_BRIEF "Where to look": "Mandatory scenes: `DialogueRunner::must_choose` (kit `dialogue.rs`), GUI `talk.rs` `Services::back`"; "New Game default world: `new_game::default_world` (`start_worlds`)"; "Act 1 hooks: encounter `survivors`, `supplies` rewards / `give`, shop `discount` (kit `battle.rs`, `quest.rs`, `shop.rs`)". HISTORY: "ACT1-HOOKS1: a farewell-less scene could be dismissed with Esc and was lost for good (FB-241 a); Back is refused while a reply can be picked; option (2), re-queueing the scene, was not taken (user 2026-11-12)." STRUCTURE: no new paths (tests in existing `tests/` folders). Known-issues row (cloud): `alsa-sys` build fails when the session-start hook did not run; `apt-get install -y libasound2-dev` (already in `docs/workflow/cloud.md`, hit again 2026-11-12).
+
+### FB-243: PR5-40 readings and questions
+
+- **Spec**: READY row PR5-40 (3) (@ the `PR5-40` squash commit)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: The specs are silent on these; built defaults: the shop discount is one `{requires_flags, mult}` object (not a list, so no stacking rule was needed) and lowers stock and loot buy prices only, not the supply price (its help text says it ignores multipliers) nor sell prices; the `survivors` flag is set on every outcome (won, lost, fled) and a guest that fled the field counts as surviving (M2's captive gets `flee_ratio` 0 in PR5-41, so this does not matter there).
+- **Recommendation**: (a) keep supplies out of the discount (alternative: the discount covers supplies too); (b) keep fled guests as survivors (alternative: count only guests on the field at the end; or a content-check warning when `survivors` sits on an encounter whose guests can flee).
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
