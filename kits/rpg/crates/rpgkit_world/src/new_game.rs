@@ -107,6 +107,13 @@ pub fn playable_worlds(d: &Data) -> Vec<String> {
     d.world_ids().into_iter().filter(|w| playable_errors(d, w).is_empty()).collect()
 }
 
+/// ACT1-HOOKS1 (FB-241 c): the world New Game picks first: the first of the manifest's `start_worlds` that is
+/// playable, else the first playable world (as before when the list is empty); "" when no world is playable.
+pub fn default_world(d: &Data) -> String {
+    let playable = playable_worlds(d);
+    d.start_worlds.iter().find(|w| playable.contains(w)).or(playable.first()).cloned().unwrap_or_default()
+}
+
 pub fn create_for_world(d: &Data, world_id: &str, seed: i64) -> Result<GameState, Vec<String>> {
     let errors = playable_errors(d, world_id);
     if !errors.is_empty() {

@@ -189,7 +189,8 @@ pub fn play_pending_fight(cx: &mut Cx) -> bool {
 
 /// T2: the campaign queue's head when it is a `{dialogue, speaker}` item: the item leaves the queue and its scene opens
 /// (`DialogueRunner::open_scene`); None for another head, or when the scene cannot open (its reason goes to the log).
-/// The region map shows the talk; the world map leaves the item for it.
+/// The region map shows the talk; the world map leaves the item for it. Nothing re-queues it, so a scene with a reply
+/// still to pick refuses Back and Esc (ACT1-HOOKS1, `Services::must_choose`).
 pub fn pending_talk(cx: &mut Cx) -> Option<DialogueRunner> {
     let item = campaign::pending_head(cx.gs()).filter(|item| item.contains_key("dialogue"))?.clone();
     campaign::pop_pending(cx.gs_mut());

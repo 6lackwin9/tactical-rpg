@@ -385,10 +385,15 @@ fn repair(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<St
 }
 
 /// PK2-FOLLOWUP: `reforge`: the picked weapon instance goes back to full durability and, with `masterwork`, becomes
-/// masterwork (its own technique opens in the main hand); refused when that changes nothing.
+/// masterwork (its own technique opens in the main hand); refused when that changes nothing. AUDIT-08 (PR5-40): a
+/// masterwork reforge of a weapon that is already masterwork is refused even when it is worn (a plain `reforge` or a
+/// `repair` restores it), so the masterwork recipe is never a costlier repair.
 fn reforge(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<String>) -> Result<(), String> {
     let w = weapons::find_mut(&mut gs.party, uid).ok_or("Pick a weapon.")?;
     let (name, max) = (d.item_name(&w.item), weapons::full(d, &w.item));
+    if json::b(fx, "masterwork", false) && w.masterwork {
+        return Err(format!("{name} is already a masterwork."));
+    }
     let make = json::b(fx, "masterwork", false) && !w.masterwork;
     if !make && w.durability >= max {
         return Err(format!("{name} needs no reforging."));

@@ -314,7 +314,7 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
 /// read two ways). A class row checks its path against its techniques (`extra` None); a derived unit row checks its
 /// `extra_skills` against both (the class's own clash is the class row's; a fixed unit owns no path). One message per
 /// family and pair.
-fn duplicate_skill_errors(v: &View, class: &ClassDef, extra: Option<&[String]>) -> Vec<String> {
+pub(crate) fn duplicate_skill_errors(v: &View, class: &ClassDef, extra: Option<&[String]>) -> Vec<String> {
     let path: Vec<String> = class.path_steps().into_iter().map(|(_, s)| s).collect();
     let techniques: Vec<String> = masterable_families(v, class)
         .iter()

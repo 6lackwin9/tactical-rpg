@@ -91,3 +91,21 @@ fn a_unit_whose_extra_skills_repeat_its_path_or_a_technique_is_refused() {
     let refused = store::upsert(&data, None, "units", &dict(unit(&["t_main"])), None).err().expect("the writer refuses the clash");
     assert!(refused.iter().any(|e| e.contains("'t_main' is in both the extra skills and a technique")), "{refused:?}");
 }
+
+/// AUDIT-05 (PR5-40): a world manifest's class overlay that replaces a class's path (`classes.<id>.skill_path`) is
+/// checked like the class row: an overlay path holding a technique the class may master is refused on the manifest
+/// (`classes_errors`), a clean overlay path or one holding a technique of a family at proficiency 1 is not.
+#[test]
+fn a_world_class_overlay_path_holding_a_technique_it_may_master_is_refused() {
+    let (_t, data) = scratch("overlay");
+    let v = store::view(&data);
+    let overlay = |path: Value| dict(json!({"id": "w", "classes": {"c_clean": {"name": "Clean", "skill_path": path}}}));
+    let dups = |path: Value| check::hooks::classes_errors(&v, &overlay(path)).into_iter().filter(|e| e.contains("a unit owns each skill once")).collect::<Vec<_>>();
+    assert!(dups(json!({"p_one": 1})).is_empty(), "the class's own clean path");
+    assert!(dups(json!({})).is_empty(), "no path");
+    assert_eq!(
+        dups(json!({"p_one": 1, "t_key": 3})),
+        ["Class names 'c_clean': Skill 't_key' is in both the class path and a technique (family 't_key'); a unit owns each skill once."]
+    );
+    assert!(dups(json!({"t_minor": 2})).is_empty(), "a family at proficiency 1 is not masterable");
+}

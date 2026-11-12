@@ -1273,6 +1273,13 @@ pub fn classes_errors(v: &View, m: &Dict) -> Vec<String> {
                         out.push(format!("{at}: skill path {fam}: the level must be a whole number {}-{}.", PATH_LEVEL.0, PATH_LEVEL.1));
                     }
                 }
+                // AUDIT-05 (PR5-40): the overlaid class (its row with this path, as `Data::cat_in` builds it) owns each
+                // skill once across the path and its masterable families' techniques, as the class row is checked
+                if v.has("classes", class_id) {
+                    let mut class = rpgkit_data::ClassDef::from_obj(v.get("classes", class_id));
+                    class.skill_path = path.iter().map(|(fam, lvl)| (fam.clone(), json::to_int(lvl) as i32)).collect();
+                    out.extend(super::unit::duplicate_skill_errors(v, &class, None).into_iter().map(|e| format!("{at}: {e}")));
+                }
             }
             Some(_) => out.push(format!("{at}: skill_path must be an object {{family: level}} ({{}} = no path).")),
         }

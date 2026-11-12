@@ -954,6 +954,47 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
     errors
 }
 
+// ---- Survivors (ACT1-HOOKS1) ----
+
+/// ACT1-HOOKS1 (FB-241 c): the `survivors` keys.
+const SURVIVORS_KEYS: [&str; 2] = ["flag", "unit"];
+
+/// ACT1-HOOKS1: a world encounter's `survivors` `{"flag", "unit"}` (`{}` = none): its keys, a flag key the game may
+/// write, guests to count, and a `unit` ("" = every guest) that is one of the guests (its ref, character id or base
+/// unit in world `w`).
+pub fn survivors_problems(v: &View, w: &str, e: &Dict) -> Vec<String> {
+    let Some(raw) = e.get("survivors") else { return Vec::new() };
+    let Some(block) = raw.as_object() else {
+        return vec!["Survivors must be an object {flag, unit}.".into()];
+    };
+    if block.is_empty() {
+        return Vec::new();
+    }
+    let mut errors: Vec<String> = block.keys().filter(|k| !SURVIVORS_KEYS.contains(&k.as_str())).map(|k| format!("Survivors: unknown key '{k}'.")).collect();
+    let flag = json::s(block, "flag");
+    if !super::quest::flag_key_ok(&flag) {
+        errors.push(format!("Survivors flag '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
+    } else {
+        let why = super::campaign::write_key_error(&flag);
+        if !why.is_empty() {
+            errors.push(format!("Survivors: {why}"));
+        }
+    }
+    let guests = strings(json::get(e, "guests"));
+    if guests.is_empty() {
+        errors.push("Survivors needs the encounter's guests (it counts the guests that lived).".into());
+    }
+    let unit = json::s(block, "unit");
+    let of_unit = |r: &String| {
+        let c = v.worlds.resolve(w, "characters", r);
+        *r == unit || json::s(c, "id") == unit || json::s(c, "base_unit") == unit
+    };
+    if !unit.is_empty() && !guests.is_empty() && !guests.iter().any(of_unit) {
+        errors.push(format!("Survivors unit '{unit}' is none of the guests (a guest's character id or base unit)."));
+    }
+    errors
+}
+
 // ---- Stay-behind and unkillable (ENCOUNTER2 3 and 6; not in Godot) ----
 
 /// The `stay_behind` keys (section 6); the hold-only and stand-only ones.

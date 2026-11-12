@@ -39,7 +39,7 @@ const EFFECTS: [(&str, &[&str]); 10] = [
     ("add_flag", &["key", "delta", "min", "max"]),
     ("start_quest", &["quest"]),
     ("turn_in", &["quest"]),
-    ("give", &["items", "gold"]),
+    ("give", &["items", "gold", "supplies"]),
     ("take", &["items", "gold"]),
     ("open_shop", &["shop"]),
     ("fight", &["encounter"]),
@@ -558,7 +558,8 @@ fn reserved_errors(key: &str, el: &str) -> Option<String> {
     (!why.is_empty()).then(|| format!("{el}: {why}"))
 }
 
-/// give / take: items {base id: 1..99} (at most 8 keys), gold 0..EFFECT_GOLD_MAX, not both empty.
+/// give / take: items {base id: 1..99} (at most 8 keys), gold 0..EFFECT_GOLD_MAX, a give's supplies 0..99
+/// (ACT1-HOOKS1), not all empty.
 fn goods_errors(v: &View, fx: &Dict, el: &str) -> Vec<String> {
     let mut errors = Vec::new();
     let items_raw = fx.get("items").cloned().unwrap_or(Value::Object(Dict::new()));
@@ -580,8 +581,15 @@ fn goods_errors(v: &View, fx: &Dict, el: &str) -> Vec<String> {
     if !int_in(&gold, 0, EFFECT_GOLD_MAX) {
         errors.push(format!("{el}: gold must be a whole number 0..{EFFECT_GOLD_MAX}."));
     }
-    if items.is_empty() && json::to_int(&gold) <= 0 {
-        errors.push(format!("{el} needs items or gold."));
+    // ACT1-HOOKS1 (FB-241 c): a give's travel supplies (a take's are refused as an unknown key)
+    let supplies = fx.get("supplies").cloned().unwrap_or(json::int(0));
+    let supplies_max = crate::source::PurseCaps::SUPPLIES_MAX;
+    if !int_in(&supplies, 0, supplies_max) {
+        errors.push(format!("{el}: supplies must be a whole number 0..{supplies_max}."));
+    }
+    if items.is_empty() && json::to_int(&gold) <= 0 && json::to_int(&supplies) <= 0 {
+        let what = if json::s(fx, "effect") == "give" { "items, gold or supplies" } else { "items or gold" };
+        errors.push(format!("{el} needs {what}."));
     }
     errors
 }
