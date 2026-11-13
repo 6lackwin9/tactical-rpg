@@ -134,12 +134,23 @@ def load_graph() -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def build(out: Path, cache: Path | None, bg: Path | None = None, landmarks: Path | None = None) -> None:
+def build(out: Path, cache: Path | None, bg: Path | None = None, landmarks: Path | None = None,
+          embed_fonts: bool = False) -> None:
     bundle = load_or_build_bundle(cache_path=cache)
-    styles = ((ROOT / "tools/mock_ui/styles.css").read_text(encoding="utf-8")
-              .replace("__FONT_DISPLAY__", bundle["fonts"]["display"])
-              .replace("__FONT_BODY__", bundle["fonts"]["body"])
-              .replace("__FONT_MONO__", bundle["fonts"]["mono"])
+    styles = (ROOT / "tools/mock_ui/styles.css").read_text(encoding="utf-8")
+    fonts_link = ""
+    if embed_fonts:
+        styles = (styles.replace("__FONT_DISPLAY__", bundle["fonts"]["display"])
+                  .replace("__FONT_BODY__", bundle["fonts"]["body"])
+                  .replace("__FONT_MONO__", bundle["fonts"]["mono"]))
+    else:  # light (default): the same three families from Google Fonts instead of ~1 MB of embedded TTF
+        styles = re.sub(r"@font-face \{[^}]*\}\s*", "", styles)
+        styles = (styles.replace("'AlegreyaSC'", "'Alegreya SC'").replace("'OpenSans'", "'Open Sans'")
+                  .replace("'JetBrainsMono'", "'JetBrains Mono'"))
+        fonts_link = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
+                      '<link href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@700&family=JetBrains+Mono:wght@700'
+                      '&family=Open+Sans:wght@600&display=swap" rel="stylesheet">')
+    styles = (styles
               .replace("__ORNATE_CORNER__", bundle["ui"]["ornate_corner"]))
     keys = ["pin_town", "pin_gate", "pin_ruin", "pin_fortress", "pin_camp", "pin_here", "badge_quest", "gold",
             "ornate_tl", "ornate_tr", "ornate_bl", "ornate_br"]
@@ -148,7 +159,7 @@ def build(out: Path, cache: Path | None, bg: Path | None = None, landmarks: Path
         import base64, io
         from PIL import Image
         buf = io.BytesIO()
-        Image.open(bg).convert("RGB").save(buf, "JPEG", quality=88)
+        Image.open(bg).convert("RGB").save(buf, "JPEG", quality=82)
         assets["map"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
     if landmarks:  # cut landmarks (map/landmarks/<location>.png) drawn in place of the kind pins
         import base64
@@ -156,6 +167,7 @@ def build(out: Path, cache: Path | None, bg: Path | None = None, landmarks: Path
                         for f in sorted(Path(landmarks).glob("*.png"))}
     data = {"graph": load_graph(), "steps": STEPS, "current": CURRENT, "bgIsMap": bool(bg)}
     html = ((HERE / "world_diamond.html").read_text(encoding="utf-8")
+            .replace("__FONTS_LINK__", fonts_link)
             .replace("__STYLES_CSS__", styles)
             .replace("__ASSETS_JSON__", json.dumps(assets))
             .replace("__DATA_JSON__", json.dumps(data)))
@@ -170,8 +182,9 @@ def main() -> None:
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="the mock UI's asset bundle cache")
     ap.add_argument("--bg", type=Path, help="a candidate act map background to review (default: the mock's title card)")
     ap.add_argument("--landmarks", type=Path, help="a folder of cut landmarks <location_id>.png drawn instead of pins")
+    ap.add_argument("--embed-fonts", action="store_true", help="embed the TTF fonts (about 1 MB more) instead of Google Fonts")
     args = ap.parse_args()
-    build(args.out, args.cache, args.bg, args.landmarks)
+    build(args.out, args.cache, args.bg, args.landmarks, args.embed_fonts)
 
 
 if __name__ == "__main__":

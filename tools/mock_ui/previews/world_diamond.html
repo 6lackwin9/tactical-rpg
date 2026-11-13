@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sunk Ward Diamond Map</title>
+__FONTS_LINK__
 <style>
 __STYLES_CSS__
 
@@ -22,6 +23,13 @@ __STYLES_CSS__
   .wd-hide { display: none; }
   .wd-trail { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 0.1 4.2; opacity: 0.52; transition: opacity 0.15s, stroke-width 0.15s; }
   .wd-trail.hot { opacity: 0.95; stroke-width: 2.1; }
+  .wd-mapview.focus-only .wd-trail { opacity: 0; }
+  .wd-mapview.focus-only .wd-trail.hot, .wd-mapview.focus-only .wd-trail.fresh { opacity: 0.95; }
+  .wd-trail.goal { opacity: 0.85; stroke-width: 2.5; stroke-dasharray: 0.1 3.4; }
+  .wd-trail.flick { animation: wdFlick 3.1s ease-in-out infinite; }
+  .wd-trail.flick.hot, .wd-trail.flick.goal { animation-name: wdFlickHot; }
+  @keyframes wdFlick { 0%, 100% { stroke-opacity: 1; } 35% { stroke-opacity: 0.55; } 52% { stroke-opacity: 0.85; } 70% { stroke-opacity: 0.6; } }
+  @keyframes wdFlickHot { 0%, 100% { stroke-opacity: 1; } 40% { stroke-opacity: 0.75; } 65% { stroke-opacity: 0.9; } }
   .wd-trail.fresh { opacity: 0.95; stroke-width: 2.1; animation: wdTrail 1.4s ease-in-out 3; }
   @keyframes wdTrail { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 3px #f59e0b); } }
   .wd-faint { background: rgba(10,11,16,0.28) !important; border-color: transparent !important; color: rgba(217,203,180,0.74) !important;
@@ -57,7 +65,7 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'trail' };
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'trail', flicker: false, goal: false };
 const FLAG_NAMES = {
   'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
   'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
@@ -105,20 +113,24 @@ function routePoints(e) {
 // Lantern trail: faint warm dots along the roads; the routes of the hovered or selected node light up (CSS :has), a
 // route that just opened glows, locked routes are not drawn (the greyed node says it is locked).
 function trailSvg() {
-  const step = S.step, prev = Math.max(0, step - 1);
+  const step = S.step, prev = Math.max(0, step - 1), reach = reachable(step), cur = DATA.steps[step];
+  const goalNode = id => { const n = node(id); return /^M\d/.test(n.mission) && reach.has(id) && !cur.cleared.includes(id); };
+  let k = 0;
   return G.edges.map(e => {
     const open = isOpen(e, step);
     if (!open) return '';
     const fresh = step > 0 && !isOpen(e, prev);
     const hot = e.a === S.sel || e.b === S.sel;
     const col = isShortcut(e) ? '#22d3ee' : '#fbbf24';
-    const cls = `wd-trail rt-${e.a} rt-${e.b}${hot ? ' hot' : ''}${fresh ? ' fresh' : ''}`;
-    return `<path class="${cls}" d="${smoothPath(routePoints(e))}" stroke="${col}" />`;
+    const goal = S.goal && (goalNode(e.a) || goalNode(e.b));
+    const cls = `wd-trail rt-${e.a} rt-${e.b}${hot ? ' hot' : ''}${fresh ? ' fresh' : ''}${goal ? ' goal' : ''}${S.flicker ? ' flick' : ''}`;
+    const delay = S.flicker ? `animation-delay:${(-(k++ * 0.73) % 3.1).toFixed(2)}s;` : '';
+    return `<path class="${cls}" style="${delay}" d="${smoothPath(routePoints(e))}" stroke="${col}" />`;
   }).join('');
 }
 
 function trailHoverCss() {
-  return G.nodes.map(n => `.wd-mapview:has(.wd-node[data-id="${n.id}"]:hover) .rt-${n.id} { opacity: 0.95; stroke-width: 2.1; }`).join('\n');
+  return G.nodes.map(n => `.wd-mapview:has(.wd-node[data-id="${n.id}"]:hover) .rt-${n.id} { opacity: 0.95 !important; stroke-width: 2.1; }`).join('\n');
 }
 
 function routesSvg() {
@@ -250,7 +262,7 @@ function hud() {
 }
 
 function legend() {
-  if (S.routes === 'trail') {
+  if (S.routes === 'trail' || S.routes === 'focus') {
     const dot = c => `<svg width="18" height="5"><line x1="1" y1="2.5" x2="17" y2="2.5" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="0.1 4.2"/></svg>`;
     return `<div class="rust-panel wd-legend"><span>${dot('#fbbf24')} road (bright: the selected or hovered place)</span>
       <span>${dot('#22d3ee')} Vesper's shortcut</span><span><b style="color:var(--ok);">✓</b> cleared</span><span style="color:#6b7280;">grey place: locked</span></div>`;
@@ -274,14 +286,16 @@ function render() {
       `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
       [['data', 'Data'], ['spaced', 'Spaced diamond'], ['regions', 'Painted regions']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
       `<span class="lbl" style="color:#a3e635;">Routes:</span>` +
-      [['straight', 'Straight'], ['roads', 'Roads'], ['trail', 'Lantern trail']].map(([k, t]) => `<button class="db-btn ${S.routes === k ? 'active' : ''}" onclick="S.routes='${k}';render();">${t}</button>`).join('') +
+      [['straight', 'Straight'], ['roads', 'Roads'], ['trail', 'Lantern trail'], ['focus', 'Focus only']].map(([k, t]) => `<button class="db-btn ${S.routes === k ? 'active' : ''}" onclick="S.routes='${k}';render();">${t}</button>`).join('') +
+      `<button class="db-btn ${S.flicker ? 'active' : ''}" onclick="S.flicker=!S.flicker;render();">Flicker</button>` +
+      `<button class="db-btn ${S.goal ? 'active' : ''}" onclick="S.goal=!S.goal;render();">Next objective</button>` +
       `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
       [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected'], ['faint', 'Faint, lit on hover / focus']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
   let map;
   if (S.view === 'diamond') {
     map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
              <defs><filter id="wdGlow" filterUnits="userSpaceOnUse" x="0" y="0" width="496" height="328"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-             ${S.routes === 'trail' ? trailSvg() : routesSvg()}</svg>${S.spacing === 'regions' ? '' : tiersHtml()}${nodesHtml()}${legend()}<style>${trailHoverCss()}</style>`;
+             ${S.routes === 'trail' || S.routes === 'focus' ? trailSvg() : routesSvg()}</svg>${S.spacing === 'regions' ? '' : tiersHtml()}${nodesHtml()}${legend()}<style>${trailHoverCss()}</style>`;
   } else {
     const c = currentHtml();
     map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">${c.svg}</svg>${c.pins}`;
@@ -289,7 +303,7 @@ function render() {
   const c = S.view === 'current' ? currentHtml() : null;
   document.getElementById('wd-stage').innerHTML = `
     ${hud()}
-    <div class="wd-mapview" style="position:absolute;left:4px;top:24px;width:496px;height:328px;border:1px solid #374151;overflow:hidden;">
+    <div class="wd-mapview${S.routes === 'focus' ? ' focus-only' : ''}" style="position:absolute;left:4px;top:24px;width:496px;height:328px;border:1px solid #374151;overflow:hidden;">
       <img src="${ASSETS.map}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:${DATA.bgIsMap ? 'none' : `brightness(${S.view === 'diamond' ? 0.55 : 0.82}) contrast(1.08)`};">
       <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(10,11,16,0.05) 40%, rgba(10,11,16,0.75) 100%);"></div>
       ${map}
