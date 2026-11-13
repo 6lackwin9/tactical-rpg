@@ -5,7 +5,8 @@
 //! them. `talk::Services` draws it while its conversation has the recipe pane open. PK2-FOLLOWUP (PR5-36): a weapon
 //! picker (`recipe.weapon`: the party's weapon instances, for `repair` and `reforge`) and a family picker
 //! (`recipe.family`: the families a row lets the pick name, such as a minor family for `train_proficiency`; each row
-//! reads it through `recipe::pick_for`) show while an offered recipe needs them.
+//! reads it through `recipe::pick_for`) show while an offered recipe needs them. PR5-45: a `stash` recipe (`craft`)
+//! needs no pick, so it adds no picker and runs on the cost checks alone.
 
 use crate::screens::Cx;
 use aegis_core::json::{self, s};
@@ -380,5 +381,59 @@ mod tests {
         frame(&mut host, &mut cx, &mut g, 1.0);
         let paid = emberwake_data::recipe::repair_share(REPAIR, FULL / 2, FULL);
         assert_eq!((weapons::find(&cx.gs().party, &uid).map(|w| w.durability), cx.gs().party.gold), (Some(FULL), FUNDS - paid), "repaired for its share");
+    }
+
+    /// PR5-45: the crafted item, its count per run and the material each run takes.
+    const MADE: i64 = 3;
+    const ORE: i64 = 2;
+
+    /// A scratch world whose smith offers only a stash recipe: `ORE` ore and `PRICE` gold make `MADE` bolts.
+    fn craft_data() -> Data {
+        let catalog = json!({
+            "classes": [{"id": "fighter", "name": "Fighter", "proficiency": {"sword": {"level": 3, "role": "main"}}}],
+            "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}],
+            "recipes": [{"id": "make_bolts", "name": "Make Bolts", "npc": "smith", "requires": [], "cost": {"gold": PRICE, "items": {"ore": ORE}}, "target": "stash",
+                "effects": [{"effect": "craft", "item": "bolt", "count": MADE}]}],
+            "items": [{"id": "ore", "name": "Ore", "item_type": "MATERIAL"}, {"id": "bolt", "name": "Bolt", "item_type": "CONSUMABLE"}]
+        });
+        let worlds = json!({"ward": {"manifest": {"id": "ward", "name": "Ward", "start_location": "hub", "start_party": ["hero"]}, "own": {
+            "locations": with_ids("ward", json!([{"id": "hub", "name": "Hub"}])),
+            "characters": with_ids("ward", json!([{"id": "hero", "name": "Hero", "role": "party", "base_unit": "hero"}, {"id": "smith", "name": "Smith", "role": "npc"}]))
+        }}});
+        Data::from_values(&catalog, &worlds, &json!({}))
+    }
+
+    /// PR5-45: a stash recipe shows no picker and runs from Do (the cost paid, the crafted stack in the stash, the line
+    /// says so); once the cost can't be paid Do turns off and a run is refused with the reason, nothing changed.
+    #[test]
+    fn a_stash_recipe_runs_with_no_pick_and_refuses_an_unpaid_cost() {
+        let (mut cx, mut g) = (story_cx(craft_data()), gfx());
+        let mut gs = new_game::create_for_world(&cx.data.clone(), "ward", 1).expect("a new game");
+        gs.party.gold = FUNDS;
+        gs.party.add_to_stash("ore", ORE);
+        enter_game(&mut cx, gs, -1, Vec::new());
+        cx.nav.clear();
+        let mut host = ServiceScreen::default();
+        host.talk(&mut cx, "smith");
+        frame(&mut host, &mut cx, &mut g, 1.0);
+        let choices = json::aget(json::dict(&host.state(&cx)["dialogue"]), "choices").to_vec();
+        let k = choices.iter().position(|c| s(json::dict(c), "service") == "recipe").expect("the recipe reply");
+        host.click_id(&mut cx, &format!("choice.{k}")).expect("the recipe reply");
+        frame(&mut host, &mut cx, &mut g, 1.0);
+        for picker in ["recipe.member", "recipe.item", "recipe.weapon", "recipe.family"] {
+            assert!(widget(&host, picker).is_none(), "{picker}: a stash recipe needs no pick");
+        }
+        assert!(widget(&host, "recipe.do.make_bolts").is_some_and(|w| w["enabled"] == json!(true)), "Do on a stash recipe that can run");
+        host.click_id(&mut cx, "recipe.do.make_bolts").expect("Do");
+        frame(&mut host, &mut cx, &mut g, 1.0);
+        let party = &cx.gs().party;
+        assert_eq!((party.stash.get("bolt").copied(), party.stash.get("ore").copied(), party.gold), (Some(MADE), None, FUNDS - PRICE), "crafted and paid");
+        assert!(widget(&host, "recipe.line").is_some_and(|w| s(json::dict(&w), "text").contains(&format!("Bolt x{MADE} added to stash."))), "the line names the craft");
+        assert!(widget(&host, "recipe.do.make_bolts").is_some_and(|w| w["enabled"] == json!(false)), "the ore is spent: off");
+        let before = cx.gs().to_value();
+        host.svc.act(&mut cx, SvcAct::Recipe(RecipeAct::Run("make_bolts".into())));
+        frame(&mut host, &mut cx, &mut g, 1.0);
+        assert_eq!(cx.gs().to_value(), before, "a refused craft changes nothing");
+        assert!(widget(&host, "recipe.line").is_some_and(|w| s(json::dict(&w), "text").contains("Not enough Ore.")), "the refusal shows");
     }
 }

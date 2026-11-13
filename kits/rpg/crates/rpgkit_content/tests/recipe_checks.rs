@@ -3,7 +3,8 @@
 //! recipe row's checks (id, name, npc, target, cost, effects: known, their keys and target, their refs; PK2-FOLLOWUP:
 //! `repair`, `reforge`, `forge_rite`, a masterwork reforge's `requires`) and across rows (unique ids); the world refs (the offering character, the `requires`
 //! conditions) in the whole-catalog report and the Forge's check; the loader keeps the rows that pass and they reach
-//! `Catalog::recipes`; the writer takes a row and re-saves it byte for byte.
+//! `Catalog::recipes`; the writer takes a row and re-saves it byte for byte. PR5-45: a `stash` recipe and its `craft`
+//! effect (a known item, an optional whole count 1..`RECIPE_COUNT_MAX`, only on a stash recipe).
 
 use aegis_core::json::{self, Dict};
 use rpgkit_content::{check, source, store};
@@ -91,7 +92,7 @@ fn each_recipe_mistake_has_its_text() {
     assert_eq!(check(with(surgery("r_one"), "name", json!(""))), ["A recipe needs a name."]);
     assert_eq!(check(with(surgery("r_one"), "npc", json!(""))), ["A recipe needs the character who offers it (npc)."]);
     assert_eq!(check(with(surgery("r_one"), "npc", json!("nobody"))), ["Offered by: unknown character 'nobody'."]);
-    assert_eq!(check(with(surgery("r_one"), "target", json!("party"))).first().map(String::as_str), Some("Target: 'party' is not one of member, weapon, item."));
+    assert_eq!(check(with(surgery("r_one"), "target", json!("party"))).first().map(String::as_str), Some("Target: 'party' is not one of member, weapon, item, stash."));
     assert_eq!(check(with(surgery("r_one"), "cost", json!({"gold": -1}))), ["Cost gold must be a whole number 0..9999999."]);
     assert_eq!(check(with(surgery("r_one"), "cost", json!({"items": {"nope": 1}}))), ["Cost items: unknown item 'nope'."]);
     assert_eq!(check(with(surgery("r_one"), "cost", json!({"items": {"core": 0}}))), ["Cost items: core count must be a whole number 1..99."]);
@@ -147,6 +148,45 @@ fn the_weapon_and_rite_effects_are_built_and_checked() {
     assert!(check(fx(json!([{"effect": "forge_rite"}]))).is_empty());
     assert_eq!(check(fx(json!([{"effect": "forge_rite", "family": "sword"}]))), ["Effect 1 (forge_rite): unknown key 'family'."]);
     assert_eq!(check(weapon(json!([{"effect": "forge_rite"}]))), ["Effect 1 (forge_rite): works on a member, but the recipe's target is weapon."]);
+}
+
+/// PR5-45: a `stash` recipe crafts: `craft` names a known item and an optional whole count in range, works on the stash
+/// only, and a stash recipe takes no member, weapon or item effect; the loader keeps a valid row and the writer
+/// re-saves it byte for byte.
+#[test]
+fn a_stash_recipe_crafts_a_known_item_in_range() {
+    use rpgkit_data::recipe::{CRAFT_COUNT_DEFAULT, RECIPE_COUNT_MAX, TARGET_STASH};
+    let (_scratch, data) = scratch("craft");
+    base_rows(&data);
+    let v = store::view(&data);
+    let check = |e: Value| check::validate_entry(&v, RECIPES_KIND, &dict(e), "");
+    let stash = |effects: Value| with(with(surgery("r_make"), "target", json!(TARGET_STASH)), "effects", effects);
+    assert!(rpgkit_data::RECIPE_TARGETS.contains(&TARGET_STASH));
+    assert!(check(stash(json!([{"effect": "craft", "item": "fine"}]))).is_empty(), "no count: the default");
+    assert_eq!(CRAFT_COUNT_DEFAULT, 1);
+    assert!(check(stash(json!([{"effect": "craft", "item": "core", "count": 1}, {"effect": "craft", "item": "g_claw", "count": RECIPE_COUNT_MAX}]))).is_empty(), "the range's ends; any known item");
+    assert!(check(stash(json!([{"effect": "craft", "item": "fine"}, {"effect": "doctrine", "axis": "flesh", "delta": 1}]))).is_empty(), "an any-target effect beside it");
+    assert_eq!(check(stash(json!([{"effect": "craft", "item": "nope"}]))), ["Effect 1 (craft): unknown item 'nope'."]);
+    assert_eq!(check(stash(json!([{"effect": "craft"}]))), ["Effect 1 (craft): unknown item ''."]);
+    let range = format!("Effect 1 (craft): count must be a whole number 1..{RECIPE_COUNT_MAX}.");
+    for bad in [json!(0), json!(RECIPE_COUNT_MAX + 1), json!(-1), json!(1.5), json!("2"), Value::Null] {
+        assert_eq!(check(stash(json!([{"effect": "craft", "item": "fine", "count": bad}]))), [range.clone()], "count {bad}");
+    }
+    assert_eq!(check(stash(json!([{"effect": "craft", "item": "fine", "slot": "s_arm"}]))), ["Effect 1 (craft): unknown key 'slot'."]);
+    for target in ["member", "weapon", "item"] {
+        assert_eq!(check(with(stash(json!([{"effect": "craft", "item": "fine"}])), "target", json!(target))), [format!("Effect 1 (craft): works on a stash, but the recipe's target is {target}.")], "craft on {target}");
+    }
+    assert_eq!(check(stash(json!([{"effect": "install", "item": "g_claw", "slot": "s_arm"}]))), ["Effect 1 (install): works on a member, but the recipe's target is stash."]);
+    assert_eq!(check(stash(json!([{"effect": "salvage", "gold": 1}]))), ["Effect 1 (salvage): works on a item, but the recipe's target is stash."]);
+    assert_eq!(check(stash(json!([{"effect": "repair"}]))), ["Effect 1 (repair): works on a weapon, but the recipe's target is stash."]);
+    // the loader keeps it, the catalog reads it, the writer re-saves it unchanged
+    let gated = with(stash(json!([{"effect": "craft", "item": "fine", "count": 2}])), "requires", json!([{"kind": "flag", "key": "open", "value": true}]));
+    store::upsert(&data, None, RECIPES_KIND, &dict(gated), None).expect("a valid stash row");
+    let file = data.join("catalog").join(format!("{RECIPES_KIND}.json"));
+    assert_eq!(store::resave_text(&data, None, RECIPES_KIND).unwrap(), fs::read_to_string(&file).unwrap(), "a re-save without changes is byte-identical");
+    let cat = Catalog::from_value(&source::load(&data).catalog);
+    let r = &cat.recipes["r_make"];
+    assert_eq!((r.target.as_str(), r.effect_names(), r.cost.items["core"]), (TARGET_STASH, vec!["craft".to_string()], 1));
 }
 
 #[test]

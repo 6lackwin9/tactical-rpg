@@ -2,7 +2,8 @@
 //! recipe row (kind `recipes`) is offered by a character (`npc`, the NPC service `recipe`) while its `requires` hold
 //! (the dialogue condition grammar: flags, quest steps, items, gold, stats); running it pays its `cost` (purse amounts
 //! and stash items) and applies its `effects` to its `target`: a party `member`, a `weapon` (a weapon instance, PK2-S5a)
-//! or a stash `item` (break-down). The kind ships without rows until the asset lane fills it, so no NPC offers one.
+//! or a stash `item` (break-down); PR5-45: a `stash` recipe works on no pick (it `craft`s items into the party stash).
+//! The kind ships without rows until the asset lane fills it, so no NPC offers one.
 
 use aegis_core::value::*;
 use indexmap::IndexMap;
@@ -12,11 +13,13 @@ use serde_json::Value;
 pub const RECIPES_KIND: &str = "recipes";
 /// The NPC service id of the recipe pane (`npc_services`, the dialogue's service choice).
 pub const RECIPE_SERVICE: &str = "recipe";
-/// What a recipe works on: a party member, a weapon instance (by uid) or a stash item, each picked when it runs.
-pub const RECIPE_TARGETS: [&str; 3] = [TARGET_MEMBER, TARGET_WEAPON, TARGET_ITEM];
+/// What a recipe works on: a party member, a weapon instance (by uid) or a stash item, each picked when it runs; or
+/// (PR5-45) the party stash itself, with no pick.
+pub const RECIPE_TARGETS: [&str; 4] = [TARGET_MEMBER, TARGET_WEAPON, TARGET_ITEM, TARGET_STASH];
 pub const TARGET_MEMBER: &str = "member";
 pub const TARGET_WEAPON: &str = "weapon";
 pub const TARGET_ITEM: &str = "item";
+pub const TARGET_STASH: &str = "stash";
 /// The cost keys: the purse amounts and the stash items.
 pub const RECIPE_COST_KEYS: [&str; 3] = ["gold", "supplies", "items"];
 /// A cost item's count range, and the most effects a row holds.
@@ -41,8 +44,9 @@ pub const PROF_ROLES: [&str; 4] = ["main", "secondary", "third", "minor"];
 /// missing durability's fraction (`repair_share`); the salvage item the weapon's theme names in `themes`, else the one
 /// its rarity names in `tiers`, else none: a basic weapon costs purse alone), `reforge` (a weapon instance back to full
 /// durability; `masterwork` also makes it masterwork, so a row with it needs `requires`), `forge_rite` (the member's
-/// forge rite, with mastery 3 in a family: its keystone opens).
-pub const RECIPE_EFFECTS: [(&str, &[&str], &str); 12] = [
+/// forge rite, with mastery 3 in a family: its keystone opens). PR5-45: `craft` (adds `count` of catalog `item` to the
+/// party stash, default `CRAFT_COUNT_DEFAULT`; a weapon becomes a fresh instance while instances are active).
+pub const RECIPE_EFFECTS: [(&str, &[&str], &str); 13] = [
     (FX_INSTALL, &["item", "slot"], TARGET_MEMBER),
     (FX_REMOVE, &["slot"], TARGET_MEMBER),
     (FX_TRACK, &["track", "delta"], TARGET_MEMBER),
@@ -55,6 +59,7 @@ pub const RECIPE_EFFECTS: [(&str, &[&str], &str); 12] = [
     (FX_REFORGE, &["masterwork"], TARGET_WEAPON),
     (FX_FORGE_RITE, &[], TARGET_MEMBER),
     (FX_SALVAGE, &["gold", "tiers", "themes"], TARGET_ITEM),
+    (FX_CRAFT, &["item", "count"], TARGET_STASH),
 ];
 pub const FX_INSTALL: &str = "install";
 pub const FX_REMOVE: &str = "remove";
@@ -68,6 +73,9 @@ pub const FX_REPAIR: &str = "repair";
 pub const FX_REFORGE: &str = "reforge";
 pub const FX_SALVAGE: &str = "salvage";
 pub const FX_FORGE_RITE: &str = "forge_rite";
+pub const FX_CRAFT: &str = "craft";
+/// A `craft`'s count when the effect names none.
+pub const CRAFT_COUNT_DEFAULT: i64 = 1;
 /// A `repair`'s salvage items for a full repair when the effect names no `count`.
 pub const REPAIR_COUNT_DEFAULT: i64 = 1;
 /// The effects whose system is not built yet (effect, the missing system): the check refuses them and a run refuses
@@ -132,7 +140,7 @@ pub struct RecipeDef {
     /// Conditions in the dialogue grammar (`{kind, ...}`), all holding for the recipe to be offered.
     pub requires: Vec<Value>,
     pub cost: RecipeCost,
-    /// `member`, `weapon` or `item` (`RECIPE_TARGETS`).
+    /// `member`, `weapon`, `item` or `stash` (`RECIPE_TARGETS`).
     pub target: String,
     /// The effect rows (`{effect, ...}`), applied in order.
     pub effects: Vec<Obj>,
