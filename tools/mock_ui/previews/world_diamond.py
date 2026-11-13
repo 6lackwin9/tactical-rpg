@@ -83,6 +83,22 @@ REGIONS = {
 }
 
 
+# Route waypoints along the painted roads of background take 1 (Tushar 2026-11-13: routes along the roads instead of
+# straight lines). Each list runs from the route's `from` to its `to` location (routes.json), endpoints excluded.
+ROUTE_PATHS = {
+    "sluice_gate": [(0.57, 0.90), (0.52, 0.84)],                                         # across the basin
+    "water_siphon": [(0.47, 0.70), (0.40, 0.66), (0.32, 0.64), (0.24, 0.65)],            # rim road, left bridge
+    "drain_flue": [(0.53, 0.70), (0.62, 0.66), (0.69, 0.62), (0.75, 0.61)],              # rim road, right bridge
+    "third_ward_road": [(0.55, 0.72), (0.66, 0.72), (0.72, 0.78)],                       # down the basin's right side
+    "siphon_shortcut": [(0.56, 0.71), (0.64, 0.67), (0.71, 0.60), (0.72, 0.47), (0.76, 0.37)],  # up the right canal
+    "kiln_link": [(0.16, 0.57), (0.14, 0.46), (0.15, 0.39)],                             # the lava-lit street
+    "crossroads_link": [(0.81, 0.55), (0.83, 0.45)],                                     # the slum alleys
+    "flue_climb": [(0.24, 0.32), (0.33, 0.31), (0.41, 0.28), (0.46, 0.29)],              # road along the top
+    "convoy_track": [(0.76, 0.36), (0.67, 0.36), (0.60, 0.33), (0.54, 0.30)],            # road along the top
+    "high_gorge": [(0.50, 0.24), (0.50, 0.17)],                                          # the gorge floor
+}
+
+
 def px(mx: float) -> int:
     return round(PAD_X + mx * (VIEW_W - 2 * PAD_X))
 
@@ -112,7 +128,8 @@ def load_graph() -> dict:
         })
     ids = {n["id"] for n in nodes}
     edges = [{"id": r["id"], "name": r["name"], "a": r["from"], "b": r["to"], "time": r["time"],
-              "req": [f["key"] for f in r["requires_flags"] if f.get("value") is True]}
+              "req": [f["key"] for f in r["requires_flags"] if f.get("value") is True],
+              "via": [[px(x), py(y)] for x, y in ROUTE_PATHS.get(r["id"], [])]}
              for r in routes if r["from"] in ids and r["to"] in ids]
     return {"nodes": nodes, "edges": edges}
 
