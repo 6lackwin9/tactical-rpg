@@ -3,7 +3,10 @@
 # reusing tools/portraits (sheets.cells_of / key_out / snap, pixelize.mode_reduce) so the cut matches ART2 and PLAYUI1.
 #   python art_src/prompts/cut_ai_sheets.py keepsakes_1 <sheet.png> [--pick kaelen=7,vesper=8,elyse=9] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py services_hud_1 <sheet.png> [--pick scrap=6,...] [--out DIR]
-#   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@x0,y0,x1,y1]] [--out DIR]
+#   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@x0,y0,x1,y1]]
+#       [--clear x0,y0,x1,y1] [--out DIR]
+#       --clear (a small pixel fix in code): erases the box (fractions of the cut), for a smoke wisp fused to the body
+#       that keep_main cannot split off. The Culling Stockades pick: --clear 0.68,0,0.78,0.21 (the torch smoke).
 #       --tint (a colour fix in code, preferences "Colour and small pixel fixes are code"): saturated, bright pixels whose
 #       hue is in LO..HI (0..1) move to hue TO, toned down to a murkier version, inside the box (fractions of the cut).
 #       The Tallow Vats pick: --tint 0.05-0.16:0.19@0.33,0,1,0.62 (the orange vat tops to sickly yellow-green).
@@ -116,7 +119,17 @@ def tint(icon, spec):
     return icon
 
 
-def cut_landmark(path, location, out_root, size=96, tints=()):
+def clear(icon, spec):
+    """--clear x0,y0,x1,y1: makes the box (fractions of the cut) transparent."""
+    x0, y0, x1, y1 = (float(v) for v in spec.split(","))
+    w, h = icon.size; px = icon.load()
+    for y in range(int(h * y0), int(h * y1)):
+        for x in range(int(w * x0), int(w * x1)):
+            px[x, y] = (0, 0, 0, 0)
+    return icon
+
+
+def cut_landmark(path, location, out_root, size=96, tints=(), clears=()):
     """One landmark on the magenta key -> GAME/map/landmarks/<location>.png, `size` x `size` (shown at 48 logical px).
     The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
     box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
@@ -133,6 +146,8 @@ def cut_landmark(path, location, out_root, size=96, tints=()):
     icon.putalpha(icon.getchannel("A").point(lambda v: 255 if v >= 128 else 0))
     for spec in tints:
         icon = tint(icon, spec)
+    for spec in clears:
+        icon = clear(icon, spec)
     dest = pathlib.Path(out_root) / f"{GAME}/map/landmarks/{location}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
     icon.save(dest)
@@ -142,10 +157,11 @@ def cut_landmark(path, location, out_root, size=96, tints=()):
 def main(argv):
     if argv and argv[0] == "landmark":
         if len(argv) < 3:
-            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--out DIR]")
+            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--out DIR]")
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         tints = [argv[i + 1] for i, a in enumerate(argv) if a == "--tint"]
-        for line in cut_landmark(argv[1], argv[2], out, tints=tints):
+        clears = [argv[i + 1] for i, a in enumerate(argv) if a == "--clear"]
+        for line in cut_landmark(argv[1], argv[2], out, tints=tints, clears=clears):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:

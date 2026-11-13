@@ -43,9 +43,26 @@ full-size files arrive (Drive), save each as `art_src/<id>.png` and run its cut;
 | 05 Tallow Vats | take A (three vats) with the colour fix | `... landmark art_src/lm_tallow_vats.png tallow_vats --tint 0.05-0.16:0.19@0.33,0,1,0.62` |
 | 06 Crucible Watchpost | take B (red window band) | `... landmark art_src/lm_crucible_watchpost.png crucible_watchpost` |
 | 07 Slag Gate | take B (portcullis in a cliff wall, slag channel) | `... landmark art_src/lm_slag_gate.png slag_gate` |
-| 1d Corvo's Gate | take A (warm crumbling brick, breach) | `... landmark art_src/lm_corvos_gate.png corvos_gate` | The image queue (`tools/portraits/artqueue.py
-request`, Drive `image_pipeline/queue/`) takes the same prompt text when the Gemini web app runs instead of the API;
-attach the reference each section names (`art_src/mara_voss.png` for portraits, the picked portrait for sheets).
+| 1d Corvo's Gate | take A (warm crumbling brick, breach) | `... landmark art_src/lm_corvos_gate.png corvos_gate` |
+
+## Act 2 map picks (reviewed 2026-11-13, full-size files to follow)
+
+Checked the same way on background take A, at the positions proposed in Outbox `AO-01`. Batch 2 (Cloisters,
+Belltower, Reliquary Crypts, Grand Spire Gate) is still to come.
+
+| Location | Pick | Cut |
+| --- | --- | --- |
+| background | take A (dark stone road, cold-blue lamps, cathedral cropped to the spire gap) | `backgrounds/world_map/high_bastion.png`, 1920 x 1080 |
+| 08 Slag Gate Breach | take A (gatehouse tower, broken portcullis) | `... landmark art_src/lm_slag_gate_breach.png slag_gate_breach` |
+| 09 Gilded Boulevard | take A (white magnesium lamp, red Watch lanterns) | `... landmark art_src/lm_gilded_boulevard.png gilded_boulevard` |
+| 10 Tallow Reservoir | take B (grey riveted silos, red pipe) with the colour fix | `... landmark art_src/lm_tallow_reservoir.png tallow_reservoir --tint 0.0-0.16:0.19` |
+| 12 Culling Stockades | take B (gatehouse, wagon, rust-topped pens) with the smoke cleared | `... landmark art_src/lm_culling_stockades.png culling_stockades --clear 0.68,0,0.78,0.21` |
+
+## Running through the image queue
+
+The image queue (`tools/portraits/artqueue.py request`, Drive `image_pipeline/queue/`) takes the same prompt text when
+the Gemini web app runs instead of the API; attach the reference each section names (`art_src/mara_voss.png` for
+portraits, the picked portrait for sheets).
 
 ## Not prompts in this batch
 
