@@ -70,7 +70,7 @@ def cut_landmark(path, location, out_root, size=96):
     The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
     box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
     im = X.clear_corner(Image.open(path).convert("RGBA"))
-    keyed = S.key_out(im, inset=0.0)
+    keyed = S.drop_specks(S.key_out(im, inset=0.0))      # ash flecks floating on the key would stretch the box
     box = keyed.getbbox()
     if not box:
         sys.exit(f"{path}: nothing left after keying out the magenta")
