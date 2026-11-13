@@ -21,6 +21,23 @@ pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
     EncounterDef::from_obj_with(entry, d.ruleset(world))
 }
 
+/// WORLD-SIM1 (PR5-42): the battle of encounter `id` as world `world` resolves it with its authored side, for a runner
+/// with no game state (the host's `new` "<world>:<id>", `aegis battle world:`, `sim feel world:`): the encounter's
+/// `party` and `guests` refs fight as the world's characters (`WorldRoster`: base unit at its authored level, class path,
+/// passives, named items, tuning, AI role and default intent), by the world's ruleset (`encounter_def`), id
+/// "<world>:<id>". The roster is at stage `stage` with the party side as its allies, as `begin_world_with` sets
+/// them (stage 0 = authored levels). None when the encounter does not resolve.
+pub fn authored_fight<'a>(d: &'a Data, world: &str, id: &str, stage: i64) -> Option<(EncounterDef, WorldRoster<'a>)> {
+    let entry = d.resolve(world, "encounters", id);
+    if entry.is_empty() {
+        return None;
+    }
+    let mut def = encounter_def(d, world, entry);
+    def.id = format!("{world}:{id}");
+    let allies = def.party.iter().chain(&def.guests).cloned().collect();
+    Some((def, WorldRoster { stage, allies, ..WorldRoster::new(d, world) }))
+}
+
 /// RULESET1 V3: the plan reveal flag of `world`: the nearest non-empty `plan_reveal_flag` of its lineage (the world,
 /// then its parents), "" when none names one.
 pub fn plan_reveal_flag(d: &Data, world: &str) -> String {

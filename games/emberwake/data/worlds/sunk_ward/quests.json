@@ -19,13 +19,15 @@
 			],
 			"reward": "Talia's thanks, a poultice, and Vane's gate cipher.",
 			"template": "a1_main_raid",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [],
 			"complete_flags": [],
 			"auto_start": false,
 			"links": {},
 			"variants": [],
-			"loot_pool": [],
+			"loot_pool": [
+				"loot_gilded_pavise"
+			],
 			"loot_picks": 1,
 			"reputation": {},
 			"tags": [],
@@ -51,7 +53,7 @@
 			],
 			"reward": "Talia's thanks, a poultice, and Quell's retorts for the Slab.",
 			"template": "a1_main_raid",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [],
 			"complete_flags": [],
 			"auto_start": false,
@@ -83,7 +85,7 @@
 			],
 			"reward": "Talia's thanks, a poultice, and a new bunk.",
 			"template": "a1_main_raid",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.m1_done",
@@ -94,7 +96,12 @@
 					"value": true
 				}
 			],
-			"complete_flags": [],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.m3_turned_in",
+					"value": true
+				}
+			],
 			"auto_start": false,
 			"links": {},
 			"variants": [],
@@ -124,7 +131,7 @@
 			],
 			"reward": "Talia's thanks, a poultice, and Orlov's Retribution; five days of Warded Tallow wait in Orlov's stores.",
 			"template": "a1_main_raid",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.m1_done",
@@ -135,7 +142,12 @@
 					"value": true
 				}
 			],
-			"complete_flags": [],
+			"complete_flags": [
+				{
+					"key": "sunk_ward.m4_turned_in",
+					"value": true
+				}
+			],
 			"auto_start": false,
 			"links": {},
 			"variants": [],
@@ -167,7 +179,7 @@
 			],
 			"reward": "Talia's thanks. The Bastion waits beyond the gate.",
 			"template": "a1_main_raid",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.interlude_done",
@@ -223,7 +235,7 @@
 			],
 			"reward": "Talia's thanks, and either a quiet gate or a loud one.",
 			"template": "a1_flag_job",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [],
 			"complete_flags": [],
 			"auto_start": false,
@@ -255,7 +267,7 @@
 			],
 			"reward": "Talia's thanks, and Widow Varka's shelves.",
 			"template": "a1_flag_job",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.debate1_seen",
@@ -292,7 +304,7 @@
 			],
 			"reward": "Slag Plating, and cheaper coals at Berek's Hearth.",
 			"template": "a1_flag_job_plating",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.m1_done",
@@ -334,7 +346,7 @@
 			],
 			"reward": "A permanent Siphon Shortcut with no Alert on the road.",
 			"template": "a1_flag_job",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.debate1_seen",
@@ -376,7 +388,7 @@
 			],
 			"reward": "Maren's clue to St. Lyra's flue, for Act 2.",
 			"template": "a1_flag_job",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.m2_done",
@@ -418,7 +430,7 @@
 			],
 			"reward": "Hollis's Lever-Winch, and a gate wave that arrives a round late.",
 			"template": "a1_flag_job",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.interlude_done",
@@ -455,7 +467,7 @@
 			],
 			"reward": "Rock Salt, and Skerrit's bone-shard recipes.",
 			"template": "a1_flag_job_salt",
-			"turn_in": "",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.dunstan_joined",
@@ -496,8 +508,8 @@
 				}
 			],
 			"reward": "Five days of Warded Tallow.",
-			"template": "a1_flag_job",
-			"turn_in": "",
+			"template": "a1_flag_job_tallow",
+			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
 					"key": "sunk_ward.elyse_joined",

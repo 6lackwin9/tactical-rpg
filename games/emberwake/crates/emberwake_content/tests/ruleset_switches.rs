@@ -76,6 +76,10 @@ const PK2S6_SEED: &str = "pk2s6.json";
 /// deck, `assault` order) and added the unit `tithe_captive` (after the PK2-S6 seed; no ruleset row changes).
 const SUNKFIX1_SEED: &str = "sunkfix1.json";
 
+/// PR5-41 (ACT1-DATA1): the seed that re-applied the unit `tithe_captive` with `flee_ratio` 0.0 (a captive no longer
+/// flees; after the SUNKWARD-FIX1 seed; no ruleset row changes). A later seed's row supersedes an earlier seed's.
+const ACT1FIX1_SEED: &str = "act1fix1.json";
+
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
 
@@ -248,12 +252,20 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("SUNKWARD-FIX1 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the SUNKWARD-FIX1 units steps leave the shipped ruleset rows");
+    // PR5-41 (ACT1-DATA1): the seed's units steps (tithe_captive no longer flees) over SUNKWARD-FIX1's
+    let act1fix1 = seed_rows(ACT1FIX1_SEED, "units");
+    assert!(seed_entries(ACT1FIX1_SEED).is_empty(), "the ACT1-DATA1 seed changes no ruleset row");
+    for e in &act1fix1 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("ACT1-DATA1 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the ACT1-DATA1 units steps leave the shipped ruleset rows");
     let seeded = store::view(&tmp);
     let units = reordered
         .iter()
         .map(|u| json::s(u, "id"))
         .chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")))
-        .chain(sunkfix1.iter().map(|e| json::s(e, "id")));
+        .chain(sunkfix1.iter().map(|e| json::s(e, "id")))
+        .chain(act1fix1.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }

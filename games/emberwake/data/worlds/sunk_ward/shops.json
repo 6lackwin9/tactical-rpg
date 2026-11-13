@@ -140,7 +140,12 @@
 					"item": "con_quenched_salt",
 					"count": 2,
 					"price": -1,
-					"requires_flags": []
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
 				}
 			],
 			"loot": [],

@@ -3083,7 +3083,7 @@
 			"default_intent": "",
 			"ai_role": "SKIRMISHER",
 			"target_pref": "NEAREST",
-			"flee_ratio": 1.0,
+			"flee_ratio": 0.0,
 			"defend_below": 0.0,
 			"prefer_level": 0,
 			"status_resist": {},

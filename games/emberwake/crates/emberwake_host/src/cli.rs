@@ -5,6 +5,9 @@
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
 //!                [ruleset=classic|timeline] [rules=-id,+id]               RULESET1: its rules (default classic; a
 //!                                                                         timeline test fight without ruleset= notes it)
+//!   aegis battle world:<world>/<id> [same keys]                           WORLD-SIM1: a world encounter with its
+//!                                                                         authored party and levels, by its world's
+//!                                                                         ruleset unless ruleset= picks one
 //!   aegis rules [--contract]                                       BASERULES1-M: the ruleset tweak report (rules,
 //!                                                                  fields, bundles, tested sets, locked, this game's
 //!                                                                  rows); --contract: the stable surface only
@@ -27,7 +30,7 @@ pub struct Emberwake;
 
 impl Game for Emberwake {
     type Content = emberwake_content::store::RpgContent;
-    const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id> [seed=N] [preset=balanced] [ruleset=classic|timeline] [rules=-id,+id] [log]
+    const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id | world:<world>/<id>> [seed=N] [preset=balanced] [ruleset=classic|timeline] [rules=-id,+id] [log]
 aegis rules [--contract]   (the ruleset tweak report; --contract: tunable and locked, one line each)";
 
     fn run(&self, args: &Args) -> Option<Result<()>> {
@@ -137,30 +140,66 @@ fn sim(args: &Args) -> Result<()> {
     Ok(())
 }
 
+/// WORLD-SIM1 (PR5-42): the battle of world encounter `reference` (`world:<world>/<id>`, or `world:<id>` in the sim's
+/// default world) with its authored side, as `aegis serve`'s `new` "<world>:<id>" and `sim feel world:` build it
+/// (`rpgkit_world::battle::authored_fight`: the encounter's `party` and `guests` as the world's characters at their
+/// authored levels, its phases and fields, the world's ruleset). `seed`: its rng seed (None: the encounter's);
+/// `ruleset`: a ruleset row over the world's ("" keeps it); `rules`: single extensions switched (`Ruleset::adjust`).
+pub fn world_session(d: &emberwake_world::Data, reference: &str, seed: Option<i64>, ruleset: &str, rules: &str) -> Result<Session> {
+    let game = emberwake_sim::game();
+    let Some((world, local)) = emberwake_sim::args::parse_ref(reference, &game.default_world) else {
+        bail!("'{reference}' is not a world encounter reference (world:<world>/<id> or world:<id>)")
+    };
+    let (mut def, roster) = emberwake_world::battle::authored_fight(d, &world, &local, 0).with_context(|| format!("unknown encounter '{local}' in world '{world}'"))?;
+    if let Some(seed) = seed {
+        def.rng_seed = seed;
+    }
+    if !ruleset.is_empty() {
+        def.ruleset = emberwake_rules::ruleset::Ruleset::of(&d.cat, ruleset).map_err(anyhow::Error::msg)?;
+    }
+    def.ruleset.adjust(rules).map_err(anyhow::Error::msg)?;
+    Ok(Session::start(d.cat.clone(), def, &roster))
+}
+
 fn battle(args: &Args) -> Result<()> {
+    let id = args.pos(1).context("usage: aegis battle <encounter id | world:<world>/<id>>")?;
+    let seed = args.keys.get("seed").map(|s| s.parse::<i64>()).transpose()?;
+    if id.starts_with(emberwake_sim::args::REF_PREFIX) {
+        let d = world_data(args)?;
+        let s = world_session(&d, id, seed, &args.key("ruleset", ""), &args.key("rules", ""))?;
+        rules_notes(args, &s.def.ruleset);
+        return autoplay(args, s);
+    }
     let cat = load_catalog(args)?;
-    let id = args.pos(1).context("usage: aegis battle <encounter id>")?;
     let entry = cat.encounters.get(id).with_context(|| format!("unknown encounter {id}"))?.clone();
     let mut def = EncounterDef::from_obj(&entry);
-    if let Some(seed) = args.keys.get("seed") {
-        def.rng_seed = seed.parse()?;
+    if let Some(seed) = seed {
+        def.rng_seed = seed;
     }
     // RULESET1 3.1.3: a catalog encounter plays classic unless ruleset= picks one; rules= switches single extensions
     def.ruleset = emberwake_rules::ruleset::Ruleset::of(&cat, &args.key("ruleset", "")).map_err(anyhow::Error::msg)?;
     def.ruleset.adjust(&args.key("rules", "")).map_err(anyhow::Error::msg)?;
-    // BASERULES1-M: an adjusted set prints the register metadata's notes (it never refuses: the tools try things)
-    if args.keys.contains_key("rules") {
-        let n = def.ruleset.notes();
-        for note in n.errors.iter().chain(&n.warnings) {
-            eprintln!("rules: {note}");
-        }
-    }
+    rules_notes(args, &def.ruleset);
     // RULESET1-G2: a timeline test fight stays classic by default (the catalog encounter default), with a note on stderr
     if let Some(note) = classic_test_fight_note(id, &entry, args.keys.contains_key("ruleset")) {
         eprintln!("{note}");
     }
+    autoplay(args, Session::start(cat.clone(), def, &IndexMap::new()))
+}
+
+/// BASERULES1-M: an adjusted set (`rules=`) prints the register metadata's notes (it never refuses: the tools try things).
+fn rules_notes(args: &Args, ruleset: &emberwake_rules::ruleset::Ruleset) {
+    if args.keys.contains_key("rules") {
+        let n = ruleset.notes();
+        for note in n.errors.iter().chain(&n.warnings) {
+            eprintln!("rules: {note}");
+        }
+    }
+}
+
+/// `aegis battle`'s autoplay of a started battle `s` (a catalog or a world encounter) to its end, round by round.
+fn autoplay(args: &Args, mut s: Session) -> Result<()> {
     let preset = args.key("preset", "balanced");
-    let mut s = Session::start(cat.clone(), def, &IndexMap::new());
     let show_log = args.flag("log");
     println!("{} (seed {}): {} rounds max", s.def.name, s.def.rng_seed, s.def.max_rounds);
     // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the encounter's phase and kill lines print with the log

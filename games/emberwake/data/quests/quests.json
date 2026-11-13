@@ -151,6 +151,22 @@
 				"gold": 10
 			},
 			"tags": []
+		},
+		{
+			"id": "a1_flag_job_tallow",
+			"name": "Act 1 side-hook (Warded Tallow)",
+			"description": "Do one errand at a ward node; paid in Warded Tallow.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"gold": 20,
+				"supplies": 5
+			},
+			"tags": []
 		}
 	]
 }
