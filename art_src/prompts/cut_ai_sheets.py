@@ -4,7 +4,10 @@
 #   python art_src/prompts/cut_ai_sheets.py keepsakes_1 <sheet.png> [--pick kaelen=7,vesper=8,elyse=9] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py services_hud_1 <sheet.png> [--pick scrap=6,...] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@x0,y0,x1,y1]]
-#       [--clear x0,y0,x1,y1] [--size N] [--out DIR]
+#       [--clear x0,y0,x1,y1] [--desmoke x0,y0,x1,y1] [--size N] [--out DIR]
+#       --desmoke (a small pixel fix in code): inside the box, steam and smoke pixels (pale, nearly grey) are filled in
+#       from the pixels around them, so steam in front of a wall leaves wall, not a hole; steam past the outline goes.
+#       The Marrow Conduits pick: --desmoke 0.62,0.35,0.79,0.52.
 #       --size: the cut's side in pixels (default 96, shown at half that in logical px); a landmark drawn larger on
 #       the map is cut at 96 x its map scale so it keeps 2 pixels per logical pixel.
 #       --clear (a small pixel fix in code): erases the box (fractions of the cut), for a smoke wisp fused to the body
@@ -131,7 +134,35 @@ def clear(icon, spec):
     return icon
 
 
-def cut_landmark(path, location, out_root, size=96, tints=(), clears=()):
+def desmoke(icon, spec):
+    """--desmoke x0,y0,x1,y1: fills the steam in the box (fractions of the cut) from its surroundings, from the edge in."""
+    import colorsys
+    x0, y0, x1, y1 = (float(v) for v in spec.split(","))
+    w, h = icon.size; px = icon.load()
+    def steam(p):
+        if not p[3]:
+            return False
+        _, sat, val = colorsys.rgb_to_hsv(p[0] / 255, p[1] / 255, p[2] / 255)
+        return (sat < 0.3 and val > 0.45) or (sat < 0.2 and val > 0.3)  # the pale core and its greyer fringe
+    todo = {(x, y) for y in range(int(h * y0), int(h * y1)) for x in range(int(w * x0), int(w * x1)) if steam(px[x, y])}
+    while todo:
+        done = {}
+        for x, y in todo:
+            near = [px[x + dx, y + dy] for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx or dy) and 0 <= x + dx < w
+                    and 0 <= y + dy < h and (x + dx, y + dy) not in todo]
+            if len(near) >= 3:
+                solid = [q for q in near if q[3]]
+                done[x, y] = ((0, 0, 0, 0) if len(solid) * 2 < len(near) else
+                              tuple(sum(q[i] for q in solid) // len(solid) for i in range(3)) + (255,))
+        if not done:  # nothing has three settled neighbours left: settle the rest as clear
+            done = {k: (0, 0, 0, 0) for k in todo}
+        for k, v in done.items():
+            px[k] = v
+        todo -= set(done)
+    return icon
+
+
+def cut_landmark(path, location, out_root, size=96, tints=(), clears=(), desmokes=()):
     """One landmark on the magenta key -> GAME/map/landmarks/<location>.png, `size` x `size` (shown at 48 logical px).
     The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
     box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
@@ -150,6 +181,8 @@ def cut_landmark(path, location, out_root, size=96, tints=(), clears=()):
         icon = tint(icon, spec)
     for spec in clears:
         icon = clear(icon, spec)
+    for spec in desmokes:
+        icon = desmoke(icon, spec)
     dest = pathlib.Path(out_root) / f"{GAME}/map/landmarks/{location}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
     icon.save(dest)
@@ -159,12 +192,13 @@ def cut_landmark(path, location, out_root, size=96, tints=(), clears=()):
 def main(argv):
     if argv and argv[0] == "landmark":
         if len(argv) < 3:
-            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--size N] [--out DIR]")
+            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--desmoke box] [--size N] [--out DIR]")
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         tints = [argv[i + 1] for i, a in enumerate(argv) if a == "--tint"]
         clears = [argv[i + 1] for i, a in enumerate(argv) if a == "--clear"]
         size = int(argv[argv.index("--size") + 1]) if "--size" in argv else 96
-        for line in cut_landmark(argv[1], argv[2], out, size=size, tints=tints, clears=clears):
+        desmokes = [argv[i + 1] for i, a in enumerate(argv) if a == "--desmoke"]
+        for line in cut_landmark(argv[1], argv[2], out, size=size, tints=tints, clears=clears, desmokes=desmokes):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:
