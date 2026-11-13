@@ -349,16 +349,19 @@ pub struct ItemHit {
     pub splash: f64,
     /// (guard + cover, the armour rating) of the target, or None (no mitigation stage).
     pub mitigation: Option<(f64, i32)>,
+    /// ACT1-HOOKS2 (FB-244 (6)): the item is `armor_piercing`: the armour step is left out (guard and cover stay).
+    pub armor_piercing: bool,
 }
 
 impl Default for ItemHit {
     fn default() -> Self {
-        Self { splash: 1.0, mitigation: None }
+        Self { splash: 1.0, mitigation: None, armor_piercing: false }
     }
 }
 
 /// A1.2-K3: the damage pipeline's modifiers of an item hit (the item's flat `damage` in the base stage, the splash in the
 /// mult stage, guard and cover capped at `GUARD_CAP`, then armour in the mitigation stage); the first `n` count.
+/// ACT1-HOOKS2: an armour-piercing hit counts no armour step.
 pub fn item_damage_modifiers(base: i32, h: ItemHit) -> ([Modifier; 4], usize) {
     let (guard_cover, rating) = h.mitigation.unwrap_or((0.0, 0));
     let mods = [
@@ -367,7 +370,7 @@ pub fn item_damage_modifiers(base: i32, h: ItemHit) -> ([Modifier; 4], usize) {
         Modifier::new("guard_cover", Stage::Mitigation, Op::Reduce(GUARD_CAP.min(guard_cover.max(0.0)))),
         Modifier::new("armour", Stage::Mitigation, Op::Reduce(armor_reduction(rating))),
     ];
-    (mods, if h.mitigation.is_some() { 4 } else { 2 })
+    (mods, if h.mitigation.is_none() { 2 } else if h.armor_piercing { 3 } else { 4 })
 }
 
 /// A1.2-K3 (A1_VALUE section 1, acceptance 1): the damage an item's flat `base` deals through `pipeline::DAMAGE`

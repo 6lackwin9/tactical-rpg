@@ -159,6 +159,9 @@ pub enum Grant {
     ForbidHands { hands: i32 },
     /// PK2-S1: a member grant: melee and bare-handed hits pierce armour (`rpgkit_data::PIERCE_MELEE`, rule pierce).
     PierceMelee,
+    /// ACT1-HOOKS2 (FB-244 (4)): skill `skill` takes `delta` more blocks for its holder (`rpgkit_data::SKILL_BLOCK_COST`;
+    /// worn items and passives; the deltas on one skill add up, `Unit::skill_blocks` clamps the sum to 1 block at least).
+    SkillBlockCost { skill: String, delta: i32 },
 }
 
 impl Grant {
@@ -269,6 +272,7 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         rpgkit_data::HEAL_TAKEN => vec![modifier(Target::HealTaken, int("value", 0))],
         rpgkit_data::FORBID_HANDS => vec![Grant::ForbidHands { hands: value::int(e, "hands", 2) }],
         rpgkit_data::PIERCE_MELEE => vec![Grant::PierceMelee],
+        rpgkit_data::SKILL_BLOCK_COST => vec![Grant::SkillBlockCost { skill: value::string(e, "skill", ""), delta: value::int(e, "delta", 0) }],
         _ => Vec::new(),
     }
 }

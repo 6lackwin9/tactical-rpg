@@ -225,7 +225,7 @@ fn reforge_restores_and_masterwork_waits_on_its_requires() {
     let built = progression::build(&d, &gs.party.members[0]).expect("a build");
     assert!(built.unit.techniques.iter().any(|t| t.skill == OWN_TECHNIQUE), "the masterwork main hand opens its own technique");
     gs.party.add_to_stash("ingot", 1);
-    assert_eq!(refused(&d, &mut gs, "masterwork", &on(&blade)), "plain is already a masterwork.", "masterwork and whole already");
+    assert_eq!(refused(&d, &mut gs, "masterwork", &on(&blade)), "plain is already a masterwork. Use a plain reforge or a repair to restore it.", "masterwork and whole already");
 }
 
 /// AUDIT-08 (PR5-40): a worn masterwork weapon is refused by the masterwork reforge (nothing paid, nothing changes);
@@ -240,7 +240,7 @@ fn a_damaged_masterwork_is_refused_by_the_masterwork_reforge() {
     wear_to(&mut gs, &blade, 1);
     gs.party.add_to_stash("ingot", 1);
     let before = gs.clone();
-    assert_eq!(refused(&d, &mut gs, "masterwork", &on(&blade)), "plain is already a masterwork.");
+    assert_eq!(refused(&d, &mut gs, "masterwork", &on(&blade)), "plain is already a masterwork. Use a plain reforge or a repair to restore it.");
     assert_eq!(gs, before, "refused: nothing paid, nothing changes");
     ok(&d, &mut gs, "reforge", &on(&blade));
     let w = weapons::find(&gs.party, &blade).unwrap();

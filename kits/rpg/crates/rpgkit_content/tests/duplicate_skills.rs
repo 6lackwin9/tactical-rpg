@@ -109,3 +109,32 @@ fn a_world_class_overlay_path_holding_a_technique_it_may_master_is_refused() {
     );
     assert!(dups(json!({"t_minor": 2})).is_empty(), "a family at proficiency 1 is not masterable");
 }
+
+/// ACT1-HOOKS2 (FB-243 (d)): the overlay check also re-checks the world's units (its characters' base units of that
+/// class, derived): a unit whose `extra_skills` repeat a family the overlay path adds is refused on the manifest; a clash
+/// the catalog class already has stays the unit row's (not repeated), and a fixed unit or a unit outside the world is
+/// not checked.
+#[test]
+fn a_world_class_overlay_path_repeating_a_world_units_extra_skill_is_refused() {
+    let (_t, data) = scratch("overlay_units");
+    let fixed = json!({"id": "u_fixed", "name": "Fixed", "side": "party", "class_id": "c_clean", "level": 1, "stat_mode": "fixed", "extra_skills": ["x_free"]});
+    let free = json!({"id": "u_free", "name": "Free", "side": "party", "class_id": "c_clean", "level": 1, "extra_skills": ["x_free"]});
+    let stray = json!({"id": "u_stray", "name": "Stray", "side": "party", "class_id": "c_clean", "level": 1, "extra_skills": ["x_free"]});
+    write(&data, "units", 1, json!([free, fixed, stray]));
+    let world = data.join("worlds/w");
+    fs::create_dir_all(&world).unwrap();
+    fs::write(world.join("world.json"), json!({"id": "w", "name": "W"}).to_string()).unwrap();
+    let character = |id: &str, unit: &str| json!({"id": id, "name": id, "role": "party", "base_unit": unit});
+    fs::write(world.join("characters.json"), json!({"kind": "characters", "version": 1, "entries": [character("one", "u_free"), character("two", "u_fixed")]}).to_string()).unwrap();
+    let v = store::view(&data);
+    let overlay = |path: Value| dict(json!({"id": "w", "classes": {"c_clean": {"name": "Clean", "skill_path": path}}}));
+    let dups = |path: Value| check::hooks::classes_errors(&v, &overlay(path)).into_iter().filter(|e| e.contains("a unit owns each skill once")).collect::<Vec<_>>();
+    assert!(dups(json!({"p_one": 1})).is_empty(), "the overlay path leaves the extra skill alone");
+    assert_eq!(
+        dups(json!({"p_one": 1, "x_free": 2})),
+        ["Class names 'c_clean': unit 'u_free': Skill 'x_free' is in both the extra skills and the class path (family 'x_free'); a unit owns each skill once."],
+        "the derived world unit is named once; the fixed one and the unit outside the world are not"
+    );
+    let no_world = dict(json!({"classes": {"c_clean": {"name": "Clean", "skill_path": {"x_free": 2}}}}));
+    assert!(check::hooks::classes_errors(&v, &no_world).into_iter().all(|e| !e.contains("unit 'u_")), "a manifest without a world id checks no units");
+}

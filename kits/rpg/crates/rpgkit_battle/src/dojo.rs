@@ -925,7 +925,8 @@ impl DojoSession {
             windup: pick(windup, n.stagger_windup_mult),
             guard: pick(guarding, n.stagger_guard_mult),
             repeat: pick(bar.broken_last, n.stagger_repeat_mult),
-            passive: target.stagger_taken.iter().filter(|e| e.matches(s.blocks)).map(|e| e.mult).product(),
+            // ACT1-HOOKS2: the action's length is its user's own blocks of the skill (`Unit::skill_blocks`)
+            passive: target.stagger_taken.iter().filter(|e| e.matches(if on_dummy { self.hero() } else { &self.dummy }.skill_blocks(s))).map(|e| e.mult).product(),
             ..Factors::default()
         };
         let taken = poise::stagger_taken(imp.stagger, &f);
@@ -1090,7 +1091,7 @@ impl DojoSession {
             "REST" if self.ruleset.rest_at_round_end() => {
                 // RULESET1_INTENT RS2, RS3: the Rest blocks pay their AP at the round's end ("Next round"); each one
                 // restores poise now (rule poise)
-                let blocks = s.blocks.max(1);
+                let blocks = self.hero().skill_blocks(&s).max(1);
                 self.rest_blocks += blocks;
                 let mut bar = self.poise();
                 let (before, pips_before) = (bar.value, bar.pips);
@@ -1271,7 +1272,7 @@ impl DojoSession {
                 // flat damage meets the dummy's guard as before
                 let dealt = if self.ruleset.numbers.item_mitigation {
                     let mitigation = Some((self.dummy.guard, rpgkit_rules::damage::armor_rating(&self.dummy)));
-                    let amount = rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit { splash: 1.0, mitigation });
+                    let amount = rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit { splash: 1.0, mitigation, armor_piercing: item.armor_piercing });
                     self.dummy.take_damage(amount, true)
                 } else {
                     self.dummy.take_damage(rpgkit_rules::damage::item_damage(item.damage, rpgkit_rules::damage::ItemHit::default()), false)

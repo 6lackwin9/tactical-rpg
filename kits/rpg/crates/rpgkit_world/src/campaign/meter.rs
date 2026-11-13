@@ -29,6 +29,7 @@ pub struct Rule {
     /// and a soft countdown's rule fires at every restart.
     pub once: bool,
     pub warn: String,
+    /// The effects as written (ACT1-HOOKS2: each may carry `when` and `else`, read when the rule fires).
     pub effects: Vec<Dict>,
     pub then: Vec<Dict>,
     /// Countdowns: run again with this many days left after the effects (K4; the days tick is CAMPAIGN1-C's).

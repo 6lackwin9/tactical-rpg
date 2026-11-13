@@ -180,7 +180,7 @@ fn item_damage_takes_guard_and_armour_under_the_rule() {
     assert_eq!(before - w.units[FOE].hp, want, "{}", cmd.log);
     assert!(want < b.damage);
     // the floor: a 1-damage item still deals 1 through a 90 % guard
-    assert_eq!(damage::item_damage(1, ItemHit { splash: 1.0, mitigation: Some((0.9, 200)) }), 1);
+    assert_eq!(damage::item_damage(1, ItemHit { splash: 1.0, mitigation: Some((0.9, 200)), armor_piercing: false }), 1);
 }
 
 /// A1 section 1: a heal item runs the heal pipeline, capped at the missing HP.
@@ -331,12 +331,12 @@ fn item_mitigation_counts_cover() {
     let cover = command::cover_between(&w, HERO, FOE, true);
     assert!(cover > 0.0, "the foe stands in rubble");
     let rating = damage::armor_rating(&w.units[FOE]);
-    let want = damage::item_damage(b.damage, ItemHit { splash: 1.0, mitigation: Some((cover, rating)) });
+    let want = damage::item_damage(b.damage, ItemHit { splash: 1.0, mitigation: Some((cover, rating)), armor_piercing: false });
     assert_eq!(command::item_hit(&w, HERO, FOE, 1.0).mitigation, Some((cover, rating)));
     let before = w.units[FOE].hp;
     let cmd = run_one(&mut w, HERO, use_on(HERO, FOE, &b));
     assert_eq!(before - w.units[FOE].hp, want, "{}", cmd.log);
-    assert!(want < damage::item_damage(b.damage, ItemHit { splash: 1.0, mitigation: Some((0.0, rating)) }), "cover lowers it");
+    assert!(want < damage::item_damage(b.damage, ItemHit { splash: 1.0, mitigation: Some((0.0, rating)), armor_piercing: false }), "cover lowers it");
 }
 
 /// IR12 with GD5: a hidden foe (stealth, moved this round) is not found: `evaded`, no damage; the copy is spent under

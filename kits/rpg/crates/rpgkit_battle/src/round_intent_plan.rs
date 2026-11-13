@@ -86,7 +86,8 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
     // wielded family's keystone)
     let u = &w.units[c];
     let techniques: Vec<String> = u.techniques.iter().map(|t| t.skill.clone()).chain(std::iter::once(u.mastery_keystone.clone()).filter(|k| !k.is_empty())).collect();
-    for id in u.meter_skills.iter().chain(&u.gear_skills).chain(&techniques) {
+    // ACT1-HOOKS2: then the encounter's battle grants (`Unit::battle_skills`)
+    for id in u.meter_skills.iter().chain(&u.gear_skills).chain(&u.battle_skills).chain(&techniques) {
         let fam = w.cat.family_of(id).to_string();
         if !out.contains(&fam) {
             out.push(fam);
@@ -847,7 +848,7 @@ impl<'a> Builder<'a> {
             }
             let s = self.skill(jump);
             let ap = if pays { skill::ap_cost_by(s, Some(&w.units[self.c]), &w.ruleset) } else { 0 };
-            return Reserve { blocks: s.blocks + w.recovery_of(self.c, s), ap, step: Some(tagged(PlanStep::engage(jump, foe), RETREAT, "")) };
+            return Reserve { blocks: w.blocks_of(self.c, s) + w.recovery_of(self.c, s), ap, step: Some(tagged(PlanStep::engage(jump, foe), RETREAT, "")) };
         }
         // AS3: a ranged Assault unit that has not moved, on a target that threatens its end tile
         let Some(foe) = self.target_unit().filter(|&t| t != self.c && self.intent == RoundIntent::Assault) else { return Reserve::default() };
@@ -967,7 +968,7 @@ impl<'a> Builder<'a> {
                     continue;
                 }
                 let mut why = String::new();
-                let need = s.blocks + w.recovery_of(self.c, s);
+                let need = w.blocks_of(self.c, s) + w.recovery_of(self.c, s);
                 let ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) } else { 0 };
                 let ap_free = st.ap_left - reserve.ap;
                 // HOOKS1 HC1: a skill whose HP cost the unit's HP left does not exceed is refused (rule hp_cost)
@@ -1970,7 +1971,7 @@ impl Builder<'_> {
                 if !round_intent::skill_rows(w, s).contains(&self.intent.id()) && !crate::channel::is_channel_rest(w, self.c, *sid) {
                     return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
-                let need = s.blocks + w.recovery_of(self.c, s);
+                let need = w.blocks_of(self.c, s) + w.recovery_of(self.c, s);
                 if !fits_before(st, need, room.limit) {
                     return Err((room.taken)(need).into());
                 }

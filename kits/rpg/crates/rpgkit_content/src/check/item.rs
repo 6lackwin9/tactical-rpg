@@ -424,7 +424,7 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     out.extend(tier_problems(v, e, family));
     out.extend(text_problems(&json::s(e, "description"), e));
     if t == "CONSUMABLE" {
-        out.extend(consumable_problems(e));
+        out.extend(consumable_problems(v, e));
         // HOOKS1 GH2: the hazard a consumable leaves (no SKILL shape: an item has no area of its own)
         if json::get(e, "hazard").as_object().is_none_or(|h| !h.is_empty()) {
             out.extend(super::hooks::hazard_place_errors(json::get(e, "hazard"), &super::hooks::Ctx::of(v), false));
@@ -811,14 +811,20 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
     out
 }
 
-fn consumable_problems(e: &Dict) -> Vec<String> {
+fn consumable_problems(v: &View, e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
-    // PK1-S1 (PK1_CORRUPTION 3.7): an `unmark` item is a use of its own
+    // PK1-S1 (PK1_CORRUPTION 3.7): an `unmark` item is a use of its own; ACT1-HOOKS2 (FB-244 (5)): a `meter_delta` too
     let unmark = json::get(e, "unmark").as_object().is_some_and(|u| !u.is_empty());
-    if json::i(e, "heal", 0) == 0 && json::i(e, "damage", 0) == 0 && json::f(e, "buff_pct", 0.0) == 0.0 && !unmark {
+    let meter = json::get(e, rpgkit_data::ITEM_METER_DELTA).as_object().is_some_and(|m| !m.is_empty());
+    if json::i(e, "heal", 0) == 0 && json::i(e, "damage", 0) == 0 && json::f(e, "buff_pct", 0.0) == 0.0 && !unmark && !meter {
         out.push("A consumable should heal, damage or buff.".into());
     }
     out.extend(unmark_problems(e));
+    out.extend(meter_delta_problems(v, e));
+    // ACT1-HOOKS2 (FB-244 (6)): armour piercing changes only an item's damage (an error, so the flag never sits idle)
+    if json::b(e, rpgkit_data::ITEM_ARMOR_PIERCING, false) && json::i(e, "damage", 0) <= 0 {
+        out.push("Armour piercing: only a damage item pierces armour (set damage or clear it).".into());
+    }
     // A1.2-K3 (INTENT2 section 6, IR9): only a damage item thrown at foes hits an area, and `affects` needs one
     let area = json::s(e, "area");
     let shaped = !area.is_empty() && area != rpgkit_data::ITEM_AREA_NONE;
@@ -828,6 +834,35 @@ fn consumable_problems(e: &Dict) -> Vec<String> {
     }
     if !shaped && !json::s(e, "affects").is_empty() {
         out.push("Affects: a single-target item has no area to affect.".into());
+    }
+    out
+}
+
+/// ACT1-HOOKS2 (FB-244 (5)): a consumable's `meter_delta` (`{}` or absent = none): `{meter, delta}`, a known unit meter
+/// (when the catalog has a meter table) and a whole delta in `hooks::HAZARD_METER_DELTA`, not 0 (as a hazard's `meter`).
+fn meter_delta_problems(v: &View, e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let raw = json::get(e, rpgkit_data::ITEM_METER_DELTA);
+    if raw.is_null() || raw.as_object().is_some_and(|o| o.is_empty()) {
+        return out;
+    }
+    let Some(o) = raw.as_object() else {
+        out.push("Meter change must be an object {\"meter\": id, \"delta\": n} ({} = none).".into());
+        return out;
+    };
+    for k in o.keys().filter(|k| !rpgkit_data::HAZARD_METER_KEYS.contains(&k.as_str())) {
+        out.push(format!("Meter change: unknown key '{k}' (keys: {}).", rpgkit_data::HAZARD_METER_KEYS.join(", ")));
+    }
+    let id = json::s(o, "meter");
+    if id.is_empty() {
+        out.push("Meter change: meter is required (a unit meter id).".into());
+    } else if !v.has(rpgkit_data::UNIT_METERS_KIND, &id) {
+        out.push(format!("Meter change: unknown unit meter '{id}'."));
+    }
+    let (lo, hi) = super::hooks::HAZARD_METER_DELTA;
+    let delta = json::get(o, "delta");
+    if !super::hooks::whole_in(delta, (lo, hi)) || json::to_int(delta) == 0 {
+        out.push(format!("Meter change: delta must be a whole number {lo}..{hi}, not 0."));
     }
     out
 }
@@ -919,7 +954,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
         "SHIELD" if slot != "OFF_HAND" => errors.push("Shields go in the OFF_HAND slot.".into()),
         "ARMOR" if slot != "HEAD" && slot != "BODY" => errors.push("Armor goes in HEAD or BODY.".into()),
         "ACCESSORY" if slot != "ACCESSORY_1" && slot != "ACCESSORY_2" => errors.push("Accessories go in ACCESSORY_1 or ACCESSORY_2.".into()),
-        "CONSUMABLE" => errors.extend(consumable_problems(e)),
+        "CONSUMABLE" => errors.extend(consumable_problems(v, e)),
         _ => {}
     }
     errors

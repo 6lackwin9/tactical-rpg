@@ -186,7 +186,8 @@ fn map_node(r: &mut Runner, ctx: &Ctx, node: &Value) -> Value {
 }
 
 /// Encounter `id` as seen from `world`, roster mapped to units; elevel_set: level-shifted copies at `foe_level`.
-/// full: also the objective, deployment, phases, guests, protect and morale fields. None when it does not exist.
+/// full: also the objective, deployment, stay-behind, phases, guests, protect and morale fields. None when it does not
+/// exist.
 pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, world: &str, full: bool) -> Option<Enc> {
     let entry = r.d.resolve(world, "encounters", id).clone();
     if entry.is_empty() {
@@ -207,7 +208,9 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
         base.insert("phases".into(), json!([a]));
     }
     if full {
-        for key in ["objective", "objective_tiles", "objective_rounds", "objective_count", "objective_text", "deployment"] {
+        // ACT1-HOOKS2 (FB-248 (c)): the escape's `stay_behind` block too (no refs inside: modes, tiles, texts), so a hold
+        // escape plays its holder and gate here as in a world battle (`Runner::fight_world` reads the whole row)
+        for key in ["objective", "objective_tiles", "objective_rounds", "objective_count", "objective_text", "deployment", "stay_behind"] {
             if let Some(v) = entry.get(key) {
                 base.insert(key.into(), v.clone());
             }

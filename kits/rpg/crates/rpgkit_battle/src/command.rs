@@ -842,7 +842,7 @@ impl Command {
                 }
                 if item.damage > 0 {
                     // A1.2-K3 (A1 section 1, FB-55(2)): the damage pipeline (flat base, mitigation by the ruleset)
-                    let amount = damage::item_damage(item.damage, item_hit(w, src, target, 1.0));
+                    let amount = damage::item_damage(item.damage, item_hit_of(w, &item, src, target, 1.0));
                     dmg = w.damage(target, amount, true);
                     let t = &w.units[target];
                     parts.push(format!("{dmg} damage (HP {}/{}){}", t.hp, t.max_hp, if t.is_alive() { "" } else { ", defeated" }));
@@ -851,6 +851,13 @@ impl Command {
                 if !item.unmark.is_empty() {
                     let undone = crate::mark::unmark(w, target, &item.unmark, &item.name);
                     parts.push(if undone.is_empty() { format!("no {} to undo", item.unmark) } else { undone });
+                }
+                // ACT1-HOOKS2 (FB-244 (5)): a `meter_delta` moves the target's meter after the action
+                // (`meter::from_item`, its own `[Meter]` line); a target without that meter is left as it is
+                if let Some(d) = &item.meter_delta {
+                    let name = w.cat.unit_meters.get(&d.meter).map_or_else(|| d.meter.clone(), |m| m.name.clone());
+                    let held = crate::meter::on(w) && crate::meter::value(w, target, &d.meter).is_some();
+                    parts.push(if held { format!("{name} {:+}", d.delta) } else { format!("no {name} to change") });
                 }
                 let t = &mut w.units[target];
                 if item.buff_pct > 0.0 {
@@ -1010,7 +1017,7 @@ impl Command {
                 continue;
             }
             let part = if primary.is_none_or(|t| t == v) { 1.0 } else { splash };
-            let amount = damage::item_damage(item.damage, item_hit(w, src, v, part));
+            let amount = damage::item_damage(item.damage, item_hit_of(w, &item, src, v, part));
             let dealt = w.damage(v, amount, true);
             self.struck.push(crate::trigger::Struck { target: v, damage: dealt, ranged: true });
             total += dealt;
@@ -1789,7 +1796,13 @@ pub fn item_ap(w: &World, c: UnitId) -> i32 {
 /// armour rating.
 pub fn item_hit(w: &World, src: UnitId, target: UnitId, splash: f64) -> damage::ItemHit {
     let mitigation = w.ruleset.numbers.item_mitigation.then(|| (w.units[target].guard + cover_between(w, src, target, true), damage::armor_rating(&w.units[target])));
-    damage::ItemHit { splash, mitigation }
+    damage::ItemHit { splash, mitigation, armor_piercing: false }
+}
+
+/// ACT1-HOOKS2 (FB-244 (6)): `item_hit` of `item`: an `armor_piercing` item skips the armour step (the battle, the
+/// area throw and the planner's estimate read this).
+pub fn item_hit_of(w: &World, item: &ItemDef, src: UnitId, target: UnitId, splash: f64) -> damage::ItemHit {
+    damage::ItemHit { armor_piercing: item.armor_piercing, ..item_hit(w, src, target, splash) }
 }
 
 /// A1.2-K3 (A1 section 1, FB-55(1)): the S1 status and magnitude a buff item grants: `empower` at its `buff_pct` in
