@@ -72,6 +72,28 @@ Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own 
 | 17 Weeping Basalt Chasm | take A (gauge-house with a caved-in roof, cyan seep down the basalt columns, rope bridge) | `... landmark art_src/lm_weeping_basalt_chasm.png weeping_basalt_chasm --size 115` |
 | 18 Marrow Conduits | take A (two brass conduits looping down a basalt wall, valve wheels, pump house, violet windows) with the steam filled in and toned down | `... landmark art_src/lm_marrow_conduits.png marrow_conduits --desmoke 0.62,0.35,0.79,0.52 --grade 0.72:0.85 --size 115` |
 
+## Blending an act's landmarks into its background (integration pass, 2026-11-13)
+
+Once an act's landmarks are all picked and placed, [blend_act_map.py](blend_act_map.py) builds the image to blend and
+cuts the result back apart; the layout (each landmark's source, map position, map scale and cut fixes) is a JSON file,
+[act2_map_layout.json](act2_map_layout.json) for Act 2.
+
+1. `python3 art_src/prompts/blend_act_map.py compose art_src/prompts/act2_map_layout.json <composite.png>`: every
+   landmark on the background at its map spot and size, at the background's own resolution, with no labels, routes or
+   badges.
+2. Blend it in Flow with the prompt below (the landmarks stay where they are; only how they sit in the scene changes).
+3. `python3 art_src/prompts/blend_act_map.py cut art_src/prompts/act2_map_layout.json <composite.png> <blended.png>`:
+   each landmark cut out of the blended image with its composite silhouette (lined up within 4 px), to
+   `map/landmarks/<id>.png` at 96 x its scale, and the blended image to `backgrounds/world_map/<target>.png`. A landmark
+   whose mismatch is flagged was moved or redrawn: blend that quarter again on its own (crop it, blend, paste it back).
+
+The game keeps drawing each landmark as its own sprite exactly over its painted copy, so hover, the selection glow,
+the grey locked look and the quest badge still work.
+
+```text
+Edit this image. It is a pixel-art district map with small landmark buildings standing on it. Blend the landmarks into the scene so each one looks painted together with the place it stands on: give each a soft contact shadow, let the ground, rock, cobbles, fences and walls around its base meet it naturally, let the nearby light (lamps, windows, furnace and marrow glows) fall on the ground around it, and match its colours and contrast to the painting around it. Keep every landmark exactly where it is, at exactly the same size and outline, with its details; do not move, redraw, add or remove anything. Keep the roads, lamps, open ground and everything else as they are. Same pixel-art style and resolution, no text.
+```
+
 ## Running through the image queue
 
 The image queue (`tools/portraits/artqueue.py request`, Drive `image_pipeline/queue/`) takes the same prompt text when
