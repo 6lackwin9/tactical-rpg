@@ -645,6 +645,10 @@ pub struct ItemDef {
     /// PK1-S1 (3.7): a consumable's `unmark` `{mark}`: the mark id whose latest entry on the target this battle it
     /// removes ("" = none).
     pub unmark: String,
+    /// ACT1-HOOKS2 (FB-244 (5)): a consumable's `meter_delta` on its target's unit meter (None = none).
+    pub meter_delta: Option<MeterDelta>,
+    /// ACT1-HOOKS2 (FB-244 (6)): a consumable's hits skip the target's armour (`ITEM_ARMOR_PIERCING`).
+    pub armor_piercing: bool,
     /// PK2-S2 (`docs/sessions/PK2_GRAFTS.md` 3): a `GRAFT` item's body fields (None for any other item type).
     pub graft: Option<GraftSpec>,
     /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): the item's theme id (a faction's arms; "" = none), which picks the
@@ -815,6 +819,8 @@ impl ItemDef {
             affects: Affects::parse(&string(o, "affects", "")),
             max_stack: int(o, "max_stack", 1),
             unmark: obj(o, "unmark").map(|u| string(u, "mark", "")).unwrap_or_default(),
+            meter_delta: obj(o, ITEM_METER_DELTA).map(MeterDelta::from_obj).filter(|m| !m.meter.is_empty() && m.delta != 0),
+            armor_piercing: boolean(o, ITEM_ARMOR_PIERCING, false),
             graft: (string(o, "item_type", "") == GRAFT).then(|| GraftSpec::from_obj(o)),
             theme: string(o, "theme", ""),
             book: (string(o, "item_type", "") == MASTERY_BOOK).then(|| MasteryBook::from_obj(o)),
@@ -2100,6 +2106,20 @@ pub const STRIKE_NEAREST: &str = "strike_nearest";
 pub const MARK: &str = "mark";
 /// PK1-S1 (3.7): a consumable's `unmark` `{mark}` removes the target's latest mark of that id this battle; its keys.
 pub const UNMARK_KEYS: [&str; 1] = ["mark"];
+/// ACT1-HOOKS2 (FB-244 (4)): an item effect `{type: skill_block_cost, skill, delta}` (gear and passives): while held,
+/// skill `skill` (a skill id) takes `delta` more blocks (negative = faster) for its holder; deltas on one skill from
+/// several sources add up, then the effective blocks are clamped to at least 1 (`Unit::skill_blocks`). Its keys and the
+/// range of one delta (whole, not 0).
+pub const SKILL_BLOCK_COST: &str = "skill_block_cost";
+pub const SKILL_BLOCK_COST_KEYS: [&str; 3] = ["type", "skill", "delta"];
+pub const SKILL_BLOCK_COST_DELTA: (i64, i64) = (-3, 3);
+/// ACT1-HOOKS2 (FB-244 (5)): a consumable's `meter_delta` `{meter, delta}` changes the target's unit meter by `delta`
+/// at use (clamped to the gauge's floor..max; nothing when the target holds no such meter), and its keys (as a hazard's
+/// `meter`, `HAZARD_METER_KEYS`).
+pub const ITEM_METER_DELTA: &str = "meter_delta";
+/// ACT1-HOOKS2 (FB-244 (6)): a damaging consumable's `armor_piercing` (false = the default): its hits skip the armour
+/// step of the item damage pipeline (`rpgkit_rules::damage::ItemHit::armor_piercing`).
+pub const ITEM_ARMOR_PIERCING: &str = "armor_piercing";
 /// PK2-S1 (`docs/sessions/PK2_GRAFTS.md` 2): the member grants of the passive grammar (passives only; gear, bands and
 /// meters may not carry them): `forbid_hands` `{hands: 2}` (equipping refuses items held in that many hands; a worn one
 /// goes to the stash at the settle) and `pierce_melee` `{}` (melee and bare-handed hits pierce armour, rule pierce).

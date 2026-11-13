@@ -295,6 +295,10 @@ pub struct Unit {
     /// granted `channel.only` skill also plays in a Standard round while the unit cannot Channel (no channel meter),
     /// as authored and paying no meter (`rpgkit_battle::channel::problem`).
     pub battle_skills: Vec<String>,
+    /// ACT1-HOOKS2 (FB-244 (4)): the blocks the passives' `skill_block_cost` effects add per skill id, and the worn
+    /// items' (rebuilt on every gear sync); `skill_blocks` reads both.
+    pub block_cost: IndexMap<String, i32>,
+    pub gear_block_cost: IndexMap<String, i32>,
     /// U3.2-S4 (U3 Level 2): crit chance points the worn gear's families give at proficiency 2 or more (their
     /// `level2_bonus` crit, each family once), rebuilt on every sync.
     pub gear_crit: f64,
@@ -433,6 +437,8 @@ impl Unit {
             gear_triggers: Vec::new(),
             gear_skills: Vec::new(),
             battle_skills: Vec::new(),
+            block_cost: IndexMap::new(),
+            gear_block_cost: IndexMap::new(),
             gear_crit: 0.0,
             held_guard: None,
             trigger_crit: 0.0,
@@ -631,6 +637,7 @@ impl Unit {
         self.gear_triggers.clear();
         self.gear_hit_sources.clear();
         self.gear_skills.clear();
+        self.gear_block_cost.clear();
         self.gear_crit = 0.0;
         // AUDIT-01: a 2H pair's stowed weapon grants nothing while it is not ready (`Inventory::ready_gear`)
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.ready_gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
@@ -836,6 +843,11 @@ impl Unit {
                 // PK2-S1: member grants, passives only (`Grant::gear_ok`)
                 Grant::ForbidHands { hands } => self.forbid_hands = self.forbid_hands.max(*hands),
                 Grant::PierceMelee => self.pierce_melee = true,
+                // ACT1-HOOKS2 (FB-244 (4)): summed per skill (the gear map is cleared on every sync)
+                Grant::SkillBlockCost { skill, delta } => {
+                    let held = if gear { &mut self.gear_block_cost } else { &mut self.block_cost };
+                    *held.entry(skill.clone()).or_insert(0) += *delta;
+                }
             }
         }
     }
@@ -1931,6 +1943,18 @@ impl Unit {
     }
 
     /// SkillDef.power_for: the skill multiplier x potency x weaken x empower.
+    /// ACT1-HOOKS2 (FB-244 (4)): the blocks `skill` takes for this unit: its own `blocks` plus the `skill_block_cost`
+    /// deltas the unit's passives and worn items hold for it (summed), clamped to 1 at least; the skill's own `blocks`
+    /// unchanged while no delta applies. The planner, the AI, the previews and the battle read this.
+    pub fn skill_blocks(&self, skill: &rpgkit_data::SkillDef) -> i32 {
+        let delta = self.block_cost.get(&skill.id).copied().unwrap_or(0) + self.gear_block_cost.get(&skill.id).copied().unwrap_or(0);
+        if delta == 0 {
+            skill.blocks
+        } else {
+            (skill.blocks + delta).max(1)
+        }
+    }
+
     pub fn power_for(&self, skill: &rpgkit_data::SkillDef) -> f64 {
         skill.power_mult * self.potency_for_skill(skill) * self.weaken_factor() * self.empower_factor()
     }

@@ -64,7 +64,9 @@ pub fn rank_lines(cat: &Catalog, unit: &Unit, family: &str) -> Vec<RankLine> {
             let unlock_level = unit.skill_unlock_level(cat, s);
             let ap = rpgkit_battle::skill::ap_cost(s, Some(unit));
             let text = if unlocked {
-                let mut bits = vec![format!("{ap} AP"), format!("{} block{}", s.blocks, if s.blocks == 1 { "" } else { "s" })];
+                // ACT1-HOOKS2: the unit's own blocks of the skill (its gear's `skill_block_cost`)
+                let blocks = unit.skill_blocks(s);
+                let mut bits = vec![format!("{ap} AP"), format!("{blocks} block{}", if blocks == 1 { "" } else { "s" })];
                 bits.extend(changing.iter().map(|f| f(s)).filter(|t| !t.is_empty()));
                 bits.join(", ")
             } else {

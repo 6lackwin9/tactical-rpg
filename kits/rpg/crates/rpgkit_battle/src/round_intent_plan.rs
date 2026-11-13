@@ -848,7 +848,7 @@ impl<'a> Builder<'a> {
             }
             let s = self.skill(jump);
             let ap = if pays { skill::ap_cost_by(s, Some(&w.units[self.c]), &w.ruleset) } else { 0 };
-            return Reserve { blocks: s.blocks + w.recovery_of(self.c, s), ap, step: Some(tagged(PlanStep::engage(jump, foe), RETREAT, "")) };
+            return Reserve { blocks: w.blocks_of(self.c, s) + w.recovery_of(self.c, s), ap, step: Some(tagged(PlanStep::engage(jump, foe), RETREAT, "")) };
         }
         // AS3: a ranged Assault unit that has not moved, on a target that threatens its end tile
         let Some(foe) = self.target_unit().filter(|&t| t != self.c && self.intent == RoundIntent::Assault) else { return Reserve::default() };
@@ -968,7 +968,7 @@ impl<'a> Builder<'a> {
                     continue;
                 }
                 let mut why = String::new();
-                let need = s.blocks + w.recovery_of(self.c, s);
+                let need = w.blocks_of(self.c, s) + w.recovery_of(self.c, s);
                 let ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) } else { 0 };
                 let ap_free = st.ap_left - reserve.ap;
                 // HOOKS1 HC1: a skill whose HP cost the unit's HP left does not exceed is refused (rule hp_cost)
@@ -1971,7 +1971,7 @@ impl Builder<'_> {
                 if !round_intent::skill_rows(w, s).contains(&self.intent.id()) && !crate::channel::is_channel_rest(w, self.c, *sid) {
                     return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
-                let need = s.blocks + w.recovery_of(self.c, s);
+                let need = w.blocks_of(self.c, s) + w.recovery_of(self.c, s);
                 if !fits_before(st, need, room.limit) {
                     return Err((room.taken)(need).into());
                 }

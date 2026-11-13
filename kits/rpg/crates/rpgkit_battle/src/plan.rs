@@ -271,7 +271,7 @@ impl PlanEntry {
                     Command::new(
                         actor,
                         0,
-                        s.blocks,
+                        blocks,
                         CmdKind::Attack {
                             target: self.target,
                             // PK1-S2a: a channeled version's power factor (1 outside a Channel round)
@@ -294,19 +294,19 @@ impl PlanEntry {
                 c
             }
             Kind::Status => Command::new(actor, 0, 1, CmdKind::StatusBlock { status: self.status_name.clone() }),
-            Kind::Support => Command::new(actor, 0, s.blocks, CmdKind::Support { target: self.target.unwrap_or(actor), skill: self.skill, last_heal: 0, last_status: String::new(), last_cleansed: Vec::new() }),
+            Kind::Support => Command::new(actor, 0, blocks, CmdKind::Support { target: self.target.unwrap_or(actor), skill: self.skill, last_heal: 0, last_status: String::new(), last_cleansed: Vec::new() }),
             Kind::Defend => {
-                let mut c = Command::new(actor, 1, s.blocks, CmdKind::Defend { mitigation: skill::guard_mitigation(s, &w.ruleset.numbers), guard_rounds: s.guard_rounds, later_mitigation: skill::guard_later_mitigation(s, &w.ruleset.numbers), grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
+                let mut c = Command::new(actor, 1, blocks, CmdKind::Defend { mitigation: skill::guard_mitigation(s, &w.ruleset.numbers), guard_rounds: s.guard_rounds, later_mitigation: skill::guard_later_mitigation(s, &w.ruleset.numbers), grant_status: s.grant_status.clone(), status_rounds: s.status_rounds, extra_grants: s.extra_grants.clone(), guard_broken: false });
                 c.status_magnitude = s.status_magnitude;
                 c
             }
-            Kind::Focus => Command::new(actor, 0, s.blocks, CmdKind::Focus { boost: s.boost, rounds: s.boost_rounds }),
+            Kind::Focus => Command::new(actor, 0, blocks, CmdKind::Focus { boost: s.boost, rounds: s.boost_rounds }),
             Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, approach: self.target, moved_tiles: 0, cut_short: false, blocked_by: String::new() }),
-            Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false, moved_tiles: 0 }),
+            Kind::Disengage => Command::new(actor, 0, blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false, moved_tiles: 0 }),
             Kind::Target => Command::new(actor, 2, 1, CmdKind::Target { target: self.target }),
             // RULESET1 T11: a unit that pays no AP gains none either; RULESET1_INTENT RS2, CLN-45: with `rest_ap`
             // round_end Rest pays its AP at round end
-            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) && !w.ruleset.rest_at_round_end() { s.recover_ap } else { 0 } }),
+            Kind::Rest => Command::new(actor, 0, blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) && !w.ruleset.rest_at_round_end() { s.recover_ap } else { 0 } }),
         };
         cmd.recovery = self.recovery;
         cmd.carry = self.carry;
@@ -850,7 +850,7 @@ impl Plan {
         }
         if con.damage > 0 {
             // A1.2-K3: the item damage pipeline's value (the flat damage unless the ruleset mitigates item damage)
-            let est = damage::item_damage(con.damage, command::item_hit(w, c, target, 1.0));
+            let est = damage::item_damage(con.damage, command::item_hit_of(w, con, c, target, 1.0));
             st.entries[last].est_damage = est;
             let hp = st.est_hp.get(&target).copied().unwrap_or(tu.hp);
             st.est_hp.insert(target, (hp - est).max(0));
@@ -1485,7 +1485,10 @@ impl Plan {
         let cells: Vec<V2> = shape.into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != st.pos).collect();
         // IR17: the shaped Assault row's longer wind-up
         let blocks = match target {
-            Some(_) => (s.blocks + w.ruleset.numbers.assault_shape_blocks.max(0)).min((w.total_blocks - w.recovery_of(c, s)).max(s.blocks)),
+            Some(_) => {
+                let own = w.blocks_of(c, s);
+                (own + w.ruleset.numbers.assault_shape_blocks.max(0)).min((w.total_blocks - w.recovery_of(c, s)).max(own))
+            }
             None => 0,
         };
         let p = self.add_entry(w, c, st, sid, index, target, &[], blocks, &cells);
@@ -1594,7 +1597,11 @@ impl Plan {
     #[allow(clippy::too_many_arguments)]
     fn add_entry(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, index: i32, foe: Option<UnitId>, dirs: &[V2], blocks_override: i32, cells: &[V2]) -> String {
         let s = &w.cat.skills[sid];
-        let n = if blocks_override > 0 { blocks_override } else { s.blocks };
+        // ACT1-HOOKS2 (FB-244 (4)): the unit's own blocks of the skill (its gear's `skill_block_cost`), held on the entry
+        // as an override only when they differ from the row's
+        let own = w.blocks_of(c, s);
+        let n = if blocks_override > 0 { blocks_override } else { own };
+        let blocks_override = if blocks_override <= 0 && own != s.blocks { own } else { blocks_override };
         let recovery = w.recovery_of(c, s);
         let start = self.free_start(st, n + recovery);
         if start < 0 {

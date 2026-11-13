@@ -13,6 +13,7 @@
 //! band may start at a percent of it, `from_pct`), `start_full` starts it full, `delta_max` bounds a `meter` effect, and
 //! its `triggers` are held by every holder (`held_triggers`, rule triggers).
 
+use crate::command::CmdKind;
 use crate::resolver::Resolver;
 use crate::trigger::{self, Event, Fired, Holder};
 use crate::world::{UnitId, World};
@@ -376,6 +377,32 @@ pub fn from_hazard(res: &mut Resolver, w: &mut World, c: UnitId, d: &MeterDelta,
     let mut fired = Fired::new(c, "meter", None, source);
     let to = w.meters.gauges[i].value + delta;
     move_to(res, w, i, to, &h, &format!("{}'s {} {}", w.units[c].name, def.name, delta_text(delta)), true, block, &mut fired);
+    if !fired.lines.is_empty() || !fired.moves.is_empty() {
+        res.triggers.fired.push(fired);
+    }
+}
+
+/// ACT1-HOOKS2 (FB-244 (5)): the action `i` used a consumable with a `meter_delta` (rule unit_meters): its target's
+/// meter moves by the item's delta in full (clamped to the gauge's floor..max, as a skill's meter cost; not a skill's
+/// gain, so UM3's `unless_gained` is untouched), logged `[Meter] <unit>'s <item>: <unit>'s <meter> -25 (40 -> 15)`; the
+/// move may cross rules, and its Fired joins the triggers the session logs next. Nothing when the item was not used,
+/// has no `meter_delta`, or the target holds no such meter (a harmless no-op).
+pub fn from_item(res: &mut Resolver, w: &mut World, i: usize) {
+    let (c, d, name, id, block) = {
+        let a = &res.scheduled[i];
+        let CmdKind::Item { target, item, used: true, cell: None, .. } = &a.command.kind else { return };
+        let Some(d) = item.meter_delta.clone() else { return };
+        (*target, d, item.name.clone(), item.id.clone(), a.impact)
+    };
+    if !on(w) || !w.units[c].is_active() {
+        return;
+    }
+    let Some(g) = find(w, c, &d.meter) else { return };
+    let Some(def) = w.cat.unit_meters.get(&d.meter).cloned() else { return };
+    let h = holder(c, &name, &format!("item:{id}"));
+    let mut fired = Fired::new(c, "meter", None, &name);
+    let to = w.meters.gauges[g].value + d.delta;
+    move_to(res, w, g, to, &h, &format!("{}'s {} {}", w.units[c].name, def.name, delta_text(d.delta)), true, block, &mut fired);
     if !fired.lines.is_empty() || !fired.moves.is_empty() {
         res.triggers.fired.push(fired);
     }

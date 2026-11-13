@@ -257,6 +257,21 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                     errors.push(format!("{at}: pierce_melee takes no keys (not '{k}')."));
                 }
             }
+            // ACT1-HOOKS2 (FB-244 (4)): `skill_block_cost` {skill, delta} on gear and passives (the unknown-type message
+            // keeps its list, checks_golden)
+            rpgkit_data::SKILL_BLOCK_COST => {
+                let skill = json::s(e, "skill");
+                if !skill_exists(&skill) {
+                    errors.push(format!("{at}: skill_block_cost: unknown skill '{skill}'."));
+                }
+                let (lo, hi) = rpgkit_data::SKILL_BLOCK_COST_DELTA;
+                if !e.get("delta").is_some_and(|d| whole_in(d, lo, hi)) || json::i(e, "delta", 0) == 0 {
+                    errors.push(format!("{at}: skill_block_cost delta must be a whole number {lo}..{hi}, not 0."));
+                }
+                for k in e.keys().filter(|k| !rpgkit_data::SKILL_BLOCK_COST_KEYS.contains(&k.as_str())) {
+                    errors.push(format!("{at}: skill_block_cost takes only skill and delta (not '{k}')."));
+                }
+            }
             _ => errors.push(format!("{at}: unknown effect type '{t}' (use {}).", if items_only { ITEM_TYPES.join(", ") } else { TYPES.join(", ") })),
         }
     }
