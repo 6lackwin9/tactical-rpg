@@ -21,6 +21,10 @@ __STYLES_CSS__
   .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
   .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
   .wd-hide { display: none; }
+  .wd-paths { margin-top: 3px; }
+  .wd-popt { display: flex; justify-content: space-between; gap: 3px; font-size: 5.4px; padding: 1px 2px; margin-top: 1px; cursor: pointer; border: 0.5px solid #2d333f; color: var(--dim); }
+  .wd-popt.on { color: var(--gold); border-color: #d97706; background: rgba(44,34,30,0.7); }
+  .wd-popt:hover { color: #fde68a; border-color: #b45309; }
   .wd-quest { position: absolute; width: 13px; height: 13px; z-index: 14; animation: wdQuest 1.8s ease-in-out infinite;
               filter: drop-shadow(0 0 1px #fff7cc) drop-shadow(0 0 2.5px #fbbf24) drop-shadow(0 0 4px #f59e0b); }
   @keyframes wdQuest { 0%, 100% { filter: drop-shadow(0 0 1px #fff7cc) drop-shadow(0 0 2px #fbbf24) drop-shadow(0 0 3px #f59e0b); }
@@ -28,25 +32,31 @@ __STYLES_CSS__
   .wd-party { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: rgba(6,182,212,0.25); z-index: 15;
               box-shadow: 0 0 0 1px #22d3ee, 0 0 6px #06b6d4; display: flex; align-items: center; justify-content: center; }
   .wd-party img, .wd-party-sm img { width: 10px; height: 10px; }
-  .wd-legend2 { position: absolute; right: 5px; top: 3px; width: 100px; padding: 2px 4px; font-size: 5.3px; color: var(--text); z-index: 25; line-height: 1.25; }
+  .wd-legend2 { position: absolute; width: 100px; padding: 2px 4px; font-size: 5.3px; color: var(--text); z-index: 25; line-height: 1.25; }
   .wd-leghead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
-  .wd-hudx { width: 9px; height: 9px; font-size: 7px; line-height: 1; padding: 0; }
+  .wd-legbtn { width: 10px; height: 9px; font-size: 5.5px; line-height: 1; padding: 0; }
+  .wd-legbtn.on { border-color: #d97706; color: var(--gold); }
+  .wd-legend2.unlocked { cursor: move; box-shadow: 0 0 0 1px #d97706, 0 3px 8px rgba(0,0,0,0.75); }
+  .wd-legmin { position: absolute; z-index: 25; font-size: 6px; padding: 1px 5px; }
   .wd-legq, .wd-legparty { display: flex; gap: 3px; align-items: center; padding: 0.5px 2px; white-space: nowrap; cursor: pointer; border: 0.5px solid transparent; }
   .wd-legq:hover, .wd-legq.on, .wd-legparty:hover { border-color: #d97706; background: rgba(44,34,30,0.7); }
   .wd-legparty { margin-top: 2px; padding-top: 2px; border-top: 0.5px solid #2d333f; }
   .wd-quest-sm { width: 8px; height: 8px; flex: none; filter: drop-shadow(0 0 1.5px #fbbf24); }
   .wd-party-sm { width: 9px; height: 9px; flex: none; border-radius: 50%; box-shadow: 0 0 0 1px #22d3ee, 0 0 4px #06b6d4; display: flex; align-items: center; justify-content: center; }
-  .wd-hudbtn { position: absolute; right: 5px; top: 5px; z-index: 25; font-size: 6px; padding: 1px 4px; }
+
   .wd-trail { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 0.1 4.2; opacity: 0.52; transition: opacity 0.15s, stroke-width 0.15s; }
   .wd-trail.hot { opacity: 0.95; stroke-width: 2.1; }
   .wd-mapview.focus-only .wd-trail { opacity: 0; }
-  .wd-mapview.focus-only .wd-trail.hot, .wd-mapview.focus-only .wd-trail.fresh { opacity: 0.95; }
-  .wd-trail.goal { opacity: 0.85; stroke-width: 2.5; stroke-dasharray: 0.1 3.4; }
+  .wd-mapview.focus-only .wd-trail.near { opacity: 0.42; }
+  .wd-path { fill: none; stroke-linecap: round; pointer-events: none; }
+  .wd-path.main { stroke: #fbbf24; stroke-width: 2.4; stroke-dasharray: 0.1 3.6; filter: drop-shadow(0 0 1.5px #f59e0b); }
+  .wd-path.alt { stroke: #d9cbb4; stroke-width: 1.7; stroke-dasharray: 0.1 3.6; opacity: 0.55; transition: opacity 0.12s; }
+  .wd-path.alt.peek { opacity: 1; stroke: #fde68a; }
+  .wd-hit { fill: none; stroke: transparent; stroke-width: 9; pointer-events: stroke; cursor: pointer; }
   .wd-trail.flick { animation: wdFlick 3.1s ease-in-out infinite; }
-  .wd-trail.flick.hot, .wd-trail.flick.goal { animation-name: wdFlickHot; }
   @keyframes wdFlick { 0%, 100% { stroke-opacity: 1; } 35% { stroke-opacity: 0.55; } 52% { stroke-opacity: 0.85; } 70% { stroke-opacity: 0.6; } }
   @keyframes wdFlickHot { 0%, 100% { stroke-opacity: 1; } 40% { stroke-opacity: 0.75; } 65% { stroke-opacity: 0.9; } }
-  .wd-trail.fresh { opacity: 0.95; stroke-width: 2.1; animation: wdTrail 1.4s ease-in-out 3; }
+
   @keyframes wdTrail { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 3px #f59e0b); } }
   .wd-faint { background: rgba(10,11,16,0.28) !important; border-color: transparent !important; color: rgba(217,203,180,0.74) !important;
               text-shadow: 0 0 2px #000, 0 0 1px #000; transition: background 0.12s, color 0.12s, border-color 0.12s; }
@@ -81,7 +91,8 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: 'sluice_undercroft', hud: true };
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: 'sluice_undercroft', hud: true, pick: 0,
+  legend: { x: 392, y: 4, locked: true, min: false } };
 const FLAG_NAMES = {
   'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
   'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
@@ -119,6 +130,33 @@ function pathTo(from, to, step) {
   while (v !== from) { const e = via[v]; out.push(e.id); v = e.a === v ? e.b : e.a; }
   return out;
 }
+
+// Every way the party can travel to a place (simple paths over open routes), cheapest first; the ones within two
+// days of the best, at most three. Supplies follow the days on the road (one a day).
+function pathOptions(from, to, step) {
+  if (from === to) return [];
+  const out = [], open = G.edges.filter(e => isOpen(e, step));
+  (function walk(at, seen, edges, days) {
+    if (out.length > 40) return;
+    if (at === to) { out.push({ edges: edges.slice(), days }); return; }
+    open.filter(e => e.a === at || e.b === at).forEach(e => {
+      const nxt = e.a === at ? e.b : e.a;
+      if (seen.has(nxt)) return;
+      seen.add(nxt); edges.push(e.id); walk(nxt, seen, edges, days + e.time); edges.pop(); seen.delete(nxt);
+    });
+  })(from, new Set([from]), [], 0);
+  out.sort((a, b) => a.days - b.days || a.edges.length - b.edges.length);
+  return out.filter(o => o.days <= out[0].days + 2).slice(0, 3);
+}
+const viaName = (o, from, all) => {  // what tells this path apart from the others: its own stops, else its own roads
+  const stopsOf = x => { let at = from; return x.edges.map(id => { const e = G.edges.find(y => y.id === id); at = e.a === at ? e.b : e.a; return at; }).slice(0, -1); };
+  const others = (all || []).filter(x => x !== o);
+  const mine = stopsOf(o).filter(id => !others.length || others.some(x => !stopsOf(x).includes(id)));
+  if (mine.length) return 'via ' + mine.map(id => node(id).name).join(', ');
+  const roads = o.edges.filter(id => others.some(x => !x.edges.includes(id))).map(id => G.edges.find(e => e.id === id).name);
+  return roads.length ? 'by ' + roads.join(', ') : 'direct';
+};
+function pickPath(i) { S.pick = i; render(); }
 
 function reachable(step) {
   const seen = new Set(['sluice_undercroft']);
@@ -158,23 +196,30 @@ function routePoints(e) {
 // Lantern trail: faint warm dots along the roads; the routes of the hovered or selected node light up (CSS :has), a
 // route that just opened glows, locked routes are not drawn (the greyed node says it is locked).
 function trailSvg() {
-  const step = S.step, prev = Math.max(0, step - 1), reach = reachable(step), cur = DATA.steps[step];
+  const step = S.step;
   let k = 0;
-  return G.edges.map(e => {
-    const open = isOpen(e, step);
-    if (!open) return '';
-    const fresh = step > 0 && !isOpen(e, prev);
-    const path = pathTo(S.party, S.sel, step) || [];
-    const hot = path.includes(e.id) || (S.sel === S.party && (e.a === S.party || e.b === S.party));
-    const col = '#fbbf24';
-    const cls = `wd-trail rt-${e.a} rt-${e.b}${hot ? ' hot' : ''}${fresh ? ' fresh' : ''}${S.flicker ? ' flick' : ''}`;
+  const opts = pathOptions(S.party, S.sel, step);
+  if (S.pick >= opts.length) S.pick = 0;
+  const base = G.edges.map(e => {
+    if (!isOpen(e, step)) return '';
+    const atParty = S.sel === S.party && (e.a === S.party || e.b === S.party);
+    const cls = `wd-trail rt-${e.a} rt-${e.b}${atParty ? ' near' : ''}${S.flicker ? ' flick' : ''}`;
     const delay = S.flicker ? `animation-delay:${(-(k++ * 0.73) % 3.1).toFixed(2)}s;` : '';
-    return `<path class="${cls}" style="${delay}" d="${smoothPath(routePoints(e))}" stroke="${col}" />`;
+    return `<path class="${cls}" style="${delay}" d="${smoothPath(routePoints(e))}" stroke="#fbbf24" />`;
   }).join('');
+  // alternatives first (under), the main path last (on top); each alternative is wide enough to hover and click
+  const pathSvg = (o, i) => o.edges.map(id => {
+    const e = G.edges.find(x => x.id === id), d = smoothPath(routePoints(e)), main = i === S.pick;
+    return main ? `<path class="wd-path main" d="${d}" />`
+      : `<path class="wd-path alt alt-${i}" d="${d}" /><path class="wd-hit" d="${d}" data-alt="${i}" onmouseenter="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.add('peek'))" onmouseleave="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.remove('peek'))" onclick="pickPath(${i})" />`;
+  }).join('');
+  const alts = opts.map((o, i) => i === S.pick ? '' : pathSvg(o, i)).join('');
+  const main = opts[S.pick] ? pathSvg(opts[S.pick], S.pick) : '';
+  return base + alts + main;
 }
 
 function trailHoverCss() {
-  return G.nodes.map(n => `.wd-mapview:has(.wd-node[data-id="${n.id}"]:hover) .rt-${n.id} { opacity: 0.95 !important; stroke-width: 2.1; }`).join('\n');
+  return G.nodes.map(n => `.wd-mapview:has(.wd-node[data-id="${n.id}"]:hover) .rt-${n.id} { opacity: 0.42 !important; }`).join('\n');
 }
 
 function routesSvg() {
@@ -205,7 +250,7 @@ function nodesHtml() {
     const available = (isMission || n.mission === 'Side job') && !cleared && !locked;
     const cls = ['wd-node', locked ? 'locked' : '', cleared ? 'cleared' : ''].join(' ');
     return `
-      <div class="${cls}" data-id="${n.id}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';render();">
+      <div class="${cls}" data-id="${n.id}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';S.pick=0;render();">
         ${(ASSETS.lm || {})[n.id]
           ? `<img src="${ASSETS.lm[n.id]}" class="pixel wd-lm" style="filter:${sel ? 'drop-shadow(0 0 1.5px #fbbf24) drop-shadow(0 0 1.5px #fbbf24)' : 'drop-shadow(0 1px 2px #000)'};">`
           : `<div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
@@ -243,7 +288,7 @@ function currentHtml() {
     }
   }));
   const pins = N.map(n => `
-      <div class="wd-node" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';render();">
+      <div class="wd-node" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';S.pick=0;render();">
         <div class="wd-pin" style="background:${n.id === sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${n.id === sel ? '#fbbf24' : '#9ca3af'};">
           <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
         </div>
@@ -276,15 +321,20 @@ function panelDiamond() {
       <div class="font-mono" style="font-size:6px;color:var(--info);margin-top:2px;">${kindLabel(n)} · ${status}</div>
       <div style="font-size:6px;color:var(--dim);margin-top:1px;">${n.who}</div>
       ${enc ? `<div class="font-mono" style="font-size:5.4px;color:#fda4af;margin-top:2px;">${enc}</div>` : ''}
-      ${S.sel !== S.party ? (() => { const pth = pathTo(S.party, n.id, S.step);
-        return `<div style="font-size:5.8px;color:${pth ? 'var(--gold)' : '#6b7280'};margin-top:2px;">${pth ? `From your party: ${pth.length} road${pth.length === 1 ? '' : 's'}, ${pth.reduce((t, id) => t + G.edges.find(e => e.id === id).time, 0)}d` : 'No open road from your party'}</div>`; })() : `<div style="font-size:5.8px;color:var(--gold);margin-top:2px;">Your party is here</div>`}
+      ${S.sel !== S.party ? (() => { const opts = pathOptions(S.party, n.id, S.step);
+        if (!opts.length) return `<div style="font-size:5.8px;color:#6b7280;margin-top:2px;">No open road from your party</div>`;
+        return `<div class="wd-paths"><div class="font-mono" style="font-size:5.2px;color:var(--dim);">FROM YOUR PARTY${opts.length > 1 ? ' · pick a path' : ''}</div>` +
+          opts.map((o, i) => `<div class="wd-popt ${i === S.pick ? 'on' : ''}" onclick="pickPath(${i})"
+              onmouseenter="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.add('peek'))" onmouseleave="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.remove('peek'))">
+            <span>${viaName(o, S.party, opts)}</span><span class="font-mono">${o.days}d · ${o.days} supplies</span></div>`).join('') + `</div>`; })()
+        : `<div style="font-size:5.8px;color:var(--gold);margin-top:2px;">Your party is here</div>`}
       <div style="border-top:1px solid #2d333f;margin:4px 0;padding-top:4px;font-size:6.4px;color:var(--text);line-height:1.36;">${n.desc}</div>
       <div class="rust-inset" style="padding:3px 5px;font-size:6px;margin-top:5px;">
         <div class="font-mono" style="font-size:5.4px;color:var(--dim);margin-bottom:1px;">ROUTES</div>${routes || '<span style="color:var(--dim);">none</span>'}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;">
-      <button class="rust-btn primary" style="width:100%;height:18px;" ${reach.has(n.id) && n.id !== S.party ? '' : 'disabled'} onclick="S.party='${n.id}';render();">${n.id === S.party ? 'Your party is here' : 'Travel here ▸'}</button>
+      <button class="rust-btn primary" style="width:100%;height:18px;" ${reach.has(n.id) && n.id !== S.party ? '' : 'disabled'} onclick="S.party='${n.id}';S.pick=0;render();">${n.id === S.party ? 'Your party is here' : 'Travel here ▸'}</button>
       <button class="rust-btn" style="width:100%;">Mode: Fast (-1d)</button>
     </div>`);
 }
@@ -307,17 +357,35 @@ function hud() {
 }
 
 function legend() {
-  if (!S.hud) return `<button class="db-btn wd-hudbtn" onclick="S.hud=true;render();" title="Show the map HUD">Show HUD</button>`;
+  const L = S.legend;
+  const pos = `left:${L.x}px;top:${L.y}px;`;
+  if (L.min) return `<button class="db-btn wd-legmin" style="${pos}" onclick="S.legend.min=false;render();" title="Open the legend">☰ Legend</button>`;
   const qs = activeQuests(S.step);
-  const party = node(S.party);
-  return `<div class="rust-panel wd-legend2">
+  return `<div class="rust-panel wd-legend2 ${L.locked ? '' : 'unlocked'}" style="${pos}" onmousedown="legendDrag(event)">
     <div class="wd-leghead"><span class="font-title" style="color:var(--gold);font-size:7px;">Active quests</span>
-      <button class="close-x-btn-640 wd-hudx" onclick="S.hud=false;render();" title="Hide the map HUD">×</button></div>
-    ${qs.length ? qs.map(n => `<div class="wd-legq ${n.id === S.sel ? 'on' : ''}" onclick="S.sel='${n.id}';render();">
+      <span style="display:flex;gap:2px;">
+        <button class="close-x-btn-640 wd-legbtn ${L.locked ? '' : 'on'}" onclick="S.legend.locked=!S.legend.locked;render();" title="${L.locked ? 'Unlock to move the legend' : 'Lock the legend in place'}">${L.locked ? '🔒' : '🔓'}</button>
+        <button class="close-x-btn-640 wd-legbtn" onclick="S.legend.min=true;render();" title="Minimize the legend">–</button>
+      </span></div>
+    ${qs.length ? qs.map(n => `<div class="wd-legq ${n.id === S.sel ? 'on' : ''}" onclick="S.sel='${n.id}';S.pick=0;render();">
         <img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest-sm"><span title="${n.name}">${questName(n)}${n.mission === 'Side job' ? ' <span style="color:var(--dim);">(side)</span>' : ''}</span></div>`).join('')
       : '<div style="color:var(--dim);">None open</div>'}
-    <div class="wd-legparty" onclick="S.sel='${S.party}';render();"><span class="wd-party-sm"><img src="${ASSETS.ui.pin_here}" class="pixel"></span><span title="${party.name}">Your party</span></div>
+    <div class="wd-legparty" onclick="S.sel='${S.party}';S.pick=0;render();"><span class="wd-party-sm"><img src="${ASSETS.ui.pin_here}" class="pixel"></span><span title="${node(S.party).name}">Your party</span></div>
   </div>`;
+}
+
+// Drag the unlocked legend inside the map (the stage is drawn at 2x, so screen pixels are halved).
+function legendDrag(ev) {
+  if (S.legend.locked || ev.target.closest('button') || ev.target.closest('.wd-legq') || ev.target.closest('.wd-legparty')) return;
+  const el = ev.currentTarget, scale = document.getElementById('wd-stage').getBoundingClientRect().width / 640;
+  const sx = ev.clientX, sy = ev.clientY, ox = S.legend.x, oy = S.legend.y, maxX = 496 - el.offsetWidth - 2, maxY = 328 - el.offsetHeight - 2;
+  const move = e => {
+    S.legend.x = Math.max(2, Math.min(maxX, ox + (e.clientX - sx) / scale));
+    S.legend.y = Math.max(2, Math.min(maxY, oy + (e.clientY - sy) / scale));
+    el.style.left = S.legend.x + 'px'; el.style.top = S.legend.y + 'px';
+  };
+  const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+  window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); ev.preventDefault();
 }
 
 function render() {
