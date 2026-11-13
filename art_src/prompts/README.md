@@ -78,6 +78,14 @@ Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own 
 
 ## Blending an act's landmarks into its background (integration pass, 2026-11-13)
 
+**Adopted (Tushar, 2026-11-13): the blend is done in code, not by an image model.** The landmarks stay their own
+layer, so every Flow edit made to them is kept and the game's hover and selection glow follow their clean outline:
+`python3 art_src/prompts/blend_act_map.py codeblend art_src/prompts/act2_map_layout.json` tones each landmark toward
+the painting around it (its own lights kept at full brightness), darkens its base where it meets the ground, and paints
+a soft contact shadow and the spill of its lamps into the background under it; it writes the landmark cuts and the
+1920 x 1080 background. `preview ... --select <id>` shows the in-game look with one selection glow. The Flow-blend steps
+below stay on record (tried twice: the second blend redrew the Spire Gate open).
+
 Once an act's landmarks are all picked and placed, [blend_act_map.py](blend_act_map.py) builds the image to blend and
 cuts the result back apart; the layout (each landmark's source, map position, map scale and cut fixes) is a JSON file,
 [act2_map_layout.json](act2_map_layout.json) for Act 2.

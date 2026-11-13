@@ -12,8 +12,17 @@
 #       shift of up to 4 px that lines it up best), downscaled to 96 x its map scale -> map/landmarks/<id>.png;
 #       the blended image itself, scaled to 1920 x 1080 -> backgrounds/world_map/<background target>.png.
 #       It prints how well each landmark lines up: a high mismatch means the model moved or redrew it (redo that one).
-#   python art_src/prompts/blend_act_map.py preview <layout.json> <cut DIR> <out.png>
-#       the in-game look: the cut background with every cut landmark drawn over it.
+#   python art_src/prompts/blend_act_map.py preview <layout.json> <cut DIR> <out.png> [--select ID]
+#       the in-game look: the cut background with every cut landmark drawn over it (--select draws one landmark's
+#       selection glow from its alpha, to check the highlight stays clean).
+#   python art_src/prompts/blend_act_map.py codeblend <layout.json> [--out DIR]
+#       the blend in code, no image model (Tushar 2026-11-13: keep the landmarks a separate layer so every edit made to
+#       them stays and the highlights stay clean). Each landmark is toned toward the painting around it (`match`,
+#       default 0.25; alpha untouched; its own lights keep full brightness) and its base rows darkened a little where it meets the ground; the BACKGROUND
+#       gets what joins them: a soft contact shadow cast from each landmark's silhouette toward the lower right (the key
+#       light is upper left) and a faint spill of its own lamps, fires and glows on the ground around it. Shadow and
+#       light are stepped (4 levels) so they stay pixel art. Writes the landmark cuts at 96 x scale and the background at
+#       1920 x 1080, like `cut`.
 #
 # layout.json: {"background": path, "target": "high_bastion",
 #               "landmarks": {id: {"src": path, "pos": [x, y], "scale": s, "fix": ["--clear", "x0,y0,x1,y1", ...]}}}
@@ -27,7 +36,7 @@ import json, pathlib, sys, tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "art_src" / "prompts"))
 import cut_ai_sheets as C  # noqa: E402
-from PIL import Image, ImageChops  # noqa: E402
+from PIL import Image, ImageChops, ImageDraw  # noqa: E402
 
 VIEW_W, VIEW_H, PAD_X, PAD_Y = 496, 328, 34, 22  # the world map viewport (tools/mock_ui/previews/world_diamond.py)
 GAME = "games/emberwake/assets"
@@ -85,16 +94,106 @@ def boxes(layout, size):
     return out
 
 
-def preview(layout_path, cut_root, out_path):
+def preview(layout_path, cut_root, out_path, select=None):
     """The in-game look after `cut`: the blended background with every cut landmark drawn over it at its box."""
     layout = json.loads(pathlib.Path(layout_path).read_text())
     bg = Image.open(pathlib.Path(cut_root) / GAME / f"backgrounds/world_map/{layout['target']}.png").convert("RGBA")
     placed = boxes(layout, bg.size)
     for lid, (x, y, side) in sorted(placed.items(), key=lambda kv: kv[1][1] + kv[1][2]):
         icon = Image.open(pathlib.Path(cut_root) / GAME / f"map/landmarks/{lid}.png").convert("RGBA")
-        bg.alpha_composite(icon.resize((side, side), Image.NEAREST), (x, y))
+        icon = icon.resize((side, side), Image.NEAREST)
+        if lid == select:  # the game's selection glow, from the landmark's own alpha
+            from PIL import ImageFilter
+            solid = icon.getchannel("A").point(lambda v: 255 if v else 0)
+            outside = solid.copy(); ImageDraw.floodfill(outside, (0, 0), 128)   # the gaps inside count as the landmark
+            filled = outside.point(lambda v: 0 if v == 128 else 255)
+            ring = ImageChops.subtract(filled.filter(ImageFilter.MaxFilter(5)), filled)  # outside the outline only
+            gold = Image.new("RGBA", icon.size, (251, 191, 36, 255)); gold.putalpha(ring)
+            bg.alpha_composite(gold, (x, y))
+        bg.alpha_composite(icon, (x, y))
     bg.convert("RGB").save(out_path)
     print(f"preview -> {out_path}")
+
+
+def _emissive(spr):
+    """The landmark's own lights: bright, saturated pixels (lamps, fires, candles, glows), with their colour."""
+    import colorsys
+    out = Image.new("RGBA", spr.size, (0, 0, 0, 0)); src = spr.load(); dst = out.load()
+    for y in range(spr.height):
+        for x in range(spr.width):
+            r, g, b, a = src[x, y]
+            if a:
+                _, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                if vv > 0.7 and ss > 0.4:
+                    dst[x, y] = (r, g, b, 255)
+    return out
+
+
+def _steps(alpha, levels=4):
+    """Quantizes a soft mask to a few levels so the shadow and glow stay pixel art."""
+    return alpha.point(lambda v: round(v / 255 * levels) * (255 // levels))
+
+
+def codeblend(layout_path, out_root):
+    from PIL import ImageFilter
+    layout = json.loads(pathlib.Path(layout_path).read_text())
+    bg = Image.open(layout["background"]).convert("RGBA")
+    base = bg.copy()
+    placed = boxes(layout, bg.size)
+    shadow = Image.new("L", bg.size, 0)
+    glow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+    for lid, (x, y, side) in placed.items():
+        e = layout["landmarks"][lid]
+        spr = sprite(e, side)
+        bb = spr.getbbox()
+        if not bb:
+            continue
+        # contact shadow: the silhouette squashed flat, sheared toward the lower right, its foot on the landmark's foot
+        sil = spr.getchannel("A").crop(bb)
+        w, h = sil.size
+        flat = sil.resize((w, max(1, round(h * 0.34))), Image.BILINEAR)
+        flat = flat.transform((w + flat.height, flat.height), Image.AFFINE, (1, -1, 0, 0, 1, 0), Image.BILINEAR)
+        fx, fy = x + bb[0] + round(side * 0.03), y + bb[3] - round(flat.height * 0.75)
+        layer = Image.new("L", bg.size, 0); layer.paste(flat, (fx, fy))
+        shadow = ImageChops.lighter(shadow, layer)
+        # light spill: the landmark's own lights, blurred wide onto the ground around it
+        em = _emissive(spr)
+        gl = Image.new("RGBA", bg.size, (0, 0, 0, 0)); gl.alpha_composite(em, (x, y))
+        glow.alpha_composite(gl)
+    r = max(2, round(min(placed.values(), key=lambda b: b[2])[2] * 0.05))
+    shadow = _steps(shadow.filter(ImageFilter.GaussianBlur(r)).point(lambda v: round(v * 0.68)))
+    dark = Image.new("RGBA", bg.size, (6, 6, 12, 255)); dark.putalpha(shadow)
+    bg.alpha_composite(dark)
+    gr = round(r * 3)
+    spill = glow.filter(ImageFilter.GaussianBlur(gr))
+    a = _steps(spill.getchannel("A").point(lambda v: min(255, round(v * 1.6))).filter(ImageFilter.GaussianBlur(1))).point(lambda v: round(v * 0.45))
+    lit = Image.new("RGBA", bg.size)
+    lit.paste(spill.convert("RGB").point(lambda v: min(255, v * 3)))
+    lit.putalpha(a)
+    bg = Image.alpha_composite(bg, lit)
+    out_root = pathlib.Path(out_root)
+    for lid, (x, y, side) in placed.items():
+        e = layout["landmarks"][lid]
+        final = round(96 * e.get("scale", 1))
+        raw = sprite(e, final)
+        icon = match_tone(raw, base, (x, y, side), e.get("match", 0.25))
+        icon.paste(raw, (0, 0), _emissive(raw))  # the landmark's own lights keep their full brightness
+        px = icon.load(); bb = icon.getbbox() or (0, 0, final, final)
+        y0 = bb[3] - max(2, round((bb[3] - bb[1]) * 0.12))
+        for yy in range(y0, bb[3]):  # the base meets the ground: its last rows a little darker
+            k = 1 - 0.28 * (yy - y0 + 1) / (bb[3] - y0)
+            for xx in range(final):
+                rr, gg, b2, al = px[xx, yy]
+                if al:
+                    px[xx, yy] = (round(rr * k), round(gg * k), round(b2 * k), al)
+        dest = out_root / GAME / f"map/landmarks/{lid}.png"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        icon.save(dest)
+        print(f"{lid}: toned {e.get('match', 0.25)} -> {dest} {final}x{final}")
+    dest = out_root / GAME / f"backgrounds/world_map/{layout['target']}.png"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    bg.convert("RGB").resize((1920, 1080), Image.LANCZOS).save(dest)
+    print(f"background (shadows and light spill) -> {dest} 1920x1080")
 
 
 def compose(layout_path, out_path):
@@ -152,7 +251,9 @@ def main(argv):
     if len(argv) >= 3 and argv[0] == "compose":
         return compose(argv[1], argv[2])
     if len(argv) >= 4 and argv[0] == "preview":
-        return preview(argv[1], argv[2], argv[3])
+        return preview(argv[1], argv[2], argv[3], argv[argv.index("--select") + 1] if "--select" in argv else None)
+    if len(argv) >= 2 and argv[0] == "codeblend":
+        return codeblend(argv[1], pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT)
     if len(argv) >= 4 and argv[0] == "cut":
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         return cut(argv[1], argv[2], argv[3], out)
