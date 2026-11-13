@@ -16,6 +16,8 @@
 # layout.json: {"background": path, "target": "high_bastion",
 #               "landmarks": {id: {"src": path, "pos": [x, y], "scale": s, "fix": ["--clear", "x0,y0,x1,y1", ...]}}}
 # pos is the map_pos anchor (the landmark's ground point; its box bottom sits 8 logical px below it and it grows up).
+# "match": 0..1 (optional, default 0) tones the landmark toward the painting around it: its colour mean moves that far
+# toward the mean of the background ring around its box, and its contrast half that far (a colour transfer in code).
 import json, pathlib, sys, tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -42,6 +44,29 @@ def sprite(entry, side):
         return Image.open(pathlib.Path(tmp) / GAME / "map/landmarks/x.png").convert("RGBA")
 
 
+def match_tone(spr, bg, box, strength):
+    """Moves the sprite's per-channel mean `strength` of the way to the surrounding background's, and its spread half
+    as far, so a landmark takes on the colour and contrast of the painting it stands in."""
+    if not strength:
+        return spr
+    x, y, side = box
+    pad = side // 3
+    ring = bg.crop((max(0, x - pad), max(0, y - pad), x + side + pad, y + side + pad)).convert("RGB")
+    rp = list(ring.getdata())
+    sp = [p for p in spr.getdata() if p[3]]
+    def stats(px, c):
+        vals = [p[c] for p in px]; m = sum(vals) / len(vals)
+        return m, max(1.0, (sum((v - m) ** 2 for v in vals) / len(vals)) ** 0.5)
+    out = spr.copy(); data = list(out.getdata())
+    for c in range(3):
+        ms, ss = stats(sp, c); mb, sb = stats(rp, c)
+        mt, st = ms + (mb - ms) * strength, ss + (sb - ss) * strength / 2
+        data = [tuple(max(0, min(255, round((p[i] - ms) / ss * st + mt))) if i == c and p[3] else p[i] for i in range(4))
+                for p in data]
+    out.putdata(data)
+    return out
+
+
 def boxes(layout, size):
     """Each landmark's square in the background image: the viewport is the image's centre crop (object-fit: cover)."""
     W, H = size
@@ -60,8 +85,10 @@ def compose(layout_path, out_path):
     layout = json.loads(pathlib.Path(layout_path).read_text())
     bg = Image.open(layout["background"]).convert("RGBA")
     placed = boxes(layout, bg.size)
+    base = bg.copy()
     for lid, (x, y, side) in sorted(placed.items(), key=lambda kv: kv[1][1] + kv[1][2]):  # back to front
-        bg.alpha_composite(sprite(layout["landmarks"][lid], side), (x, y))
+        e = layout["landmarks"][lid]
+        bg.alpha_composite(match_tone(sprite(e, side), base, (x, y, side), e.get("match", 0)), (x, y))
     bg.convert("RGB").save(out_path)
     pathlib.Path(str(out_path) + ".masks.json").write_text(json.dumps(placed, indent=1))
     print(f"composite {bg.size[0]}x{bg.size[1]} -> {out_path}")
@@ -75,7 +102,7 @@ def cut(layout_path, composite_path, blended_path, out_root):
         blend = blend.resize(comp.size, Image.LANCZOS)
     placed = boxes(layout, comp.size)
     for lid, (x, y, side) in placed.items():
-        mask = sprite(layout["landmarks"][lid], side).getchannel("A")
+        mask = sprite(layout["landmarks"][lid], side).getchannel("A")  # the shape only; tone comes from the blend
         ref = comp.crop((x, y, x + side, y + side))
         best = None
         for dy in range(-4, 5):            # the shift that lines the blended landmark up with the composite best

@@ -32,14 +32,15 @@
   "tallow_reservoir": {
    "src": "art_src/lm_tallow_reservoir.png",
    "pos": [
-    0.87,
-    0.93
+    0.9,
+    1.03
    ],
    "scale": 1.2,
    "fix": [
     "--tint",
     "0.0-0.16:0.19"
-   ]
+   ],
+   "match": 0.5
   },
   "culling_stockades": {
    "src": "art_src/lm_culling_stockades.png",
@@ -68,11 +69,12 @@
   "grand_belltower": {
    "src": "art_src/lm_grand_belltower.png",
    "pos": [
-    0.15,
-    0.33
+    0.3,
+    0.22
    ],
-   "scale": 1.8,
-   "fix": []
+   "scale": 1.6,
+   "fix": [],
+   "match": 0.5
   },
   "reliquary_crypts": {
    "src": "art_src/lm_reliquary_crypts.png",
