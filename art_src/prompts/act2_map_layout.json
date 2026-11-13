@@ -8,7 +8,7 @@
     0.42,
     1.02
    ],
-   "scale": 1.0,
+   "scale": 1,
    "fix": []
   },
   "slag_gate_breach": {
@@ -32,8 +32,8 @@
   "tallow_reservoir": {
    "src": "art_src/lm_tallow_reservoir.png",
    "pos": [
-    0.9,
-    1.03
+    0.898,
+    0.987
    ],
    "scale": 1.2,
    "fix": [
@@ -45,8 +45,8 @@
   "culling_stockades": {
    "src": "art_src/lm_culling_stockades.png",
    "pos": [
-    0.13,
-    0.83
+    0.109,
+    0.834
    ],
    "scale": 1.2,
    "fix": [
@@ -69,10 +69,10 @@
   "grand_belltower": {
    "src": "art_src/lm_grand_belltower.png",
    "pos": [
-    0.3,
-    0.22
+    0.05,
+    0.386
    ],
-   "scale": 1.6,
+   "scale": 1.4,
    "fix": [],
    "match": 0.5
   },
