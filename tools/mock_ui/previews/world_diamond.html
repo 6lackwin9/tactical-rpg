@@ -19,6 +19,10 @@ __STYLES_CSS__
   .wd-label { font-size: 6px; white-space: nowrap; margin-top: 1px; padding: 0.5px 3px; background: rgba(10,11,16,0.92); display: flex; gap: 3px; align-items: center; }
   .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
   .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
+  .wd-hide { display: none; }
+  .wd-node:hover .wd-hide { display: flex; z-index: 30; }
+  .wd-node:hover { z-index: 30; }
+  .wd-above { position: absolute; left: 50%; transform: translateX(-50%); margin-top: 0; }
   .wd-lm { width: 48px; height: 48px; margin-top: -26px; image-rendering: pixelated; }
   .wd-node.locked .wd-lm { filter: grayscale(1) brightness(0.5) !important; }
   .wd-node.locked .wd-label { opacity: 0.55; }
@@ -43,7 +47,7 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7' };
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'data', labels: 'below' };
 const FLAG_NAMES = {
   'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
   'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
@@ -105,7 +109,7 @@ function nodesHtml() {
         ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:0;top:-2px;width:10px;height:10px;">` : ''}
         ${cleared ? `<span class="wd-check">✓</span>` : ''}
         ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:${(ASSETS.lm || {})[n.id] ? -16 : -2}px;top:${(ASSETS.lm || {})[n.id] ? -26 : -2}px;width:10px;height:10px;">` : ''}
-        <div class="wd-label" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};">
+        <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' ? 'wd-above' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' ? `bottom:${(ASSETS.lm || {})[n.id] ? 50 : 30}px;` : ''}">
           ${tag ? `<span class="wd-mtag">${tag}</span>` : ''}<span>${n.num} · ${n.name}</span>
         </div>
       </div>`;
@@ -204,13 +208,18 @@ function legend() {
 }
 
 function render() {
+  G.nodes.forEach(n => { [n.x, n.y] = n.pos[S.spacing]; });
   const bar = document.getElementById('wd-bar');
   bar.innerHTML = `
     <span class="lbl" style="color:#fbbf24;">View:</span>
     <button class="db-btn ${S.view === 'diamond' ? 'active' : ''}" onclick="S.view='diamond';S.sel='alleyway_junction_7';render();">Proposed: Act 1 diamond</button>
     <button class="db-btn ${S.view === 'current' ? 'active' : ''}" onclick="S.view='current';S.sel='n_corvo';render();">Current mock map</button>
     ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">Act 1 progress:</span>` +
-      DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') : ''}`;
+      DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') +
+      `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
+      [['data', 'Data'], ['spaced', 'Hub ↓ / grate ↑']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
+      `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
+      [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
   let map;
   if (S.view === 'diamond') {
     map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">

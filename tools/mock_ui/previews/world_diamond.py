@@ -58,6 +58,19 @@ CURRENT = [
 ]
 
 
+# A proposed spacing (Tushar 2026-11-13: the hub and grate landmarks nearly touch at the data's map_pos): the hub
+# lower, the grate higher. Preview only; the real positions are game data (Outbox AO-01).
+SPACED = {"sluice_undercroft": (0.5, 0.94), "drowned_runoff_grate": (0.5, 0.69)}
+
+
+def px(mx: float) -> int:
+    return round(PAD_X + mx * (VIEW_W - 2 * PAD_X))
+
+
+def py(my: float) -> int:
+    return round(PAD_Y + my * (VIEW_H - 2 * PAD_Y))
+
+
 def load_graph() -> dict:
     locs = json.loads((WORLD / "locations.json").read_text(encoding="utf-8"))["entries"]
     routes = json.loads((WORLD / "routes.json").read_text(encoding="utf-8"))["entries"]
@@ -72,7 +85,8 @@ def load_graph() -> dict:
         mx, my = loc["map_pos"]
         nodes.append({
             "id": loc["id"], "num": num, "name": loc["name"], "desc": desc[:1].upper() + desc[1:], "mission": mission,
-            "who": who, "pin": pin, "x": round(PAD_X + mx * (VIEW_W - 2 * PAD_X)), "y": round(PAD_Y + my * (VIEW_H - 2 * PAD_Y)),
+            "who": who, "pin": pin, "x": px(mx), "y": py(my),
+            "pos": {"data": [px(mx), py(my)], "spaced": [px(SPACED.get(loc["id"], (mx, my))[0]), py(SPACED.get(loc["id"], (mx, my))[1])]},
             "encounters": [{"id": i, "name": encs[i].get("name", i), "desc": encs[i].get("description", "")} for i in loc.get("encounters", []) if i in encs],
         })
     ids = {n["id"] for n in nodes}
