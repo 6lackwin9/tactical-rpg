@@ -39,6 +39,12 @@ District: the High Bastion of Upper Cinderreach, the Clerisy's rich cathedral ri
 
 ## The Mantle Fissure, Act 3 (`wm_mantle_fissure`)
 
+Rewritten 2026-11-13 with the Act 2 lessons: each quarter painted with its own character so its place can sit on it,
+and a flat, plain ledge in every quarter for a landmark to stand on (every corner of the Act 2 map ended up holding a
+place). The layout follows the canon graph (`mantle_fissure_campaign_map.md`): the ingress at the bottom, the Chorus
+Spire and the Silent Ossuary up the left, the Weeping Chasm and the Marrow Conduits up the right, the High Altar and
+the Dreaming Core up the top centre.
+
 ```text
-District: the Mantle Fissure beneath the city, a vast volcanic chasm seen from above. Walls and ledges of petrified black basalt shaped like the giant ribs and vertebrae of a sleeping titan, thin blue-violet marrow veins glowing along the cracks, brass conduit pipes and rope bridges strung across the gaps, a few steaming vents with a faint amber glow; bottom centre a ledge of rock where a cave mouth opens from above; the chasm narrows and deepens towards the top centre into a black pit with a slow pulsing violet glow at its heart. Mood: cosmic dread, petrified anatomy, a deafening silence.
+District: the Mantle Fissure beneath the city, a vast volcanic chasm seen from above. Walls and ledges of petrified black basalt shaped like the giant ribs and vertebrae of a sleeping titan, thin blue-violet marrow veins glowing along the cracks, brass conduit pipes and rope bridges strung across the gaps, a few steaming vents with a faint amber glow. Each quarter keeps its own character so its place can sit on it, without any one structure standing out, and each quarter has one flat, plain ledge of bare rock, wide and empty, where a marker will stand: the lower left is a field of steaming geyser vents among pale bone spires; the upper left is a sheer cliff face carved with rows of small dark burial niches; the lower right is wet black basalt ledges weeping dark water, with rope bridges over a side crevasse; the upper right is a chasm wall climbed by two great brass conduit pipes. Bottom centre: a ledge of rock where a cave mouth opens from above, with a brass lift cable dropping down out of the picture (the way back to the hideout). Paths of ledges and rope bridges climb from it up the left and right halves and join again near the top. The middle of the picture is the open, dark gulf of the chasm, a deep drop with nothing built in it. Top centre: the chasm narrows to a wide stepped ledge on its edge, and above it a black pit with a slow pulsing violet glow at its heart. Mood: cosmic dread, petrified anatomy, a deafening silence.
 ```
