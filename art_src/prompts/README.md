@@ -64,7 +64,7 @@ Checked the same way on background take A, at the positions proposed in Outbox `
 
 Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own quarter and is drawn larger than 48 px, so each is cut at 96 x its map scale with `--size`: belltower x1.8 `--size 173`, spire gate x1.5 `--size 144`, stockades, reservoir and cloisters x1.2 `--size 115`, breach, boulevard and crypts x1.15 `--size 110`; the hub keeps 96. Positions and scales: Outbox `AO-01`.
 
-## Act 3 map picks (in progress, 2026-11-13)
+## Act 3 map picks (closed 2026-11-13)
 
 | Location | Pick | Cut |
 | --- | --- | --- |

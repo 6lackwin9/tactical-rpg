@@ -223,7 +223,8 @@ def main(argv):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:
-        sys.exit("usage: cut_ai_sheets.py keepsakes_1|services_hud_1 <sheet.png> [--pick name=cell,...] [--out DIR]")
+        sys.exit("usage: cut_ai_sheets.py keepsakes_1|services_hud_1 <sheet.png> [--pick name=cell,...] [--out DIR]"
+                 " | landmark <image.png> <location_id> [--tint ...] [--clear box] [--desmoke box] [--grade SAT:VAL] [--size N] [--out DIR]")
     sheet_id, path = argv[0], argv[1]
     picks, out = {}, ROOT
     if "--pick" in argv:

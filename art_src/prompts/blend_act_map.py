@@ -257,7 +257,8 @@ def main(argv):
     if len(argv) >= 4 and argv[0] == "cut":
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         return cut(argv[1], argv[2], argv[3], out)
-    sys.exit("usage: blend_act_map.py compose <layout.json> <out.png> | cut <layout.json> <composite> <blended> [--out DIR]")
+    sys.exit("usage: blend_act_map.py compose <layout.json> <out.png> | cut <layout.json> <composite> <blended> [--out DIR]"
+             " | preview <layout.json> <cut DIR> <out.png> [--select ID] | codeblend <layout.json> [--out DIR]")
 
 
 if __name__ == "__main__":
