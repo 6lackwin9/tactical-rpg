@@ -82,7 +82,7 @@ def load_graph() -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def build(out: Path, cache: Path | None, bg: Path | None = None) -> None:
+def build(out: Path, cache: Path | None, bg: Path | None = None, landmarks: Path | None = None) -> None:
     bundle = load_or_build_bundle(cache_path=cache)
     styles = ((ROOT / "tools/mock_ui/styles.css").read_text(encoding="utf-8")
               .replace("__FONT_DISPLAY__", bundle["fonts"]["display"])
@@ -98,6 +98,10 @@ def build(out: Path, cache: Path | None, bg: Path | None = None) -> None:
         buf = io.BytesIO()
         Image.open(bg).convert("RGB").save(buf, "JPEG", quality=88)
         assets["map"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    if landmarks:  # cut landmarks (map/landmarks/<location>.png) drawn in place of the kind pins
+        import base64
+        assets["lm"] = {f.stem: "data:image/png;base64," + base64.b64encode(f.read_bytes()).decode()
+                        for f in sorted(Path(landmarks).glob("*.png"))}
     data = {"graph": load_graph(), "steps": STEPS, "current": CURRENT, "bgIsMap": bool(bg)}
     html = ((HERE / "world_diamond.html").read_text(encoding="utf-8")
             .replace("__STYLES_CSS__", styles)
@@ -113,8 +117,9 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=ROOT / "target" / "world_diamond_preview.html")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="the mock UI's asset bundle cache")
     ap.add_argument("--bg", type=Path, help="a candidate act map background to review (default: the mock's title card)")
+    ap.add_argument("--landmarks", type=Path, help="a folder of cut landmarks <location_id>.png drawn instead of pins")
     args = ap.parse_args()
-    build(args.out, args.cache, args.bg)
+    build(args.out, args.cache, args.bg, args.landmarks)
 
 
 if __name__ == "__main__":

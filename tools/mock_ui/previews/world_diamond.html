@@ -19,6 +19,8 @@ __STYLES_CSS__
   .wd-label { font-size: 6px; white-space: nowrap; margin-top: 1px; padding: 0.5px 3px; background: rgba(10,11,16,0.92); display: flex; gap: 3px; align-items: center; }
   .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
   .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
+  .wd-lm { width: 48px; height: 48px; margin-top: -26px; image-rendering: pixelated; }
+  .wd-node.locked .wd-lm { filter: grayscale(1) brightness(0.5) !important; }
   .wd-node.locked .wd-label { opacity: 0.55; }
   .wd-node.locked .wd-mtag { background: #6b7280; }
   .wd-node.cleared .wd-mtag { background: #4b5563; color: #d9cbb4; }
@@ -95,12 +97,14 @@ function nodesHtml() {
     const tag = isMission ? n.mission.split(' ')[0] : (n.mission === 'Side job' ? 'JOB' : '');
     return `
       <div class="${cls}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';render();">
-        <div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
+        ${(ASSETS.lm || {})[n.id]
+          ? `<img src="${ASSETS.lm[n.id]}" class="pixel wd-lm" style="filter:${sel ? 'drop-shadow(0 0 1.5px #fbbf24) drop-shadow(0 0 1.5px #fbbf24)' : 'drop-shadow(0 1px 2px #000)'};">`
+          : `<div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
           <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
-        </div>
+        </div>`}
         ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:0;top:-2px;width:10px;height:10px;">` : ''}
         ${cleared ? `<span class="wd-check">✓</span>` : ''}
-        ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:-2px;top:-2px;width:10px;height:10px;">` : ''}
+        ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:${(ASSETS.lm || {})[n.id] ? -16 : -2}px;top:${(ASSETS.lm || {})[n.id] ? -26 : -2}px;width:10px;height:10px;">` : ''}
         <div class="wd-label" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};">
           ${tag ? `<span class="wd-mtag">${tag}</span>` : ''}<span>${n.num} · ${n.name}</span>
         </div>

@@ -15,7 +15,7 @@ How to run (`tools/portraits/generate.py` reads each section's text block as the
    <ids...> --prompts ... --n 2 --route other`). Each section's
    `reference:` line sends the picked hub, so the set stays consistent.
 3. Cut each pick with `python3 art_src/prompts/cut_ai_sheets.py landmark art_src/<id>.png <location_id>`: the magenta is
-   keyed out and the landmark is fitted into **96 x 96** (drawn at 48 logical pixels on the 640 x 360 map) at
+   keyed out and the landmark is box-downscaled into **96 x 96** (drawn at 48 logical pixels on the 640 x 360 map) at
    `games/emberwake/assets/map/landmarks/<location_id>.png`. The game does not draw landmarks yet: Outbox `AO-01`.
 
 Check every take: one landmark only, nothing touching the frame edge, no magenta or pink inside it, readable when

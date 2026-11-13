@@ -5,7 +5,7 @@
 #   python art_src/prompts/cut_ai_sheets.py services_hud_1 <sheet.png> [--pick scrap=6,...] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--out DIR]
 #       one act-map landmark (art_src/prompts/act_map_landmarks.md): the magenta key cleared, cropped to the landmark,
-#       reduced to a 48 grid with snap's palette and outline, stored at 2x as map/landmarks/<location_id>.png (96 x 96)
+#       box-downscaled to map/landmarks/<location_id>.png (96 x 96, shown at 48 logical px)
 # Cells are numbered 1..9 row by row. Without --pick the first take of each icon is used. --out writes under DIR
 # (a review folder) instead of the repository, keeping the same relative paths; a contact sheet of all nine cells is
 # always written beside the sheet as <sheet>_cells.png.
@@ -65,18 +65,21 @@ def cut(sheet_id, sheet_path, picks, out_root):
     return written
 
 
-def cut_landmark(path, location, out_root, grid=48, scale=2):
-    """One landmark on the magenta key -> GAME/map/landmarks/<location>.png, `grid` px of pixel art stored at `scale`x."""
+def cut_landmark(path, location, out_root, size=96):
+    """One landmark on the magenta key -> GAME/map/landmarks/<location>.png, `size` x `size` (shown at 48 logical px).
+    The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
+    box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
     im = X.clear_corner(Image.open(path).convert("RGBA"))
     keyed = S.key_out(im, inset=0.0)
     box = keyed.getbbox()
     if not box:
         sys.exit(f"{path}: nothing left after keying out the magenta")
     fig = keyed.crop(box)
-    side = int(max(fig.size) * 1.06)                       # a little air so the outline never touches the edge
+    side = int(max(fig.size) * 1.12)                       # air so the outline never touches the edge
     square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    square.paste(fig, ((side - fig.size[0]) // 2, side - fig.size[1] - (side - max(fig.size)) // 2))
-    icon = S.snap(X.mode_reduce(square, grid), colors=24).resize((grid * scale, grid * scale), Image.NEAREST)
+    square.paste(fig, ((side - fig.size[0]) // 2, (side - fig.size[1]) // 2))
+    icon = square.resize((size, size), Image.BOX)
+    icon.putalpha(icon.getchannel("A").point(lambda v: 255 if v >= 128 else 0))
     dest = pathlib.Path(out_root) / f"{GAME}/map/landmarks/{location}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
     icon.save(dest)
