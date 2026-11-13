@@ -14,14 +14,22 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-1 to PR5-6, PR5-8, PR5-16, PR5-17, PR5-20 to PR5-25 | done (FB-168 to FB-189, FB-194 to FB-196, answered) | `develop` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-10) |
 | PR5-7, PR5-9 to PR5-13b, PR5-18, PR5-19, PR5-26 to PR5-35 | done, released to `main` in #62 (FB-190 to FB-234, answered @cf3d93b4) | `main` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-11) |
 | PR5-36 to PR5-44 | done (FB-235 to FB-253, answered @6edec2a1, @08ccf4f5, @1c96b539, @e4505f78) | `develop` | full rows in `docs/archive/FEEDBACK_CLOSED.md`; follow-ups queued as PR5-45, PR5-46 |
-| PR5-45 `SKERRIT-CRAFT-HOOK` | building (logic-builder) | `claude/gifted-wozniak-2nf3xr` | - |
-| PR5-46 `ACT1-DATA3` | queued (after PR5-45, user 2026-11-13) | - | - |
+| PR5-45 `SKERRIT-CRAFT-HOOK` | done (FB-254): recipe target `stash` and effect `craft`; 0 golden diffs | `develop` | - |
+| PR5-46 `ACT1-DATA3` | next | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
 FB-01 to FB-253 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-13). New items start at FB-254. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+
+### FB-254: PR5-45 `SKERRIT-CRAFT-HOOK` landed
+
+- **Spec**: READY Section 1 row PR5-45; FB-252 (1) (the `PR5-45` squash commit on `develop`, 2026-11-13)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Recipe target `stash` (`TARGET_STASH`; `RECIPE_TARGETS` member, weapon, item, stash; `kits/rpg/schema.json` `content.recipes` target options and help) and effect `craft` {`item`, `count` 1..99, default 1} (`FX_CRAFT`, `CRAFT_COUNT_DEFAULT`). `rpgkit_world::recipe` runs a stash recipe with no pick and, after the usual `requires` and cost, adds the items to the stash and calls `weapons::sync` (the row's `weapons::grant` does not exist; `sync` mints one fresh full instance per new weapon copy from `durability.from_act` and does nothing before). Notes "{Item} added to stash." / "{Item} x{count} added to stash." (the row's one-item text "added {item_name}." was capitalised to the file's note style). The content check covers unknown or missing items, counts outside 1..99 or not whole, and target-bound effects on the wrong target. `RecipePane` needed no code change (no picker without a member, item or weapon row). Tests: `rpgkit_world/tests/craft_recipes.rs` (4), `rpgkit_content/tests/recipe_checks.rs` `a_stash_recipe_crafts_a_known_item_in_range` (the target-list error now names stash), `emberwake_gui` `recipe::tests::a_stash_recipe_runs_with_no_pick_and_refuses_an_unpaid_cost`. Gate 3234 passed, 0 failed; 0 golden diffs; existing recipe rows re-save byte-identical.
+- **Recommendation**: GAME_BRIEF recipes line: "Recipe target `stash` and effect `craft {item, count}` (PR5-45): a recipe can make items straight into the stash; weapons become instances from Act 2." STRUCTURE: `rpgkit_world/tests/craft_recipes.rs`. Open: should `craft` refuse quest-type items (the row only asks for a known catalog item)?
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
