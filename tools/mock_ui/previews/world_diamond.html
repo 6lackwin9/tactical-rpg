@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sunk Ward Diamond Map</title>
+<title>__TITLE__</title>
 __FONTS_LINK__
 <style>
 __STYLES_CSS__
@@ -91,27 +91,22 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: 'sluice_undercroft', hud: true, pick: 0,
-  legend: { x: 392, y: 4, locked: true, min: false } };
-const FLAG_NAMES = {
-  'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
-  'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
-};
+const ACT = DATA.act;  // what differs per act: names, the hub, defaults, flag names, days, tiers
+const S = { view: 'diamond', step: 0, sel: ACT.sel, spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: ACT.party, hud: true, pick: 0,
+  legend: { x: ACT.legend[0], y: ACT.legend[1], locked: true, min: false } };
+const FLAG_NAMES = ACT.flagNames;
 const node = id => G.nodes.find(n => n.id === id);
 const isOpen = (e, step) => e.req.every(f => DATA.steps[step].flags.includes(f));
-const isShortcut = e => e.req.includes('sunk_ward.lock_ciphers_done');
+const isShortcut = e => !!e.shortcut;
 const opensAfter = e => e.req.length ? 'after ' + e.req.map(f => FLAG_NAMES[f] || f).join(' + ') : 'from Day 1';
 
 // Player-facing names (no backend codes such as M1 or JOB; Tushar 2026-11-13).
-const isMain = n => /^M\d/.test(n.mission);
+const isMain = n => n.main;
 const questName = n => (n.encounters[0] || {}).name || n.name;
-function kindLabel(n) {
-  if (isMain(n)) return n.mission.includes('climax') ? 'Main quest · Act 1 climax' : 'Main quest';
-  return { 'Side job': 'Side job', 'Hub': 'Your hideout', 'Egress': 'Checkpoint', 'Exit to Act 2': 'The way out' }[n.mission] || n.mission;
-}
+const kindLabel = n => n.kind;  // player-facing kind, set by the builder
 function activeQuests(step) {
   const reach = reachable(step), cur = DATA.steps[step];
-  return G.nodes.filter(n => (isMain(n) || n.mission === 'Side job') && reach.has(n.id) && !cur.cleared.includes(n.id));
+  return G.nodes.filter(n => n.quest && reach.has(n.id) && !cur.cleared.includes(n.id));
 }
 // The travel path from the party to a place: cheapest open routes (days), as a list of route ids.
 function pathTo(from, to, step) {
@@ -149,6 +144,13 @@ function pathOptions(from, to, step) {
   return out.filter(o => o.days <= out[0].days + 2).slice(0, 3);
 }
 const viaName = (o, from, all) => {  // what tells this path apart from the others: its own stops, else its own roads
+  const E = id => G.edges.find(e => e.id === id);
+  if (o.edges.some(id => E(id).way) || (all || []).some(x => x.edges.some(id => E(id).way))) {
+    // street or rooftop ways over the same stops (Act 2): name the rooftop legs, else it is the streets all the way
+    const roofs = o.edges.map(E).filter(e => e.way === 'rooftops');
+    const sameStops = (all || []).every(x => x.edges.length === o.edges.length && x.edges.every((id, i) => E(id).a === E(o.edges[i]).a && E(id).b === E(o.edges[i]).b));
+    if (sameStops) return roofs.length ? 'rooftops over ' + roofs.map(e => e.base).join(', ') : 'by the streets';
+  }
   const stopsOf = x => { let at = from; return x.edges.map(id => { const e = G.edges.find(y => y.id === id); at = e.a === at ? e.b : e.a; return at; }).slice(0, -1); };
   const others = (all || []).filter(x => x !== o);
   const mine = stopsOf(o).filter(id => !others.length || others.some(x => !stopsOf(x).includes(id)));
@@ -157,9 +159,10 @@ const viaName = (o, from, all) => {  // what tells this path apart from the othe
   return roads.length ? 'by ' + roads.join(', ') : 'direct';
 };
 function pickPath(i) { S.pick = i; render(); }
+const alertOf = o => o.edges.reduce((t, id) => t + (G.edges.find(e => e.id === id).alert || 0), 0);  // Alert on the way (Act 2)
 
 function reachable(step) {
-  const seen = new Set(['sluice_undercroft']);
+  const seen = new Set([ACT.hub]);
   let grew = true;
   while (grew) {
     grew = false;
@@ -246,20 +249,20 @@ function nodesHtml() {
     const cleared = step.cleared.includes(n.id);
     const locked = !reach.has(n.id);
     const sel = n.id === S.sel;
-    const isMission = /^M\d/.test(n.mission);
-    const available = (isMission || n.mission === 'Side job') && !cleared && !locked;
+    const available = n.quest && !cleared && !locked;
+    const sc = n.scale || 1, lmTop = -(48 * sc - 22);  // a larger landmark grows up from the same ground point
     const cls = ['wd-node', locked ? 'locked' : '', cleared ? 'cleared' : ''].join(' ');
     return `
       <div class="${cls}" data-id="${n.id}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';S.pick=0;render();">
         ${(ASSETS.lm || {})[n.id]
-          ? `<img src="${ASSETS.lm[n.id]}" class="pixel wd-lm" style="filter:${sel ? 'drop-shadow(0 0 1.5px #fbbf24) drop-shadow(0 0 1.5px #fbbf24)' : 'drop-shadow(0 1px 2px #000)'};">`
+          ? `<img src="${ASSETS.lm[n.id]}" class="pixel wd-lm" style="width:${48 * sc}px;height:${48 * sc}px;margin-top:${lmTop}px;filter:${sel ? 'drop-shadow(0 0 1.5px #fbbf24) drop-shadow(0 0 1.5px #fbbf24)' : 'drop-shadow(0 1px 2px #000)'};">`
           : `<div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
           <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
         </div>`}
-        ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest" style="right:${(ASSETS.lm || {})[n.id] ? -12 : -2}px;top:${(ASSETS.lm || {})[n.id] ? -26 : -4}px;">` : ''}
+        ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest" style="right:${(ASSETS.lm || {})[n.id] ? -12 : -2}px;top:${(ASSETS.lm || {})[n.id] ? lmTop : -4}px;">` : ''}
         ${cleared ? `<span class="wd-check">✓</span>` : ''}
         ${n.id === S.party ? `<span class="wd-party" style="left:${(ASSETS.lm || {})[n.id] ? -16 : -4}px;top:${(ASSETS.lm || {})[n.id] ? 4 : -4}px;"><img src="${ASSETS.ui.pin_here}" class="pixel"></span>` : ''}
-        <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' || S.labels === 'faint' ? 'wd-above' : ''} ${S.labels === 'faint' && !sel ? 'wd-faint' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' || S.labels === 'faint' ? `bottom:${(ASSETS.lm || {})[n.id] ? 50 : 30}px;` : ''}">
+        <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' || S.labels === 'faint' ? 'wd-above' : ''} ${S.labels === 'faint' && !sel ? 'wd-faint' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' || S.labels === 'faint' ? `bottom:${(ASSETS.lm || {})[n.id] ? 48 * sc + 2 : 30}px;` : ''}">
           <span>${n.name}</span>
         </div>
       </div>`;
@@ -272,8 +275,7 @@ function nodesHtml() {
 
 function tiersHtml() {
   const y = id => node(id).y;
-  return [['TIER 1 · M1 / M2', y('alleyway_junction_7')], ['TIER 2 · M3 / M4', y('fourth_kiln')],
-          ['CLIMB · M5', y('crucible_watchpost')], ['EXIT', y('slag_gate')]]
+  return ACT.tiers.map(([t, id]) => [t, y(id)])
     .map(([t, yy]) => `<div class="wd-tier" style="top:${yy - 4}px;">${t}</div>`).join('');
 }
 
@@ -305,13 +307,13 @@ function corner(style, inner) {
 }
 
 function panelDiamond() {
-  const n = node(S.sel) || node('alleyway_junction_7');
+  const n = node(S.sel) || node(ACT.sel);
   const step = DATA.steps[S.step], reach = reachable(S.step);
   const status = step.cleared.includes(n.id) ? '<span style="color:var(--ok);">Cleared</span>'
     : reach.has(n.id) ? '<span style="color:var(--gold);">Open</span>' : '<span style="color:#9ca3af;">Locked</span>';
   const routes = G.edges.filter(e => e.a === n.id || e.b === n.id).map(e => {
     const other = node(e.a === n.id ? e.b : e.a), open = isOpen(e, S.step);
-    return `<div class="wd-route"><span style="color:${open ? 'var(--text)' : '#6b7280'};">${open ? '' : '🔒 '}${other.name}</span>
+    return `<div class="wd-route"><span style="color:${open ? 'var(--text)' : '#6b7280'};">${open ? '' : '🔒 '}${other.name}${e.way ? ` <span style="color:var(--dim);">(${e.way})</span>` : ''}</span>
             <span class="font-mono" style="color:var(--dim);font-size:5.4px;">${open ? e.time + 'd' : opensAfter(e)}</span></div>`;
   }).join('');
   const enc = n.encounters.map(x => x.name).join(' · ');
@@ -326,7 +328,7 @@ function panelDiamond() {
         return `<div class="wd-paths"><div class="font-mono" style="font-size:5.2px;color:var(--dim);">FROM YOUR PARTY${opts.length > 1 ? ' · pick a path' : ''}</div>` +
           opts.map((o, i) => `<div class="wd-popt ${i === S.pick ? 'on' : ''}" onclick="pickPath(${i})"
               onmouseenter="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.add('peek'))" onmouseleave="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.remove('peek'))">
-            <span>${viaName(o, S.party, opts)}</span><span class="font-mono">${o.days}d · ${o.days} supplies</span></div>`).join('') + `</div>`; })()
+            <span>${viaName(o, S.party, opts)}</span><span class="font-mono">${o.days}d · ${o.days} supplies${alertOf(o) ? ` · +${alertOf(o)}% Alert` : ''}</span></div>`).join('') + `</div>`; })()
         : `<div style="font-size:5.8px;color:var(--gold);margin-top:2px;">Your party is here</div>`}
       <div style="border-top:1px solid #2d333f;margin:4px 0;padding-top:4px;font-size:6.4px;color:var(--text);line-height:1.36;">${n.desc}</div>
       <div class="rust-inset" style="padding:3px 5px;font-size:6px;margin-top:5px;">
@@ -350,10 +352,10 @@ function panelCurrent(sel) {
 }
 
 function hud() {
-  return `<div class="hud-bar"><div class="hud-place"><span>The Sunk Ward · District Map</span>
-    <span class="font-mono" style="font-size:7px;color:var(--dim);">· Day ${[1, 4, 7, 12, 14, 17][S.step]}</span></div>
+  return `<div class="hud-bar"><div class="hud-place"><span>${ACT.place} · District Map</span>
+    <span class="font-mono" style="font-size:7px;color:var(--dim);">· Day ${ACT.days[S.step]}</span></div>
     <div class="hud-right"><div class="hud-chip"><img src="${ASSETS.ui.gold}" class="pixel" style="width:10px;height:10px;"><span class="font-mono">65 Scrap</span></div>
-    <div class="hud-chip deadline"><span class="font-mono">Tithing: ${42 - [1, 4, 7, 12, 14, 17][S.step]}d</span></div></div></div>`;
+    <div class="hud-chip deadline"><span class="font-mono">Tithing: ${ACT.tithing - ACT.days[S.step]}d</span></div></div></div>`;
 }
 
 function legend() {
@@ -402,12 +404,12 @@ function render() {
   const bar = document.getElementById('wd-bar');
   bar.innerHTML = `
     <span class="lbl" style="color:#fbbf24;">View:</span>
-    <button class="db-btn ${S.view === 'diamond' ? 'active' : ''}" onclick="S.view='diamond';S.sel='alleyway_junction_7';render();">Proposed: Act 1 diamond</button>
-    <button class="db-btn ${S.view === 'current' ? 'active' : ''}" onclick="S.view='current';S.sel='n_corvo';render();">Current mock map</button>
-    ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">Act 1 progress:</span>` +
+    <button class="db-btn ${S.view === 'diamond' ? 'active' : ''}" onclick="S.view='diamond';S.sel=ACT.sel;render();">${ACT.viewLabel}</button>
+    ${DATA.current ? `<button class="db-btn ${S.view === 'current' ? 'active' : ''}" onclick="S.view='current';S.sel='n_corvo';render();">Current mock map</button>` : ''}
+    ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">${ACT.progress}</span>` +
       DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') +
-      `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
-      [['data', 'Data'], ['spaced', 'Spaced diamond'], ['regions', 'Painted regions']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
+      (ACT.spacings ? `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
+      [['data', 'Data'], ['spaced', 'Spaced diamond'], ['regions', 'Painted regions']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') : '') +
       `<span class="lbl" style="color:#a3e635;">Routes:</span>` +
       [['straight', 'Straight'], ['roads', 'Roads'], ['trail', 'Lantern trail'], ['focus', 'Focus only']].map(([k, t]) => `<button class="db-btn ${S.routes === k ? 'active' : ''}" onclick="S.routes='${k}';render();">${t}</button>`).join('') +
       `<button class="db-btn ${S.flicker ? 'active' : ''}" onclick="S.flicker=!S.flicker;render();" title="A kit option; off in Emberwake">Flicker (kit option)</button>` +
@@ -432,7 +434,7 @@ function render() {
     </div>
     ${S.view === 'diamond' ? panelDiamond() : panelCurrent(c.sel)}`;
   document.getElementById('wd-note').innerHTML = S.view === 'diamond'
-    ? `<b>${DATA.steps[S.step].label}.</b> ${DATA.steps[S.step].note} <span style="color:var(--dim);">Graph, node numbers and gates read from the shipped <code>worlds/sunk_ward</code> data; click a node for its routes and what unlocks them.</span>`
+    ? `<b>${DATA.steps[S.step].label}.</b> ${DATA.steps[S.step].note} <span style="color:var(--dim);">${ACT.source}</span>`
     : `<b>The mock UI's map today.</b> The proposed view replaces it once signed off; nothing in the full mock UI changes until then.`;
 }
 render();
