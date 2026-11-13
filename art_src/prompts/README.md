@@ -25,7 +25,25 @@ review"). Placeholders are replaced **in place**: the same path, size and format
 | Act maps (2026-11-13) | Tallow Vats colour fix | the pick (take A) | `cut_ai_sheets.py landmark <pick> tallow_vats --tint 0.05-0.16:0.19@0.33,0,1,0.62` (orange vat tops to the Guild's sickly yellow-green) | `map/landmarks/tallow_vats.png` |
 | Act maps (2026-11-13) | 3 act map backgrounds | [act_map_backgrounds.md](act_map_backgrounds.md) | `artqueue.py request wm_sunk_ward wm_high_bastion wm_mantle_fissure --prompts art_src/prompts/act_map_backgrounds.md --no-ref --n 2 --aspect 16:9 --route other` | `backgrounds/world_map/{sunk_ward,high_bastion,mantle_fissure}.png` (1920 x 1080; Act 1 shows now, Acts 2-3 after `AO-01`) |
 
-Paths without a layer prefix are under `games/emberwake/assets/`. The image queue (`tools/portraits/artqueue.py
+Paths without a layer prefix are under `games/emberwake/assets/`.
+
+## Act 1 map picks (reviewed 2026-11-13, full-size files to follow)
+
+Each pick was reviewed from the chat copy, cut and checked on its painted place in background take 1. When the
+full-size files arrive (Drive), save each as `art_src/<id>.png` and run its cut; the background is scaled to 1920 x 1080.
+
+| Location | Pick | Cut |
+| --- | --- | --- |
+| background | take 1 (open-centre diamond, gorge at the top) | `backgrounds/world_map/sunk_ward.png`, 1920 x 1080 |
+| 00 Sluice Undercroft | take 2 (rounded patch, water reflection) | `cut_ai_sheets.py landmark art_src/lm_sluice_undercroft.png sluice_undercroft` |
+| 01 Drowned Runoff Grate | revised take 2 (square ring posts, grate over water) | `... landmark art_src/lm_drowned_runoff_grate.png drowned_runoff_grate` |
+| 02 Alleyway Junction 7 | take B (dark slab base, barricade and torch) | `... landmark art_src/lm_alleyway_junction_7.png alleyway_junction_7` |
+| 03 Ash-Crawl Crossroads | take A (cages, violet lamp) | `... landmark art_src/lm_ash_crawl_crossroads.png ash_crawl_crossroads` |
+| 04 Fourth Kiln | take B (no smoke, dark base) | `... landmark art_src/lm_fourth_kiln.png fourth_kiln` |
+| 05 Tallow Vats | take A (three vats) with the colour fix | `... landmark art_src/lm_tallow_vats.png tallow_vats --tint 0.05-0.16:0.19@0.33,0,1,0.62` |
+| 06 Crucible Watchpost | take B (red window band) | `... landmark art_src/lm_crucible_watchpost.png crucible_watchpost` |
+| 07 Slag Gate | take B (portcullis in a cliff wall, slag channel) | `... landmark art_src/lm_slag_gate.png slag_gate` |
+| 1d Corvo's Gate | take A (warm crumbling brick, breach) | `... landmark art_src/lm_corvos_gate.png corvos_gate` | The image queue (`tools/portraits/artqueue.py
 request`, Drive `image_pipeline/queue/`) takes the same prompt text when the Gemini web app runs instead of the API;
 attach the reference each section names (`art_src/mara_voss.png` for portraits, the picked portrait for sheets).
 
