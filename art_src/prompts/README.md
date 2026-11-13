@@ -68,6 +68,7 @@ Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own 
 | Location | Pick | Cut |
 | --- | --- | --- |
 | background | take A, edited twice in Flow (the pit and its stepped plateau moved lower; a landing for the hideout beside the cave ledge) | `backgrounds/world_map/mantle_fissure.png`, 1920 x 1080 |
+| 16 Chasm Ingress | take B (rib-vault cave mouth with a spine on top, brass lift cage on a winch gantry, two lit lanterns) | `... landmark art_src/lm_chasm_ingress.png chasm_ingress --size 110` |
 
 ## Running through the image queue
 
