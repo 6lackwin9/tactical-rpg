@@ -87,6 +87,17 @@ cuts the result back apart; the layout (each landmark's source, map position, ma
    `map/landmarks/<id>.png` at 96 x its scale, and the blended image to `backgrounds/world_map/<target>.png`. A landmark
    whose mismatch is flagged was moved or redrawn: blend that quarter again on its own (crop it, blend, paste it back).
 
+Before blending, every picked landmark loses its rock block in a Flow edit (adopted 2026-11-13 after testing the
+belltower and the reservoir): the block makes a landmark read as a token placed on the map. Two wordings:
+
+```text
+Edit this image: remove the thick block of rock and ground that the building stands on, and its dark side faces. Keep the building and everything built on it exactly as it is, standing on only a thin, flat edge of its own ground at its foundations. Keep the solid pure magenta background everywhere else. Do not change the building, its size, its colours or its details.
+```
+
+```text
+Edit this image: remove only the thick dark side faces of the rock block under this place. Keep its top surface (the yard, terrace or water and everything on it) exactly as it is, as a thin flat layer of ground. Keep the solid pure magenta background everywhere else. Do not change the place, its size, its colours or its details.
+```
+
 The game keeps drawing each landmark as its own sprite exactly over its painted copy, so hover, the selection glow,
 the grey locked look and the quest badge still work.
 
