@@ -5,8 +5,8 @@
   "sluice_undercroft": {
    "src": "art_src/lm_sluice_undercroft.png",
    "pos": [
-    0.42,
-    1.02
+    0.424,
+    1.042
    ],
    "scale": 1,
    "fix": [
@@ -18,7 +18,7 @@
    "src": "art_src/lm_slag_gate_breach.png",
    "pos": [
     0.5,
-    0.86
+    0.879
    ],
    "scale": 1.15,
    "fix": [
@@ -29,10 +29,10 @@
   "gilded_boulevard": {
    "src": "art_src/lm_gilded_boulevard.png",
    "pos": [
-    0.5,
-    0.64
+    0.502,
+    0.637
    ],
-   "scale": 1.15,
+   "scale": 1.25,
    "fix": []
   },
   "tallow_reservoir": {
@@ -51,8 +51,8 @@
   "culling_stockades": {
    "src": "art_src/lm_culling_stockades.png",
    "pos": [
-    0.109,
-    0.834
+    0.115,
+    0.846
    ],
    "scale": 1.2,
    "fix": [
@@ -63,8 +63,8 @@
   "embalming_cloisters": {
    "src": "art_src/lm_embalming_cloisters.png",
    "pos": [
-    0.89,
-    0.2
+    0.886,
+    0.221
    ],
    "scale": 1.2,
    "fix": []
@@ -82,19 +82,19 @@
   "reliquary_crypts": {
    "src": "art_src/lm_reliquary_crypts.png",
    "pos": [
-    0.5,
-    0.38
+    0.499,
+    0.413
    ],
-   "scale": 1.15,
+   "scale": 1.25,
    "fix": []
   },
   "grand_spire_gate": {
    "src": "art_src/lm_grand_spire_gate.png",
    "pos": [
-    0.5,
-    0.17
+    0.498,
+    0.158
    ],
-   "scale": 1.5,
+   "scale": 1.35,
    "fix": []
   }
  }

@@ -169,23 +169,23 @@ def act1_kind(mission: str) -> tuple[bool, bool, str]:
 ACT2_NODES = [
     # id, node number, name, kind, main quest?, who / boss, quest name, position, scale, description
     ("sluice_undercroft", "00", "The Sluice Undercroft", "Your hideout", False, "Sabina, Berek, Talia · 6 bunks (8 with Berek's frames)", "",
-     (0.42, 1.02), 1.0, "The cell's one hideout in every act, reached up the concealed siphon runoff and the culvert."),
+     (0.424, 1.042), 1, "The cell's one hideout in every act, reached up the concealed siphon runoff and the culvert."),
     ("slag_gate_breach", "08", "Slag Gate Breach", "Checkpoint", False, "The way in from the Sunk Ward", "",
-     (0.50, 0.86), 1.15, "The broken Slag portcullis in the ridge's lower wall: the way up from the slums."),
+     (0.5, 0.879), 1.15, "The broken Slag portcullis in the ridge's lower wall: the way up from the slums."),
     ("gilded_boulevard", "09", "Gilded Boulevard", "Main quest", True, "The Bastion curfew cordon · Ruthven watches", "Ingress",
-     (0.50, 0.64), 1.15, "Polished basalt under magnesium lamps; the Castellan cordon holds the avenue."),
+     (0.502, 0.637), 1.25, "Polished basalt under magnesium lamps; the Castellan cordon holds the avenue."),
     ("culling_stockades", "12", "Culling Stockades", "Main quest", True, "The culling wagon · Lucan in the pens", "Jailbreak",
-     (0.109, 0.834), 1.2, "Iron transit pens of Unsealed levies bound for Lazar's cloisters; break the gate before the wagon leaves."),
+     (0.115, 0.846), 1.2, "Iron transit pens of Unsealed levies bound for Lazar's cloisters; break the gate before the wagon leaves."),
     ("tallow_reservoir", "10", "Tallow Reservoir", "Main quest", True, "Three Guild silos", "Sabotage",
      (0.898, 0.987), 1.2, "Upper Cinderreach's tallow silos: wreck them and the arc-lamps go dark (-30% Alert, +20 Warded Tallow)."),
     ("grand_belltower", "13", "Grand Belltower", "Main quest", True, "The Penitent Bell-Warden", "The Chimes",
      (0.05, 0.386), 1.4, "The curfew bells of St. Lyra, rung by a martyr pinned into the yoke: +10 Strain in every battle until they fall silent."),
     ("embalming_cloisters", "11", "Embalming Cloisters", "Main quest", True, "Chief Anatomist Lazar · Sabina's quest", "The Cloisters",
-     (0.89, 0.20), 1.2, "Lazar's crimson-and-pearl surgical cloister; through the leaded glass, the winch captive is handed over."),
+     (0.886, 0.221), 1.2, "Lazar's crimson-and-pearl surgical cloister; through the leaded glass, the winch captive is handed over."),
     ("reliquary_crypts", "14", "Reliquary Crypts", "Main quest · Act 2 climax", True, "Inquisitor-General Ruthven · the First Apostle Saint-Warden", "The Reliquary",
-     (0.50, 0.38), 1.15, "The tomb of the First Extinguishers beneath the nave, and the Key of the Mantle Chasm."),
+     (0.499, 0.413), 1.25, "The tomb of the First Extinguishers beneath the nave, and the Key of the Mantle Chasm."),
     ("grand_spire_gate", "15", "Grand Spire Gate", "The way out", False, "The Mantle Fissure below (Act 3)", "",
-     (0.50, 0.17), 1.5, "The gate between the cathedral's spires on the lip of the city: the way down to the Mantle Fissure."),
+     (0.498, 0.158), 1.35, "The gate between the cathedral's spires on the lip of the city: the way down to the Mantle Fissure."),
 ]
 # Routes: id, name, from, to, days, flags it needs, waypoints along the painted streets of take A (endpoints excluded).
 # Every leg between the boulevard and the crypts is a street way (1 day, +10% Alert) and also has a rooftop way
