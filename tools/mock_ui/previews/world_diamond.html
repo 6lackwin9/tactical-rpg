@@ -21,6 +21,22 @@ __STYLES_CSS__
   .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
   .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
   .wd-hide { display: none; }
+  .wd-quest { position: absolute; width: 13px; height: 13px; z-index: 14; animation: wdQuest 1.8s ease-in-out infinite;
+              filter: drop-shadow(0 0 1px #fff7cc) drop-shadow(0 0 2.5px #fbbf24) drop-shadow(0 0 4px #f59e0b); }
+  @keyframes wdQuest { 0%, 100% { filter: drop-shadow(0 0 1px #fff7cc) drop-shadow(0 0 2px #fbbf24) drop-shadow(0 0 3px #f59e0b); }
+                       50% { filter: drop-shadow(0 0 1.5px #fff7cc) drop-shadow(0 0 3.5px #fbbf24) drop-shadow(0 0 6px #f59e0b); } }
+  .wd-party { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: rgba(6,182,212,0.25); z-index: 15;
+              box-shadow: 0 0 0 1px #22d3ee, 0 0 6px #06b6d4; display: flex; align-items: center; justify-content: center; }
+  .wd-party img, .wd-party-sm img { width: 10px; height: 10px; }
+  .wd-legend2 { position: absolute; right: 5px; top: 3px; width: 100px; padding: 2px 4px; font-size: 5.3px; color: var(--text); z-index: 25; line-height: 1.25; }
+  .wd-leghead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
+  .wd-hudx { width: 9px; height: 9px; font-size: 7px; line-height: 1; padding: 0; }
+  .wd-legq, .wd-legparty { display: flex; gap: 3px; align-items: center; padding: 0.5px 2px; white-space: nowrap; cursor: pointer; border: 0.5px solid transparent; }
+  .wd-legq:hover, .wd-legq.on, .wd-legparty:hover { border-color: #d97706; background: rgba(44,34,30,0.7); }
+  .wd-legparty { margin-top: 2px; padding-top: 2px; border-top: 0.5px solid #2d333f; }
+  .wd-quest-sm { width: 8px; height: 8px; flex: none; filter: drop-shadow(0 0 1.5px #fbbf24); }
+  .wd-party-sm { width: 9px; height: 9px; flex: none; border-radius: 50%; box-shadow: 0 0 0 1px #22d3ee, 0 0 4px #06b6d4; display: flex; align-items: center; justify-content: center; }
+  .wd-hudbtn { position: absolute; right: 5px; top: 5px; z-index: 25; font-size: 6px; padding: 1px 4px; }
   .wd-trail { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 0.1 4.2; opacity: 0.52; transition: opacity 0.15s, stroke-width 0.15s; }
   .wd-trail.hot { opacity: 0.95; stroke-width: 2.1; }
   .wd-mapview.focus-only .wd-trail { opacity: 0; }
@@ -65,7 +81,7 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'trail', flicker: false, goal: false };
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: 'sluice_undercroft', hud: true };
 const FLAG_NAMES = {
   'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
   'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
@@ -74,6 +90,35 @@ const node = id => G.nodes.find(n => n.id === id);
 const isOpen = (e, step) => e.req.every(f => DATA.steps[step].flags.includes(f));
 const isShortcut = e => e.req.includes('sunk_ward.lock_ciphers_done');
 const opensAfter = e => e.req.length ? 'after ' + e.req.map(f => FLAG_NAMES[f] || f).join(' + ') : 'from Day 1';
+
+// Player-facing names (no backend codes such as M1 or JOB; Tushar 2026-11-13).
+const isMain = n => /^M\d/.test(n.mission);
+const questName = n => (n.encounters[0] || {}).name || n.name;
+function kindLabel(n) {
+  if (isMain(n)) return n.mission.includes('climax') ? 'Main quest · Act 1 climax' : 'Main quest';
+  return { 'Side job': 'Side job', 'Hub': 'Your hideout', 'Egress': 'Checkpoint', 'Exit to Act 2': 'The way out' }[n.mission] || n.mission;
+}
+function activeQuests(step) {
+  const reach = reachable(step), cur = DATA.steps[step];
+  return G.nodes.filter(n => (isMain(n) || n.mission === 'Side job') && reach.has(n.id) && !cur.cleared.includes(n.id));
+}
+// The travel path from the party to a place: cheapest open routes (days), as a list of route ids.
+function pathTo(from, to, step) {
+  if (from === to) return [];
+  const dist = { [from]: 0 }, via = {}, todo = new Set([from]);
+  while (todo.size) {
+    const u = [...todo].reduce((a, b) => dist[a] <= dist[b] ? a : b); todo.delete(u);
+    if (u === to) break;
+    G.edges.filter(e => isOpen(e, step) && (e.a === u || e.b === u)).forEach(e => {
+      const v = e.a === u ? e.b : e.a, d = dist[u] + e.time;
+      if (dist[v] === undefined || d < dist[v]) { dist[v] = d; via[v] = e; todo.add(v); }
+    });
+  }
+  if (dist[to] === undefined) return null;
+  const out = []; let v = to;
+  while (v !== from) { const e = via[v]; out.push(e.id); v = e.a === v ? e.b : e.a; }
+  return out;
+}
 
 function reachable(step) {
   const seen = new Set(['sluice_undercroft']);
@@ -114,16 +159,15 @@ function routePoints(e) {
 // route that just opened glows, locked routes are not drawn (the greyed node says it is locked).
 function trailSvg() {
   const step = S.step, prev = Math.max(0, step - 1), reach = reachable(step), cur = DATA.steps[step];
-  const goalNode = id => { const n = node(id); return /^M\d/.test(n.mission) && reach.has(id) && !cur.cleared.includes(id); };
   let k = 0;
   return G.edges.map(e => {
     const open = isOpen(e, step);
     if (!open) return '';
     const fresh = step > 0 && !isOpen(e, prev);
-    const hot = e.a === S.sel || e.b === S.sel;
-    const col = isShortcut(e) ? '#22d3ee' : '#fbbf24';
-    const goal = S.goal && (goalNode(e.a) || goalNode(e.b));
-    const cls = `wd-trail rt-${e.a} rt-${e.b}${hot ? ' hot' : ''}${fresh ? ' fresh' : ''}${goal ? ' goal' : ''}${S.flicker ? ' flick' : ''}`;
+    const path = pathTo(S.party, S.sel, step) || [];
+    const hot = path.includes(e.id) || (S.sel === S.party && (e.a === S.party || e.b === S.party));
+    const col = '#fbbf24';
+    const cls = `wd-trail rt-${e.a} rt-${e.b}${hot ? ' hot' : ''}${fresh ? ' fresh' : ''}${S.flicker ? ' flick' : ''}`;
     const delay = S.flicker ? `animation-delay:${(-(k++ * 0.73) % 3.1).toFixed(2)}s;` : '';
     return `<path class="${cls}" style="${delay}" d="${smoothPath(routePoints(e))}" stroke="${col}" />`;
   }).join('');
@@ -158,9 +202,8 @@ function nodesHtml() {
     const locked = !reach.has(n.id);
     const sel = n.id === S.sel;
     const isMission = /^M\d/.test(n.mission);
-    const available = isMission && !cleared && !locked;
+    const available = (isMission || n.mission === 'Side job') && !cleared && !locked;
     const cls = ['wd-node', locked ? 'locked' : '', cleared ? 'cleared' : ''].join(' ');
-    const tag = isMission ? n.mission.split(' ')[0] : (n.mission === 'Side job' ? 'JOB' : '');
     return `
       <div class="${cls}" data-id="${n.id}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';render();">
         ${(ASSETS.lm || {})[n.id]
@@ -168,11 +211,11 @@ function nodesHtml() {
           : `<div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
           <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
         </div>`}
-        ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:0;top:-2px;width:10px;height:10px;">` : ''}
+        ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest" style="right:${(ASSETS.lm || {})[n.id] ? -12 : -2}px;top:${(ASSETS.lm || {})[n.id] ? -26 : -4}px;">` : ''}
         ${cleared ? `<span class="wd-check">✓</span>` : ''}
-        ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:${(ASSETS.lm || {})[n.id] ? -14 : -2}px;top:${(ASSETS.lm || {})[n.id] ? 8 : -2}px;width:10px;height:10px;">` : ''}
+        ${n.id === S.party ? `<span class="wd-party" style="left:${(ASSETS.lm || {})[n.id] ? -16 : -4}px;top:${(ASSETS.lm || {})[n.id] ? 4 : -4}px;"><img src="${ASSETS.ui.pin_here}" class="pixel"></span>` : ''}
         <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' || S.labels === 'faint' ? 'wd-above' : ''} ${S.labels === 'faint' && !sel ? 'wd-faint' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' || S.labels === 'faint' ? `bottom:${(ASSETS.lm || {})[n.id] ? 50 : 30}px;` : ''}">
-          ${tag ? `<span class="wd-mtag">${tag}</span>` : ''}<span>${n.num} · ${n.name}</span>
+          <span>${n.name}</span>
         </div>
       </div>`;
   }).join('') + (step.interlude ? (() => {
@@ -223,23 +266,25 @@ function panelDiamond() {
     : reach.has(n.id) ? '<span style="color:var(--gold);">Open</span>' : '<span style="color:#9ca3af;">Locked</span>';
   const routes = G.edges.filter(e => e.a === n.id || e.b === n.id).map(e => {
     const other = node(e.a === n.id ? e.b : e.a), open = isOpen(e, S.step);
-    return `<div class="wd-route"><span style="color:${open ? 'var(--text)' : '#6b7280'};">${open ? '' : '🔒 '}${other.num} ${other.name}</span>
-            <span class="font-mono" style="color:${isShortcut(e) ? 'var(--info)' : 'var(--dim)'};font-size:5.4px;">${open ? e.time + 'd' : opensAfter(e)}</span></div>`;
+    return `<div class="wd-route"><span style="color:${open ? 'var(--text)' : '#6b7280'};">${open ? '' : '🔒 '}${other.name}</span>
+            <span class="font-mono" style="color:var(--dim);font-size:5.4px;">${open ? e.time + 'd' : opensAfter(e)}</span></div>`;
   }).join('');
   const enc = n.encounters.map(x => x.name).join(' · ');
   return corner('position:absolute;left:504px;top:24px;width:132px;height:328px;padding:7px;display:flex;flex-direction:column;justify-content:space-between;', `
     <div>
-      <div class="font-title" style="font-size:9px;color:var(--gold);line-height:1.2;">${n.num} · ${n.name}</div>
-      <div class="font-mono" style="font-size:6px;color:var(--info);margin-top:2px;">${n.mission} · ${status}</div>
+      <div class="font-title" style="font-size:9px;color:var(--gold);line-height:1.2;">${n.name}</div>
+      <div class="font-mono" style="font-size:6px;color:var(--info);margin-top:2px;">${kindLabel(n)} · ${status}</div>
       <div style="font-size:6px;color:var(--dim);margin-top:1px;">${n.who}</div>
       ${enc ? `<div class="font-mono" style="font-size:5.4px;color:#fda4af;margin-top:2px;">${enc}</div>` : ''}
+      ${S.sel !== S.party ? (() => { const pth = pathTo(S.party, n.id, S.step);
+        return `<div style="font-size:5.8px;color:${pth ? 'var(--gold)' : '#6b7280'};margin-top:2px;">${pth ? `From your party: ${pth.length} road${pth.length === 1 ? '' : 's'}, ${pth.reduce((t, id) => t + G.edges.find(e => e.id === id).time, 0)}d` : 'No open road from your party'}</div>`; })() : `<div style="font-size:5.8px;color:var(--gold);margin-top:2px;">Your party is here</div>`}
       <div style="border-top:1px solid #2d333f;margin:4px 0;padding-top:4px;font-size:6.4px;color:var(--text);line-height:1.36;">${n.desc}</div>
       <div class="rust-inset" style="padding:3px 5px;font-size:6px;margin-top:5px;">
         <div class="font-mono" style="font-size:5.4px;color:var(--dim);margin-bottom:1px;">ROUTES</div>${routes || '<span style="color:var(--dim);">none</span>'}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;">
-      <button class="rust-btn primary" style="width:100%;height:18px;" ${reach.has(n.id) ? '' : 'disabled'}>${n.id === 'sluice_undercroft' ? 'Enter Sanctuary Hub ▸' : 'Travel & Enter Node ▸'}</button>
+      <button class="rust-btn primary" style="width:100%;height:18px;" ${reach.has(n.id) && n.id !== S.party ? '' : 'disabled'} onclick="S.party='${n.id}';render();">${n.id === S.party ? 'Your party is here' : 'Travel here ▸'}</button>
       <button class="rust-btn" style="width:100%;">Mode: Fast (-1d)</button>
     </div>`);
 }
@@ -262,16 +307,17 @@ function hud() {
 }
 
 function legend() {
-  if (S.routes === 'trail' || S.routes === 'focus') {
-    const dot = c => `<svg width="18" height="5"><line x1="1" y1="2.5" x2="17" y2="2.5" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="0.1 4.2"/></svg>`;
-    return `<div class="rust-panel wd-legend"><span>${dot('#fbbf24')} road (bright: the selected or hovered place)</span>
-      <span>${dot('#22d3ee')} Vesper's shortcut</span><span><b style="color:var(--ok);">✓</b> cleared</span><span style="color:#6b7280;">grey place: locked</span></div>`;
-  }
-  const ln = (c, d, w) => `<svg width="16" height="5"><line x1="0" y1="2.5" x2="16" y2="2.5" stroke="${c}" stroke-width="${w}" stroke-dasharray="${d}"/></svg>`;
-  return `<div class="rust-panel wd-legend">
-    <span>${ln('#6b7280', '3,2', 1.2)} open</span><span>${ln('#f59e0b', '3,2', 2)} just opened</span>
-    <span>${ln('#3f4552', '1,2.5', 1)} locked</span><span>${ln('#06b6d4', '2,1.5', 1.3)} Vesper's shortcut</span>
-    <span><b style="color:var(--ok);">✓</b> cleared</span></div>`;
+  if (!S.hud) return `<button class="db-btn wd-hudbtn" onclick="S.hud=true;render();" title="Show the map HUD">Show HUD</button>`;
+  const qs = activeQuests(S.step);
+  const party = node(S.party);
+  return `<div class="rust-panel wd-legend2">
+    <div class="wd-leghead"><span class="font-title" style="color:var(--gold);font-size:7px;">Active quests</span>
+      <button class="close-x-btn-640 wd-hudx" onclick="S.hud=false;render();" title="Hide the map HUD">×</button></div>
+    ${qs.length ? qs.map(n => `<div class="wd-legq ${n.id === S.sel ? 'on' : ''}" onclick="S.sel='${n.id}';render();">
+        <img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest-sm"><span title="${n.name}">${questName(n)}${n.mission === 'Side job' ? ' <span style="color:var(--dim);">(side)</span>' : ''}</span></div>`).join('')
+      : '<div style="color:var(--dim);">None open</div>'}
+    <div class="wd-legparty" onclick="S.sel='${S.party}';render();"><span class="wd-party-sm"><img src="${ASSETS.ui.pin_here}" class="pixel"></span><span title="${party.name}">Your party</span></div>
+  </div>`;
 }
 
 function render() {
@@ -287,8 +333,7 @@ function render() {
       [['data', 'Data'], ['spaced', 'Spaced diamond'], ['regions', 'Painted regions']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
       `<span class="lbl" style="color:#a3e635;">Routes:</span>` +
       [['straight', 'Straight'], ['roads', 'Roads'], ['trail', 'Lantern trail'], ['focus', 'Focus only']].map(([k, t]) => `<button class="db-btn ${S.routes === k ? 'active' : ''}" onclick="S.routes='${k}';render();">${t}</button>`).join('') +
-      `<button class="db-btn ${S.flicker ? 'active' : ''}" onclick="S.flicker=!S.flicker;render();">Flicker</button>` +
-      `<button class="db-btn ${S.goal ? 'active' : ''}" onclick="S.goal=!S.goal;render();">Next objective</button>` +
+      `<button class="db-btn ${S.flicker ? 'active' : ''}" onclick="S.flicker=!S.flicker;render();" title="A kit option; off in Emberwake">Flicker (kit option)</button>` +
       `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
       [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected'], ['faint', 'Faint, lit on hover / focus']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
   let map;
