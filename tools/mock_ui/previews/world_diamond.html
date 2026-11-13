@@ -220,7 +220,7 @@ function render() {
   document.getElementById('wd-stage').innerHTML = `
     ${hud()}
     <div style="position:absolute;left:4px;top:24px;width:496px;height:328px;border:1px solid #374151;overflow:hidden;">
-      <img src="${ASSETS.map}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(${S.view === 'diamond' ? 0.55 : 0.82}) contrast(1.08);">
+      <img src="${ASSETS.map}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:${DATA.bgIsMap ? 'none' : `brightness(${S.view === 'diamond' ? 0.55 : 0.82}) contrast(1.08)`};">
       <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(10,11,16,0.05) 40%, rgba(10,11,16,0.75) 100%);"></div>
       ${map}
     </div>

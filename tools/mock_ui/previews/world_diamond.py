@@ -82,7 +82,7 @@ def load_graph() -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def build(out: Path, cache: Path | None) -> None:
+def build(out: Path, cache: Path | None, bg: Path | None = None) -> None:
     bundle = load_or_build_bundle(cache_path=cache)
     styles = ((ROOT / "tools/mock_ui/styles.css").read_text(encoding="utf-8")
               .replace("__FONT_DISPLAY__", bundle["fonts"]["display"])
@@ -92,7 +92,13 @@ def build(out: Path, cache: Path | None) -> None:
     keys = ["pin_town", "pin_gate", "pin_ruin", "pin_fortress", "pin_camp", "pin_here", "badge_quest", "gold",
             "ornate_tl", "ornate_tr", "ornate_bl", "ornate_br"]
     assets = {"ui": {k: bundle["ui"][k] for k in keys if k in bundle["ui"]}, "map": bundle["bg"]["sunk_ward"]}
-    data = {"graph": load_graph(), "steps": STEPS, "current": CURRENT}
+    if bg:  # a candidate act map background (a take under review): shown as is, cropped to the map viewport
+        import base64, io
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.open(bg).convert("RGB").save(buf, "JPEG", quality=88)
+        assets["map"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    data = {"graph": load_graph(), "steps": STEPS, "current": CURRENT, "bgIsMap": bool(bg)}
     html = ((HERE / "world_diamond.html").read_text(encoding="utf-8")
             .replace("__STYLES_CSS__", styles)
             .replace("__ASSETS_JSON__", json.dumps(assets))
@@ -106,8 +112,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, default=ROOT / "target" / "world_diamond_preview.html")
     ap.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="the mock UI's asset bundle cache")
+    ap.add_argument("--bg", type=Path, help="a candidate act map background to review (default: the mock's title card)")
     args = ap.parse_args()
-    build(args.out, args.cache)
+    build(args.out, args.cache, args.bg)
 
 
 if __name__ == "__main__":
