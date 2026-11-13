@@ -32,12 +32,14 @@ __STYLES_CSS__
   .wd-party { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: rgba(6,182,212,0.25); z-index: 15;
               box-shadow: 0 0 0 1px #22d3ee, 0 0 6px #06b6d4; display: flex; align-items: center; justify-content: center; }
   .wd-party img, .wd-party-sm img { width: 10px; height: 10px; }
-  .wd-legend2 { position: absolute; width: 100px; padding: 2px 4px; font-size: 5.3px; color: var(--text); z-index: 25; line-height: 1.25; }
+  .wd-legend2 { position: absolute; width: 100px; padding: 2px 4px; font-size: 5.3px; color: var(--text); z-index: 40; line-height: 1.25; }
   .wd-leghead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
   .wd-legbtn { width: 10px; height: 9px; font-size: 5.5px; line-height: 1; padding: 0; }
   .wd-legbtn.on { border-color: #d97706; color: var(--gold); }
   .wd-legend2.unlocked { cursor: move; box-shadow: 0 0 0 1px #d97706, 0 3px 8px rgba(0,0,0,0.75); }
-  .wd-legmin { position: absolute; z-index: 25; font-size: 6px; padding: 1px 5px; white-space: nowrap; }
+  .wd-legmin { position: absolute; z-index: 40; font-size: 6px; padding: 1px 5px; white-space: nowrap; }
+  .wd-legmin.unlocked { cursor: move; box-shadow: 0 0 0 1px #d97706; }
+  /* the legend and its chip float above every landmark, hovered ones included (those rise to 30) */
   .wd-legq, .wd-legparty { display: flex; gap: 3px; align-items: center; padding: 0.5px 2px; white-space: nowrap; cursor: pointer; border: 0.5px solid transparent; }
   .wd-legq:hover, .wd-legq.on, .wd-legparty:hover { border-color: #d97706; background: rgba(44,34,30,0.7); }
   .wd-legparty { margin-top: 2px; padding-top: 2px; border-top: 0.5px solid #2d333f; }
@@ -363,7 +365,9 @@ function legend() {
   const pos = `left:${L.x}px;top:${L.y}px;`;
   // Minimized, the chip stays at the corner that held the minimize button (the panel's top-right), so minimize and
   // restore toggle in place (Tushar 2026-11-13, a rule for every floating panel: preferences/ui.md).
-  if (L.min) return `<button class="db-btn wd-legmin" style="left:${L.x + (L.br || 96)}px;top:${L.y + (L.bt || 3) - 1}px;transform:translateX(-100%);" onclick="S.legend.min=false;render();" title="Open the legend">☰ Legend</button>`;
+  // The chip floats like the panel (Tushar 2026-11-13): while the legend is unlocked, press and drag moves it; a press
+  // without a drag (a click) opens the legend again, with its minimize button where the chip was.
+  if (L.min) return `<button class="db-btn wd-legmin ${L.locked ? '' : 'unlocked'}" style="left:${L.x + (L.br || 96)}px;top:${L.y + (L.bt || 3) - 1}px;transform:translateX(-100%);" onmousedown="chipDrag(event)" title="${L.locked ? 'Open the legend' : 'Drag to move · click to open the legend'}">☰ Legend</button>`;
   const qs = activeQuests(S.step);
   return `<div class="rust-panel wd-legend2 ${L.locked ? '' : 'unlocked'}" style="${pos}" onmousedown="legendDrag(event)">
     <div class="wd-leghead"><span class="font-title" style="color:var(--gold);font-size:7px;">Active quests</span>
@@ -383,6 +387,32 @@ function minimizeLegend(btn) {
   const panel = btn.closest('.wd-legend2'), scale = document.getElementById('wd-stage').getBoundingClientRect().width / 640;
   const pr = panel.getBoundingClientRect(), br = btn.getBoundingClientRect();
   S.legend.br = (br.right - pr.left) / scale; S.legend.bt = (br.top - pr.top) / scale; S.legend.min = true; render();
+}
+
+// The minimized chip: drag it while the legend is unlocked (it carries the legend's position with it); a click opens it.
+function chipDrag(ev) {
+  const L = S.legend, el = ev.currentTarget, scale = document.getElementById('wd-stage').getBoundingClientRect().width / 640;
+  const sx = ev.clientX, sy = ev.clientY, ox = L.x, oy = L.y, br = L.br || 96, bt = (L.bt || 3) - 1;
+  const cw = el.offsetWidth, ch = el.offsetHeight;
+  let moved = false;
+  const move = e => {
+    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 3) moved = true;
+    if (!moved || L.locked) return;
+    L.x = Math.max(2 + cw - br, Math.min(494 - br, ox + (e.clientX - sx) / scale));   // the chip stays inside the map
+    L.y = Math.max(2 - bt, Math.min(326 - ch - bt, oy + (e.clientY - sy) / scale));
+    el.style.left = (L.x + br) + 'px'; el.style.top = (L.y + bt) + 'px';
+  };
+  const up = () => {
+    window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+    if (moved && !L.locked) return;
+    L.min = false; render();
+    const panel = document.querySelector('.wd-legend2');  // the panel opens inside the map: nudge it in by its real size
+    if (panel) {
+      L.x = Math.max(2, Math.min(496 - panel.offsetWidth - 2, L.x)); L.y = Math.max(2, Math.min(328 - panel.offsetHeight - 2, L.y));
+      panel.style.left = L.x + 'px'; panel.style.top = L.y + 'px';
+    }
+  };
+  window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); ev.preventDefault();
 }
 
 // Drag the unlocked legend inside the map (the stage is drawn at 2x, so screen pixels are halved).
