@@ -55,7 +55,7 @@ Checked the same way on background take A, at the positions proposed in Outbox `
 | 08 Slag Gate Breach | take A (gatehouse tower, broken portcullis) | `... landmark art_src/lm_slag_gate_breach.png slag_gate_breach` |
 | 09 Gilded Boulevard | take A (white magnesium lamp, red Watch lanterns) | `... landmark art_src/lm_gilded_boulevard.png gilded_boulevard` |
 | 10 Tallow Reservoir | take B (grey riveted silos, red pipe) with the colour fix | `... landmark art_src/lm_tallow_reservoir.png tallow_reservoir --tint 0.0-0.16:0.19` |
-| 12 Culling Stockades | take B (gatehouse, wagon, rust-topped pens) with the smoke cleared | `... landmark art_src/lm_culling_stockades.png culling_stockades --clear 0.68,0,0.78,0.21` |
+| 12 Culling Stockades | take B (gatehouse, wagon, rust-topped pens), slab removed in Flow, the torch smoke cleared | `... landmark art_src/lm_culling_stockades.png culling_stockades --clear 0.69,0.15,0.77,0.25 --size 115` |
 | 11 Embalming Cloisters | take A (pale stone, lit courtyard, glowing dome) with the chimney wisp cleared | `... landmark art_src/lm_embalming_cloisters.png embalming_cloisters --clear 0.635,0.17,0.69,0.24` |
 | 13 Grand Belltower | take A (lit bronze bell, buttresses, red banners) | `... landmark art_src/lm_grand_belltower.png grand_belltower` |
 | 14 Reliquary Crypts | take B (candle-lit stair down to the gilded sarcophagus door, skull niches) | `... landmark art_src/lm_reliquary_crypts.png reliquary_crypts` |

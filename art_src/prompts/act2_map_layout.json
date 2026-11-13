@@ -9,7 +9,10 @@
     1.02
    ],
    "scale": 1,
-   "fix": []
+   "fix": [
+    "--desmoke",
+    "0.69,0.30,0.80,0.52"
+   ]
   },
   "slag_gate_breach": {
    "src": "art_src/lm_slag_gate_breach.png",
@@ -51,7 +54,7 @@
    "scale": 1.2,
    "fix": [
     "--clear",
-    "0.68,0,0.78,0.21"
+    "0.69,0.15,0.77,0.25"
    ]
   },
   "embalming_cloisters": {
