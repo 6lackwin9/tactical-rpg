@@ -47,14 +47,14 @@ fn empower_caps_at_fifty() {
 #[test]
 fn the_item_damage_pipeline() {
     assert_eq!(damage::item_damage(45, ItemHit::default()), 45, "the exact port");
-    assert_eq!(damage::item_damage(45, ItemHit { splash: 0.5, mitigation: None }), roundi(45.0 * 0.5));
+    assert_eq!(damage::item_damage(45, ItemHit { splash: 0.5, mitigation: None, armor_piercing: false }), roundi(45.0 * 0.5));
     let rating = 25;
     let want = roundi(40.0 * 0.5 * (1.0 - 0.35) * (1.0 - damage::armor_reduction(rating))).max(1);
-    assert_eq!(damage::item_damage(40, ItemHit { splash: 0.5, mitigation: Some((0.35, rating)) }), want);
+    assert_eq!(damage::item_damage(40, ItemHit { splash: 0.5, mitigation: Some((0.35, rating)), armor_piercing: false }), want);
     let capped = roundi(100.0 * (1.0 - GUARD_CAP)).max(1);
-    assert_eq!(damage::item_damage(100, ItemHit { splash: 1.0, mitigation: Some((1.5, 0)) }), capped, "guard and cover cap at GUARD_CAP");
-    let (v, trace) = damage::item_damage_traced(40, ItemHit { splash: 1.0, mitigation: Some((0.3, rating)) });
-    assert_eq!(v, damage::item_damage(40, ItemHit { splash: 1.0, mitigation: Some((0.3, rating)) }));
+    assert_eq!(damage::item_damage(100, ItemHit { splash: 1.0, mitigation: Some((1.5, 0)), armor_piercing: false }), capped, "guard and cover cap at GUARD_CAP");
+    let (v, trace) = damage::item_damage_traced(40, ItemHit { splash: 1.0, mitigation: Some((0.3, rating)), armor_piercing: false });
+    assert_eq!(v, damage::item_damage(40, ItemHit { splash: 1.0, mitigation: Some((0.3, rating)), armor_piercing: false }));
     let ids: Vec<&str> = trace.steps.iter().map(|s| s.id.as_ref()).collect();
     assert_eq!(ids, ["item", "round", "splash", "guard_cover", "armour", "round"], "base, splash, guard and cover, armour");
     assert_eq!(damage::item_heal(60), 60);

@@ -121,7 +121,7 @@
 		{
 			"id": "t_interlude",
 			"name": "The marrow back-surge",
-			"on": "enter",
+			"on": "any",
 			"encounter": "",
 			"outcome": "any",
 			"location": "sluice_undercroft",

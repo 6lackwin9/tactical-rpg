@@ -460,7 +460,9 @@ fn rule_errors(v: &View, w: &str, i: usize, raw: &Value, bands: &[String], (lo, 
     errors.extend(acts_key(r, "acts", &label));
     errors.extend(bool_key(r, "once", &label));
     errors.extend(text_key(r, "warn", TEXT_MAX, false, &label));
-    errors.extend(effects_errors(v, w, r.get("effects").unwrap_or(&Value::Array(Vec::new())), &label));
+    let (gates, effects) = rule_effect_gates(r.get("effects").unwrap_or(&Value::Array(Vec::new())), &label);
+    errors.extend(gates);
+    errors.extend(effects_errors(v, w, &effects, &label));
     errors.extend(then_errors(v, w, r.get("then").unwrap_or(&Value::Array(Vec::new())), &label));
     if let Some(days) = r.get("restart_days") {
         if !countdown {
@@ -470,6 +472,54 @@ fn rule_errors(v: &View, w: &str, i: usize, raw: &Value, bands: &[String], (lo, 
         }
     }
     errors
+}
+
+/// ACT1-HOOKS2 (FB-244 (2)): the `when` and `else` of a meter rule's effects (`rpgkit_data::RULE_EFFECT_WHEN`,
+/// `RULE_EFFECT_ELSE`): `when` is a list of flag conditions (`condition_errors`), `else` true or false; an `else` effect
+/// needs an effect before it and never follows an effect of its chain that always runs (no `when`: it would never run).
+/// Returns those problems and the list with both keys taken off each effect, for the effect checks.
+fn rule_effect_gates(raw: &Value, label: &str) -> (Vec<String>, Value) {
+    use rpgkit_data::{RULE_EFFECT_ELSE as ELSE, RULE_EFFECT_WHEN as WHEN};
+    let mut errors = Vec::new();
+    let Some(list) = raw.as_array() else { return (errors, raw.clone()) };
+    let mut stripped = Vec::with_capacity(list.len());
+    // whether the chain so far holds an effect that always runs (None: no effect yet)
+    let mut chain_sure: Option<bool> = None;
+    for (k, fx) in list.iter().enumerate() {
+        let Some(o) = fx.as_object() else {
+            stripped.push(fx.clone());
+            continue;
+        };
+        let el = format!("{label} effect {}", k + 1);
+        let is_else = match o.get(ELSE) {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => {
+                errors.push(format!("{el}: {ELSE} must be true or false."));
+                false
+            }
+        };
+        let when = o.get(WHEN);
+        if let Some(c) = when {
+            errors.extend(condition_errors(c, &format!("{el}: {WHEN}")));
+        }
+        let sure = json::arr(&json::normalize(when.unwrap_or(&Value::Null))).is_empty();
+        if is_else {
+            match chain_sure {
+                None => errors.push(format!("{el}: {ELSE} needs an effect before it.")),
+                Some(true) => errors.push(format!("{el}: {ELSE} never runs (an earlier effect of its chain has no {WHEN}, so it always runs).")),
+                Some(false) => {}
+            }
+            chain_sure = Some(chain_sure.unwrap_or(false) || sure);
+        } else {
+            chain_sure = Some(sure);
+        }
+        let mut o = o.clone();
+        o.shift_remove(WHEN);
+        o.shift_remove(ELSE);
+        stripped.push(Value::Object(o));
+    }
+    (errors, Value::Array(stripped))
 }
 
 /// M3: one gauge input (`span`: max - min, the largest move; `modes`: the world's travel mode ids, CAMPAIGN1-TM).
@@ -570,8 +620,9 @@ pub fn trigger_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     if json::s(e, "outcome") != "any" && on != "battle" {
         errors.push("Outcome is for on battle only.".into());
     }
-    if !json::s(e, "location").is_empty() && on != "enter" {
-        errors.push("Location is for on enter only.".into());
+    // ACT1-HOOKS2 (FB-246 (a)): on any, a location means "while the party is there"
+    if !json::s(e, "location").is_empty() && on != "enter" && on != "any" {
+        errors.push("Location is for on enter or on any only.".into());
     }
     errors.extend(condition_errors(json::get(e, "when"), "When"));
     let (effects, then) = (json::get(e, "effects"), json::get(e, "then"));

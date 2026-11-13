@@ -332,6 +332,8 @@ impl Resolver {
         }
         // HOOKS1 AT2: who the action's hits took HP from, for next round's `brace_after_hit` (rule ai_tactics)
         w.note_hits(&cmd.struck);
+        // ACT1-HOOKS2 (FB-244 (5)): a used consumable's `meter_delta` on its target (rule unit_meters; nothing else)
+        crate::meter::from_item(self, w, idx);
         // HOOKS1 4.3 step 6: the forced moves follow the stagger and breaks (rule forced_move; nothing in classic)
         crate::forced::resolve(self, w, idx, &windups);
         // HOOKS1 4.3 step 7: the hazard the action leaves, then the Walks a sprung trap cancels (rule ground_hazards)

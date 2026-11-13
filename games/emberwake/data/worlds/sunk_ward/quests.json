@@ -277,7 +277,26 @@
 			"complete_flags": [],
 			"auto_start": false,
 			"links": {},
-			"variants": [],
+			"variants": [
+				{
+					"id": "ivo_lost",
+					"when_flags": [
+						{
+							"key": "sunk_ward.ivo_lost",
+							"value": true
+						}
+					],
+					"unless_flags": [
+						{
+							"key": "sunk_ward.ivo_rescued",
+							"value": true
+						}
+					],
+					"set": {
+						"available": false
+					}
+				}
+			],
 			"loot_pool": [],
 			"loot_picks": 1,
 			"reputation": {},
@@ -285,7 +304,7 @@
 			"board": "talia_board",
 			"track": "side",
 			"show_locked": true,
-			"closed_text": ""
+			"closed_text": "Too late. The Red Pen swept the Toll-Pen at zero days."
 		},
 		{
 			"id": "q_hook_bellows",
@@ -302,7 +321,7 @@
 					"value": true
 				}
 			],
-			"reward": "Slag Plating, and cheaper coals at Berek's Hearth.",
+			"reward": "Slag Plating, 60 xp and 10 gold, and cheaper coals at Berek's Hearth (-20%).",
 			"template": "a1_flag_job_plating",
 			"turn_in": "talia_rusk",
 			"requires_flags": [
@@ -386,7 +405,7 @@
 					"value": true
 				}
 			],
-			"reward": "Maren's clue to St. Lyra's flue, for Act 2.",
+			"reward": "60 xp, 20 gold, and Maren's clue to St. Lyra's flue, for Act 2.",
 			"template": "a1_flag_job",
 			"turn_in": "talia_rusk",
 			"requires_flags": [
@@ -428,8 +447,8 @@
 					"value": true
 				}
 			],
-			"reward": "Hollis's Lever-Winch, and a gate wave that arrives a round late.",
-			"template": "a1_flag_job",
+			"reward": "Hollis's Lever-Winch (Heavy Winch Sunder costs 1 block less), 60 xp and 20 gold, and a gate wave that arrives a round late.",
+			"template": "a1_flag_job_winch",
 			"turn_in": "talia_rusk",
 			"requires_flags": [
 				{
@@ -507,7 +526,7 @@
 					"value": true
 				}
 			],
-			"reward": "Five days of Warded Tallow.",
+			"reward": "Five days of Warded Tallow, 60 xp and 20 gold, and a Snapped Alum Inhaler.",
 			"template": "a1_flag_job_tallow",
 			"turn_in": "talia_rusk",
 			"requires_flags": [

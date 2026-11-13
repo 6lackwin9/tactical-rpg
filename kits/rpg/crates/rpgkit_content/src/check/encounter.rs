@@ -995,6 +995,69 @@ pub fn survivors_problems(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors
 }
 
+/// ACT1-HOOKS2 (FB-243 (b)): a world encounter's `survivors` that counts a guest who can flee (its unit's `flee_ratio`
+/// above 0 and not reckless, as the AI withdraws): a guest that fled the field counts as surviving, so the count can
+/// read high. One warning per counted guest (`survivors.unit` "" = every guest).
+pub fn survivors_warnings(v: &View, w: &str, e: &Dict) -> Vec<String> {
+    let Some(block) = e.get("survivors").and_then(Value::as_object).filter(|b| !b.is_empty()) else { return Vec::new() };
+    let unit = json::s(block, "unit");
+    let mut out = Vec::new();
+    for r in strings(json::get(e, "guests")) {
+        let c = v.worlds.resolve(w, "characters", &r);
+        let base = if c.is_empty() { r.clone() } else { json::s(c, "base_unit") };
+        if !unit.is_empty() && r != unit && json::s(c, "id") != unit && base != unit {
+            continue;
+        }
+        let Some(u) = v.typed.units.get(&base) else { continue };
+        if u.flee_ratio > 0.0 && !u.reckless {
+            out.push(format!(
+                "Survivors counts guest '{r}', who can flee (flee_ratio {}); a guest that fled counts as surviving. Set its flee_ratio to 0 or make it reckless.",
+                u.flee_ratio
+            ));
+        }
+    }
+    out
+}
+
+// ---- Flag skills (ACT1-HOOKS2) ----
+
+/// ACT1-HOOKS2 (FB-244 (1)): a world encounter's `flag_skills` (`[]` or absent = none): a list of at most
+/// `FLAG_SKILLS_MAX` objects with the keys `FLAG_SKILL_KEYS`: `member_from_flag` a flag key (it holds the member's
+/// character id when the battle starts), `skill` a catalog skill, `requires_flags` flag conditions.
+pub fn flag_skills_problems(v: &View, e: &Dict) -> Vec<String> {
+    use rpgkit_data::{FLAG_SKILLS, FLAG_SKILLS_MAX, FLAG_SKILL_KEYS};
+    let Some(raw) = e.get(FLAG_SKILLS) else { return Vec::new() };
+    let Some(list) = raw.as_array() else {
+        return vec!["Flag skills must be a list of {member_from_flag, skill, requires_flags}.".into()];
+    };
+    let mut errors = Vec::new();
+    if list.len() > FLAG_SKILLS_MAX {
+        errors.push(format!("Flag skills holds at most {FLAG_SKILLS_MAX} entries (has {}).", list.len()));
+    }
+    for (i, g) in list.iter().enumerate() {
+        let label = format!("Flag skill {}", i + 1);
+        let Some(g) = g.as_object() else {
+            errors.push(format!("{label} must be an object {{member_from_flag, skill, requires_flags}}."));
+            continue;
+        };
+        errors.extend(g.keys().filter(|k| !FLAG_SKILL_KEYS.contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}'.")));
+        let flag = json::s(g, "member_from_flag");
+        if !super::quest::flag_key_ok(&flag) {
+            errors.push(format!("{label}: member_from_flag '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
+        }
+        let skill = json::s(g, "skill");
+        if skill.is_empty() || !v.has("skills", &skill) {
+            errors.push(format!("{label}: unknown skill '{skill}'."));
+        } else if json::b(v.get("skills", &skill), "system", false) {
+            errors.push(format!("{label}: '{skill}' is a system skill (every unit has it)."));
+        }
+        if let Some(c) = g.get("requires_flags") {
+            errors.extend(super::quest::condition_errors(c, &format!("{label}: requires_flags")));
+        }
+    }
+    errors
+}
+
 // ---- Stay-behind and unkillable (ENCOUNTER2 3 and 6; not in Godot) ----
 
 /// The `stay_behind` keys (section 6); the hold-only and stand-only ones.

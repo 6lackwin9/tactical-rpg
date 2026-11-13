@@ -12,7 +12,8 @@
 //! weapon effects `repair` (the picked instance back to `ItemDef::max_durability` for its scaled cost, `repair_cost`)
 //! and `reforge` (back to full; `masterwork` makes it masterwork), on a `weapon` recipe while instances are active
 //! (`weapons::active`; the run syncs them first), and the member effect `forge_rite` (`UnitState::forge_rite`, for a
-//! member with mastery 3 in a family).
+//! member with mastery 3 in a family). PR5-45: a `stash` recipe needs no pick; its effect `craft` adds `count` of its
+//! item to the party stash (a weapon gets a fresh full instance while instances are active, `weapons::sync`).
 
 use crate::data::Data;
 use crate::dialogue;
@@ -205,6 +206,7 @@ fn plan(d: &Data, gs: &mut GameState, npc_qid: &str, id: &str, pick: &Pick) -> R
             r::FX_SALVAGE => salvage(d, gs, fx, &pick.item, &mut notes)?,
             r::FX_REPAIR => repair(d, gs, fx, &pick.weapon, &mut notes)?,
             r::FX_REFORGE => reforge(d, gs, fx, &pick.weapon, &mut notes)?,
+            r::FX_CRAFT => craft(d, gs, fx, &mut notes)?,
             // reserved for a later system (PK4): nothing to apply yet, on any target
             r::FX_DOCTRINE => {}
             _ => member_effect(d, gs, &name, fx, pick, &mut notes)?,
@@ -387,12 +389,13 @@ fn repair(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<St
 /// PK2-FOLLOWUP: `reforge`: the picked weapon instance goes back to full durability and, with `masterwork`, becomes
 /// masterwork (its own technique opens in the main hand); refused when that changes nothing. AUDIT-08 (PR5-40): a
 /// masterwork reforge of a weapon that is already masterwork is refused even when it is worn (a plain `reforge` or a
-/// `repair` restores it), so the masterwork recipe is never a costlier repair.
+/// `repair` restores it), so the masterwork recipe is never a costlier repair; ACT1-HOOKS2 (FB-243 (c)): the refusal
+/// says so.
 fn reforge(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<String>) -> Result<(), String> {
     let w = weapons::find_mut(&mut gs.party, uid).ok_or("Pick a weapon.")?;
     let (name, max) = (d.item_name(&w.item), weapons::full(d, &w.item));
     if json::b(fx, "masterwork", false) && w.masterwork {
-        return Err(format!("{name} is already a masterwork."));
+        return Err(format!("{name} is already a masterwork. Use a plain reforge or a repair to restore it."));
     }
     let make = json::b(fx, "masterwork", false) && !w.masterwork;
     if !make && w.durability >= max {
@@ -401,6 +404,25 @@ fn reforge(d: &Data, gs: &mut GameState, fx: &Dict, uid: &str, notes: &mut Vec<S
     w.durability = w.durability.max(max);
     w.masterwork |= make;
     notes.push(if make { format!("{name} is reforged into a masterwork.") } else { format!("{name} is reforged ({max}/{max}).") });
+    Ok(())
+}
+
+/// PR5-45: `craft`: `count` (default `CRAFT_COUNT_DEFAULT`) of catalog item `item` go into the party stash; while
+/// weapon instances are active (`weapons::active`), a crafted weapon gets a fresh instance at full durability (the
+/// sync mints one per new stashed copy, the instances already held kept as they are).
+fn craft(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>) -> Result<(), String> {
+    let item = json::s(fx, "item");
+    if !d.cat.items.contains_key(&item) {
+        return Err(format!("Unknown item '{item}'."));
+    }
+    let count = json::i(fx, "count", r::CRAFT_COUNT_DEFAULT);
+    if !(1..=r::RECIPE_COUNT_MAX).contains(&count) {
+        return Err(format!("{} can't be made {count} at a time.", d.item_name(&item)));
+    }
+    gs.party.add_to_stash(&item, count);
+    weapons::sync(d, gs);
+    let name = d.item_name(&item);
+    notes.push(if count > 1 { format!("{name} x{count} added to stash.") } else { format!("{name} added to stash.") });
     Ok(())
 }
 

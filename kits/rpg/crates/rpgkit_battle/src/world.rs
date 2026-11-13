@@ -503,6 +503,12 @@ impl World {
         !(self.ruleset.has(rpgkit_rules::ruleset::ENEMY_MOVES) && self.enemies.contains(&c))
     }
 
+    /// ACT1-HOOKS2 (FB-244 (4)): the blocks `s` takes for unit `c` (`Unit::skill_blocks`: its own `blocks` plus the
+    /// unit's `skill_block_cost` deltas, at least 1); the planners, the AI, the previews and the commands read this.
+    pub fn blocks_of(&self, c: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
+        self.units[c].skill_blocks(s)
+    }
+
     /// The recovery blocks `c` books after the impact of `s` (RULESET1 T1, T4): the row's `recovery_blocks` for an
     /// enemy-side unit under `enemy_moves` using an Attack, Support or Focus skill (not an item); else 0 (party-side
     /// units, classic).

@@ -480,6 +480,26 @@
 								{
 									"key": "sunk_ward.talia_ivo_told",
 									"value": true
+								},
+								{
+									"key": "sunk_ward.ivo_lost",
+									"value": true
+								}
+							]
+						},
+						{
+							"text": "What happened to Ivo?",
+							"to": "ivo_lost",
+							"requires": [
+								{
+									"key": "sunk_ward.ivo_lost",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.talia_ivo_lost_told",
+									"value": true
 								}
 							]
 						},
@@ -548,6 +568,18 @@
 						{
 							"effect": "set_flag",
 							"key": "sunk_ward.talia_leg_told",
+							"value": true
+						}
+					]
+				},
+				{
+					"id": "ivo_lost",
+					"text": "Her hand closes on the rod until the notches bite. \"The Red Pen swept the pen at zero. They chalk a child and call it arithmetic. I'll remember who held the pen. Go on. Read the board twice.\"",
+					"next": "n0",
+					"effects": [
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.talia_ivo_lost_told",
 							"value": true
 						}
 					]
@@ -833,11 +865,38 @@
 							]
 						},
 						{
+							"text": "About Ida.",
+							"to": "ida_lost",
+							"requires": [
+								{
+									"key": "sunk_ward.ida_lost",
+									"value": true
+								}
+							],
+							"unless": [
+								{
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								}
+							],
+							"effects": [
+								{
+									"effect": "set_flag",
+									"key": "sunk_ward.corvo_settled",
+									"value": true
+								}
+							]
+						},
+						{
 							"text": "What do you keep behind the gate?",
 							"to": "ida",
 							"unless": [
 								{
 									"key": "sunk_ward.corvo_ida_told",
+									"value": true
+								},
+								{
+									"key": "sunk_ward.ida_lost",
 									"value": true
 								}
 							]
@@ -875,6 +934,11 @@
 					"speaker": "bailiff_corvo",
 					"text": "Corvo waves you off the post.",
 					"end": true
+				},
+				{
+					"id": "ida_lost",
+					"text": "He does not look up from the stone of his leg. \"They took her at the count. Nothing left to keep behind the gate. Go through. I won't stop you, and I won't say thank you.\"",
+					"next": "n0"
 				}
 			],
 			"services": false,
@@ -1034,7 +1098,7 @@
 				{
 					"id": "joined",
 					"speaker": "dunstan",
-					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed. Open Party (P) to swap them into the squad from the bench.",
+					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed. Open Party (P) to swap Dunstan into the squad from the bench.",
 					"end": true
 				}
 			],
@@ -1075,7 +1139,7 @@
 				{
 					"id": "joined",
 					"speaker": "elyse",
-					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper. Open Party (P) to swap them into the squad from the bench.",
+					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper. Open Party (P) to swap Elyse into the squad from the bench.",
 					"end": true
 				}
 			],
@@ -1119,6 +1183,12 @@
 									"effect": "sequence",
 									"sequence": "seq_interlude"
 								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "kaelen"
+								}
 							]
 						},
 						{
@@ -1144,6 +1214,12 @@
 								{
 									"effect": "sequence",
 									"sequence": "seq_interlude"
+								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "vesper"
 								}
 							]
 						},
@@ -1171,6 +1247,12 @@
 									"effect": "sequence",
 									"sequence": "seq_interlude"
 								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "maren"
+								}
 							]
 						},
 						{
@@ -1196,6 +1278,12 @@
 								{
 									"effect": "sequence",
 									"sequence": "seq_interlude"
+								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "hollis"
 								}
 							]
 						},
@@ -1237,9 +1325,8 @@
 							],
 							"requires": [
 								{
-									"kind": "flag",
-									"key": "sunk_ward.dunstan_joined",
-									"value": true
+									"kind": "in_active_party",
+									"character": "dunstan"
 								}
 							]
 						},
@@ -1270,9 +1357,8 @@
 							],
 							"requires": [
 								{
-									"kind": "flag",
-									"key": "sunk_ward.elyse_joined",
-									"value": true
+									"kind": "in_active_party",
+									"character": "elyse"
 								}
 							]
 						},

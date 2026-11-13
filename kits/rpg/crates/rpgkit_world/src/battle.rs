@@ -709,7 +709,8 @@ pub fn begin_world(d: &Data, gs: &mut GameState, fight: &Dict) -> Result<WorldFi
 /// reveal (`encounter_def_in`), in the fight's `zone` when it names one, granting each `start_status` entry whose
 /// `requires_flags` all hold (PACE1 rule 7). Each active member is fielded by the one builder (`roster::field_unit`:
 /// its class path, wounds, AI profile, default intent) wearing the art `art` gives it; the foes come from the world's
-/// characters (`WorldRoster` at the game state's `world_stage`); then the start-AP change (`lower_start_ap` with
+/// characters (`WorldRoster` at the game state's `world_stage`); ACT1-HOOKS2: a fielded member named by the entry's
+/// `flag_skills` holds those skills for this battle (`flag_skills`, `Unit::battle_skills`); then the start-AP change (`lower_start_ap` with
 /// `campaign::purse::battle_mods`, read before the session).
 pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut MemberArt) -> Result<WorldFight, String> {
     let enc_ref = json::s(fight, "encounter");
@@ -737,8 +738,15 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     let roster = WorldRoster { stage, allies, ..WorldRoster::new(d, world.clone()) };
     let mut party = Vec::new();
     let mut members = Vec::new();
+    let granted = flag_skills(d, gs, entry);
     for m in gs.party.active_members() {
-        let Some(field) = roster::field_unit(d, gs, m, &world) else { continue };
+        let Some(mut field) = roster::field_unit(d, gs, m, &world) else { continue };
+        // ACT1-HOOKS2 (FB-244 (1)): the encounter's battle grants for this member
+        for (_, skill) in granted.iter().filter(|(who, _)| *who == m.id) {
+            if !field.unit.battle_skills.contains(skill) {
+                field.unit.battle_skills.push(skill.clone());
+            }
+        }
         let (art, palette) = art(&world, m);
         party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone(), default_intent: field.default_intent });
         members.push((m.id.clone(), field.pouch_unloaded));
@@ -748,6 +756,25 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     let mut session = Session::start_with(d.cat.clone(), def, &roster, party);
     lower_start_ap(&mut session, heroes, &mods);
     Ok(WorldFight { session, world, members, stash_short, mods, intro: json::s(entry, "intro"), stage })
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): encounter row `entry`'s `flag_skills` (`rpgkit_data::FLAG_SKILLS`) as (member id, skill
+/// id), in row order: each entry whose `requires_flags` all hold grants its `skill`, for this battle only, to the party
+/// member flag `member_from_flag` names (`dialogue::member_from_flag`); an entry naming no member (the flag unset, or
+/// not a member) or an unknown skill grants nothing. `begin_world_with` gives them to the fielded members
+/// (`Unit::battle_skills`); a member on the bench gets none.
+pub fn flag_skills(d: &Data, gs: &GameState, entry: &Dict) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for g in json::aget(entry, rpgkit_data::FLAG_SKILLS).iter().filter_map(Value::as_object) {
+        let skill = json::s(g, "skill");
+        if d.cat.skill(&skill).is_none() || !json::aget(g, "requires_flags").iter().all(|c| quest::condition_met(gs, json::dict(c))) {
+            continue;
+        }
+        if let Some(id) = crate::dialogue::member_from_flag(d, gs, &json::s(g, "member_from_flag")) {
+            out.push((id, skill));
+        }
+    }
+    out
 }
 
 /// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and

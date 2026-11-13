@@ -1236,6 +1236,34 @@ pub fn classes_warnings(v: &View, w: &str) -> Vec<String> {
     out
 }
 
+/// ACT1-HOOKS2 (FB-243 (d), AUDIT-05): the world `w`'s units (its characters' base units, the lineage's too) of class
+/// `class_id`, derived (not fixed), re-checked against the overlaid class (`class`, with the overlay's path): a unit's
+/// `extra_skills` repeating a family of the overlay path is refused here. Only clashes the overlay brings are named
+/// (the unit row already reports those with the catalog class), one message per unit and family.
+fn overlay_unit_errors(v: &View, w: &str, class_id: &str, class: &rpgkit_data::ClassDef) -> Vec<String> {
+    let mut out = Vec::new();
+    if w.is_empty() || !v.worlds.has_world(w) {
+        return out;
+    }
+    let mut seen: Vec<String> = Vec::new();
+    for c in v.worlds.merged_entries(w, "characters") {
+        let unit_id = json::s(c, "base_unit");
+        let unit = v.get("units", &unit_id);
+        if unit_id.is_empty() || seen.contains(&unit_id) || json::s(unit, "class_id") != class_id || json::s(unit, "stat_mode") == "fixed" {
+            continue;
+        }
+        seen.push(unit_id.clone());
+        let extra = json::sget(unit, "extra_skills");
+        let base = v.typed.classes.get(class_id).map(|base| super::unit::duplicate_skill_errors(v, base, Some(&extra))).unwrap_or_default();
+        for e in super::unit::duplicate_skill_errors(v, class, Some(&extra)) {
+            if !base.contains(&e) {
+                out.push(format!("unit '{unit_id}': {e}"));
+            }
+        }
+    }
+    out
+}
+
 /// CN1: a manifest's `classes`: base class ids, each {name 1-32, description 0-240, skill_path absent or {family:
 /// level 1-30}}.
 pub fn classes_errors(v: &View, m: &Dict) -> Vec<String> {
@@ -1279,6 +1307,7 @@ pub fn classes_errors(v: &View, m: &Dict) -> Vec<String> {
                     let mut class = rpgkit_data::ClassDef::from_obj(v.get("classes", class_id));
                     class.skill_path = path.iter().map(|(fam, lvl)| (fam.clone(), json::to_int(lvl) as i32)).collect();
                     out.extend(super::unit::duplicate_skill_errors(v, &class, None).into_iter().map(|e| format!("{at}: {e}")));
+                    out.extend(overlay_unit_errors(v, json::s(m, "id").as_str(), class_id, &class).into_iter().map(|e| format!("{at}: {e}")));
                 }
             }
             Some(_) => out.push(format!("{at}: skill_path must be an object {{family: level}} ({{}} = no path).")),

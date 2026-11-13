@@ -1,7 +1,8 @@
 //! Recipes (PK2-S3, `docs/sessions/PK2_GRAFTS.md` section 4; engine-only, no Godot original): the checks of one row of
 //! the kind `recipes` against the catalog loaded before it (the id, name, origin and target, the cost's purse amounts
 //! and items, the effects: known, their keys, their target, their refs to items, body slots, unit tracks and class
-//! roles, and the effects whose system is not built yet; PK2-FOLLOWUP: a masterwork `reforge` needs `requires`) and
+//! roles, and the effects whose system is not built yet; PK2-FOLLOWUP: a masterwork `reforge` needs `requires`; PR5-45:
+//! a `craft` names a known item and an optional whole `count` 1..`RECIPE_COUNT_MAX`, on a `stash` recipe) and
 //! across rows (unique ids). The loader keeps the rows that
 //! pass, in file order. The world refs (the offering character, the `requires` conditions) are checked over the
 //! worlds (`world_errors`, the whole-catalog report).
@@ -225,6 +226,16 @@ fn effect_errors(name: &str, fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> 
                 out.push(format!("{at}: count must be a whole number 1..{RECIPE_COUNT_MAX}."));
             }
             out.extend(tier_theme_errors(fx, at, loaded));
+        }
+        r::FX_CRAFT => {
+            // PR5-45: a known catalog item, and its count (default `CRAFT_COUNT_DEFAULT`)
+            let item = json::s(fx, "item");
+            if row(loaded, "items", &item).is_none() {
+                out.push(format!("{at}: unknown item '{item}'."));
+            }
+            if fx.contains_key("count") && !whole_in(fx.get("count"), 1, RECIPE_COUNT_MAX) {
+                out.push(format!("{at}: count must be a whole number 1..{RECIPE_COUNT_MAX}."));
+            }
         }
         r::FX_REFORGE => {
             if fx.get("masterwork").is_some_and(|v| !v.is_boolean()) {

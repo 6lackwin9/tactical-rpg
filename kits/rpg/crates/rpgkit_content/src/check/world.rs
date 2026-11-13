@@ -544,6 +544,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(encounter::stay_behind_problems(v, e, true));
     // ACT1-HOOKS1: the guests-that-lived flag
     errors.extend(encounter::survivors_problems(v, w, e));
+    // ACT1-HOOKS2: the battle skill grants keyed on a member flag
+    errors.extend(encounter::flag_skills_problems(v, e));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects (a ref plays as its character's base unit)
     errors.extend(super::hooks::arena_hazards_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND)));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
@@ -921,7 +923,9 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
         // HOOKS1 DU1 (user 2026-10-29 (b)): an add that pushes out an automatic deck's families
         let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
         let deck = super::hooks::deck_effect_warnings(v, e, Some(w), &unit_of);
-        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward).chain(arena).chain(deck) {
+        // ACT1-HOOKS2 (FB-243 (b)): survivors counting a guest that can flee
+        let survivors = encounter::survivors_warnings(v, w, e);
+        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward).chain(arena).chain(deck).chain(survivors) {
             out.push(format!("{w}:{id}: {warning}"));
         }
     }

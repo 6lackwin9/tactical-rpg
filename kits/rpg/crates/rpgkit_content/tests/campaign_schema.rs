@@ -286,7 +286,7 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
         ("checkpoints", "deadline 1000", cp.clone(), with(&cp, &["deadline"], json!(1000)), "Deadline day must be 1..999."),
         ("triggers", "an encounter with on day", raid.clone(), with(&without(&raid, "outcome"), &["on"], json!("day")), "Encounter is for on battle only."),
         ("triggers", "an outcome with on enter", act1.clone(), with(&act1, &["outcome"], json!("lost")), "Outcome is for on battle only."),
-        ("triggers", "a location with on battle", act1.clone(), with(&act1, &["on"], json!("battle")), "Location is for on enter only."),
+        ("triggers", "a location with on battle", act1.clone(), with(&act1, &["on"], json!("battle")), "Location is for on enter or on any only."),
         ("triggers", "no effects and no then", wiped.clone(), with(&wiped, &["effects"], json!([])), "needs effects or then"),
         ("triggers", "an effect that opens a screen", wiped.clone(), with(&wiped, &["effects", "0"], json!({"effect": "fight", "encounter": "raid"})), "opens a screen"),
         ("triggers", "a then battle unknown", raid.clone(), with(&raid, &["then", "0"], json!({"battle": "ghost"})), "unknown encounter 'ghost'"),
@@ -303,6 +303,8 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
     for (kind, tag, good, bad, needle) in cases {
         assert_one(&v, kind, &good, &bad, needle, tag);
     }
+    // ACT1-HOOKS2 (FB-246 (a)): on any, a location reads "while the party is there"
+    assert!(added(&v, "triggers", &act1, &with(&act1, &["on"], json!("any"))).is_empty(), "a location with on any is allowed");
     drop_scratch(&data);
 }
 
@@ -329,10 +331,10 @@ fn campaign_effects_and_read_keys_are_checked_in_dialogue() {
     for (tag, bad, needle) in cases {
         assert_one(&v, "dialogues", &d, &bad, needle, tag);
     }
-    // the unknown-effect message lists the campaign effects after the dialogue ones (T1.2-S2's roll among them) and
-    // STORYUI1's story effects
+    // the unknown-effect message lists the campaign effects after the dialogue ones (T1.2-S2's roll and ACT1-HOOKS2's
+    // install among them) and STORYUI1's story effects
     let unknown = added(&v, "dialogues", &d, &with(&d, &[&fx[..], &["1", "effect"]].concat(), json!("zz")));
-    assert!(unknown.iter().any(|m| m.contains("recruit, roll, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
+    assert!(unknown.iter().any(|m| m.contains("recruit, roll, install, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
     drop_scratch(&data);
 }
 

@@ -82,6 +82,7 @@ Every Act 1 boss encounter pairs mechanical phase triggers with 1-2 line charact
     ["execution_wall"], "order": {"assault": ["execution_wall", "gilded_billhook_sunder"]}}`.
   - `vane_withdraws` (`CL-01`): `hp_below` 25, effects line `"This isn't over, deserter."`, `talk` (`captain_vane` -> `dlg_talk_m1_retreat`), ai `{"unit": "captain_vane", "flee_ratio": 1.0}`.
 - Reward: `city_gate_pass` is the objective reward and `vanes_gilded_pavise` is delivered on win (both awarded whether he fled or fell); Vane's final reckoning is Kaelen's (or Berek's inherited, `CL-09`) Act 2 quest.
+- Balance note (`FB-248(c)`): M1 (`enc_evt_01`) and M2 (`enc_evt_02`) stay tuned for human tactical play (do not nerf boss tiers/armour for autoplay); `PR5-44` bumps both `max_rounds` (`8 -> 10`) and reviews Vane guard rate (`traitors_parry`) and Quell `regen` stall pacing.
 
 ### 3.2 Proctor Quell (M2, `enc_evt_02`; Tier 1): the brass marrow valve
 
