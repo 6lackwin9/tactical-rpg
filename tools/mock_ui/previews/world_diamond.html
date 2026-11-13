@@ -223,7 +223,7 @@ function render() {
     ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">Act 1 progress:</span>` +
       DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') +
       `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
-      [['data', 'Data'], ['spaced', 'Hub ↓ / grate ↑']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
+      [['data', 'Data'], ['spaced', 'Spaced']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
       `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
       [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected'], ['faint', 'Faint, lit on hover / focus']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
   let map;

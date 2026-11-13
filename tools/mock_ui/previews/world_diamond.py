@@ -58,9 +58,14 @@ CURRENT = [
 ]
 
 
-# A proposed spacing (Tushar 2026-11-13: the hub and grate landmarks nearly touch at the data's map_pos): the hub
-# lower, the grate higher. Preview only; the real positions are game data (Outbox AO-01).
-SPACED = {"sluice_undercroft": (0.5, 0.94), "drowned_runoff_grate": (0.5, 0.69)}
+# A proposed spacing (Tushar 2026-11-13: the hub and grate, 02/04, 03/05 and 06/07 landmarks nearly touch at the data's
+# map_pos). Preview only; the real positions are game data (Outbox AO-01).
+SPACED = {  # each same-column pair (00/01, 02/04, 03/05, 06/07) about 60 px apart: a 48 px landmark plus its label
+    "slag_gate": (0.5, 0.113), "crucible_watchpost": (0.5, 0.324),
+    "fourth_kiln": (0.31, 0.514), "tallow_vats": (0.69, 0.514),
+    "alleyway_junction_7": (0.31, 0.725), "ash_crawl_crossroads": (0.69, 0.725),
+    "drowned_runoff_grate": (0.5, 0.768), "corvos_gate": (0.86, 0.768), "sluice_undercroft": (0.5, 0.986),
+}
 
 
 def px(mx: float) -> int:
