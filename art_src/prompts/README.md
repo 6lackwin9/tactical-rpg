@@ -73,6 +73,7 @@ Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own 
 | 19 Chorus Spire | take B (Y-shaped bone forks, reed shrines with candles), slab removed in Flow; the vent's steam kept, as part of the geyser | `... landmark art_src/lm_chorus_spire.png chorus_spire --size 134` |
 | 20 Silent Ossuary | take A (skull-and-bone facade in a rock hollow, gilded door, cold lamp), slab removed and turned to face the viewer in Flow (second edit) | `... landmark art_src/lm_silent_ossuary.png silent_ossuary --size 125` |
 | 21 High Altar | take B (front-facing stepped gilded altar, reliquary throne, cracked stair, brass pipes into twin basins, candles) | `... landmark art_src/lm_high_altar.png high_altar --size 134` |
+| 22 The Dreaming Core | take A (split black-stone brainstem with blue-violet marrow light, pale and cyan crystals, scaffolds, a brick ring of the pit's rim) | `... landmark art_src/lm_dreaming_core.png dreaming_core --size 115` |
 | 18 Marrow Conduits | take A (two brass conduits looping down a basalt wall, valve wheels, pump house, violet windows) with the steam filled in and toned down | `... landmark art_src/lm_marrow_conduits.png marrow_conduits --desmoke 0.61,0.38,0.76,0.58 --grade 0.72:0.85 --size 115` (the slab-free edit) |
 
 ## Blending an act's landmarks into its background (integration pass, 2026-11-13)

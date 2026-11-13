@@ -72,6 +72,15 @@
    ],
    "scale": 1.4,
    "fix": []
+  },
+  "dreaming_core": {
+   "src": "art_src/lm_dreaming_core.png",
+   "pos": [
+    0.5,
+    0.2
+   ],
+   "scale": 1.2,
+   "fix": []
   }
  }
 }
