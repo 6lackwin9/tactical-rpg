@@ -26,7 +26,8 @@ pub struct TriggerDef {
     pub encounter: String,
     /// On battle: won, lost, fled or any.
     pub outcome: String,
-    /// On enter: the location's qid ("" = any).
+    /// On enter: the location's qid ("" = any); ACT1-HOOKS2 (FB-246 (a)): on any, the location the party must be at
+    /// when the tick runs ("" = anywhere).
     pub location: String,
     pub when: Value,
     pub once: bool,
@@ -73,6 +74,13 @@ impl TriggerDef {
         }
     }
 
+    /// ACT1-HOOKS2 (FB-246 (a)): an `any` trigger with a `location` is checked only while the party is at that location
+    /// (`GameState::location_id`, after a fight, a turn-in, a day, an entry...); every other trigger is checked anywhere
+    /// (`enter` filters by the entered location in `matches`).
+    pub fn at_location(&self, gs: &GameState) -> bool {
+        self.on != "any" || self.location.is_empty() || gs.location_id == self.location
+    }
+
     /// T1: every `when` condition holds now (read keys included).
     pub fn holds(&self, gs: &GameState) -> bool {
         quest::all_hold(gs, &self.when)
@@ -90,7 +98,8 @@ pub fn defs(d: &Data, w: &str) -> Vec<TriggerDef> {
 }
 
 /// T1, T2, the tick's trigger step after `cause`: first a repeatable trigger whose `when` stopped holding leaves
-/// `armed` (it may fire again); then, in data order, each trigger checked after this cause whose `when` holds fires
+/// `armed` (it may fire again); then, in data order, each trigger checked after this cause (an `any` trigger with a
+/// `location` only while the party is there, `at_location`) whose `when` holds fires
 /// unless it already did (`once`: its `trigger:<id>` in `fired`; repeatable: its id in `armed`). Firing runs the
 /// effects at once (the shared effect body; a `trigger_fired` event carries their notes for the log) and, unless the
 /// run ended, queues the `then` items in `pending`. Stops at the first `end` (F1). Returns whether any fired (the rules
@@ -102,6 +111,9 @@ pub fn step(d: &Data, gs: &mut GameState, cause: &Cause, events: &mut Vec<Value>
     c.armed.retain(|id| holding.contains(id));
     let mut fired = false;
     for t in rows.iter().filter(|t| t.matches(cause)) {
+        if !t.at_location(gs) {
+            continue;
+        }
         let Some(c) = gs.campaign.as_ref() else { break };
         if c.is_over() {
             break;

@@ -992,11 +992,16 @@ impl DialogueRunner {
         if !problems.is_empty() {
             return json::ok_result(false, &problems);
         }
+        let act = gs.campaign.as_ref().map(|c| c.act);
         let res = quest::complete(d, gs, &qid, recipient, picks);
         if !json::b(&res, "ok", false) {
             return json::ok_result(false, &json::sget(&res, "errors"));
         }
-        self.apply(d, gs, &rest);
+        // ACT1-HOOKS2 (FB-246 (a)): a turn-in is a campaign tick even with no effects after it (its rewards and
+        // complete_flags may satisfy a trigger's `when`); one tick for the turn-in and its effects
+        apply_effects(d, gs, &rest, &mut self.notes, &mut self.campaign_events);
+        let events = crate::campaign::after_effects(d, gs, act);
+        self.campaign_events.extend(events);
         self.pending = None;
         let mut moved = self.move_to(d, gs, &to);
         moved.insert("granted".into(), res.get("granted").cloned().unwrap_or(Value::Null));

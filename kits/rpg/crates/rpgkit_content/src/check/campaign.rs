@@ -620,8 +620,9 @@ pub fn trigger_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     if json::s(e, "outcome") != "any" && on != "battle" {
         errors.push("Outcome is for on battle only.".into());
     }
-    if !json::s(e, "location").is_empty() && on != "enter" {
-        errors.push("Location is for on enter only.".into());
+    // ACT1-HOOKS2 (FB-246 (a)): on any, a location means "while the party is there"
+    if !json::s(e, "location").is_empty() && on != "enter" && on != "any" {
+        errors.push("Location is for on enter or on any only.".into());
     }
     errors.extend(condition_errors(json::get(e, "when"), "When"));
     let (effects, then) = (json::get(e, "effects"), json::get(e, "then"));

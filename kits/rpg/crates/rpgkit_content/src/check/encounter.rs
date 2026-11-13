@@ -995,6 +995,30 @@ pub fn survivors_problems(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors
 }
 
+/// ACT1-HOOKS2 (FB-243 (b)): a world encounter's `survivors` that counts a guest who can flee (its unit's `flee_ratio`
+/// above 0 and not reckless, as the AI withdraws): a guest that fled the field counts as surviving, so the count can
+/// read high. One warning per counted guest (`survivors.unit` "" = every guest).
+pub fn survivors_warnings(v: &View, w: &str, e: &Dict) -> Vec<String> {
+    let Some(block) = e.get("survivors").and_then(Value::as_object).filter(|b| !b.is_empty()) else { return Vec::new() };
+    let unit = json::s(block, "unit");
+    let mut out = Vec::new();
+    for r in strings(json::get(e, "guests")) {
+        let c = v.worlds.resolve(w, "characters", &r);
+        let base = if c.is_empty() { r.clone() } else { json::s(c, "base_unit") };
+        if !unit.is_empty() && r != unit && json::s(c, "id") != unit && base != unit {
+            continue;
+        }
+        let Some(u) = v.typed.units.get(&base) else { continue };
+        if u.flee_ratio > 0.0 && !u.reckless {
+            out.push(format!(
+                "Survivors counts guest '{r}', who can flee (flee_ratio {}); a guest that fled counts as surviving. Set its flee_ratio to 0 or make it reckless.",
+                u.flee_ratio
+            ));
+        }
+    }
+    out
+}
+
 // ---- Flag skills (ACT1-HOOKS2) ----
 
 /// ACT1-HOOKS2 (FB-244 (1)): a world encounter's `flag_skills` (`[]` or absent = none): a list of at most

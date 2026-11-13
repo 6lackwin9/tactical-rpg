@@ -923,7 +923,9 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
         // HOOKS1 DU1 (user 2026-10-29 (b)): an add that pushes out an automatic deck's families
         let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
         let deck = super::hooks::deck_effect_warnings(v, e, Some(w), &unit_of);
-        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward).chain(arena).chain(deck) {
+        // ACT1-HOOKS2 (FB-243 (b)): survivors counting a guest that can flee
+        let survivors = encounter::survivors_warnings(v, w, e);
+        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward).chain(arena).chain(deck).chain(survivors) {
             out.push(format!("{w}:{id}: {warning}"));
         }
     }

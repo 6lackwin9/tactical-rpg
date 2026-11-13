@@ -286,7 +286,7 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
         ("checkpoints", "deadline 1000", cp.clone(), with(&cp, &["deadline"], json!(1000)), "Deadline day must be 1..999."),
         ("triggers", "an encounter with on day", raid.clone(), with(&without(&raid, "outcome"), &["on"], json!("day")), "Encounter is for on battle only."),
         ("triggers", "an outcome with on enter", act1.clone(), with(&act1, &["outcome"], json!("lost")), "Outcome is for on battle only."),
-        ("triggers", "a location with on battle", act1.clone(), with(&act1, &["on"], json!("battle")), "Location is for on enter only."),
+        ("triggers", "a location with on battle", act1.clone(), with(&act1, &["on"], json!("battle")), "Location is for on enter or on any only."),
         ("triggers", "no effects and no then", wiped.clone(), with(&wiped, &["effects"], json!([])), "needs effects or then"),
         ("triggers", "an effect that opens a screen", wiped.clone(), with(&wiped, &["effects", "0"], json!({"effect": "fight", "encounter": "raid"})), "opens a screen"),
         ("triggers", "a then battle unknown", raid.clone(), with(&raid, &["then", "0"], json!({"battle": "ghost"})), "unknown encounter 'ghost'"),
@@ -303,6 +303,8 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
     for (kind, tag, good, bad, needle) in cases {
         assert_one(&v, kind, &good, &bad, needle, tag);
     }
+    // ACT1-HOOKS2 (FB-246 (a)): on any, a location reads "while the party is there"
+    assert!(added(&v, "triggers", &act1, &with(&act1, &["on"], json!("any"))).is_empty(), "a location with on any is allowed");
     drop_scratch(&data);
 }
 

@@ -73,3 +73,29 @@ fn a_bad_block_names_each_problem() {
     let lonely = encounter::survivors_problems(&view(), "w", &enc(json!({"flag": "w.saved"}), json!([])));
     assert_eq!(lonely, ["Survivors needs the encounter's guests (it counts the guests that lived)."]);
 }
+
+/// ACT1-HOOKS2 (FB-243 (b)): `survivors` counting a guest whose unit can flee (`flee_ratio` above 0, not reckless) is a
+/// warning on the encounter (a fled guest counts as surviving); a guest at `flee_ratio` 0, a reckless one, a guest the
+/// `unit` filter leaves out, or no `survivors` block warn nothing.
+#[test]
+fn survivors_counting_a_guest_that_can_flee_warns() {
+    let catalog = json!({"units": [
+        {"id": "captive", "name": "Captive", "flee_ratio": 0.4},
+        {"id": "squire", "name": "Squire", "flee_ratio": 0.0},
+        {"id": "brave", "name": "Brave", "flee_ratio": 0.5, "reckless": true}
+    ]});
+    let worlds = json!({"w": {"manifest": {"id": "w", "name": "W"}, "own": {"characters": with_ids("w", json!([
+        {"id": "cap_a", "name": "Cap A", "role": "npc", "base_unit": "captive"},
+        {"id": "aide", "name": "Aide", "role": "npc", "base_unit": "squire"},
+        {"id": "bold", "name": "Bold", "role": "npc", "base_unit": "brave"}
+    ]))}}});
+    let v = View::new(&catalog, &worlds, &json!({}), Default::default());
+    let warn = |survivors: Value, guests: Value| encounter::survivors_warnings(&v, "w", &enc(survivors, guests));
+    let fleeing = warn(json!({"flag": "w.saved"}), json!(["cap_a", "aide", "bold"]));
+    assert_eq!(fleeing.len(), 1, "{fleeing:?}");
+    assert!(fleeing[0].starts_with("Survivors counts guest 'cap_a', who can flee (flee_ratio 0.4)"), "{fleeing:?}");
+    assert_eq!(warn(json!({"flag": "w.saved", "unit": "captive"}), json!(["cap_a", "aide"])).len(), 1, "the counted unit can flee");
+    assert!(warn(json!({"flag": "w.saved", "unit": "squire"}), json!(["cap_a", "aide"])).is_empty(), "the filter leaves the fleeing guest out");
+    assert!(warn(json!({"flag": "w.saved"}), json!(["aide", "bold"])).is_empty(), "flee_ratio 0 and reckless guests stay");
+    assert!(warn(json!({}), json!(["cap_a"])).is_empty(), "no survivors block");
+}
