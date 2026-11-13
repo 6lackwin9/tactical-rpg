@@ -190,6 +190,10 @@
 						{
 							"key": "sunk_ward.ivo_rescued",
 							"value": true
+						},
+						{
+							"key": "sunk_ward.ivo_lost",
+							"value": true
 						}
 					],
 					"sets_flags": [

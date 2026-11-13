@@ -855,6 +855,62 @@
 					"delta": 1
 				}
 			]
+		},
+		{
+			"id": "skerrit_bone_cestus",
+			"name": "Shards into a Barbed Bone Cestus",
+			"description": "Skerrit works Calcified Bone Shards into a Barbed Bone Cestus at his bench.",
+			"npc": "skerrit_bone_wright",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "sunk_ward.skerrit_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 25,
+				"items": {
+					"calcified_bone_shard": 2
+				}
+			},
+			"target": "stash",
+			"effects": [
+				{
+					"effect": "craft",
+					"item": "barbed_bone_cestus",
+					"count": 1
+				}
+			]
+		},
+		{
+			"id": "skerrit_bone_quarrel",
+			"name": "Shard into a Bone Quarrel",
+			"description": "Skerrit works Calcified Bone Shards into a Bone Quarrel at his bench.",
+			"npc": "skerrit_bone_wright",
+			"requires": [
+				{
+					"kind": "flag",
+					"key": "sunk_ward.skerrit_open",
+					"value": true,
+					"op": "=="
+				}
+			],
+			"cost": {
+				"gold": 10,
+				"items": {
+					"calcified_bone_shard": 1
+				}
+			},
+			"target": "stash",
+			"effects": [
+				{
+					"effect": "craft",
+					"item": "bone_quarrel",
+					"count": 1
+				}
+			]
 		}
 	]
 }
