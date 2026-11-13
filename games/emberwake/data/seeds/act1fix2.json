@@ -1733,6 +1733,368 @@
      "scene"
     ]
    }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_06",
+    "name": "The Crucible",
+    "description": "M5: the Crucible watchpost; one founder holds the winch, three get out.",
+    "intro": "The Slag Gate winch is two tiles from a muster yard.",
+    "location": "crucible_watchpost",
+    "zone": "watchpost",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ],
+     [
+      11,
+      5
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..........#",
+     "#..f..#....#",
+     "#.....#.....",
+     "#...........",
+     "#.....#.....",
+     "#..f..#....#",
+     "#..........#",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "vesper",
+     "kaelen",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "castellan_footman",
+     "castellan_footman",
+     "inquisitor_prelate_nemeth",
+     "inquisitorial_purifier",
+     "inquisitorial_purifier",
+     "watch_crossbowman",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "gate_reinforcements",
+      "name": "The watchpost empties",
+      "trigger": {
+       "kind": "arrival",
+       "round": 3,
+       "block": 1
+      },
+      "effects": [
+       {
+        "type": "wave",
+        "units": [
+         "castellan_footman",
+         "castellan_footman"
+        ],
+        "label": "The watchpost empties"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "infusion",
+      "name": "Marrow infusion",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "inquisitor_prelate_nemeth",
+       "pct": 50,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Cold steel cannot finish me."
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_cold_steel",
+        "speaker": "inquisitor_prelate_nemeth"
+       },
+       {
+        "type": "status",
+        "unit": "inquisitor_prelate_nemeth",
+        "status": "steadfast",
+        "rounds": 2,
+        "magnitude": 0
+       },
+       {
+        "type": "enrage",
+        "unit": "inquisitor_prelate_nemeth",
+        "power": 20
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "gate_closing",
+      "name": "The gate closes",
+      "trigger": {
+       "kind": "round",
+       "round": 6
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The gate! Now, or never!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_winch",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "escape",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 3,
+    "objective_text": "Open the Slag Gate: one holds the winch, three get out.",
+    "unkillable": [
+     "inquisitor_prelate_nemeth"
+    ],
+    "timeout_outcome": "lost",
+    "stay_behind": {
+     "mode": "hold",
+     "tiles": [
+      [
+       10,
+       1
+      ]
+     ],
+     "tiles_label": "the winch",
+     "fallback": "any",
+     "pick_default": "highest_hp",
+     "flag": "sunk_ward.crucible_stayed",
+     "then": "capture",
+     "result_line": "{name} held the winch."
+    },
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 4,
+    "protect": [],
+    "tags": [
+     "main",
+     "checkpoint"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_06_overlook",
+    "name": "The Crucible (Overlook)",
+    "description": "M5 variant when Hollis completed the Crag-Sight Overlook: the counterweight delays the reinforcements to round 4.",
+    "intro": "The Slag Gate winch is two tiles from a muster yard.",
+    "location": "crucible_watchpost",
+    "zone": "watchpost",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ],
+     [
+      11,
+      5
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..........#",
+     "#..f..#....#",
+     "#.....#.....",
+     "#...........",
+     "#.....#.....",
+     "#..f..#....#",
+     "#..........#",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "vesper",
+     "kaelen",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "castellan_footman",
+     "castellan_footman",
+     "inquisitor_prelate_nemeth",
+     "inquisitorial_purifier",
+     "inquisitorial_purifier",
+     "watch_crossbowman",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "gate_reinforcements",
+      "name": "The watchpost empties",
+      "trigger": {
+       "kind": "arrival",
+       "round": 4,
+       "block": 1
+      },
+      "effects": [
+       {
+        "type": "wave",
+        "units": [
+         "castellan_footman",
+         "castellan_footman"
+        ],
+        "label": "The watchpost empties"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "infusion",
+      "name": "Marrow infusion",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "inquisitor_prelate_nemeth",
+       "pct": 50,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Cold steel cannot finish me."
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_cold_steel",
+        "speaker": "inquisitor_prelate_nemeth"
+       },
+       {
+        "type": "status",
+        "unit": "inquisitor_prelate_nemeth",
+        "status": "steadfast",
+        "rounds": 2,
+        "magnitude": 0
+       },
+       {
+        "type": "enrage",
+        "unit": "inquisitor_prelate_nemeth",
+        "power": 20
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "gate_closing",
+      "name": "The gate closes",
+      "trigger": {
+       "kind": "round",
+       "round": 6
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The gate! Now, or never!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_winch",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "escape",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 3,
+    "objective_text": "Open the Slag Gate: one holds the winch, three get out.",
+    "unkillable": [
+     "inquisitor_prelate_nemeth"
+    ],
+    "timeout_outcome": "lost",
+    "stay_behind": {
+     "mode": "hold",
+     "tiles": [
+      [
+       10,
+       1
+      ]
+     ],
+     "tiles_label": "the winch",
+     "fallback": "any",
+     "pick_default": "highest_hp",
+     "flag": "sunk_ward.crucible_stayed",
+     "then": "capture",
+     "result_line": "{name} held the winch."
+    },
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 4,
+    "protect": [],
+    "tags": [
+     "main",
+     "checkpoint"
+    ]
+   }
   }
  ]
 }

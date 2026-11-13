@@ -1357,17 +1357,17 @@
 			"start_ap": 0,
 			"rng_seed": 1337,
 			"party": [
-				"kaelen",
 				"vesper",
+				"kaelen",
 				"maren",
 				"hollis"
 			],
 			"enemies": [
+				"castellan_footman",
+				"castellan_footman",
 				"inquisitor_prelate_nemeth",
 				"inquisitorial_purifier",
 				"inquisitorial_purifier",
-				"castellan_footman",
-				"castellan_footman",
 				"watch_crossbowman",
 				"watch_crossbowman"
 			],
@@ -1533,17 +1533,17 @@
 			"start_ap": 0,
 			"rng_seed": 1337,
 			"party": [
-				"kaelen",
 				"vesper",
+				"kaelen",
 				"maren",
 				"hollis"
 			],
 			"enemies": [
+				"castellan_footman",
+				"castellan_footman",
 				"inquisitor_prelate_nemeth",
 				"inquisitorial_purifier",
 				"inquisitorial_purifier",
-				"castellan_footman",
-				"castellan_footman",
 				"watch_crossbowman",
 				"watch_crossbowman"
 			],
