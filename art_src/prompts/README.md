@@ -67,7 +67,7 @@ Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own 
 
 | Location | Pick | Cut |
 | --- | --- | --- |
-| background | take A, edited in Flow (the pit and its stepped plateau moved lower) | `backgrounds/world_map/mantle_fissure.png`, 1920 x 1080 |
+| background | take A, edited twice in Flow (the pit and its stepped plateau moved lower; a landing for the hideout beside the cave ledge) | `backgrounds/world_map/mantle_fissure.png`, 1920 x 1080 |
 
 ## Running through the image queue
 
