@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunk Ward Diamond Map</title>
+<style>
+__STYLES_CSS__
+
+  .wd-page { width: 1280px; margin: 0 auto; padding: 10px 0 24px; }
+  .wd-bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 8px; font-family: 'OpenSans', sans-serif; }
+  .wd-bar .lbl { font-size: 11px; font-weight: 700; margin: 0 2px 0 8px; }
+  .wd-frame { width: 1280px; height: 720px; position: relative; overflow: hidden; border: 1px solid #374151; background: #0a0b10; }
+  .wd-note { margin-top: 8px; padding: 8px 12px; font-family: 'OpenSans', sans-serif; font-size: 13px; line-height: 1.5; color: var(--text); background: #0e1016; border: 1px solid #2d333f; }
+  .wd-note b { color: var(--gold); }
+  .wd-tier { position: absolute; left: 5px; font-family: 'JetBrainsMono', monospace; font-size: 5.2px; letter-spacing: 0.6px; color: #9ca3af; opacity: 0.85; background: rgba(10,11,16,0.7); padding: 0.5px 3px; border-left: 1.5px solid #4b5563; z-index: 4; }
+  .wd-node { position: absolute; width: 28px; height: 28px; display: flex; flex-direction: column; align-items: center; cursor: pointer; z-index: 10; }
+  .wd-pin { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px #000; }
+  .wd-label { font-size: 6px; white-space: nowrap; margin-top: 1px; padding: 0.5px 3px; background: rgba(10,11,16,0.92); display: flex; gap: 3px; align-items: center; }
+  .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
+  .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
+  .wd-node.locked .wd-label { opacity: 0.55; }
+  .wd-node.locked .wd-mtag { background: #6b7280; }
+  .wd-node.cleared .wd-mtag { background: #4b5563; color: #d9cbb4; }
+  .wd-check { position: absolute; right: -1px; top: -3px; font-size: 8px; color: var(--ok); text-shadow: 0 0 2px #000, 0 0 2px #000; font-weight: 700; }
+  .wd-interlude { position: absolute; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #a855f7; box-shadow: 0 0 10px rgba(168,85,247,0.75); animation: wdPulse 1.6s ease-in-out infinite; z-index: 9; pointer-events: none; }
+  .wd-interlude-tag { position: absolute; font-family: 'JetBrainsMono', monospace; font-size: 5.2px; color: #e9d5ff; background: rgba(88,28,135,0.92); border: 0.5px solid #a855f7; padding: 0.5px 3px; white-space: nowrap; z-index: 12; }
+  @keyframes wdPulse { 0%, 100% { opacity: 0.55; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
+  .wd-legend { position: absolute; left: 6px; bottom: 6px; padding: 3px 6px; font-size: 5.6px; color: var(--dim); display: flex; gap: 7px; align-items: center; z-index: 20; }
+  .wd-legend svg { vertical-align: middle; }
+  .wd-route { display: flex; justify-content: space-between; gap: 4px; padding: 1.5px 0; border-bottom: 0.5px solid #1f2430; }
+</style>
+</head>
+<body>
+<div class="wd-page">
+  <div class="wd-bar" id="wd-bar"></div>
+  <div class="wd-frame"><div class="legacy-640-stage" id="wd-stage"></div></div>
+  <div class="wd-note" id="wd-note"></div>
+</div>
+<script>
+const ASSETS = __ASSETS_JSON__;
+const DATA = __DATA_JSON__;
+const G = DATA.graph;
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7' };
+const FLAG_NAMES = {
+  'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
+  'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
+};
+const node = id => G.nodes.find(n => n.id === id);
+const isOpen = (e, step) => e.req.every(f => DATA.steps[step].flags.includes(f));
+const isShortcut = e => e.req.includes('sunk_ward.lock_ciphers_done');
+const opensAfter = e => e.req.length ? 'after ' + e.req.map(f => FLAG_NAMES[f] || f).join(' + ') : 'from Day 1';
+
+function reachable(step) {
+  const seen = new Set(['sluice_undercroft']);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    G.edges.forEach(e => {
+      if (!isOpen(e, step)) return;
+      if (seen.has(e.a) && !seen.has(e.b)) { seen.add(e.b); grew = true; }
+      if (seen.has(e.b) && !seen.has(e.a)) { seen.add(e.a); grew = true; }
+    });
+  }
+  return seen;
+}
+
+const padlock = (x, y) => `<g transform="translate(${x - 3},${y - 3.5})"><rect x="0.5" y="3" width="5" height="4" rx="0.6" fill="#1f2430" stroke="#6b7280" stroke-width="0.6"/><path d="M1.6 3 V2 a1.4 1.4 0 0 1 2.8 0 V3" fill="none" stroke="#6b7280" stroke-width="0.6"/></g>`;
+
+function routesSvg() {
+  const step = S.step, prev = Math.max(0, step - 1);
+  return G.edges.map(e => {
+    const a = node(e.a), b = node(e.b), open = isOpen(e, step);
+    const fresh = open && step > 0 && !isOpen(e, prev);
+    const hot = open && (e.a === S.sel || e.b === S.sel);
+    let stroke = '#6b7280', w = 1.2, dash = '3,2', extra = '';
+    if (!open) { stroke = '#3f4552'; w = 1; dash = '1,2.5'; }
+    else if (isShortcut(e)) { stroke = '#06b6d4'; w = 1.3; dash = '2,1.5'; }
+    if (fresh) { stroke = isShortcut(e) ? '#22d3ee' : '#f59e0b'; w = 2; extra = 'filter="url(#wdGlow)"'; }
+    if (hot) { stroke = '#fbbf24'; w = 2; }
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${stroke}" stroke-width="${w}" stroke-dasharray="${dash}" ${extra}/>` + (open ? '' : padlock(mx, my));
+  }).join('');
+}
+
+function nodesHtml() {
+  const step = DATA.steps[S.step], reach = reachable(S.step);
+  return G.nodes.map(n => {
+    const cleared = step.cleared.includes(n.id);
+    const locked = !reach.has(n.id);
+    const sel = n.id === S.sel;
+    const isMission = /^M\d/.test(n.mission);
+    const available = isMission && !cleared && !locked;
+    const cls = ['wd-node', locked ? 'locked' : '', cleared ? 'cleared' : ''].join(' ');
+    const tag = isMission ? n.mission.split(' ')[0] : (n.mission === 'Side job' ? 'JOB' : '');
+    return `
+      <div class="${cls}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';render();">
+        <div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
+          <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
+        </div>
+        ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:0;top:-2px;width:10px;height:10px;">` : ''}
+        ${cleared ? `<span class="wd-check">✓</span>` : ''}
+        ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:-2px;top:-2px;width:10px;height:10px;">` : ''}
+        <div class="wd-label" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};">
+          ${tag ? `<span class="wd-mtag">${tag}</span>` : ''}<span>${n.num} · ${n.name}</span>
+        </div>
+      </div>`;
+  }).join('') + (step.interlude ? (() => {
+    const h = node('sluice_undercroft');
+    return `<div class="wd-interlude" style="left:${h.x - 17}px;top:${h.y - 17}px;"></div>
+            <div class="wd-interlude-tag" style="left:${h.x + 16}px;top:${h.y - 16}px;">INTERLUDE · the back-surge</div>`;
+  })() : '');
+}
+
+function tiersHtml() {
+  const y = id => node(id).y;
+  return [['TIER 1 · M1 / M2', y('alleyway_junction_7')], ['TIER 2 · M3 / M4', y('fourth_kiln')],
+          ['CLIMB · M5', y('crucible_watchpost')], ['EXIT', y('slag_gate')]]
+    .map(([t, yy]) => `<div class="wd-tier" style="top:${yy - 4}px;">${t}</div>`).join('');
+}
+
+function currentHtml() {
+  const N = DATA.current, sel = N.find(n => n.id === S.sel) ? S.sel : 'n_corvo';
+  let lines = '';
+  N.forEach(n => n.edges.forEach(t => {
+    const b = N.find(x => x.id === t);
+    if (b && n.id < b.id) {
+      const hot = n.id === sel || b.id === sel;
+      lines += `<line x1="${n.x}" y1="${n.y}" x2="${b.x}" y2="${b.y}" stroke="${hot ? '#fbbf24' : '#6b7280'}" stroke-width="${hot ? 2 : 1.2}" stroke-dasharray="3,2"/>`;
+    }
+  }));
+  const pins = N.map(n => `
+      <div class="wd-node" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';render();">
+        <div class="wd-pin" style="background:${n.id === sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${n.id === sel ? '#fbbf24' : '#9ca3af'};">
+          <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
+        </div>
+        <div class="wd-label" style="color:${n.id === sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${n.id === sel ? '#d97706' : '#374151'};">${n.name}</div>
+      </div>`).join('');
+  return { svg: lines, pins, sel: N.find(n => n.id === sel) };
+}
+
+function corner(style, inner) {
+  return `<div class="ornate-corners-only-640" style="${style}">
+    <img src="${ASSETS.ui.ornate_tl}" class="ornate-corner-sm-640 tl"><img src="${ASSETS.ui.ornate_tr}" class="ornate-corner-sm-640 tr">
+    <img src="${ASSETS.ui.ornate_bl}" class="ornate-corner-sm-640 bl"><img src="${ASSETS.ui.ornate_br}" class="ornate-corner-sm-640 br">
+    ${inner}</div>`;
+}
+
+function panelDiamond() {
+  const n = node(S.sel) || node('alleyway_junction_7');
+  const step = DATA.steps[S.step], reach = reachable(S.step);
+  const status = step.cleared.includes(n.id) ? '<span style="color:var(--ok);">Cleared</span>'
+    : reach.has(n.id) ? '<span style="color:var(--gold);">Open</span>' : '<span style="color:#9ca3af;">Locked</span>';
+  const routes = G.edges.filter(e => e.a === n.id || e.b === n.id).map(e => {
+    const other = node(e.a === n.id ? e.b : e.a), open = isOpen(e, S.step);
+    return `<div class="wd-route"><span style="color:${open ? 'var(--text)' : '#6b7280'};">${open ? '' : '🔒 '}${other.num} ${other.name}</span>
+            <span class="font-mono" style="color:${isShortcut(e) ? 'var(--info)' : 'var(--dim)'};font-size:5.4px;">${open ? e.time + 'd' : opensAfter(e)}</span></div>`;
+  }).join('');
+  const enc = n.encounters.map(x => x.name).join(' · ');
+  return corner('position:absolute;left:504px;top:24px;width:132px;height:328px;padding:7px;display:flex;flex-direction:column;justify-content:space-between;', `
+    <div>
+      <div class="font-title" style="font-size:9px;color:var(--gold);line-height:1.2;">${n.num} · ${n.name}</div>
+      <div class="font-mono" style="font-size:6px;color:var(--info);margin-top:2px;">${n.mission} · ${status}</div>
+      <div style="font-size:6px;color:var(--dim);margin-top:1px;">${n.who}</div>
+      ${enc ? `<div class="font-mono" style="font-size:5.4px;color:#fda4af;margin-top:2px;">${enc}</div>` : ''}
+      <div style="border-top:1px solid #2d333f;margin:4px 0;padding-top:4px;font-size:6.4px;color:var(--text);line-height:1.36;">${n.desc}</div>
+      <div class="rust-inset" style="padding:3px 5px;font-size:6px;margin-top:5px;">
+        <div class="font-mono" style="font-size:5.4px;color:var(--dim);margin-bottom:1px;">ROUTES</div>${routes || '<span style="color:var(--dim);">none</span>'}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <button class="rust-btn primary" style="width:100%;height:18px;" ${reach.has(n.id) ? '' : 'disabled'}>${n.id === 'sluice_undercroft' ? 'Enter Sanctuary Hub ▸' : 'Travel & Enter Node ▸'}</button>
+      <button class="rust-btn" style="width:100%;">Mode: Fast (-1d)</button>
+    </div>`);
+}
+
+function panelCurrent(sel) {
+  return corner('position:absolute;left:504px;top:24px;width:132px;height:328px;padding:7px;', `
+    <div class="font-title" style="font-size:9px;color:var(--gold);line-height:1.2;">${sel.name}</div>
+    <div class="font-mono" style="font-size:6px;color:#fda4af;margin-top:3px;">THE MOCK UI TODAY (pre-diamond)</div>
+    <div style="border-top:1px solid #2d333f;margin:5px 0;padding-top:5px;font-size:6.4px;color:var(--text);line-height:1.4;">
+      Six nodes and free links, no tiers: no M1/M2 pair, no Tallow Vats (M4), no Interlude, no Slag Gate (07), and Corvo's gate sits in the middle as node 02.
+      Node numbers do not match the game data (Junction 7 is 02, the Crossroads 03, Corvo's gate 1d).
+    </div>`);
+}
+
+function hud() {
+  return `<div class="hud-bar"><div class="hud-place"><span>The Sunk Ward · District Map</span>
+    <span class="font-mono" style="font-size:7px;color:var(--dim);">· Day ${[1, 4, 7, 12, 14, 17][S.step]}</span></div>
+    <div class="hud-right"><div class="hud-chip"><img src="${ASSETS.ui.gold}" class="pixel" style="width:10px;height:10px;"><span class="font-mono">65 Scrap</span></div>
+    <div class="hud-chip deadline"><span class="font-mono">Tithing: ${42 - [1, 4, 7, 12, 14, 17][S.step]}d</span></div></div></div>`;
+}
+
+function legend() {
+  const ln = (c, d, w) => `<svg width="16" height="5"><line x1="0" y1="2.5" x2="16" y2="2.5" stroke="${c}" stroke-width="${w}" stroke-dasharray="${d}"/></svg>`;
+  return `<div class="rust-panel wd-legend">
+    <span>${ln('#6b7280', '3,2', 1.2)} open</span><span>${ln('#f59e0b', '3,2', 2)} just opened</span>
+    <span>${ln('#3f4552', '1,2.5', 1)} locked</span><span>${ln('#06b6d4', '2,1.5', 1.3)} Vesper's shortcut</span>
+    <span><b style="color:var(--ok);">✓</b> cleared</span></div>`;
+}
+
+function render() {
+  const bar = document.getElementById('wd-bar');
+  bar.innerHTML = `
+    <span class="lbl" style="color:#fbbf24;">View:</span>
+    <button class="db-btn ${S.view === 'diamond' ? 'active' : ''}" onclick="S.view='diamond';S.sel='alleyway_junction_7';render();">Proposed: Act 1 diamond</button>
+    <button class="db-btn ${S.view === 'current' ? 'active' : ''}" onclick="S.view='current';S.sel='n_corvo';render();">Current mock map</button>
+    ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">Act 1 progress:</span>` +
+      DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') : ''}`;
+  let map;
+  if (S.view === 'diamond') {
+    map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+             <defs><filter id="wdGlow" filterUnits="userSpaceOnUse" x="0" y="0" width="496" height="328"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+             ${routesSvg()}</svg>${tiersHtml()}${nodesHtml()}${legend()}`;
+  } else {
+    const c = currentHtml();
+    map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">${c.svg}</svg>${c.pins}`;
+  }
+  const c = S.view === 'current' ? currentHtml() : null;
+  document.getElementById('wd-stage').innerHTML = `
+    ${hud()}
+    <div style="position:absolute;left:4px;top:24px;width:496px;height:328px;border:1px solid #374151;overflow:hidden;">
+      <img src="${ASSETS.map}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(${S.view === 'diamond' ? 0.55 : 0.82}) contrast(1.08);">
+      <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(10,11,16,0.05) 40%, rgba(10,11,16,0.75) 100%);"></div>
+      ${map}
+    </div>
+    ${S.view === 'diamond' ? panelDiamond() : panelCurrent(c.sel)}`;
+  document.getElementById('wd-note').innerHTML = S.view === 'diamond'
+    ? `<b>${DATA.steps[S.step].label}.</b> ${DATA.steps[S.step].note} <span style="color:var(--dim);">Graph, node numbers and gates read from the shipped <code>worlds/sunk_ward</code> data; click a node for its routes and what unlocks them.</span>`
+    : `<b>The mock UI's map today.</b> The proposed view replaces it once signed off; nothing in the full mock UI changes until then.`;
+}
+render();
+</script>
+</body>
+</html>
