@@ -10,6 +10,7 @@ use aegis_core::json::{self, Dict};
 use emberwake_data::Step;
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_battle::encounter::PartyFate;
+use emberwake_battle::{channel, meter};
 use emberwake_world::{battle, board, campaign, dialogue, explore, mastery, new_game, quest, recipe, roster, shop, story, travel, weapons, Data, GameState};
 use serde_json::Value;
 use std::path::Path;
@@ -332,17 +333,6 @@ fn turn_in_at_hub(d: &Data, gs: &mut GameState, quest: &str) -> Vec<String> {
     panic!("no one in the hub takes {quest}'s turn-in (hub characters {npcs:?}; its giver '{}', turn_in '{}'; the board line \"{line}\")", json::s(&rq, "giver"), json::s(&rq, "turn_in"));
 }
 
-/// Leaves the hub to a node one leg away and walks back in (the hub's `enter` tick runs again).
-fn reenter_hub(d: &Data, gs: &mut GameState) {
-    let next = travel::known(d, gs)
-        .into_iter()
-        .filter_map(|n| n.strip_prefix(&format!("{WORLD}:")).map(str::to_string))
-        .find(|n| *n != HUB && open_path(d, gs, n).is_some_and(|p| p.len() == 1))
-        .expect("a node one leg from the hub");
-    go(d, gs, &next);
-    go(d, gs, HUB);
-}
-
 /// A New game in `sunk_ward` played through the `new_game` sequence into the hub.
 fn after_prologue(d: &Data) -> (GameState, Played) {
     let mut gs = new_game::create_for_world(d, WORLD, 1).expect("a new sunk_ward game");
@@ -353,7 +343,8 @@ fn after_prologue(d: &Data) -> (GameState, Played) {
 }
 
 /// Tier 1 (M1, M2) and Tier 2 (M3, M4) won from the hub, the scenes the triggers queue played (the recruits); M3 and
-/// M4 turned in at the hub and the hub entered again, so the Interlude's scene stays queued for the caller.
+/// M4 turned in at the hub (PR5-44: `t_interlude` is `on: any`, so the second turn-in starts it in place); the
+/// Interlude's scene stays queued for the caller.
 fn after_tier2(d: &Data) -> GameState {
     let (mut gs, _) = after_prologue(d);
     for m in ["q_a1_m1", "q_a1_m2", "q_a1_m3", "q_a1_m4"] {
@@ -363,9 +354,7 @@ fn after_tier2(d: &Data) -> GameState {
     for m in ["q_a1_m3", "q_a1_m4"] {
         turn_in_at_hub(d, &mut gs, m);
     }
-    if !gs.flag_true(&flag("interlude_started")) {
-        reenter_hub(d, &mut gs);
-    }
+    assert!(gs.flag_true(&flag("interlude_started")), "the Interlude starts at the second turn-in");
     gs
 }
 
@@ -379,6 +368,57 @@ fn after_interlude(d: &Data) -> GameState {
     let played = play_sequence(d, &mut gs);
     assert_eq!(gs.location_id, q(HUB), "the Interlude ends in the hub ({played:?})");
     gs
+}
+
+/// dlg_int_dose's dose replies (the choices that start a sequence): (the Founder `sabina_dose_to` names, the choice).
+fn dose_replies(d: &Data) -> Vec<(String, Dict)> {
+    json::aget(entry(d, "dialogues", "dlg_int_dose"), "nodes")
+        .iter()
+        .flat_map(|n| json::aget(json::dict(n), "choices").to_vec())
+        .map(|c| json::dict(&c).clone())
+        .filter(|c| json::aget(c, "effects").iter().any(|fx| json::s(json::dict(fx), "effect") == "sequence"))
+        .map(|c| {
+            let to = json::aget(&c, "effects").iter().map(json::dict).find(|fx| json::s(fx, "key") == flag("sabina_dose_to")).map(|fx| json::s(fx, "value")).unwrap_or_default();
+            (to, c)
+        })
+        .collect()
+}
+
+/// Plays the queued dose scene as a player who gives the dose to `founder` (deployed first through the party screen's
+/// toggle when benched): at each node the reply that doses `founder`, else the reply that leads to a node holding it.
+fn dose_to(d: &Data, gs: &mut GameState, founder: &str) {
+    if !dialogue::is_active_member(d, gs, founder) {
+        let other = gs.party.active_members().iter().map(|m| m.id.clone()).find(|m| m != founder).expect("an active member");
+        if gs.party.active_members().len() as i64 >= gs.party.max_active {
+            roster::toggle_active(&mut gs.party, &other).expect("bench another member");
+        }
+        roster::toggle_active(&mut gs.party, founder).expect("deploy the Founder");
+    }
+    assert!(dialogue::is_active_member(d, gs, founder), "{founder} is deployed");
+    let item = campaign::pending_head(gs).cloned().expect("the dose scene is queued");
+    assert_eq!(json::s(&item, "dialogue"), "dlg_int_dose");
+    campaign::pop_pending(gs);
+    let tree = entry(d, "dialogues", "dlg_int_dose").clone();
+    let node_of = |id: &str| json::aget(&tree, "nodes").iter().map(json::dict).find(|n| json::s(n, "id") == id).cloned().unwrap_or_default();
+    let doses = |c: &Dict| json::aget(c, "effects").iter().map(json::dict).any(|fx| json::s(fx, "key") == flag("sabina_dose_to") && json::s(fx, "value") == founder);
+    let mut r = DialogueRunner::open_scene(d, gs, "dlg_int_dose", &json::s(&item, "speaker"));
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    for _ in 0..5 {
+        if gs.flag(&flag("sabina_dose_to")).is_some() {
+            break;
+        }
+        let node = node_of(&r.node_id);
+        let data: Vec<Dict> = json::aget(&node, "choices").iter().map(|c| json::dict(c).clone()).collect();
+        let view = r.view(d, gs);
+        let shown: Vec<Dict> = json::aget(&view, "choices").iter().map(|c| json::dict(c).clone()).collect();
+        let pick = shown.iter().position(|v| {
+            data.iter().find(|c| json::s(c, "text") == json::s(v, "text")).is_some_and(|c| doses(c) || json::aget(&node_of(&json::s(c, "to")), "choices").iter().map(json::dict).any(doses))
+        });
+        let k = pick.unwrap_or_else(|| panic!("dlg_int_dose {}: no way to dose {founder}: {view:?}", r.node_id));
+        assert!(!json::b(&shown[k], "locked", false), "{founder}'s way is open: {view:?}");
+        assert!(ok(&r.choose(d, gs, k as i64)), "dose {founder}");
+    }
+    assert_eq!(gs.flag(&flag("sabina_dose_to")), Some(&Value::String(founder.to_string())), "{founder} takes the dose");
 }
 
 /// The scene effects a player picks first: a recruit, and the sequence that starts the Interlude.
@@ -424,6 +464,40 @@ fn assert_act_after_m5(d: &Data, gs: &GameState) {
     assert_eq!(now, act, "the campaign is in act {act} after M5");
     assert!(weapons::active(d, gs), "durability (from act {}) is on after M5 (act {now})", d.from_act);
     assert!(mastery::open(d, gs), "weapon mastery is gained after M5 (act {now})");
+    assert_graft_after_m5(d, gs);
+}
+
+/// PR5-44: `seq_after_m5` installs, in the effects step that sets the act, the Tier I graft into the Founder the dose
+/// went to (`install {member_from_flag: sabina_dose_to}`): that member carries it and becomes a Strain carrier at the
+/// floor the graft's `floors` table gives one graft (PK2); no other member carries it or holds Strain.
+fn assert_graft_after_m5(d: &Data, gs: &GameState) {
+    let step = json::aget(entry(d, "sequences", "seq_after_m5"), "steps")
+        .iter()
+        .map(json::dict)
+        .find(|s| json::aget(s, "effects").iter().any(|fx| json::s(json::dict(fx), "effect") == "set_act"))
+        .cloned()
+        .expect("the set_act step");
+    let install = json::aget(&step, "effects").iter().map(json::dict).find(|fx| json::s(fx, "effect") == "install").cloned().expect("seq_after_m5 installs a graft with set_act");
+    assert_eq!(json::s(&install, "member_from_flag"), flag("sabina_dose_to"), "the graft goes to the dosed Founder");
+    let item = json::s(&install, "item");
+    assert_eq!(item, "graft_optic");
+    let dosed = gs.flag(&flag("sabina_dose_to")).and_then(Value::as_str).map(str::to_string).expect("the dose went to a Founder");
+    let meter_fx = json::aget(d.entry("items", &item), "body_effects").iter().map(json::dict).find(|e| json::s(e, "type") == "meter").cloned().expect("the graft grants a meter");
+    let strain = json::s(&meter_fx, "meter");
+    let floors: Vec<i64> = json::aget(&meter_fx, "floors").iter().filter_map(Value::as_i64).collect();
+    for m in &gs.party.members {
+        let carries = m.body.values().any(|i| *i == item);
+        assert_eq!(carries, m.id == dosed, "{}: carries {item} only when dosed ({dosed}): {:?}", m.id, m.body);
+        let unit = roster::field_unit(d, gs, m, WORLD).unwrap_or_else(|| panic!("{} fields", m.id)).unit;
+        let held: Vec<Option<i32>> = unit.passive_meters.iter().filter(|h| h.meter == strain).map(|h| h.floor).collect();
+        if m.id == dosed {
+            let grafts = m.body.len();
+            let want = floors[grafts.min(floors.len()) - 1] as i32;
+            assert_eq!(held, [Some(want)], "{dosed} carries {strain} at the floor of {grafts} graft(s)");
+        } else {
+            assert!(held.is_empty(), "{}: no {strain}", m.id);
+        }
+    }
 }
 
 /// The recipes a character offers now, as ids.
@@ -576,45 +650,64 @@ fn tier_one_then_tier_two_then_the_interlude() {
     go(&d, &mut gs, HUB);
     assert!(!gs.flag_true(&flag("interlude_started")) && pending(&gs).is_empty(), "back at the hub with M3 and M4 not turned in: no Interlude yet");
     let trig = entry(&d, "triggers", "t_interlude");
+    assert_eq!(json::s(trig, "on"), "any", "PR5-44: t_interlude fires on any tick, not only on entering the hub");
     let when: Vec<String> = json::aget(trig, "when").iter().map(|w| json::s(json::dict(w), "key")).collect();
-    for m in ["q_a1_m3", "q_a1_m4"] {
+    for (i, m) in ["q_a1_m3", "q_a1_m4"].into_iter().enumerate() {
         turn_in_at_hub(&d, &mut gs, m);
         for c in json::aget(entry(&d, "quests", m), "complete_flags") {
             let key = json::s(json::dict(c), "key");
             assert!(gs.flag_true(&key), "{m}'s turn-in sets {key}");
             assert!(when.contains(&key), "t_interlude waits for {key}");
         }
+        if i == 0 {
+            assert!(!gs.flag_true(&flag("interlude_started")) && pending(&gs).is_empty(), "one turn-in does not start the Interlude");
+        }
     }
     for key in &when {
         assert!(gs.flag_true(key), "t_interlude's condition {key} holds after the turn-ins");
     }
-    // t_interlude is an `enter` trigger at the hub: it fires the next time the party walks into the hub
-    if !gs.flag_true(&flag("interlude_started")) {
-        reenter_hub(&d, &mut gs);
-    }
-    assert!(gs.flag_true(&flag("interlude_started")), "t_interlude after M3 and M4 are turned in");
+    // PR5-44: t_interlude is `on: any`: the second turn-in starts it in the hub, with no walk out and back in
+    assert!(gs.flag_true(&flag("interlude_started")), "t_interlude fires at the second turn-in");
+    assert_eq!(gs.location_id, q(HUB), "the party never left the hub");
     let queued = pending(&gs);
     assert!(queued.contains(&("dialogue".into(), "dlg_int_dose".into())), "Sabina's dose scene is queued: {queued:?}");
-    // PR5-41: only a Founder in the party can take the dose (no "Nobody"); the Tier 2 recruits' replies wait for
-    // their joined flags
+    // PR5-41: only a Founder in the party can take the dose (no "Nobody"); PR5-44: each reply waits for its Founder
+    // in the active party (`in_active_party`), not for a joined flag
     let party: Vec<String> = gs.party.members.iter().map(|m| m.id.clone()).collect();
-    let dose: Vec<(String, Vec<String>)> = json::aget(entry(&d, "dialogues", "dlg_int_dose"), "nodes")
-        .iter()
-        .flat_map(|n| json::aget(json::dict(n), "choices").to_vec())
-        .map(|c| json::dict(&c).clone())
-        .filter(|c| json::aget(c, "effects").iter().any(|fx| json::s(json::dict(fx), "effect") == "sequence"))
-        .map(|c| {
-            let to = json::aget(&c, "effects").iter().map(json::dict).find(|fx| json::s(fx, "key") == flag("sabina_dose_to")).map(|fx| json::s(fx, "value")).unwrap_or_default();
-            (to, json::aget(&c, "requires").iter().map(|r| json::s(json::dict(r), "key")).collect())
-        })
-        .collect();
+    let dose = dose_replies(&d);
     assert!(!dose.is_empty(), "dlg_int_dose has dose replies");
-    for (to, requires) in &dose {
+    let mut founders: Vec<String> = prologue_party.clone();
+    founders.extend(["dunstan".to_string(), "elyse".to_string()]);
+    let mut named: Vec<String> = dose.iter().map(|(to, _)| to.clone()).collect();
+    named.sort();
+    founders.sort();
+    assert_eq!(named, founders, "one dose reply per Founder");
+    for (to, c) in &dose {
         assert!(party.contains(to), "the dose reply for '{to}' names a Founder in the party ({party:?})");
-        if !prologue_party.contains(to) {
-            assert!(requires.contains(&flag(&format!("{to}_joined"))), "{to}'s dose reply waits for {to}_joined: {requires:?}");
-        }
+        let requires: Vec<Dict> = json::aget(c, "requires").iter().map(|r| json::dict(r).clone()).collect();
+        assert_eq!(requires.len(), 1, "{to}'s dose reply has one condition: {requires:?}");
+        assert_eq!((json::s(&requires[0], "kind"), json::s(&requires[0], "character")), ("in_active_party".to_string(), to.clone()), "{to}'s dose reply waits for {to} in the active party");
+        assert!(requires.iter().all(|r| !json::s(r, "key").ends_with("_joined")), "{to}: no joined-flag gate: {requires:?}");
     }
+    // drive the real party: an active Founder's reply is open, a benched one's is locked, and back
+    for (to, c) in &dose {
+        let active = gs.party.active_members().iter().any(|m| m.id == *to);
+        assert_eq!(dialogue::choice_open(&d, &gs, c), active, "{to}'s reply is open exactly while {to} is active");
+    }
+    let (kept, benched) = {
+        let act: Vec<String> = gs.party.active_members().iter().map(|m| m.id.clone()).collect();
+        let b = dose.iter().map(|(to, _)| to.clone()).find(|to| act.contains(to)).expect("an active Founder");
+        let k = dose.iter().map(|(to, _)| to.clone()).find(|to| act.contains(to) && *to != b).expect("a second active Founder");
+        (k, b)
+    };
+    let saved = gs.party.active_ids.clone();
+    roster::toggle_active(&mut gs.party, &benched).expect("bench a Founder");
+    let reply = |who: &str| dose.iter().find(|(to, _)| to == who).map(|(_, c)| c.clone()).expect("a reply");
+    assert!(!dialogue::choice_open(&d, &gs, &reply(&benched)), "{benched} benched: the reply is locked");
+    assert!(dialogue::choice_open(&d, &gs, &reply(&kept)), "{kept} active: the reply is open");
+    roster::toggle_active(&mut gs.party, &benched).expect("deploy the Founder again");
+    assert!(dialogue::choice_open(&d, &gs, &reply(&benched)), "{benched} deployed again: the reply opens");
+    gs.party.active_ids = saved;
 
     let scenes = play_scenes(&d, &mut gs, PICK);
     assert!(scenes.iter().any(|(s, fx)| s == "dlg_int_dose" && fx.iter().any(|e| e == "sequence")), "the dose choice: {scenes:?}");
@@ -1016,4 +1109,322 @@ fn act1_data_reads_in_world() {
     for r in routes {
         assert_eq!(json::i(r, "encounter_pct", -1), 0, "route {} has no random fights", json::s(r, "id"));
     }
+}
+
+// ---- PR5-44 ACT1-DATA2 acceptance -------------------------------------------------------------------------------
+
+/// Plays the running sequence's vignettes up to its first fight step and starts that fight through the world-fight
+/// path (`story::fight`, `battle::begin_world`): (the fight dict, the battle at its start).
+fn begin_next_story_fight(d: &Data, gs: &mut GameState) -> (Dict, battle::WorldFight) {
+    for _ in 0..50 {
+        match story::current(d, gs) {
+            Some(Step::Vignette { vignette }) => assert!(ok(&story::step_done(d, gs)), "{vignette}"),
+            Some(Step::Fight { encounter, .. }) => {
+                let fight = story::fight(d, gs).expect("a story fight at a fight step");
+                let f = battle::begin_world(d, gs, &fight).unwrap_or_else(|e| panic!("{encounter} starts: {e}"));
+                return (fight, f);
+            }
+            other => panic!("no fight before {other:?}"),
+        }
+    }
+    panic!("no fight step");
+}
+
+/// `enc_evt_05` (the Interlude's fight): each `flag_skills` entry grants `marrow_lash` to the Founder whose id
+/// `sabina_dose_to` holds. Per Founder dosed in the scene: exactly that fielded member holds the skill for the battle,
+/// plays it in a Standard round with no channel meter and so no Strain paid (no Strain in Act 1), and keeps nothing
+/// after the fight.
+#[test]
+fn the_dosed_founder_fights_the_interlude_holding_marrow_lash_for_free() {
+    let d = data();
+    let enc = entry(&d, "encounters", "enc_evt_05").clone();
+    let grants: Vec<Dict> = json::aget(&enc, "flag_skills").iter().map(|g| json::dict(g).clone()).collect();
+    let founders: Vec<String> = dose_replies(&d).into_iter().map(|(to, _)| to).collect();
+    assert_eq!(grants.len(), founders.len(), "one grant per Founder");
+    let skill = json::s(&grants[0], "skill");
+    for (g, f) in grants.iter().zip(&founders) {
+        assert_eq!(json::s(g, "member_from_flag"), flag("sabina_dose_to"));
+        assert_eq!(json::s(g, "skill"), skill, "every grant is the same Tier I skill");
+        let req: Vec<(String, String)> = json::aget(g, "requires_flags").iter().map(json::dict).map(|c| (json::s(c, "key"), json::s(c, "value"))).collect();
+        assert!(founders.iter().any(|x| req == [(flag("sabina_dose_to"), x.clone())]), "{f}: the grant is keyed on one Founder: {req:?}");
+    }
+    let mut keyed: Vec<String> = grants.iter().map(|g| json::s(json::dict(&json::aget(g, "requires_flags")[0]), "value")).collect();
+    let mut want = founders.clone();
+    keyed.sort();
+    want.sort();
+    assert_eq!(keyed, want, "every Founder has its own grant");
+    assert_eq!(skill, "marrow_lash");
+    for founder in &founders {
+        let mut gs = after_tier2(&d);
+        let learned: Vec<(String, Vec<String>)> = gs.party.members.iter().map(|m| (m.id.clone(), m.learned_skills.clone())).collect();
+        dose_to(&d, &mut gs, founder);
+        assert_eq!(gs.story.running.as_ref().map(|r| r.sequence.clone()), Some(q("seq_interlude")));
+        let (fight, f) = begin_next_story_fight(&d, &mut gs);
+        assert_eq!(json::s(&fight, "encounter"), q("enc_evt_05"));
+        assert!(f.members.iter().any(|(m, _)| m == founder), "{founder} is fielded");
+        let w = &f.session.w;
+        let k = w.book().find(&skill).expect("marrow_lash in the battle's book");
+        let def = w.cat.skills[k].clone();
+        for (i, (m, _)) in f.members.iter().enumerate() {
+            let u = &w.units[i];
+            if m == founder {
+                assert_eq!(u.battle_skills, [skill.clone()], "{founder} holds {skill} for the battle");
+                assert!(u.owns_skill(&w.cat, &skill), "{founder} owns {skill} in the battle");
+                assert!(!channel::can_channel(w, i), "{founder}: no channel meter in Act 1");
+                assert!(channel::standard_grant(w, i, &def), "{founder} plays {skill} in a Standard round");
+                assert_eq!(channel::problem(w, i, &def), None, "{founder}: {skill} is open");
+                assert!(channel::meters_for(w, i, &def).is_empty(), "{founder}: {skill} pays no Strain");
+                assert_eq!(meter::value(w, i, "strain"), None, "{founder} holds no Strain");
+            } else {
+                assert!(u.battle_skills.is_empty(), "{m} (not dosed) holds no grant: {:?}", u.battle_skills);
+                assert!(!u.owns_skill(&w.cat, &skill), "{m} does not own {skill}");
+            }
+        }
+        let tally = f.tally();
+        let r = battle::finish_world(&d, &mut gs, &json::s(&fight, "source"), &fight, "won", Some(&tally));
+        assert!(ok(&r), "{r:?}");
+        let after: Vec<(String, Vec<String>)> = gs.party.members.iter().map(|m| (m.id.clone(), m.learned_skills.clone())).collect();
+        assert_eq!(after, learned, "{founder}: nothing is learned for good");
+        let played = play_sequence(&d, &mut gs);
+        assert!(played.fights.is_empty(), "the Interlude has one fight: {played:?}");
+        assert!(gs.flag_true(&flag("interlude_done")));
+    }
+}
+
+/// A New game after the Prologue with the Red Tithing running, `flags` set first.
+fn tithing_game(d: &Data, flags: &[(&str, Value)]) -> GameState {
+    let (mut gs, _) = after_prologue(d);
+    for (k, v) in flags {
+        gs.set_flag(&flag(k), v.clone());
+    }
+    if !running(&gs, "doom_clock") {
+        let mut events = Vec::new();
+        campaign::apply_effects(d, &mut gs, &[json::obj([("effect", "clock_start".into()), ("meter", "doom_clock".into())])], &mut events);
+    }
+    gs
+}
+
+/// Runs the Red Tithing down to its next `d_zero` (its own path: `campaign::tick` by days) and checks the Alert rose
+/// by the rule's amount (to the Alert's max).
+fn next_tithing(d: &Data, gs: &mut GameState) {
+    let clock = entry(d, "meters", "doom_clock").clone();
+    let rule = json::aget(&clock, "rules").iter().map(json::dict).find(|r| json::s(r, "id") == "d_zero").cloned().expect("d_zero");
+    let delta = json::aget(&rule, "effects").iter().map(json::dict).find(|fx| json::s(fx, "meter") == "alert").map(|fx| json::i(fx, "delta", 0)).expect("d_zero adds to the Alert");
+    let alert_max = json::i(entry(d, "meters", "alert"), "max", i64::MAX);
+    let before = meter(gs, "alert");
+    let events = days_until_rule(d, gs, "d_zero", json::i(&clock, "max", 0) + 1);
+    assert!(events.iter().map(json::dict).any(|e| json::s(e, "rule") == "d_zero"), "d_zero ran: {events:?}");
+    assert_eq!(meter(gs, "alert"), (before + delta).min(alert_max), "+{delta} Alert at every d_zero");
+    assert!(gs.campaign.as_ref().is_some_and(|c| !c.is_over()), "the run goes on");
+}
+
+fn youths(gs: &GameState) -> i64 {
+    gs.flag(&flag("saved_youths")).and_then(Value::as_i64).unwrap_or(0)
+}
+
+/// PR5-44: the Red Tithing's `d_zero` stakes, in order: with Ivo neither rescued nor lost, Ivo is lost; else with
+/// Corvo not bribed and Ida not lost, Ida is lost; else two saved youths are taken (never below 0).
+#[test]
+fn the_red_tithing_takes_ivo_then_ida_then_the_saved_youths() {
+    let d = data();
+    let mut gs = tithing_game(&d, &[]);
+    for f in ["ivo_rescued", "ivo_lost", "corvo_bribed", "ida_lost"] {
+        assert!(!gs.flag_true(&flag(f)), "{f} is unset after the Prologue");
+    }
+    gs.set_flag(&flag("saved_youths"), Value::from(3));
+    next_tithing(&d, &mut gs);
+    assert!(gs.flag_true(&flag("ivo_lost")) && !gs.flag_true(&flag("ida_lost")), "the first tithing takes Ivo only");
+    assert_eq!(youths(&gs), 3, "the youths are spared while Ivo is taken");
+    next_tithing(&d, &mut gs);
+    assert!(gs.flag_true(&flag("ida_lost")), "the second takes Ida");
+    assert_eq!(youths(&gs), 3, "the youths are spared while Ida is taken");
+    next_tithing(&d, &mut gs);
+    assert_eq!(youths(&gs), 1, "then two youths");
+    next_tithing(&d, &mut gs);
+    assert_eq!(youths(&gs), 0, "1 -> 0, floored");
+    next_tithing(&d, &mut gs);
+    assert_eq!(youths(&gs), 0, "never below 0");
+
+    // Ivo rescued: Ida is the first; Ivo rescued and Corvo bribed: the youths at once
+    let mut gs = tithing_game(&d, &[("ivo_rescued", Value::Bool(true))]);
+    next_tithing(&d, &mut gs);
+    assert!(!gs.flag_true(&flag("ivo_lost")) && gs.flag_true(&flag("ida_lost")), "a rescued Ivo is safe: Ida is taken");
+    let mut gs = tithing_game(&d, &[("ivo_rescued", Value::Bool(true)), ("corvo_bribed", Value::Bool(true)), ("saved_youths", Value::from(2))]);
+    next_tithing(&d, &mut gs);
+    assert!(!gs.flag_true(&flag("ivo_lost")) && !gs.flag_true(&flag("ida_lost")), "Ivo rescued and Corvo bribed: nobody named is lost");
+    assert_eq!(youths(&gs), 0, "two youths are taken");
+}
+
+/// Walks to `loc` and steps onto its point marker `marker` (`explore::step` from an open tile beside it); the point's
+/// flags are set.
+fn take_point(d: &Data, gs: &mut GameState, loc: &str, marker: &str) {
+    go(d, gs, loc);
+    let l = explore::location(d, gs).clone();
+    let m = explore::markers_of(&l).into_iter().find(|m| json::s(m, "id") == marker).unwrap_or_else(|| panic!("{loc} has the point {marker}"));
+    assert_eq!(explore::presence(d, gs, &q(loc), &m), "present", "{loc}:{marker} is open");
+    let t = explore::template_of(d, &l).clone();
+    let at = explore::marker_pos(&t, &m, gs.explore_int("loc_steps"));
+    let dir = explore::DIRS.into_iter().find(|dd| explore::is_open(&t, at.0 - dd.0, at.1 - dd.1)).expect("an open tile beside the point");
+    gs.position = (at.0 - dir.0, at.1 - dir.1);
+    let r = explore::step(d, gs, dir);
+    assert!(ok(&r) && gs.position == at, "the party steps onto {marker}: {r:?}");
+    for f in json::aget(&m, "sets_flags") {
+        assert!(gs.flag(&json::s(json::dict(f), "key")).is_some(), "{marker} sets {f:?}");
+    }
+}
+
+/// Takes side hook `quest` from Talia's board, meets its flag step at point `marker` of `loc` and turns it in at the
+/// hub; the stash change of its template's reward items.
+fn run_side_hook(d: &Data, gs: &mut GameState, quest: &str, loc: &str, marker: &str) -> Vec<(String, i64)> {
+    assert_eq!(quest::status(d, gs, &q(quest)), "available", "{quest}");
+    assert_eq!(quest::start(d, gs, &q(quest)), Vec::<String>::new(), "{quest} is taken");
+    take_point(d, gs, loc, marker);
+    let rq = quest::resolved(d, gs, &q(quest));
+    let items: Vec<String> = json::dget(json::dget(&rq, "rewards"), "items").keys().cloned().collect();
+    assert!(!items.is_empty(), "{quest} pays items");
+    let before: Vec<i64> = items.iter().map(|i| gs.party.stash.get(i).copied().unwrap_or(0)).collect();
+    turn_in_at_hub(d, gs, quest);
+    let out: Vec<(String, i64)> = items.iter().zip(before).map(|(i, b)| (i.clone(), gs.party.stash.get(i).copied().unwrap_or(0) - b)).collect();
+    // a second turn-in is impossible and pays nothing
+    let stash = gs.party.stash.clone();
+    let again = quest::complete(d, gs, &q(quest), "", &[]);
+    assert!(!ok(&again), "{quest} turns in once: {again:?}");
+    assert_eq!(gs.party.stash, stash, "{quest}: no second reward");
+    assert_eq!(quest::status(d, gs, &q(quest)), "completed");
+    out
+}
+
+/// PR5-44: Berek's Hearth sells at its `discount.mult` (0.8, ceil, at least 1) once the Bellows hook is turned in
+/// (`bellows_done`), at full price before; a supplies offer keeps its price.
+#[test]
+fn the_bellows_hook_cheapens_berek_s_hearth() {
+    let d = data();
+    let sh = entry(&d, "shops", "berek_hearth").clone();
+    let disc = json::dget(&sh, "discount").clone();
+    let keys: Vec<String> = json::aget(&disc, "requires_flags").iter().map(|c| json::s(json::dict(c), "key")).collect();
+    assert_eq!(keys, [flag("bellows_done")], "the discount waits for the Bellows hook");
+    let pct = (json::f(&disc, "mult", 1.0) * 100.0).round() as i64;
+    assert_eq!(pct, 80, "the row's x0.8");
+    let (mut gs, _) = after_prologue(&d);
+    run_quest(&d, &mut gs, "q_a1_m1", None);
+    play_scenes(&d, &mut gs, PICK);
+    let prices = |gs: &GameState| shop::offers(&d, gs, &q("berek_hearth")).iter().map(|o| (json::s(o, "kind"), json::s(o, "id"), json::i(o, "price", 0))).collect::<Vec<_>>();
+    let full = prices(&gs);
+    assert!(!full.is_empty(), "the Hearth sells");
+    let completes: Vec<String> = json::aget(entry(&d, "quests", "q_hook_bellows"), "complete_flags").iter().map(|c| json::s(json::dict(c), "key")).collect();
+    assert!(completes.contains(&flag("bellows_done")), "the Bellows hook sets bellows_done");
+    assert_eq!(quest::status(&d, &gs, &q("q_hook_bellows")), "available");
+    quest::start(&d, &mut gs, &q("q_hook_bellows"));
+    take_point(&d, &mut gs, "alleyway_junction_7", "bellows_cache");
+    assert_eq!(prices(&gs), full, "full price before the turn-in");
+    turn_in_at_hub(&d, &mut gs, "q_hook_bellows");
+    assert!(gs.flag_true(&flag("bellows_done")));
+    let cheap = prices(&gs);
+    assert_eq!(cheap.len(), full.len());
+    for ((kind, id, was), (k2, i2, now)) in full.iter().zip(&cheap) {
+        assert_eq!((kind, id), (k2, i2));
+        let want = if kind == "supplies" { *was } else { ((was * pct + 99) / 100).max(1) };
+        assert_eq!(*now, want, "{kind} {id}: {was} -> {now}");
+    }
+    assert!(full.iter().zip(&cheap).any(|(a, b)| b.2 < a.2), "something is cheaper");
+}
+
+/// PR5-44: the Overlook hook pays one Hollis's Lever-Winch (once); worn by Hollis it takes a block off his Heavy Winch
+/// Sunder (its `skill_block_cost`).
+#[test]
+fn the_overlook_hook_pays_the_lever_winch_once_and_it_quickens_the_sunder() {
+    let d = data();
+    let mut gs = after_interlude(&d);
+    let got = run_side_hook(&d, &mut gs, "q_hook_overlook", "crucible_watchpost", "overlook");
+    assert_eq!(got, [("hollis_lever_winch".to_string(), 1)], "one Lever-Winch");
+    let item = d.entry("items", "hollis_lever_winch").clone();
+    assert!(json::b(&item, "special", false), "a special (never sold) item");
+    let fx = json::aget(&item, "modifiers").iter().map(json::dict).filter(|m| json::s(m, "kind") == "effect").map(|m| json::dget(m, "effect").clone()).find(|e| json::s(e, "type") == "skill_block_cost").expect("skill_block_cost");
+    let (skill, delta) = (json::s(&fx, "skill"), json::i(&fx, "delta", 0));
+    assert_eq!((skill.as_str(), delta), ("heavy_winch_sunder", -1));
+    let def = d.cat.skill(&skill).cloned().expect("the skill");
+    let blocks = |gs: &GameState| {
+        let m = gs.party.members.iter().find(|m| m.id == "hollis").expect("Hollis");
+        roster::field_unit(&d, gs, m, WORLD).expect("Hollis fields").unit.skill_blocks(&def)
+    };
+    let bare = blocks(&gs);
+    assert_eq!(bare, def.blocks, "without the winch: the skill's own blocks");
+    {
+        let party = &mut gs.party;
+        let hollis = party.members.iter_mut().find(|m| m.id == "hollis").expect("Hollis");
+        emberwake_world::party_ops::equip(&d, WORLD, hollis, &mut party.stash, "hollis_lever_winch", None).expect("Hollis wears the winch");
+    }
+    assert_eq!(blocks(&gs), (bare + delta as i32).max(1), "worn: {delta} block");
+}
+
+/// PR5-44: the Counter-Still hook pays one prototype Alum Inhaler, a consumable that bleeds 25 Strain.
+#[test]
+fn the_counter_still_hook_pays_an_alum_inhaler() {
+    let d = data();
+    let mut gs = after_interlude(&d);
+    let got = run_side_hook(&d, &mut gs, "q_hook_counter_still", "tallow_vats", "counter_still");
+    assert!(got.contains(&("alum_inhaler".to_string(), 1)), "one Alum Inhaler: {got:?}");
+    let item = d.entry("items", "alum_inhaler");
+    let md = json::dget(item, "meter_delta");
+    assert_eq!((json::s(md, "meter"), json::i(md, "delta", 0)), ("strain".to_string(), -25), "the row's Strain -25");
+}
+
+/// Every string under `v` (any depth).
+fn strings(v: &Value, out: &mut Vec<String>) {
+    match v {
+        Value::String(s) => out.push(s.clone()),
+        Value::Array(a) => a.iter().for_each(|x| strings(x, out)),
+        Value::Object(o) => o.values().for_each(|x| strings(x, out)),
+        _ => {}
+    }
+}
+
+/// PR5-44 copy: Debate 3 has Elyse's vitriol charge for the brake housing and Dunstan's iron shackles (his slag-ladle
+/// line is gone from it); no `sunk_ward` text says "swap them into the squad"; the recruit scenes' hints name the
+/// recruit.
+#[test]
+fn debate_3_and_the_recruit_hints_read_as_fixed() {
+    let d = data();
+    let cards: Vec<Dict> = json::aget(entry(&d, "vignettes", "vg_debate_3"), "cards").iter().map(|c| json::dict(c).clone()).collect();
+    let said = |who: &str, words: &[&str]| cards.iter().any(|c| (json::s(c, "speaker") == who || json::s(c, "text").contains(&format!("{}{}", &who[..1].to_uppercase(), &who[1..]))) && words.iter().all(|w| json::s(c, "text").contains(w)));
+    assert!(said("elyse", &["vitriol charge", "brake housing"]), "Elyse offers the vitriol charge for the brake housing");
+    assert!(said("dunstan", &["iron shackles"]), "Dunstan sets down his iron shackles");
+    let mut debate = Vec::new();
+    strings(&Value::Array(cards.iter().map(|c| Value::Object(c.clone())).collect()), &mut debate);
+    assert!(debate.iter().all(|s| !s.contains("slag-ladle")), "no slag-ladle in Debate 3");
+    let dir = data_dir().join("worlds").join(WORLD);
+    let mut all = Vec::new();
+    for f in std::fs::read_dir(&dir).expect("the world folder").filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.ends_with(".json")) {
+        strings(&data_file(&format!("worlds/{WORLD}/{f}")), &mut all);
+    }
+    assert!(all.iter().all(|s| !s.contains("swap them into the squad")), "the generic recruit hint is gone");
+    for (dlg, who) in [("dlg_post_m3", "dunstan"), ("dlg_post_m4", "elyse")] {
+        let name = json::s(entry(&d, "characters", who), "name");
+        let first = name.split_whitespace().next().unwrap_or_default().to_string();
+        let mut text = Vec::new();
+        strings(&Value::Object(entry(&d, "dialogues", dlg).clone()), &mut text);
+        assert!(text.iter().any(|s| s.contains(&format!("swap {first} into the squad"))), "{dlg}: the hint names {first}");
+    }
+}
+
+/// PR5-44: M1 and M2 last up to 10 rounds; the Skerrit trade's new items are in the catalog with the row's numbers.
+#[test]
+fn m1_m2_rounds_and_the_skerrit_items() {
+    let d = data();
+    for enc in ["enc_evt_01", "enc_evt_02"] {
+        assert_eq!(json::i(entry(&d, "encounters", enc), "max_rounds", 0), 10, "{enc}: 10 rounds");
+    }
+    let cestus = d.entry("items", "barbed_bone_cestus");
+    assert_eq!((json::s(cestus, "family"), json::s(cestus, "hand"), json::i(cestus, "value", 0), json::f(cestus, "weight", 0.0)), ("fist".into(), "main_1h".into(), 65, 1.5));
+    let mods: Vec<Dict> = json::aget(cestus, "modifiers").iter().map(|m| json::dict(m).clone()).collect();
+    assert!(mods.iter().any(|m| json::s(m, "kind") == "adjust" && json::s(m, "field") == "power" && json::i(m, "delta", 0) == 3), "power +3");
+    assert!(mods.iter().any(|m| json::s(m, "kind") == "requirement" && json::s(m, "stat") == "STR" && json::i(m, "value", 0) == 11), "STR 11");
+    assert!(d.cat.items.contains_key("barbed_bone_cestus"), "the catalog reads the cestus");
+    let quarrel = d.entry("items", "bone_quarrel");
+    assert_eq!(json::s(quarrel, "consumable_type"), "THROWABLE_BOMB");
+    assert_eq!(json::s(quarrel, "area"), "NONE");
+    assert!(json::b(quarrel, "armor_piercing", false));
+    let nums: Vec<i64> = ["damage", "use_blocks", "use_reach", "max_stack", "value"].iter().map(|k| json::i(quarrel, k, 0)).collect();
+    assert_eq!(nums, [32, 2, 3, 5, 30], "damage, blocks, reach, stack, value");
+    assert!(d.cat.items.contains_key("bone_quarrel"), "the catalog reads the quarrel");
 }

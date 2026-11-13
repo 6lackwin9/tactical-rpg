@@ -100,6 +100,15 @@
 			"buy_mult": 1.0,
 			"supply_price": 0,
 			"sell_mult": 0.5,
+			"discount": {
+				"requires_flags": [
+					{
+						"key": "sunk_ward.bellows_done",
+						"value": true
+					}
+				],
+				"mult": 0.8
+			},
 			"buys": [
 				"WEAPON",
 				"SHIELD",

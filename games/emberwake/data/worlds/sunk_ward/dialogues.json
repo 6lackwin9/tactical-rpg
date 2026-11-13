@@ -1034,7 +1034,7 @@
 				{
 					"id": "joined",
 					"speaker": "dunstan",
-					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed. Open Party (P) to swap them into the squad from the bench.",
+					"text": "Dunstan clamps his wired jaw and nods once, a slow mortar-stone nod. Then he points at the chute where his father's bones came down, and at the mill, and at the road. He means to see all three of them smashed. Open Party (P) to swap Dunstan into the squad from the bench.",
 					"end": true
 				}
 			],
@@ -1075,7 +1075,7 @@
 				{
 					"id": "joined",
 					"speaker": "elyse",
-					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper. Open Party (P) to swap them into the squad from the bench.",
+					"text": "\"I make alum tonic. I make tallow. I make the Spent open their eyes. If that sounds like a use, I'd like to be of it.\" She shoulders a bandolier of phosphorus bottles and falls in beside Vesper. Open Party (P) to swap Elyse into the squad from the bench.",
 					"end": true
 				}
 			],
@@ -1119,6 +1119,12 @@
 									"effect": "sequence",
 									"sequence": "seq_interlude"
 								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "kaelen"
+								}
 							]
 						},
 						{
@@ -1144,6 +1150,12 @@
 								{
 									"effect": "sequence",
 									"sequence": "seq_interlude"
+								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "vesper"
 								}
 							]
 						},
@@ -1171,6 +1183,12 @@
 									"effect": "sequence",
 									"sequence": "seq_interlude"
 								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "maren"
+								}
 							]
 						},
 						{
@@ -1196,6 +1214,12 @@
 								{
 									"effect": "sequence",
 									"sequence": "seq_interlude"
+								}
+							],
+							"requires": [
+								{
+									"kind": "in_active_party",
+									"character": "hollis"
 								}
 							]
 						},
@@ -1237,9 +1261,8 @@
 							],
 							"requires": [
 								{
-									"kind": "flag",
-									"key": "sunk_ward.dunstan_joined",
-									"value": true
+									"kind": "in_active_party",
+									"character": "dunstan"
 								}
 							]
 						},
@@ -1270,9 +1293,8 @@
 							],
 							"requires": [
 								{
-									"kind": "flag",
-									"key": "sunk_ward.elyse_joined",
-									"value": true
+									"kind": "in_active_party",
+									"character": "elyse"
 								}
 							]
 						},
