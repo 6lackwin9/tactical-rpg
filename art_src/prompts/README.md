@@ -63,6 +63,12 @@ Checked the same way on background take A, at the positions proposed in Outbox `
 
 Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own quarter and is drawn larger than 48 px, so each is cut at 96 x its map scale with `--size`: belltower x1.8 `--size 173`, spire gate x1.5 `--size 144`, stockades, reservoir and cloisters x1.2 `--size 115`, breach, boulevard and crypts x1.15 `--size 110`; the hub keeps 96. Positions and scales: Outbox `AO-01`.
 
+## Act 3 map picks (in progress, 2026-11-13)
+
+| Location | Pick | Cut |
+| --- | --- | --- |
+| background | take A, edited in Flow (the pit and its stepped plateau moved lower) | `backgrounds/world_map/mantle_fissure.png`, 1920 x 1080 |
+
 ## Running through the image queue
 
 The image queue (`tools/portraits/artqueue.py request`, Drive `image_pipeline/queue/`) takes the same prompt text when
