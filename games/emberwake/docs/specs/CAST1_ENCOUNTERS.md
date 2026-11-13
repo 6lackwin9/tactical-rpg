@@ -96,6 +96,7 @@ HOOKS1 ZN3). `party` lists the expected founders (previews and sims); the campai
   win first. If Hollis completed *"The Crag-Sight Overlook"* (`sunk_ward.hollis_overlook`, `CL-08`), the outer chimney
   counterweight drops onto the Watch muster yard (`enc_evt_06_overlook` quest variant), delaying `gate_reinforcements`
   from Round `3` to Round `4`.
+- M5 Crucible autoplay deployment (`FB-250(d)` `[PROVISIONAL]`): keep `inquisitor_prelate_nemeth`'s Round 1 kit untouched for human play (`FB-248(c)`), and resolve Round 1 winch-holder KO (`273`/`409` vs `242` HP) via Option `(4)` then `(2)` — reorder `enemies` and `party` in `enc_evt_06` & `enc_evt_06_overlook` so Nemeth deploys off the central `(6,4)` breach (frontline `castellan_footman` at `(7,4)`, Nemeth to the south/back flank) while the winch holder spawns on the upper flank and routes north via `(6,1)` to `(10,1)`, escalating to Option `(2)` (sturdier holder) only if still needed.
 - The hearth scene (**Hub Debate 1**) and post-`M5` wake (**Hub Debate 3**) are sequences/vignettes (not encounters).
 
 ## 3. Tier 1 (`M1`, `M2`), Tier 2 (`M4`) & Causal Interlude (`enc_evt_01`, `enc_evt_02`, `enc_evt_04`, `enc_evt_05`)
@@ -131,9 +132,9 @@ Purse values are `{"gold_min": n, "gold_max": n, "once": true}` (Scrap is the pu
   (or Talia's inherited) loyalty quest, leaving behind `loot_flensing_talon` (`objective_reward`) while the M4 quest
   turn-in awards `loot_orlovs_retribution` and `+5` `Warded Tallow`. The grease (`toxic_bog`) tiles stand in for Orlov's
   boiling-fat floor.
-- Causal Interlude (`CL-08`, `CL-11`, `FB-244(1)`): Shutting down `M1`–`M4`'s Watch grates, titration cages, bone-mill chutes, and
+- Causal Interlude (`CL-08`, `CL-11`, `FB-244(1)`, `FB-250(a, b)`): Shutting down `M1`–`M4`'s Watch grates, titration cages, bone-mill chutes, and
   rendering vats backs raw abyssal condensate down the blocked drain-lines until it ruptures straight into the Sluice
-  Undercroft. Pre-fight dialogue `dlg_int_dose` (each Founder option gated on `in_active_party` / deployed) records which Founder takes **Chirurgeon Sabina**'s emergency raw marrow dose in `sunk_ward.sabina_dose`; `enc_evt_05` grants that Founder's Tier I marrow skill for this battle only at **0 Act 1 Strain** (`PR5-43` encounter skill grant), `seq_after_m5` installs the persistent Tier I graft (`install {member_from_flag, item}`) alongside `set_act: 2` (`PK2_GRAFTS` §3), and **Hub Debate 2** (`Sabina` vs. `Berek` vs. `Talia`) plays after the fight.
+  Undercroft. Pre-fight dialogue `dlg_int_dose` (each Founder option gated on `in_active_party` / deployed) sets `sunk_ward.sabina_dose: true` (bool gate) and records the chosen Founder's ID in `sunk_ward.sabina_dose_to`; `enc_evt_05` grants Tier I `"marrow_lash"` via `flag_skills` keyed on `sunk_ward.sabina_dose_to` for this battle only at **0 Act 1 Strain** (non-Strain-carriers pay nothing and do not become carriers in Act 1), `seq_after_m5` installs Tier I `"graft_optic"` via `install {member_from_flag: "sunk_ward.sabina_dose_to", item: "graft_optic"}` alongside `set_act: 2` (`PK2_GRAFTS` §3), and **Hub Debate 2** (`Sabina` vs. `Berek` vs. `Talia`) plays after the fight.
 - `CAST1-B` validation (`FB-248`): `T12` (`ash_cloud_fade` smoke in `0b`) and `T13` (`tripwire_snare` trap in `0c`) are verified as deterministic scripted probes (`PR5-43`), `M1`/`M2` `max_rounds` bump to `10` (`PR5-44`), and `rpgkit_sim/src/world.rs` copies `"stay_behind"` in `world::encounter` (`PR5-43`) so Crucible `sim feel` exercises winch-hold + 3-hero escape.
 - Vane's & Orlov's final reckonings are Act 2 personal/mentor-inherited quests (`CL-02`, `CL-09`).
 

@@ -133,6 +133,7 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 | A planner row insert matched a task id inside another row's dependency cell and split two rows (KITIDS1, BASERULES1-DOM) | 2026-11-05, found by MASTERPLAN1 | Insert before a line that starts with the id; check cell counts after each TASKS edit | Done |
 | The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |
 | Cloud `alsa-sys` build fails when `.claude/hooks/session-start.sh` did not run | `PR5-40` (`FB-242`, 2026-11-12) | `apt-get install -y libasound2-dev` (already in `docs/workflow/cloud.md` Environment) | Done (`cloud.md`) |
+| Unsetting `CARGO_TARGET_DIR` creates a stray `C:/` folder (`.cargo/config.toml` sets a Windows target path) | `PR5-43` (`FB-249`, 2026-11-13) | Keep `CARGO_TARGET_DIR` set on Linux/cloud (`fc.sh` / session hook); never unset it | Done (`EFFICIENCY.md`) |
 
 ## Local CPU and heat (user 2026-11-04)
 
