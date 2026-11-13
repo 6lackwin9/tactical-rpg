@@ -47,8 +47,7 @@ full-size files arrive (Drive), save each as `art_src/<id>.png` and run its cut;
 
 ## Act 2 map picks (reviewed 2026-11-13, full-size files to follow)
 
-Checked the same way on background take A, at the positions proposed in Outbox `AO-01`. Batch 2's Grand Spire
-Gate is still to come.
+Checked the same way on background take A, at the positions proposed in Outbox `AO-01`.
 
 | Location | Pick | Cut |
 | --- | --- | --- |
@@ -60,6 +59,7 @@ Gate is still to come.
 | 11 Embalming Cloisters | take A (pale stone, lit courtyard, glowing dome) with the chimney wisp cleared | `... landmark art_src/lm_embalming_cloisters.png embalming_cloisters --clear 0.635,0.17,0.69,0.24` |
 | 13 Grand Belltower | take A (lit bronze bell, buttresses, red banners) | `... landmark art_src/lm_grand_belltower.png grand_belltower` |
 | 14 Reliquary Crypts | take B (candle-lit stair down to the gilded sarcophagus door, skull niches) | `... landmark art_src/lm_reliquary_crypts.png reliquary_crypts` |
+| 15 Grand Spire Gate | take A (iron gate between two spires, round lock-seal, violet-lit cliff lip) | `... landmark art_src/lm_grand_spire_gate.png grand_spire_gate` |
 
 ## Running through the image queue
 
