@@ -2593,7 +2593,7 @@
 		},
 		{
 			"id": "alum_inhaler",
-			"name": "Alum Inhaler (prototype)",
+			"name": "Snapped Alum Inhaler",
 			"family": "consumable",
 			"rarity": "UNCOMMON",
 			"weight": 0.3,

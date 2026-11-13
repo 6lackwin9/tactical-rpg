@@ -1,0 +1,647 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "skerrit_bone_cestus",
+    "name": "Shards into a Barbed Bone Cestus",
+    "description": "Skerrit works Calcified Bone Shards into a Barbed Bone Cestus at his bench.",
+    "npc": "skerrit_bone_wright",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "sunk_ward.skerrit_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 25,
+     "items": {
+      "calcified_bone_shard": 2
+     }
+    },
+    "target": "stash",
+    "effects": [
+     {
+      "effect": "craft",
+      "item": "barbed_bone_cestus",
+      "count": 1
+     }
+    ],
+    "origin": "system"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "recipes",
+   "entry": {
+    "id": "skerrit_bone_quarrel",
+    "name": "Shard into a Bone Quarrel",
+    "description": "Skerrit works Calcified Bone Shards into a Bone Quarrel at his bench.",
+    "npc": "skerrit_bone_wright",
+    "requires": [
+     {
+      "kind": "flag",
+      "key": "sunk_ward.skerrit_open",
+      "value": true,
+      "op": "=="
+     }
+    ],
+    "cost": {
+     "gold": 10,
+     "items": {
+      "calcified_bone_shard": 1
+     }
+    },
+    "target": "stash",
+    "effects": [
+     {
+      "effect": "craft",
+      "item": "bone_quarrel",
+      "count": 1
+     }
+    ],
+    "origin": "system"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "alum_inhaler",
+    "name": "Snapped Alum Inhaler",
+    "family": "consumable",
+    "rarity": "UNCOMMON",
+    "weight": 0.3,
+    "value": 35,
+    "description": "Elyse's prototype alum inhaler: a few clear breaths bleed marrow Strain away.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "consumable_type": "FOCUS_INCENSE",
+    "heal": 0,
+    "damage": 0,
+    "buff_pct": 0.0,
+    "duration": 0,
+    "use_blocks": 1,
+    "use_reach": 0,
+    "hazard": {},
+    "meter_delta": {
+     "meter": "strain",
+     "delta": -25
+    },
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "ash_crawl_crossroads",
+    "name": "Ash-Crawl Crossroads",
+    "description": "Node 03: an open-air culling station where the slum alleys meet, with the Seventh Ward Toll-Pen beside the cages.",
+    "kind": "wild",
+    "region": "sunk_ward_quarter",
+    "exits": [],
+    "encounters": [
+     "enc_evt_02"
+    ],
+    "map": "gorge_ruins",
+    "zone_bindings": {},
+    "markers": [
+     {
+      "id": "world_map",
+      "kind": "exit",
+      "anchor": "east",
+      "requires_flags": [],
+      "unless_flags": [],
+      "sets_flags": [],
+      "to": "world_map",
+      "label": "World map: the Ash-Crawl"
+     },
+     {
+      "id": "cages",
+      "kind": "encounter",
+      "anchor": "site_b",
+      "requires_flags": [],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.m2_done",
+        "value": true
+       }
+      ],
+      "sets_flags": [],
+      "encounter": "enc_evt_02",
+      "trigger": "proximity",
+      "radius": 2,
+      "once": false
+     },
+     {
+      "id": "toll_pen",
+      "kind": "point",
+      "anchor": "altar",
+      "requires_flags": [],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.ivo_rescued",
+        "value": true
+       },
+       {
+        "key": "sunk_ward.ivo_lost",
+        "value": true
+       }
+      ],
+      "sets_flags": [
+       {
+        "key": "sunk_ward.ivo_rescued",
+        "value": true
+       }
+      ],
+      "label": "The Seventh Ward Toll-Pen",
+      "note": "A boy with a chalked number on his shirt counts sentries on his fingers. The lock gives. He keeps counting until the grate is behind you."
+     },
+     {
+      "id": "rubbings",
+      "kind": "point",
+      "anchor": "ruin_lore",
+      "requires_flags": [
+       {
+        "key": "sunk_ward.m2_done",
+        "value": true
+       }
+      ],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.rubbings_taken",
+        "value": true
+       }
+      ],
+      "sets_flags": [
+       {
+        "key": "sunk_ward.rubbings_taken",
+        "value": true
+       }
+      ],
+      "label": "The cage-seal rubbings",
+      "note": "Maren spreads grey linen over the open cage seals and rubs. The Clerisy's cipher rises in white lines. St. Lyra's name is in it."
+     }
+    ],
+    "map_pos": [
+     0.67,
+     0.58
+    ],
+    "rest": false,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "q_a1_red_pen",
+    "name": "The Night of the Red Pen",
+    "description": "Talia's courier Ivo, twelve, is chalked into the Seventh Ward Toll-Pen at the Ash-Crawl Crossroads. Take him out before the Tithing clock runs down.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Bring Ivo out of the Toll-Pen",
+      "flag": "sunk_ward.ivo_rescued",
+      "value": true
+     }
+    ],
+    "reward": "Talia's thanks, and Widow Varka's shelves.",
+    "template": "a1_flag_job",
+    "turn_in": "talia_rusk",
+    "requires_flags": [
+     {
+      "key": "sunk_ward.debate1_seen",
+      "value": true
+     }
+    ],
+    "complete_flags": [],
+    "auto_start": false,
+    "links": {},
+    "variants": [
+     {
+      "id": "ivo_lost",
+      "when_flags": [
+       {
+        "key": "sunk_ward.ivo_lost",
+        "value": true
+       }
+      ],
+      "unless_flags": [
+       {
+        "key": "sunk_ward.ivo_rescued",
+        "value": true
+       }
+      ],
+      "set": {
+       "available": false
+      }
+     }
+    ],
+    "loot_pool": [],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "side",
+    "show_locked": true,
+    "closed_text": "Too late. The Red Pen swept the Toll-Pen at zero days."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "quests",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "q_hook_counter_still",
+    "name": "The Tenement Counter-Still",
+    "description": "Elyse will check her awakened mother's tenement block and distil tallow. The Vats' leftover stills are hot.",
+    "giver": "",
+    "faction": "",
+    "region": "sunk_ward_quarter",
+    "requires": [],
+    "steps": [
+     {
+      "text": "Check the counter-still at the Tallow Vats",
+      "flag": "sunk_ward.still_checked",
+      "value": true
+     }
+    ],
+    "reward": "Five days of Warded Tallow, 60 xp and 20 gold, and a Snapped Alum Inhaler.",
+    "template": "a1_flag_job_tallow",
+    "turn_in": "talia_rusk",
+    "requires_flags": [
+     {
+      "key": "sunk_ward.elyse_joined",
+      "value": true
+     }
+    ],
+    "complete_flags": [
+     {
+      "key": "sunk_ward.still_done",
+      "value": true
+     }
+    ],
+    "auto_start": false,
+    "links": {},
+    "variants": [],
+    "loot_pool": [],
+    "loot_picks": 1,
+    "reputation": {},
+    "tags": [],
+    "board": "talia_board",
+    "track": "side",
+    "show_locked": true,
+    "closed_text": "Cut through the Tallow Vats first."
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talia",
+    "name": "Talia at the cipher board",
+    "speaker": "talia_rusk",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Talia Rusk does not turn her head to look at you. She turns the left ear, the one that still hears. \"The board is on the wall. Chalk is ink down here. Read it twice.\"",
+      "choices": [
+       {
+        "text": "How do the ciphers work?",
+        "to": "cipher"
+       },
+       {
+        "text": "Who is Ivo?",
+        "to": "ivo_ask",
+        "requires": [
+         {
+          "key": "sunk_ward.ivo_rescued",
+          "value": false
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.talia_ivo_told",
+          "value": true
+         },
+         {
+          "key": "sunk_ward.ivo_lost",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "What happened to Ivo?",
+        "to": "ivo_lost",
+        "requires": [
+         {
+          "key": "sunk_ward.ivo_lost",
+          "value": true
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.talia_ivo_lost_told",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Ivo is home.",
+        "to": "ivo_home",
+        "requires": [
+         {
+          "key": "sunk_ward.ivo_rescued",
+          "value": true
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.talia_ivo_thanks",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "About that leg...",
+        "to": "leg",
+        "unless": [
+         {
+          "key": "sunk_ward.talia_leg_told",
+          "value": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "cipher",
+      "text": "\"Bone rods, notches by the quarter-hour. Each rod is a runner. Each notch is a drop. If the Watch burns a rod, they've burned the runner, so keep the rods clean.\"",
+      "next": "n0"
+     },
+     {
+      "id": "ivo_ask",
+      "text": "\"Twelve. The fastest courier I ever taught after Vesper. The Watch has him in the Seventh Ward Toll-Pen with a number chalked on his shirt. If the Tithing hits zero first, they take him and not a slate lies. Find the pen. Don't make me ask you twice.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.talia_ivo_told",
+        "value": true
+       }
+      ]
+     },
+     {
+      "id": "ivo_home",
+      "text": "She is quiet for a moment, and her fingers stop on the rod. \"Then Varka can open her shelves. The Leaking Vat is yours now, and the Basin will trade without a question. Thank you. I mean that.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.talia_ivo_thanks",
+        "value": true
+       }
+      ]
+     },
+     {
+      "id": "leg",
+      "text": "\"Ruthven's sweep, a magnesium flash-charge, and a crutch of ash-wood. The leg is a bad joke and the ear is worse. I can hear a bone-cipher click at forty paces and nothing on my right. Don't stand there.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.talia_leg_told",
+        "value": true
+       }
+      ]
+     },
+     {
+      "id": "ivo_lost",
+      "text": "Her hand closes on the rod until the notches bite. \"The Red Pen swept the pen at zero. They chalk a child and call it arithmetic. I'll remember who held the pen. Go on. Read the board twice.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.talia_ivo_lost_told",
+        "value": true
+       }
+      ]
+     }
+    ],
+    "services": true,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_corvo_gate",
+    "name": "Bailiff Corvo at the Third Ward gate",
+    "speaker": "bailiff_corvo",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "text": "Bailiff Corvo leans on the gate-post with a stiff leg that has already turned to grey stone to the knee. \"Third Ward gate. You want through, you leave something at the post. Salt or Scrap. I don't care who for.\"",
+      "choices": [
+       {
+        "text": "Rock Salt for the gate.",
+        "to": "bribed",
+        "requires": [
+         {
+          "kind": "items",
+          "item": "rock_salt",
+          "count": 1
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "take",
+          "items": {
+           "rock_salt": 1
+          }
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_bribed",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         },
+         {
+          "effect": "meter_add",
+          "meter": "alert",
+          "delta": -20
+         }
+        ]
+       },
+       {
+        "text": "Thirty Scrap for the gate.",
+        "to": "bribed_scrap",
+        "requires": [
+         {
+          "kind": "gold",
+          "min": 30
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "take",
+          "gold": 30
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_bribed",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         },
+         {
+          "effect": "meter_add",
+          "meter": "alert",
+          "delta": -20
+         }
+        ]
+       },
+       {
+        "text": "No more tolls. Force the Third Ward gate.",
+        "to": "",
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_forced",
+          "value": true
+         },
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         },
+         {
+          "effect": "fight",
+          "encounter": "enc_job_corvo_gate"
+         }
+        ]
+       },
+       {
+        "text": "About Ida.",
+        "to": "ida_lost",
+        "requires": [
+         {
+          "key": "sunk_ward.ida_lost",
+          "value": true
+         }
+        ],
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ],
+        "effects": [
+         {
+          "effect": "set_flag",
+          "key": "sunk_ward.corvo_settled",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "What do you keep behind the gate?",
+        "to": "ida",
+        "unless": [
+         {
+          "key": "sunk_ward.corvo_ida_told",
+          "value": true
+         },
+         {
+          "key": "sunk_ward.ida_lost",
+          "value": true
+         }
+        ]
+       },
+       {
+        "text": "Leave.",
+        "to": "bye"
+       }
+      ]
+     },
+     {
+      "id": "bribed",
+      "text": "He takes the salt, tucks it into a ledger he doesn't write in, and nods. \"Patrols cut short on the Third Ward side tonight. My sister Ida is sixteen and the Tithing is looking for sixteens. If it ever goes badly, don't make it worse.\"",
+      "next": "n0"
+     },
+     {
+      "id": "bribed_scrap",
+      "text": "He pockets the Scrap, tucks it into a ledger he doesn't write in, and nods. \"Patrols cut short on the Third Ward side tonight. My sister Ida is sixteen and the Tithing is looking for sixteens. If it ever goes badly, don't make it worse.\"",
+      "next": "n0"
+     },
+     {
+      "id": "ida",
+      "text": "\"My sister. Ida. Sixteen. I keep the gate so I can keep her indoors. I kept my mind on clean water. It buys me a stone leg and a few more months.\"",
+      "next": "n0",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "sunk_ward.corvo_ida_told",
+        "value": true
+       }
+      ]
+     },
+     {
+      "id": "bye",
+      "speaker": "bailiff_corvo",
+      "text": "Corvo waves you off the post.",
+      "end": true
+     },
+     {
+      "id": "ida_lost",
+      "text": "He does not look up from the stone of his leg. \"They took her at the count. Nothing left to keep behind the gate. Go through. I won't stop you, and I won't say thank you.\"",
+      "next": "n0"
+     }
+    ],
+    "services": false,
+    "tags": []
+   }
+  }
+ ]
+}
