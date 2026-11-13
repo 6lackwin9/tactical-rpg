@@ -14,7 +14,8 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-1 to PR5-6, PR5-8, PR5-16, PR5-17, PR5-20 to PR5-25 | done (FB-168 to FB-189, FB-194 to FB-196, answered) | `develop` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-10) |
 | PR5-7, PR5-9 to PR5-13b, PR5-18, PR5-19, PR5-26 to PR5-35 | done, released to `main` in #62 (FB-190 to FB-234, answered @cf3d93b4) | `main` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-11) |
 | PR5-36 to PR5-42 | done (FB-235 to FB-248, answered @6edec2a1 and @08ccf4f5) | `develop` | full rows in `docs/archive/FEEDBACK_CLOSED.md`; follow-ups queued as PR5-43, PR5-44 |
-| PR5-43 `ACT1-HOOKS2`, PR5-44 `ACT1-DATA2` | queued (cloud Build Session, 2026-11-13) | - | dispatch plan awaiting user confirmation |
+| PR5-43 `ACT1-HOOKS2` | building (logic-builder, pass 1 of 3) | `claude/gifted-wozniak-2nf3xr` | - |
+| PR5-44 `ACT1-DATA2` | queued (after PR5-43, user 2026-11-13) | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
