@@ -290,6 +290,11 @@ pub struct Unit {
     /// U3.2-S4 (FB-35, OFFHAND1): the skills worn items grant (their `skill` effects, their families' mastery
     /// passives'), rebuilt on every sync: owned, unlocked and always active while worn, no slot (`gear_skill`).
     pub gear_skills: Vec<String>,
+    /// ACT1-HOOKS2 (FB-244 (1)): the skills the encounter granted this unit for this battle only (a world encounter's
+    /// `flag_skills`): owned, unlocked and open without a slot like a worn item's (`battle_skill`); never saved. A
+    /// granted `channel.only` skill also plays in a Standard round while the unit cannot Channel (no channel meter),
+    /// as authored and paying no meter (`rpgkit_battle::channel::problem`).
+    pub battle_skills: Vec<String>,
     /// U3.2-S4 (U3 Level 2): crit chance points the worn gear's families give at proficiency 2 or more (their
     /// `level2_bonus` crit, each family once), rebuilt on every sync.
     pub gear_crit: f64,
@@ -427,6 +432,7 @@ impl Unit {
             passive_triggers: Vec::new(),
             gear_triggers: Vec::new(),
             gear_skills: Vec::new(),
+            battle_skills: Vec::new(),
             gear_crit: 0.0,
             held_guard: None,
             trigger_crit: 0.0,
@@ -983,6 +989,12 @@ impl Unit {
         self.gear_skills.iter().any(|s| s == skill_id)
     }
 
+    /// ACT1-HOOKS2 (FB-244 (1)): whether the encounter granted `skill_id` to this unit for this battle (owned, unlocked
+    /// and open without a slot, like a worn item's).
+    pub fn battle_skill(&self, skill_id: &str) -> bool {
+        self.battle_skills.iter().any(|s| s == skill_id)
+    }
+
     // ---- Skills: ownership, unlocks (SK2), loadout ---------------------------------------------------------------
 
     pub fn active_families(&self) -> Vec<String> {
@@ -1009,7 +1021,8 @@ impl Unit {
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
         // PK2-S2: a keystone graft's skill sits in the keystone slot, open without an active slot
         // PK2-S4: a technique is open without a slot while its weapon is wielded
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.keystone_skill(skill_id) || self.technique_skill(skill_id) {
+        // ACT1-HOOKS2: an encounter's battle grant too
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.battle_skill(skill_id) || self.keystone_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
@@ -1077,7 +1090,8 @@ impl Unit {
     /// HOOKS1 UM6: a meter skill the battle gave is owned (before the deck rule's closed basics).
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
         // PK2-S4: a technique open now is owned
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.technique_skill(skill_id) {
+        // ACT1-HOOKS2: an encounter's battle grant is owned for that battle
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.battle_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         if let Some(open) = self.deck_basic(cat, skill_id) {

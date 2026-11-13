@@ -86,7 +86,8 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
     // wielded family's keystone)
     let u = &w.units[c];
     let techniques: Vec<String> = u.techniques.iter().map(|t| t.skill.clone()).chain(std::iter::once(u.mastery_keystone.clone()).filter(|k| !k.is_empty())).collect();
-    for id in u.meter_skills.iter().chain(&u.gear_skills).chain(&techniques) {
+    // ACT1-HOOKS2: then the encounter's battle grants (`Unit::battle_skills`)
+    for id in u.meter_skills.iter().chain(&u.gear_skills).chain(&u.battle_skills).chain(&techniques) {
         let fam = w.cat.family_of(id).to_string();
         if !out.contains(&fam) {
             out.push(fam);

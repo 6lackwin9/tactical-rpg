@@ -1246,6 +1246,11 @@ pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
     ("rest", &[]),
     ("end", &["kind", "card", "text"]),
 ];
+/// ACT1-HOOKS2 (FB-244 (2)): the keys a meter rule's effect may carry besides its kind's: `when`, flag conditions
+/// (`{key, op, value}`, all holding when the effect is reached), and `else` (true: runs only when no effect of its chain
+/// ran; an effect without `else` starts a chain), so a rule writes if / else if / else.
+pub const RULE_EFFECT_WHEN: &str = "when";
+pub const RULE_EFFECT_ELSE: &str = "else";
 /// 11.4: flag-key prefixes the campaign answers (read-only: `set_flag` and `add_flag` refuse them in every world).
 pub const RESERVED_PREFIXES: [&str; 3] = ["meter.", "campaign.", "roster."];
 /// 11.4: the read keys besides `meter.<id>`, `meter.<id>.band` and `meter.<id>.running`.
@@ -1670,6 +1675,26 @@ pub const STORY_EFFECTS: [(&str, &[&str]); 3] = [("vignette", &["vignette"]), ("
 /// one draw `1..dialogue_roll_die` from the save's `dialogue` roll stream plus the stat (the active party's best, or
 /// the active member `who`'s) against `dc`; flag `key` is set true (success) or false. A choice effect only.
 pub const ROLL_EFFECT: &str = "roll";
+/// ACT1-HOOKS2 (FB-244 (1)): the dialogue condition kind `{"kind": "in_active_party", "character"}`: the party
+/// character is an active (deployed) member now, not only on the bench (choices' `requires` / `unless`, recipes'
+/// `requires`, story cards' `when`).
+pub const IN_ACTIVE_PARTY: &str = "in_active_party";
+/// ACT1-HOOKS2 (FB-244 (1)): the effect `{"effect": "install", "member_from_flag", "item", "slot"}`: the graft `item`
+/// goes into a body slot of the party member whose character id flag `member_from_flag` holds (`slot` "" or absent =
+/// the first empty slot, in catalog order, that takes it), through the recipe's install path
+/// (`UnitState::install_graft`); nothing changes (a note says why) when the flag names no member or the graft does
+/// not fit. Dialogue choices, sequences' effects steps and campaign rows take it.
+pub const INSTALL_EFFECT: &str = "install";
+/// ACT1-HOOKS2 (FB-244 (1)): a world encounter's `flag_skills` (stored only when set): at most `FLAG_SKILLS_MAX`
+/// `{"member_from_flag", "skill", "requires_flags"}`: while every `requires_flags` condition holds, the party member the
+/// flag names (it holds a character id) fights this battle holding `skill` (owned and open without a slot, for this
+/// battle only; a `channel.only` skill also plays in a Standard round while the unit holds no channel meter, as
+/// authored and paying no meter).
+pub const FLAG_SKILLS: &str = "flag_skills";
+pub const FLAG_SKILL_KEYS: [&str; 3] = ["member_from_flag", "skill", "requires_flags"];
+/// Room for one entry per party member (each gated by `requires_flags` on the flag's value) in a party of 8.
+pub const FLAG_SKILLS_MAX: usize = 8;
+pub const INSTALL_EFFECT_KEYS: [&str; 3] = ["member_from_flag", "item", "slot"];
 pub const ROLL_EFFECT_KEYS: [&str; 4] = ["stat", "dc", "key", "who"];
 /// T1.2-S2: the world manifest's `dialogue_roll_die` (-1: the nearest parent world's): the default and the range.
 pub const DIALOGUE_ROLL_DIE: i64 = 20;

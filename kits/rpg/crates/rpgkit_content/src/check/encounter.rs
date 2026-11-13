@@ -995,6 +995,45 @@ pub fn survivors_problems(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors
 }
 
+// ---- Flag skills (ACT1-HOOKS2) ----
+
+/// ACT1-HOOKS2 (FB-244 (1)): a world encounter's `flag_skills` (`[]` or absent = none): a list of at most
+/// `FLAG_SKILLS_MAX` objects with the keys `FLAG_SKILL_KEYS`: `member_from_flag` a flag key (it holds the member's
+/// character id when the battle starts), `skill` a catalog skill, `requires_flags` flag conditions.
+pub fn flag_skills_problems(v: &View, e: &Dict) -> Vec<String> {
+    use rpgkit_data::{FLAG_SKILLS, FLAG_SKILLS_MAX, FLAG_SKILL_KEYS};
+    let Some(raw) = e.get(FLAG_SKILLS) else { return Vec::new() };
+    let Some(list) = raw.as_array() else {
+        return vec!["Flag skills must be a list of {member_from_flag, skill, requires_flags}.".into()];
+    };
+    let mut errors = Vec::new();
+    if list.len() > FLAG_SKILLS_MAX {
+        errors.push(format!("Flag skills holds at most {FLAG_SKILLS_MAX} entries (has {}).", list.len()));
+    }
+    for (i, g) in list.iter().enumerate() {
+        let label = format!("Flag skill {}", i + 1);
+        let Some(g) = g.as_object() else {
+            errors.push(format!("{label} must be an object {{member_from_flag, skill, requires_flags}}."));
+            continue;
+        };
+        errors.extend(g.keys().filter(|k| !FLAG_SKILL_KEYS.contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}'.")));
+        let flag = json::s(g, "member_from_flag");
+        if !super::quest::flag_key_ok(&flag) {
+            errors.push(format!("{label}: member_from_flag '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
+        }
+        let skill = json::s(g, "skill");
+        if skill.is_empty() || !v.has("skills", &skill) {
+            errors.push(format!("{label}: unknown skill '{skill}'."));
+        } else if json::b(v.get("skills", &skill), "system", false) {
+            errors.push(format!("{label}: '{skill}' is a system skill (every unit has it)."));
+        }
+        if let Some(c) = g.get("requires_flags") {
+            errors.extend(super::quest::condition_errors(c, &format!("{label}: requires_flags")));
+        }
+    }
+    errors
+}
+
 // ---- Stay-behind and unkillable (ENCOUNTER2 3 and 6; not in Godot) ----
 
 /// The `stay_behind` keys (section 6); the hold-only and stand-only ones.

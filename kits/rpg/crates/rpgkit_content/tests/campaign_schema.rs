@@ -329,10 +329,10 @@ fn campaign_effects_and_read_keys_are_checked_in_dialogue() {
     for (tag, bad, needle) in cases {
         assert_one(&v, "dialogues", &d, &bad, needle, tag);
     }
-    // the unknown-effect message lists the campaign effects after the dialogue ones (T1.2-S2's roll among them) and
-    // STORYUI1's story effects
+    // the unknown-effect message lists the campaign effects after the dialogue ones (T1.2-S2's roll and ACT1-HOOKS2's
+    // install among them) and STORYUI1's story effects
     let unknown = added(&v, "dialogues", &d, &with(&d, &[&fx[..], &["1", "effect"]].concat(), json!("zz")));
-    assert!(unknown.iter().any(|m| m.contains("recruit, roll, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
+    assert!(unknown.iter().any(|m| m.contains("recruit, roll, install, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
     drop_scratch(&data);
 }
 

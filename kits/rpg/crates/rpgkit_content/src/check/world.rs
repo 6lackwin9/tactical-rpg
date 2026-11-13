@@ -544,6 +544,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(encounter::stay_behind_problems(v, e, true));
     // ACT1-HOOKS1: the guests-that-lived flag
     errors.extend(encounter::survivors_problems(v, w, e));
+    // ACT1-HOOKS2: the battle skill grants keyed on a member flag
+    errors.extend(encounter::flag_skills_problems(v, e));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects (a ref plays as its character's base unit)
     errors.extend(super::hooks::arena_hazards_errors(e, &v.ids(rpgkit_data::UNIT_METERS_KIND)));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
