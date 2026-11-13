@@ -4,7 +4,9 @@
 #   python art_src/prompts/cut_ai_sheets.py keepsakes_1 <sheet.png> [--pick kaelen=7,vesper=8,elyse=9] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py services_hud_1 <sheet.png> [--pick scrap=6,...] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@x0,y0,x1,y1]]
-#       [--clear x0,y0,x1,y1] [--desmoke x0,y0,x1,y1] [--size N] [--out DIR]
+#       [--clear x0,y0,x1,y1] [--desmoke x0,y0,x1,y1] [--grade SAT:VAL] [--size N] [--out DIR]
+#       --grade (a colour fix in code): scales the landmark's saturation and brightness, so a landmark that stands out
+#       too much sits into its act's background. The Marrow Conduits on Act 3: --grade 0.72:0.85.
 #       --desmoke (a small pixel fix in code): inside the box, steam and smoke pixels (pale, nearly grey) are filled in
 #       from the pixels around them, so steam in front of a wall leaves wall, not a hole; steam past the outline goes.
 #       The Marrow Conduits pick: --desmoke 0.62,0.35,0.79,0.52.
@@ -162,7 +164,22 @@ def desmoke(icon, spec):
     return icon
 
 
-def cut_landmark(path, location, out_root, size=96, tints=(), clears=(), desmokes=()):
+def grade(icon, spec):
+    """--grade SAT:VAL: multiplies every pixel's saturation by SAT and brightness by VAL (a tone-down, not a recolour)."""
+    import colorsys
+    sat, val = (float(v) for v in spec.split(":"))
+    px = icon.load()
+    for y in range(icon.height):
+        for x in range(icon.width):
+            r, g, b, a = px[x, y]
+            if a:
+                hh, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                r2, g2, b2 = colorsys.hsv_to_rgb(hh, ss * sat, vv * val)
+                px[x, y] = (round(r2 * 255), round(g2 * 255), round(b2 * 255), a)
+    return icon
+
+
+def cut_landmark(path, location, out_root, size=96, tints=(), clears=(), desmokes=(), grades=()):
     """One landmark on the magenta key -> GAME/map/landmarks/<location>.png, `size` x `size` (shown at 48 logical px).
     The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
     box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
@@ -183,6 +200,8 @@ def cut_landmark(path, location, out_root, size=96, tints=(), clears=(), desmoke
         icon = clear(icon, spec)
     for spec in desmokes:
         icon = desmoke(icon, spec)
+    for spec in grades:
+        icon = grade(icon, spec)
     dest = pathlib.Path(out_root) / f"{GAME}/map/landmarks/{location}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
     icon.save(dest)
@@ -192,13 +211,15 @@ def cut_landmark(path, location, out_root, size=96, tints=(), clears=(), desmoke
 def main(argv):
     if argv and argv[0] == "landmark":
         if len(argv) < 3:
-            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--desmoke box] [--size N] [--out DIR]")
+            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--desmoke box] [--grade SAT:VAL] [--size N] [--out DIR]")
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         tints = [argv[i + 1] for i, a in enumerate(argv) if a == "--tint"]
         clears = [argv[i + 1] for i, a in enumerate(argv) if a == "--clear"]
         size = int(argv[argv.index("--size") + 1]) if "--size" in argv else 96
         desmokes = [argv[i + 1] for i, a in enumerate(argv) if a == "--desmoke"]
-        for line in cut_landmark(argv[1], argv[2], out, size=size, tints=tints, clears=clears, desmokes=desmokes):
+        grades = [argv[i + 1] for i, a in enumerate(argv) if a == "--grade"]
+        for line in cut_landmark(argv[1], argv[2], out, size=size, tints=tints, clears=clears, desmokes=desmokes,
+                                 grades=grades):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:
