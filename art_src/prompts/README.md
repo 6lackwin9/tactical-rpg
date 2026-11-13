@@ -61,7 +61,7 @@ Checked the same way on background take A, at the positions proposed in Outbox `
 | 14 Reliquary Crypts | take B (candle-lit stair down to the gilded sarcophagus door, skull niches) | `... landmark art_src/lm_reliquary_crypts.png reliquary_crypts` |
 | 15 Grand Spire Gate | take A (iron gate between two spires, round lock-seal, violet-lit cliff lip) | `... landmark art_src/lm_grand_spire_gate.png grand_spire_gate` |
 
-Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own quarter and is drawn larger than 48 px, so each is cut at 96 x its map scale with `--size`: belltower x1.8 `--size 173`, spire gate x1.7 `--size 163`, stockades, reservoir and cloisters x1.2 `--size 115`, breach, boulevard and crypts x1.15 `--size 110`; the hub keeps 96. Positions and scales: Outbox `AO-01`.
+Act 2 layout (Tushar, 2026-11-13): each landmark sits on open ground in its own quarter and is drawn larger than 48 px, so each is cut at 96 x its map scale with `--size`: belltower x1.8 `--size 173`, spire gate x1.5 `--size 144`, stockades, reservoir and cloisters x1.2 `--size 115`, breach, boulevard and crypts x1.15 `--size 110`; the hub keeps 96. Positions and scales: Outbox `AO-01`.
 
 ## Running through the image queue
 
