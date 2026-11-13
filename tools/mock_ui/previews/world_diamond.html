@@ -20,12 +20,18 @@ __STYLES_CSS__
   .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
   .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
   .wd-hide { display: none; }
+  .wd-faint { background: rgba(10,11,16,0.28) !important; border-color: transparent !important; color: rgba(217,203,180,0.74) !important;
+              text-shadow: 0 0 2px #000, 0 0 1px #000; transition: background 0.12s, color 0.12s, border-color 0.12s; }
+  .wd-faint .wd-mtag { opacity: 0.55; }
+  .wd-node:hover .wd-faint { background: rgba(10,11,16,0.94) !important; border-color: #d97706 !important; color: var(--gold) !important; text-shadow: none; }
+  .wd-node:hover .wd-faint .wd-mtag { opacity: 1; }
   .wd-node:hover .wd-hide { display: flex; z-index: 30; }
   .wd-node:hover { z-index: 30; }
   .wd-above { position: absolute; left: 50%; transform: translateX(-50%); margin-top: 0; }
   .wd-lm { width: 48px; height: 48px; margin-top: -26px; image-rendering: pixelated; }
   .wd-node.locked .wd-lm { filter: grayscale(1) brightness(0.5) !important; }
   .wd-node.locked .wd-label { opacity: 0.55; }
+  .wd-node.locked .wd-faint { opacity: 0.8; }
   .wd-node.locked .wd-mtag { background: #6b7280; }
   .wd-node.cleared .wd-mtag { background: #4b5563; color: #d9cbb4; }
   .wd-check { position: absolute; right: -1px; top: -3px; font-size: 8px; color: var(--ok); text-shadow: 0 0 2px #000, 0 0 2px #000; font-weight: 700; }
@@ -47,7 +53,7 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'data', labels: 'below' };
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'spaced', labels: 'faint' };
 const FLAG_NAMES = {
   'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
   'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
@@ -108,8 +114,8 @@ function nodesHtml() {
         </div>`}
         ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:0;top:-2px;width:10px;height:10px;">` : ''}
         ${cleared ? `<span class="wd-check">✓</span>` : ''}
-        ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:${(ASSETS.lm || {})[n.id] ? -16 : -2}px;top:${(ASSETS.lm || {})[n.id] ? -26 : -2}px;width:10px;height:10px;">` : ''}
-        <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' ? 'wd-above' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' ? `bottom:${(ASSETS.lm || {})[n.id] ? 50 : 30}px;` : ''}">
+        ${n.id === 'sluice_undercroft' ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:${(ASSETS.lm || {})[n.id] ? -14 : -2}px;top:${(ASSETS.lm || {})[n.id] ? 8 : -2}px;width:10px;height:10px;">` : ''}
+        <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' || S.labels === 'faint' ? 'wd-above' : ''} ${S.labels === 'faint' && !sel ? 'wd-faint' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' || S.labels === 'faint' ? `bottom:${(ASSETS.lm || {})[n.id] ? 50 : 30}px;` : ''}">
           ${tag ? `<span class="wd-mtag">${tag}</span>` : ''}<span>${n.num} · ${n.name}</span>
         </div>
       </div>`;
@@ -219,7 +225,7 @@ function render() {
       `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
       [['data', 'Data'], ['spaced', 'Hub ↓ / grate ↑']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
       `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
-      [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
+      [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected'], ['faint', 'Faint, lit on hover / focus']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
   let map;
   if (S.view === 'diamond') {
     map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
