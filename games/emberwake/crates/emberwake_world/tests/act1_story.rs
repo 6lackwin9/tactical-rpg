@@ -1357,7 +1357,7 @@ fn the_overlook_hook_pays_the_lever_winch_once_and_it_quickens_the_sunder() {
     assert_eq!(blocks(&gs), (bare + delta as i32).max(1), "worn: {delta} block");
 }
 
-/// PR5-44: the Counter-Still hook pays one prototype Alum Inhaler, a consumable that bleeds 25 Strain.
+/// PR5-44: the Counter-Still hook pays one Alum Inhaler (PR5-46: "Snapped Alum Inhaler"), a consumable that bleeds 25 Strain.
 #[test]
 fn the_counter_still_hook_pays_an_alum_inhaler() {
     let d = data();
@@ -1427,4 +1427,278 @@ fn m1_m2_rounds_and_the_skerrit_items() {
     let nums: Vec<i64> = ["damage", "use_blocks", "use_reach", "max_stack", "value"].iter().map(|k| json::i(quarrel, k, 0)).collect();
     assert_eq!(nums, [32, 2, 3, 5, 30], "damage, blocks, reach, stack, value");
     assert!(d.cat.items.contains_key("bone_quarrel"), "the catalog reads the quarrel");
+}
+
+// ---- PR5-46 ACT1-DATA3 acceptance -------------------------------------------------------------------------------
+
+/// The choices of a conversation view as (text, locked).
+fn view_choices(view: &Dict) -> Vec<(String, bool)> {
+    json::aget(view, "choices").iter().map(json::dict).map(|c| (json::s(c, "text"), json::b(c, "locked", false))).collect()
+}
+
+/// Whether reply `text` is shown and open in `view`.
+fn reply_open(view: &Dict, text: &str) -> bool {
+    view_choices(view).iter().any(|(t, locked)| t == text && !locked)
+}
+
+/// Whether reply `text` is shown at all in `view` (open or locked).
+fn reply_shown(view: &Dict, text: &str) -> bool {
+    view_choices(view).iter().any(|(t, _)| t == text)
+}
+
+/// Picks open reply `text` in runner `r` and plays its node's line back to where the conversation goes on.
+fn pick_reply(d: &Data, gs: &mut GameState, r: &mut DialogueRunner, text: &str) -> Dict {
+    let view = r.view(d, gs);
+    let k = view_choices(&view).iter().position(|(t, locked)| t == text && !locked).unwrap_or_else(|| panic!("'{text}' is open: {view:?}"));
+    let res = r.choose(d, gs, k as i64);
+    assert!(ok(&res), "'{text}': {res:?}");
+    for _ in 0..5 {
+        if r.closed || !json::aget(&r.view(d, gs), "choices").is_empty() {
+            break;
+        }
+        assert!(ok(&r.advance(d, gs)), "'{text}': its line");
+    }
+    res
+}
+
+/// A Skerrit recipe row and its crafted item.
+fn skerrit_recipe(d: &Data, id: &str) -> (emberwake_data::recipe::RecipeDef, String, i64) {
+    let rc = d.cat.recipes.get(id).cloned().unwrap_or_else(|| panic!("the catalog has recipe {id}"));
+    assert_eq!(rc.target, "stash", "{id} crafts into the stash");
+    let fx = rc.effects.iter().find(|fx| json::s(fx, "effect") == "craft").cloned().unwrap_or_else(|| panic!("{id} crafts"));
+    let keys: Vec<String> = rc.requires.iter().map(|c| json::s(json::dict(c), "key")).collect();
+    assert_eq!(keys, [flag("skerrit_open")], "{id} waits for skerrit_open");
+    (rc, json::s(&fx, "item"), json::i(&fx, "count", 0))
+}
+
+/// PR5-46: Skerrit's two bone-shard recipes, through the real path: the Chain-Gang Wedges hook turned in (`wedges_done`)
+/// is not enough (refused, nothing paid); his "Dunstan sent me" reply opens them (`skerrit_open`); with the Scrap and
+/// shards both cost, both craft once into the stash, paid once; with too few shards both are refused and nothing
+/// changes.
+#[test]
+fn skerrit_crafts_the_cestus_and_the_quarrel_after_the_wedges() {
+    let d = data();
+    let ids = ["skerrit_bone_cestus", "skerrit_bone_quarrel"];
+    let rows: Vec<_> = ids.iter().map(|id| skerrit_recipe(&d, id)).collect();
+    let crafts: Vec<(&str, i64)> = rows.iter().map(|(_, item, n)| (item.as_str(), *n)).collect();
+    assert_eq!(crafts, [("barbed_bone_cestus", 1), ("bone_quarrel", 1)], "the row's items");
+    let shard = "calcified_bone_shard";
+    let gold: i64 = rows.iter().map(|(rc, _, _)| rc.cost.gold).sum();
+    let shards: i64 = rows.iter().map(|(rc, _, _)| rc.cost.items.get(shard).copied().unwrap_or(0)).sum();
+    assert!(gold > 0 && shards > 0, "the recipes cost Scrap and shards");
+    for (rc, _, _) in &rows {
+        assert_eq!(rc.cost.items.keys().collect::<Vec<_>>(), [shard], "{}: shards only", rc.id);
+    }
+    let npc = q("skerrit_bone_wright");
+    let pick = recipe::Pick::default();
+
+    let mut gs = after_interlude(&d);
+    run_side_hook(&d, &mut gs, "q_hook_wedges", "fourth_kiln", "wedge_pile");
+    assert!(gs.flag_true(&flag("wedges_done")) && !gs.flag_true(&flag("skerrit_open")));
+    go(&d, &mut gs, "fourth_kiln");
+    assert!(present_npcs(&d, &gs).contains(&"skerrit_bone_wright".to_string()), "Skerrit stands at the Fourth Kiln");
+    gs.party.gold = gold;
+    gs.party.stash.insert(shard.into(), shards);
+    // before skerrit_open: not offered, refused, nothing paid
+    assert!(offered(&d, &gs, "skerrit_bone_wright").iter().all(|id| !ids.contains(&id.as_str())), "no Skerrit recipe before skerrit_open");
+    let stash = gs.party.stash.clone();
+    for id in ids {
+        let r = recipe::run(&d, &mut gs, &npc, id, &pick);
+        assert!(!ok(&r), "{id} before skerrit_open: {r:?}");
+        assert_eq!((gs.party.gold, &gs.party.stash), (gold, &stash), "{id}: nothing paid");
+    }
+    // the wedges reply opens the bench
+    let mut r = DialogueRunner::open(&d, &mut gs, "skerrit_bone_wright");
+    assert!(r.errors.is_empty(), "Skerrit talks: {:?}", r.errors);
+    pick_reply(&d, &mut gs, &mut r, "Dunstan sent me. Chain-gang wedges.");
+    assert!(gs.flag_true(&flag("skerrit_open")), "the wedges reply sets skerrit_open");
+    let now = offered(&d, &gs, "skerrit_bone_wright");
+    for id in ids {
+        assert!(now.contains(&id.to_string()), "{id} offered after skerrit_open: {now:?}");
+    }
+    // enough for both: each crafts once, paid once
+    for (rc, item, n) in &rows {
+        let (g, s, have) = (gs.party.gold, gs.party.stash.get(shard).copied().unwrap_or(0), gs.party.stash.get(item).copied().unwrap_or(0));
+        let res = recipe::run(&d, &mut gs, &npc, &rc.id, &pick);
+        assert!(ok(&res), "{}: {res:?}", rc.id);
+        assert_eq!(gs.party.gold, g - rc.cost.gold, "{}: Scrap paid once", rc.id);
+        assert_eq!(gs.party.stash.get(shard).copied().unwrap_or(0), s - rc.cost.items[shard], "{}: shards paid once", rc.id);
+        assert_eq!(gs.party.stash.get(item).copied().unwrap_or(0), have + n, "{}: {item} in the stash", rc.id);
+    }
+    assert_eq!((gs.party.gold, gs.party.stash.get(shard).copied().unwrap_or(0)), (0, 0), "exactly both costs paid");
+    // too few shards: refused, nothing changes
+    gs.party.gold = gold * 10;
+    for (rc, _, _) in &rows {
+        gs.party.stash.insert(shard.into(), rc.cost.items[shard] - 1);
+        let (g, stash) = (gs.party.gold, gs.party.stash.clone());
+        let res = recipe::run(&d, &mut gs, &npc, &rc.id, &pick);
+        assert!(!ok(&res), "{} with too few shards: {res:?}", rc.id);
+        assert_eq!((gs.party.gold, &gs.party.stash), (g, &stash), "{}: a refusal changes nothing", rc.id);
+    }
+}
+
+/// The board row of quest `quest` on Talia's board: (section id, line).
+fn board_row(d: &Data, gs: &GameState, quest: &str) -> Option<(String, String)> {
+    json::aget(&board::view(d, gs, &q(BOARD)), "sections").iter().map(json::dict).find_map(|s| {
+        json::aget(s, "rows").iter().map(json::dict).find(|r| json::s(r, "quest") == q(quest)).map(|r| (json::s(s, "id"), json::s(r, "line")))
+    })
+}
+
+/// Whether point `marker` of `loc` is present now.
+fn point_present(d: &Data, gs: &GameState, loc: &str, marker: &str) -> bool {
+    let l = entry(d, "locations", loc);
+    let m = explore::markers_of(l).into_iter().find(|m| json::s(m, "id") == marker).unwrap_or_else(|| panic!("{loc} has {marker}"));
+    explore::presence(d, gs, &q(loc), &m) == "present"
+}
+
+/// PR5-46: the Red Tithing taking Ivo (`d_zero` through the meter path) hides the Toll-Pen, closes `q_a1_red_pen` on
+/// Talia's board with its `closed_text`, and swaps Talia's "Who is Ivo?" for "What happened to Ivo?" (open once; it
+/// sets `talia_ivo_lost_told` and goes back to her main node; she stays leavable). With Ivo rescued first, none of it.
+#[test]
+fn ivo_lost_closes_the_toll_pen_and_opens_talias_line() {
+    let d = data();
+    let rq = entry(&d, "quests", "q_a1_red_pen").clone();
+    let closed = json::s(&rq, "closed_text");
+    assert!(!closed.is_empty(), "q_a1_red_pen has a closed_text");
+    let (who, what, home) = ("Who is Ivo?", "What happened to Ivo?", "Ivo is home.");
+
+    let mut gs = tithing_game(&d, &[]);
+    assert!(point_present(&d, &gs, "ash_crawl_crossroads", "toll_pen"), "the Toll-Pen is open before the tithing");
+    assert_eq!(quest::status(&d, &gs, &q("q_a1_red_pen")), "available");
+    {
+        let mut r = DialogueRunner::open(&d, &mut gs, "talia_rusk");
+        let view = r.view(&d, &gs);
+        assert!(reply_open(&view, who) && !reply_shown(&view, what), "before: {view:?}");
+        r.cancel();
+    }
+    next_tithing(&d, &mut gs);
+    assert!(gs.flag_true(&flag("ivo_lost")) && !gs.flag_true(&flag("ivo_rescued")), "the first tithing takes Ivo");
+    assert!(!point_present(&d, &gs, "ash_crawl_crossroads", "toll_pen"), "a lost Ivo cannot be rescued: the Toll-Pen is gone");
+    assert_eq!(quest::status(&d, &gs, &q("q_a1_red_pen")), "unavailable", "q_a1_red_pen closes");
+    assert_eq!(board_row(&d, &gs, "q_a1_red_pen"), Some(("closed".to_string(), closed.clone())), "Closed on Talia's board with its closed_text");
+    assert!(!quest::start(&d, &mut gs, &q("q_a1_red_pen")).is_empty(), "a closed quest is not taken");
+
+    assert_eq!(gs.location_id, q(HUB));
+    assert!(present_npcs(&d, &gs).contains(&"talia_rusk".to_string()), "Talia stands in the hub");
+    let mut r = DialogueRunner::open(&d, &mut gs, "talia_rusk");
+    assert!(r.errors.is_empty(), "Talia talks: {:?}", r.errors);
+    assert!(!r.must_choose(&d, &gs), "dlg_talia may be left");
+    let start = r.node_id.clone();
+    let view = r.view(&d, &gs);
+    assert!(!reply_shown(&view, who), "'{who}' is hidden once Ivo is lost: {view:?}");
+    assert!(reply_open(&view, what), "'{what}' is open: {view:?}");
+    pick_reply(&d, &mut gs, &mut r, what);
+    assert!(gs.flag_true(&flag("talia_ivo_lost_told")), "'{what}' sets talia_ivo_lost_told");
+    assert_eq!(r.node_id, start, "back to Talia's main node");
+    let view = r.view(&d, &gs);
+    assert!(!reply_shown(&view, what) && !reply_shown(&view, who), "told once: {view:?}");
+    assert!(!r.must_choose(&d, &gs), "dlg_talia may still be left");
+    r.cancel();
+
+    // Ivo rescued first: d_zero takes Ida, and Ivo's lost line never opens
+    let (mut gs, _) = after_prologue(&d);
+    take_point(&d, &mut gs, "ash_crawl_crossroads", "toll_pen");
+    assert!(gs.flag_true(&flag("ivo_rescued")));
+    go(&d, &mut gs, HUB);
+    next_tithing(&d, &mut gs);
+    assert!(!gs.flag_true(&flag("ivo_lost")) && gs.flag_true(&flag("ida_lost")), "a rescued Ivo is safe: Ida is taken");
+    assert_ne!(quest::status(&d, &gs, &q("q_a1_red_pen")), "unavailable", "a rescued Ivo leaves q_a1_red_pen open");
+    assert_ne!(board_row(&d, &gs, "q_a1_red_pen").map(|r| r.0), Some("closed".to_string()), "not Closed on the board");
+    let mut r = DialogueRunner::open(&d, &mut gs, "talia_rusk");
+    let view = r.view(&d, &gs);
+    assert!(!reply_shown(&view, what) && !reply_shown(&view, who), "rescued: no lost line: {view:?}");
+    assert!(reply_open(&view, home), "rescued: '{home}' instead: {view:?}");
+    r.cancel();
+}
+
+/// PR5-46: the Red Tithing taking Ida (its second firing) turns Corvo's "What do you keep behind the gate?" into "About
+/// Ida.": picking it settles the gate (`corvo_settled`, so `q_a1_corvo`'s step is met as a bribe meets it) without
+/// `corvo_bribed` and without the bribe's Alert cut (the Alert is read before and after); the conversation stays
+/// leavable.
+#[test]
+fn ida_lost_gives_corvo_s_bitter_gate_pass_with_no_alert_cut() {
+    let d = data();
+    let (ask, about) = ("What do you keep behind the gate?", "About Ida.");
+    let (mut gs, _) = after_prologue(&d);
+    run_quest(&d, &mut gs, "q_a1_m1", None);
+    play_scenes(&d, &mut gs, PICK);
+    assert_eq!(quest::status(&d, &gs, &q("q_a1_corvo")), "available");
+    assert_eq!(quest::start(&d, &mut gs, &q("q_a1_corvo")), Vec::<String>::new(), "q_a1_corvo is taken");
+    go(&d, &mut gs, "corvos_gate");
+    let corvo = present_npcs(&d, &gs).into_iter().find(|c| json::s(entry(&d, "characters", c), "dialogue") == "dlg_corvo_gate").expect("Corvo stands at his gate");
+    {
+        let mut r = DialogueRunner::open(&d, &mut gs, &corvo);
+        let view = r.view(&d, &gs);
+        assert!(reply_open(&view, ask) && !reply_shown(&view, about), "before Ida is taken: {view:?}");
+        r.cancel();
+    }
+    for _ in 0..2 {
+        if !gs.flag_true(&flag("ida_lost")) {
+            next_tithing(&d, &mut gs);
+        }
+    }
+    assert!(gs.flag_true(&flag("ivo_lost")) && gs.flag_true(&flag("ida_lost")), "the tithings took Ivo, then Ida");
+    assert_eq!(gs.location_id, q("corvos_gate"));
+    assert!(present_npcs(&d, &gs).contains(&corvo), "Corvo still keeps the gate");
+
+    let mut r = DialogueRunner::open(&d, &mut gs, &corvo);
+    assert!(r.errors.is_empty(), "Corvo talks: {:?}", r.errors);
+    assert!(!r.must_choose(&d, &gs), "dlg_corvo_gate may be left");
+    let view = r.view(&d, &gs);
+    assert!(!reply_shown(&view, ask), "'{ask}' is hidden once Ida is taken: {view:?}");
+    assert!(reply_open(&view, about), "'{about}' is open: {view:?}");
+
+    // the bribe from the same state, for comparison: it settles the gate and cuts the Alert
+    let bribes: Vec<String> = json::aget(entry(&d, "dialogues", "dlg_corvo_gate"), "nodes")
+        .iter()
+        .flat_map(|n| json::aget(json::dict(n), "choices").to_vec())
+        .map(|c| json::dict(&c).clone())
+        .filter(|c| json::aget(c, "effects").iter().map(json::dict).any(|fx| json::s(fx, "key") == flag("corvo_bribed")))
+        .map(|c| json::s(&c, "text"))
+        .collect();
+    assert!(!bribes.is_empty(), "Corvo takes a bribe");
+    let mut bribed = gs.clone();
+    let cut: i64 = {
+        let mut b = DialogueRunner::open(&d, &mut bribed, &corvo);
+        let bview = b.view(&d, &bribed);
+        let text = bribes.iter().find(|t| reply_open(&bview, t)).cloned().unwrap_or_else(|| panic!("a bribe is affordable: {bview:?}"));
+        let before = meter(&bribed, "alert");
+        pick_reply(&d, &mut bribed, &mut b, &text);
+        b.cancel();
+        before - meter(&bribed, "alert")
+    };
+    assert!(bribed.flag_true(&flag("corvo_bribed")) && bribed.flag_true(&flag("corvo_settled")));
+    assert!(cut > 0, "the bribe cuts the Alert");
+
+    let alert = meter(&gs, "alert");
+    pick_reply(&d, &mut gs, &mut r, about);
+    assert!(gs.flag_true(&flag("corvo_settled")), "'{about}' settles the gate");
+    assert!(!gs.flag_true(&flag("corvo_bribed")), "'{about}' is no bribe");
+    assert_eq!(meter(&gs, "alert"), alert, "'{about}': 0 Alert reduction");
+    let view = r.view(&d, &gs);
+    assert!(!reply_shown(&view, about) && bribes.iter().all(|t| !reply_shown(&view, t)), "the gate is settled: {view:?}");
+    assert!(!r.must_choose(&d, &gs), "dlg_corvo_gate may still be left");
+    r.cancel();
+    // the gate lets the party through as the bribe does: q_a1_corvo's step met, Corvo stays, the same roads
+    assert_eq!(quest::status(&d, &gs, &q("q_a1_corvo")), quest::status(&d, &bribed, &q("q_a1_corvo")), "q_a1_corvo as after a bribe");
+    assert_eq!(quest::status(&d, &gs, &q("q_a1_corvo")), "ready", "q_a1_corvo waits to be turned in");
+    assert_eq!(present_npcs(&d, &gs), present_npcs(&d, &bribed), "Corvo stays as after a bribe");
+    assert!(!gs.flag_true(&flag("corvo_forced")), "no gate fight");
+    let mut known = travel::known(&d, &gs);
+    let mut known_b = travel::known(&d, &bribed);
+    known.sort();
+    known_b.sort();
+    assert_eq!(known, known_b, "the same roads as after a bribe");
+}
+
+/// PR5-46: `alum_inhaler` reads "Snapped Alum Inhaler", and the Counter-Still hook's reward text names it so.
+#[test]
+fn the_alum_inhaler_is_the_snapped_alum_inhaler() {
+    let d = data();
+    let name = "Snapped Alum Inhaler";
+    assert_eq!(d.item_name("alum_inhaler"), name);
+    assert_eq!(json::s(d.entry("items", "alum_inhaler"), "name"), name);
+    let reward = json::s(entry(&d, "quests", "q_hook_counter_still"), "reward");
+    assert!(reward.contains(name), "q_hook_counter_still's reward names it: {reward}");
+    assert!(!reward.contains("prototype Alum Inhaler"), "the old name is gone: {reward}");
 }
