@@ -109,7 +109,7 @@ HOOKS1 ZN3). `party` lists the expected founders (previews and sims); the campai
 | `objective` | rout | rout | rout | rout |
 | `objective_text` | "Break Vane's sweep before the grates are sealed." | "Free the cages before the flagellants cull them." | "Cut through the vats; find the chemist." | "Drive the marrow surge back into the fissure." |
 | `exits` | [[11, 4]] | [[11, 4]] | [[11, 4]] | [[0, 4]] |
-| `max_rounds` | 8 | 8 | 10 | 10 |
+| `max_rounds` | 10 (`PR5-44`) | 10 (`PR5-44`) | 10 | 10 |
 | `morale` | true; `morale_leader` `captain_vane`; `morale_break` 50 | false | false | false |
 | `phases` | `vane_taunt` (`talk` R1 `kaelen`), `execution_wall`, `vane_withdraws` (`CL-01`) | `quell_taunt` (`talk` R1 `maren`), `cull_1`, `cull_2`, `marrow_valve` (`hp_below: 35`) | `orlov_taunt` (`talk` R1 `vesper`), `cataclysm`, `orlov_withdraws` (`CL-01`) | `surge_breach` (`talk` R1), `bells`, `bloom` |
 | `purse` | 30 | 25 | 100 | 0 |
@@ -131,11 +131,10 @@ Purse values are `{"gold_min": n, "gold_max": n, "once": true}` (Scrap is the pu
   (or Talia's inherited) loyalty quest, leaving behind `loot_flensing_talon` (`objective_reward`) while the M4 quest
   turn-in awards `loot_orlovs_retribution` and `+5` `Warded Tallow`. The grease (`toxic_bog`) tiles stand in for Orlov's
   boiling-fat floor.
-- Causal Interlude (`CL-08`, `CL-11`): Shutting down `M1`–`M4`'s Watch grates, titration cages, bone-mill chutes, and
+- Causal Interlude (`CL-08`, `CL-11`, `FB-244(1)`): Shutting down `M1`–`M4`'s Watch grates, titration cages, bone-mill chutes, and
   rendering vats backs raw abyssal condensate down the blocked drain-lines until it ruptures straight into the Sluice
-  Undercroft. Pre-fight dialogue records which Founder takes **Chirurgeon Sabina**'s emergency raw marrow dose in
-  `sunk_ward.sabina_dose` (carrying Stage I `Vein-Blackening` + free Tier I implant head-start into Act 2) and triggers
-  **Hub Debate 2** (`Sabina` vs. `Berek` vs. `Talia`) after the fight.
+  Undercroft. Pre-fight dialogue `dlg_int_dose` (each Founder option gated on `in_active_party` / deployed) records which Founder takes **Chirurgeon Sabina**'s emergency raw marrow dose in `sunk_ward.sabina_dose`; `enc_evt_05` grants that Founder's Tier I marrow skill for this battle only at **0 Act 1 Strain** (`PR5-43` encounter skill grant), `seq_after_m5` installs the persistent Tier I graft (`install {member_from_flag, item}`) alongside `set_act: 2` (`PK2_GRAFTS` §3), and **Hub Debate 2** (`Sabina` vs. `Berek` vs. `Talia`) plays after the fight.
+- `CAST1-B` validation (`FB-248`): `T12` (`ash_cloud_fade` smoke in `0b`) and `T13` (`tripwire_snare` trap in `0c`) are verified as deterministic scripted probes (`PR5-43`), `M1`/`M2` `max_rounds` bump to `10` (`PR5-44`), and `rpgkit_sim/src/world.rs` copies `"stay_behind"` in `world::encounter` (`PR5-43`) so Crucible `sim feel` exercises winch-hold + 3-hero escape.
 - Vane's & Orlov's final reckonings are Act 2 personal/mentor-inherited quests (`CL-02`, `CL-09`).
 
 ## 4. Terrain rows (`rows`, ENCOUNTER2 R0)
