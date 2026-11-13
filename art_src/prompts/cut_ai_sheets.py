@@ -3,7 +3,10 @@
 # reusing tools/portraits (sheets.cells_of / key_out / snap, pixelize.mode_reduce) so the cut matches ART2 and PLAYUI1.
 #   python art_src/prompts/cut_ai_sheets.py keepsakes_1 <sheet.png> [--pick kaelen=7,vesper=8,elyse=9] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py services_hud_1 <sheet.png> [--pick scrap=6,...] [--out DIR]
-#   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--out DIR]
+#   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@x0,y0,x1,y1]] [--out DIR]
+#       --tint (a colour fix in code, preferences "Colour and small pixel fixes are code"): saturated, bright pixels whose
+#       hue is in LO..HI (0..1) move to hue TO, toned down to a murkier version, inside the box (fractions of the cut).
+#       The Tallow Vats pick: --tint 0.05-0.16:0.19@0.33,0,1,0.62 (the orange vat tops to sickly yellow-green).
 #       one act-map landmark (art_src/prompts/act_map_landmarks.md): the magenta key cleared, cropped to the landmark,
 #       box-downscaled to map/landmarks/<location_id>.png (96 x 96, shown at 48 logical px)
 # Cells are numbered 1..9 row by row. Without --pick the first take of each icon is used. --out writes under DIR
@@ -65,7 +68,27 @@ def cut(sheet_id, sheet_path, picks, out_root):
     return written
 
 
-def cut_landmark(path, location, out_root, size=96):
+def tint(icon, spec):
+    """--tint LO-HI:TO[@x0,y0,x1,y1]: moves the bright, saturated pixels of a hue range to another hue (a colour fix)."""
+    import colorsys
+    rng, _, rest = spec.partition(":")
+    to, _, box = rest.partition("@")
+    lo, hi = (float(v) for v in rng.split("-"))
+    x0, y0, x1, y1 = (float(v) for v in box.split(",")) if box else (0, 0, 1, 1)
+    w, h = icon.size; px = icon.load()
+    for y in range(int(h * y0), int(h * y1)):
+        for x in range(int(w * x0), int(w * x1)):
+            r, g, b, a = px[x, y]
+            if not a:
+                continue
+            hh, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            if lo <= hh <= hi and ss > 0.55 and vv > 0.55:
+                r2, g2, b2 = colorsys.hsv_to_rgb(float(to), ss * 0.72, vv * 0.84)
+                px[x, y] = (int(r2 * 255), int(g2 * 255), int(b2 * 255), a)
+    return icon
+
+
+def cut_landmark(path, location, out_root, size=96, tints=()):
     """One landmark on the magenta key -> GAME/map/landmarks/<location>.png, `size` x `size` (shown at 48 logical px).
     The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
     box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
@@ -80,6 +103,8 @@ def cut_landmark(path, location, out_root, size=96):
     square.paste(fig, ((side - fig.size[0]) // 2, (side - fig.size[1]) // 2))
     icon = square.resize((size, size), Image.BOX)
     icon.putalpha(icon.getchannel("A").point(lambda v: 255 if v >= 128 else 0))
+    for spec in tints:
+        icon = tint(icon, spec)
     dest = pathlib.Path(out_root) / f"{GAME}/map/landmarks/{location}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
     icon.save(dest)
@@ -89,9 +114,10 @@ def cut_landmark(path, location, out_root, size=96):
 def main(argv):
     if argv and argv[0] == "landmark":
         if len(argv) < 3:
-            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--out DIR]")
+            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--out DIR]")
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
-        for line in cut_landmark(argv[1], argv[2], out):
+        tints = [argv[i + 1] for i, a in enumerate(argv) if a == "--tint"]
+        for line in cut_landmark(argv[1], argv[2], out, tints=tints):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:
