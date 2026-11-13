@@ -68,6 +68,34 @@ def cut(sheet_id, sheet_path, picks, out_root):
     return written
 
 
+def keep_main(im, share=0.08):
+    """Keeps the landmark's main body and any piece at least `share` of it; floating bits (smoke wisps, ash flecks,
+    halo crumbs left on the key) go, whatever their size. Pieces are 8-connected over alpha >= 128."""
+    w, h = im.size; a = im.getchannel("A").tobytes(); seen = bytearray(w * h); pieces = []
+    for start in range(w * h):
+        if seen[start] or a[start] < 128:
+            continue
+        stack = [start]; seen[start] = 1; piece = []
+        while stack:
+            i = stack.pop(); piece.append(i); x, y = i % w, i // w
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < w and 0 <= ny < h:
+                        j = ny * w + nx
+                        if not seen[j] and a[j] >= 128:
+                            seen[j] = 1; stack.append(j)
+        pieces.append(piece)
+    if not pieces:
+        return im
+    big = max(len(p) for p in pieces); px = im.load()
+    for p in pieces:
+        if len(p) < big * share:
+            for i in p:
+                px[i % w, i // w] = (0, 0, 0, 0)
+    return im
+
+
 def tint(icon, spec):
     """--tint LO-HI:TO[@x0,y0,x1,y1]: moves the bright, saturated pixels of a hue range to another hue (a colour fix)."""
     import colorsys
@@ -93,7 +121,7 @@ def cut_landmark(path, location, out_root, size=96, tints=()):
     The source is already pixel art (the image model's), so it is only keyed, cropped with air around it and
     box-downscaled with a hard alpha edge: a palette reduce at this size smears the detail (checked on the hub takes)."""
     im = X.clear_corner(Image.open(path).convert("RGBA"))
-    keyed = S.drop_specks(S.key_out(im, inset=0.0))      # ash flecks floating on the key would stretch the box
+    keyed = keep_main(S.key_out(im, inset=0.0))          # smoke wisps and ash flecks floating on the key are dropped
     box = keyed.getbbox()
     if not box:
         sys.exit(f"{path}: nothing left after keying out the magenta")
