@@ -53,7 +53,7 @@ __STYLES_CSS__
 const ASSETS = __ASSETS_JSON__;
 const DATA = __DATA_JSON__;
 const G = DATA.graph;
-const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'spaced', labels: 'faint' };
+const S = { view: 'diamond', step: 0, sel: 'alleyway_junction_7', spacing: 'regions', labels: 'faint' };
 const FLAG_NAMES = {
   'sunk_ward.m1_done': 'M1', 'sunk_ward.m2_done': 'M2', 'sunk_ward.interlude_done': 'the Interlude',
   'sunk_ward.m5_done': 'M5', 'sunk_ward.lock_ciphers_done': "Vesper's lock ciphers"
@@ -223,14 +223,14 @@ function render() {
     ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">Act 1 progress:</span>` +
       DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') +
       `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
-      [['data', 'Data'], ['spaced', 'Spaced']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
+      [['data', 'Data'], ['spaced', 'Spaced diamond'], ['regions', 'Painted regions']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') +
       `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
       [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected'], ['faint', 'Faint, lit on hover / focus']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
   let map;
   if (S.view === 'diamond') {
     map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
              <defs><filter id="wdGlow" filterUnits="userSpaceOnUse" x="0" y="0" width="496" height="328"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-             ${routesSvg()}</svg>${tiersHtml()}${nodesHtml()}${legend()}`;
+             ${routesSvg()}</svg>${S.spacing === 'regions' ? '' : tiersHtml()}${nodesHtml()}${legend()}`;
   } else {
     const c = currentHtml();
     map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">${c.svg}</svg>${c.pins}`;
