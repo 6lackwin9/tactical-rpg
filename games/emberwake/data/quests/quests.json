@@ -154,8 +154,8 @@
 		},
 		{
 			"id": "a1_flag_job_tallow",
-			"name": "Act 1 side-hook (Warded Tallow)",
-			"description": "Do one errand at a ward node; paid in Warded Tallow.",
+			"name": "Act 1 side-hook (Warded Tallow, Alum Inhaler)",
+			"description": "Do one errand at a ward node; paid in Warded Tallow and a prototype Alum Inhaler.",
 			"objectives": [
 				{
 					"kind": "flag"
@@ -164,7 +164,28 @@
 			"rewards": {
 				"xp": 60,
 				"gold": 20,
-				"supplies": 5
+				"supplies": 5,
+				"items": {
+					"alum_inhaler": 1
+				}
+			},
+			"tags": []
+		},
+		{
+			"id": "a1_flag_job_winch",
+			"name": "Act 1 side-hook (Lever-Winch)",
+			"description": "Do one errand at a ward node; paid in Hollis's Lever-Winch.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"gold": 20,
+				"items": {
+					"hollis_lever_winch": 1
+				}
 			},
 			"tags": []
 		}

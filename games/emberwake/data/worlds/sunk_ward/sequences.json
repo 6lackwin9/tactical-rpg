@@ -160,6 +160,12 @@
 						{
 							"effect": "set_act",
 							"act": 2
+						},
+						{
+							"effect": "install",
+							"member_from_flag": "sunk_ward.sabina_dose_to",
+							"item": "graft_optic",
+							"slot": ""
 						}
 					]
 				},

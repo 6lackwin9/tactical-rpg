@@ -407,7 +407,7 @@
 				"####..######"
 			],
 			"arena_hazards": [],
-			"max_rounds": 8,
+			"max_rounds": 10,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 10,
@@ -574,7 +574,7 @@
 				"#....##....#"
 			],
 			"arena_hazards": [],
-			"max_rounds": 8,
+			"max_rounds": 10,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 10,
@@ -1250,6 +1250,68 @@
 			"guests": [],
 			"party_min": 0,
 			"protect": [],
+			"flag_skills": [
+				{
+					"member_from_flag": "sunk_ward.sabina_dose_to",
+					"skill": "marrow_lash",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.sabina_dose_to",
+							"value": "kaelen"
+						}
+					]
+				},
+				{
+					"member_from_flag": "sunk_ward.sabina_dose_to",
+					"skill": "marrow_lash",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.sabina_dose_to",
+							"value": "vesper"
+						}
+					]
+				},
+				{
+					"member_from_flag": "sunk_ward.sabina_dose_to",
+					"skill": "marrow_lash",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.sabina_dose_to",
+							"value": "maren"
+						}
+					]
+				},
+				{
+					"member_from_flag": "sunk_ward.sabina_dose_to",
+					"skill": "marrow_lash",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.sabina_dose_to",
+							"value": "hollis"
+						}
+					]
+				},
+				{
+					"member_from_flag": "sunk_ward.sabina_dose_to",
+					"skill": "marrow_lash",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.sabina_dose_to",
+							"value": "dunstan"
+						}
+					]
+				},
+				{
+					"member_from_flag": "sunk_ward.sabina_dose_to",
+					"skill": "marrow_lash",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.sabina_dose_to",
+							"value": "elyse"
+						}
+					]
+				}
+			],
 			"tags": [
 				"main"
 			]

@@ -442,7 +442,7 @@
 				},
 				{
 					"style": "text",
-					"text": "Dunstan sets his broken slag-ladle on the made bunk, handle first. His wired jaw does not move.",
+					"text": "Dunstan sets down his iron shackles on the made bunk, links first. His wired jaw does not move.",
 					"when": [
 						{
 							"kind": "flag",
@@ -455,7 +455,7 @@
 				{
 					"style": "line",
 					"speaker": "elyse",
-					"text": "I make tonics for the Spent. I have nothing that makes a winch hold.",
+					"text": "I make tonics for the Spent, and I have nothing that makes a winch hold. But I have a vitriol charge. Pack it in the brake housing and it will fuse the pawl or jam the whole mechanism. Next time we will not have to hold it by hand.",
 					"expression": "sad",
 					"when": [
 						{
