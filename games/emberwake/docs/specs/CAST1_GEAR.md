@@ -62,7 +62,7 @@ modifiers as listed; `slot` BODY for armour):
 | `flensing_hooks` | Flensing Hooks | axe main_1h | 3.0 | 60 | power +2 | - | Guild-Master Orlov |
 | `prelates_blade` | Prelate's Blade | sword main_2h | 4.5 | 120 | power +4; req STR 14 | - | Nemeth (RARE) |
 | `slag_plating` | Slag Plating | plate | 9.0 | 90 | mitigation +2; req CONS 13 | resist burn 15 | M3 reward (UNCOMMON) |
-| `barbed_bone_cestus` | Barbed Bone Cestus (`[PROVISIONAL]`) | fist main_1h | 1.5 | 65 | power +3; req STR 11 | `status_potency` 5 (`UNCOMMON`) | Skerrit recipe (`sunk_ward.skerrit_open`) |
+| `barbed_bone_cestus` | Barbed Bone Cestus (`[PROVISIONAL]`) | fist main_1h | 1.5 | 65 | power +3; req STR 11 | `status_potency` 5 (`UNCOMMON`) | Skerrit recipe `skerrit_bone_cestus` (`2 calcified_bone_shard` + `25` Scrap, `sunk_ward.skerrit_open`) |
 | `hollis_lever_winch` | Hollis's Lever-Winch (`[PROVISIONAL]`) | accessory (`ACCESSORY_2`) | 0.5 | 0 | `special: true`, stat PERC +1 | `skill_block_cost` `heavy_winch_sunder` `-1` (min 1) | `q_hook_overlook` / `overlook` |
 
 Consumables (`consumable` family; `max_stack` 5):
@@ -72,13 +72,13 @@ Consumables (`consumable` family; `max_stack` 5):
 | `sulfur_poultice` | Stitch-Poultice | HEALTH_POTION | heal 60 | blocks 1, reach 1 | 15 |
 | `pitch_fire_bomb` | Pitch Fire-Bomb | THROWABLE_BOMB | damage 40, damage type fire | blocks 1, reach 3 | 30 |
 | `brimstone_draught` | Brimstone Draught | FOCUS_INCENSE | buff CONS 0.3 for 3 rounds | blocks 1, reach 0 | 25 |
-| `alum_inhaler` | Snapped Alum Inhaler (`[PROVISIONAL]`) | FOCUS_INCENSE | `meter_delta` `strain` `-25` (no-op if no meter) | blocks 1, reach 0 | 35 |
-| `bone_quarrel` | Bone Quarrel (`[PROVISIONAL]`) | THROWABLE_BOMB | `area: "NONE"`, damage 32, `armor_piercing: true` | blocks 2, reach 3 | 30 |
+| `alum_inhaler` | Snapped Alum Inhaler (`[PROVISIONAL]`) | FOCUS_INCENSE | `meter_delta` `strain` `-25` (no-op if no meter); `weight: 0.3`, `UNCOMMON` | blocks 1, reach 0 | 35 |
+| `bone_quarrel` | Bone Quarrel (`[PROVISIONAL]`) | THROWABLE_BOMB | `area: "NONE"`, damage 32, `armor_piercing: true`; `weight: 0.5`, `UNCOMMON` | blocks 2, reach 3 | 30 |
 
 - Sulfur Stitch-Poultice: the lore's cleanse of bleed and poison waits (consumables heal or buff, G17); full name in
   the description. Tallow Burn Salve and the Magnesium Flash-Pot are not made (no item cleanse or item stagger).
 - Brimstone Tallow Draught stand-in: "halves poise damage for 3 rounds" becomes CONS +30% (Max Poise reads CONS).
-- Side-hook shop/recipe items (`FB-244`, `PR5-43` hooks + `PR5-44` seed `act1fix2.json`): `q_hook_overlook` / `overlook` pays `hollis_lever_winch` once; `q_hook_counter_still` / `a1_flag_job_tallow` grants `1` prototype `alum_inhaler`; `q_hook_bellows` sets `sunk_ward.bellows_done` giving `berek_hearth` `discount` `mult: 0.8` (`-20%`); `q_hook_wedges` sets `sunk_ward.skerrit_open` unlocking Skerrit (`skerrit_bone_wright`) recipes (`calcified_bone_shard` + Scrap) for `barbed_bone_cestus` and `bone_quarrel`.
+- Side-hook shop/recipe items (`FB-244`, `PR5-43` hooks, `PR5-44` `act1fix2.json`, queued `PR5-45`/`PR5-46`): `q_hook_overlook` / `overlook` pays `hollis_lever_winch` once; `q_hook_counter_still` / `a1_flag_job_tallow` grants `1` `alum_inhaler` (renamed `"Snapped Alum Inhaler"` in `PR5-46`); `q_hook_bellows` sets `sunk_ward.bellows_done` giving `berek_hearth` `discount` `mult: 0.8` (`-20%`); `q_hook_wedges` sets `sunk_ward.skerrit_open` unlocking `skerrit_bone_wright` `stash`/`craft` recipes (`PR5-45` + `PR5-46`, `[PROVISIONAL]`): `skerrit_bone_cestus` (`2 calcified_bone_shard + 25 Scrap` -> `barbed_bone_cestus`) and `skerrit_bone_quarrel` (`1 calcified_bone_shard + 10 Scrap` -> `bone_quarrel`).
 
 Materials (`material` family) and quest items (`quest` family), value 0 unless noted:
 
