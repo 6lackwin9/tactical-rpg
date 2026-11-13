@@ -4,7 +4,9 @@
 #   python art_src/prompts/cut_ai_sheets.py keepsakes_1 <sheet.png> [--pick kaelen=7,vesper=8,elyse=9] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py services_hud_1 <sheet.png> [--pick scrap=6,...] [--out DIR]
 #   python art_src/prompts/cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@x0,y0,x1,y1]]
-#       [--clear x0,y0,x1,y1] [--out DIR]
+#       [--clear x0,y0,x1,y1] [--size N] [--out DIR]
+#       --size: the cut's side in pixels (default 96, shown at half that in logical px); a landmark drawn larger on
+#       the map is cut at 96 x its map scale so it keeps 2 pixels per logical pixel.
 #       --clear (a small pixel fix in code): erases the box (fractions of the cut), for a smoke wisp fused to the body
 #       that keep_main cannot split off. The Culling Stockades pick: --clear 0.68,0,0.78,0.21 (the torch smoke).
 #       --tint (a colour fix in code, preferences "Colour and small pixel fixes are code"): saturated, bright pixels whose
@@ -157,11 +159,12 @@ def cut_landmark(path, location, out_root, size=96, tints=(), clears=()):
 def main(argv):
     if argv and argv[0] == "landmark":
         if len(argv) < 3:
-            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--out DIR]")
+            sys.exit("usage: cut_ai_sheets.py landmark <image.png> <location_id> [--tint LO-HI:TO[@box]] [--clear box] [--size N] [--out DIR]")
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         tints = [argv[i + 1] for i, a in enumerate(argv) if a == "--tint"]
         clears = [argv[i + 1] for i, a in enumerate(argv) if a == "--clear"]
-        for line in cut_landmark(argv[1], argv[2], out, tints=tints, clears=clears):
+        size = int(argv[argv.index("--size") + 1]) if "--size" in argv else 96
+        for line in cut_landmark(argv[1], argv[2], out, size=size, tints=tints, clears=clears):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:
