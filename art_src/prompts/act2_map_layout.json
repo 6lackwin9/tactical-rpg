@@ -21,7 +21,10 @@
     0.86
    ],
    "scale": 1.15,
-   "fix": []
+   "fix": [
+    "--desmoke",
+    "0.68,0.33,0.86,0.56"
+   ]
   },
   "gilded_boulevard": {
    "src": "art_src/lm_gilded_boulevard.png",
@@ -64,10 +67,7 @@
     0.2
    ],
    "scale": 1.2,
-   "fix": [
-    "--clear",
-    "0.635,0.17,0.69,0.24"
-   ]
+   "fix": []
   },
   "grand_belltower": {
    "src": "art_src/lm_grand_belltower.png",
