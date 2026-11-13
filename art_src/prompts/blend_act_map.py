@@ -12,12 +12,16 @@
 #       shift of up to 4 px that lines it up best), downscaled to 96 x its map scale -> map/landmarks/<id>.png;
 #       the blended image itself, scaled to 1920 x 1080 -> backgrounds/world_map/<background target>.png.
 #       It prints how well each landmark lines up: a high mismatch means the model moved or redrew it (redo that one).
+#   python art_src/prompts/blend_act_map.py preview <layout.json> <cut DIR> <out.png>
+#       the in-game look: the cut background with every cut landmark drawn over it.
 #
 # layout.json: {"background": path, "target": "high_bastion",
 #               "landmarks": {id: {"src": path, "pos": [x, y], "scale": s, "fix": ["--clear", "x0,y0,x1,y1", ...]}}}
 # pos is the map_pos anchor (the landmark's ground point; its box bottom sits 8 logical px below it and it grows up).
 # "match": 0..1 (optional, default 0) tones the landmark toward the painting around it: its colour mean moves that far
 # toward the mean of the background ring around its box, and its contrast half that far (a colour transfer in code).
+# "keep_sprite": true (optional) keeps the landmark's own cut instead of cutting it from the blended image, for a
+# landmark the model redrew (its sprite then covers the redrawn copy; `match` tones it to the blended surroundings).
 import json, pathlib, sys, tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -81,6 +85,18 @@ def boxes(layout, size):
     return out
 
 
+def preview(layout_path, cut_root, out_path):
+    """The in-game look after `cut`: the blended background with every cut landmark drawn over it at its box."""
+    layout = json.loads(pathlib.Path(layout_path).read_text())
+    bg = Image.open(pathlib.Path(cut_root) / GAME / f"backgrounds/world_map/{layout['target']}.png").convert("RGBA")
+    placed = boxes(layout, bg.size)
+    for lid, (x, y, side) in sorted(placed.items(), key=lambda kv: kv[1][1] + kv[1][2]):
+        icon = Image.open(pathlib.Path(cut_root) / GAME / f"map/landmarks/{lid}.png").convert("RGBA")
+        bg.alpha_composite(icon.resize((side, side), Image.NEAREST), (x, y))
+    bg.convert("RGB").save(out_path)
+    print(f"preview -> {out_path}")
+
+
 def compose(layout_path, out_path):
     layout = json.loads(pathlib.Path(layout_path).read_text())
     bg = Image.open(layout["background"]).convert("RGBA")
@@ -113,15 +129,18 @@ def cut(layout_path, composite_path, blended_path, out_root):
                 if best is None or score < best[0]:
                     best = (score, dx, dy, got)
         score, dx, dy, got = best
-        cutout = got.convert("RGBA"); cutout.putalpha(mask)
         e = layout["landmarks"][lid]
+        if e.get("keep_sprite"):  # the model redrew it: keep the landmark's own cut, toned to the blended painting
+            cutout = match_tone(sprite(e, side), blend.convert("RGBA"), (x, y, side), e.get("match", 0.5))
+        else:
+            cutout = got.convert("RGBA"); cutout.putalpha(mask)
         final = round(96 * e.get("scale", 1))
         icon = cutout.resize((final, final), Image.BOX)
         icon.putalpha(icon.getchannel("A").point(lambda v: 255 if v >= 128 else 0))
         dest = pathlib.Path(out_root) / GAME / f"map/landmarks/{lid}.png"
         dest.parent.mkdir(parents=True, exist_ok=True)
         icon.save(dest)
-        flag = "  <- check: redrawn or moved?" if score > 40 else ""
+        flag = "  (own sprite kept)" if e.get("keep_sprite") else ("  <- check: redrawn or moved?" if score > 40 else "")
         print(f"{lid}: shift ({dx}, {dy}), mismatch {score:.1f}{flag} -> {dest} {final}x{final}")
     dest = pathlib.Path(out_root) / GAME / f"backgrounds/world_map/{layout['target']}.png"
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -132,6 +151,8 @@ def cut(layout_path, composite_path, blended_path, out_root):
 def main(argv):
     if len(argv) >= 3 and argv[0] == "compose":
         return compose(argv[1], argv[2])
+    if len(argv) >= 4 and argv[0] == "preview":
+        return preview(argv[1], argv[2], argv[3])
     if len(argv) >= 4 and argv[0] == "cut":
         out = pathlib.Path(argv[argv.index("--out") + 1]) if "--out" in argv else ROOT
         return cut(argv[1], argv[2], argv[3], out)
