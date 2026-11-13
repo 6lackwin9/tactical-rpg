@@ -189,8 +189,8 @@ ACT2_NODES = [
 ]
 # Routes: id, name, from, to, days, flags it needs, waypoints along the painted streets of take A (endpoints excluded).
 # Every leg between the boulevard and the crypts is a street way (1 day, +10% Alert) and also has a rooftop way
-# (2 days, +2% Alert; canon 2.1): the same course pushed out over the roofs. The legend starts in the empty right half
-# of the plaza (the upper right holds the cloisters).
+# (2 days, +2% Alert; canon 2.1): the same course pushed out over the roofs. Every corner of the map holds a place, so
+# the legend starts in the empty right half of the plaza and unlocked, ready to be dragged (Tushar 2026-11-13).
 ACT2_ROUTES = [
     ("siphon_runoff", "The concealed siphon runoff", "sluice_undercroft", "slag_gate_breach", 1, [], [(0.47, 0.96), (0.50, 0.93)]),
     ("slag_portcullis", "The breached Slag portcullis", "slag_gate_breach", "gilded_boulevard", 1, [], [(0.50, 0.77), (0.50, 0.71)]),
@@ -233,7 +233,7 @@ ACT2_META = {
     "flagNames": {"high_bastion.ingress_done": "Ingress", "high_bastion.jailbreak_done": "the Jailbreak",
                   "high_bastion.sabotage_done": "the Sabotage", "high_bastion.cloisters_done": "the Cloisters",
                   "high_bastion.chimes_done": "the Chimes", "high_bastion.reliquary_done": "the Reliquary"},
-    "days": [19, 22, 27, 32, 36], "tithing": 56, "legend": [305, 128], "spacings": False, "tiers": [],
+    "days": [19, 22, 27, 32, 36], "tithing": 56, "legend": [305, 128], "legendUnlocked": True, "spacings": False, "tiers": [],
     "source": "Act 2 has no game data yet: the graph is the canon campaign map (<code>upper_bastion_campaign_map.md</code>), "
               "at the layout settled on background take A; the gates, days and Tithing count are placeholders.",
 }

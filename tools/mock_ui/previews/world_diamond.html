@@ -93,7 +93,7 @@ const DATA = __DATA_JSON__;
 const G = DATA.graph;
 const ACT = DATA.act;  // what differs per act: names, the hub, defaults, flag names, days, tiers
 const S = { view: 'diamond', step: 0, sel: ACT.sel, spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: ACT.party, hud: true, pick: 0,
-  legend: { x: ACT.legend[0], y: ACT.legend[1], locked: true, min: false } };
+  legend: { x: ACT.legend[0], y: ACT.legend[1], locked: !ACT.legendUnlocked, min: false } };  // no free corner: starts unlocked
 const FLAG_NAMES = ACT.flagNames;
 const node = id => G.nodes.find(n => n.id === id);
 const isOpen = (e, step) => e.req.every(f => DATA.steps[step].flags.includes(f));
