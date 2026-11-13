@@ -23,6 +23,7 @@ review"). Placeholders are replaced **in place**: the same path, size and format
 
 | Act maps (2026-11-13) | 24 location landmarks, the hub shared by all acts | [act_map_landmarks.md](act_map_landmarks.md) | the hub first with `--no-ref`, then the rest with the picked hub as reference; `cut_ai_sheets.py landmark <pick> <location_id>` | `map/landmarks/<location>.png` (96; drawn once Outbox `AO-01` lands) |
 | Act maps (2026-11-13) | Tallow Vats colour fix | the pick (take A) | `cut_ai_sheets.py landmark <pick> tallow_vats --tint 0.05-0.16:0.19@0.33,0,1,0.62` (orange vat tops to the Guild's sickly yellow-green) | `map/landmarks/tallow_vats.png` |
+| Region maps (next session) | prep: how region maps are drawn, the art contract, each Act 1 location's template, the plan | [region_maps_prep.md](region_maps_prep.md) | Outbox `AO-04` first | - |
 | Act maps (2026-11-13) | 3 act map backgrounds | [act_map_backgrounds.md](act_map_backgrounds.md) | `artqueue.py request wm_sunk_ward wm_high_bastion wm_mantle_fissure --prompts art_src/prompts/act_map_backgrounds.md --no-ref --n 2 --aspect 16:9 --route other` | `backgrounds/world_map/{sunk_ward,high_bastion,mantle_fissure}.png` (1920 x 1080; Act 1 shows now, Acts 2-3 after `AO-01`) |
 
 Paths without a layer prefix are under `games/emberwake/assets/`.
