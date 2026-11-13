@@ -1,7 +1,10 @@
 # Act map landmarks
 
 One picture per location, drawn on the act's world map as its own layer over the act background (Outbox `AO-01` in
-`games/emberwake/docs/specs/ART_UI_REQUESTS.md`; the game does not read this folder yet, so the kind pin still shows).
+`games/emberwake/docs/specs/ART_UI_REQUESTS.md`). **Empty for now**: the asset-tree test
+(`emberwake_gui` `region::tests::the_assets_follow_the_layered_tree`, ASSETORG2 section 3) has no `map/landmarks/<id>.png`
+pattern yet, so the cuts land with the Build task that reads them (AO-01 asks for the pattern). Until then they are
+rebuilt on demand with the command below.
 
 - `<location_id>.png`, transparent, square, cut at 96 x the location's map scale (2 pixels per logical pixel of the
   640 x 360 map; the map draws it at 48 x scale logical pixels, its box bottom 8 px below the location's ground point).
@@ -10,5 +13,5 @@ One picture per location, drawn on the act's world map as its own layer over the
   background (`backgrounds/world_map/<region>.png`) carries its contact shadow and light spill. The alpha is the cut's
   own, so the selection glow follows a clean outline.
 - `sluice_undercroft.png` (the hideout) is shared by every act: untoned, at its largest scale (x1.2).
-- Sources, picks, fixes and layouts: `art_src/prompts/README.md`, `ART_UI_STUDIO.md` 3.10. Acts 2 and 3 are here;
+- Sources, picks, fixes and layouts: `art_src/prompts/README.md`, `ART_UI_STUDIO.md` 3.10. Acts 2 and 3 are ready;
   Act 1 follows its slab-removal pass.
