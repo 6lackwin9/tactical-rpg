@@ -21,8 +21,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 LAYOUTS = ROOT / "art_src" / "region_maps"
-ORDER = ["sluice_undercroft", "drowned_runoff_grate"]
-TITLES = {"sluice_undercroft": "00 · The Sluice Undercroft", "drowned_runoff_grate": "01 · Drowned Runoff Grate"}
+ORDER = ["sluice_undercroft", "drowned_runoff_grate", "alleyway_junction_7", "ash_crawl_crossroads", "fourth_kiln",
+         "tallow_vats", "crucible_watchpost", "slag_gate", "corvos_gate"]
+TITLES = {"sluice_undercroft": "00 Undercroft", "drowned_runoff_grate": "01 Grate", "alleyway_junction_7": "02 Junction 7",
+          "ash_crawl_crossroads": "03 Crossroads", "fourth_kiln": "04 Kiln", "tallow_vats": "05 Vats",
+          "crucible_watchpost": "06 Crucible", "slag_gate": "07 Slag Gate", "corvos_gate": "1d Corvo's Gate"}
+FIXES = {"sluice_undercroft": {"desmokes": ["0.69,0.30,0.80,0.52"]}, "tallow_vats": {"tints": ["0.05-0.16:0.19@0.33,0,1,0.62"]}}
 
 
 def landmark_uri(location: str) -> str:
@@ -32,7 +36,7 @@ def landmark_uri(location: str) -> str:
     sys.path.insert(0, str(ROOT / "art_src" / "prompts"))
     import cut_ai_sheets as C  # noqa: E402
     from PIL import Image
-    fixes = {"sluice_undercroft": {"desmokes": ["0.69,0.30,0.80,0.52"]}}.get(location, {})
+    fixes = FIXES.get(location, {})
     with tempfile.TemporaryDirectory() as tmp:
         C.cut_landmark(str(src), "x", tmp, size=288, **fixes)
         im = Image.open(Path(tmp) / "games/emberwake/assets/map/landmarks/x.png")

@@ -1,0 +1,336 @@
+{
+ "id": "sunk_ward_junction_7",
+ "name": "Sunk Ward: Alleyway Junction 7",
+ "rows": [
+  "###############..###############",
+  "#############......#############",
+  "#############......#############",
+  "#############......#############",
+  "#############.###..#############",
+  "#############......#############",
+  "#############.....##############",
+  "#..............................#",
+  "#..............................#",
+  "#.......###.....................",
+  "#...............................",
+  "#..............................#",
+  "#..............................#",
+  "#############......#############",
+  "#############......#############",
+  "#############..###.#############",
+  "#############......#############",
+  "#############......#############",
+  "#############......#############",
+  "################################"
+ ],
+ "zones": [
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "ddddddddddddddddddddddddssssssss",
+  "ddddddddddddddddddddddddssssssss",
+  "ddddddddddddddddddddddddssssssss",
+  "ddddddddddddddddddddddddssssssss",
+  "ddddddddddddddddddddddddssssssss",
+  "ddddddddddddddddddddddddssssssss",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "bridge",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "alley",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 29,
+   "y": 10
+  },
+  {
+   "id": "exit_bridge",
+   "x": 31,
+   "y": 10
+  },
+  {
+   "id": "exit_north",
+   "x": 15,
+   "y": 0
+  },
+  {
+   "id": "sweep",
+   "x": 15,
+   "y": 10
+  },
+  {
+   "id": "cache",
+   "x": 21,
+   "y": 12
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "tenement_1",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_2",
+   "art": "tenement_block",
+   "x": 7,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_3",
+   "art": "tenement_block",
+   "x": 19,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_4",
+   "art": "tenement_block",
+   "x": 25,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_5",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 14,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_6",
+   "art": "tenement_block",
+   "x": 7,
+   "y": 14,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "armory",
+   "art": "watch_armory",
+   "x": 19,
+   "y": 14,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_7",
+   "art": "tenement_block",
+   "x": 25,
+   "y": 14,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_1",
+   "art": "watch_torch",
+   "x": 12,
+   "y": 6,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_2",
+   "art": "watch_torch",
+   "x": 19,
+   "y": 6,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_3",
+   "art": "watch_torch",
+   "x": 12,
+   "y": 13,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_4",
+   "art": "watch_torch",
+   "x": 19,
+   "y": 13,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pennant",
+   "art": "rust_pennant",
+   "x": 18,
+   "y": 6,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barricade_n",
+   "art": "spiked_barricade",
+   "x": 14,
+   "y": 4,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barricade_s",
+   "art": "spiked_barricade",
+   "x": 15,
+   "y": 15,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barricade_w",
+   "art": "spiked_barricade",
+   "x": 8,
+   "y": 9,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "grate_w",
+   "art": "street_grate",
+   "x": 4,
+   "y": 10,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "grate_e",
+   "art": "street_grate",
+   "x": 24,
+   "y": 7,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "sealed_gate",
+   "art": "barred_gate",
+   "x": 0,
+   "y": 8,
+   "w": 1,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mccccccccccccffffffccccccccccccm",
+  "mccccccccccccffffffccccccccccccm",
+  "mccccccccccccffffffccccccccccccc",
+  "mccccccccccccffffffccccccccccccc",
+  "mccccccccccccffffffccccccccccccm",
+  "mccccccccccccffffffccccccccccccm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmccccccmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the bridge from the Grate)",
+  "exit_bridge": "exit `world_map` (was anchor `east`): the bridge east, World map: the Seventh Ward",
+  "exit_north": "exit (new, optional): the road north toward the Kiln, World map",
+  "sweep": "encounter `sweep` (was `site_b`): Captain Vane's sweep in the yard",
+  "cache": "point `bellows_cache` (was `altar`): the old Watch armory's door"
+ },
+ "location": "alleyway_junction_7"
+}

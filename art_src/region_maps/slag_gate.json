@@ -1,0 +1,179 @@
+{
+ "id": "sunk_ward_slag_gate",
+ "name": "Sunk Ward: the Slag Gate (optional)",
+ "rows": [
+  "###########..###########",
+  "###########..###########",
+  "########################",
+  "########################",
+  "####................####",
+  "####................####",
+  "####................####",
+  "####................####",
+  "####................####",
+  "####................####",
+  "####................####",
+  "####................####",
+  "####................####",
+  "###########..###########"
+ ],
+ "zones": [
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd",
+  "dddddddddddddddddddddddd"
+ ],
+ "zone_legend": {
+  "d": {
+   "id": "slag_gate",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 11,
+   "y": 11
+  },
+  {
+   "id": "exit_gorge",
+   "x": 11,
+   "y": 13
+  },
+  {
+   "id": "portcullis",
+   "x": 11,
+   "y": 4
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "bastion_w",
+   "art": "cliff_bastion",
+   "x": 3,
+   "y": 1,
+   "w": 5,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bastion_e",
+   "art": "cliff_bastion",
+   "x": 16,
+   "y": 1,
+   "w": 5,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": true
+  },
+  {
+   "id": "portcullis",
+   "art": "portcullis",
+   "x": 10,
+   "y": 2,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_w",
+   "art": "watch_torch",
+   "x": 9,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_e",
+   "art": "watch_torch",
+   "x": 14,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "banner_w",
+   "art": "banner_pole",
+   "x": 8,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "banner_e",
+   "art": "banner_pole",
+   "x": 15,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "slag",
+   "art": "slag_channel",
+   "x": 6,
+   "y": 4,
+   "w": 4,
+   "h": 8,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "mmmmmmmmmmmffmmmmmmmmmmm",
+  "mmmmmmmmmmmffmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm",
+  "mmmmmmmmmmffffmmmmmmmmmm"
+ ],
+ "ground_legend": {
+  "f": "flagstone",
+  "m": "mud"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the high gorge from the Crucible)",
+  "exit_gorge": "exit: back down the high gorge, World map",
+  "portcullis": "the portcullis: the way to Upper Cinderreach once the winch has lifted it (M5)"
+ },
+ "location": "slag_gate"
+}

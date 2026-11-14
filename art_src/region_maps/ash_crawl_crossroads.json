@@ -1,0 +1,430 @@
+{
+ "id": "sunk_ward_crossroads",
+ "name": "Sunk Ward: the Ash-Crawl Crossroads",
+ "rows": [
+  "###############..###############",
+  "##############....##############",
+  "##############....##############",
+  "##############....##############",
+  "#####.............#######..#####",
+  "#####..###.###....#.....#..#####",
+  "#####..###.###....#.....#..#####",
+  "#####.............#.....#..#####",
+  "#####.............#######......#",
+  "#####...........................",
+  "#####...........................",
+  "#####..........................#",
+  "#####............#.........#####",
+  "#####.##...................#####",
+  "#####......................#####",
+  "#####......................#####",
+  "################################",
+  "################################",
+  "################################",
+  "################################"
+ ],
+ "zones": [
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "ddddddddddddddddddddddddddssssss",
+  "ddddddddddddddddddddddddddssssss",
+  "ddddddddddddddddddddddddddssssss",
+  "ddddddddddddddddddddddddddssssss",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "alley_mouth",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "culling_yard",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 29,
+   "y": 10
+  },
+  {
+   "id": "exit_alley",
+   "x": 31,
+   "y": 10
+  },
+  {
+   "id": "exit_north",
+   "x": 15,
+   "y": 0
+  },
+  {
+   "id": "cages",
+   "x": 12,
+   "y": 9
+  },
+  {
+   "id": "toll_pen",
+   "x": 21,
+   "y": 9
+  },
+  {
+   "id": "rubbings",
+   "x": 8,
+   "y": 8
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "shack_n1",
+   "art": "ash_shack",
+   "x": 1,
+   "y": 1,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_n2",
+   "art": "ash_shack",
+   "x": 5,
+   "y": 1,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_n3",
+   "art": "ash_shack",
+   "x": 9,
+   "y": 1,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_n4",
+   "art": "ash_shack",
+   "x": 18,
+   "y": 1,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_n5",
+   "art": "ash_shack",
+   "x": 22,
+   "y": 1,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_n6",
+   "art": "ash_shack",
+   "x": 26,
+   "y": 1,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s1",
+   "art": "ash_shack",
+   "x": 1,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s2",
+   "art": "ash_shack",
+   "x": 5,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s3",
+   "art": "ash_shack",
+   "x": 9,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s4",
+   "art": "ash_shack",
+   "x": 13,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s5",
+   "art": "ash_shack",
+   "x": 17,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s6",
+   "art": "ash_shack",
+   "x": 21,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_s7",
+   "art": "ash_shack",
+   "x": 25,
+   "y": 16,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_w1",
+   "art": "ash_shack",
+   "x": 1,
+   "y": 5,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_w2",
+   "art": "ash_shack",
+   "x": 1,
+   "y": 10,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_e1",
+   "art": "ash_shack",
+   "x": 27,
+   "y": 4,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "shack_e2",
+   "art": "ash_shack",
+   "x": 27,
+   "y": 13,
+   "w": 4,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cages_1",
+   "art": "cage_platform",
+   "x": 7,
+   "y": 5,
+   "w": 3,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cages_2",
+   "art": "cage_platform",
+   "x": 11,
+   "y": 5,
+   "w": 3,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pen_fence_n1",
+   "art": "pen_fence",
+   "x": 18,
+   "y": 4,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pen_fence_n2",
+   "art": "pen_fence",
+   "x": 21,
+   "y": 4,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pen_gate",
+   "art": "toll_pen_gate",
+   "x": 20,
+   "y": 8,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pen_fence_e",
+   "art": "pen_fence",
+   "x": 22,
+   "y": 8,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "lamp",
+   "art": "violet_lamp_post",
+   "x": 17,
+   "y": 12,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "lamp_light",
+   "art": "violet_pool",
+   "x": 15,
+   "y": 12,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crates",
+   "art": "crate_stack",
+   "x": 6,
+   "y": 13,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "ash_1",
+   "art": "ash_drift",
+   "x": 8,
+   "y": 10,
+   "w": 3,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "ssssssssssssssccccssssssssssssss",
+  "ssssssssssssssccccssssssssssssss",
+  "ssssssssssssssccccssssssssssssss",
+  "ssssssssssssssccccssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssffffffffffsssmmmmmssssssss",
+  "ssssssffffffffffsssmmmmmssssssss",
+  "ssssssffffffffffsssmmmmmssssssss",
+  "sssssssssssssssssssssssssssccccc",
+  "sssssssssssssssssssssssssssccccc",
+  "sssssssssssssssssssssssssssccccc",
+  "sssssssssssssssssssssssssssccccc",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the alley from the Grate)",
+  "exit_alley": "exit `world_map` (was `east`): the alley east, World map: the Ash-Crawl",
+  "exit_north": "exit (new, optional): the alley north toward the Vats, World map",
+  "cages": "encounter `cages` (was `site_b`): Proctor Quell's titration cages",
+  "toll_pen": "point `toll_pen` (was `altar`): the Seventh Ward Toll-Pen's chained gate",
+  "rubbings": "point `rubbings` (was `ruin_lore`): the cage-seal rubbings"
+ },
+ "location": "ash_crawl_crossroads"
+}

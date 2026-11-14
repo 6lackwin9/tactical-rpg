@@ -1,0 +1,280 @@
+{
+ "id": "sunk_ward_corvos_gate",
+ "name": "Sunk Ward: Corvo's Gate",
+ "rows": [
+  "################################",
+  "#######...............######...#",
+  "#######...............######...#",
+  "#######...............######...#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "#####..#######....##############",
+  "#####..#########################",
+  "#..............................#",
+  "#.####......#......##..........#",
+  "#..................##..........#",
+  "#....................#.........#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "###############..###############"
+ ],
+ "zones": [
+  "ssssssssssssssssssssssssssssssss",
+  "sdddddddddddddddddddddddddddddds",
+  "sdddddddddddddddddddddddddddddds",
+  "sdddddddddddddddddddddddddddddds",
+  "sdddddddddddddddddddddddddddddds",
+  "sdddddddddddddddddddddddddddddds",
+  "sdddddddddddddddddddddddddddddds",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssss"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "toll_road",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "third_ward",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 15,
+   "y": 17
+  },
+  {
+   "id": "exit_road",
+   "x": 15,
+   "y": 19
+  },
+  {
+   "id": "corvo",
+   "x": 18,
+   "y": 12
+  },
+  {
+   "id": "breach",
+   "x": 5,
+   "y": 9
+  },
+  {
+   "id": "ward_street",
+   "x": 15,
+   "y": 4
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "wall_1",
+   "art": "brick_wall_run",
+   "x": 9,
+   "y": 7,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "wall_2",
+   "art": "brick_wall_run",
+   "x": 19,
+   "y": 7,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "wall_3",
+   "art": "brick_wall_run",
+   "x": 23,
+   "y": 7,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "wall_4",
+   "art": "brick_wall_run",
+   "x": 27,
+   "y": 7,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "breach_w",
+   "art": "brick_breach",
+   "x": 3,
+   "y": 7,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "breach_e",
+   "art": "brick_breach",
+   "x": 7,
+   "y": 7,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": true
+  },
+  {
+   "id": "barrier",
+   "art": "striped_barrier",
+   "x": 14,
+   "y": 8,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "gatepost",
+   "art": "gatepost",
+   "x": 17,
+   "y": 8,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "booth",
+   "art": "toll_booth",
+   "x": 19,
+   "y": 10,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "drum",
+   "art": "toll_drum",
+   "x": 12,
+   "y": 10,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "lantern",
+   "art": "lantern_pole",
+   "x": 21,
+   "y": 12,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "ward_1",
+   "art": "tenement_row",
+   "x": 1,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "ward_2",
+   "art": "tenement_row",
+   "x": 22,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "rubble",
+   "art": "rubble_wall",
+   "x": 2,
+   "y": 10,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "cccccccccccccccccccccccccccccccc",
+  "cccccccccccccccccccccccccccccccc",
+  "cccccccccccccccccccccccccccccccc",
+  "cccccccccccccccccccccccccccccccc",
+  "cccccccccccccccccccccccccccccccc",
+  "cccccccccccccccccccccccccccccccc",
+  "cccccccccccccccccccccccccccccccc",
+  "cccccmmccccccccccccccccccccccccc",
+  "cccccmmccccccccccccccccccccccccc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cmmmmmmmmmmmmffffffccccmmmmmmmmc",
+  "cccccccccccccccffccccccccccccccc"
+ ],
+ "ground_legend": {
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the Third Ward road from the Grate)",
+  "exit_road": "exit `world_map` (was `east`): the road south, World map: the Third Ward road",
+  "corvo": "npc `corvo` (was `camp_npc`): Bailiff Corvo at his booth",
+  "breach": "the breach west (the loud way through; a point or the job's fight start)",
+  "ward_street": "encounter start for the loud answer (`enc_job_corvo_gate`), beyond the wall"
+ },
+ "location": "corvos_gate"
+}

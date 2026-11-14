@@ -1,0 +1,315 @@
+{
+ "id": "sunk_ward_fourth_kiln",
+ "name": "Sunk Ward: the Fourth Kiln",
+ "rows": [
+  "##################################",
+  "#........################........#",
+  "#........################.####...#",
+  "#.....##.################.####...#",
+  "#.....##.################.####...#",
+  "#.....##.################.####...#",
+  "#.....##.################........#",
+  "#.....##.################........#",
+  "#................................#",
+  "#................................#",
+  "#.................................",
+  "#.....................##..........",
+  "#................................#",
+  "#........##......................#",
+  "#############........#############",
+  "#................................#",
+  "#................................#",
+  "#................................#",
+  "#................................#",
+  "#................................#",
+  "#................................#",
+  "################..################"
+ ],
+ "zones": [
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dssssssssssssssssssssssssssssssssd",
+  "dssssssssssssssssssssssssssssssssd",
+  "dssssssssssssssssssssssssssssssssd",
+  "dssssssssssssssssssssssssssssssssd",
+  "dssssssssssssssssssssssssssssssssd",
+  "dssssssssssssssssssssssssssssssssd",
+  "dddddddddddddddddddddddddddddddddd"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "kiln_road",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "mill_floor",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 16,
+   "y": 19
+  },
+  {
+   "id": "exit_road",
+   "x": 16,
+   "y": 21
+  },
+  {
+   "id": "exit_climb",
+   "x": 33,
+   "y": 10
+  },
+  {
+   "id": "mill",
+   "x": 17,
+   "y": 10
+  },
+  {
+   "id": "skerrit",
+   "x": 6,
+   "y": 17
+  },
+  {
+   "id": "wedges",
+   "x": 23,
+   "y": 9
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "kiln",
+   "art": "fourth_kiln",
+   "x": 10,
+   "y": 1,
+   "w": 14,
+   "h": 6,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "furnace",
+   "art": "furnace_mouth",
+   "x": 16,
+   "y": 7,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "chute",
+   "art": "conveyor_chute",
+   "x": 6,
+   "y": 4,
+   "w": 2,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tank",
+   "art": "brass_tank",
+   "x": 26,
+   "y": 2,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tank_2",
+   "art": "brass_tank",
+   "x": 28,
+   "y": 2,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pipes",
+   "art": "pipe_run",
+   "x": 26,
+   "y": 4,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pipes_2",
+   "art": "pipe_run",
+   "x": 28,
+   "y": 4,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "heap_1",
+   "art": "bone_meal_heap",
+   "x": 5,
+   "y": 8,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "heap_2",
+   "art": "bone_meal_heap",
+   "x": 10,
+   "y": 9,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "carts",
+   "art": "crate_stack",
+   "x": 22,
+   "y": 11,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "carts_2",
+   "art": "crate_stack",
+   "x": 9,
+   "y": 13,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "wedges",
+   "art": "wedge_pile",
+   "x": 24,
+   "y": 9,
+   "w": 1,
+   "h": 1,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "mill_wall_w",
+   "art": "rubble_wall",
+   "x": 2,
+   "y": 14,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "mill_wall_w2",
+   "art": "rubble_wall",
+   "x": 7,
+   "y": 14,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "mill_wall_e",
+   "art": "rubble_wall",
+   "x": 22,
+   "y": 14,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "mill_wall_e2",
+   "art": "rubble_wall",
+   "x": 27,
+   "y": 14,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssss",
+  "sssssssscccccctttttttcccccssssssss",
+  "sssssssscccccctttttttcccccssssssss",
+  "sssssssscccccctttttttcccccsssssssc",
+  "ssssssssccccccccccccccccccsssssssc",
+  "ssssssssccccccccccccccccccssssssss",
+  "ssssssssccccccccccccccccccssssssss",
+  "sssssssssssssssffffsssssssssssssss",
+  "sccccccccccccccffffccccccccccccccs",
+  "sccccccccccccccffffccccccccccccccs",
+  "sccccccccccccccffffccccccccccccccs",
+  "sccccccccccccccffffccccccccccccccs",
+  "sccccccccccccccffffccccccccccccccs",
+  "sccccccccccccccffffccccccccccccccs",
+  "ssssssssssssssssffssssssssssssssss"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "t": "tallow"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the road from Junction 7)",
+  "exit_road": "exit `world_map` (was `east`): the road south, World map: the Fourth Kiln",
+  "exit_climb": "exit (new, optional): the climb east toward the Crucible, World map",
+  "mill": "encounter `bone_mill` (was `site_b`): Overseer Grendel on the mill floor",
+  "skerrit": "npc `skerrit` (was `camp_npc`): Skerrit the bone-wright, after M3",
+  "wedges": "point `wedge_pile` (was `altar`): the black-iron wedges"
+ },
+ "location": "fourth_kiln"
+}

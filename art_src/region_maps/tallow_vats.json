@@ -1,0 +1,278 @@
+{
+ "id": "sunk_ward_tallow_vats",
+ "name": "Sunk Ward: the Tallow Vats",
+ "rows": [
+  "##################################",
+  "#~~~.....................#########",
+  "#~~~.....................#########",
+  "#~~~...##...###...###.#..#########",
+  "#~~~...##...###...###.#..#########",
+  "#~~~........###...###.#..#########",
+  "#~~~.............................#",
+  "#~~~.............................#",
+  "#~~~.............................#",
+  "#~~~...........###......##.##....#",
+  "...............###...............#",
+  "#~~~...........###...............#",
+  "#~~~.............................#",
+  "#~~~.............................#",
+  "#~~~.............................#",
+  "#~~~...##................#########",
+  "#~~~.....................#########",
+  "#~~~.....................#########",
+  "#~~~.....................#########",
+  "#~~~.............................#",
+  "#~~~.............................#",
+  "################..################"
+ ],
+ "zones": [
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "ssssssdddddddddddddddddddddddddddd",
+  "ssssssdddddddddddddddddddddddddddd",
+  "ssssssdddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddddd",
+  "ddddddsssssssssssssssssssddddddddd",
+  "ddddddsssssssssssssssssssddddddddd",
+  "ddddddsssssssssssssssssssddddddddd",
+  "dddddddddddddddddddddddddddddddddd"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "vats_gate",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "rendering_yard",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 16,
+   "y": 19
+  },
+  {
+   "id": "exit_alley",
+   "x": 16,
+   "y": 21
+  },
+  {
+   "id": "siphon",
+   "x": 0,
+   "y": 10
+  },
+  {
+   "id": "siphon_in",
+   "x": 4,
+   "y": 10
+  },
+  {
+   "id": "vats",
+   "x": 17,
+   "y": 7
+  },
+  {
+   "id": "stores",
+   "x": 28,
+   "y": 14
+  },
+  {
+   "id": "still",
+   "x": 28,
+   "y": 6
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "vat_1",
+   "art": "tallow_vat",
+   "x": 12,
+   "y": 3,
+   "w": 3,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "vat_2",
+   "art": "tallow_vat",
+   "x": 18,
+   "y": 3,
+   "w": 3,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "vat_3",
+   "art": "tallow_vat",
+   "x": 15,
+   "y": 9,
+   "w": 3,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "stair",
+   "art": "catwalk_stair",
+   "x": 22,
+   "y": 3,
+   "w": 1,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "spill_1",
+   "art": "tallow_spill",
+   "x": 11,
+   "y": 7,
+   "w": 3,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "spill_2",
+   "art": "tallow_spill",
+   "x": 19,
+   "y": 11,
+   "w": 3,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "still_shed",
+   "art": "still_room",
+   "x": 26,
+   "y": 1,
+   "w": 6,
+   "h": 4,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "store",
+   "art": "guild_store",
+   "x": 26,
+   "y": 15,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barrels_1",
+   "art": "barrel_stack",
+   "x": 24,
+   "y": 9,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barrels_2",
+   "art": "barrel_stack",
+   "x": 27,
+   "y": 9,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barrels_3",
+   "art": "barrel_stack",
+   "x": 7,
+   "y": 15,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pipes",
+   "art": "pipe_run",
+   "x": 7,
+   "y": 3,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "tttttttttttttttttttttttttttttttttt",
+  "twwwcctttttttttttttttttttttttttttt",
+  "twwwccttttiiiiiiiiiiiiiitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "iiiiccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttittttttttttttitttttttttt",
+  "twwwccttttiiiiiiiiiiiiiitttttttttt",
+  "twwwcctttttttttffffttttttttttttttt",
+  "twwwcctttttttttffffttttttttttttttt",
+  "twwwcccccccccccffffccccccttttttttt",
+  "twwwcccccccccccffffccccccttttttttt",
+  "twwwcccccccccccffffccccccttttttttt",
+  "twwwcccccccccccffffccccccttttttttt",
+  "tttttttttttttttffffttttttttttttttt"
+ ],
+ "ground_legend": {
+  "c": "cobble_road",
+  "f": "flagstone",
+  "i": "iron_catwalk",
+  "t": "tallow",
+  "w": "water"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the alley from the Crossroads)",
+  "exit_alley": "exit `world_map` (was `east`): the alley south, World map: the Tallow Vats",
+  "siphon": "exit (new): the siphon culvert, World map (the Grate's shortcut; requires sunk_ward.lock_ciphers_done)",
+  "siphon_in": "arrival by the siphon shortcut (the towpath at the culvert)",
+  "vats": "encounter `vats` (was `site_b`): Guild-Master Orlov among the vats",
+  "stores": "chest `orlov_stores` (was `ruin_chest`): Orlov's store, after M4",
+  "still": "point `counter_still` (was `altar`): Elyse's counter-still at the still-room"
+ },
+ "location": "tallow_vats"
+}

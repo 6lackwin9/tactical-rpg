@@ -1,0 +1,343 @@
+{
+ "id": "sunk_ward_crucible",
+ "name": "Sunk Ward: Crucible Watchpost",
+ "rows": [
+  "#######################.########",
+  "#######################..#######",
+  "#######################..#######",
+  "#...########.............#######",
+  "#...########.............#######",
+  "#...########........#....#######",
+  "#........................#######",
+  "#...###..................#######",
+  "#######..................#######",
+  "###############..###############",
+  "###############..###############",
+  "#####......................#####",
+  "#####......................#####",
+  "#####......................#####",
+  "#####...##.................#####",
+  "#####...##.................#####",
+  "#####.................##...#####",
+  "#####.................##...#####",
+  "#####......................#####",
+  "#####......................#####",
+  "#####......................#####",
+  "###############..###############"
+ ],
+ "zones": [
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dssssddddddddddddddddddddddddddd",
+  "dssssddddddddddddddddddddddddddd",
+  "dssssddddddddddddddddddddddddddd",
+  "dssssddddddddddddddddddddddddddd",
+  "dssssddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddddddddddddddddddddddddddddd",
+  "dddddssssssssssssssssssssssddddd",
+  "dddddssssssssssssssssssssssddddd",
+  "dddddssssssssssssssssssssssddddd",
+  "dddddssssssssssssssssssssssddddd",
+  "dddddddddddddddddddddddddddddddd"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "gorge_mouth",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "watchpost",
+   "kind": "danger"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 15,
+   "y": 19
+  },
+  {
+   "id": "exit_road",
+   "x": 15,
+   "y": 21
+  },
+  {
+   "id": "postern",
+   "x": 23,
+   "y": 0
+  },
+  {
+   "id": "crucible",
+   "x": 15,
+   "y": 6
+  },
+  {
+   "id": "crucible_overlook",
+   "x": 15,
+   "y": 12
+  },
+  {
+   "id": "winch_post",
+   "x": 16,
+   "y": 3
+  },
+  {
+   "id": "overlook",
+   "x": 2,
+   "y": 4
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "cliff_w1",
+   "art": "cliff_face",
+   "x": 1,
+   "y": 2,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_e1",
+   "art": "cliff_face",
+   "x": 27,
+   "y": 2,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_w2",
+   "art": "cliff_face",
+   "x": 1,
+   "y": 8,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_e2",
+   "art": "cliff_face",
+   "x": 27,
+   "y": 8,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_w3",
+   "art": "cliff_face",
+   "x": 1,
+   "y": 14,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_e3",
+   "art": "cliff_face",
+   "x": 27,
+   "y": 14,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "winch",
+   "art": "winch_drum",
+   "x": 15,
+   "y": 1,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "north_wall_w",
+   "art": "watch_wall",
+   "x": 7,
+   "y": 1,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "north_wall_e",
+   "art": "watch_wall",
+   "x": 17,
+   "y": 1,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crane",
+   "art": "crane_arm",
+   "x": 21,
+   "y": 1,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tower",
+   "art": "slit_window_tower",
+   "x": 7,
+   "y": 3,
+   "w": 5,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "curtain_w",
+   "art": "watch_wall",
+   "x": 10,
+   "y": 9,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "curtain_e",
+   "art": "watch_wall",
+   "x": 18,
+   "y": 9,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "gate_w",
+   "art": "gatepost",
+   "x": 14,
+   "y": 10,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "gate_e",
+   "art": "gatepost",
+   "x": 17,
+   "y": 10,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "braziers",
+   "art": "brazier",
+   "x": 20,
+   "y": 5,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "boulder_1",
+   "art": "boulder",
+   "x": 8,
+   "y": 14,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "boulder_2",
+   "art": "boulder",
+   "x": 22,
+   "y": 16,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "mmmmmmmmmmmmmmmmmmmmmmmfmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmffmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmffmmmmmmm",
+  "msssmmmffffffffffffffffffmmmmmmm",
+  "msssmmmffffffffffffffffffmmmmmmm",
+  "msssmmmffffffffffffffffffmmmmmmm",
+  "mssssffffffffffffffffffffmmmmmmm",
+  "msssmmmffffffffffffffffffmmmmmmm",
+  "mmmmmmmffffffffffffffffffmmmmmmm",
+  "mmmmmmmmmmmmmmmffmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmffmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the road up from the gorge mouth)",
+  "exit_road": "exit `world_map` (was `east`): the road south, World map: the Crucible",
+  "postern": "exit (new, optional): the postern up the high gorge to the Slag Gate, World map",
+  "crucible": "encounter `crucible` (was `site_b`): the yard before the winch house (M5)",
+  "crucible_overlook": "encounter `crucible_overlook` (was `site_a`): before the gatehouse, the Overlook variant",
+  "winch_post": "the winch (the founder who holds it; a point or a set piece)",
+  "overlook": "point `overlook` (was `altar`): the Crag-Sight Overlook, after the Interlude"
+ },
+ "location": "crucible_watchpost"
+}
