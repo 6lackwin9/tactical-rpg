@@ -25,6 +25,9 @@ Hollis
   hunting brigandine with a heavy horn pauldron on the right shoulder; a large steel crossbow (arbalest) and a quiver
   of bone bolts. Tired, guarded.
 
-Sister Aline
-  Images: aline_full_body_aline.png
-  Description: hub apothecary; pale woman with short black hair; dark habit under a long rust-brown leather apron.
+Chirurgeon Sabina
+  Images: aline_full_body_aline.png (placeholder: the retired Sister Aline art until AI-05 repaints her; rename the
+  Flow character from "Sister Aline" to "Chirurgeon Sabina" and swap in sabina_kress_full_body.png once it exists)
+  Description: hub surgeon, 31; gaunt; silver-templed cropped black hair; dark oiled-green prosector collar with an
+  unhooked leather surgical half-mask hanging at the neck; chalk-pale knuckles; glass retort pipettes and silver
+  scalpels. No habit, no spectacles.

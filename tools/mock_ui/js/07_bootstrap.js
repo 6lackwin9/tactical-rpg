@@ -87,6 +87,7 @@ function render() {
       const db = STATE.storyDeformerBoost || 1.0;
       const wm = STATE.storyWalkMode || 'off';
       const tv = STATE.storyTurnaroundView || 'side';
+      const ph = STATE.storyRigPlaceholder || 'others';
       togglesEl.innerHTML = `
         <span style="color:#fbbf24;font-weight:700;font-size:10px;">StoryStage:</span>
         <button class="db-btn ${m === 'vn_stage' ? 'active' : ''}" onclick="STATE.storyMode='vn_stage';render();" title="VN Stage: 60fps Live2D/VTuber Rigged Full-Body Sprites on visible stone floor">1. ★ VN Stage</button>
@@ -99,6 +100,11 @@ function render() {
           <button class="db-btn ${re === 'atlas_b' ? 'active' : ''}" onclick="STATE.storyRigEngine='atlas_b';if(STATE.storyTurnaroundView==='sheet_3view')STATE.storyTurnaroundView='side';render();" title="Approach B: Exploded 13-Part Spine2D Cutout Atlas driven by 16-joint 2-Bone IK / FK skeleton">🧩 Atlas (B)</button>
           <button class="db-btn ${re === 'slice_a' ? 'active' : ''}" onclick="STATE.storyRigEngine='slice_a';render();" title="Approach A: Single Neutral Sprite auto-sliced into 10 limbs with circular joint caps">✂️ Slice (A)</button>
           <button class="db-btn ${re === 'compare_bc' ? 'active' : ''}" onclick="STATE.storyRigEngine='compare_bc';if(STATE.storyRigPose==='auto')STATE.storyRigPose='weapons_drawn';render();" title="Side-by-Side Live Comparison of Approach C (3-Pose Sheet + Deformer), Approach B (Exploded Atlas Rig), and Approach A (Auto-Slice Rig)">⇄ Compare</button>
+          <span style="color:#6b7280;margin:0 1px;">|</span>
+          <span style="color:#a3e635;font-size:10px;font-weight:700;">Placeholder:</span>
+          <button class="db-btn ${ph === 'others' ? 'active' : ''}" onclick="STATE.storyRigPlaceholder='others';render();" title="Actors without signed-off VN art play their code-rig battle animation (Kaelen keeps his keyframe set)">🧩 Rig (no VN art)</button>
+          <button class="db-btn ${ph === 'all' ? 'active' : ''}" onclick="STATE.storyRigPlaceholder='all';render();" title="Every actor plays its code-rig battle animation">Rig (all)</button>
+          <button class="db-btn ${ph === 'off' ? 'active' : ''}" onclick="STATE.storyRigPlaceholder='off';render();" title="The experimental full-body VN rigs (Rig Engine above)">VN rigs</button>
           <span style="color:#6b7280;margin:0 1px;">|</span>
           <span style="color:#fbbf24;font-size:10px;font-weight:700;">Pose:</span>
           <button class="db-btn ${rp === 'auto' ? 'active' : ''}" onclick="STATE.storyRigPose='auto';render();" title="Use each dialogue beat's authored pose">Auto</button>

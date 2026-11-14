@@ -21,10 +21,10 @@ dithered shading, 1376 by 768 CGs. Canvas: 640 by 360 logical at 2x (`SCREEN_ATL
 | Hollis | founder, 0c on | **done** |
 | Dunstan | founder, guest in M3, joins after it | have-old (`portraits/heroes/dunstan.png`) |
 | Captain Vane | "Order 44" at 0a (dialogue, not on the board) | have-old (`portraits/bosses/captain_vane.png`) |
-| Bram | hub keeper, hearth scene | have-old (`portraits/npcs/bram.png`) |
-| Sister Aline | hub keeper, hearth scene | have-old (`portraits/npcs/aline.png`, VN full body) |
-| Tess | the mission board | have-old (`portraits/npcs/tess.png`) |
-| Sergeant Corvo | Corvo's Gate dilemma (dialogue, not on the board) | new (uses `warrior_base`) |
+| Berek "Cinder-Lung" Dorn | hub keeper (Tinker's Hearth), hearth scene | have-old (`portraits/npcs/berek_dorn.png`, the old `bram.png` kept 1:1 by CANON 3.2) |
+| Chirurgeon Sabina | hub keeper (Apothecary's Slab), hearth scene | placeholder (`portraits/npcs/sabina_kress.png` and `full_body/sabina_kress.png`, copies of the retired Aline art; repaint AI-05) |
+| Talia Rusk | the cipher board (Basin Spymaster) | placeholder (`portraits/npcs/talia_rusk.png`, a copy of the retired Tess art; repaint AI-05) |
+| Bailiff Corvo | Corvo's Gate dilemma (dialogue, not on the board) | new (uses `warrior_base`) |
 | Overseer Grendel | M3 boss | new (uses `brawler_base`) |
 | Inquisitor-Prelate Nemeth | M5 climax, takes a founder | have-old (`portraits/bosses/inquisitor_prelate_nemeth.png`) |
 
@@ -52,7 +52,7 @@ dithered shading, 1376 by 768 CGs. Canvas: 640 by 360 logical at 2x (`SCREEN_ATL
 | 8 | 0c: Kaelen strikes the cart's padlock, Vesper's ash flask | **done** (`Kaelen_smashing_padlock_on_cart.jpg`) |
 | 9 | 0c: Maren and Hollis break out of the cart | new (optional) |
 | 10 | The descent: the four at the drainage grate | **done** (`Characters_escaping_through_drain_v2.jpg`) |
-| 11 | Arrival: the four wash up in the Sluice Undercroft; Bram at the Tinker's Hearth, Aline at the Apothecary's Slab | have-old (`backgrounds/story/hearth.png`) |
+| 11 | Arrival: the four wash up in the Sluice Undercroft; Berek at the Tinker's Hearth, Sabina at the Apothecary's Slab | have-old (`backgrounds/story/hearth.png`) |
 | 12 | Corvo's Gate: the bribe or the fight (one CG, or one per choice) | new |
 | 13 | M3: the bone-mill and the chain gang freed; Dunstan joins | new |
 | 14 | M5: one founder holds the jammed winch at the Slag Gate as the other three escape | new (key emotional beat) |
@@ -82,7 +82,7 @@ Two kinds: **stage** (full-body VN sprites at 340 px, the video pipeline, `ART_U
 | Maren | idle, walk, sneak, staff strike, bone-saw strike, heal / censer swing | new |
 | Hollis | idle, walk, sneak, aim and shoot the arbalest, reload | new |
 | Dunstan | idle, walk, main attack | new |
-| NPCs (Vane, Bram, Aline, Tess, Corvo) | idle breath only (dialogue) | new |
+| NPCs (Vane, Berek, Sabina, Talia, Corvo) | idle breath only (dialogue) | new |
 | Bosses (Grendel, Nemeth) | idle, one signature attack | new |
 
 Battle sprites for all five founders and every enemy type in section 2: idle, move, attack, hit, KO (the current
@@ -116,8 +116,8 @@ The current tracks are synthesized placeholders (`tools/gen_music.py`; `assets/a
 ## 7. The rest of Act 1 (M2b, after the slice playtest)
 
 - Characters: Elyse (founder, M4), Proctor Quell (M2), Guild-Master Orlov (M4), Brother Malachi (interlude);
-  optional-job NPCs Pip, Agnes, Rook.
+  optional-job NPCs Ivo, Widow Varka, Skerrit, Bone-Wright, Agnes of Block 12, Brother Rook.
 - CGs: M1 breaking Vane's sweep; M2 the caged youths and Quell's marrow valve; M4 the Tallow Vats and Elyse joining; the
-  interlude (the hub floor splits on a titan vein, Aline's marrow dose).
+  interlude (the hub floor splits on a titan vein, Sabina's marrow dose).
 - Backgrounds: M2 and M4 stages, the catacombs; battle backdrops `tallow_vats`, `undercroft` (have-old).
 - Music: Tallow Vats, the catacombs, the interlude.
