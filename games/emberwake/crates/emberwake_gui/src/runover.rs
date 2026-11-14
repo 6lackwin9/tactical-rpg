@@ -279,7 +279,16 @@ pub fn days_ask(cx: &Cx, n: i64, what: &str, verb: &str) -> Option<String> {
 /// W3, CAMPAIGN1-TM: the question before the trip to `to` when its legs would end the run (`campaign::preview_trip`:
 /// the days and the leg inputs of the travel mode now), None when they would not.
 pub fn trip_ask(cx: &Cx, to: &str) -> Option<String> {
-    let ends = campaign::preview_trip(&cx.data, cx.gs(), to);
+    trip_ask_of(campaign::preview_trip(&cx.data, cx.gs(), to))
+}
+
+/// MAP-HOOKS1: `trip_ask` for the way picked on the world map (`routes`, a way of `travel::paths`;
+/// `campaign::preview_trip_via`).
+pub fn trip_ask_via(cx: &Cx, routes: &[String]) -> Option<String> {
+    trip_ask_of(campaign::preview_trip_via(&cx.data, cx.gs(), routes))
+}
+
+fn trip_ask_of(ends: Vec<Value>) -> Option<String> {
     if ends.is_empty() {
         return None;
     }

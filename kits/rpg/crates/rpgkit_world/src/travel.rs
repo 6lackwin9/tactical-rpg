@@ -5,6 +5,8 @@
 //! view's checkpoint lines (STORYUI1 B10). CAMPAIGN1-TM: in a campaign world with travel modes, each leg takes the
 //! party's mode's `days` more (`leg_days`: path search, trip cost, the clock, upkeep and the days tick all count them)
 //! and its leg tick names the mode (meter inputs `modes`); the mode's road-fight change is `campaign::purse`'s.
+//! MAP-HOOKS1: `paths` offers up to three ways to a place within two days of the cheapest (days, upkeep, labels from
+//! display names) and `travel_via` walks the one picked; `travel` keeps taking `path`.
 
 use crate::data::Data;
 use crate::explore::{self, SPAWN};
@@ -254,11 +256,134 @@ pub fn best_path_with(all: &[(Dict, String, String)], nodes: &[String], from: &s
     best.get(to).cloned()
 }
 
+/// MAP-HOOKS1: most ways `paths` offers to one place.
+pub const PATHS_MAX: usize = 3;
+/// MAP-HOOKS1: how many days longer than the cheapest a way `paths` offers may take.
+pub const PATHS_DAYS_SLACK: i64 = 2;
+
+/// MAP-HOOKS1: one way to a place (`paths`): its route qids in order, the nodes it reaches (the last is the place),
+/// its days in the party's travel mode, its upkeep (each leg's `campaign::purse::leg_upkeep`, summed, not capped by
+/// the party's supplies), and a label naming what sets it apart from the other ways offered, from display names only
+/// ("by <route name>", "via <location name>").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TravelPath {
+    pub routes: Vec<String>,
+    pub nodes: Vec<String>,
+    pub days: i64,
+    pub supplies: i64,
+    pub label: String,
+}
+
+impl TravelPath {
+    pub fn legs(&self) -> usize {
+        self.routes.len()
+    }
+}
+
+/// MAP-HOOKS1: up to `PATHS_MAX` ways from `from` to `to` over open legs between known nodes (as `path` plans), each a
+/// simple path (no node twice) taking at most `PATHS_DAYS_SLACK` days more than the cheapest, in the party's travel
+/// mode; ranked by days, then upkeep, then legs, then the route qids (so the order is stable). [] when `path` finds no
+/// way. The first is the way `path` (and so `travel`) takes when the cheapest is unique.
+pub fn paths(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<TravelPath> {
+    let known_nodes = known(d, gs);
+    if from == to || !known_nodes.iter().any(|q| q == from) || !known_nodes.iter().any(|q| q == to) {
+        return Vec::new();
+    }
+    let all = legs(d, gs, &gs.world_id);
+    let extra = mode_days(d, gs);
+    let Some((cheapest, _)) = best_path_with(&all, &known_nodes, from, to, extra) else { return Vec::new() };
+    let limit = cheapest + PATHS_DAYS_SLACK;
+    let mut found: Vec<(i64, Vec<String>, Vec<String>, Vec<i64>)> = Vec::new();
+    // depth first over simple paths, cut at the day limit: (node, days so far, routes, nodes reached, leg days)
+    let mut stack: Vec<(String, i64, Vec<String>, Vec<String>, Vec<i64>)> = vec![(from.to_string(), 0, Vec::new(), Vec::new(), Vec::new())];
+    while let Some((at, days, routes, reached, leg_list)) = stack.pop() {
+        if at == to {
+            found.push((days, routes, reached, leg_list));
+            continue;
+        }
+        for (route, lf, lt) in &all {
+            if *lf != at || lt == from || reached.contains(lt) || !known_nodes.contains(lt) {
+                continue;
+            }
+            let leg = leg_days(route, extra);
+            if days + leg > limit {
+                continue;
+            }
+            let (mut r, mut n, mut l) = (routes.clone(), reached.clone(), leg_list.clone());
+            r.push(json::s(route, "_qid"));
+            n.push(lt.clone());
+            l.push(leg);
+            stack.push((lt.clone(), days + leg, r, n, l));
+        }
+    }
+    let mut out: Vec<TravelPath> = found
+        .into_iter()
+        .map(|(days, routes, nodes, leg_list)| {
+            let supplies = leg_list.iter().map(|leg| crate::campaign::purse::leg_upkeep(d, &gs.world_id, *leg)).sum();
+            TravelPath { routes, nodes, days, supplies, label: String::new() }
+        })
+        .collect();
+    out.sort_by(|a, b| (a.days, a.supplies, a.legs(), &a.routes).cmp(&(b.days, b.supplies, b.legs(), &b.routes)));
+    out.dedup_by(|a, b| a.routes == b.routes);
+    out.truncate(PATHS_MAX);
+    let labels: Vec<String> = (0..out.len()).map(|i| path_label(d, gs, &out, i)).collect();
+    for (p, label) in out.iter_mut().zip(labels) {
+        p.label = label;
+    }
+    out
+}
+
+/// MAP-HOOKS1: what sets way `i` of `ways` apart, from display names: "via <name>" of its first stop no other way
+/// passes, else "by <name>" of its first route no other way takes (a one-leg way: its route), else of its first named
+/// route; "Another way" when nothing it passes has a name.
+fn path_label(d: &Data, gs: &GameState, ways: &[TravelPath], i: usize) -> String {
+    let me = &ways[i];
+    let others: Vec<&TravelPath> = ways.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, p)| p).collect();
+    let stops = &me.nodes[..me.nodes.len().saturating_sub(1)];
+    let place = |q: &str| json::s(explore::resolve_location(d, gs, q), "name");
+    let road = |rq: &str| json::s(&route_in(d, &gs.world_id, rq), "name");
+    for q in stops {
+        let name = place(q);
+        if !name.is_empty() && !others.iter().any(|o| o.nodes.contains(q)) {
+            return format!("via {name}");
+        }
+    }
+    for rq in &me.routes {
+        let name = road(rq);
+        if !name.is_empty() && !others.iter().any(|o| o.routes.contains(rq)) {
+            return format!("by {name}");
+        }
+    }
+    match me.routes.iter().map(|rq| road(rq)).find(|n| !n.is_empty()) {
+        Some(name) => format!("by {name}"),
+        None => "Another way".to_string(),
+    }
+}
+
 pub fn route_in(d: &Data, w: &str, route_qid: &str) -> Dict {
     graph(d, w).into_iter().find(|r| json::s(r, "_qid") == route_qid).unwrap_or_default()
 }
 
 fn quest_targets(d: &Data, gs: &GameState) -> Vec<(String, String)> {
+    quest_targets_of(d, gs).into_iter().map(|(node, text, _)| (node, text)).collect()
+}
+
+/// MAP-HOOKS1: the places of the active quests' current objectives as (node qid, quest name), one per quest and node,
+/// in quest order (a world map's list of quests); a quest without a display name is left out, so no id reaches the
+/// player.
+pub fn quest_places(d: &Data, gs: &GameState) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (node, _, qid) in quest_targets_of(d, gs) {
+        let name = json::s(&quest::resolved(d, gs, &qid), "name");
+        if !name.is_empty() && !out.iter().any(|(n, q)| *n == node && *q == name) {
+            out.push((node, name));
+        }
+    }
+    out
+}
+
+/// The active quests' objective places: (node qid, objective text, quest id).
+fn quest_targets_of(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     for qid in quest::quests_with(d, gs, "active") {
         let obj = quest::current_objective(d, gs, &qid);
@@ -284,7 +409,7 @@ fn quest_targets(d: &Data, gs: &GameState) -> Vec<(String, String)> {
             }
             let hit = json::s(explore::resolve_location(d, gs, &r), "_qid");
             if !hit.is_empty() {
-                out.push((hit, json::s(&obj, "text")));
+                out.push((hit, json::s(&obj, "text"), qid.clone()));
             }
         }
     }
@@ -448,6 +573,49 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
         plan.push((route, at.clone(), leg_to.clone()));
         at = leg_to;
     }
+    run_trip(d, gs, plan)
+}
+
+/// MAP-HOOKS1: `travel` towards `to_ref` along the chosen `routes` (route qids in order, e.g. a way of `paths`): each
+/// must be an open leg (as `legs` gives) from where the party stands then, onto a known node, and the last must reach
+/// the place; else nothing moves. The trip runs leg by leg exactly as `travel`'s (clock, upkeep, campaign ticks, road
+/// fights, arrival).
+pub fn travel_via(d: &Data, gs: &mut GameState, to_ref: &str, routes: &[String]) -> Dict {
+    let over = crate::campaign::save_refusal(gs);
+    if !over.is_empty() {
+        return json::fail(over);
+    }
+    let start = current_node(d, gs);
+    if start.is_empty() {
+        return json::fail("The party is not at a world map node.");
+    }
+    let target = explore::resolve_location(d, gs, to_ref);
+    if target.is_empty() {
+        return json::fail(&format!("Unknown location '{to_ref}'."));
+    }
+    let to_qid = json::s(target, "_qid");
+    if routes.is_empty() || start == to_qid {
+        return json::fail(&format!("No known way from '{start}' to '{to_qid}'."));
+    }
+    let known_nodes = known(d, gs);
+    let open = legs(d, gs, &gs.world_id);
+    let mut plan = Vec::new();
+    let mut at = start.clone();
+    for rq in routes {
+        let Some((route, _, lt)) = open.iter().find(|(r, lf, lt)| json::s(r, "_qid") == *rq && *lf == at && known_nodes.contains(lt)) else {
+            return json::fail(&format!("'{rq}' is not an open road from '{at}'."));
+        };
+        plan.push((route.clone(), at.clone(), lt.clone()));
+        at = lt.clone();
+    }
+    if at != to_qid {
+        return json::fail(&format!("That way from '{start}' does not reach '{to_qid}'."));
+    }
+    run_trip(d, gs, plan)
+}
+
+/// The legs of a planned trip, run in order (`travel`, `travel_via`): (route, from, to) each.
+fn run_trip(d: &Data, gs: &mut GameState, plan: Vec<(Dict, String, String)>) -> Dict {
     let mut events = Vec::new();
     let mut ticked: Vec<Value> = Vec::new();
     let (mut spent, mut supplies_spent, mut starved_legs, mut legs_done) = (0, 0, 0, 0);

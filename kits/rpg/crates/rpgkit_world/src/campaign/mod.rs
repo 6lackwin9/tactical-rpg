@@ -22,7 +22,7 @@ pub mod purse;
 pub mod trigger;
 pub mod view;
 
-pub use preview::{preview_battle, preview_days, preview_trip};
+pub use preview::{preview_battle, preview_days, preview_trip, preview_trip_via};
 pub use view::hud;
 
 use crate::data::Data;
