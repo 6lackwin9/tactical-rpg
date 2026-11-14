@@ -45,6 +45,12 @@ SHEETS = {
         "path": lambda n: f"{KIT}/ui/services/recipe.png" if n == "recipe" else f"{GAME}/ui/hud/{n}.png",
         "size": lambda n: 32 if n == "recipe" else 14,
     },
+    "families_1": {  # sunk_ward_icons.md: 3 item-family base icons and 2 status icons, on tiles like keepsakes_1
+        "cells": ["polearm", "censer", "bone_saw", "steadfast", "stealth", "polearm", "censer", "bone_saw", "stealth"],
+        "path": lambda n: f"{GAME}/statuses/{n}.png" if n in ("steadfast", "stealth") else f"{GAME}/items/{n}/base.png",
+        "size": lambda n: 64 if n in ("steadfast", "stealth") else 96,
+        "tile": True,
+    },
 }
 
 
@@ -60,7 +66,7 @@ def cut(sheet_id, sheet_path, picks, out_root):
     written = []
     for name, cell in chosen.items():
         tile, size = tiles[cell - 1], spec["size"](name)
-        if sheet_id == "keepsakes_1":
+        if sheet_id == "keepsakes_1" or spec.get("tile"):
             icon = X.mode_reduce(tile, 32).resize((size, size), Image.NEAREST)
         else:
             icon = S.snap(X.mode_reduce(S.key_out(tile), size))
