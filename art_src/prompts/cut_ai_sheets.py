@@ -67,8 +67,16 @@ def cut(sheet_id, sheet_path, picks, out_root):
     for name, cell in chosen.items():
         tile, size = tiles[cell - 1], spec["size"](name)
         if sheet_id == "keepsakes_1" or spec.get("tile"):
-            icon = X.mode_reduce(tile, 32).resize((size, size), Image.NEAREST)
-        else:
+            # scale only (Tushar 2026-11-15: the 32-grid reduction made the icons hard to read; the art is pixel art already)
+            icon = tile.resize((size, size), Image.LANCZOS)
+        elif size >= 32:
+            keyed = S.key_out(tile)
+            box = keyed.crop(keyed.getbbox())
+            side = max(box.size)
+            square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+            square.alpha_composite(box, ((side - box.width) // 2, (side - box.height) // 2))
+            icon = square.resize((size, size), Image.LANCZOS)
+        else:  # a 14 px chip stays on the hard grid: a smooth downscale that small goes soft and faint
             icon = S.snap(X.mode_reduce(S.key_out(tile), size))
         dest = pathlib.Path(out_root) / spec["path"](name)
         dest.parent.mkdir(parents=True, exist_ok=True)
