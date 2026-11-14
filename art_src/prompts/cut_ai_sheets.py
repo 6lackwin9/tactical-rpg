@@ -51,13 +51,27 @@ SHEETS = {
         "size": lambda n: 64 if n in ("steadfast", "stealth") else 96,
         "tile": True,
     },
+    "hud_chips_2": {  # the 14 px chips redrawn as bold 16 x 16 sprites (sunk_ward_icons.md)
+        "cells": ["scrap", "tallow", "alert", "doom_clock", "scrap", "alert", "doom_clock", "tallow", "scrap"],
+        "path": lambda n: f"{GAME}/ui/hud/{n}.png",
+        "size": lambda n: 14,
+    },
+    "gear_1": {  # the gear rework's families without an icon, 4 x 4 (sunk_ward_icons.md); the helms wait for a path
+        "grid": 4,
+        "cells": ["greatsword", "gauntlet", "knife", "buckler", "braces", "ammo", "cloak", "graft",
+                  "helm_heavy", "helm_medium", "helm_light", "ammo", "greatsword", "gauntlet", "knife", "graft"],
+        "path": lambda n: f"{GAME}/items/{n}/base.png",
+        "size": lambda n: 96,
+        "tile": True,
+        "skip": ("helm_heavy", "helm_medium", "helm_light"),
+    },
 }
 
 
 def cut(sheet_id, sheet_path, picks, out_root):
     spec = SHEETS[sheet_id]
     im = X.clear_corner(Image.open(sheet_path).convert("RGBA"))
-    boxes = S.cells_of(im, 3)
+    boxes = S.cells_of(im, spec.get("grid", 3))
     tiles = [im.crop(b) for b in boxes]
     chosen = {}
     for i, name in enumerate(spec["cells"], 1):
@@ -65,6 +79,8 @@ def cut(sheet_id, sheet_path, picks, out_root):
     chosen.update(picks)
     written = []
     for name, cell in chosen.items():
+        if name in spec.get("skip", ()):
+            continue
         tile, size = tiles[cell - 1], spec["size"](name)
         if sheet_id == "keepsakes_1" or spec.get("tile"):
             # scale only (Tushar 2026-11-15: the 32-grid reduction made the icons hard to read; the art is pixel art already)
@@ -244,7 +260,7 @@ def main(argv):
     if "--pick" in argv:
         for kv in argv[argv.index("--pick") + 1].split(","):
             k, v = kv.split("=")
-            if k not in SHEETS[sheet_id]["cells"] or not 1 <= int(v) <= 9:
+            if k not in SHEETS[sheet_id]["cells"] or not 1 <= int(v) <= SHEETS[sheet_id].get("grid", 3) ** 2:
                 sys.exit(f"bad pick {kv}")
             picks[k] = int(v)
     if "--out" in argv:
