@@ -29,7 +29,9 @@
   .toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); font-size: 13px; cursor: pointer; }
   .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 12px; align-items: start; }
   @media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
-  .stage { border: 1px solid var(--line); border-radius: 6px; background: #07080b; overflow: auto; }
+  .stage { border: 1px solid var(--line); border-radius: 6px; background: #07080b; overflow: auto; max-height: 78vh; cursor: grab; }
+  .stage.panning { cursor: grabbing; }
+  .stage canvas.zoomed { max-width: none; }
   canvas { display: block; max-width: 100%; height: auto; image-rendering: pixelated; }
   .side { display: grid; gap: 12px; min-width: 0; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; min-width: 0; }
@@ -63,6 +65,11 @@
     <label class="toggle"><input type="checkbox" id="opt-bright" checked> Brighten grounds</label>
     <label class="toggle"><input type="checkbox" id="opt-screen" checked> Screen size</label>
     <label class="toggle" id="inside-wrap">Party is <select id="opt-inside"></select></label>
+    <span class="seg" id="zoom" role="radiogroup" aria-label="Zoom">
+      <input type="radio" name="zoom" id="zoom-fit" value="fit" checked><label for="zoom-fit">Fit</label>
+      <input type="radio" name="zoom" id="zoom-1" value="1"><label for="zoom-1">1x</label>
+      <input type="radio" name="zoom" id="zoom-2" value="2"><label for="zoom-2">2x</label>
+    </span>
     <span style="flex:1"></span>
     <span class="status" id="status"></span>
   </div>
@@ -249,9 +256,26 @@ function fillInside() {
   $('opt-inside').innerHTML = '<option value="">outside</option>' + rooms.map(([c, z]) => '<option value="' + c + '">inside: ' + z.id.replace(/_/g, ' ') + '</option>').join('');
   $('inside-wrap').hidden = !rooms.length;
 }
-function render() { draw(); side(); }
+// zoom: Fit scales the map to the page width; 1x draws a tile at 32 screen px (the props' art scale), 2x at 64.
+// Zoomed, the map scrolls inside its box and drags to pan.
+function zoom() {
+  const z = document.querySelector('input[name="zoom"]:checked').value, cv = $('cv');
+  cv.classList.toggle('zoomed', z !== 'fit');
+  cv.style.width = z === 'fit' ? '' : (cv.width * +z) + 'px';
+}
+function render() { draw(); side(); zoom(); }
+(() => {
+  const st = document.querySelector('.stage');
+  let drag = null;
+  st.addEventListener('pointerdown', e => { if (!$('cv').classList.contains('zoomed')) return;
+    drag = { x: e.clientX, y: e.clientY, l: st.scrollLeft, t: st.scrollTop }; st.classList.add('panning'); st.setPointerCapture(e.pointerId); });
+  st.addEventListener('pointermove', e => { if (!drag) return; st.scrollLeft = drag.l - (e.clientX - drag.x); st.scrollTop = drag.t - (e.clientY - drag.y); });
+  const end = () => { drag = null; st.classList.remove('panning'); };
+  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+})();
 $('tabs').innerHTML = DATA.maps.map((m, i) => `<input type="radio" name="map" id="tab-${i}" value="${i}" ${i === 0 ? 'checked' : ''}><label for="tab-${i}">${m.title}</label>`).join('');
 $('tabs').addEventListener('change', e => { cur = +e.target.value; fillInside(); render(); });
 ['opt-grid', 'opt-zones', 'opt-anchors', 'opt-props', 'opt-bright', 'opt-screen', 'opt-inside'].forEach(id => $(id).addEventListener('change', render));
+$('zoom').addEventListener('change', zoom);
 fillInside(); render();
 </script>
