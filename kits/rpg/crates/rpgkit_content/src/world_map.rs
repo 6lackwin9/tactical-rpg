@@ -388,9 +388,6 @@ pub fn write(worlds: &Catalogs, layers: &Layers, name: &str, edits: &Value) -> R
     let out = text(&v);
     let path = root.join(&rel);
     let own_before = vfs::read_to_string(&path).ok();
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| vec![format!("{}: {e}", dir.display())])?;
-    }
-    std::fs::write(&path, &out).map_err(|e| vec![format!("{}: {e}", path.display())])?;
+    aegis_content::store::write_file(&path, &out)?;
     Ok(Written { changed: own_before.as_deref() != Some(out.as_str()), path, edits })
 }

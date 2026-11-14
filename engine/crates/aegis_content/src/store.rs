@@ -69,6 +69,15 @@ pub trait Hooks {
     }
 }
 
+/// PR5-48: writes `text` to `path` (its folder made when missing) for a game's writer of files beside the data (a
+/// sidecar op, `Hooks::sidecar`): native tooling, the content writer's file seam.
+pub fn write_file(path: &Path, text: &str) -> Result<(), Vec<String>> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| vec![format!("{}: {e}", dir.display())])?;
+    }
+    std::fs::write(path, text).map_err(|e| vec![format!("{}: {e}", path.display())])
+}
+
 /// What an upsert or remove did.
 pub struct Outcome {
     pub file: PathBuf,
