@@ -94,17 +94,20 @@ ACT1_SCALE = {"drowned_runoff_grate": 1.1, "alleyway_junction_7": 1.2, "ash_craw
 
 # Route waypoints along the painted roads of background take 1 (Tushar 2026-11-13: routes along the roads instead of
 # straight lines). Each list runs from the route's `from` to its `to` location (routes.json), endpoints excluded.
+# Redrawn 2026-11-14 for the final Act 1 spots, on the road centrelines measured from the background (the ring above the
+# basin wall at y 0.67, the left loop past the bridge at x 0.25, the right loop up to the gorge at x 0.62-0.65, and the
+# roads down both sides of the basin).
 ROUTE_PATHS = {
-    "sluice_gate": [(0.57, 0.90), (0.52, 0.84)],                                         # across the basin
-    "water_siphon": [(0.47, 0.70), (0.40, 0.66), (0.32, 0.64), (0.24, 0.65)],            # rim road, left bridge
-    "drain_flue": [(0.53, 0.70), (0.62, 0.66), (0.69, 0.62), (0.75, 0.61)],              # rim road, right bridge
-    "third_ward_road": [(0.55, 0.72), (0.66, 0.72), (0.72, 0.78)],                       # down the basin's right side
-    "siphon_shortcut": [(0.56, 0.71), (0.64, 0.67), (0.71, 0.60), (0.72, 0.47), (0.76, 0.37)],  # up the right canal
-    "kiln_link": [(0.16, 0.57), (0.14, 0.46), (0.15, 0.39)],                             # the lava-lit street
-    "crossroads_link": [(0.81, 0.55), (0.83, 0.45)],                                     # the slum alleys
-    "flue_climb": [(0.24, 0.32), (0.33, 0.31), (0.41, 0.28), (0.46, 0.29)],              # road along the top
-    "convoy_track": [(0.76, 0.36), (0.67, 0.36), (0.60, 0.33), (0.54, 0.30)],            # road along the top
-    "high_gorge": [(0.50, 0.24), (0.50, 0.17)],                                          # the gorge floor
+    "sluice_gate": [(0.585, 0.88), (0.54, 0.80)],                                                    # across the basin
+    "water_siphon": [(0.50, 0.67), (0.42, 0.678), (0.375, 0.615), (0.322, 0.58), (0.262, 0.575), (0.21, 0.61)],  # ring, left loop, bridge
+    "drain_flue": [(0.515, 0.675), (0.57, 0.67), (0.61, 0.688), (0.65, 0.71), (0.70, 0.76), (0.735, 0.795), (0.79, 0.74)],  # ring, right road
+    "third_ward_road": [(0.515, 0.675), (0.57, 0.67), (0.61, 0.688), (0.65, 0.71), (0.70, 0.76), (0.735, 0.80)],  # down the basin's right side
+    "siphon_shortcut": [(0.515, 0.675), (0.59, 0.672), (0.633, 0.63), (0.68, 0.60), (0.71, 0.54), (0.73, 0.47)],  # ring, up the right canal
+    "kiln_link": [(0.21, 0.61), (0.262, 0.565), (0.26, 0.49), (0.258, 0.425)],                       # bridge, up the left loop
+    "crossroads_link": [(0.84, 0.60), (0.82, 0.52), (0.80, 0.47)],                                    # the slum alleys
+    "flue_climb": [(0.265, 0.405), (0.31, 0.37), (0.345, 0.34), (0.372, 0.305), (0.415, 0.29), (0.455, 0.33)],  # the left loop's top
+    "convoy_track": [(0.72, 0.44), (0.66, 0.43), (0.618, 0.425), (0.60, 0.385), (0.585, 0.362), (0.54, 0.352)],  # over the canal, right loop
+    "high_gorge": [(0.50, 0.30), (0.505, 0.22)],                                                      # the gorge floor
 }
 
 
