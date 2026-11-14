@@ -196,15 +196,12 @@ def sluice_undercroft():
     L.prop("scrap", "scrap_heap", 27, 6, 2, 2)
     L.prop("tool_rack", "crate_stack", 22, 8, 2, 1)
     # Commons: the brazier the bunks face
-    L.rect(9, 9, 20, 13, ground="c")
-    L.prop("brazier", "brazier", 14, 11)
+    L.prop("brazier", "brazier", 14, 11)     # on the one flagstone floor (2026-11-15: fewer grounds, a calmer room)
     # South: the Dry Hollows, six brick kiln bunks along the south wall, three either side
     for i, x in enumerate((7, 10, 13)):
         L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 17, 2, 1)
     for i, x in enumerate((15, 18, 21)):   # the east three stop short of the crypts' door at (24, 17)
         L.prop(f"bunk_{i + 4}", "kiln_bunk", x, 17, 2, 1)
-    L.rect(6, 14, 23, 18, ground="m")                    # damp trodden floor of the hollows
-    L.rect(6, 15, 23, 16, ground="f")
     # Isolation Crypts: barred cells in the south-east corner, two stasis slots
     L.rect(24, 13, 24, 18, "#")
     L.prop("crypt_bars", "crypt_bars", 24, 14, 1, 3)
@@ -232,7 +229,7 @@ def sluice_undercroft():
     L.anchor("rest", 14, 12, "the brazier: rest and the bunk roster")
     L.anchor("crypts", 24, 17, "the Isolation Crypts' door (Stage IV operatives, stasis slots)")
     return L.entry("sunk_ward_undercroft", "Sunk Ward: the Sluice Undercroft", {"h": {"id": "hub", "kind": "safe"}},
-                   {k: v for k, v in GROUND.items() if k in "scfmoiw"}, ["sunk_ward"])
+                   {k: v for k, v in GROUND.items() if k in "sfoiw"}, ["sunk_ward"])
 
 
 def drowned_runoff_grate():

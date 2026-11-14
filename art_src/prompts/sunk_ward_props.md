@@ -363,3 +363,57 @@ Row 4: worn stone steps seen from straight above, each step a horizontal band, g
 ```text
 References: props_buildings_gen1793556098_1.png (the viewing angle only: every building there is seen from the front and slightly above, its front wall flat to the viewer; do not copy its buildings, colours or subject). One pixel-art building for the top-down tile map of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art: a bone-mill kiln. VIEW: seen straight from the front and slightly from above; its long front wall is flat to the viewer and its bottom edge is perfectly horizontal, with a band of roof showing above; not isometric, no diagonal edges, no side wall visible, no ground under it. It stands on the bottom edge of the image, 14 units wide and 10 tall: a long soot-black brick block with iron bands and pipes across its front, three squat chimneys in a row along its roof whose tops glow inside with no smoke, a small lit lamp at each end of the front wall, and a plain dark gap in the middle of the front wall at ground level where a separate furnace mouth will stand. Clear dark outlines, hand-placed pixel clusters, at most 16 colours with 4 shades per colour, light from the upper left. The whole background is flat, solid pure magenta (#FF00FF); no magenta or pink in the building. No text, no letters, no numbers, no runes, no labels, no frame, no watermark.
 ```
+
+## 5. One view, two profiles (Tushar, 2026-11-15)
+
+"The props should probably all be from one angle", "the gates for left and right should probably different and not have
+front view", "if we are going for front view we need props in both side profile and front profile based on the
+alignment". So every prop is drawn in the one top-down front view, and a prop whose look depends on which wall it
+stands against has **two arts**: `<art>` (the front profile: against the north wall or free-standing, facing south)
+and `<art>_side` (the side profile: against the west wall, its long axis north to south, facing east; `flip` gives the
+east wall). Round and symmetric props (vats, barrels, brazier, posts, lamps, pillars, heaps) need only the one art. The
+layout picks the profile from the prop's alignment (`build_layouts.py`).
+
+| Art | PNG px | Footprint | Layer | What |
+| --- | --- | --- | --- | --- |
+| `crypt_bars_side` | 64 x 128 | 1 x 3 | sort | a run of iron cell bars set in a wall that runs north to south, seen from above: the bar tops in a row |
+| `iron_ladder_side` | 48 x 96 | 1 x 2 | sort | an iron ladder fixed to the left wall, seen from its side |
+| `culvert_gate_side` | 48 x 96 | 1 x 2 | sort | a barred culvert opening in the left wall, a chain and padlock |
+| `barred_gate_side` | 48 x 96 | 1 x 2 | sort | a barred iron gate in the left wall, shut |
+| `door_side` | 48 x 96 | 1 x 2 | sort | a plain wooden door in the left wall, in a brick frame |
+| `kiln_bunk_side` | 64 x 96 | 1 x 2 | sort | a bunk in a brick niche in the left wall, its long side north to south |
+| `cot_side` | 48 x 80 | 1 x 2 | sort | a plank cot along the left wall, head to the north |
+| `goods_shelf_side` | 48 x 96 | 1 x 2 | sort | a tall shelf against the left wall, seen from its end and top |
+| `retort_shelf_side` | 48 x 128 | 1 x 3 | sort | a shelf of retorts and jars against the left wall |
+| `shop_counter_side` | 48 x 112 | 1 x 3 | sort | a shop counter running north to south |
+| `workbench_side` | 48 x 112 | 1 x 3 | sort | a workbench running north to south |
+| `weapon_rack_side` | 48 x 96 | 1 x 2 | sort | a weapon rack against the left wall |
+| `mission_board_side` | 48 x 96 | 1 x 2 | sort | a notice board fixed to the left wall |
+| `pen_fence_side` | 32 x 112 | 1 x 3 | sort | a fence of stakes and rails running north to south |
+| `striped_barrier_side` | 32 x 112 | 1 x 3 | sort | a striped barrier pole lowered north to south |
+| `stone_steps_side` | 96 x 96 | 3 x 3 | ground | stone steps going up toward the left, seen from straight above |
+
+### Sheet S15 side profiles (`props_sunk_side`)
+
+4 x 4 cells, row by row, in the table's order. No reference attached.
+
+```text
+A sheet of 16 pixel-art props for the top-down tile maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF), so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows. VIEW, the same for every prop: the camera looks down at a room from the front and above, as on a classic top-down JRPG tile map, and each of these props stands against the LEFT wall of the room, turned to face right. So each prop is tall and narrow in its tile: its long axis runs straight up and down the tile, we look down on its top surface, and we see its right-hand face as a narrow vertical band; its nearer (bottom) end is slightly lower in the tile than its far end is high. Every edge is vertical or horizontal: not isometric, no diagonal edges, nothing rotated. Clear dark outlines, hand-placed pixel clusters, at most 16 colours per prop with 4 shades per colour, light from the upper left; no magenta and no pink anywhere in the props, no glow halos round lights. Materials of a sunless slum: soot-black brick, rusted iron, dark worn wood, grey cloth. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:
+Row 1: a run of iron cell bars set in a brick wall that runs up and down the tile, seen from above as a row of round bar tops between two brick ends (1 wide by 3 tall); an iron ladder fixed to a brick wall on its left, seen from the side as two rails close together with rungs between (1 wide by 2 tall); a barred culvert opening in a brick wall on its left, a chain and padlock across it (1 wide by 2 tall); a shut barred iron gate in a brick wall on its left (1 wide by 2 tall).
+Row 2: a plain wooden door in a brick frame in a wall on its left (1 wide by 2 tall); a bunk in a brick niche on its left, a straw pallet and grey blanket lying up and down the tile, a candle stub at its head (1 wide by 2 tall); a plank cot lying up and down the tile, pillow at the top, grey blanket (1 wide by 2 tall); a tall wooden shelf of jars against a wall on its left, seen from above and from its end (1 wide by 2 tall).
+Row 3: a long shelf of glass retorts and jars against a wall on its left (1 wide by 3 tall); a wooden shop counter running up and down the tile, a lamp and wares on top (1 wide by 3 tall); a workbench running up and down the tile, saws and bone pieces on top (1 wide by 3 tall); a wooden weapon rack of polearms against a wall on its left (1 wide by 2 tall).
+Row 4: a wooden notice board fixed to a wall on its left, blank slips pinned to it (1 wide by 2 tall); a fence of iron stakes and timber rails running up and down the tile (1 wide by 3 tall); a red-and-white striped barrier pole lowered so that it runs up and down the tile, on two trestles (1 wide by 3 tall); worn stone steps seen from straight above, each step a vertical band, going up toward the left of the tile (flat, 3 wide by 3 deep).
+```
+
+### Sheet S16 front-on, the rest (`props_sunk_front_c`)
+
+The first run's keepers that still stand at an angle, redrawn front-on so every prop shares one view. 3 x 3 cells, row by
+row: `retort_shelf`, `herb_rack`, `anvil`; `scrap_heap`, `mission_board`, `lock_tablet`; `watch_torch`, `hearth_stove`,
+`weapon_rack`. Reference: `props_buildings_gen1793556098_1.png`, for the viewing angle only.
+
+```text
+References: props_buildings_gen1793556098_1.png (the viewing angle only: every building there is seen from the front and slightly above, its front wall flat to the viewer; do not copy its buildings, colours or subject). A sheet of 9 pixel-art props for the top-down tile maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art. Square 1:1 image, an exact 3 by 3 grid of 9 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF), so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows in the proportions named for it (width by height). VIEW, the same for every prop: seen straight from the front and slightly from above, like furniture on a classic top-down JRPG tile map; the front face is flat to the viewer, its bottom edge perfectly horizontal; the top face shows above it as a horizontal band; every vertical edge is vertical and every horizontal edge is horizontal. Not isometric: no diagonal edges, nothing rotated, no side face visible. Each prop stands on the bottom edge of its tile. Clear dark outlines, hand-placed pixel clusters, at most 16 colours per prop with 4 shades per colour, light from the upper left; no magenta and no pink anywhere in the props, no glow halos round lights. Materials of a sunless slum: dark worn wood, rusted iron, tarnished brass, bronze, pale bone, grey cloth. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:
+Row 1: a dark wooden shelf of glass retorts, jars and bone pins with an oil lamp on top, seen from the front (3 wide by 3 tall); a drying rack of grey herbs hung from a bar between two uprights, salt sacks at its foot (2 wide by 3 tall); a blackened anvil on a tree stump, the anvil seen from its side with its horn to the left (2 wide by 2 tall).
+Row 2: a heap of salvaged scrap: bent pipe, valve wheels, chain and cracked brass (2 wide by 3 tall); a wooden notice board on two posts hung with blank bone slips and pinned blank scraps (2 wide by 3 tall); an upright bronze flood-lock tablet on a stone plinth, half buried in grey silt, blank (2 wide by 3 tall).
+Row 3: an iron torch bracket on a short post with a red-orange flame (2 wide by 2.5 tall); a small iron stove with a door in its front showing a low warm glow, a pipe going straight up (2 wide by 3 tall); a wooden rack holding four polearms upright side by side and a shield (2 wide by 2.5 tall).
+```

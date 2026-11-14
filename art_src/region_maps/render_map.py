@@ -15,7 +15,7 @@ import glob
 import json
 import pathlib
 
-from PIL import Image, ImageDraw, ImageEnhance
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 T = 32
@@ -37,7 +37,7 @@ def hexrgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def tone(im, colour, spread=0.55, cells=8, grey=0.0):
+def tone(im, colour, spread=0.38, cells=8, grey=0.0):
     """A texture toned toward `colour`: scaled to `cells` tiles, its mean moved onto the colour, its contrast cut."""
     im = im.convert("RGB").resize((cells * T, cells * T), Image.LANCZOS)
     if grey:
@@ -67,7 +67,17 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     cat = {g["id"]: hexrgb(g["colour"]) for g in json.loads((ROOT / "games/emberwake/data/catalog/grounds.json").read_text(encoding="utf-8"))["entries"]}
     cat.setdefault("floorboards", hexrgb("#3a2c22"))
     lift = lambda c: tuple(min(255, round(v * BRIGHT)) for v in c)
-    rows, W, H, M = e["rows"], len(e["rows"][0]), len(e["rows"]), 2
+    rows, W, H, M = [list(r) for r in e["rows"]], len(e["rows"][0]), len(e["rows"]), 2
+    # A standing prop's footprint is wall only so nobody walks through it. Drawn as wall, the brick shows round the
+    # prop and it seems to float; a free-standing prop (open ground on some side of its footprint) stands on the floor.
+    for p in e["props"]:
+        if p["layer"] != "sort":
+            continue
+        cells = [(x, y) for y in range(p["y"], p["y"] + p["h"]) for x in range(p["x"], p["x"] + p["w"])]
+        ring = [(x + dx, y + dy) for x, y in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
+        if any(0 <= x < W and 0 <= y < H and e["rows"][y][x] != "#" for x, y in ring) and not any(x in (0, W - 1) or y in (0, H - 1) for x, y in cells):
+            for x, y in cells:
+                rows[y][x] = "."
     tex = {}
     for gid in set(e["ground_legend"].values()):
         src = find(tiles_dir, *TILES[gid]) if gid in TILES else None
@@ -76,25 +86,95 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     top_take, face_take = WALL_TAKES[bset]
     top = find(tiles_dir, f"boundary_{bset}_wall", top_take)
     face = find(tiles_dir, f"boundary_{bset}_wall_face", face_take)
-    top = tone(top, (44, 44, 50), 0.6) if top else Image.new("RGB", (8 * T, 8 * T), (40, 40, 46))
-    face = tone(face, (62, 60, 66), 0.7, cells=4) if face else Image.new("RGB", (4 * T, 4 * T), (60, 58, 64))
+    top = tone(top, (40, 40, 46), 0.3) if top else Image.new("RGB", (8 * T, 8 * T), (40, 40, 46))
+    face = tone(face, (60, 58, 64), 0.5, cells=4) if face else Image.new("RGB", (4 * T, 4 * T), (60, 58, 64))
     im = Image.new("RGBA", ((W + 2 * M) * T, (H + 2 * M) * T))
+    # Ground: one picture composed from the textures, with soft irregular borders between land grounds (REGIONGROUND1
+    # EN 2: an edge wanders up to about 0.3 cell). The lookup position of every pixel is pushed by smooth noise, so a
+    # border wobbles instead of running along the grid. Water never moves: `rows` decide where water is (G7).
+    import numpy as np
+    rng = np.random.default_rng(7)
+    gh, gw = (H + 2 * M) * T, (W + 2 * M) * T
+
+    def noise(cells_per_bump):
+        low = rng.random((max(2, round((H + 2 * M) / cells_per_bump) + 2), max(2, round((W + 2 * M) / cells_per_bump) + 2))).astype("float32")
+        return np.asarray(Image.fromarray((low * 255).astype("uint8")).resize((gw, gh), Image.BICUBIC), dtype="float32") / 255 - 0.5
+
+    amp = 0.62   # cells, peak to peak
+    nx = (noise(1.3) + 0.5 * noise(0.6)) * amp
+    ny = (noise(1.3) + 0.5 * noise(0.6)) * amp
+    yy, xx = np.mgrid[0:gh, 0:gw]
+    cu, cv = xx / T - M, yy / T - M                       # this pixel's cell
+    lu = np.clip(np.floor(cu + nx), 0, W - 1).astype(int)  # the cell its ground is looked up in
+    lv = np.clip(np.floor(cv + ny), 0, H - 1).astype(int)
+    ou = np.clip(np.floor(cu), 0, W - 1).astype(int)
+    ov = np.clip(np.floor(cv), 0, H - 1).astype(int)
+    ids = sorted(set(e["ground_legend"].values()))
+    gid = np.array([[ids.index(e["ground_legend"][c]) for c in r] for r in e["ground"]])
+    water = np.array([ids.index(g) if g == "water" else -1 for g in ids]).max()
+    own, look = gid[ov, ou], gid[lv, lu]
+    pick = np.where((own == water) | (look == water), own, look)
+    canvas = np.zeros((gh, gw, 3), dtype="uint8")
+    for k, g in enumerate(ids):
+        tx = np.asarray(tex[g]); th, tw = tx.shape[:2]
+        full = tx[(yy % th), (xx % tw)]
+        canvas[pick == k] = full[pick == k]
+    im.paste(Image.fromarray(canvas), (0, 0))
+    # a stone rim where land meets water: a dark line on the land side, a pale lip on the water side
+    rim = Image.new("RGBA", im.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(rim)
+    for y in range(H):
+        for x in range(W):
+            if rows[y][x] != "~":
+                continue
+            X0, Y0 = (x + M) * T, (y + M) * T
+            for dx, dy, box in ((0, -1, (X0, Y0, X0 + T - 1, Y0 + 3)), (0, 1, (X0, Y0 + T - 4, X0 + T - 1, Y0 + T - 1)),
+                                (-1, 0, (X0, Y0, X0 + 3, Y0 + T - 1)), (1, 0, (X0 + T - 4, Y0, X0 + T - 1, Y0 + T - 1))):
+                n = rows[y + dy][x + dx] if 0 <= y + dy < H and 0 <= x + dx < W else "#"
+                if n == ".":
+                    dr.rectangle(box, fill=(96, 98, 108, 255))
+                    b = (box[0] - dx * 4 if dx else box[0], box[1] - dy * 4 if dy else box[1], box[2] - dx * 4 if dx else box[2], box[3] - dy * 4 if dy else box[3])
+                    dr.rectangle(b, fill=(0, 0, 0, 80))
+    im.alpha_composite(rim)
+    # DEPTH (Tushar 2026-11-15: "need to create the sense of depth to the map, it feels flat"). Light comes from the
+    # upper left. (1) Walls stand two tiles tall: the two wall cells above open ground show the wall's face, the upper
+    # one lighter, with a pale cap line where the face meets the wall's top. (2) Walls cast a soft shadow on the floor
+    # to their south and east. (3) Water lies below the floor: a dark inner edge along its north and west sides.
+    def open_at(x, y):
+        return 0 <= x < W and 0 <= y < H and rows[y][x] != "#"
+
+    FACE_H = 2
+    face_dark = ImageEnhance.Brightness(face).enhance(0.72)
     for y in range(-M, H + M):
         for x in range(-M, W + M):
-            inside_map = 0 <= x < W and 0 <= y < H
-            ch = rows[y][x] if inside_map else "#"
-            if ch == "#":
-                below = rows[y + 1][x] if 0 <= x < W and -1 <= y < H - 1 else "#"
-                t = tiled(face, x, 3) if below != "#" else tiled(top, x, y)
+            if open_at(x, y):
+                continue
+            depth = next((k for k in range(1, FACE_H + 1) if open_at(x, y + k)), 0)
+            X0, Y0 = (x + M) * T, (y + M) * T
+            if depth:
+                im.paste(tiled(face if depth == FACE_H or not open_at(x, y + 1) else face_dark, x, 4 - depth), (X0, Y0))
+                if depth == FACE_H or (depth == 1 and open_at(x, y - 1) is False and not any(open_at(x, y + k) for k in (2,)) and False):
+                    ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(118, 116, 124, 255))
             else:
-                t = tiled(tex[e["ground_legend"][e["ground"][y][x]]], x, y)
-            im.paste(t, ((x + M) * T, (y + M) * T))
-    # a soft shade on open ground under a wall to its north, so walls stand up
+                im.paste(tiled(top, x, y), (X0, Y0))
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(sh)
     for y in range(H):
         for x in range(W):
-            if rows[y][x] != "#" and y > 0 and rows[y - 1][x] == "#":
-                d.rectangle([(x + M) * T, (y + M) * T, (x + M + 1) * T - 1, (y + M) * T + 7], fill=(0, 0, 0, 70))
+            if not open_at(x, y):
+                continue
+            X0, Y0 = (x + M) * T, (y + M) * T
+            if not open_at(x, y - 1):                       # a wall to the north: its shadow falls south
+                for k in range(14):
+                    d.line([X0, Y0 + k, X0 + T - 1, Y0 + k], fill=(0, 0, 0, round(120 * (1 - k / 14) ** 1.5)))
+            if not open_at(x - 1, y):                       # a wall to the west: its shadow falls east
+                for k in range(10):
+                    d.line([X0 + k, Y0, X0 + k, Y0 + T - 1], fill=(0, 0, 0, round(95 * (1 - k / 10) ** 1.5)))
+            if rows[y][x] == "~":                           # water sits below the floor
+                if open_at(x, y - 1) and rows[y - 1][x] != "~" or not open_at(x, y - 1):
+                    for k in range(9):
+                        d.line([X0, Y0 + 4 + k, X0 + T - 1, Y0 + 4 + k], fill=(0, 0, 0, round(130 * (1 - k / 9))))
+                if open_at(x - 1, y) and rows[y][x - 1] != "~":
+                    for k in range(7):
+                        d.line([X0 + 4 + k, Y0, X0 + 4 + k, Y0 + T - 1], fill=(0, 0, 0, round(110 * (1 - k / 7))))
     im.alpha_composite(sh)
 
     def art(p):
@@ -108,6 +188,14 @@ def render(loc, tiles_dir, props_root, out, inside=""):
 
     def place(p, a):
         x = (p["x"] + M) * T + (p["w"] * T - a.width) // 2
+        if p["layer"] == "sort" and not p.get("no_shadow"):
+            # a contact shadow under the base, so the prop sits on the floor
+            box = a.getbbox() or (0, 0, a.width, a.height)
+            by = (p["y"] + p["h"] + M) * T - (a.height - box[3])
+            sh2 = Image.new("RGBA", im.size, (0, 0, 0, 0))
+            ImageDraw.Draw(sh2).ellipse([x + box[0] - 2, by - 8, x + box[2] + 9, by + 6], fill=(0, 0, 0, 120))
+            sh2 = sh2.filter(ImageFilter.GaussianBlur(2))
+            im.alpha_composite(sh2)
         if p["layer"] == "ground":
             y = (p["y"] + M) * T + (p["h"] * T - a.height) // 2
         else:
@@ -133,6 +221,27 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                 missing.append(p["art"])
             else:
                 place(dict(p, layer="sort"), a)
+    # (4) Light and dark: the whole map is dimmed, and each fire or lamp lifts a warm pool round itself, so the room
+    # has near and far, lit and unlit.
+    LIGHTS = {"brazier": (150, (255, 170, 80)), "tinker_hearth": (140, (255, 140, 60)), "furnace_mouth": (170, (255, 120, 40)),
+              "lantern_pole": (95, (255, 190, 110)), "watch_torch": (95, (255, 130, 60)), "violet_lamp_post": (100, (150, 130, 255)),
+              "apothecary_slab": (85, (255, 200, 130)), "retort_shelf": (60, (255, 200, 130)), "kiln_bunk": (45, (255, 190, 120)),
+              "hearth_stove": (70, (255, 150, 80)), "candle_stand": (70, (255, 200, 120)), "shrine_altar": (80, (255, 200, 120))}
+    dark = Image.new("L", im.size, 96)                      # how much darkness lies over the map (0 none, 255 black)
+    glow = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    dd, dg = ImageDraw.Draw(dark), ImageDraw.Draw(glow)
+    for p in e["props"]:
+        if p["art"] in LIGHTS and (p["layer"] != "roof"):
+            r, col = LIGHTS[p["art"]]
+            cx, cy = (p["x"] + p["w"] / 2 + M) * T, (p["y"] + p["h"] + M) * T - 14
+            for k in range(12, 0, -1):
+                rr = r * k / 12
+                dd.ellipse([cx - rr, cy - rr * 0.8, cx + rr, cy + rr * 0.8], fill=round(96 * (k / 12) ** 1.6))
+                dg.ellipse([cx - rr, cy - rr * 0.8, cx + rr, cy + rr * 0.8], fill=col + (round(5 + 26 * (1 - k / 12)),))
+    dark = dark.filter(ImageFilter.GaussianBlur(10))
+    im.alpha_composite(glow.filter(ImageFilter.GaussianBlur(8)))
+    night = Image.new("RGBA", im.size, (6, 8, 16, 255)); night.putalpha(dark)
+    im.alpha_composite(night)
     # who stands where: a small figure-sized marker on each NPC and arrival anchor, for scale (a unit is 16 x 24 art px)
     d3 = ImageDraw.Draw(im)
     for a in e["anchors"]:
