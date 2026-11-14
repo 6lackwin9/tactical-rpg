@@ -85,10 +85,10 @@ From [CANON](../CANON.md) 3.4-3.5; none has a maneuver set yet (gap 6).
 | ENC-ACT2-01 | Inquisitor-General Ruthven's checkpoint (whether he fights: CANON open question) | Iron Inquisition |
 | ENC-ACT2-02 | culling wagon escort (repeatable) | Iron Inquisition |
 | ENC-ACT2-04 | Chief Anatomist Lazar | the regime (cast registry; which arm is open) |
-| ENC-ACT2-05 | Bell-Warden Colossus | open |
-| ENC-ACT2-06 | Reliquary Guardian | open |
-| ENC-ACT3-01 | Chasm Gatekeepers | open |
-| ENC-ACT3-02 | High Castellan Ulric | Iron Inquisition (a reconstructed inquisitor, cast registry) |
+| ENC-ACT2-05 | Stage IV Penitent Bell-Warden (`CL-06`, wired into St. Lyra's bell-yoke) | Iron Inquisition / Sovereign Clerisy |
+| ENC-ACT2-06 | Inquisitor-General Ruthven + First Apostle Saint-Warden (`CL-06`, `CL-10`) | Iron Inquisition / Sovereign Clerisy |
+| ENC-ACT3-01 | Overrun Clerisy Conduit Survey Outpost aberrations (introduces Brother Malachi) | the Low Sleep |
+| ENC-ACT3-02 | Warden-Inquisitor Ulric | Iron Inquisition (a reconstructed Saint-Warden, cast registry) |
 | ENC-ACT3-03 | Cantor Ysolde | Awakening Chorus |
 | ENC-ACT3-04 | the corrupted founder (optional), in two phases (CANON 3.6): phase 1 at Inquisitor-Prelate Nemeth's side with his guard, using the founder's old signature moves, twisted; then the founder goes insane, kills Nemeth and his guard and fights the cell alone as a monstrosity (a unit swap for the larger body, art Q-79); needs a phase effect that kills named units and a "hostile to all sides" AI or faction switch `[kit hook]` new | phase 1: Iron Inquisition (Nemeth's side); phase 2: hostile to all |
 | ENC-ACT3-05 | Arch-Prelate Othemar | Sovereign Clerisy |

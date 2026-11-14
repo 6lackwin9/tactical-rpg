@@ -78,7 +78,7 @@ fn encounters(w: &str) -> Value {
 /// A talker whose one choice runs `effects`.
 fn talk(w: &str, effects: Value) -> (Value, Value) {
     let dialogues = with_ids(w, json!([{"id": "talk", "start": "a", "services": false, "nodes": [{"id": "a", "text": "Well?", "choices": [{"text": "Do it.", "effects": effects}]}]}]));
-    let characters = with_ids(w, json!([{"id": "tess", "name": "Tess", "role": "npc", "dialogue": "talk"}]));
+    let characters = with_ids(w, json!([{"id": "innkeeper", "name": "Innkeeper", "role": "npc", "dialogue": "talk"}]));
     (dialogues, characters)
 }
 
@@ -141,7 +141,7 @@ fn a_world_without_campaign_stays_inert() {
     assert!(!gs.to_value().as_object().unwrap().contains_key("campaign"), "no saved key (X3)");
     let res = battle::settle(&d, &mut gs, "classic:loud_job", "won", None);
     assert!(json::b(&res, "ok", false) && !res.contains_key("campaign"), "no result key (X3): {res:?}");
-    let mut r = DialogueRunner::open(&d, &mut gs, "tess");
+    let mut r = DialogueRunner::open(&d, &mut gs, "innkeeper");
     let res = r.choose(&d, &mut gs, 0);
     assert!(json::b(&res, "ok", false) && !res.contains_key("campaign"), "a campaign effect does nothing: {res:?}");
     assert!(campaign::tick(&d, &mut gs, &Cause::Effects).is_empty());
@@ -161,7 +161,7 @@ fn read_keys_are_reserved_in_every_world() {
         assert_eq!(gs.set_flag("meter.alert", json!(5)), campaign::reserved_text("meter.alert"));
         assert_eq!(quest::set_flag(&d, &mut gs, "campaign.act", json!(3)), campaign::reserved_text("campaign.act"));
         assert_eq!(quest::add_flag(&d, &mut gs, "roster.living", 1, &Value::Null, &Value::Null), campaign::reserved_text("roster.living"));
-        let mut r = DialogueRunner::open(&d, &mut gs, "tess");
+        let mut r = DialogueRunner::open(&d, &mut gs, "innkeeper");
         let res = r.choose(&d, &mut gs, 0);
         assert!(!json::b(&res, "ok", true), "{w}: the choice is refused");
         assert_eq!(json::sget(&res, "errors"), vec![campaign::reserved_text("meter.alert")]);
@@ -175,7 +175,7 @@ fn a_meter_add_moves_the_gauge_into_its_band_with_one_warning() {
     let mut gs = state(&d, "camp");
     let start = SUSPICIOUS - 6;
     set_alert(&mut gs, start);
-    let mut r = DialogueRunner::open(&d, &mut gs, "tess");
+    let mut r = DialogueRunner::open(&d, &mut gs, "innkeeper");
     let res = r.choose(&d, &mut gs, 0);
     assert!(json::b(&res, "ok", false), "{res:?}");
     assert_eq!(alert_of(&gs), start + 10);
@@ -190,7 +190,7 @@ fn breach_in_act_1_ends_the_run_once_and_refuses_saves() {
     let d = data();
     let mut gs = state(&d, "camp");
     set_alert(&mut gs, BREACH - 5);
-    let mut r = DialogueRunner::open(&d, &mut gs, "tess");
+    let mut r = DialogueRunner::open(&d, &mut gs, "innkeeper");
     let res = r.choose(&d, &mut gs, 0);
     assert_eq!(alert_of(&gs), BREACH, "clamped at max (M4)");
     let events = events_of(&res);
@@ -213,7 +213,7 @@ fn an_act_1_rule_does_not_fire_in_act_2() {
     campaign::apply_effect(&d, &mut gs, &json::obj([("effect", "set_act".into()), ("act", 2.into())]), &mut events);
     campaign::tick(&d, &mut gs, &Cause::Effects);
     set_alert(&mut gs, BREACH - 5);
-    let mut r = DialogueRunner::open(&d, &mut gs, "tess");
+    let mut r = DialogueRunner::open(&d, &mut gs, "innkeeper");
     let res = r.choose(&d, &mut gs, 0);
     assert_eq!(alert_of(&gs), BREACH);
     assert!(events_of(&res).is_empty(), "the breach rule is act 1 only (M5 acts)");
@@ -226,7 +226,7 @@ fn a_new_act_raises_the_gauge_to_its_floor() {
     let mut gs = state(&d, "camp");
     let start = FLOOR_ACT2 - 18;
     set_alert(&mut gs, start);
-    let mut r = DialogueRunner::open(&d, &mut gs, "tess");
+    let mut r = DialogueRunner::open(&d, &mut gs, "innkeeper");
     let res = r.choose(&d, &mut gs, 0);
     assert_eq!(alert_of(&gs), FLOOR_ACT2, "M4: the value rises to the floor");
     assert_eq!(gs.read_flag("campaign.act"), Some(json!(2)));

@@ -1,0 +1,181 @@
+{
+	"kind": "shops",
+	"version": 1,
+	"entries": [
+		{
+			"id": "sabina_slab",
+			"name": "The Apothecary's Slab",
+			"keeper": "sabina_kress",
+			"stock": [
+				{
+					"item": "sulfur_poultice",
+					"count": -1,
+					"price": 12,
+					"requires_flags": []
+				},
+				{
+					"item": "brimstone_draught",
+					"count": 4,
+					"price": 20,
+					"requires_flags": []
+				},
+				{
+					"item": "pitch_fire_bomb",
+					"count": 3,
+					"price": 25,
+					"requires_flags": []
+				}
+			],
+			"loot": [],
+			"buy_mult": 1.0,
+			"supply_price": 0,
+			"sell_mult": 0.4,
+			"buys": [
+				"CONSUMABLE",
+				"MATERIAL"
+			],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.debate1_seen",
+					"value": true
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "berek_hearth",
+			"name": "The Tinker's Hearth",
+			"keeper": "berek_dorn",
+			"stock": [
+				{
+					"item": "notched_billhook",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "watch_hookbill",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "curfew_bodkin",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "stirrup_arbalest",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "watch_heater",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "watch_cuirass",
+					"count": 1,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "watch_gambeson",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "soot_leathers",
+					"count": 2,
+					"price": -1,
+					"requires_flags": []
+				}
+			],
+			"loot": [],
+			"buy_mult": 1.0,
+			"supply_price": 0,
+			"sell_mult": 0.5,
+			"discount": {
+				"requires_flags": [
+					{
+						"key": "sunk_ward.bellows_done",
+						"value": true
+					}
+				],
+				"mult": 0.8
+			},
+			"buys": [
+				"WEAPON",
+				"SHIELD",
+				"ARMOR"
+			],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.debate1_seen",
+					"value": true
+				}
+			],
+			"tags": []
+		},
+		{
+			"id": "varka_trade",
+			"name": "The Leaking Vat",
+			"keeper": "widow_varka",
+			"stock": [
+				{
+					"item": "rock_salt",
+					"count": -1,
+					"price": 25,
+					"requires_flags": []
+				},
+				{
+					"item": "sulfur_poultice",
+					"count": -1,
+					"price": -1,
+					"requires_flags": []
+				},
+				{
+					"item": "calcified_bone_shard",
+					"count": -1,
+					"price": 20,
+					"requires_flags": []
+				},
+				{
+					"item": "con_quenched_salt",
+					"count": 2,
+					"price": -1,
+					"requires_flags": [
+						{
+							"key": "pk2.slab_open",
+							"value": true
+						}
+					]
+				}
+			],
+			"loot": [],
+			"buy_mult": 1.0,
+			"supply_price": 8,
+			"sell_mult": 0.5,
+			"buys": [
+				"WEAPON",
+				"SHIELD",
+				"ARMOR",
+				"ACCESSORY",
+				"CONSUMABLE",
+				"MATERIAL"
+			],
+			"requires_flags": [
+				{
+					"key": "sunk_ward.ivo_rescued",
+					"value": true
+				}
+			],
+			"tags": []
+		}
+	]
+}

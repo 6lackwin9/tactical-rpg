@@ -1,0 +1,19 @@
+{
+	"kind": "boards",
+	"version": 1,
+	"entries": [
+		{
+			"id": "talia_board",
+			"name": "Talia's Cipher Board",
+			"keeper": "talia_rusk",
+			"intro": "Bone-cipher rods, chalk tallies and a crutch against the wall: Talia posts what the cell can bite off next.",
+			"requires_flags": [
+				{
+					"key": "sunk_ward.debate1_seen",
+					"value": true
+				}
+			],
+			"tags": []
+		}
+	]
+}

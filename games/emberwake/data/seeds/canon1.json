@@ -1,0 +1,782 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "graft_optic",
+				"name": "Amber Tapetum Pin",
+				"family": "graft",
+				"rarity": "COMMON",
+				"weight": 0.5,
+				"value": 0,
+				"description": "Test Tier I graft (Amber Tapetum): teaches Marrow Lash.",
+				"damage_type": "",
+				"icon_id": "",
+				"starter_stash": false,
+				"tier": 1,
+				"body_role": "monster",
+				"keystone": false,
+				"class_id": "",
+				"body_effects": [
+					{
+						"type": "meter",
+						"meter": "strain",
+						"start": 0,
+						"floor": 0,
+						"floors": [
+							5,
+							15,
+							30,
+							50
+						]
+					},
+					{
+						"type": "skill",
+						"skill": "marrow_lash"
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "graft_valve",
+				"name": "Siphon-Valve Pin",
+				"family": "graft",
+				"rarity": "UNCOMMON",
+				"weight": 0.5,
+				"value": 0,
+				"description": "Test Tier II graft (Brass Marrow Valve): teaches Marrow Bolt.",
+				"damage_type": "",
+				"icon_id": "",
+				"starter_stash": false,
+				"tier": 2,
+				"body_role": "monster",
+				"keystone": false,
+				"class_id": "",
+				"body_effects": [
+					{
+						"type": "meter",
+						"meter": "strain",
+						"start": 0,
+						"floor": 0,
+						"floors": [
+							5,
+							15,
+							30,
+							50
+						]
+					},
+					{
+						"type": "skill",
+						"skill": "marrow_bolt"
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "graft_core",
+				"name": "Dreamer's Geode Pin",
+				"family": "graft",
+				"rarity": "RARE",
+				"weight": 0.5,
+				"value": 0,
+				"description": "Test Tier III graft (Dreamer's Marrow Geode): teaches Marrow Rend.",
+				"damage_type": "",
+				"icon_id": "",
+				"starter_stash": false,
+				"tier": 3,
+				"body_role": "monster",
+				"keystone": false,
+				"class_id": "",
+				"body_effects": [
+					{
+						"type": "meter",
+						"meter": "strain",
+						"start": 0,
+						"floor": 0,
+						"floors": [
+							5,
+							15,
+							30,
+							50
+						]
+					},
+					{
+						"type": "skill",
+						"skill": "marrow_rend"
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "black_iron_ingot",
+				"name": "Black-Iron Bar",
+				"family": "material",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Test rare material for Hearth training.",
+				"damage_type": "",
+				"icon_id": "",
+				"starter_stash": false,
+				"max_stack": 20
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "keepsake_kaelen",
+				"name": "Kaelen's Gouged Sigil",
+				"family": "accessory",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Kaelen's Gouged Sigil.",
+				"damage_type": "",
+				"icon_id": "keepsake_kaelen",
+				"starter_stash": false,
+				"special": true,
+				"special_note": "Keepsake: never sold.",
+				"slot": "ACCESSORY_1",
+				"modifiers": [
+					{
+						"kind": "stat_bonus",
+						"stat": "CONS",
+						"value": 2
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "resist",
+							"status": "stagger",
+							"value": 20
+						}
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "resist",
+							"status": "stun",
+							"value": 20
+						}
+					}
+				],
+				"tiers": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "keepsake_vesper",
+				"name": "Vesper's Runner Whistle",
+				"family": "accessory",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Vesper's Runner Whistle.",
+				"damage_type": "",
+				"icon_id": "keepsake_vesper",
+				"starter_stash": false,
+				"special": true,
+				"special_note": "Keepsake: never sold.",
+				"slot": "ACCESSORY_1",
+				"modifiers": [
+					{
+						"kind": "stat_bonus",
+						"stat": "DEX",
+						"value": 2
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "resist",
+							"status": "slow",
+							"value": 25
+						}
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "resist",
+							"status": "root",
+							"value": 25
+						}
+					}
+				],
+				"tiers": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "keepsake_maren",
+				"name": "Maren's Copyist Quill",
+				"family": "accessory",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Maren's Copyist Quill.",
+				"damage_type": "",
+				"icon_id": "keepsake_maren",
+				"starter_stash": false,
+				"special": true,
+				"special_note": "Keepsake: never sold.",
+				"slot": "ACCESSORY_1",
+				"modifiers": [
+					{
+						"kind": "stat_bonus",
+						"stat": "KNOW",
+						"value": 2
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "skill_potency",
+							"group": "heal",
+							"value": 0.1
+						}
+					}
+				],
+				"tiers": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "keepsake_hollis",
+				"name": "Hollis's Focusing Monocle",
+				"family": "accessory",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Hollis's Focusing Monocle.",
+				"damage_type": "",
+				"icon_id": "keepsake_hollis",
+				"starter_stash": false,
+				"special": true,
+				"special_note": "Keepsake: never sold.",
+				"slot": "ACCESSORY_1",
+				"modifiers": [
+					{
+						"kind": "stat_bonus",
+						"stat": "PERC",
+						"value": 3
+					}
+				],
+				"tiers": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "keepsake_dunstan",
+				"name": "Dunstan's Shackle Link",
+				"family": "accessory",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Dunstan's Shackle Link.",
+				"damage_type": "",
+				"icon_id": "keepsake_dunstan",
+				"starter_stash": false,
+				"special": true,
+				"special_note": "Keepsake: never sold.",
+				"slot": "ACCESSORY_1",
+				"modifiers": [
+					{
+						"kind": "stat_bonus",
+						"stat": "max_poise",
+						"value": 12
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "resist",
+							"status": "stun",
+							"value": 30
+						}
+					}
+				],
+				"tiers": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "items",
+			"entry": {
+				"id": "keepsake_elyse",
+				"name": "Elyse's Cracked Retort",
+				"family": "accessory",
+				"rarity": "RARE",
+				"weight": 0.2,
+				"value": 0,
+				"description": "Elyse's Cracked Retort.",
+				"damage_type": "",
+				"icon_id": "keepsake_elyse",
+				"starter_stash": false,
+				"special": true,
+				"special_note": "Keepsake: never sold.",
+				"slot": "ACCESSORY_1",
+				"modifiers": [
+					{
+						"kind": "stat_bonus",
+						"stat": "INT",
+						"value": 2
+					},
+					{
+						"kind": "effect",
+						"effect": {
+							"type": "status_potency",
+							"value": 10
+						}
+					}
+				],
+				"tiers": []
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_optic_forearms",
+				"name": "Amber Tapetum Pin into Forearms",
+				"description": "Graft surgery: the Amber Tapetum Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 40,
+					"items": {
+						"stalker_optic_nerve": 1,
+						"slot_bone_spur": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_optic",
+						"slot": "forearms"
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_optic_thoracic",
+				"name": "Amber Tapetum Pin into Thoracic",
+				"description": "Graft surgery: the Amber Tapetum Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 40,
+					"items": {
+						"stalker_optic_nerve": 1,
+						"slot_chitin_plate": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_optic",
+						"slot": "thoracic"
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_optic_visceral",
+				"name": "Amber Tapetum Pin into Visceral",
+				"description": "Graft surgery: the Amber Tapetum Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 40,
+					"items": {
+						"stalker_optic_nerve": 1,
+						"slot_blood_sac": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_optic",
+						"slot": "visceral"
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_valve_forearms",
+				"name": "Siphon-Valve Pin into Forearms",
+				"description": "Graft surgery: the Siphon-Valve Pin into the Forearms (an occupied slot is overwritten, its graft destroyed).",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 80,
+					"items": {
+						"inquisitor_marrow_valve": 1,
+						"slot_bone_spur": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_valve",
+						"slot": "forearms"
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_valve_thoracic",
+				"name": "Siphon-Valve Pin into Thoracic",
+				"description": "Graft surgery: the Siphon-Valve Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed).",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 80,
+					"items": {
+						"inquisitor_marrow_valve": 1,
+						"slot_chitin_plate": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_valve",
+						"slot": "thoracic"
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_valve_visceral",
+				"name": "Siphon-Valve Pin into Visceral",
+				"description": "Graft surgery: the Siphon-Valve Pin into the Visceral (an occupied slot is overwritten, its graft destroyed).",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 80,
+					"items": {
+						"inquisitor_marrow_valve": 1,
+						"slot_blood_sac": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_valve",
+						"slot": "visceral"
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_core_forearms",
+				"name": "Dreamer's Geode Pin into Forearms",
+				"description": "Graft surgery: the Dreamer's Geode Pin into the Forearms (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					},
+					{
+						"kind": "flag",
+						"key": "pk2.apex_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 150,
+					"items": {
+						"titan_marrow_core": 1,
+						"slot_bone_spur": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_core",
+						"slot": "forearms"
+					},
+					{
+						"effect": "track",
+						"track": "calcification",
+						"delta": 1
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_core_thoracic",
+				"name": "Dreamer's Geode Pin into Thoracic",
+				"description": "Graft surgery: the Dreamer's Geode Pin into the Thoracic (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					},
+					{
+						"kind": "flag",
+						"key": "pk2.apex_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 150,
+					"items": {
+						"titan_marrow_core": 1,
+						"slot_chitin_plate": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_core",
+						"slot": "thoracic"
+					},
+					{
+						"effect": "track",
+						"track": "calcification",
+						"delta": 1
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "recipes",
+			"entry": {
+				"id": "sg_core_visceral",
+				"name": "Dreamer's Geode Pin into Visceral",
+				"description": "Graft surgery: the Dreamer's Geode Pin into the Visceral (an occupied slot is overwritten, its graft destroyed); Tier III: +1 Calcification.",
+				"npc": "sabina_kress",
+				"requires": [
+					{
+						"kind": "flag",
+						"key": "pk2.slab_open",
+						"value": true,
+						"op": "=="
+					},
+					{
+						"kind": "flag",
+						"key": "pk2.apex_open",
+						"value": true,
+						"op": "=="
+					}
+				],
+				"cost": {
+					"gold": 150,
+					"items": {
+						"titan_marrow_core": 1,
+						"slot_blood_sac": 1
+					}
+				},
+				"target": "member",
+				"effects": [
+					{
+						"effect": "install",
+						"item": "graft_core",
+						"slot": "visceral"
+					},
+					{
+						"effect": "track",
+						"track": "calcification",
+						"delta": 1
+					},
+					{
+						"effect": "doctrine",
+						"axis": "flesh_broker",
+						"delta": 1
+					}
+				]
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "passives",
+			"entry": {
+				"id": "cinder_childs_reflex",
+				"name": "Gutter-Runner's Reflex",
+				"description": "Hasted for a round when an attack on her finds nothing; a Throat-Carver kill returns 2 AP.",
+				"effects": [
+					{
+						"type": "trigger",
+						"on": "evaded",
+						"effects": [
+							{
+								"type": "grant",
+								"status": "haste",
+								"rounds": 1
+							}
+						]
+					},
+					{
+						"type": "trigger",
+						"on": "kill",
+						"when": {
+							"skills": [
+								"throat_carver"
+							]
+						},
+						"effects": [
+							{
+								"type": "ap",
+								"value": 2
+							}
+						]
+					}
+				],
+				"slot": ""
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "passives",
+			"entry": {
+				"id": "marrow_valve",
+				"name": "Brass Marrow Valve",
+				"description": "An illegal marrow valve in his neck. Once, it will not let him fall.",
+				"effects": [
+					{
+						"type": "resist",
+						"status": "bleed",
+						"value": 25
+					}
+				],
+				"slot": ""
+			}
+		}
+	]
+}

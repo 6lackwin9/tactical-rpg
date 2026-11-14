@@ -181,7 +181,7 @@ fn each_broken_rule_is_one_error() {
     one(stay_errors(&v, json!({"result_line": "{hero} held."})), line, "another token");
     one(stay_errors(&v, json!({"result_line": "x".repeat(161)})), line, "too long");
     one(stand(json!({"stand_line": 7})), "Stay-behind stand_line holds at most 160 characters, {name} the only token.", "not text");
-    one(stay_errors(&v, json!({"flag": "crucible_stayed"})), "Stay-behind flag and then are for world encounters only.", "catalog flag");
+    one(stay_errors(&v, json!({"flag": "gatehouse_stayed"})), "Stay-behind flag and then are for world encounters only.", "catalog flag");
     one(stay_errors(&v, json!({"then": "capture"})), "Stay-behind flag and then are for world encounters only.", "catalog then");
     assert_eq!(stay_errors(&v, json!({"then": "none", "result_line": "{name} held the winch."})), Vec::<String>::new(), "then none and one token");
     drop_scratch(&data);

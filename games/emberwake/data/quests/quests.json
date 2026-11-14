@@ -82,6 +82,112 @@
 				"gold": 20
 			},
 			"tags": []
+		},
+		{
+			"id": "a1_main_raid",
+			"name": "Act 1 raid",
+			"description": "Win the cell's fight at one ward node.",
+			"objectives": [
+				{
+					"kind": "win_encounter"
+				}
+			],
+			"rewards": {
+				"xp": 120,
+				"items": {
+					"sulfur_poultice": 1
+				},
+				"gold": 40
+			},
+			"tags": []
+		},
+		{
+			"id": "a1_flag_job",
+			"name": "Act 1 side-hook",
+			"description": "Do one errand at a ward node.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"gold": 20
+			},
+			"tags": []
+		},
+		{
+			"id": "a1_flag_job_salt",
+			"name": "Act 1 side-hook (Rock Salt)",
+			"description": "Do one errand at a ward node; paid in Rock Salt.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"items": {
+					"rock_salt": 1
+				},
+				"gold": 15
+			},
+			"tags": []
+		},
+		{
+			"id": "a1_flag_job_plating",
+			"name": "Act 1 side-hook (plating)",
+			"description": "Do one errand at a ward node; paid in Slag Plating.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"items": {
+					"slag_plating": 1
+				},
+				"gold": 10
+			},
+			"tags": []
+		},
+		{
+			"id": "a1_flag_job_tallow",
+			"name": "Act 1 side-hook (Warded Tallow, Alum Inhaler)",
+			"description": "Do one errand at a ward node; paid in Warded Tallow and a prototype Alum Inhaler.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"gold": 20,
+				"supplies": 5,
+				"items": {
+					"alum_inhaler": 1
+				}
+			},
+			"tags": []
+		},
+		{
+			"id": "a1_flag_job_winch",
+			"name": "Act 1 side-hook (Lever-Winch)",
+			"description": "Do one errand at a ward node; paid in Hollis's Lever-Winch.",
+			"objectives": [
+				{
+					"kind": "flag"
+				}
+			],
+			"rewards": {
+				"xp": 60,
+				"gold": 20,
+				"items": {
+					"hollis_lever_winch": 1
+				}
+			},
+			"tags": []
 		}
 	]
 }

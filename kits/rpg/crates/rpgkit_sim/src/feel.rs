@@ -12,7 +12,15 @@
 //! driver. `armor=` and `tune=` change the run's in-memory units and ruleset only.
 //!
 //! SIMCOUNT1: `counts=on` adds the rule counts of `RULE_COUNTERS` per side to each block and to FEEL_JSON. It is a key, not
-//! the default, because `sim_golden` holds the default lines. A new count is one row of that table.
+//! the default, because `sim_golden` holds the default lines. A new count is one row of that table. PK2-FOLLOWUP
+//! (PR5-36): it also reports each side's weapon wear (`worn`, `dulled`; non-zero only with `durability=` under the rule
+//! `durability`, which `feel` applies as every mode does).
+//!
+//! WORLD-SIM1 (PR5-42, FB-239 (a)): an encounter may be a world encounter (`world:<world>/<id>`): it fights with its
+//! authored side as its world builds it (`Runner::fight_world`, `rpgkit_world::battle::authored_fight`), by the world's
+//! ruleset unless `ruleset=` picks one. `counts=on` also adds the hook counts (`HOOK_COUNTERS`, read off the battle
+//! metrics' HOOKS1 4.2 records), the skills landed by id, each unit's intents, and per encounter the arena strikes, the windup breaks by
+//! skill, the phases fired and the fights with each count (CAST1 T10-T14).
 //!
 //! The runner calls the hooks (`start`, `planned`, `round_end`, `end`) while it fights; they only read the session.
 
@@ -20,6 +28,7 @@ use crate::runner::Runner;
 use aegis_core::json;
 use indexmap::IndexMap;
 use rpgkit_battle::command::{self, Carry, CmdKind, MoveKind};
+use rpgkit_battle::metrics::BattleMetrics;
 use rpgkit_battle::resolver::ScheduledAction;
 use rpgkit_battle::round_intent::{self, RoundIntent};
 use rpgkit_battle::round_intent_plan as rip;
@@ -52,6 +61,31 @@ pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
     ("channeled_actions", "channeled actions", |_, a| (a.landed && a.command.channeled) as i64),
     ("vents", "Vents", |w, a| (a.landed && is_vent(w, a)) as i64),
 ];
+
+/// WORLD-SIM1 (PR5-42): reads one unit's hook count for the fight from the battle metrics (HOOKS1 4.2), by its display
+/// name.
+pub type HookCount = fn(&BattleMetrics, &str) -> i64;
+
+/// WORLD-SIM1 (PR5-42, CAST1 T12-T14): the hook counts (`counts=on`), by the side of the unit the metrics credit: JSON
+/// key, human label, how a unit counts. Pure reads of the battle metrics' HOOKS1 4.2 records (triggers and riders by
+/// their holder, hazards placed and traps sprung by their placer, pushes, pulls and collisions by their driver, arena
+/// strikes' hits, pushes and collisions by the struck unit). ADD A COUNTER HERE: one row.
+pub const HOOK_COUNTERS: &[(&str, &str, HookCount)] = &[
+    ("triggers_fired", "triggers fired", |m, n| m.triggers.get(n).map_or(0, |r| r.fired.into())),
+    ("riders", "riders", |m, n| m.triggers.get(n).map_or(0, |r| r.riders.into())),
+    ("hazards_placed", "hazards placed", |m, n| m.hazards.get(n).map_or(0, |r| r.placed.into())),
+    ("traps_sprung", "traps sprung", |m, n| m.hazards.get(n).map_or(0, |r| r.traps.into())),
+    ("hazard_hits", "hazard hits taken", |m, n| m.hazards.get(n).map_or(0, |r| r.hits.into())),
+    ("pushes", "pushes", |m, n| m.forced.get(n).map_or(0, |r| r.pushes.into())),
+    ("pulls", "pulls", |m, n| m.forced.get(n).map_or(0, |r| r.pulls.into())),
+    ("collisions", "collisions", |m, n| m.forced.get(n).map_or(0, |r| r.collisions.into())),
+    ("arena_hits", "arena hits taken", |m, n| m.arena.get(n).map_or(0, |r| r.struck.into())),
+    ("arena_pushed", "arena pushes taken", |m, n| m.arena.get(n).map_or(0, |r| r.pushed.into())),
+    ("arena_collisions", "arena collisions", |m, n| m.arena.get(n).map_or(0, |r| r.collisions.into())),
+];
+
+/// WORLD-SIM1: the `fights_with` key of the fights with a windup break by skill `skill`.
+pub const WINDUP_BREAK_BY: &str = "windup_break:";
 
 /// PR5-26: a Vent: a channeled-only skill (`channel.only`) whose meter cost lowers the channel meter.
 fn is_vent(w: &World, a: &ScheduledAction) -> bool {
@@ -131,6 +165,17 @@ pub struct Side {
     pub crises: i64,
     pub channel_bands: IndexMap<String, i64>,
     pub breaks_taken: i64,
+    /// PK2-FOLLOWUP (PR5-36, FB-218 (c-e), FB-220): the durability the side's tracked weapons spent and how many ended a
+    /// fight dulled (`rpgkit_battle::wear::tally`; 0 without `durability=` and the rule `durability`).
+    pub worn: i64,
+    pub dulled: i64,
+    /// WORLD-SIM1 (PR5-42, counts=on): `HOOK_COUNTERS` by key (absent = 0; `hook_count` reads it) and the landed skill
+    /// commands by skill id.
+    pub hooks: IndexMap<&'static str, i64>,
+    pub skills_landed: IndexMap<String, i64>,
+    /// WORLD-SIM1 (counts=on): each unit's round intents by its display name ("none" without one), so a Founder's
+    /// `default_intent` and its intent variety read per unit.
+    pub intents_by_unit: IndexMap<String, IndexMap<String, i64>>,
 }
 
 impl Side {
@@ -162,6 +207,25 @@ impl Side {
             *self.channel_bands.entry(k.clone()).or_default() += v;
         }
         self.breaks_taken += o.breaks_taken;
+        self.worn += o.worn;
+        self.dulled += o.dulled;
+        for (k, v) in &o.hooks {
+            *self.hooks.entry(k).or_default() += v;
+        }
+        for (k, v) in &o.skills_landed {
+            *self.skills_landed.entry(k.clone()).or_default() += v;
+        }
+        for (unit, m) in &o.intents_by_unit {
+            let mine = self.intents_by_unit.entry(unit.clone()).or_default();
+            for (k, v) in m {
+                *mine.entry(k.clone()).or_default() += v;
+            }
+        }
+    }
+
+    /// WORLD-SIM1: one `HOOK_COUNTERS` count (0 when nothing counted it).
+    pub fn hook_count(&self, key: &str) -> i64 {
+        self.hooks.get(key).copied().unwrap_or(0)
     }
 
     /// SIMCOUNT1: one `RULE_COUNTERS` count (0 when nothing counted it).
@@ -182,7 +246,10 @@ impl Side {
             "counts": counts, "per_fight": per_fight, "protected_share_pct": self.protected_share(),
             "rest_blocks_per_round": round2(ratio(self.rest_blocks, rounds)), "items_by_id": counts_json(&self.items_by_id),
             "channel": {"rounds": self.channel_rounds, "meter_triggers": self.channel_triggers, "crises": self.crises, "bands": counts_json(&self.channel_bands)},
-            "breaks_taken": self.breaks_taken,
+            "breaks_taken": self.breaks_taken, "wear": {"worn": self.worn, "dulled": self.dulled},
+            "hooks": Value::Object(HOOK_COUNTERS.iter().map(|(k, _, _)| (k.to_string(), json!(self.hook_count(k)))).collect()),
+            "skills_landed": counts_json(&self.skills_landed),
+            "intents_by_unit": Value::Object(self.intents_by_unit.iter().map(|(u, m)| (u.clone(), counts_json(m))).collect()),
         })
     }
 
@@ -192,7 +259,7 @@ impl Side {
         let items: Vec<String> = self.items_by_id.iter().map(|(k, v)| format!("{k} {v}")).collect();
         let bands: Vec<String> = self.channel_bands.iter().map(|(k, v)| format!("{k} {v}")).collect();
         format!(
-            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, crises {}, rounds by band {}; breaks taken {}",
+            "  {name} rule counts: {}; protected share {}%, Rest blocks/round {}, items {}; Channel rounds {}, channel meter triggers {}, crises {}, rounds by band {}; breaks taken {}; worn {}, dulled {}",
             counts.join(", "),
             self.protected_share(),
             round2(ratio(self.rest_blocks, rounds)),
@@ -201,7 +268,22 @@ impl Side {
             self.channel_triggers,
             self.crises,
             if bands.is_empty() { "-".to_string() } else { bands.join(" ") },
-            self.breaks_taken
+            self.breaks_taken,
+            self.worn,
+            self.dulled
+        )
+    }
+
+    /// WORLD-SIM1: the human line of the hook counts and the skills landed (counts=on).
+    fn hook_line(&self, name: &str) -> String {
+        let hooks: Vec<String> = HOOK_COUNTERS.iter().map(|(k, label, _)| format!("{label} {}", self.hook_count(k))).collect();
+        let landed: Vec<String> = self.skills_landed.iter().map(|(k, v)| format!("{k} {v}")).collect();
+        let intents: Vec<String> = self.intents_by_unit.iter().map(|(u, m)| format!("{u}: {}", m.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" "))).collect();
+        format!(
+            "  {name} hooks: {}; skills landed {}; intents by unit {}",
+            hooks.join(", "),
+            if landed.is_empty() { "-".to_string() } else { landed.join(" ") },
+            if intents.is_empty() { "-".to_string() } else { intents.join(", ") }
         )
     }
 
@@ -286,6 +368,14 @@ pub struct Counts {
     pub timed_rounds: i64,
     pub party: Side,
     pub enemy: Side,
+    /// WORLD-SIM1 (PR5-42, CAST1 T10-T14; printed with counts=on): the arena strikes (HOOKS1 4.2), the windup breaks by
+    /// the breaking command's skill, the fights each encounter phase fired in (by phase id), and the fights with at least
+    /// one of a count (`fights_with`: every `HOOK_COUNTERS` key over both sides, `arena_strikes`, `windup_breaks` and
+    /// `WINDUP_BREAK_BY<skill>`), so "in most seeds" reads off one run.
+    pub arena_strikes: i64,
+    pub windup_breaks_by_skill: IndexMap<String, i64>,
+    pub phases_fired: IndexMap<String, i64>,
+    pub fights_with: IndexMap<String, i64>,
 }
 
 impl Counts {
@@ -320,6 +410,21 @@ impl Counts {
         self.timed_rounds += o.timed_rounds;
         self.party.add(&o.party);
         self.enemy.add(&o.enemy);
+        self.arena_strikes += o.arena_strikes;
+        for (k, v) in &o.windup_breaks_by_skill {
+            *self.windup_breaks_by_skill.entry(k.clone()).or_default() += v;
+        }
+        for (k, v) in &o.phases_fired {
+            *self.phases_fired.entry(k.clone()).or_default() += v;
+        }
+        for (k, v) in &o.fights_with {
+            *self.fights_with.entry(k.clone()).or_default() += v;
+        }
+    }
+
+    /// WORLD-SIM1: the fights with at least one of `key` (`fights_with`; 0 when none).
+    pub fn fights_with(&self, key: &str) -> i64 {
+        self.fights_with.get(key).copied().unwrap_or(0)
     }
 
     /// The median of the fights' rounds (the mean of the middle two for an even count; 0 without fights).
@@ -357,6 +462,10 @@ impl Counts {
             let rounds: i64 = self.rounds.iter().map(|r| *r as i64).sum();
             v["party"]["rule_counts"] = self.party.rule_json(self.fights, rounds);
             v["enemy"]["rule_counts"] = self.enemy.rule_json(self.fights, rounds);
+            v["hooks"] = json!({
+                "arena_strikes": self.arena_strikes, "windup_breaks_by_skill": counts_json(&self.windup_breaks_by_skill),
+                "phases_fired": counts_json(&self.phases_fired), "fights_with": counts_json(&self.fights_with),
+            });
         }
         v
     }
@@ -368,6 +477,16 @@ impl Counts {
             let rounds: i64 = self.rounds.iter().map(|r| *r as i64).sum();
             out.push(self.party.rule_line("party", self.fights, rounds));
             out.push(self.enemy.rule_line("enemy", self.fights, rounds));
+            out.push(self.party.hook_line("party"));
+            out.push(self.enemy.hook_line("enemy"));
+            let tally = |m: &IndexMap<String, i64>| if m.is_empty() { "-".to_string() } else { m.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(" ") };
+            out.push(format!(
+                "  hooks: arena strikes {}; windup breaks by skill {}; phases fired (fights) {}; fights with {}",
+                self.arena_strikes,
+                tally(&self.windup_breaks_by_skill),
+                tally(&self.phases_fired),
+                tally(&self.fights_with)
+            ));
         }
         out
     }
@@ -427,6 +546,8 @@ pub struct Feel {
     ap_planned: IndexMap<UnitId, i32>,
     /// Session events already read.
     events_seen: usize,
+    /// WORLD-SIM1: the skills that broke a unit in its windup this fight.
+    fight_windup: IndexMap<String, i64>,
 }
 
 /// A planner reason tag without its numbers ("rest: AP 0 < 2" -> "rest: AP", "follow-up 1" -> "follow-up"), so the
@@ -494,6 +615,7 @@ impl Feel {
         self.last_intent.clear();
         self.ap_planned.clear();
         self.events_seen = s.events.len();
+        self.fight_windup.clear();
     }
 
     /// The round is planned and confirmed: intents, intent changes and the buffs they dropped, OI1, AP, the party's
@@ -518,6 +640,7 @@ impl Feel {
             *side.intents.entry(id.clone()).or_default() += 1;
             side.intent_changes += changed as i64;
             side.no_active += no_active as i64;
+            *side.intents_by_unit.entry(u.name.clone()).or_default().entry(id.clone()).or_default() += 1;
             self.last_intent.insert(c, id);
         }
         for &c in &w.allies {
@@ -569,6 +692,9 @@ impl Feel {
             let side = self.side(s, a.unit);
             side.follow_ups += follow as i64;
             side.carried_moves += carried as i64;
+            if skill_like && !cmd.skill.is_empty() {
+                *side.skills_landed.entry(cmd.skill.clone()).or_default() += 1;
+            }
             let c = &mut self.counts;
             // RULESET1_INTENT GD5 only: an ATTACKLOCK1 dodge raises `evaded` too and has its own row
             c.lost_attacks += (cmd.evaded.is_some() && cmd.dodged.is_none()) as i64;
@@ -580,6 +706,10 @@ impl Feel {
             for st in &cmd.staggers {
                 c.windup_hits += st.windup as i64;
                 c.windup_breaks += (st.windup && st.broke.is_some()) as i64;
+                if st.windup && st.broke.is_some() {
+                    *c.windup_breaks_by_skill.entry(cmd.skill.clone()).or_default() += 1;
+                    *self.fight_windup.entry(cmd.skill.clone()).or_default() += 1;
+                }
                 c.guarded_hits += (st.factors.guard < 1.0) as i64;
                 if let Some((chance, roll)) = st.chance {
                     c.chance_rolls += 1;
@@ -630,6 +760,40 @@ impl Feel {
             _ => c.capped += 1,
         }
         c.rounds.push(rounds);
+        // PK2-FOLLOWUP: each side's weapon wear this fight (counts=on)
+        for (side, units) in [(&mut c.party, &s.w.allies), (&mut c.enemy, &s.w.enemies)] {
+            let (worn, dulled) = rpgkit_battle::wear::tally(&s.w, units);
+            side.worn += worn;
+            side.dulled += i64::from(dulled);
+        }
+        // WORLD-SIM1 (PR5-42): the fight's hook counts (the metrics' HOOKS1 4.2 records, by the credited unit's side),
+        // its phases fired, its windup breaks by skill, and which counts it had at least one of
+        let mut had: IndexMap<String, i64> = IndexMap::new();
+        if let Some(m) = s.metrics.as_deref() {
+            c.arena_strikes += i64::from(m.arena_strikes);
+            *had.entry("arena_strikes".into()).or_default() += i64::from(m.arena_strikes);
+            for (id, u) in s.w.units.iter().enumerate() {
+                let ally = s.w.allies.contains(&id);
+                for (key, _, count) in HOOK_COUNTERS {
+                    let n = count(m, &u.name);
+                    if n != 0 {
+                        let side = if ally { &mut c.party } else { &mut c.enemy };
+                        *side.hooks.entry(key).or_default() += n;
+                        *had.entry(key.to_string()).or_default() += n;
+                    }
+                }
+            }
+        }
+        for id in s.phases.fired.keys() {
+            *c.phases_fired.entry(id.clone()).or_default() += 1;
+        }
+        *had.entry("windup_breaks".into()).or_default() += self.fight_windup.values().sum::<i64>();
+        for (skill, n) in &self.fight_windup {
+            *had.entry(format!("{WINDUP_BREAK_BY}{skill}")).or_default() += n;
+        }
+        for (key, n) in had {
+            *c.fights_with.entry(key).or_default() += (n > 0) as i64;
+        }
         for e in s.log.iter().filter(|e| e.outcome == "BREAK") {
             *c.breaks.entry(e.status.clone()).or_default() += 1;
             // PR5-26 (FB-191 (f)): by the broken unit's side (the entry's actor)
@@ -680,7 +844,8 @@ fn crisis_at(row: &rpgkit_data::TriggerRow, m: &str) -> Option<i32> {
     (row.on == "round_end" && cond.get("id").and_then(Value::as_str) == Some(m)).then(|| cond.get("at_least").and_then(Value::as_i64).unwrap_or(0) as i32)
 }
 
-/// The `feel` mode: each of the arguments' encounters (catalog encounters with a party) fought over every seed with its
+/// The `feel` mode: each of the arguments' encounters (catalog encounters with a party, or world encounters with an
+/// authored party) fought over every seed with its
 /// authored party, the encounter's round limit and board; per party driver a block of lines per encounter, the total,
 /// then FEEL_JSON.
 pub fn feel_mode(r: &mut Runner) {
@@ -697,10 +862,22 @@ pub fn feel_mode(r: &mut Runner) {
     r.driver = crate::timed::Driver::Auto;
 }
 
-/// Catalog encounter `id` fought once per seed with the runner's driver and tactic: its counts. RULESET1-G2: the
+/// Encounter `id` (a catalog encounter, or WORLD-SIM1 a world reference: `Runner::fight_world`) fought once per seed
+/// with the runner's driver and tactic: its counts. RULESET1-G2: the
 /// encounter as authored (every field: objective, morale, timeout outcome, hazards...) but its round limit and seed,
 /// as the host's `new` and `autoplay` and the CLI `battle` fight it (jitter, distance and the enemy block aside).
 pub fn fight_encounter(r: &mut Runner, id: &str, seeds: &[i64]) -> Counts {
+    // WORLD-SIM1 (PR5-42): a world encounter fights with its authored side as its world builds it (`Runner::fight_world`)
+    if let Some((world, local)) = crate::args::parse_ref(id, &r.args.world) {
+        let max_rounds = json::i(r.d.resolve(&world, "encounters", &local), "max_rounds", r.args.cap as i64) as i32;
+        r.rounds_override = max_rounds;
+        r.feel = Some(Feel::default());
+        for &seed in seeds {
+            r.fight_world(&world, &local, seed);
+        }
+        r.rounds_override = 0;
+        return r.feel.take().map(|f| f.counts).unwrap_or_default();
+    }
     let entry = r.d.entry("encounters", id).clone();
     let party = json::sget(&entry, "party");
     let enemies = json::sget(&entry, "enemies");
@@ -736,7 +913,11 @@ fn feel_block(r: &mut Runner) {
     let mut per: Map<String, Value> = Map::new();
     for id in r.args.encounters.clone() {
         let counts = fight_encounter(r, &id, &seeds);
-        let lines = counts.report_lines(&format!("{id} ({})", json::s_or(r.d.entry("encounters", &id), "name", &id)), rule_counts);
+        let name = match crate::args::parse_ref(&id, &r.args.world) {
+            Some((world, local)) => json::s_or(r.d.resolve(&world, "encounters", &local), "name", &local),
+            None => json::s_or(r.d.entry("encounters", &id), "name", &id),
+        };
+        let lines = counts.report_lines(&format!("{id} ({name})"), rule_counts);
         r.out.extend(lines);
         per.insert(id.clone(), counts.report_json(rule_counts));
         total.add(&counts);

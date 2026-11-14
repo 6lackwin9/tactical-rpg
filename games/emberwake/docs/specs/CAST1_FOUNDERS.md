@@ -104,7 +104,7 @@ Gear: main `curfew_bodkin` (dagger); body `soot_leathers`; pouch `sulfur_poultic
 | `prowlers_cadence` | Prowler's Cadence | passive | resist `slow` 40, `root` 40 | no extra move cost in cover, mist and rubble (G8) |
 | `anatomical_flaw` | Anatomical Flaw | passive | `skill_potency` family `throat_carver` +0.15, family `hamstring_sever` +0.15 | ignore armour and +25% crit on stunned, staggered or rooted targets (G11) |
 | `ghost_of_the_undercroft` | Ghost of the Undercroft | keystone | `foresight` (no range); `ap_regen` +1 | Q-58 a: rebuilt on foresight and stealth |
-| `cinder_childs_reflex` | Cinder-Child's Reflex | "" | trigger `evaded`: grant `haste` 1 round; trigger `kill` with `when.skills` [`throat_carver`]: `ap` 2 (HOOKS1 8.6, HQ16 a) | - |
+| `cinder_childs_reflex` | Gutter-Runner's Reflex | "" | trigger `evaded`: grant `haste` 1 round; trigger `kill` with `when.skills` [`throat_carver`]: `ap` 2 (HOOKS1 8.6, HQ16 a) | - |
 
 Deck at level 1: active [`hamstring_sever`, `ash_cloud_fade`]; passive [`prowlers_cadence`, `anatomical_flaw`];
 keystone [`ghost_of_the_undercroft`].

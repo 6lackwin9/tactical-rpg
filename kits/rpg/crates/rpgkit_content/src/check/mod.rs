@@ -487,6 +487,10 @@ pub fn validate_all(v: &View) -> Report {
     for e in v.entries(recipe::KIND) {
         add(&format!("{}:{}", recipe::KIND, json::s(e, "id")), recipe::world_errors(v, e));
     }
+    // ACT1-HOOKS1 (FB-241 c): the quest templates' rewards (QuestRules.rewards_errors; `supplies` joined the keys)
+    for t in v.entries("quest_templates") {
+        add(&format!("quest_templates:{}", json::s(t, "id")), quest::rewards_errors(v, json::get(t, "rewards")));
+    }
     add("load", v.load_errors.clone());
     problems
 }

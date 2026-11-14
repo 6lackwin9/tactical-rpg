@@ -1551,7 +1551,7 @@ fn strike_chain(w: &World, foe: UnitId, target: UnitId, at: V2, by_block: i32) -
         if move_blocks > MAX_MOVE_BLOCKS as i32 {
             continue;
         }
-        let mut hits = ((by_block - move_blocks) as f64 / s.blocks.max(1) as f64).floor() as i32;
+        let mut hits = ((by_block - move_blocks) as f64 / w.blocks_of(foe, s).max(1) as f64).floor() as i32;
         // RULESET1 T10, T11: the AP the foe pays (none under enemy_moves)
         let cost = if w.pays_ap(foe) { skill::ap_cost_by(s, Some(fu), &w.ruleset) } else { 0 };
         if cost > 0 {

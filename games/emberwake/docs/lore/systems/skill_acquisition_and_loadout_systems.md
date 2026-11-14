@@ -13,7 +13,7 @@ and loadouts") and the kit's skills in [RPG_KIT_CATALOG](../../../../../docs/RPG
 | | Cold Steel | The Bitter Inoculation |
 | --- | --- | --- |
 | Source | levels and weapon training | harvested Aberrant Organs and surgery |
-| Where | the Tinker's Hearth (Bram) | the Apothecary's Slab (Sister Aline) |
+| Where | the Tinker's Hearth (Berek) | the Apothecary's Slab (Chirurgeon Sabina) |
 | When | Act 1 on | Act 2 on (locked until the Crucible) |
 | Cost | none lasting | Strain per use, a higher dormant floor, Calcification for Tier III |
 
@@ -26,7 +26,7 @@ and loadouts") and the kit's skills in [RPG_KIT_CATALOG](../../../../../docs/RPG
   needs a sword and the training level).
 - **Training drills at the Tinker's Hearth** `[kit hook]` hub facility: the lore has Tier II learned through drills
   paid with skill points; the engine has no skill points (tiers open by level). What drills do is open (see gaps).
-- **Keystones** `[data]`: after Bram's quest "Cold Slag, Black Iron" (its act is open, CANON section 6); a Cold Steel
+- **Keystones** `[data]`: after Berek's quest "Cold Slag, Black Iron" (Act 2, after Lucan's rescue; `CANON.md` 3.4); a Cold Steel
   keystone may require masterwork forged gear (a weapon or item gate).
 
 ### 1.2 The Inoculation (Act 2 on)
@@ -34,7 +34,7 @@ and loadouts") and the kit's skills in [RPG_KIT_CATALOG](../../../../../docs/RPG
 1. **Harvest** `[kit hook]` (exists) loot tables (REWARD1), `[data]` organ items: elite aberrations and Inquisitors drop Aberrant
    Organs (e.g. Stalker Optic Nerve, Caustic Gall-Bladder; Apex organs such as the Titan Marrow Core are Tier III).
 2. **Surgery** `[kit hook]` exchange recipe at a hub facility, `[data]` recipes: the operative and the organ go to the
-   Slab; Sister Aline grafts it.
+   Slab; Chirurgeon Sabina grafts it.
 3. **Result**: the matching Inoculated skill is taught through the engine's `learn_skill` (`learned_only` skills reach
    a unit only that way) `[kit hook]` (exists); the dormant Strain floor rises (+10 for a Tier I graft; keystones lock it at 30)
    `[kit hook]`; a Tier III graft also advances Calcification by one stage. The operative starts the next mission

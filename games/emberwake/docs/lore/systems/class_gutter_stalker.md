@@ -43,14 +43,12 @@ mobility, low poise. The old "high evasion (20%)" is cut with evasion rolls.
 
 ## 4. Founder: Vesper
 
-Ash-Crawl curfew runner and thief, 18. Her parents died of black-lung and were rendered at the Tallow Vats; Orlov's
-Guild paid the informant who sold out her runner ring. Tess was her runner contact. Smoke drifts from her fingertips
-and her shadow leans toward enemies whatever the lamps do (backstory only in Act 1). Joins: prologue 0b, the rooftop.
-Her vendetta is Act 1 mission 4 against Guild-Master Orlov.
+Ash-Crawl curfew runner and thief, 21. Her older brother died on Orlov's tallow tithe, and Orlov tricked her into carrying the sweep-cipher that shattered her runner ring. Talia Rusk was her cipher mentor. Starts 100% mortal human on Day 1 (`CANON.md` 3.1; fingertip smoke is an Act 2+ corruption visual). Joins: prologue 0b, the rooftop.
+Her vendetta is Act 1 mission 4 against Guild-Master Orlov (escalating to Act 2 Counting-House reckoning).
 
 | Kit | Profile | Effect | Act |
 | --- | --- | --- | --- |
-| Cinder-Child's Reflex (trait) | innate | replacement open: its triggers (evading an attack, breaking line of sight, entering stealth) are cut; its reward was +1 tile on her next move and, Inoculated, -10 Strain | 1 open |
+| Gutter-Runner's Reflex (`cinder_childs_reflex`, trait) | innate | replacement open: its triggers (evading an attack, breaking line of sight, entering stealth) are cut; its reward was +1 tile on her next move and, Inoculated, -10 Strain | 1 open |
 | Orlov's Retribution (variant of Throat-Carver's Art) | 3 AP, Standard, reach 1, single | one AP cheaper; if it kills, she dissolves into soot and reappears 2 tiles away on a free tile without spending her move | 1 `[kit hook]` teleport |
 | Umbral Flensing (signature) | 2 AP, Strain 30, Snap, range 3, line 3 | smoke-fingers become razor filaments along a 3-tile line: 38 damage, pierces, pulls every target 1 tile toward her, mutilated (slowed 2 rounds, bleed 2 rounds, lore 10 per round) | 2 `[kit hook]` pull |
 

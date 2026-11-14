@@ -21,6 +21,23 @@ pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
     EncounterDef::from_obj_with(entry, d.ruleset(world))
 }
 
+/// WORLD-SIM1 (PR5-42): the battle of encounter `id` as world `world` resolves it with its authored side, for a runner
+/// with no game state (the host's `new` "<world>:<id>", `aegis battle world:`, `sim feel world:`): the encounter's
+/// `party` and `guests` refs fight as the world's characters (`WorldRoster`: base unit at its authored level, class path,
+/// passives, named items, tuning, AI role and default intent), by the world's ruleset (`encounter_def`), id
+/// "<world>:<id>". The roster is at stage `stage` with the party side as its allies, as `begin_world_with` sets
+/// them (stage 0 = authored levels). None when the encounter does not resolve.
+pub fn authored_fight<'a>(d: &'a Data, world: &str, id: &str, stage: i64) -> Option<(EncounterDef, WorldRoster<'a>)> {
+    let entry = d.resolve(world, "encounters", id);
+    if entry.is_empty() {
+        return None;
+    }
+    let mut def = encounter_def(d, world, entry);
+    def.id = format!("{world}:{id}");
+    let allies = def.party.iter().chain(&def.guests).cloned().collect();
+    Some((def, WorldRoster { stage, allies, ..WorldRoster::new(d, world) }))
+}
+
 /// RULESET1 V3: the plan reveal flag of `world`: the nearest non-empty `plan_reveal_flag` of its lineage (the world,
 /// then its parents), "" when none names one.
 pub fn plan_reveal_flag(d: &Data, world: &str) -> String {
@@ -250,6 +267,52 @@ pub struct Tally {
     pub party: Vec<roster::HeroEnd>,
     /// The world whose encounter was fought (`roster::field_unit`'s world; "" = `fight_world`).
     pub world: String,
+    /// ACT1-HOOKS1 (FB-241 c): how the battle left each party-side guest (the encounter's `guests`), for its
+    /// `survivors` flag. None = not known (a tally built by hand): the flag is left as it is.
+    pub guests: Option<Vec<GuestEnd>>,
+}
+
+/// ACT1-HOOKS1: one party-side guest at the battle's end: its encounter ref and whether it lived (alive and still on
+/// the party's side; a guest that fled the field lived, one that turned hostile did not).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuestEnd {
+    pub unit_ref: String,
+    pub alive: bool,
+}
+
+/// ACT1-HOOKS1: the world encounter field `{"flag", "unit"}` (`{}` = none): at every settle the flag is set to the
+/// number of guests (of `unit`: a guest's ref, character id or base unit; "" = every guest) that lived.
+pub const SURVIVORS: &str = "survivors";
+
+/// ACT1-HOOKS1: the guests of `s` (its encounter's `guests` refs, spawn order) as the battle left them.
+pub fn guest_ends(s: &Session) -> Vec<GuestEnd> {
+    s.def
+        .guests
+        .iter()
+        .flat_map(|r| s.units_of_ref(r).into_iter().map(move |c| (r, c)))
+        .map(|(r, c)| GuestEnd { unit_ref: r.clone(), alive: s.guests.contains(&c) && s.w.units[c].is_alive() })
+        .collect()
+}
+
+/// ACT1-HOOKS1: guest ref `r` (an encounter's guest in `world`) is of `unit`: "" (every guest), the ref itself, or its
+/// character's id or base unit.
+fn guest_of(d: &Data, world: &str, r: &str, unit: &str) -> bool {
+    if unit.is_empty() || r == unit {
+        return true;
+    }
+    let c = d.resolve(world, "characters", r);
+    json::s(c, "id") == unit || json::s(c, "base_unit") == unit
+}
+
+/// ACT1-HOOKS1 (FB-241 c): the encounter's `survivors` flag set (on every outcome) to how many guests of its `unit`
+/// lived; nothing when the encounter names no flag or the tally does not know its guests.
+fn record_survivors(d: &Data, gs: &mut GameState, enc: &Dict, tally: &Tally) {
+    let block = json::dget(enc, SURVIVORS);
+    let flag = json::s(block, "flag");
+    let Some(guests) = tally.guests.as_ref().filter(|_| !flag.is_empty()) else { return };
+    let (world, unit) = (json::s_or(enc, "_world", &gs.world_id), json::s(block, "unit"));
+    let n = guests.iter().filter(|g| g.alive && guest_of(d, &world, &g.unit_ref, &unit)).count() as i64;
+    quest::set_flag(d, gs, &flag, int(n));
 }
 
 impl Tally {
@@ -267,13 +330,15 @@ impl Tally {
     /// `members`: member id and unloaded pouch ids, in the order they were fielded), fought in world `world`. Every
     /// screen or headless runner that plays a world fight passes this to its runner's `after_fight`.
     pub fn of_world_fight(s: &Session, members: &[(String, Vec<String>)], world: &str) -> Self {
-        Tally { party: roster::hero_ends(s, members), world: world.to_string(), ..Self::from_session(s) }
+        Tally { party: roster::hero_ends(s, members), world: world.to_string(), guests: Some(guest_ends(s)), ..Self::from_session(s) }
     }
 
-    /// REWARD1 2.5, no battle: won = every roster enemy killed; lost and fled = every one standing.
+    /// REWARD1 2.5, no battle: won = every roster enemy killed; lost and fled = every one standing. Every guest of
+    /// the encounter lived (ACT1-HOOKS1).
     pub fn default_for(d: &Data, world: &str, encounter_qid: &str, outcome: &str) -> Self {
         let fate = if outcome == "won" { Fate::Killed } else { Fate::Standing };
-        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), ..Default::default() }
+        let guests = json::sget(d.resolve(world, "encounters", encounter_qid), "guests").into_iter().map(|r| GuestEnd { unit_ref: r, alive: true }).collect();
+        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), guests: Some(guests), ..Default::default() }
     }
 
     /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster.
@@ -341,6 +406,8 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let enc_world = json::s_or(&enc, "_world", &world);
     // 1. the party side first (ROSTER1 3.2 and L5, ENCOUNTER2 W1-W4): before the XP, the quest hook and the tick
     let (party_keys, party_notes) = settle_party_side(d, gs, &enc, encounter_qid, outcome, tally);
+    // ACT1-HOOKS1 (FB-241 c): the guests that lived, on every outcome
+    record_survivors(d, gs, &enc, tally);
     let roster = roster_at(d, &world, encounter_qid, world_stage(gs));
     let (fates, mut notes) = tally.fates_of(&roster);
     notes.extend(party_notes);
@@ -548,6 +615,26 @@ fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_
             let mastery = settled.mastery.iter().map(|g| json::obj([("member", g.member.clone().into()), ("family", g.family.clone().into()), ("from", int(g.from)), ("to", int(g.to)), ("level", int(i64::from(g.level())))]).into()).collect();
             out.insert("mastery".into(), Value::Array(mastery));
         }
+        // PK2-FOLLOWUP (FB-218 (d)): the wear the battle took off the weapon instances, and which ended dulled
+        if !settled.wear.is_empty() {
+            let wear = settled
+                .wear
+                .iter()
+                .map(|w| {
+                    json::obj([
+                        ("member", w.member.clone().into()),
+                        ("slot", w.slot.clone().into()),
+                        ("uid", w.uid.clone().into()),
+                        ("item", w.item.clone().into()),
+                        ("worn", int(w.from - w.to)),
+                        ("durability", int(w.to)),
+                        ("dulled", Value::Bool(w.dulled())),
+                    ])
+                    .into()
+                })
+                .collect();
+            out.insert("wear".into(), Value::Array(wear));
+        }
     }
     if let Some(b) = stay.as_ref().filter(|b| !b.flag.is_empty()) {
         let err = quest::set_flag(d, gs, &b.flag, Value::String(first_stayer));
@@ -622,7 +709,8 @@ pub fn begin_world(d: &Data, gs: &mut GameState, fight: &Dict) -> Result<WorldFi
 /// reveal (`encounter_def_in`), in the fight's `zone` when it names one, granting each `start_status` entry whose
 /// `requires_flags` all hold (PACE1 rule 7). Each active member is fielded by the one builder (`roster::field_unit`:
 /// its class path, wounds, AI profile, default intent) wearing the art `art` gives it; the foes come from the world's
-/// characters (`WorldRoster` at the game state's `world_stage`); then the start-AP change (`lower_start_ap` with
+/// characters (`WorldRoster` at the game state's `world_stage`); ACT1-HOOKS2: a fielded member named by the entry's
+/// `flag_skills` holds those skills for this battle (`flag_skills`, `Unit::battle_skills`); then the start-AP change (`lower_start_ap` with
 /// `campaign::purse::battle_mods`, read before the session).
 pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut MemberArt) -> Result<WorldFight, String> {
     let enc_ref = json::s(fight, "encounter");
@@ -650,8 +738,15 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     let roster = WorldRoster { stage, allies, ..WorldRoster::new(d, world.clone()) };
     let mut party = Vec::new();
     let mut members = Vec::new();
+    let granted = flag_skills(d, gs, entry);
     for m in gs.party.active_members() {
-        let Some(field) = roster::field_unit(d, gs, m, &world) else { continue };
+        let Some(mut field) = roster::field_unit(d, gs, m, &world) else { continue };
+        // ACT1-HOOKS2 (FB-244 (1)): the encounter's battle grants for this member
+        for (_, skill) in granted.iter().filter(|(who, _)| *who == m.id) {
+            if !field.unit.battle_skills.contains(skill) {
+                field.unit.battle_skills.push(skill.clone());
+            }
+        }
         let (art, palette) = art(&world, m);
         party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone(), default_intent: field.default_intent });
         members.push((m.id.clone(), field.pouch_unloaded));
@@ -661,6 +756,25 @@ pub fn begin_world_with(d: &Data, gs: &mut GameState, fight: &Dict, art: &mut Me
     let mut session = Session::start_with(d.cat.clone(), def, &roster, party);
     lower_start_ap(&mut session, heroes, &mods);
     Ok(WorldFight { session, world, members, stash_short, mods, intro: json::s(entry, "intro"), stage })
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): encounter row `entry`'s `flag_skills` (`rpgkit_data::FLAG_SKILLS`) as (member id, skill
+/// id), in row order: each entry whose `requires_flags` all hold grants its `skill`, for this battle only, to the party
+/// member flag `member_from_flag` names (`dialogue::member_from_flag`); an entry naming no member (the flag unset, or
+/// not a member) or an unknown skill grants nothing. `begin_world_with` gives them to the fielded members
+/// (`Unit::battle_skills`); a member on the bench gets none.
+pub fn flag_skills(d: &Data, gs: &GameState, entry: &Dict) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for g in json::aget(entry, rpgkit_data::FLAG_SKILLS).iter().filter_map(Value::as_object) {
+        let skill = json::s(g, "skill");
+        if d.cat.skill(&skill).is_none() || !json::aget(g, "requires_flags").iter().all(|c| quest::condition_met(gs, json::dict(c))) {
+            continue;
+        }
+        if let Some(id) = crate::dialogue::member_from_flag(d, gs, &json::s(g, "member_from_flag")) {
+            out.push((id, skill));
+        }
+    }
+    out
 }
 
 /// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and
@@ -717,8 +831,9 @@ pub fn finish_world(d: &Data, gs: &mut GameState, runner: &str, fight: &Dict, ou
 /// track, from, to}] (the unit tracks the marks moved) and `stashed` [{member, item}] (worn items a `forbid_hands`
 /// sent to the stash). PR5-26 (review F2): `cleared` [{member, slot}] (a slot left empty, its default refused).
 /// PK2-S2: `remains` [{member, item}] (what a fallen member left in the stash, the field held). PK2-S4: `mastery`
-/// [{member, family, from, to, level}] (the weapon mastery the members gained by use).
-pub const PARTY_KEYS: [&str; 11] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared", "remains", "mastery"];
+/// [{member, family, from, to, level}] (the weapon mastery the members gained by use). PK2-FOLLOWUP: `wear` [{member,
+/// slot, uid, item, worn, durability, dulled}] (the battle's wear on the weapon instances; only when some was taken).
+pub const PARTY_KEYS: [&str; 12] = ["party_fates", "stay_lines", "wounded", "departed", "stash_short", "marks", "tracks", "stashed", "cleared", "remains", "mastery", "wear"];
 
 /// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
 /// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`

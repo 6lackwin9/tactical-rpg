@@ -1,0 +1,2444 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "castellan_footman",
+    "name": "Castellan Footman",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "castellan_footman",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "footman_patrol",
+    "name": "Castellan Footman",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "castellan_footman",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {
+     "hp_pct": -30,
+     "power": -2
+    },
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "footman_shieldbearer",
+    "name": "Shield-Bearer",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "castellan_footman",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {
+     "hp_pct": -20
+    },
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "watch_crossbowman",
+    "name": "Watch Crossbowman",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "watch_crossbowman",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "tallow_dredger",
+    "name": "Tallow Dredger",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "tallow_dredger",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "render_beast",
+    "name": "Render-Beast",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "render_beast",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "ash_crawler",
+    "name": "Ash-Crawler",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "ash_crawler",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "tithe_captive_a",
+    "name": "Caged Unsealed",
+    "title": "",
+    "role": "npc",
+    "base_unit": "tithe_captive",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "tithe_captive_b",
+    "name": "Caged Unsealed",
+    "title": "",
+    "role": "npc",
+    "base_unit": "tithe_captive",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_gilded_pavise",
+    "name": "Gilded Pavise",
+    "description": "Captain Vane's candle-gold bribe-shield.",
+    "reward_kind": "item",
+    "ref": "vanes_gilded_pavise",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_gate_pass",
+    "name": "Gate Pass Cipher",
+    "description": "A Castellan footman's cipher for the checkpoint gates.",
+    "reward_kind": "item",
+    "ref": "city_gate_pass",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_marrow_scalpel",
+    "name": "Marrow Scalpel",
+    "description": "Proctor Quell's marrow scalpel.",
+    "reward_kind": "item",
+    "ref": "quells_marrow_scalpel",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_marrow_valve",
+    "name": "Marrow Valve",
+    "description": "The brass valve cut from Quell's neck.",
+    "reward_kind": "item",
+    "ref": "inquisitor_marrow_valve",
+    "count": 1,
+    "rarity": "rare",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_slab_retorts",
+    "name": "Slab Retorts",
+    "description": "Titration retorts from the Crossroads cages.",
+    "reward_kind": "item",
+    "ref": "slab_retorts",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_slag_hammer",
+    "name": "Slag-Hammer",
+    "description": "Overseer Grendel's slag-hammer.",
+    "reward_kind": "item",
+    "ref": "grendels_slag_hammer",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_slag_plating",
+    "name": "Slag Plating",
+    "description": "Cooled slag plating from the Fourth Kiln.",
+    "reward_kind": "item",
+    "ref": "slag_plating",
+    "count": 1,
+    "rarity": "rare",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_flensing_talon",
+    "name": "Flensing Talon",
+    "description": "Dropped as Guild-Master Orlov fled the vats.",
+    "reward_kind": "item",
+    "ref": "orlovs_flensing_talon",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_orlovs_retribution",
+    "name": "Orlov's Retribution",
+    "description": "Orlov's flensing technique, taken at the M4 turn-in.",
+    "reward_kind": "skill",
+    "ref": "orlovs_retribution",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_marrow_core",
+    "name": "Marrow Core",
+    "description": "The core of the Calcified Amalgam.",
+    "reward_kind": "item",
+    "ref": "titan_marrow_core",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_dreamers_vertebra",
+    "name": "Dreamer's Vertebra",
+    "description": "A vertebra from the Undercroft fissure.",
+    "reward_kind": "item",
+    "ref": "dreamers_vertebra",
+    "count": 1,
+    "rarity": "unique",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "loot",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "loot_poultices",
+    "name": "Stitch-Poultices",
+    "description": "Field poultices.",
+    "reward_kind": "item",
+    "ref": "sulfur_poultice",
+    "count": 2,
+    "rarity": "common",
+    "requires_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_0b_smoke",
+    "name": "Rooftop: follow the smoke",
+    "speaker": "vesper",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "vesper",
+      "text": "Smoke on the chimneys. Follow my draught, Kaelen, and they lose us in it.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "speaker": "kaelen",
+      "text": "Stay low. Guard each other.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_0c_cart",
+    "name": "Bridge: the cart",
+    "speaker": "maren",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "maren",
+      "text": "The lock is iron and the seal is warm. Hold the bridge while I work it.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "speaker": "hollis",
+      "text": "Get me a clear line down the canal rail.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_corvo",
+    "name": "Corvo's Gate: forced",
+    "speaker": "kaelen",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "kaelen",
+      "text": "No more tolls. Force the Third Ward gate.",
+      "next": "n1"
+     },
+     {
+      "id": "n1",
+      "speaker": "vesper",
+      "text": "So much for quiet.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m1_vane",
+    "name": "The Sweep: Vane",
+    "speaker": "kaelen",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "kaelen",
+      "text": "Order 44 and a candle-gold shield, Vane. Your Seventh Ward sold its own.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m1_retreat",
+    "name": "The Sweep: Vane withdraws",
+    "speaker": "captain_vane",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "captain_vane",
+      "text": "Seal the grates behind me. The Watch remembers every face.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m2_cages",
+    "name": "The Cages: Maren",
+    "speaker": "maren",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "maren",
+      "text": "Those cage seals are cipher work. Keep the flagellants off the locks!",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m2_valve",
+    "name": "The Cages: the valve",
+    "speaker": "maren",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "maren",
+      "text": "That silver saw. He used it on my mentor. Cut him down before the surge settles.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m3_grendel",
+    "name": "Bone-Mill: Dunstan",
+    "speaker": "dunstan",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "dunstan",
+      "text": "My father's bones went down that chute. I will smash it before I die.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m4_orlov",
+    "name": "Tallow Vats: Vesper",
+    "speaker": "vesper",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "vesper",
+      "text": "The tallow tithe killed my brother, an ash-sweeper. Count the fat that bought it, Orlov.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m4_elyse",
+    "name": "Tallow Vats: Elyse",
+    "speaker": "elyse",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "elyse",
+      "text": "Hold the catwalk. I know these vats' pressure better than he does.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m4_retreat",
+    "name": "Tallow Vats: Orlov withdraws",
+    "speaker": "guild_master_orlov",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "guild_master_orlov",
+      "text": "Remember my name when the tallow runs short.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_int_surge",
+    "name": "Back-Surge: Kaelen",
+    "speaker": "kaelen",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "kaelen",
+      "text": "The drain-vault has ruptured. Every valve we shut drove the marrow back down here, and now it is climbing the floor.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m5_cold_steel",
+    "name": "The Crucible: Nemeth",
+    "speaker": "inquisitor_prelate_nemeth",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "inquisitor_prelate_nemeth",
+      "text": "Cold steel cannot finish me. Kneel at the winch.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dialogues",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "dlg_talk_m5_winch",
+    "name": "The Crucible: the winch",
+    "speaker": "kaelen",
+    "start": "n0",
+    "nodes": [
+     {
+      "id": "n0",
+      "speaker": "kaelen",
+      "text": "Someone hold that winch! The rest of you, run and do not look back.",
+      "end": true
+     }
+    ],
+    "services": false,
+    "tags": [
+     "talk"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_pro_0a",
+    "name": "The Alley",
+    "description": "Prologue: a curfew sweep in the Alleyway of Cinders.",
+    "intro": "The curfew bell tolls and two Castellan Footmen close the alley.",
+    "location": "",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..r.......#",
+     "#......r...#",
+     "#...........",
+     "#...........",
+     "#...r......#",
+     "#.......r..#",
+     "############",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen"
+    ],
+    "enemies": [
+     "footman_patrol",
+     "footman_patrol"
+    ],
+    "phases": [
+     {
+      "id": "tremor",
+      "name": "The bell tremor",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The alley shudders as the distant curfew bell tolls. Watch whistles shrill down the lane."
+       },
+       {
+        "type": "shake",
+        "preset": "tremor"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Strike while they wind up: a quick Pommel Strike breaks a slow blow.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_pro_0b",
+    "name": "The Rooftop",
+    "description": "Prologue: the Meat Market rooftops; Vesper joins.",
+    "intro": "Three Mortuary Flagellants rush across the slates.",
+    "location": "",
+    "zone": "rooftops",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "oooooooooooo",
+     "oo#ooooo##oo",
+     "oo#ooroooooo",
+     "oooooorooo#o",
+     "o##ooooooooo",
+     "oooooo#ooroo",
+     "ooroo##ooooo",
+     "ooooooorooo#",
+     "oooooooooooo"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper"
+    ],
+    "enemies": [
+     "mortuary_flagellant",
+     "mortuary_flagellant",
+     "mortuary_flagellant"
+    ],
+    "phases": [
+     {
+      "id": "chimney_call",
+      "name": "Vesper calls the smoke",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_0b_smoke",
+        "speaker": "vesper"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Follow the smoke: hide, guard each other, slip away.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 10,
+     "gold_max": 10,
+     "once": true
+    },
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_pro_0c",
+    "name": "The Bridge",
+    "description": "Prologue: the canal bridge; Maren and Hollis are freed from the iron cart.",
+    "intro": "Footmen hold the canal bridge against the cart's captives.",
+    "location": "",
+    "zone": "canal",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "WWWWWWWWWWWW",
+     "WWWWWWWWWWWW",
+     "============",
+     "======##====",
+     "============",
+     "============",
+     "============",
+     "WWWWWWWWWWWW",
+     "WWWWWWWWWWWW"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "footman_patrol",
+     "footman_patrol",
+     "footman_patrol",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "bridge_call",
+      "name": "Maren works the lock",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_0c_cart",
+        "speaker": "maren"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Free the cart's captives and hold the bridge.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 15,
+     "gold_max": 15,
+     "once": true
+    },
+    "key_loot": [],
+    "objective_reward": {
+     "loot": "loot_poultices",
+     "once": true
+    },
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_job_corvo_gate",
+    "name": "Corvo's Gate",
+    "description": "The loud answer to Bailiff Corvo's toll.",
+    "intro": "The Third Ward gate is held by a Bailiff's picked men.",
+    "location": "",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ],
+     [
+      11,
+      5
+     ]
+    ],
+    "rows": [
+     "############",
+     "#....#.....#",
+     "#.r..#..r..#",
+     "#...........",
+     "#...........",
+     "#...........",
+     "#.r..#..r..#",
+     "#....#.....#",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "castellan_footman",
+     "castellan_footman",
+     "watch_crossbowman",
+     "bailiff_enforcer"
+    ],
+    "phases": [
+     {
+      "id": "corvo_call",
+      "name": "Kaelen calls the gate",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_corvo",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Force the Third Ward gate.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 20,
+     "gold_max": 20,
+     "once": true
+    },
+    "key_loot": [],
+    "objective_reward": {
+     "loot": "loot_poultices",
+     "once": true
+    },
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "loud"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_01",
+    "name": "The Sweep",
+    "description": "M1, Tier 1: Captain Vane's grate sweep at Junction 7.",
+    "intro": "Vane's sweep is closing the grates, wall by wall.",
+    "location": "",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "####..######",
+     "#..r..#....#",
+     "#.....#..r.#",
+     "#..........#",
+     "..r.....r...",
+     "#..........#",
+     "#.r...#....#",
+     "#.....#..r.#",
+     "####..######"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "captain_vane",
+     "castellan_footman",
+     "castellan_footman",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "vane_taunt",
+      "name": "Kaelen answers Vane",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m1_vane",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "execution_wall",
+      "name": "The Execution Wall",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "captain_vane",
+       "pct": 50,
+       "or_round": 3
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Lock shields! Seventh Ward, with me!"
+       },
+       {
+        "type": "wave",
+        "units": [
+         "footman_shieldbearer",
+         "footman_shieldbearer"
+        ],
+        "label": "Shield-bearers lock the wall"
+       },
+       {
+        "type": "enrage",
+        "unit": "captain_vane",
+        "power": 15
+       },
+       {
+        "type": "deck",
+        "unit": "captain_vane",
+        "add": [
+         "execution_wall"
+        ],
+        "order": {
+         "assault": [
+          "execution_wall",
+          "gilded_billhook_sunder"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "vane_withdraws",
+      "name": "Vane withdraws",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "captain_vane",
+       "pct": 25
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "This isn't over, deserter."
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m1_retreat",
+        "speaker": "captain_vane"
+       },
+       {
+        "type": "ai",
+        "unit": "captain_vane",
+        "flee_ratio": 1.0
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Break Vane's sweep before the grates are sealed.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": true,
+    "morale_break": 50,
+    "morale_leader": "captain_vane",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 30,
+     "gold_max": 30,
+     "once": true
+    },
+    "key_loot": [
+     {
+      "loot": "loot_gate_pass",
+      "kill": "castellan_footman"
+     }
+    ],
+    "objective_reward": {
+     "loot": "loot_gilded_pavise",
+     "once": true
+    },
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main",
+     "loud"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_02",
+    "name": "The Crossroads Cages",
+    "description": "M2, Tier 1: Proctor Quell's titration cages at the Ash-Crawl Crossroads.",
+    "intro": "Flagellants circle the cages while Quell works.",
+    "location": "ash_crawl_crossroads",
+    "zone": "alley",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "#....##....#",
+     "#.f......f.#",
+     "#...r..r...#",
+     "#....##....#",
+     ".....##.....",
+     "#....##....#",
+     "#...r..r...#",
+     "#.f......f.#",
+     "#....##....#"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "proctor_quell",
+     "inquisitorial_purifier",
+     "mortuary_flagellant",
+     "mortuary_flagellant"
+    ],
+    "phases": [
+     {
+      "id": "quell_taunt",
+      "name": "Maren reads the cage seals",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m2_cages",
+        "speaker": "maren"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "cull_1",
+      "name": "The first cull",
+      "trigger": {
+       "kind": "round",
+       "round": 3
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "A flagellant raises the scourge over the first cage."
+       },
+       {
+        "type": "kill",
+        "units": [
+         "tithe_captive_a"
+        ],
+        "by": "mortuary_flagellant",
+        "within": 0
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "cull_2",
+      "name": "The second cull",
+      "trigger": {
+       "kind": "round",
+       "round": 5
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Another cage falls silent."
+       },
+       {
+        "type": "kill",
+        "units": [
+         "tithe_captive_b"
+        ],
+        "by": "mortuary_flagellant",
+        "within": 0
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "marrow_valve",
+      "name": "The brass valve",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "proctor_quell",
+       "pct": 35,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The brass valve in Quell's neck hisses open—raw condensate floods his veins!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m2_valve",
+        "speaker": "maren"
+       },
+       {
+        "type": "status",
+        "unit": "proctor_quell",
+        "status": "regen",
+        "rounds": 3,
+        "magnitude": 10
+       },
+       {
+        "type": "enrage",
+        "unit": "proctor_quell",
+        "power": 15
+       },
+       {
+        "type": "deck",
+        "unit": "proctor_quell",
+        "add": [
+         "transfusion_pulse"
+        ],
+        "order": {
+         "assault": [
+          "transfusion_pulse",
+          "sanctified_vivisection"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Free the cages before the flagellants cull them.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 25,
+     "gold_max": 25,
+     "once": true
+    },
+    "key_loot": [
+     {
+      "loot": "loot_marrow_scalpel",
+      "kill": "proctor_quell"
+     },
+     {
+      "loot": "loot_marrow_valve",
+      "kill": "proctor_quell"
+     }
+    ],
+    "objective_reward": {
+     "loot": "loot_slab_retorts",
+     "once": true
+    },
+    "guests": [
+     "tithe_captive_a",
+     "tithe_captive_b"
+    ],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main",
+     "loud"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_03",
+    "name": "The Bone-Mill Raid",
+    "description": "M3, Tier 2: Overseer Grendel's bone-mill at the Fourth Kiln; Dunstan joins.",
+    "intro": "Slag pools and vent lines ring the mill floor.",
+    "location": "fourth_kiln",
+    "zone": "foundry",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..LL....r.#",
+     "#..LL......#",
+     "#..........#",
+     "#.r.........",
+     "#.........r#",
+     "#..LL......#",
+     "#..LL......#",
+     "############"
+    ],
+    "arena_hazards": [
+     {
+      "id": "slag_vents",
+      "name": "Slag Vents",
+      "columns": [
+       7,
+       8
+      ],
+      "rounds": [],
+      "blocks": [
+       3,
+       6
+      ],
+      "effect": {
+       "damage_pct": 12,
+       "stagger": 10,
+       "status": "burn",
+       "potency": 60,
+       "magnitude": 3,
+       "status_rounds": 1
+      },
+      "line": "The slag vents roar."
+     }
+    ],
+    "max_rounds": 10,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "overseer_grendel",
+     "tallow_dredger",
+     "tallow_dredger",
+     "bailiff_enforcer"
+    ],
+    "phases": [
+     {
+      "id": "mill_oath",
+      "name": "Dunstan's oath",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m3_grendel",
+        "speaker": "dunstan"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "pulverizer",
+      "name": "Feed them to the mill",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "overseer_grendel",
+       "pct": 50,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Feed them to the mill!"
+       },
+       {
+        "type": "enrage",
+        "unit": "overseer_grendel",
+        "power": 20
+       },
+       {
+        "type": "deck",
+        "unit": "overseer_grendel",
+        "add": [
+         "bone_mill_pulverizer"
+        ],
+        "order": {
+         "assault": [
+          "bone_mill_pulverizer",
+          "pneumatic_hammer_strike",
+          "coal_shovel_jab"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Wreck the mill and free the chain gang.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 50,
+     "gold_max": 50,
+     "once": true
+    },
+    "key_loot": [
+     {
+      "loot": "loot_slag_hammer",
+      "kill": "overseer_grendel"
+     }
+    ],
+    "objective_reward": {
+     "loot": "loot_slag_plating",
+     "once": true
+    },
+    "guests": [
+     "dunstan"
+    ],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main",
+     "loud"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_04",
+    "name": "The Tallow Vats",
+    "description": "M4, Tier 2: Guild-Master Orlov's rendering vats; Elyse joins.",
+    "intro": "Boiling fat and greased catwalks: Orlov's floor.",
+    "location": "",
+    "zone": "tallow_vats",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      4
+     ]
+    ],
+    "rows": [
+     "LLLLLLLLLLLL",
+     "L....==....L",
+     "L.r..LL..pp.",
+     "===..LL..pp.",
+     "...........=",
+     "===..LL..pp.",
+     "L.r..LL..pp.",
+     "L....==....L",
+     "LLLLLLLLLLLL"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 10,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "guild_master_orlov",
+     "render_beast",
+     "render_beast",
+     "tallow_dredger",
+     "tallow_dredger"
+    ],
+    "phases": [
+     {
+      "id": "orlov_taunt",
+      "name": "Vesper calls Orlov out",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m4_orlov",
+        "speaker": "vesper"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "orlov_reply",
+      "name": "Elyse answers",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m4_elyse",
+        "speaker": "elyse"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "cataclysm",
+      "name": "Into the vats",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "guild_master_orlov",
+       "pct": 40,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Into the vats, the lot of you!"
+       },
+       {
+        "type": "enrage",
+        "unit": "guild_master_orlov",
+        "power": 20
+       },
+       {
+        "type": "deck",
+        "unit": "guild_master_orlov",
+        "add": [
+         "scalding_cataclysm"
+        ],
+        "order": {
+         "assault": [
+          "scalding_cataclysm",
+          "pressurized_lard_spray",
+          "flensing_hook_drag"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "orlov_withdraws",
+      "name": "Orlov withdraws",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "guild_master_orlov",
+       "pct": 20
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Back to the upper vats—seal the sluices!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m4_retreat",
+        "speaker": "guild_master_orlov"
+       },
+       {
+        "type": "ai",
+        "unit": "guild_master_orlov",
+        "flee_ratio": 1.0
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Cut through the vats; find the chemist.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {
+     "gold_min": 100,
+     "gold_max": 100,
+     "once": true
+    },
+    "key_loot": [],
+    "objective_reward": {
+     "loot": "loot_flensing_talon",
+     "once": true
+    },
+    "guests": [
+     "elyse"
+    ],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main",
+     "loud"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_05",
+    "name": "The Awakening Fissure",
+    "description": "Causal Interlude: the marrow back-surge ruptures into the Sluice Undercroft.",
+    "intro": "Raw condensate has found the drain-vault. The floor splits.",
+    "location": "sluice_undercroft",
+    "zone": "undercroft",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      0,
+      4
+     ]
+    ],
+    "rows": [
+     "############",
+     "##...p....##",
+     "#..#.....#.#",
+     "#.....pp...#",
+     "...........#",
+     "#.....pp...#",
+     "#.#.....#..#",
+     "##....p...##",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 10,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "calcified_amalgam",
+     "ash_crawler",
+     "ash_crawler",
+     "ash_crawler",
+     "calcified_husk",
+     "calcified_husk"
+    ],
+    "phases": [
+     {
+      "id": "surge_breach",
+      "name": "The vault ruptures",
+      "trigger": {
+       "kind": "round",
+       "round": 1
+      },
+      "effects": [
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_int_surge",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "bells",
+      "name": "The bells toll",
+      "trigger": {
+       "kind": "round",
+       "round": 2
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The cathedral bells toll. The Amalgam shudders in answer."
+       },
+       {
+        "type": "shake",
+        "preset": "toll"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "bloom",
+      "name": "Bone Bloom",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "calcified_amalgam",
+       "pct": 30
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Bone spires split the floor."
+       },
+       {
+        "type": "enrage",
+        "unit": "calcified_amalgam",
+        "power": 25
+       },
+       {
+        "type": "deck",
+        "unit": "calcified_amalgam",
+        "add": [
+         "ossification_bloom"
+        ],
+        "order": {
+         "assault": [
+          "ossification_bloom",
+          "ossified_spine_volley"
+         ],
+         "guard": [
+          "tendril_flail"
+         ]
+        }
+       }
+      ],
+      "pause_autoplay": true
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "rout",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 1,
+    "objective_text": "Drive the marrow surge back into the fissure.",
+    "unkillable": [],
+    "timeout_outcome": "fled",
+    "stay_behind": {},
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [
+     {
+      "loot": "loot_marrow_core",
+      "kill": "calcified_amalgam"
+     }
+    ],
+    "objective_reward": {
+     "loot": "loot_dreamers_vertebra",
+     "once": true
+    },
+    "guests": [],
+    "party_min": 0,
+    "protect": [],
+    "tags": [
+     "main"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_06",
+    "name": "The Crucible",
+    "description": "M5: the Crucible watchpost; one founder holds the winch, three get out.",
+    "intro": "The Slag Gate winch is two tiles from a muster yard.",
+    "location": "crucible_watchpost",
+    "zone": "watchpost",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ],
+     [
+      11,
+      5
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..........#",
+     "#..f..#....#",
+     "#.....#.....",
+     "#...........",
+     "#.....#.....",
+     "#..f..#....#",
+     "#..........#",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "inquisitor_prelate_nemeth",
+     "inquisitorial_purifier",
+     "inquisitorial_purifier",
+     "castellan_footman",
+     "castellan_footman",
+     "watch_crossbowman",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "gate_reinforcements",
+      "name": "The watchpost empties",
+      "trigger": {
+       "kind": "arrival",
+       "round": 3,
+       "block": 1
+      },
+      "effects": [
+       {
+        "type": "wave",
+        "units": [
+         "castellan_footman",
+         "castellan_footman"
+        ],
+        "label": "The watchpost empties"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "infusion",
+      "name": "Marrow infusion",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "inquisitor_prelate_nemeth",
+       "pct": 50,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Cold steel cannot finish me."
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_cold_steel",
+        "speaker": "inquisitor_prelate_nemeth"
+       },
+       {
+        "type": "status",
+        "unit": "inquisitor_prelate_nemeth",
+        "status": "steadfast",
+        "rounds": 2,
+        "magnitude": 0
+       },
+       {
+        "type": "enrage",
+        "unit": "inquisitor_prelate_nemeth",
+        "power": 20
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "gate_closing",
+      "name": "The gate closes",
+      "trigger": {
+       "kind": "round",
+       "round": 6
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The gate! Now, or never!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_winch",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "escape",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 3,
+    "objective_text": "Open the Slag Gate: one holds the winch, three get out.",
+    "unkillable": [
+     "inquisitor_prelate_nemeth"
+    ],
+    "timeout_outcome": "lost",
+    "stay_behind": {
+     "mode": "hold",
+     "tiles": [
+      [
+       10,
+       1
+      ]
+     ],
+     "tiles_label": "the winch",
+     "fallback": "any",
+     "pick_default": "highest_hp",
+     "flag": "sunk_ward.crucible_stayed",
+     "then": "capture",
+     "result_line": "{name} held the winch."
+    },
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 4,
+    "protect": [],
+    "tags": [
+     "main",
+     "checkpoint"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "encounters",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "enc_evt_06_overlook",
+    "name": "The Crucible (Overlook)",
+    "description": "M5 variant when Hollis completed the Crag-Sight Overlook: the counterweight delays the reinforcements to round 4.",
+    "intro": "The Slag Gate winch is two tiles from a muster yard.",
+    "location": "crucible_watchpost",
+    "zone": "watchpost",
+    "arena": "CLOSED",
+    "exits": [
+     [
+      11,
+      3
+     ],
+     [
+      11,
+      4
+     ],
+     [
+      11,
+      5
+     ]
+    ],
+    "rows": [
+     "############",
+     "#..........#",
+     "#..f..#....#",
+     "#.....#.....",
+     "#...........",
+     "#.....#.....",
+     "#..f..#....#",
+     "#..........#",
+     "############"
+    ],
+    "arena_hazards": [],
+    "max_rounds": 8,
+    "total_blocks": 6,
+    "ap_regen": 4,
+    "unit_ap": 10,
+    "start_ap": 0,
+    "rng_seed": 1337,
+    "party": [
+     "kaelen",
+     "vesper",
+     "maren",
+     "hollis"
+    ],
+    "enemies": [
+     "inquisitor_prelate_nemeth",
+     "inquisitorial_purifier",
+     "inquisitorial_purifier",
+     "castellan_footman",
+     "castellan_footman",
+     "watch_crossbowman",
+     "watch_crossbowman"
+    ],
+    "phases": [
+     {
+      "id": "gate_reinforcements",
+      "name": "The watchpost empties",
+      "trigger": {
+       "kind": "arrival",
+       "round": 4,
+       "block": 1
+      },
+      "effects": [
+       {
+        "type": "wave",
+        "units": [
+         "castellan_footman",
+         "castellan_footman"
+        ],
+        "label": "The watchpost empties"
+       }
+      ],
+      "pause_autoplay": false
+     },
+     {
+      "id": "infusion",
+      "name": "Marrow infusion",
+      "trigger": {
+       "kind": "hp_below",
+       "unit": "inquisitor_prelate_nemeth",
+       "pct": 50,
+       "or_round": 4
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "Cold steel cannot finish me."
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_cold_steel",
+        "speaker": "inquisitor_prelate_nemeth"
+       },
+       {
+        "type": "status",
+        "unit": "inquisitor_prelate_nemeth",
+        "status": "steadfast",
+        "rounds": 2,
+        "magnitude": 0
+       },
+       {
+        "type": "enrage",
+        "unit": "inquisitor_prelate_nemeth",
+        "power": 20
+       }
+      ],
+      "pause_autoplay": true
+     },
+     {
+      "id": "gate_closing",
+      "name": "The gate closes",
+      "trigger": {
+       "kind": "round",
+       "round": 6
+      },
+      "effects": [
+       {
+        "type": "line",
+        "text": "The gate! Now, or never!"
+       },
+       {
+        "type": "talk",
+        "dialogue": "dlg_talk_m5_winch",
+        "speaker": "kaelen"
+       }
+      ],
+      "pause_autoplay": false
+     }
+    ],
+    "script": [],
+    "pace": "auto",
+    "start_status": [],
+    "objective": "escape",
+    "objective_tiles": [],
+    "objective_rounds": 3,
+    "objective_unit": "",
+    "objective_count": 3,
+    "objective_text": "Open the Slag Gate: one holds the winch, three get out.",
+    "unkillable": [
+     "inquisitor_prelate_nemeth"
+    ],
+    "timeout_outcome": "lost",
+    "stay_behind": {
+     "mode": "hold",
+     "tiles": [
+      [
+       10,
+       1
+      ]
+     ],
+     "tiles_label": "the winch",
+     "fallback": "any",
+     "pick_default": "highest_hp",
+     "flag": "sunk_ward.crucible_stayed",
+     "then": "capture",
+     "result_line": "{name} held the winch."
+    },
+    "deployment": "standard",
+    "morale": false,
+    "morale_break": 50,
+    "morale_leader": "",
+    "morale_groups": [],
+    "morale_text": "",
+    "purse": {},
+    "key_loot": [],
+    "objective_reward": {},
+    "guests": [],
+    "party_min": 4,
+    "protect": [],
+    "tags": [
+     "main",
+     "checkpoint"
+    ]
+   }
+  }
+ ]
+}

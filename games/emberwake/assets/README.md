@@ -23,6 +23,7 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
   (the game layer's `common/` holds the creature bodies' portraits, `beast_render_beast.png` and `crawler_ash_crawler.png`, ART3).
 - `items/<family>/base.png` and `items/<family>/<icon>.png`; `items/any/{base,<item_type>}.png`.
 - `skills/<family>.png`, `skills/kinds/<kind>.png`; `statuses/<id>.png`; `map/markers/<marker>.png`.
+- `map/landmarks/<location>.png`: the act maps' location landmarks (Art/UI, `map/landmarks/README.md`; land with Outbox `AO-01`, which adds the pattern to the asset-tree test); `backgrounds/world_map/{high_bastion,mantle_fissure}.png` are the Act 2 and Act 3 maps, read once Outbox `AO-01` lands (only `<world>.png` is looked up today).
 - `ui/{pins,intents,badges,chips}/<id>.png`; `backgrounds/{menu,title,world_map,location,battle,story}/<id>.png` (`story`: vignette card pictures, STORYART1; `tools/gen_art.py` groups `story`, `world_card`, `menu_sunless`, `sunk_backdrops`, `family_icons` draw the Sunk Ward slice's story scenes at 1120 x 472 under a starless Shroud sky (`shroud_sky`, ash in `ASH_COLS`, never white), the `sunk_ward` world card, `menu/main_menu.png` (the sunless main menu, MENU2; the old sunny menu drawing is retired, so the `menu` group now draws only the Ashlands title card), the seven zone backdrops and the scourge and sprayer family icons in the ART2 icon look).
 - `tilesets/<set>/<tile>/v<n>.png` (set = a world id, or `common`; variants are the files present).
 - `audio/sfx/<key>.wav`, `audio/music/<key>.ogg` (played by `aegis_ui::audio`).
@@ -99,7 +100,7 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
   28 px (X3, side and views), no new colour but the gold motes and no new palette slot (X5); `--review` adds
   `<body>_windup_board.png`, `<body>_windup_strike.gif`, `<body>_windups.gif` and `<body>_stagger_dazed.gif` (X6).
 - `python tools/gen_music.py [track ...] [--layer kit|game] [--root DIR] [--list]`: the music (numpy and ffmpeg);
-  `menu_theme` and the world tracks land here, the mood loops in the kit.
+  the world tracks land here, the mood loops in the kit (`menu_theme` is a Flow Music track, not generated).
 - Check a regeneration without touching the committed files: run `gen_art.py --root DIR` and
   `export_units.py --root DIR` into an empty folder `DIR`, then `gen_art.py --compare DIR [--spot OUT]`. It lists
   missing or extra paths and PNG size differences (pixels may drift with numpy and Pillow, so bytes are not compared

@@ -489,8 +489,15 @@ impl Services {
         Some(talk_key(k, &view).is_some_and(|a| self.act(cx, svc_talk_act::<SvcAct>(a))))
     }
 
+    /// ACT1-HOOKS1 (FB-241 a): the open conversation is a queued scene that must be answered
+    /// (`DialogueRunner::must_choose`: no farewell, a reply still to pick); Back and Farewell leave it open.
+    pub fn must_choose(&self, cx: &Cx) -> bool {
+        self.runner.as_ref().is_some_and(|r| r.must_choose(&cx.data, cx.gs()))
+    }
+
     /// Back (right click, Esc): cancels the turn-in picker, closes the shop (asking first with a trade), closes the
-    /// board, or says farewell. None when nothing is open, else whether a fight started.
+    /// board, or says farewell; refused (Some(false), the talk stays) on a scene that must be answered (`must_choose`).
+    /// None when nothing is open, else whether a fight started.
     pub fn back(&mut self, cx: &mut Cx) -> Option<bool> {
         let a = if self.pending.is_some() {
             SvcAct::CancelTurnIn
@@ -552,6 +559,10 @@ impl Services {
             if json::i(g, "gold", 0) > 0 {
                 got.push(format!("{} {}", json::i(g, "gold", 0), purse_word(cx, PurseWord::Currency)));
             }
+            // ACT1-HOOKS1 (FB-241 c): a quest's travel supplies
+            if json::i(g, "supplies", 0) > 0 {
+                got.push(format!("{} {}", json::i(g, "supplies", 0), purse_word(cx, PurseWord::Upkeep)));
+            }
             for (id, n) in json::ints(json::get(g, "items")) {
                 got.push(format!("{} x{n}", cx.data.item_name(&id)));
             }
@@ -610,6 +621,8 @@ impl Services {
                 let farewell = json::aget(&view, "choices").iter().position(|c| s(json::dict(c), "service") == "farewell");
                 match farewell {
                     Some(i) => self.act(cx, SvcAct::Choose(i as i64)),
+                    // ACT1-HOOKS1 (FB-241 a): a scene still waiting on a reply is not dismissed (nothing re-queues it)
+                    None if self.must_choose(cx) => false,
                     None => {
                         self.end(cx);
                         false
@@ -933,5 +946,133 @@ mod tests {
         }
         *cx.gs_mut() = start;
         assert!(checked, "nobody in the first playable world has a farewell reply: nothing to check");
+    }
+
+    /// ACT1-HOOKS1 (FB-241 a): a queued scene (no farewell) with a reply still to pick is not dismissed: Back (Esc,
+    /// right click) and Farewell leave it open on the plain backdrop and the services alike, and the host stays (the
+    /// kit's `scene_must_choose` tests the answering). The scene is the first of any playable world's dialogues that
+    /// must be answered when opened as a scene (by rule, `DialogueRunner::must_choose`); a visit with a farewell still
+    /// ends on Back.
+    #[test]
+    fn back_and_esc_leave_a_scene_with_a_reply_to_pick_open() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = cx.data.clone();
+        let found = emberwake_world::new_game::playable_worlds(&d).into_iter().find_map(|w| {
+            let gs = emberwake_world::new_game::create_for_world(&d, &w, 1).ok()?;
+            let scene = d.merged_entries(&w, "dialogues").into_iter().map(|t| s(t, "_qid")).find(|q| {
+                let mut probe = gs.clone();
+                DialogueRunner::open_scene(&d, &mut probe, q, "").must_choose(&d, &probe)
+            })?;
+            Some((gs, scene))
+        });
+        let (gs, scene) = found.expect("a playable world has a scene that must be answered");
+        *cx.gs_mut() = gs;
+        let mut host = ServiceScreen::default();
+        host.svc.runner = Some(DialogueRunner::open_scene(&d, cx.gs_mut(), &scene, ""));
+        cx.set_busy(true);
+        frame(&mut host, &mut cx, &mut g, 1.0);
+        let before = host.state(&cx)["dialogue"].clone();
+        assert!(before.is_object() && host.svc.must_choose(&cx), "{scene}: open and waiting on a reply");
+        assert!(!json::aget(json::dict(&before), "choices").iter().any(|c| s(json::dict(c), "service") == "farewell"), "{scene}: no farewell");
+        host.back(&mut cx);
+        frame(&mut host, &mut cx, &mut g, 1.0);
+        assert!(cx.nav.is_empty() && cx.busy(), "{scene}: Back neither leaves the host nor ends the talk");
+        assert_eq!(host.state(&cx)["dialogue"], before, "{scene}: the same node still shows");
+        assert_eq!(host.svc.back(&mut cx), Some(false), "{scene}: the services refuse Back");
+        assert!(!host.svc.act(&mut cx, SvcAct::Farewell) && host.svc.talking(), "{scene}: Farewell is refused too");
+        host.svc.end(&mut cx);
+        assert!(!host.svc.must_choose(&cx), "closed: nothing holds it");
+        // a visit has a farewell: Back ends it at once
+        let visitor = d.merged_entries(&cx.gs().world_id, "characters").into_iter().map(|c| s(c, "_qid")).find(|q| {
+            let mut probe = cx.gs().clone();
+            let r = DialogueRunner::open(&d, &mut probe, q);
+            !r.closed && json::aget(&r.view(&d, &probe), "choices").iter().any(|c| s(json::dict(c), "service") == "farewell")
+        });
+        if let Some(q) = visitor {
+            host.talk(&mut cx, &q);
+            assert!(host.svc.talking() && !host.svc.must_choose(&cx), "{q}: a visit");
+            host.back(&mut cx);
+            assert!(!host.svc.talking() && !cx.busy(), "{q}: Back says farewell");
+        }
+    }
+
+    /// PR5-38 ACT1-STORY (shipped data): a New game in `sunk_ward` played through its Prologue (story fights settled
+    /// `won` with no battle) stands in the hub; the hub's region map draws; Talia's board reply opens the BoardPane, the
+    /// Slab's and the Hearth's shop replies the ShopPane; no recipe reply before M5, and with the effects of the
+    /// post-M5 sequence applied Sabina's recipe reply opens the RecipePane; the WorldMap shows the hub and the way out,
+    /// not Tier 2.
+    #[test]
+    fn the_sunk_ward_hub_opens_its_panes_and_the_world_map() {
+        use emberwake_world::{battle, new_game, story};
+        const W: &str = "sunk_ward";
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = cx.data.clone();
+        let gs = new_game::create_for_world(&d, W, 1).expect("a new sunk_ward game");
+        crate::screens::enter_game(&mut cx, gs, -1, Vec::new());
+        cx.nav.clear();
+        {
+            let gs = cx.gs_mut();
+            for _ in 0..200 {
+                if !story::is_running(gs) {
+                    break;
+                }
+                if let Some(fight) = story::fight(&d, gs) {
+                    let r = battle::finish_world(&d, gs, story::FIGHT_SOURCE, &fight, "won", None);
+                    assert!(json::b(&r, "ok", false), "{r:?}");
+                } else if !json::b(&story::step_done(&d, gs), "ok", false) {
+                    let r = story::finish(&d, gs);
+                    assert!(json::b(&r, "ok", false), "{r:?}");
+                }
+            }
+        }
+        assert!(!story::is_running(cx.gs()), "the Prologue ends");
+        assert_eq!(cx.gs().location_id, format!("{W}:sluice_undercroft"));
+        let hub = cx.data.resolve(W, "locations", "sluice_undercroft").clone();
+        let mut map = crate::region::RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let npc_markers: Vec<String> = emberwake_world::explore::markers_of(&hub).iter().filter(|m| s(m, "kind") == "npc").map(|m| format!("marker.{}", s(m, "id"))).collect();
+        assert!(map.widgets().iter().any(|w| npc_markers.iter().any(|id| w["id"] == json!(id))), "the hub map draws its people: {npc_markers:?}");
+        // a service reply of `who`, clicked: the host with its pane open; None when `who` offers no such reply
+        let open = |cx: &mut Cx, g: &mut Gfx, who: &str, service: &str| -> Option<ServiceScreen> {
+            let mut host = ServiceScreen::default();
+            host.talk(cx, who);
+            frame(&mut host, cx, g, 1.0);
+            let choices = json::aget(json::dict(&host.state(cx)["dialogue"]), "choices").to_vec();
+            let k = choices.iter().position(|c| s(json::dict(c), "service") == service)?;
+            host.click_id(cx, &format!("choice.{k}")).expect("the service reply");
+            frame(&mut host, cx, g, 1.0);
+            Some(host)
+        };
+        let has = |host: &ServiceScreen, id: &str| host.widgets().iter().any(|w| w["id"] == id);
+        let host = open(&mut cx, &mut g, "talia_rusk", "board").expect("Talia's board reply");
+        assert_eq!(host.state(&cx)["board"], json!(format!("{W}:talia_board")));
+        assert!(has(&host, "board"), "the BoardPane draws");
+        for (who, shop) in [("sabina_kress", "sabina_slab"), ("berek_dorn", "berek_hearth")] {
+            let host = open(&mut cx, &mut g, who, "shop").unwrap_or_else(|| panic!("{who}'s shop reply"));
+            assert!(host.state(&cx)["shop"].is_object() && has(&host, "shop"), "{shop}: the ShopPane opens");
+            assert!(open(&mut cx, &mut g, who, "recipe").is_none(), "{who}: no recipe reply before M5");
+        }
+        // the post-M5 sequence's own effects (the PK2 flags), applied as its effects step applies them
+        let after_m5 = cx.data.resolve(W, "sequences", "seq_after_m5").clone();
+        let effects: Vec<Dict> = json::aget(&after_m5, "steps")
+            .iter()
+            .map(json::dict)
+            .filter(|st| s(st, "kind") == "effects")
+            .flat_map(|st| json::aget(st, "effects").iter().map(|fx| json::dict(fx).clone()).collect::<Vec<_>>())
+            .collect();
+        assert!(!effects.is_empty(), "seq_after_m5 has an effects step");
+        let (mut notes, mut events) = (Vec::new(), Vec::new());
+        emberwake_world::dialogue::apply_effects(&d, cx.gs_mut(), &effects, &mut notes, &mut events);
+        for who in ["sabina_kress", "berek_dorn"] {
+            let host = open(&mut cx, &mut g, who, "recipe").unwrap_or_else(|| panic!("{who}'s recipe reply after M5"));
+            assert_eq!(host.state(&cx)["recipe"], json!(format!("{W}:{who}")));
+            assert!(has(&host, "recipe"), "{who}: the RecipePane draws");
+        }
+        let mut wm = crate::worldmap::WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let node = |id: &str| format!("node.{W}.{id}");
+        assert!(wm.widgets().iter().any(|w| w["id"] == json!(node("sluice_undercroft"))), "the WorldMap shows the hub");
+        assert!(wm.widgets().iter().any(|w| w["id"] == json!(node("drowned_runoff_grate"))), "and the way out");
+        assert!(!wm.widgets().iter().any(|w| w["id"] == json!(node("fourth_kiln"))), "not Tier 2");
     }
 }

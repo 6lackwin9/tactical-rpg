@@ -1,21 +1,20 @@
 # The High Bastion: campaign graph and Act 2 missions
 
-Status: proposal (Act 2 "The First Rupture"; not locked; follows [CANON.md](../CANON.md) section 3.4). Related:
+Status: canon (`2026-11-11`, synced with [CANON.md](../CANON.md) & [STORY_GUIDE.md](../STORY_GUIDE.md); Act 2 *"The First Rupture"*, `CL-02..CL-11`). Related:
 [world geography](world_geography_and_hub.md), [Sunk Ward map](sunk_ward_campaign_map.md),
-[cast registry](cast_registry.md), [enemy bestiary](../systems/enemy_bestiary_and_ai.md),
-[campaign structure](../narrative/campaign_narrative_structure.md),
-[systems roadmap](../specs/full_game_systems_roadmap.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`,
+[NPCs and questlines](npcs_and_questlines.md), [ACTS23 spec](../../../../docs/specs/ACTS23.md),
+[campaign structure](../narrative/campaign_narrative_structure.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`,
 `[game code]`.
 
 ## 1. Overview
 
 Act 2 takes place in **the High Bastion and St. Lyra's Cathedral district** (Upper Cinderreach). After the Crucible
-([Sunk Ward map](sunk_ward_campaign_map.md) section 3.7) the remaining founders come through the Slag Gate into the
-Clerisy's wealthy heart: gothic spires, polished basalt boulevards and magnesium lamps over embalming laboratories,
-gallows and iron culling stockades.
+([Sunk Ward map](sunk_ward_campaign_map.md) section 3.5), the `5` surviving Founders gather over the empty bunk (**Hub Debate 3**)
+before `Talia Rusk` shelters `1` class-matched `18-24` visored/cowled runaway (`CL-07`) and the cell pushes through the Slag Gate
+into the Clerisy's wealthy heart: soot-blackened gothic spires, polished basalt boulevards, and magnesium lamps over embalming
+cloisters, gallows, and iron culling stockades.
 
-The district graph has 8 nodes `[data]` and adds rooftop routes, timed searchlight sweeps and moving culling convoys
-`[kit hook]` world map extensions.
+The district graph has 8 nodes `[data]` with street vs. rooftop legs, timed magnesium searchlights, and moving culling convoys.
 
 ```text
                              [ THE HIGH BASTION NODE GRAPH ]
@@ -25,12 +24,12 @@ The district graph has 8 nodes `[data]` and adds rooftop routes, timed searchlig
                                            ^
                                            | [route: Sacred Chancel]
                                 [ 14. RELIQUARY CRYPTS ]
-                         (2.6, ENC-ACT2-06: Reliquary Guardian)
+                  (2.6, ENC-ACT2-06: Ruthven + First Apostle Saint-Warden)
                                            ^
                     +----------------------+----------------------+
                     | [route: Spire Buttress]                     | [route: Catacomb Flue]
          [ 13. GRAND BELLTOWER ]                       [ 11. EMBALMING CLOISTERS ]
-     (2.5, ENC-ACT2-05: Bell-Warden Colossus)      (2.4, ENC-ACT2-04: Chief Anatomist Lazar)
+      (2.5, ENC-ACT2-05: Penitent Bell-Warden)      (2.4, ENC-ACT2-04: Chief Anatomist Lazar)
                     ^                                             ^
                     | [route: Gargoyle Rafters]                   | [route: Scriptorium Duct]
          [ 12. CULLING STOCKADES ]                     [ 10. TALLOW RESERVOIR ]
@@ -40,165 +39,96 @@ The district graph has 8 nodes `[data]` and adds rooftop routes, timed searchlig
                     +----------------------+----------------------+
                                            |
                                 [ 09. GILDED BOULEVARD ]
-                       (2.1, ENC-ACT2-01: Ruthven's checkpoint)
+                       (2.1, ENC-ACT2-01: Bastion curfew cordon)
                                            ^
                                            | [breached Slag portcullis]
                                 [ 08. SLAG GATE BREACH ]
                                    (entry from Act 1)
                                            |
                                            v [concealed siphon runoff]
-                                [ THE SCRIBE'S CRYPT ]
-                     (optional forward base, proposal; bunks inherited)
+                              [ 00. SLUICE UNDERCROFT ]
+                     (single campaign hub; bunks 6 -> 8 via Berek's Hearth)
 ```
 
-## 2. Travel
+## 2. Travel, Convoys & Hub Continuity
 
 ### 2.1 Street or rooftop
 
-Each leg offers two routes `[kit hook]` route variants, `[data]` numbers.
+Each leg offers two routes (`ACTS23` `PK1`, `[data]`):
 
-1. **Street cobbles:** 1 day; +10% Alert per leg. Checkpoints held by Castellan Sergeants and Heavy Shield-Bearers;
-   Inquisitorial Purifiers likely.
-2. **Rooftop rafters and flying buttresses:** 2 days; +2% Alert. Avoids the checkpoints, but risks a structural
-   collapse event (minor stagger or fall damage) and Cathedral Crossbow Snipers.
+1. **Street cobbles:** `1` day; `+10%` Alert per leg. Checkpoints held by Castellan Footmen, Shield-Bearers, and Inquisitorial Purifiers.
+2. **Rooftop rafters and flying buttresses:** `2` days; `+2%` Alert. Avoids street checkpoints, risking Watch Crossbowmen.
 
-Both cost 1 Warded Tallow per day, as everywhere (CANON.md section 2.5).
+Both cost `1` Warded Tallow per day (`CANON` 4.2); Act 2 raises the **Alert floor to `30`** (`Guarded` is gone above the Slag Gate).
 
-### 2.2 Magnesium searchlights
+### 2.2 Magnesium searchlights & Curfew Bells (`CL-05`)
 
-- Upper Cinderreach is lit by tower-mounted magnesium arc-lamps.
-- On the district map the cones sweep across the boulevards every 2 days `[kit hook]` timed route hazard.
-- Entering a swept node while the beam is on forces an ambush battle and adds +15% Alert. The old "+25% enemy accuracy"
-  rider is retired with accuracy rolls; what an ambush does in battle is open (see gaps).
+- Upper Cinderreach is lit by tower-mounted magnesium arc-lamps sweeping exposed boulevards every `2` days (`+15%` Alert on lit entry).
+- **Curfew Bell Resonance (`CL-05`)**: Until `2.5 Grand Belltower` falls, St. Lyra's curfew bells deal **`+10` starting Strain** to every Stage I+ operative in Upper Cinderreach battles.
 
-### 2.3 Culling convoys and recruits
+### 2.3 Culling convoys, recruits & `25+` non-combat rescues (`CL-07`)
 
-- **Convoys:** armoured culling wagons move 09 to 12 to 11 every 3 days, carrying captive youths to the dissection
-  slabs `[kit hook]` moving world-map event, `[data]`.
-- **Interception:** engaging a convoy starts ENC-ACT2-02; a freed wagon yields 1-2 recruits aged 18-24 for empty bunks
-  `[kit hook]` RECRUIT1 (exists), `[data]` recruit pools. One wagon carries Lucan (Bram's former apprentice, 14, a
-  non-combat NPC). What happens to freed youths under 18 is open (see gaps). The first procedural recruit takes the
-  bunk the Crucible emptied, at the start of Act 2 (user 2026-10-25, Q-38; whether that recruit comes from the first
-  wagon or joins at the act transition: see gaps).
+- **Act 2 Entry Recruit (`CL-07`)**: `Talia` shelters `1` class-matched `18-24` visored/cowled runaway into the `M5` bunk (`6/6` filled; expandable to `8` via `Berek`'s *"Expanded Timber Frames"* Hearth project).
+- **Convoys (`2.2` Culling Stockades)**: Intercepting a culling wagon (`enc_act2_02`) yields `1-2` visored/cowled `18-24` Unsealed recruits (`RECRUIT1`) for open bunks; freed Unsealed under `18`—including **`Lucan`** (`14`, `Berek`'s former Fourth Kiln apprentice traded to the Tithing by `Foundry-Master Jessop`) and **`Wren`** (`14`, `Hollis`'s sister)—are sheltered by `Talia` as non-combat Basin wards (`+saved_youths`). Rescued `25+` Spent specialists (`Ferrand` `40`, `Herbalist Clemence` `36`) stay bunk-free Basin guests (`CL-07`).
 
-### 2.4 The Scribe's Crypt (optional forward base)
+### 2.4 Single Hub (`Sluice Undercroft`) & Siege Stakes
 
-- Beneath St. Lyra's scriptorium, reached from node 08. One hub (the Sluice) is preferred; the Crypt is used only if
-  the story needs a forward base.
-- **Bunks:** inherited (6, or 8 after Bram's "Expanded Timber Frames" project); the Crypt adds none.
-- **Apex grafting** (four graft slots: Cranial, Thoracic, Forearms, Visceral) opens at the Apothecary's Slab after
-  M2.4 `[kit hook]` graft slots (Act 2 proposal), `[data]`; Rock Salt flushes (effect open, CANON.md section 6).
-- **The Courier Blind:** see [world geography](world_geography_and_hub.md) section 2.2.
+- The cell operates out of the **Sluice Undercroft** across all three acts (`ACTS23` `Q-90 a`; `The Scribe's Crypt` is a narrative forward blind, not a second hub).
+- **`Alert 100` Hub Breach (`CL-06`, `CL-10`)**: Triggers a Sluice Hub Siege where **`Chirurgeon Sabina`** and **`Berek`** stand on `protect` tiles (`ACTS23` `PK1`) while **`Inquisitor-General Ruthven` ("the Blind Eye")** leads the breach—withdrawing at **`25%` HP (`ruthven_withdraws`)** so he always survives to command the `2.6` Reliquary Gate climax. Losing a siege costs `10` Warded Tallow, `50` Scrap, `+2d` facility lock, and resets Alert to `60` (never a Game Over).
 
-## 3. Act 2 missions
+## 3. Act 2 Main Missions, 6 Dual-Rituals & Survivor Inheritance (`CL-02`, `CL-09`, `CL-10`, `CL-11`)
 
 | # | Mission | Node | Encounter | Payoff |
 | --- | --- | --- | --- | --- |
-| 2.1 | Ingress | 09 Gilded Boulevard | ENC-ACT2-01, Inquisitor-General Ruthven's checkpoint | Into Upper Cinderreach |
-| 2.2 | Jailbreak | 12 Culling Stockades | ENC-ACT2-02, culling wagon (repeatable) | Recruits 18-24; Lucan's rescue (one wagon) |
-| 2.3 | Sabotage | 10 Tallow Reservoir | ENC-ACT2-03, silo sabotage | +20 Warded Tallow, -30% Alert |
-| 2.4 | The Cloisters | 11 Embalming Cloisters | ENC-ACT2-04, Chief Anatomist Lazar (Aline's quest) | Apex grafting; the Great Tithing's date, scale and cause; Nemeth seen delivering the captured founder |
-| 2.5 | The Chimes | 13 Grand Belltower | ENC-ACT2-05, Bell-Warden Colossus | Silences the bells' resonance |
-| 2.6 | The Reliquary | 14 Reliquary Crypts to 15 Grand Spire Gate | ENC-ACT2-06, Reliquary Guardian | Key of the Mantle Chasm; Act 3 |
+| `2.1` | Ingress | `09` Gilded Boulevard | `enc_act2_01`, Bastion curfew cordon | Foothold in Upper Cinderreach (`Ruthven` inspects & withdraws before clash) |
+| `2.2` | Jailbreak | `12` Culling Stockades | `enc_act2_02`, culling wagon (repeatable) | `18-24` Cohort recruits; rescues `14`-yo `Lucan` (`Berek` stake) |
+| `2.3` | Sabotage | `10` Tallow Reservoir | `enc_act2_03`, silo sabotage | `+20` `Warded Tallow`, `-30%` Alert |
+| `2.4` | The Cloisters | `11` Embalming Cloisters | `enc_act2_04`, `Chief Anatomist Lazar` (`Sabina`'s quest) | `Lazar` slain -> `Sabina's Prosector Crook`, Tier III Apex implants & bone-scraping; `Nemeth` captive handover (`no rescue`); **Hub Debate 4** (`Great Tithing` `max(days, 18)`) |
+| `2.5` | The Chimes | `13` Grand Belltower | `enc_act2_05`, **Penitent Bell-Warden** (Stage IV) | Silences curfew-bell `+10` Strain resonance (`CL-05`, `CL-10`) |
+| `2.6` | The Reliquary | `14` Reliquary Crypts -> `15` Grand Spire Gate | `enc_act2_06`, **Inquisitor-General Ruthven + First Apostle Saint-Warden** | First Extinguishers' tomb truth; **Key of the Mantle Chasm**; opens Act 3 |
 
-Key choices: the doctrine split, Living Martyrs, the siege dilemma (defend the hub or finish the mission). From Act 2:
-founders at 0 HP are downed and may die or be captured `[kit hook]` unit lifecycle; Alert 100% starts a siege of the
-hub, and a lost siege costs facilities and forces a relocation, never a Game Over `[kit hook]` campaign meter triggers.
+### 3.1 Six Dual-Path Personal Quests & Survivor Inheritance (`CL-02`, `CL-09`)
 
-## 4. Encounters
+Every Founder has an Act 2 personal reckoning offering **Cold Steel vs. Inoculated** completion (`CL-02`). **Survivor Inheritance (`CL-09`)**: if that Founder was captured on the `M5` winch or fell in Act 2 (`roster.departed.<id>`), the mission **never vanishes**—their closest Hub mentor and surviving cellmates inherit the raid, paying cell-wide Hearth/Slab relics and Doctrine shifts instead of that Founder's personal keystone:
 
-### 4.1 Mission 2.1: the Gilded Boulevard breach
+1. **`Kaelen` (or `Berek` + cell)**: Hunts **`Capt. Vane`** in the Seventh Ward Castellan Watch garrison (`Vane` dies; burns or leverages his Bastion debt ledgers -> `Deserter's Kettle Helm` / cell-wide Watch plate).
+2. **`Vesper` (or `Talia` + cell)**: Corners **`Guild-Master Orlov`** in his Guild Counting-House (`Orlov` dies; seizes `+10` `Warded Tallow` & tallow ledgers).
+3. **`Maren` (or `Sabina` + cell)**: Unseals St. Lyra's Scriptorium Forbidden Vault using `M2`'s cipher rubbings.
+4. **`Hollis` (or `Talia` + cell)**: Intercepts `Ruthven`'s decoy convoy to rescue `Hollis`'s `14`-yo sister **`Wren`** into Basin shelter.
+5. **`Dunstan` + `Berek` (or `Berek` + cell)**: Storms the Fourth Kiln inner foundry to kill **`Foundry-Master Jessop`**, flood the bone-mortar moulds with molten iron, and seize `Jessop`/`Berek`'s **`3.2` Marrow Conduit** valve blueprints.
+6. **`Elyse` (or `Sabina` + cell)**: Sabotages the Cathedral sedative cisterns feeding the Lullaby Houses.
 
-- **Story:** out of the smoking Slag Gate, the founders must break the outer curfew barrier held by Inquisitor-General
-  Ruthven's iron vanguard. Ruthven is on stage here; whether he fights is open (CANON.md section 6).
-- **Encounter:** ENC-ACT2-01, Gilded Avenue Checkpoint. Castellan Captain + 2 Inquisitorial Purifiers + 2 Greatshield
-  Castellans `[data]`.
-- **Play:** break the Greatshields with stagger and wall slams, or pierce them with the first Inoculated strikes;
-  stay clear of magnesium flash-bombs (Blinded: effect open, accuracy rolls are cut).
-- **The captured founder's keepsake** (an ACC heirloom) is in the stash from the start of Act 2; its effect numbers are
-  open `[data]`.
+## 4. Main Mission Encounters
 
-### 4.2 Mission 2.2: the culling wagon
+### 4.1 Mission `2.1`: Gilded Boulevard Breach (`enc_act2_01`)
 
-- **Node:** 12, the Inquisitorial Penitentiary and Culling Stockades.
-- **Story:** a fresh levy of young factory apprentices waits in iron transit pens for the dissection slabs.
-- **Encounter:** ENC-ACT2-02, Culling Wagon Interception. Proctor Jailer + 2 Bailiff Enforcers + 2 War Hounds
-  (Render-Beast variants) `[data]`.
-- **Objective:** the wagon leaves on round 4; breach the pen gate or kill the draught beasts before it exits the map
-  `[kit hook]` objectives with a round limit, `[data]`.
-- **Payoff:** recruits through RECRUIT1 `[kit hook]`.
+- **Story:** Emerging from the smoking Slag Gate, the squad glimpses `Inquisitor-General Ruthven` ("the Blind Eye", `Hollis`'s quarrel-dent scarred across his left iron mask-plate) setting his hounds onto `Talia`'s couriers before leaving his Castellan cordon to hold the avenue.
+- **Play:** First test of `Channel` armour-piercing strikes vs. Cold Steel stagger/techniques against heavy Bastion shields.
 
-### 4.3 Mission 2.3: the Tallow Reservoir
+### 4.2 Mission `2.2`: Culling Stockades (`enc_act2_02`)
 
-- **Node:** 10, the Merchant Guild Tallow Reservoir.
-- **Story:** three huge tallow silos light and power Upper Cinderreach; wrecking the pumps blacks out the district and
-  blinds the church searchlights.
-- **Encounter:** ENC-ACT2-03, Tallow Silo Sabotage. Guild-Master's Provost + 3 Tallow Dredgers + 2 Crossbow Watchmen
-  `[data]`.
-- **Hazard:** smashing a silo valve floods lanes with scalding grease: burning or slick tiles `[kit hook]` zone hazards.
-- **Payoff:** -30% Alert and +20 Warded Tallow `[data]`.
+- **Story:** Fresh levies of `18-24` Unsealed apprentices and `14`-yo `Lucan` wait in iron transit pens bound for `Lazar`'s Cloisters.
+- **Objective:** Breach the pen gate before Round 4 departure -> `RECRUIT1` cohort recruits + `Lucan` brought safely to `Berek`.
 
-### 4.4 Mission 2.4: the Embalming Cloisters (Sister Aline's quest)
+### 4.3 Mission `2.3`: Tallow Reservoir (`enc_act2_03`)
 
-- **Node:** 11, St. Lyra's Embalming Cloisters and Dispensary.
-- **Story:** Aline's personal quest, "Anatomy of a Living Saint" ([NPCs](npcs_and_questlines.md) section 2.1): her
-  former order's laboratory, to retrieve her confiscated notes and an Apex gland from an embalmed prelate before it
-  decays. Aline is non-combat: she directs, the squad fights.
-- **Encounter:** ENC-ACT2-04, the Embalming Cloister Infiltration. Chief Anatomist Lazar + 2 Calcified Husks + 2
-  Inquisitorial Suture-Priests `[data]`.
-- **Play:** the Suture-Priests' channelled heal regenerates the husks; break it while it is in windup (it lands at the
-  end of its own blocks) `[kit hook]` ruleset "timeline".
-- **The Great Tithing reveal** (user 2026-10-25, [CANON.md](../CANON.md) 3.6): Lazar's records give the Great
-  Tithing's date and scale (thousands) and show that the cell's own raids caused it: every tithe it freed and every
-  station it broke starved the dream, the titan stirred, and the Clerisy turned this year's rite into a Great Tithing to
-  drug it back to sleep. The visible Doom Clock is relabelled "the Great Tithing" `[data]` (the meter's label).
-- **Nemeth's sighting** (refinement, CANON 3.6): the cell sees Inquisitor-Prelate Nemeth deliver the founder captured
-  at the Crucible to Lazar's anatomists, to be made into a saint-weapon against the cell, and arrives too late; this
-  closes a rescue in practice (Q-33 option a). Staging `[data]` (a scene; no battle with Nemeth here).
-- **Payoff:** Apex grafting at the Apothecary's Slab and Aline's bone-scraping; the records above (whether the true
-  date also corrects the day count once and sets the Act 3 budget is open: Q-17).
+- **Story:** Wrecking Upper Cinderreach's three Guild tallow silos blacks out magnesium arc-lamps (`-30%` Alert, `+20` `Warded Tallow`).
 
-### 4.5 Mission 2.5: silencing the chimes
+### 4.4 Mission `2.4`: Embalming Cloisters & Hub Debate 4 (`enc_act2_04`)
 
-- **Node:** 13, the Grand Belltower of the Slagged Saint.
-- **Story:** the great bells ring every hour of the bell-day; their resonance agitates the sleeping titan and rattles
-  calcified bone.
-- **Encounter:** ENC-ACT2-05, the Grand Belltower. The Bell-Warden Colossus (heavy automaton) + 2 Watch Snipers
-  `[data]`.
-- **Hazard:** the chimes sound every 2 rounds; every unit loses 15 Poise unless it passes a Composure check (Composure
-  is the derived corruption resist, CANON 2.1; how the check resolves: see gaps) `[kit hook]` scheduled hazard.
-- **Payoff:** ends the acoustic resonance penalty in Upper Cinderreach (operatives no longer start battles there with
-  extra Strain) `[data]` flag.
+- **Story (`Sabina`'s Quest)**: `Sabina` directs the cell into her former mentor **`Chief Anatomist Lazar`**'s crimson-and-pearl surgical cloister (`Lazar` + `2` `Calcified Husks` + `2` Suture-Priests). Through sealed leaded glass, the squad witnesses `Nemeth` hand the `M5` captive over to `Lazar`'s inner ward—too late to rescue (`Q-33`).
+- **Hub Debate 4 (*The Ledger of the Lullaby Houses*)**: `Lazar` dies (`Sabina's Prosector Crook`, Tier III Apex implants & Slab bone-scraping unlocked), and his ledger reveals the whole engine: **Lullaby Houses** harvest Unsealed blood, `3.2` Conduits pump **steeped sacrificial ichor** *up* from `21` High Altar to `Lazar`, and the cell's own raids starved the titan's sleep—forcing `Othemar` to call a **second Great Tithing** (`max(days, 18)`, `CL-04`). Back at the Sluice, `Sabina`, `Berek`, `Talia`, and the surviving Founders debate how Cinderreach can survive without child blood (`CL-11`).
 
-### 4.6 Mission 2.6: the Reliquary (Act 2 climax)
+### 4.5 Mission `2.5`: Grand Belltower (`enc_act2_05`, `CL-10`)
 
-- **Node:** 14, the Reliquary Crypts of the First Apostles, then 15 Grand Spire Gate.
-- **Story:** under the cathedral floor lies the tomb of the first Extinguishers and the **Key of the Mantle Chasm**, the
-  iron seal to the volcanic vents beneath the city. The first Extinguishers are the Clerisy's founders (Q-12 option a,
-  CANON 3.6): they founded the order two centuries ago, in the dark of the Extinguishing, with the first Great Tithing,
-  recorded as the titan's wrath, and were the first to drink the marrow. Their tomb holds the record of that night,
-  which the cell finds here `[data]` (a scene or a found document).
-- **Encounter:** ENC-ACT2-06, the Reliquary. The Reliquary Guardian (a gilded saint's sarcophagus animated by Apex
-  marrow) + 2 Inquisitor Castellans + 2 Choral Acolytes `[data]`.
-- **Play:** the Guardian ignores Cold Steel damage until its four reliquary marrow-vials are smashed; Inoculated
-  attacks at high Strain get through its wards `[data]` boss phases (exists).
-- **Transition:** the Key opens node 15; the cell looks down into the Sub-Basalt Abyss. Act 3 (The Awakening Abyss)
-  begins: the Doom Clock (visible since Act 1 day 1) turns hard, and the tremors start.
+- **Story & Ossuary Boss (`CL-10` — no clockwork construct)**: St. Lyra's curfew bells are rung by a Stage IV **`Penitent Bell-Warden`**—a calcifying living martyr chained and bone-pinned directly into the great bronze bell-yoke, flanked by `2` Watch Crossbowmen. Every `2` rounds the bell-toll strips Poise and spikes Strain; slaying the Bell-Warden permanently silences Upper Cinderreach's `+10` Strain resonance (`CL-05`).
 
-## 5. Later uses of the Act 2 encounters (proposal)
+### 4.6 Mission `2.6`: Reliquary Crypts Climax (`enc_act2_06`, `CL-10`)
 
-| Encounter | Act 2 role | Repeatable or event use |
-| --- | --- | --- |
-| ENC-ACT2-01 | Boulevard ingress | Roadblock: re-appears on random avenue nodes while Alert is above 60% |
-| ENC-ACT2-02 | Recruit source | A convoy appears every 5 days with new recruits |
-| ENC-ACT2-03 | Reservoir sabotage | Fuel bounty: side silos keep the Warded Tallow stock up |
-| ENC-ACT2-04 | Aline's quest | Organ hunt: raid side dispensaries for rare Aberrant Organs |
-| ENC-ACT2-05 | Belltower | Alert suppression: wreck auxiliary searchlight mirrors to clear fog of war |
-| ENC-ACT2-06 | Mantle Key | None: the one-time Act 2 to Act 3 trigger (the Doom Clock turns hard) |
+- **Story & Climax Boss (`CL-10`)**: Beneath the cathedral nave lies the tomb of the **First Extinguishers** (revered publicly as the *First Apostles*), holding their 200-year confession of the first Great Tithing and the **Key of the Mantle Chasm**. **`Inquisitor-General Ruthven`** (`4`-screw blind iron mask, collarbone tremor-grafts) makes his stand to the death here alongside an awakened **First Apostle Saint-Warden** (`Lazar`-embalmed reliquary corpse-knight, replacing generic sarcophagus constructs) and `2` Inquisitorial Purifiers.
+- **Transition:** Claiming the Mantle Key opens `15 Grand Spire Gate` into Act 3 (*The Awakening Abyss*): the Doom Clock turns **hard** (`min 12d`, `CL-04`).
 
-## 6. Data sketch `[data]`
-
-Illustrative only (field names as today's `locations.json`; the logic lane owns the schema).
+## 5. Data sketch `[data]`
 
 ```json
 {
@@ -210,20 +140,13 @@ Illustrative only (field names as today's `locations.json`; the logic lane owns 
     { "id": "culling_stockades", "name": "Culling Stockades", "kind": "prison", "encounters": ["enc_act2_02"] },
     { "id": "grand_belltower", "name": "Grand Belltower of the Slagged Saint", "kind": "spire", "encounters": ["enc_act2_05"] },
     { "id": "reliquary_crypts", "name": "Reliquary Crypts of the First Apostles", "kind": "crypt", "encounters": ["enc_act2_06"] },
-    { "id": "grand_spire_gate", "name": "Grand Spire Gate", "kind": "gate" }
+    { "id": "grand_spire_gate", "name": "Grand Spire Gate", "kind": "gate", "region": "high_bastion" }
   ]
 }
 ```
 
-## 7. Gaps in this file
+## 6. Resolved design notes
 
-- What an ambush does in battle now that accuracy is cut; the Blinded status (sections 2.2, 4.1): Open, see gaps.
-- What happens to freed youths under 18 (section 2.3): Open, see gaps.
-- How the first procedural recruit arrives at the start of Act 2 (section 2.3): from the first culling wagon (2.2) or
-  as a join at the act transition; not written.
-- How the "true Tithing date" changes the visible Doom Clock (section 4.4): the relabel to "the Great Tithing" is
-  decided (CANON 2.6); a one-time correction of the day count and the Act 3 budget stay open (Q-17).
-- The Composure check (section 4.5): Composure is decided (a derived stat, CANON 2.1); how a hazard's check resolves
-  (a threshold, a scaled poise loss or a seeded roll) is open for the derived-stat spec and the balance lane.
-- Whether "the First Apostles" of the crypts' name are the founders' public title (section 4.6): not written.
-- A fight for Ruthven; Alert across act lines; the siege battle content: open in CANON.md section 6 and gaps.
+- **Act 2 entry recruit & non-combat rescues (`CL-07`)**: `1` class-matched `18-24` visored/cowled runaway joins at Act 2 start; under-`18` (`Lucan`, `Wren`) and `25+` (`Ferrand`, `Clemence`) rescues stay non-combat Basin wards/guests.
+- **Doom Clock at `2.4` (`CL-04`)**: Relabelled *the Great Tithing* and set to `max(days, 18)`.
+- **`2.5` & `2.6` Bosses (`CL-10`)**: `Penitent Bell-Warden` (`2.5`) and `Inquisitor-General Ruthven + First Apostle Saint-Warden` (`2.6`) replace generic clockwork/animated-sarcophagus RPG tropes; `Ruthven` withdraws at `25%` HP in any earlier Hub Breach.

@@ -32,8 +32,8 @@ plain face, breathe as before.
   the offset parts add up past 3 px.
 - Pick one signature part per face and keep the rest quiet: a wince is an entry squeeze plus shallow breaths, a heave
   is a deep fast cycle plus a lean, fear is a quick cycle plus a shiver, sadness a slow sink with a long out-breath.
-- Only the inner picture moves; the frame never does. Anchored layers (blink lids, eye glow, glow, veins, the face
-  tint and marks) move with it; falling particles (ash, smoke) do not.
+- Only the inner picture moves; the frame never does. Anchored layers (blink lids, `point_glow`, `glow`, `lines`, the face
+  tint and marks) move with it; unanchored particle overlays (`particles_rise`, `drift`) do not.
 - Small portraits move less: below the full tier (96 device px) there is no cycle, lean or bob and the entry, rest and
   shiver are halved; the smallest tier and reduce motion draw no motion at all, and the flush holds steady.
 - A face change blends the old motion into the new over 200 ms (`MOTION_BLEND_MS`), so nothing jumps.

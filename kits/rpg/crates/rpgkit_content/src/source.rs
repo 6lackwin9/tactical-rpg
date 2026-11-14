@@ -28,6 +28,8 @@ pub struct Source {
     /// PK2-S4 (FB-167 Q7 (a)): the act the standard path's growth starts in (`from_act_of`, the manifest's
     /// `durability.from_act`; 0 = none: no mastery is gained).
     pub from_act: i64,
+    /// ACT1-HOOKS1 (FB-241 c): the manifest's `start_worlds` (New Game's default is the first playable one).
+    pub start_worlds: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -230,7 +232,8 @@ pub fn load(data_dir: &Path) -> Source {
     let manifest = manifest_beside(data_dir);
     let music_keys = manifest.as_ref().map(music_keys_of).unwrap_or_default();
     let from_act = manifest.as_ref().map_or(0, from_act_of);
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, errors }
+    let start_worlds = manifest.as_ref().map(|m| json::sget(m, "start_worlds")).unwrap_or_default();
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, start_worlds, errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.

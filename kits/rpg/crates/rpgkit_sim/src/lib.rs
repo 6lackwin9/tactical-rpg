@@ -2,7 +2,8 @@
 //! units built from class + level + tier, in nine modes (duel, tier, levels, group, stats, party, role, sweep,
 //! campaign). `run` returns the lines the sim prints; `aegis sim <mode> ...` prints them. Scores per fight (left side):
 //! binary (KO, else the HP lead with a 0.02 band) and HP margin (KO 1 / 0, else 0.5 + (l - r) / 2). RULESET1-G adds a
-//! tenth, engine-only mode, `feel` (feel.rs): catalog encounters with their party, read for how the rules feel.
+//! tenth, engine-only mode, `feel` (feel.rs): catalog encounters with their party (WORLD-SIM1: or world encounters with
+//! their authored party), read for how the rules feel.
 //! CAMPAIGN1-SIM adds an eleventh, engine-only and fightless, `deadlines` (deadlines.rs): the best and worst day each
 //! campaign checkpoint can be met.
 
@@ -147,6 +148,7 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
             // SIMCOUNT1: apart from `usage`, which `sim_golden` holds; no golden run asks for help or refuses a feel line
             if matches!(argv.first().map(String::as_str), Some("help" | "feel")) {
                 out.push(args::FEEL_COUNTS_USAGE.to_string());
+                out.push(args::FEEL_WORLD_USAGE.to_string());
             }
             // BASERULES1-M2: the same, for the ruleset notes (no golden run asks for help)
             if argv.first().map(String::as_str) == Some("help") {
@@ -156,6 +158,8 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
                 // PK2-S5b: the same, for `dulled=`
                 out.push(args::DULLED_USAGE.to_string());
                 out.push(args::DURABILITY_USAGE.to_string());
+                // PK2-FOLLOWUP: the same, for `mastery=`
+                out.push(args::MASTERY_USAGE.to_string());
             }
             return out;
         }

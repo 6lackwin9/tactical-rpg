@@ -9,33 +9,23 @@ the candidates to `art_src/<id>_gen<time>_<n>.png`; `tools/portraits/pixelize.py
 `games/emberwake/assets/portraits/`.
 
 Sources for each block: the CAST1 asset briefs N1, N2 and N4-N8 ([CAST1_ASSETS.md](CAST1_ASSETS.md) section 7), the
-founders' portraits row of `docs/specs/STORYUI1_TASKS.md` 1.5 (Vane, Tess, Bram, Aline), the art bible
+founders' portraits row of `docs/specs/STORYUI1_TASKS.md` 1.5 (`captain_vane`, `talia_rusk`, `berek_dorn`, `sabina_kress` — synced to `CANON.md` 3.2 on `2026-11-11`), the art bible
 (`games/emberwake/docs/lore/specs/art_and_visual_style.md` sections 1, 3 and 7.2) and the hub cast looks
 (`games/emberwake/docs/lore/background/npcs_and_questlines.md` section 2). Ids are the CAST1 unit ids
-([CAST1_BESTIARY.md](CAST1_BESTIARY.md), [CAST1_BOSSES.md](CAST1_BOSSES.md)) and the hub NPC ids of STORYUI1
-(`tess`, `bram`, `aline`). Hue numbers are the art bible's 16 master hues. Tone rule: children are never fighters or
-victims on screen, so every Unsealed youth drawn here is an adult; Tess (19, an adult; decisions/lore.md "Tess's age") is drawn as a young
-adult. Where the sources leave a detail open (hair, beard, age in looks), the block makes a best guess; change it
+([CAST1_BESTIARY.md](CAST1_BESTIARY.md), [CAST1_BOSSES.md](CAST1_BOSSES.md)) and the canonical hub NPC ids
+(`talia_rusk`, `berek_dorn`, `sabina_kress`). Hue numbers are the art bible's 16 master hues. Tone rule: children are never fighters or
+victims on screen, so every Unsealed youth drawn here is an adult; Hub mentors are Spent adults (`Talia Rusk` 29, `Chirurgeon Sabina` 31, `Berek Dorn` 33; `CANON.md` 3.2). Where the sources leave a detail open (hair, beard, age in looks), the block makes a best guess; change it
 freely.
 
-ART3B (user 2026-10-25, the stylized re-roll of the nine human portraits; 2 takes each, Gemini 3 Pro Image): the
+ART3B (user 2026-10-25, the stylized re-roll of the nine human portraits; 2 takes each, Gemini 3 Pro Image; hub cast blocks below updated `2026-11-11` for `AI-05` per `CANON.md` 3.2): the
 style block gains a stylization line and a hair line, and Mara Voss sets the pixel style and framing only (preference
 "Characters are stylized, not realistic", [assets-world.md](../preferences/assets-world.md)). Each human block names
-how far its features are pushed: the hub cast (Tess, Bram, Aline) readable and warm, Captain Vane in between, the
+how far its features are pushed: the hub cast (`talia_rusk`, `berek_dorn`, `sabina_kress`) readable and warm, Captain Vane in between, the
 Clerisy (Quell, Nemeth, the Purifier), the corrupted (the Calcified Husk) and Orlov much further. Hair now varies by
-character; a hood, cowl or habit veil stays only where the brief needs it (the Purifier's gas-mask hood). What the lore
-fixes stays: Tess's deaf, burned ear (her right ear since the user's call of 2026-10-25, so it shows in the
-right-facing framing; the ART3B takes were made with the left ear, and the right-ear re-roll ran as ART3C, see
-below), Bram's loupe over the
-right eye and scarred throat, Aline's cropped soot-black hair and defaced habit, Quell's neck valve, Nemeth's grey skin
-and throat vial. The two creature blocks are unchanged and were not re-rolled. The user's ART3B picks (2026-10-25:
-take 1 of Vane, Quell, Orlov, Nemeth, the Husk, Tess and Bram, take 2 of the Purifier and Aline) are now
-`art_src/<id>.png` and the game portraits; the ART3 picks went back to their `_gen` names as takes.
-
-ART3C (user 2026-10-25, Tess's right-ear re-roll; 2 takes, Gemini 3 Pro Image): Tess's block names the near-side ear
-on the left of the picture, uncovered by hair, notched, with the burn running onto her jaw. The user picked take 2
-(`tess_gen1792945812_2`); it is now `art_src/tess.png` and the game portrait, and the ART3B pick went back to
-`tess_gen1792942586_1.png` as a take.
+character; a hood, cowl or habit veil stays only where the brief needs it (the Purifier's gas-mask hood). Key visual hooks (`CANON.md` 3.2):
+Talia's deaf, flash-burned right ear (near-side in right-facing framing), wool dispatch cloak, and ash-wood crutch top; Berek's iron loupe over the
+right eye and scarred throat (`berek_dorn` keeps the `ART3B` `bram` take `1:1`); Sabina's silver-templed cropped black hair, dark oiled-green prosector collar, and unhooked leather surgical half-mask; Quell's neck valve; Nemeth's grey skin
+and throat vial. The two creature blocks are unchanged and were not re-rolled.
 
 Every prompt starts with the same style block:
 
@@ -136,35 +126,35 @@ Main colours: polished steel and scavenged iron, rust crimson cassock, blight vi
 
 ## Hub cast
 
-## Tess (`tess`)
+## Talia Rusk (`talia_rusk`)
 
-Hub NPC (non-combat), the founders' portraits row. The game: Tess Morn, the cell's dead-drop courier; runs the mission
-board at the Water-Lock Basin; Vesper's former runner contact; deaf in one ear from an Inquisition flash-bomb.
+Hub NPC (non-combat). The game: Talia Rusk (29), crippled cipher spymaster who runs the mission board at the Water-Lock
+Basin; mentored Vesper and shelters Ivo; deaf in her right ear from Ruthven's Inquisition sweep.
 
 ```text
-Character: Tess Morn, Dead-Drop Courier. Stylization warm and readable: large, bright, alert eyes, a small pointed chin, expressive dark brows, a quick lopsided half-smile, a sharp, lively face with soot smudges and a few freckles. A young woman of nineteen, an adult, wiry and compact. Long, thick, wild dark-brown hair: one messy loose braid over her left shoulder, the rest falling free in tangled strands, swept back behind her right ear. Her right ear, the deaf one, on the near side toward the viewer (the left side of the picture), is fully visible and not covered by hair: scarred and notched at the rim, the skin round it and down onto her jaw puckered, shiny and pinkish-pale from an old burn from a flash-bomb, clearly readable at small size. Patched leather shingle-armour of overlapping scraps over greasy wool wraps, a courier's satchel strap across the chest with a rolled message tube.
-Mood: quick, wary, determined.
-Main colours: boiled leather brown and rotting oak, grey wool wraps, a small tallow amber accent.
+Character: Talia Rusk, Cipher Spymaster of the Basin. Stylization warm and readable: sharp observant eyes, weathered late-twenties lines around the mouth and brow, a small pointed chin, expressive dark brows, a dry guarded half-smile. A Spent woman of twenty-nine, lean and tough. Dark-brown hair pulled back in a low utilitarian knot with stray soot-dulled strands, swept completely clear of her right ear. Her right ear, the deaf one on the near side toward the viewer (the left side of the picture), is fully visible: scarred and notched at the rim, puckered pale burn tissue running onto her jaw from an Inquisition flash-pot. Heavy grey-brown wool dispatch cloak pinned over patched leather, bone-cipher tally rods at her collar, the carved top of an ash-wood underarm crutch resting against her near shoulder.
+Mood: sharp, watchful, unsentimental.
+Main colours: damp wool grey-brown and boiled leather, carved pale bone rods, tallow amber rim light.
 ```
 
-## Bram (`bram`)
+## Berek Dorn (`berek_dorn`)
 
-Hub NPC (non-combat), the founders' portraits row. The game: Bram "Iron-Lung" Karr, the smith at the Tinker's Hearth;
-a former master foundryman, lungs ruined, mind intact.
+Hub NPC (non-combat). The game: Berek "Cinder-Lung" Dorn (33), the smith at the Tinker's Hearth and Preservationist
+voice; former Fourth Kiln master valve-caster, lungs ruined, mind intact.
 
 ```text
-Character: Bram "Iron-Lung" Karr, Tinker of the Hearth. Stylization warm and readable: a big square head, a huge barrel chest and wide shoulders, a broad flattened nose, a heavy kind-but-tired brow over deep-set eyes. A man in his thirties who looks older. A wild, shaggy mane of dark-brown hair streaked with grey, worn loose to the shoulders, and a big bushy soot-streaked beard; a thick, scarred throat. An iron jeweller's loupe strapped over his right eye. A scorched cowhide apron studded with riveted pouches over a rolled-sleeve work shirt, soot and burn marks on his forearms. Warm forge glow on one side of his face.
+Character: Berek "Cinder-Lung" Dorn, Smith of the Tinker's Hearth. Stylization warm and readable: a big square head, a huge barrel chest and wide shoulders, a broad flattened nose, a heavy kind-but-tired brow over deep-set eyes. A man in his early thirties who looks older. A wild, shaggy mane of dark-brown hair streaked with grey, worn loose to the shoulders, and a big bushy soot-streaked beard; a thick, scarred throat. An iron jeweller's loupe strapped over his right eye. A scorched cowhide apron studded with riveted pouches over a rolled-sleeve work shirt, soot and burn marks on his forearms. Warm forge glow on one side of his face.
 Mood: gruff, steady, stubborn.
 Main colours: boiled leather and scorched cowhide brown, scavenged iron, tallow amber forge glow.
 ```
 
-## Sister Aline (`aline`)
+## Chirurgeon Sabina (`sabina_kress`)
 
-Hub NPC (non-combat), the founders' portraits row. The game: Sister Aline Vance, surgeon at the Apothecary's Slab and
-the Flesh-Broker voice; a former Anointed Prosector of the Hall of Holy Dissection.
+Hub NPC (non-combat). The game: Chirurgeon Sabina Kress (31), surgeon at the Apothecary's Slab and the Flesh-Broker
+voice; exiled outer-ward anatomist who once studied under Chief Anatomist Lazar.
 
 ```text
-Character: Sister Aline, Surgeon of the Apothecary's Slab. Stylization readable but cool: a long elegant neck, a long narrow face with high sharp cheekbones and hollow cheeks, large cool calculating eyes under straight dark brows, a small firm mouth. A tall, gaunt woman in her mid-twenties. Cropped soot-black hair, cut short and severe with a razor, ragged at the nape, one longer lock falling over her brow; bareheaded, no veil and no wimple. A clerical habit with its holy emblem cut away and defaced, under a stiff leather embalmer's apron stained with vitriol. A bandolier of silver scalpels and bone cannulas across the chest; sulfur-yellow stained fingertips on one hand raised near the strap. Faint early black-violet veins creeping up the side of her neck.
-Mood: cold, pragmatic, unflinching.
-Main colours: bleached linen and damp basalt habit, boiled leather apron, polished steel scalpels, a hint of blight violet.
+Character: Chirurgeon Sabina Kress, Surgeon of the Apothecary's Slab. Stylization readable but cool: a long narrow face with high sharp cheekbones and hollow cheeks, severe silver-grey eyes under straight dark brows, a small clinical mouth, no spectacles. A tall, gaunt woman of thirty-one. Cropped soot-black hair streaked with early silver at both temples, bareheaded, no veil and no wimple. A high-collared dark oiled-green prosector coat over a vitriol-stained leather surgical apron, an unhooked dark leather surgical half-mask hanging loose from one collar button, a bandolier of glass pipettes and polished steel scalpels across the chest, sulfur-stained fingertips.
+Mood: clinical, unsentimental, unflinching.
+Main colours: dark oiled prosector green and damp basalt, boiled leather apron, polished steel scalpels, faint amber-green glass pipettes.
 ```

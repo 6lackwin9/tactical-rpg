@@ -11,7 +11,7 @@ use super::quest::{flag_key_ok, flag_value_ok, rep_value_error};
 use super::world::{party_character_errors, ref_errors};
 use super::View;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{ROLL_EFFECT, STANDING_RATINGS, STATS};
+use rpgkit_data::{INSTALL_EFFECT, INSTALL_EFFECT_KEYS, IN_ACTIVE_PARTY, ROLL_EFFECT, STANDING_RATINGS, STATS};
 use indexmap::IndexMap;
 use serde_json::Value;
 
@@ -23,7 +23,15 @@ const MAX_TEXT: usize = 1000;
 const NODE_KEYS: [&str; 8] = ["id", "speaker", "expression", "text", "choices", "effects", "next", "end"];
 const CHOICE_KEYS: [&str; 6] = ["text", "to", "requires", "unless", "effects", "show_locked"];
 /// Condition kind -> its keys besides `kind`.
-const CONDITION_KINDS: [(&str, &[&str]); 5] = [("flag", &["key", "value", "op"]), ("quest", &["quest", "status"]), ("items", &["item", "count"]), ("gold", &["min"]), ("stat", &["stat", "min", "threshold"])];
+/// ACT1-HOOKS2 (FB-244 (1)): `in_active_party` {character}, a party character deployed now.
+const CONDITION_KINDS: [(&str, &[&str]); 6] = [
+    ("flag", &["key", "value", "op"]),
+    ("quest", &["quest", "status"]),
+    ("items", &["item", "count"]),
+    ("gold", &["min"]),
+    ("stat", &["stat", "min", "threshold"]),
+    (IN_ACTIVE_PARTY, &["character"]),
+];
 const QUEST_STATUSES: [&str; 7] = ["locked", "available", "unavailable", "active", "ready", "blocked", "completed"];
 const GOLD_CONDITION_MAX: i64 = 9999999;
 const STAT_MIN: i64 = 1;
@@ -33,18 +41,19 @@ const RATING_BAR_MAX: i64 = 999;
 /// T1.2-S2: a roll's `dc`.
 const ROLL_DC_MIN: i64 = 1;
 const ROLL_DC_MAX: i64 = 999;
-/// Effect -> its keys besides `effect`.
-const EFFECTS: [(&str, &[&str]); 10] = [
+/// Effect -> its keys besides `effect` (ACT1-HOOKS2: `install`, a graft into the body of the member a flag names).
+const EFFECTS: [(&str, &[&str]); 11] = [
     ("set_flag", &["key", "value"]),
     ("add_flag", &["key", "delta", "min", "max"]),
     ("start_quest", &["quest"]),
     ("turn_in", &["quest"]),
-    ("give", &["items", "gold"]),
+    ("give", &["items", "gold", "supplies"]),
     ("take", &["items", "gold"]),
     ("open_shop", &["shop"]),
     ("fight", &["encounter"]),
     ("recruit", &["character", "level"]),
     (ROLL_EFFECT, &rpgkit_data::ROLL_EFFECT_KEYS),
+    (INSTALL_EFFECT, &INSTALL_EFFECT_KEYS),
 ];
 const NODE_EFFECTS: [&str; 3] = ["set_flag", "add_flag", "give"];
 /// STORYUI1 4.7: the story effect a node takes besides NODE_EFFECTS (the choice order rules keep NODE_EFFECTS).
@@ -349,6 +358,17 @@ pub fn conditions_errors(v: &View, w: &str, raw: &Value, label: &str) -> Vec<Str
                     errors.push(format!("{cl}: min must be a whole number 0..{GOLD_CONDITION_MAX}."));
                 }
             }
+            // ACT1-HOOKS2 (FB-244 (1)): a party character (only those can be deployed)
+            IN_ACTIVE_PARTY => {
+                let found = ref_value_errors(v, w, cond.get("character").unwrap_or(&Value::from("")), "characters", &format!("{cl} character"));
+                if found.is_empty() {
+                    let c = v.worlds.resolve(w, "characters", &json::s(cond, "character"));
+                    if json::s_or(c, "role", "npc") != "party" {
+                        errors.push(format!("{cl}: character '{}' is not a party character (role party).", json::s(cond, "character")));
+                    }
+                }
+                errors.extend(found);
+            }
             _ => {
                 let stat = cond.get("stat").cloned().unwrap_or(Value::from(""));
                 let primary = stat_kind(v, w, &stat);
@@ -547,7 +567,44 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
                 errors.push(format!("{el}: level '{}' must be {} or a whole number 1..{RECRUIT_LEVEL_MAX}.", gstr(level), RECRUIT_LEVELS.join(", ")));
             }
         }
+        INSTALL_EFFECT => errors.extend(install_errors(v, fx, el)),
         _ => errors.extend(super::campaign::effect_errors(v, w, effect, fx, el)),
+    }
+    errors
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): an `install` effect: `member_from_flag` a flag key (the flag holds a character id when it
+/// runs), `item` a graft item, `slot` (optional, "" = the first empty slot that takes it) a body slot of the graft's role.
+fn install_errors(v: &View, fx: &Dict, el: &str) -> Vec<String> {
+    let mut errors = Vec::new();
+    let key = fx.get("member_from_flag").cloned().unwrap_or(Value::from(""));
+    if !key.is_string() || !flag_key_ok(&gstr(&key)) {
+        errors.push(format!("{el}: member_from_flag '{}' must be a flag key, non-empty [a-z0-9_.].", gstr(&key)));
+    }
+    let item = json::s(fx, "item");
+    let fits = match v.get("items", &item) {
+        i if item.is_empty() || i.is_empty() => {
+            errors.push(format!("{el}: unknown item '{item}'."));
+            None
+        }
+        i if json::s(i, "item_type") != rpgkit_data::GRAFT => {
+            errors.push(format!("{el}: '{item}' is not a graft."));
+            None
+        }
+        i => Some(json::s_or(i, "body_role", rpgkit_data::BODY_ROLE_MONSTER)),
+    };
+    match fx.get("slot") {
+        None => {}
+        Some(Value::String(slot)) if slot.is_empty() => {}
+        Some(Value::String(slot)) => {
+            let row = v.get(rpgkit_data::BODY_SLOTS_KIND, slot);
+            if row.is_empty() {
+                errors.push(format!("{el}: unknown body slot '{slot}'."));
+            } else if let Some(fits) = fits.filter(|f| *f != json::s(row, "role")) {
+                errors.push(format!("{el}: body slot '{slot}' does not take {fits} grafts."));
+            }
+        }
+        Some(_) => errors.push(format!("{el}: slot must be a body slot id or \"\".")),
     }
     errors
 }
@@ -558,7 +615,8 @@ fn reserved_errors(key: &str, el: &str) -> Option<String> {
     (!why.is_empty()).then(|| format!("{el}: {why}"))
 }
 
-/// give / take: items {base id: 1..99} (at most 8 keys), gold 0..EFFECT_GOLD_MAX, not both empty.
+/// give / take: items {base id: 1..99} (at most 8 keys), gold 0..EFFECT_GOLD_MAX, a give's supplies 0..99
+/// (ACT1-HOOKS1), not all empty.
 fn goods_errors(v: &View, fx: &Dict, el: &str) -> Vec<String> {
     let mut errors = Vec::new();
     let items_raw = fx.get("items").cloned().unwrap_or(Value::Object(Dict::new()));
@@ -580,8 +638,15 @@ fn goods_errors(v: &View, fx: &Dict, el: &str) -> Vec<String> {
     if !int_in(&gold, 0, EFFECT_GOLD_MAX) {
         errors.push(format!("{el}: gold must be a whole number 0..{EFFECT_GOLD_MAX}."));
     }
-    if items.is_empty() && json::to_int(&gold) <= 0 {
-        errors.push(format!("{el} needs items or gold."));
+    // ACT1-HOOKS1 (FB-241 c): a give's travel supplies (a take's are refused as an unknown key)
+    let supplies = fx.get("supplies").cloned().unwrap_or(json::int(0));
+    let supplies_max = crate::source::PurseCaps::SUPPLIES_MAX;
+    if !int_in(&supplies, 0, supplies_max) {
+        errors.push(format!("{el}: supplies must be a whole number 0..{supplies_max}."));
+    }
+    if items.is_empty() && json::to_int(&gold) <= 0 && json::to_int(&supplies) <= 0 {
+        let what = if json::s(fx, "effect") == "give" { "items, gold or supplies" } else { "items or gold" };
+        errors.push(format!("{el} needs {what}."));
     }
     errors
 }

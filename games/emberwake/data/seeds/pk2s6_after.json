@@ -1,5 +1,4 @@
 {
- "_waits_on": "PR5-19 blocked rows: repair and reforge recipe effects and target weapon are in RECIPE_PENDING (check refuses them); repair also waits on a scaled cost model (per missing durability, tier -> fine salvage, theme -> themed salvage; FB-218 e). Not applied.",
  "steps": [
   {
    "op": "upsert",
@@ -7,7 +6,7 @@
    "entry": {
     "id": "hearth_repair",
     "name": "Repair",
-    "description": "Restore a weapon's durability. Cost scaling by missing durability, tier and theme is not modelled yet.",
+    "description": "Restore a weapon's durability: Scrap scaled by the missing durability; higher tiers also need fine salvage, Inquisitor arms Inquisitor steel.",
     "npc": "berek_dorn",
     "requires": [
      {
@@ -17,13 +16,22 @@
       "op": "=="
      }
     ],
-    "cost": {
-     "gold": 10
-    },
+    "cost": {},
     "target": "weapon",
     "effects": [
      {
-      "effect": "repair"
+      "effect": "repair",
+      "gold": 10,
+      "count": 1,
+      "tiers": {
+       "UNCOMMON": "salvage_fine",
+       "RARE": "salvage_fine",
+       "EPIC": "salvage_fine",
+       "LEGENDARY": "salvage_fine"
+      },
+      "themes": {
+       "inquisitor": "salvage_inquisitor"
+      }
      },
      {
       "effect": "doctrine",

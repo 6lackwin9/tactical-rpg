@@ -206,3 +206,26 @@ fn an_attack_records_the_main_hand_family_of_a_member() {
     resolve(&mut member, HERO, "t_jab", FOE);
     assert_eq!(member.weapon_attacks.get(&HERO).cloned().unwrap_or_default(), ["sword"], "once per family");
 }
+
+/// PK2-FOLLOWUP (PR5-36, the sims' `mastery=N`): `sim::apply_mastery` gives each unit its main-hand family's mastery
+/// n (clamped to 0-3), so the family's first n techniques open as for a member built with it; a unit with no main-hand
+/// weapon is left as it was.
+#[test]
+fn the_sims_mastery_opens_the_main_hand_familys_techniques() {
+    let s = session(false);
+    for n in 0..=MASTERY_MAX + 1 {
+        let mut w = s.w.clone();
+        wield(&mut w, HERO, "blade_1h", None, false);
+        assert!(w.units[HERO].techniques.is_empty(), "a catalog unit opens none");
+        rpgkit_battle::sim::apply_mastery(&mut w, &[HERO], n);
+        let open: Vec<&str> = w.units[HERO].techniques.iter().map(|t| t.skill.as_str()).collect();
+        let level = n.min(MASTERY_MAX) as usize;
+        assert_eq!(open, TECHNIQUES[..level], "mastery {n}");
+        assert_eq!(w.units[HERO].mastery.as_ref().and_then(|m| m.get("sword").copied()), Some(level as i32));
+    }
+    let mut bare = s.w.clone();
+    bare.units[FOE].inventory.unequip(Slot::MainHand);
+    let before = bare.units[FOE].mastery.clone();
+    rpgkit_battle::sim::apply_mastery(&mut bare, &[FOE], MASTERY_MAX);
+    assert_eq!(bare.units[FOE].mastery, before, "no main-hand weapon: unchanged");
+}

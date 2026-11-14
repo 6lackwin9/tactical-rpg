@@ -209,11 +209,11 @@ impl Battle {
 
     fn new_world_battle(&mut self, world: &str, local: &str, req: &Value) -> Value {
         let Some(d) = self.data.clone() else { return err("this host has no world data: world encounters need the GUI or a data folder") };
-        let entry = d.resolve(world, "encounters", local);
-        if entry.is_empty() {
+        // WORLD-SIM1: the one authored-side builder (`aegis battle world:` and `sim feel world:` share it)
+        let Some((mut def, roster)) = rpgkit_world::battle::authored_fight(&d, world, local, 0) else {
             return err(format!("unknown encounter '{local}' in world '{world}'"));
-        }
-        let mut def = rpgkit_world::battle::encounter_def(&d, world, entry);
+        };
+        let entry = d.resolve(world, "encounters", local);
         if let Some(seed) = req.get("seed").and_then(Value::as_i64) {
             def.rng_seed = seed;
         }
@@ -227,8 +227,6 @@ impl Battle {
             Ok(t) => def.tactics = t,
             Err(e) => return err(e),
         }
-        def.id = format!("{world}:{local}");
-        let roster = rpgkit_world::battle::WorldRoster::new(&d, world);
         let s = Session::start(d.cat.clone(), def, &roster);
         let state = state_of(&s);
         self.begin(s);
@@ -622,6 +620,13 @@ fn items_of(s: &Session, u: UnitId, target: Option<UnitId>) -> Vec<Value> {
             row["field_reach"] = json!(command::item_field_reach(con));
             row["assault_blocks"] = json!(command::item_blocks(&s.w, con, true, s.w.total_blocks));
         }
+        // ACT1-HOOKS2 (FB-244 (5-6)): a meter change and armour piercing, only when set (other rows keep their shape)
+        if let Some(m) = &con.meter_delta {
+            row["meter_delta"] = json!({"meter": m.meter, "delta": m.delta});
+        }
+        if con.armor_piercing {
+            row["armor_piercing"] = json!(true);
+        }
         out.push(row);
     }
     out
@@ -638,7 +643,7 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
                 continue;
             }
             let reach = if k == Kind::Support { skill::support_reach(sk, &w.units[u]) } else { skill::reach_by(sk, &w.units[u], &w.ruleset) };
-            let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": rpgkit_content::source::skill_description(&sk.raw, w.ruleset.stances())});
+            let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": w.blocks_of(u, sk), "reach": [reach.0, reach.1], "area": sk.area, "description": rpgkit_content::source::skill_description(&sk.raw, w.ruleset.stances())});
             // HOOKS1 HC1 (HOOKS1-UI slice 3): the HP the skill costs, priced from the battle's own catalog as the planner
             // does, only when it costs some (rule hp_cost; classic rows keep their shape)
             // PK1-S2a: with a percent cost (`hp_cost_pct`) of the unit's max HP

@@ -539,7 +539,8 @@ pub fn claim_loot(gs: &mut GameState, qid: &str) -> String {
     String::new()
 }
 
-/// `rewards` {xp, items, passives, skills, gold} plus resolved loot entries. {ok, errors, granted, notes}.
+/// `rewards` {xp, items, passives, skills, gold, supplies} plus resolved loot entries. {ok, errors, granted, notes};
+/// `granted.supplies` only when the rewards name some (ACT1-HOOKS1).
 /// Content validation of the reward block (QuestRules.rewards_errors) is not ported: shipped data is valid.
 pub fn reward_apply(d: &Data, gs: &mut GameState, rewards: &Dict, recipient_id: &str, loot: &[Dict]) -> Dict {
     let r = json::normalize_dict(rewards);
@@ -550,6 +551,12 @@ pub fn reward_apply(d: &Data, gs: &mut GameState, rewards: &Dict, recipient_id: 
         errors.push(format!("Rewards gold must be a whole number 0..{GOLD_MAX}."));
     }
     let gold = json::to_int(&gold_raw);
+    // ACT1-HOOKS1 (FB-241 c): travel supplies, capped by the purse (the rest is a note)
+    let supplies_raw = r.get("supplies").cloned().unwrap_or(int(0));
+    if !json::is_int(&supplies_raw) || json::to_int(&supplies_raw) < 0 {
+        errors.push("Rewards supplies must be a whole number 0 or more.".into());
+    }
+    let supplies = json::to_int(&supplies_raw).max(0);
     let xp = json::i(&r, "xp", 0);
     let mut items = r.get("items").map(json::ints).unwrap_or_default();
     let mut passives = json::sget(&r, "passives");
@@ -606,6 +613,14 @@ pub fn reward_apply(d: &Data, gs: &mut GameState, rewards: &Dict, recipient_id: 
         granted.insert("gold".into(), int(added));
         if added < gold {
             notes.push(terms::currency_capped(d, &gs.world_id, gold - added));
+        }
+    }
+    // ACT1-HOOKS1: `granted.supplies` only when some were given (results without them read as before)
+    if supplies > 0 {
+        let added = gs.party.add_supplies(supplies);
+        granted.insert("supplies".into(), int(added));
+        if added < supplies {
+            notes.push(terms::upkeep_capped(d, &gs.world_id, supplies - added));
         }
     }
     if xp > 0 {

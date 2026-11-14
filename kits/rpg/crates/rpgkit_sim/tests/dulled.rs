@@ -6,8 +6,14 @@
 //! `rpgkit_battle/tests/durability.rs`, since a catalog ally opens no technique). The keys parse, refuse other values,
 //! show in the ARGS header only when set, and their help prints apart from `usage` (which `sim_golden` holds). Checked
 //! on a scratch catalog built here.
+//!
+//! PK2-FOLLOWUP (PR5-36, FB-218 (c-e), FB-220): `mastery=0-3` (each ally's main-hand family mastery, so techniques open;
+//! `rpgkit_battle::sim::apply_mastery`, tested in `rpgkit_battle/tests/techniques.rs`) parses, refuses other values and
+//! shows only when set; `feel` applies `durability=` (every mode fights through `Runner::fight`), and `counts=on` reports
+//! each side's `worn` and `dulled` (never without the key, so `sim_golden`'s lines hold).
 
-use rpgkit_sim::args::{SimArgs, DULLED_MODES, DULLED_USAGE, DURABILITY_USAGE};
+use rpgkit_sim::args::{SimArgs, DULLED_MODES, DULLED_USAGE, DURABILITY_USAGE, MASTERY_USAGE};
+use rpgkit_sim::feel::JSON_PREFIX;
 use rpgkit_sim::runner::Runner;
 use rpgkit_world::Data;
 use serde_json::{json, Map};
@@ -106,4 +112,72 @@ fn the_dulled_key_parses_refuses_bad_values_and_is_in_sim_help() {
     let help = rpgkit_sim::run(&d, &["help".to_string()], &game);
     assert!(help.contains(&DULLED_USAGE.to_string()), "sim help lists dulled=");
     assert!(!rpgkit_sim::args::usage(&game).contains(&DULLED_USAGE.to_string()), "apart from usage (sim_golden)");
+}
+
+#[test]
+fn the_mastery_key_parses_refuses_bad_values_and_is_in_sim_help() {
+    let d = data();
+    let game = rpgkit_sim::SimGame::default();
+    let parsed = |line: &str| SimArgs::parse_for(&d, &line.split_whitespace().map(String::from).collect::<Vec<_>>(), &game);
+    let default = parsed("party").expect("parses");
+    assert!(default.mastery.is_none() && !default.header().contains("mastery"), "absent: catalog allies hold none, not echoed");
+    let max = rpgkit_data::mastery::MASTERY_MAX;
+    for n in 0..=max {
+        let a = parsed(&format!("party mastery={n}")).expect("parses");
+        assert_eq!(a.mastery, Some(n));
+        assert!(a.header().ends_with(&format!(", mastery {n}")), "{}", a.header());
+    }
+    for bad in [String::from("-1"), (max + 1).to_string(), "x".into(), String::new()] {
+        let err = parsed(&format!("party mastery={bad}")).map(|a| a.mastery);
+        assert!(err.as_ref().is_err_and(|e| e.starts_with("mastery must")), "mastery={bad}: {err:?}");
+    }
+    let help = rpgkit_sim::run(&d, &["help".to_string()], &game);
+    assert!(help.contains(&MASTERY_USAGE.to_string()), "sim help lists mastery=");
+    assert!(!rpgkit_sim::args::usage(&game).contains(&MASTERY_USAGE.to_string()), "apart from usage (sim_golden)");
+}
+
+/// `data()` with a timeline ruleset row listing the rule `durability` and the encounter `t_ring` (t_hero against the
+/// wolf), for the feel mode.
+fn feel_data() -> Data {
+    let stats = json!({"STR": 12, "DEX": 10, "INT": 6, "CONS": 12, "PERC": 10, "KNOW": 10});
+    let catalog = json!({
+        "classes": [{"id": "drill", "name": "Drill", "base_stats": stats, "proficiency": {"sword": {"level": 2}}, "skill_path": {"t_jab": 1}}],
+        "skills": [
+            {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY", "round_intent": "assault"},
+            {"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2},
+            {"id": "t_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 1.0, "target_mode": "ENEMY", "round_intent": "assault"}
+        ],
+        "items": [{"id": "blade", "name": "Blade", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "base_power": 10}],
+        "units": [
+            {"id": "t_hero", "name": "t_hero", "side": "party", "class_id": "drill", "level": 3, "main_hand": "blade"},
+            {"id": "wolf", "name": "wolf", "side": "enemy", "class_id": "drill", "level": 3, "tuning": {"hp_pct": 400}}
+        ],
+        "encounters": [{"id": "t_ring", "name": "Ring", "zone": "stone_arena", "arena": "CLOSED", "max_rounds": 4, "total_blocks": 6, "ap_regen": 4, "unit_ap": 10, "party": ["t_hero"], "enemies": ["wolf"]}],
+        "rulesets": [{"id": "timeline", "name": "Timeline", "rules": ["round_intent", "ap_cost", "durability"], "basics": ["move", "rest", "strike"]}]
+    });
+    Data::from_values(&catalog, &json!({}), &json!({}))
+}
+
+#[test]
+fn feel_applies_the_durability_seed_and_counts_report_the_wear() {
+    let d = feel_data();
+    let game = rpgkit_sim::SimGame { feel_encounters: vec!["t_ring".into()], ..rpgkit_sim::SimGame::default() };
+    let run = |line: &str| rpgkit_sim::run(&d, &line.split_whitespace().map(String::from).collect::<Vec<_>>(), &game);
+    let seeds = 2;
+    let wear = |out: &[String]| {
+        let last = out.last().expect("a line");
+        let v: serde_json::Value = serde_json::from_str(last.strip_prefix(JSON_PREFIX).unwrap_or_else(|| panic!("FEEL_JSON last: {out:?}"))).expect("JSON");
+        let w = &v["total"]["party"]["rule_counts"]["wear"];
+        (w["worn"].as_i64().unwrap_or(-1), w["dulled"].as_i64().unwrap_or(-1))
+    };
+    let plain = run(&format!("feel seeds={seeds} counts=on"));
+    assert_eq!(wear(&plain), (0, 0), "no seed: catalog allies track no wear");
+    assert!(plain.iter().any(|l| l.contains("party rule counts: ") && l.ends_with("; worn 0, dulled 0")), "the human line: {plain:?}");
+    let dull = run(&format!("feel seeds={seeds} counts=on durability=0"));
+    assert_eq!(wear(&dull).1, seeds, "durability=0: the hero's one blade is dulled every fight");
+    let sharp = run(&format!("feel seeds={seeds} counts=on durability={PLENTY}"));
+    assert!(wear(&sharp).0 > 0 && wear(&sharp).1 == 0, "a seeded run spends without dulling: {:?}", wear(&sharp));
+    let quiet = run(&format!("feel seeds={seeds} durability=0"));
+    assert!(!quiet.iter().any(|l| l.contains("worn") || l.contains("\"wear\"")), "no wear without counts=on");
 }

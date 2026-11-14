@@ -1,132 +1,61 @@
 # Narrative agency, roster continuity and fail states
 
-Status: canon for the lifecycle and fail-state rules (CANON 2.4 and 2.6); proposal for the recruit pool and the Acts 2-3
-detail (consistency pass 2026-10-25). This doc follows [CANON.md](../CANON.md); where they differ, CANON wins. Names
-follow the [cast registry](../background/cast_registry.md). Related: [roster lifecycle](../systems/roster_expansion_and_lifecycle.md),
-[NPCs and questlines](../background/npcs_and_questlines.md). Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
+Status: **`[LOCKED]` (`2026-11-11`, synced with [CANON.md](../CANON.md) & [STORY_GUIDE.md](../STORY_GUIDE.md); `CL-01..CL-11`)**. Related:
+[NPCs and questlines](../background/npcs_and_questlines.md), [ACTS23 spec](../../../../docs/specs/ACTS23.md).
+Layer tags: `[engine]`, `[kit hook]`, `[data]`, `[game code]`.
 
-## 1. Authored founders, hybrid recruits
+## 1. Authored Founders, Visored Cohorts & Survivor Inheritance (`CL-07..11`)
 
-The cast is a resilient ensemble: the founders are authored characters with stakes; the recruits who replace the fallen
-come from a pool with authored parts. If one founder falls, the cause goes on.
+The cast is a resilient ensemble: the `6` Founders have personal arcs across Acts 1-3, visored/cowled Unsealed cohorts (`18-24`) replenish lost bunks from Act 2 onward, and **Survivor Inheritance (`CL-09`)** guarantees that losing a Founder at `M5` or in Act 2 reshapes *how* their personal reckoning plays out rather than deleting it.
 
-### 1.1 The founders
+### 1.1 The Six Founders (`CANON` 3.1)
 
-| Founder | World tie | Personal hook |
-| --- | --- | --- |
-| Kaelen (Vanguard) | Deserter from the Seventh Ward Castellan Watch; guilt over enforcing curfew sweeps | Hunts his former commanding officer, Captain Vane (M1) |
-| Vesper (Gutter-Stalker) | Ash-Crawl curfew runner and thief; knows the drainage locks and runner routes | Vendetta against Guild-Master Orlov (M4) |
-| Maren (Heretic Acolyte) | Defrocked scribe of the Scriptorium of St. Lyra's who copied the forbidden texts | Proctor Quell denounced her (M2) |
-| Hollis (Arbalestier) | Crag poacher who shot the Castellan commander dragging his sister Wren to the cages | Open |
-| Dunstan "Slag-Jaw" (Slag-Brute) | Bone-mill stoker at the Fourth Kiln under Overseer Grendel | Grendel (M3) |
-| Elyse (Ichor Alchemist) | Hedge chemist with a still beneath the Tallow Vats | Open |
+| Founder | World Tie | Act 1 Hook (`CL-08`) | Act 2 Reckoning & Survivor Inheritance (`CL-02`, `CL-09`) |
+| --- | --- | --- | --- |
+| `Kaelen` (`Vanguard`, `24`) | Castellan Watch deserter (Seventh Ward) who refused `Vane`'s Order 44 | `M1` (`Vane` withdraws) + *"Seventh Ward Bellows"* (`Slag Plating` + Hearth discount) | Hunts `Capt. Vane` & Watch debt ledgers *(inherited by `Berek` + cell)* |
+| `Vesper` (`Gutter-Stalker`, `21`) | Ash-Crawl curfew runner whose brother died on `Orlov`'s tallow tithe | `M4` (`Orlov` withdraws) + *"Sluice Lock-Ciphers"* (`0`-Alert Siphon Shortcut) | Raids `Orlov`'s Counting-House *(inherited by `Talia` + cell)* |
+| `Maren` (`Heretic Acolyte`, `22`) | Defrocked St. Lyra's copyist whose mentor `Quell` vivisected | `M2` (`Quell` slain, saved captives -> `+1` `Rock Salt`) + *"Liturgical Cipher Rubbings"* | Unseals St. Lyra's Forbidden Vault *(inherited by `Sabina` + cell)* |
+| `Hollis` (`Arbalestier`, `23`) | Crag poacher whose bolt blinded `Ruthven` while `Wren` (`14`) was taken | *"The Crag-Sight Overlook"* (`Lever-Winch` + delays `M5` R3 wave -> R4) | Frees `Wren` from Bastion convoy *(inherited by `Talia` + cell)* & faces `Ruthven` at `2.6` |
+| `Dunstan "Slag-Jaw"` (`Slag-Brute`, `22`) | Fourth Kiln bone-mill convict whose Spent father came down `Grendel`'s chute | Joins at `M3` (`Grendel` slain) + *"Chain-Gang Wedges"* (`Skerrit` bone-wright recipes) | Kills `Foundry-Master Jessop` & seizes `3.2` Conduit plans w/ `Berek` *(inherited by `Berek` + cell)* |
+| `Elyse` (`Ichor Alchemist`, `19`) | Vat assayer whose alum counter-tonic woke her Spent mother's tenement block | Joins at `M4` + *"Tenement Counter-Still"* (`+5` `Warded Tallow` + `1` prototype `Snapped Alum Inhaler`) | Sabotages Cathedral sedative cisterns *(inherited by `Sabina` + cell)* |
 
-- Voices: each founder has a personal voice in hub dialogue with Sister Aline, Bram and Tess `[kit hook]` (dialogue,
-  today `emberwake_world::dialogue`) `[data]` (lines).
-- Battle barks: short reactive lines on battle events `[kit hook]` (new: bark lines keyed to battle events) `[data]`;
-  whether barks are in scope: Open.
+- **Hub Debates & Battle `talk` Cues (`CL-11`)**: Founders speak in the **4 Hub Table Debates** (`Post-0c`, `Post-Interlude`, `Post-M5`, `Post-2.4`) alongside `Chirurgeon Sabina`, `Berek "Cinder-Lung" Dorn`, and `Talia Rusk`, and trigger `1-2` line mid-battle `talk` (`TalkCue`) phase overlays when deployed against their personal antagonists.
 
-### 1.2 Replacement recruits (Act 2 on)
+### 1.2 Act 2-3 Unsealed Recruit Cohorts (`18-24`, `CL-07`)
 
-- Founders cannot die in Act 1. From Act 2 a founder lost to death, capture or Calcification Stage V (Terminal Drift)
-  is replaced from the Unsealed pool, never by nameless units.
-- Recruits are Unsealed youths aged 18-24 `[data]` (recruit pool), each with:
-  - a personal name and a visual silhouette;
-  - an origin tag (for example Escaped Kiln Stoker, Defrocked Acolyte, Gutter Orphan, Smuggler's Apprentice);
-  - a temperament (for example Grim Fatalist, Cold Pragmatist, Vengeful Zealot) that picks their barks and hub lines.
-- Whether origin tags and temperaments carry mechanics: Open.
+- Founders cannot die in Act 1 (`0` HP -> `wounded`, `-20%` max HP until rested).
+- At Act 2 start, `Talia` shelters `1` class-matched `18-24` runaway into the `M5` bunk (`CL-07`); repeatable `2.2 Culling Stockades` wagon raids (`enc_act2_02`) offer `1-2` recruits from the `6` **Act 2 Recruit Cohorts** (*Turncoat Watch Levy*, *Ash-Crawl Flue-Runner*, *Apostate Charnel-Novice*, *Outwall Bolt-Man*, *Kiln Chain-Breaker*, *Vat-Still Saboteur*), all wearing **visors, cowls, scarves, or respirator-goggles** (`CANON` 3.2).
+- Rescued children under `18` (`Ivo` `12`, `Lucan` `14`, `Wren` `14`, `Ida` `16`) and Spent specialists `25+` (`Ferrand` `40`, `Herbalist Clemence` `36`) stay bunk-free non-combat Basin wards/guests (`CL-07`).
 
-## 2. Reserves
+## 2. Reserves, Bunks & Upkeep
 
-Recruits come from two sources `[kit hook]` (RECRUIT1; dialogue effect `recruit`):
+- **No soft lock**: `Talia`'s cipher board always offers `2.2` culling-wagon raids in Acts 2-3 while at least `1` operative lives.
+- **Bunk cap**: `6` in the Dry Hollows (`8` after `Berek`'s *"Expanded Timber Frames"* Hearth project, plus `2` **Isolation Crypt** stasis slots for Stage IV operatives).
+- **Cell upkeep**: `1` `Warded Tallow` per day of travel or rest (`0` = `-2` starting AP in battle; never scales with bench count).
 
-| Source | What | Notes |
-| --- | --- | --- |
-| Story recruits | Named characters freed in milestone quests | Higher starting skill or a unique perk; wait as guests first ([recruits and prologue](recruits_and_prologue_architecture.md) 3) |
-| Culling raids | Repeatable culling-wagon or stockade raids (ENC-ACT2-02) | Always on Tess's board from Act 2; free 1-2 recruits each |
+## 3. Lifecycle, Sieges & Fail States (`[LOCKED]`)
 
-### 2.1 No soft lock
+### 3.1 Operative Downed Rules (`ACTS23` `PK3`)
 
-- From Act 2, Tess's board always offers a repeatable culling raid `[kit hook]` (repeatable board mission) `[data]`,
-  so the bench can always be refilled while anyone is alive to run it.
-- Act 1 needs no such valve: founders cannot die there.
+- **Act 1**: Downed -> `wounded` (`-20%` max HP until rested); `M5` Crucible winch is the sole scripted capture (`sunk_ward.crucible_stayed`).
+- **Acts 2-3**: On a **won** battle (`held field`), downed operatives survive `wounded` unless claimed by Stage V **Terminal Drift** (`lost`, `Sabina` recovers `1` core from implanted allies); on a **fled/lost** battle, downed operatives face seeded `captured` / `dead` (`ACTS23` `PK3`), returning gear to stash and inscribing their name on the Dry Hollows Memorial Stone.
 
-### 2.2 Limits on hoarding
+### 3.2 The `Extinguished` Failure Screen
 
-1. Bunks: 6 in the Dry Hollows, 8 after Bram's "Expanded Timber Frames" project (Act 2) `[kit hook]` (hub facility
-   levels). Act 1 holds only the six founders; the bunk the Crucible empties takes the first procedural recruit at the
-   start of Act 2 (user 2026-10-25, Q-38). A recruit needs a free bunk; guests wait in the Water-Lock Basin and take
-   none.
-2. Inquisition Alert, a generic meter system (user 2026-10-25, Q-15) `[engine]` if game-agnostic, else `[kit hook]`:
-   loud raids raise it (loud and quiet mission tags, bribes in Scrap or Rock Salt, story amounts; numbers by the balance
-   lane). At Lockdown (71-99%) Inquisitor-General Ruthven's Render-Beast packs hunt and routes harden (the Lockdown
-   effects are built with the meter); at Breach (100%) an Act 1 run ends (3.2) and from Act 2 a siege starts. In Acts
-   2-3 Alert is an active management task.
-3. Upkeep does not scale with the bench: it is 1 Warded Tallow per day of travel or rest for the whole cell. At 0
-   Tallow every battle starts with -2 AP until restocked. The old per-operative "Tallow and Salt" tax and its "Strain
-   and panic" penalty are dropped.
+`Extinguished` is a campaign failure screen (`aegis_ui`), never a narrative ending:
 
-## 3. Fail states
-
-### 3.1 No single death ends the campaign
-
-- Losing any one operative, a founder included, never ends the campaign. A campaign that ended on one death would make
-  players treat founders as fragile VIPs, reload every loss and avoid Inoculation and grafts.
-- Act 1: founders at 0 HP are downed and end the battle wounded (-20% max HP until a rest, Q-31); the Crucible capture
-  is the one scripted loss.
-- Acts 2-3: when an operative dies or reaches Terminal Drift, their gear goes to the stash `[kit hook]` (stash) and
-  their name onto the Memorial Stone in the Dry Hollows `[kit hook]` (lifecycle event) `[data]`. How the survivors react
-  (the old "Resolve or grief traits"): Open.
-- A captured operative may return as the optional corrupted-founder boss in Act 3. The Crucible's captive cannot be
-  saved in practice: at 2.4 the cell sees Nemeth deliver them to Lazar and arrives too late (CANON 3.6, refinement;
-  Q-33 option a). Whether a capture in Act 2 can be undone: Open.
-
-### 3.2 The Extinguished screen
-
-Extinguished is a failure screen, not an ending `[engine]` (a screen on `aegis_ui::screen::Screen`) raised by
-`[kit hook]` fail conditions:
-
-| Condition | When |
+| Condition | Trigger |
 | --- | --- |
-| An Act 1 Breach | Inquisition Alert reaches 100 in Act 1 (user 2026-10-25, Q-13). Only a player who blatantly ignores the meter gets there: Act 1 inputs are small and a clear warning shows at each threshold (warning steps: a design-lane spec with Q-15; the screen's story text: story guide G-23) |
-| No living operative | No operative is left alive in the field or in the bunks (cannot happen in Act 1) |
-| The Act 3 Doom Clock | It reaches 0 before node 21 (the High Altar) falls: the Great Tithing completes |
+| **Act 1 Breach** | `Alert` hits `100` in Act 1 (`CANON` 4.2) |
+| **Total Cell Wipe** | `0` living operatives remain across deployed squad and hub bunks |
+| **Act 3 Hard Doom Clock** | *The Great Tithing* reaches `0d` before `3.5 High Altar` (`node 21`) falls (`3.6` dream-retries also tick Act 3 days, `CL-11`) |
 
-Not a fail: a single death; a lost siege (Acts 2-3); an Act 1-2 clock expiry (soft). If the squad is wiped while at least one
-operative is resting in the bunks, the campaign goes on: the survivors run a low-tier rescue or scouting mission to
-rebuild the cell.
+### 3.3 Sluice Hub Breach Sieges (`Acts 2-3`, `CL-06`, `CL-10`)
 
-### 3.3 Siege of the Sluice (Acts 2-3)
+- Hitting `Alert 100` in Acts 2-3 triggers a **Sluice Undercroft Siege** (`Chirurgeon Sabina` and `Berek` stand on `protect` tiles; `Inquisitor-General Ruthven` leads Act 2 Breaches and withdraws at `25%` HP so he always commands `2.6`).
+- Losing a siege never ends the run: the cell holds the single Sluice hub (`Q-90 a`), paying `10` `Warded Tallow`, `50` `Scrap`, `+2d` facility lock, and resetting `Alert` to `60`.
 
-- Loud play raises Alert (inputs as 2.2; amounts by the balance lane). At Breach (100%) an Inquisition strike force
-  finds the Drowned Runoff Grate and assaults the Sluice Undercroft `[kit hook]` (meter threshold trigger) `[data]`
-  (siege encounter with reinforcement waves and a hold objective).
-- Bram and Aline are non-combat (registry); whether they appear in the battle, for example as protect targets: Open.
-- A lost siege costs facilities and forces a relocation; it is never a Game Over. Where the cell relocates: Open. The
-  defend-or-finish dilemma when Breach fires during a mission: [choices](narrative_choices_and_dilemmas.md) Choice 4.
+### 3.4 Lesser Tithing vs. Great Tithing (`CL-04`)
 
-### 3.4 The Red Tithing Doom Clock
-
-- The Red Tithing calendar in days, visible from Act 1 day 1 at 42 ("six weeks") `[kit hook]` (campaign meter over the
-  travel clock in `travel.rs`).
-- Soft in Acts 1-2 (story pressure, no fail); hard in Act 3.
-- Story (user 2026-10-25, Q-04 and Q-16; [CANON](../CANON.md) 3.6): the clock counts to this year's rite, which the
-  Clerisy turns into a Great Tithing (thousands) because the cell's raids hasten the titan's waking. Mission 2.4
-  reveals that and relabels the clock "the Great Tithing". At 0 in Acts 1-2 the Clerisy holds a lesser tithing and the
-  clock restarts (days by the balance lane; which named stakes a lesser tithing takes: story guide G-20).
-- Time: a route leg costs 1 day (stealth +1), a rest 1 day, a battle none (CANON 2.6).
-- The Clerisy preaches that the Tithing keeps the titan asleep. What it truly does is in the
-  [central truth](../background/central_truth.md) (Option A, canon: the dream steeps the tithed dead, whose remains are
-  rendered into the Clerisy's marrow). The old loss text "the bells toll, the Low Sleep wakes and drags the continent
-  into the tar-sea" is retired: the Act 3 loss is the Great Tithing completing, a second Extinguishing for the
-  Unsealed.
-
-## 4. Gaps (Open)
-
-- The Act 2-3 rule that decides whether a downed operative dies, is captured or ends the battle wounded.
-- The outcome of a lost Act 1 battle (wounded effects are decided: -20% max HP until a rest, Q-31).
-- Whether barks are in scope; whether origin tags and temperaments carry mechanics.
-- Survivors' reaction to a death; rescue of a founder captured in Act 2.
-- Alert and Lockdown numbers (the system is decided, Q-15); the Act 1 warning steps and the Breach story text;
-  Bram and Aline in a siege; the relocation target.
-- Expiry of the soft clock in Acts 1-2: decided (a lesser tithing, Q-16); the named stakes it takes stay open (G-20).
+- **Acts 1-2 Soft Clock (`42d` -> `max(days, 18)` at `2.4`)**: Hitting `0d` triggers a **lesser tithing** (`14d` reset, `+10` Alert, claiming `1` unrescued named stake—`Ivo` `12` or `Ida` `16`—else `-2` `saved_youths`).
+- **Act 3 Hard Clock (`min 12d`)**: Stopped permanently when `Arch-Prelate Othemar` falls at `3.5 High Altar`, triggering the waking caldera collapse into `3.6 Dreaming Core` (`CL-11`).

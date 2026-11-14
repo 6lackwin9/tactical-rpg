@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+__FONTS_LINK__
+<style>
+__STYLES_CSS__
+
+  .wd-page { width: 1280px; margin: 0 auto; padding: 10px 0 24px; }
+  .wd-bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 8px; font-family: 'OpenSans', sans-serif; }
+  .wd-bar .lbl { font-size: 11px; font-weight: 700; margin: 0 2px 0 8px; }
+  .wd-frame { width: 1280px; height: 720px; position: relative; overflow: hidden; border: 1px solid #374151; background: #0a0b10; }
+  .wd-note { margin-top: 8px; padding: 8px 12px; font-family: 'OpenSans', sans-serif; font-size: 13px; line-height: 1.5; color: var(--text); background: #0e1016; border: 1px solid #2d333f; }
+  .wd-note b { color: var(--gold); }
+  .wd-tier { position: absolute; left: 5px; font-family: 'JetBrainsMono', monospace; font-size: 5.2px; letter-spacing: 0.6px; color: #9ca3af; opacity: 0.85; background: rgba(10,11,16,0.7); padding: 0.5px 3px; border-left: 1.5px solid #4b5563; z-index: 4; }
+  .wd-node { position: absolute; width: 28px; height: 28px; display: flex; flex-direction: column; align-items: center; cursor: pointer; z-index: 10; }
+  .wd-pin { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px #000; }
+  .wd-label { font-size: 6px; white-space: nowrap; margin-top: 1px; padding: 0.5px 3px; background: rgba(10,11,16,0.92); display: flex; gap: 3px; align-items: center; }
+  .wd-mtag { font-family: 'JetBrainsMono', monospace; font-size: 5px; color: #0a0b10; background: var(--gold); padding: 0 2px; }
+  .wd-node.locked .wd-pin { filter: grayscale(1) brightness(0.55); }
+  .wd-hide { display: none; }
+  .wd-paths { margin-top: 3px; }
+  .wd-popt { display: flex; justify-content: space-between; gap: 3px; font-size: 5.4px; padding: 1px 2px; margin-top: 1px; cursor: pointer; border: 0.5px solid #2d333f; color: var(--dim); }
+  .wd-popt.on { color: var(--gold); border-color: #d97706; background: rgba(44,34,30,0.7); }
+  .wd-popt:hover { color: #fde68a; border-color: #b45309; }
+  .wd-quest { position: absolute; width: 13px; height: 13px; z-index: 14; animation: wdQuest 1.8s ease-in-out infinite;
+              filter: drop-shadow(0 0 1px #fff7cc) drop-shadow(0 0 2.5px #fbbf24) drop-shadow(0 0 4px #f59e0b); }
+  @keyframes wdQuest { 0%, 100% { filter: drop-shadow(0 0 1px #fff7cc) drop-shadow(0 0 2px #fbbf24) drop-shadow(0 0 3px #f59e0b); }
+                       50% { filter: drop-shadow(0 0 1.5px #fff7cc) drop-shadow(0 0 3.5px #fbbf24) drop-shadow(0 0 6px #f59e0b); } }
+  .wd-party { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: rgba(6,182,212,0.25); z-index: 15;
+              box-shadow: 0 0 0 1px #22d3ee, 0 0 6px #06b6d4; display: flex; align-items: center; justify-content: center; }
+  .wd-party img, .wd-party-sm img { width: 10px; height: 10px; }
+  .wd-legend2 { position: absolute; width: 100px; padding: 2px 4px; font-size: 5.3px; color: var(--text); z-index: 40; line-height: 1.25; }
+  .wd-leghead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
+  .wd-legbtn { width: 10px; height: 9px; font-size: 5.5px; line-height: 1; padding: 0; }
+  .wd-legbtn.on { border-color: #d97706; color: var(--gold); }
+  .wd-legend2.unlocked { cursor: move; box-shadow: 0 0 0 1px #d97706, 0 3px 8px rgba(0,0,0,0.75); }
+  .wd-legmin { position: absolute; z-index: 40; font-size: 6px; padding: 1px 5px; white-space: nowrap; }
+  .wd-legmin.unlocked { cursor: move; box-shadow: 0 0 0 1px #d97706; }
+  /* the legend and its chip float above every landmark, hovered ones included (those rise to 30) */
+  .wd-legq, .wd-legparty { display: flex; gap: 3px; align-items: center; padding: 0.5px 2px; white-space: nowrap; cursor: pointer; border: 0.5px solid transparent; }
+  .wd-legq:hover, .wd-legq.on, .wd-legparty:hover { border-color: #d97706; background: rgba(44,34,30,0.7); }
+  .wd-legparty { margin-top: 2px; padding-top: 2px; border-top: 0.5px solid #2d333f; }
+  .wd-quest-sm { width: 8px; height: 8px; flex: none; filter: drop-shadow(0 0 1.5px #fbbf24); }
+  .wd-party-sm { width: 9px; height: 9px; flex: none; border-radius: 50%; box-shadow: 0 0 0 1px #22d3ee, 0 0 4px #06b6d4; display: flex; align-items: center; justify-content: center; }
+
+  .wd-trail { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 0.1 4.2; opacity: 0.52; transition: opacity 0.15s, stroke-width 0.15s; }
+  .wd-trail.hot { opacity: 0.95; stroke-width: 2.1; }
+  .wd-mapview.focus-only .wd-trail { opacity: 0; }
+  .wd-mapview.focus-only .wd-trail.near { opacity: 0.42; }
+  .wd-path { fill: none; stroke-linecap: round; pointer-events: none; }
+  .wd-path.main { stroke: #fbbf24; stroke-width: 2.4; stroke-dasharray: 0.1 3.6; filter: drop-shadow(0 0 1.5px #f59e0b); }
+  .wd-path.alt { stroke: #d9cbb4; stroke-width: 1.7; stroke-dasharray: 0.1 3.6; opacity: 0.55; transition: opacity 0.12s; }
+  .wd-path.alt.peek { opacity: 1; stroke: #fde68a; }
+  .wd-hit { fill: none; stroke: transparent; stroke-width: 9; pointer-events: stroke; cursor: pointer; }
+  .wd-trail.flick { animation: wdFlick 3.1s ease-in-out infinite; }
+  @keyframes wdFlick { 0%, 100% { stroke-opacity: 1; } 35% { stroke-opacity: 0.55; } 52% { stroke-opacity: 0.85; } 70% { stroke-opacity: 0.6; } }
+  @keyframes wdFlickHot { 0%, 100% { stroke-opacity: 1; } 40% { stroke-opacity: 0.75; } 65% { stroke-opacity: 0.9; } }
+
+  @keyframes wdTrail { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 2px #f59e0b) drop-shadow(0 0 3px #f59e0b); } }
+  .wd-faint { background: rgba(10,11,16,0.28) !important; border-color: transparent !important; color: rgba(217,203,180,0.74) !important;
+              text-shadow: 0 0 2px #000, 0 0 1px #000; transition: background 0.12s, color 0.12s, border-color 0.12s; }
+  .wd-faint .wd-mtag { opacity: 0.55; }
+  .wd-node:hover .wd-faint { background: rgba(10,11,16,0.94) !important; border-color: #d97706 !important; color: var(--gold) !important; text-shadow: none; }
+  .wd-node:hover .wd-faint .wd-mtag { opacity: 1; }
+  .wd-node:hover .wd-hide { display: flex; z-index: 30; }
+  .wd-node:hover { z-index: 30; }
+  .wd-above { position: absolute; left: 50%; transform: translateX(-50%); margin-top: 0; }
+  .wd-lm { width: 48px; height: 48px; margin-top: -26px; image-rendering: pixelated; }
+  .wd-node.locked .wd-lm { filter: grayscale(0.85) brightness(0.85) contrast(0.9) drop-shadow(0 1px 2px #000) !important; opacity: 0.8; }  /* grey, not dark: a dark map swallowed half-bright greys */
+  .wd-node.locked .wd-label { opacity: 0.55; }
+  .wd-node.locked .wd-faint { opacity: 0.8; }
+  .wd-node.locked .wd-mtag { background: #6b7280; }
+  .wd-node.cleared .wd-mtag { background: #4b5563; color: #d9cbb4; }
+  .wd-check { position: absolute; right: -1px; top: -3px; font-size: 8px; color: var(--ok); text-shadow: 0 0 2px #000, 0 0 2px #000; font-weight: 700; }
+  .wd-interlude { position: absolute; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #a855f7; box-shadow: 0 0 10px rgba(168,85,247,0.75); animation: wdPulse 1.6s ease-in-out infinite; z-index: 9; pointer-events: none; }
+  .wd-interlude-tag { position: absolute; font-family: 'JetBrainsMono', monospace; font-size: 5.2px; color: #e9d5ff; background: rgba(88,28,135,0.92); border: 0.5px solid #a855f7; padding: 0.5px 3px; white-space: nowrap; z-index: 12; }
+  @keyframes wdPulse { 0%, 100% { opacity: 0.55; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
+  .wd-legend { position: absolute; left: 6px; bottom: 6px; padding: 3px 6px; font-size: 5.6px; color: var(--dim); display: flex; gap: 7px; align-items: center; z-index: 20; }
+  .wd-legend svg { vertical-align: middle; }
+  .wd-route { display: flex; justify-content: space-between; gap: 4px; padding: 1.5px 0; border-bottom: 0.5px solid #1f2430; }
+</style>
+</head>
+<body>
+<div class="wd-page">
+  <div class="wd-bar" id="wd-bar"></div>
+  <div class="wd-frame"><div class="legacy-640-stage" id="wd-stage"></div></div>
+  <div class="wd-note" id="wd-note"></div>
+</div>
+<script>
+const ASSETS = __ASSETS_JSON__;
+const DATA = __DATA_JSON__;
+const G = DATA.graph;
+const ACT = DATA.act;  // what differs per act: names, the hub, defaults, flag names, days, tiers
+const S = { view: 'diamond', step: 0, sel: ACT.sel, spacing: 'regions', labels: 'faint', routes: 'focus', flicker: false, party: ACT.party, hud: true, pick: 0,
+  legend: { x: ACT.legend[0], y: ACT.legend[1], locked: !ACT.legendUnlocked, min: false } };  // no free corner: starts unlocked
+const FLAG_NAMES = ACT.flagNames;
+const node = id => G.nodes.find(n => n.id === id);
+const isOpen = (e, step) => e.req.every(f => DATA.steps[step].flags.includes(f));
+const isShortcut = e => !!e.shortcut;
+const opensAfter = e => e.req.length ? 'after ' + e.req.map(f => FLAG_NAMES[f] || f).join(' + ') : 'from Day 1';
+
+// Player-facing names (no backend codes such as M1 or JOB; Tushar 2026-11-13).
+const isMain = n => n.main;
+const questName = n => (n.encounters[0] || {}).name || n.name;
+const kindLabel = n => n.kind;  // player-facing kind, set by the builder
+function activeQuests(step) {
+  const reach = reachable(step), cur = DATA.steps[step];
+  return G.nodes.filter(n => n.quest && reach.has(n.id) && !cur.cleared.includes(n.id));
+}
+// The travel path from the party to a place: cheapest open routes (days), as a list of route ids.
+function pathTo(from, to, step) {
+  if (from === to) return [];
+  const dist = { [from]: 0 }, via = {}, todo = new Set([from]);
+  while (todo.size) {
+    const u = [...todo].reduce((a, b) => dist[a] <= dist[b] ? a : b); todo.delete(u);
+    if (u === to) break;
+    G.edges.filter(e => isOpen(e, step) && (e.a === u || e.b === u)).forEach(e => {
+      const v = e.a === u ? e.b : e.a, d = dist[u] + e.time;
+      if (dist[v] === undefined || d < dist[v]) { dist[v] = d; via[v] = e; todo.add(v); }
+    });
+  }
+  if (dist[to] === undefined) return null;
+  const out = []; let v = to;
+  while (v !== from) { const e = via[v]; out.push(e.id); v = e.a === v ? e.b : e.a; }
+  return out;
+}
+
+// Every way the party can travel to a place (simple paths over open routes), cheapest first; the ones within two
+// days of the best, at most three. Supplies follow the days on the road (one a day).
+function pathOptions(from, to, step) {
+  if (from === to) return [];
+  const out = [], open = G.edges.filter(e => isOpen(e, step));
+  (function walk(at, seen, edges, days) {
+    if (out.length > 40) return;
+    if (at === to) { out.push({ edges: edges.slice(), days }); return; }
+    open.filter(e => e.a === at || e.b === at).forEach(e => {
+      const nxt = e.a === at ? e.b : e.a;
+      if (seen.has(nxt)) return;
+      seen.add(nxt); edges.push(e.id); walk(nxt, seen, edges, days + e.time); edges.pop(); seen.delete(nxt);
+    });
+  })(from, new Set([from]), [], 0);
+  out.sort((a, b) => a.days - b.days || a.edges.length - b.edges.length);
+  return out.filter(o => o.days <= out[0].days + 2).slice(0, 3);
+}
+const viaName = (o, from, all) => {  // what tells this path apart from the others: its own stops, else its own roads
+  const E = id => G.edges.find(e => e.id === id);
+  if (o.edges.some(id => E(id).way) || (all || []).some(x => x.edges.some(id => E(id).way))) {
+    // street or rooftop ways over the same stops (Act 2): name the rooftop legs, else it is the streets all the way
+    const roofs = o.edges.map(E).filter(e => e.way === 'rooftops');
+    const sameStops = (all || []).every(x => x.edges.length === o.edges.length && x.edges.every((id, i) => E(id).a === E(o.edges[i]).a && E(id).b === E(o.edges[i]).b));
+    if (sameStops) return roofs.length ? 'rooftops over ' + roofs.map(e => e.base).join(', ') : 'by the streets';
+  }
+  const stopsOf = x => { let at = from; return x.edges.map(id => { const e = G.edges.find(y => y.id === id); at = e.a === at ? e.b : e.a; return at; }).slice(0, -1); };
+  const others = (all || []).filter(x => x !== o);
+  const mine = stopsOf(o).filter(id => !others.length || others.some(x => !stopsOf(x).includes(id)));
+  if (mine.length) return 'via ' + mine.map(id => node(id).name).join(', ');
+  const roads = o.edges.filter(id => others.some(x => !x.edges.includes(id))).map(id => G.edges.find(e => e.id === id).name);
+  return roads.length ? 'by ' + roads.join(', ') : 'direct';
+};
+function pickPath(i) { S.pick = i; render(); }
+const alertOf = o => o.edges.reduce((t, id) => t + (G.edges.find(e => e.id === id).alert || 0), 0);  // Alert on the way (Act 2)
+
+function reachable(step) {
+  const seen = new Set([ACT.hub]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    G.edges.forEach(e => {
+      if (!isOpen(e, step)) return;
+      if (seen.has(e.a) && !seen.has(e.b)) { seen.add(e.b); grew = true; }
+      if (seen.has(e.b) && !seen.has(e.a)) { seen.add(e.a); grew = true; }
+    });
+  }
+  return seen;
+}
+
+const padlock = (x, y) => `<g transform="translate(${x - 3},${y - 3.5})"><rect x="0.5" y="3" width="5" height="4" rx="0.6" fill="#1f2430" stroke="#6b7280" stroke-width="0.6"/><path d="M1.6 3 V2 a1.4 1.4 0 0 1 2.8 0 V3" fill="none" stroke="#6b7280" stroke-width="0.6"/></g>`;
+
+// A smooth path through the points (Catmull-Rom as cubic Beziers).
+function smoothPath(pts) {
+  if (pts.length < 3) return `M${pts[0][0]},${pts[0][1]} L${pts[1][0]},${pts[1][1]}`;
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
+function routePoints(e) {
+  const a = node(e.a), b = node(e.b);
+  const via = (S.routes !== 'straight' && S.spacing === 'regions') ? (e.via || []) : [];
+  return [[a.x, a.y], ...via, [b.x, b.y]];
+}
+
+// Lantern trail: faint warm dots along the roads; the routes of the hovered or selected node light up (CSS :has), a
+// route that just opened glows, locked routes are not drawn (the greyed node says it is locked).
+function trailSvg() {
+  const step = S.step;
+  let k = 0;
+  const opts = pathOptions(S.party, S.sel, step);
+  if (S.pick >= opts.length) S.pick = 0;
+  const base = G.edges.map(e => {
+    if (!isOpen(e, step)) return '';
+    const atParty = S.sel === S.party && (e.a === S.party || e.b === S.party);
+    const cls = `wd-trail rt-${e.a} rt-${e.b}${atParty ? ' near' : ''}${S.flicker ? ' flick' : ''}`;
+    const delay = S.flicker ? `animation-delay:${(-(k++ * 0.73) % 3.1).toFixed(2)}s;` : '';
+    return `<path class="${cls}" style="${delay}" d="${smoothPath(routePoints(e))}" stroke="#fbbf24" />`;
+  }).join('');
+  // alternatives first (under), the main path last (on top); each alternative is wide enough to hover and click
+  const pathSvg = (o, i) => o.edges.map(id => {
+    const e = G.edges.find(x => x.id === id), d = smoothPath(routePoints(e)), main = i === S.pick;
+    return main ? `<path class="wd-path main" d="${d}" />`
+      : `<path class="wd-path alt alt-${i}" d="${d}" /><path class="wd-hit" d="${d}" data-alt="${i}" onmouseenter="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.add('peek'))" onmouseleave="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.remove('peek'))" onclick="pickPath(${i})" />`;
+  }).join('');
+  const alts = opts.map((o, i) => i === S.pick ? '' : pathSvg(o, i)).join('');
+  const main = opts[S.pick] ? pathSvg(opts[S.pick], S.pick) : '';
+  return base + alts + main;
+}
+
+function trailHoverCss() {
+  return G.nodes.map(n => `.wd-mapview:has(.wd-node[data-id="${n.id}"]:hover) .rt-${n.id} { opacity: 0.42 !important; }`).join('\n');
+}
+
+function routesSvg() {
+  const step = S.step, prev = Math.max(0, step - 1);
+  return G.edges.map(e => {
+    const a = node(e.a), b = node(e.b), open = isOpen(e, step);
+    const fresh = open && step > 0 && !isOpen(e, prev);
+    const hot = open && (e.a === S.sel || e.b === S.sel);
+    let stroke = '#6b7280', w = 1.2, dash = '3,2', extra = '';
+    if (!open) { stroke = '#3f4552'; w = 1; dash = '1,2.5'; }
+    else if (isShortcut(e)) { stroke = '#06b6d4'; w = 1.3; dash = '2,1.5'; }
+    if (fresh) { stroke = isShortcut(e) ? '#22d3ee' : '#f59e0b'; w = 2; extra = 'filter="url(#wdGlow)"'; }
+    if (hot) { stroke = '#fbbf24'; w = 2; }
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const pts = routePoints(e), mid = pts[Math.floor(pts.length / 2)];
+    const lock = pts.length > 2 ? padlock(mid[0], mid[1]) : padlock(mx, my);
+    return `<path d="${smoothPath(pts)}" fill="none" stroke="${stroke}" stroke-width="${w}" stroke-dasharray="${dash}" ${extra}/>` + (open ? '' : lock);
+  }).join('');
+}
+
+function nodesHtml() {
+  const step = DATA.steps[S.step], reach = reachable(S.step);
+  return G.nodes.map(n => {
+    const cleared = step.cleared.includes(n.id);
+    const locked = !reach.has(n.id);
+    const sel = n.id === S.sel;
+    const available = n.quest && !cleared && !locked;
+    const sc = n.scale || 1, lmTop = -(48 * sc - 22);  // a larger landmark grows up from the same ground point
+    const cls = ['wd-node', locked ? 'locked' : '', cleared ? 'cleared' : ''].join(' ');
+    return `
+      <div class="${cls}" data-id="${n.id}" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';S.pick=0;render();">
+        ${(ASSETS.lm || {})[n.id]
+          ? `<img src="${ASSETS.lm[n.id]}" class="pixel wd-lm" style="width:${48 * sc}px;height:${48 * sc}px;margin-top:${lmTop}px;filter:${sel ? 'drop-shadow(0 0 1.5px #fbbf24) drop-shadow(0 0 1.5px #fbbf24)' : 'drop-shadow(0 1px 2px #000)'};">`
+          : `<div class="wd-pin" style="background:${sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${sel ? '#fbbf24' : '#9ca3af'};">
+          <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
+        </div>`}
+        ${available ? `<img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest" style="right:${(ASSETS.lm || {})[n.id] ? -12 : -2}px;top:${(ASSETS.lm || {})[n.id] ? lmTop : -4}px;">` : ''}
+        ${cleared ? `<span class="wd-check">✓</span>` : ''}
+        ${n.id === S.party ? `<span class="wd-party" style="left:${(ASSETS.lm || {})[n.id] ? -16 : -4}px;top:${(ASSETS.lm || {})[n.id] ? 4 : -4}px;"><img src="${ASSETS.ui.pin_here}" class="pixel"></span>` : ''}
+        <div class="wd-label ${S.labels === 'hover' && !sel ? 'wd-hide' : ''} ${S.labels === 'above' || S.labels === 'faint' ? 'wd-above' : ''} ${S.labels === 'faint' && !sel ? 'wd-faint' : ''}" style="color:${sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${sel ? '#d97706' : '#374151'};${S.labels === 'above' || S.labels === 'faint' ? `bottom:${(ASSETS.lm || {})[n.id] ? 48 * sc + 2 : 30}px;` : ''}">
+          <span>${n.name}</span>
+        </div>
+      </div>`;
+  }).join('') + (step.interlude ? (() => {
+    const h = node('sluice_undercroft');
+    return `<div class="wd-interlude" style="left:${h.x - 17}px;top:${h.y - 17}px;"></div>
+            <div class="wd-interlude-tag" style="left:${h.x + 16}px;top:${h.y - 16}px;">INTERLUDE · the back-surge</div>`;
+  })() : '');
+}
+
+function tiersHtml() {
+  const y = id => node(id).y;
+  return ACT.tiers.map(([t, id]) => [t, y(id)])
+    .map(([t, yy]) => `<div class="wd-tier" style="top:${yy - 4}px;">${t}</div>`).join('');
+}
+
+function currentHtml() {
+  const N = DATA.current, sel = N.find(n => n.id === S.sel) ? S.sel : 'n_corvo';
+  let lines = '';
+  N.forEach(n => n.edges.forEach(t => {
+    const b = N.find(x => x.id === t);
+    if (b && n.id < b.id) {
+      const hot = n.id === sel || b.id === sel;
+      lines += `<line x1="${n.x}" y1="${n.y}" x2="${b.x}" y2="${b.y}" stroke="${hot ? '#fbbf24' : '#6b7280'}" stroke-width="${hot ? 2 : 1.2}" stroke-dasharray="3,2"/>`;
+    }
+  }));
+  const pins = N.map(n => `
+      <div class="wd-node" style="left:${n.x - 14}px;top:${n.y - 14}px;" onclick="S.sel='${n.id}';S.pick=0;render();">
+        <div class="wd-pin" style="background:${n.id === sel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${n.id === sel ? '#fbbf24' : '#9ca3af'};">
+          <img src="${ASSETS.ui[n.pin]}" class="pixel" style="width:12px;height:12px;">
+        </div>
+        <div class="wd-label" style="color:${n.id === sel ? 'var(--gold)' : 'var(--text)'};border:0.5px solid ${n.id === sel ? '#d97706' : '#374151'};">${n.name}</div>
+      </div>`).join('');
+  return { svg: lines, pins, sel: N.find(n => n.id === sel) };
+}
+
+function corner(style, inner) {
+  return `<div class="ornate-corners-only-640" style="${style}">
+    <img src="${ASSETS.ui.ornate_tl}" class="ornate-corner-sm-640 tl"><img src="${ASSETS.ui.ornate_tr}" class="ornate-corner-sm-640 tr">
+    <img src="${ASSETS.ui.ornate_bl}" class="ornate-corner-sm-640 bl"><img src="${ASSETS.ui.ornate_br}" class="ornate-corner-sm-640 br">
+    ${inner}</div>`;
+}
+
+function panelDiamond() {
+  const n = node(S.sel) || node(ACT.sel);
+  const step = DATA.steps[S.step], reach = reachable(S.step);
+  const status = step.cleared.includes(n.id) ? '<span style="color:var(--ok);">Cleared</span>'
+    : reach.has(n.id) ? '<span style="color:var(--gold);">Open</span>' : '<span style="color:#9ca3af;">Locked</span>';
+  const routes = G.edges.filter(e => e.a === n.id || e.b === n.id).map(e => {
+    const other = node(e.a === n.id ? e.b : e.a), open = isOpen(e, S.step);
+    return `<div class="wd-route"><span style="color:${open ? 'var(--text)' : '#6b7280'};">${open ? '' : '🔒 '}${other.name}${e.way ? ` <span style="color:var(--dim);">(${e.way})</span>` : ''}</span>
+            <span class="font-mono" style="color:var(--dim);font-size:5.4px;">${open ? e.time + 'd' : opensAfter(e)}</span></div>`;
+  }).join('');
+  const enc = n.encounters.map(x => x.name).join(' · ');
+  return corner('position:absolute;left:504px;top:24px;width:132px;height:328px;padding:7px;display:flex;flex-direction:column;justify-content:space-between;', `
+    <div>
+      <div class="font-title" style="font-size:9px;color:var(--gold);line-height:1.2;">${n.name}</div>
+      <div class="font-mono" style="font-size:6px;color:var(--info);margin-top:2px;">${kindLabel(n)} · ${status}</div>
+      <div style="font-size:6px;color:var(--dim);margin-top:1px;">${n.who}</div>
+      ${enc ? `<div class="font-mono" style="font-size:5.4px;color:#fda4af;margin-top:2px;">${enc}</div>` : ''}
+      ${S.sel !== S.party ? (() => { const opts = pathOptions(S.party, n.id, S.step);
+        if (!opts.length) return `<div style="font-size:5.8px;color:#6b7280;margin-top:2px;">No open road from your party</div>`;
+        return `<div class="wd-paths"><div class="font-mono" style="font-size:5.2px;color:var(--dim);">FROM YOUR PARTY${opts.length > 1 ? ' · pick a path' : ''}</div>` +
+          opts.map((o, i) => `<div class="wd-popt ${i === S.pick ? 'on' : ''}" onclick="pickPath(${i})"
+              onmouseenter="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.add('peek'))" onmouseleave="document.querySelectorAll('.alt-${i}').forEach(x=>x.classList.remove('peek'))">
+            <span>${viaName(o, S.party, opts)}</span><span class="font-mono">${o.days}d · ${o.days} supplies${alertOf(o) ? ` · +${alertOf(o)}% Alert` : ''}</span></div>`).join('') + `</div>`; })()
+        : `<div style="font-size:5.8px;color:var(--gold);margin-top:2px;">Your party is here</div>`}
+      <div style="border-top:1px solid #2d333f;margin:4px 0;padding-top:4px;font-size:6.4px;color:var(--text);line-height:1.36;">${n.desc}</div>
+      <div class="rust-inset" style="padding:3px 5px;font-size:6px;margin-top:5px;">
+        <div class="font-mono" style="font-size:5.4px;color:var(--dim);margin-bottom:1px;">ROUTES</div>${routes || '<span style="color:var(--dim);">none</span>'}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <button class="rust-btn primary" style="width:100%;height:18px;" ${reach.has(n.id) && n.id !== S.party ? '' : 'disabled'} onclick="S.party='${n.id}';S.pick=0;render();">${n.id === S.party ? 'Your party is here' : 'Travel here ▸'}</button>
+      <button class="rust-btn" style="width:100%;">Mode: Fast (-1d)</button>
+    </div>`);
+}
+
+function panelCurrent(sel) {
+  return corner('position:absolute;left:504px;top:24px;width:132px;height:328px;padding:7px;', `
+    <div class="font-title" style="font-size:9px;color:var(--gold);line-height:1.2;">${sel.name}</div>
+    <div class="font-mono" style="font-size:6px;color:#fda4af;margin-top:3px;">THE MOCK UI TODAY (pre-diamond)</div>
+    <div style="border-top:1px solid #2d333f;margin:5px 0;padding-top:5px;font-size:6.4px;color:var(--text);line-height:1.4;">
+      Six nodes and free links, no tiers: no M1/M2 pair, no Tallow Vats (M4), no Interlude, no Slag Gate (07), and Corvo's gate sits in the middle as node 02.
+      Node numbers do not match the game data (Junction 7 is 02, the Crossroads 03, Corvo's gate 1d).
+    </div>`);
+}
+
+function hud() {
+  return `<div class="hud-bar"><div class="hud-place"><span>${ACT.place} · District Map</span>
+    <span class="font-mono" style="font-size:7px;color:var(--dim);">· Day ${ACT.days[S.step]}</span></div>
+    <div class="hud-right"><div class="hud-chip"><img src="${ASSETS.ui.gold}" class="pixel" style="width:10px;height:10px;"><span class="font-mono">65 Scrap</span></div>
+    <div class="hud-chip deadline"><span class="font-mono">Tithing: ${ACT.tithing - ACT.days[S.step]}d</span></div></div></div>`;
+}
+
+function legend() {
+  const L = S.legend;
+  const pos = `left:${L.x}px;top:${L.y}px;`;
+  // Minimized, the chip stays at the corner that held the minimize button (the panel's top-right), so minimize and
+  // restore toggle in place (Tushar 2026-11-13, a rule for every floating panel: preferences/ui.md).
+  // The chip floats like the panel (Tushar 2026-11-13): while the legend is unlocked, press and drag moves it; a press
+  // without a drag (a click) opens the legend again, with its minimize button where the chip was.
+  if (L.min) return `<button class="db-btn wd-legmin ${L.locked ? '' : 'unlocked'}" style="left:${L.x + (L.br || 96)}px;top:${L.y + (L.bt || 3) - 1}px;transform:translateX(-100%);" onmousedown="chipDrag(event)" title="${L.locked ? 'Open the legend' : 'Drag to move · click to open the legend'}">☰ Legend</button>`;
+  const qs = activeQuests(S.step);
+  return `<div class="rust-panel wd-legend2 ${L.locked ? '' : 'unlocked'}" style="${pos}" onmousedown="legendDrag(event)">
+    <div class="wd-leghead"><span class="font-title" style="color:var(--gold);font-size:7px;">Active quests</span>
+      <span style="display:flex;gap:2px;">
+        <button class="close-x-btn-640 wd-legbtn ${L.locked ? '' : 'on'}" onclick="S.legend.locked=!S.legend.locked;render();" title="${L.locked ? 'Unlock to move the legend' : 'Lock the legend in place'}">${L.locked ? '🔒' : '🔓'}</button>
+        <button class="close-x-btn-640 wd-legbtn" onclick="minimizeLegend(this)" title="Minimize the legend">–</button>
+      </span></div>
+    ${qs.length ? qs.map(n => `<div class="wd-legq ${n.id === S.sel ? 'on' : ''}" onclick="S.sel='${n.id}';S.pick=0;render();">
+        <img src="${ASSETS.ui.badge_quest}" class="pixel wd-quest-sm"><span title="${n.name}">${questName(n)}${n.mission === 'Side job' ? ' <span style="color:var(--dim);">(side)</span>' : ''}</span></div>`).join('')
+      : '<div style="color:var(--dim);">None open</div>'}
+    <div class="wd-legparty" onclick="S.sel='${S.party}';S.pick=0;render();"><span class="wd-party-sm"><img src="${ASSETS.ui.pin_here}" class="pixel"></span><span title="${node(S.party).name}">Your party</span></div>
+  </div>`;
+}
+
+// Minimize: remember where the minimize button sits inside the panel (in map pixels) so the chip's top-right lands on it.
+function minimizeLegend(btn) {
+  const panel = btn.closest('.wd-legend2'), scale = document.getElementById('wd-stage').getBoundingClientRect().width / 640;
+  const pr = panel.getBoundingClientRect(), br = btn.getBoundingClientRect();
+  S.legend.br = (br.right - pr.left) / scale; S.legend.bt = (br.top - pr.top) / scale; S.legend.min = true; render();
+}
+
+// The minimized chip: drag it while the legend is unlocked (it carries the legend's position with it); a click opens it.
+function chipDrag(ev) {
+  const L = S.legend, el = ev.currentTarget, scale = document.getElementById('wd-stage').getBoundingClientRect().width / 640;
+  const sx = ev.clientX, sy = ev.clientY, ox = L.x, oy = L.y, br = L.br || 96, bt = (L.bt || 3) - 1;
+  const cw = el.offsetWidth, ch = el.offsetHeight;
+  let moved = false;
+  const move = e => {
+    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 3) moved = true;
+    if (!moved || L.locked) return;
+    L.x = Math.max(2 + cw - br, Math.min(494 - br, ox + (e.clientX - sx) / scale));   // the chip stays inside the map
+    L.y = Math.max(2 - bt, Math.min(326 - ch - bt, oy + (e.clientY - sy) / scale));
+    el.style.left = (L.x + br) + 'px'; el.style.top = (L.y + bt) + 'px';
+  };
+  const up = () => {
+    window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+    if (moved && !L.locked) return;
+    L.min = false; render();
+    const panel = document.querySelector('.wd-legend2');  // the panel opens inside the map: nudge it in by its real size
+    if (panel) {
+      L.x = Math.max(2, Math.min(496 - panel.offsetWidth - 2, L.x)); L.y = Math.max(2, Math.min(328 - panel.offsetHeight - 2, L.y));
+      panel.style.left = L.x + 'px'; panel.style.top = L.y + 'px';
+    }
+  };
+  window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); ev.preventDefault();
+}
+
+// Drag the unlocked legend inside the map (the stage is drawn at 2x, so screen pixels are halved).
+function legendDrag(ev) {
+  if (S.legend.locked || ev.target.closest('button') || ev.target.closest('.wd-legq') || ev.target.closest('.wd-legparty')) return;
+  const el = ev.currentTarget, scale = document.getElementById('wd-stage').getBoundingClientRect().width / 640;
+  const sx = ev.clientX, sy = ev.clientY, ox = S.legend.x, oy = S.legend.y, maxX = 496 - el.offsetWidth - 2, maxY = 328 - el.offsetHeight - 2;
+  const move = e => {
+    S.legend.x = Math.max(2, Math.min(maxX, ox + (e.clientX - sx) / scale));
+    S.legend.y = Math.max(2, Math.min(maxY, oy + (e.clientY - sy) / scale));
+    el.style.left = S.legend.x + 'px'; el.style.top = S.legend.y + 'px';
+  };
+  const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+  window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); ev.preventDefault();
+}
+
+function render() {
+  G.nodes.forEach(n => { [n.x, n.y] = n.pos[S.spacing]; });
+  const bar = document.getElementById('wd-bar');
+  bar.innerHTML = `
+    <span class="lbl" style="color:#fbbf24;">View:</span>
+    <button class="db-btn ${S.view === 'diamond' ? 'active' : ''}" onclick="S.view='diamond';S.sel=ACT.sel;render();">${ACT.viewLabel}</button>
+    ${DATA.current ? `<button class="db-btn ${S.view === 'current' ? 'active' : ''}" onclick="S.view='current';S.sel='n_corvo';render();">Current mock map</button>` : ''}
+    ${S.view === 'diamond' ? `<span class="lbl" style="color:#a3e635;">${ACT.progress}</span>` +
+      DATA.steps.map((s, i) => `<button class="db-btn ${S.step === i ? 'active' : ''}" onclick="S.step=${i};render();">${s.label}</button>`).join('') +
+      (ACT.spacings ? `<span class="lbl" style="color:#38bdf8;">Spacing:</span>` +
+      [['data', 'Data'], ['spaced', 'Spaced diamond'], ['regions', 'Painted regions']].map(([k, t]) => `<button class="db-btn ${S.spacing === k ? 'active' : ''}" onclick="S.spacing='${k}';render();">${t}</button>`).join('') : '') +
+      `<span class="lbl" style="color:#a3e635;">Routes:</span>` +
+      [['straight', 'Straight'], ['roads', 'Roads'], ['trail', 'Lantern trail'], ['focus', 'Focus only']].map(([k, t]) => `<button class="db-btn ${S.routes === k ? 'active' : ''}" onclick="S.routes='${k}';render();">${t}</button>`).join('') +
+      `<button class="db-btn ${S.flicker ? 'active' : ''}" onclick="S.flicker=!S.flicker;render();" title="A kit option; off in Emberwake">Flicker (kit option)</button>` +
+      `<span class="lbl" style="color:#f472b6;">Labels:</span>` +
+      [['below', 'Below'], ['above', 'Above'], ['hover', 'Hover / selected'], ['faint', 'Faint, lit on hover / focus']].map(([k, t]) => `<button class="db-btn ${S.labels === k ? 'active' : ''}" onclick="S.labels='${k}';render();">${t}</button>`).join('') : ''}`;
+  let map;
+  if (S.view === 'diamond') {
+    map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+             <defs><filter id="wdGlow" filterUnits="userSpaceOnUse" x="0" y="0" width="496" height="328"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+             ${S.routes === 'trail' || S.routes === 'focus' ? trailSvg() : routesSvg()}</svg>${S.spacing === 'regions' ? '' : tiersHtml()}${nodesHtml()}${legend()}<style>${trailHoverCss()}</style>`;
+  } else {
+    const c = currentHtml();
+    map = `<svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">${c.svg}</svg>${c.pins}`;
+  }
+  const c = S.view === 'current' ? currentHtml() : null;
+  document.getElementById('wd-stage').innerHTML = `
+    ${hud()}
+    <div class="wd-mapview${S.routes === 'focus' ? ' focus-only' : ''}" style="position:absolute;left:4px;top:24px;width:496px;height:328px;border:1px solid #374151;overflow:hidden;">
+      <img src="${ASSETS.map}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:${DATA.bgIsMap ? 'none' : `brightness(${S.view === 'diamond' ? 0.55 : 0.82}) contrast(1.08)`};">
+      <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(10,11,16,0.05) 40%, rgba(10,11,16,0.75) 100%);"></div>
+      ${map}
+    </div>
+    ${S.view === 'diamond' ? panelDiamond() : panelCurrent(c.sel)}`;
+  document.getElementById('wd-note').innerHTML = S.view === 'diamond'
+    ? `<b>${DATA.steps[S.step].label}.</b> ${DATA.steps[S.step].note} <span style="color:var(--dim);">${ACT.source}</span>`
+    : `<b>The mock UI's map today.</b> The proposed view replaces it once signed off; nothing in the full mock UI changes until then.`;
+}
+render();
+</script>
+</body>
+</html>

@@ -397,7 +397,7 @@ fn report(out: &[String]) -> Value {
     serde_json::from_str(last.strip_prefix(JSON_PREFIX).unwrap()).expect("JSON")
 }
 
-/// Drops the rule counts from a report, leaving what a run without the key prints.
+/// Drops the rule counts (and WORLD-SIM1's hook tallies) from a report, leaving what a run without the key prints.
 fn without_rule_counts(mut v: Value) -> Value {
     let mut scopes: Vec<String> = ENCOUNTERS.iter().map(|e| e.to_string()).collect();
     scopes.push("total".into());
@@ -406,6 +406,7 @@ fn without_rule_counts(mut v: Value) -> Value {
         for side in ["party", "enemy"] {
             block[side].as_object_mut().unwrap().shift_remove("rule_counts");
         }
+        block.as_object_mut().unwrap().shift_remove("hooks");
     }
     v
 }
@@ -417,10 +418,10 @@ fn asking_for_the_counts_changes_no_result() {
     for rest in ["party=both", "melee_diagonal=none", "melee_diagonal=all party=timed"] {
         let off = run(&d, &format!("feel seeds=4 {rest}"));
         let on = run(&d, &format!("feel seeds=4 {rest} counts=on"));
-        let strip = |lines: &[String]| -> Vec<String> { lines.iter().filter(|l| !l.contains(" rule counts: ") && !l.starts_with("ARGS") && !l.starts_with(JSON_PREFIX)).cloned().collect() };
+        let strip = |lines: &[String]| -> Vec<String> { lines.iter().filter(|l| !l.contains(" rule counts: ") && !l.contains(" hooks: ") && !l.starts_with("ARGS") && !l.starts_with(JSON_PREFIX)).cloned().collect() };
         assert_eq!(strip(&on), strip(&off), "{rest}: the same lines beside the counts");
         assert!(on.iter().any(|l| l.contains("party rule counts: ")), "{rest}");
-        assert!(!off.iter().any(|l| l.contains(" rule counts: ")), "{rest}: no counts without the key");
+        assert!(!off.iter().any(|l| l.contains(" rule counts: ") || l.contains(" hooks: ")), "{rest}: no counts without the key");
         let (on_json, off_json) = (report(&on), report(&off));
         assert_eq!(without_rule_counts(on_json), off_json, "{rest}: the same FEEL_JSON beside the counts");
     }

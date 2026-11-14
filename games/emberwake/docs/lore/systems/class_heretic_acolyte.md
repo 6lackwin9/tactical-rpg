@@ -42,10 +42,7 @@ Act 2 the siphoning of Strain between bodies. Profile: moderate HP, robes and a 
 
 ## 4. Founder: Maren
 
-Defrocked scriptorium scribe of St. Lyra's, 23, who copied the forbidden texts. Proctor Quell denounced her; she was
-defrocked under Othemar's seal and sent toward the dissection crypts. She knows Sister Aline only by reputation (the
-Hall of Holy Dissection and the discovery of the drugged draughts are Aline's story, not hers). Years of marrow-ink
-left black veins in her throat (backstory only in Act 1). Joins: prologue 0c, freed from the iron mortuary cart at the
+Mortuary novice and scriptorium scribe of St. Lyra's, 22, who copied the forbidden Great Tithing chronicles after Proctor Quell vivisected her mentor. Defrocked under Othemar's seal and sent toward the dissection crypts; Chirurgeon Sabina studied under Chief Anatomist Lazar in the outer dissection wards before her own exile (`CANON.md` 3.1-3.2). Starts 100% mortal human on Day 1 (throat veins are an Act 2+ corruption visual). Joins: prologue 0c, freed from the iron mortuary cart at the
 canal bridge with Hollis. Act 1 mission 2 (Proctor Quell's crossroads cages) is her hook.
 
 | Kit | Profile | Effect | Act |
@@ -58,7 +55,7 @@ In Act 1 Maren has her trait and the Cold Steel branch; her variant and signatur
 
 ## 5. Notes
 
-- The old trait name "Anatomist of St. Agnes" is retired with the chapel (St. Agnes collided with Old Mother Agnes;
+- The old trait name "Anatomist of St. Agnes" is retired with the chapel (St. Agnes collided with Agnes of Block 12;
   Maren's origin is the Scriptorium of St. Lyra's).
 - Martyr's Shroud: the old "50% of the fatal damage becomes +15% Strain" is restated as Strain 15 per absorbed blow;
   its 3 AP sits above the Inoculated 1-2 guideline (index gaps).

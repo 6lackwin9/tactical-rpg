@@ -851,8 +851,8 @@ pub fn default_border(size: i32) -> i32 {
     (size as f64 / 30.0).round() as i32
 }
 
-/// The sidecar path of a portrait: `.png` replaced by `.face.json` (`portraits/npcs/tess.png` ->
-/// `portraits/npcs/tess.face.json`).
+/// The sidecar path of a portrait: `.png` replaced by `.face.json` (`portraits/npcs/innkeeper.png` ->
+/// `portraits/npcs/innkeeper.face.json`).
 pub fn face_file(rel: &str) -> String {
     format!("{}.face.json", rel.strip_suffix(".png").unwrap_or(rel))
 }
@@ -1256,7 +1256,7 @@ mod tests {
         let f200 = parse_face(&json!({"size": 200})).unwrap();
         assert_eq!(face_problems(&f200, 240), ["size 200 differs from the PNG's width 240: the anchors are scaled by 240 / 200."]);
         assert!(face_problems(&f200, 0).is_empty(), "width 0 skips the scale check");
-        assert_eq!(face_file("portraits/npcs/tess.png"), "portraits/npcs/tess.face.json");
+        assert_eq!(face_file("portraits/npcs/innkeeper.png"), "portraits/npcs/innkeeper.face.json");
     }
 
     #[test]

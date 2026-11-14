@@ -1,13 +1,17 @@
 //! PLAYUI1-P: `shop::trade` (games/emberwake/docs/specs/PLAYUI1.md 4.4), one whole trade settled at once. Checked
 //! against today's `buy` and `sell` (a one-line trade leaves the same state) and the trade rules (net gold, summed
 //! counts, all-or-nothing, refusal reasons). Read-only over the shipped data: the party's gold and stash are set in
-//! memory and the expectations come from the shop's own offers and sell list, not from content numbers.
+//! memory and the expectations come from the shop's own offers and sell list, not from content numbers. Refusals and
+//! notes that name the purse are built from the world's own words (`terms`: gold, or Scrap in a Scrap world).
 
 use aegis_core::json::{self, Dict};
 use emberwake_world::state::{GOLD_MAX, SUPPLIES_MAX};
-use emberwake_world::{new_game, shop, Data, GameState};
+use emberwake_world::{new_game, shop, terms, Data, GameState};
 use serde_json::Value;
 use std::path::Path;
+
+/// The Act 1 world whose purse currency is Scrap (PR5-38): its refusal text is pinned once as written.
+const SCRAP_WORLD: &str = "sunk_ward";
 
 fn data() -> Data {
     let dir = Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
@@ -24,14 +28,19 @@ fn meet(gs: &mut GameState, raw: &Value) {
     }
 }
 
-/// (game, shop qid) for every shop open at the start of a playable world, and again with the flags its stock and loot
-/// ask for set (more stock and the loot offers).
+/// (game, shop qid) for every shop of a playable world, open at the start or opened by setting the flags its own
+/// `requires_flags` ask for (so a story gate on a shop does not hide it from these checks), and again with the flags
+/// its stock and loot ask for set (more stock and the loot offers).
 fn open_shops(d: &Data) -> Vec<(GameState, String)> {
     let mut out = Vec::new();
     for w in new_game::playable_worlds(d) {
-        let gs = new_game::create_for_world(d, &w, 1).expect("a new game");
-        for sh in d.merged_entries(&gs.world_id, "shops") {
+        let start = new_game::create_for_world(d, &w, 1).expect("a new game");
+        for sh in d.merged_entries(&start.world_id, "shops") {
             let q = json::s(sh, "_qid");
+            let mut gs = start.clone();
+            if !shop::is_open(d, &gs, &q) {
+                meet(&mut gs, json::get(sh, "requires_flags"));
+            }
             if !shop::is_open(d, &gs, &q) {
                 continue;
             }
@@ -116,7 +125,8 @@ fn a_one_line_trade_matches_buy_and_sell() {
 #[test]
 fn sales_pay_for_purchases_and_one_gold_short_changes_nothing() {
     let d = data();
-    let mut checked = false;
+    let mut checked = Vec::new();
+    let mut scrap = 0;
     for (start, q) in open_shops(&d) {
         let mut gs = start.clone();
         stock_stash(&d, &mut gs, &q, 2);
@@ -132,7 +142,14 @@ fn sales_pay_for_purchases_and_one_gold_short_changes_nothing() {
         gs.party.gold = price - earned - 1;
         let before = gs.clone();
         let r = shop::trade(&d, &mut gs, &q, &buys, &sells);
-        assert!(!ok(&r) && errors(&r) == ["Not enough gold."], "{q}: {r:?}");
+        // the refusal names the world's purse currency ("Not enough gold.", "Not enough Scrap.")
+        assert_eq!(errors(&r), [terms::not_enough_currency(&d, &gs.world_id)], "{q}: {r:?}");
+        assert!(!ok(&r), "{q}: {r:?}");
+        if gs.world_id == SCRAP_WORLD {
+            // pinned once as the player reads it, not only through the helper that builds it
+            assert_eq!(errors(&r), ["Not enough Scrap."], "{q}: {r:?}");
+            scrap += 1;
+        }
         assert_eq!(gs, before, "{q}: a refused trade changes nothing");
         gs.party.gold = price - earned;
         assert!(gs.party.gold < price, "the purchase alone does not fit the gold held");
@@ -141,9 +158,13 @@ fn sales_pay_for_purchases_and_one_gold_short_changes_nothing() {
         assert_eq!((json::i(&r, "spent", 0), json::i(&r, "earned", 0), json::i(&r, "gold", 0)), (price, earned, earned - price));
         assert_eq!(gs.party.gold, 0, "{q}: the gold left is gold + sales - purchases");
         assert_eq!(gs.party.stash.get(&json::s(&sale, "item")).copied().unwrap_or(0), 0, "{q}: both sold");
-        checked = true;
+        checked.push(format!("{q} ({})", terms::word(&d, &gs.world_id, terms::CURRENCY)));
     }
-    assert!(checked, "no open shop sells something dearer than two of what it buys");
+    eprintln!("checked: {checked:?}");
+    if new_game::playable_worlds(&d).iter().any(|w| w == SCRAP_WORLD) {
+        assert!(scrap > 0, "no {SCRAP_WORLD} shop was checked for its Scrap refusal");
+    }
+    assert!(!checked.is_empty(), "no open shop sells something dearer than two of what it buys");
 }
 
 /// 4.4: counts are summed per id and side before the stock, supplies and stash checks; stock and stash move by the
@@ -189,7 +210,7 @@ fn summed_counts_meet_stock_supplies_and_the_stash() {
                     let room = SUPPLIES_MAX - gs.party.supplies;
                     assert_eq!(left, room.max(0));
                     let r = shop::trade(&d, &mut gs, &q, &[buy_line(&o, room.max(0) + 1)], &[]);
-                    assert!(!ok(&r) && errors(&r) == [format!("You can carry at most {SUPPLIES_MAX} supplies.")], "{q}: {r:?}");
+                    assert!(!ok(&r) && errors(&r) == [terms::upkeep_carry_max(&d, &gs.world_id)], "{q}: {r:?}");
                     assert_eq!(gs, before);
                     if room > 0 {
                         let r = shop::trade(&d, &mut gs, &q, &[buy_line(&o, room)], &[]);
@@ -291,7 +312,7 @@ fn a_gain_past_the_gold_cap_is_noted() {
         let r = shop::trade(&d, &mut gs, &q, &[], &[(json::s(&row, "item"), 1)]);
         assert!(ok(&r), "{r:?}");
         assert_eq!((gs.party.gold, json::i(&r, "gold", 0)), (GOLD_MAX, 1));
-        assert_eq!(json::sget(&r, "notes"), [format!("Gold is capped at {GOLD_MAX} ({} not added).", json::i(&row, "price", 0) - 1)]);
+        assert_eq!(json::sget(&r, "notes"), [terms::currency_capped(&d, &gs.world_id, json::i(&row, "price", 0) - 1)]);
         return;
     }
     panic!("no open shop buys anything worth 2 gold or more");

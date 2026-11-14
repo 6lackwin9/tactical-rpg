@@ -11,7 +11,7 @@ A scenario checks that the built game still works end to end. A rule or a screen
 | --- | --- |
 | `aegis scenario check [<file> or all]` | Parses the files. No game starts. Exit 1 on a problem, each naming the file and step |
 | `aegis scenario run <id, all or a .json path> [size=WxH] [out=<dir>] [slow=N] [exe=<program>] [data=<dir>] [window=1] [fps=N] [dpr=X]` | Runs them |
-| `aegis scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...]`, plus the keys of `run` | Proof shots of a fight or screen, with no file to write |
+| `aegis scenario shots <name> [screen=] [scene=] [ruleset=] [seed=] [do=<a>,<b>,...]`, plus the keys of `run` (`encounter=` accepted as alias; `rules=` refused on CLI) | Proof shots of a fight or screen, with no file to write |
 | `tools/fc.sh scenario check [<file> or all]` | The same check |
 | `tools/fc.sh scenario <id, all or a .json path> [profile=dev or release]`, plus the keys of `run` | Builds the game and the CLI in one profile, then runs |
 | `tools/fc.sh scenario shots <name>`, plus the keys of `shots` | The same for proof shots |
@@ -33,7 +33,7 @@ driver's tests on a fake link; `aegis scenario check` is for a file being writte
 | `title` | text | "" | - |
 | `status` | `active`, `waiting` | `active` | `waiting` needs `why`; it is parsed and never run |
 | `why` | text | - | Why it waits |
-| `launch` | object | `{"screen": "menu"}` | `screen` is `menu`, `arena` or `runner`; optional `encounter`, `seed`, and `ruleset` with `arena` |
+| `launch` | object | `{"screen": "menu"}` | `screen` is `menu`, `arena` or `runner`; optional `scene` (alias `encounter`), `seed`, and `ruleset` (alias `rules`) with `arena` |
 | `sizes` | list of `WxH` | `["1280x720"]` | Each from 1280x720 to 7680x4320 |
 | `settings` | object | `{}` | Merged over the scratch profile. Refused: `mute` false, `start_inactive`, `window_size`, `fullscreen`, `borderless`, `window_mode` |
 | `timeout_s` | whole number | 300 | 1 to 3600, for the whole run at one size |
@@ -158,7 +158,7 @@ for the state after it.
 
 ```bash
 tools/fc.sh scenario shots menu
-tools/fc.sh scenario shots fight screen=arena encounter=tl_flank ruleset=timeline seed=7 do=shot:start,key:a,clip:play:12:250,pause:500,shot:mid
+tools/fc.sh scenario shots fight screen=arena scene=tl_flank ruleset=timeline seed=7 do=shot:start,key:a,clip:play:12:250,pause:500,shot:mid
 ```
 
 | In `do=` | Step |

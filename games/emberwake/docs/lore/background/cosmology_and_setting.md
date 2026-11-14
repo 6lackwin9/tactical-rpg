@@ -69,7 +69,7 @@ suppresses dissent) leave older people docile and stiff.
 - **Society:** the Spent police their own children, reporting runaways and heretics to the Iron Inquisition for extra
   salt vouchers, tallow candles and safety from the culling wagons.
 - **The few who kept their minds:** adults who avoided communion keep their wits but calcify in body and cannot fight
-  (Bram, Sister Aline, Bailiff Corvo: non-combat hub or quest NPCs). Agnes, at 44, is one of the oldest in the
+  (Berek, Chirurgeon Sabina, Talia Rusk, Bailiff Corvo: non-combat hub or quest NPCs). Agnes, at 44, is one of the oldest in the
   Ash-Crawl; the Spent rarely pass 45. Arch-Prelate Othemar at 64 is the visible exception (see the
   [central truth](central_truth.md)).
 
@@ -83,7 +83,7 @@ The young are the only supple, vital part of humanity.
   pens either give in to the draughts or take up heretical arms. This is a world fact, not a per-operative countdown
   (Act 1 has no countdown on any founder; whether operatives age during the campaign is open, see gaps).
 - **The Red Tithing** takes Unsealed youths of any age, children raised for it first (refinement: from infancy, in the
-  Clerisy's foundling houses, the Lullaby Houses; CANON 3.6); children are stakes in the story (Pip, Lucan, Ida), never
+  Clerisy's foundling houses, the Lullaby Houses; CANON 3.6); children are stakes in the story (Ivo, Lucan, Wren, Ida), never
   fighters or on-screen victims.
 - **The rebellion's core:** every operative of **the Severed Root** is 18-24 `[data]` (recruit ages, RECRUIT1).
 
@@ -125,12 +125,12 @@ These terms appear in dialogue, the quest log and item text.
   Cinderreach.
 - **The Sluice:** the runoff and sewage canals beneath the city, the insurrection's hidden arteries; the hub is the
   Sluice Undercroft.
-- **Cold Steel:** the skill branch (and Bram's creed) of uncorrupted weapons, leverage and drill.
+- **Cold Steel:** the skill branch (and Berek's creed) of uncorrupted weapons, leverage and drill.
 - **The Inoculation:** the forbidden surgery that grafts aberration marrow, glands or ichor into living flesh (Act 2
   on; never on anyone under 18).
 - **Calcification:** the permanent hardening of soft tissue into black bone. For operatives it is a five-stage track
   (Vein-Blackening, Calloused Chitin, Sensory Rot, The Shakes, Terminal Drift) that advances only through a Flesh
-  Breach or Tier III graft surgery; Sister Aline's bone-scraping is the only undo.
+  Breach or Tier III graft surgery; Chirurgeon Sabina's bone-scraping is the only undo.
 - **Preservationist / Flesh-Broker:** the two doctrines of the cell (Act 2 on).
 
 ## 6. Gaps in this file

@@ -102,12 +102,12 @@ fn triggers() -> Value {
         {"id": "t_wiped", "name": "Wiped", "on": "any", "when": [{"key": "roster.living", "op": "<", "value": 1}], "effects": [{"effect": "end", "kind": "fail", "card": "extinguished_wiped"}]},
         {"id": "t_raid", "name": "Raid", "on": "battle", "encounter": "raid", "outcome": "won", "once": false,
             "effects": [{"effect": "meter_set", "meter": "alert", "value": 50}, {"effect": "clock_set", "meter": "doom_clock", "days": 10, "label": "The Great Tithing"}],
-            "then": [{"battle": "raid"}, {"dialogue": "tess"}]}
+            "then": [{"battle": "raid"}, {"dialogue": "innkeeper"}]}
     ])
 }
 
-fn tess() -> Value {
-    json!({"id": "tess", "name": "Tess", "start": "start", "services": false, "nodes": [{"id": "start", "text": "Well?", "choices": [
+fn innkeeper() -> Value {
+    json!({"id": "innkeeper", "name": "Innkeeper", "start": "start", "services": false, "nodes": [{"id": "start", "text": "Well?", "choices": [
         {"text": "Pay to cool things down.", "to": "", "requires": [{"kind": "flag", "key": "meter.alert", "op": ">=", "value": 31}],
             "effects": [{"effect": "take", "gold": 40}, {"effect": "meter_add", "meter": "alert", "delta": -10}]},
         {"text": "Rest a day.", "to": "", "requires": [{"key": "meter.alert.band", "value": "lockdown", "op": "!="}, {"key": "campaign.act", "op": ">=", "value": 1}], "effects": [{"effect": "rest"}]},
@@ -124,7 +124,7 @@ fn campaign_world(tag: &str) -> PathBuf {
     write_kind(&data, "locations", json!([{"id": "hub", "name": "Hub", "rest": true}, {"id": "street", "name": "Street"}]));
     write_kind(&data, "quests", json!([{"id": "q_cages", "name": "The Cages"}]));
     write_kind(&data, "encounters", json!([{"id": "raid", "name": "Raid"}]));
-    write_kind(&data, "dialogues", json!([tess()]));
+    write_kind(&data, "dialogues", json!([innkeeper()]));
     write_kind(&data, "meters", json!([alert(), doom()]));
     write_kind(&data, "checkpoints", checkpoints());
     write_kind(&data, "triggers", triggers());
@@ -286,12 +286,12 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
         ("checkpoints", "deadline 1000", cp.clone(), with(&cp, &["deadline"], json!(1000)), "Deadline day must be 1..999."),
         ("triggers", "an encounter with on day", raid.clone(), with(&without(&raid, "outcome"), &["on"], json!("day")), "Encounter is for on battle only."),
         ("triggers", "an outcome with on enter", act1.clone(), with(&act1, &["outcome"], json!("lost")), "Outcome is for on battle only."),
-        ("triggers", "a location with on battle", act1.clone(), with(&act1, &["on"], json!("battle")), "Location is for on enter only."),
+        ("triggers", "a location with on battle", act1.clone(), with(&act1, &["on"], json!("battle")), "Location is for on enter or on any only."),
         ("triggers", "no effects and no then", wiped.clone(), with(&wiped, &["effects"], json!([])), "needs effects or then"),
         ("triggers", "an effect that opens a screen", wiped.clone(), with(&wiped, &["effects", "0"], json!({"effect": "fight", "encounter": "raid"})), "opens a screen"),
         ("triggers", "a then battle unknown", raid.clone(), with(&raid, &["then", "0"], json!({"battle": "ghost"})), "unknown encounter 'ghost'"),
         ("triggers", "a then vignette unknown (STORYUI1-S)", act1.clone(), with(&act1, &["then", "0", "vignette"], json!("v_ghost")), "unknown vignette 'v_ghost'"),
-        ("triggers", "a speaker on a vignette", act1.clone(), with(&act1, &["then", "0", "speaker"], json!("tess")), "speaker is for a dialogue only."),
+        ("triggers", "a speaker on a vignette", act1.clone(), with(&act1, &["then", "0", "speaker"], json!("innkeeper")), "speaker is for a dialogue only."),
         ("triggers", "a when on an unknown meter", act1.clone(), with(&act1, &["when", "0", "key"], json!("meter.heat")), "names no meter"),
         ("triggers", "clock_start on a gauge", act1.clone(), with(&act1, &["effects", "2", "meter"], json!("alert")), "is not a countdown"),
         ("triggers", "meter_set on a countdown", raid.clone(), with(&raid, &["effects", "0", "meter"], json!("doom_clock")), "is not a gauge"),
@@ -303,6 +303,8 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
     for (kind, tag, good, bad, needle) in cases {
         assert_one(&v, kind, &good, &bad, needle, tag);
     }
+    // ACT1-HOOKS2 (FB-246 (a)): on any, a location reads "while the party is there"
+    assert!(added(&v, "triggers", &act1, &with(&act1, &["on"], json!("any"))).is_empty(), "a location with on any is allowed");
     drop_scratch(&data);
 }
 
@@ -310,7 +312,7 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
 fn campaign_effects_and_read_keys_are_checked_in_dialogue() {
     let data = campaign_world("dialogue");
     let v = store::view(&data);
-    let d = tess();
+    let d = innkeeper();
     let fx = ["nodes", "0", "choices", "0", "effects"];
     let req = ["nodes", "0", "choices", "1", "requires"];
     let rest = ["nodes", "0", "choices", "1", "effects"];
@@ -329,10 +331,10 @@ fn campaign_effects_and_read_keys_are_checked_in_dialogue() {
     for (tag, bad, needle) in cases {
         assert_one(&v, "dialogues", &d, &bad, needle, tag);
     }
-    // the unknown-effect message lists the campaign effects after the dialogue ones (T1.2-S2's roll among them) and
-    // STORYUI1's story effects
+    // the unknown-effect message lists the campaign effects after the dialogue ones (T1.2-S2's roll and ACT1-HOOKS2's
+    // install among them) and STORYUI1's story effects
     let unknown = added(&v, "dialogues", &d, &with(&d, &[&fx[..], &["1", "effect"]].concat(), json!("zz")));
-    assert!(unknown.iter().any(|m| m.contains("recruit, roll, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
+    assert!(unknown.iter().any(|m| m.contains("recruit, roll, install, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
     drop_scratch(&data);
 }
 

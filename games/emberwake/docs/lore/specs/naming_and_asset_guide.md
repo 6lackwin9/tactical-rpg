@@ -39,8 +39,8 @@ A player who has never read the lore should be able to guess a stranger's side f
 | Severed Root youths | Short, plain street names; often an earned epithet | Kaelen, Vesper, Hollis, Dunstan "Slag-Jaw" |
 | Sovereign Clerisy | Long, liturgical, saintly; always a church title | Arch-Prelate Othemar, Cantor Ysolde |
 | Iron Inquisition | Military rank plus a hard one- or two-syllable surname | Captain Vane, Inquisitor-Prelate Nemeth, Proctor Quell |
-| Tallow Guild and industry | Trade and guild surnames, often from the work | Foundry-Master Jessop, Madame Sallow |
-| Commoners and the Spent | Old, homely names | Old Mother Agnes, Ida |
+| Tallow Guild and industry | Trade and guild surnames, often from the work | Foundry-Master Jessop, Widow Varka |
+| Commoners and the Spent | Old, homely names | Agnes of Block 12, Ida |
 | Hermits and heretics | Scriptural or apocryphal | Brother Malachi, Brother Rook |
 | Aberrations | No personal names: what the thing is | the Amalgam, Render-Beast |
 | Enemy unit types | Rank or role plus function | Castellan Footman, Lantern Warden |

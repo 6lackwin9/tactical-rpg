@@ -582,13 +582,13 @@ fn rule_passes(d: &Data, gs: &mut GameState, events: &mut Vec<Value>) {
     }
 }
 
-/// M5: one rule fires: its warning, its effects at once, then (unless the run ended) its `then` items queued and a
+/// M5: one rule fires: its warning, its effects at once (ACT1-HOOKS2: each under its `when` / `else`), then (unless the run ended) its `then` items queued and a
 /// countdown's restart.
 fn fire(d: &Data, gs: &mut GameState, def: &MeterDef, rule: &meter::Rule, value: i64, events: &mut Vec<Value>) {
     if !rule.warn.is_empty() {
         events.push(warning(def, rule, value));
     }
-    apply_effects(d, gs, &rule.effects, events);
+    apply_rule_effects(d, gs, &rule.effects, events);
     let time = gs.time;
     let Some(c) = gs.campaign.as_mut() else { return };
     if c.is_over() {
@@ -600,6 +600,28 @@ fn fire(d: &Data, gs: &mut GameState, def: &MeterDef, rule: &meter::Rule, value:
             st.due = time + days;
             st.running = true;
         }
+    }
+}
+
+/// ACT1-HOOKS2 (FB-244 (2)): a meter rule's effects in order, each gated by its optional `when` (flag conditions, all
+/// holding when the effect is reached, after the effects before it) and `else` (`rpgkit_data::RULE_EFFECT_ELSE`): an
+/// effect without `else` starts a chain; an `else` effect runs only when no effect of its chain ran yet, so
+/// `[{when: A}, {else, when: B}, {else}]` is if A / else if B / else. Every effect goes through the shared effect body
+/// (`apply_effects`), which stops at the first `end` (F1). Rules without either key run every effect as before.
+fn apply_rule_effects(d: &Data, gs: &mut GameState, effects: &[Dict], events: &mut Vec<Value>) {
+    let mut chain_ran = false;
+    for fx in effects {
+        let is_else = json::b(fx, rpgkit_data::RULE_EFFECT_ELSE, false);
+        if !is_else {
+            chain_ran = false;
+        } else if chain_ran {
+            continue;
+        }
+        if !quest::all_hold(gs, json::get(fx, rpgkit_data::RULE_EFFECT_WHEN)) {
+            continue;
+        }
+        chain_ran = true;
+        apply_effects(d, gs, std::slice::from_ref(fx), events);
     }
 }
 

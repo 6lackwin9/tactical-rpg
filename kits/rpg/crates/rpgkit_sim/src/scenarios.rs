@@ -265,6 +265,9 @@ pub struct FightSet {
     /// REWARD1-S: the fights' reward sums and the encounter's purse mean (0 = none).
     pub rewards: RewardSum,
     pub purse_mean: f64,
+    /// PK2-FOLLOWUP (PR5-36, FB-220): the party's weapon wear summed over the fights (`FightRes::worn`, `dulled`).
+    pub worn: f64,
+    pub dulled: f64,
 }
 
 /// REWARD1-S: what a set of fights' defeated enemies paid, summed (means are over `fights`).
@@ -337,6 +340,8 @@ pub fn run_seeds(r: &mut Runner, left: &[String], enemies: &[String], base: &Map
         let kills = r.key_kills.clone();
         acc.rewards.add(&res.reward, res.won, &kills);
         acc.fights += 1.0;
+        acc.worn += res.worn as f64;
+        acc.dulled += f64::from(res.dulled);
         if f.cleared {
             acc.cleared += 1.0;
             acc.rounds_cleared_sum += f.rounds as f64;

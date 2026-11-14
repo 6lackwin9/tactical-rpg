@@ -290,6 +290,15 @@ pub struct Unit {
     /// U3.2-S4 (FB-35, OFFHAND1): the skills worn items grant (their `skill` effects, their families' mastery
     /// passives'), rebuilt on every sync: owned, unlocked and always active while worn, no slot (`gear_skill`).
     pub gear_skills: Vec<String>,
+    /// ACT1-HOOKS2 (FB-244 (1)): the skills the encounter granted this unit for this battle only (a world encounter's
+    /// `flag_skills`): owned, unlocked and open without a slot like a worn item's (`battle_skill`); never saved. A
+    /// granted `channel.only` skill also plays in a Standard round while the unit cannot Channel (no channel meter),
+    /// as authored and paying no meter (`rpgkit_battle::channel::problem`).
+    pub battle_skills: Vec<String>,
+    /// ACT1-HOOKS2 (FB-244 (4)): the blocks the passives' `skill_block_cost` effects add per skill id, and the worn
+    /// items' (rebuilt on every gear sync); `skill_blocks` reads both.
+    pub block_cost: IndexMap<String, i32>,
+    pub gear_block_cost: IndexMap<String, i32>,
     /// U3.2-S4 (U3 Level 2): crit chance points the worn gear's families give at proficiency 2 or more (their
     /// `level2_bonus` crit, each family once), rebuilt on every sync.
     pub gear_crit: f64,
@@ -427,6 +436,9 @@ impl Unit {
             passive_triggers: Vec::new(),
             gear_triggers: Vec::new(),
             gear_skills: Vec::new(),
+            battle_skills: Vec::new(),
+            block_cost: IndexMap::new(),
+            gear_block_cost: IndexMap::new(),
             gear_crit: 0.0,
             held_guard: None,
             trigger_crit: 0.0,
@@ -625,6 +637,7 @@ impl Unit {
         self.gear_triggers.clear();
         self.gear_hit_sources.clear();
         self.gear_skills.clear();
+        self.gear_block_cost.clear();
         self.gear_crit = 0.0;
         // AUDIT-01: a 2H pair's stowed weapon grants nothing while it is not ready (`Inventory::ready_gear`)
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.ready_gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
@@ -663,6 +676,14 @@ impl Unit {
             fresh
         });
         out
+    }
+
+    /// PK2-FOLLOWUP (PR5-36, the sims' `mastery=N`): sets the unit's mastery level in gear type `family` (clamped to
+    /// 0-3; a unit without mastery gets it) and reopens its techniques, as a member built with that mastery would hold.
+    pub fn set_mastery(&mut self, family: &str, level: i32) {
+        let level = level.clamp(0, rpgkit_data::mastery::MASTERY_MAX);
+        self.mastery.get_or_insert_with(IndexMap::new).insert(family.to_string(), level);
+        self.techniques = self.open_techniques();
     }
 
     /// PK2-S4: the open technique of skill `skill_id` (None: not a technique now).
@@ -822,6 +843,11 @@ impl Unit {
                 // PK2-S1: member grants, passives only (`Grant::gear_ok`)
                 Grant::ForbidHands { hands } => self.forbid_hands = self.forbid_hands.max(*hands),
                 Grant::PierceMelee => self.pierce_melee = true,
+                // ACT1-HOOKS2 (FB-244 (4)): summed per skill (the gear map is cleared on every sync)
+                Grant::SkillBlockCost { skill, delta } => {
+                    let held = if gear { &mut self.gear_block_cost } else { &mut self.block_cost };
+                    *held.entry(skill.clone()).or_insert(0) += *delta;
+                }
             }
         }
     }
@@ -975,6 +1001,12 @@ impl Unit {
         self.gear_skills.iter().any(|s| s == skill_id)
     }
 
+    /// ACT1-HOOKS2 (FB-244 (1)): whether the encounter granted `skill_id` to this unit for this battle (owned, unlocked
+    /// and open without a slot, like a worn item's).
+    pub fn battle_skill(&self, skill_id: &str) -> bool {
+        self.battle_skills.iter().any(|s| s == skill_id)
+    }
+
     // ---- Skills: ownership, unlocks (SK2), loadout ---------------------------------------------------------------
 
     pub fn active_families(&self) -> Vec<String> {
@@ -1001,7 +1033,8 @@ impl Unit {
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
         // PK2-S2: a keystone graft's skill sits in the keystone slot, open without an active slot
         // PK2-S4: a technique is open without a slot while its weapon is wielded
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.keystone_skill(skill_id) || self.technique_skill(skill_id) {
+        // ACT1-HOOKS2: an encounter's battle grant too
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.battle_skill(skill_id) || self.keystone_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
@@ -1069,7 +1102,8 @@ impl Unit {
     /// HOOKS1 UM6: a meter skill the battle gave is owned (before the deck rule's closed basics).
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
         // PK2-S4: a technique open now is owned
-        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.technique_skill(skill_id) {
+        // ACT1-HOOKS2: an encounter's battle grant is owned for that battle
+        if self.meter_skill(skill_id) || self.gear_skill(skill_id) || self.battle_skill(skill_id) || self.technique_skill(skill_id) {
             return true;
         }
         if let Some(open) = self.deck_basic(cat, skill_id) {
@@ -1909,6 +1943,18 @@ impl Unit {
     }
 
     /// SkillDef.power_for: the skill multiplier x potency x weaken x empower.
+    /// ACT1-HOOKS2 (FB-244 (4)): the blocks `skill` takes for this unit: its own `blocks` plus the `skill_block_cost`
+    /// deltas the unit's passives and worn items hold for it (summed), clamped to 1 at least; the skill's own `blocks`
+    /// unchanged while no delta applies. The planner, the AI, the previews and the battle read this.
+    pub fn skill_blocks(&self, skill: &rpgkit_data::SkillDef) -> i32 {
+        let delta = self.block_cost.get(&skill.id).copied().unwrap_or(0) + self.gear_block_cost.get(&skill.id).copied().unwrap_or(0);
+        if delta == 0 {
+            skill.blocks
+        } else {
+            (skill.blocks + delta).max(1)
+        }
+    }
+
     pub fn power_for(&self, skill: &rpgkit_data::SkillDef) -> f64 {
         skill.power_mult * self.potency_for_skill(skill) * self.weaken_factor() * self.empower_factor()
     }

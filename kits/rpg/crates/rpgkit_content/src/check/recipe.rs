@@ -1,7 +1,9 @@
 //! Recipes (PK2-S3, `docs/sessions/PK2_GRAFTS.md` section 4; engine-only, no Godot original): the checks of one row of
 //! the kind `recipes` against the catalog loaded before it (the id, name, origin and target, the cost's purse amounts
 //! and items, the effects: known, their keys, their target, their refs to items, body slots, unit tracks and class
-//! roles, and the effects whose system is not built yet) and across rows (unique ids). The loader keeps the rows that
+//! roles, and the effects whose system is not built yet; PK2-FOLLOWUP: a masterwork `reforge` needs `requires`; PR5-45:
+//! a `craft` names a known item and an optional whole `count` 1..`RECIPE_COUNT_MAX`, on a `stash` recipe) and
+//! across rows (unique ids). The loader keeps the rows that
 //! pass, in file order. The world refs (the offering character, the `requires` conditions) are checked over the
 //! worlds (`world_errors`, the whole-catalog report).
 
@@ -88,6 +90,11 @@ pub fn row_errors(e: &Dict, loaded: &Dict) -> Vec<String> {
     }
     out.extend(cost_errors(json::get(e, "cost"), loaded));
     out.extend(effects_errors(json::get(e, "effects"), &target, loaded));
+    // PK2-FOLLOWUP (`PK2_GRAFTS.md` 5): masterwork forging opens with a quest, so a masterwork reforge names its gate
+    let masterwork = json::arr(json::get(e, "effects")).iter().map(json::dict).any(|fx| json::s(fx, "effect") == r::FX_REFORGE && fx.get("masterwork") == Some(&Value::Bool(true)));
+    if masterwork && json::arr(json::get(e, "requires")).is_empty() {
+        out.push("A masterwork reforge needs requires (what opens masterwork forging, such as a quest flag).".into());
+    }
     out
 }
 
@@ -212,6 +219,29 @@ fn effect_errors(name: &str, fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> 
             }
         }
         r::FX_SALVAGE => out.extend(salvage_errors(fx, at, loaded)),
+        r::FX_REPAIR => {
+            // PK2-FOLLOWUP: the full-repair price (purse, salvage count) and the salvage item per rarity and theme
+            out.extend(purse_errors(fx, at));
+            if fx.contains_key("count") && !whole_in(fx.get("count"), 1, RECIPE_COUNT_MAX) {
+                out.push(format!("{at}: count must be a whole number 1..{RECIPE_COUNT_MAX}."));
+            }
+            out.extend(tier_theme_errors(fx, at, loaded));
+        }
+        r::FX_CRAFT => {
+            // PR5-45: a known catalog item, and its count (default `CRAFT_COUNT_DEFAULT`)
+            let item = json::s(fx, "item");
+            if row(loaded, "items", &item).is_none() {
+                out.push(format!("{at}: unknown item '{item}'."));
+            }
+            if fx.contains_key("count") && !whole_in(fx.get("count"), 1, RECIPE_COUNT_MAX) {
+                out.push(format!("{at}: count must be a whole number 1..{RECIPE_COUNT_MAX}."));
+            }
+        }
+        r::FX_REFORGE => {
+            if fx.get("masterwork").is_some_and(|v| !v.is_boolean()) {
+                out.push(format!("{at}: masterwork must be true or false."));
+            }
+        }
         r::FX_DRILL => {
             // PK2-S4: the mastery XP before the member's proficiency rate
             let (lo, hi) = rpgkit_data::mastery::MASTERY_XP_RANGE;
@@ -227,10 +257,26 @@ fn effect_errors(name: &str, fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> 
 /// A salvage effect: `gold` (whole, 0..PURSE_MAX), `tiers` {item rarity: known item}, `themes` {theme id: known item};
 /// it gives something.
 fn salvage_errors(fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> {
-    let mut out = Vec::new();
-    if fx.contains_key("gold") && !whole_in(fx.get("gold"), 0, PURSE_MAX) {
-        out.push(format!("{at}: gold must be a whole number 0..{PURSE_MAX}."));
+    let mut out = purse_errors(fx, at);
+    out.extend(tier_theme_errors(fx, at, loaded));
+    let gives = json::i(fx, "gold", 0) > 0 || ["tiers", "themes"].iter().any(|k| !json::dget(fx, k).is_empty());
+    if !gives {
+        out.push(format!("{at}: a salvage gives gold, tiers or themes."));
     }
+    out
+}
+
+/// An effect's `gold`, when given: whole, 0..PURSE_MAX.
+fn purse_errors(fx: &Dict, at: &str) -> Vec<String> {
+    if fx.contains_key("gold") && !whole_in(fx.get("gold"), 0, PURSE_MAX) {
+        return vec![format!("{at}: gold must be a whole number 0..{PURSE_MAX}.")];
+    }
+    Vec::new()
+}
+
+/// An effect's `tiers` {item rarity: known item} and `themes` {theme id: known item} (salvage, repair).
+fn tier_theme_errors(fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
     let rarities = options("items", "rarity");
     for (key, keyed) in [("tiers", true), ("themes", false)] {
         match fx.get(key) {
@@ -250,10 +296,6 @@ fn salvage_errors(fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> {
             }
             Some(_) => out.push(format!("{at}: {key} must be an object.")),
         }
-    }
-    let gives = json::i(fx, "gold", 0) > 0 || ["tiers", "themes"].iter().any(|k| !json::dget(fx, k).is_empty());
-    if !gives {
-        out.push(format!("{at}: a salvage gives gold, tiers or themes."));
     }
     out
 }

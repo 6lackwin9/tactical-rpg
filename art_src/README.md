@@ -69,6 +69,10 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
 - ART3C (2026-10-25): Tess's right-ear re-roll, 2 takes (`tess_gen1792945776_1`, `tess_gen1792945812_2`). The user
   picked take 2; it is now `tess.png` with `generated_as`, and the ART3B pick went back to `tess_gen1792942586_1.png`
   as a take.
+- Canon rename (CANON 6.1, 2026-11-11; AI-09 2026-11-12): the hub cast `tess`, `bram` and `aline` above are retired
+  names. Their portraits ship as `talia_rusk`, `berek_dorn` and `sabina_kress` (byte copies; Berek keeps the `bram`
+  art for good, Sabina and Talia are repainted under AI-05). The masters and takes here keep their old file names as
+  the record of what was generated.
 - `ui_1.png`: the PLAYUI1 UI icon sheet (5x5 on a magenta key; prompt in
   `games/emberwake/docs/specs/PLAYUI1_ICONS.md`); `tools/portraits/sheets.py ui art_src/ui_1.png ui_1` cuts it into
   the 22 icons at their layer paths (`--contact` makes a review sheet).

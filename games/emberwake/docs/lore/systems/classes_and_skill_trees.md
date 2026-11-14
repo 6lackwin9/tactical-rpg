@@ -60,14 +60,14 @@ the character's `extra_skills`.
 | Founder | Innate trait | Variant (modifies) | Signature | Act 1 kit |
 | --- | --- | --- | --- | --- |
 | Kaelen | Castellan's Penance | Notched Billhook Sunder (Sunder and Pin) | Seventh Ward Bulwark | all three |
-| Vesper | Cinder-Child's Reflex | Orlov's Retribution (Throat-Carver's Art) | Umbral Flensing | trait (replacement open), variant |
+| Vesper | Gutter-Runner's Reflex | Orlov's Retribution (Throat-Carver's Art) | Umbral Flensing | trait, variant |
 | Hollis | Crag Hawkeye | Poacher's Barbed Quarrel (Notched Quarrel) | Predator Reticle Pulse | trait, variant |
 | Dunstan "Slag-Jaw" | Foundry-Wired Spite | Shackle-Pummel Slam (Jaw-Breaker) | Molten Marrow Eruption | trait, variant |
 | Maren | Copyist of St. Lyra's | Black-Ichor Transfusion (Ichor Thread Suture) | Martyr's Shroud | trait only |
 | Elyse | Volatile Reaction Catalyst | Pressurized Vitriol Siphon (Caustic Vitriol) | Spore-Bloom of the Sleeper | trait only |
 
-Inoculated variants and signatures (Strain cost listed) wait for Act 2. Founders' visible taints are backstory only in
-Act 1.
+Inoculated variants and signatures (Strain cost listed) wait for Act 2. Founders are clean mortal humans on Day 1;
+personal physical taints manifest only on the Act 2 Inoculated path (`CANON.md` 3.1, 3.3).
 
 | | Founders | Act 2 recruits |
 | --- | --- | --- |
@@ -109,7 +109,7 @@ is character-locked follows section 4 above.
 | Lasting cost of the Inoculated keystones (their Calcification-per-battle cost is retired) | A: the floor lock at 30 is the whole cost; B: installing a keystone is Tier III surgery and adds a Calcification stage | B: it reuses CANON's own Tier III rule |
 | Flat damage and heal numbers | A: convert each to `power_mult` against a reference attack power at the asset pass; B: keep flat values through a new field | A |
 | Flat poise bonuses on passives (Braced Poise +20) beside the CANON formula | A: allowed as a third term; B: passives add armour poise instead | A, stated in the poise spec |
-| Skills whose identity was a cut rider (Ghost of the Undercroft, Viscous Shadow, Cinder-Child's Reflex) | A: rebuild on engine hooks (`exploit` bonuses against statuses, chase, intent foresight); B: replace the skill | A, per class file |
+| Skills whose identity was a cut rider (Ghost of the Undercroft, Viscous Shadow, Gutter-Runner's Reflex) | A: rebuild on engine hooks (`exploit` bonuses against statuses, chase, intent foresight); B: replace the skill | A, per class file |
 | Enemy Strain (Miasma and Spore-Bloom add Strain to enemies) | A: aberrant enemies carry the meter, humans ignore it; B: no enemy Strain, swap the rider | A, Act 2 bestiary |
 | Martyr's Shroud costs 3 AP, above the Inoculated 1-2 guideline | keep as a signature exception, or 2 AP | keep (`ap_cost` is decoupled) |
 | Ocular Lock's mark: +35% (old tree table) or +30% crit (old text) | 30 (matches Predator Reticle Pulse) | 30 |

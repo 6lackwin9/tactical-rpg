@@ -140,8 +140,8 @@ pub fn opens(w: &World, c: UnitId, s: &SkillDef) -> bool {
 }
 
 /// PK1 4.3 items 1-2, 7: why `c` may not plan `s` in its round's mode (None: it may): a Standard version (or an
-/// item) in a Channel round is "Channel round", a channeled-only skill in a Standard round "Only in a Channel round".
-/// None without the rule. PK2-S4: first, with or without the rule, a technique whose grip tag does not fit the
+/// item) in a Channel round is "Channel round", a channeled-only skill in a Standard round "Only in a Channel round"
+/// (ACT1-HOOKS2: not one `standard_grant` opens). None without the rule. PK2-S4: first, with or without the rule, a technique whose grip tag does not fit the
 /// main-hand weapon (`Unit::technique_problem`); a technique in a Channel round is "Channel round" (`opens`).
 /// PK2-S5b: then, under the sims' `World::dulled_lock`, a technique that swings a dulled weapon (`wear::problem`).
 pub fn problem(w: &World, c: UnitId, s: &SkillDef) -> Option<&'static str> {
@@ -158,7 +158,14 @@ pub fn problem(w: &World, c: UnitId, s: &SkillDef) -> Option<&'static str> {
     if is_channel(w, c) {
         return (!opens(w, c, s)).then_some(CHANNEL_ROUND);
     }
-    only(s).then_some(ONLY_CHANNEL)
+    (only(s) && !standard_grant(w, c, s)).then_some(ONLY_CHANNEL)
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): whether `c` plays channeled-only `s` in a Standard round: the encounter granted it for
+/// this battle (`Unit::battle_skill`) and the unit cannot Channel (it holds no channel meter), so the skill resolves
+/// as authored and pays no meter (no version outside a Channel round).
+pub fn standard_grant(w: &World, c: UnitId, s: &SkillDef) -> bool {
+    w.units.get(c).is_some_and(|u| u.battle_skill(&s.id)) && !can_channel(w, c)
 }
 
 /// PK1 4.3 item 2: why `c` may not use a pouch item now (None: it may): items have no channeled version, so a Channel

@@ -45,7 +45,7 @@ fn with_ids(w: &str, rows: Value) -> Value {
 }
 
 /// A world's two founders, a party-side guest, a foe and the fight between them; slice 4: two later recruits, the
-/// `crucible` fight (`party_min` 4) and one-choice scenes that recruit (by each BK5 `level`) or start that fight.
+/// `gauntlet` fight (`party_min` 4) and one-choice scenes that recruit (by each BK5 `level`) or start that fight.
 fn own(w: &str) -> Value {
     let scene = |id: &str, fx: Value| json!({"id": id, "start": "a", "services": false, "nodes": [{"id": "a", "text": "Well?", "choices": [{"text": "Go.", "effects": [fx]}]}]});
     json!({
@@ -59,7 +59,7 @@ fn own(w: &str) -> Value {
         ])),
         "encounters": with_ids(w, json!([
             {"id": "fight", "party": ["founder"], "enemies": ["foe"], "guests": ["guide"]},
-            {"id": "crucible", "party": ["founder"], "enemies": ["foe"], "party_min": 4},
+            {"id": "gauntlet", "party": ["founder"], "enemies": ["foe"], "party_min": 4},
             // ENCOUNTER2-W: a hold escape whose holder is captured (W2-W4), and one with the default `then` and line
             {"id": "winch", "party": ["founder"], "enemies": ["foe"], "objective": "escape", "objective_count": 1,
              "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "flag": "winch_held", "then": "capture", "result_line": "{name} held the winch."}},
@@ -70,7 +70,7 @@ fn own(w: &str) -> Value {
             scene("r_kestrel", json!({"effect": "recruit", "character": "kestrel"})),
             scene("r_average", json!({"effect": "recruit", "character": "dalton", "level": "average"})),
             scene("r_three", json!({"effect": "recruit", "character": "dalton", "level": 3})),
-            scene("f_crucible", json!({"effect": "fight", "encounter": "crucible"}))
+            scene("f_gauntlet", json!({"effect": "fight", "encounter": "gauntlet"}))
         ]))
     })
 }
@@ -641,16 +641,16 @@ fn party_min_refuses_a_fight_short_of_heroes() {
     let d = data();
     let mut gs = crew(&d, "bw", 3);
     let want = "Take 4 into this fight (3 in the party).";
-    assert_eq!(errors(&scene(&d, &mut gs, "f_crucible")), [want]);
-    assert_eq!(roster::party_min_text(&d, &gs, "crucible"), want);
+    assert_eq!(errors(&scene(&d, &mut gs, "f_gauntlet")), [want]);
+    assert_eq!(roster::party_min_text(&d, &gs, "gauntlet"), want);
     assert_eq!(roster::party_min_text(&d, &gs, "fight"), "", "no party_min: any party");
     let mut gs = crew(&d, "bw", 5);
     gs.party.active_ids.truncate(3);
-    assert_eq!(roster::party_min_text(&d, &gs, "crucible"), want, "two on the bench");
+    assert_eq!(roster::party_min_text(&d, &gs, "gauntlet"), want, "two on the bench");
     let mut gs = crew(&d, "bw", 4);
-    let res = scene(&d, &mut gs, "f_crucible");
+    let res = scene(&d, &mut gs, "f_gauntlet");
     assert!(ok(&res) && res.contains_key("fight"), "four take the field: {res:?}");
-    assert_eq!(roster::party_min_text(&d, &gs, "crucible"), "");
+    assert_eq!(roster::party_min_text(&d, &gs, "gauntlet"), "");
 }
 
 #[test]
@@ -917,8 +917,8 @@ fn party_min_reads_the_fight_worlds_entry() {
     // BK6 at the battle start reads the entry of the world the fight is built in (`battle::fight_world`)
     let d = data();
     let gs = crew(&d, "w", 3);
-    assert_eq!(roster::party_min_refusal(&gs, d.resolve("w", "encounters", "crucible")), roster::party_min_text(&d, &gs, "crucible"));
-    assert!(!roster::party_min_text(&d, &gs, "crucible").is_empty());
+    assert_eq!(roster::party_min_refusal(&gs, d.resolve("w", "encounters", "gauntlet")), roster::party_min_text(&d, &gs, "gauntlet"));
+    assert!(!roster::party_min_text(&d, &gs, "gauntlet").is_empty());
     assert_eq!(battle::fight_world(&d, &gs, "fight"), "w", "in the lineage: the played world");
     assert_eq!(battle::fight_world(&d, &gs, "ow:fight"), "ow", "another world's encounter: that world");
     assert_eq!(battle::fight_world(&d, &gs, "nothing"), "w", "unknown: the played world");

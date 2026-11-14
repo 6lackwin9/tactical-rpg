@@ -1,0 +1,48 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "sequences",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "seq_after_m5",
+    "name": "Beyond the Slag Gate",
+    "steps": [
+     {
+      "kind": "vignette",
+      "vignette": "vg_m5_gate",
+      "music": "story_goodbye"
+     },
+     {
+      "kind": "vignette",
+      "vignette": "vg_debate_3",
+      "music": "story_goodbye"
+     },
+     {
+      "kind": "effects",
+      "effects": [
+       {
+        "effect": "set_flag",
+        "key": "pk2.slab_open",
+        "value": true
+       },
+       {
+        "effect": "set_flag",
+        "key": "pk2.hearth_open",
+        "value": true
+       }
+      ]
+     },
+     {
+      "kind": "enter",
+      "location": "sluice_undercroft",
+      "anchor": "spawn"
+     }
+    ],
+    "tags": [
+     "m5"
+    ]
+   }
+  }
+ ]
+}

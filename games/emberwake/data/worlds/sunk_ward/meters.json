@@ -173,12 +173,60 @@
 					],
 					"effects": [
 						{
+							"effect": "meter_add",
+							"meter": "alert",
+							"delta": 10
+						},
+						{
 							"effect": "add_flag",
 							"key": "lesser_tithings",
 							"delta": 1
+						},
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.ivo_lost",
+							"value": true,
+							"when": [
+								{
+									"key": "sunk_ward.ivo_rescued",
+									"op": "!=",
+									"value": true
+								},
+								{
+									"key": "sunk_ward.ivo_lost",
+									"op": "!=",
+									"value": true
+								}
+							]
+						},
+						{
+							"effect": "set_flag",
+							"key": "sunk_ward.ida_lost",
+							"value": true,
+							"else": true,
+							"when": [
+								{
+									"key": "sunk_ward.corvo_bribed",
+									"op": "!=",
+									"value": true
+								},
+								{
+									"key": "sunk_ward.ida_lost",
+									"op": "!=",
+									"value": true
+								}
+							]
+						},
+						{
+							"effect": "add_flag",
+							"key": "sunk_ward.saved_youths",
+							"delta": -2,
+							"min": 0,
+							"else": true
 						}
 					],
-					"restart_days": 14
+					"restart_days": 14,
+					"warn": "The Red Tithing falls early: a lesser tithing, and the Inquisition's Alert rises by 10."
 				}
 			],
 			"inputs": [],

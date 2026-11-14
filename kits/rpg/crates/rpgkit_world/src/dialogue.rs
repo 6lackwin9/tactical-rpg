@@ -251,8 +251,23 @@ pub fn condition_holds(d: &Data, gs: &GameState, raw: &Dict) -> bool {
         "items" => gs.party.stash.get(&json::s(&cond, "item")).copied().unwrap_or(0) >= json::i(&cond, "count", 1),
         "gold" => gs.party.gold >= json::i(&cond, "min", 0),
         "stat" => best_stat(d, gs, &json::s(&cond, "stat")) >= stat_threshold(&cond),
+        rpgkit_data::IN_ACTIVE_PARTY => is_active_member(d, gs, &json::s(&cond, "character")),
         _ => false,
     }
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): whether character `character_ref` is an active (deployed) party member now, not only on
+/// the bench (the condition kind `in_active_party`).
+pub fn is_active_member(d: &Data, gs: &GameState, character_ref: &str) -> bool {
+    if character_ref.is_empty() {
+        return false;
+    }
+    let c = d.resolve(&gs.world_id, "characters", character_ref);
+    if c.is_empty() {
+        return false;
+    }
+    let (id, qid) = (json::s(c, "id"), json::s(c, "_qid"));
+    gs.party.active_members().iter().any(|m| m.id == id || m.lore_ref == qid)
 }
 
 pub fn choice_open(d: &Data, gs: &GameState, choice: &Dict) -> bool {
@@ -301,6 +316,10 @@ fn needs_text(d: &Data, gs: &GameState, cond: &Dict) -> String {
         }
         "gold" => terms::needs_currency(d, &gs.world_id, json::i(cond, "min", 0)),
         "stat" => format!("Needs {} {}", json::s(cond, "stat"), stat_threshold(cond)),
+        rpgkit_data::IN_ACTIVE_PARTY => {
+            let c = d.resolve(&gs.world_id, "characters", &json::s(cond, "character"));
+            format!("Needs {} in the active party", json::s_or(c, "name", &json::s(cond, "character")))
+        }
         "quest" => {
             let q = json::s(cond, "quest");
             format!("Needs {} ({})", json::s_or(&quest::resolved(d, gs, &q), "name", &q), json::s(cond, "status"))
@@ -383,6 +402,8 @@ pub struct DialogueRunner {
     pub closed: bool,
     pub start: String,
     pub services: bool,
+    /// ACT1-HOOKS1: opened as a queued scene (`open_scene`), not a visit (`must_choose`).
+    pub scene: bool,
     pub node_id: String,
     pub shop_qid: String,
     /// STORYUI1 B3: the board whose pane is open over the conversation ("" = none), like `shop_qid`.
@@ -436,7 +457,7 @@ impl DialogueRunner {
     /// to ("" = none: the tree's and the nodes' own speakers), no services (a scene, not a visit). Refused for an
     /// unknown ref or a speaker who is gone, as `open`.
     pub fn open_scene(d: &Data, gs: &mut GameState, dialogue_ref: &str, speaker_ref: &str) -> Self {
-        let mut r = Self::default();
+        let mut r = Self { scene: true, ..Default::default() };
         if !speaker_ref.is_empty() {
             let c = d.resolve(&gs.world_id, "characters", speaker_ref);
             if c.is_empty() {
@@ -971,11 +992,16 @@ impl DialogueRunner {
         if !problems.is_empty() {
             return json::ok_result(false, &problems);
         }
+        let act = gs.campaign.as_ref().map(|c| c.act);
         let res = quest::complete(d, gs, &qid, recipient, picks);
         if !json::b(&res, "ok", false) {
             return json::ok_result(false, &json::sget(&res, "errors"));
         }
-        self.apply(d, gs, &rest);
+        // ACT1-HOOKS2 (FB-246 (a)): a turn-in is a campaign tick even with no effects after it (its rewards and
+        // complete_flags may satisfy a trigger's `when`); one tick for the turn-in and its effects
+        apply_effects(d, gs, &rest, &mut self.notes, &mut self.campaign_events);
+        let events = crate::campaign::after_effects(d, gs, act);
+        self.campaign_events.extend(events);
         self.pending = None;
         let mut moved = self.move_to(d, gs, &to);
         moved.insert("granted".into(), res.get("granted").cloned().unwrap_or(Value::Null));
@@ -1088,12 +1114,43 @@ impl DialogueRunner {
         };
         self.with_notes(res)
     }
+
+    /// ACT1-HOOKS1 (FB-241 a): a scene (`open_scene`) that may not be left without choosing: it is open, offers no
+    /// farewell reply, and has a reply that can be taken now (`answerable`) on the node shown, or on a node its `next`
+    /// lines lead to (read with the state as it is now). Read from the tree alone (no dialogue id is special). A node
+    /// whose replies are all locked, hidden or refused (an unaffordable `take`, a blocked `fight`, ...) may be left
+    /// (never a dead end); a conversation with a person (`open`) always may be.
+    pub fn must_choose(&self, d: &Data, gs: &GameState) -> bool {
+        if !self.scene || self.closed {
+            return false;
+        }
+        if self.visible(d, gs).iter().any(|(c, _)| json::s(c, "_service") == "farewell") {
+            return false;
+        }
+        let mut seen: Vec<String> = Vec::new();
+        let mut id = self.node_id.clone();
+        while !id.is_empty() && !seen.contains(&id) {
+            let node = self.node(d, gs, &id);
+            if !json::arr(&json::normalize(json::get(&node, "choices"))).is_empty() {
+                return self.choices_of(d, gs, &id).iter().any(|c| self.answerable(d, gs, c));
+            }
+            seen.push(id);
+            id = json::s(&node, "next");
+        }
+        false
+    }
+
+    /// ACT1-HOOKS1: reply `c` can be taken now: shown (not a recruit of a member), open, and its effects pass the
+    /// choice's precheck (`choose` would not refuse it).
+    fn answerable(&self, d: &Data, gs: &GameState, c: &Dict) -> bool {
+        !recruits_member(d, gs, c) && choice_open(d, gs, c) && self.precheck(d, gs, &effects_of(c)).is_empty()
+    }
 }
 
 /// DialogueRunner.apply's body for one effect (STORYUI1 Q3: factored out with no change to the conversation), shared by
 /// the conversation, story sequences' `effects` steps and campaign rules (CAMPAIGN1 T2): `set_flag`, `add_flag`,
 /// `start_quest` (the giver check is the conversation's precheck), `give` (its notes), `take`, `recruit` (its note),
-/// the story effects `vignette` (queued, W1), `sequence` (started, Q1; refused while one runs, the refusal a note) and
+/// ACT1-HOOKS2's `install` (its note), the story effects `vignette` (queued, W1), `sequence` (started, Q1; refused while one runs, the refusal a note) and
 /// `open_board` (its first open sets the board's flag, B9; the runner opens the pane), `rest` (CAMPAIGN1 R2, its note;
 /// the days it passes tick after the list), then the campaign effects (11.3; inert outside a campaign world). No
 /// campaign tick: the caller ticks once after its list.
@@ -1111,7 +1168,11 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
             quest::start(d, gs, &json::s(fx, "quest"));
         }
         "give" => {
-            let rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
+            let mut rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
+            // ACT1-HOOKS1 (FB-241 c): a `give` may hand over travel supplies (capped by the purse, the rest a note)
+            if json::i(fx, "supplies", 0) > 0 {
+                rewards.insert("supplies".into(), int(json::i(fx, "supplies", 0)));
+            }
             let given = quest::reward_apply(d, gs, &rewards, "", &[]);
             notes.extend(json::sget(&given, "notes"));
         }
@@ -1119,6 +1180,8 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
             quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
         }
         "recruit" => recruit(d, gs, &json::s(fx, "character"), fx.get("level").unwrap_or(&Value::Null), notes),
+        // ACT1-HOOKS2 (FB-244 (1)): a graft into the body of the member a flag names (the recipe's install path)
+        rpgkit_data::INSTALL_EFFECT => install(d, gs, fx, notes),
         // T1.2-S2 (FB-54b): the choice-time roll and its note
         "roll" => {
             let r = roll_effect(d, gs, fx);
@@ -1159,6 +1222,51 @@ pub fn apply_effects(d: &Data, gs: &mut GameState, effects: &[Dict], notes: &mut
             break;
         }
         apply_effect(d, gs, fx, notes, events);
+    }
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): the party member whose character flag `key` names (the flag holds a character id or
+/// ref, as a choice's `set_flag` wrote it); None when the flag is not text or names no member.
+pub fn member_from_flag(d: &Data, gs: &GameState, key: &str) -> Option<String> {
+    let held = gs.read_flag(key)?;
+    let r = held.as_str().filter(|r| !r.is_empty())?;
+    let c = d.resolve(&gs.world_id, "characters", r);
+    let (id, qid) = (json::s(c, "id"), json::s(c, "_qid"));
+    gs.party.members.iter().find(|m| m.id == r || (!c.is_empty() && (m.id == id || m.lore_ref == qid))).map(|m| m.id.clone())
+}
+
+/// ACT1-HOOKS2 (FB-244 (1)): the `install` effect (`rpgkit_data::INSTALL_EFFECT`): graft `item` into a body slot of the
+/// member `member_from_flag` names (`slot`, or "" = the first empty slot in catalog order that takes it) through the
+/// recipe's install path (`UnitState::install_graft`: an occupied named slot is overwritten and its graft destroyed).
+/// A member who already carries the item changes nothing (a replayed list installs once); so does a flag naming no
+/// member or a graft that does not fit: each with a note, never a refusal.
+fn install(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>) {
+    let (key, item) = (json::s(fx, "member_from_flag"), json::s(fx, "item"));
+    let Some(id) = member_from_flag(d, gs, &key) else {
+        notes.push(format!("Flag '{key}' names no party member; nothing is installed."));
+        return;
+    };
+    let Some(m) = gs.party.member_mut(&id) else { return };
+    let who = progression::display_name(d, m);
+    let name = d.item_name(&item);
+    if m.body.values().any(|held| *held == item) {
+        notes.push(format!("{who} already carries {name}."));
+        return;
+    }
+    let named = json::s(fx, "slot");
+    let slot = if named.is_empty() { d.cat.body_slots.keys().find(|s| !m.body.contains_key(*s) && m.graft_misfit(d, s, &item).is_none()).cloned() } else { Some(named) };
+    let Some(slot) = slot else {
+        notes.push(format!("{who}: no empty body slot takes {name}."));
+        return;
+    };
+    match m.install_graft(d, &slot, &item) {
+        Err(e) => notes.push(format!("{who}: {e}")),
+        Ok(old) => {
+            if let Some(old) = old {
+                notes.push(format!("{} is destroyed.", d.item_name(&old)));
+            }
+            notes.push(format!("{who} takes {name}."));
+        }
     }
 }
 

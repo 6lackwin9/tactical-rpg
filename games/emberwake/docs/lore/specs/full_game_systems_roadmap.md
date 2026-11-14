@@ -20,8 +20,8 @@ Kaelen (Vanguard), Vesper (Gutter-Stalker), Maren (Heretic Acolyte), Hollis (Arb
 | 2 | Prologue 0a The Alley | Kaelen alone, ENC-PRO-0A (2 Castellan Footmen; Captain Vane gives "Order 44" and withdraws); teaches windup, guard, the Pommel Strike interrupt | encounter, objectives | `[data]` |
 | 3 | Prologue 0b The Rooftop | Vesper joins; ENC-PRO-0B ambush squad; teaches smoke zone, root, disengage | encounter, guest then recruit | `[data]` |
 | 4 | Prologue 0c The Bridge | Maren and Hollis freed from the iron mortuary cart; ENC-PRO-0C (3 Inquisitors + a crossbowman); teaches ranged pins, field suture | encounter, `protect` / guests, recruit | `[data]` |
-| 5 | The hearth scene | The dive through the Drowned Runoff Grate; Bram and Aline at the hearth; six bunks, four filled; the Doom Clock appears at 42 days; the Act 1 title card | event trigger, vignette player, campaign meter | `[kit hook]`, `[data]` |
-| 6 | The Undercroft hub | Walkable hub with Sister Aline (the Slab; grafting opens in Act 2), Bram (the Hearth: forge, projects), Tess (the dead-drop board at the Water-Lock Basin); stash, bunks | region map location, NPCs, shops, mission board, facilities | `[data]`, `[kit hook]` |
+| 5 | The hearth scene | The dive through the Drowned Runoff Grate; Berek and Sabina at the hearth; six bunks, four filled; the Doom Clock appears at 42 days; the Act 1 title card | event trigger, vignette player, campaign meter | `[kit hook]`, `[data]` |
+| 6 | The Undercroft hub | Walkable hub with Chirurgeon Sabina (the Slab; grafting opens in Act 2), Berek (the Hearth: forge, projects), Talia (the dead-drop board at the Water-Lock Basin); stash, bunks | region map location, NPCs, shops, mission board, facilities | `[data]`, `[kit hook]` |
 | 7 | The district | A 4-node Sunk Ward graph (which nodes: gap 1), routes costing 1 day (stealth +1), Warded Tallow upkeep, the Alert meter | world map, travel clock, supplies as Tallow, meter | `[data]`, `[kit hook]` |
 | 8 | The bone-mill raid | Act 1 M3, node 04 Fourth Kiln, ENC-EVT-03 Overseer Grendel; Dunstan joins (bunk 5) | encounter, boss phases, recruit | `[data]` |
 | 9 | One dilemma | One authored choice with a lasting flag (which one: gap 2) | dialogue, flags | `[data]` |
@@ -86,7 +86,7 @@ need goes back to M0-M1 as an engine or kit task.
 
 | Deliverable | Tag |
 | --- | --- |
-| The slice of section 1 from the prologue at level 1: encounters ENC-PRO-0A..0C, ENC-EVT-03, ENC-EVT-06; the hub and its NPCs, dialogue, quests on Tess's board; the 4-node district; founders as world characters; the dilemma's flags; meter numbers and warnings | `[data]` |
+| The slice of section 1 from the prologue at level 1: encounters ENC-PRO-0A..0C, ENC-EVT-03, ENC-EVT-06; the hub and its NPCs, dialogue, quests on Talia's board; the 4-node district; founders as world characters; the dilemma's flags; meter numbers and warnings | `[data]` |
 | Placeholder art for the Sunk Ward (tiles by code, recoloured kit bodies, portraits only through the image API, asked first) | `[data]` |
 
 Exit: New Game to the Crucible plays end to end from level 1; saves load at every beat; the first fight is fun (the
@@ -122,16 +122,16 @@ ENC-EVT-05 interlude, the optional board work) is data on the same hooks.
 | Roster | Six founders (five in the slice) and no one else (Q-38), 6 bunks, up to 4 deployed; downed then wounded; the Crucible capture | `[kit hook]`, `[data]` |
 | Economy | Scrap, Warded Tallow (1 per day), Rock Salt, organs in the stash | `[kit hook]`, `[data]` |
 | Meters | Alert (no siege in Act 1; Breach ends the run, only if the warnings are ignored), Doom Clock soft from day 1 | `[kit hook]` |
-| Missions | Tess's board plus node travel | `[kit hook]`, `[data]` |
+| Missions | Talia's board plus node travel | `[kit hook]`, `[data]` |
 
 ## 4. Act 2 systems (proposal)
 
 | Id | System | Summary | Carrier | Tag |
 | --- | --- | --- | --- | --- |
 | P2-01 | Recruits from culling wagons | Rescued youths 18-24 with rolled stats, a quirk and a class; the first takes the bunk the Crucible emptied, at the start of Act 2 (Q-38); quirks may read Composure (CANON 2.1); quirk list and rolls open | RECRUIT1 plus rolled characters | `[kit hook]`, `[data]` |
-| P2-02 | Apex grafts and excision | 4 graft slots (Cranial, Thoracic, Forearms, Visceral); an apex graft raises the dormant Strain floor; Aline can cut one out for -15% max HP for good | second slot set, stage track | `[kit hook]`, `[data]` |
+| P2-02 | Apex grafts and excision | 4 graft slots (Cranial, Thoracic, Forearms, Visceral); an apex graft raises the dormant Strain floor; Sabina can cut one out for -15% max HP for good | second slot set, stage track | `[kit hook]`, `[data]` |
 | P2-03 | Living Martyrs | A Stage IV operative may fight one last mission (immune to control, +100% true damage, 0 AP skills), then petrifies into a relic | unit lifecycle "retired" plus statuses | `[kit hook]`, `[data]` |
-| P2-04 | Doctrine | Preservationist (Bram) to Flesh-Broker (Aline); gates facilities, lines and endings; inputs and thresholds open (candidate: grafts and high-Strain battles against forge upgrades and salt flushes) | campaign meter | `[kit hook]`, `[data]` |
+| P2-04 | Doctrine | Preservationist (Berek) to Flesh-Broker (Sabina); gates facilities, lines and endings; inputs and thresholds open (candidate: grafts and high-Strain battles against forge upgrades and salt flushes) | campaign meter | `[kit hook]`, `[data]` |
 | P2-05 | Permadeath and capture | From Act 2; whether a captured founder can be rescued is open | unit lifecycle | `[kit hook]` |
 | P2-06 | Sieges | Alert Breach starts a siege of the hub; a lost siege costs facilities and forces a relocation, never a Game Over | encounter at the hub, facility levels | `[kit hook]`, `[data]` |
 
@@ -145,13 +145,13 @@ ENC-EVT-05 interlude, the optional board work) is data on the same hooks.
 | P3-04 | Optional nodes | 19 Chorus Spire and 20 Silent Ossuary (Nemeth with the corrupted founder at his side; only for a captured founder) | district graph, flags | `[data]` |
 | P3-05 | Two-phase Ossuary battle | ENC-ACT3-04 (CANON 3.6): phase 1, the founder fights at Nemeth's side; the break (`hp_below` on the founder with a round fallback, or earlier if Nemeth falls low) plays a line, kills Nemeth and his guard and turns the founder against everyone; phase 2, the cell against the monstrosity (a unit swap for the larger body, art Q-79) | boss phases (exist: `emberwake_battle::encounter`, `hp_below` with `or_round`, line, status, ai and enrage effects) | `[kit hook]` new (small): a phase effect that kills named units, and a "hostile to all sides" AI or faction switch; `[data]` |
 
-## 6. Endings (proposal)
+## 6. Endings (`[LOCKED]`, `CANON.md` 4.1)
 
 | Ending | What happens | Doctrine gate |
 | --- | --- | --- |
-| A Preservation | Cold Steel severs the synapse; the titan sinks into a deep coma; humanity stays mortal and untainted | Open unless Flesh-Broker |
-| B Ascendancy | The cell merges with the titan's marrow and rules as something new | Flesh-Broker only |
-| C Red Martyrdom | The cell gives itself to break the Tithing for good | Always open |
+| A Black-Iron Severance | Berek's iron spikes kill the Core's brainstem—saves Cinderreach, ends marrow and geothermal warmth, petrifies implants (Shroud stays dark) | Open unless Flesh-Broker |
+| B The Living Conduit | Grafted wardens bind into the Core's crown to sedate it without child tithes—keeps warmth and marrow, risks becoming a new Clerisy | Flesh-Broker only |
+| C Stone Martyrdom | Ossify the wounded Core from within, petrifying both Core and squad into black-stone pillars holding up Cinderreach | Always open |
 | Extinguished | The failure screen (no operative left, or the Act 3 clock), not an ending | - |
 
 What the endings mean follows the central truth (Option A, canon, Q-01; precedent in CANON 3.6):

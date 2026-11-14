@@ -59,12 +59,12 @@ fn kestrel() -> Value {
     json!({"id": "kestrel", "name": "Kestrel", "role": "party", "base_unit": "hero", "keepsake": "sigil"})
 }
 
-fn crucible() -> Value {
-    json!({"id": "crucible", "name": "The Gauntlet", "party": ["kestrel"], "enemies": ["warden"], "party_min": 4})
+fn gauntlet() -> Value {
+    json!({"id": "gauntlet", "name": "The Gauntlet", "party": ["kestrel"], "enemies": ["warden"], "party_min": 4})
 }
 
-fn bram() -> Value {
-    json!({"id": "bram", "name": "Bram", "start": "start", "services": false, "nodes": [{"id": "start", "text": "Well?", "choices": [
+fn smith() -> Value {
+    json!({"id": "smith", "name": "Smith", "start": "start", "services": false, "nodes": [{"id": "start", "text": "Well?", "choices": [
         {"text": "Join us.", "to": "", "effects": [{"effect": "recruit", "character": "kestrel", "level": "average"}]},
         {"text": "Who is left?", "to": "", "requires": [{"key": "roster.kestrel", "value": "captured"}, {"key": "roster.bunks_free", "op": ">=", "value": 1}]},
         {"text": "Leave.", "to": ""}
@@ -72,7 +72,7 @@ fn bram() -> Value {
 }
 
 /// A scratch roster world: a class, a party unit, four keepsake candidates (one good, three broken), the manifest, a
-/// location, the founder and an npc, the Gauntlet and Bram's dialogue.
+/// location, the founder and an npc, the Gauntlet and the smith's dialogue.
 fn roster_world(tag: &str, party_max: i64) -> PathBuf {
     let (scratch_dir, data) = scratch(tag);
     scratch_dir.until_thread_end();
@@ -82,9 +82,9 @@ fn roster_world(tag: &str, party_max: i64) -> PathBuf {
     write_catalog(&data, "items", json!([acc("sigil", "ACCESSORY", 0, true), acc("strap", "ACCESSORY", 0, true), acc("trinket", "ACCESSORY", 2, true), acc("charm", "ACCESSORY", 0, false), acc("blade", "WEAPON", 0, true)]));
     fs::write(aegis_content::world::manifest_path(&data, W), manifest(roster(), party_max).to_string()).unwrap();
     write_kind(&data, "locations", json!([{"id": "hub", "name": "Hub", "rest": true}]));
-    write_kind(&data, "characters", json!([kestrel(), {"id": "tess", "name": "Tess", "role": "npc", "base_unit": "hero"}, {"id": "warden", "name": "Warden", "role": "enemy", "base_unit": "brute"}]));
-    write_kind(&data, "encounters", json!([crucible()]));
-    write_kind(&data, "dialogues", json!([bram()]));
+    write_kind(&data, "characters", json!([kestrel(), {"id": "innkeeper", "name": "Innkeeper", "role": "npc", "base_unit": "hero"}, {"id": "warden", "name": "Warden", "role": "enemy", "base_unit": "brute"}]));
+    write_kind(&data, "encounters", json!([gauntlet()]));
+    write_kind(&data, "dialogues", json!([smith()]));
     data
 }
 
@@ -140,11 +140,11 @@ fn the_section_5_1_roster_world_checks_clean() {
     assert_eq!(check::world::roster_errors(&v, W, v.worlds.manifest(W)), Vec::<String>::new());
     let wired = check::world::manifest_errors(&v, W);
     assert!(wired.is_empty(), "{wired:?}");
-    for (kind, e) in [("characters", kestrel()), ("dialogues", bram())] {
+    for (kind, e) in [("characters", kestrel()), ("dialogues", smith())] {
         let found = errors_of(&v, kind, &e);
         assert!(found.is_empty(), "{kind}: {found:?}");
     }
-    let found: Vec<String> = errors_of(&v, "encounters", &crucible()).into_iter().filter(|e| e.contains("Party min")).collect();
+    let found: Vec<String> = errors_of(&v, "encounters", &gauntlet()).into_iter().filter(|e| e.contains("Party min")).collect();
     assert!(found.is_empty(), "{found:?}");
     drop_scratch(&data);
 }
@@ -226,7 +226,7 @@ fn a_keepsake_is_a_special_unsellable_accessory_on_a_party_character() {
 fn party_min_is_at_most_the_party_max() {
     let data = roster_world("party_min", 4);
     let v = store::view(&data);
-    let c = crucible();
+    let c = gauntlet();
     // the schema range (0..4) clamps on normalize; the check adds the world's party max
     assert!(added(&v, "encounters", &c, &with(&c, &["party_min"], json!(4))).is_empty(), "4 of 4");
     assert!(added(&v, "encounters", &c, &with(&c, &["party_min"], json!(0))).is_empty(), "0 = any");
@@ -241,7 +241,7 @@ fn party_min_is_at_most_the_party_max() {
 fn the_recruit_level_and_the_roster_read_keys_are_checked() {
     let data = roster_world("dialogue", 4);
     let v = store::view(&data);
-    let d = bram();
+    let d = smith();
     let level = ["nodes", "0", "choices", "0", "effects", "0", "level"];
     let key = ["nodes", "0", "choices", "1", "requires", "0", "key"];
     for ok in [json!("highest"), json!("average"), json!(1), json!(20)] {
@@ -250,7 +250,7 @@ fn the_recruit_level_and_the_roster_read_keys_are_checked() {
     for bad in [json!(0), json!(21), json!("lowest"), json!(2.5)] {
         one(added(&v, "dialogues", &d, &with(&d, &level, bad.clone())), "must be highest, average or a whole number 1..20.", &format!("level {bad}"));
     }
-    for ok in ["roster.living", "roster.bunks", "roster.bunks_free", "roster.pool", "roster.open", "roster.departed.captured", "roster.departed.retired", "roster.hero", "roster.recruit_3", "roster.tess"] {
+    for ok in ["roster.living", "roster.bunks", "roster.bunks_free", "roster.pool", "roster.open", "roster.departed.captured", "roster.departed.retired", "roster.hero", "roster.recruit_3", "roster.innkeeper"] {
         assert!(added(&v, "dialogues", &d, &with(&d, &key, json!(ok))).is_empty(), "{ok}");
     }
     one(added(&v, "dialogues", &d, &with(&d, &key, json!("roster.ghost"))), "'roster.ghost' names no member of this world", "an unknown member");

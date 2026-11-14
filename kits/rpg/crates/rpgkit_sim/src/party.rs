@@ -104,6 +104,10 @@ pub fn party_mode(r: &mut Runner) {
         if a.rewards {
             r.print(format!("  {enc_id} rewards: {}", acc.rewards.line(acc.purse_mean)));
         }
+        // PK2-FOLLOWUP (PR5-36, FB-220): with `durability=` the party's weapon wear, per fight (never without the key)
+        if a.durability.is_some() {
+            r.print(format!("  {enc_id} wear: worn {} ({}/fight), dulled {} ({}/fight)", acc.worn.round() as i64, fixed(scenarios::mean(&acc, acc.worn), 2), acc.dulled.round() as i64, fixed(scenarios::mean(&acc, acc.dulled), 2)));
+        }
         if a.metrics {
             print_units(r, &acc);
         }

@@ -65,7 +65,7 @@ titan. Power runs down from the cathedral through the Inquisition and the guilds
 ### 2.3 The Tallow Guild and the Fourth Kiln Syndicate (industry)
 
 - **Role:** the city's industrial backbone: rendering vats and crushing mills on the edge of the slums. The Fourth
-  Kiln Syndicate is the Guild's foundry and bone-mill arm (Bram worked its upper forge, Dunstan its bone-mill).
+  Kiln Syndicate is the Guild's foundry and bone-mill arm (Berek worked its upper valve-foundry, Dunstan its bone-mill).
 - **Monopolies:**
   - **Warded Tallow:** rendered from carcasses, livestock and the unredeemed human dead (the dead Spent among them:
     the young become marrow, the old become fuel; CANON 3.6, refinement); mandatory for house lamps, because wood or
@@ -75,7 +75,7 @@ titan. Power runs down from the cathedral through the Inquisition and the guilds
 - **Standing:** despised as butcher-merchants, yet indispensable: insult a tallow-master and a household's lamp ration
   is revoked, which in the dark means death.
 - **Figures:** Guild-Master Orlov (the Tallow Vats), Overseer Grendel (the bone-mill), Foundry-Master Jessop (the
-  Fourth Kiln casting floor); Madame Sallow trades on the Guild's black margin.
+  Fourth Kiln casting floor); Widow Varka trades on the Guild's black margin.
 
 ### 2.4 The Spent (the subjugated majority)
 
@@ -104,7 +104,7 @@ To withstand torture and scrying, the rebellion keeps strict compartments.
 - **The blind chain:** no operative knows more than two outside contacts; a captured cell can expose only its
   immediate handler.
 - **Bone-ciphers:** messages carved on fragments of black bone, dropped into submerged grates and collected at the
-  Water-Lock Basin, where Tess runs the dead-drop board (the mission board: a hub NPC offering quests) `[kit hook]`
+  Water-Lock Basin, where Talia Rusk runs the dead-drop board (the mission board: a hub NPC offering quests) `[kit hook]`
   mission board, `[data]` quests.
 
 ### 3.2 Founders
@@ -116,7 +116,7 @@ Alchemist). Backgrounds are in the [cast registry](cast_registry.md).
 ## 4. The doctrine split (Act 2 on)
 
 From Act 2 the cell splits over one question: graft the titan's flesh, or refuse it. Doctrine is a campaign meter
-from Preservationist (Bram's voice) to Flesh-Broker (Aline's voice) `[kit hook]` campaign meter with thresholds,
+from Preservationist (Berek's voice) to Flesh-Broker (Sabina's voice) `[kit hook]` campaign meter with thresholds,
 `[data]` names; it gates the endings (CANON.md section 4). Its inputs and thresholds are open (CANON.md section 6).
 
 ```text
@@ -132,7 +132,7 @@ from Preservationist (Bram's voice) to Flesh-Broker (Aline's voice) `[kit hook]`
 
 ### 4.1 The Preservationists (Cold Steel loyalists)
 
-- **Belief:** led by smiths and old line soldiers (Bram "Iron-Lung" Karr). Grafting aberration flesh is surrender: it
+- **Belief:** led by smiths and old line soldiers (Berek "Cinder-Lung" Dorn). Grafting aberration flesh is surrender: it
   turns rebels into the monsters they fight.
 - **Methods:** discipline, leverage, counterweights, armour plate, ambush and demolition charges.
 - **What it means in play:** Cold Steel skills add no Strain `[data]`. A unit still gains Strain from hazards and
@@ -141,7 +141,7 @@ from Preservationist (Bram's voice) to Flesh-Broker (Aline's voice) `[kit hook]`
 
 ### 4.2 The Flesh-Brokers (resonant flesh-crafters)
 
-- **Belief:** led by heretic apothecaries (Sister Aline, a non-combat surgeon) and the desperate fighters who follow
+- **Belief:** led by heretic apothecaries (Chirurgeon Sabina, a non-combat surgeon) and the desperate fighters who follow
   her. Meeting cosmic horrors and armoured inquisitors with plain iron is romantic suicide.
 - **Methods:** harvest glands, marrow, nerve clusters and ichor from slain aberrations and officers (Aberrant Organs,
   a stash material `[data]`) and graft them into operatives at the Apothecary's Slab: speed, phase steps, acid bile.
