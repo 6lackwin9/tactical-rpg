@@ -1,0 +1,106 @@
+{
+ "background": "art_src/wm_high_bastion.png",
+ "target": "high_bastion",
+ "landmarks": {
+  "sluice_undercroft": {
+   "src": "art_src/lm_sluice_undercroft.png",
+   "pos": [
+    0.424,
+    1.042
+   ],
+   "scale": 1,
+   "fix": [
+    "--desmoke",
+    "0.69,0.30,0.80,0.52"
+   ]
+  },
+  "slag_gate_breach": {
+   "src": "art_src/lm_slag_gate_breach.png",
+   "pos": [
+    0.5,
+    0.879
+   ],
+   "scale": 1.15,
+   "fix": [
+    "--desmoke",
+    "0.68,0.33,0.86,0.56"
+   ]
+  },
+  "gilded_boulevard": {
+   "src": "art_src/lm_gilded_boulevard.png",
+   "pos": [
+    0.502,
+    0.637
+   ],
+   "scale": 1.25,
+   "fix": []
+  },
+  "tallow_reservoir": {
+   "src": "art_src/lm_tallow_reservoir.png",
+   "pos": [
+    0.898,
+    0.987
+   ],
+   "scale": 1.2,
+   "fix": [
+    "--tint",
+    "0.0-0.16:0.19"
+   ],
+   "match": 0.5
+  },
+  "culling_stockades": {
+   "src": "art_src/lm_culling_stockades.png",
+   "pos": [
+    0.115,
+    0.846
+   ],
+   "scale": 1.2,
+   "fix": [
+    "--clear",
+    "0.69,0.15,0.77,0.25"
+   ]
+  },
+  "embalming_cloisters": {
+   "src": "art_src/lm_embalming_cloisters.png",
+   "pos": [
+    0.886,
+    0.221
+   ],
+   "scale": 1.2,
+   "fix": []
+  },
+  "grand_belltower": {
+   "src": "art_src/lm_grand_belltower.png",
+   "pos": [
+    0.05,
+    0.386
+   ],
+   "scale": 1.4,
+   "fix": [],
+   "match": 0.5
+  },
+  "reliquary_crypts": {
+   "src": "art_src/lm_reliquary_crypts.png",
+   "pos": [
+    0.499,
+    0.413
+   ],
+   "scale": 1.25,
+   "fix": []
+  },
+  "grand_spire_gate": {
+   "src": "art_src/lm_grand_spire_gate.png",
+   "pos": [
+    0.498,
+    0.158
+   ],
+   "scale": 1.35,
+   "fix": [
+    "--clear",
+    "0,0.78,1,1"
+   ],
+   "keep_sprite": true,
+   "match": 0.5
+  }
+ }
+}

@@ -599,6 +599,10 @@
     pointer-events: none;
     animation: emberRise ease-in-out infinite;
   }
+  @keyframes storyRigStrip {
+    from { background-position-x: 0; }
+    to { background-position-x: var(--strip-end); }
+  }
   @keyframes ashFall {
     0%   { transform: translate3d(0, -20px, 0) rotate(0deg); opacity: 0; }
     12%  { opacity: 0.85; }

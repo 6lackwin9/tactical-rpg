@@ -150,11 +150,20 @@ def hex_to_rgb(h: str) -> tuple[int, int, int]:
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
-def extract_unit_frames(body_key: str, palette_id: str = "") -> dict[str, str]:
+# Mock-only palettes (slot -> hex) for placeholder bodies that have no palette file in the game: kept here, not in
+# games/emberwake/assets, because no game data names them.
+MOCK_PALETTES: dict[str, dict[str, str]] = {
+    # Chirurgeon Sabina on the bareheaded wenn_tallow body (CANON 3.2: cropped black hair, dark oiled-green prosector
+    # coat, boiled-leather surgical apron, steel scalpels; no habit, no veil). The priest body read as a habit.
+    "sabina_mock": {"main": "#2f3d32", "accent": "#9ca3af", "leg": "#1e232d", "skin": "#d4a988", "hair": "#14171f",
+                    "glove": "#d9cbb4", "leather": "#92400e", "boot": "#2c221e"},
+}
+
+
+def load_unit_sheet(body_key: str, palette_id: str = "") -> tuple[Any, dict[str, Any]]:
     """
-    Loads `units/<body_key>/clips.json` and `sheet.png` from layered assets,
-    applies `palettes/<palette_id>.json` like `aegis_ui::art::Art::load_body`,
-    and extracts [idle0, idle1, atk] as PNG data URIs.
+    Loads `units/<body_key>/clips.json` and `sheet.png` from layered assets and
+    applies `palettes/<palette_id>.json` like `aegis_ui::art::Art::load_body`.
     """
     clips_path = find_asset(f"units/{body_key}/clips.json")
     sheet_path = find_asset(f"units/{body_key}/sheet.png")
@@ -165,8 +174,11 @@ def extract_unit_frames(body_key: str, palette_id: str = "") -> dict[str, str]:
     sheet = Image.open(sheet_path).convert("RGBA")
     if palette_id:
         try:
-            pal_path = find_asset(f"units/{body_key}/palettes/{palette_id}.json")
-            slots = json.loads(pal_path.read_text(encoding="utf-8")).get("slots", {})
+            if palette_id in MOCK_PALETTES:
+                slots = MOCK_PALETTES[palette_id]
+            else:
+                pal_path = find_asset(f"units/{body_key}/palettes/{palette_id}.json")
+                slots = json.loads(pal_path.read_text(encoding="utf-8")).get("slots", {})
             swap_map = {
                 base_pal[slot_name]: hex_to_rgb(target_hex)
                 for slot_name, target_hex in slots.items()
@@ -180,7 +192,13 @@ def extract_unit_frames(body_key: str, palette_id: str = "") -> dict[str, str]:
                 ])
         except FileNotFoundError:
             pass
+    return sheet, clips_data
 
+
+def extract_unit_frames(body_key: str, palette_id: str = "") -> dict[str, str]:
+    """[idle0, idle1, atk] of a rig body as PNG data URIs (the map stage, battle and hub sprites)."""
+    sheet, clips_data = load_unit_sheet(body_key, palette_id)
+    fw, fh = clips_data["frame"]
     row_map = {c["id"]: (idx, c) for idx, c in enumerate(clips_data["clips"])}
     idle_row, idle_clip = row_map.get("idle", (0, clips_data["clips"][0]))
     atk_row, atk_clip = row_map.get("attack", (idle_row, idle_clip))
@@ -194,6 +212,25 @@ def extract_unit_frames(body_key: str, palette_id: str = "") -> dict[str, str]:
     atk_col = atk_clip.get("impact") or min(2, atk_clip["frames"] - 1)
     fatk = crop_frame(atk_row, atk_col)
     return {"idle0": f0, "idle1": f1, "atk": fatk}
+
+
+# The rig clips a story actor plays while it has no signed-off VN art (user 2026-11-12: the code rig's animation is
+# the placeholder for story and VN sprites). Each is one horizontal strip; the story stage steps through it in CSS.
+STORY_RIG_CLIPS = ("idle", "walk", "attack", "windup")
+
+
+def extract_unit_clips(body_key: str, palette_id: str = "") -> dict[str, Any]:
+    """{clip: {strip, frames, ms, loop}} for the clips in STORY_RIG_CLIPS that the body has, plus the frame size."""
+    sheet, clips_data = load_unit_sheet(body_key, palette_id)
+    fw, fh = clips_data["frame"]
+    out: dict[str, Any] = {"frame": [fw, fh]}
+    for row, clip in enumerate(clips_data["clips"]):
+        if clip["id"] not in STORY_RIG_CLIPS or clip.get("of"):
+            continue
+        n = clip["frames"]
+        strip = sheet.crop((0, row * fh, n * fw, (row + 1) * fh))
+        out[clip["id"]] = {"strip": png_to_data_uri(strip), "frames": n, "ms": sum(clip["ms"]), "loop": bool(clip.get("loop"))}
+    return out
 
 
 def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
@@ -270,7 +307,7 @@ def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
             elif char_key == "vane":
                 pivot = [132, 162]
                 is_weap = x <= 122 and 140 <= y <= 305
-            elif char_key == "aline":
+            elif char_key == "sabina":
                 pivot = [192, 160]
                 is_weap = x >= 200 and 120 <= y <= 245
 
@@ -285,6 +322,34 @@ def split_vtuber_layers(char_key: str, rel_path: str) -> dict[str, Any]:
         "pivot": pivot,
         "nativeLeft": native_left,
     }
+
+
+# Mock unit key -> (rig body, palette): the battle, map-stage and hub sprites, and the story stage's rig placeholder.
+UNIT_BODIES: dict[str, tuple[str, str]] = {
+    "kaelen": ("warrior/2h_axe", "kaelen"),
+    "vesper": ("rogue/base", "vesper"),
+    "maren": ("priest/base", "maren"),
+    "hollis": ("ranger/base", "hollis"),
+    "dunstan": ("brawler/base", "dunstan"),
+    "elyse": ("ranger/wenn_tallow", "elyse"),
+    "sabina": ("ranger/wenn_tallow", "sabina_mock"),
+    "berek": ("warrior/2h_hammer", "grendel"),
+    "talia": ("rogue/base", "captive"),
+    "watchman": ("warrior/1h_buckler", "castellan_watch"),
+    "crossbow": ("ranger/base", "castellan_watch"),
+    "bailiff": ("warrior/2h_hammer", "bailiff"),
+    "purifier": ("priest/base", "purifier"),
+    "flagellant": ("brawler/base", "flagellant"),
+    "flayer": ("ranger/wenn_tallow", "tallow_guild"),
+    "husk": ("brawler/base", "calcified"),
+    "vane": ("warrior/2h_axe", "vane"),
+    "quell": ("warrior/2h_sword", "quell"),
+    "grendel": ("warrior/2h_hammer", "grendel"),
+    "orlov": ("brawler/base", "orlov"),
+    "nemeth": ("warrior/2h_sword", "nemeth"),
+    "beast": ("beast/render_beast", ""),
+    "crawler": ("crawler/ash_crawler", ""),
+}
 
 
 def build_asset_bundle() -> dict[str, Any]:
@@ -369,9 +434,9 @@ def build_asset_bundle() -> dict[str, Any]:
             "hollis": load_scaled_uri("portraits/heroes/hollis.png", (120, 120)),
             "dunstan": load_scaled_uri("portraits/heroes/dunstan.png", (120, 120)),
             "elyse": load_scaled_uri("portraits/heroes/elyse.png", (120, 120)),
-            "aline": load_scaled_uri("portraits/npcs/aline.png", (120, 120)),
-            "bram": load_scaled_uri("portraits/npcs/bram.png", (120, 120)),
-            "tess": load_scaled_uri("portraits/npcs/tess.png", (120, 120)),
+            "sabina": load_scaled_uri("portraits/npcs/sabina_kress.png", (120, 120)),
+            "berek": load_scaled_uri("portraits/npcs/berek_dorn.png", (120, 120)),
+            "talia": load_scaled_uri("portraits/npcs/talia_rusk.png", (120, 120)),
             "vane": load_scaled_uri("portraits/bosses/captain_vane.png", (120, 120)),
             "quell": load_scaled_uri("portraits/bosses/proctor_quell.png", (120, 120)),
             "orlov": load_scaled_uri("portraits/bosses/guild_master_orlov.png", (120, 120)),
@@ -395,7 +460,7 @@ def build_asset_bundle() -> dict[str, Any]:
             "vane": split_vtuber_layers("vane", "portraits/full_body/vane.png"),
             "vesper": split_vtuber_layers("vesper", "portraits/full_body/vesper.png"),
             "maren": split_vtuber_layers("maren", "portraits/full_body/maren.png"),
-            "aline": split_vtuber_layers("aline", "portraits/full_body/aline.png"),
+            "sabina": split_vtuber_layers("sabina", "portraits/full_body/sabina_kress.png"),
             "watchman": split_vtuber_layers("watchman", "portraits/full_body/watchman.png"),
         },
         "partsAtlas": {
@@ -416,31 +481,8 @@ def build_asset_bundle() -> dict[str, Any]:
             },
         },
         "faces": {},
-        "units": {
-            "kaelen": extract_unit_frames("warrior/2h_axe", "kaelen"),
-            "vesper": extract_unit_frames("rogue/base", "vesper"),
-            "maren": extract_unit_frames("priest/base", "maren"),
-            "hollis": extract_unit_frames("ranger/base", "hollis"),
-            "dunstan": extract_unit_frames("brawler/base", "dunstan"),
-            "elyse": extract_unit_frames("ranger/wenn_tallow", "elyse"),
-            "aline": extract_unit_frames("priest/base", "maren"),
-            "bram": extract_unit_frames("warrior/2h_hammer", "grendel"),
-            "tess": extract_unit_frames("rogue/base", "captive"),
-            "watchman": extract_unit_frames("warrior/1h_buckler", "castellan_watch"),
-            "crossbow": extract_unit_frames("ranger/base", "castellan_watch"),
-            "bailiff": extract_unit_frames("warrior/2h_hammer", "bailiff"),
-            "purifier": extract_unit_frames("priest/base", "purifier"),
-            "flagellant": extract_unit_frames("brawler/base", "flagellant"),
-            "flayer": extract_unit_frames("ranger/wenn_tallow", "tallow_guild"),
-            "husk": extract_unit_frames("brawler/base", "calcified"),
-            "vane": extract_unit_frames("warrior/2h_axe", "vane"),
-            "quell": extract_unit_frames("warrior/2h_sword", "quell"),
-            "grendel": extract_unit_frames("warrior/2h_hammer", "grendel"),
-            "orlov": extract_unit_frames("brawler/base", "orlov"),
-            "nemeth": extract_unit_frames("warrior/2h_sword", "nemeth"),
-            "beast": extract_unit_frames("beast/render_beast", ""),
-            "crawler": extract_unit_frames("crawler/ash_crawler", ""),
-        },
+        "units": {k: extract_unit_frames(b, pal) for k, (b, pal) in UNIT_BODIES.items()},
+        "unitClips": {k: extract_unit_clips(b, pal) for k, (b, pal) in UNIT_BODIES.items()},
         "skills": {},
         "statuses": {},
     }
@@ -453,9 +495,9 @@ def build_asset_bundle() -> dict[str, Any]:
         ("hollis", "portraits/heroes/faces/hollis"),
         ("dunstan", "portraits/heroes/faces/dunstan"),
         ("elyse", "portraits/heroes/faces/elyse"),
-        ("aline", "portraits/npcs/faces/aline"),
-        ("bram", "portraits/npcs/faces/bram"),
-        ("tess", "portraits/npcs/faces/tess"),
+        ("sabina", "portraits/npcs/faces/sabina_kress"),
+        ("berek", "portraits/npcs/faces/berek_dorn"),
+        ("talia", "portraits/npcs/faces/talia_rusk"),
         ("vane", "portraits/bosses/faces/captain_vane"),
         ("quell", "portraits/bosses/faces/proctor_quell"),
         ("orlov", "portraits/bosses/faces/guild_master_orlov"),

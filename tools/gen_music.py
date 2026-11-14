@@ -2,8 +2,10 @@
 # Writes the generated music loops (MUSIC1-A): original tracks synthesized from notes, no samples.
 #   python tools/gen_music.py [track ...] [--layer kit|game ...] [--root DIR] [--list]   (default: every track)
 # Each track lands at its ASSETORG2 layer's audio/music/<key>.ogg: the mood loops (combat, boss, town, shop, danger,
-# travel) in the RPG kit (kits/rpg/assets/), the menu and world tracks in the game (games/emberwake/assets/). DIR is a
+# travel) in the RPG kit (kits/rpg/assets/), the world tracks in the game (games/emberwake/assets/). DIR is a
 # workspace root (default: this repository); --list prints the paths without rendering (no ffmpeg needed).
+# No menu_theme key (AI-02, 2026-11-12): the shipped menu_theme.ogg is a Flow Music track (tools/mock_ui/music.py,
+# art_src/music/menu_theme.json) that a run with no arguments must never overwrite.
 # Needs numpy and ffmpeg (libvorbis). Each track renders as one circular buffer, so notes, reverb and
 # noise beds that run past the end wrap onto the start and the loop has no seam. Prints "§ wrote <path> <s>s".
 import argparse
@@ -244,39 +246,6 @@ def chord_tones(root: int, quality: str) -> list:
 
 
 # --- tracks ------------------------------------------------------------------------------------------
-
-def menu_theme() -> np.ndarray:
-    # 64 BPM, 4/4, 16 bars (60 s). A minor; drum joins on the second pass of the progression.
-    tr = Track(64, 4, 16, seed=11)
-    prog = [("A2", "m"), ("F2", "M"), ("C3", "M"), ("G2", "M"), ("A2", "m"), ("D3", "m"), ("F2", "M"), ("E2", "M")]
-    for i, (root, q) in enumerate(prog):
-        r = midi(root)
-        tones = chord_tones(r + 12, q)
-        tr.add(pad(tones, 2 * 4 * tr.beat, 1.5, 1.8), tr.at(2 * i), 0.0, 1.0, 0.5)
-        tr.add(bass(r, 3.5 * tr.beat, 0.1), tr.at(2 * i), -0.1, 0.55, 0.2)
-        tr.add(bass(r, 3.5 * tr.beat, 0.1), tr.at(2 * i + 1), -0.1, 0.45, 0.2)
-        for b in range(8):  # slow arpeggio in the low register
-            m = tones[b % len(tones)] + (12 if b % 4 == 3 else 0)
-            tr.add(pluck(m, tr.beat, 0.5, 2.2), tr.at(2 * i, b), -0.35, 0.35, 0.45)
-    lines = [
-        [(0, 69, 1.5), (1.5, 67, 0.5), (2, 64, 2), (4, 60, 1), (5, 62, 1), (6, 64, 2)],
-        [(0, 65, 1.5), (1.5, 64, 0.5), (2, 60, 2), (4, 57, 1), (5, 60, 1), (6, 62, 2)],
-        [(0, 64, 1), (1, 67, 1), (2, 72, 2), (4, 71, 1), (5, 67, 1), (6, 64, 2)],
-        [(0, 62, 1.5), (1.5, 64, 0.5), (2, 67, 2), (4, 62, 2), (6, 59, 2)],
-        [(0, 72, 1.5), (1.5, 71, 0.5), (2, 69, 2), (4, 64, 1), (5, 67, 1), (6, 69, 2)],
-        [(0, 65, 1.5), (1.5, 64, 0.5), (2, 62, 2), (4, 65, 1), (5, 69, 1), (6, 74, 2)],
-        [(0, 72, 1), (1, 69, 1), (2, 65, 2), (4, 64, 1), (5, 65, 1), (6, 67, 2)],
-        [(0, 68, 1.5), (1.5, 69, 0.5), (2, 71, 2), (4, 68, 2), (6, 64, 2)],
-    ]
-    for i, line in enumerate(lines):
-        melody(tr, line, 2 * i, lambda m, d: pluck(m, d, 1.0, 1.3), 0.2, 0.9, 0.4)
-    for bar in range(8, 16):
-        tr.add(drum(70, 0.25, 0.4, tr.rng), tr.at(bar, 0), 0.0, 0.5, 0.2)
-        tr.add(drum(95, 0.15, 0.6, tr.rng), tr.at(bar, 2.5), 0.15, 0.25, 0.25)
-        tr.add(drum(85, 0.18, 0.5, tr.rng), tr.at(bar, 3), -0.1, 0.3, 0.2)
-    drone(tr, [midi("A1"), midi("E2")], 0.12)
-    return tr.render(3.2)
-
 
 def ashlands() -> np.ndarray:
     # 64 BPM, 4/4, 20 bars (75 s). D Phrygian dominant flavour, wind bed, sparse hand drum.
@@ -543,7 +512,7 @@ def boss() -> np.ndarray:
     return tr.render(1.6)
 
 
-TRACKS = {"menu_theme": menu_theme, "ashlands": ashlands, "iron_reaches": iron_reaches,
+TRACKS = {"ashlands": ashlands, "iron_reaches": iron_reaches,
           "tidewrack": tidewrack, "combat": combat,
           "town": town, "danger": danger, "shop": shop, "travel": travel, "boss": boss}
 # ASSETORG2 layers: the kit's mood loops; every other track is the game's
