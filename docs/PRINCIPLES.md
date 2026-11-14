@@ -18,10 +18,10 @@ Whenever an open choice arises in `.1` spec authoring, `FB-nn` / `UN-nn` Build f
    - **(c) Zero unintended golden movement**: strict no-op defaults unless the slice explicitly intends a named golden change.
 4. **Apply Immediately as `[PROVISIONAL]` & Log in `docs/DESIGN_REVIEW.md`**:
    - Put the chosen option straight into `docs/READY.md` (Section 1 or 4), the `.1` / feature spec, or `CANON.md` Section 5.1 tagged `[PROVISIONAL]` so Build stays unblocked (`workflow.md` `"Build feedback on the recommended option"`).
-   - Append a row to `docs/DESIGN_REVIEW.md` (`Date`, `Item`, `What was asked`, `Applied` citing principle IDs like `P-ARCH-01, P-COMBAT-02`, `Where`, `Undo cost`) so the user can approve or flip it asynchronously at low cost.
+   - Append architectural/rule calls to `## Open` in `docs/DESIGN_REVIEW.md` (`Date`, `Item`, `What was asked`, `Applied` citing principle IDs like `P-ARCH-01, P-COMBAT-02`, `Where`, `Undo cost`), and place pure **data / copy / encounter-feel / balance** provisional calls directly into `## Playtest Review Target (Provisional Data, Copy & Feel)` so human playtesting verifies feel without blocking implementation.
 5. **Hard-Stop Exceptions (Never Auto-Decide)**: Always pause and ask the user first before:
    - Irreversible git/release actions (`push` or PR merge to `main`, `itch.io` deploy, deleting user branches or files).
-   - Paid external API spend (e.g. Gemini image API batches without prior count/model approval; local ComfyUI generation is free to run).
+   - Paid external API spend (e.g. Gemini image API batches without prior count/model approval; local ComfyUI and Google Flow generation are preferred).
    - Breaking shipped release saves without a migration path, or resolving a direct contradiction between two `[LOCKED]` user rulings.
 
 ## 1. Architecture, Layering & Data Hygiene (`P-ARCH`)
@@ -29,9 +29,9 @@ Whenever an open choice arises in `.1` spec authoring, `FB-nn` / `UN-nn` Build f
 - **`P-ARCH-01` — Three-Layer Question Test & Kit-First Rule Library** (`layer_rule.md`, `SPLIT1`, `"Engine scope: a rule library"`):
   - *Rule*: Generic tech any genre needs belongs in `engine/` (`aegis_*`); reusable RPG mechanics, schemas, validation, and AI belong in `kits/rpg/` (`rpgkit_*` + `schema.json`) with zero game/lore nouns; `games/<id>/` holds thin shell/UI crates plus data and assets.
   - *Option test*: **Prefer** building a clean, parameterised `kits/rpg/` rule capability **over** coding game-unique rule logic, deck/squad validators, hardcoded sim tables, or English combat-log string scraping in `emberwake_*`.
-- **`P-ARCH-02` — Additive Engine Options & Ruleset Isolation** (`"Engine options are additive"`, `"Ruleset placement"`):
-  - *Rule*: The engine and kit accumulate reusable rule options (`classic` vs. `timeline`, `strain_enabled`, `melee_diagonal`); each world opts into a coherent set, and dropped game experiments stay available in the kit if cleanly isolated.
-  - *Option test*: **Prefer** gating new or incompatible behaviour behind explicit ruleset flags/numbers that default to a strict no-op (`0` unintended golden diffs) **over** mutating shared baseline formulas.
+- **`P-ARCH-02` — Additive Engine Options & Ruleset Isolation** (`"Engine options are additive"`, `"Ruleset placement"`, `RULESET-MODES1`):
+  - *Rule*: The engine and kit accumulate reusable rule options and mutually exclusive `modes` under single rules in `rpgkit_rules/src/ruleset.rs`, while each game ships **only one** active ruleset in `games/<id>/data/catalog/rulesets.json` (`classic` lives in kit built-ins/fixtures).
+  - *Option test*: **Prefer** gating new or incompatible behaviour behind explicit ruleset flags/modes that default to a strict no-op (`0` unintended golden diffs) **over** mutating shared baseline formulas or shipping multiple rulesets in one game.
 - **`P-ARCH-03` — Fixed Behaviours in Code; Numbers & System Terms in Data** (`"Behaviours fixed, stats as data"`, `TERMS1`, `"Tier numbers"`):
   - *Rule*: Code defines *how* a behaviour works; data defines *names, scaling inputs, and numbers*. System labels (`currency`, `upkeep`, intent names, `"Cold Steel"`) resolve through one `terms` table, and skill rank rows store explicit numbers rather than hidden engine formulas.
   - *Option test*: **Prefer** `schema.json` fields, `tuning.json`, and `terms.json` **over** magic constants in Rust or hardcoded lore labels.
@@ -44,9 +44,9 @@ Whenever an open choice arises in `.1` spec authoring, `FB-nn` / `UN-nn` Build f
 - **`P-ARCH-06` — Additive State & Disposable Dev Saves** (`"Saves and data edits"`, `"Save upgrades at game version updates"`):
   - *Rule*: Keep a single clean save version during pre-release development (while preserving the migration hook for post-release upgrades), and gate mid-campaign mechanics by act (`durability.from_act`, `tracks`, `body`).
   - *Option test*: **Prefer** additive optional save/data keys with clear load notes **over** maintaining v1..vN development save migrations.
-- **`P-ARCH-07` — Single-Writer Sessions & Small Feel Tuners** (`"Two-session split"`, `"Engine goal: agents build, humans judge feel"`, `"No upkeep on unused debug tools"`):
-  - *Rule*: Respect single-writer boundaries (`READY.md` = Design, `FEEDBACK.md` = Build, `ART_UI_REQUESTS.md` + `assets/**/README.md` = Art/UI handshake). Build small, game-agnostic tuners/arenas for subjective feel checks, and prune debug scaffolding nobody uses.
-  - *Option test*: **Prefer** a tiny reusable Dojo/Gallery/HTML tuner for human feel sign-off **over** guessing subjective feel in full-game loops or maintaining dead debug modes.
+- **`P-ARCH-07` — Strict Single-Writer Session Ownership & Small Feel Tuners** (`"Two-session split"`, `user 2026-11-14`, `"Engine goal: agents build, humans judge feel"`):
+  - *Rule*: Every doc has **one** owning session: Build writes **only** `docs/FEEDBACK.md` (`FEEDBACK_CLOSED.md`); docs used **only** by `/art-ui-session` belong exclusively to Art/UI (`art_src/**`, `PROPS1_PROMPTS.md`, `ART_UI_STUDIO.md`, `SCREEN_ATLAS.md`, `assets/**/README.md`, `tools/mock_ui/**`, `tools/gen_music.py`); docs governing game/kit design or assigning Build work belong exclusively to Design (`docs/READY.md`, `PROPS1.md`, `REGIONGROUND1.md`, `PRINCIPLES.md`, `CANON.md`, `TASKS.md`, `DESIGN_REVIEW.md`, `docs/sessions/**`, `docs/specs/**`). Cross-session hand-offs travel through `ART_UI_REQUESTS.md` (Art/UI mocks layouts first -> Outbox -> Design specs & queues Build).
+  - *Option test*: **Prefer** clean Inbox/Outbox hand-offs and tiny reusable Dojo/Gallery/HTML tuners for human feel sign-off **over** cross-session file edits or guessing subjective feel in full-game loops.
 
 ## 2. Combat, Pacing & AI Symmetry (`P-COMBAT`)
 
@@ -71,9 +71,9 @@ Whenever an open choice arises in `.1` spec authoring, `FB-nn` / `UN-nn` Build f
 
 ## 3. Class Identity, Progression & Economy (`P-PROG`)
 
-- **`P-PROG-01` — Equal Stat Budgets, Distinct Shapes & Unique Main Weapons** (`"Class balance"`, `"Class weapon lineup"`):
-  - *Rule*: Every playable class shares the exact same level-1 stat sum (`62`) and per-level growth (`5`), plus `3` masterable weapon families (`3 / 2 / 2`) where each class's `main` (`proficiency 3`) weapon family is unique across the six classes.
-  - *Option test*: **Prefer** expressing class fantasy through stat distribution, class deck, and unique main-weapon techniques **over** raw stat budget inflation or overlapping signature weapons.
+- **`P-PROG-01` — Equal Stat Budgets, Distinct Shapes & Asymmetric Gear Roles** (`"Class balance"`, `U3_GEAR_REWORK.md`):
+  - *Rule*: Every playable class shares the exact same level-1 stat sum (`62`) and per-level growth (`5`), `3` masterable main-hand weapon families (`main [3]`, `secondary [2]`, `third [2]`) + `1` non-masterable `minor [1]` across `15` weapon families (with `6` unique `main` weapons), asymmetric `Main [3] / Sub [1]` pairings across `7` dedicated off-hands, and `6` unique ordered `[3]/[1]` permutations across `heavy / medium / light` armor & helms (`Prof 0` and unmet `required_stats` hard-lock equip).
+  - *Option test*: **Prefer** expressing class fantasy through stat distribution, asymmetric off-hand/armor pairings, class deck, and unique main-weapon techniques **over** raw stat budget inflation, soft equip mush, or overlapping signature weapons.
 - **`P-PROG-02` — Parallel Asymmetric Branches With Separate Substrates** (`PK2_GRAFTS`, `"Cold Steel weapon techniques"`):
   - *Rule*: From Act 2, Cold Steel and Inoculation mirror each other in power budget and progression depth (`3-4` heavy slots + `1` shared keystone slot of either theme) while taxing separate substrates: Cold Steel taxes **weapons, mastery & Scrap/salvage** (Hearth, durability), while Inoculation taxes **the body & Strain/Calcification** (Slab, monster grafts, `5/15/30/50` Strain floor).
   - *Option test*: **Prefer** structural parity with contrasting costs (`marrow` never spends durability; Cold Steel never spends Strain) **over** letting one doctrine dominate or merging their currencies.
@@ -113,15 +113,15 @@ Whenever an open choice arises in `.1` spec authoring, `FB-nn` / `UN-nn` Build f
 - **`P-UI-03` — Consistent Ergonomics, Scalable Text & Bounded Data Layouts** (`TEXTFIT1`, `DRAG1`, `LAYOUTDATA1`, `"Compact frame"`):
   - *Rule*: Prefer popups over full screens (`Right-click` / `X` closes); support drag-and-drop alongside click workflows everywhere; scale all text across 4 sizes (`0.85x..1.3x`, `dim` `#9ca3af` contrast) verified by `text_audit`; keep one frame corner size per screen; honour `reduce_motion`; make every floating panel unlockable-to-drag and minimizable toward the corner holding its minimize button so a named button (e.g. `"Legend"`, never `"Show HUD"`) toggles in place and drags with press-and-drag while unlocked (starting open, centered, and unlocked when every map corner holds a node or feature); and send `ui/layouts/<screen>.json` back to Rust if it needs new node kinds, arithmetic, or `> 60` lines.
   - *Option test*: **Prefer** computed text-fit layouts and shared widget conventions **over** fixed pixel widths, drag-only inputs, or complex logic inside JSON layouts.
-- **`P-UI-04` — Placeholder-First Assets & Layered Fallbacks** (`"Placeholder-first assets"`, `"Asset layers and reuse groups"`):
-  - *Rule*: Missing art or audio never blocks code/data slices: Build wires the final path, copies the nearest valid asset as a placeholder, and logs it in `FEEDBACK.md` so Design queues an `ART_UI_REQUESTS.md` Inbox item for in-place replacement; missing assets fall back `game -> kit -> engine`.
-  - *Option test*: **Prefer** landing green features with final-path placeholders **over** parking gameplay tasks on art or inventing temporary code fallbacks.
+- **`P-UI-04` — Placeholder-First Assets, `ASSETORG4` Kit Library & Three Map Sets** (`"Placeholder-first assets"`, `ASSETORG4.md`, `AO-06` `2026-11-14`):
+  - *Rule*: Missing art/audio never blocks code/data (Build wires final paths with nearest-asset placeholders, logged in `FEEDBACK.md` -> `ART_UI_REQUESTS.md`, resolving `game -> kit -> engine`). By the **Rename & Composition Test** (`ASSETORG4.md`), atomic renameable assets (tilesets/grounds, props, landmarks, complete character visual bundles, icons, HUD chips, generic battle backdrops, SFX/mood music) live in `kits/rpg/assets/`, while painted campaign world maps (`backgrounds/world_map/`), story CGs (`backgrounds/story/`), branding, and data bindings stay in `games/<id>/` (`location_background` retired). Every campaign place distinguishes **three map sets** (`AO-06`): `(1)` story/VN backdrops for interactive beats & transitions, `(2)` free-movement exploration maps (mission maps `2-3` screens with enterable `REVEAL1` indoor rooms + danger streets; hubs/gates `~1` screen with `boundary` surrounds), and `(3)` tactical combat maps—**exploration comes first; story backdrops come later**.
+  - *Option test*: **Prefer** reusable lore-free `kits/rpg/assets/` bundles + final-path placeholders **over** siloing generic RPG art inside `games/emberwake/` or parking gameplay on art.
 - **`P-UI-05` — Lightweight Preview Labs First in `/art-ui-session`** (`ART_UI_STUDIO.md`, `"Efficiency pass"`):
   - *Rule*: Never iterate UI layouts, VN choreography, or animations directly in Rust or inside the full `emberwake_screen_flow.html` bundle; prove the look first in a tiny standalone HTML/GIF lab (`tools.mock_ui.anim_lab`) inside `/art-ui-session` and build small tuners for user-tuned visuals.
   - *Option test*: **Prefer** a focused 1-screen mock/GIF sign-off **over** multi-round Rust rebuilds on unapproved visuals.
-- **`P-UI-06` — Local-First Generation, Faction Readability & Mandatory Self-Review** (`preferences/assets-world.md`, `"Faction lighting"`):
-  - *Rule*: Draft and limit-test locally first (`FLUX.2 Klein 4B` / `ERNIE-Image Turbo`, alpha `"good enough"` bar) before proposing paid image-API runs; apply faction silhouettes and rim lighting; obey VN 4-pose rules (no leg crossover, flat-planted feet, threat via weapon motion); and **visually inspect every generated/edited image against prompt + reference** before accepting.
-  - *Option test*: **Prefer** code recolours/fixes and local ComfyUI takes verified by immediate visual inspection **over** unreviewed generations or defaulting to external API calls.
+- **`P-UI-06` — Local & Google Flow Generation, Faction Readability & Mandatory Self-Review** (`preferences/assets-world.md`, `"Faction lighting"`, `user 2026-11-14`):
+  - *Rule*: Generate act maps, landmarks, region ground/terrain textures (`REGIONGROUND1`), and prop sheets through **Google Flow** (and local `FLUX.2 Klein 4B` / `ERNIE-Image Turbo` drafts) rather than paid Gemini image-API batches; apply faction silhouettes and rim lighting; obey VN 4-pose rules (no leg crossover, flat-planted feet, threat via weapon motion); and **visually inspect every generated/edited image against prompt + reference** before accepting.
+  - *Option test*: **Prefer** Google Flow, code recolours/fixes, and local ComfyUI takes verified by immediate visual inspection **over** unreviewed generations or paid external API batches.
 
 ## 6. Quick Scorecard for Option Selection & Audits
 

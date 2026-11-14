@@ -1,6 +1,6 @@
 # Session U3: gear, proficiency and carry
 
-MASTERPLAN1 sub-block U3. Interactive design session with the user, 2026-11-07. Status: design closed (user 2026-11-07).
+MASTERPLAN1 sub-block U3. Interactive design session with the user, 2026-11-07. Status: built in `R1` (`W2-2`); **superseded on 2026-11-14 by [`docs/sessions/U3_GEAR_REWORK.md`](U3_GEAR_REWORK.md) (`GEAR-REWORK1`, `PR5-51a..b`)** for strict `Prof 0` / `required_stats` hard equip locks, `0.80x / 1.00x / 1.25x` proficiency multipliers, retiring `Switch Weapon`, the `15` main-hand / `7` off-hand + Off-Hand UI button / `heavy-medium-light` armor framework, and `proficiency.<fam>.role` class tables.
 
 ## Decided (user 2026-11-07, all defaults approved)
 

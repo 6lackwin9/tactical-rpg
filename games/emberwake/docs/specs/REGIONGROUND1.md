@@ -74,11 +74,14 @@ one id. `colour` is the mock's swatch. Fields not listed take their defaults (KT
 | `flagstone` | Flagstones | 70 | land | #373636 | .10 | yes | .08 | 0 | built, .45 |
 | `cobble_road` | Cobbled road | 78 | land | #2e3137 | .10 | yes | .08 | 0 | built, .45 |
 | `paved_road` | Paved road | 80 | land | #3e3f42 | .10 | yes | .08 | 0 | built, .45 |
+| `floorboards` | Floorboards (`REVEAL1`, `PR5-54`) | 72 | land | #3a2c22 | .06 | no | .08 | 0 | built, .45 |
 | `iron_catwalk` | Iron catwalk | 90 | land | #303032 | .06 | no | .08 | 0 | built, .45 |
 
 Marks (slice D2; `marks_per_100` 2): `ash`, `packed_dirt` take `footprints`, `scuff`; `dirt_road` takes `footprints`,
 `scuff`, `rut_short`; `soot_yard`, `mud`, `cobble_road` take `footprints`, `drag_mark`. Moss is the Sunk Ward's green:
 no ground there is grass.
+
+**Pipeline update (`2026-11-14`, user ruling `AO-04` / `P-UI-06`)**: All remaining ground, interior-wall (`interior_plaster`, `interior_stone`), and boundary (`drain_brick`, `blind_tenements`, `gorge_rock`) texture generation (`A1..A3`, `floorboards`) moves to **Google Flow** (same workflow as act maps and landmarks) rather than paid Gemini API batches; generic material sets promote to `kits/rpg/assets/tilesets/` under `docs/specs/ASSETORG4.md`.
 
 ## 4. Textures
 
