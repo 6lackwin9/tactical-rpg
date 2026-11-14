@@ -91,3 +91,39 @@ Row 4: a brass nozzle spraying a cone of pale burning lard; a flensing hook drag
 Row 1: a black tendril whipping low in a wide arc, blue-violet glow; chalk-white bone crystals bursting up in a cluster, blue-violet light in the cracks.
 Row 2: a heavy executioner's blade falling under a cold white ray; a raised gauntleted hand with one finger pointing down, cold white light behind it.
 ```
+
+## Sheet hud_chips_2 (`hud_chips_2`)
+
+A redo of the four 14 x 14 HUD chips (Tushar, 2026-11-15: they "look less clear"). The first sheet drew detailed
+pictures that turn to mush at 14 px (gear teeth, nails and clock ticks are smaller than a pixel). This one asks for
+one bold silhouette each, drawn as if on a 16 x 16 grid. Cells, row by row: `scrap`, `tallow`, `alert`; `doom_clock`,
+spare `scrap` (a nut and bolt), spare `alert` (a lit lantern); spare `doom_clock` (a clock face), spare `tallow` (a
+flame), spare `scrap` (a cog). Cut with the hard-grid chip cut to `games/emberwake/assets/ui/hud/<name>.png`.
+
+```text
+A sheet of 9 very simple pixel-art status icons for a game's top bar, each one designed to be shown at only 14 by 14 pixels. Square 1:1 image, an exact 3 by 3 grid of 9 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF). Each tile holds one single chunky symbol that fills most of the tile, drawn as a low-resolution 16 by 16 pixel sprite scaled up with hard square pixels: one bold silhouette, a thick dark outline, at most 4 flat colours, no small details, no thin lines, no texture, no shading gradients, no glow. No magenta or pink in the symbols. No text, no letters, no numbers, no labels, no frame, no watermark. Row by row, left to right:
+Row 1: a single fat cog wheel with six square teeth and a round hole, rust brown; a short fat candle with one big flame, pale yellow wax and an orange flame; a plain bell with a clapper, dark iron with one red highlight.
+Row 2: an hourglass with red sand, brass frame; a fat hexagonal nut with a short bolt through it, rust brown; a square lantern with a lit orange window, dark iron.
+Row 3: a round clock face with two thick hands and no numbers, brass with one red hand; a single large teardrop flame, orange with a yellow core; a second fat cog wheel with eight square teeth, grey iron.
+```
+
+## Sheet gear_1 (`gear_1`)
+
+The gear pass (Tushar, 2026-11-15: "do a pass on the gears since we worked it out today and see if any dont have a
+reference icon"). `docs/sessions/U3_GEAR_REWORK.md` has 15 weapon families, 7 off-hands and 3 armour weights. Checked
+against `items/<family>/base.png` in the game and the kit: **eight families have no icon at all** (`greatsword`,
+`gauntlet`, `knife`, `buckler`, `braces`, `ammo`, `cloak`, and `graft`, which has five items today and falls back to
+the generic icon), and the new **helms** (the `HEAD` slot, one per weight) have none. The others resolve (kit or game),
+and `polearm`, `censer` and `bone_saw` got their own icons today. 4 by 4; cells, row by row: `greatsword`, `gauntlet`,
+`knife`, `buckler`; `braces`, `ammo`, `cloak`, `graft`; `helm_heavy`, `helm_medium`, `helm_light`, spare `ammo` (a fuel
+canister); spare `greatsword`, spare `gauntlet`, spare `knife`, spare `graft`. Targets
+`games/emberwake/assets/items/<family>/base.png` at 96 x 96 (scale only); the helm paths wait for `PR5-51b` (proposed
+`items/<weight>/helm.png`).
+
+```text
+A sheet of 16 pixel-art item icons for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG icons. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Each tile is one icon on its own rounded-square tile filled with dark slate grey, with a subtle darker vignette. Every icon is a single piece of gear drawn large and centred, with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per colour, a cool light from the upper left and a thin warm amber rim light. Grimy, matte, scavenged materials of a sunless industrial city: dented iron, soot-stained wood, boiled leather, tarnished brass, grey wool. Each reads at a glance at small size. No text, no letters, no numbers, no labels, no frame, no watermark. Row by row, left to right:
+Row 1: a long two-handed executioner's greatsword with a wide square-tipped blade, set diagonally; a heavy iron gauntlet with a brass piston along its forearm, fist clenched; a short single-edged hunting knife with a bone handle; a small round iron buckler with a central boss.
+Row 2: a pair of leather forearm braces with iron splints and buckles; a leather quiver of crossbow bolts with a strap; a hooded ash-grey cloak folded over a clasp; a small surgical graft: a brass valve and tube set in a ring of pale bone.
+Row 3: a heavy closed iron helm with a riveted visor; a leather hood with an iron brow band; a cloth cowl with a leather half-mask; a small brass pressurised fuel canister with a valve and a carry strap.
+Row 4: a second take of the two-handed greatsword, set upright, a notched blade; a second take of the piston gauntlet, open hand; a second take of the hunting knife, in a leather sheath; a second take of the graft, a glass lens in a brass eyepiece on a bone ring.
+```
