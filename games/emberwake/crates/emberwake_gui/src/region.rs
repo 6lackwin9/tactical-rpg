@@ -1918,6 +1918,18 @@ mod tests {
         }
     }
 
+    /// MAP-HOOKS1: landmarks `map/landmarks/<id>.png`; a world map background `<name>.png` and its layout sidecar
+    /// `<name>.json`; other background folders stay PNG only, and the location backdrops keep their arm.
+    #[test]
+    fn landmarks_and_world_map_sidecars_follow_the_layout() {
+        for ok in ["map/landmarks/fourth_kiln.png", "backgrounds/world_map/sunk_ward_quarter.png", "backgrounds/world_map/sunk_ward_quarter.json", "backgrounds/location/keep.png"] {
+            assert!(layout_ok(ok), "{ok}");
+        }
+        for stray in ["map/landmarks/fourth_kiln.json", "map/landmarks/a/fourth_kiln.png", "map/fourth_kiln.png", "backgrounds/world_map/x.txt", "backgrounds/title/ashlands.json", "backgrounds/location/keep.json"] {
+            assert!(!layout_ok(stray), "{stray}");
+        }
+    }
+
     /// The shipped data's faces (PORTRAITFX2 FL1), read once.
     fn shipped_faces() -> &'static [String] {
         static FACES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
@@ -1957,7 +1969,10 @@ mod tests {
             // REGIONGROUND1: a ground's one texture (only `v0` is read), and a boundary's tiles
             ["tilesets", _, "ground", _, "v0.png"] => true,
             ["tilesets", _, "boundary", _, "wall" | "wall_face", f] => v(f),
-            ["backgrounds", "menu" | "title" | "world_map" | "location" | "battle" | "story", f] => png(f),
+            // MAP-HOOKS1: a location's landmark on the world map, and a world map background with its layout sidecar
+            ["map", "landmarks", f] => png(f),
+            ["backgrounds", "world_map", f] => png(f) || f.ends_with(".json"),
+            ["backgrounds", "menu" | "title" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
             _ => false,
