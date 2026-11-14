@@ -3,7 +3,7 @@
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
 use rpgkit_battle::grid::{glyph_of, terrain_walkable, TerrainTable, GLYPH_KEY, GLYPHS, TERRAIN_IDS};
-use rpgkit_rules::status;
+use rpgkit_rules::{intent, status};
 use serde_json::Value;
 
 const TRIGGERS: [&str; 3] = ["enter", "round_end", "both"];
@@ -101,8 +101,8 @@ pub fn missing_terrain(rows: &[Dict]) -> Vec<&'static str> {
 }
 
 /// Passives.EFFECT_TYPES; RULESET1-S adds `stagger_taken` (rule poise, P6), HOOKS1-S `forced_move`, `trigger` and `meter`
-/// (`check::hooks`).
-const TYPES: [&str; 14] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock", "foresight", "stagger_taken", "forced_move", "trigger", "meter"];
+/// (`check::hooks`); PR5-50 (FB-204) lists `skill_reach` where `spell_reach` stood (the alias still checks, unlisted).
+const TYPES: [&str; 14] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", rpgkit_data::SKILL_REACH, "unlock", "foresight", "stagger_taken", "forced_move", "trigger", "meter"];
 /// RULESET1-S: a `stagger_taken` effect's multiplier and the longest action (blocks) it matches (0 = any).
 const STAGGER_MULT_MAX: f64 = 2.0;
 const STAGGER_MAX_BLOCKS: i64 = 6;
@@ -111,7 +111,11 @@ const FORESIGHT_RANGE_MAX: i64 = 8;
 /// The effect types gear may carry; HOOKS1-S adds `trigger` and `forced_move`; U3.2-S4 (FB-35, OFFHAND1) `skill` (a worn
 /// skill: always active while worn, no slot) and `stat` (a U1 modifier), both taken off with the item. `proficiency`
 /// stays out (training is the class's and the drills'; an item training its own gear would undo the wield penalty).
-pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", "spell_reach", "resist", "trigger", "forced_move", "skill", "stat"];
+pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", rpgkit_data::SKILL_REACH, "resist", "trigger", "forced_move", "skill", "stat"];
+/// PR5-50 (FB-204): a `skill_reach` effect's `kind` filter values (the authorable skill kinds and the spell group) and
+/// its `intent` filter values (the round intents IR21 derives; `rpgkit_rules::unit::skill_reach_matches`).
+pub const SKILL_REACH_KINDS: [&str; 6] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", rpgkit_data::SKILL_REACH_SPELL];
+pub const SKILL_REACH_INTENTS: [&str; 5] = [intent::ASSAULT, intent::STAND, intent::SUPPORT, intent::MANEUVER, intent::FIELD];
 const GROUPS: [&str; 2] = ["spell", "heal"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 
@@ -223,9 +227,26 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                     errors.push(format!("{at}: status potency is 1-25 points."));
                 }
             }
-            "spell_reach" => {
+            // PR5-50: the retired form, checked as before (it loads as `skill_reach {reach: value, kind: SPELL}`)
+            rpgkit_data::SPELL_REACH_ALIAS => {
                 if !(1..=2).contains(&json::i(e, "value", 0)) {
                     errors.push(format!("{at}: spell reach is 1-2 tiles."));
+                }
+            }
+            // PR5-50 (FB-204): `skill_reach` {reach 1-2, intent?, kind?} (an absent or empty filter matches every skill)
+            rpgkit_data::SKILL_REACH => {
+                let (lo, hi) = rpgkit_data::SKILL_REACH_RANGE;
+                if !e.get("reach").is_some_and(|r| whole_in(r, lo, hi)) {
+                    errors.push(format!("{at}: skill_reach reach must be a whole number {lo}-{hi} (tiles)."));
+                }
+                if let Some(i) = e.get("intent").filter(|i| !i.as_str().is_some_and(|s| s.is_empty() || SKILL_REACH_INTENTS.contains(&s))) {
+                    errors.push(format!("{at}: skill_reach intent '{}' is not one of {}.", json::gstr(i), SKILL_REACH_INTENTS.join(", ")));
+                }
+                if let Some(k) = e.get("kind").filter(|k| !k.as_str().is_some_and(|s| s.is_empty() || SKILL_REACH_KINDS.contains(&s))) {
+                    errors.push(format!("{at}: skill_reach kind '{}' is not one of {}.", json::gstr(k), SKILL_REACH_KINDS.join(", ")));
+                }
+                for k in e.keys().filter(|k| !rpgkit_data::SKILL_REACH_KEYS.contains(&k.as_str())) {
+                    errors.push(format!("{at}: skill_reach takes only reach, intent and kind (not '{k}')."));
                 }
             }
             "foresight" => {

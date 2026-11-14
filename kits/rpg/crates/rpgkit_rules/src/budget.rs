@@ -14,6 +14,8 @@ pub const W_STAT_POINT: f64 = 2.0;
 pub const W_BURDEN: f64 = -2.0;
 pub const W_SKILL_POTENCY: f64 = 20.0;
 pub const W_STATUS_POTENCY: f64 = 0.2;
+/// The weight of one `skill_reach` tile, whatever its filters (PR5-50; the name is the retired `spell_reach`'s, kept
+/// as the rules contract pins it).
 pub const W_SPELL_REACH: f64 = 3.0;
 /// Near the median of the six original class loadouts (19 19 22 24 27 35).
 pub const TARGET_BUDGET: f64 = 23.0;
@@ -37,13 +39,14 @@ pub fn is_special(item: &ItemDef) -> bool {
     boolean(&item.raw, "special", false)
 }
 
-/// Value of one item effect: skill_potency x20 per 1.0, status_potency x0.2, spell_reach x3 (resist 0).
+/// Value of one item effect: skill_potency x20 per 1.0, status_potency x0.2, skill_reach x3 per tile (its `spell_reach`
+/// alias the same; resist 0).
 pub fn effect_value(fx: &Value) -> f64 {
     let fx = json::dict(fx);
     match json::s(fx, "type").as_str() {
         "skill_potency" => json::f(fx, "value", 0.0) * W_SKILL_POTENCY,
         "status_potency" => json::i(fx, "value", 0) as f64 * W_STATUS_POTENCY,
-        "spell_reach" => json::i(fx, "value", 0) as f64 * W_SPELL_REACH,
+        rpgkit_data::SKILL_REACH | rpgkit_data::SPELL_REACH_ALIAS => rpgkit_data::SkillReach::from_effect(fx).map_or(0.0, |r| f64::from(r.reach) * W_SPELL_REACH),
         _ => 0.0,
     }
 }

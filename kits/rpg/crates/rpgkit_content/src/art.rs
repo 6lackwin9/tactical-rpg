@@ -381,10 +381,20 @@ pub fn world_map_layout(name: &str) -> String {
 }
 
 /// MAP-HOOKS1: a location's landmark on the world map, `map/landmarks/<local id>.png`; a qualified id (`world:id`)
-/// drops its world, so one file serves the location wherever it is seen from.
-pub fn landmark(location_id: &str) -> String {
+/// drops its world, so one file serves the location wherever it is seen from. MAP-POLISH1 (AO-04): the location's
+/// `art` (`art`, when not empty) names the picture instead, `map/landmarks/<art>.png`, so places share one file.
+pub fn landmark(location_id: &str, art: &str) -> String {
+    if !art.is_empty() {
+        return format!("map/landmarks/{art}.png");
+    }
     let local = location_id.rsplit_once(':').map_or(location_id, |(_, l)| l);
     format!("map/landmarks/{local}.png")
+}
+
+/// MAP-POLISH1: whether a location's landmark `art` name is valid: empty, or 2-32 lowercase letters, digits and
+/// underscores (as a set id, `set_id_ok`).
+pub fn landmark_art_ok(art: &str) -> bool {
+    art.is_empty() || set_id_ok(art)
 }
 
 pub fn title_background(world: &str) -> String {
@@ -472,9 +482,12 @@ mod tests {
     /// sits beside the background of the same name.
     #[test]
     fn landmarks_and_map_layouts_follow_the_tree() {
-        assert_eq!(landmark("hub"), "map/landmarks/hub.png");
-        assert_eq!(landmark("world_a:hub"), "map/landmarks/hub.png");
-        assert_eq!(landmark(""), "map/landmarks/.png", "no id gives a name no layer holds");
+        assert_eq!(landmark("hub", ""), "map/landmarks/hub.png");
+        assert_eq!(landmark("world_a:hub", ""), "map/landmarks/hub.png");
+        assert_eq!(landmark("", ""), "map/landmarks/.png", "no id gives a name no layer holds");
+        // MAP-POLISH1: a location's `art` names the picture over its id
+        assert_eq!(landmark("world_a:hub", "shared_gate"), "map/landmarks/shared_gate.png");
+        assert!(landmark_art_ok("") && landmark_art_ok("shared_gate2") && !landmark_art_ok("Gate") && !landmark_art_ok("a") && !landmark_art_ok("x/y"));
         assert_eq!(world_map_layout("quarter"), "backgrounds/world_map/quarter.json");
         assert_eq!(world_map_background("quarter"), "backgrounds/world_map/quarter.png");
     }

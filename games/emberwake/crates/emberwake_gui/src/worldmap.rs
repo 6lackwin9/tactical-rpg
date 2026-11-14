@@ -24,6 +24,11 @@
 //! pulsing quest badge (`pulse`), faint names above the landmarks lit on hover, focus and pick (`label_rect`), and the
 //! floating Legend (`FloatPanel`: a free corner or the middle and unlocked, drag when unlocked, minimize to a named
 //! button in place). Player text carries display names only.
+//! MAP-POLISH1 (FB-257, AO-04): the places shown are the kit's (`travel::shown`: in a region with `map_reveal` every
+//! routed place of it, the unreachable ones grey by `travel::locked`); the layout sidecar is only the one beside the
+//! background that resolved (`layout_name`), never a lineage name's over another's picture; a location's `art` names its
+//! landmark picture (`art::landmark`); the Legend's place and lock are kept in the settings (`LEGEND_KEY`) and restored
+//! when the map opens again, a saved place off the map falling back to a free corner.
 
 use aegis_core::clock::Instant;
 use aegis_ui::theme::th;
@@ -37,6 +42,8 @@ use aegis_core::json::{self, s};
 use emberwake_world::{explore, progression, travel};
 use emberwake_content::world_map::{self, Owner};
 use aegis_ui::layout_editor::{LayoutAct, LayoutEdit, LayoutEditor, Marker, MarkerBox, Polyline, Viewport};
+/// The smooth road line (moved into the engine with PR5-49, where the layout editor previews roads with it).
+pub use aegis_ui::layout_editor::spline;
 use aegis_ui::screen::PointerPhase;
 use std::rc::Rc;
 use serde_json::{json, Value};
@@ -229,8 +236,15 @@ pub fn map_names(d: &emberwake_world::Data, gs: &emberwake_world::GameState) -> 
     out
 }
 
+/// MAP-POLISH1 (FB-257 (d)): the name whose background the map draws: the first of `names` (`map_names`) whose
+/// `backgrounds/world_map/<name>.png` a layer holds; None when none does. Its sidecar is the only one the map reads.
+pub fn layout_name(layers: &aegis_core::assets::Layers, names: &[String]) -> Option<String> {
+    names.iter().find(|n| layers.has(&emberwake_content::art::world_map_background(n))).cloned()
+}
+
 /// The layout of the first of `names` whose sidecar a layer holds and that reads as a layout; a missing file or a bad
-/// one (not JSON, not an object) is passed over, and None leaves every node on its `map_pos`.
+/// one (not JSON, not an object) is passed over, and None leaves every node on its `map_pos`. The map passes only the
+/// name its background resolved to (`layout_name`), so a sidecar always matches the picture under it.
 pub fn read_layout(layers: &aegis_core::assets::Layers, names: &[String]) -> Option<MapLayout> {
     names.iter().find_map(|n| aegis_core::assets::read_json(layers, &emberwake_content::art::world_map_layout(n)).and_then(|v| MapLayout::parse(&v)))
 }
@@ -277,29 +291,6 @@ pub fn cover_rect(iw: i32, ih: i32, r: Rect) -> Rect {
 }
 
 // ---- MAP-HOOKS1 pass B: roads, labels, badges and the Legend -------------------------------------------------------
-
-/// A smooth line through `pts` (the preview's `smoothPath`: Catmull-Rom as cubic Béziers, end points repeated),
-/// sampled every few px; two points give the straight segment, fewer give nothing to draw.
-pub fn spline(pts: &[(f32, f32)]) -> Vec<(f32, f32)> {
-    if pts.len() < 3 {
-        return if pts.len() == 2 { pts.to_vec() } else { Vec::new() };
-    }
-    let mut out = vec![pts[0]];
-    for i in 0..pts.len() - 1 {
-        let (p0, p1, p2, p3) = (pts[i.saturating_sub(1)], pts[i], pts[i + 1], pts[(i + 2).min(pts.len() - 1)]);
-        let c1 = (p1.0 + (p2.0 - p0.0) / 6.0, p1.1 + (p2.1 - p0.1) / 6.0);
-        let c2 = (p2.0 - (p3.0 - p1.0) / 6.0, p2.1 - (p3.1 - p1.1) / 6.0);
-        let len = ((p2.0 - p1.0).powi(2) + (p2.1 - p1.1).powi(2)).sqrt();
-        let steps = (len / 2.0).ceil().max(1.0) as usize;
-        for k in 1..=steps {
-            let t = k as f32 / steps as f32;
-            let u = 1.0 - t;
-            let (a, b, c, e) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
-            out.push((a * p1.0 + b * c1.0 + c * c2.0 + e * p2.0, a * p1.1 + b * c1.1 + c * c2.1 + e * p2.1));
-        }
-    }
-    out
-}
 
 /// Points along the polyline `line` every `step` px of its length, from its start (the lantern dots).
 pub fn dots(line: &[(f32, f32)], step: f32) -> Vec<(f32, f32)> {
@@ -554,11 +545,47 @@ impl FloatPanel {
 
 /// The drag payload of the Legend and its minimized button (`Ui::draggable`).
 pub const LEGEND_DRAG: &str = "world_map.legend";
+/// MAP-POLISH1 (FB-257 (c)): the settings key the Legend's place and lock are kept under, beside `map_legend_open`:
+/// `{"pos": [x, y], "locked": bool}` (`{}` until the player moves or locks it).
+pub const LEGEND_KEY: &str = "world_map_legend";
+
+impl FloatPanel {
+    /// MAP-POLISH1: the place and lock kept in the settings (`LEGEND_KEY`): `{"pos": [x, y], "locked": bool}`.
+    pub fn saved(&self) -> Value {
+        json!({"pos": self.pos.map(|p| vec![p.0, p.1]), "locked": self.locked})
+    }
+
+    /// MAP-POLISH1: takes a kept place and lock (`saved`) before the panel is first placed: a place whose panel of
+    /// `size` lies wholly inside `area` is taken as it is with its lock, one partly inside is moved in (`clamp`), and one
+    /// off the area (a smaller window or layout since) is dropped with its lock, so `place` starts the panel afresh (a free
+    /// corner, locked, or the middle, unlocked). False when nothing was taken (no or a bad value, a place off the area, or
+    /// the panel already placed).
+    pub fn restore_saved(&mut self, v: &Value, area: Rect, size: (i32, i32)) -> bool {
+        if self.pos.is_some() {
+            return false;
+        }
+        let Some(locked) = v.get("locked").and_then(Value::as_bool) else { return false };
+        let pos = v.get("pos").and_then(Value::as_array).and_then(|p| match p.as_slice() {
+            [x, y] => Some((x.as_i64()? as i32, y.as_i64()? as i32)),
+            _ => None,
+        });
+        let Some((x, y)) = pos else { return false };
+        if !overlaps(Rect::new(x, y, size.0, size.1), area) {
+            return false;
+        }
+        self.pos = Some((x, y));
+        self.locked = locked;
+        self.clamp(area, size);
+        true
+    }
+}
 
 /// One place's drawing on the map this frame.
 struct Mark {
     qid: String,
     name: String,
+    /// The landmark picture's path (`art::landmark`, by the location's `art`).
+    art: String,
     x: f32,
     y: f32,
     /// The landmark's box or the pin's.
@@ -593,8 +620,12 @@ pub struct WorldMap {
     /// MAP-HOOKS1: the floating Legend and its open size in the last frame.
     pub legend: FloatPanel,
     legend_size: (i32, i32),
+    /// MAP-POLISH1: the Legend's place and lock as last kept in (or read from) the settings; None before the first frame.
+    legend_kept: Option<Value>,
     /// MAP-HOOKS1: the roads drawn in the last frame and how.
     shown: Vec<(String, RouteStyle)>,
+    /// MAP-POLISH1: the places drawn in the last frame and whether each was drawn locked (grey).
+    drawn: Vec<(String, bool)>,
     /// MAP-HOOKS1: the clock the badge pulse and the flicker run on.
     born: Option<Instant>,
     /// PR5-48: the layout being edited in place (a debug build with the dev tools, `crate::DEV_KEYS`).
@@ -606,13 +637,35 @@ impl WorldMap {
         Self::default()
     }
 
-    /// MAP-HOOKS1: the layout sidecar for `names` (`read_layout`), read again only when the names or the art change.
-    fn layout_for(&mut self, cx: &Cx, names: &[String]) -> Option<MapLayout> {
+    /// MAP-HOOKS1: the layout sidecar beside background `name` (`read_layout`; MAP-POLISH1: only the name the background
+    /// resolved to, none without one), read again only when the name or the art change.
+    fn layout_for(&mut self, cx: &Cx, name: Option<&str>) -> Option<MapLayout> {
         let generation = cx.art.generation();
-        if !self.layout.as_ref().is_some_and(|(n, g, _)| n.as_slice() == names && *g == generation) {
-            self.layout = Some((names.to_vec(), generation, read_layout(cx.art.layers(), names)));
+        let names: Vec<String> = name.map(str::to_string).into_iter().collect();
+        if !self.layout.as_ref().is_some_and(|(n, g, _)| *n == names && *g == generation) {
+            let read = read_layout(cx.art.layers(), &names);
+            self.layout = Some((names, generation, read));
         }
         self.layout.as_ref().and_then(|c| c.2.clone())
+    }
+
+    /// MAP-POLISH1 (FB-257 (c)): before the Legend is first placed, its kept place and lock (`LEGEND_KEY`); after, a
+    /// change the player made (a drag ended, the lock toggled) is kept in the settings file.
+    fn keep_legend(&mut self, cx: &mut Cx, size: (i32, i32), held: bool) {
+        if self.legend_kept.is_none() {
+            let kept = cx.settings.v[LEGEND_KEY].clone();
+            self.legend.restore_saved(&kept, MAP, size);
+            return;
+        }
+        let now = self.legend.saved();
+        if held || self.legend_kept.as_ref() == Some(&now) {
+            return;
+        }
+        cx.settings.v[LEGEND_KEY] = now.clone();
+        self.legend_kept = Some(now);
+        if let Err(e) = cx.settings.save() {
+            cx.log(format!("Settings could not be saved: {e}"));
+        }
     }
 
     /// The topmost widget of the last frame under `mouse` (none when not live).
@@ -719,8 +772,8 @@ impl WorldMap {
     }
 
     /// PR5-48: switches the in-place layout editing on (a debug build with the dev tools only, `crate::DEV_KEYS`) or off.
-    /// It edits the sidecar the map reads (the first of `map_names` with one, else the current region's or world's
-    /// name): the map draws by the editor's layout with its real labels, badges and Legend, the editor's handles over
+    /// It edits the sidecar the map reads (MAP-POLISH1: the one beside the background drawn, `layout_name`, else the
+    /// current region's or world's name): the map draws by the editor's layout with its real labels, badges and Legend, the editor's handles over
     /// it and its controls in the side panel. Switched off, what was not saved is dropped (the log says so).
     fn toggle_edit(&mut self, cx: &mut Cx) {
         if let Some(e) = self.edit.take() {
@@ -733,7 +786,7 @@ impl WorldMap {
             return;
         }
         let names = map_names(&cx.data, cx.gs());
-        let Some(name) = names.iter().find(|n| cx.art.has(&emberwake_content::art::world_map_layout(n))).or(names.first()).cloned() else { return };
+        let Some(name) = layout_name(cx.art.layers(), &names).or(names.first().cloned()) else { return };
         let mut e = LayoutEditing::open(cx, &name, false);
         e.editor.backdrop = false;
         e.editor.grid = false;
@@ -965,10 +1018,12 @@ impl Screen<GameCx> for WorldMap {
         // MAP-HOOKS1: the current location's region chain, then the world lineage child first
         let names = map_names(&d, &gs);
         let backgrounds: Vec<String> = names.iter().map(|n| emberwake_content::art::world_map_background(n)).collect();
+        // MAP-POLISH1 (FB-257 (d)): the sidecar beside the background drawn, never another name's
+        let drawn = names.iter().zip(&backgrounds).find(|(_, b)| cx.art.has(b)).map(|(n, _)| n.clone());
         // PR5-48: while editing, the map draws by the editor's layout
         let layout = match self.edit.as_ref() {
             Some(e) => Some(e.layout()),
-            None => self.layout_for(cx, &names),
+            None => self.layout_for(cx, drawn.as_deref()),
         };
         draw_background(&mut ui, cx, &backgrounds);
         let view = travel::view(&d, &gs);
@@ -1029,10 +1084,12 @@ impl Screen<GameCx> for WorldMap {
             let (x, y) = pos_of(&q);
             let is_here = q == here;
             let selected = q == self.selected;
-            let trip = travel::trip(&d, &gs, &here, &q);
-            let locked = !is_here && !json::b(&trip, "ok", false);
+            // MAP-POLISH1: the kit says which places are locked (no trip there now), the map draws them grey
+            let locked = travel::locked(&d, &gs, &q);
             let lit = selected || near.as_deref() == Some(q.as_str());
-            let landmark = cx.art.has(&emberwake_content::art::landmark(&q));
+            // AO-04: the location's `art` names its landmark picture (shared pictures), else its id
+            let art = emberwake_content::art::landmark(&q, &s(explore::resolve_location(&d, &gs, &q), "art"));
+            let landmark = cx.art.has(&art);
             let r = if landmark { landmark_box(x, y, placed.get(&q).map_or(1.0, |p| p.1)) } else { pin_box(x, y) };
             let quest = json::b(n, "quest", false) || !json::sget(n, "jobs").is_empty();
             // the quest badge at the mark's top right (inside a landmark's box, over a pin's corner)
@@ -1042,10 +1099,10 @@ impl Screen<GameCx> for WorldMap {
             // the name's foot: over a landmark's top (its art has room there), above a pin and its badge
             let bottom = if landmark { r.y + 2 } else { r.y - 5 };
             let label = label_rect(x, bottom, lw, label_h, MAP);
-            marks.push(Mark { qid: q, name, x, y, r, landmark, is_here, selected, lit, locked, badge, label });
+            marks.push(Mark { qid: q, name, art, x, y, r, landmark, is_here, selected, lit, locked, badge, label });
         }
         for m in &marks {
-            let rel = if m.landmark { emberwake_content::art::landmark(&m.qid) } else { emberwake_content::art::pin(&s(nodes.iter().find(|n| s(n, "qid") == m.qid).unwrap_or(&json::Dict::new()), "kind")) };
+            let rel = if m.landmark { m.art.clone() } else { emberwake_content::art::pin(&s(nodes.iter().find(|n| s(n, "qid") == m.qid).unwrap_or(&json::Dict::new()), "kind")) };
             let px = (m.r.w as f32 * ui.p.v.s).round().max(1.0) as i32;
             if m.lit && !m.landmark {
                 // hover, focus or pick: a warm glow behind the pin
@@ -1165,9 +1222,14 @@ impl Screen<GameCx> for WorldMap {
         let size = (((widest + 18.0).ceil() as i32).clamp(96, 150), 4 + row_h + 2 + row_h * rows.len().max(1) as i32 + 3 + row_h + 3);
         let chip = ((ui.p.text_w("Legend", SMALL + 1.0) + 18.0).ceil() as i32, row_h + 4);
         let taken: Vec<Rect> = marks.iter().flat_map(|m| [m.r, m.label]).collect();
-        self.legend.place(MAP, size, &taken);
-        self.legend_size = size;
         let held = ui.dragging() == Some(LEGEND_DRAG);
+        // MAP-POLISH1: the kept place and lock first; the first frame keeps what it placed as the settings' baseline
+        self.keep_legend(cx, size, held);
+        self.legend.place(MAP, size, &taken);
+        if self.legend_kept.is_none() {
+            self.legend_kept = Some(self.legend.saved());
+        }
+        self.legend_size = size;
         let now = self.legend.shown(size, chip);
         self.legend.follow(mouse, held, now, MAP);
         if !self.legend.minimized && !held {
@@ -1263,6 +1325,7 @@ impl Screen<GameCx> for WorldMap {
         }
         self.w = ui.widgets;
         self.shown = shown;
+        self.drawn = marks.iter().map(|m| (m.qid.clone(), m.locked)).collect();
     }
 
     /// P, J, I and ? open the HUD bar's popups (PLAYUI1-H). PR5-48: F7 switches the debug layout editing (a debug build
@@ -1285,13 +1348,17 @@ impl Screen<GameCx> for WorldMap {
         }
     }
 
-    /// The pick, the chosen way and the ways offered, the roads drawn in the last frame (MAP-HOOKS1) and the Legend.
+    /// The pick, the chosen way and the ways offered, the roads drawn in the last frame (MAP-HOOKS1) and the Legend;
+    /// MAP-POLISH1: the places drawn and the locked ones.
     fn state(&self, cx: &Cx) -> Value {
         let ways: Vec<Value> = self.ways(cx).iter().map(|w| json!({"label": w.label, "days": w.days, "supplies": w.supplies, "routes": w.routes})).collect();
         let roads: Vec<Value> = self.shown.iter().map(|(r, st)| json!({"route": r, "style": st.name()})).collect();
         let l = &self.legend;
         json!({
             "selected": self.selected, "pick": self.pick, "ways": ways, "roads": roads,
+            // MAP-POLISH1: the places drawn and the ones drawn locked (grey), in the last frame
+            "places": self.drawn.iter().map(|(q, _)| q.clone()).collect::<Vec<_>>(),
+            "locked": self.drawn.iter().filter(|(_, l)| *l).map(|(q, _)| q.clone()).collect::<Vec<_>>(),
             "legend": {"pos": l.pos.map(|p| vec![p.0, p.1]), "locked": l.locked, "minimized": l.minimized},
             "view": travel::view(&cx.data, cx.gs()),
             // PR5-48: the layout being edited in place and the editor's state
@@ -1413,6 +1480,9 @@ pub fn layout_places(d: &emberwake_world::Data, layers: &aegis_core::assets::Lay
 /// polylines are the places' routes with the sidecar's waypoints (none yet: empty), then any other route the sidecar
 /// holds (a pre-staged act's). The viewport is the world map's (`MAP`, `MAP_PAD`) and the markers are boxed by its
 /// landmark rule, so the editor shows the map as the player sees it. Save writes through the kit's writer.
+/// MAP-POLISH1 (FB-259 (a), (c)): each place's route runs between its two places' markers (`Polyline::ends`, drawn as
+/// fixed anchors with the live smooth road preview), and a place without a landmark picture (by its `art`) is its 14 px
+/// kind pin (`art::pin`), as the map draws it.
 pub struct LayoutEditing {
     pub name: String,
     pub editor: LayoutEditor,
@@ -1421,8 +1491,8 @@ pub struct LayoutEditing {
 }
 
 impl LayoutEditing {
-    /// Opens layout `name`; `images`: the landmark images on the markers (the Map Layout screen; the live map draws its
-    /// own).
+    /// Opens layout `name`; `images`: the editor paints the landmark images and pins (the Map Layout screen; the live map
+    /// draws its own, the markers still boxed by them).
     pub fn open(cx: &mut Cx, name: &str, images: bool) -> Self {
         let d = cx.data.clone();
         let layers = cx.art.layers().clone();
@@ -1430,6 +1500,8 @@ impl LayoutEditing {
         let (world, places) = layout_places(&d, &layers, name);
         let unit = (0.0, 0.0, 1.0, 1.0);
         let mut markers = Vec::new();
+        // each place's marker id (qid -> the sidecar's key), for the routes' ends
+        let mut ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         for (i, q) in places.iter().enumerate() {
             let loc = d.resolve(world.as_deref().unwrap_or_default(), "locations", q);
             let ((x, y), scale) = place(layout.as_ref(), q, json::aget(loc, "map_pos"), i, places.len(), unit);
@@ -1437,18 +1509,23 @@ impl LayoutEditing {
             // the sidecar's key: the local id, unless the sidecar keys this place by its qid
             let id = if layout.as_ref().is_some_and(|l| l.landmarks.contains_key(q.as_str())) { q.clone() } else { local.to_string() };
             let mut m = Marker::new(&id, &json::s_or(loc, "name", local), [x, y], scale);
-            if images {
-                m.image = cx.art.image(&emberwake_content::art::landmark(q), LANDMARK_IMG, LANDMARK_IMG).cloned().map(Rc::new);
+            m.image = cx.art.image(&emberwake_content::art::landmark(q, &s(loc, "art")), LANDMARK_IMG, LANDMARK_IMG).cloned().map(Rc::new);
+            if m.image.is_none() {
+                // FB-259 (c): the kind pin the map draws in its place (a dot when the kind has none)
+                m.pin = cx.art.image(&emberwake_content::art::pin(&s(loc, "kind")), PIN_PX, PIN_PX).cloned().map(Rc::new);
             }
+            ids.insert(q.clone(), id.clone());
             markers.push(m);
         }
         let mut lines: Vec<Polyline> = Vec::new();
         if let Some(w) = &world {
             for r in travel::graph(&d, w) {
                 let id = s(&r, "id");
-                if places.contains(&s(&r, "_from")) && places.contains(&s(&r, "_to")) && !lines.iter().any(|l| l.id == id) {
+                let (from, to) = (s(&r, "_from"), s(&r, "_to"));
+                if let (Some(a), Some(b), false) = (ids.get(&from), ids.get(&to), lines.iter().any(|l| l.id == id)) {
                     let pts = layout.as_ref().and_then(|l| l.route(&id)).map(|p| p.iter().map(|(x, y)| [*x, *y]).collect()).unwrap_or_default();
-                    lines.push(Polyline::new(&id, pts));
+                    // FB-259 (a): the road runs from its `from` place to its `to` place, the sidecar's waypoints between
+                    lines.push(Polyline::new(&id, pts).with_ends(a, b));
                 }
             }
         }
@@ -1460,6 +1537,7 @@ impl LayoutEditing {
         let mut editor = LayoutEditor::new(markers, lines);
         editor.set_view(Viewport::new(MAP, (MAP_PAD.0 as f32, MAP_PAD.1 as f32)));
         editor.marker_box = MarkerBox { side: LANDMARK_PX, foot: LANDMARK_FOOT };
+        editor.marker_art = images;
         Self { name: name.to_string(), editor, bg_scale: None }
     }
 
@@ -1763,6 +1841,31 @@ mod tests {
         assert_eq!(read_layout(&layers, &["sunk_ward_quarter".to_string()]), Some(l));
     }
 
+    /// PR5-49 (MAP-POLISH1): the shipped `sunk_ward` `locations.json` `map_pos` match the `sunk_ward_quarter.json`
+    /// sidecar: every landmark's `pos` is its location's `map_pos`, and every routed place of the region has a landmark.
+    #[test]
+    fn the_shipped_map_pos_match_the_act_one_sidecar() {
+        let layers = Layers::for_game(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
+        let d = data_dir_data();
+        let v = aegis_core::assets::read_json(&layers, &emberwake_content::art::world_map_layout("sunk_ward_quarter")).expect("the sidecar is JSON");
+        let l = MapLayout::parse(&v).expect("a layout");
+        assert!(!l.landmarks.is_empty());
+        for (id, mark) in &l.landmarks {
+            let loc = d.resolve(SW, "locations", id);
+            let mp: Vec<f64> = json::aget(loc, "map_pos").iter().filter_map(Value::as_f64).collect();
+            assert_eq!(mp.len(), 2, "{id} has a map_pos of two numbers");
+            let (x, y) = (f64::from(mark.pos.0), f64::from(mark.pos.1));
+            assert!((mp[0] - x).abs() < 1e-6 && (mp[1] - y).abs() < 1e-6, "{id}: map_pos {mp:?} vs sidecar pos {:?}", mark.pos);
+        }
+        let rq = s(d.resolve(SW, "regions", "sunk_ward_quarter"), "_qid");
+        assert!(!rq.is_empty(), "the region exists");
+        let routed: Vec<String> = travel::nodes(&d, SW).into_iter().filter(|q| travel::region_chain(&d, SW, q).contains(&rq)).collect();
+        assert!(!routed.is_empty());
+        for q in &routed {
+            assert!(l.landmark(q).is_some(), "{q} (routed, in sunk_ward_quarter) has a sidecar landmark");
+        }
+    }
+
     // ---- MAP-HOOKS1 pass B ----------------------------------------------------------------------------------------
 
     use crate::hud::hud_tests::{frame, gfx};
@@ -1778,8 +1881,12 @@ mod tests {
     /// The shipped game at the Sunk Ward hub once the Prologue is over, with `flags` set and the places `visited` been
     /// to (the fog lifts one open road past a visited place); the game's art and sidecar when `art`.
     fn ward_hub(flags: &[&str], visited: &[&str], art: bool) -> Cx {
+        ward_hub_with(crate::hud::hud_tests::game_cx(), flags, visited, art)
+    }
+
+    /// `ward_hub` on the data `cx` holds.
+    fn ward_hub_with(mut cx: Cx, flags: &[&str], visited: &[&str], art: bool) -> Cx {
         use emberwake_world::{battle, new_game, story};
-        let mut cx = crate::hud::hud_tests::game_cx();
         let d = cx.data.clone();
         let gs = new_game::create_for_world(&d, SW, 1).expect("a new sunk_ward game");
         crate::screens::enter_game(&mut cx, gs, -1, Vec::new());
@@ -2348,7 +2455,7 @@ mod tests {
         frame(&mut wm, &mut cx, &mut g, 1.0);
         let (x, y, w, h) = anchor_rect();
         let (r, _) = wm.widget_rect(&node_id(&here)).unwrap();
-        let landmark = cx.art.has(&emberwake_content::art::landmark(&here));
+        let landmark = cx.art.has(&emberwake_content::art::landmark(&here, &s(cx.data.resolve(SW, "locations", &here), "art")));
         let scale = wm.edit.as_ref().unwrap().editor.marker(&id).unwrap().scale;
         let want = if landmark { landmark_box(x + 0.25 * w, y + 0.5 * h, scale) } else { pin_box(x + 0.25 * w, y + 0.5 * h) };
         assert_eq!(r, want, "the mark follows the editor");
@@ -2423,6 +2530,288 @@ mod tests {
         assert!(matches!(cx.nav.as_slice(), [Nav::Push(n)] if n.id() == "notice"), "the problems show");
     }
 
+    // ---- PR5-49 (MAP-POLISH1) ---------------------------------------------------------------------------------
+
+    fn copy_dir(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let p = e.unwrap().path();
+            let dest = to.join(p.file_name().unwrap());
+            if p.is_dir() {
+                copy_dir(&p, &dest);
+            } else {
+                std::fs::copy(&p, &dest).unwrap();
+            }
+        }
+    }
+
+    /// A scratch copy of the shipped data (and the game manifest beside it) with each `(kind, id, fields)` of the Sunk
+    /// Ward re-saved by the kit's writer with `fields` set, loaded; the scratch folder lives as long as the guard.
+    fn ward_data(edits: &[(&str, &str, Value)]) -> (Scratch, std::sync::Arc<Data>) {
+        let s = Scratch::new("pr549_data");
+        let shipped = Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let dir = s.join("data");
+        copy_dir(&shipped, &dir);
+        if let Some(m) = shipped.parent().map(|p| p.join("game.json")).filter(|p| p.exists()) {
+            std::fs::copy(m, s.join("game.json")).unwrap();
+        }
+        let d = Data::open(&dir).expect("the copy loads").0;
+        for (kind, id, fields) in edits {
+            let mut entry: json::Dict = d.resolve(SW, kind, id).iter().filter(|(k, _)| !k.starts_with('_')).map(|(k, v)| (k.clone(), v.clone())).collect();
+            assert!(!entry.is_empty(), "{kind} {id}");
+            for (k, v) in json::dict(fields) {
+                entry.insert(k.clone(), v.clone());
+            }
+            emberwake_content::store::upsert(&dir, Some(SW), kind, &entry, None).unwrap_or_else(|e| panic!("{kind} {id}: {e:?}"));
+        }
+        let d = Data::open(&dir).expect("the edited copy loads").0;
+        (s, std::sync::Arc::new(d))
+    }
+
+    /// `ward_hub` on data `d` (a `ward_data` copy).
+    fn ward_hub_on(d: std::sync::Arc<Data>, flags: &[&str], visited: &[&str], art: bool) -> Cx {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.data = d;
+        ward_hub_with(cx, flags, visited, art)
+    }
+
+    /// The hub's region (where the Prologue ends), its id.
+    fn hub_region(d: &Data) -> String {
+        s(d.resolve(SW, "locations", &q("sluice_undercroft")), "region")
+    }
+
+    fn strs(v: &Value) -> Vec<String> {
+        json::arr(v).iter().map(|x| json::gstr(x).to_string()).collect()
+    }
+
+    /// FB-257 (a): with the hub's region revealing (`map_reveal`, on in the shipped data since the PR5-49 seed) the map
+    /// after the Prologue draws every place of the region a route touches, the ones the party cannot travel to grey
+    /// (`travel::locked`); a place of the region no route touches stays off it. Off (a test copy with `map_reveal`
+    /// false), the fog as before.
+    #[test]
+    fn a_revealing_region_shows_every_routed_place_and_greys_the_locked_ones() {
+        let shipped = data_dir_data();
+        let region = hub_region(&shipped);
+        assert!(json::b(shipped.resolve(SW, "regions", &region), travel::MAP_REVEAL, false), "the shipped {region} reveals");
+        let mut cx = ward_hub(&[], &[], false);
+        let d = cx.data.clone();
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let st = wm.state(&cx);
+        let gs = cx.gs().clone();
+        let rq = travel::reveal_region(&d, &gs).expect("the hub's region reveals");
+        let in_region = |q: &String| travel::region_chain(&d, SW, q).contains(&rq);
+        let routed: Vec<String> = travel::nodes(&d, SW).into_iter().filter(|q| in_region(q)).collect();
+        let places = strs(&st["places"]);
+        assert_eq!(places, travel::shown(&d, &gs), "the kit's places");
+        assert!(routed.iter().all(|q| places.contains(q)), "every routed place of the region: {places:?}");
+        let known = travel::known(&d, &gs);
+        assert!(places.len() > known.len(), "more than the fog shows");
+        let unrouted: Vec<String> = d.merged_entries(SW, "locations").iter().map(|l| s(l, "_qid")).filter(|q| in_region(q) && !routed.contains(q)).collect();
+        assert!(unrouted.iter().all(|q| !places.contains(q) && widget(&wm, &node_id(q)).is_none()), "no route, not on the map: {unrouted:?}");
+        // the grey ones: the kit's locked places, every place shown only by the region among them
+        let locked = strs(&st["locked"]);
+        assert_eq!(locked, places.iter().filter(|q| travel::locked(&d, &gs, q)).cloned().collect::<Vec<_>>());
+        assert!(places.iter().filter(|q| !known.contains(q)).all(|q| locked.contains(q)), "a place only the region shows is grey");
+        assert!(!locked.contains(&gs.location_id), "the party's place is never grey");
+        for q in &places {
+            assert!(widget(&wm, &node_id(q)).is_some(), "{q} has its mark");
+        }
+        // off: a copy with the region's `map_reveal` false draws the fog as before, locked by the same rule
+        let (_s, d) = ward_data(&[("regions", region.as_str(), json!({"map_reveal": false}))]);
+        let mut cx = ward_hub_on(d, &[], &[], false);
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let st = wm.state(&cx);
+        let gs = cx.gs().clone();
+        assert_eq!(travel::reveal_region(&cx.data, &gs), None, "off: no revealing region");
+        assert_eq!(strs(&st["places"]), travel::known(&cx.data, &gs), "off: the known places");
+        let was: Vec<String> = strs(&st["places"]).into_iter().filter(|q| *q != gs.location_id && !json::b(&travel::trip(&cx.data, &gs, &gs.location_id, q), "ok", false)).collect();
+        assert_eq!(strs(&st["locked"]), was, "locked as before: no trip there");
+    }
+
+    /// The shipped data, loaded.
+    fn data_dir_data() -> Data {
+        Data::open(&Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder")).expect("data").0
+    }
+
+    /// FB-257 (d): the sidecar read is the one beside the background drawn: a region picture without its own sidecar
+    /// uses none (never the world's coordinates over the region's picture); no picture, no sidecar.
+    #[test]
+    fn the_sidecar_is_only_the_one_beside_the_background_drawn() {
+        let d = data();
+        let names = map_names(&d, &state(&d, "ward:hub"));
+        let root = Scratch::new("pr549_sidecar");
+        let dir = root.join("backgrounds/world_map");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("ward.json"), r#"{"landmarks": {"hub": {"pos": [0.25, 0.75]}}}"#).unwrap();
+        let layers = Layers::of(vec![root.path_buf()]);
+        assert_eq!(layout_name(&layers, &names), None, "no picture: no name, so no sidecar");
+        std::fs::write(dir.join("quarter.png"), "png").unwrap();
+        assert_eq!(layout_name(&layers, &names), Some("quarter".to_string()), "the region's picture comes first");
+        assert_eq!(read_layout(&layers, &["quarter".to_string()]), None, "the region's picture has no sidecar of its own");
+        assert!(read_layout(&layers, &names).is_some(), "the world's sidecar is there, but not for the region's picture");
+        std::fs::remove_file(dir.join("quarter.png")).unwrap();
+        std::fs::write(dir.join("ward.png"), "png").unwrap();
+        let name = layout_name(&layers, &names).expect("the world's picture");
+        assert_eq!(read_layout(&layers, &[name]).and_then(|l| l.landmark("ward:hub").copied()).map(|l| l.pos), Some((0.25, 0.75)), "picture and sidecar match");
+        // on the map: the shipped hub over a scratch layer with its region's picture and only the world's sidecar
+        let mut cx = ward_hub(&[], &[], false);
+        let here = cx.gs().location_id.clone();
+        let region = hub_region(&cx.data);
+        let s2 = Scratch::new("pr549_sidecar_map");
+        let bg = s2.join("backgrounds/world_map");
+        std::fs::create_dir_all(&bg).unwrap();
+        std::fs::write(bg.join(format!("{region}.png")), "png").unwrap();
+        let at = json!({"landmarks": {local_id(&here): {"pos": [0.3125, 0.4375]}}}).to_string();
+        std::fs::write(bg.join(format!("{SW}.json")), &at).unwrap();
+        cx.art = aegis_ui::art::Art::layered(Layers::of(vec![s2.path_buf()]));
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let nodes = travel::nodes(&cx.data, SW);
+        let i = nodes.iter().position(|n| *n == here).unwrap();
+        let ((x, y), _) = place(None, &here, json::aget(cx.data.resolve(SW, "locations", &here), "map_pos"), i, nodes.len(), anchor_rect());
+        assert_eq!(wm.widget_rect(&node_id(&here)).unwrap().0, pin_box(x, y), "the world's sidecar is not read over the region's picture: map_pos");
+        std::fs::write(bg.join(format!("{region}.json")), &at).unwrap();
+        cx.art = aegis_ui::art::Art::layered(Layers::of(vec![s2.path_buf()]));
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let (ax, ay, aw, ah) = anchor_rect();
+        assert_eq!(wm.widget_rect(&node_id(&here)).unwrap().0, pin_box(ax + 0.3125 * aw, ay + 0.4375 * ah), "the region's own sidecar is");
+    }
+
+    /// A tiny RGBA PNG of `side` px.
+    fn png_bytes(side: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut enc = png::Encoder::new(&mut out, side, side);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[200u8, 120, 40, 255].repeat((side * side) as usize)).unwrap();
+        out
+    }
+
+    /// AO-04 + FB-259: two places whose `art` names one picture both draw it as their landmark on the map and in the
+    /// editor; a place without a picture is its 14 px kind pin in the editor (the kind's pin picture, else a dot); each
+    /// route of the region runs between its places' markers (`ends`).
+    #[test]
+    fn a_shared_art_picture_serves_both_places_and_the_editor_draws_pins_and_route_ends() {
+        let hub = q("sluice_undercroft");
+        let d0 = data_dir_data();
+        // the hub and a place one route away share the picture
+        let other = travel::graph(&d0, SW).iter().find(|r| s(r, "_from") == hub).map(|r| s(r, "_to")).expect("a road from the hub");
+        let (_s, d) = ward_data(&[("locations", local_id(&hub), json!({"art": "shared_spot"})), ("locations", local_id(&other), json!({"art": "shared_spot"}))]);
+        let mut cx = ward_hub_on(d.clone(), &[], &[], false);
+        let layer = Scratch::new("pr549_art");
+        let lm = layer.join("map/landmarks");
+        std::fs::create_dir_all(&lm).unwrap();
+        std::fs::write(lm.join("shared_spot.png"), png_bytes(8)).unwrap();
+        cx.art = aegis_ui::art::Art::layered(Layers::of(vec![layer.path_buf()]));
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let nodes = travel::nodes(&d, SW);
+        for qd in [&hub, &other] {
+            let i = nodes.iter().position(|n| n == qd).unwrap();
+            let ((x, y), scale) = place(None, qd, json::aget(d.resolve(SW, "locations", qd), "map_pos"), i, nodes.len(), anchor_rect());
+            assert_eq!(wm.widget_rect(&node_id(qd)).unwrap().0, landmark_box(x, y, scale), "{qd}: the shared picture is its landmark");
+        }
+        // the editor: the two share the image, every other place is its pin (no pin pictures in the layer: a dot)
+        let e = LayoutEditing::open(&mut cx, &hub_region(&d), true);
+        let mk = |q: &str| e.editor.marker(local_id(q)).unwrap_or_else(|| panic!("{q}")).clone();
+        assert!(mk(&hub).image.is_some() && mk(&other).image.is_some());
+        let rest: Vec<Marker> = e.editor.markers().iter().filter(|m| m.id != local_id(&hub) && m.id != local_id(&other)).cloned().collect();
+        assert!(!rest.is_empty() && rest.iter().all(|m| m.image.is_none() && m.pin.is_none()), "no picture: the dot");
+        for m in &rest {
+            let r = e.editor.marker_rect(m);
+            assert_eq!((r.w, r.h), (PIN_PX, PIN_PX), "{}: the 14 px pin, not the {} px box", m.id, LANDMARK_PX);
+        }
+        assert_eq!(e.editor.marker_rect(&mk(&hub)), e.editor.marker_box.rect(e.editor.view().to_screen(mk(&hub).pos), mk(&hub).scale), "a picture: the landmark box");
+        // with the kinds' pins in the layer, each picture-less place draws its kind's pin
+        let pins = layer.join("ui/pins");
+        std::fs::create_dir_all(&pins).unwrap();
+        for m in &rest {
+            let kind = s(d.resolve(SW, "locations", &q(&m.id)), "kind");
+            std::fs::write(pins.join(format!("{kind}.png")), png_bytes(14)).unwrap();
+        }
+        cx.art = aegis_ui::art::Art::layered(Layers::of(vec![layer.path_buf()]));
+        let e = LayoutEditing::open(&mut cx, &hub_region(&d), true);
+        assert!(e.editor.markers().iter().filter(|m| m.image.is_none()).all(|m| m.pin.is_some()), "the kind pins");
+        assert!(e.editor.state()["markers"].as_array().unwrap().iter().filter(|m| m["image"] == json!(false)).all(|m| m["pin"] == json!(true)));
+        // every route between two of the region's places runs from its `from` marker to its `to` marker
+        let places = e.editor.markers().iter().map(|m| q(&m.id)).collect::<Vec<_>>();
+        let mut n = 0;
+        for r in travel::graph(&d, SW) {
+            let (from, to) = (s(&r, "_from"), s(&r, "_to"));
+            if !(places.contains(&from) && places.contains(&to)) {
+                continue;
+            }
+            let l = e.editor.polyline(&s(&r, "id")).expect("its polyline");
+            assert_eq!(l.ends, Some([local_id(&from).to_string(), local_id(&to).to_string()]), "{}", l.id);
+            let li = e.editor.polylines().iter().position(|x| x.id == l.id).unwrap();
+            let run = e.editor.chain(li);
+            assert_eq!((run.first().copied(), run.last().copied()), (Some(e.editor.marker(local_id(&from)).unwrap().pos), Some(e.editor.marker(local_id(&to)).unwrap().pos)));
+            assert!(!e.editor.preview(li).is_empty(), "{}: the live preview", l.id);
+            n += 1;
+        }
+        assert!(n > 0, "the region has roads");
+        // the live map's editing boxes the markers by the map's own marks and leaves their pictures to the map
+        let live = LayoutEditing::open(&mut cx, &hub_region(&d), false);
+        assert!(!live.editor.marker_art && live.editor.markers().iter().filter(|m| m.id == local_id(&hub)).all(|m| m.image.is_some()));
+    }
+
+    /// FB-257 (c): the Legend's place and lock are kept in the settings and restored when the map opens again; a kept
+    /// place off the map starts the Legend afresh (as a map with nothing kept); a kept place partly off is moved in.
+    #[test]
+    fn the_legend_keeps_its_place_and_lock_across_map_reopens() {
+        let mut cx = ward_hub(&TIER2, &["drowned_runoff_grate", "alleyway_junction_7", "ash_crawl_crossroads"], false);
+        open_boards(&mut cx);
+        let (mut wm, mut g) = (WorldMap::new(), gfx());
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let fresh = (wm.widget_rect("world_map.legend").unwrap().0, wm.legend.locked);
+        assert_eq!(cx.settings.v[LEGEND_KEY], json!({}), "nothing kept until the player moves or locks it");
+        wm.click_id(&mut cx, "world_map.legend.lock").expect("unlock");
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let r = fresh.0;
+        let held = aegis_ui::ui::Drag { key: LEGEND_DRAG.into(), id: "world_map.legend".into(), text: "Legend".into() };
+        let grab = (r.x + 10, r.y + 4);
+        wm.draw(&mut cx, &mut g, grab, true);
+        g.kit.drag = Some(held);
+        wm.draw(&mut cx, &mut g, (grab.0 - 150, grab.1 + 60), true);
+        g.kit.drag = None;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let moved = wm.widget_rect("world_map.legend").unwrap().0;
+        assert_eq!((moved.x, moved.y), (r.x - 150, r.y + 60));
+        assert_eq!(cx.settings.v[LEGEND_KEY], json!({"pos": [moved.x, moved.y], "locked": false}), "kept");
+        let file = aegis_ui::screen::Settings::load(cx.shot_dir.join("settings.json"), crate::screens::default_settings());
+        assert_eq!(file.v[LEGEND_KEY], cx.settings.v[LEGEND_KEY], "in the settings file");
+        // the map opens again: where it was, unlocked
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!((wm.widget_rect("world_map.legend").unwrap().0, wm.legend.locked), (moved, false), "restored");
+        assert_eq!(widget(&wm, "world_map.legend").unwrap()["drag"], json!(LEGEND_DRAG));
+        // locked again: kept, restored locked
+        wm.click_id(&mut cx, "world_map.legend.lock").expect("lock");
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!(cx.settings.v[LEGEND_KEY]["locked"], json!(true));
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!((wm.widget_rect("world_map.legend").unwrap().0, wm.legend.locked), (moved, true));
+        // a kept place off the map: the Legend starts afresh; partly off: moved in
+        cx.settings.v[LEGEND_KEY] = json!({"pos": [MAP.x + MAP.w + 400, MAP.y + MAP.h + 300], "locked": false});
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!((wm.widget_rect("world_map.legend").unwrap().0, wm.legend.locked), fresh, "as a map with nothing kept");
+        cx.settings.v[LEGEND_KEY] = json!({"pos": [MAP.x + MAP.w - 10, MAP.y + 20], "locked": true});
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let p = wm.widget_rect("world_map.legend").unwrap().0;
+        assert!(p.x + p.w <= MAP.x + MAP.w && p.y == MAP.y + 20 && wm.legend.locked, "moved inside the map: {p:?}");
+        // a value that is not a place (an old or hand-edited file) is passed over
+        cx.settings.v[LEGEND_KEY] = json!({"pos": "corner", "locked": 3});
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!((wm.widget_rect("world_map.legend").unwrap().0, wm.legend.locked), fresh);
+    }
+
     /// PR5-48 review renders at 1280 x 720 with the game's art and theme, only with `AEGIS_REVIEW_DIR` set: Map Layout on
     /// Act 1's sidecar (a landmark selected), on a pre-staged act, and the live map edited in place (a debug build).
     #[test]
@@ -2463,6 +2852,18 @@ mod tests {
             wm.key(&mut cx, Key::Fn(7));
             shot(&mut wm, &mut cx, "3_live_world_map_editing");
         }
+        // PR5-49 (FB-259): a road selected (its end anchors and live smooth preview), and two places whose `art` names
+        // no picture (a test copy), drawn as their 14 px kind pins
+        let region = hub_region(&cx.data);
+        let lost: Vec<String> = travel::graph(&cx.data, SW).iter().filter(|r| s(r, "_from") == here).map(|r| s(r, "_to")).take(2).collect();
+        let edits: Vec<(&str, &str, Value)> = lost.iter().map(|q| ("locations", local_id(q), json!({"art": "no_such_picture"}))).collect();
+        let (_s, d) = ward_data(&edits);
+        let mut cx = ward_hub_on(d, &[], &[], true);
+        let mut m = MapLayoutScreen::new(&mut cx, Some(&region));
+        let road = m.edit.editor.polylines().iter().position(|l| l.ends.as_ref().is_some_and(|e| e[0] == local_id(&here)) && !l.points.is_empty()).unwrap_or(0);
+        m.act(&mut cx, LAct::Edit(LayoutAct::Line(road)));
+        m.act(&mut cx, LAct::Edit(LayoutAct::Select(Some(aegis_ui::layout_editor::Sel::Point(road, 0)))));
+        shot(&mut m, &mut cx, "4_map_layout_route_ends_and_pins");
     }
 
     /// Review renders of the world map on the shipped Sunk Ward at 1280 x 720 with the game's art and theme: only with
@@ -2516,6 +2917,16 @@ mod tests {
         frame(&mut wm, &mut cx, &mut gfx(), 1.0);
         wm.click_id(&mut cx, &node_id(&q("crucible_watchpost"))).expect("the crucible");
         shot(&mut wm, &mut cx, "8_all_open_crucible_picked", off);
+        // PR5-49 (FB-257 (a)): the hub after the Prologue with its region revealing (a test copy): every routed place of
+        // the region on the map, the ones not yet reachable grey; the Prologue's places stay off
+        let region = hub_region(&cx.data);
+        let (_s, d) = ward_data(&[("regions", region.as_str(), json!({"map_reveal": true}))]);
+        let mut cx2 = ward_hub_on(d, &[], &[], true);
+        let mut wm2 = WorldMap::new();
+        shot(&mut wm2, &mut cx2, "9_reveal_after_prologue", off);
+        let kiln = centre(&wm2, &node_id(&q("fourth_kiln")));
+        shot(&mut wm2, &mut cx2, "10_reveal_hover_locked_kiln", kiln);
+        println!("reveal places: {} locked: {}", wm2.state(&cx2)["places"], wm2.state(&cx2)["locked"]);
         println!("legend rows: {:?}", wm.widgets().iter().filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with("world_map.legend"))).map(|w| w["text"].clone()).collect::<Vec<_>>());
     }
 }

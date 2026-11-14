@@ -124,7 +124,7 @@ fn location<'a>(worlds: &'a Catalogs, world: &str, id: &str) -> &'a Dict {
 /// Checks layout `v` of sidecar `name`: its shape (an object of `landmarks` and `routes`, no other key), every landmark's
 /// `pos` and every route point (`POS_RANGE`) and `scale` (`SCALE_RANGE`, optional); with a world or region owner also
 /// that each landmark names a location and each route a route of that world, and warns when a location has no landmark
-/// image (`art::landmark`: the map draws its kind pin, `art::pin`). A pre-staged name skips the id checks and the
+/// image (`art::landmark`, by the location's `art` when set: the map draws its kind pin, `art::pin`). A pre-staged name skips the id checks and the
 /// warnings.
 pub fn check(worlds: &Catalogs, layers: &Layers, name: &str, v: &Value) -> Findings {
     let mut f = Findings::default();
@@ -162,10 +162,10 @@ pub fn check(worlds: &Catalogs, layers: &Layers, name: &str, v: &Value) -> Findi
                 let loc = location(worlds, w, id);
                 if loc.is_empty() {
                     f.errors.push(format!("Landmark '{id}' isn't a location of world '{w}'."));
-                } else if !layers.roots.is_empty() && !layers.has(&art::landmark(id)) {
+                } else if !layers.roots.is_empty() && !layers.has(&art::landmark(id, &json::s(loc, "art"))) {
                     let kind = json::s(loc, "kind");
                     let pin = if kind.is_empty() { "its kind pin".to_string() } else { format!("its pin {}", art::pin(&kind)) };
-                    f.warnings.push(format!("Landmark '{id}' has no {}: the map draws {pin}.", art::landmark(id)));
+                    f.warnings.push(format!("Landmark '{id}' has no {}: the map draws {pin}.", art::landmark(id, &json::s(loc, "art"))));
                 }
             }
         }

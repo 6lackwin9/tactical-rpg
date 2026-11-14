@@ -373,7 +373,8 @@ pub fn side_entry(w: &World, actor: &str, phase: &str, turned: &[usize], to: &st
     e
 }
 
-/// PHASEFX1: "A turns on everyone." (`hostile_all`), "A and B join the party side." (a side id); `kill_line`'s list.
+/// PHASEFX1: "A turns on everyone." (`hostile_all`), "A and B join the friendly side." (a side id or alias, as written);
+/// `kill_line`'s list.
 pub fn side_line(names: &[&str], to: &str) -> String {
     let (one, many) = if to == crate::encounter::HOSTILE_ALL { ("turns on everyone", "turn on everyone") } else { ("joins", "join") };
     let tail = if to == crate::encounter::HOSTILE_ALL { String::new() } else { format!(" the {to} side") };

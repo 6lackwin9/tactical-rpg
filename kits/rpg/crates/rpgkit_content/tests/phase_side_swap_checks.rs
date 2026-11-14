@@ -1,6 +1,6 @@
 //! PHASEFX1 content side (docs/specs/ACTS23.md PK6 hooks l and m): the phase `side` effect (keys `type, units, to`; 1-6
 //! refs, each an enemy, a phase-wave ref or a guest, never a hero, a protected guest or the slay target; `to`
-//! hostile_all, party or enemy) and the phase `swap` effect (keys `type, unit, to, hp`; `unit` an enemy, a phase-wave ref or a guest, never a
+//! hostile_all, friendly or hostile, PR5-50, with the aliases party and enemy) and the phase `swap` effect (keys `type, unit, to, hp`; `unit` an enemy, a phase-wave ref or a guest, never a
 //! hero; `to` a unit row of the swapped unit's side, a guest's being the party side; `hp` keep_pct or full): one error
 //! per mistake, in catalog and world encounters alike. Scratch data folders only.
 
@@ -83,7 +83,8 @@ fn a_valid_turn_checks_clean() {
     catalog(&data);
     let v = store::view(&data);
     assert_eq!(effect_errors(&v, "side", json!({})), Vec::<String>::new(), "the turn");
-    for to in ["party", "enemy", "hostile_all"] {
+    // PR5-50 (FB-171): the side ids and their aliases
+    for to in ["friendly", "hostile", "hostile_all", "party", "enemy"] {
         assert_eq!(effect_errors(&v, "side", json!({"to": to})), Vec::<String>::new(), "side to {to}");
     }
     assert_eq!(effect_errors(&v, "side", json!({"units": ["captive"]})), Vec::<String>::new(), "a guest may turn");
@@ -104,8 +105,8 @@ fn each_side_mistake_is_one_error() {
     one(effect_errors(&v, "side", json!({"units": ["founder", "ghost"]})), "Phase 'turn': side unit 'ghost' is not in this encounter.");
     one(effect_errors(&v, "side", json!({"units": []})), "Phase 'turn': a side names 1 to 6 units.");
     one(effect_errors(&v, "side", json!({"units": vec!["founder"; 7]})), "Phase 'turn': a side names 1 to 6 units.");
-    one(effect_errors(&v, "side", json!({"to": "neutral"})), "Phase 'turn': side to 'neutral' must be one of hostile_all, party, enemy.");
-    one(effect_errors(&v, "side", json!({"to": null})), "Phase 'turn': side to '<null>' must be one of hostile_all, party, enemy.");
+    one(effect_errors(&v, "side", json!({"to": "neutral"})), "Phase 'turn': side to 'neutral' must be one of hostile_all, friendly, hostile (aliases party = friendly, enemy = hostile).");
+    one(effect_errors(&v, "side", json!({"to": null})), "Phase 'turn': side to '<null>' must be one of hostile_all, friendly, hostile (aliases party = friendly, enemy = hostile).");
     one(effect_errors(&v, "side", json!({"by": "ogre"})), "Phase 'turn': unknown side key 'by'.");
     drop_scratch(&data);
 }

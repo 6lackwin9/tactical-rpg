@@ -1126,8 +1126,8 @@ impl Session {
 
     /// PHASEFX1 (ACTS23 PK6 hook l): a phase `side` effect: every active, placed, unreserved unit of its refs (never a
     /// hero) goes to side `to` (`World::set_side`): `hostile_all` makes it a rogue on the enemy side that fights every
-    /// other unit (and counts as a foe for the win objectives), `party` a guest of the party side (planned as guests are),
-    /// `enemy` an enemy-side unit. A unit leaving the party side stops being a guest (and protected); one joining it is
+    /// other unit (and counts as a foe for the win objectives), `friendly` (alias `party`) an AI-controlled guest of the
+    /// party side (planned as guests are), `hostile` (alias `enemy`) an enemy-side unit. A unit leaving the party side stops being a guest (and protected); one joining it is
     /// no longer unkillable (S1 is enemy-side only); one leaving the enemy side or turning on everyone leaves its morale
     /// group (`leave_morale`). Its actions already booked this round stay. One EVENT cell (log::side_entry; actor the encounter) over the units that changed side.
     fn phase_side(&mut self, fx: &Obj, phase_name: &str, round: i32, block: i32) {

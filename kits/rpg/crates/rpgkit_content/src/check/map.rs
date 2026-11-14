@@ -93,6 +93,11 @@ fn exit_targets(e: &Dict) -> Vec<String> {
 /// MapRules.location_errors.
 pub fn location_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     let mut errors = map_pos_errors(e.get("map_pos").unwrap_or(&Value::Array(Vec::new())));
+    // MAP-POLISH1 (AO-04): the landmark picture's name (`art::landmark`)
+    let art = json::s(e, "art");
+    if !crate::art::landmark_art_ok(&art) {
+        errors.push(format!("Landmark art '{art}' must be empty (the location's id) or 2-32 lowercase letters, digits and underscores (map/landmarks/<art>.png)."));
+    }
     let map_id = json::s(e, "map");
     let bindings_raw = e.get("zone_bindings").cloned().unwrap_or(Value::Object(Dict::new()));
     let markers_raw = e.get("markers").cloned().unwrap_or(Value::Array(Vec::new()));

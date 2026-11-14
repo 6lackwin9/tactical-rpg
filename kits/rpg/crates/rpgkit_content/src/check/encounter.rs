@@ -7,7 +7,7 @@ use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::encounter::{
     ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, BROKEN, BROKEN_KEYS, DOWNED, DOWNED_KEYS, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PARTY_NAME, PARTY_PREFIX, PICK_DEFAULTS, ROUND_KEYS, STAY_HOLD,
-    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS, SIDE_EFFECT, SIDE_EFFECT_KEYS, SIDE_TARGETS, SWAP_EFFECT, SWAP_EFFECT_KEYS, SWAP_HP, SWAP_KEEP_PCT, ENEMY_SIDE, PARTY_SIDE,
+    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS, SIDE_EFFECT, SIDE_EFFECT_KEYS, SIDE_TARGETS, SIDE_ALIASES, side_id, SWAP_EFFECT, SWAP_EFFECT_KEYS, SWAP_HP, SWAP_KEEP_PCT, ENEMY_SIDE, PARTY_SIDE,
 };
 use rpgkit_battle::grid::{Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
@@ -625,7 +625,7 @@ fn kill_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String]) -> Vec<Strin
 
 /// PHASEFX1 (ACTS23 PK6 hook l): each `side` effect of `phase`: 1 to KILL_MAX_UNITS refs, each an enemy, a phase-wave
 /// ref or a guest, never a hero (a `party` ref), a protected guest or a slay objective's target; `to` one of
-/// SIDE_TARGETS. One error per mistake.
+/// SIDE_TARGETS or an alias of SIDE_ALIASES (PR5-50). One error per mistake.
 fn side_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String]) -> Vec<String> {
     let mut errors = Vec::new();
     let (party, guests, protect) = (strings(json::get(e, "party")), strings(json::get(e, "guests")), strings(json::get(e, "protect")));
@@ -648,8 +648,10 @@ fn side_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String]) -> Vec<Strin
             }
         }
         let to = fx.get("to").cloned().unwrap_or(Value::Null);
-        if !to.as_str().is_some_and(|t| SIDE_TARGETS.contains(&t)) {
-            errors.push(format!("Phase '{tag}': side to '{}' must be one of {}.", gstr(&to), SIDE_TARGETS.join(", ")));
+        // PR5-50 (FB-171): a side id, or an alias (party, enemy) read as one
+        if !to.as_str().is_some_and(|t| side_id(t).is_some()) {
+            let aliases: Vec<String> = SIDE_ALIASES.iter().map(|(a, s)| format!("{a} = {s}")).collect();
+            errors.push(format!("Phase '{tag}': side to '{}' must be one of {} (aliases {}).", gstr(&to), SIDE_TARGETS.join(", "), aliases.join(", ")));
         }
     }
     errors

@@ -4,13 +4,15 @@
 //! are inserted and removed, the switches change what the stage draws and nothing else, undo walks back in order and is
 //! capped, Save is only a request and only in a build that may write, the stage draws inside its viewport, the agent
 //! link's `layout_markers` state and `layout` ops work on the pane, and the same over a real link through a screen that
-//! hosts the pane (the shell's handle drag, `Screen::pointer`).
+//! hosts the pane (the shell's handle drag, `Screen::pointer`). PR5-49 (MAP-POLISH1): a polyline's `ends` are fixed
+//! anchors (no handle) with a live smooth preview through end, points, end that follows its markers, and a marker
+//! without an image is drawn and grabbed as its `PIN_PX` pin (the caller's picture, else a dot).
 
 use aegis_core::scratch::Scratch;
 use aegis_ui::art::Art;
 use aegis_ui::audio::Audio;
 use aegis_ui::canvas::{Canvas, Image, Rect};
-use aegis_ui::layout_editor::{self, clamp_scale, scale_at, scale_steps, step_of, writes_allowed, LayoutAct, LayoutEdit, LayoutEditor, Marker, MarkerBox, Polyline, Sel, Show, Viewport, NUDGE, SCALE_RANGE, SCALE_STEP, STATE_KEY, UNDO_MAX};
+use aegis_ui::layout_editor::{self, clamp_scale, pin_rect, scale_at, scale_steps, spline, step_of, writes_allowed, LayoutAct, LayoutEdit, LayoutEditor, Marker, MarkerBox, Polyline, Sel, Show, Viewport, NUDGE, PIN_PX, SCALE_RANGE, SCALE_STEP, STATE_KEY, UNDO_MAX};
 use aegis_ui::painter::{Fonts, View};
 use aegis_ui::playtest::Playtests;
 use aegis_ui::screen::{Context, Cx, Key, PointerPhase, Screen, Settings};
@@ -648,4 +650,187 @@ fn over_the_agent_link_a_hosting_screen_drags_reads_and_sets_the_layout() {
     assert_eq!(s[STATE_KEY]["routes"][1]["points"], json!([]), "the last op undone");
     assert_eq!(link.ask(json!({"cmd": "quit"}))["ok"], json!(true));
     thread.join().unwrap().unwrap();
+}
+
+// ---- PR5-49 (MAP-POLISH1): polyline ends, the live spline preview and the pin fallback ---------------------------
+
+/// `editor()` with polyline `r1` running from marker `a` to marker `b` and `r2` (no points) between them too.
+fn ended() -> LayoutEditor {
+    let mut a = Marker::new("a", "Alpha", [0.25, 0.5], 1.0);
+    a.image = Some(square(16));
+    let b = Marker::new("b", "Beta", [1.042, 0.9], 1.5);
+    let lines = vec![Polyline::new("r1", vec![[0.1, 0.1], [0.3, 0.2], [0.6, 0.2]]).with_ends("a", "b"), Polyline::new("r2", Vec::new()).with_ends("b", "a"), Polyline::new("free", vec![[0.2, 0.2], [0.4, 0.4]])];
+    let mut e = LayoutEditor::new(vec![a, b], lines).with_view(VIEW);
+    e.marker_box = MarkerBox { side: 40.0, foot: 6.0 };
+    e
+}
+
+/// The handle widgets the stage pushes (id, rect).
+fn handles(e: &LayoutEditor) -> Vec<(String, Rect)> {
+    let mut g = gfx(640, 360);
+    let mut ui: Ui<LayoutAct> = Ui::new(&mut g, (-1, -1), true);
+    e.draw_stage(&mut ui, &|a| a);
+    ui.widgets.iter().filter(|w| w.kind == "handle").map(|w| (w.id.clone(), w.rect)).collect()
+}
+
+fn near(a: (f32, f32), b: (f32, f32)) -> bool {
+    (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3
+}
+
+#[test]
+fn the_spline_passes_through_every_point_and_two_points_are_straight() {
+    assert_eq!(spline(&[(0.0, 0.0), (10.0, 0.0)]), [(0.0, 0.0), (10.0, 0.0)]);
+    assert!(spline(&[(1.0, 1.0)]).is_empty() && spline(&[]).is_empty());
+    let pts = [(0.0, 0.0), (20.0, 10.0), (40.0, 0.0), (60.0, 30.0)];
+    let line = spline(&pts);
+    for p in pts {
+        assert!(line.iter().any(|q| near(*q, p)), "{p:?} lies on the line");
+    }
+    assert!(near(line[0], pts[0]) && near(*line.last().unwrap(), pts[3]), "it starts and ends on the end points");
+    assert!(line.windows(2).all(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt() <= 2.5), "sampled about every 2 px");
+}
+
+#[test]
+fn a_polyline_between_two_markers_runs_end_points_end_and_previews_smoothly() {
+    let mut e = ended();
+    let (a, b) = (pos(&e, "a"), pos(&e, "b"));
+    assert_eq!(e.end_points(0), Some((a, b)));
+    assert_eq!(e.chain(0), vec![a, [0.1, 0.1], [0.3, 0.2], [0.6, 0.2], b], "end, points, end");
+    assert_eq!(e.chain(1), vec![b, a], "no points: end to end");
+    assert_eq!(e.chain(2), points(&e, "free"), "a free line is its points");
+    assert!(e.preview(2).is_empty(), "no preview for a free line");
+    let preview = e.preview(0);
+    let screen: Vec<(f32, f32)> = e.chain(0).into_iter().map(|p| VIEW.to_screen(p)).collect();
+    assert_eq!(preview, spline(&screen), "the preview is the spline through the run on screen");
+    for p in &screen {
+        assert!(preview.iter().any(|q| near(*q, *p)), "{p:?}: the ends and every point lie on the preview");
+    }
+    assert_eq!(e.preview(1), screen_of(&[b, a]), "end to end: straight");
+    // the preview is live: it follows a moved end marker
+    e.command(&json!({"cmd": "layout", "id": "b", "pos": [0.8, 0.95]})).unwrap();
+    assert_eq!(*e.preview(0).last().unwrap(), VIEW.to_screen([0.8, 0.95]), "it ends on the end marker where it is now");
+    assert_eq!(e.chain(0).last(), Some(&[0.8, 0.95]));
+    // an end naming no marker leaves a free line
+    let lone = LayoutEditor::new(vec![Marker::new("a", "A", [0.5, 0.5], 1.0)], vec![Polyline::new("x", vec![[0.1, 0.1]]).with_ends("a", "nobody")]);
+    assert_eq!((lone.end_points(0), lone.chain(0), lone.preview(0).len()), (None, vec![[0.1, 0.1]], 0));
+}
+
+fn screen_of(pts: &[[f32; 2]]) -> Vec<(f32, f32)> {
+    pts.iter().map(|p| VIEW.to_screen(*p)).collect()
+}
+
+#[test]
+fn a_polylines_ends_are_fixed_anchors_not_handles() {
+    let mut e = ended();
+    let hs = handles(&e);
+    let ids: Vec<&str> = hs.iter().map(|(i, _)| i.as_str()).collect();
+    // each marker one handle; each point of r1 one handle; no handle at all for the ends
+    for k in 0..3 {
+        assert!(ids.contains(&format!("layout.point.{k}.r1").as_str()), "point {k}");
+    }
+    assert!(!ids.contains(&"layout.point.3.r1") && !ids.iter().any(|i| i.contains("anchor") || i.contains("end.r2.") || i.starts_with("layout.point.") && i.ends_with(".r2")), "{ids:?}");
+    // the segments from the ends take a middle handle (start, end), the inner ones theirs; r2 (no points) one, its start
+    for id in ["layout.mid.start.r1", "layout.mid.0.r1", "layout.mid.1.r1", "layout.mid.end.r1", "layout.mid.start.r2"] {
+        assert!(ids.contains(&id), "{id}: {ids:?}");
+    }
+    assert!(!ids.contains(&"layout.mid.2.r1") && !ids.contains(&"layout.mid.end.r2"));
+    // no press can move an end: the only handle over an end's point is its marker's, which moves the marker (and the end
+    // with it), never the polyline's points
+    let before = points(&e, "r1");
+    let at_b = at(VIEW.to_screen(pos(&e, "b")));
+    let over_b: Vec<&str> = hs.iter().filter(|(_, r)| r.contains(at_b.0, at_b.1)).map(|(i, _)| i.as_str()).collect();
+    assert!(over_b.iter().all(|i| *i == "layout.marker.b" || i.starts_with("layout.mid.")), "{over_b:?}");
+    assert!(!e.pointer("layout.point.3.r1", PointerPhase::Down, at_b), "past the last point: no point to grab");
+    assert!(!e.pointer("layout.anchor.1.r1", PointerPhase::Down, at_b));
+    assert!(e.pointer("layout.marker.b", PointerPhase::Down, at_b));
+    e.pointer("layout.marker.b", PointerPhase::Up, (at_b.0 - 20, at_b.1 - 10));
+    assert_eq!(points(&e, "r1"), before, "the points stay");
+    assert_eq!(e.chain(0).last(), Some(&pos(&e, "b")), "the end moved with its marker");
+    assert_eq!(e.changes(), vec![LayoutEdit::Marker { id: "b".into(), pos: pos(&e, "b"), scale: 1.5 }], "a marker edit, no polyline edit");
+}
+
+#[test]
+fn a_segment_from_an_end_inserts_before_the_first_point_or_after_the_last() {
+    let mut e = ended();
+    let (a, b) = (pos(&e, "a"), pos(&e, "b"));
+    let p = points(&e, "r1");
+    let half = |x: [f32; 2], y: [f32; 2]| [round4((x[0] + y[0]) / 2.0), round4((x[1] + y[1]) / 2.0)];
+    assert!(e.pointer("layout.mid.start.r1", PointerPhase::Down, (0, 0)));
+    e.pointer("layout.mid.start.r1", PointerPhase::Cancel, (0, 0));
+    assert_eq!(points(&e, "r1")[0], half(a, p[0]), "halfway from the first end to the first point");
+    assert!(e.pointer("layout.mid.end.r1", PointerPhase::Down, (0, 0)));
+    e.pointer("layout.mid.end.r1", PointerPhase::Cancel, (0, 0));
+    assert_eq!(*points(&e, "r1").last().unwrap(), half(p[2], b), "halfway from the last point to the second end");
+    assert!(e.pointer("layout.mid.start.r2", PointerPhase::Down, (0, 0)));
+    e.pointer("layout.mid.start.r2", PointerPhase::Cancel, (0, 0));
+    assert_eq!(points(&e, "r2"), vec![half(b, a)], "no points: halfway between the ends");
+    assert!(!e.pointer("layout.mid.start.free", PointerPhase::Down, (0, 0)), "a free line has no end segments");
+    // Insert point: past the last point halfway to the second end; on an empty one halfway between the ends
+    let mut e = ended();
+    e.act(LayoutAct::Select(Some(Sel::Point(0, 2))));
+    e.act(LayoutAct::InsertPoint);
+    assert_eq!(points(&e, "r1")[3], half(p[2], b));
+    e.act(LayoutAct::Select(None));
+    e.act(LayoutAct::Line(1));
+    e.act(LayoutAct::InsertPoint);
+    assert_eq!(points(&e, "r2"), vec![half(b, a)]);
+}
+
+#[test]
+fn a_marker_without_an_image_is_its_small_pin() {
+    let mut e = ended();
+    let g = VIEW.to_screen(pos(&e, "b"));
+    let pin = pin_rect(g);
+    assert_eq!((pin.w, pin.h), (PIN_PX as i32, PIN_PX as i32));
+    assert!((pin.x + pin.w / 2 - g.0 as i32).abs() <= 1 && (pin.y + pin.h / 2 - g.1 as i32).abs() <= 1, "centred on the point");
+    let b = e.marker("b").unwrap().clone();
+    assert_eq!(e.marker_rect(&b), pin, "no image: the pin, not the {} px box", e.marker_box.side * b.scale);
+    let a = e.marker("a").unwrap().clone();
+    assert_eq!(e.marker_rect(&a), e.marker_box.rect(VIEW.to_screen(a.pos), a.scale), "an image: the ground-point box");
+    let hs = handles(&e);
+    assert_eq!(hs.iter().find(|(i, _)| i == "layout.marker.b").map(|h| h.1), Some(pin), "grabbed at the pin");
+    // the pin draws inside its box: the caller's picture there, else a dot
+    let draw = |e: &LayoutEditor| {
+        let mut g = gfx(640, 360);
+        let mut ui: Ui<LayoutAct> = Ui::new(&mut g, (-1, -1), true);
+        e.draw_stage(&mut ui, &|a| a);
+        drop(ui);
+        g.canvas.px
+    };
+    e.grid = false;
+    e.labels = false;
+    e.rings = false;
+    let dot = draw(&e);
+    let red = Rc::new(Image { w: 14, h: 14, px: [230u8, 20, 20, 255].repeat(14 * 14) });
+    let i = e.markers().iter().position(|m| m.id == "b").unwrap();
+    let mut markers = e.markers().to_vec();
+    markers[i].pin = Some(red);
+    let mut with_pin = LayoutEditor::new(markers, e.polylines().to_vec()).with_view(VIEW);
+    with_pin.marker_box = e.marker_box;
+    (with_pin.grid, with_pin.labels, with_pin.rings) = (false, false, false);
+    let pinned = draw(&with_pin);
+    let px = |buf: &[u8], x: i32, y: i32| {
+        let k = ((y * 640 + x) * 4) as usize;
+        [buf[k], buf[k + 1], buf[k + 2]]
+    };
+    // a corner of the pin box (inside it, away from the dot and the anchors)
+    let (cx, cy) = (pin.x + 1, pin.y + 1);
+    assert_eq!(px(&pinned, cx, cy), [230, 20, 20], "the caller's pin fills its 14 px box");
+    assert_ne!(px(&dot, cx, cy), [230, 20, 20]);
+    assert_eq!(with_pin.state()["markers"][i]["pin"], json!(true), "the agent link says it has a pin");
+    assert!(e.state()["markers"][i].get("pin").is_none(), "no pin: no key");
+    // marker_art off: the caller drew the pictures, the stage leaves the box as it was
+    let mut bare = with_pin.clone();
+    bare.marker_art = false;
+    assert_ne!(px(&draw(&bare), cx, cy), [230, 20, 20], "no picture drawn");
+    assert_eq!(handles(&bare), handles(&with_pin), "the same handles");
+}
+
+#[test]
+fn the_agent_link_names_a_polylines_ends() {
+    let e = ended();
+    let s = e.state();
+    assert_eq!(s["routes"][0], json!({"id": "r1", "points": [[0.1, 0.1], [0.3, 0.2], [0.6, 0.2]], "ends": ["a", "b"]}));
+    assert!(s["routes"][2].get("ends").is_none(), "a free line has none");
+    assert_eq!(editor().state()["routes"][0], json!({"id": "r1", "points": [[0.1, 0.1], [0.3, 0.2], [0.6, 0.2]]}), "unchanged for a line without ends");
 }

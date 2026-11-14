@@ -242,3 +242,33 @@ fn a_class_proficiency_role_and_an_item_theme() {
     let saved = fs::read_to_string(data.join("catalog/items.json")).unwrap();
     assert_eq!(saved.matches("\"theme\"").count(), 1, "only a themed item writes the key");
 }
+
+/// PR5-50 (`KIT-HOOKS-CLEANUP`, FB-212 (d)): a `train_proficiency` effect no class can take (no class holds a family of
+/// its role at the level it trains from, `to` - 1; the minor role's 1 -> 2) is one warning naming the role and the
+/// level, in the entry's warnings and the whole-catalog report; it is never an error.
+#[test]
+fn a_training_no_class_can_take_is_a_warning() {
+    let (_scratch, data) = scratch("train_warn");
+    base_rows(&data);
+    let train = |role: &str, to: i64| with(surgery("r_train"), "effects", json!([{"effect": "train_proficiency", "role": role, "to": to}]));
+    let warn = |role: &str, from: i64| format!("Effect 1 (train_proficiency): no class holds a {role} family at level {from} (the level this training starts from).");
+    // the base class holds no role at all
+    let v = store::view(&data);
+    assert_eq!(check::validate_entry(&v, RECIPES_KIND, &dict(train("minor", 2)), ""), Vec::<String>::new(), "no error");
+    assert_eq!(check::warnings_for(&v, RECIPES_KIND, &dict(train("minor", 2))), vec![warn("minor", 1)]);
+    // a class holding a minor family at level 1 and a secondary one at 2
+    let stats = json!({"STR": 12, "DEX": 10, "INT": 8, "CONS": 13, "PERC": 9, "KNOW": 10});
+    let prof = json!({"t_sword": {"level": 1, "role": "minor"}, "t_axe": {"level": 2, "role": "secondary"}});
+    write_kind(&data, "classes", json!([{"id": "adept", "name": "Adept", "base_stats": stats, "growth": stats, "skill_path": {}, "proficiency": prof}]));
+    let v = store::view(&data);
+    for (role, to) in [("minor", 2), ("secondary", 3)] {
+        assert_eq!(check::warnings_for(&v, RECIPES_KIND, &dict(train(role, to))), Vec::<String>::new(), "{role} {to}: a class can take it");
+    }
+    assert_eq!(check::warnings_for(&v, RECIPES_KIND, &dict(train("minor", 3))), vec![warn("minor", 2)], "no class holds its minor family at 2");
+    assert_eq!(check::warnings_for(&v, RECIPES_KIND, &dict(train("third", 3))), vec![warn("third", 2)], "no class holds a third family");
+    // the whole-catalog report names the row
+    write_kind(&data, RECIPES_KIND, json!([train("third", 3)]));
+    let report = check::warnings_all(&store::view(&data));
+    assert_eq!(report.get(&format!("{RECIPES_KIND}:r_train")), Some(&vec![warn("third", 2)]), "{report:?}");
+    assert!(store::check(&data).iter().all(|p| !p.contains("train_proficiency")), "never an error");
+}

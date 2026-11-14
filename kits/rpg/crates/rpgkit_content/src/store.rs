@@ -359,15 +359,56 @@ fn version_of(world: Option<&str>, kind: &str) -> i64 {
     }
 }
 
-/// Every entry of the file in storage form, as the save would write it: the document text.
+/// PR5-50 (FB-204): the kinds whose rows hold passive-grammar effects (a passive's `effects`, an item's `effects` and
+/// its `effect` modifiers), where a retired `spell_reach` is stored as `skill_reach`.
+const REACH_KINDS: [&str; 2] = ["items", "passives"];
+
+/// PR5-50 (FB-204): entry `e` of `kind` with each `spell_reach` effect in its stored form `skill_reach {reach, kind:
+/// SPELL}` (`rpgkit_data::SkillReach::migrated`); unchanged for another kind or without one.
+pub fn with_skill_reach(kind: &str, e: &Dict) -> Dict {
+    if !REACH_KINDS.contains(&kind) {
+        return e.clone();
+    }
+    let migrate_list = |v: &Value| -> Value {
+        match v.as_array() {
+            Some(list) => Value::Array(list.iter().map(|fx| fx.as_object().and_then(rpgkit_data::SkillReach::migrated).map(Value::Object).unwrap_or_else(|| fx.clone())).collect()),
+            None => v.clone(),
+        }
+    };
+    let mut out = e.clone();
+    if let Some(fx) = e.get("effects") {
+        out.insert("effects".into(), migrate_list(fx));
+    }
+    if let Some(Value::Array(mods)) = e.get("modifiers") {
+        let mods = mods
+            .iter()
+            .map(|m| match m.as_object().and_then(|o| o.get("effect")).and_then(Value::as_object).and_then(rpgkit_data::SkillReach::migrated) {
+                Some(fx) => {
+                    let mut m = m.as_object().cloned().unwrap_or_default();
+                    m.insert("effect".into(), Value::Object(fx));
+                    Value::Object(m)
+                }
+                None => m.clone(),
+            })
+            .collect();
+        out.insert("modifiers".into(), Value::Array(mods));
+    }
+    out
+}
+
+/// Every entry of the file in storage form, as the save would write it: the document text. PR5-50 (FB-204): an entry
+/// the write changes (one not stored exactly so in the file now) stores its `spell_reach` effects as `skill_reach`
+/// (`with_skill_reach`); every untouched entry keeps its stored form, so a re-save without changes stays byte-identical.
 fn rewrite(data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -> Result<String, String> {
     let game = if world.is_none() { game_kind(kind) } else { None };
     let families = derived_families(data_dir);
+    let on_disk = if world.is_none() && REACH_KINDS.contains(&kind) { raw_entries(&file_of(data_dir, world, kind)) } else { Vec::new() };
     let mut stored = Vec::new();
     for e in entries {
         stored.push(Value::Object(match (world, game) {
             (Some(_), _) => world_storage(kind, &without_empty_follow_ups(kind, &without_empty_expressions(kind, e))),
             (None, Some(_)) => game_storage(kind, e),
+            (None, None) if REACH_KINDS.contains(&kind) && !on_disk.contains(e) => catalog_storage(kind, &with_skill_reach(kind, &without_empty_follow_ups(kind, e)), &families)?,
             (None, None) => catalog_storage(kind, &without_empty_follow_ups(kind, e), &families)?,
         }));
     }

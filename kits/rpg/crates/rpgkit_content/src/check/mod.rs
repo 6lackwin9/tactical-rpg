@@ -428,6 +428,8 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
         portrait::KIND => portrait::warnings(&e),
         expression_fx::KIND => expression_fx::warnings(&e),
         ruleset::KIND => ruleset::warnings(&e),
+        // PR5-50 (FB-212 (d)): a training no class can take
+        recipe::KIND => recipe::warnings(v, &e),
         _ => Vec::new(),
     }
 }
@@ -530,6 +532,13 @@ pub fn warnings_all(v: &View) -> Report {
     // CLN-44: without the default `classic` row its battles play the built-in classic values
     if !v.has(ruleset::KIND, rpgkit_rules::ruleset::CLASSIC) {
         out.insert(format!("{}:missing", ruleset::KIND), vec![rpgkit_rules::ruleset::fallback_note(rpgkit_rules::ruleset::CLASSIC)]);
+    }
+    // PR5-50 (FB-212 (d)): the recipe rows' warnings (`recipes:<id>`)
+    for e in v.entries(recipe::KIND) {
+        let found = recipe::warnings(v, e);
+        if !found.is_empty() {
+            out.insert(format!("{}:{}", recipe::KIND, json::s(e, "id")), found);
+        }
     }
     // INPUT1 1.7: the ruleset rows' warnings (`rulesets:<id>`)
     for e in v.entries(ruleset::KIND) {

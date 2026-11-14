@@ -196,3 +196,24 @@ fn the_writer_stores_the_schema_fields_and_resaves_byte_for_byte() {
     assert_eq!(v.typed.dojo_presets["t_duel"].passives, vec!["p_meter".to_string()], "the written row loads");
     assert!(ours(&check::validate_all(&v)).is_empty());
 }
+
+/// PR5-50 (`KIT-HOOKS-CLEANUP`, FB-189): `gear` names catalog items: an unknown one is an error in the Forge's check, in
+/// the folder check (`store::check`), and the writer refuses to remove (or rename away) an item a preset's gear still
+/// names, since that would add the error.
+#[test]
+fn gear_item_references_are_checked_and_guard_their_items() {
+    let (_scratch, data) = scratch("gear_refs");
+    catalog(&data, Some(json!([duel()])));
+    let v = store::view(&data);
+    assert_eq!(errors_of(&v, &json!({"gear": {"main_hand": "t_gone"}})), vec!["Gear main_hand: unknown item 't_gone'.".to_string()]);
+    assert!(store::check(&data).iter().all(|p| !p.contains("Dojo preset")), "the fixture checks clean");
+    // removing the item the preset wears is refused, and the file stays as it was
+    let items = data.join("catalog/items.json");
+    let before = fs::read_to_string(&items).unwrap();
+    let Err(refused) = store::remove(&data, None, "items", "t_blade") else { panic!("the preset still names it") };
+    assert!(refused.iter().any(|p| p.contains("Dojo preset 't_duel'") && p.contains("unknown item 't_blade'")), "{refused:?}");
+    assert_eq!(fs::read_to_string(&items).unwrap(), before, "put back");
+    // a preset file naming a missing item is a folder error (the loader skips the row)
+    catalog(&data, Some(json!([duel(), {"id": "t_bad", "name": "Bad", "gear": {"main_hand": "t_gone"}}])));
+    assert!(store::check(&data).iter().any(|p| p.contains("Dojo preset 't_bad': Gear main_hand: unknown item 't_gone'.")), "{:?}", store::check(&data));
+}

@@ -14,6 +14,11 @@
 //! last saved (`dirty`), and Save, in a native debug build only (`writes_allowed`, as the frame tuner), leaves a request
 //! the caller takes (`take_save`) and acknowledges (`mark_saved`). The agent link: `state` (a screen's
 //! `layout_markers`, `STATE_KEY`) and `command` (`layout {id, pos, scale}`, `layout {route, points}`, `layout_markers`).
+//!
+//! PR5-49 (MAP-POLISH1): a polyline may name two markers as its ends (`Polyline::ends`): the stage draws them as fixed
+//! anchors (no handle: they move only with their markers) and a live smooth preview through end, points, end (`spline`,
+//! `LayoutEditor::preview`); a segment from an end takes a middle handle too. A marker without an image is drawn as its
+//! `PIN_PX` pin (the caller's small `pin` image, else a dot), boxed and grabbed at that size, not the marker box.
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::screen::{Key, PointerPhase};
@@ -38,6 +43,9 @@ pub const UNDO_MAX: usize = 256;
 pub const GRID_STEP: f32 = 0.1;
 /// The prefix of the pane's widget ids.
 pub const ID: &str = "layout";
+/// The side of a marker's pin (logical px): a marker without an image is drawn and grabbed in this square, centred on
+/// its point.
+pub const PIN_PX: f32 = 14.0;
 
 /// A position kept to 4 decimals (a saved file reads as typed, no float noise).
 fn round4(v: f32) -> f32 {
@@ -136,11 +144,13 @@ impl MarkerBox {
     }
 }
 
-/// A placed picture: its id (the caller's key), image (None draws a pin), label, position and scale.
+/// A placed picture: its id (the caller's key), image (None draws its pin), label, position and scale; `pin`: the small
+/// picture drawn at `PIN_PX` when there is no image (None: a dot).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Marker {
     pub id: String,
     pub image: Option<Rc<Image>>,
+    pub pin: Option<Rc<Image>>,
     pub label: String,
     pub pos: [f32; 2],
     pub scale: f32,
@@ -148,21 +158,58 @@ pub struct Marker {
 
 impl Marker {
     pub fn new(id: &str, label: &str, pos: [f32; 2], scale: f32) -> Self {
-        Self { id: id.into(), image: None, label: label.into(), pos, scale }
+        Self { id: id.into(), image: None, pin: None, label: label.into(), pos, scale }
     }
 }
 
-/// A line through points (positions as markers have).
+/// A line through points (positions as markers have); `ends`: the ids of the two markers it runs between (its points
+/// are the ones in between, from the first end to the second), or None for a free line.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Polyline {
     pub id: String,
     pub points: Vec<[f32; 2]>,
+    pub ends: Option<[String; 2]>,
 }
 
 impl Polyline {
     pub fn new(id: &str, points: Vec<[f32; 2]>) -> Self {
-        Self { id: id.into(), points }
+        Self { id: id.into(), points, ends: None }
     }
+
+    /// The polyline running between markers `from` and `to`.
+    pub fn with_ends(mut self, from: &str, to: &str) -> Self {
+        self.ends = Some([from.into(), to.into()]);
+        self
+    }
+}
+
+/// A smooth line through `pts` (Catmull-Rom as cubic Béziers, the end points repeated), sampled about every 2 px of each
+/// segment; every given point lies on it. Two points give the straight segment, fewer give nothing to draw.
+pub fn spline(pts: &[(f32, f32)]) -> Vec<(f32, f32)> {
+    if pts.len() < 3 {
+        return if pts.len() == 2 { pts.to_vec() } else { Vec::new() };
+    }
+    let mut out = vec![pts[0]];
+    for i in 0..pts.len() - 1 {
+        let (p0, p1, p2, p3) = (pts[i.saturating_sub(1)], pts[i], pts[i + 1], pts[(i + 2).min(pts.len() - 1)]);
+        let c1 = (p1.0 + (p2.0 - p0.0) / 6.0, p1.1 + (p2.1 - p0.1) / 6.0);
+        let c2 = (p2.0 - (p3.0 - p1.0) / 6.0, p2.1 - (p3.1 - p1.1) / 6.0);
+        let len = ((p2.0 - p1.0).powi(2) + (p2.1 - p1.1).powi(2)).sqrt();
+        let steps = (len / 2.0).ceil().max(1.0) as usize;
+        for k in 1..=steps {
+            let t = k as f32 / steps as f32;
+            let u = 1.0 - t;
+            let (a, b, c, e) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+            out.push((a * p1.0 + b * c1.0 + c * c2.0 + e * p2.0, a * p1.1 + b * c1.1 + c * c2.1 + e * p2.1));
+        }
+    }
+    out
+}
+
+/// The pin box of a marker without an image on ground point `g` (logical px): `PIN_PX` square, centred on it.
+pub fn pin_rect(g: (f32, f32)) -> Rect {
+    let side = PIN_PX as i32;
+    Rect::new(g.0 as i32 - side / 2, g.1 as i32 - side / 2, side, side)
 }
 
 /// What is selected: a marker (index) or a polyline's point (polyline index, point index).
@@ -258,6 +305,9 @@ pub struct LayoutEditor {
     base_markers: Vec<([f32; 2], f32)>,
     base_lines: Vec<Vec<[f32; 2]>>,
     pub background: Option<Rc<Image>>,
+    /// Whether the stage paints the markers' images and pins; false when the caller drew them (a live screen edited in
+    /// place): the boxes, rings, labels and handles stay.
+    pub marker_art: bool,
     /// Whether the stage paints its own ground (the stage fill and the background); false draws the pane over what the
     /// caller drew there (a live screen edited in place).
     pub backdrop: bool,
@@ -287,6 +337,7 @@ impl LayoutEditor {
             base_markers,
             base_lines,
             background: None,
+            marker_art: true,
             backdrop: true,
             marker_box: MarkerBox::default(),
             view: Cell::new(Viewport::default()),
@@ -330,6 +381,39 @@ impl LayoutEditor {
 
     pub fn polyline(&self, id: &str) -> Option<&Polyline> {
         self.polylines.iter().find(|l| l.id == id)
+    }
+
+    /// The box marker `m` is drawn and grabbed in: its image by the ground-point rule (`marker_box`), else its pin
+    /// (`pin_rect`, `PIN_PX`).
+    pub fn marker_rect(&self, m: &Marker) -> Rect {
+        let g = self.view().to_screen(m.pos);
+        if m.image.is_some() { self.marker_box.rect(g, m.scale) } else { pin_rect(g) }
+    }
+
+    /// The positions of polyline `li`'s two end markers; None for a free line or an end naming no marker.
+    pub fn end_points(&self, li: usize) -> Option<([f32; 2], [f32; 2])> {
+        let [a, b] = self.polylines.get(li)?.ends.as_ref()?;
+        Some((self.marker(a)?.pos, self.marker(b)?.pos))
+    }
+
+    /// Polyline `li`'s whole run: its first end, its points, its second end (only its points without both ends).
+    pub fn chain(&self, li: usize) -> Vec<[f32; 2]> {
+        let Some(l) = self.polylines.get(li) else { return Vec::new() };
+        match self.end_points(li) {
+            Some((a, b)) => std::iter::once(a).chain(l.points.iter().copied()).chain(std::iter::once(b)).collect(),
+            None => l.points.clone(),
+        }
+    }
+
+    /// The live smooth preview of polyline `li` on screen (logical px): `spline` through its run (`chain`) when it has
+    /// both ends; none for a free line.
+    pub fn preview(&self, li: usize) -> Vec<(f32, f32)> {
+        if self.end_points(li).is_none() {
+            return Vec::new();
+        }
+        let v = self.view();
+        let pts: Vec<(f32, f32)> = self.chain(li).into_iter().map(|p| v.to_screen(p)).collect();
+        spline(&pts)
     }
 
     /// The image marker `id` draws (None: a pin); false when there is no such marker. Not an edit.
@@ -492,10 +576,15 @@ impl LayoutEditor {
             }
         };
         let pts = &self.polylines[li].points;
-        let p = match (pts.get(k), pts.get(k.wrapping_add(1)), k.checked_sub(1).and_then(|j| pts.get(j))) {
-            (Some(a), Some(b), _) => [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0],
-            (Some(a), None, Some(z)) => [a[0] + (a[0] - z[0]) / 2.0, a[1] + (a[1] - z[1]) / 2.0],
-            (Some(a), None, None) => [a[0] + 0.05, a[1]],
+        let half = |a: &[f32; 2], b: &[f32; 2]| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+        // a polyline between two markers: past its last point, halfway to its second end; empty, halfway between them
+        let ends = self.end_points(li);
+        let p = match (pts.get(k), pts.get(k.wrapping_add(1)), k.checked_sub(1).and_then(|j| pts.get(j)), ends) {
+            (Some(a), Some(b), _, _) => half(a, b),
+            (Some(a), None, _, Some((_, end))) => half(a, &end),
+            (Some(a), None, Some(z), None) => [a[0] + (a[0] - z[0]) / 2.0, a[1] + (a[1] - z[1]) / 2.0],
+            (Some(a), None, None, None) => [a[0] + 0.05, a[1]],
+            (None, _, _, Some((a, b))) => half(&a, &b),
             _ => [0.5, 0.5],
         };
         Some(self.insert_at(li, k.wrapping_add(1), p))
@@ -658,6 +747,19 @@ impl LayoutEditor {
                         return false;
                     }
                     Sel::Point(li, k)
+                } else if let Some((side, line)) = rest.strip_prefix("mid.start.").map(|l| (0, l)).or_else(|| rest.strip_prefix("mid.end.").map(|l| (1, l))) {
+                    // a segment from an end: inserts before the first point or after the last
+                    let Some(li) = self.line_by_id(line) else { return false };
+                    let Some((a, b)) = self.end_points(li) else { return false };
+                    let pts = &self.polylines[li].points;
+                    let (from, to, at) = match (side, pts.first(), pts.last()) {
+                        (0, Some(p), _) => (a, *p, 0),
+                        (1, _, Some(p)) => (*p, b, pts.len()),
+                        (0, None, _) => (a, b, 0),
+                        _ => return false,
+                    };
+                    self.insert_at(li, at, [(from[0] + to[0]) / 2.0, (from[1] + to[1]) / 2.0]);
+                    Sel::Point(li, at)
                 } else if let Some((k, line)) = rest.strip_prefix("mid.").and_then(|r| r.split_once('.')) {
                     let (Ok(k), Some(li)) = (k.parse::<usize>(), self.line_by_id(line)) else { return false };
                     let pts = &self.polylines[li].points;
@@ -793,12 +895,30 @@ impl LayoutEditor {
         }
     }
 
+    /// A marker for the agent link; `pin` (true) only when it has a pin picture.
+    fn marker_json(&self, m: &Marker) -> Value {
+        let mut out = json!({"id": m.id, "label": m.label, "pos": pair(m.pos), "scale": num(m.scale), "image": m.image.is_some()});
+        if m.pin.is_some() {
+            out["pin"] = json!(true);
+        }
+        out
+    }
+
+    /// A polyline for the agent link; `ends` (its two markers' ids) only when it runs between two.
+    fn line_json(&self, l: &Polyline) -> Value {
+        let mut out = json!({"id": l.id, "points": l.points.iter().map(|p| pair(*p)).collect::<Vec<_>>()});
+        if let Some(ends) = &l.ends {
+            out["ends"] = json!(ends);
+        }
+        out
+    }
+
     /// The agent link's view of the pane (a screen's `layout_markers`).
     pub fn state(&self) -> Value {
         let v = self.view();
         json!({
-            "markers": self.markers.iter().map(|m| json!({"id": m.id, "label": m.label, "pos": pair(m.pos), "scale": num(m.scale), "image": m.image.is_some()})).collect::<Vec<_>>(),
-            "routes": self.polylines.iter().map(|l| json!({"id": l.id, "points": l.points.iter().map(|p| pair(*p)).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+            "markers": self.markers.iter().map(|m| self.marker_json(m)).collect::<Vec<_>>(),
+            "routes": self.polylines.iter().map(|l| self.line_json(l)).collect::<Vec<_>>(),
             "selected": self.sel_json(),
             "route": self.polylines.get(self.line).map(|l| l.id.clone()),
             "grid": self.grid, "labels": self.labels, "rings": self.rings,
@@ -921,22 +1041,30 @@ impl LayoutEditor {
         for (a, b) in [((ax, ay), (ax + aw, ay)), ((ax + aw, ay), (ax + aw, ay + ah)), ((ax + aw, ay + ah), (ax, ay + ah)), ((ax, ay + ah), (ax, ay))] {
             ui.p.line(a.0, a.1, b.0, b.1, gold, 3.0);
         }
-        for (li, l) in self.polylines.iter().enumerate() {
+        for li in 0..self.polylines.len() {
             let col = if li == self.line { t.info } else { with_alpha(t.info, 140) };
-            for w in l.points.windows(2) {
+            let preview = self.preview(li);
+            // between two markers: the straight run faint under its live smooth preview
+            let guide = if preview.is_empty() { col } else { with_alpha(col, 90) };
+            for w in self.chain(li).windows(2) {
                 let (a, b) = (v.to_screen(w[0]), v.to_screen(w[1]));
-                ui.p.line(a.0, a.1, b.0, b.1, col, 0.0);
+                ui.p.line(a.0, a.1, b.0, b.1, guide, if preview.is_empty() { 0.0 } else { 2.0 });
+            }
+            for w in preview.windows(2) {
+                ui.p.line(w[0].0, w[0].1, w[1].0, w[1].1, if li == self.line { t.gold } else { with_alpha(t.gold, 150) }, 0.0);
             }
         }
         let small = ui.p.line_h(SMALL);
         for (i, m) in self.markers.iter().enumerate() {
             let g = v.to_screen(m.pos);
-            let b = self.marker_box.rect(g, m.scale);
-            match &m.image {
-                Some(img) => ui.p.image(img, b),
-                None => {
-                    ui.p.panel(b, rgba(0, 0, 0, 0), with_alpha(t.dim, 160), 0.0);
-                    ui.p.ellipse(g.0, g.1, 4.0, 4.0, t.gold);
+            let b = self.marker_rect(m);
+            match (&m.image, &m.pin) {
+                _ if !self.marker_art => {}
+                (Some(img), _) => ui.p.image(img, b),
+                (None, Some(pin)) => ui.p.image(pin, b),
+                (None, None) => {
+                    ui.p.ellipse(g.0, g.1, 4.0, 4.0, rgba(0, 0, 0, 160));
+                    ui.p.ellipse(g.0, g.1, 3.0, 3.0, t.gold);
                 }
             }
             if self.rings {
@@ -953,11 +1081,33 @@ impl LayoutEditor {
             ui.handle(&format!("{ID}.marker.{}", m.id), b, &m.label, Some(wrap(LayoutAct::Select(Some(Sel::Marker(i))))), tip(&m.label, "Drag to move it; the arrows nudge it (Shift: more); + and - size it."));
         }
         for (li, l) in self.polylines.iter().enumerate() {
-            for (k, w) in l.points.windows(2).enumerate() {
+            // a polyline between two markers: its ends are fixed anchors (drawn, never a handle: they move with their
+            // markers), and the segments from them take a middle handle too
+            let ends = self.end_points(li);
+            let run = self.chain(li);
+            let last = run.len().saturating_sub(2);
+            for (k, w) in run.windows(2).enumerate() {
                 let (a, b) = (v.to_screen(w[0]), v.to_screen(w[1]));
                 let (mx, my) = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+                let id = match ends {
+                    Some(_) if k == 0 => format!("{ID}.mid.start.{}", l.id),
+                    Some(_) if k == last => format!("{ID}.mid.end.{}", l.id),
+                    Some(_) => format!("{ID}.mid.{}.{}", k - 1, l.id),
+                    None => format!("{ID}.mid.{k}.{}", l.id),
+                };
                 ui.p.circle(mx, my, 2.5, with_alpha(t.info, 200));
-                ui.handle(&format!("{ID}.mid.{k}.{}", l.id), Rect::new(mx.round() as i32 - 3, my.round() as i32 - 3, 7, 7), "+", None, tip("Insert", "Drag from a segment's middle to add a point there."));
+                ui.handle(&id, Rect::new(mx.round() as i32 - 3, my.round() as i32 - 3, 7, 7), "+", None, tip("Insert", "Drag from a segment's middle to add a point there."));
+            }
+            if let Some((a, b)) = ends {
+                // a hollow diamond in the line's colour (the points are filled squares; a pin shows through): fixed, not grabbed
+                let col = if li == self.line { t.info } else { with_alpha(t.info, 160) };
+                for e in [a, b] {
+                    let (ex, ey) = v.to_screen(e);
+                    let r = 5.0;
+                    for (p, q) in [((ex, ey - r), (ex + r, ey)), ((ex + r, ey), (ex, ey + r)), ((ex, ey + r), (ex - r, ey)), ((ex - r, ey), (ex, ey - r))] {
+                        ui.p.line(p.0, p.1, q.0, q.1, col, 0.0);
+                    }
+                }
             }
             for (k, p) in l.points.iter().enumerate() {
                 let s = v.to_screen(*p);

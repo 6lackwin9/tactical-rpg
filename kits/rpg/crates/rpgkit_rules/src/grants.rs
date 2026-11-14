@@ -21,7 +21,7 @@ const UNLOCK_LEVELS_MAX: i32 = 2;
 /// FB-26: how a target folds a new value into what the unit holds.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Combine {
-    /// Added: `stat`, `ap_regen`, `status_potency`, `spell_reach`, `skill_potency` (pooled per family or group, read as
+    /// Added: `stat`, `ap_regen`, `status_potency`, `skill_reach` (per filter, read per skill), `skill_potency` (pooled per family or group, read as
     /// 1 + sum), `forced_move` tiles, a band's `crit`.
     Sum,
     /// Added, then capped: `resist` per status.
@@ -87,8 +87,9 @@ pub enum Target {
     ApRegen,
     SkillPotency(SkillSet),
     StatusPotency,
-    /// FB-25: no shipped row uses it (U1 moved reach to the skill); kept for the fixture catalog until the row migration.
-    SpellReach,
+    /// PR5-50 (FB-204): the reach bonus of the skills that match the filters ("" = any; `rpgkit_data::SkillReach`; the
+    /// retired `spell_reach` reads as kind `SPELL`).
+    SkillReach { intent: String, kind: String },
     /// The reveal range (capped at the read).
     Foresight,
     /// The multiplier for stagger from an action of at most `max_blocks` blocks (0 = any).
@@ -113,7 +114,7 @@ impl Target {
             | Target::ApRegen
             | Target::SkillPotency(_)
             | Target::StatusPotency
-            | Target::SpellReach
+            | Target::SkillReach { .. }
             | Target::ForcedTiles
             | Target::Crit
             | Target::HealTaken => Combine::Sum,
@@ -247,7 +248,10 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         "skill" => vec![Grant::GrantSkill(SkillGrant::Learn(value::string(e, "skill", "")))],
         "skill_potency" => vec![modifier(Target::SkillPotency(skill_set(e)), value::float(e, "value", 0.0))],
         "status_potency" => vec![modifier(Target::StatusPotency, int("value", 0))],
-        "spell_reach" => vec![modifier(Target::SpellReach, int("value", 0))],
+        rpgkit_data::SKILL_REACH | rpgkit_data::SPELL_REACH_ALIAS => {
+            let r = rpgkit_data::SkillReach::from_effect(e).unwrap_or(rpgkit_data::SkillReach { reach: 0, intent: String::new(), kind: String::new() });
+            vec![modifier(Target::SkillReach { intent: r.intent, kind: r.kind }, f64::from(r.reach))]
+        }
         "unlock" => vec![Grant::GrantSkill(SkillGrant::Unlock { set: skill_set(e), levels: value::int(e, "levels", 0).clamp(0, UNLOCK_LEVELS_MAX) })],
         "foresight" => vec![modifier(Target::Foresight, f64::from(value::int(e, "range", 0).clamp(0, FORESIGHT_RANGE_MAX)))],
         "stagger_taken" => {
