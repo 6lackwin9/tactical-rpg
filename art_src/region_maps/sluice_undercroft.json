@@ -1,0 +1,476 @@
+{
+ "id": "sunk_ward_undercroft",
+ "name": "Sunk Ward: the Sluice Undercroft",
+ "rows": [
+  "##############..##############",
+  "####......~~~~..~~~~....###..#",
+  "#.......##~~~~..~~~~##..###..#",
+  "#.......##~~~~..~~~~##.......#",
+  "#..###....~~~~..~~~~.........#",
+  "#..###....~~~~..~~~~.....#...#",
+  "#........#~~~~..~~~~#......###",
+  "##........##...............###",
+  "##....................##.....#",
+  "#............................#",
+  "#.......##..........##.......#",
+  "#.......##....#.....##.......#",
+  "#............................#",
+  "#....#..................#....#",
+  "#....#..................#....#",
+  "#.......................#.##.#",
+  "#....#..................#....#",
+  ".....#.##.##.####.##.##...##.#",
+  "#....#..................#....#",
+  "##############################"
+ ],
+ "zones": [
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+ ],
+ "zone_legend": {
+  "h": {
+   "id": "hub",
+   "kind": "safe"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 3,
+   "y": 17
+  },
+  {
+   "id": "road",
+   "x": 0,
+   "y": 17
+  },
+  {
+   "id": "gate",
+   "x": 14,
+   "y": 0
+  },
+  {
+   "id": "gate_in",
+   "x": 15,
+   "y": 1
+  },
+  {
+   "id": "npc_a",
+   "x": 4,
+   "y": 6
+  },
+  {
+   "id": "npc_b",
+   "x": 25,
+   "y": 3
+  },
+  {
+   "id": "npc_c",
+   "x": 12,
+   "y": 8
+  },
+  {
+   "id": "npc_d",
+   "x": 17,
+   "y": 7
+  },
+  {
+   "id": "lore_a",
+   "x": 13,
+   "y": 7
+  },
+  {
+   "id": "chest_a",
+   "x": 1,
+   "y": 9
+  },
+  {
+   "id": "rest",
+   "x": 14,
+   "y": 12
+  },
+  {
+   "id": "crypts",
+   "x": 24,
+   "y": 17
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "sluice_arch_w",
+   "art": "sluice_arch",
+   "x": 12,
+   "y": 0,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "sluice_arch_e",
+   "art": "sluice_arch",
+   "x": 16,
+   "y": 0,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": true
+  },
+  {
+   "id": "skiff",
+   "art": "varka_skiff",
+   "x": 17,
+   "y": 3,
+   "w": 2,
+   "h": 1,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "board",
+   "art": "mission_board",
+   "x": 10,
+   "y": 7,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "basin_post_w",
+   "art": "ring_post",
+   "x": 9,
+   "y": 6,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "basin_post_e",
+   "art": "ring_post",
+   "x": 20,
+   "y": 6,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pier_8_2",
+   "art": "vault_pillar",
+   "x": 8,
+   "y": 2,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pier_8_10",
+   "art": "vault_pillar",
+   "x": 8,
+   "y": 10,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pier_20_2",
+   "art": "vault_pillar",
+   "x": 20,
+   "y": 2,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pier_20_10",
+   "art": "vault_pillar",
+   "x": 20,
+   "y": 10,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "retorts",
+   "art": "retort_shelf",
+   "x": 1,
+   "y": 1,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "slab",
+   "art": "apothecary_slab",
+   "x": 3,
+   "y": 4,
+   "w": 3,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "herb_rack",
+   "art": "herb_rack",
+   "x": 1,
+   "y": 7,
+   "w": 1,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "hearth",
+   "art": "tinker_hearth",
+   "x": 24,
+   "y": 1,
+   "w": 3,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "anvil",
+   "art": "anvil",
+   "x": 25,
+   "y": 5,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "scrap",
+   "art": "scrap_heap",
+   "x": 27,
+   "y": 6,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tool_rack",
+   "art": "crate_stack",
+   "x": 22,
+   "y": 8,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "brazier",
+   "art": "brazier",
+   "x": 14,
+   "y": 11,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bunk_1",
+   "art": "kiln_bunk",
+   "x": 7,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bunk_2",
+   "art": "kiln_bunk",
+   "x": 10,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bunk_3",
+   "art": "kiln_bunk",
+   "x": 13,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bunk_4",
+   "art": "kiln_bunk",
+   "x": 15,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bunk_5",
+   "art": "kiln_bunk",
+   "x": 18,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "bunk_6",
+   "art": "kiln_bunk",
+   "x": 21,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crypt_bars",
+   "art": "crypt_bars",
+   "x": 24,
+   "y": 14,
+   "w": 1,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "stasis_1",
+   "art": "stasis_slab",
+   "x": 26,
+   "y": 15,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "stasis_2",
+   "art": "stasis_slab",
+   "x": 26,
+   "y": 17,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "ladder",
+   "art": "iron_ladder",
+   "x": 0,
+   "y": 15,
+   "w": 1,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "ffffffffffffffiiffffffffffffff",
+  "ffffffffffwwwwiiwwwwffsssssssf",
+  "ffffffffffwwwwiiwwwwffsssssssf",
+  "ffffffffffwwwwiiwwwwffsssssssf",
+  "ffffffffffwwwwiiwwwwffsssssssf",
+  "ffffffffffwwwwiiwwwwffsssssssf",
+  "ffffffffffwwwwiiwwwwffsssssssf",
+  "ffffffffffffffffffffffsssssssf",
+  "ffffffffffffffffffffffsssssssf",
+  "fffffffffccccccccccccfsssssssf",
+  "fffffffffccccccccccccfffffffff",
+  "fffffffffccccccccccccfffffffff",
+  "fffffffffccccccccccccfffffffff",
+  "fssssffffccccccccccccffffoooof",
+  "fssssfmmmmmmmmmmmmmmmmmmfoooof",
+  "fssssffffffffffffffffffffoooof",
+  "fssssffffffffffffffffffffoooof",
+  "sssssfmmmmmmmmmmmmmmmmmmfoooof",
+  "fssssfmmmmmmmmmmmmmmmmmmfoooof",
+  "ffffffffffffffffffffffffffffff"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud",
+  "o": "moss",
+  "i": "iron_catwalk",
+  "w": "water"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the ladder foot)",
+  "road": "exit `road`: up the ladder, World map: the Sunk Ward",
+  "gate": "exit `gate`: down the sluice gate to drowned_runoff_grate (to_anchor `sluice_in`)",
+  "gate_in": "arrival from the Grate (the Grate's `sluice` exit to_anchor)",
+  "npc_a": "Sabina at the Apothecary's Slab",
+  "npc_b": "Berek at the Tinker's Hearth",
+  "npc_c": "Talia at the mission board",
+  "npc_d": "Widow Varka at her moored skiff",
+  "lore_a": "Ivo beside Talia (after the Toll-Pen rescue)",
+  "chest_a": "the stash (herb rack corner)",
+  "rest": "the brazier: rest and the bunk roster",
+  "crypts": "the Isolation Crypts' door (Stage IV operatives, stasis slots)"
+ },
+ "location": "sluice_undercroft"
+}

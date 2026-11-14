@@ -52,7 +52,7 @@ So 8 places share 2 generic templates. Each landmark picture is already the best
 place seen from above, with its features (the Kiln's chimneys, the Vats' tanks, the Grate over black water). Acts 2
 and 3 have no location data yet (`docs/specs/ACTS23.md`: "two act regions" to author), so their region maps wait.
 
-## 4. Proposed plan for the session (pending Design's answers to AO-04)
+## 4. Proposed plan for the session (Design answered AO-04; steps 2-3 started 2026-11-14: `art_src/region_maps/`, [sunk_ward_props.md](sunk_ward_props.md))
 
 1. **Sunk Ward ground set** (`sunk_streets`): REGIONGROUND1-A3's nine textures (soot_yard x2, cobble_road, flagstone,
    mud, moss, iron_catwalk, tallow, water; prompts and tones in REGIONGROUND1 section 7). Approved, but it waits on

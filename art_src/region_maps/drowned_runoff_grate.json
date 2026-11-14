@@ -1,0 +1,352 @@
+{
+ "id": "sunk_ward_runoff_grate",
+ "name": "Sunk Ward: the Drowned Runoff Grate",
+ "rows": [
+  "####################.###########",
+  "####################.###########",
+  "###################~.~##########",
+  "#.....~....#.......~.~.........#",
+  "#.#.#.~............~.~.........#",
+  "#.....~~~..........~.~.........#",
+  "#......~~~~~~~~~~~~~.~~........#",
+  "#.......#~~~.........~~#.......#",
+  "#........~~~........~~~.........",
+  "#........~~~........~~~........#",
+  "#........~~~........~~~........#",
+  "#.......#~~~~~~..~~~~~~#.......#",
+  "#..........#........#..........#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "#..............................#",
+  "#......####..........####......#",
+  "#..............................#",
+  "####.######################.####"
+ ],
+ "zones": [
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg",
+  "gggggggggggggggggggggggggggggggg"
+ ],
+ "zone_legend": {
+  "g": {
+   "id": "grate",
+   "kind": "safe"
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 15,
+   "y": 17
+  },
+  {
+   "id": "streets_w",
+   "x": 4,
+   "y": 19
+  },
+  {
+   "id": "streets_e",
+   "x": 27,
+   "y": 19
+  },
+  {
+   "id": "sluice",
+   "x": 20,
+   "y": 0
+  },
+  {
+   "id": "sluice_in",
+   "x": 20,
+   "y": 3
+  },
+  {
+   "id": "tablet",
+   "x": 3,
+   "y": 5
+  },
+  {
+   "id": "culvert",
+   "x": 31,
+   "y": 8
+  },
+  {
+   "id": "grate",
+   "x": 15,
+   "y": 8
+  }
+ ],
+ "paths": {},
+ "props": [
+  {
+   "id": "drain_w",
+   "art": "drain_arch",
+   "x": 5,
+   "y": 1,
+   "w": 3,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tunnel_w",
+   "art": "sluice_tunnel",
+   "x": 18,
+   "y": 1,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tunnel_e",
+   "art": "sluice_tunnel",
+   "x": 21,
+   "y": 1,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": true
+  },
+  {
+   "id": "grate",
+   "art": "drain_grate",
+   "x": 12,
+   "y": 7,
+   "w": 8,
+   "h": 4,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "post_1",
+   "art": "ring_post",
+   "x": 8,
+   "y": 7,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "post_2",
+   "art": "ring_post",
+   "x": 8,
+   "y": 11,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "post_3",
+   "art": "ring_post",
+   "x": 23,
+   "y": 7,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "post_4",
+   "art": "ring_post",
+   "x": 23,
+   "y": 11,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "post_5",
+   "art": "ring_post",
+   "x": 11,
+   "y": 12,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "post_6",
+   "art": "ring_post",
+   "x": 20,
+   "y": 12,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tablet_1",
+   "art": "lock_tablet",
+   "x": 2,
+   "y": 4,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tablet_2",
+   "art": "lock_tablet",
+   "x": 4,
+   "y": 4,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "silt",
+   "art": "silt_bank",
+   "x": 1,
+   "y": 6,
+   "w": 4,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "lantern",
+   "art": "lantern_pole",
+   "x": 11,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "steps_w",
+   "art": "stone_steps",
+   "x": 3,
+   "y": 16,
+   "w": 3,
+   "h": 3,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "steps_e",
+   "art": "stone_steps",
+   "x": 26,
+   "y": 16,
+   "w": 3,
+   "h": 3,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "rail_w",
+   "art": "rubble_wall",
+   "x": 7,
+   "y": 17,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "rail_e",
+   "art": "rubble_wall",
+   "x": 21,
+   "y": 17,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "culvert",
+   "art": "culvert_gate",
+   "x": 31,
+   "y": 6,
+   "w": 1,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "mmmmmmmmmmmmmmmmmmmmimmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmimmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmwiwmmmmmmmmmm",
+  "mmmmmmwmmmmmmmmmmmmwiwmmmssssssm",
+  "mmmmmmwmmmmmmmmmmmmwiwmmmssssssm",
+  "mmmmmmwwwmmmmmmmmmmwiwmmmssssssm",
+  "mmmmmmmwwwwwwwwwwwwwiwwmmssssssm",
+  "mmmmmmmmmwwwiiiiiiiiiwwmmssssssm",
+  "mmmmmmmmmwwwiiiiiiiiwwwmmsiiiiii",
+  "mmmmmmmmmwwwiiiiiiiiwwwmmssssssm",
+  "mmmmmmmmmwwwiiiiiiiiwwwmmssssssm",
+  "mmmmmmmmmwwwwwwiiwwwwwwmmmmmmmmm",
+  "mccccccccccccccccccccccccccccccm",
+  "mffffffffffffffffffffffffffffffm",
+  "mccccccccccccccccccccccccccccccm",
+  "mccccccccccccccccccccccccccccccm",
+  "mccccccccccccccccccccccccccccccm",
+  "mccccccccccccccccccccccccccccccm",
+  "mccccccccccccccccccccccccccccccm",
+  "mmmmcmmmmmmmmmmmmmmmmmmmmmmcmmmm"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud",
+  "i": "iron_catwalk",
+  "w": "water"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the yard, between the stairs)",
+  "streets_w": "exit: the west stair, World map: the drains (toward Junction 7)",
+  "streets_e": "exit: the east stair, World map: the drains (toward the Third Ward road)",
+  "sluice": "exit `sluice`: down the tunnel to sluice_undercroft (to_anchor `gate_in`)",
+  "sluice_in": "arrival from the hub (the hub's `gate` exit to_anchor)",
+  "tablet": "the `lock_tablet` point (sets sunk_ward.lock_ciphers_mapped)",
+  "culvert": "exit: the siphon culvert, World map (requires sunk_ward.lock_ciphers_done; Vats shortcut)",
+  "grate": "on the grate: a lore point or a set piece (optional)"
+ },
+ "location": "drowned_runoff_grate"
+}
