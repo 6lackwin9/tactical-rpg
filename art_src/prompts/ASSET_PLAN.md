@@ -9,6 +9,12 @@ that are byte-identical copies of another (placeholders nobody listed).
 Routes: Flow or the Drive web queue first, local ComfyUI for tiles; every result is viewed against its prompt and
 reference before it is kept. Placeholders are replaced in place: the same path, size and format.
 
+**Portraits from the web queue are placeholders (Tushar, 2026-11-15).** Final characters are fleshed out in Flow as
+Flow characters, because a Flow character carries over to animations and story CGs. So batches 1, 5, 6 and 10 below
+aim at a readable placeholder in place (one review pass, no polishing rounds), and each named character's final art
+is a later Flow set: portrait, three-view body, then animations and CGs (`ART_UI_STUDIO.md` 3.6, 3.7). The founders
+(batch 5) already have Flow portraits and bodies for four of the six on Drive, so their final art starts there.
+
 ## 1. Batches, in the order proposed
 
 | # | Batch | Images | Prompts | Blocked by | Why this order |
