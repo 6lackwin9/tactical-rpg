@@ -533,18 +533,19 @@ impl World {
     }
 
     /// PHASEFX1: unit `c` goes to side `to` (`encounter::SIDE_TARGETS`): `hostile_all` puts it on the enemy side as a
-    /// rogue (`Sides`), `party` or `enemy` on that side (no longer a rogue); a unit changing side joins the end of its new
-    /// side's list. Returns whether anything changed (an unknown `to` or a unit on no side changes nothing).
+    /// rogue (`Sides`), `friendly` or `hostile` on that side (no longer a rogue; PR5-50: the aliases `party` and `enemy`
+    /// read the same, `encounter::side_id`); a unit changing side joins the end of its new side's list. Returns whether
+    /// anything changed (an unknown `to` or a unit on no side changes nothing).
     pub fn set_side(&mut self, c: UnitId, to: &str) -> bool {
-        use crate::encounter::{ENEMY_SIDE, HOSTILE_ALL, PARTY_SIDE};
+        use crate::encounter::{side_id, FRIENDLY_SIDE, HOSTILE_ALL, HOSTILE_SIDE};
         let (ally, rogue) = (self.allies.contains(&c), self.sides.rogues.contains(&c));
         if !ally && !self.enemies.contains(&c) {
             return false;
         }
-        let (to_party, to_rogue) = match to {
-            HOSTILE_ALL => (false, true),
-            PARTY_SIDE => (true, false),
-            ENEMY_SIDE => (false, false),
+        let (to_party, to_rogue) = match side_id(to) {
+            Some(HOSTILE_ALL) => (false, true),
+            Some(FRIENDLY_SIDE) => (true, false),
+            Some(HOSTILE_SIDE) => (false, false),
             _ => return false,
         };
         if to_party == ally && to_rogue == rogue {

@@ -149,11 +149,13 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
                     u.passive_status_potency += value::int(e, "value", 0)
                 }
             }
-            "spell_reach" => {
+            // PR5-50 (FB-204, on purpose): the held reach is one row per source (`skill_reach`, the alias as kind SPELL)
+            "spell_reach" | "skill_reach" => {
+                let r = emberwake_data::SkillReach::from_effect(e).unwrap();
                 if gear {
-                    u.gear_spell_reach += value::int(e, "value", 0)
+                    u.gear_skill_reach.push(r)
                 } else {
-                    u.passive_spell_reach += value::int(e, "value", 0)
+                    u.passive_skill_reach.push(r)
                 }
             }
             "unlock" if !gear => {
@@ -311,6 +313,7 @@ fn item_effects_evaluate_the_same_through_the_typed_view() {
         json!({"type": "skill_potency", "group": "spell", "value": 0.1}),
         json!({"type": "status_potency", "value": 5}),
         json!({"type": "spell_reach", "value": 1}),
+        json!({"type": "skill_reach", "reach": 1, "intent": "field"}),
         json!({"type": "resist", "status": "burn", "value": 60}),
         json!({"type": "resist", "status": "burn", "value": 60}),
         json!({"type": "trigger", "on": "hit", "effects": [{"type": "crit", "value": 5}], "limit": "round"}),

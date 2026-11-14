@@ -4,7 +4,7 @@
 use crate::grid::{V2, DIRS};
 use rpgkit_data::{Affects, Catalog, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, Ruleset};
-use rpgkit_rules::unit::{skill_in_group, BASE_AP};
+use rpgkit_rules::unit::BASE_AP;
 use rpgkit_rules::{Stance, Unit};
 
 pub type SkillId = usize;
@@ -299,7 +299,8 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
         return (1, 1);
     }
     let a = area(s);
-    let extra = if skill_in_group(s, "spell") && !from_user(a) { c.spell_reach_bonus() } else { 0 };
+    // PR5-50 (FB-204): the unit's `skill_reach` bonuses that match the skill (none for a shape drawn from its tile)
+    let extra = if from_user(a) { 0 } else { c.skill_reach_bonus(s) };
     if s.reach_max > 0 {
         return (s.reach_min, s.reach_max + extra);
     }
@@ -310,7 +311,7 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
     (lo, hi + extra)
 }
 
-/// The shapes drawn from the user's own tile (LINE, A3.2-S1's RING and ARC, A3.2-K2's CONE): no spell reach
+/// The shapes drawn from the user's own tile (LINE, A3.2-S1's RING and ARC, A3.2-K2's CONE): no skill reach
 /// bonus, a (1, 1) band without their own reach.
 pub fn from_user(a: Area) -> bool {
     matches!(a, Area::Line | Area::Ring | Area::Arc | Area::Cone)
@@ -328,7 +329,7 @@ pub fn directed(a: Area) -> bool {
     matches!(a, Area::Line | Area::Arc | Area::Cone)
 }
 
-/// The band of a plain attack (no own reach, no area, no spell bonus): ranged (2, max(3, range)), melee (1, `melee`).
+/// The band of a plain attack (no own reach, no area, no skill reach bonus): ranged (2, max(3, range)), melee (1, `melee`).
 fn plain_band(c: &Unit, melee: i32) -> (i32, i32) {
     if c.attack_range > 1 {
         (2, 3.max(c.attack_range))

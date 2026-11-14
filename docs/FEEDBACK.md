@@ -15,30 +15,31 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-7, PR5-9 to PR5-13b, PR5-18, PR5-19, PR5-26 to PR5-35 | done, released to `main` in #62 (FB-190 to FB-234, answered @cf3d93b4) | `main` | moved to `docs/archive/FEEDBACK_CLOSED.md` (Build Status rows, 2026-11-11) |
 | PR5-36 to PR5-48 | done (FB-235 to FB-259, answered through @35c365b9) | `develop` | full rows in `docs/archive/FEEDBACK_CLOSED.md` |
 | PR5-49 `MAP-POLISH1` | done (FB-260; FB-261 questions): region `map_reveal` with grey locked places, sidecar beside the drawn background, location `art`, saved Legend, Act 1 `map_pos` = sidecar, editor end anchors and pins; 0 golden diffs | `develop` | - |
-| PR5-50 `KIT-HOOKS-CLEANUP` | next | - | - |
-| PR5-51a to PR5-56 | queued, in order (user 2026-11-14) | - | - |
+| PR5-50 `KIT-HOOKS-CLEANUP` | done (FB-262; FB-263 questions): `skill_reach`, `friendly` / `hostile` sides, preset and training checks; `checks_golden` re-recorded (3 lines) | `develop` | - |
+| PR5-51a `GEAR-REWORK1-KIT` | next | - | - |
+| PR5-51b to PR5-56 | queued, in order (user 2026-11-14) | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
 Entry fields: `Spec`, `Kind` (feasibility, conflict, cost, sim, docs-delta), `Status` (open, answered, closed), `Finding`, `Recommendation`.
 
-FB-01 to FB-259 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-14). New items start at FB-260. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
+FB-01 to FB-261 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-11-14). New items start at FB-262. Archived items record `closed: <disposition> (@<commit>)` (UN-05).
 
-### FB-260: PR5-49 `MAP-POLISH1` landed
+### FB-262: PR5-50 `KIT-HOOKS-CLEANUP` landed
 
-- **Spec**: READY Section 1 row PR5-49; FB-257 (a, c, d), FB-259 (a, c), AO-04, AO-05 (the `PR5-49` squash commit on `develop`, 2026-11-14)
+- **Spec**: READY Section 1 row PR5-50; FB-171, FB-189, FB-204, FB-212 (the `PR5-50` squash commit on `develop`, 2026-11-14)
 - **Kind**: docs-delta
 - **Status**: open
-- **Finding**: (1) Region field `map_reveal` (kit rule, FEEDBACK kit README line); Sunk Ward's `sunk_ward_quarter` has it on (seed `seeds/mappolish1.json`): after the Prologue the map shows every routed Act 1 place, the unreachable ones grey (85% grey, 80% opacity, no locked roads on hover); the three prologue places stay off; the world map's agent state gains `places` and `locked`. (2) `worldmap::layout_name`: the map reads only the sidecar beside the background png it drew (F7 editing edits that one); location `art` override (`art::landmark(id, art)`, used by the map, the editor and the sidecar check). (3) Settings key `world_map_legend` `{pos, locked}` next to `map_legend_open`, saved on drag end / lock toggle, restored on reopen (a partly off-map place is pulled in, a fully off-map or bad value dropped; minimised is not kept). (4) The 9 Act 1 `map_pos` equal the final `sunk_ward_quarter.json` positions (test `the_shipped_map_pos_match_the_act_one_sidecar`). (5) Engine `aegis_ui::layout_editor`: `Polyline::ends` drawn as fixed diamond anchors with a live smooth preview (`end_points`, `chain`, `preview`; `spline` moved here from the game's world map, which re-exports it), end-segment insert handles, `Marker::pin` / `PIN_PX` 14 (a marker without a picture is its pin or a dot), `marker_art`; agent state adds `ends` / `pin` only when set. Tests: engine `layout_editor.rs` (21, 6 new), kit `map_reveal.rs` (5), `world_map_fields.rs` (4), GUI `worldmap.rs` (29); `talk::tests::the_sunk_ward_hub_opens_its_panes_and_the_world_map` now expects the kiln shown grey (reveal on). Gate 3326 passed, 0 failed; 0 golden diffs.
-- **Recommendation**: GAME_BRIEF (world map): "A region's `map_reveal` (Sunk Ward: on) shows every routed place of the region, the unreachable ones grey; unrouted places stay off. A location's `art` names its landmark picture. The map reads only the sidecar beside the background it drew. The Legend's place and lock are kept in settings `world_map_legend`." engine/README (`layout_editor`): "`Polyline::ends` fixed anchors with a live spline preview (`spline` lives here); a marker without a picture is its 14 px pin; `marker_art`." STRUCTURE: tests `rpgkit_world/tests/map_reveal.rs`, `rpgkit_content/tests/world_map_fields.rs`; seed `seeds/mappolish1.json`. HISTORY: "PR5-49: `art::landmark(id)` became `art::landmark(id, art)`; the world map no longer applies a lineage name's sidecar over another name's background (FB-257 (d)); `worldmap::spline` moved to `aegis_ui::layout_editor::spline`." Decision: region-wide reveal is a region field, since the flagged region is also the scope.
+- **Finding**: (1) `skill_reach` replaces `spell_reach` (FEEDBACK kit README line); `wpn_orb` migrated to `{"type": "skill_reach", "reach": 1, "kind": "SPELL"}` (seed `seeds/kithooks1.json`, the only shipped `spell_reach`); battle reach unchanged (every battle / sim golden byte-identical; `W_SPELL_REACH` kept so `rules_contract_golden` does not move; the frozen `timeline_kit.json` reads through the alias). (2) Phase `side.to` `friendly` / `hostile` / `hostile_all` with `party` / `enemy` aliases (no `_all` alias was needed); the unit-row `side`, character `role`, trigger unit names and host JSON keep `party` (they name hero rows, not battle sides); an AI-controlled `friendly` ally is today's allied guest (battle log equal cell for cell). (3) `dojo_presets.gear` unknown item: the check existed since PR5-22, a test added; new `train_proficiency` warning. **`checks_golden` re-recorded**: 3 lines, the unknown-effect lists name `skill_reach` where they named `spell_reach`. Tests: kit `skill_reach.rs` (7), `skill_reach_checks.rs` (3), `phase_side_swap.rs` (+3), `dojo_preset_checks.rs` (+1), `recipe_checks.rs` (+1), `phase_side_swap_checks.rs` (message updated); game `passive_grants.rs` oracle pushes `SkillReach`. Gate 3341 passed, 0 failed.
+- **Recommendation**: HISTORY: "`checks_golden` re-recorded (PR5-50): the unknown effect type lists name `skill_reach` where they named `spell_reach` (3 lines)." GAME_BRIEF: "`wpn_orb`'s reach bonus is `skill_reach {reach: 1, kind: SPELL}`; phase sides are `friendly` / `hostile` / `hostile_all`." STRUCTURE: tests `rpgkit_battle/tests/skill_reach.rs`, `rpgkit_content/tests/skill_reach_checks.rs`; seed `seeds/kithooks1.json`.
 
-### FB-261: PR5-49 questions
+### FB-263: PR5-50 readings and questions
 
-- **Spec**: READY row PR5-49 (@ the `PR5-49` squash commit)
+- **Spec**: READY row PR5-50 (@ the `PR5-50` squash commit)
 - **Kind**: suggestion
 - **Status**: open
-- **Finding**: (a) "Locked" means no trip is possible now, so a place on an open road that the party has not reached yet (two legs past a visited place) is also drawn grey, the same rule the GUI used before. (b) The Legend's minimised state is not kept across reopens (the row asks for position and lock only).
-- **Recommendation**: (a) keep (recommended), or draw open-but-unvisited places differently from shut ones (a kit flag); (b) keep minimised in `world_map_legend` too if wanted (a one-line change).
+- **Finding**: (a) The row asks for a warning when a `train_proficiency` targets "a family that 0 classes hold at minor proficiency (1)"; the effect names a class role, not a family (`{role, to}`), so the warning is per role at level `to - 1` and covers every role, and since no shipped class sets a proficiency `role` yet it raises 3 warnings (`train_secondary`, `train_third`, `train_minor`) until PR5-51b adds the roles. (b) `kind: SPELL` is not a skill kind in code; it reads as the old spell group (ATTACK with a spell source), which is what reproduces `spell_reach`. (c) The constant `W_SPELL_REACH` keeps its name (it now weighs every `skill_reach` tile) so `rules_contract_golden` stays unchanged.
+- **Recommendation**: (a) keep every role (recommended; PR5-51b's roles clear the warnings) or limit to `minor`; (c) rename to `W_SKILL_REACH` with a named 1-line `rules_contract_golden` re-record in a later row if wanted; (d) aliasing the unit-row `side` field to `friendly` / `hostile` too is a larger change (many `== "party"` checks) left out.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

@@ -5,7 +5,8 @@
 //! a `craft` names a known item and an optional whole `count` 1..`RECIPE_COUNT_MAX`, on a `stash` recipe) and
 //! across rows (unique ids). The loader keeps the rows that
 //! pass, in file order. The world refs (the offering character, the `requires` conditions) are checked over the
-//! worlds (`world_errors`, the whole-catalog report).
+//! worlds (`world_errors`, the whole-catalog report). PR5-50 (FB-212 (d)): a `train_proficiency` no class can take is a
+//! warning (`warnings`).
 
 use super::View;
 use crate::source::fields;
@@ -308,6 +309,29 @@ pub fn entry_errors(v: &View, e: &Dict, current_id: &str) -> Vec<String> {
     let mut found = check_rows(&rows, &loaded_of(v)).pop().unwrap_or_default();
     found.extend(world_errors(v, e));
     found
+}
+
+/// PR5-50 (`KIT-HOOKS-CLEANUP`, FB-212 (d)): the soft problems of a row: a `train_proficiency` effect (role R, `to`)
+/// that no class can take, because no class row holds a family of role R at the level the training starts from (`to`
+/// - 1; the minor role's 1 -> 2), one warning naming the role and the level. A broken effect is the errors' (none here).
+pub fn warnings(v: &View, e: &Dict) -> Vec<String> {
+    let classes: Vec<rpgkit_data::ClassDef> = v.entries("classes").iter().map(rpgkit_data::ClassDef::from_obj).collect();
+    let mut out = Vec::new();
+    for (i, fx) in json::arr(json::get(e, "effects")).iter().enumerate() {
+        let fx = json::dict(fx);
+        if json::s(fx, "effect") != r::FX_TRAIN {
+            continue;
+        }
+        let (role, from) = (json::s(fx, "role"), json::i(fx, "to", 0) - 1);
+        if !rpgkit_data::PROF_ROLES.contains(&role.as_str()) || from < 0 {
+            continue;
+        }
+        let held = classes.iter().any(|c| c.proficiency_roles.iter().any(|(fam, r)| *r == role && c.proficiency.get(fam).is_some_and(|p| i64::from(p.level) == from)));
+        if !held {
+            out.push(format!("Effect {} ({}): no class holds a {role} family at level {from} (the level this training starts from).", i + 1, r::FX_TRAIN));
+        }
+    }
+    out
 }
 
 /// The catalog kinds a recipe names, as the loader holds them ({kind: [row]}).

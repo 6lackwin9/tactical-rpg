@@ -885,8 +885,9 @@
 				{
 					"kind": "effect",
 					"effect": {
-						"type": "spell_reach",
-						"value": 1
+						"type": "skill_reach",
+						"reach": 1,
+						"kind": "SPELL"
 					}
 				}
 			],

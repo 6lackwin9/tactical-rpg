@@ -2113,6 +2113,56 @@ pub const UNMARK_KEYS: [&str; 1] = ["mark"];
 pub const SKILL_BLOCK_COST: &str = "skill_block_cost";
 pub const SKILL_BLOCK_COST_KEYS: [&str; 3] = ["type", "skill", "delta"];
 pub const SKILL_BLOCK_COST_DELTA: (i64, i64) = (-3, 3);
+/// PR5-50 (`KIT-HOOKS-CLEANUP`, FB-204): the skill-scoped reach bonus `{type: skill_reach, reach, intent?, kind?}` (gear
+/// and passives): while held, a skill that matches every filter given (`intent` a round intent id the skill is offered
+/// in, `kind` a skill kind or `SKILL_REACH_SPELL`) reaches `reach` tiles further (worn sources summed and capped at
+/// `rpgkit_rules::unit::GEAR_REACH_CAP`, passive sources summed; a shape drawn from the user's own tile takes none).
+/// Its keys, the range of one `reach`, and the `kind` filter value that names the spell group (an ATTACK with a
+/// spell source, `rpgkit_rules::unit::skill_in_group` "spell").
+pub const SKILL_REACH: &str = "skill_reach";
+pub const SKILL_REACH_KEYS: [&str; 4] = ["type", "reach", "intent", "kind"];
+pub const SKILL_REACH_RANGE: (i64, i64) = (1, 2);
+pub const SKILL_REACH_SPELL: &str = "SPELL";
+/// PR5-50: the retired spell-only form `{type: spell_reach, value}`, still read as `skill_reach {reach: value, kind:
+/// SPELL}` (a load alias: rows stored before PR5-50 keep loading and checking; a write stores the new form).
+pub const SPELL_REACH_ALIAS: &str = "spell_reach";
+
+/// PR5-50: one skill reach bonus read from an effect row (`skill_reach`, or the `spell_reach` alias); empty filters
+/// match every skill.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillReach {
+    pub reach: i32,
+    pub intent: String,
+    pub kind: String,
+}
+
+impl SkillReach {
+    /// The bonus of effect row `e` (None for another type): `skill_reach` as written, `spell_reach {value}` as
+    /// `{reach: value, kind: SPELL}`.
+    pub fn from_effect(e: &Obj) -> Option<SkillReach> {
+        match string(e, "type", "").as_str() {
+            SKILL_REACH => Some(SkillReach { reach: int(e, "reach", 0), intent: string(e, "intent", ""), kind: string(e, "kind", "") }),
+            SPELL_REACH_ALIAS => Some(SkillReach { reach: int(e, "value", 0), intent: String::new(), kind: SKILL_REACH_SPELL.into() }),
+            _ => None,
+        }
+    }
+
+    /// The stored form of a `spell_reach` row: `{type: skill_reach, reach: value, kind: SPELL}` (None for any other row,
+    /// which stays as written). Keys other than `type` and `value` are kept after the new ones.
+    pub fn migrated(e: &Obj) -> Option<Obj> {
+        if string(e, "type", "") != SPELL_REACH_ALIAS {
+            return None;
+        }
+        let mut out = Obj::new();
+        out.insert("type".into(), Value::from(SKILL_REACH));
+        out.insert("reach".into(), e.get("value").cloned().unwrap_or(Value::from(0)));
+        out.insert("kind".into(), Value::from(SKILL_REACH_SPELL));
+        for (k, v) in e.iter().filter(|(k, _)| !matches!(k.as_str(), "type" | "value" | "reach" | "kind")) {
+            out.insert(k.clone(), v.clone());
+        }
+        Some(out)
+    }
+}
 /// ACT1-HOOKS2 (FB-244 (5)): a consumable's `meter_delta` `{meter, delta}` changes the target's unit meter by `delta`
 /// at use (clamped to the gauge's floor..max; nothing when the target holds no such meter), and its keys (as a hazard's
 /// `meter`, `HAZARD_METER_KEYS`).

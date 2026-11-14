@@ -346,3 +346,84 @@ fn encounters_without_the_effects_keep_the_two_sides() {
         assert_eq!(s.w.friends_of(c), s.w.enemies.as_slice());
     }
 }
+
+/// PR5-50 (`KIT-HOOKS-CLEANUP`, FB-171): the side ids are `friendly` (the party's side: heroes and the AI-controlled
+/// units fighting beside them), `hostile` and `hostile_all`; the ids before PR5-50, `party` and `enemy`, read as
+/// `friendly` and `hostile`; anything else (`neutral`, "") is no side.
+#[test]
+fn friendly_hostile_and_hostile_all_resolve_and_party_and_enemy_alias_them() {
+    use rpgkit_battle::encounter::{side_id, FRIENDLY_SIDE, HOSTILE_ALL, HOSTILE_SIDE, SIDE_TARGETS};
+    assert_eq!(SIDE_TARGETS, [HOSTILE_ALL, FRIENDLY_SIDE, HOSTILE_SIDE]);
+    for (to, want) in [("friendly", Some(FRIENDLY_SIDE)), ("hostile", Some(HOSTILE_SIDE)), ("hostile_all", Some(HOSTILE_ALL)), ("party", Some(FRIENDLY_SIDE)), ("enemy", Some(HOSTILE_SIDE)), ("neutral", None), ("", None)] {
+        assert_eq!(side_id(to), want, "{to}");
+    }
+}
+
+/// The boss turned to `friendly` (or its alias) at round 2, a guard to `hostile_all` and the boss back to `hostile` (or
+/// its alias) at round 3, then a round with the boss AI-controlled on its side; the session after round 4 starts.
+fn turned_and_fought(friendly: &str, hostile: &str) -> Session {
+    let phases = json!([
+        {"id": "turn", "name": "Turn", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "side", "units": ["k_boss"], "to": friendly}]},
+        {"id": "back", "name": "Back", "trigger": {"kind": "round", "round": 4}, "effects": [{"type": "side", "units": ["k_boss"], "to": hostile}, {"type": "side", "units": ["k_brute"], "to": "hostile_all"}]}
+    ]);
+    let mut s = session(row(phases));
+    next_round(&mut s);
+    next_round(&mut s);
+    next_round(&mut s);
+    s
+}
+
+/// The log with a side cell's own words (the side as written) read back to the side id, so two battles that differ only
+/// in the alias they name compare equal.
+fn as_ids(log: &[Entry]) -> Vec<Entry> {
+    log.iter()
+        .cloned()
+        .map(|mut e| {
+            if e.subtype == PHASE_SIDE {
+                e.detail = e.detail.replace("party side", "friendly side").replace("enemy side", "hostile side");
+                e.status = rpgkit_battle::encounter::side_id(&e.status).unwrap_or("").to_string();
+            }
+            e
+        })
+        .collect()
+}
+
+#[test]
+fn each_alias_turns_units_exactly_as_its_side_id() {
+    let (new, old) = (turned_and_fought("friendly", "hostile"), turned_and_fought("party", "enemy"));
+    assert!(new.w.enemies.contains(&BOSS) && new.w.sides.rogues() == [BRUTE], "the boss is back on the hostile side, the brute a rogue");
+    assert_eq!((&new.w.allies, &new.w.enemies, new.w.sides.rogues()), (&old.w.allies, &old.w.enemies, old.w.sides.rogues()));
+    assert_eq!((&new.guests, &new.protected, &new.w.unkillable), (&old.guests, &old.protected, &old.w.unkillable));
+    for c in 0..CELLS.len() {
+        assert_eq!(new.w.foes_of(c), old.w.foes_of(c), "unit {c}'s foes");
+    }
+    assert_eq!(as_ids(&new.log), as_ids(&old.log), "the same battle, cell for cell");
+    assert_eq!(cells(&new, PHASE_SIDE)[0].detail, "Boss joins the friendly side.");
+    assert_eq!(cells(&old, PHASE_SIDE)[0].detail, "Boss joins the party side.", "an alias is written as the row names it");
+}
+
+/// An AI-controlled `friendly` ally is planned and fights as an allied guest always was (the `party` alias): drafted by
+/// the auto planner (guests always Balanced), the same actions, targets and damage, round for round, and it fights the
+/// hostile side.
+#[test]
+fn an_ai_controlled_friendly_ally_acts_as_an_allied_unit() {
+    let run = |to: &str| {
+        let mut s = session(row(at_round_two(json!([{"type": "side", "units": ["k_boss"], "to": to}]))));
+        for round in 1..=3 {
+            s.plan_apply_preset_all("balanced");
+            if round < 3 {
+                next_round(&mut s);
+            } else {
+                resolve(&mut s);
+            }
+        }
+        s
+    };
+    let (new, old) = (run("friendly"), run("party"));
+    assert!(new.guests.contains(&BOSS) && new.w.allies.contains(&BOSS), "a guest of the friendly side, planned by the AI");
+    assert_eq!(as_ids(&new.log), as_ids(&old.log), "the same battle as the party alias");
+    let acted: Vec<&Entry> = new.log.iter().filter(|e| e.round >= 2 && e.actor == "Boss" && e.category == "ATTACK").collect();
+    let boss: Vec<String> = new.log.iter().filter(|e| e.actor == "Boss").map(|e| format!("r{} b{} {} {} -> {} {} {}", e.round, e.block, e.category, e.skill, e.target, e.damage, e.detail)).collect();
+    assert!(!acted.is_empty(), "the ally acts: {boss:#?}");
+    assert!(acted.iter().all(|e| e.target != "Ash" && e.target != "Bryn"), "never against the heroes");
+}

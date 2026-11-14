@@ -321,13 +321,25 @@ pub const KILL_OVERRIDES_UNKILLABLE: bool = true;
 
 /// PHASEFX1 (ACTS23 PK6 hook l): the phase effect that turns named units (`units` refs) to another side: `to` =
 /// `hostile_all` (the unit fights every other unit and counts as a foe for the win objectives) or a battle side id
-/// (`party`, `enemy`); its keys and targets. A side names 1 to KILL_MAX_UNITS refs.
+/// (`friendly`, `hostile`); its keys and targets. A side names 1 to KILL_MAX_UNITS refs.
 pub const SIDE_EFFECT: &str = "side";
 pub const SIDE_EFFECT_KEYS: [&str; 3] = ["type", "units", "to"];
 pub const HOSTILE_ALL: &str = "hostile_all";
+/// PR5-50 (`KIT-HOOKS-CLEANUP`, FB-171): the battle side ids: `friendly` (the player's heroes and the AI-controlled
+/// allied or neutral units fighting beside them, `World::allies`) and `hostile` (`World::enemies`).
+pub const FRIENDLY_SIDE: &str = "friendly";
+pub const HOSTILE_SIDE: &str = "hostile";
+/// The side ids before PR5-50, still read as `friendly` and `hostile` (load aliases: stored rows keep them).
 pub const PARTY_SIDE: &str = "party";
 pub const ENEMY_SIDE: &str = "enemy";
-pub const SIDE_TARGETS: [&str; 3] = [HOSTILE_ALL, PARTY_SIDE, ENEMY_SIDE];
+pub const SIDE_TARGETS: [&str; 3] = [HOSTILE_ALL, FRIENDLY_SIDE, HOSTILE_SIDE];
+/// PR5-50: each alias with the side id it reads as.
+pub const SIDE_ALIASES: [(&str, &str); 2] = [(PARTY_SIDE, FRIENDLY_SIDE), (ENEMY_SIDE, HOSTILE_SIDE)];
+
+/// PR5-50 (FB-171): the side id `to` names (`SIDE_TARGETS`, an alias read as its side); None for anything else.
+pub fn side_id(to: &str) -> Option<&'static str> {
+    SIDE_TARGETS.iter().copied().find(|s| *s == to).or_else(|| SIDE_ALIASES.iter().find(|(a, _)| *a == to).map(|(_, s)| *s))
+}
 /// PHASEFX1 (ACTS23 PK6 hook m): the phase effect that replaces a unit in place by another unit row (`unit` an
 /// encounter ref, `to` a unit ref) on the same cell, keeping its side; `hp` = `keep_pct` (the same share of the new max
 /// HP, the default) or `full`. One cell per unit (2 x 2 footprints are hook n).

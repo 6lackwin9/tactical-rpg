@@ -4,7 +4,7 @@ use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::grants::{self, Combine, Grant, Immunity, Modifier, SkillGrant, SkillSet, Target};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_core::value::to_int;
-use rpgkit_data::{Catalog, ClassDef, Deck, Technique, UnitDef, UnitTemplate, NO_ITEM};
+use rpgkit_data::{Catalog, ClassDef, Deck, SkillReach, Technique, UnitDef, UnitTemplate, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
@@ -267,9 +267,11 @@ pub struct Unit {
     pub gear_potency_group: IndexMap<String, f64>,
     pub gear_status_resist: IndexMap<String, i32>,
     pub gear_status_potency: i32,
-    pub gear_spell_reach: i32,
+    /// PR5-50 (FB-204): the worn `skill_reach` bonuses (rebuilt on every sync) and the passive ones, in apply order
+    /// (`skill_reach_bonus` sums the ones a skill matches).
+    pub gear_skill_reach: Vec<SkillReach>,
     pub passive_status_potency: i32,
-    pub passive_spell_reach: i32,
+    pub passive_skill_reach: Vec<SkillReach>,
     pub foresight_source: String,
     /// RULESET1 V4: the widest `range` of the unit's foresight passives (0 = today's rule only); read only under the
     /// rule `plan_badges`.
@@ -424,9 +426,9 @@ impl Unit {
             gear_potency_group: IndexMap::new(),
             gear_status_resist: IndexMap::new(),
             gear_status_potency: 0,
-            gear_spell_reach: 0,
+            gear_skill_reach: Vec::new(),
             passive_status_potency: 0,
-            passive_spell_reach: 0,
+            passive_skill_reach: Vec::new(),
             foresight_source: String::new(),
             foresight_range: 0,
             poise: -1,
@@ -632,7 +634,7 @@ impl Unit {
         self.gear_potency_group.clear();
         self.gear_status_resist.clear();
         self.gear_status_potency = 0;
-        self.gear_spell_reach = 0;
+        self.gear_skill_reach.clear();
         self.gear_forced = ForcedTraits::default();
         self.gear_triggers.clear();
         self.gear_hit_sources.clear();
@@ -895,9 +897,10 @@ impl Unit {
                 let held = if gear { &mut self.gear_status_potency } else { &mut self.passive_status_potency };
                 *held = c.fold_i(*held, int);
             }
-            Target::SpellReach => {
-                let held = if gear { &mut self.gear_spell_reach } else { &mut self.passive_spell_reach };
-                *held = c.fold_i(*held, int);
+            // PR5-50: one held row per source (`Combine::Sum` over the rows a skill matches, `skill_reach_bonus`)
+            Target::SkillReach { intent, kind } => {
+                let held = if gear { &mut self.gear_skill_reach } else { &mut self.passive_skill_reach };
+                held.push(SkillReach { reach: int, intent: intent.clone(), kind: kind.clone() });
             }
             Target::Foresight => {
                 if self.foresight_source.is_empty() {
@@ -1269,6 +1272,23 @@ pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
         "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0),
         _ => false,
     }
+}
+
+/// PR5-50 (FB-204): whether skill `s` takes reach bonus `r`: every filter given matches. `kind`: the skill's kind, or
+/// `SKILL_REACH_SPELL` for the spell group (`skill_in_group` "spell"); `intent`: one of the intents IR21 derives for the
+/// skill (`intent::derive`) or its single legacy intent (its `round_intent`, else its kind's), so the filter reads the
+/// same in every ruleset.
+pub fn skill_reach_matches(r: &SkillReach, s: &rpgkit_data::SkillDef) -> bool {
+    let kind_ok = match r.kind.as_str() {
+        "" => true,
+        rpgkit_data::SKILL_REACH_SPELL => skill_in_group(s, "spell"),
+        k => s.kind == k,
+    };
+    let intent_ok = r.intent.is_empty() || {
+        let legacy = if s.round_intent.is_empty() { crate::ruleset::kind_intent(&s.kind) } else { s.round_intent.as_str() };
+        legacy == r.intent || crate::intent::derive(&crate::intent::IntentInput::of_def(s)).contains(&r.intent.as_str())
+    };
+    kind_ok && intent_ok
 }
 
 /// The side whose units are the player's (heroes and allies): never templated.
@@ -1963,8 +1983,12 @@ impl Unit {
         self.gear_status_potency + self.passive_status_potency
     }
 
-    pub fn spell_reach_bonus(&self) -> i32 {
-        self.gear_spell_reach.min(GEAR_REACH_CAP) + self.passive_spell_reach
+    /// PR5-50 (FB-204): the reach the unit's `skill_reach` bonuses add to skill `s` (`skill_reach_matches`): the worn
+    /// ones summed and capped at GEAR_REACH_CAP, plus the passive ones summed. With only `kind: SPELL` rows this is the
+    /// retired spell reach bonus exactly.
+    pub fn skill_reach_bonus(&self, s: &rpgkit_data::SkillDef) -> i32 {
+        let sum = |held: &[SkillReach]| held.iter().filter(|r| skill_reach_matches(r, s)).map(|r| r.reach).sum::<i32>();
+        sum(&self.gear_skill_reach).min(GEAR_REACH_CAP) + sum(&self.passive_skill_reach)
     }
 
     pub fn resist_for(&self, status: &str) -> i32 {
