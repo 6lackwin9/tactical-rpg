@@ -25,6 +25,7 @@ use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
+use aegis_ui::screen::PointerPhase;
 use aegis_ui::specimens::{portrait_label, KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
 use aegis_ui::timeline::Timeline;
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, SMALL, TITLE, W};
@@ -609,6 +610,11 @@ impl Default for Gallery {
 }
 
 impl Gallery {
+    /// PR5-48: the Kit widgets entry shows its Layout page (the layout editor).
+    fn on_layout_page(&self) -> bool {
+        ENTRIES[self.entry].0 == "kit" && aegis_ui::specimens::PAGES.get(self.kit.page) == Some(&"Layout")
+    }
+
     pub fn new() -> Self {
         let s = aegis_ui::timeline::sample();
         Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, pane: (s.selected_block, s.selected_track), own_game: None, w: Vec::new() }
@@ -1096,6 +1102,8 @@ impl Screen<GameCx> for Gallery {
             "selected_block": d.and_then(|d| d.block), "planning": s.map(|s| s.phase == Phase::Planning && !s.plan_confirmed), "rounds_archived": s.map(|s| s.history.len()),
             // PORTRAITFX1-G (4.11): the Portraits entry's pick and its portraits' state
             "portrait_pick": self.portraits.key(), "portrait_last": self.portraits.last, "portraits": self.portraits.faces.state(),
+            // PR5-48: the Kit widgets' Layout page
+            aegis_ui::layout_editor::STATE_KEY: if self.on_layout_page() { self.kit.layout.state() } else { Value::Null },
         })
     }
 
@@ -1112,14 +1120,38 @@ impl Screen<GameCx> for Gallery {
         }
     }
 
-    /// The Kit widgets entry takes its Panes page's keys (hotkeys, PageUp / PageDown, the ask's Enter, y and n).
-    fn key(&mut self, _cx: &mut Cx, k: Key) {
+    /// The Kit widgets entry takes its Panes page's keys (hotkeys, PageUp / PageDown, the ask's Enter, y and n) and its
+    /// Layout page's (PR5-48: the arrows with Shift, + and -, Ctrl+Z).
+    fn key(&mut self, cx: &mut Cx, k: Key) {
         if ENTRIES[self.entry].0 == "kit" {
-            self.kit.key(k);
+            self.kit.key_with(k, cx.held.shift, cx.held.ctrl);
         }
         if ENTRIES[self.entry].0 == "frame_tuner" {
             self.kit.tuner.key(k);
         }
+    }
+
+    /// PR5-48: the Kit widgets' Layout page steers with the arrows (the layout editor's nudge).
+    fn arrow_focus(&self) -> bool {
+        !self.on_layout_page()
+    }
+
+    /// PR5-48: a handle drag on the Kit widgets' Layout page goes to its layout editor; any other press clicks.
+    fn pointer(&mut self, cx: &mut Cx, id: &str, phase: PointerPhase, pos: (i32, i32)) {
+        if self.on_layout_page() && self.kit.pointer(id, phase, pos) {
+            return;
+        }
+        if phase == PointerPhase::Down {
+            self.click(cx, pos);
+        }
+    }
+
+    /// PR5-48: the Layout page's agent commands (`layout_markers`, `layout`).
+    fn command(&mut self, _cx: &Cx, body: &Value) -> Option<Value> {
+        if ENTRIES[self.entry].0 != "kit" {
+            return None;
+        }
+        self.kit.command(body)
     }
 
     /// Esc answers the Panes page's ask (No) there; anywhere else it leaves the gallery.
@@ -1168,6 +1200,52 @@ impl Screen<GameCx> for Gallery {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// PR5-48 (MAP-LAYOUT-ED): the real Gallery hands the Kit widgets' Layout page its handle drags (`Screen::pointer`),
+    /// its keys with Shift (a coarse nudge) and its agent commands, steers no focus with the arrows there, and shows the
+    /// editor's state as `layout_markers`; on another page none of that.
+    #[test]
+    fn the_gallery_layout_page_drags_nudges_with_shift_and_takes_commands() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        use aegis_ui::layout_editor::{NUDGE, STATE_KEY};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut gallery = Gallery::new();
+        gallery.act(&mut cx, GAct::Entry(ENTRIES.iter().position(|e| e.0 == "kit").unwrap()));
+        let page = aegis_ui::specimens::PAGES.iter().position(|p| *p == "Layout").expect("a Layout page");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(gallery.arrow_focus() && gallery.state(&cx)[STATE_KEY].is_null(), "not on the Layout page yet");
+        gallery.click_id(&mut cx, &format!("kit.page.{page}")).unwrap();
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(!gallery.arrow_focus(), "the arrows nudge on the Layout page");
+        let first = gallery.kit.layout.markers()[0].clone();
+        let handle = format!("layout.marker.{}", first.id);
+        let (r, _) = gallery.widget_rect(&handle).expect("the marker's handle");
+        let at = (r.x + r.w / 2, r.y + r.h / 2);
+        gallery.pointer(&mut cx, &handle, PointerPhase::Down, at);
+        gallery.pointer(&mut cx, &handle, PointerPhase::Move, (at.0 + 20, at.1));
+        gallery.pointer(&mut cx, &handle, PointerPhase::Up, (at.0 + 20, at.1));
+        let moved = gallery.kit.layout.markers()[0].pos;
+        assert!(moved[0] > first.pos[0] && (moved[1] - first.pos[1]).abs() < 1e-3, "dragged right: {:?} -> {moved:?}", first.pos);
+        assert_eq!(gallery.kit.layout.undo_depth(), 1, "the drag is one undo step");
+        // Shift held: the coarse nudge; Ctrl+Z: undo
+        cx.held.shift = true;
+        gallery.key(&mut cx, Key::Right);
+        cx.held.shift = false;
+        let nudged = gallery.kit.layout.markers()[0].pos;
+        assert!((nudged[0] - moved[0] - NUDGE.1).abs() < 1e-3, "{moved:?} -> {nudged:?}");
+        cx.held.ctrl = true;
+        gallery.key(&mut cx, Key::Char('z'));
+        cx.held.ctrl = false;
+        assert!((gallery.kit.layout.markers()[0].pos[0] - moved[0]).abs() < 1e-3, "Ctrl+Z took the nudge back");
+        // the agent link's commands and state
+        let reply = gallery.command(&cx, &json!({"cmd": "layout", "id": first.id, "pos": [0.5, 0.5]})).expect("a layout op");
+        assert_eq!(reply["ok"], json!(true), "{reply}");
+        assert_eq!(gallery.state(&cx)[STATE_KEY]["markers"][0]["pos"], json!([0.5, 0.5]));
+        assert_eq!(gallery.command(&cx, &json!({"cmd": STATE_KEY})).expect("the state")["ok"], json!(true));
+        // another page: no layout commands, the arrows steer the focus again
+        gallery.click_id(&mut cx, "kit.page.0").unwrap();
+        assert!(gallery.command(&cx, &json!({"cmd": STATE_KEY})).is_none() && gallery.arrow_focus());
+    }
 
     /// LOOK1-M1: the real Gallery forwards keys to the Kit widgets' Panes page: the menu column's hotkey, the tab rail's
     /// PageUp / PageDown, the ask's y and Esc (Esc answers there and leaves the gallery elsewhere); another entry takes none.

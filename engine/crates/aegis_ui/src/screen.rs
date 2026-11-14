@@ -315,6 +315,16 @@ pub struct Held {
     pub dir: Option<(i64, i64)>,
 }
 
+/// PR5-48: where a pointer drag on a `handle` widget (`Ui::handle`) is (`Screen::pointer`): the press, a move while the
+/// button is held, the release, or the shell dropping it (a key, a right click, a lost release).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PointerPhase {
+    Down,
+    Move,
+    Up,
+    Cancel,
+}
+
 /// The shared context: the engine's half here, the game's half in `app` (reached through Deref).
 pub struct Cx<G> {
     pub settings: Settings,
@@ -471,6 +481,15 @@ pub trait Screen<G> {
     }
     /// Payload `from` was released over target `to` (only when `can_drop` allowed it).
     fn accept_drop(&mut self, _cx: &mut Cx<G>, _from: &str, _to: &str) {}
+    /// PR5-48: a pointer drag on handle `id` (`Ui::handle`), followed by the screen itself (free-form dragging, a layout
+    /// editor's markers; no ghost, no drop targets): `Down` at the press, `Move` at each move while held, `Up` at the
+    /// release, `Cancel` when the shell drops it; `pos` is the mouse in the screen's units. The default clicks at the
+    /// press (the handle's action) and ignores the rest.
+    fn pointer(&mut self, cx: &mut Cx<G>, _id: &str, phase: PointerPhase, pos: (i32, i32)) {
+        if phase == PointerPhase::Down {
+            self.click(cx, pos);
+        }
+    }
     /// The screen's windows (UIKIT3), when it keeps a desk: the shell moves, resizes, raises, opens and closes them and
     /// saves the desk; the screen draws it (`Desk::draw`, `Desk::toolbar`).
     fn desk(&mut self) -> Option<&mut crate::window::Desk> {

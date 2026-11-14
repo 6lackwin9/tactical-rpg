@@ -529,6 +529,25 @@ impl Hooks for RpgContent {
     fn manifest_problems(&self, manifest: &Dict) -> Vec<String> {
         source::manifest_problems(manifest)
     }
+
+    /// PR5-48 (MAP-LAYOUT-ED): the world map layout sidecars (`world_map::OP`).
+    fn sidecar_ops(&self) -> &'static [&'static str] {
+        &[crate::world_map::OP]
+    }
+
+    /// PR5-48: `aegis content world_map_layout <name> [<edits>]`: the sidecar's text as the asset layers of the data's
+    /// game resolve it, or the edits written into the game's own layer (`world_map::write`).
+    fn sidecar(&self, data_dir: &Path, op: &str, name: &str, edits: Option<&Value>) -> Result<String, Vec<String>> {
+        if op != crate::world_map::OP {
+            return Err(vec![format!("This game has no sidecar op '{op}'.")]);
+        }
+        let view = view(data_dir);
+        let Some(edits) = edits else {
+            return crate::world_map::read(&view.assets, name).map(|(_, text)| text).ok_or_else(|| vec![format!("No {} in the asset layers.", crate::art::world_map_layout(name))]);
+        };
+        let w = crate::world_map::write(&view.worlds, &view.assets, name, edits)?;
+        Ok(format!("{} {} ({} edit(s))", if w.changed { "wrote" } else { "unchanged" }, w.path.display(), w.edits))
+    }
 }
 
 /// E2.2-S2 (FB-110): merges `patch` into the game manifest at `path` (`aegis content manifest`): the engine keys and the
