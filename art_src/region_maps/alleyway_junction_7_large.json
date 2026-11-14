@@ -1,0 +1,772 @@
+{
+ "id": "sunk_ward_junction_7_large",
+ "name": "Sunk Ward: Alleyway Junction 7 (large)",
+ "rows": [
+  "###############..#######################################",
+  "###############..#######################################",
+  "###############..#######################################",
+  "###############..#######################################",
+  "###############..#######################################",
+  "###############..............................###########",
+  "###############..............................###########",
+  "###############..#####.......................###########",
+  "###############..############..###########..############",
+  "###############..############..###########..############",
+  "###############..############..###########..############",
+  "###############..############..###########..############",
+  "##########......###...#######..###########..############",
+  "##########............#######..###########..##....##...#",
+  "##########............#######..###########..##.........#",
+  "##########............#######..###########..##.........#",
+  "##########...........#.................................#",
+  "##########..............................................",
+  "##########..............................................",
+  "##########...........#.................................#",
+  "##########............###########..###########.........#",
+  "##########............###########..###########.........#",
+  "##########............###########..###########.........#",
+  "##########............###########..#####################",
+  "#############.####..#########...........################",
+  "###########....###..#########........##.################",
+  "###########....#......#######..#........################",
+  "###########....#........................################",
+  "################........................################",
+  "##################################.#####################",
+  "##############################.........#################",
+  "##############################.........#################",
+  "##############################.........#################",
+  "########################################################",
+  "########################################################",
+  "########################################################"
+ ],
+ "zones": [
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-----------",
+  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-ssssssssss",
+  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-ssssssssss",
+  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-ssssssssss",
+  "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
+  "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
+  "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
+  "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
+  "----------yyyyyyyyyyyy-----------cc-----------ssssssssss",
+  "----------yyyyyyyyyyyy-----------cc-----------ssssssssss",
+  "----------yyyyyyyyyyyy-----------cc-----------ssssssssss",
+  "----------yyyyyyyyyyyy-----------cc---------------------",
+  "-------------a--bbbbbbbbbbbbbccccccccccc----------------",
+  "-----------aaaa-bbbbbbbbbbbbbccccccccccc----------------",
+  "-----------aaaa-bbbbbbbbbbbbbccccccccccc----------------",
+  "-----------aaaa-bbbbbbbbbbbbbccccccccccc----------------",
+  "----------------bbbbbbbbbbbbbccccccccccc----------------",
+  "----------------------------------h---------------------",
+  "------------------------------hhhhhhhhh-----------------",
+  "------------------------------hhhhhhhhh-----------------",
+  "------------------------------hhhhhhhhh-----------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------"
+ ],
+ "zone_legend": {
+  "s": {
+   "id": "bridge_landing",
+   "kind": "safe"
+  },
+  "c": {
+   "id": "doss_court",
+   "kind": "safe"
+  },
+  "d": {
+   "id": "main_street",
+   "kind": "danger"
+  },
+  "b": {
+   "id": "back_alleys",
+   "kind": "danger"
+  },
+  "y": {
+   "id": "yard",
+   "kind": "danger"
+  },
+  "a": {
+   "id": "armory",
+   "kind": "safe",
+   "indoor": true
+  },
+  "h": {
+   "id": "doss_house",
+   "kind": "safe",
+   "indoor": true
+  }
+ },
+ "anchors": [
+  {
+   "id": "spawn",
+   "x": 51,
+   "y": 17
+  },
+  {
+   "id": "exit_bridge",
+   "x": 55,
+   "y": 17
+  },
+  {
+   "id": "exit_north",
+   "x": 15,
+   "y": 0
+  },
+  {
+   "id": "sweep",
+   "x": 16,
+   "y": 18
+  },
+  {
+   "id": "cache",
+   "x": 12,
+   "y": 26
+  },
+  {
+   "id": "contact",
+   "x": 34,
+   "y": 31
+  },
+  {
+   "id": "patrol_start",
+   "x": 24,
+   "y": 18
+  }
+ ],
+ "paths": {
+  "watch_patrol": [
+   [
+    24,
+    18
+   ],
+   [
+    25,
+    18
+   ],
+   [
+    26,
+    18
+   ],
+   [
+    27,
+    18
+   ],
+   [
+    28,
+    18
+   ],
+   [
+    29,
+    18
+   ],
+   [
+    30,
+    18
+   ],
+   [
+    31,
+    18
+   ],
+   [
+    32,
+    18
+   ],
+   [
+    33,
+    18
+   ],
+   [
+    34,
+    18
+   ],
+   [
+    35,
+    18
+   ],
+   [
+    36,
+    18
+   ],
+   [
+    37,
+    18
+   ],
+   [
+    38,
+    18
+   ],
+   [
+    39,
+    18
+   ],
+   [
+    40,
+    18
+   ],
+   [
+    41,
+    18
+   ],
+   [
+    42,
+    18
+   ],
+   [
+    43,
+    18
+   ],
+   [
+    44,
+    18
+   ],
+   [
+    44,
+    17
+   ],
+   [
+    43,
+    17
+   ],
+   [
+    42,
+    17
+   ],
+   [
+    41,
+    17
+   ],
+   [
+    40,
+    17
+   ],
+   [
+    39,
+    17
+   ],
+   [
+    38,
+    17
+   ],
+   [
+    37,
+    17
+   ],
+   [
+    36,
+    17
+   ],
+   [
+    35,
+    17
+   ],
+   [
+    34,
+    17
+   ],
+   [
+    33,
+    17
+   ],
+   [
+    32,
+    17
+   ],
+   [
+    31,
+    17
+   ],
+   [
+    30,
+    17
+   ],
+   [
+    29,
+    17
+   ],
+   [
+    28,
+    17
+   ],
+   [
+    27,
+    17
+   ],
+   [
+    26,
+    17
+   ],
+   [
+    25,
+    17
+   ],
+   [
+    24,
+    17
+   ]
+  ]
+ },
+ "props": [
+  {
+   "id": "roof_doss_house",
+   "art": "doss_house",
+   "x": 29,
+   "y": 29,
+   "w": 11,
+   "h": 5,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "h"
+  },
+  {
+   "id": "tenement_n_1",
+   "art": "tenement_block",
+   "x": 22,
+   "y": 8,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_m_1",
+   "art": "tenement_block",
+   "x": 31,
+   "y": 8,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_ne_1",
+   "art": "tenement_block",
+   "x": 45,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_ne_2",
+   "art": "tenement_block",
+   "x": 45,
+   "y": 6,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_nw_1",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_nw_2",
+   "art": "tenement_block",
+   "x": 7,
+   "y": 1,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_nw_3",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 6,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_nw_4",
+   "art": "tenement_block",
+   "x": 7,
+   "y": 6,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_se_1",
+   "art": "tenement_block",
+   "x": 40,
+   "y": 23,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_se_2",
+   "art": "tenement_block",
+   "x": 46,
+   "y": 23,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_se_3",
+   "art": "tenement_block",
+   "x": 40,
+   "y": 28,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_se_4",
+   "art": "tenement_block",
+   "x": 46,
+   "y": 28,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_sw_1",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 29,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_sw_2",
+   "art": "tenement_block",
+   "x": 7,
+   "y": 29,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_sw_3",
+   "art": "tenement_block",
+   "x": 13,
+   "y": 29,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_sw_4",
+   "art": "tenement_block",
+   "x": 19,
+   "y": 29,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_w_1",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 12,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_w_2",
+   "art": "tenement_block",
+   "x": 1,
+   "y": 17,
+   "w": 6,
+   "h": 5,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_ss_1",
+   "art": "tenement_row",
+   "x": 35,
+   "y": 20,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_far_1",
+   "art": "tenement_row",
+   "x": 22,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_far_2",
+   "art": "tenement_row",
+   "x": 28,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "tenement_far_3",
+   "art": "tenement_row",
+   "x": 34,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "barricade_n",
+   "art": "spiked_barricade",
+   "x": 16,
+   "y": 12,
+   "w": 3,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "grate_yard",
+   "art": "street_grate",
+   "x": 12,
+   "y": 19,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "grate_street",
+   "art": "street_grate",
+   "x": 36,
+   "y": 17,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "roof_watch_armory",
+   "art": "watch_armory",
+   "x": 10,
+   "y": 24,
+   "w": 6,
+   "h": 5,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "a"
+  },
+  {
+   "id": "torch_1",
+   "art": "watch_torch",
+   "x": 21,
+   "y": 16,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_2",
+   "art": "watch_torch",
+   "x": 21,
+   "y": 19,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_3",
+   "art": "watch_torch",
+   "x": 45,
+   "y": 15,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "torch_4",
+   "art": "watch_torch",
+   "x": 45,
+   "y": 20,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "pennant",
+   "art": "rust_pennant",
+   "x": 9,
+   "y": 17,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "court_brazier",
+   "art": "brazier",
+   "x": 31,
+   "y": 26,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "court_crates",
+   "art": "crate_stack",
+   "x": 37,
+   "y": 25,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "landing_crates",
+   "art": "crate_stack",
+   "x": 50,
+   "y": 13,
+   "w": 2,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  }
+ ],
+ "ground": [
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmcmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmcmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmccccccccccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmccccccccccccmmmmmmmmmmmmmmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccffffffffccmmmmmmmmmmmmmmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccffffffffccmmmmmmmmmmmmmmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccffffffffccccccccccccccccccccccccccfffffffffm",
+  "mmmmmmmmmmccffffffffccccccccccccccccccccccccccffffffffff",
+  "mmmmmmmmmmccffffffffccccccccccccccccccccccccccffffffffff",
+  "mmmmmmmmmmccffffffffccccccccccccccccccccccccccfffffffffm",
+  "mmmmmmmmmmccffffffffccmmmmmmmmmmmccmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccffffffffccmmmmmmmmmmmccmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccccccccccccmmmmmmmmmmmccmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccccccccccccmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmfmmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmffffmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmffffmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmffffmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+ ],
+ "ground_legend": {
+  "s": "soot_yard",
+  "c": "cobble_road",
+  "f": "flagstone",
+  "m": "mud"
+ },
+ "tags": [
+  "sunk_ward"
+ ],
+ "draft_markers": {
+  "spawn": "arrival from the world map (the bridge landing from the Grate)",
+  "exit_bridge": "exit `world_map`: the bridge east, World map: the Seventh Ward",
+  "exit_north": "exit (optional): the road north toward the Kiln, World map",
+  "sweep": "encounter `sweep`: Captain Vane's sweep in the yard (the mission)",
+  "cache": "point `bellows_cache`: inside the old Watch armory, after M1 (indoor)",
+  "contact": "inside the doss house: a contact or a rest (safe, indoor)",
+  "patrol_start": "roamer `watch_patrol` (path `watch_patrol`): the Watch on the main street"
+ },
+ "draft_zone_bindings": {
+  "main_street": "street fights (Watch pairs, enforcers); the roamer as well",
+  "back_alleys": "scavengers and stray Watch; 12-20 steps a fight (the kit's default)",
+  "yard": "no binding: the yard's fight is the `sweep` encounter marker"
+ },
+ "location": "alleyway_junction_7"
+}

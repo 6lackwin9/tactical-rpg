@@ -43,6 +43,8 @@
   code { font: 500 11.5px var(--mono); color: var(--fg); }
   .dim { color: var(--dim); }
   .status { font: 500 12px var(--mono); color: var(--green); }
+  select { font: 600 12.5px var(--body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+  select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 </style>
 
 <div class="wrap">
@@ -59,6 +61,8 @@
     <label class="toggle"><input type="checkbox" id="opt-anchors" checked> Anchors</label>
     <label class="toggle"><input type="checkbox" id="opt-props" checked> Prop names</label>
     <label class="toggle"><input type="checkbox" id="opt-bright" checked> Brighten grounds</label>
+    <label class="toggle"><input type="checkbox" id="opt-screen" checked> Screen size</label>
+    <label class="toggle" id="inside-wrap">Party is <select id="opt-inside"></select></label>
     <span style="flex:1"></span>
     <span class="status" id="status"></span>
   </div>
@@ -66,6 +70,8 @@
     <div class="stage"><canvas id="cv" width="960" height="640"></canvas></div>
     <div class="side">
       <div class="card"><h2>Landmark</h2><img class="lm" id="lm" alt="The place's act-map landmark"><p class="note" id="lm-note"></p></div>
+      <div class="card"><h2>Size</h2><p class="note" id="size" style="margin:0"></p></div>
+      <div class="card"><h2>Zones</h2><ul id="zones"></ul></div>
       <div class="card"><h2>Anchors</h2><ul id="anchors"></ul></div>
       <div class="card"><h2>Grounds</h2><ul id="grounds"></ul></div>
     </div>
@@ -120,11 +126,12 @@ function draw() {
   }
   // zones
   if ($('opt-zones').checked) {
-    const zc = {}; Object.entries(m.zone_legend).forEach(([c, z]) => zc[c] = z.kind === 'danger' ? 'rgba(232,90,70,.22)' : 'rgba(80,200,120,.14)');
+    const zc = {}; Object.entries(m.zone_legend).forEach(([c, z]) => zc[c] = z.indoor ? 'rgba(180,156,255,.25)' : z.kind === 'danger' ? 'rgba(232,90,70,.22)' : 'rgba(80,200,120,.14)');
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = m.zones[y][x]; if (zc[c]) { g.fillStyle = zc[c]; g.fillRect(x * T, y * T, T, T); } }
   }
   // props: ground props dashed and flat, standing props solid with a face below the top
-  const groundProps = m.props.filter(p => p.layer === 'ground'), standing = m.props.filter(p => p.layer !== 'ground');
+  const groundProps = m.props.filter(p => p.layer === 'ground'), standing = m.props.filter(p => p.layer === 'sort');
+  const roofs = m.props.filter(p => p.layer === 'roof'), inside = $('opt-inside').value;
   for (const p of groundProps) {
     const c = PROP_COL[p.art] ||= hashCol(p.art);
     g.save(); g.globalAlpha = .55; g.fillStyle = c; g.fillRect(p.x * T + 2, p.y * T + 2, p.w * T - 4, p.h * T - 4); g.restore();
@@ -137,7 +144,7 @@ function draw() {
     g.strokeStyle = '#0b0b0f'; g.lineWidth = 2; g.strokeRect(x + 2, y + 2, w - 4, h - 4);
   }
   if ($('opt-props').checked) {
-    for (const p of m.props) {
+    for (const p of m.props.filter(q => q.layer !== 'roof')) {
       const cx = (p.x + p.w / 2) * T, cy = (p.y + p.h / 2) * T, label = p.art.replace(/_/g, ' ');
       const tw = g.measureText(label).width;
       g.fillStyle = 'rgba(8,9,12,.78)'; g.fillRect(cx - tw / 2 - 3, cy - 8, tw + 6, 16);
@@ -163,11 +170,50 @@ function draw() {
       g.fillStyle = KCOL[k]; g.fillText(a.id, lx, cy + 1);
     }
   }
+  // roofs (REVEAL1 draft): above the characters; the room the party stands in fades to an outline
+  for (const p of roofs) {
+    const x = p.x * T, y = p.y * T, w = p.w * T, h = p.h * T, c = PROP_COL[p.art] ||= hashCol(p.art);
+    if (p.roof_of === inside) {
+      g.setLineDash([6, 4]); g.strokeStyle = c; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, w - 2, h - 2); g.setLineDash([]);
+      continue;
+    }
+    g.fillStyle = c; g.fillRect(x + 1, y + 1, w - 2, h - 2);
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x + 1, y + h * .62, w - 2, h * .38 - 1);
+    g.strokeStyle = '#0b0b0f'; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    const label = p.art.replace(/_/g, ' ') + ' (roof)', tw = g.measureText(label).width;
+    g.fillStyle = 'rgba(8,9,12,.78)'; g.fillRect(x + w / 2 - tw / 2 - 3, y + h / 2 - 8, tw + 6, 16);
+    g.fillStyle = '#f3ead6'; g.fillText(label, x + w / 2 - tw / 2, y + h / 2 + 1);
+  }
+  // the game's screen: the map area under the HUD bar is 640 x 340 logical px and a cell is 16 px at 1x zoom, so the
+  // camera shows 40 x 21.25 cells at 1x and 20 x 10.6 at 2x, centred on the party and stopped at the map's edges
+  if ($('opt-screen').checked) {
+    const sp = m.anchors.find(a => a.id === 'spawn');
+    for (const [zoom, col] of [[1, '#f2b437'], [2, '#3fc9e0']]) {
+      const vw = 40 / zoom, vh = 21.25 / zoom;
+      const place = (c, v, n) => n + 2 <= v ? (n - v) / 2 : Math.max(-1, Math.min(n + 1 - v, c + .5 - v / 2));
+      const fx = place(sp.x, vw, W), fy = place(sp.y, vh, H);
+      g.save(); g.strokeStyle = col; g.lineWidth = 3; g.setLineDash(zoom === 1 ? [] : [10, 6]);
+      g.strokeRect(fx * T, fy * T, vw * T, vh * T); g.restore();
+      g.font = '700 12px Inter, system-ui, sans-serif';
+      const lab = 'one screen at ' + zoom + 'x zoom', tw = g.measureText(lab).width;
+      const lx = Math.max(4, fx * T + 6), ly = Math.max(10, fy * T + 12);
+      g.fillStyle = 'rgba(8,9,12,.85)'; g.fillRect(lx - 3, ly - 9, tw + 6, 18); g.fillStyle = col; g.fillText(lab, lx, ly);
+      g.font = '600 11px Inter, system-ui, sans-serif';
+    }
+  }
 }
 
 function side() {
   const m = DATA.maps[cur];
   $('lm').src = m.landmark || ''; $('lm').hidden = !m.landmark;
+  const W = m.rows[0].length, H = m.rows.length;
+  $('size').textContent = W + ' x ' + H + ' tiles. One screen at 1x zoom shows 40 x 21 tiles, so this map is about ' + (W / 40).toFixed(1) + ' x ' + (H / 21.25).toFixed(1) + ' screens; at 2x zoom about ' + (W / 20).toFixed(1) + ' x ' + (H / 10.6).toFixed(1) + '.';
+  const zb = m.draft_zone_bindings || {};
+  $('zones').innerHTML = Object.entries(m.zone_legend).map(([c, z]) => {
+    const col = z.indoor ? '#b49cff' : z.kind === 'danger' ? '#e85a46' : '#7fcf8a';
+    const note = z.indoor ? 'indoor: its roof fades while the party is inside' : (zb[z.id] || z.kind);
+    return '<li><span class="dot" style="background:' + col + '"></span><span><code>' + c + '</code> ' + z.id + ' <span class="dim">' + z.kind + '</span><br>' + note + '</span></li>';
+  }).join('');
   $('lm-note').textContent = `${m.rows[0].length} x ${m.rows.length} tiles · draft template ${m.id} · ${m.props.length} props`;
   $('anchors').innerHTML = m.anchors.map(a => {
     const t = m.draft_markers[a.id] || '', k = markerKind(t);
@@ -181,9 +227,14 @@ function side() {
   $('status').textContent = `${m.title}`;
 }
 
+function fillInside() {
+  const m = DATA.maps[cur], rooms = Object.entries(m.zone_legend).filter(([, z]) => z.indoor);
+  $('opt-inside').innerHTML = '<option value="">outside</option>' + rooms.map(([c, z]) => '<option value="' + c + '">inside: ' + z.id.replace(/_/g, ' ') + '</option>').join('');
+  $('inside-wrap').hidden = !rooms.length;
+}
 function render() { draw(); side(); }
 $('tabs').innerHTML = DATA.maps.map((m, i) => `<input type="radio" name="map" id="tab-${i}" value="${i}" ${i === 0 ? 'checked' : ''}><label for="tab-${i}">${m.title}</label>`).join('');
-$('tabs').addEventListener('change', e => { cur = +e.target.value; render(); });
-['opt-grid', 'opt-zones', 'opt-anchors', 'opt-props', 'opt-bright'].forEach(id => $(id).addEventListener('change', render));
-render();
+$('tabs').addEventListener('change', e => { cur = +e.target.value; fillInside(); render(); });
+['opt-grid', 'opt-zones', 'opt-anchors', 'opt-props', 'opt-bright', 'opt-screen', 'opt-inside'].forEach(id => $(id).addEventListener('change', render));
+fillInside(); render();
 </script>

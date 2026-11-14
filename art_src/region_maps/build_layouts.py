@@ -49,6 +49,16 @@ class Layout:
         self.props.append({"id": pid, "art": art, "x": x, "y": y, "w": w, "h": h, "layer": layer, "variant": -1,
                            "flip": False})
 
+    def indoor(self, zone_char, x0, y0, x1, y1, door, ground, art, roof_h=None):
+        """An enterable building (REVEAL1 draft): a wall ring round an open floor, one doorway, the floor its own
+        zone, and the building's picture as a `roof` prop over the whole footprint. Outside, the roof hides the room;
+        with the party inside its zone, the roof and front wall fade (REGIONGROUND1_SCENE: indoor reveal)."""
+        self.rect(x0, y0, x1, y1, "#")
+        self.rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ".", ground, zone_char)
+        self.rect(door[0], door[1], door[0], door[1], ".", ground, zone_char)
+        self.props.append({"id": f"roof_{art}", "art": art, "x": x0, "y": y0, "w": x1 - x0 + 1, "h": y1 - y0 + 1,
+                           "layer": "roof", "variant": -1, "flip": False, "roof_of": zone_char})
+
     def anchor(self, aid, x, y, marker=None):
         self.anchors.append({"id": aid, "x": x, "y": y})
         if marker:
@@ -477,8 +487,95 @@ def slag_gate():
                    {k: v for k, v in GROUND.items() if k in "fm"}, ["sunk_ward"])
 
 
+def fill_block(L, name, x0, y0, x1, y1, art="tenement_block", pw=6, ph=5):
+    """A city block: all wall, packed with as many `art` buildings (pw x ph) as fit; the rest stays plain wall."""
+    L.rect(x0, y0, x1, y1, "#")
+    n = 0
+    for by in range(y0, y1 - ph + 2, ph):
+        for bx in range(x0, x1 - pw + 2, pw):
+            n += 1
+            L.prop(f"{name}_{n}", art, bx, by, pw, ph)
+
+
+def alleyway_junction_7_large():
+    """Junction 7 at mission-ground size (Tushar 2026-11-14: a sense of size; larger open maps with dedicated zones,
+    danger areas to go through and safe meeting areas, against small rooms joined by corridors).
+
+    The rooms-and-corridors feel inside one map: safe rooms (the bridge landing where the party arrives, the doss-house
+    court where it can meet a contact) joined by danger streets and alleys. A danger zone bound to an encounter list
+    (`zone_bindings`) starts a fight every 12 to 20 steps walked inside it (rpgkit_world explore.rs); a Watch patrol walks
+    the main street as a roamer. The mission site, Vane's barricaded yard where the alleys cross, is at the far west end;
+    the road north toward the Kiln leaves from the yard. About 56 x 36 tiles: three screens at the default zoom."""
+    L = Layout(56, 36, "m")
+    L.border()
+    L.rect(1, 1, 54, 34, "#")
+    # the streets and rooms, carved out of the solid ward
+    L.rect(46, 13, 54, 22, ".", "f")                    # the bridge landing (safe)
+    L.rect(55, 17, 55, 18, ".", "f")                    # the bridge exit
+    L.rect(22, 16, 45, 19, ".", "c")                    # the main street (danger: the Watch patrol, street fights)
+    L.rect(10, 12, 21, 23, ".", "c"); L.rect(12, 14, 19, 21, ground="f")   # the Junction 7 yard (the mission)
+    L.rect(15, 0, 16, 11, ".", "c")                     # the road north toward the Kiln
+    L.rect(22, 5, 44, 7, ".", "m")                      # the back alley north (danger)
+    L.rect(29, 8, 30, 15, ".", "m"); L.rect(42, 8, 43, 15, ".", "m")   # its two lanes down to the main street
+    L.rect(16, 5, 21, 6, ".", "m")                      # the back alley's west end, onto the north road
+    L.rect(33, 20, 34, 23, ".", "c")                    # the lane down to the doss-house court
+    L.rect(29, 24, 39, 28, ".", "f")                    # the doss-house court (safe)
+    L.indoor("h", 29, 29, 39, 33, (34, 29), "f", "doss_house")      # the doss house: the meeting room inside
+    L.rect(18, 24, 19, 25, ".", "m"); L.rect(16, 26, 21, 28, ".", "m")   # the drain run south of the yard (danger)
+    L.rect(22, 27, 28, 28, ".", "m")                    # it reaches the court's west door
+    # buildings fill the solid ward between the streets
+    fill_block(L, "tenement_n", 22, 8, 28, 15); fill_block(L, "tenement_m", 31, 8, 41, 15)
+    fill_block(L, "tenement_ne", 45, 1, 54, 12); fill_block(L, "tenement_nw", 1, 1, 14, 11)
+    fill_block(L, "tenement_s", 22, 20, 32, 23); fill_block(L, "tenement_se", 40, 23, 54, 34)
+    fill_block(L, "tenement_sw", 1, 29, 28, 34); fill_block(L, "tenement_w", 1, 12, 9, 23)
+    fill_block(L, "tenement_ss", 35, 20, 45, 22, art="tenement_row", pw=6, ph=3)
+    L.rect(22, 1, 43, 4, "#"); fill_block(L, "tenement_far", 22, 1, 43, 4, art="tenement_row", pw=6, ph=3)
+    # Vane's yard: a barricade across most of the north road's mouth, the sealed grates, the Watch armory south of it
+    L.rect(16, 12, 18, 12, "#"); L.prop("barricade_n", "spiked_barricade", 16, 12, 3, 1)
+    L.prop("grate_yard", "street_grate", 12, 19, 2, 2, layer="ground")
+    L.prop("grate_street", "street_grate", 36, 17, 2, 2, layer="ground")
+    L.indoor("a", 10, 24, 15, 28, (13, 24), "f", "watch_armory")   # the old Watch armory: the cache inside
+    for i, (x, y) in enumerate(((21, 16), (21, 19), (45, 15), (45, 20))):
+        L.rows[y][x] = "#"; L.prop(f"torch_{i + 1}", "watch_torch", x, y)
+    L.prop("pennant", "rust_pennant", 9, 17); L.rows[17][9] = "#"
+    # the doss-house court: a brazier, crates, its house along the south wall
+    L.prop("court_brazier", "brazier", 31, 26); L.rows[26][31] = "#"
+    L.prop("court_crates", "crate_stack", 37, 25, 2, 1); L.rect(37, 25, 38, 25, "#")
+    L.prop("landing_crates", "crate_stack", 50, 13, 2, 1); L.rect(50, 13, 51, 13, "#")
+    # zones: two safe rooms, three danger stretches, the yard
+    L.rect(0, 0, 55, 35, zone="-")
+    L.rect(46, 13, 55, 22, zone="s"); L.rect(29, 24, 39, 28, zone="c")
+    L.rect(22, 16, 45, 19, zone="d"); L.rect(16, 0, 44, 15, zone="b"); L.rect(16, 24, 28, 28, zone="b")
+    L.rect(10, 12, 21, 23, zone="y"); L.rect(15, 0, 16, 11, zone="b")
+    L.rect(33, 20, 34, 23, zone="c")
+    L.rect(11, 25, 14, 27, zone="a"); L.rect(13, 24, 13, 24, zone="a")
+    L.rect(30, 30, 38, 32, zone="h"); L.rect(34, 29, 34, 29, zone="h")
+    # the Watch patrol walks the main street, east and back
+    L.paths = {"watch_patrol": [[x, 18] for x in range(24, 45)] + [[x, 17] for x in range(44, 23, -1)]}
+    L.anchor("spawn", 51, 17, "arrival from the world map (the bridge landing from the Grate)")
+    L.anchor("exit_bridge", 55, 17, "exit `world_map`: the bridge east, World map: the Seventh Ward")
+    L.anchor("exit_north", 15, 0, "exit (optional): the road north toward the Kiln, World map")
+    L.anchor("sweep", 16, 18, "encounter `sweep`: Captain Vane's sweep in the yard (the mission)")
+    L.anchor("cache", 12, 26, "point `bellows_cache`: inside the old Watch armory, after M1 (indoor)")
+    L.anchor("contact", 34, 31, "inside the doss house: a contact or a rest (safe, indoor)")
+    L.anchor("patrol_start", 24, 18, "roamer `watch_patrol` (path `watch_patrol`): the Watch on the main street")
+    e = L.entry("sunk_ward_junction_7_large", "Sunk Ward: Alleyway Junction 7 (large)",
+                {"s": {"id": "bridge_landing", "kind": "safe"}, "c": {"id": "doss_court", "kind": "safe"},
+                 "d": {"id": "main_street", "kind": "danger"}, "b": {"id": "back_alleys", "kind": "danger"},
+                 "y": {"id": "yard", "kind": "danger"},
+                 "a": {"id": "armory", "kind": "safe", "indoor": True},
+                 "h": {"id": "doss_house", "kind": "safe", "indoor": True}},
+                {k: v for k, v in GROUND.items() if k in "scfm"}, ["sunk_ward"])
+    e["paths"] = L.paths
+    e["draft_zone_bindings"] = {"main_street": "street fights (Watch pairs, enforcers); the roamer as well",
+                                "back_alleys": "scavengers and stray Watch; 12-20 steps a fight (the kit's default)",
+                                "yard": "no binding: the yard's fight is the `sweep` encounter marker"}
+    return e
+
+
 PLACES = [(sluice_undercroft, "sluice_undercroft"), (drowned_runoff_grate, "drowned_runoff_grate"),
-          (alleyway_junction_7, "alleyway_junction_7"), (ash_crawl_crossroads, "ash_crawl_crossroads"),
+          (alleyway_junction_7, "alleyway_junction_7"), (alleyway_junction_7_large, "alleyway_junction_7_large"),
+          (ash_crawl_crossroads, "ash_crawl_crossroads"),
           (fourth_kiln, "fourth_kiln"), (tallow_vats, "tallow_vats"), (crucible_watchpost, "crucible_watchpost"),
           (slag_gate, "slag_gate"), (corvos_gate, "corvos_gate")]
 
@@ -513,6 +610,15 @@ def check(e):
                     if (x, y) in seen:
                         errs.append(f"standing props {seen[(x, y)]} and {p['id']} share ({x},{y})")
                     seen[(x, y)] = p["id"]
+    for zc, z in e["zone_legend"].items():
+        if z.get("indoor"):
+            roofs = [p for p in e["props"] if p.get("roof_of") == zc]
+            if not roofs:
+                errs.append(f"indoor zone {z['id']} has no roof prop")
+            for y, r in enumerate(e["zones"]):
+                for x, c in enumerate(r):
+                    if c == zc and not any(p["x"] <= x < p["x"] + p["w"] and p["y"] <= y < p["y"] + p["h"] for p in roofs):
+                        errs.append(f"indoor zone {z['id']} cell ({x},{y}) outside its roof")
     ids = [a["id"] for a in e["anchors"]]
     if ids.count("spawn") != 1:
         errs.append("exactly one spawn anchor")
@@ -542,7 +648,7 @@ def main():
     ok = True
     for fn, loc in PLACES:
         e = fn()
-        e["location"] = loc
+        e["location"] = loc.removesuffix("_large")      # a large variant belongs to the same place
         errs = check(e)
         (HERE / f"{loc}.json").write_text(json.dumps(e, indent=1) + "\n", encoding="utf-8", newline="\n")
         print(f"{loc}: {len(e['rows'][0])} x {len(e['rows'])}, {len(e['props'])} props, {len(e['anchors'])} anchors,"
