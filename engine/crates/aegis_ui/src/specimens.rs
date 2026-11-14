@@ -1205,11 +1205,26 @@ impl Specimens {
         used
     }
 
+    /// PR5-48: the Layout page's agent commands (`layout_markers`, `layout`; `LayoutEditor::command`), on that page only.
+    pub fn command(&mut self, body: &serde_json::Value) -> Option<serde_json::Value> {
+        if self.page != 8 {
+            return None;
+        }
+        let out = self.layout.command(body)?;
+        self.last = self.layout.note.clone();
+        Some(out)
+    }
+
     /// The Panes page's keys (the gallery screen forwards them): the menu column's hotkeys, the tab rail's PageUp /
     /// PageDown and the ask's Enter, y, n and Esc. True when the key was used.
     pub fn key(&mut self, k: Key) -> bool {
+        self.key_with(k, false, false)
+    }
+
+    /// `key` with the modifiers held (PR5-48: the Layout page's Shift nudge and Ctrl+Z).
+    pub fn key_with(&mut self, k: Key, shift: bool, ctrl: bool) -> bool {
         if self.page == 8 {
-            let used = self.layout.key(k, false, false);
+            let used = self.layout.key(k, shift, ctrl);
             if used {
                 self.last = self.layout.note.clone();
             }

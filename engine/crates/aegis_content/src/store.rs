@@ -56,6 +56,17 @@ pub trait Hooks {
     fn manifest_problems(&self, _manifest: &Dict) -> Vec<String> {
         Vec::new()
     }
+    /// PR5-48: the asset sidecar ops the game's writer adds to `aegis content` (`aegis content <op> <name> [<json |
+    /// @file>]`, a seed step `{"op": <op>, "name", "edits"}`): files beside the art that only the writer edits (the
+    /// standing rule: no raw JSON). None by default.
+    fn sidecar_ops(&self) -> &'static [&'static str] {
+        &[]
+    }
+    /// Sidecar `name` of op `op` (one of `sidecar_ops`): its text when `edits` is None, else the edits applied, checked
+    /// and written (Ok: the line to print); refused with nothing written.
+    fn sidecar(&self, _data_dir: &Path, op: &str, _name: &str, _edits: Option<&serde_json::Value>) -> Result<String, Vec<String>> {
+        Err(vec![format!("This game has no sidecar op '{op}'.")])
+    }
 }
 
 /// What an upsert or remove did.

@@ -31,6 +31,10 @@ pub enum SAct {
     PickDiagonal(usize),
     ContentForge,
     WorldForge,
+    /// PR5-48: the Map Layout editor on the picked world map.
+    MapLayout,
+    /// PR5-48: the world map Map Layout opens (an index into `worldmap::layout_names`).
+    PickLayout(usize),
     Dojo,
     Gallery,
     Exploration,
@@ -90,12 +94,14 @@ pub struct SceneRunner {
     world: usize,
     /// Exploration's start: an index into `starts`.
     location: usize,
+    /// PR5-48: Map Layout's world map, an index into `worldmap::layout_names` (None: the editor's default, Act 1's sidecar).
+    layout: Option<usize>,
     w: Vec<Widget<SAct>>,
 }
 
 impl SceneRunner {
     pub fn new() -> Self {
-        Self { encounter: 0, ruleset: 0, rules: IndexMap::new(), show_rules: false, reveal: false, diagonal: 0, world: 0, location: 0, w: Vec::new() }
+        Self { encounter: 0, ruleset: 0, rules: IndexMap::new(), show_rules: false, reveal: false, diagonal: 0, world: 0, location: 0, layout: None, w: Vec::new() }
     }
 
     /// The ruleset the picked encounter plays by before the toggles: the picked one, or for World the ruleset of the
@@ -261,6 +267,13 @@ impl SceneRunner {
                 let f = crate::forge::Forge::world(cx);
                 cx.nav.push(Nav::Push(Box::new(f)));
             }
+            SAct::MapLayout => {
+                let names = crate::worldmap::layout_names(cx.art.layers());
+                let name = self.layout.and_then(|i| names.get(i).cloned());
+                let m = crate::worldmap::MapLayoutScreen::new(cx, name.as_deref());
+                cx.nav.push(Nav::Push(Box::new(m)));
+            }
+            SAct::PickLayout(i) => self.layout = Some(i),
             SAct::Gallery => cx.nav.push(Nav::Push(Box::new(crate::gallery::Gallery::new()))),
             SAct::Dojo => {
                 let dj = crate::dojo::Dojo::new(cx);
@@ -334,11 +347,12 @@ impl Screen<GameCx> for SceneRunner {
         let worlds = new_game::playable_worlds(&cx.data);
         let starts = self.world_id(cx).map(|w| Self::starts(&cx.data, &w)).unwrap_or_default();
         self.location = self.location.min(starts.len().saturating_sub(1));
-        let scenes: [(&str, &str, &str, SAct); 7] = [
+        let scenes: [(&str, &str, &str, SAct); 8] = [
             ("runner.main_menu", "Main Menu", "The player's front door: continue, new game, load and save slots, settings and the in-game hub.", SAct::MainMenu),
             ("runner.arena", "Combat Arena", "Plan and fight a battle: a catalog encounter or any world's battle (played with that world's characters).", SAct::Arena),
             ("runner.content_forge", "Content Forge", "Read-only asset viewer: skills, items, classes, units and encounters with an engine summary.", SAct::ContentForge),
             ("runner.world_forge", "World Forge", "Read-only world viewer: regions, factions, characters, quests and encounters with their inheritance.", SAct::WorldForge),
+            ("runner.map_layout", "Map Layout", "Lay out any act's world map: drag, nudge and size the landmarks and shape the roads over the act background; Save writes its layout sidecar (debug build).", SAct::MapLayout),
             ("runner.dojo", "Gear & Skill Dojo", "Equip heroes and benchmark their damage against a training dummy.", SAct::Dojo),
             ("runner.gallery", "UI Gallery", "UI panes one at a time on sample data (the battle timeline first), to judge and refine them on their own.", SAct::Gallery),
             ("runner.exploration", "Exploration", "Walk a world's regions and world map from any start (travel, dialogue, shops, quests); a fight is skipped as a win at no cost, or fought. Nothing is saved.", SAct::Exploration),
@@ -356,10 +370,10 @@ impl Screen<GameCx> for SceneRunner {
             .iter()
             .map(|s| {
                 let lines = ui.p.wrap(s.2, SMALL, desc_w);
-                let extra = matches!(s.3, SAct::Arena | SAct::Exploration);
+                let extra = matches!(s.3, SAct::Arena | SAct::Exploration | SAct::MapLayout);
                 let extra_h = match s.3 {
                     SAct::Arena => arena_h,
-                    SAct::Exploration => 16,
+                    SAct::Exploration | SAct::MapLayout => 16,
                     _ => 0,
                 };
                 let h = (3.0 + name_h + 1.0 + lines.len() as f32 * line_h + extra_h as f32 + 3.0).ceil() as i32;
@@ -406,6 +420,12 @@ impl Screen<GameCx> for SceneRunner {
                         ui.checkbox(&format!("runner.arena.rule.{id}"), r.x + 5 + col * col_w, row_y + 18 + row * RULE_ROW_H, &id.replace('_', " "), effective.has(id), SAct::ToggleRule(i), true);
                     }
                 }
+            } else if let SAct::MapLayout = act {
+                // PR5-48: the world map to lay out (Act 1's sidecar by default; a pre-staged act's background too)
+                let names = crate::worldmap::layout_names(cx.art.layers());
+                let default = names.iter().position(|n| cx.art.has(&emberwake_content::art::world_map_layout(n))).unwrap_or(0);
+                let at = self.layout.unwrap_or(default).min(names.len().saturating_sub(1));
+                ui.select(&format!("{id}.name"), Rect::new(r.x + 5, pick_y, 160, 14), &names, at, SAct::PickLayout, names.len() > 1, tip("World map", "The act's world map Map Layout opens: a layout sidecar, or a background whose act has no data yet."));
             } else if extra {
                 let names: Vec<String> = worlds.iter().map(|w| cx.world_name(w)).collect();
                 ui.select(&format!("{id}.world"), Rect::new(r.x + 5, pick_y, 140, 14), &names, self.world % worlds.len().max(1), SAct::PickWorld, worlds.len() > 1, tip("World", "The world to explore."));
@@ -440,7 +460,8 @@ impl Screen<GameCx> for SceneRunner {
         let start = world.as_deref().map(|w| Self::starts(&cx.data, w)).and_then(|st| st.get(self.location.min(st.len().saturating_sub(1))).cloned());
         let base = self.base_ruleset(cx);
         json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": Self::rulesets(cx).get(self.ruleset).map(|r| r.1.clone()), "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
-            "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "melee_diagonal": self.diagonal_pick(), "chip": self.chip(cx)})
+            "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "melee_diagonal": self.diagonal_pick(), "chip": self.chip(cx),
+            "map_layout": self.layout.and_then(|i| crate::worldmap::layout_names(cx.art.layers()).get(i).cloned())})
     }
 
     widget_plumbing!();
@@ -554,6 +575,38 @@ mod tests {
         assert_eq!(r.state(&cx)["ruleset"], json!("Plain"));
         r.act(&mut cx, SAct::PickRuleset(99));
         assert_eq!(r.ruleset, rows.len() - 1, "clamped to the last row");
+    }
+
+    /// PR5-48 (MAP-LAYOUT-ED): the Scene Runner's Map Layout card sits right after the read-only World Forge, its picker
+    /// lists every world map `worldmap::layout_names` offers (Act 1's sidecar picked by default), and Launch opens the
+    /// layout editor on the picked one, for each of them.
+    #[test]
+    fn the_map_layout_entry_opens_the_editor_on_each_world_map() {
+        use crate::hud::hud_tests::{frame, game_cx, gfx};
+        let mut cx = game_cx();
+        cx.art = aegis_ui::art::Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let mut r = SceneRunner::new();
+        frame(&mut r, &mut cx, &mut gfx(), 1.0);
+        let y = |id: &str| r.widget_rect(id).unwrap_or_else(|| panic!("{id}")).0.y;
+        let cards: Vec<i32> = ["runner.world_forge", "runner.map_layout", "runner.dojo"].iter().map(|id| y(id)).collect();
+        assert!(cards[0] < cards[1] && cards[1] < cards[2], "beside the World Forge: {cards:?}");
+        let names = crate::worldmap::layout_names(cx.art.layers());
+        assert!(!names.is_empty());
+        let picker = r.widgets().into_iter().find(|w| w["id"] == "runner.map_layout.name").expect("the picker");
+        let default = names.iter().position(|n| cx.art.has(&emberwake_content::art::world_map_layout(n))).expect("a sidecar");
+        assert_eq!(picker["text"], json!(names[default]), "Act 1's sidecar by default: {picker}");
+        let opened = |cx: &mut Cx| match cx.nav.pop() {
+            Some(Nav::Push(s)) => (s.id(), s.state(cx)["name"].as_str().unwrap_or_default().to_string()),
+            _ => panic!("Launch pushes a screen"),
+        };
+        r.act(&mut cx, SAct::MapLayout);
+        assert_eq!(opened(&mut cx), ("map_layout", names[default].clone()));
+        for (i, n) in names.iter().enumerate() {
+            r.act(&mut cx, SAct::PickLayout(i));
+            assert_eq!(r.state(&cx)["map_layout"], json!(n));
+            r.act(&mut cx, SAct::MapLayout);
+            assert_eq!(opened(&mut cx), ("map_layout", n.clone()), "{n}");
+        }
     }
 
     fn data() -> emberwake_world::Data {

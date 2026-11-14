@@ -258,6 +258,9 @@ pub struct LayoutEditor {
     base_markers: Vec<([f32; 2], f32)>,
     base_lines: Vec<Vec<[f32; 2]>>,
     pub background: Option<Rc<Image>>,
+    /// Whether the stage paints its own ground (the stage fill and the background); false draws the pane over what the
+    /// caller drew there (a live screen edited in place).
+    pub backdrop: bool,
     pub marker_box: MarkerBox,
     /// The viewport last set (`set_view`); a pointer is read through it.
     view: Cell<Viewport>,
@@ -284,6 +287,7 @@ impl LayoutEditor {
             base_markers,
             base_lines,
             background: None,
+            backdrop: true,
             marker_box: MarkerBox::default(),
             view: Cell::new(Viewport::default()),
             selected: None,
@@ -879,9 +883,9 @@ impl LayoutEditor {
         self.draw_stage(ui, wrap);
     }
 
-    /// The stage at `view`: the background covering the rect, the padded area and the grid, the polylines with their
-    /// points and segment middles, the markers by the ground-point rule with their rings and labels. Nothing draws
-    /// outside the rect.
+    /// The stage at `view`: the background covering the rect (with `backdrop`), the padded area and the grid, the
+    /// polylines with their points and segment middles, the markers by the ground-point rule with their rings and labels.
+    /// Nothing draws outside the rect.
     pub fn draw_stage<A: Clone>(&self, ui: &mut Ui<A>, wrap: &impl Fn(LayoutAct) -> A) {
         let t = ui.t.clone();
         let v = self.view();
@@ -889,9 +893,11 @@ impl LayoutEditor {
         if r.w <= 0 || r.h <= 0 {
             return;
         }
-        ui.p.fill(r, t.stage);
+        if self.backdrop {
+            ui.p.fill(r, t.stage);
+        }
         ui.push_clip(r);
-        if let Some(bg) = &self.background {
+        if let Some(bg) = self.background.as_ref().filter(|_| self.backdrop) {
             ui.p.image(bg, cover_rect(bg.w, bg.h, r));
         }
         let (ax, ay, aw, ah) = v.area();

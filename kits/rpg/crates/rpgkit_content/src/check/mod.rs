@@ -491,6 +491,12 @@ pub fn validate_all(v: &View) -> Report {
     for t in v.entries("quest_templates") {
         add(&format!("quest_templates:{}", json::s(t, "id")), quest::rewards_errors(v, json::get(t, "rewards")));
     }
+    // PR5-48 (MAP-LAYOUT-ED): the world map layout sidecars of the asset layers (`world_map:<name>`)
+    if !v.assets.roots.is_empty() {
+        for (name, found) in crate::world_map::check_all(&v.worlds, &v.assets) {
+            add(&format!("world_map:{name}"), found.errors);
+        }
+    }
     add("load", v.load_errors.clone());
     problems
 }
@@ -557,6 +563,14 @@ pub fn warnings_all(v: &View) -> Report {
         let found = assets::portrait_file_warnings(root, &v.assets, &faces);
         if !found.is_empty() {
             out.insert(format!("assets:{}", assets::layer_name(root)), found);
+        }
+    }
+    // PR5-48 (MAP-LAYOUT-ED): a sidecar landmark with no landmark image (the map draws its pin)
+    if !v.assets.roots.is_empty() {
+        for (name, found) in crate::world_map::check_all(&v.worlds, &v.assets) {
+            if !found.warnings.is_empty() {
+                out.insert(format!("world_map:{name}"), found.warnings);
+            }
         }
     }
     out

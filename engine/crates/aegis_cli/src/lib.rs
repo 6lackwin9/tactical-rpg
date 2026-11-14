@@ -3,7 +3,7 @@
 //!   aegis serve                                                                the game's command API over stdin / stdout
 //!   aegis link '<json>' ... [port=47800]                                       requests to a running GUI (agent link)
 //!   aegis replay <recording.json> ...                                          replay a playtest recording (see `replay`)
-//!   aegis content check | upsert | remove | world | apply | manifest            edit the data folder (see `content`)
+//!   aegis content check | upsert | remove | world | apply | manifest | <sidecar op>  edit the data folder (see `content`)
 //!   aegis scenario check | run                                                 walk real screens from JSON files (see `scenario`)
 //!   aegis bundle <manifest.json> [out=<dir>]                                   pack a web build's bundle parts (see `bundle`)
 
@@ -71,7 +71,7 @@ pub trait Game {
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
 aegis replay <recording.json> [session=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>]
+aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>] | <sidecar op> <name> [<json or @file>]
 aegis scenario check [<file> | all] | run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
 aegis bundle <manifest.json> [out=<dir>]   (pack a web build's bundle parts and bundle.json)";
 
@@ -112,9 +112,16 @@ pub fn json_arg(raw: &str) -> Result<Value> {
 }
 
 /// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?}, {"op": "remove", "kind", "id",
-/// "world"?} or {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1).
+/// "world"?}, {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1) or {"op": <a sidecar op of the
+/// game>, "name", "edits"?} (PR5-48, `Hooks::sidecar`).
 pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
     let s = |k: &str| step.get(k).and_then(|v| v.as_str()).map(String::from);
+    // PR5-48: a sidecar op of the game's writer, {"op": <op>, "name", "edits"} (no edits: written again as it is)
+    if let Some(op) = s("op").filter(|o| hooks.sidecar_ops().contains(&o.as_str())) {
+        let name = s("name").ok_or_else(|| vec![format!("{op} needs a name")])?;
+        let edits = step.get("edits").cloned().unwrap_or_else(|| json!([]));
+        return hooks.sidecar(dir, &op, &name, Some(&edits));
+    }
     if s("op").as_deref() == Some("world") {
         let id = s("id").ok_or_else(|| vec!["world needs an id".to_string()])?;
         let fields = step.get("fields").and_then(|f| f.as_object()).ok_or_else(|| vec!["world needs a fields object".to_string()])?;
@@ -134,7 +141,10 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
             let o = store::upsert(hooks, dir, world.as_deref(), &kind, entry, s("replace").as_deref())?;
             (if o.replaced { "replaced" } else { "added" }, o)
         }
-        other => return Err(vec![format!("unknown op '{other}' (upsert, remove or world)")]),
+        other => {
+            let extra: String = hooks.sidecar_ops().iter().map(|o| format!(", {o}")).collect();
+            return Err(vec![format!("unknown op '{other}' (upsert, remove, world{extra})")]);
+        }
     };
     let id = s("id").or_else(|| step.get("entry").and_then(|e| e.get("id")).and_then(|v| v.as_str()).map(String::from)).unwrap_or_default();
     Ok(format!("{verb} {kind} '{id}' in {}", outcome.file.display()))
@@ -150,6 +160,8 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
 ///   manifest [<json | @file>]                          show the game manifest, or merge fields into it (checked)
 ///   manifest --kit <id> [<json | @file>]               show or write a kit manifest, kits/<id>/kit.json (ASSETORG2)
+///   <sidecar op> <name> [<json | @file>]               PR5-48: show a sidecar of the game's writer, or apply edits to
+///                                                      it (checked; nothing written when refused; `Hooks::sidecar`)
 fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
     let dir = game.data_dir(args)?;
     let hooks = game.content();
@@ -262,8 +274,23 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
                 Err(e) => fail(e),
             }
         }
-        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json | @file>] [full] | apply <seed.json> | manifest [<json | @file>] | manifest --kit <id> [<json | @file>]"),
+        Some(op) if hooks.sidecar_ops().contains(&op) => {
+            let Some(name) = args.pos(2) else { bail!("usage: aegis content {op} <name> [<json | @file>]") };
+            let edits = args.pos(3).map(json_arg).transpose()?;
+            match sidecar_command(&hooks, &dir, op, name, edits.as_ref()) {
+                Ok(out) => Ok(print!("{out}")),
+                Err(e) => fail(e),
+            }
+        }
+        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json | @file>] [full] | apply <seed.json> | manifest [<json | @file>] | manifest --kit <id> [<json | @file>] | <sidecar op> <name> [<json | @file>]"),
     }
+}
+
+/// PR5-48: `aegis content <sidecar op> <name> [<json | @file>]` as printed: the sidecar's text (`edits` None), else the
+/// writer's line and a newline; the problems when refused (nothing written).
+pub fn sidecar_command(hooks: &impl Hooks, dir: &Path, op: &str, name: &str, edits: Option<&Value>) -> std::result::Result<String, Vec<String>> {
+    let out = hooks.sidecar(dir, op, name, edits)?;
+    Ok(if edits.is_some() { format!("{out}\n") } else { out })
 }
 
 /// `aegis serve`: the game's command API over stdin / stdout, one JSON request per line, one JSON reply per line.

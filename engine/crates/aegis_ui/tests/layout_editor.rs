@@ -355,6 +355,37 @@ fn save_is_only_a_request_and_only_where_writes_are_allowed() {
     assert_eq!(ui.widgets.iter().any(|w| w.id == "layout.save"), writes_allowed());
 }
 
+/// Pass 2: without `backdrop` the stage draws over what the caller drew there (no fill, no background), so a live screen
+/// is edited in place; with it, the stage paints its ground.
+#[test]
+fn without_a_backdrop_the_stage_draws_over_the_callers_picture() {
+    let mut e = editor();
+    e.background = Some(square(8));
+    e.grid = false;
+    let draw = |e: &LayoutEditor| {
+        let mut g = gfx(640, 360);
+        let r = VIEW.rect;
+        g.canvas.fill(r, [9, 99, 9, 255]);
+        let mut ui: Ui<LayoutAct> = Ui::new(&mut g, (-1, -1), true);
+        e.draw_stage(&mut ui, &|a| a);
+        let handles = ui.widgets.iter().filter(|w| w.kind == "handle").count();
+        drop(ui);
+        (g.canvas.px, handles)
+    };
+    // a spot of the stage away from the markers, the polylines and the padded area's edge
+    let spot = |px: &[u8]| {
+        let (x, y) = (VIEW.rect.x + 8, VIEW.rect.y + VIEW.rect.h / 2);
+        let i = ((y * 640 + x) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2], px[i + 3]]
+    };
+    let (painted, n) = draw(&e);
+    assert_ne!(spot(&painted), [9, 99, 9, 255], "the backdrop covers the caller's picture");
+    e.backdrop = false;
+    let (over, m) = draw(&e);
+    assert_eq!(spot(&over), [9, 99, 9, 255], "no backdrop: the caller's picture shows through");
+    assert_eq!(n, m, "the same handles either way");
+}
+
 #[test]
 fn the_stage_draws_inside_its_viewport_and_the_pane_at_any_size() {
     for (w, h) in [(640, 360), (1280, 720), (1920, 1080)] {
