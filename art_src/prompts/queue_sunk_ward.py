@@ -29,7 +29,8 @@ STREET_GROUNDS = {  # REGIONGROUND1 section 7, A3
     "cobble_road": "damp rounded cobbles",
     "flagstone": "soot-stained flagstones of many sizes",
     "mud": "black lane mud with small even pits",
-    "moss": "low damp moss, close and even, no grass, no blades",
+    # reworded 2026-11-15: the plain "low damp moss" prompt failed twice with IMAGE_RECITATION (too close to an existing image)
+    "moss": "dark soot-dusted cobbles almost overgrown by patches of low damp grey-green moss, dark overall and low contrast, no grass, no blades",
     "iron_catwalk": "riveted dark iron plates of many sizes, in no rows, faint rust",
     "tallow": "packed ground soaked with pale tallow, fine even mottling",
     "water": "still black canal water, tiny even ripples, no highlights, no reflections",
