@@ -162,74 +162,97 @@ WOOD = {"ward_shop", "ward_house", "doss_house", "rag_hovel", "bonewright_shop"}
 
 
 def sluice_undercroft():
-    """The hub: a pre-Extinguishing storm-drain vault three levels under the Sunk Ward (CANON 2, the four quarters).
+    """The hub as walled rooms (Tushar 2026-11-15: "break the hub into dedicated regions for slab, hearth, bunk,
+    crypt, entry area, the central area and the exit arch area with clear boundary/walls then we can have the
+    interior styled accordingly ... everything is one big room").
 
-    Landmark: a curved brick vault, the barred sluice gate arch with lit water in front of it, a ladder up the left
-    wall, a bench. North: the Water-Lock Basin before the sluice gate (Talia's board, Varka's moored stall, Ivo).
-    West: Sabina's Apothecary's Slab. East: Berek's Tinker's Hearth. South: the Dry Hollows (six kiln bunks round the
-    brazier) with the Isolation Crypts behind bars in the south-east corner and the ladder shaft up to the streets in
-    the south-west corner."""
-    L = Layout(30, 20, "f")
-    L.border()
-    # Water-Lock Basin: the pool before the sluice gate, an iron walkway down its middle to the gate
-    L.rect(10, 1, 19, 6, "~", "w")
-    L.rect(14, 1, 15, 6, ".", "i")                     # the sluice walkway
-    L.rect(9, 7, 20, 8, ".", "f")                      # the basin rim
-    # the barred sluice gate arch in the north wall: two standing halves on the walls either side of the opening
-    L.prop("sluice_arch_w", "sluice_arch", 12, 0, 2, 1)
-    L.prop("sluice_arch_e", "sluice_arch", 16, 0, 2, 1); L.props[-1]["flip"] = True
-    L.rect(14, 0, 15, 0, ".", "i")                     # the way through the raised bars (the exit tiles)
-    L.prop("skiff", "varka_skiff", 17, 3, 2, 1, layer="ground")   # Varka's black-market stall: a moored skiff
-    L.prop("board", "mission_board", 10, 7, 2, 1)       # Talia's bone-cipher mission board on the rim
-    L.prop("basin_post_w", "ring_post", 9, 6); L.prop("basin_post_e", "ring_post", 20, 6)
-    # vault piers between the quarters
-    for x, y in ((8, 2), (8, 10), (20, 2), (20, 10)):
-        L.prop(f"pier_{x}_{y}", "vault_pillar", x, y, 2, 2)
-    # West: the Apothecary's Slab (Sabina)
-    L.prop("retorts", "retort_shelf", 1, 1, 3, 1)
-    L.prop("slab", "apothecary_slab", 3, 4, 3, 2)
-    L.prop("herb_rack", "herb_rack", 1, 7, 1, 2)
-    # East: the Tinker's Hearth (Berek)
-    L.rect(22, 1, 28, 9, ground="s")
-    L.prop("hearth", "tinker_hearth", 24, 1, 3, 2)
-    L.prop("anvil", "anvil", 25, 5)
-    L.prop("scrap", "scrap_heap", 27, 6, 2, 2)
-    L.prop("tool_rack", "crate_stack", 22, 8, 2, 1)
-    # Commons: the brazier the bunks face
-    L.prop("brazier", "brazier", 14, 11)     # on the one flagstone floor (2026-11-15: fewer grounds, a calmer room)
-    # South: the Dry Hollows, six brick kiln bunks along the south wall, three either side
-    for i, x in enumerate((7, 10, 13)):
-        L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 17, 2, 1)
-    for i, x in enumerate((15, 18, 21)):   # the east three stop short of the crypts' door at (24, 17)
-        L.prop(f"bunk_{i + 4}", "kiln_bunk", x, 17, 2, 1)
-    # Isolation Crypts: barred cells in the south-east corner, two stasis slots
-    L.rect(24, 13, 24, 18, "#")
-    L.prop("crypt_bars", "crypt_bars", 24, 14, 1, 3)
-    L.rect(25, 13, 28, 18, ground="o")
-    L.prop("stasis_1", "stasis_slab", 26, 15, 2, 1); L.prop("stasis_2", "stasis_slab", 26, 17, 2, 1)
-    L.rect(24, 17, 24, 17, ".", "f")                     # the crypts' door (locked by default: a marker decides)
-    # Ladder shaft up to the streets: the south-west corner
-    L.rect(5, 13, 5, 18, "#")
-    L.rect(1, 13, 4, 18, ground="s")
-    L.prop("ladder", "iron_ladder", 0, 15, 1, 2)
-    L.rect(0, 17, 0, 17, ".", "s")                       # the exit tile at the ladder's foot
-    L.rect(5, 15, 5, 15, ".", "f")                       # the shaft's opening into the hollows
-    L.rect(0, 0, 29, 19, zone="h")
-    # anchors: the location's markers keep their anchor ids (spawn, gate, road, npc_a..d, lore_a, chest_a)
-    L.anchor("spawn", 3, 17, "arrival from the world map (the ladder foot)")
-    L.anchor("road", 0, 17, "exit `road`: up the ladder, World map: the Sunk Ward")
-    L.anchor("gate", 14, 0, "exit `gate`: down the sluice gate to drowned_runoff_grate (to_anchor `sluice_in`)")
-    L.anchor("gate_in", 15, 1, "arrival from the Grate (the Grate's `sluice` exit to_anchor)")
-    L.anchor("npc_a", 4, 6, "Sabina at the Apothecary's Slab")
-    L.anchor("npc_b", 25, 3, "Berek at the Tinker's Hearth")
-    L.anchor("npc_c", 12, 8, "Talia at the mission board")
-    L.anchor("npc_d", 17, 7, "Widow Varka at her moored skiff")
-    L.anchor("lore_a", 13, 7, "Ivo beside Talia (after the Toll-Pen rescue)")
-    L.anchor("chest_a", 1, 9, "the stash (herb rack corner)")
-    L.anchor("rest", 14, 12, "the brazier: rest and the bunk roster")
-    L.anchor("crypts", 24, 17, "the Isolation Crypts' door (Stage IV operatives, stasis slots)")
-    return L.entry("sunk_ward_undercroft", "Sunk Ward: the Sluice Undercroft", {"h": {"id": "hub", "kind": "safe"}},
-                   {k: v for k, v in GROUND.items() if k in "sfoiw"}, ["sunk_ward"])
+    A pre-Extinguishing storm-drain vault three levels under the Sunk Ward (CANON 2). A hall runs east to west through
+    the middle. North of it, three rooms: the Apothecary's Slab (west), the Water-Lock Basin with the sluice gate
+    (middle: the exit arch area) and the Tinker's Hearth (east). South of it: the entry shaft with the ladder up to the
+    streets (west), the Dry Hollows with six kiln bunks (middle) and the Isolation Crypts (east). Each room is its own
+    zone, so its floor, walls and furniture can take their own style."""
+    L = Layout(38, 24, "f")
+    L.rect(0, 0, 37, 23, "#")
+    rooms = {  # zone char: (x0, y0, x1, y1, ground)
+        "a": (1, 1, 11, 7, "f"),      # the Apothecary's Slab
+        "w": (13, 1, 24, 7, "f"),     # the Water-Lock Basin (the exit arch area)
+        "t": (26, 1, 36, 7, "s"),     # the Tinker's Hearth: soot on the flags
+        "c": (1, 10, 36, 13, "f"),    # the hall (the central area)
+        "e": (1, 16, 8, 22, "s"),     # the entry shaft
+        "b": (10, 16, 27, 22, "b"),   # the Dry Hollows: floorboards on timber frames
+        "y": (29, 16, 36, 22, "o"),   # the Isolation Crypts: moss on the flags
+    }
+    for z, (x0, y0, x1, y1, g) in rooms.items():
+        L.rect(x0, y0, x1, y1, ".", g, z)
+    doors = {"a": (5, 8), "w": (18, 8), "t": (30, 8), "e": (4, 14), "b": (18, 14), "y": (32, 14)}
+    for z, (x, y) in doors.items():       # a doorway two tiles wide through the two-tile wall, in the room's floor
+        L.rect(x, y, x + 1, y + 1, ".", rooms[z][4], z)
+    # --- the Water-Lock Basin: water either side of a stone causeway that runs from the door up to the sluice gate
+    L.rect(13, 1, 24, 5, "~", "w")
+    L.rect(18, 1, 19, 5, ".", "f")
+    L.rect(16, 0, 21, 0, "#")
+    L.prop("sluice_gate", "portcullis", 17, 0, 4, 1)              # one barred arch in the north wall, over the causeway
+    L.prop("post_w", "ring_post", 17, 6); L.prop("post_e", "ring_post", 20, 6)
+    L.prop("skiff", "varka_skiff", 21, 4, 2, 1, layer="ground")
+    L.prop("board", "mission_board", 14, 6, 2, 1)
+    # --- the Apothecary's Slab
+    L.prop("retorts", "retort_shelf", 2, 1, 3, 1)
+    L.prop("shelf", "goods_shelf", 8, 1, 2, 1)
+    L.prop("slab", "apothecary_slab", 5, 3, 3, 2)
+    L.prop("herb_rack", "herb_rack", 1, 5, 1, 2)
+    L.prop("candles", "candle_stand", 10, 4)
+    # --- the Tinker's Hearth
+    L.prop("hearth", "tinker_hearth", 30, 1, 3, 2)
+    L.prop("tool_shelf", "goods_shelf", 27, 1, 2, 1)
+    L.prop("anvil", "anvil", 29, 4)
+    L.prop("scrap", "scrap_heap", 34, 5, 2, 2)
+    L.prop("crates", "crate_stack", 27, 6, 2, 1)
+    # --- the hall: the brazier everyone passes, vault piers by the doors
+    L.prop("brazier", "brazier", 22, 11)
+    L.prop("pier_w", "vault_pillar", 9, 10, 2, 2); L.prop("pier_e", "vault_pillar", 27, 10, 2, 2)
+    # --- the entry shaft: the ladder up to the streets on the west wall
+    L.prop("ladder", "iron_ladder", 0, 18, 1, 2)
+    L.rect(0, 20, 0, 20, ".", "s", "e")
+    L.prop("entry_crates", "crate_stack", 6, 16, 2, 1)
+    L.prop("entry_lamp", "lantern_pole", 2, 16)
+    # --- the Dry Hollows: six kiln bunks along the north wall, three either side of the door, a table
+    for i, x in enumerate((10, 13, 16, 20, 23, 26)):
+        L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 16, 2, 1)
+    L.prop("table", "table_stools", 18, 20, 2, 1)
+    L.prop("stove", "hearth_stove", 27, 20)
+    # --- the Isolation Crypts: bars beside the door, two stasis slabs
+    L.prop("crypt_bars", "crypt_bars", 30, 15, 1, 1)
+    L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
+    L.prop("crypt_candles", "candle_stand", 36, 16)
+    # anchors: the location's markers keep their anchor ids
+    L.anchor("spawn", 3, 19, "arrival from the world map (the ladder foot)")
+    L.anchor("road", 0, 20, "exit `road`: up the ladder, World map: the Sunk Ward")
+    L.anchor("gate", 18, 1, "exit `gate`: through the sluice gate to drowned_runoff_grate (to_anchor `sluice_in`)")
+    L.anchor("gate_in", 19, 2, "arrival from the Grate (the Grate's `sluice` exit to_anchor)")
+    L.anchor("npc_a", 6, 5, "Sabina at the Apothecary's Slab")
+    L.anchor("npc_b", 31, 3, "Berek at the Tinker's Hearth")
+    L.anchor("npc_c", 16, 7, "Talia at the mission board")
+    L.anchor("npc_d", 22, 6, "Widow Varka at her moored skiff")
+    L.anchor("lore_a", 14, 7, "Ivo beside Talia (after the Toll-Pen rescue)")
+    L.anchor("chest_a", 10, 6, "the stash (the Slab room's corner)")
+    L.anchor("rest", 22, 12, "the brazier: rest and the bunk roster")
+    L.anchor("crypts", 32, 15, "the Isolation Crypts' door (Stage IV operatives, stasis slots)")
+    legend = {"a": {"id": "slab", "kind": "safe"}, "w": {"id": "basin", "kind": "safe"}, "t": {"id": "hearth", "kind": "safe"},
+              "c": {"id": "hall", "kind": "safe"}, "e": {"id": "entry", "kind": "safe"}, "b": {"id": "hollows", "kind": "safe"},
+              "y": {"id": "crypts", "kind": "safe"}}
+    e = L.entry("sunk_ward_undercroft", "Sunk Ward: the Sluice Undercroft", legend,
+                {k: v for k, v in GROUND.items() if k in "sfobw"}, ["sunk_ward"])
+    # how each room should be styled (not schema: for Design and for the art pass)
+    e["draft_room_styles"] = {
+        "slab": "clean flagstone, whitewashed dressed stone walls, steel and glass, cold lamplight",
+        "basin": "dark water, a stone causeway and rim, drain brick walls, the barred sluice arch",
+        "hearth": "flagstone under patches of soot and ash, drain brick walls, forge glow",
+        "hall": "flagstone, drain brick walls, vault piers, the brazier",
+        "entry": "flagstone under patches of soot, the ladder shaft, a lantern",
+        "hollows": "floorboards on timber frames, brick kiln niches, warm candlelight",
+        "crypts": "flagstone under patches of moss, iron bars, cold and unlit",
+    }
+    return e
 
 
 def drowned_runoff_grate():

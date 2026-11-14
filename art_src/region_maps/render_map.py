@@ -30,6 +30,8 @@ WALL_TAKES = {"drain_brick": (1, 2), "blind_tenements": (2, 1), "gorge_rock": (1
               "interior_plaster": (2, 1), "interior_stone": (1, 2)}   # (top take, face take)
 CELLS = {"flagstone": 4, "cobble_road": 6, "floorboards": 6}   # tiles a texture spans (default 8): sets the size of its stones
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
+PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
+UNDER = "flagstone"                           # what shows between the patches
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
 
@@ -79,7 +81,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             for x, y in cells:
                 rows[y][x] = "."
     tex = {}
-    for gid in set(e["ground_legend"].values()):
+    for gid in set(e["ground_legend"].values()) | {UNDER}:
         src = find(tiles_dir, *TILES[gid]) if gid in TILES else None
         tex[gid] = tone(src, lift(cat[gid]), cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), lift(cat[gid]))
     bset = BOUNDARY.get(e.get("location", loc), "blind_tenements")
@@ -115,10 +117,26 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     own, look = gid[ov, ou], gid[lv, lu]
     pick = np.where((own == water) | (look == water), own, look)
     canvas = np.zeros((gh, gw, 3), dtype="uint8")
-    for k, g in enumerate(ids):
+    def full_of(g):
         tx = np.asarray(tex[g]); th, tw = tx.shape[:2]
-        full = tx[(yy % th), (xx % tw)]
-        canvas[pick == k] = full[pick == k]
+        return tx[(yy % th), (xx % tw)]
+
+    blobs = noise(1.6) + 0.6 * noise(0.7) + 0.25 * noise(0.3)       # where a patchy ground lies thick
+    lo, hi = float(blobs.min()), float(blobs.max())
+    blobs = (blobs - lo) / (hi - lo)
+    under = full_of(UNDER)
+    for k, g in enumerate(ids):
+        full = full_of(g)
+        sel = pick == k
+        if g in PATCHY:
+            cut = float(np.quantile(blobs, 1 - PATCHY[g]))
+            thick = sel & (blobs >= cut)
+            thin = sel & (blobs < cut) & (blobs >= cut - 0.08)        # a soft edge: half ash, half floor
+            canvas[sel] = under[sel]
+            canvas[thin] = (under[thin].astype("int16") * 0.5 + full[thin].astype("int16") * 0.5).astype("uint8")
+            canvas[thick] = full[thick]
+        else:
+            canvas[sel] = full[sel]
     im.paste(Image.fromarray(canvas), (0, 0))
     # a stone rim where land meets water: a dark line on the land side, a pale lip on the water side
     rim = Image.new("RGBA", im.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(rim)
@@ -143,17 +161,32 @@ def render(loc, tiles_dir, props_root, out, inside=""):
         return 0 <= x < W and 0 <= y < H and rows[y][x] != "#"
 
     FACE_H = 2
+
+    def _depth(x, y):
+        if open_at(x, y):
+            return 0
+        dd = next((k for k in range(1, FACE_H + 1) if open_at(x, y + k)), 0)
+        return 0 if dd == 2 and open_at(x, y - 1) else dd
+
+    def _is_face(x, y):
+        return _depth(x, y) > 0
+
     face_dark = ImageEnhance.Brightness(face).enhance(0.72)
     for y in range(-M, H + M):
         for x in range(-M, W + M):
             if open_at(x, y):
                 continue
             depth = next((k for k in range(1, FACE_H + 1) if open_at(x, y + k)), 0)
+            if depth == 2 and open_at(x, y - 1):
+                depth = 0        # a wall two tiles thick: its far row shows its top, its near row its face
             X0, Y0 = (x + M) * T, (y + M) * T
             if depth:
-                im.paste(tiled(face if depth == FACE_H or not open_at(x, y + 1) else face_dark, x, 4 - depth), (X0, Y0))
-                if depth == FACE_H or (depth == 1 and open_at(x, y - 1) is False and not any(open_at(x, y + k) for k in (2,)) and False):
-                    ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(118, 116, 124, 255))
+                # the near row of a face is a little darker (it is lower, further from the light); the row that meets
+                # the wall's top carries a pale cap line
+                upper = depth == 2 or open_at(x, y - 1) or not (0 <= y - 1) or depth == 1 and not any(open_at(x, y - k) for k in (1,)) and not _is_face(x, y - 1)
+                im.paste(tiled(face_dark if depth == 1 and _is_face(x, y - 1) else face, x, 4 - depth), (X0, Y0))
+                if not _is_face(x, y - 1):
+                    ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(132, 130, 140, 255))
             else:
                 im.paste(tiled(top, x, y), (X0, Y0))
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(sh)
@@ -193,8 +226,11 @@ def render(loc, tiles_dir, props_root, out, inside=""):
             box = a.getbbox() or (0, 0, a.width, a.height)
             by = (p["y"] + p["h"] + M) * T - (a.height - box[3])
             sh2 = Image.new("RGBA", im.size, (0, 0, 0, 0))
-            ImageDraw.Draw(sh2).ellipse([x + box[0] - 2, by - 8, x + box[2] + 9, by + 6], fill=(0, 0, 0, 120))
-            sh2 = sh2.filter(ImageFilter.GaussianBlur(2))
+            ImageDraw.Draw(sh2).ellipse([x + box[0] - 4, by - 10, x + box[2] + 12, by + 7], fill=(0, 0, 0, 95))
+            sh2 = sh2.filter(ImageFilter.GaussianBlur(3))
+            core = Image.new("RGBA", im.size, (0, 0, 0, 0))            # a tight dark line where the base meets the floor
+            ImageDraw.Draw(core).rectangle([x + box[0] + 1, by - 3, x + box[2] - 1, by + 1], fill=(0, 0, 0, 150))
+            sh2.alpha_composite(core.filter(ImageFilter.GaussianBlur(1)))
             im.alpha_composite(sh2)
         if p["layer"] == "ground":
             y = (p["y"] + M) * T + (p["h"] * T - a.height) // 2
