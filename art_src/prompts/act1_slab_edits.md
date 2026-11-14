@@ -5,8 +5,9 @@ edit, as Acts 2 and 3 did (`README.md`, "Blending an act's landmarks"). A landma
 a token set on the map rather than a place in it.
 
 **Sources**: the Drive picks in `image_pipeline/flow/out/World Map/` (checked 2026-11-14 on the mounted Drive,
-`G:\My Drive\...`). All nine still stand on a thick block. That includes the hub: its slab-free edit from 2026-11-13
-was only a chat copy and never reached Drive, so it is redone here.
+`G:\My Drive\...`). The eight Act 1 places below still stand on a thick block. The hub is already the slab-free
+edit on Drive (`00_Sluice_Undercroft_98ec71d6.jpg`, cut with `--desmoke 0.69,0.30,0.80,0.52`), and so are the Act 2
+and Act 3 files, so none of them needs a new edit.
 
 **Returns**: save each edit as `image_pipeline/flow/out/World Map/slab_free/<file>.jpg`, keeping the source's name.
 Art/UI then reviews each one against its source: the design, size and colours are unchanged, the block and its
@@ -15,15 +16,6 @@ dark sides are gone, and the magenta keys clean. Each edit is then cut with the 
 Each prompt is one of the two wordings already used for Acts 2 and 3, plus one sentence naming what stays. The
 **ground** wording keeps the place's top surface (yard, water, road) as a thin layer. The **building** wording keeps
 only the structure on a thin edge at its foundations. Attach only the source file.
-
-## 00 The Sluice Undercroft (hub, shared by all acts)
-
-Source `00_Sluice_Undercroft_98ec71d6.jpg`. Ground wording, the same as its lost 2026-11-13 edit. Cut fix:
-`--desmoke 0.69,0.30,0.80,0.52` (the steam curl on the arch).
-
-```text
-Edit this image: remove only the thick dark side faces of the rock block under this place. Keep its top surface (the lit water in front of the arch, the wooden bench and the ladder, and everything on it) exactly as it is, as a thin flat layer of ground, and keep the curved brick wall and the arch. Keep the solid pure magenta background everywhere else. Do not change the place, its size, its colours or its details.
-```
 
 ## 01 Drowned Runoff Grate
 

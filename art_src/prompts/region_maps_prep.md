@@ -71,7 +71,7 @@ and 3 have no location data yet (`docs/specs/ACTS23.md`: "two act regions" to au
 Act 2 and Act 3 are closed (`ART_UI_STUDIO.md` 3.10, "Act 2 and Act 3 maps closed"). Act 1 gets the same treatment:
 
 1. Slab-removal Flow edit on the 8 Act 1 landmarks (Grate, Junction 7, Crossroads, Kiln, Vats, Crucible, Slag Gate,
-   Corvo's Gate), plus the hideout: its Drive copy still has the block (checked 2026-11-14). One prompt per place in
+   Corvo's Gate; the hideout is shared and its Drive copy is already slab-free). One prompt per place in
    [act1_slab_edits.md](act1_slab_edits.md); the Drive `flow/out/World Map` JPGs are the sources.
 2. Act 1 in the Act Map Layout page (https://claude.ai/artifact/LvgjBQTj9enpJG6J5CQEBb, private): Tushar places and
    sizes; Art/UI writes `art_src/prompts/act1_map_layout.json`.
