@@ -27,6 +27,7 @@ class Layout:
         self.zones = [["-" for _ in range(w)] for _ in range(h)]
         self.props, self.anchors, self.markers = [], [], {}
         self.extra_legend = {}
+        self.rooms = []
 
     def rect(self, x0, y0, x1, y1, tile=None, ground=None, zone=None):
         """Fill the inclusive rectangle."""
@@ -56,9 +57,11 @@ class Layout:
         with the party inside its zone, the roof and front wall fade (REGIONGROUND1_SCENE: indoor reveal)."""
         self.props = [p for p in self.props if p["layer"] != "sort" or p["x"] + p["w"] <= x0 or p["x"] > x1
                       or p["y"] + p["h"] <= y0 or p["y"] > y1]   # a building replaces what stood on its footprint
+        ground = "b" if art in WOOD else ground
         self.rect(x0, y0, x1, y1, "#")
         self.rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ".", ground, zone_char)
         self.rect(door[0], door[1], door[0], door[1], ".", ground, zone_char)
+        self.rooms.append({"zone": zone_char, "box": (x0, y0, x1, y1), "door": door, "art": art})
         self.props.append({"id": f"roof_{zone_char}", "art": art, "x": x0, "y": y0, "w": x1 - x0 + 1, "h": y1 - y0 + 1,
                            "layer": "roof", "variant": -1, "flip": False, "roof_of": zone_char})
 
@@ -74,7 +77,59 @@ class Layout:
         if marker:
             self.markers[aid] = marker
 
+    def furnish(self):
+        """Furnish each room: standing pieces along its walls, farthest from the door first, each kept only if the
+        door, the anchors and every floor tile stay reachable; ground pieces lie anywhere on the floor."""
+        anchors = {(a["x"], a["y"]) for a in self.anchors}
+        for room in self.rooms:
+            x0, y0, x1, y1 = room["box"]
+            dx, dy = room["door"]
+            ex = dx + (1 if dx == x0 else -1 if dx == x1 else 0)
+            ey = dy + (1 if dy == y0 else -1 if dy == y1 else 0)
+            inner = [(x, y) for y in range(y0 + 1, y1) for x in range(x0 + 1, x1)]
+
+            def open_cells():
+                return {c for c in inner if self.rows[c[1]][c[0]] == "."}
+
+            def connected():
+                cells = open_cells()
+                seen, todo = {(ex, ey)}, [(ex, ey)]
+                while todo:
+                    x, y = todo.pop()
+                    for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                        if n in cells and n not in seen:
+                            seen.add(n); todo.append(n)
+                return seen == cells
+
+            for n, (art, w, h, layer) in enumerate(FURNISH.get(room["art"], [])):
+                spots = []
+                for (x, y) in inner:
+                    foot = [(x + i, y + j) for j in range(h) for i in range(w)]
+                    if not all(c in inner for c in foot):
+                        continue
+                    if layer == "sort" and (any(c not in open_cells() or c in anchors or c == (ex, ey) for c in foot)):
+                        continue
+                    wall = any(c[0] in (x0 + 1, x1 - 1) or c[1] in (y0 + 1, y1 - 1) for c in foot)
+                    far = sum(abs(c[0] - ex) + abs(c[1] - ey) for c in foot) / len(foot)
+                    spots.append((not wall, -far, y, x, foot))
+                for _, _, y, x, foot in sorted(spots):
+                    if layer == "ground":
+                        self.props.append({"id": f"in_{room['zone']}_{n}", "art": art, "x": x, "y": y, "w": w, "h": h,
+                                           "layer": "ground", "variant": -1, "flip": False})
+                        break
+                    for c in foot:
+                        self.rows[c[1]][c[0]] = "#"
+                    if connected():
+                        self.props.append({"id": f"in_{room['zone']}_{n}", "art": art, "x": x, "y": y, "w": w, "h": h,
+                                           "layer": "sort", "variant": -1, "flip": False})
+                        break
+                    for c in foot:
+                        self.rows[c[1]][c[0]] = "."
+
     def entry(self, tid, name, legend, ground_legend, tags):
+        self.furnish()
+        if any(r["art"] in WOOD for r in self.rooms):
+            ground_legend = {**ground_legend, "b": "floorboards"}
         return {"id": tid, "name": name, "rows": ["".join(r) for r in self.rows],
                 "zones": ["".join(r) for r in self.zones], "zone_legend": {**legend, **self.extra_legend}, "anchors": self.anchors,
                 "paths": {}, "props": self.props, "ground": ["".join(r) for r in self.ground],
@@ -82,7 +137,28 @@ class Layout:
 
 
 GROUND = {"s": "soot_yard", "c": "cobble_road", "f": "flagstone", "m": "mud", "o": "moss", "i": "iron_catwalk",
-          "t": "tallow", "w": "water"}
+          "t": "tallow", "w": "water", "b": "floorboards"}   # floorboards: a proposed ground (not in the catalog yet)
+
+# What furnishes each enterable building (Tushar 2026-11-14: "the indoor maps would need their own interiors and
+# props"): (art, w, h, layer). Pieces stand along the walls; the door, the anchors and every floor tile stay reachable.
+FURNISH = {
+    "ward_shop": [("shop_counter", 3, 1, "sort"), ("goods_shelf", 2, 1, "sort"), ("crate_stack", 2, 1, "sort")],
+    "ward_house": [("cot", 2, 1, "sort"), ("table_stools", 2, 1, "sort"), ("hearth_stove", 1, 1, "sort")],
+    "ward_shrine": [("shrine_altar", 3, 1, "sort"), ("candle_stand", 1, 1, "sort"), ("candle_stand", 1, 1, "sort")],
+    "guardroom": [("weapon_rack", 2, 1, "sort"), ("table_stools", 2, 1, "sort"), ("cot", 2, 1, "sort")],
+    "watch_armory": [("weapon_rack", 2, 1, "sort"), ("weapon_rack", 2, 1, "sort"), ("strongbox", 1, 1, "sort")],
+    "doss_house": [("cot", 2, 1, "sort")] * 4 + [("brazier", 1, 1, "sort"), ("table_stools", 2, 1, "sort")],
+    "rag_hovel": [("rag_pile", 2, 2, "ground"), ("table_stools", 2, 1, "sort"), ("goods_shelf", 2, 1, "sort"),
+                  ("cot", 2, 1, "sort")],
+    "bonewright_shop": [("workbench", 3, 1, "sort"), ("bone_rack", 2, 1, "sort"), ("anvil", 1, 1, "sort"),
+                        ("goods_shelf", 2, 1, "sort")],
+    "still_room": [("copper_still", 2, 2, "sort"), ("copper_still", 2, 2, "sort"), ("barrel_stack", 2, 1, "sort"),
+                   ("goods_shelf", 2, 1, "sort")],
+    "guild_store": [("crate_stack", 2, 1, "sort"), ("barrel_stack", 2, 1, "sort"), ("barrel_stack", 2, 1, "sort"),
+                    ("crate_stack", 2, 1, "sort"), ("strongbox", 1, 1, "sort")],
+    "sentry_hut": [("cot", 2, 1, "sort"), ("hearth_stove", 1, 1, "sort"), ("table_stools", 2, 1, "sort")],
+}
+WOOD = {"ward_shop", "ward_house", "doss_house", "rag_hovel", "bonewright_shop"}
 
 
 def sluice_undercroft():

@@ -118,6 +118,40 @@ street map has three enterable buildings off its streets (a shop, a house, a shr
 shrine, the guardroom), each with an `npc_<zone>` anchor inside for Design to bind a side-quest giver or a lore
 character. They share the four pictures above, with takes for variety, so a map edit can add more without new art.
 
+## 2d. Interiors: furniture, floors and walls
+
+Every enterable building is furnished (Tushar, 2026-11-14: "the indoor maps would need their own interiors and
+props"). `build_layouts.py` `FURNISH` gives each building type its pieces; they stand along the walls, farthest from
+the door first, and a piece is kept only if the door, the anchors and every floor tile stay reachable. Under the roof
+they are hidden; with the party inside, the roof fades and they show.
+
+| Art | PNG px | Footprint | Layer | Where | What |
+| --- | --- | --- | --- | --- | --- |
+| `shop_counter` | 96 x 64 | 3 x 1 | sort | shops | a worn wooden shop counter, a lamp and a few wares on it |
+| `goods_shelf` | 64 x 96 | 2 x 1 | sort | shops, hovel, workshop, still-room | a tall wooden shelf of jars, bundles and tins |
+| `cot` | 64 x 48 | 2 x 1 | sort | houses, doss house, hovel, guardroom, sentry hut | a low cot of planks with a grey blanket |
+| `table_stools` | 64 x 64 | 2 x 1 | sort | houses, doss house, hovel, guardroom, sentry hut | a rough table with two stools, a candle stub |
+| `hearth_stove` | 32 x 80 | 1 x 1 | sort | houses, sentry hut | a small iron stove with a pipe going up and a low tallow-yellow glow |
+| `shrine_altar` | 96 x 80 | 3 x 1 | sort | shrines | a stone altar with a cloth, a bone reliquary and candles |
+| `candle_stand` | 32 x 64 | 1 x 1 | sort | shrines | an iron candle stand with a cluster of tallow candles |
+| `weapon_rack` | 64 x 80 | 2 x 1 | sort | armory, guardroom | a wooden rack of polearms, cudgels and shields |
+| `strongbox` | 32 x 48 | 1 x 1 | sort | armory, Orlov's store | an iron-banded strongbox with a heavy lock |
+| `workbench` | 96 x 64 | 3 x 1 | sort | Skerrit's workshop | a bone-wright's workbench: saws, drills and pale bone pieces |
+| `bone_rack` | 64 x 96 | 2 x 1 | sort | Skerrit's workshop | a rack of cleaned bones sorted by size |
+| `copper_still` | 64 x 96 | 2 x 2 | sort | the still-room | a copper still with coiled pipes over a low fire |
+| `rag_pile` | 64 x 64 | 2 x 2 | ground | the hovel | heaped rags and sacks on the floor, seen from above |
+
+Reused inside: `crate_stack` (kit), `barrel_stack`, `brazier` and `anvil`.
+
+- **Floors**: homes, shops, the doss house, the hovel and the workshop use a proposed ground, `floorboards`
+  (colour `#3a2c22`: dark worn planks, soot in the seams, no shine), a `grounds.json` row for Design and Build; the
+  shrines and the Watch, Guild and Kiln buildings keep `flagstone`. Its texture is drawn with the Sunk Ward grounds.
+- **Walls**: an indoor room's wall ring is ordinary `#` today, drawn with the location's wall faces (street brick).
+  Seen from inside, it should be an interior wall: REVEAL1 should draw an indoor zone's ring with an interior wall
+  set, `interior_plaster` (sooty limewash over brick, a skirting of planks; homes and shops) or `interior_stone`
+  (dressed dark stone; shrines, Watch, Guild and Kiln buildings), at
+  `games/emberwake/assets/tilesets/sunk_streets/walls/<set>/{wall,wall_face}/v<n>.png`.
+
 ## 2c. Boundary sets (the screen past a small map)
 
 A map smaller than the screen is centred and the rest of the screen shows the location's boundary art: flat border
@@ -247,6 +281,21 @@ Row 3: an L-shaped channel of glowing orange slag running down the left side and
 
 ```text
 References: lm_fourth_kiln.jpg (the building to draw, its style and colours). One pixel-art building for the top-down region map of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art: the bone-mill kiln from the reference picture, seen in the three-quarter top-down view of a tile map (the top and the south face visible), standing on the bottom edge of the image with its base as wide as the drawing, 14 units wide and 10 tall. A long soot-black brick block, three squat chimneys whose tops glow inside with no smoke, iron bands and pipes on its face, a gap at the middle of its south face where a separate furnace mouth will stand. Clear dark outlines, hand-placed pixel clusters, at most 16 colours with 4 shades per colour, light from the upper left. The whole background is flat, solid pure magenta (#FF00FF) with no ground and no cast shadow; no magenta or pink in the building. No text, no letters, no numbers, no runes, no labels, no frame, no watermark.
+```
+
+### Sheet S11 Sunk Ward interiors (`props_sunk_interiors`)
+
+4 x 4 cells, row by row: `shop_counter`, `goods_shelf`, `cot`, `table_stools`; `hearth_stove`, `shrine_altar`,
+`candle_stand`, `weapon_rack`; `strongbox`, `workbench`, `bone_rack`, `copper_still`; `rag_pile`, `cot` (a second take),
+`goods_shelf` (a second take), `candle_stand` (a second take). References, in attach order: `lm_sluice_undercroft.jpg`
+(the style, warm lamplight indoors), `lm_fourth_kiln.jpg` (the style, iron and brass).
+
+```text
+References: lm_sluice_undercroft.jpg (the style and the warm lamplight), lm_fourth_kiln.jpg (the style, the iron and the brass). A sheet of 16 pixel-art furnishings for the interiors on the top-down region maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art and matching the two reference pictures. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF): square corners, no gradient, no vignette, no texture, no ground, no cast shadow on it, so the background can be keyed out. Each tile holds one single piece drawn as large as the tile allows in the proportions named for it (width by height), in the three-quarter top-down view of a tile map (the top and the south face visible), with clear dark outlines, hand-placed pixel clusters, at most 16 colours per piece with 4 shades per colour, and light from the upper left; no magenta and no pink anywhere in the pieces. A standing piece stands on the bottom edge of its tile; a flat piece lies on the floor seen from above, with ragged edges. The pieces furnish the poor homes, shops, shrines and Watch rooms of a sunless slum: dark worn wood, grey cloth, rusted iron, tallow candles with warm yellow light. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:
+Row 1: a worn wooden shop counter with a lamp and a few wares on it (standing, 3 wide by 2 tall); a tall wooden shelf of jars, bundles and tins (standing, 2 wide by 3 tall); a low cot of planks with a grey blanket (standing, 2 wide by 1.5 tall); a rough table with two stools and a candle stub (standing, 2 wide by 2 tall).
+Row 2: a small iron stove with a pipe going up and a low warm glow (standing, 1 wide by 2.5 tall); a stone altar with a cloth, a small bone reliquary and candles (standing, 3 wide by 2.5 tall); an iron candle stand with a cluster of tallow candles (standing, 1 wide by 2 tall); a wooden rack of polearms, cudgels and shields (standing, 2 wide by 2.5 tall).
+Row 3: an iron-banded strongbox with a heavy lock (standing, 1 wide by 1.5 tall); a bone-wright's workbench with saws, drills and pale bone pieces (standing, 3 wide by 2 tall); a rack of cleaned bones sorted by size (standing, 2 wide by 3 tall); a copper still with coiled pipes over a low fire (standing, 2 wide by 3 tall).
+Row 4: heaped rags and sacks lying on the floor (flat, 2 wide by 2 deep); a second take of the low plank cot, the blanket thrown back (standing, 2 wide by 1.5 tall); a second take of the tall shelf, other jars and bundles (standing, 2 wide by 3 tall); a second take of the candle stand, its candles burnt lower (standing, 1 wide by 2 tall).
 ```
 
 ### Single images S10 enterable buildings (`props_sunk_houses`)

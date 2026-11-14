@@ -48,6 +48,7 @@ def landmark_uri(location: str) -> str:
 def build(out: Path) -> None:
     grounds = {g["id"]: g.get("colour", "#333333")
                for g in json.loads((ROOT / "games/emberwake/data/catalog/grounds.json").read_text(encoding="utf-8"))["entries"]}
+    grounds.setdefault("floorboards", "#3a2c22")   # a proposed ground for homes and shops (not in the catalog yet)
     maps = []
     for loc in ORDER:
         e = json.loads((LAYOUTS / f"{loc}.json").read_text(encoding="utf-8"))
