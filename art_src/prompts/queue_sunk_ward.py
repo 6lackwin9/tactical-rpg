@@ -2,6 +2,7 @@
 """Queue the Sunk Ward props sheets and a terrain-tile probe on the Drive web queue (Art/UI 2026-11-15).
 
     python art_src/prompts/queue_sunk_ward.py props [--dry-run]     # sheets S4-S8, S11 and the Kiln image S9
+    python art_src/prompts/queue_sunk_ward.py props-front [--dry-run]  # the front-on re-run: S12, S13, S14
     python art_src/prompts/queue_sunk_ward.py tiles [--dry-run]     # the tile probe: 4 prompts, before the full set
     python art_src/prompts/queue_sunk_ward.py tiles-all [--dry-run] # every ground, boundary and interior wall prompt
 
@@ -41,8 +42,8 @@ def block_after(text, heading):
 
 
 def refs_of(prompt):
-    head = prompt.split(". A sheet", 1)[0].split(". One pixel-art", 1)[0]
-    return [ROOT / "art_src" / n for n in re.findall(r"lm_[a-z0-9_]+\.jpg", head)] if prompt.startswith("References:") else []
+    head = prompt.split("). A sheet", 1)[0].split("). One pixel-art", 1)[0]
+    return [ROOT / "art_src" / n for n in re.findall(r"[a-z0-9_]+\.(?:jpg|png)", head)] if prompt.startswith("References:") else []
 
 
 def props():
@@ -54,6 +55,14 @@ def props():
         out.append((sid, block_after(text, heading), "1:1"))
     out.append(("props_sunk_kiln", block_after(text, "### Single image S9"), "16:9"))
     return out
+
+
+def props_front():
+    """The front-on re-run of the props the first run drew on the diagonal (sunk_ward_props.md section 4)."""
+    text = (HERE / "sunk_ward_props.md").read_text(encoding="utf-8")
+    return [("props_sunk_front_a", block_after(text, "### Sheet S12"), "1:1"),
+            ("props_sunk_front_b", block_after(text, "### Sheet S13"), "1:1"),
+            ("props_sunk_kiln_front", block_after(text, "### Single image S14"), "16:9")]
 
 
 def tiles(every):
@@ -75,19 +84,20 @@ def tiles(every):
 
 
 def main(argv):
-    if not argv or argv[0] not in ("props", "tiles", "tiles-all"):
+    if not argv or argv[0] not in ("props", "props-front", "tiles", "tiles-all"):
         sys.exit(__doc__)
     dry = "--dry-run" in argv
     pipe = Q.pipeline() if hasattr(Q, "pipeline") else None
-    reqs = props() if argv[0] == "props" else tiles(argv[0] == "tiles-all")
-    task = "sunk_ward_props" if argv[0] == "props" else "sunk_ward_tiles"
+    is_props = argv[0].startswith("props")
+    reqs = props() if argv[0] == "props" else props_front() if argv[0] == "props-front" else tiles(argv[0] == "tiles-all")
+    task = "sunk_ward_props" if is_props else "sunk_ward_tiles"
     for cid, prompt, aspect in reqs:
         refs = refs_of(prompt)
         for r in refs:
             if r.stat().st_size < 1000:
                 sys.exit(f"{r} is a Git LFS pointer, not the image: git lfs pull --include {r.relative_to(ROOT).as_posix()}")
         req = Q.build_request(prompt, cid, refs=refs, n=2, aspect=aspect, route="other", task=task,
-                              record={"prompts_file": "art_src/prompts/sunk_ward_props.md" if argv[0] == "props"
+                              record={"prompts_file": "art_src/prompts/sunk_ward_props.md" if is_props
                                       else "art_src/prompts/sunk_ward_walls.md"})
         name = Q.request_name(pipe, cid)
         Q.enqueue(pipe, name, req, dry=dry)
