@@ -24,18 +24,26 @@ from PIL import Image  # noqa: E402
 GAME = "games/emberwake/assets"
 # sheet id -> (grid, {art: (take, cell)}); cells count from 1, row by row
 PICKS = {
-    "props_sunk_undercroft": (4, {"retort_shelf": (1, 5), "herb_rack": (1, 7), "anvil": (1, 9), "scrap_heap": (1, 10),
-                                  "brazier": (1, 11), "mission_board": (1, 15)}),
-    "props_sunk_drains": (3, {"lock_tablet": (1, 2), "lantern_pole": (1, 3), "culvert_gate": (1, 4), "silt_bank": (1, 7)}),
-    "props_sunk_streets": (4, {"tenement_row": (1, 2), "watch_armory": (1, 3), "watch_torch": (1, 5),
+    "props_sunk_undercroft": (4, {"brazier": (1, 11)}),
+    "props_sunk_drains": (3, {"lantern_pole": (1, 3), "culvert_gate": (1, 4), "silt_bank": (1, 7)}),
+    # the first run's keepers that stood at an angle, redrawn front-on (sheet S16)
+    "props_sunk_front_c": (3, {"retort_shelf": (1, 1), "herb_rack": (1, 2), "anvil": (1, 3), "scrap_heap": (1, 4),
+                               "mission_board": (1, 5), "lock_tablet": (1, 6), "watch_torch": (1, 7),
+                               "hearth_stove": (1, 8), "weapon_rack": (1, 9)}),
+    # side profiles (sheet S15): only the pieces that came back lying north to south; the wall-mounted ones (bars,
+    # ladder, gates, door, shelf, rack, board, fence) came back front-on again and are not cut
+    "props_sunk_side": (4, {"kiln_bunk_side": (1, 6), "cot_side": (1, 7), "retort_shelf_side": (2, 9),
+                            "shop_counter_side": (1, 10), "workbench_side": (1, 11), "striped_barrier_side": (1, 15),
+                            "stone_steps_side": (2, 16)}),
+    "props_sunk_streets": (4, {"tenement_row": (1, 2), "watch_armory": (1, 3),
                                "rust_pennant": (1, 6), "spiked_barricade": (1, 7), "toll_pen_gate": (2, 11),
                                "violet_lamp_post": (1, 12), "brick_wall_run": (1, 13), "brick_breach": (1, 14)}),
     "props_sunk_works": (4, {"conveyor_chute": (1, 2), "brass_tank": (1, 3), "pipe_run": (2, 4), "tallow_vat": (1, 5),
                              "watch_wall": (2, 8), "barrel_stack": (2, 9), "toll_drum": (1, 10), "crane_arm": (2, 12)}),
     "props_sunk_ground": (3, {"street_grate": (1, 1), "violet_pool": (2, 2), "ash_drift": (1, 3), "bone_meal_heap": (1, 4),
                               "wedge_pile": (1, 5), "tallow_spill": (1, 6), "slag_channel": (1, 7)}),
-    "props_sunk_interiors": (4, {"goods_shelf": (1, 2), "hearth_stove": (1, 5), "candle_stand": (1, 7),
-                                 "weapon_rack": (1, 8), "bone_rack": (1, 11), "copper_still": (1, 12), "rag_pile": (1, 13)}),
+    "props_sunk_interiors": (4, {"goods_shelf": (1, 2), "candle_stand": (1, 7),
+                                 "bone_rack": (1, 11), "copper_still": (1, 12), "rag_pile": (1, 13)}),
     "props_sunk_front_a": (4, {"sluice_arch": (1, 1), "sluice_tunnel": (1, 2), "drain_arch": (1, 3), "vault_pillar": (1, 4),
                                "crypt_bars": (1, 5), "iron_ladder": (1, 6), "furnace_mouth": (1, 7), "portcullis": (1, 8),
                                "tenement_block": (1, 9), "ash_shack": (1, 10), "toll_booth": (1, 11),
@@ -59,6 +67,25 @@ def specs():
     return out
 
 
+def strip_gutter(tile):
+    """The cell without a strip of the sheet's black gutter along an edge (an uneven grid leaves one): a column or
+    row in the outer eighth that is almost all pure black becomes magenta, so the key takes it."""
+    tile = tile.convert("RGBA"); px = tile.load(); w, h = tile.size
+    black = lambda c: c[0] < 10 and c[1] < 10 and c[2] < 10
+    mid = [px[w // 2, 2], px[w // 2, h - 3], px[2, h // 2], px[w - 3, h // 2]]
+    if sum(black(c) for c in mid) >= 2:
+        return tile           # a cell drawn on a dark ground (the skiff, the grate): nothing to strip
+    for x in list(range(0, w // 10)) + list(range(w - w // 10, w)):
+        if sum(black(px[x, y]) for y in range(h)) > h * 0.9:
+            for y in range(h):
+                px[x, y] = (255, 0, 255, 255)
+    for y in list(range(0, h // 10)) + list(range(h - h // 10, h)):
+        if sum(black(px[x, y]) for x in range(w)) > w * 0.9:
+            for x in range(w):
+                px[x, y] = (255, 0, 255, 255)
+    return tile
+
+
 def cut(folder, out_root, only=None):
     sp, done = specs(), []
     for sid, (grid, picks) in PICKS.items():
@@ -75,11 +102,14 @@ def cut(folder, out_root, only=None):
             im, boxes = sheets[take]
             size, layer = sp[art]
             tile = im.crop(boxes[cell - 1])
+            if grid > 1:    # a little inside the cell: an uneven grid leaves a strip of black gutter along an edge
+                tw, th = tile.size; d = round(tw * 0.035)
+                tile = tile.crop((d, d, tw - d, th - d))
             if art in KEEP_WATER:
                 w, h = tile.size; d = int(w * 0.03)
                 img = tile.crop((d, d, w - d, h - d)).resize(size, Image.LANCZOS)
             else:
-                img, _ = S.prop_image(tile, size, "ground" if layer == "ground" else "sort", reduce="scale")
+                img, _ = S.prop_image(strip_gutter(tile), size, "ground" if layer == "ground" else "sort", reduce="scale")
             dest = pathlib.Path(out_root) / GAME / "props" / "sunk_ward" / art / "v0.png"
             dest.parent.mkdir(parents=True, exist_ok=True)
             img.save(dest)

@@ -18,12 +18,12 @@
   "#....................................#",
   "####..############..############..####",
   "####..############..############..####",
-  "#.#...##.###.##.##..##.##.###.......##",
+  "#.#......#..................#.......##",
   "#........#..................#........#",
   "#........#..................#.##..##.#",
   "#........#..................#........#",
-  ".........#........##.......##........#",
-  "#........#..................#........#",
+  "#........#........##.......##........#",
+  "###......#..................#........#",
   "#........#..................#........#",
   "######################################"
  ],
@@ -48,7 +48,7 @@
   "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
   "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
   "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
-  "eeeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
+  "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
   "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
   "-eeeeeeee-bbbbbbbbbbbbbbbbbb-yyyyyyyy-",
   "--------------------------------------"
@@ -86,13 +86,13 @@
  "anchors": [
   {
    "id": "spawn",
-   "x": 3,
-   "y": 19
+   "x": 6,
+   "y": 17
   },
   {
    "id": "road",
-   "x": 0,
-   "y": 20
+   "x": 7,
+   "y": 16
   },
   {
    "id": "gate",
@@ -348,10 +348,10 @@
   {
    "id": "ladder",
    "art": "iron_ladder",
-   "x": 0,
-   "y": 18,
+   "x": 7,
+   "y": 15,
    "w": 1,
-   "h": 2,
+   "h": 1,
    "layer": "sort",
    "variant": -1,
    "flip": false
@@ -359,8 +359,8 @@
   {
    "id": "entry_crates",
    "art": "crate_stack",
-   "x": 6,
-   "y": 16,
+   "x": 1,
+   "y": 21,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -382,7 +382,7 @@
    "id": "bunk_1",
    "art": "kiln_bunk",
    "x": 10,
-   "y": 16,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -393,7 +393,7 @@
    "id": "bunk_2",
    "art": "kiln_bunk",
    "x": 13,
-   "y": 16,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -404,7 +404,7 @@
    "id": "bunk_3",
    "art": "kiln_bunk",
    "x": 16,
-   "y": 16,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -415,7 +415,7 @@
    "id": "bunk_4",
    "art": "kiln_bunk",
    "x": 20,
-   "y": 16,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -426,7 +426,7 @@
    "id": "bunk_5",
    "art": "kiln_bunk",
    "x": 23,
-   "y": 16,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -437,7 +437,7 @@
    "id": "bunk_6",
    "art": "kiln_bunk",
    "x": 26,
-   "y": 16,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -532,7 +532,7 @@
   "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
   "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
   "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
-  "sssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
+  "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
   "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
   "fssssssssfbbbbbbbbbbbbbbbbbbfoooooooof",
   "ffffffffffffffffffffffffffffffffffffff"

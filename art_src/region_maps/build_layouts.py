@@ -210,14 +210,13 @@ def sluice_undercroft():
     # --- the hall: the brazier everyone passes, vault piers by the doors
     L.prop("brazier", "brazier", 22, 11)
     L.prop("pier_w", "vault_pillar", 9, 10, 2, 2); L.prop("pier_e", "vault_pillar", 27, 10, 2, 2)
-    # --- the entry shaft: the ladder up to the streets on the west wall
-    L.prop("ladder", "iron_ladder", 0, 18, 1, 2)
-    L.rect(0, 20, 0, 20, ".", "s", "e")
-    L.prop("entry_crates", "crate_stack", 6, 16, 2, 1)
+    # --- the entry shaft: the ladder up to the streets
+    L.prop("ladder", "iron_ladder", 7, 15, 1, 1)        # on the room's north wall, so it is seen from the front
+    L.prop("entry_crates", "crate_stack", 1, 21, 2, 1)
     L.prop("entry_lamp", "lantern_pole", 2, 16)
     # --- the Dry Hollows: six kiln bunks along the north wall, three either side of the door, a table
     for i, x in enumerate((10, 13, 16, 20, 23, 26)):
-        L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 16, 2, 1)
+        L.prop(f"bunk_{i + 1}", "kiln_bunk", x, 15, 2, 1)   # niches in the wall's face, not furniture on the floor
     L.prop("table", "table_stools", 18, 20, 2, 1)
     L.prop("stove", "hearth_stove", 27, 20)
     # --- the Isolation Crypts: bars beside the door, two stasis slabs
@@ -225,8 +224,8 @@ def sluice_undercroft():
     L.prop("stasis_1", "stasis_slab", 30, 18, 2, 1); L.prop("stasis_2", "stasis_slab", 34, 18, 2, 1)
     L.prop("crypt_candles", "candle_stand", 36, 16)
     # anchors: the location's markers keep their anchor ids
-    L.anchor("spawn", 3, 19, "arrival from the world map (the ladder foot)")
-    L.anchor("road", 0, 20, "exit `road`: up the ladder, World map: the Sunk Ward")
+    L.anchor("spawn", 6, 17, "arrival from the world map (the ladder foot)")
+    L.anchor("road", 7, 16, "exit `road`: up the ladder, World map: the Sunk Ward")
     L.anchor("gate", 18, 1, "exit `gate`: through the sluice gate to drowned_runoff_grate (to_anchor `sluice_in`)")
     L.anchor("gate_in", 19, 2, "arrival from the Grate (the Grate's `sluice` exit to_anchor)")
     L.anchor("npc_a", 6, 5, "Sabina at the Apothecary's Slab")

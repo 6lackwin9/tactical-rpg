@@ -32,6 +32,7 @@ CELLS = {"flagstone": 4, "cobble_road": 6, "floorboards": 6}   # tiles a texture
 GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 PATCHY = {"soot_yard": 0.52, "moss": 0.46}   # share of a cell these grounds cover: ash and moss lie in patches on the floor
 UNDER = "flagstone"                           # what shows between the patches
+FIT = {"portcullis": (72, 84), "kiln_bunk": (64, 56), "iron_ladder": (40, 56), "crypt_bars": (48, 52)}   # (w, h) px a wall-mounted art is scaled into
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
 
@@ -160,7 +161,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     def open_at(x, y):
         return 0 <= x < W and 0 <= y < H and rows[y][x] != "#"
 
-    FACE_H = 2
+    FACE_H = 1   # every wall shows the same one-tile face under its top (2026-11-15: wall joins must be consistent)
 
     def _depth(x, y):
         if open_at(x, y):
@@ -189,6 +190,18 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                     ImageDraw.Draw(im).rectangle([X0, Y0, X0 + T - 1, Y0 + 2], fill=(132, 130, 140, 255))
             else:
                 im.paste(tiled(top, x, y), (X0, Y0))
+    edge = ImageDraw.Draw(im)
+    for y in range(-1, H + 1):
+        for x in range(-1, W + 1):
+            if open_at(x, y) or _is_face(x, y):
+                continue
+            X0, Y0 = (x + M) * T, (y + M) * T
+            if open_at(x + 1, y) or _is_face(x + 1, y):
+                edge.line([X0 + T - 1, Y0, X0 + T - 1, Y0 + T - 1], fill=(14, 14, 18, 255), width=2)
+            if open_at(x - 1, y) or _is_face(x - 1, y):
+                edge.line([X0, Y0, X0, Y0 + T - 1], fill=(70, 70, 78, 255), width=1)
+            if open_at(x, y - 1):
+                edge.line([X0, Y0, X0 + T - 1, Y0], fill=(70, 70, 78, 255), width=1)
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(sh)
     for y in range(H):
         for x in range(W):
@@ -219,18 +232,46 @@ def render(loc, tiles_dir, props_root, out, inside=""):
                 return a.transpose(Image.FLIP_LEFT_RIGHT) if p.get("flip") else a
         return None
 
+    face_mean = [sum(c[k] for c in face.resize((8, 8)).getdata()) / 64 for k in range(3)]
+
+    def wall_mounted(p):
+        """A standing prop whose whole footprint is a wall's face row: an arch, a niche, bars, a ladder."""
+        return p["layer"] == "sort" and all(_is_face(x, p["y"] + p["h"] - 1) and e["rows"][p["y"] + p["h"] - 1][x] == "#"
+                                            for x in range(p["x"], p["x"] + p["w"]))
+
+    def into_wall(a, p):
+        """The prop's stone and brick pulled to the wall's colour, and a tall arch scaled to sit in a low wall."""
+        limit = FIT.get(p["art"])
+        if limit and (a.width > limit[0] or a.height > limit[1]):
+            k = min(limit[0] / a.width, limit[1] / a.height)
+            a = a.resize((round(a.width * k), round(a.height * k)), Image.LANCZOS)
+        px = a.load()
+        opaque = [px[x, y] for y in range(0, a.height, 2) for x in range(0, a.width, 2) if px[x, y][3] > 128]
+        if not opaque:
+            return a
+        mean = [sum(c[k] for c in opaque) / len(opaque) for k in range(3)]
+        for y in range(a.height):
+            for x in range(a.width):
+                r, g, b, al = px[x, y]
+                if al and max(r, g, b) - min(r, g, b) < 40 and max(r, g, b) < 150:      # grey masonry only: fire, wood and cloth keep their colour
+                    px[x, y] = tuple(max(0, min(255, round(c + (face_mean[k] - mean[k]) * 0.75))) for k, c in enumerate((r, g, b))) + (al,)
+        return a
+
     def place(p, a):
+        mounted = wall_mounted(p)
+        if mounted:
+            a = into_wall(a, p)
+            p = dict(p, no_shadow=True)
         x = (p["x"] + M) * T + (p["w"] * T - a.width) // 2
         if p["layer"] == "sort" and not p.get("no_shadow"):
             # a contact shadow under the base, so the prop sits on the floor
             box = a.getbbox() or (0, 0, a.width, a.height)
             by = (p["y"] + p["h"] + M) * T - (a.height - box[3])
             sh2 = Image.new("RGBA", im.size, (0, 0, 0, 0))
-            ImageDraw.Draw(sh2).ellipse([x + box[0] - 4, by - 10, x + box[2] + 12, by + 7], fill=(0, 0, 0, 95))
-            sh2 = sh2.filter(ImageFilter.GaussianBlur(3))
-            core = Image.new("RGBA", im.size, (0, 0, 0, 0))            # a tight dark line where the base meets the floor
-            ImageDraw.Draw(core).rectangle([x + box[0] + 1, by - 3, x + box[2] - 1, by + 1], fill=(0, 0, 0, 150))
-            sh2.alpha_composite(core.filter(ImageFilter.GaussianBlur(1)))
+            # no cast shadow (Tushar 2026-11-15: an oval under a front-view prop makes it float): only a thin dark
+            # line where the base meets the floor
+            ImageDraw.Draw(sh2).rectangle([x + box[0] + 1, by - 2, x + box[2] - 1, by + 1], fill=(0, 0, 0, 120))
+            sh2 = sh2.filter(ImageFilter.GaussianBlur(1))
             im.alpha_composite(sh2)
         if p["layer"] == "ground":
             y = (p["y"] + M) * T + (p["h"] * T - a.height) // 2
