@@ -9,6 +9,7 @@
 			"climate": "soot, fog and slag runoff",
 			"parent": "",
 			"faction": "iron_inquisition",
+			"map_reveal": true,
 			"tags": []
 		}
 	]

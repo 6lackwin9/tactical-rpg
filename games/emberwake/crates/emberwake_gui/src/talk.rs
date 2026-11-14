@@ -1073,6 +1073,14 @@ mod tests {
         let node = |id: &str| format!("node.{W}.{id}");
         assert!(wm.widgets().iter().any(|w| w["id"] == json!(node("sluice_undercroft"))), "the WorldMap shows the hub");
         assert!(wm.widgets().iter().any(|w| w["id"] == json!(node("drowned_runoff_grate"))), "and the way out");
-        assert!(!wm.widgets().iter().any(|w| w["id"] == json!(node("fourth_kiln"))), "not Tier 2");
+        // PR5-49 (MAP-POLISH1): the hub's region reveals its road network, so a Tier 2 place is drawn, but grey (locked)
+        let kiln = format!("{W}:fourth_kiln");
+        let locked = json::aget(json::dict(&wm.state(&cx)), "locked").iter().any(|q| json::gstr(q) == kiln);
+        let shown = wm.widgets().iter().any(|w| w["id"] == json!(node("fourth_kiln")));
+        if emberwake_world::travel::reveal_region(&cx.data, cx.gs()).is_some() {
+            assert!(shown && locked, "Tier 2 is on the revealed map, grey: not reachable yet");
+        } else {
+            assert!(!shown, "not Tier 2");
+        }
     }
 }

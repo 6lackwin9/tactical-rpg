@@ -7,6 +7,8 @@
 //! and its leg tick names the mode (meter inputs `modes`); the mode's road-fight change is `campaign::purse`'s.
 //! MAP-HOOKS1: `paths` offers up to three ways to a place within two days of the cheapest (days, upkeep, labels from
 //! display names) and `travel_via` walks the one picked; `travel` keeps taking `path`.
+//! MAP-POLISH1 (FB-257 (a)): a region whose `map_reveal` is on shows, while the party is in it, every place of it a route
+//! touches (`shown`), the ones it cannot travel to now greyed (`locked`); a place no route touches never shows.
 
 use crate::data::Data;
 use crate::explore::{self, SPAWN};
@@ -178,6 +180,55 @@ pub fn known(d: &Data, gs: &GameState) -> Vec<String> {
         }
     }
     all.into_iter().filter(|q| hit.contains(q)).collect()
+}
+
+/// MAP-POLISH1: the region field that shows the region's whole road network on the world map while the party is in it.
+pub const MAP_REVEAL: &str = "map_reveal";
+
+/// MAP-POLISH1: the regions location `qid` sits in, seen from world `w`: its region, then up the `parent` chain, as
+/// qids (a missing region or a loop ends the chain); none for a place in no region.
+pub fn region_chain(d: &Data, w: &str, qid: &str) -> Vec<String> {
+    let loc = d.resolve(w, "locations", qid);
+    let mut world = json::s_or(loc, "_world", w);
+    let mut region_ref = json::s(loc, "region");
+    let mut out: Vec<String> = Vec::new();
+    while !region_ref.is_empty() {
+        let region = d.resolve(&world, "regions", &region_ref);
+        let id = json::s(region, "id");
+        if id.is_empty() {
+            break;
+        }
+        let rq = json::s_or(region, "_qid", &id);
+        if out.contains(&rq) {
+            break;
+        }
+        out.push(rq);
+        world = json::s_or(region, "_world", &world);
+        region_ref = json::s(region, "parent");
+    }
+    out
+}
+
+/// MAP-POLISH1: the revealing region of the party's place: the first region up its chain (`region_chain`) whose
+/// `map_reveal` is on, as a qid; None when none is (the map shows the known places only).
+pub fn reveal_region(d: &Data, gs: &GameState) -> Option<String> {
+    let w = &gs.world_id;
+    region_chain(d, w, &gs.location_id).into_iter().find(|rq| json::b(d.resolve(w, "regions", rq), MAP_REVEAL, false))
+}
+
+/// MAP-POLISH1: the places the world map shows, in node order: the known ones (`known`), and while the party is in a
+/// revealing region (`reveal_region`) every node of the world's road graph in that region too (`nodes`: a place no route
+/// touches is never one). Without one, the known places, as before.
+pub fn shown(d: &Data, gs: &GameState) -> Vec<String> {
+    let known_nodes = known(d, gs);
+    let Some(region) = reveal_region(d, gs) else { return known_nodes };
+    nodes(d, &gs.world_id).into_iter().filter(|q| known_nodes.contains(q) || region_chain(d, &gs.world_id, q).contains(&region)).collect()
+}
+
+/// MAP-POLISH1: whether the world map draws place `qid` locked (grey): not the party's place, and no trip there now
+/// (`path` finds no way over open legs between known places).
+pub fn locked(d: &Data, gs: &GameState, qid: &str) -> bool {
+    qid != gs.location_id && path(d, gs, &gs.location_id, qid).is_empty()
 }
 
 fn better(a: &(i64, Vec<String>), b: &(i64, Vec<String>)) -> bool {
@@ -454,13 +505,15 @@ pub fn trip(d: &Data, gs: &GameState, from: &str, to: &str) -> Dict {
     json::obj([("ok", Value::Bool(true)), ("time", int(time)), ("supplies", int(spent))])
 }
 
-/// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos, jobs?, deadlines?}], routes: [{qid,
-/// from, to, two_way, open, time, days?}], mode?}. STORYUI1 B10: `jobs` (the names of the available quests of boards
-/// opened once whose node this is) and `deadlines` (the checkpoint lines of the quests whose node this is, CAMPAIGN1)
-/// only when there are some. CAMPAIGN1-TM: in a world with travel modes, `mode` (the party's mode id) and each
-/// route's `days` in that mode.
+/// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos, jobs?, deadlines?, revealed?}],
+/// routes: [{qid, from, to, two_way, open, time, days?}], mode?}. STORYUI1 B10: `jobs` (the names of the available
+/// quests of boards opened once whose node this is) and `deadlines` (the checkpoint lines of the quests whose node this
+/// is, CAMPAIGN1) only when there are some. CAMPAIGN1-TM: in a world with travel modes, `mode` (the party's mode id) and
+/// each route's `days` in that mode. MAP-POLISH1: the nodes are the places shown (`shown`); `revealed` (true) marks one
+/// shown only by a revealing region (not known); the routes are those between places shown.
 pub fn view(d: &Data, gs: &GameState) -> Dict {
-    let known_nodes = known(d, gs);
+    let known_set = known(d, gs);
+    let known_nodes = shown(d, gs);
     let quest_at = quest_nodes(d, gs);
     let jobs = crate::board::jobs(d, gs);
     let deadlines = crate::board::deadlines(d, gs);
@@ -487,6 +540,9 @@ pub fn view(d: &Data, gs: &GameState) -> Dict {
         let due: Vec<Value> = deadlines.iter().filter(|(n, _)| n == q).map(|(_, line)| line.clone()).collect();
         if !due.is_empty() {
             node.insert("deadlines".into(), Value::Array(due));
+        }
+        if !known_set.contains(q) {
+            node.insert("revealed".into(), Value::Bool(true));
         }
         node_list.push(Value::Object(node));
     }

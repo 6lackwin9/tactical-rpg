@@ -235,6 +235,22 @@ fn bound_sets(v: &View, w: &str) -> (Option<String>, Vec<(String, String)>) {
     (stage, regions)
 }
 
+/// MAP-POLISH1 (AO-04): a location whose landmark `art` names a picture no layer holds (`map/landmarks/<art>.png`): the
+/// world map draws its kind pin there. A bad name is the location check's error. Skipped without asset layers.
+pub fn landmark_art_warnings(v: &View, w: &str) -> Vec<String> {
+    if v.assets.roots.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for e in v.worlds.own_entries(w, "locations") {
+        let art = json::s(e, "art");
+        if !art.is_empty() && art::landmark_art_ok(&art) && !v.assets.has(&art::landmark("", &art)) {
+            out.push(format!("Location '{}' landmark art '{art}': no file {} in any layer; the world map draws its kind pin.", json::s(e, "id"), art::landmark("", &art)));
+        }
+    }
+    out
+}
+
 /// A13 (id rule) and A15 (wrong size) of world `w`: a set id that is not `[a-z0-9_]{2,32}`, and a PNG of a bound set
 /// (`tilesets/<set>/**`) that is not a tile of the set's role; a location's `boundary` id by the same rule, and its
 /// files by the same sizes. A set's `ground/` folder has its own check (A17). Errors; the size check is skipped without

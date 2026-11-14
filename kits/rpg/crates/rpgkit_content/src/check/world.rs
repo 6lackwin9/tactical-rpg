@@ -947,6 +947,7 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(character_asset_warnings(v, w));
     out.extend(super::assets::prop_warnings(v, w));
     out.extend(super::assets::tileset_warnings(v, w));
+    out.extend(super::assets::landmark_art_warnings(v, w));
     out.extend(super::assets::ground_warnings(v, w));
     out.extend(campaign::warnings(v, w));
     out.extend(story::warnings(v, w));
