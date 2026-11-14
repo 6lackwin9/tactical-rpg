@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Render a draft region map with real art: ground textures, walls, boundary and props (Art/UI 2026-11-15).
 
-    python art_src/region_maps/render_map.py <location> --tiles <folder of tile PNGs> --props <root with props/> --out x.png
+    python art_src/region_maps/render_map.py <location> [--tiles DIR] [--props DIR] [--out x.png] [--inside ZONE]
+
+Defaults: the tiles in art_src/sunk_ward/tiles, the cut props in art_src/sunk_ward/props_cut, and the picture to
+art_src/region_maps/previews/<location>.png.
 
 A look-and-feel preview, not the game's renderer: it draws art_src/region_maps/<location>.json at 32 px a tile, the
 props' art scale. Grounds are the web-queue tile textures (TILES names the picked take), toned in code toward each
@@ -224,7 +227,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     im.alpha_composite(sh)
 
     def art(p):
-        for base in (pathlib.Path(props_root) / "games/emberwake/assets/props/sunk_ward", ROOT / "games/emberwake/assets/props/sunk_ward",
+        for base in (pathlib.Path(props_root) / "games/emberwake/assets/props/sunk_ward", pathlib.Path(props_root), ROOT / "games/emberwake/assets/props/sunk_ward",
                      ROOT / "kits/rpg/assets/props/common"):
             f = base / p["art"] / "v0.png"
             if f.exists():
@@ -334,7 +337,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("location"); ap.add_argument("--tiles", required=True); ap.add_argument("--props", required=True)
-    ap.add_argument("--out", required=True); ap.add_argument("--inside", default="")
+    ap.add_argument("location"); ap.add_argument("--tiles", default=str(ROOT / "art_src/sunk_ward/tiles")); ap.add_argument("--props", default=str(ROOT / "art_src/sunk_ward/props_cut"))
+    ap.add_argument("--out", default=""); ap.add_argument("--inside", default="")
     a = ap.parse_args()
-    render(a.location, a.tiles, a.props, a.out, a.inside)
+    render(a.location, a.tiles, a.props, a.out or str(ROOT / "art_src/region_maps/previews" / f"{a.location}.png"), a.inside)
