@@ -6,6 +6,7 @@ the nine Sunk Ward maps on placeholders. This file holds the prompts for the art
 
 **Held**: the Sunk Ward ground batch waits for the `REGIONGROUND1` R1 tuning (Design, `AO-04` (1)), and every run
 needs the user's go-ahead on the model and the count (`P-UI-06`). Local takes first (ComfyUI, `C:\dev\localgen`).
+Reworded 2026-11-15 after the first run: `gorge_rock` top and both `interior_plaster` tiles came back near-white ("sooty" and "ash" were read as pale), so they now say dark and low-contrast outright.
 Prompts follow REGIONGROUND1's short material-first form: one material, even detail, no light direction, no objects;
 the colour is set in code from the ground's catalog colour. Sizes and the wall-face layout are REGIONGROUND1_SCENE's;
 cut with `tools/tiles/cut.py`.
@@ -43,7 +44,7 @@ wall_face: Pixel-art wall face seen straight on, 16-bit RPG tile style: the blin
 `gorge_rock` (the Crucible, the Slag Gate):
 
 ```text
-wall: Seamless top-down pixel-art texture, 16-bit RPG tile style: the top of dark gorge rock, broken into angular slabs, ash in the cracks. Even detail edge to edge, no objects, no shadows, flat and matte, tiles seamlessly on all four sides.
+wall: Seamless top-down pixel-art texture, 16-bit RPG tile style: the top of very dark gorge rock, broken into angular slabs, the cracks between them filled with dark charcoal-grey ash only a little lighter than the rock. Dark overall and low contrast, no white, no pale lines. Even detail edge to edge, no objects, no shadows, flat and matte, tiles seamlessly on all four sides.
 wall_face: Pixel-art wall face seen straight on, 16-bit RPG tile style: a tall face of dark gorge rock in broken vertical slabs, a thin slag-orange glint deep in one crack, darker at the foot. Tiles seamlessly left to right. Flat and matte, no light direction.
 ```
 
@@ -55,8 +56,8 @@ faded, so they sit under the furniture in contrast (the hierarchy rule).
 `interior_plaster` (homes, shops, the doss house, the hovel, the workshop):
 
 ```text
-wall: Seamless top-down pixel-art texture, 16-bit RPG tile style: the top of an interior wall, a plain band of sooty limewashed plaster over brick. Even detail, no objects, no shadows, flat and matte, tiles seamlessly on all four sides.
-wall_face: Pixel-art interior wall face seen straight on, 16-bit RPG tile style: sooty limewashed plaster, cracked, brick showing in one patch, a dark plank skirting at the foot. Tiles seamlessly left to right. Flat and matte, no light direction, no furniture, no pictures.
+wall: Seamless top-down pixel-art texture, 16-bit RPG tile style: the top of an interior wall, plain dark soot-grey plaster, smooth, with faint hairline cracks. Dark overall and low contrast, no white, no bare brick, no stains. Even detail, no objects, no shadows, flat and matte, tiles seamlessly on all four sides.
+wall_face: Pixel-art interior wall face seen straight on, 16-bit RPG tile style: dark soot-grey plaster, grimy, a few hairline cracks, one small patch of dark brick showing through, a dark plank skirting at the foot. Dark overall and low contrast, no white, no bright patches. Tiles seamlessly left to right. Flat and matte, no light direction, no furniture, no pictures.
 ```
 
 `interior_stone` (shrines, the armory, the guardroom, the sentry hut, the still-room, Orlov's store):
