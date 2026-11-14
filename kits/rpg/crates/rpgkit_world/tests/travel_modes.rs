@@ -287,3 +287,22 @@ fn the_trip_preview_runs_the_legs_in_the_mode_now() {
     assert_eq!(value(&gs, "alert"), BREACH - FORCED_ALERT, "the preview leaves the state alone");
     assert!(campaign::preview_trip(&d, &gs, "nowhere").is_empty(), "no known way: nothing to preview");
 }
+
+/// MAP-HOOKS1: the trip preview of a chosen way (`preview_trip_via`) runs that way's legs: two forced legs reach
+/// Breach where the one direct leg does not; `preview_trip` is the preview of `travel::path`'s way.
+#[test]
+fn the_trip_preview_of_a_chosen_way_runs_its_own_legs() {
+    let d = data(true, modes());
+    let mut gs = state(&d);
+    pick(&d, &mut gs, "forced");
+    set_alert(&mut gs, BREACH - 2 * FORCED_ALERT);
+    let (two, direct) = (vec!["w:r_a".to_string(), "w:r_b".to_string()], vec!["w:r_direct".to_string()]);
+    assert_eq!(travel::path(&d, &gs, "w:hub", "w:b"), two, "forced legs add no day: the two short legs are the cheapest");
+    let ends = campaign::preview_trip_via(&d, &gs, &two);
+    assert_eq!(ends.len(), 1, "{ends:?}");
+    assert_eq!(json::s(json::dict(&ends[0]), "card"), "card_breach", "the second forced leg reaches Breach");
+    assert!(campaign::preview_trip_via(&d, &gs, &direct).is_empty(), "one forced leg does not");
+    assert_eq!(campaign::preview_trip(&d, &gs, "b"), ends, "the cheapest way's preview");
+    assert!(campaign::preview_trip_via(&d, &gs, &[]).is_empty(), "no leg: nothing");
+    assert_eq!(value(&gs, "alert"), BREACH - 2 * FORCED_ALERT, "the preview leaves the state alone");
+}

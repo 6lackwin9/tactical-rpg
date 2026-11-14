@@ -55,12 +55,20 @@ pub fn preview_trip(d: &Data, gs: &GameState, to: &str) -> Vec<Value> {
     }
     let start = crate::travel::current_node(d, gs);
     let target = json::s(crate::explore::resolve_location(d, gs, to), "_qid");
-    let routes = crate::travel::path(d, gs, &start, &target);
+    preview_trip_via(d, gs, &crate::travel::path(d, gs, &start, &target))
+}
+
+/// MAP-HOOKS1: `preview_trip` along the chosen `routes` (route qids in order, a way of `travel::paths`), run on a copy
+/// the same way. [] when the run goes on, outside a campaign world and once the run is over.
+pub fn preview_trip_via(d: &Data, gs: &GameState, routes: &[String]) -> Vec<Value> {
+    if !live(gs) {
+        return Vec::new();
+    }
     let mut g = gs.clone();
     let extra = crate::travel::mode_days(d, gs);
     let mode = super::purse::travel_mode(d, gs).map(|m| m.id).unwrap_or_default();
     for rq in routes {
-        let route = crate::travel::route_in(d, &gs.world_id, &rq);
+        let route = crate::travel::route_in(d, &gs.world_id, rq);
         let n = crate::travel::leg_days(&route, extra);
         g.time += n;
         super::tick(d, &mut g, &Cause::Days { n, why: "travel".into() });

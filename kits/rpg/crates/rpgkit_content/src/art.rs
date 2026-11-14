@@ -368,8 +368,23 @@ pub fn zone_backdrop(zone: &str, row: Option<&ZoneDef>) -> String {
     }
 }
 
+/// The world map's background `name` (a region id or a world id; the screen tries the current location's region chain,
+/// then the world lineage child first).
 pub fn world_map_background(world: &str) -> String {
     format!("backgrounds/world_map/{world}.png")
+}
+
+/// MAP-HOOKS1: the world map layout sidecar beside background `name`, `backgrounds/world_map/<name>.json`
+/// (`{landmarks: {id: {pos: [x, y], scale?}}, routes: {id: [[x, y], ...]}}`; read over the locations' `map_pos`).
+pub fn world_map_layout(name: &str) -> String {
+    format!("backgrounds/world_map/{name}.json")
+}
+
+/// MAP-HOOKS1: a location's landmark on the world map, `map/landmarks/<local id>.png`; a qualified id (`world:id`)
+/// drops its world, so one file serves the location wherever it is seen from.
+pub fn landmark(location_id: &str) -> String {
+    let local = location_id.rsplit_once(':').map_or(location_id, |(_, l)| l);
+    format!("map/landmarks/{local}.png")
 }
 
 pub fn title_background(world: &str) -> String {
@@ -451,5 +466,16 @@ mod tests {
         assert_eq!(battle_stage_dirs("wall_face", ""), ["tilesets/common_stage/wall_face"]);
         assert_eq!(battle_prop_dirs("tree"), ["props/common/tree"]);
         assert_eq!(battle_backdrop("forest_clearing"), "backgrounds/battle/forest_clearing.png");
+    }
+
+    /// MAP-HOOKS1: a landmark is named by the location's local id (a qualified id drops its world); the layout sidecar
+    /// sits beside the background of the same name.
+    #[test]
+    fn landmarks_and_map_layouts_follow_the_tree() {
+        assert_eq!(landmark("hub"), "map/landmarks/hub.png");
+        assert_eq!(landmark("world_a:hub"), "map/landmarks/hub.png");
+        assert_eq!(landmark(""), "map/landmarks/.png", "no id gives a name no layer holds");
+        assert_eq!(world_map_layout("quarter"), "backgrounds/world_map/quarter.json");
+        assert_eq!(world_map_background("quarter"), "backgrounds/world_map/quarter.png");
     }
 }

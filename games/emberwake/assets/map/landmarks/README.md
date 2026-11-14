@@ -1,10 +1,10 @@
 # Act map landmarks
 
 One picture per location, drawn on the act's world map as its own layer over the act background (Outbox `AO-01` in
-`games/emberwake/docs/specs/ART_UI_REQUESTS.md`). **Empty for now**: the asset-tree test
-(`emberwake_gui` `region::tests::the_assets_follow_the_layered_tree`, ASSETORG2 section 3) has no `map/landmarks/<id>.png`
-pattern yet, so the cuts land with the Build task that reads them (AO-01 asks for the pattern). Until then they are
-rebuilt on demand with the command below.
+`games/emberwake/docs/specs/ART_UI_REQUESTS.md`). `PR5-47` (MAP-HOOKS1) reads them (`art::landmark`), drawn at
+`48 x scale` logical px from the act's sidecar `backgrounds/world_map/<region>.json`. **Act 1 is shipped** (2026-11-14):
+the nine Sunk Ward cuts here match the Act 1 sidecar and background. Acts 2 and 3 land with their location data
+(ACTS23); their cuts are rebuilt with the command below.
 
 - `<location_id>.png`, transparent, square, cut at 96 x the location's map scale (2 pixels per logical pixel of the
   640 x 360 map; the map draws it at 48 x scale logical pixels, its box bottom 8 px below the location's ground point).

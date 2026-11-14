@@ -532,7 +532,8 @@ impl Hooks for RpgContent {
 }
 
 /// E2.2-S2 (FB-110): merges `patch` into the game manifest at `path` (`aegis content manifest`): the engine keys and the
-/// kit's (`source::MANIFEST_KEYS`: the purse caps, STORYMUSIC1's `music_keys`, PK2-S4's `durability`), checked by both.
+/// kit's (`source::MANIFEST_KEYS`: the purse caps, STORYMUSIC1's `music_keys`, PK2-S4's `durability`, MAP-HOOKS1's
+/// `world_map_lantern_flicker`), checked by both.
 pub fn set_manifest(path: &Path, patch: &Dict) -> Result<aegis_content::manifest::Manifest, Vec<String>> {
     aegis_content::store::set_manifest(&RpgContent, path, patch)
 }

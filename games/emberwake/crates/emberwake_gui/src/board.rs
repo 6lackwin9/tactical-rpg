@@ -729,8 +729,9 @@ mod tests {
             let id = format!("node.{}", node.replace(':', "."));
             let badge = widget(&wm, &format!("{id}.job")).unwrap_or_else(|| panic!("{id}: the job badge"));
             let (bx, by, bw, bh) = rect(&badge);
-            let (nx, ny, ..) = rect(&widget(&wm, &id).expect("the node"));
-            assert!(bw == 9 && bh == 9 && bx <= nx && by <= ny + 2, "{id}: a 9 px badge at the pin's top left: {badge}");
+            let (nx, ny, nw, _) = rect(&widget(&wm, &id).expect("the node"));
+            // MAP-HOOKS1 (AO-01 (5)): at the pin's top right, as Art/UI's preview places it
+            assert!(bw == 9 && bh == 9 && bx + bw >= nx + nw && by <= ny + 2, "{id}: a 9 px badge at the pin's top right: {badge}");
             let card = widget(&wm, &id).expect("the node")["tip"].to_string();
             assert!(card.contains(&format!("Job: {name}")), "{card}");
         }
