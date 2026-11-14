@@ -75,18 +75,21 @@ SPACED = {  # each same-column pair (00/01, 02/04, 03/05, 06/07) about 60 px apa
 
 
 # Each landmark on its own painted place in Act 1 background take 1 (Tushar 2026-11-13: "tie the landmark to the region
-# within the map so they don't seem out of place"; the diamond need not stay mirrored).
+# within the map so they don't seem out of place"; the diamond need not stay mirrored). Final spots and map scales from
+# the Act Map Layout page (Tushar 2026-11-14), the same numbers as art_src/prompts/act1_map_layout.json.
 REGIONS = {
-    "sluice_undercroft": (0.60, 0.99),     # the flooded basin
-    "drowned_runoff_grate": (0.50, 0.79),  # the arched drain painted in the basin's top wall
-    "alleyway_junction_7": (0.17, 0.66),   # the left tenement alleys
-    "ash_crawl_crossroads": (0.80, 0.64),  # the right-hand slum block
-    "fourth_kiln": (0.15, 0.33),           # the chimneys and furnace glow, upper left
-    "tallow_vats": (0.84, 0.34),           # on the painted vat tanks
-    "crucible_watchpost": (0.50, 0.31),    # the gorge mouth
-    "slag_gate": (0.50, 0.10),             # up the gorge, on the slag seam
-    "corvos_gate": (0.76, 0.85),           # across the right canal
+    "sluice_undercroft": (0.597, 0.972),     # the flooded basin
+    "drowned_runoff_grate": (0.504, 0.756),  # above the arched drain in the basin's top wall
+    "alleyway_junction_7": (0.159, 0.649),   # the left tenement alleys
+    "ash_crawl_crossroads": (0.847, 0.676),  # the right-hand slum block
+    "fourth_kiln": (0.185, 0.382),           # the chimneys and furnace glow, upper left
+    "tallow_vats": (0.787, 0.432),           # on the painted vat tanks
+    "crucible_watchpost": (0.487, 0.353),    # the gorge mouth
+    "slag_gate": (0.488, 0.132),             # up the gorge, on the slag seam
+    "corvos_gate": (0.752, 0.855),           # across the right canal
 }
+ACT1_SCALE = {"drowned_runoff_grate": 1.1, "alleyway_junction_7": 1.2, "ash_crawl_crossroads": 1.2, "fourth_kiln": 1.2,
+              "tallow_vats": 1.2, "crucible_watchpost": 1.2, "slag_gate": 1.2}  # the rest x1.0
 
 
 # Route waypoints along the painted roads of background take 1 (Tushar 2026-11-13: routes along the roads instead of
@@ -129,7 +132,7 @@ def load_graph() -> dict:
         nodes.append({
             "id": loc["id"], "num": num, "name": loc["name"], "desc": desc[:1].upper() + desc[1:], "mission": mission,
             "main": main, "quest": quest, "kind": kind,
-            "who": who, "pin": pin, "x": px(mx), "y": py(my),
+            "who": who, "pin": pin, "x": px(mx), "y": py(my), "scale": ACT1_SCALE.get(loc["id"], 1.0),
             "pos": {"data": [px(mx), py(my)], "spaced": [px(SPACED.get(loc["id"], (mx, my))[0]), py(SPACED.get(loc["id"], (mx, my))[1])],
                     "regions": [px(REGIONS.get(loc["id"], (mx, my))[0]), py(REGIONS.get(loc["id"], (mx, my))[1])]},
             "encounters": [{"id": i, "name": encs[i].get("name", i), "desc": encs[i].get("description", "")} for i in loc.get("encounters", []) if i in encs],

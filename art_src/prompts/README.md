@@ -47,6 +47,12 @@ full-size files arrive (Drive), save each as `art_src/<id>.png` and run its cut;
 | 07 Slag Gate | take B (portcullis in a cliff wall, slag channel) | `... landmark art_src/lm_slag_gate.png slag_gate` |
 | 1d Corvo's Gate | take A (warm crumbling brick, breach) | `... landmark art_src/lm_corvos_gate.png corvos_gate` |
 
+Slab-free edits and final layout (2026-11-14): the eight places above were re-edited in Flow without their rock block
+([act1_slab_edits.md](act1_slab_edits.md)), and the Drive files were replaced in place. The sources are copied byte for
+byte to `art_src/lm_<id>.jpg` and `art_src/wm_sunk_ward.jpg`. The layout from the Act Map Layout page is
+[act1_map_layout.json](act1_map_layout.json) (target `sunk_ward_quarter`, the Act 1 region): `codeblend` writes
+`backgrounds/world_map/sunk_ward_quarter.png` and the cuts at 96 x scale.
+
 ## Act 2 map picks (reviewed 2026-11-13, full-size files to follow)
 
 Checked the same way on background take A, at the positions proposed in Outbox `AO-01`.

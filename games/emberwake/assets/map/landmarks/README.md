@@ -13,5 +13,5 @@ rebuilt on demand with the command below.
   background (`backgrounds/world_map/<region>.png`) carries its contact shadow and light spill. The alpha is the cut's
   own, so the selection glow follows a clean outline.
 - `sluice_undercroft.png` (the hideout) is shared by every act: untoned, at its largest scale (x1.2).
-- Sources, picks, fixes and layouts: `art_src/prompts/README.md`, `ART_UI_STUDIO.md` 3.10. Acts 2 and 3 are ready;
-  Act 1 follows its slab-removal pass.
+- Sources, picks, fixes and layouts: `art_src/prompts/README.md`, `ART_UI_STUDIO.md` 3.10. All three acts are
+  ready (Act 1 since 2026-11-14). The hideout ships as the one shared cut above, not Act 1's toned x1.0 copy.

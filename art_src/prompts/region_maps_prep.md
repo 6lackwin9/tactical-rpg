@@ -66,7 +66,7 @@ and 3 have no location data yet (`docs/specs/ACTS23.md`: "two act regions" to au
    Grate (first mission ground).
 4. Placeholder-first: anything a template needs before its art lands keeps the kit's `common` art.
 
-## 5. Act 1 map cleanup (first item next session)
+## 5. Act 1 map cleanup (done 2026-11-14: steps 1-3; `ART_UI_STUDIO.md` 3.10)
 
 Act 2 and Act 3 are closed (`ART_UI_STUDIO.md` 3.10, "Act 2 and Act 3 maps closed"). Act 1 gets the same treatment:
 
