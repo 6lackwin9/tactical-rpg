@@ -28,6 +28,8 @@ BOUNDARY = {"sluice_undercroft": "drain_brick", "drowned_runoff_grate": "drain_b
             "slag_gate": "gorge_rock"}   # the rest: blind_tenements
 WALL_TAKES = {"drain_brick": (1, 2), "blind_tenements": (2, 1), "gorge_rock": (1, 2),
               "interior_plaster": (2, 1), "interior_stone": (1, 2)}   # (top take, face take)
+CELLS = {"flagstone": 4, "cobble_road": 6, "floorboards": 6}   # tiles a texture spans (default 8): sets the size of its stones
+GREY = {"cobble_road": 0.75, "flagstone": 0.5}                # how far a texture's own hue is pulled to grey before toning
 BRIGHT = 1.9   # the catalog colours are near black; the preview lifts everything by this, like the grid preview
 
 
@@ -35,9 +37,11 @@ def hexrgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def tone(im, colour, spread=0.55, cells=8):
+def tone(im, colour, spread=0.55, cells=8, grey=0.0):
     """A texture toned toward `colour`: scaled to `cells` tiles, its mean moved onto the colour, its contrast cut."""
     im = im.convert("RGB").resize((cells * T, cells * T), Image.LANCZOS)
+    if grey:
+        im = Image.blend(im, im.convert("L").convert("RGB"), grey)
     px = im.load(); w, h = im.size
     n = w * h
     mean = [sum(px[x, y][c] for y in range(0, h, 3) for x in range(0, w, 3)) / len(range(0, h, 3)) / len(range(0, w, 3)) for c in range(3)]
@@ -67,7 +71,7 @@ def render(loc, tiles_dir, props_root, out, inside=""):
     tex = {}
     for gid in set(e["ground_legend"].values()):
         src = find(tiles_dir, *TILES[gid]) if gid in TILES else None
-        tex[gid] = tone(src, lift(cat[gid])) if src else Image.new("RGB", (8 * T, 8 * T), lift(cat[gid]))
+        tex[gid] = tone(src, lift(cat[gid]), cells=CELLS.get(gid, 8), grey=GREY.get(gid, 0.0)) if src else Image.new("RGB", (8 * T, 8 * T), lift(cat[gid]))
     bset = BOUNDARY.get(e.get("location", loc), "blind_tenements")
     top_take, face_take = WALL_TAKES[bset]
     top = find(tiles_dir, f"boundary_{bset}_wall", top_take)

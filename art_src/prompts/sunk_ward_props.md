@@ -10,6 +10,10 @@ landmarks (`art_src/lm_<location>.jpg`), which are the style and colour referenc
 `games/emberwake/assets/props/sunk_ward/<art>/v<n>.png`, 32 px per tile; a standing prop's picture may be one tile
 wider and up to four taller than its footprint (PROPS1 6.1). Style A as in PROPS1 6.1.
 
+**Picture boxes widened (2026-11-15, after the first hub render)**: a standing prop's picture may be one tile wider than its
+footprint (PROPS1 6.1). The front-on art is wider than the narrow boxes first listed, so 21 small props (racks, posts,
+lamps, the cot, table, bunk, slab, anvil, brazier, strongbox and so on) now use that extra tile; footprints are unchanged.
+
 ## 1. Arts for the hub and the Grate (26 arts: 24 new, 2 reused from the kit)
 
 | Art | PNG px | Footprint | Layer | Where | What |
@@ -18,24 +22,24 @@ wider and up to four taller than its footprint (PROPS1 6.1). Style A as in PROPS
 | `vault_pillar` | 64 x 160 | 2 x 2 | sort | hub | a squat soot-black brick pier with a stone footing, rising into the vault |
 | `retort_shelf` | 96 x 96 | 3 x 1 | sort | hub | a dark wooden shelf of glass retorts, jars and bone pins, a dripping oil lamp |
 | `apothecary_slab` | 96 x 112 | 3 x 2 | sort | hub | a stone dissection slab on iron legs, a folded oiled-green cloth, scalpels and pipettes, a hanging lamp |
-| `herb_rack` | 32 x 112 | 1 x 2 | sort | hub | a narrow drying rack of grey herbs and rock-salt sacks |
+| `herb_rack` | 64 x 96 | 1 x 2 | sort | hub | a narrow drying rack of grey herbs and rock-salt sacks |
 | `tinker_hearth` | 96 x 160 | 3 x 2 | sort | hub | a brick forge hearth with a glowing tallow-yellow fire, bellows, a hooded flue rising into the vault |
-| `anvil` | 32 x 48 | 1 x 1 | sort | hub | a blackened anvil on a stump, a hammer on it |
+| `anvil` | 64 x 64 | 1 x 1 | sort | hub | a blackened anvil on a stump, a hammer on it |
 | `scrap_heap` | 64 x 96 | 2 x 2 | sort | hub | a heap of salvaged scrap: bent pipe, valve wheels, chain, cracked brass |
-| `brazier` | 32 x 64 | 1 x 1 | sort | hub | an iron brazier on three legs with a low tallow-yellow fire |
-| `kiln_bunk` | 64 x 64 | 2 x 1 | sort | hub | a bunk set into a brick kiln niche: straw pallet, grey blanket, a candle stub |
-| `stasis_slab` | 64 x 64 | 2 x 1 | sort | hub | a stone slab with leather restraints under a sheet, chalk marks on the stone |
-| `crypt_bars` | 32 x 160 | 1 x 3 | sort | hub | a run of rusted iron cell bars in a brick frame, running north to south |
+| `brazier` | 64 x 80 | 1 x 1 | sort | hub | an iron brazier on three legs with a low tallow-yellow fire |
+| `kiln_bunk` | 80 x 80 | 2 x 1 | sort | hub | a bunk set into a brick kiln niche: straw pallet, grey blanket, a candle stub |
+| `stasis_slab` | 80 x 64 | 2 x 1 | sort | hub | a stone slab with leather restraints under a sheet, chalk marks on the stone |
+| `crypt_bars` | 64 x 160 | 1 x 3 | sort | hub | a run of rusted iron cell bars in a brick frame, running north to south |
 | `mission_board` | 64 x 96 | 2 x 1 | sort | hub | a wooden board on two posts hung with bone-cipher slips and pinned scraps (no letters) |
-| `iron_ladder` | 32 x 128 | 1 x 2 | sort | hub | a rusted iron ladder bolted up a brick wall, going out of sight |
+| `iron_ladder` | 64 x 128 | 1 x 2 | sort | hub | a rusted iron ladder bolted up a brick wall, going out of sight |
 | `varka_skiff` | 64 x 32 | 2 x 1 | ground | hub | a small flat skiff moored on black water, crates and a lantern on it, seen from above |
 | `crate_stack` | (kit) | 2 x 1 | sort | hub | kit `common` art reused |
 | `drain_arch` | 96 x 128 | 3 x 2 | sort | Grate | a small arched drain mouth in a brick wall, a trickle of black water from it |
 | `sluice_tunnel` | 64 x 128 | 2 x 1 | sort | Grate | one half of the big sluice tunnel mouth: a deep brick arch, dark water running out; `flip` makes the other half |
 | `ring_post` | 32 x 64 | 1 x 1 | sort | both | a square stone mooring post with an iron ring |
-| `lock_tablet` | 32 x 80 | 1 x 1 | sort | Grate | an upright bronze flood-lock tablet on a stone plinth, half buried in silt (no letters) |
-| `lantern_pole` | 32 x 96 | 1 x 1 | sort | Grate | a crooked iron pole with a hanging tallow-yellow lantern |
-| `culvert_gate` | 32 x 128 | 1 x 2 | sort | Grate | a barred iron culvert gate set in a brick wall, a chain and padlock |
+| `lock_tablet` | 64 x 96 | 1 x 1 | sort | Grate | an upright bronze flood-lock tablet on a stone plinth, half buried in silt (no letters) |
+| `lantern_pole` | 64 x 112 | 1 x 1 | sort | Grate | a crooked iron pole with a hanging tallow-yellow lantern |
+| `culvert_gate` | 64 x 128 | 1 x 2 | sort | Grate | a barred iron culvert gate set in a brick wall, a chain and padlock |
 | `drain_grate` | 256 x 128 | 8 x 4 | ground | Grate | a big square iron grate over swirling black water, rust at the bolts, seen from above |
 | `silt_bank` | 128 x 64 | 4 x 2 | ground | Grate | a bank of grey river silt with ripples and a broken lock-plate edge |
 | `stone_steps` | 96 x 96 | 3 x 3 | ground | Grate | worn stone steps going up to the south, soot in the corners, seen from above |
@@ -52,22 +56,22 @@ tower window is asked for as a cold blue-violet, which keyed apart from the mage
 | --- | --- | --- | --- | --- | --- |
 | `tenement_block` | 192 x 288 | 6 x 5 | sort | Junction 7 | a crooked three-storey tenement of soot-black brick and timber, slate roof, shuttered windows, two lit |
 | `watch_armory` | 192 x 288 | 6 x 5 | roof | Junction 7 | a squat brick Watch armory, an iron-bound door, barred windows, a rust-crimson banner (enterable: the cache inside) |
-| `watch_torch` | 32 x 80 | 1 x 1 | sort | Junction 7, Slag Gate | an iron torch bracket on a short post, a red-orange flame |
-| `rust_pennant` | 32 x 96 | 1 x 1 | sort | Junction 7 | a pole with a rust-crimson pennant |
+| `watch_torch` | 64 x 80 | 1 x 1 | sort | Junction 7, Slag Gate | an iron torch bracket on a short post, a red-orange flame |
+| `rust_pennant` | 64 x 96 | 1 x 1 | sort | Junction 7 | a pole with a rust-crimson pennant |
 | `spiked_barricade` | 96 x 64 | 3 x 1 | sort | Junction 7 | a spiked timber barricade lashed with chain |
 | `street_grate` | 64 x 64 | 2 x 2 | ground | Junction 7 | a square iron street grate chained shut, seen from above |
 | `ash_shack` | 128 x 160 | 4 x 3 | sort | Crossroads | a ramshackle plank shack, a sagging roof of tin sheets under grey ash |
 | `cage_platform` | 96 x 128 | 3 x 2 | sort | Crossroads | two iron cages on a wooden platform, chains, a titration bench of glass and tubes |
 | `pen_fence` | 96 x 64 | 3 x 1 | sort | Crossroads | a rough fence of iron stakes and timber rails |
 | `toll_pen_gate` | 64 x 96 | 2 x 1 | sort | Crossroads | the chained Toll-Pen gate, a padlock, a blank tally board |
-| `violet_lamp_post` | 32 x 112 | 1 x 1 | sort | Crossroads | a crooked iron lamp post with a cold blue-violet flame |
+| `violet_lamp_post` | 64 x 128 | 1 x 1 | sort | Crossroads | a crooked iron lamp post with a cold blue-violet flame |
 | `violet_pool` | 64 x 64 | 2 x 2 | ground | Crossroads | a soft pool of cold blue-violet light on ash cobbles |
 | `ash_drift` | 96 x 64 | 3 x 2 | ground | Crossroads | a drift of grey ash and cinders |
 | `brick_wall_run` | 128 x 128 | 4 x 2 | sort | Corvo's Gate | a run of crumbling warm red-brown brick wall, moss in the cracks |
 | `brick_breach` | 64 x 128 | 2 x 2 | sort | Corvo's Gate | the broken end of the brick wall at a breach, bricks spilling; `flip` for the other side |
 | `striped_barrier` | 96 x 64 | 3 x 1 | sort | Corvo's Gate | a red-and-white striped barrier pole on a trestle, lowered |
 | `toll_booth` | 64 x 128 | 2 x 2 | sort | Corvo's Gate | a small timber guard booth, a slanted roof, a lantern by the window |
-| `toll_drum` | 32 x 48 | 1 x 1 | sort | Corvo's Gate | an iron-banded toll drum on a stand, a slot in its lid |
+| `toll_drum` | 64 x 64 | 1 x 1 | sort | Corvo's Gate | an iron-banded toll drum on a stand, a slot in its lid |
 | `tenement_row` | 192 x 224 | 6 x 3 | sort | Corvo's Gate | a row of narrow two-storey soot-black tenements |
 | `fourth_kiln` | 448 x 320 | 14 x 6 | sort | Kiln | the bone-mill kiln: a soot-black brick block, three chimney tops glowing inside with no smoke, pipes and iron bands on its face |
 | `furnace_mouth` | 96 x 96 | 3 x 1 | sort | Kiln | a glowing furnace mouth in a brick arch, ash at its sill |
@@ -77,14 +81,14 @@ tower window is asked for as a cold blue-violet, which keyed apart from the mage
 | `bone_meal_heap` | 64 x 64 | 2 x 2 | ground | Kiln | a heap of pale bone meal |
 | `wedge_pile` | 32 x 32 | 1 x 1 | ground | Kiln | a small pile of black-iron wedges |
 | `tallow_vat` | 96 x 160 | 3 x 3 | sort | Vats | a big riveted iron vat with a glowing sickly-yellow tallow top and a ladder up its side |
-| `catwalk_stair` | 32 x 160 | 1 x 3 | sort | Vats | a steep iron catwalk stair with a rail |
+| `catwalk_stair` | 64 x 160 | 1 x 3 | sort | Vats | a steep iron catwalk stair with a rail |
 | `tallow_spill` | 96 x 64 | 3 x 2 | ground | Vats | a spill of pale yellow tallow, congealed at the edges |
 | `still_room` | 352 x 320 | 11 x 7 | roof | Vats | a low brick still-room, copper still pipes through its roof (enterable: Elyse's counter-still) |
 | `guild_store` | 352 x 288 | 11 x 6 | roof | Vats | a Guild storehouse of brick, wide double doors, sickly-yellow Guild marks, no letters (enterable: Orlov's stores) |
 | `barrel_stack` | 64 x 64 | 2 x 1 | sort | Vats | tallow barrels stacked two high |
 | `winch_drum` | 64 x 128 | 2 x 2 | sort | Crucible | a big iron winch drum in a timber frame, its chain running down |
 | `watch_wall` | 128 x 128 | 4 x 2 | sort | Crucible | a run of fortress wall, rust-trimmed battlements, one red-orange slit window |
-| `crane_arm` | 32 x 128 | 1 x 1 | sort | Crucible | an iron crane arm with a pulley and hook |
+| `crane_arm` | 64 x 128 | 1 x 1 | sort | Crucible | an iron crane arm with a pulley and hook |
 | `slit_window_tower` | 160 x 256 | 5 x 3 | sort | Crucible | a stone watch tower, a row of red-orange slit windows, battlements, a cold blue-violet glint in its top window |
 | `cliff_bastion` | 160 x 192 | 5 x 3 | sort | Slag Gate | a fortified stretch of dark cliff faced with masonry, a red banner; `flip` for the other side |
 | `portcullis` | 128 x 160 | 4 x 2 | sort | Slag Gate | a shut iron portcullis in a stone gate arch |
@@ -129,13 +133,13 @@ they are hidden; with the party inside, the roof fades and they show.
 | --- | --- | --- | --- | --- | --- |
 | `shop_counter` | 96 x 64 | 3 x 1 | sort | shops | a worn wooden shop counter, a lamp and a few wares on it |
 | `goods_shelf` | 64 x 96 | 2 x 1 | sort | shops, hovel, workshop, still-room | a tall wooden shelf of jars, bundles and tins |
-| `cot` | 64 x 48 | 2 x 1 | sort | houses, doss house, hovel, guardroom, sentry hut | a low cot of planks with a grey blanket |
-| `table_stools` | 64 x 64 | 2 x 1 | sort | houses, doss house, hovel, guardroom, sentry hut | a rough table with two stools, a candle stub |
-| `hearth_stove` | 32 x 80 | 1 x 1 | sort | houses, sentry hut | a small iron stove with a pipe going up and a low tallow-yellow glow |
+| `cot` | 96 x 64 | 2 x 1 | sort | houses, doss house, hovel, guardroom, sentry hut | a low cot of planks with a grey blanket |
+| `table_stools` | 96 x 80 | 2 x 1 | sort | houses, doss house, hovel, guardroom, sentry hut | a rough table with two stools, a candle stub |
+| `hearth_stove` | 64 x 96 | 1 x 1 | sort | houses, sentry hut | a small iron stove with a pipe going up and a low tallow-yellow glow |
 | `shrine_altar` | 96 x 80 | 3 x 1 | sort | shrines | a stone altar with a cloth, a bone reliquary and candles |
-| `candle_stand` | 32 x 64 | 1 x 1 | sort | shrines | an iron candle stand with a cluster of tallow candles |
+| `candle_stand` | 64 x 80 | 1 x 1 | sort | shrines | an iron candle stand with a cluster of tallow candles |
 | `weapon_rack` | 64 x 80 | 2 x 1 | sort | armory, guardroom | a wooden rack of polearms, cudgels and shields |
-| `strongbox` | 32 x 48 | 1 x 1 | sort | armory, Orlov's store | an iron-banded strongbox with a heavy lock |
+| `strongbox` | 64 x 64 | 1 x 1 | sort | armory, Orlov's store | an iron-banded strongbox with a heavy lock |
 | `workbench` | 96 x 64 | 3 x 1 | sort | Skerrit's workshop | a bone-wright's workbench: saws, drills and pale bone pieces |
 | `bone_rack` | 64 x 96 | 2 x 1 | sort | Skerrit's workshop | a rack of cleaned bones sorted by size |
 | `copper_still` | 64 x 96 | 2 x 2 | sort | the still-room | a copper still with coiled pipes over a low fire |
