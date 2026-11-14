@@ -2,52 +2,88 @@
  "id": "sunk_ward_crucible",
  "name": "Sunk Ward: Crucible Watchpost",
  "rows": [
-  "#######################.########",
-  "#######################..#######",
-  "#######################..#######",
-  "#...########.............#######",
-  "#...########.............#######",
-  "#...########........#....#######",
-  "#........................#######",
-  "#...###..................#######",
-  "#######..................#######",
-  "###############..###############",
-  "###############..###############",
-  "#####......................#####",
-  "#####......................#####",
-  "#####......................#####",
-  "#####...##.................#####",
-  "#####...##.................#####",
-  "#####.................##...#####",
-  "#####.................##...#####",
-  "#####......................#####",
-  "#####......................#####",
-  "#####......................#####",
-  "###############..###############"
+  "####################################.###########",
+  "####################################..##########",
+  "####################################..##########",
+  "#########...............................########",
+  "#########.#####.........................########",
+  "###....##.#####.........................########",
+  "###....##.#####...............#.........########",
+  "###....##...............................########",
+  "###..####...............................########",
+  "###..####...............................########",
+  "###..####...............................########",
+  "###..####...............................########",
+  "###..####...............................########",
+  "###..####...............................########",
+  "###..##################..#######################",
+  "###..##################..#######################",
+  "###..##################..#######################",
+  "###..###................................########",
+  "###..###................................########",
+  "###..###..........................##....########",
+  "###...............................##....########",
+  "###.....................................########",
+  "########................................########",
+  "########................................########",
+  "########.........##...........##........########",
+  "########.........##...........##........#.....##",
+  "########......................................##",
+  "########................................#.....##",
+  "########................................#.....##",
+  "########........................##......########",
+  "########........##..............##......########",
+  "########........##......................########",
+  "########................................########",
+  "##############....................##############",
+  "##############....................##############",
+  "##############....................##############",
+  "##############....................##############",
+  "##############....................##############",
+  "#######################..#######################",
+  "#######################..#######################"
  ],
  "zones": [
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dssssddddddddddddddddddddddddddd",
-  "dssssddddddddddddddddddddddddddd",
-  "dssssddddddddddddddddddddddddddd",
-  "dssssddddddddddddddddddddddddddd",
-  "dssssddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddd",
-  "dddddssssssssssssssssssssssddddd",
-  "dddddssssssssssssssssssssssddddd",
-  "dddddssssssssssssssssssssssddddd",
-  "dddddssssssssssssssssssssssddddd",
-  "dddddddddddddddddddddddddddddddd"
+  "------------------------------------yy----------",
+  "------------------------------------yy----------",
+  "------------------------------------yy----------",
+  "---------yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---------yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb---------------yy-----------------------",
+  "---bbbbb---------------yy-----------------------",
+  "---bbbbb---------------yy-----------------------",
+  "---bbbbbdddddddddddddddddddddddddddddddd--------",
+  "---bbbbbdddddddddddddddddddddddddddddddd--------",
+  "---bbbbbdddddddddddddddddddddddddddddddd--------",
+  "---bbbbbdddddddddddddddddddddddddddddddd--------",
+  "---bbbbbdddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd-hhhhh--",
+  "--------ddddddddddddddddddddddddddddddddhhhhhh--",
+  "--------dddddddddddddddddddddddddddddddd-hhhhh--",
+  "--------dddddddddddddddddddddddddddddddd-hhhhh--",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------dddddddddddddddddddddddddddddddd--------",
+  "--------------ssssssssssssssssssss--------------",
+  "--------------ssssssssssssssssssss--------------",
+  "--------------ssssssssssssssssssss--------------",
+  "--------------ssssssssssssssssssss--------------",
+  "--------------ssssssssssssssssssss--------------",
+  "-----------------------ss-----------------------",
+  "-----------------------ss-----------------------"
  ],
  "zone_legend": {
   "s": {
@@ -55,131 +91,224 @@
    "kind": "safe"
   },
   "d": {
+   "id": "gorge_road",
+   "kind": "danger"
+  },
+  "b": {
+   "id": "overlook_path",
+   "kind": "danger"
+  },
+  "y": {
    "id": "watchpost",
    "kind": "danger"
+  },
+  "h": {
+   "id": "sentry_hut",
+   "kind": "safe",
+   "indoor": true
   }
  },
  "anchors": [
   {
    "id": "spawn",
-   "x": 15,
-   "y": 19
+   "x": 23,
+   "y": 35
   },
   {
    "id": "exit_road",
-   "x": 15,
-   "y": 21
+   "x": 23,
+   "y": 39
   },
   {
    "id": "postern",
-   "x": 23,
+   "x": 36,
    "y": 0
   },
   {
    "id": "crucible",
-   "x": 15,
-   "y": 6
+   "x": 24,
+   "y": 8
   },
   {
    "id": "crucible_overlook",
-   "x": 15,
-   "y": 12
+   "x": 23,
+   "y": 19
   },
   {
    "id": "winch_post",
-   "x": 16,
+   "x": 24,
    "y": 3
   },
   {
    "id": "overlook",
-   "x": 2,
-   "y": 4
+   "x": 5,
+   "y": 6
+  },
+  {
+   "id": "hut",
+   "x": 43,
+   "y": 26
+  },
+  {
+   "id": "patrol_start",
+   "x": 23,
+   "y": 31
   }
  ],
- "paths": {},
+ "paths": {
+  "sentry_patrol": [
+   [
+    23,
+    31
+   ],
+   [
+    23,
+    30
+   ],
+   [
+    23,
+    29
+   ],
+   [
+    23,
+    28
+   ],
+   [
+    22,
+    28
+   ],
+   [
+    21,
+    28
+   ],
+   [
+    20,
+    28
+   ],
+   [
+    19,
+    28
+   ],
+   [
+    18,
+    28
+   ],
+   [
+    17,
+    28
+   ],
+   [
+    16,
+    28
+   ],
+   [
+    15,
+    28
+   ],
+   [
+    14,
+    28
+   ],
+   [
+    13,
+    28
+   ],
+   [
+    12,
+    28
+   ],
+   [
+    12,
+    27
+   ],
+   [
+    12,
+    26
+   ],
+   [
+    12,
+    25
+   ],
+   [
+    12,
+    24
+   ],
+   [
+    12,
+    23
+   ],
+   [
+    12,
+    22
+   ],
+   [
+    12,
+    21
+   ],
+   [
+    13,
+    21
+   ],
+   [
+    14,
+    21
+   ],
+   [
+    15,
+    21
+   ],
+   [
+    16,
+    21
+   ],
+   [
+    17,
+    21
+   ],
+   [
+    18,
+    21
+   ],
+   [
+    19,
+    21
+   ],
+   [
+    20,
+    21
+   ],
+   [
+    21,
+    21
+   ],
+   [
+    22,
+    21
+   ],
+   [
+    23,
+    21
+   ],
+   [
+    23,
+    20
+   ],
+   [
+    23,
+    19
+   ],
+   [
+    23,
+    18
+   ]
+  ]
+ },
  "props": [
   {
-   "id": "cliff_w1",
-   "art": "cliff_face",
-   "x": 1,
-   "y": 2,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "cliff_e1",
-   "art": "cliff_face",
-   "x": 27,
-   "y": 2,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "cliff_w2",
-   "art": "cliff_face",
-   "x": 1,
-   "y": 8,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "cliff_e2",
-   "art": "cliff_face",
-   "x": 27,
-   "y": 8,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "cliff_w3",
-   "art": "cliff_face",
-   "x": 1,
-   "y": 14,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "cliff_e3",
-   "art": "cliff_face",
-   "x": 27,
-   "y": 14,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "winch",
-   "art": "winch_drum",
-   "x": 15,
-   "y": 1,
-   "w": 2,
-   "h": 2,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "north_wall_w",
+   "id": "curtain_1",
    "art": "watch_wall",
-   "x": 7,
-   "y": 1,
+   "x": 9,
+   "y": 14,
    "w": 4,
    "h": 2,
    "layer": "sort",
@@ -187,10 +316,21 @@
    "flip": false
   },
   {
-   "id": "north_wall_e",
+   "id": "curtain_2",
+   "art": "watch_wall",
+   "x": 13,
+   "y": 14,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "curtain_3",
    "art": "watch_wall",
    "x": 17,
-   "y": 1,
+   "y": 14,
    "w": 4,
    "h": 2,
    "layer": "sort",
@@ -198,32 +338,10 @@
    "flip": false
   },
   {
-   "id": "crane",
-   "art": "crane_arm",
-   "x": 21,
-   "y": 1,
-   "w": 1,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "tower",
-   "art": "slit_window_tower",
-   "x": 7,
-   "y": 3,
-   "w": 5,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "curtain_w",
+   "id": "curtain_4",
    "art": "watch_wall",
-   "x": 10,
-   "y": 9,
+   "x": 26,
+   "y": 14,
    "w": 4,
    "h": 2,
    "layer": "sort",
@@ -231,10 +349,21 @@
    "flip": false
   },
   {
-   "id": "curtain_e",
+   "id": "curtain_5",
    "art": "watch_wall",
-   "x": 18,
-   "y": 9,
+   "x": 30,
+   "y": 14,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "curtain_6",
+   "art": "watch_wall",
+   "x": 34,
+   "y": 14,
    "w": 4,
    "h": 2,
    "layer": "sort",
@@ -244,8 +373,8 @@
   {
    "id": "gate_w",
    "art": "gatepost",
-   "x": 14,
-   "y": 10,
+   "x": 22,
+   "y": 16,
    "w": 1,
    "h": 1,
    "layer": "sort",
@@ -255,8 +384,8 @@
   {
    "id": "gate_e",
    "art": "gatepost",
-   "x": 17,
-   "y": 10,
+   "x": 25,
+   "y": 16,
    "w": 1,
    "h": 1,
    "layer": "sort",
@@ -264,10 +393,87 @@
    "flip": false
   },
   {
-   "id": "braziers",
+   "id": "tower",
+   "art": "slit_window_tower",
+   "x": 10,
+   "y": 4,
+   "w": 5,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "winch",
+   "art": "winch_drum",
+   "x": 23,
+   "y": 1,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "crane",
+   "art": "crane_arm",
+   "x": 25,
+   "y": 1,
+   "w": 1,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "north_wall_1",
+   "art": "watch_wall",
+   "x": 14,
+   "y": 1,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "north_wall_2",
+   "art": "watch_wall",
+   "x": 18,
+   "y": 1,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "north_wall_3",
+   "art": "watch_wall",
+   "x": 27,
+   "y": 1,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "north_wall_4",
+   "art": "watch_wall",
+   "x": 31,
+   "y": 1,
+   "w": 4,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "brazier",
    "art": "brazier",
-   "x": 20,
-   "y": 5,
+   "x": 30,
+   "y": 6,
    "w": 1,
    "h": 1,
    "layer": "sort",
@@ -277,8 +483,8 @@
   {
    "id": "boulder_1",
    "art": "boulder",
-   "x": 8,
-   "y": 14,
+   "x": 16,
+   "y": 30,
    "w": 2,
    "h": 2,
    "layer": "sort",
@@ -288,38 +494,145 @@
   {
    "id": "boulder_2",
    "art": "boulder",
-   "x": 22,
-   "y": 16,
+   "x": 30,
+   "y": 24,
    "w": 2,
    "h": 2,
    "layer": "sort",
    "variant": -1,
    "flip": false
+  },
+  {
+   "id": "boulder_3",
+   "art": "boulder",
+   "x": 32,
+   "y": 29,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "boulder_4",
+   "art": "boulder",
+   "x": 17,
+   "y": 24,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "boulder_5",
+   "art": "boulder",
+   "x": 34,
+   "y": 19,
+   "w": 2,
+   "h": 2,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_1",
+   "art": "cliff_face",
+   "x": 41,
+   "y": 18,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_2",
+   "art": "cliff_face",
+   "x": 41,
+   "y": 31,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_3",
+   "art": "cliff_face",
+   "x": 1,
+   "y": 26,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "cliff_4",
+   "art": "cliff_face",
+   "x": 1,
+   "y": 31,
+   "w": 4,
+   "h": 1,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "roof_sentry_hut",
+   "art": "sentry_hut",
+   "x": 40,
+   "y": 24,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "h"
   }
  ],
  "ground": [
-  "mmmmmmmmmmmmmmmmmmmmmmmfmmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmffmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmffmmmmmmm",
-  "msssmmmffffffffffffffffffmmmmmmm",
-  "msssmmmffffffffffffffffffmmmmmmm",
-  "msssmmmffffffffffffffffffmmmmmmm",
-  "mssssffffffffffffffffffffmmmmmmm",
-  "msssmmmffffffffffffffffffmmmmmmm",
-  "mmmmmmmffffffffffffffffffmmmmmmm",
-  "mmmmmmmmmmmmmmmffmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmffmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmccccmmmmmmmmmmmmmm"
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffmmmmmmmmmm",
+  "mmmmmmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmmmmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssssmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssssmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssssmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmfffffffffffffffffffffffffffffffmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmmffmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmmffmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmmffmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmsssssmmmcccccccccccccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmsssssmmmccccccccccccccmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmfffffmm",
+  "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmffffffmm",
+  "mmmmmmmmmmmcccccccccccccccmmmmmmmmmmmmmmmfffffmm",
+  "mmmmmmmmmmmcccccccccccccccmmmmmmmmmmmmmmmfffffmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmm"
  ],
  "ground_legend": {
   "s": "soot_yard",
@@ -331,13 +644,20 @@
   "sunk_ward"
  ],
  "draft_markers": {
-  "spawn": "arrival from the world map (the road up from the gorge mouth)",
+  "spawn": "arrival from the world map (the gorge mouth)",
   "exit_road": "exit `world_map` (was `east`): the road south, World map: the Crucible",
-  "postern": "exit (new, optional): the postern up the high gorge to the Slag Gate, World map",
-  "crucible": "encounter `crucible` (was `site_b`): the yard before the winch house (M5)",
+  "postern": "exit (optional): the postern up the high gorge to the Slag Gate, World map",
+  "crucible": "encounter `crucible` (was `site_b`): the yard before the winch house (M5, the mission)",
   "crucible_overlook": "encounter `crucible_overlook` (was `site_a`): before the gatehouse, the Overlook variant",
   "winch_post": "the winch (the founder who holds it; a point or a set piece)",
-  "overlook": "point `overlook` (was `altar`): the Crag-Sight Overlook, after the Interlude"
+  "overlook": "point `overlook` (was `altar`): the Crag-Sight Overlook, after the Interlude",
+  "hut": "inside the old sentry hut: a safe stop (rest or a contact, indoor)",
+  "patrol_start": "roamer `sentry_patrol`: Watch sentries on the switchback road"
+ },
+ "draft_zone_bindings": {
+  "gorge_road": "Watch sentries and crossbowmen; the roamer as well",
+  "overlook_path": "cliff scavengers; 12-20 steps a fight",
+  "watchpost": "no binding: the fights are the `crucible` / `crucible_overlook` encounter markers"
  },
  "location": "crucible_watchpost"
 }

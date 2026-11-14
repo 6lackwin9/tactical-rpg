@@ -21,10 +21,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 LAYOUTS = ROOT / "art_src" / "region_maps"
-ORDER = ["sluice_undercroft", "drowned_runoff_grate", "alleyway_junction_7", "alleyway_junction_7_large",
+ORDER = ["sluice_undercroft", "drowned_runoff_grate", "alleyway_junction_7",
          "ash_crawl_crossroads", "fourth_kiln",
          "tallow_vats", "crucible_watchpost", "slag_gate", "corvos_gate"]
-TITLES = {"sluice_undercroft": "00 Undercroft", "drowned_runoff_grate": "01 Grate", "alleyway_junction_7": "02 Junction 7", "alleyway_junction_7_large": "02 Junction 7 (large)",
+TITLES = {"sluice_undercroft": "00 Undercroft", "drowned_runoff_grate": "01 Grate", "alleyway_junction_7": "02 Junction 7",
           "ash_crawl_crossroads": "03 Crossroads", "fourth_kiln": "04 Kiln", "tallow_vats": "05 Vats",
           "crucible_watchpost": "06 Crucible", "slag_gate": "07 Slag Gate", "corvos_gate": "1d Corvo's Gate"}
 FIXES = {"sluice_undercroft": {"desmokes": ["0.69,0.30,0.80,0.52"]}, "tallow_vats": {"tints": ["0.05-0.16:0.19@0.33,0,1,0.62"]}}

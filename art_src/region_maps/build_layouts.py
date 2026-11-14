@@ -210,93 +210,6 @@ def drowned_runoff_grate():
                    {k: v for k, v in GROUND.items() if k in "scfmiw"}, ["sunk_ward"])
 
 
-def alleyway_junction_7():
-    """Node 02: a street crossing in the Seventh Ward where Captain Vane has sealed the grates (M1, the Sweep).
-
-    Landmark (take B): crooked tenements round a cobbled yard, barred iron gates, a spiked timber barricade, a
-    rust-crimson pennant and one Watch torch. Two alleys cross in the middle; four tenement blocks fill the corners,
-    the old Watch armory in the south-east one. The route from the Grate arrives over the bridge from the east, the
-    road to the Kiln leaves north; the west alley ends at a sealed barred gate."""
-    L = Layout(32, 20, "m")
-    L.border()
-    blocks = {"nw": (1, 1, 12, 6), "ne": (19, 1, 30, 6), "sw": (1, 13, 12, 18), "se": (19, 13, 30, 18)}
-    for x0, y0, x1, y1 in blocks.values():
-        L.rect(x0, y0, x1, y1, "#")
-    L.prop("tenement_1", "tenement_block", 1, 1, 6, 5); L.prop("tenement_2", "tenement_block", 7, 1, 6, 5)
-    L.prop("tenement_3", "tenement_block", 19, 1, 6, 5); L.prop("tenement_4", "tenement_block", 25, 1, 6, 5)
-    L.prop("tenement_5", "tenement_block", 1, 14, 6, 5); L.prop("tenement_6", "tenement_block", 7, 14, 6, 5)
-    L.prop("armory", "watch_armory", 19, 14, 6, 5); L.prop("tenement_7", "tenement_block", 25, 14, 6, 5)
-    for i, (x, y) in enumerate(((12, 6), (19, 6), (12, 13), (19, 13))):
-        L.prop(f"torch_{i + 1}", "watch_torch", x, y)
-    L.prop("pennant", "rust_pennant", 18, 6)
-    L.rect(1, 7, 30, 12, ground="c"); L.rect(13, 1, 18, 18, ground="c")
-    L.rect(13, 7, 18, 12, ground="f")                   # the yard where the alleys cross
-    L.prop("barricade_n", "spiked_barricade", 14, 4, 3, 1)
-    L.prop("barricade_s", "spiked_barricade", 15, 15, 3, 1)
-    L.prop("barricade_w", "spiked_barricade", 8, 9, 3, 1)
-    L.prop("grate_w", "street_grate", 4, 10, 2, 2, layer="ground")    # the grates Vane sealed
-    L.prop("grate_e", "street_grate", 24, 7, 2, 2, layer="ground")
-    L.prop("sealed_gate", "barred_gate", 0, 8, 1, 2)
-    L.rect(15, 0, 16, 0, ".", "c"); L.rect(31, 9, 31, 10, ".", "c")
-    L.rect(0, 0, 31, 19, zone="d"); L.rect(24, 7, 31, 12, zone="s")
-    L.anchor("spawn", 29, 10, "arrival from the world map (the bridge from the Grate)")
-    L.anchor("exit_bridge", 31, 10, "exit `world_map` (was anchor `east`): the bridge east, World map: the Seventh Ward")
-    L.anchor("exit_north", 15, 0, "exit (new, optional): the road north toward the Kiln, World map")
-    L.anchor("sweep", 15, 10, "encounter `sweep` (was `site_b`): Captain Vane's sweep in the yard")
-    L.anchor("cache", 21, 12, "point `bellows_cache` (was `altar`): the old Watch armory's door")
-    return L.entry("sunk_ward_junction_7", "Sunk Ward: Alleyway Junction 7",
-                   {"s": {"id": "bridge", "kind": "safe"}, "d": {"id": "alley", "kind": "danger"}},
-                   {k: v for k, v in GROUND.items() if k in "scfm"}, ["sunk_ward"])
-
-
-def ash_crawl_crossroads():
-    """Node 03: an open-air culling station where the slum alleys meet, the Seventh Ward Toll-Pen beside the cages
-    (M2, Proctor Quell's titration cages).
-
-    Landmark (take A): cages on a wooden platform, the chained toll-pen gate, a crooked violet lamp-post and its
-    violet pool of light, ash-roofed shacks. An ashy plaza in the middle, the cage platforms on its north side, the
-    fenced Toll-Pen east of them, shacks round the edge. The route from the Grate arrives from the east; the alley
-    toward the Vats leaves north."""
-    L = Layout(32, 20, "s")
-    L.border()
-    # shacks round the edge, gaps where the alleys run
-    L.rect(1, 1, 13, 3, "#"); L.rect(18, 1, 30, 3, "#"); L.rect(1, 16, 30, 18, "#"); L.rect(1, 4, 4, 15, "#")
-    L.rect(27, 4, 30, 7, "#"); L.rect(27, 12, 30, 15, "#")
-    for i, (x, y) in enumerate(((1, 1), (5, 1), (9, 1), (18, 1), (22, 1), (26, 1))):
-        L.prop(f"shack_n{i + 1}", "ash_shack", x, y, 4, 3)
-    for i, x in enumerate((1, 5, 9, 13, 17, 21, 25)):
-        L.prop(f"shack_s{i + 1}", "ash_shack", x, 16, 4, 3)
-    L.prop("shack_w1", "ash_shack", 1, 5, 4, 3); L.prop("shack_w2", "ash_shack", 1, 10, 4, 3)
-    L.prop("shack_e1", "ash_shack", 27, 4, 4, 3); L.prop("shack_e2", "ash_shack", 27, 13, 4, 3)
-    L.rect(14, 0, 17, 3, ".", "c")                      # the alley north toward the Vats
-    L.rect(14, 0, 17, 0, "#"); L.rect(15, 0, 16, 0, ".", "c")
-    L.rect(27, 8, 31, 11, ".", "c")                     # the alley east toward the Grate
-    L.rect(31, 8, 31, 8, "#"); L.rect(31, 11, 31, 11, "#")
-    # the cages on their platforms, the Proctor's titration station
-    L.rect(6, 5, 15, 7, ground="f")
-    L.prop("cages_1", "cage_platform", 7, 5, 3, 2); L.prop("cages_2", "cage_platform", 11, 5, 3, 2)
-    # the Toll-Pen: a fenced pen east of the cages, its chained gate on the south side
-    L.rect(18, 4, 24, 8, "#"); L.rect(19, 5, 23, 7, ".", "m")
-    L.prop("pen_fence_n1", "pen_fence", 18, 4, 3, 1); L.prop("pen_fence_n2", "pen_fence", 21, 4, 3, 1)
-    L.prop("pen_gate", "toll_pen_gate", 20, 8, 2, 1)
-    L.prop("pen_fence_e", "pen_fence", 22, 8, 3, 1)
-    L.rect(18, 5, 18, 7, "#"); L.rect(24, 5, 24, 7, "#")
-    L.prop("lamp", "violet_lamp_post", 17, 12)
-    L.prop("lamp_light", "violet_pool", 15, 12, 2, 2, layer="ground")
-    L.prop("crates", "crate_stack", 6, 13, 2, 1)
-    L.prop("ash_1", "ash_drift", 8, 10, 3, 2, layer="ground")
-    L.rect(0, 0, 31, 19, zone="d"); L.rect(26, 8, 31, 11, zone="s")
-    L.anchor("spawn", 29, 10, "arrival from the world map (the alley from the Grate)")
-    L.anchor("exit_alley", 31, 10, "exit `world_map` (was `east`): the alley east, World map: the Ash-Crawl")
-    L.anchor("exit_north", 15, 0, "exit (new, optional): the alley north toward the Vats, World map")
-    L.anchor("cages", 12, 9, "encounter `cages` (was `site_b`): Proctor Quell's titration cages")
-    L.anchor("toll_pen", 21, 9, "point `toll_pen` (was `altar`): the Seventh Ward Toll-Pen's chained gate")
-    L.anchor("rubbings", 8, 8, "point `rubbings` (was `ruin_lore`): the cage-seal rubbings")
-    return L.entry("sunk_ward_crossroads", "Sunk Ward: the Ash-Crawl Crossroads",
-                   {"s": {"id": "alley_mouth", "kind": "safe"}, "d": {"id": "culling_yard", "kind": "danger"}},
-                   {k: v for k, v in GROUND.items() if k in "scfm"}, ["sunk_ward"])
-
-
 def corvos_gate():
     """Node 1d: the Third Ward gate, where Bailiff Corvo keeps a bribable post (the side job; the loud answer is a
     fight).
@@ -334,129 +247,6 @@ def corvos_gate():
     return L.entry("sunk_ward_corvos_gate", "Sunk Ward: Corvo's Gate",
                    {"s": {"id": "toll_road", "kind": "safe"}, "d": {"id": "third_ward", "kind": "danger"}},
                    {k: v for k, v in GROUND.items() if k in "cfm"}, ["sunk_ward"])
-
-
-def fourth_kiln():
-    """Node 04: the bone-mill that mortars the Inquisition's watch-posts out of uncremated Spent (M3, Overseer
-    Grendel; Dunstan joins).
-
-    Landmark (take B): a soot-black brick kiln with three glowing chimney tops and a furnace mouth, a conveyor chute up
-    its side, a bone-meal heap, a brass tank and pipes on a cobbled apron. The kiln fills the north; the mill floor
-    in front of the furnace is the fight; the road from Junction 7 arrives from the south, the climb toward the
-    Crucible leaves east."""
-    L = Layout(34, 22, "s")
-    L.border()
-    L.rect(9, 1, 24, 7, "#")
-    L.prop("kiln", "fourth_kiln", 10, 1, 14, 6)
-    L.rect(16, 7, 18, 7, "#"); L.prop("furnace", "furnace_mouth", 16, 7, 3, 1)
-    L.rect(6, 3, 7, 7, "#"); L.prop("chute", "conveyor_chute", 6, 4, 2, 3)
-    L.rect(26, 2, 29, 5, "#"); L.prop("tank", "brass_tank", 26, 2, 2, 2); L.prop("tank_2", "brass_tank", 28, 2, 2, 2)
-    L.prop("pipes", "pipe_run", 26, 4, 2, 2); L.prop("pipes_2", "pipe_run", 28, 4, 2, 2)
-    L.rect(8, 8, 25, 13, ground="c")                    # the cobbled apron, the mill floor
-    L.rect(14, 8, 20, 10, ground="t")                   # ash and bone dust before the furnace mouth
-    L.prop("heap_1", "bone_meal_heap", 5, 8, 2, 2, layer="ground")
-    L.prop("heap_2", "bone_meal_heap", 10, 9, 2, 2, layer="ground")
-    L.prop("carts", "crate_stack", 22, 11, 2, 1)
-    L.prop("carts_2", "crate_stack", 9, 13, 2, 1)
-    L.prop("wedges", "wedge_pile", 24, 9, 1, 1, layer="ground")
-    L.rect(1, 15, 32, 20, ground="c"); L.rect(15, 14, 18, 20, ground="f")
-    L.rect(1, 14, 12, 14, "#"); L.rect(21, 14, 32, 14, "#")
-    L.prop("mill_wall_w", "rubble_wall", 2, 14, 4, 1); L.prop("mill_wall_w2", "rubble_wall", 7, 14, 4, 1)
-    L.prop("mill_wall_e", "rubble_wall", 22, 14, 4, 1); L.prop("mill_wall_e2", "rubble_wall", 27, 14, 4, 1)
-    L.rect(16, 21, 17, 21, ".", "f"); L.rect(33, 10, 33, 11, ".", "c")
-    L.rect(0, 0, 33, 21, zone="d"); L.rect(1, 15, 32, 20, zone="s")
-    L.anchor("spawn", 16, 19, "arrival from the world map (the road from Junction 7)")
-    L.anchor("exit_road", 16, 21, "exit `world_map` (was `east`): the road south, World map: the Fourth Kiln")
-    L.anchor("exit_climb", 33, 10, "exit (new, optional): the climb east toward the Crucible, World map")
-    L.anchor("mill", 17, 10, "encounter `bone_mill` (was `site_b`): Overseer Grendel on the mill floor")
-    L.anchor("skerrit", 6, 17, "npc `skerrit` (was `camp_npc`): Skerrit the bone-wright, after M3")
-    L.anchor("wedges", 23, 9, "point `wedge_pile` (was `altar`): the black-iron wedges")
-    return L.entry("sunk_ward_fourth_kiln", "Sunk Ward: the Fourth Kiln",
-                   {"s": {"id": "kiln_road", "kind": "safe"}, "d": {"id": "mill_floor", "kind": "danger"}},
-                   {k: v for k, v in GROUND.items() if k in "scft"}, ["sunk_ward"])
-
-
-def tallow_vats():
-    """Node 05: the Guild's rendering vats and still-rooms, where Tallow Dredgers boil the district's dead (M4,
-    Guild-Master Orlov; Elyse joins).
-
-    Landmark (take A, tinted): three big vats with glowing tallow tops, catwalks, a shed, pipes, barrels and spilt
-    tallow. The vats stand in a tallow-soaked yard ringed by iron catwalk; the still-room shed north-east; Orlov's
-    store south-east; a canal down the west side, where the siphon shortcut from the Grate comes in by culvert; the
-    alley from the Crossroads arrives from the south."""
-    L = Layout(34, 22, "t")
-    L.border()
-    L.rect(1, 1, 3, 20, "~", "w")                       # the canal
-    L.rect(1, 10, 3, 10, ".", "i"); L.rect(0, 10, 0, 10, ".", "i")    # the culvert catwalk over it
-    L.rect(4, 1, 5, 20, ground="c")                     # the canal towpath
-    L.rect(10, 2, 23, 14, ground="i")                   # the catwalk ring
-    L.rect(11, 3, 22, 13, ground="t")
-    for i, (x, y) in enumerate(((12, 3), (18, 3), (15, 9))):
-        L.prop(f"vat_{i + 1}", "tallow_vat", x, y, 3, 3)
-    L.prop("stair", "catwalk_stair", 22, 3, 1, 3)
-    L.prop("spill_1", "tallow_spill", 11, 7, 3, 2, layer="ground"); L.prop("spill_2", "tallow_spill", 19, 11, 3, 2, layer="ground")
-    L.rect(25, 1, 32, 5, "#"); L.prop("still_shed", "still_room", 26, 1, 6, 4)
-    L.rect(25, 15, 32, 18, "#"); L.prop("store", "guild_store", 26, 15, 6, 3)
-    L.prop("barrels_1", "barrel_stack", 24, 9, 2, 1); L.prop("barrels_2", "barrel_stack", 27, 9, 2, 1)
-    L.prop("barrels_3", "barrel_stack", 7, 15, 2, 1); L.prop("pipes", "pipe_run", 7, 3, 2, 2)
-    L.rect(1, 17, 3, 18, "~", "w")
-    L.rect(6, 17, 24, 20, ground="c"); L.rect(15, 15, 18, 21, ground="f")
-    L.rect(16, 21, 17, 21, ".", "f")
-    L.rect(0, 0, 33, 21, zone="d"); L.rect(6, 18, 24, 20, zone="s"); L.rect(0, 9, 5, 11, zone="s")
-    L.anchor("spawn", 16, 19, "arrival from the world map (the alley from the Crossroads)")
-    L.anchor("exit_alley", 16, 21, "exit `world_map` (was `east`): the alley south, World map: the Tallow Vats")
-    L.anchor("siphon", 0, 10, "exit (new): the siphon culvert, World map (the Grate's shortcut; requires sunk_ward.lock_ciphers_done)")
-    L.anchor("siphon_in", 4, 10, "arrival by the siphon shortcut (the towpath at the culvert)")
-    L.anchor("vats", 17, 7, "encounter `vats` (was `site_b`): Guild-Master Orlov among the vats")
-    L.anchor("stores", 28, 14, "chest `orlov_stores` (was `ruin_chest`): Orlov's store, after M4")
-    L.anchor("still", 28, 6, "point `counter_still` (was `altar`): Elyse's counter-still at the still-room")
-    return L.entry("sunk_ward_tallow_vats", "Sunk Ward: the Tallow Vats",
-                   {"s": {"id": "vats_gate", "kind": "safe"}, "d": {"id": "rendering_yard", "kind": "danger"}},
-                   {k: v for k, v in GROUND.items() if k in "cfitw"}, ["sunk_ward"])
-
-
-def crucible_watchpost():
-    """Node 06: the fortified post above the Slag Gate, with the winch that lifts it (M5: one founder holds the winch,
-    three get out; the Overlook variant).
-
-    Landmark (take B): a fortress tower with a row of red-orange slit windows and rust-trimmed battlements, the winch
-    drum and chain, the crane arm, a violet glint in the tower window. The road climbs from the gorge mouth (south)
-    to the gatehouse in the curtain wall; inside, the yard, the tower west and the winch house on the north wall
-    over the Slag Gate; the Crag-Sight Overlook is a ledge on the west cliff; a postern leads north up the gorge."""
-    L = Layout(32, 22, "m")
-    L.border()
-    L.rect(1, 1, 4, 20, "#"); L.rect(27, 1, 30, 20, "#")          # the gorge cliffs
-    for i, y in enumerate((2, 8, 14)):
-        L.prop(f"cliff_w{i + 1}", "cliff_face", 1, y, 4, 1); L.prop(f"cliff_e{i + 1}", "cliff_face", 27, y, 4, 1)
-    L.rect(1, 3, 3, 7, ".", "s")                        # the Crag-Sight Overlook ledge in the west cliff
-    L.rect(4, 6, 4, 6, ".", "s")
-    L.rect(5, 1, 26, 2, "#"); L.rect(5, 9, 26, 10, "#"); L.rect(5, 3, 6, 8, "#"); L.rect(25, 3, 26, 8, "#")
-    L.prop("winch", "winch_drum", 15, 1, 2, 2)
-    L.prop("north_wall_w", "watch_wall", 7, 1, 4, 2); L.prop("north_wall_e", "watch_wall", 17, 1, 4, 2)
-    L.rect(23, 1, 24, 2, ".", "f"); L.rect(23, 0, 23, 0, ".", "f")   # the postern up the gorge
-    L.prop("crane", "crane_arm", 21, 1)
-    L.rect(5, 6, 6, 6, ".", "f")                        # the sally door from the yard out to the Overlook ledge
-    L.rect(7, 3, 11, 5, "#"); L.prop("tower", "slit_window_tower", 7, 3, 5, 3)
-    L.prop("curtain_w", "watch_wall", 10, 9, 4, 2); L.prop("curtain_e", "watch_wall", 18, 9, 4, 2)
-    L.rect(15, 9, 16, 10, ".", "f")                     # the gatehouse passage
-    L.prop("gate_w", "gatepost", 14, 10); L.prop("gate_e", "gatepost", 17, 10)
-    L.rect(14, 9, 14, 10, "#"); L.rect(17, 9, 17, 10, "#")
-    L.rect(7, 3, 24, 8, ground="f"); L.rect(7, 3, 11, 6, ground="f")
-    L.prop("braziers", "brazier", 20, 5)
-    L.rect(5, 11, 26, 20, ground="m"); L.rect(14, 11, 17, 21, ground="c")   # the gorge floor and the road up
-    L.prop("boulder_1", "boulder", 8, 14, 2, 2); L.prop("boulder_2", "boulder", 22, 16, 2, 2)
-    L.rect(15, 21, 16, 21, ".", "c")
-    L.rect(0, 0, 31, 21, zone="d"); L.rect(5, 17, 26, 20, zone="s"); L.rect(1, 3, 4, 7, zone="s")
-    L.anchor("spawn", 15, 19, "arrival from the world map (the road up from the gorge mouth)")
-    L.anchor("exit_road", 15, 21, "exit `world_map` (was `east`): the road south, World map: the Crucible")
-    L.anchor("postern", 23, 0, "exit (new, optional): the postern up the high gorge to the Slag Gate, World map")
-    L.anchor("crucible", 15, 6, "encounter `crucible` (was `site_b`): the yard before the winch house (M5)")
-    L.anchor("crucible_overlook", 15, 12, "encounter `crucible_overlook` (was `site_a`): before the gatehouse, the Overlook variant")
-    L.anchor("winch_post", 16, 3, "the winch (the founder who holds it; a point or a set piece)")
-    L.anchor("overlook", 2, 4, "point `overlook` (was `altar`): the Crag-Sight Overlook, after the Interlude")
-    return L.entry("sunk_ward_crucible", "Sunk Ward: Crucible Watchpost",
-                   {"s": {"id": "gorge_mouth", "kind": "safe"}, "d": {"id": "watchpost", "kind": "danger"}},
-                   {k: v for k, v in GROUND.items() if k in "scfm"}, ["sunk_ward"])
 
 
 def slag_gate():
@@ -497,7 +287,7 @@ def fill_block(L, name, x0, y0, x1, y1, art="tenement_block", pw=6, ph=5):
             L.prop(f"{name}_{n}", art, bx, by, pw, ph)
 
 
-def alleyway_junction_7_large():
+def alleyway_junction_7():
     """Junction 7 at mission-ground size (Tushar 2026-11-14: a sense of size; larger open maps with dedicated zones,
     danger areas to go through and safe meeting areas, against small rooms joined by corridors).
 
@@ -559,7 +349,7 @@ def alleyway_junction_7_large():
     L.anchor("cache", 12, 26, "point `bellows_cache`: inside the old Watch armory, after M1 (indoor)")
     L.anchor("contact", 34, 31, "inside the doss house: a contact or a rest (safe, indoor)")
     L.anchor("patrol_start", 24, 18, "roamer `watch_patrol` (path `watch_patrol`): the Watch on the main street")
-    e = L.entry("sunk_ward_junction_7_large", "Sunk Ward: Alleyway Junction 7 (large)",
+    e = L.entry("sunk_ward_junction_7", "Sunk Ward: Alleyway Junction 7",
                 {"s": {"id": "bridge_landing", "kind": "safe"}, "c": {"id": "doss_court", "kind": "safe"},
                  "d": {"id": "main_street", "kind": "danger"}, "b": {"id": "back_alleys", "kind": "danger"},
                  "y": {"id": "yard", "kind": "danger"},
@@ -573,9 +363,247 @@ def alleyway_junction_7_large():
     return e
 
 
+def path_through(corners):
+    """An orthogonal patrol path through the corner points, one tile a step (roamers walk `paths`)."""
+    out = [list(corners[0])]
+    for (x0, y0), (x1, y1) in zip(corners, corners[1:]):
+        dx = (x1 > x0) - (x1 < x0); dy = (y1 > y0) - (y1 < y0)
+        x, y = x0, y0
+        while (x, y) != (x1, y1):
+            x += dx if x != x1 else 0
+            y += dy if x == x1 and y != y1 else 0
+            out.append([x, y])
+    return out
+
+
+def mission_entry(L, tid, name, legend, grounds, bindings):
+    e = L.entry(tid, name, legend, {k: v for k, v in GROUND.items() if k in grounds}, ["sunk_ward"])
+    e["paths"] = getattr(L, "paths", {})
+    e["draft_zone_bindings"] = bindings
+    return e
+
+
+def ash_crawl_crossroads():
+    """Node 03 at mission-ground size (Tushar 2026-11-14: "Go large for missions"): an open-air culling station where
+    the slum alleys meet, the Seventh Ward Toll-Pen beside the cages (M2, Proctor Quell's titration cages).
+
+    The party arrives at the alley mouth from the Grate (east, safe). The slum lane west is danger (the Proctor's
+    wardens patrol it), with a loop of back alleys north of it; south of the lane, the safe rag-market court and the
+    ragpicker's hovel (enterable: a contact). The culling plaza at the far west is the mission ground: the cage
+    platforms, the fenced Toll-Pen and its chained gate, the cold violet lamp. The alley toward the Vats leaves the
+    plaza north."""
+    L = Layout(56, 36, "s")
+    L.border(); L.rect(1, 1, 54, 34, "#")
+    L.rect(46, 14, 54, 21, ".", "c"); L.rect(55, 17, 55, 18, ".", "c")      # the alley mouth (arrival, safe)
+    L.rect(26, 16, 45, 19, ".", "s")                                         # the slum lane (danger)
+    L.rect(5, 7, 25, 27, ".", "s"); L.rect(8, 8, 22, 13, ground="f")        # the culling plaza (the mission)
+    L.rect(15, 0, 16, 6, ".", "c")                                           # the alley north toward the Vats
+    L.rect(26, 6, 44, 8, ".", "m"); L.rect(30, 9, 31, 15, ".", "m"); L.rect(41, 9, 42, 15, ".", "m")   # back alleys
+    L.rect(34, 20, 35, 23, ".", "c"); L.rect(29, 24, 41, 28, ".", "f")      # the lane down, the rag-market court
+    L.rect(26, 27, 28, 28, ".", "m")                                         # the drain run from the plaza
+    for b in ((1, 1, 14, 6), (17, 1, 54, 5), (26, 9, 29, 15), (32, 9, 40, 15), (43, 9, 54, 13), (1, 7, 4, 27),
+              (26, 20, 33, 23), (36, 20, 45, 23), (1, 28, 25, 34), (42, 24, 54, 34)):
+        fill_block(L, f"shacks_{b[0]}_{b[1]}", *b, art="ash_shack", pw=4, ph=3)
+    # the plaza: three cage platforms, the Toll-Pen, the lamp
+    for i, x in enumerate((9, 13, 17)):
+        L.prop(f"cages_{i + 1}", "cage_platform", x, 9, 3, 2)
+    L.rect(8, 16, 14, 20, "#"); L.rect(9, 17, 13, 19, ".", "m")
+    L.prop("pen_fence_n1", "pen_fence", 8, 16, 3, 1); L.prop("pen_fence_n2", "pen_fence", 11, 16, 3, 1)
+    L.prop("pen_gate", "toll_pen_gate", 10, 20, 2, 1); L.prop("pen_fence_s", "pen_fence", 12, 20, 3, 1)
+    L.rows[22][20] = "#"; L.prop("lamp", "violet_lamp_post", 20, 22)
+    L.prop("lamp_light", "violet_pool", 18, 22, 2, 2, layer="ground")
+    L.prop("ash_1", "ash_drift", 6, 24, 3, 2, layer="ground"); L.prop("ash_2", "ash_drift", 33, 17, 3, 2, layer="ground")
+    L.rect(22, 25, 23, 25, "#"); L.prop("crates", "crate_stack", 22, 25, 2, 1)
+    L.rect(51, 14, 52, 14, "#"); L.prop("mouth_crates", "crate_stack", 51, 14, 2, 1)
+    L.rect(0, 0, 55, 35, zone="-")
+    L.rect(46, 14, 55, 21, zone="s"); L.rect(26, 16, 45, 19, zone="d"); L.rect(15, 0, 16, 6, zone="b")
+    L.rect(17, 6, 44, 15, zone="b"); L.rect(26, 27, 28, 28, zone="b"); L.rect(5, 7, 25, 27, zone="y")
+    L.rect(29, 24, 41, 28, zone="c"); L.rect(34, 20, 35, 23, zone="c")
+    L.indoor("h", 30, 29, 40, 33, (35, 29), "f", "rag_hovel")              # the ragpicker's hovel (a contact)
+    L.paths = {"warden_patrol": path_through([(28, 18), (44, 18), (44, 17), (28, 17), (28, 18)])[:-1]}
+    L.anchor("spawn", 51, 17, "arrival from the world map (the alley mouth from the Grate)")
+    L.anchor("exit_alley", 55, 17, "exit `world_map` (was `east`): the alley east, World map: the Ash-Crawl")
+    L.anchor("exit_north", 15, 0, "exit (optional): the alley north toward the Vats, World map")
+    L.anchor("cages", 15, 12, "encounter `cages` (was `site_b`): Proctor Quell's titration cages (the mission)")
+    L.anchor("toll_pen", 10, 21, "point `toll_pen` (was `altar`): the Seventh Ward Toll-Pen's chained gate")
+    L.anchor("rubbings", 12, 11, "point `rubbings` (was `ruin_lore`): the cage-seal rubbings, after M2")
+    L.anchor("contact", 35, 31, "inside the ragpicker's hovel: a contact or a rest (safe, indoor)")
+    L.anchor("patrol_start", 28, 18, "roamer `warden_patrol`: the Proctor's wardens on the slum lane")
+    return mission_entry(L, "sunk_ward_crossroads", "Sunk Ward: the Ash-Crawl Crossroads",
+                         {"s": {"id": "alley_mouth", "kind": "safe"}, "d": {"id": "slum_lane", "kind": "danger"},
+                          "b": {"id": "back_alleys", "kind": "danger"}, "y": {"id": "culling_plaza", "kind": "danger"},
+                          "c": {"id": "rag_market", "kind": "safe"},
+                          "h": {"id": "rag_hovel", "kind": "safe", "indoor": True}}, "scfm",
+                         {"slum_lane": "the Proctor's wardens; the roamer as well",
+                          "back_alleys": "cage-runners and scavengers; 12-20 steps a fight (the kit's default)",
+                          "culling_plaza": "no binding: the plaza's fight is the `cages` encounter marker"})
+
+
+def fourth_kiln():
+    """Node 04 at mission-ground size: the bone-mill that mortars the Inquisition's watch-posts out of uncremated Spent
+    (M3, Overseer Grendel; Dunstan joins).
+
+    The party arrives in the gate yard (south, safe), beside Skerrit's workshop (enterable: Skerrit after M3). The cart
+    track north is danger (bone-cart haulers patrol it); the ash yards west, with their bone-meal heaps, are danger too.
+    The mill floor before the furnace mouth, under the 14-wide kiln, is the mission ground; the brass tanks and the
+    conveyor chute flank the kiln. A lane east from the mill floor climbs toward the Crucible."""
+    L = Layout(56, 36, "s")
+    L.border(); L.rect(1, 1, 54, 34, "#")
+    L.rect(17, 27, 38, 33, ".", "c"); L.rect(27, 34, 28, 35, ".", "f")      # the gate yard (arrival, safe)
+    L.rect(26, 17, 29, 26, ".", "c")                                         # the cart track (danger)
+    L.rect(12, 8, 43, 16, ".", "c"); L.rect(23, 8, 32, 10, ground="t")      # the mill floor (the mission)
+    L.rect(3, 8, 11, 28, ".", "s"); L.rect(12, 27, 16, 28, ".", "s")        # the ash yards (danger)
+    L.rect(44, 11, 54, 12, ".", "c"); L.rect(55, 11, 55, 12, ".", "c")      # the lane east, the climb
+    L.rect(21, 1, 34, 7, "#"); L.prop("kiln", "fourth_kiln", 21, 1, 14, 6)
+    L.prop("furnace", "furnace_mouth", 26, 7, 3, 1)
+    L.rect(17, 2, 20, 7, "#"); L.prop("chute", "conveyor_chute", 18, 4, 2, 3)
+    L.rect(35, 2, 40, 7, "#")
+    L.prop("tank_1", "brass_tank", 35, 2, 2, 2); L.prop("tank_2", "brass_tank", 37, 2, 2, 2)
+    L.prop("pipes_1", "pipe_run", 35, 4, 2, 2); L.prop("pipes_2", "pipe_run", 37, 4, 2, 2)
+    for b in ((1, 1, 16, 7), (41, 1, 54, 7), (44, 13, 54, 26), (12, 17, 25, 26), (30, 17, 43, 26), (39, 27, 54, 34),
+              (1, 29, 6, 34)):
+        fill_block(L, f"row_{b[0]}_{b[1]}", *b, art="tenement_row", pw=6, ph=3)
+    for i, (x, y) in enumerate(((4, 10), (7, 15), (4, 21))):
+        L.prop(f"heap_{i + 1}", "bone_meal_heap", x, y, 2, 2, layer="ground")
+    L.rect(14, 14, 15, 14, "#"); L.prop("carts_1", "crate_stack", 14, 14, 2, 1)
+    L.rect(40, 15, 41, 15, "#"); L.prop("carts_2", "crate_stack", 40, 15, 2, 1)
+    L.prop("wedges", "wedge_pile", 33, 9, 1, 1, layer="ground")
+    L.rect(19, 28, 20, 28, "#"); L.prop("yard_crates", "crate_stack", 19, 28, 2, 1)
+    L.rect(0, 0, 55, 35, zone="-")
+    L.rect(17, 27, 38, 33, zone="s"); L.rect(27, 34, 28, 35, zone="s"); L.rect(26, 17, 29, 26, zone="d")
+    L.rect(12, 8, 43, 16, zone="y"); L.rect(3, 8, 11, 28, zone="b"); L.rect(12, 27, 16, 28, zone="b")
+    L.rect(44, 11, 55, 12, zone="b")
+    L.indoor("h", 7, 29, 16, 34, (16, 31), "f", "bonewright_shop")         # Skerrit's workshop
+    L.paths = {"hauler_patrol": path_through([(27, 25), (27, 18), (28, 18), (28, 25), (27, 25)])[:-1]}
+    L.anchor("spawn", 27, 31, "arrival from the world map (the gate yard, the road from Junction 7)")
+    L.anchor("exit_road", 27, 35, "exit `world_map` (was `east`): the road south, World map: the Fourth Kiln")
+    L.anchor("exit_climb", 55, 11, "exit (optional): the lane east, the climb toward the Crucible, World map")
+    L.anchor("mill", 27, 12, "encounter `bone_mill` (was `site_b`): Overseer Grendel on the mill floor (the mission)")
+    L.anchor("skerrit", 11, 31, "npc `skerrit` (was `camp_npc`): Skerrit in his workshop, after M3 (indoor)")
+    L.anchor("wedges", 32, 9, "point `wedge_pile` (was `altar`): the black-iron wedges by the furnace")
+    L.anchor("patrol_start", 27, 25, "roamer `hauler_patrol`: bone-cart haulers on the cart track")
+    return mission_entry(L, "sunk_ward_fourth_kiln", "Sunk Ward: the Fourth Kiln",
+                         {"s": {"id": "gate_yard", "kind": "safe"}, "d": {"id": "cart_track", "kind": "danger"},
+                          "b": {"id": "ash_yards", "kind": "danger"}, "y": {"id": "mill_floor", "kind": "danger"},
+                          "h": {"id": "bonewright_shop", "kind": "safe", "indoor": True}}, "scft",
+                         {"cart_track": "bone-cart haulers and kiln guards; the roamer as well",
+                          "ash_yards": "Spent scavengers among the heaps; 12-20 steps a fight",
+                          "mill_floor": "no binding: the floor's fight is the `bone_mill` encounter marker"})
+
+
+def tallow_vats():
+    """Node 05 at mission-ground size: the Guild's rendering vats and still-rooms, where Tallow Dredgers boil the
+    district's dead (M4, Guild-Master Orlov; Elyse joins).
+
+    The party arrives in the gate yard (south, safe) by the alley from the Crossroads, or at the siphon landing on the
+    west canal (safe) by the Grate's culvert shortcut. The lane north into the vats is danger; so are the towpath and
+    the barrel yard east. The vats yard, three vats in a catwalk ring that Tallow Dredgers patrol, is the mission
+    ground. The still-room (Elyse's counter-still) and Orlov's store (the chest after M4) are enterable."""
+    L = Layout(56, 36, "t")
+    L.border(); L.rect(1, 1, 54, 34, "#")
+    L.rect(1, 1, 3, 34, "~", "w"); L.rect(0, 17, 3, 17, ".", "i")          # the canal, the culvert catwalk
+    L.rect(4, 1, 5, 34, ".", "c"); L.rect(6, 15, 10, 19, ".", "c")          # the towpath, the siphon landing
+    L.rect(12, 3, 34, 20, ".", "i"); L.rect(13, 4, 33, 19, ground="t")      # the vats yard in its catwalk ring
+    L.rect(6, 8, 11, 9, ".", "c")                                            # the towpath way into the yard
+    L.rect(22, 21, 25, 28, ".", "c")                                         # the lane north (danger)
+    L.rect(17, 29, 32, 33, ".", "c"); L.rect(24, 34, 25, 35, ".", "f")      # the gate yard (arrival, safe)
+    L.rect(6, 31, 16, 32, ".", "c")                                          # the towpath to the gate yard
+    L.rect(35, 9, 48, 21, ".", "s")                                          # the barrel yard (danger)
+    for i, (x, y) in enumerate(((15, 6), (23, 6), (19, 13))):
+        L.prop(f"vat_{i + 1}", "tallow_vat", x, y, 3, 3)
+    L.prop("stair", "catwalk_stair", 30, 6, 1, 3)
+    L.prop("spill_1", "tallow_spill", 14, 11, 3, 2, layer="ground"); L.prop("spill_2", "tallow_spill", 26, 15, 3, 2, layer="ground")
+    L.prop("pipes", "pipe_run", 8, 3, 2, 2)
+    for i, (x, y) in enumerate(((38, 12), (44, 12), (40, 17))):
+        L.rect(x, y, x + 1, y, "#"); L.prop(f"barrels_{i + 1}", "barrel_stack", x, y, 2, 1)
+    for b in ((6, 21, 21, 28), (26, 21, 36, 28), (37, 28, 54, 34), (49, 1, 54, 27)):
+        fill_block(L, f"row_{b[0]}_{b[1]}", *b, art="tenement_row", pw=6, ph=3)
+    L.rect(0, 0, 55, 35, zone="-")
+    L.rect(17, 29, 32, 33, zone="s"); L.rect(24, 34, 25, 35, zone="s")
+    L.rect(6, 15, 10, 19, zone="w"); L.rect(0, 17, 3, 17, zone="w")
+    L.rect(22, 21, 25, 28, zone="d"); L.rect(12, 3, 34, 20, zone="y")
+    L.rect(4, 1, 5, 34, zone="b"); L.rect(6, 8, 11, 9, zone="b"); L.rect(6, 31, 16, 32, zone="b")
+    L.rect(35, 9, 48, 21, zone="b"); L.rect(4, 15, 5, 19, zone="w")
+    L.indoor("h", 37, 2, 47, 8, (42, 8), "f", "still_room")                 # the still-room (Elyse's counter-still)
+    L.indoor("o", 37, 22, 47, 27, (42, 22), "f", "guild_store")             # Orlov's store
+    L.paths = {"dredger_patrol": path_through([(13, 4), (33, 4), (33, 19), (13, 19), (13, 5)])}
+    L.anchor("spawn", 24, 31, "arrival from the world map (the gate yard, the alley from the Crossroads)")
+    L.anchor("exit_alley", 24, 35, "exit `world_map` (was `east`): the alley south, World map: the Tallow Vats")
+    L.anchor("siphon", 0, 17, "exit: the siphon culvert, World map (the Grate's shortcut; requires sunk_ward.lock_ciphers_done)")
+    L.anchor("siphon_in", 7, 17, "arrival by the siphon shortcut (the landing, safe)")
+    L.anchor("vats", 22, 11, "encounter `vats` (was `site_b`): Guild-Master Orlov among the vats (the mission)")
+    L.anchor("still", 42, 5, "point `counter_still` (was `altar`): Elyse's counter-still, inside the still-room (indoor)")
+    L.anchor("stores", 42, 25, "chest `orlov_stores` (was `ruin_chest`): inside Orlov's store, after M4 (indoor)")
+    L.anchor("patrol_start", 13, 4, "roamer `dredger_patrol`: Tallow Dredgers round the catwalk ring")
+    return mission_entry(L, "sunk_ward_tallow_vats", "Sunk Ward: the Tallow Vats",
+                         {"s": {"id": "vats_gate", "kind": "safe"}, "w": {"id": "siphon_landing", "kind": "safe"},
+                          "d": {"id": "vats_lane", "kind": "danger"}, "b": {"id": "towpath_and_yard", "kind": "danger"},
+                          "y": {"id": "rendering_yard", "kind": "danger"},
+                          "h": {"id": "still_room", "kind": "safe", "indoor": True},
+                          "o": {"id": "guild_store", "kind": "safe", "indoor": True}}, "cfistw",
+                         {"vats_lane": "Guild bruisers at the vats' gate",
+                          "towpath_and_yard": "Tallow Dredgers and canal scavengers; 12-20 steps a fight",
+                          "rendering_yard": "no binding: the dredger roamer; the yard's fight is the `vats` encounter marker"})
+
+
+def crucible_watchpost():
+    """Node 06 at mission-ground size: the fortified post above the Slag Gate, with the winch that lifts it (M5: one
+    founder holds the winch, three get out; the Overlook variant).
+
+    The party arrives at the gorge mouth (south, safe). The road switchbacks up the gorge floor between boulders
+    (danger: Watch sentries patrol it) to the gatehouse in the curtain wall; an old sentry hut in the east cliff is a
+    safe stop (enterable). A side path climbs the west cliff to the Crag-Sight Overlook. Inside the walls, the yard
+    before the winch house is the mission ground, with the slit-window tower west and a postern north up the gorge."""
+    L = Layout(48, 40, "m")
+    L.border(); L.rect(1, 1, 46, 38, "#")
+    L.rect(14, 33, 33, 37, ".", "m"); L.rect(23, 38, 24, 39, ".", "c")      # the gorge mouth (arrival, safe)
+    L.rect(8, 17, 39, 32, ".", "m")                                          # the gorge floor (danger)
+    for x0, y0, x1, y1 in ((22, 28, 25, 32), (11, 27, 25, 28), (11, 21, 14, 27), (11, 20, 24, 21), (22, 17, 25, 20)):
+        L.rect(x0, y0, x1, y1, ground="c")                                   # the switchback road
+    L.rect(22, 33, 25, 37, ground="c")
+    L.rect(3, 20, 7, 21, ".", "s"); L.rect(3, 8, 4, 19, ".", "s"); L.rect(3, 5, 6, 7, ".", "s")   # the Overlook path (its ledge walled off from the yard)
+    L.rect(9, 3, 39, 13, ".", "f")                                           # the yard (the mission)
+    L.rect(23, 14, 24, 16, ".", "f")                                         # the gatehouse passage
+    for i, x in enumerate((9, 13, 17, 26, 30, 34)):
+        L.prop(f"curtain_{i + 1}", "watch_wall", x, 14, 4, 2)
+    L.rows[16][22] = L.rows[16][25] = "#"
+    L.prop("gate_w", "gatepost", 22, 16); L.prop("gate_e", "gatepost", 25, 16)
+    L.rect(10, 4, 14, 6, "#"); L.prop("tower", "slit_window_tower", 10, 4, 5, 3)
+    L.prop("winch", "winch_drum", 23, 1, 2, 2); L.prop("crane", "crane_arm", 25, 1)
+    for i, x in enumerate((14, 18, 27, 31)):
+        L.prop(f"north_wall_{i + 1}", "watch_wall", x, 1, 4, 2)
+    L.rect(36, 0, 36, 0, ".", "f"); L.rect(36, 1, 37, 2, ".", "f")          # the postern up the gorge
+    L.rows[6][30] = "#"; L.prop("brazier", "brazier", 30, 6)
+    for i, (x, y) in enumerate(((16, 30), (30, 24), (32, 29), (17, 24), (34, 19))):
+        L.prop(f"boulder_{i + 1}", "boulder", x, y, 2, 2)
+    for i, (x, y) in enumerate(((41, 18), (41, 31), (1, 26), (1, 31))):
+        L.prop(f"cliff_{i + 1}", "cliff_face", x, y, 4, 1)
+    L.rect(0, 0, 47, 39, zone="-")
+    L.rect(14, 33, 33, 37, zone="s"); L.rect(23, 38, 24, 39, zone="s"); L.rect(8, 17, 39, 32, zone="d")
+    L.rect(3, 5, 7, 21, zone="b"); L.rect(9, 3, 39, 13, zone="y"); L.rect(23, 14, 24, 16, zone="y")
+    L.rect(36, 0, 37, 2, zone="y")
+    L.indoor("h", 40, 24, 46, 29, (40, 26), "f", "sentry_hut")              # the old sentry hut (a safe stop)
+    L.paths = {"sentry_patrol": path_through([(23, 31), (23, 28), (12, 28), (12, 21), (23, 21), (23, 18)])}
+    L.anchor("spawn", 23, 35, "arrival from the world map (the gorge mouth)")
+    L.anchor("exit_road", 23, 39, "exit `world_map` (was `east`): the road south, World map: the Crucible")
+    L.anchor("postern", 36, 0, "exit (optional): the postern up the high gorge to the Slag Gate, World map")
+    L.anchor("crucible", 24, 8, "encounter `crucible` (was `site_b`): the yard before the winch house (M5, the mission)")
+    L.anchor("crucible_overlook", 23, 19, "encounter `crucible_overlook` (was `site_a`): before the gatehouse, the Overlook variant")
+    L.anchor("winch_post", 24, 3, "the winch (the founder who holds it; a point or a set piece)")
+    L.anchor("overlook", 5, 6, "point `overlook` (was `altar`): the Crag-Sight Overlook, after the Interlude")
+    L.anchor("hut", 43, 26, "inside the old sentry hut: a safe stop (rest or a contact, indoor)")
+    L.anchor("patrol_start", 23, 31, "roamer `sentry_patrol`: Watch sentries on the switchback road")
+    return mission_entry(L, "sunk_ward_crucible", "Sunk Ward: Crucible Watchpost",
+                         {"s": {"id": "gorge_mouth", "kind": "safe"}, "d": {"id": "gorge_road", "kind": "danger"},
+                          "b": {"id": "overlook_path", "kind": "danger"}, "y": {"id": "watchpost", "kind": "danger"},
+                          "h": {"id": "sentry_hut", "kind": "safe", "indoor": True}}, "scfm",
+                         {"gorge_road": "Watch sentries and crossbowmen; the roamer as well",
+                          "overlook_path": "cliff scavengers; 12-20 steps a fight",
+                          "watchpost": "no binding: the fights are the `crucible` / `crucible_overlook` encounter markers"})
+
+
 PLACES = [(sluice_undercroft, "sluice_undercroft"), (drowned_runoff_grate, "drowned_runoff_grate"),
-          (alleyway_junction_7, "alleyway_junction_7"), (alleyway_junction_7_large, "alleyway_junction_7_large"),
-          (ash_crawl_crossroads, "ash_crawl_crossroads"),
+          (alleyway_junction_7, "alleyway_junction_7"), (ash_crawl_crossroads, "ash_crawl_crossroads"),
           (fourth_kiln, "fourth_kiln"), (tallow_vats, "tallow_vats"), (crucible_watchpost, "crucible_watchpost"),
           (slag_gate, "slag_gate"), (corvos_gate, "corvos_gate")]
 
@@ -619,6 +647,12 @@ def check(e):
                 for x, c in enumerate(r):
                     if c == zc and not any(p["x"] <= x < p["x"] + p["w"] and p["y"] <= y < p["y"] + p["h"] for p in roofs):
                         errs.append(f"indoor zone {z['id']} cell ({x},{y}) outside its roof")
+    for pid, pts in e.get("paths", {}).items():
+        for i, (x, y) in enumerate(pts):
+            if rows[y][x] != ".":
+                errs.append(f"path {pid} step {i} on a blocked tile ({x},{y})")
+            if i and abs(x - pts[i - 1][0]) + abs(y - pts[i - 1][1]) != 1:
+                errs.append(f"path {pid} step {i} is not one orthogonal step")
     ids = [a["id"] for a in e["anchors"]]
     if ids.count("spawn") != 1:
         errs.append("exactly one spawn anchor")

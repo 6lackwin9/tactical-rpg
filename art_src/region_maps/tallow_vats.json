@@ -2,107 +2,445 @@
  "id": "sunk_ward_tallow_vats",
  "name": "Sunk Ward: the Tallow Vats",
  "rows": [
-  "##################################",
-  "#~~~.....................#########",
-  "#~~~.....................#########",
-  "#~~~...##...###...###.#..#########",
-  "#~~~...##...###...###.#..#########",
-  "#~~~........###...###.#..#########",
-  "#~~~.............................#",
-  "#~~~.............................#",
-  "#~~~.............................#",
-  "#~~~...........###......##.##....#",
-  "...............###...............#",
-  "#~~~...........###...............#",
-  "#~~~.............................#",
-  "#~~~.............................#",
-  "#~~~.............................#",
-  "#~~~...##................#########",
-  "#~~~.....................#########",
-  "#~~~.....................#########",
-  "#~~~.....................#########",
-  "#~~~.............................#",
-  "#~~~.............................#",
-  "################..################"
+  "########################################################",
+  "#~~~..##################################################",
+  "#~~~..##################################################",
+  "#~~~..######.......................###.........#########",
+  "#~~~..######.......................###.........#########",
+  "#~~~..######.......................###.........#########",
+  "#~~~..######...###.....###....#....###.........#########",
+  "#~~~..######...###.....###....#....###.........#########",
+  "#~~~...........###.....###....#....#######.#############",
+  "#~~~.............................................#######",
+  "#~~~..######.....................................#######",
+  "#~~~..######.....................................#######",
+  "#~~~..######..........................##....##...#######",
+  "#~~~..######.......###...........................#######",
+  "#~~~..######.......###...........................#######",
+  "#~~~.......#.......###...........................#######",
+  "#~~~.......#.....................................#######",
+  "...........#............................##.......#######",
+  "#~~~.......#.....................................#######",
+  "#~~~.......#.....................................#######",
+  "#~~~..######.....................................#######",
+  "#~~~..################....###########............#######",
+  "#~~~..################....################.#############",
+  "#~~~..################....############.........#########",
+  "#~~~..################....############.........#########",
+  "#~~~..################....############.........#########",
+  "#~~~..################....############.........#########",
+  "#~~~..################....##############################",
+  "#~~~..################....##############################",
+  "#~~~..###########................#######################",
+  "#~~~..###########................#######################",
+  "#~~~.............................#######################",
+  "#~~~.............................#######################",
+  "#~~~..###########................#######################",
+  "#~~~..##################..##############################",
+  "########################..##############################"
  ],
  "zones": [
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "ssssssdddddddddddddddddddddddddddd",
-  "ssssssdddddddddddddddddddddddddddd",
-  "ssssssdddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "ddddddsssssssssssssssssssddddddddd",
-  "ddddddsssssssssssssssssssddddddddd",
-  "ddddddsssssssssssssssssssddddddddd",
-  "dddddddddddddddddddddddddddddddddd"
+  "--------------------------------------------------------",
+  "----bb--------------------------------------------------",
+  "----bb--------------------------------------------------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyy---hhhhhhhhh---------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyy---hhhhhhhhh---------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyy---hhhhhhhhh---------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyy---hhhhhhhhh---------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyy---hhhhhhhhh---------",
+  "----bbbbbbbbyyyyyyyyyyyyyyyyyyyyyyy-------h-------------",
+  "----bbbbbbbbyyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----wwwwwww-yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----wwwwwww-yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "wwwwwwwwwww-yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----wwwwwww-yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----wwwwwww-yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
+  "----bb----------------dddd---------bbbbbbbbbbbbbb-------",
+  "----bb----------------dddd----------------o-------------",
+  "----bb----------------dddd------------ooooooooo---------",
+  "----bb----------------dddd------------ooooooooo---------",
+  "----bb----------------dddd------------ooooooooo---------",
+  "----bb----------------dddd------------ooooooooo---------",
+  "----bb----------------dddd------------------------------",
+  "----bb----------------dddd------------------------------",
+  "----bb-----------ssssssssssssssss-----------------------",
+  "----bb-----------ssssssssssssssss-----------------------",
+  "----bbbbbbbbbbbbbssssssssssssssss-----------------------",
+  "----bbbbbbbbbbbbbssssssssssssssss-----------------------",
+  "----bb-----------ssssssssssssssss-----------------------",
+  "----bb------------------ss------------------------------",
+  "------------------------ss------------------------------"
  ],
  "zone_legend": {
   "s": {
    "id": "vats_gate",
    "kind": "safe"
   },
+  "w": {
+   "id": "siphon_landing",
+   "kind": "safe"
+  },
   "d": {
+   "id": "vats_lane",
+   "kind": "danger"
+  },
+  "b": {
+   "id": "towpath_and_yard",
+   "kind": "danger"
+  },
+  "y": {
    "id": "rendering_yard",
    "kind": "danger"
+  },
+  "h": {
+   "id": "still_room",
+   "kind": "safe",
+   "indoor": true
+  },
+  "o": {
+   "id": "guild_store",
+   "kind": "safe",
+   "indoor": true
   }
  },
  "anchors": [
   {
    "id": "spawn",
-   "x": 16,
-   "y": 19
+   "x": 24,
+   "y": 31
   },
   {
    "id": "exit_alley",
-   "x": 16,
-   "y": 21
+   "x": 24,
+   "y": 35
   },
   {
    "id": "siphon",
    "x": 0,
-   "y": 10
+   "y": 17
   },
   {
    "id": "siphon_in",
-   "x": 4,
-   "y": 10
+   "x": 7,
+   "y": 17
   },
   {
    "id": "vats",
-   "x": 17,
-   "y": 7
-  },
-  {
-   "id": "stores",
-   "x": 28,
-   "y": 14
+   "x": 22,
+   "y": 11
   },
   {
    "id": "still",
-   "x": 28,
-   "y": 6
+   "x": 42,
+   "y": 5
+  },
+  {
+   "id": "stores",
+   "x": 42,
+   "y": 25
+  },
+  {
+   "id": "patrol_start",
+   "x": 13,
+   "y": 4
   }
  ],
- "paths": {},
+ "paths": {
+  "dredger_patrol": [
+   [
+    13,
+    4
+   ],
+   [
+    14,
+    4
+   ],
+   [
+    15,
+    4
+   ],
+   [
+    16,
+    4
+   ],
+   [
+    17,
+    4
+   ],
+   [
+    18,
+    4
+   ],
+   [
+    19,
+    4
+   ],
+   [
+    20,
+    4
+   ],
+   [
+    21,
+    4
+   ],
+   [
+    22,
+    4
+   ],
+   [
+    23,
+    4
+   ],
+   [
+    24,
+    4
+   ],
+   [
+    25,
+    4
+   ],
+   [
+    26,
+    4
+   ],
+   [
+    27,
+    4
+   ],
+   [
+    28,
+    4
+   ],
+   [
+    29,
+    4
+   ],
+   [
+    30,
+    4
+   ],
+   [
+    31,
+    4
+   ],
+   [
+    32,
+    4
+   ],
+   [
+    33,
+    4
+   ],
+   [
+    33,
+    5
+   ],
+   [
+    33,
+    6
+   ],
+   [
+    33,
+    7
+   ],
+   [
+    33,
+    8
+   ],
+   [
+    33,
+    9
+   ],
+   [
+    33,
+    10
+   ],
+   [
+    33,
+    11
+   ],
+   [
+    33,
+    12
+   ],
+   [
+    33,
+    13
+   ],
+   [
+    33,
+    14
+   ],
+   [
+    33,
+    15
+   ],
+   [
+    33,
+    16
+   ],
+   [
+    33,
+    17
+   ],
+   [
+    33,
+    18
+   ],
+   [
+    33,
+    19
+   ],
+   [
+    32,
+    19
+   ],
+   [
+    31,
+    19
+   ],
+   [
+    30,
+    19
+   ],
+   [
+    29,
+    19
+   ],
+   [
+    28,
+    19
+   ],
+   [
+    27,
+    19
+   ],
+   [
+    26,
+    19
+   ],
+   [
+    25,
+    19
+   ],
+   [
+    24,
+    19
+   ],
+   [
+    23,
+    19
+   ],
+   [
+    22,
+    19
+   ],
+   [
+    21,
+    19
+   ],
+   [
+    20,
+    19
+   ],
+   [
+    19,
+    19
+   ],
+   [
+    18,
+    19
+   ],
+   [
+    17,
+    19
+   ],
+   [
+    16,
+    19
+   ],
+   [
+    15,
+    19
+   ],
+   [
+    14,
+    19
+   ],
+   [
+    13,
+    19
+   ],
+   [
+    13,
+    18
+   ],
+   [
+    13,
+    17
+   ],
+   [
+    13,
+    16
+   ],
+   [
+    13,
+    15
+   ],
+   [
+    13,
+    14
+   ],
+   [
+    13,
+    13
+   ],
+   [
+    13,
+    12
+   ],
+   [
+    13,
+    11
+   ],
+   [
+    13,
+    10
+   ],
+   [
+    13,
+    9
+   ],
+   [
+    13,
+    8
+   ],
+   [
+    13,
+    7
+   ],
+   [
+    13,
+    6
+   ],
+   [
+    13,
+    5
+   ]
+  ]
+ },
  "props": [
   {
    "id": "vat_1",
    "art": "tallow_vat",
-   "x": 12,
-   "y": 3,
+   "x": 15,
+   "y": 6,
    "w": 3,
    "h": 3,
    "layer": "sort",
@@ -112,8 +450,8 @@
   {
    "id": "vat_2",
    "art": "tallow_vat",
-   "x": 18,
-   "y": 3,
+   "x": 23,
+   "y": 6,
    "w": 3,
    "h": 3,
    "layer": "sort",
@@ -123,8 +461,8 @@
   {
    "id": "vat_3",
    "art": "tallow_vat",
-   "x": 15,
-   "y": 9,
+   "x": 19,
+   "y": 13,
    "w": 3,
    "h": 3,
    "layer": "sort",
@@ -134,8 +472,8 @@
   {
    "id": "stair",
    "art": "catwalk_stair",
-   "x": 22,
-   "y": 3,
+   "x": 30,
+   "y": 6,
    "w": 1,
    "h": 3,
    "layer": "sort",
@@ -145,8 +483,8 @@
   {
    "id": "spill_1",
    "art": "tallow_spill",
-   "x": 11,
-   "y": 7,
+   "x": 14,
+   "y": 11,
    "w": 3,
    "h": 2,
    "layer": "ground",
@@ -156,8 +494,8 @@
   {
    "id": "spill_2",
    "art": "tallow_spill",
-   "x": 19,
-   "y": 11,
+   "x": 26,
+   "y": 15,
    "w": 3,
    "h": 2,
    "layer": "ground",
@@ -165,23 +503,12 @@
    "flip": false
   },
   {
-   "id": "still_shed",
-   "art": "still_room",
-   "x": 26,
-   "y": 1,
-   "w": 6,
-   "h": 4,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "store",
-   "art": "guild_store",
-   "x": 26,
-   "y": 15,
-   "w": 6,
-   "h": 3,
+   "id": "pipes",
+   "art": "pipe_run",
+   "x": 8,
+   "y": 3,
+   "w": 2,
+   "h": 2,
    "layer": "sort",
    "variant": -1,
    "flip": false
@@ -189,8 +516,8 @@
   {
    "id": "barrels_1",
    "art": "barrel_stack",
-   "x": 24,
-   "y": 9,
+   "x": 38,
+   "y": 12,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -200,8 +527,8 @@
   {
    "id": "barrels_2",
    "art": "barrel_stack",
-   "x": 27,
-   "y": 9,
+   "x": 44,
+   "y": 12,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -211,8 +538,8 @@
   {
    "id": "barrels_3",
    "art": "barrel_stack",
-   "x": 7,
-   "y": 15,
+   "x": 40,
+   "y": 17,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -220,42 +547,301 @@
    "flip": false
   },
   {
-   "id": "pipes",
-   "art": "pipe_run",
-   "x": 7,
-   "y": 3,
-   "w": 2,
-   "h": 2,
+   "id": "row_6_21_1",
+   "art": "tenement_row",
+   "x": 6,
+   "y": 21,
+   "w": 6,
+   "h": 3,
    "layer": "sort",
    "variant": -1,
    "flip": false
+  },
+  {
+   "id": "row_6_21_2",
+   "art": "tenement_row",
+   "x": 12,
+   "y": 21,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_6_21_3",
+   "art": "tenement_row",
+   "x": 6,
+   "y": 24,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_6_21_4",
+   "art": "tenement_row",
+   "x": 12,
+   "y": 24,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_26_21_1",
+   "art": "tenement_row",
+   "x": 26,
+   "y": 21,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_26_21_2",
+   "art": "tenement_row",
+   "x": 26,
+   "y": 24,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_37_28_1",
+   "art": "tenement_row",
+   "x": 37,
+   "y": 28,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_37_28_2",
+   "art": "tenement_row",
+   "x": 43,
+   "y": 28,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_37_28_3",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 28,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_37_28_4",
+   "art": "tenement_row",
+   "x": 37,
+   "y": 31,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_37_28_5",
+   "art": "tenement_row",
+   "x": 43,
+   "y": 31,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_37_28_6",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 31,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_1",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_2",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 4,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_3",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 7,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_4",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 10,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_5",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 13,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_6",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 16,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_7",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 19,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_8",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 22,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_49_1_9",
+   "art": "tenement_row",
+   "x": 49,
+   "y": 25,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "roof_still_room",
+   "art": "still_room",
+   "x": 37,
+   "y": 2,
+   "w": 11,
+   "h": 7,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "h"
+  },
+  {
+   "id": "roof_guild_store",
+   "art": "guild_store",
+   "x": 37,
+   "y": 22,
+   "w": 11,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "o"
   }
  ],
  "ground": [
-  "tttttttttttttttttttttttttttttttttt",
-  "twwwcctttttttttttttttttttttttttttt",
-  "twwwccttttiiiiiiiiiiiiiitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "iiiiccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttittttttttttttitttttttttt",
-  "twwwccttttiiiiiiiiiiiiiitttttttttt",
-  "twwwcctttttttttffffttttttttttttttt",
-  "twwwcctttttttttffffttttttttttttttt",
-  "twwwcccccccccccffffccccccttttttttt",
-  "twwwcccccccccccffffccccccttttttttt",
-  "twwwcccccccccccffffccccccttttttttt",
-  "twwwcccccccccccffffccccccttttttttt",
-  "tttttttttttttttffffttttttttttttttt"
+  "tttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+  "twwwcctttttttttttttttttttttttttttttttttttttttttttttttttt",
+  "twwwcctttttttttttttttttttttttttttttttttttttttttttttttttt",
+  "twwwccttttttiiiiiiiiiiiiiiiiiiiiiiitttfffffffffttttttttt",
+  "twwwccttttttitttttttttttttttttttttitttfffffffffttttttttt",
+  "twwwccttttttitttttttttttttttttttttitttfffffffffttttttttt",
+  "twwwccttttttitttttttttttttttttttttitttfffffffffttttttttt",
+  "twwwccttttttitttttttttttttttttttttitttfffffffffttttttttt",
+  "twwwccccccccitttttttttttttttttttttitttttttfttttttttttttt",
+  "twwwccccccccitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccttttttitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccttttttitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccttttttitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccttttttitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccttttttitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccccccctitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccccccctitttttttttttttttttttttissssssssssssssttttttt",
+  "iiiiccccccctitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccccccctitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccccccctitttttttttttttttttttttissssssssssssssttttttt",
+  "twwwccttttttiiiiiiiiiiiiiiiiiiiiiiissssssssssssssttttttt",
+  "twwwccttttttttttttttttcccctttttttttssssssssssssssttttttt",
+  "twwwccttttttttttttttttccccttttttttttttttttfttttttttttttt",
+  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
+  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
+  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
+  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
+  "twwwccttttttttttttttttcccctttttttttttttttttttttttttttttt",
+  "twwwccttttttttttttttttcccctttttttttttttttttttttttttttttt",
+  "twwwcctttttttttttccccccccccccccccttttttttttttttttttttttt",
+  "twwwcctttttttttttccccccccccccccccttttttttttttttttttttttt",
+  "twwwcccccccccccccccccccccccccccccttttttttttttttttttttttt",
+  "twwwcccccccccccccccccccccccccccccttttttttttttttttttttttt",
+  "twwwcctttttttttttccccccccccccccccttttttttttttttttttttttt",
+  "twwwccttttttttttttttttttfftttttttttttttttttttttttttttttt",
+  "ttttttttttttttttttttttttfftttttttttttttttttttttttttttttt"
  ],
  "ground_legend": {
+  "s": "soot_yard",
   "c": "cobble_road",
   "f": "flagstone",
   "i": "iron_catwalk",
@@ -266,13 +852,19 @@
   "sunk_ward"
  ],
  "draft_markers": {
-  "spawn": "arrival from the world map (the alley from the Crossroads)",
+  "spawn": "arrival from the world map (the gate yard, the alley from the Crossroads)",
   "exit_alley": "exit `world_map` (was `east`): the alley south, World map: the Tallow Vats",
-  "siphon": "exit (new): the siphon culvert, World map (the Grate's shortcut; requires sunk_ward.lock_ciphers_done)",
-  "siphon_in": "arrival by the siphon shortcut (the towpath at the culvert)",
-  "vats": "encounter `vats` (was `site_b`): Guild-Master Orlov among the vats",
-  "stores": "chest `orlov_stores` (was `ruin_chest`): Orlov's store, after M4",
-  "still": "point `counter_still` (was `altar`): Elyse's counter-still at the still-room"
+  "siphon": "exit: the siphon culvert, World map (the Grate's shortcut; requires sunk_ward.lock_ciphers_done)",
+  "siphon_in": "arrival by the siphon shortcut (the landing, safe)",
+  "vats": "encounter `vats` (was `site_b`): Guild-Master Orlov among the vats (the mission)",
+  "still": "point `counter_still` (was `altar`): Elyse's counter-still, inside the still-room (indoor)",
+  "stores": "chest `orlov_stores` (was `ruin_chest`): inside Orlov's store, after M4 (indoor)",
+  "patrol_start": "roamer `dredger_patrol`: Tallow Dredgers round the catwalk ring"
+ },
+ "draft_zone_bindings": {
+  "vats_lane": "Guild bruisers at the vats' gate",
+  "towpath_and_yard": "Tallow Dredgers and canal scavengers; 12-20 steps a fight",
+  "rendering_yard": "no binding: the dredger roamer; the yard's fight is the `vats` encounter marker"
  },
  "location": "tallow_vats"
 }

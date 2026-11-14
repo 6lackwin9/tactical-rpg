@@ -41,7 +41,7 @@ wider and up to four taller than its footprint (PROPS1 6.1). Style A as in PROPS
 | `stone_steps` | 96 x 96 | 3 x 3 | ground | Grate | worn stone steps going up to the south, soot in the corners, seen from above |
 | `rubble_wall` | (kit) | 4 x 1 | sort | Grate | kit `common` art reused |
 
-## 2. Arts for the other seven Act 1 places (44 arts: 40 new, 4 more reused from the kit)
+## 2. Arts for the other seven Act 1 places (43 arts: 39 new, 4 more reused from the kit)
 
 Each art has one footprint, since a prop draws at its picture's size and is never stretched (PROPS1 4.3); walls,
 fences and shack rows repeat one piece. Kit arts reused here: `gatepost`, `cliff_face`, `boulder`, `banner_pole`
@@ -51,12 +51,11 @@ tower window is asked for as a cold blue-violet, which keyed apart from the mage
 | Art | PNG px | Footprint | Layer | Where | What |
 | --- | --- | --- | --- | --- | --- |
 | `tenement_block` | 192 x 288 | 6 x 5 | sort | Junction 7 | a crooked three-storey tenement of soot-black brick and timber, slate roof, shuttered windows, two lit |
-| `watch_armory` | 192 x 256 | 6 x 5 | sort | Junction 7 | a squat brick Watch armory, an iron-bound door, barred windows, a rust-crimson banner |
+| `watch_armory` | 192 x 288 | 6 x 5 | roof | Junction 7 | a squat brick Watch armory, an iron-bound door, barred windows, a rust-crimson banner (enterable: the cache inside) |
 | `watch_torch` | 32 x 80 | 1 x 1 | sort | Junction 7, Slag Gate | an iron torch bracket on a short post, a red-orange flame |
 | `rust_pennant` | 32 x 96 | 1 x 1 | sort | Junction 7 | a pole with a rust-crimson pennant |
 | `spiked_barricade` | 96 x 64 | 3 x 1 | sort | Junction 7 | a spiked timber barricade lashed with chain |
 | `street_grate` | 64 x 64 | 2 x 2 | ground | Junction 7 | a square iron street grate chained shut, seen from above |
-| `barred_gate` | 32 x 128 | 1 x 2 | sort | Junction 7 | a barred iron gate in a brick wall, chained, running north to south |
 | `ash_shack` | 128 x 160 | 4 x 3 | sort | Crossroads | a ramshackle plank shack, a sagging roof of tin sheets under grey ash |
 | `cage_platform` | 96 x 128 | 3 x 2 | sort | Crossroads | two iron cages on a wooden platform, chains, a titration bench of glass and tubes |
 | `pen_fence` | 96 x 64 | 3 x 1 | sort | Crossroads | a rough fence of iron stakes and timber rails |
@@ -80,8 +79,8 @@ tower window is asked for as a cold blue-violet, which keyed apart from the mage
 | `tallow_vat` | 96 x 160 | 3 x 3 | sort | Vats | a big riveted iron vat with a glowing sickly-yellow tallow top and a ladder up its side |
 | `catwalk_stair` | 32 x 160 | 1 x 3 | sort | Vats | a steep iron catwalk stair with a rail |
 | `tallow_spill` | 96 x 64 | 3 x 2 | ground | Vats | a spill of pale yellow tallow, congealed at the edges |
-| `still_room` | 192 x 224 | 6 x 4 | sort | Vats | a low brick still-room shed, copper still pipes through its roof |
-| `guild_store` | 192 x 192 | 6 x 3 | sort | Vats | a Guild storehouse of brick, wide double doors, sickly-yellow Guild marks (no letters) |
+| `still_room` | 352 x 320 | 11 x 7 | roof | Vats | a low brick still-room, copper still pipes through its roof (enterable: Elyse's counter-still) |
+| `guild_store` | 352 x 288 | 11 x 6 | roof | Vats | a Guild storehouse of brick, wide double doors, sickly-yellow Guild marks, no letters (enterable: Orlov's stores) |
 | `barrel_stack` | 64 x 64 | 2 x 1 | sort | Vats | tallow barrels stacked two high |
 | `winch_drum` | 64 x 128 | 2 x 2 | sort | Crucible | a big iron winch drum in a timber frame, its chain running down |
 | `watch_wall` | 128 x 128 | 4 x 2 | sort | Crucible | a run of fortress wall, rust-trimmed battlements, one red-orange slit window |
@@ -94,6 +93,21 @@ tower window is asked for as a cold blue-violet, which keyed apart from the mage
 | `cliff_face` | (kit) | 4 x 1 | sort | Crucible | kit `common` art reused |
 | `boulder` | (kit) | 2 x 2 | sort | Crucible | kit `common` art reused |
 | `banner_pole` | (kit) | 1 x 1 | sort | Slag Gate | kit `common` art reused |
+
+## 2b. Enterable buildings (the `roof` layer, REVEAL1 draft; mission maps at full size, 2026-11-14)
+
+The mission grounds were redrawn at two to three screens (Tushar, "Go large for missions"), with buildings the party can
+walk into. Such a building is a wall ring with an open floor and one doorway in the map's `rows`; its picture is a prop
+on a `roof` layer over the whole footprint, drawn above the characters, showing the closed building (roof and front
+wall). It fades while the party stands in the building's indoor zone (`roof_of`), so the floor and walls drawn by the
+tiles show through. The art is a normal building picture; only its layer is new (REVEAL1 is Build's).
+
+| Art | PNG px | Footprint | Layer | Where | What |
+| --- | --- | --- | --- | --- | --- |
+| `doss_house` | 352 x 256 | 11 x 5 | roof | Junction 7 | a sagging two-storey doss house of soot-black brick and timber, patched slate roof, a lantern over its door (the contact inside) |
+| `rag_hovel` | 352 x 224 | 11 x 5 | roof | Crossroads | a long ragpicker's hovel of planks and tin under grey ash, bundles of rags on its roof (the contact inside) |
+| `bonewright_shop` | 320 x 288 | 10 x 6 | roof | Kiln | a bone-wright's brick workshop, a squat chimney, pale bone tools hung by the door (Skerrit inside, after M3) |
+| `sentry_hut` | 224 x 256 | 7 x 6 | roof | Crucible | an old stone sentry hut set into the cliff, a slate roof, a shuttered window (a safe stop) |
 
 ## 3. Prompt sheets (for `PROPS1_PROMPTS.md`)
 
@@ -155,7 +169,7 @@ Row 3: a bank of grey river silt with ripples and the broken edge of a bronze pl
 ### Sheet S6 Sunk Ward streets and walls, standing (`props_sunk_streets`)
 
 4 x 4 cells, row by row: `tenement_block`, `tenement_row`, `watch_armory`, `ash_shack`; `watch_torch`,
-`rust_pennant`, `spiked_barricade`, `barred_gate`; `cage_platform`, `pen_fence`, `toll_pen_gate`, `violet_lamp_post`;
+`rust_pennant`, `spiked_barricade`, `tenement_block` (a second take); `cage_platform`, `pen_fence`, `toll_pen_gate`, `violet_lamp_post`;
 `brick_wall_run`, `brick_breach`, `striped_barrier`, `toll_booth` (sizes and layers in section 2).
 
 References, in attach order: `lm_alleyway_junction_7.jpg` (style, tenements and torchlight),
@@ -164,7 +178,7 @@ References, in attach order: `lm_alleyway_junction_7.jpg` (style, tenements and 
 ```text
 References: lm_alleyway_junction_7.jpg (the style, the crooked tenements and the torchlight), lm_ash_crawl_crossroads.jpg (the style, the shacks, the cages and the cold lamp), lm_corvos_gate.jpg (the style and the warm red-brown brick). A sheet of 16 pixel-art props for the top-down region maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art and matching the three reference pictures. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF): square corners, no gradient, no vignette, no texture, no ground, no cast shadow on it, so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows in the proportions named for it (width by height), in the three-quarter top-down view of a tile map (the top and the south face visible), with clear dark outlines, hand-placed pixel clusters, at most 16 colours per prop with 4 shades per colour, and light from the upper left; no magenta and no pink anywhere in the props, and any violet light leans cold blue. A standing prop stands on the bottom edge of its tile, its base as wide as the drawing, anything above the base roof, chimney, banner or lamp. The props belong to the drowned slums of a sunless city: soot-black brick and timber, slate and tin roofs under grey ash, rusted iron, rust-crimson cloth, red-orange torchlight. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:
 Row 1: a crooked three-storey tenement of soot-black brick and timber with a slate roof and shuttered windows, two of them lit (standing, 6 wide by 9 tall); a row of narrow two-storey soot-black tenements (standing, 6 wide by 7 tall); a squat brick Watch armory with an iron-bound door, barred windows and a rust-crimson banner (standing, 6 wide by 8 tall); a ramshackle plank shack with a sagging roof of tin sheets under grey ash (standing, 4 wide by 5 tall).
-Row 2: an iron torch bracket on a short post with a red-orange flame (standing, 1 wide by 2.5 tall); a pole with a rust-crimson pennant (standing, 1 wide by 3 tall); a spiked timber barricade lashed with chain (standing, 3 wide by 2 tall); a barred iron gate in a brick wall, chained, seen running away from the viewer, north to south (standing, 1 wide by 4 tall).
+Row 2: an iron torch bracket on a short post with a red-orange flame (standing, 1 wide by 2.5 tall); a pole with a rust-crimson pennant (standing, 1 wide by 3 tall); a spiked timber barricade lashed with chain (standing, 3 wide by 2 tall); a second take of the crooked three-storey tenement, other windows lit, a different roof line (standing, 6 wide by 9 tall).
 Row 3: two iron cages on a wooden platform with chains and a titration bench of glass and tubes (standing, 3 wide by 4 tall); a rough fence of iron stakes and timber rails (standing, 3 wide by 2 tall); a chained pen gate with a padlock and a blank tally board (standing, 2 wide by 3 tall); a crooked iron lamp post with a cold blue-violet flame (standing, 1 wide by 3.5 tall).
 Row 4: a run of crumbling warm red-brown brick wall with moss in the cracks, its left and right edges cut straight so runs join (standing, 4 wide by 4 tall); the broken end of the same brick wall at a breach, bricks spilling to the right (standing, 2 wide by 4 tall); a red-and-white striped barrier pole lowered on a trestle (standing, 3 wide by 2 tall); a small timber guard booth with a slanted roof and a lantern by its window (standing, 2 wide by 4 tall).
 ```
@@ -172,7 +186,7 @@ Row 4: a run of crumbling warm red-brown brick wall with moss in the cracks, its
 ### Sheet S7 Sunk Ward industry and fortress, standing (`props_sunk_works`)
 
 4 x 4 cells, row by row: `furnace_mouth`, `conveyor_chute`, `brass_tank`, `pipe_run`; `tallow_vat`, `catwalk_stair`,
-`still_room`, `guild_store`; `barrel_stack`, `toll_drum`, `winch_drum`, `crane_arm`; `watch_wall`,
+`tallow_vat` (a second take), `watch_wall` (a second take); `barrel_stack`, `toll_drum`, `winch_drum`, `crane_arm`; `watch_wall`,
 `slit_window_tower`, `cliff_bastion`, `portcullis`.
 
 References, in attach order: `lm_fourth_kiln.jpg` (style, brick, brass and furnace glow), `lm_tallow_vats.jpg` (style,
@@ -182,7 +196,7 @@ vats and the Guild's sickly yellow), `lm_crucible_watchpost.jpg` (style, fortres
 ```text
 References: lm_fourth_kiln.jpg (the style, the soot-black brick, the brass and the furnace glow), lm_tallow_vats.jpg (the style, the vats and the sickly-yellow tallow), lm_crucible_watchpost.jpg (the style, the fortress stone and the slit windows), lm_slag_gate.jpg (the style, the cliff masonry and the portcullis). A sheet of 16 pixel-art props for the top-down region maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art and matching the four reference pictures. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF): square corners, no gradient, no vignette, no texture, no ground, no cast shadow on it, so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows in the proportions named for it (width by height), in the three-quarter top-down view of a tile map (the top and the south face visible), with clear dark outlines, hand-placed pixel clusters, at most 16 colours per prop with 4 shades per colour, and light from the upper left; no magenta and no pink anywhere in the props, and any violet light leans cold blue. A standing prop stands on the bottom edge of its tile, its base as wide as the drawing, anything above the base roof, pipe, battlement or frame. The props belong to the mills, rendering vats and watch fortress of a sunless industrial slum: soot-black brick, dark fortress stone, rusted iron, riveted brass, copper, sickly-yellow tallow, red-orange furnace and window light. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:
 Row 1: a glowing furnace mouth in a soot-black brick arch, ash on its sill (standing, 3 wide by 3 tall); an inclined wooden conveyor chute on a trestle with bones on the belt (standing, 2 wide by 5 tall); a riveted brass tank with two gauges (standing, 2 wide by 3.5 tall); a run of rusted pipes on brackets with a valve wheel (standing, 2 wide by 3 tall).
-Row 2: a big riveted iron vat with a glowing sickly-yellow tallow top and a ladder up its side (standing, 3 wide by 5 tall); a steep iron catwalk stair with a rail (standing, 1 wide by 5 tall); a low brick still-room shed with copper still pipes through its roof (standing, 6 wide by 7 tall); a brick storehouse with wide double doors and sickly-yellow painted marks without letters (standing, 6 wide by 6 tall).
+Row 2: a big riveted iron vat with a glowing sickly-yellow tallow top and a ladder up its side (standing, 3 wide by 5 tall); a steep iron catwalk stair with a rail (standing, 1 wide by 5 tall); a second take of the big riveted iron vat, its ladder on the other side (standing, 3 wide by 5 tall); a second take of the run of dark fortress wall, its slit window further left, edges cut straight so runs join (standing, 4 wide by 4 tall).
 Row 3: tallow barrels stacked two high (standing, 2 wide by 2 tall); an iron-banded toll drum on a stand with a slot in its lid (standing, 1 wide by 1.5 tall); a big iron winch drum in a timber frame, its chain running down (standing, 2 wide by 4 tall); an iron crane arm with a pulley and a hook (standing, 1 wide by 4 tall).
 Row 4: a run of dark fortress wall with rust-trimmed battlements and one red-orange slit window, its left and right edges cut straight so runs join (standing, 4 wide by 4 tall); a stone watch tower with a row of red-orange slit windows, battlements and a cold blue-violet glint in its top window (standing, 5 wide by 8 tall); a fortified stretch of dark cliff faced with masonry, a red banner on it (standing, 5 wide by 6 tall); a shut iron portcullis in a stone gate arch (standing, 4 wide by 5 tall).
 ```
@@ -208,4 +222,15 @@ Row 3: an L-shaped channel of glowing orange slag running down the left side and
 
 ```text
 References: lm_fourth_kiln.jpg (the building to draw, its style and colours). One pixel-art building for the top-down region map of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art: the bone-mill kiln from the reference picture, seen in the three-quarter top-down view of a tile map (the top and the south face visible), standing on the bottom edge of the image with its base as wide as the drawing, 14 units wide and 10 tall. A long soot-black brick block, three squat chimneys whose tops glow inside with no smoke, iron bands and pipes on its face, a gap at the middle of its south face where a separate furnace mouth will stand. Clear dark outlines, hand-placed pixel clusters, at most 16 colours with 4 shades per colour, light from the upper left. The whole background is flat, solid pure magenta (#FF00FF) with no ground and no cast shadow; no magenta or pink in the building. No text, no letters, no numbers, no runes, no labels, no frame, no watermark.
+```
+
+### Single images S10 enterable buildings (`props_sunk_houses`)
+
+One wide image each (16:9), the place's landmark as the reference, cut to the size in section 2b: `doss_house` and
+`watch_armory` (`lm_alleyway_junction_7.jpg`), `rag_hovel` (`lm_ash_crawl_crossroads.jpg`), `bonewright_shop`
+(`lm_fourth_kiln.jpg`), `still_room` and `guild_store` (`lm_tallow_vats.jpg`), `sentry_hut`
+(`lm_crucible_watchpost.jpg`). The prompt is the same for each, with the building's line from the table in its place.
+
+```text
+References: <the landmark named above> (the style and colours). One pixel-art building for the top-down region map of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art, seen in the three-quarter top-down view of a tile map (the top and the south face visible), standing on the bottom edge of the image with its base as wide as the drawing, <width> units wide and <height> tall: <the building's description from the table>. Its door is in its south face. Clear dark outlines, hand-placed pixel clusters, at most 16 colours with 4 shades per colour, light from the upper left. The whole background is flat, solid pure magenta (#FF00FF) with no ground and no cast shadow; no magenta or pink in the building. No text, no letters, no numbers, no runes, no labels, no frame, no watermark.
 ```

@@ -2,101 +2,214 @@
  "id": "sunk_ward_fourth_kiln",
  "name": "Sunk Ward: the Fourth Kiln",
  "rows": [
-  "##################################",
-  "#........################........#",
-  "#........################.####...#",
-  "#.....##.################.####...#",
-  "#.....##.################.####...#",
-  "#.....##.################.####...#",
-  "#.....##.################........#",
-  "#.....##.################........#",
-  "#................................#",
-  "#................................#",
-  "#.................................",
-  "#.....................##..........",
-  "#................................#",
-  "#........##......................#",
-  "#############........#############",
-  "#................................#",
-  "#................................#",
-  "#................................#",
-  "#................................#",
-  "#................................#",
-  "#................................#",
-  "################..################"
+  "########################################################",
+  "########################################################",
+  "########################################################",
+  "########################################################",
+  "########################################################",
+  "########################################################",
+  "########################################################",
+  "########################################################",
+  "###.........................................############",
+  "###.........................................############",
+  "###.........................................############",
+  "###.....................................................",
+  "###.....................................................",
+  "###.........................................############",
+  "###...........##............................############",
+  "###.....................................##..############",
+  "###.........................................############",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###.........##############....##########################",
+  "###....................................#################",
+  "###................##..................#################",
+  "#################......................#################",
+  "########........#......................#################",
+  "########...............................#################",
+  "########........#......................#################",
+  "########........#......................#################",
+  "###########################..###########################",
+  "###########################..###########################"
  ],
  "zones": [
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dddddddddddddddddddddddddddddddddd",
-  "dssssssssssssssssssssssssssssssssd",
-  "dssssssssssssssssssssssssssssssssd",
-  "dssssssssssssssssssssssssssssssssd",
-  "dssssssssssssssssssssssssssssssssd",
-  "dssssssssssssssssssssssssssssssssd",
-  "dssssssssssssssssssssssssssssssssd",
-  "dddddddddddddddddddddddddddddddddd"
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "--------------------------------------------------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbb",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbb",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbbbbbbbssssssssssssssssssssss-----------------",
+  "---bbbbbbbbbbbbbbssssssssssssssssssssss-----------------",
+  "-----------------ssssssssssssssssssssss-----------------",
+  "--------hhhhhhhh-ssssssssssssssssssssss-----------------",
+  "--------hhhhhhhhhssssssssssssssssssssss-----------------",
+  "--------hhhhhhhh-ssssssssssssssssssssss-----------------",
+  "--------hhhhhhhh-ssssssssssssssssssssss-----------------",
+  "---------------------------ss---------------------------",
+  "---------------------------ss---------------------------"
  ],
  "zone_legend": {
   "s": {
-   "id": "kiln_road",
+   "id": "gate_yard",
    "kind": "safe"
   },
   "d": {
+   "id": "cart_track",
+   "kind": "danger"
+  },
+  "b": {
+   "id": "ash_yards",
+   "kind": "danger"
+  },
+  "y": {
    "id": "mill_floor",
    "kind": "danger"
+  },
+  "h": {
+   "id": "bonewright_shop",
+   "kind": "safe",
+   "indoor": true
   }
  },
  "anchors": [
   {
    "id": "spawn",
-   "x": 16,
-   "y": 19
+   "x": 27,
+   "y": 31
   },
   {
    "id": "exit_road",
-   "x": 16,
-   "y": 21
+   "x": 27,
+   "y": 35
   },
   {
    "id": "exit_climb",
-   "x": 33,
-   "y": 10
+   "x": 55,
+   "y": 11
   },
   {
    "id": "mill",
-   "x": 17,
-   "y": 10
+   "x": 27,
+   "y": 12
   },
   {
    "id": "skerrit",
-   "x": 6,
-   "y": 17
+   "x": 11,
+   "y": 31
   },
   {
    "id": "wedges",
-   "x": 23,
+   "x": 32,
    "y": 9
+  },
+  {
+   "id": "patrol_start",
+   "x": 27,
+   "y": 25
   }
  ],
- "paths": {},
+ "paths": {
+  "hauler_patrol": [
+   [
+    27,
+    25
+   ],
+   [
+    27,
+    24
+   ],
+   [
+    27,
+    23
+   ],
+   [
+    27,
+    22
+   ],
+   [
+    27,
+    21
+   ],
+   [
+    27,
+    20
+   ],
+   [
+    27,
+    19
+   ],
+   [
+    27,
+    18
+   ],
+   [
+    28,
+    18
+   ],
+   [
+    28,
+    19
+   ],
+   [
+    28,
+    20
+   ],
+   [
+    28,
+    21
+   ],
+   [
+    28,
+    22
+   ],
+   [
+    28,
+    23
+   ],
+   [
+    28,
+    24
+   ],
+   [
+    28,
+    25
+   ]
+  ]
+ },
  "props": [
   {
    "id": "kiln",
    "art": "fourth_kiln",
-   "x": 10,
+   "x": 21,
    "y": 1,
    "w": 14,
    "h": 6,
@@ -107,7 +220,7 @@
   {
    "id": "furnace",
    "art": "furnace_mouth",
-   "x": 16,
+   "x": 26,
    "y": 7,
    "w": 3,
    "h": 1,
@@ -118,7 +231,7 @@
   {
    "id": "chute",
    "art": "conveyor_chute",
-   "x": 6,
+   "x": 18,
    "y": 4,
    "w": 2,
    "h": 3,
@@ -127,9 +240,9 @@
    "flip": false
   },
   {
-   "id": "tank",
+   "id": "tank_1",
    "art": "brass_tank",
-   "x": 26,
+   "x": 35,
    "y": 2,
    "w": 2,
    "h": 2,
@@ -140,7 +253,7 @@
   {
    "id": "tank_2",
    "art": "brass_tank",
-   "x": 28,
+   "x": 37,
    "y": 2,
    "w": 2,
    "h": 2,
@@ -149,9 +262,9 @@
    "flip": false
   },
   {
-   "id": "pipes",
+   "id": "pipes_1",
    "art": "pipe_run",
-   "x": 26,
+   "x": 35,
    "y": 4,
    "w": 2,
    "h": 2,
@@ -162,7 +275,7 @@
   {
    "id": "pipes_2",
    "art": "pipe_run",
-   "x": 28,
+   "x": 37,
    "y": 4,
    "w": 2,
    "h": 2,
@@ -171,10 +284,340 @@
    "flip": false
   },
   {
+   "id": "row_1_1_1",
+   "art": "tenement_row",
+   "x": 1,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_1_1_2",
+   "art": "tenement_row",
+   "x": 7,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_1_1_3",
+   "art": "tenement_row",
+   "x": 1,
+   "y": 4,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_1_1_4",
+   "art": "tenement_row",
+   "x": 7,
+   "y": 4,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_41_1_1",
+   "art": "tenement_row",
+   "x": 41,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_41_1_2",
+   "art": "tenement_row",
+   "x": 47,
+   "y": 1,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_41_1_3",
+   "art": "tenement_row",
+   "x": 41,
+   "y": 4,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_41_1_4",
+   "art": "tenement_row",
+   "x": 47,
+   "y": 4,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_44_13_1",
+   "art": "tenement_row",
+   "x": 44,
+   "y": 13,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_44_13_2",
+   "art": "tenement_row",
+   "x": 44,
+   "y": 16,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_44_13_3",
+   "art": "tenement_row",
+   "x": 44,
+   "y": 19,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_44_13_4",
+   "art": "tenement_row",
+   "x": 44,
+   "y": 22,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_12_17_1",
+   "art": "tenement_row",
+   "x": 12,
+   "y": 17,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_12_17_2",
+   "art": "tenement_row",
+   "x": 18,
+   "y": 17,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_12_17_3",
+   "art": "tenement_row",
+   "x": 12,
+   "y": 20,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_12_17_4",
+   "art": "tenement_row",
+   "x": 18,
+   "y": 20,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_12_17_5",
+   "art": "tenement_row",
+   "x": 12,
+   "y": 23,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_12_17_6",
+   "art": "tenement_row",
+   "x": 18,
+   "y": 23,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_30_17_1",
+   "art": "tenement_row",
+   "x": 30,
+   "y": 17,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_30_17_2",
+   "art": "tenement_row",
+   "x": 36,
+   "y": 17,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_30_17_3",
+   "art": "tenement_row",
+   "x": 30,
+   "y": 20,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_30_17_4",
+   "art": "tenement_row",
+   "x": 36,
+   "y": 20,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_30_17_5",
+   "art": "tenement_row",
+   "x": 30,
+   "y": 23,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_30_17_6",
+   "art": "tenement_row",
+   "x": 36,
+   "y": 23,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_39_27_1",
+   "art": "tenement_row",
+   "x": 39,
+   "y": 27,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_39_27_2",
+   "art": "tenement_row",
+   "x": 45,
+   "y": 27,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_39_27_3",
+   "art": "tenement_row",
+   "x": 39,
+   "y": 30,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_39_27_4",
+   "art": "tenement_row",
+   "x": 45,
+   "y": 30,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_1_29_1",
+   "art": "tenement_row",
+   "x": 1,
+   "y": 29,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "row_1_29_2",
+   "art": "tenement_row",
+   "x": 1,
+   "y": 32,
+   "w": 6,
+   "h": 3,
+   "layer": "sort",
+   "variant": -1,
+   "flip": false
+  },
+  {
    "id": "heap_1",
    "art": "bone_meal_heap",
-   "x": 5,
-   "y": 8,
+   "x": 4,
+   "y": 10,
    "w": 2,
    "h": 2,
    "layer": "ground",
@@ -184,8 +627,8 @@
   {
    "id": "heap_2",
    "art": "bone_meal_heap",
-   "x": 10,
-   "y": 9,
+   "x": 7,
+   "y": 15,
    "w": 2,
    "h": 2,
    "layer": "ground",
@@ -193,10 +636,21 @@
    "flip": false
   },
   {
-   "id": "carts",
+   "id": "heap_3",
+   "art": "bone_meal_heap",
+   "x": 4,
+   "y": 21,
+   "w": 2,
+   "h": 2,
+   "layer": "ground",
+   "variant": -1,
+   "flip": false
+  },
+  {
+   "id": "carts_1",
    "art": "crate_stack",
-   "x": 22,
-   "y": 11,
+   "x": 14,
+   "y": 14,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -206,8 +660,8 @@
   {
    "id": "carts_2",
    "art": "crate_stack",
-   "x": 9,
-   "y": 13,
+   "x": 40,
+   "y": 15,
    "w": 2,
    "h": 1,
    "layer": "sort",
@@ -217,7 +671,7 @@
   {
    "id": "wedges",
    "art": "wedge_pile",
-   "x": 24,
+   "x": 33,
    "y": 9,
    "w": 1,
    "h": 1,
@@ -226,73 +680,66 @@
    "flip": false
   },
   {
-   "id": "mill_wall_w",
-   "art": "rubble_wall",
-   "x": 2,
-   "y": 14,
-   "w": 4,
+   "id": "yard_crates",
+   "art": "crate_stack",
+   "x": 19,
+   "y": 28,
+   "w": 2,
    "h": 1,
    "layer": "sort",
    "variant": -1,
    "flip": false
   },
   {
-   "id": "mill_wall_w2",
-   "art": "rubble_wall",
+   "id": "roof_bonewright_shop",
+   "art": "bonewright_shop",
    "x": 7,
-   "y": 14,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
+   "y": 29,
+   "w": 10,
+   "h": 6,
+   "layer": "roof",
    "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "mill_wall_e",
-   "art": "rubble_wall",
-   "x": 22,
-   "y": 14,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "mill_wall_e2",
-   "art": "rubble_wall",
-   "x": 27,
-   "y": 14,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
+   "flip": false,
+   "roof_of": "h"
   }
  ],
  "ground": [
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssssssssss",
-  "sssssssscccccctttttttcccccssssssss",
-  "sssssssscccccctttttttcccccssssssss",
-  "sssssssscccccctttttttcccccsssssssc",
-  "ssssssssccccccccccccccccccsssssssc",
-  "ssssssssccccccccccccccccccssssssss",
-  "ssssssssccccccccccccccccccssssssss",
-  "sssssssssssssssffffsssssssssssssss",
-  "sccccccccccccccffffccccccccccccccs",
-  "sccccccccccccccffffccccccccccccccs",
-  "sccccccccccccccffffccccccccccccccs",
-  "sccccccccccccccffffccccccccccccccs",
-  "sccccccccccccccffffccccccccccccccs",
-  "sccccccccccccccffffccccccccccccccs",
-  "ssssssssssssssssffssssssssssssssss"
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "sssssssssssscccccccccccttttttttttcccccccccccssssssssssss",
+  "sssssssssssscccccccccccttttttttttcccccccccccssssssssssss",
+  "sssssssssssscccccccccccttttttttttcccccccccccssssssssssss",
+  "sssssssssssscccccccccccccccccccccccccccccccccccccccccccc",
+  "sssssssssssscccccccccccccccccccccccccccccccccccccccccccc",
+  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "sssssssssssssssssccccccccccccccccccccccsssssssssssssssss",
+  "sssssssssssssssssccccccccccccccccccccccsssssssssssssssss",
+  "sssssssssssssssssccccccccccccccccccccccsssssssssssssssss",
+  "ssssssssffffffffsccccccccccccccccccccccsssssssssssssssss",
+  "ssssssssfffffffffccccccccccccccccccccccsssssssssssssssss",
+  "ssssssssffffffffsccccccccccccccccccccccsssssssssssssssss",
+  "ssssssssffffffffsccccccccccccccccccccccsssssssssssssssss",
+  "sssssssssssssssssssssssssssffsssssssssssssssssssssssssss",
+  "sssssssssssssssssssssssssssffsssssssssssssssssssssssssss"
  ],
  "ground_legend": {
   "s": "soot_yard",
@@ -304,12 +751,18 @@
   "sunk_ward"
  ],
  "draft_markers": {
-  "spawn": "arrival from the world map (the road from Junction 7)",
+  "spawn": "arrival from the world map (the gate yard, the road from Junction 7)",
   "exit_road": "exit `world_map` (was `east`): the road south, World map: the Fourth Kiln",
-  "exit_climb": "exit (new, optional): the climb east toward the Crucible, World map",
-  "mill": "encounter `bone_mill` (was `site_b`): Overseer Grendel on the mill floor",
-  "skerrit": "npc `skerrit` (was `camp_npc`): Skerrit the bone-wright, after M3",
-  "wedges": "point `wedge_pile` (was `altar`): the black-iron wedges"
+  "exit_climb": "exit (optional): the lane east, the climb toward the Crucible, World map",
+  "mill": "encounter `bone_mill` (was `site_b`): Overseer Grendel on the mill floor (the mission)",
+  "skerrit": "npc `skerrit` (was `camp_npc`): Skerrit in his workshop, after M3 (indoor)",
+  "wedges": "point `wedge_pile` (was `altar`): the black-iron wedges by the furnace",
+  "patrol_start": "roamer `hauler_patrol`: bone-cart haulers on the cart track"
+ },
+ "draft_zone_bindings": {
+  "cart_track": "bone-cart haulers and kiln guards; the roamer as well",
+  "ash_yards": "Spent scavengers among the heaps; 12-20 steps a fight",
+  "mill_floor": "no binding: the floor's fight is the `bone_mill` encounter marker"
  },
  "location": "fourth_kiln"
 }
