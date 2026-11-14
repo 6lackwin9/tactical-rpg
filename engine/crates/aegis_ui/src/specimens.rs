@@ -21,10 +21,14 @@
 //! among the asset layers' `tilesets/` (`theme::layers`), square or tilted at 1x-3x (its Ground switch, REGIONGROUND1-E1:
 //! the same map through `ground::compose`), with the set's transition pieces
 //! (`autotile`) when it has them, else the mask numbers. LOOK1-FT: an eighth page, Frames, the frame tuner (`frame_tuner`).
+//! PR5-48: a ninth page, Layout, the layout editor (`layout_editor`) on its code-drawn sample (`layout_editor::sample`);
+//! the gallery screen hands its handle drags to `Specimens::pointer`.
 
 use crate::autotile::{block_edges, corner_pieces};
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::frame_tuner::{self, FrameTuner, TunerAct};
+use crate::layout_editor::{self, LayoutAct, LayoutEditor};
+use crate::screen::PointerPhase;
 use crate::ground::{self, GroundJob, GroundKey, GroundLayer};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
 use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
@@ -102,10 +106,12 @@ pub enum KitAct {
     TileGround,
     /// LOOK1-FT: the Frames page's frame tuner.
     Tuner(TunerAct),
+    /// PR5-48: the Layout page's layout editor.
+    Layout(LayoutAct),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 8] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes", "Tiles", "Frames"];
+pub const PAGES: [&str; 9] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes", "Tiles", "Frames", "Layout"];
 /// LOOK1-E2: the Tiles page's views (name, logical cell width and height at 1x) and zooms.
 pub const TILE_VIEWS: [(&str, i32, i32); 2] = [("Square 16 x 16", 16, 16), ("Tilted 32 x 24", 32, 24)];
 pub const TILE_ZOOMS: [i32; 3] = [1, 2, 3];
@@ -226,6 +232,8 @@ pub struct Specimens {
     pub ask_no_default: bool,
     /// The Tiles page's state (LOOK1-E2).
     pub tiles: TileDemo,
+    /// PR5-48: the Layout page.
+    pub layout: LayoutEditor,
 }
 
 /// The cell of `TILES_MAP` at (x, y), an off-grid cell taking its nearest cell's kind (so the map's rim draws no edge).
@@ -541,6 +549,7 @@ impl Default for Specimens {
             tuner: FrameTuner::default(),
             ask_no_default: false,
             tiles: TileDemo::default(),
+            layout: layout_editor::sample(),
         }
     }
 }
@@ -598,7 +607,7 @@ impl Specimens {
             KitAct::TileZoom(i) => format!("tile zoom {}x", TILE_ZOOMS[*i % TILE_ZOOMS.len()]),
             KitAct::TilePan(dx, dy) => format!("tile pan ({dx}, {dy})"),
             KitAct::TileGround => format!("composed ground {}", if self.tiles.ground { "off" } else { "on" }),
-            KitAct::Tuner(_) => String::new(),
+            KitAct::Tuner(_) | KitAct::Layout(_) => String::new(),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -664,6 +673,10 @@ impl Specimens {
             KitAct::Tuner(t) => {
                 self.tuner.act(t);
                 self.last = self.tuner.note.clone();
+            }
+            KitAct::Layout(a) => {
+                self.layout.act(a);
+                self.last = self.layout.note.clone();
             }
             KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
         }
@@ -759,6 +772,10 @@ impl Specimens {
             self.draw_tiles(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else if self.page == 7 {
             self.tuner.draw(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &|a| wrap(KitAct::Tuner(a)));
+        } else if self.page == 8 {
+            let page = Rect::new(r.x, r.y, r.w, r.h - 18);
+            self.layout.set_view(layout_editor::sample_view(&self.layout, LayoutEditor::split(page).1));
+            self.layout.draw(ui, page, &|a| wrap(KitAct::Layout(a)));
         } else {
             self.draw_widgets(ui, r, &wrap);
         }
@@ -1176,9 +1193,28 @@ pub fn sample_portraits() -> &'static [Image] {
 }
 
 impl Specimens {
+    /// PR5-48: a handle drag on the Layout page (`Screen::pointer` of the gallery screen). True when the page took it.
+    pub fn pointer(&mut self, id: &str, phase: PointerPhase, pos: (i32, i32)) -> bool {
+        if self.page != 8 {
+            return false;
+        }
+        let used = self.layout.pointer(id, phase, pos);
+        if used && !self.layout.note.is_empty() {
+            self.last = self.layout.note.clone();
+        }
+        used
+    }
+
     /// The Panes page's keys (the gallery screen forwards them): the menu column's hotkeys, the tab rail's PageUp /
     /// PageDown and the ask's Enter, y, n and Esc. True when the key was used.
     pub fn key(&mut self, k: Key) -> bool {
+        if self.page == 8 {
+            let used = self.layout.key(k, false, false);
+            if used {
+                self.last = self.layout.note.clone();
+            }
+            return used;
+        }
         if self.page == 7 {
             let used = self.tuner.key(k);
             if used {

@@ -11,7 +11,7 @@ use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::layout_audit::{self, Profile};
 use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
-use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, Screen};
+use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, Context, Cx, Held, Key, Nav, Notice, PointerPhase, Screen};
 // The window's show, size and place (DISPLAY2): the desktop only; the web page owns its canvas (WEBREL1-E2).
 #[cfg(not(target_arch = "wasm32"))]
 use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect, WindowShow};
@@ -99,6 +99,8 @@ struct Shell<G> {
     drag: Option<(String, String)>,
     /// A press on a draggable widget (UIKIT2), waiting to become a drag (a move) or a click (a release).
     press: Option<Press>,
+    /// PR5-48: the handle (`Ui::handle`) whose pointer drag the top screen follows (`Screen::pointer`), until the release.
+    handle: Option<String>,
     /// A window being moved or resized (UIKIT3): its id, the grab and the last mouse position.
     win_drag: Option<(String, Grab, (i32, i32))>,
     /// The choice field whose list the keyboard opened (its option takes the focus once the list is drawn).
@@ -179,7 +181,7 @@ impl<G: Context> Shell<G> {
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = dpr;
         let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         shell.cx.notice.extend(icon_notice);
         shell.cx.notice.extend(window_notices);
         hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
@@ -428,7 +430,7 @@ impl<G: Context> Shell<G> {
     /// and its caret, a drag, a held walk key, a music fade, a queued screen or notice), else the most any drawn screen says.
     fn frame_need(&self) -> FrameNeed {
         let kit = &self.gfx.kit;
-        let own = kit.edit.is_some() || kit.drag.is_some() || self.drag.is_some() || self.press.is_some() || self.win_drag.is_some() || self.cx.held.dir.is_some();
+        let own = kit.edit.is_some() || kit.drag.is_some() || self.drag.is_some() || self.press.is_some() || self.handle.is_some() || self.win_drag.is_some() || self.cx.held.dir.is_some();
         if own || self.cx.audio.fading() || !self.cx.nav.is_empty() || !self.cx.notice.is_empty() {
             return FrameNeed::Full;
         }
@@ -577,7 +579,12 @@ impl<G: Context> Shell<G> {
         if moved {
             self.save_desk();
         }
-        let had = self.press.take().is_some() | moved;
+        let mut had = self.press.take().is_some() | moved;
+        if let Some(id) = self.handle.take() {
+            let (cx, pos) = (&mut self.cx, self.mouse);
+            self.stack.last_mut().unwrap().pointer(cx, &id, PointerPhase::Cancel, pos);
+            had = true;
+        }
         self.gfx.kit.drag.take().is_some() || had
     }
 
@@ -786,6 +793,14 @@ impl<G: Context> Shell<G> {
             self.gfx.kit.open = Some(id);
             return true;
         }
+        if kind == "handle" {
+            // A free-form handle (PR5-48): the screen follows the pointer from the press to the release.
+            self.handle = Some(id.clone());
+            let cx = &mut self.cx;
+            self.stack.last_mut().unwrap().pointer(cx, &id, PointerPhase::Down, pos);
+            self.settle();
+            return true;
+        }
         if let Some(key) = at.as_ref().and_then(|w| w["drag"].as_str()) {
             // A draggable widget: a move picks it up (`drag_to`), a release without one clicks it (`release`).
             let text = at.as_ref().and_then(|w| w["text"].as_str()).unwrap_or("").to_string();
@@ -821,6 +836,12 @@ impl<G: Context> Shell<G> {
                 d.drag(&win, grab, self.mouse.0 - last.0, self.mouse.1 - last.1);
             }
             self.win_drag = Some((win, grab, self.mouse));
+            return;
+        }
+        if let Some(id) = self.handle.clone() {
+            let (cx, pos) = (&mut self.cx, self.mouse);
+            self.stack.last_mut().unwrap().pointer(cx, &id, PointerPhase::Move, pos);
+            self.settle();
             return;
         }
         if let Some(p) = &self.press {
@@ -861,6 +882,11 @@ impl<G: Context> Shell<G> {
         self.text_press = false;
         if self.win_drag.take().is_some() {
             self.save_desk();
+        }
+        if let Some(id) = self.handle.take() {
+            let (cx, pos) = (&mut self.cx, self.mouse);
+            self.stack.last_mut().unwrap().pointer(cx, &id, PointerPhase::Up, pos);
+            self.settle();
         }
         let Some(p) = self.press.take() else { return };
         match self.gfx.kit.drag.take() {
@@ -2243,7 +2269,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, handle: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         s.frame();
         s
     }
