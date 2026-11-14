@@ -1,0 +1,38 @@
+Emberwake: A Scarlet Lullaby - story tracks (Inbox AI-03, Art/UI 2026-11-15)
+
+Four Flow Music prompts for the slice's story keys (game.json music_keys; PR5-24 STORYMUSIC1 reads them). Use the
+SOUND BIBLE and the house seed from flow_music_brief.txt (1B, the 16-bit main theme, set the sound). Each track loops:
+one steady mood and tempo, no intro build, no fade-out, 90 to 150 seconds. Export as .ogg to
+games/emberwake/assets/audio/music/<key>.ogg and add each to that folder's README.md.
+
+Where each plays today (worlds/sunk_ward/vignettes.json): story_opening on vg_open "The Red Tithing";
+story_escape on vg_meat_market; story_goodbye on vg_m5_gate and vg_debate_3; prologue_tension has no vignette yet
+(story steps of the prologue: the alley, the rooftops, the bridge cart).
+
+---------------------------------------------------------------- story_opening (the opening vignette, the Red Tithing)
+Opening story theme for Emberwake: A Scarlet Lullaby, in the style of a 16-bit SNES-era dark fantasy RPG soundtrack:
+sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. A low male choir hums the Scarlet Lullaby, the
+simple sad 6/8 cradle tune in D minor, slow and cold, as a church sings it to children it is about to take; a single
+hand bell tolls on the first beat of every second bar; low sampled strings hold a drone under it. 56 BPM. No drums.
+Solemn, ceremonial, dreadful. Steady throughout so it loops; no fade-out ending. About 2 minutes.
+
+---------------------------------------------------------------- prologue_tension (the alley, the rooftops, the bridge)
+Stealth and tension theme for Emberwake: A Scarlet Lullaby, in the style of a 16-bit SNES-era dark fantasy RPG
+soundtrack: sampled orchestra, slightly lo-fi. Instrumental. Plucked low strings and a muted frame drum keep a quiet,
+uneven pulse like held breath; a hurdy-gurdy drones; now and then two notes of the Scarlet Lullaby on a dulcimer,
+never finished; distant struck iron, like a searchlight shutter. 84 BPM, D minor. Tense, hunted, quiet; it never
+breaks into a fight. Steady throughout so it loops; no fade-out ending. About 100 seconds.
+
+---------------------------------------------------------------- story_escape (the Meat Market, the run for the drains)
+Escape theme for Emberwake: A Scarlet Lullaby, in the style of a 16-bit SNES-era dark fantasy RPG soundtrack: sampled
+orchestra, slightly lo-fi. Instrumental. Driving low strings in fast repeated notes, frame drums and struck chains on
+the off-beats, a solo violin carrying an urgent rising line that quotes the Scarlet Lullaby at double speed; church
+bells clang out of time behind it, as an alarm. 132 BPM, D minor. Breathless, desperate, defiant. Steady throughout
+so it loops; no fade-out ending. About 100 seconds.
+
+---------------------------------------------------------------- story_goodbye (the Slag Gate, one of them stays)
+Farewell theme for Emberwake: A Scarlet Lullaby, in the style of a 16-bit SNES-era dark fantasy RPG soundtrack:
+sampled orchestra, slightly lo-fi, warm and grainy. Instrumental. The Scarlet Lullaby played plainly on a music box,
+the first time it sounds warm; a solo viola answers each phrase; soft low strings under them; near the end of each
+pass a lone woman's wordless voice doubles the tune, far off. 60 BPM, D minor leaning to F major and falling back.
+Grief held quietly, love, resolve; no heroics. Steady throughout so it loops; no fade-out ending. About 2 minutes.

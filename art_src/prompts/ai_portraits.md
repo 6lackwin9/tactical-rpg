@@ -142,3 +142,29 @@ Lighting: a hard red-orange torch rim light from the right instead of the amber 
 Mood: stolid, menacing, bored.
 Main colours: scavenged iron, rust crimson, boiled leather, red-orange rim.
 ```
+
+## Bailiff Corvo (`bailiff_corvo`)
+
+Not in the inbox: found by the 2026-11-15 asset sweep (a named NPC with dialogue `dlg_corvo_gate` and no portrait).
+Target: `portraits/npcs/bailiff_corvo.png`; faction `castellan`. `CANON.md` 3.2: twenty-nine, a Spent who kept his
+mind, a stone leg, a sister (Ida) he is trying to save. Must read apart from `bailiff_enforcer` and `captain_vane`:
+tired and human, no helm.
+
+```text
+Character: Bailiff Corvo, gatekeeper of the Third Ward. Stylization warm and readable: a long tired face, heavy-lidded watchful eyes, a crooked nose, three days of stubble, a wry worn-out mouth. A Spent man of twenty-nine who looks older, lean and stooped. Lank dark-brown hair pushed back from a high forehead, no helm: his dented kettle helm hangs from a strap at his shoulder. A rust-crimson Watch surcoat gone grey at the seams over a dented iron gorget, a ring of heavy gate keys and a brass toll token on a cord at his collar; along his jaw on the far side, a small patch of chalk-white calcified skin.
+Lighting: a hard red-orange torch rim light from the right instead of the amber tallow rim.
+Mood: weary, bribable, decent underneath.
+Main colours: rust crimson gone grey, scavenged iron, tarnished brass, red-orange rim.
+```
+
+## Skerrit, Bone-Wright (`skerrit_bone_wright`)
+
+Not in the inbox: found by the 2026-11-15 asset sweep (a named NPC with dialogue `dlg_skerrit` and no portrait).
+Target: `portraits/npcs/skerrit_bone_wright.png`; faction `hearth` (a street neutral, the plain amber rim). A
+hunchbacked tenement bone-wright and seal-forger, a muttering craftsman.
+
+```text
+Character: Skerrit the Bone-Wright, a tenement craftsman and seal-forger. Stylization in between: a hunched old-looking man with a narrow face, a long chin, small sharp eyes behind a pair of round wire spectacles with one cracked lens, thin lips pursed mid-mutter. Sparse grey hair in wisps round a bald crown. His shoulders ride high and uneven under a stained leather apron over patched wool; a jeweller's loupe pushed up on his forehead, a carved bone seal-stamp on a cord at his neck, pale bone dust on his sleeves and fingers, a fine bone-handled file tucked behind one ear.
+Mood: muttering, shrewd, absorbed in his work.
+Main colours: stained boiled leather, pale carved bone, soot-grey wool, tallow amber rim light.
+```

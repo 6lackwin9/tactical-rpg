@@ -27,6 +27,12 @@ review"). Placeholders are replaced **in place**: the same path, size and format
 | Region maps (next session) | prep: how region maps are drawn, the art contract, each Act 1 location's template, the plan | [region_maps_prep.md](region_maps_prep.md) | Outbox `AO-04` first | - |
 | Act maps (2026-11-13) | 3 act map backgrounds | [act_map_backgrounds.md](act_map_backgrounds.md) | `artqueue.py request wm_sunk_ward wm_high_bastion wm_mantle_fissure --prompts art_src/prompts/act_map_backgrounds.md --no-ref --n 2 --aspect 16:9 --route other` | `backgrounds/world_map/{sunk_ward,high_bastion,mantle_fissure}.png` (1920 x 1080; Act 1 shows now, Acts 2-3 after `AO-01`) |
 
+| Sweep 2026-11-15 | The whole open art backlog, in run order | [ASSET_PLAN.md](ASSET_PLAN.md) | the plan; start here | - |
+| Sweep 2026-11-15 | Corvo and Skerrit portraits | [ai_portraits.md](ai_portraits.md) | `generate.py run <model> bailiff_corvo skerrit_bone_wright --n 2 --prompts art_src/prompts/ai_portraits.md` | `portraits/npcs/<id>.png` |
+| Sweep 2026-11-15 | 3 family icons, 2 status icons, 52 skill icons | [sunk_ward_icons.md](sunk_ward_icons.md) | `generate.py run <model> families_1 skills_1 skills_2 skills_3 skills_4 --file art_src/prompts/sunk_ward_icons.md --no-ref` (after `AO-07`) | `items/<family>/base.png`, `statuses/<id>.png`, `skills/<id>.png` |
+| Sweep 2026-11-15 | Boundary sets, interior walls, `floorboards` | [sunk_ward_walls.md](sunk_ward_walls.md) | local takes first; held for R1 | `tilesets/sunk_streets/...` |
+| AI-03 | 4 story music tracks | `art_src/music/prompts/story_tracks.txt` | Flow Music, house seed | `audio/music/<key>.ogg` |
+
 Paths without a layer prefix are under `games/emberwake/assets/`.
 
 ## Act 1 map picks (reviewed 2026-11-13, full-size files to follow)
