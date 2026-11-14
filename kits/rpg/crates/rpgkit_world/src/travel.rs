@@ -365,6 +365,25 @@ pub fn route_in(d: &Data, w: &str, route_qid: &str) -> Dict {
 }
 
 fn quest_targets(d: &Data, gs: &GameState) -> Vec<(String, String)> {
+    quest_targets_of(d, gs).into_iter().map(|(node, text, _)| (node, text)).collect()
+}
+
+/// MAP-HOOKS1: the places of the active quests' current objectives as (node qid, quest name), one per quest and node,
+/// in quest order (a world map's list of quests); a quest without a display name is left out, so no id reaches the
+/// player.
+pub fn quest_places(d: &Data, gs: &GameState) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (node, _, qid) in quest_targets_of(d, gs) {
+        let name = json::s(&quest::resolved(d, gs, &qid), "name");
+        if !name.is_empty() && !out.iter().any(|(n, q)| *n == node && *q == name) {
+            out.push((node, name));
+        }
+    }
+    out
+}
+
+/// The active quests' objective places: (node qid, objective text, quest id).
+fn quest_targets_of(d: &Data, gs: &GameState) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     for qid in quest::quests_with(d, gs, "active") {
         let obj = quest::current_objective(d, gs, &qid);
@@ -390,7 +409,7 @@ fn quest_targets(d: &Data, gs: &GameState) -> Vec<(String, String)> {
             }
             let hit = json::s(explore::resolve_location(d, gs, &r), "_qid");
             if !hit.is_empty() {
-                out.push((hit, json::s(&obj, "text")));
+                out.push((hit, json::s(&obj, "text"), qid.clone()));
             }
         }
     }

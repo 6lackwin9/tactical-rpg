@@ -47,6 +47,8 @@ pub struct Data {
     pub from_act: i64,
     /// ACT1-HOOKS1 (FB-241 c): the game manifest's `start_worlds` (`new_game::default_world`; empty from values).
     pub start_worlds: Vec<String>,
+    /// MAP-HOOKS1: the game manifest's `world_map_lantern_flicker` (the world map's roads flicker; false from values).
+    pub world_map_lantern_flicker: bool,
     /// HOOKS1 CN3: per world whose `classes` overlay replaces a class path, the catalog with those paths (built at load;
     /// other worlds build with `cat`).
     world_cats: IndexMap<String, Arc<Catalog>>,
@@ -79,6 +81,7 @@ impl Data {
         d.purse = src.purse;
         d.from_act = src.from_act;
         d.start_worlds = src.start_worlds;
+        d.world_map_lantern_flicker = src.world_map_lantern_flicker;
         Ok((d, src.errors))
     }
 
@@ -126,6 +129,7 @@ impl Data {
             purse: rpgkit_content::source::PurseCaps::default(),
             from_act: 0,
             start_worlds: Vec::new(),
+            world_map_lantern_flicker: false,
             world_cats: IndexMap::new(),
         };
         d.refresh_world_cats();

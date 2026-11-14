@@ -30,6 +30,8 @@ pub struct Source {
     pub from_act: i64,
     /// ACT1-HOOKS1 (FB-241 c): the manifest's `start_worlds` (New Game's default is the first playable one).
     pub start_worlds: Vec<String>,
+    /// MAP-HOOKS1: the manifest's `world_map_lantern_flicker` (`lantern_flicker_of`; false without it).
+    pub world_map_lantern_flicker: bool,
     pub errors: Vec<String>,
 }
 
@@ -97,9 +99,27 @@ pub const DURABILITY: &str = "durability";
 pub const FROM_ACT: &str = "from_act";
 /// The highest act `from_act` may name (the campaign's last act).
 pub const FROM_ACT_MAX: i64 = 9;
+/// MAP-HOOKS1 (AO-01 (4)): the optional game manifest switch of the world map's lantern flicker, `true` or `false`: the
+/// roads a hovered place shows flicker like lantern light (never under the player's reduce-motion setting). Without it
+/// (or false) the roads hold still.
+pub const WORLD_MAP_LANTERN_FLICKER: &str = "world_map_lantern_flicker";
 /// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
 /// order a write keeps them.
-pub const MANIFEST_KEYS: [&str; 4] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS, DURABILITY];
+pub const MANIFEST_KEYS: [&str; 5] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS, DURABILITY, WORLD_MAP_LANTERN_FLICKER];
+
+/// MAP-HOOKS1: a game manifest object's `world_map_lantern_flicker` (false when missing or not a boolean, which
+/// `lantern_flicker_problems` reports).
+pub fn lantern_flicker_of(m: &Dict) -> bool {
+    m.get(WORLD_MAP_LANTERN_FLICKER).and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// MAP-HOOKS1: what keeps a manifest's `world_map_lantern_flicker` from being valid: present and not `true` or `false`.
+pub fn lantern_flicker_problems(m: &Dict) -> Vec<String> {
+    match m.get(WORLD_MAP_LANTERN_FLICKER) {
+        Some(v) if !v.is_boolean() => vec![format!("game.json: {WORLD_MAP_LANTERN_FLICKER} must be true or false.")],
+        _ => Vec::new(),
+    }
+}
 
 /// PK2-S4: the act of a game manifest object's `durability.from_act` (0: no block, or a value that is not a whole
 /// number 1-`FROM_ACT_MAX`, which `durability_problems` reports).
@@ -144,11 +164,13 @@ pub fn music_keys_problems(m: &Dict) -> Vec<String> {
     out
 }
 
-/// The kit's problems of a game manifest object: the purse caps', the music keys' and (PK2-S4) the durability block's.
+/// The kit's problems of a game manifest object: the purse caps', the music keys', (PK2-S4) the durability block's and
+/// (MAP-HOOKS1) the lantern flicker switch's.
 pub fn manifest_problems(m: &Dict) -> Vec<String> {
     let mut out = PurseCaps::problems(m);
     out.extend(music_keys_problems(m));
     out.extend(durability_problems(m));
+    out.extend(lantern_flicker_problems(m));
     out
 }
 
@@ -233,7 +255,8 @@ pub fn load(data_dir: &Path) -> Source {
     let music_keys = manifest.as_ref().map(music_keys_of).unwrap_or_default();
     let from_act = manifest.as_ref().map_or(0, from_act_of);
     let start_worlds = manifest.as_ref().map(|m| json::sget(m, "start_worlds")).unwrap_or_default();
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, start_worlds, errors }
+    let world_map_lantern_flicker = manifest.as_ref().is_some_and(lantern_flicker_of);
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, start_worlds, world_map_lantern_flicker, errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.
