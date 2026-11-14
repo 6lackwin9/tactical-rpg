@@ -26,6 +26,7 @@ class Layout:
         self.ground = [[fill_ground for _ in range(w)] for _ in range(h)]
         self.zones = [["-" for _ in range(w)] for _ in range(h)]
         self.props, self.anchors, self.markers = [], [], {}
+        self.extra_legend = {}
 
     def rect(self, x0, y0, x1, y1, tile=None, ground=None, zone=None):
         """Fill the inclusive rectangle."""
@@ -53,11 +54,20 @@ class Layout:
         """An enterable building (REVEAL1 draft): a wall ring round an open floor, one doorway, the floor its own
         zone, and the building's picture as a `roof` prop over the whole footprint. Outside, the roof hides the room;
         with the party inside its zone, the roof and front wall fade (REGIONGROUND1_SCENE: indoor reveal)."""
+        self.props = [p for p in self.props if p["layer"] != "sort" or p["x"] + p["w"] <= x0 or p["x"] > x1
+                      or p["y"] + p["h"] <= y0 or p["y"] > y1]   # a building replaces what stood on its footprint
         self.rect(x0, y0, x1, y1, "#")
         self.rect(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ".", ground, zone_char)
         self.rect(door[0], door[1], door[0], door[1], ".", ground, zone_char)
-        self.props.append({"id": f"roof_{art}", "art": art, "x": x0, "y": y0, "w": x1 - x0 + 1, "h": y1 - y0 + 1,
+        self.props.append({"id": f"roof_{zone_char}", "art": art, "x": x0, "y": y0, "w": x1 - x0 + 1, "h": y1 - y0 + 1,
                            "layer": "roof", "variant": -1, "flip": False, "roof_of": zone_char})
+
+    def flavour(self, zc, zone_id, x0, y0, door, art, note, kind="safe"):
+        """A flavour building (Tushar 2026-11-14: more explorable indoor areas, for side quests and lore NPCs): a 7 x 6
+        enterable building off a street, its door on the street, an NPC anchor inside for Design to bind."""
+        self.indoor(zc, x0, y0, x0 + 6, y0 + 5, door, "f", art)
+        self.extra_legend[zc] = {"id": zone_id, "kind": kind, "indoor": True}
+        self.anchor(f"npc_{zone_id}", x0 + 3, y0 + 3, note + " (a side-quest giver or lore NPC; Design binds the character)")
 
     def anchor(self, aid, x, y, marker=None):
         self.anchors.append({"id": aid, "x": x, "y": y})
@@ -66,7 +76,7 @@ class Layout:
 
     def entry(self, tid, name, legend, ground_legend, tags):
         return {"id": tid, "name": name, "rows": ["".join(r) for r in self.rows],
-                "zones": ["".join(r) for r in self.zones], "zone_legend": legend, "anchors": self.anchors,
+                "zones": ["".join(r) for r in self.zones], "zone_legend": {**legend, **self.extra_legend}, "anchors": self.anchors,
                 "paths": {}, "props": self.props, "ground": ["".join(r) for r in self.ground],
                 "ground_legend": ground_legend, "tags": tags, "draft_markers": self.markers}
 
@@ -342,6 +352,9 @@ def alleyway_junction_7():
     L.rect(30, 30, 38, 32, zone="h"); L.rect(34, 29, 34, 29, zone="h")
     # the Watch patrol walks the main street, east and back
     L.paths = {"watch_patrol": [[x, 18] for x in range(24, 45)] + [[x, 17] for x in range(44, 23, -1)]}
+    L.flavour("p", "chandler", 32, 10, (35, 15), "ward_shop", "a candle-maker's shop on the main street")
+    L.flavour("q", "lodging", 22, 8, (25, 8), "ward_house", "a lodging house off the back alley")
+    L.flavour("r", "wayside_shrine", 18, 29, (21, 29), "ward_shrine", "a wayside shrine on the drain run")
     L.anchor("spawn", 51, 17, "arrival from the world map (the bridge landing from the Grate)")
     L.anchor("exit_bridge", 55, 17, "exit `world_map`: the bridge east, World map: the Seventh Ward")
     L.anchor("exit_north", 15, 0, "exit (optional): the road north toward the Kiln, World map")
@@ -420,6 +433,9 @@ def ash_crawl_crossroads():
     L.rect(17, 6, 44, 15, zone="b"); L.rect(26, 27, 28, 28, zone="b"); L.rect(5, 7, 25, 27, zone="y")
     L.rect(29, 24, 41, 28, zone="c"); L.rect(34, 20, 35, 23, zone="c")
     L.indoor("h", 30, 29, 40, 33, (35, 29), "f", "rag_hovel")              # the ragpicker's hovel (a contact)
+    L.flavour("p", "pawnbroker", 32, 10, (35, 15), "ward_shop", "a pawnbroker's on the slum lane")
+    L.flavour("q", "cipher_den", 33, 1, (36, 6), "ward_house", "an abandoned bone-cipher den off the back alley")
+    L.flavour("r", "ash_shrine", 42, 24, (42, 26), "ward_shrine", "an ash-choked shrine beside the rag market")
     L.paths = {"warden_patrol": path_through([(28, 18), (44, 18), (44, 17), (28, 17), (28, 18)])[:-1]}
     L.anchor("spawn", 51, 17, "arrival from the world map (the alley mouth from the Grate)")
     L.anchor("exit_alley", 55, 17, "exit `world_map` (was `east`): the alley east, World map: the Ash-Crawl")
@@ -474,6 +490,9 @@ def fourth_kiln():
     L.rect(12, 8, 43, 16, zone="y"); L.rect(3, 8, 11, 28, zone="b"); L.rect(12, 27, 16, 28, zone="b")
     L.rect(44, 11, 55, 12, zone="b")
     L.indoor("h", 7, 29, 16, 34, (16, 31), "f", "bonewright_shop")         # Skerrit's workshop
+    L.flavour("p", "haulers_lodging", 30, 18, (30, 20), "ward_house", "the bone-cart haulers' lodging on the cart track")
+    L.flavour("q", "bone_chandler", 19, 18, (25, 21), "ward_shop", "a bone-dust chandler's on the cart track")
+    L.flavour("r", "spent_shrine", 45, 13, (48, 13), "ward_shrine", "a shrine for the uncremated Spent on the east lane")
     L.paths = {"hauler_patrol": path_through([(27, 25), (27, 18), (28, 18), (28, 25), (27, 25)])[:-1]}
     L.anchor("spawn", 27, 31, "arrival from the world map (the gate yard, the road from Junction 7)")
     L.anchor("exit_road", 27, 35, "exit `world_map` (was `east`): the road south, World map: the Fourth Kiln")
@@ -526,6 +545,10 @@ def tallow_vats():
     L.rect(35, 9, 48, 21, zone="b"); L.rect(4, 15, 5, 19, zone="w")
     L.indoor("h", 37, 2, 47, 8, (42, 8), "f", "still_room")                 # the still-room (Elyse's counter-still)
     L.indoor("o", 37, 22, 47, 27, (42, 22), "f", "guild_store")             # Orlov's store
+    L.flavour("p", "tallow_chandler", 26, 22, (26, 24), "ward_shop", "a tallow chandler's on the vats lane")
+    L.flavour("q", "dredgers_bunkhouse", 15, 22, (21, 24), "ward_house", "the Tallow Dredgers' bunkhouse on the vats lane")
+    L.rect(33, 31, 36, 31, ".", "c", "s")                                    # an alley east from the gate yard
+    L.flavour("r", "vats_shrine", 37, 29, (37, 31), "ward_shrine", "a shrine at the end of the gate yard's alley")
     L.paths = {"dredger_patrol": path_through([(13, 4), (33, 4), (33, 19), (13, 19), (13, 5)])}
     L.anchor("spawn", 24, 31, "arrival from the world map (the gate yard, the alley from the Crossroads)")
     L.anchor("exit_alley", 24, 35, "exit `world_map` (was `east`): the alley south, World map: the Tallow Vats")
@@ -573,7 +596,7 @@ def crucible_watchpost():
     for i, x in enumerate((14, 18, 27, 31)):
         L.prop(f"north_wall_{i + 1}", "watch_wall", x, 1, 4, 2)
     L.rect(36, 0, 36, 0, ".", "f"); L.rect(36, 1, 37, 2, ".", "f")          # the postern up the gorge
-    L.rows[6][30] = "#"; L.prop("brazier", "brazier", 30, 6)
+    L.rows[6][26] = "#"; L.prop("brazier", "brazier", 26, 6)
     for i, (x, y) in enumerate(((16, 30), (30, 24), (32, 29), (17, 24), (34, 19))):
         L.prop(f"boulder_{i + 1}", "boulder", x, y, 2, 2)
     for i, (x, y) in enumerate(((41, 18), (41, 31), (1, 26), (1, 31))):
@@ -583,6 +606,8 @@ def crucible_watchpost():
     L.rect(3, 5, 7, 21, zone="b"); L.rect(9, 3, 39, 13, zone="y"); L.rect(23, 14, 24, 16, zone="y")
     L.rect(36, 0, 37, 2, zone="y")
     L.indoor("h", 40, 24, 46, 29, (40, 26), "f", "sentry_hut")              # the old sentry hut (a safe stop)
+    L.flavour("p", "condemned_shrine", 40, 17, (40, 20), "ward_shrine", "a shrine for the condemned in the east cliff")
+    L.flavour("q", "guardroom", 29, 4, (32, 9), "guardroom", "the Watch guardroom in the yard (its log, a prisoner)", kind="danger")
     L.paths = {"sentry_patrol": path_through([(23, 31), (23, 28), (12, 28), (12, 21), (23, 21), (23, 18)])}
     L.anchor("spawn", 23, 35, "arrival from the world map (the gorge mouth)")
     L.anchor("exit_road", 23, 39, "exit `world_map` (was `east`): the road south, World map: the Crucible")

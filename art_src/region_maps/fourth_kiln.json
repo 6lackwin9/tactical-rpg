@@ -15,16 +15,16 @@
   "###.........................................############",
   "###.....................................................",
   "###.....................................................",
-  "###.........................................############",
-  "###...........##............................############",
-  "###.....................................##..############",
-  "###.........................................############",
+  "###.........................................####.#######",
+  "###...........##............................##.....#####",
+  "###.....................................##..##.....#####",
+  "###.........................................##.....#####",
+  "###.........##############....################.....#####",
   "###.........##############....##########################",
-  "###.........##############....##########################",
-  "###.........##############....##########################",
-  "###.........##############....##########################",
-  "###.........##############....##########################",
-  "###.........##############....##########################",
+  "###.........########.....#....#.....####################",
+  "###.........########.....#..........####################",
+  "###.........########..........#.....####################",
+  "###.........########.....#....#.....####################",
   "###.........##############....##########################",
   "###.........##############....##########################",
   "###.........##############....##########################",
@@ -53,16 +53,16 @@
   "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
   "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbb",
   "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbb",
-  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
-  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
-  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
-  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy------------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy----r-------",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--rrrrr-----",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--rrrrr-----",
+  "---bbbbbbbbbyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--rrrrr-----",
+  "---bbbbbbbbb--------------dddd----------------rrrrr-----",
   "---bbbbbbbbb--------------dddd--------------------------",
-  "---bbbbbbbbb--------------dddd--------------------------",
-  "---bbbbbbbbb--------------dddd--------------------------",
-  "---bbbbbbbbb--------------dddd--------------------------",
-  "---bbbbbbbbb--------------dddd--------------------------",
-  "---bbbbbbbbb--------------dddd--------------------------",
+  "---bbbbbbbbb--------qqqqq-dddd-ppppp--------------------",
+  "---bbbbbbbbb--------qqqqq-ddddpppppp--------------------",
+  "---bbbbbbbbb--------qqqqqqdddd-ppppp--------------------",
+  "---bbbbbbbbb--------qqqqq-dddd-ppppp--------------------",
   "---bbbbbbbbb--------------dddd--------------------------",
   "---bbbbbbbbb--------------dddd--------------------------",
   "---bbbbbbbbb--------------dddd--------------------------",
@@ -98,9 +98,39 @@
    "id": "bonewright_shop",
    "kind": "safe",
    "indoor": true
+  },
+  "p": {
+   "id": "haulers_lodging",
+   "kind": "safe",
+   "indoor": true
+  },
+  "q": {
+   "id": "bone_chandler",
+   "kind": "safe",
+   "indoor": true
+  },
+  "r": {
+   "id": "spent_shrine",
+   "kind": "safe",
+   "indoor": true
   }
  },
  "anchors": [
+  {
+   "id": "npc_haulers_lodging",
+   "x": 33,
+   "y": 21
+  },
+  {
+   "id": "npc_bone_chandler",
+   "x": 22,
+   "y": 21
+  },
+  {
+   "id": "npc_spent_shrine",
+   "x": 48,
+   "y": 16
+  },
   {
    "id": "spawn",
    "x": 27,
@@ -372,28 +402,6 @@
    "flip": false
   },
   {
-   "id": "row_44_13_1",
-   "art": "tenement_row",
-   "x": 44,
-   "y": 13,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_44_13_2",
-   "art": "tenement_row",
-   "x": 44,
-   "y": 16,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "row_44_13_3",
    "art": "tenement_row",
    "x": 44,
@@ -427,17 +435,6 @@
    "flip": false
   },
   {
-   "id": "row_12_17_2",
-   "art": "tenement_row",
-   "x": 18,
-   "y": 17,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "row_12_17_3",
    "art": "tenement_row",
    "x": 12,
@@ -449,97 +446,9 @@
    "flip": false
   },
   {
-   "id": "row_12_17_4",
-   "art": "tenement_row",
-   "x": 18,
-   "y": 20,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "row_12_17_5",
    "art": "tenement_row",
    "x": 12,
-   "y": 23,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_12_17_6",
-   "art": "tenement_row",
-   "x": 18,
-   "y": 23,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_30_17_1",
-   "art": "tenement_row",
-   "x": 30,
-   "y": 17,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_30_17_2",
-   "art": "tenement_row",
-   "x": 36,
-   "y": 17,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_30_17_3",
-   "art": "tenement_row",
-   "x": 30,
-   "y": 20,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_30_17_4",
-   "art": "tenement_row",
-   "x": 36,
-   "y": 20,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_30_17_5",
-   "art": "tenement_row",
-   "x": 30,
-   "y": 23,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_30_17_6",
-   "art": "tenement_row",
-   "x": 36,
    "y": 23,
    "w": 6,
    "h": 3,
@@ -691,7 +600,7 @@
    "flip": false
   },
   {
-   "id": "roof_bonewright_shop",
+   "id": "roof_h",
    "art": "bonewright_shop",
    "x": 7,
    "y": 29,
@@ -701,6 +610,42 @@
    "variant": -1,
    "flip": false,
    "roof_of": "h"
+  },
+  {
+   "id": "roof_p",
+   "art": "ward_house",
+   "x": 30,
+   "y": 18,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "p"
+  },
+  {
+   "id": "roof_q",
+   "art": "ward_shop",
+   "x": 19,
+   "y": 18,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "q"
+  },
+  {
+   "id": "roof_r",
+   "art": "ward_shrine",
+   "x": 45,
+   "y": 13,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "r"
   }
  ],
  "ground": [
@@ -717,16 +662,16 @@
   "sssssssssssscccccccccccttttttttttcccccccccccssssssssssss",
   "sssssssssssscccccccccccccccccccccccccccccccccccccccccccc",
   "sssssssssssscccccccccccccccccccccccccccccccccccccccccccc",
-  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
-  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
-  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
-  "ssssssssssssccccccccccccccccccccccccccccccccssssssssssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssssfsssssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssfffffsssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssfffffsssss",
+  "ssssssssssssccccccccccccccccccccccccccccccccssfffffsssss",
+  "ssssssssssssssssssssssssssccccssssssssssssssssfffffsssss",
   "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
-  "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
+  "ssssssssssssssssssssfffffsccccsfffffssssssssssssssssssss",
+  "ssssssssssssssssssssfffffsccccffffffssssssssssssssssssss",
+  "ssssssssssssssssssssffffffccccsfffffssssssssssssssssssss",
+  "ssssssssssssssssssssfffffsccccsfffffssssssssssssssssssss",
   "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
   "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
   "ssssssssssssssssssssssssssccccssssssssssssssssssssssssss",
@@ -751,6 +696,9 @@
   "sunk_ward"
  ],
  "draft_markers": {
+  "npc_haulers_lodging": "the bone-cart haulers' lodging on the cart track (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_bone_chandler": "a bone-dust chandler's on the cart track (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_spent_shrine": "a shrine for the uncremated Spent on the east lane (a side-quest giver or lore NPC; Design binds the character)",
   "spawn": "arrival from the world map (the gate yard, the road from Junction 7)",
   "exit_road": "exit `world_map` (was `east`): the road south, World map: the Fourth Kiln",
   "exit_climb": "exit (optional): the lane east, the climb toward the Crucible, World map",

@@ -108,6 +108,31 @@ tiles show through. The art is a normal building picture; only its layer is new 
 | `rag_hovel` | 352 x 224 | 11 x 5 | roof | Crossroads | a long ragpicker's hovel of planks and tin under grey ash, bundles of rags on its roof (the contact inside) |
 | `bonewright_shop` | 320 x 288 | 10 x 6 | roof | Kiln | a bone-wright's brick workshop, a squat chimney, pale bone tools hung by the door (Skerrit inside, after M3) |
 | `sentry_hut` | 224 x 256 | 7 x 6 | roof | Crucible | an old stone sentry hut set into the cliff, a slate roof, a shuttered window (a safe stop) |
+| `ward_house` | 224 x 288 | 7 x 6 | roof | Junction 7, Crossroads, Kiln, Vats | a narrow soot-black brick and timber house, a slate roof, one lit window; v0-v2 (three takes: other roofs, doors and windows), picked by position |
+| `ward_shop` | 224 x 288 | 7 x 6 | roof | Junction 7, Crossroads, Kiln, Vats | a small shop front of soot-black brick, a hanging sign with a picture and no letters, a lit display window; v0-v1 |
+| `ward_shrine` | 224 x 256 | 7 x 6 | roof | Junction 7, Crossroads, Kiln, Vats, Crucible | a small wayside shrine of dark stone, a pitched roof, candles at its open door |
+| `guardroom` | 224 x 256 | 7 x 6 | roof | Crucible | a squat Watch guardroom of dark fortress stone, a barred window, a red-orange lamp at the door |
+
+**Flavour buildings (Tushar, 2026-11-14: more explorable indoor areas for side quests and lore NPCs)**: each mission
+street map has three enterable buildings off its streets (a shop, a house, a shrine), and the Crucible has two (a
+shrine, the guardroom), each with an `npc_<zone>` anchor inside for Design to bind a side-quest giver or a lore
+character. They share the four pictures above, with takes for variety, so a map edit can add more without new art.
+
+## 2c. Boundary sets (the screen past a small map)
+
+A map smaller than the screen is centred and the rest of the screen shows the location's boundary art: flat border
+tiles, never walkable (REGIONVIEW1; the camera shows one cell past a larger map's edge the same way). The hub, the
+Grate, Corvo's Gate and the Slag Gate are smaller than a screen at 1x zoom, so their border is a large part of what is
+seen. No Sunk Ward boundary art exists yet. Three sets, chosen per location with its `boundary` field
+(REGIONGROUND1_SCENE section 1: a set of its own in the tile set, its own style allowed), at
+`games/emberwake/assets/tilesets/sunk_streets/boundary/<set>/{wall,wall_face}/v<n>.png`, drawn after the
+REGIONGROUND1 R1 tuning and the user's go-ahead (Design held the Sunk Ward ground batch, AO-04 (1)):
+
+| Set | Locations | What |
+| --- | --- | --- |
+| `drain_brick` | the hub, the Grate | soot-black storm-drain brick, damp, a few iron rungs and pipe stubs |
+| `blind_tenements` | Junction 7, the Crossroads, the Kiln, the Vats, Corvo's Gate | the blind back walls of tenements: soot-black brick, bricked-up windows, drainpipes |
+| `gorge_rock` | the Crucible, the Slag Gate | dark gorge rock in tall broken faces, a slag-orange glint in the cracks |
 
 ## 3. Prompt sheets (for `PROPS1_PROMPTS.md`)
 
@@ -228,8 +253,9 @@ References: lm_fourth_kiln.jpg (the building to draw, its style and colours). On
 
 One wide image each (16:9), the place's landmark as the reference, cut to the size in section 2b: `doss_house` and
 `watch_armory` (`lm_alleyway_junction_7.jpg`), `rag_hovel` (`lm_ash_crawl_crossroads.jpg`), `bonewright_shop`
-(`lm_fourth_kiln.jpg`), `still_room` and `guild_store` (`lm_tallow_vats.jpg`), `sentry_hut`
-(`lm_crucible_watchpost.jpg`). The prompt is the same for each, with the building's line from the table in its place.
+(`lm_fourth_kiln.jpg`), `still_room` and `guild_store` (`lm_tallow_vats.jpg`), `sentry_hut` and `guardroom`
+(`lm_crucible_watchpost.jpg`), and the flavour buildings `ward_house` (three takes), `ward_shop` (two takes) and
+`ward_shrine` (`lm_alleyway_junction_7.jpg`). The prompt is the same for each, with the building's line from the table in its place.
 
 ```text
 References: <the landmark named above> (the style and colours). One pixel-art building for the top-down region map of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art, seen in the three-quarter top-down view of a tile map (the top and the south face visible), standing on the bottom edge of the image with its base as wide as the drawing, <width> units wide and <height> tall: <the building's description from the table>. Its door is in its south face. Clear dark outlines, hand-placed pixel clusters, at most 16 colours with 4 shades per colour, light from the upper left. The whole background is flat, solid pure magenta (#FF00FF) with no ground and no cast shadow; no magenta or pink in the building. No text, no letters, no numbers, no runes, no labels, no frame, no watermark.

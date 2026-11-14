@@ -10,14 +10,14 @@
   "###############..............................###########",
   "###############..............................###########",
   "###############..#####.......................###########",
-  "###############..############..###########..############",
-  "###############..############..###########..############",
-  "###############..############..###########..############",
-  "###############..############..###########..############",
-  "##########......###...#######..###########..############",
-  "##########............#######..###########..##....##...#",
-  "##########............#######..###########..##.........#",
-  "##########............#######..###########..##.........#",
+  "###############..########.###..###########..############",
+  "###############..######.....#..###########..############",
+  "###############..######.....#..###########..############",
+  "###############..######.....#..##.....####..############",
+  "##########......###...#.....#..##.....####..############",
+  "##########............#######..##.....####..##....##...#",
+  "##########............#######..##.....####..##.........#",
+  "##########............#######..####.######..##.........#",
   "##########...........#.................................#",
   "##########..............................................",
   "##########..............................................",
@@ -31,11 +31,11 @@
   "###########....#......#######..#........################",
   "###########....#........................################",
   "################........................################",
-  "##################################.#####################",
-  "##############################.........#################",
-  "##############################.........#################",
-  "##############################.........#################",
-  "########################################################",
+  "#####################.############.#####################",
+  "###################.....######.........#################",
+  "###################.....######.........#################",
+  "###################.....######.........#################",
+  "###################.....################################",
   "########################################################",
   "########################################################"
  ],
@@ -48,14 +48,14 @@
   "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
   "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
   "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
-  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
-  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
-  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
-  "---------------bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-----------",
-  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-----------",
-  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-ssssssssss",
-  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-ssssssssss",
-  "----------yyyyyyyyyyyybbbbbbbbbbbbbbbbbbbbbbb-ssssssssss",
+  "---------------bbbbbbbbbbqbbbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbqqqqqbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbqqqqqbbbbbbbbbbbbbbbbb-----------",
+  "---------------bbbbbbbbqqqqqbbbbbpppppbbbbbbb-----------",
+  "----------yyyyyyyyyyyybqqqqqbbbbbpppppbbbbbbb-----------",
+  "----------yyyyyyyyyyyybbbbbbbbbbbpppppbbbbbbb-ssssssssss",
+  "----------yyyyyyyyyyyybbbbbbbbbbbpppppbbbbbbb-ssssssssss",
+  "----------yyyyyyyyyyyybbbbbbbbbbbbbpbbbbbbbbb-ssssssssss",
   "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
   "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
   "----------yyyyyyyyyyyyddddddddddddddddddddddddssssssssss",
@@ -69,11 +69,11 @@
   "-----------aaaa-bbbbbbbbbbbbbccccccccccc----------------",
   "-----------aaaa-bbbbbbbbbbbbbccccccccccc----------------",
   "----------------bbbbbbbbbbbbbccccccccccc----------------",
-  "----------------------------------h---------------------",
-  "------------------------------hhhhhhhhh-----------------",
-  "------------------------------hhhhhhhhh-----------------",
-  "------------------------------hhhhhhhhh-----------------",
-  "--------------------------------------------------------",
+  "---------------------r------------h---------------------",
+  "-------------------rrrrr------hhhhhhhhh-----------------",
+  "-------------------rrrrr------hhhhhhhhh-----------------",
+  "-------------------rrrrr------hhhhhhhhh-----------------",
+  "-------------------rrrrr--------------------------------",
   "--------------------------------------------------------",
   "--------------------------------------------------------"
  ],
@@ -107,9 +107,39 @@
    "id": "doss_house",
    "kind": "safe",
    "indoor": true
+  },
+  "p": {
+   "id": "chandler",
+   "kind": "safe",
+   "indoor": true
+  },
+  "q": {
+   "id": "lodging",
+   "kind": "safe",
+   "indoor": true
+  },
+  "r": {
+   "id": "wayside_shrine",
+   "kind": "safe",
+   "indoor": true
   }
  },
  "anchors": [
+  {
+   "id": "npc_chandler",
+   "x": 35,
+   "y": 13
+  },
+  {
+   "id": "npc_lodging",
+   "x": 25,
+   "y": 11
+  },
+  {
+   "id": "npc_wayside_shrine",
+   "x": 21,
+   "y": 32
+  },
   {
    "id": "spawn",
    "x": 51,
@@ -320,7 +350,7 @@
  },
  "props": [
   {
-   "id": "roof_doss_house",
+   "id": "roof_h",
    "art": "doss_house",
    "x": 29,
    "y": 29,
@@ -330,28 +360,6 @@
    "variant": -1,
    "flip": false,
    "roof_of": "h"
-  },
-  {
-   "id": "tenement_n_1",
-   "art": "tenement_block",
-   "x": 22,
-   "y": 8,
-   "w": 6,
-   "h": 5,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "tenement_m_1",
-   "art": "tenement_block",
-   "x": 31,
-   "y": 8,
-   "w": 6,
-   "h": 5,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
   },
   {
    "id": "tenement_ne_1",
@@ -486,28 +494,6 @@
    "flip": false
   },
   {
-   "id": "tenement_sw_3",
-   "art": "tenement_block",
-   "x": 13,
-   "y": 29,
-   "w": 6,
-   "h": 5,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "tenement_sw_4",
-   "art": "tenement_block",
-   "x": 19,
-   "y": 29,
-   "w": 6,
-   "h": 5,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "tenement_w_1",
    "art": "tenement_block",
    "x": 1,
@@ -607,7 +593,7 @@
    "flip": false
   },
   {
-   "id": "roof_watch_armory",
+   "id": "roof_a",
    "art": "watch_armory",
    "x": 10,
    "y": 24,
@@ -705,6 +691,42 @@
    "layer": "sort",
    "variant": -1,
    "flip": false
+  },
+  {
+   "id": "roof_p",
+   "art": "ward_shop",
+   "x": 32,
+   "y": 10,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "p"
+  },
+  {
+   "id": "roof_q",
+   "art": "ward_house",
+   "x": 22,
+   "y": 8,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "q"
+  },
+  {
+   "id": "roof_r",
+   "art": "ward_shrine",
+   "x": 18,
+   "y": 29,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "r"
   }
  ],
  "ground": [
@@ -716,14 +738,14 @@
   "mmmmmmmmmmmmmmmcmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmmmmmcmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmccccccccccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmccccccccccccmmmmmmmmmmmmmmmmmmmmmmmmfffffffffm",
-  "mmmmmmmmmmccffffffffccmmmmmmmmmmmmmmmmmmmmmmmmfffffffffm",
-  "mmmmmmmmmmccffffffffccmmmmmmmmmmmmmmmmmmmmmmmmfffffffffm",
+  "mmmmmmmmmmmmmmmccmmmmmmmmfmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmfffffmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmfffffmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmccmmmmmmfffffmmmmmfffffmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmccccccccccccmfffffmmmmmfffffmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmccccccccccccmmmmmmmmmmmfffffmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccffffffffccmmmmmmmmmmmfffffmmmmmmmmfffffffffm",
+  "mmmmmmmmmmccffffffffccmmmmmmmmmmmmmfmmmmmmmmmmfffffffffm",
   "mmmmmmmmmmccffffffffccccccccccccccccccccccccccfffffffffm",
   "mmmmmmmmmmccffffffffccccccccccccccccccccccccccffffffffff",
   "mmmmmmmmmmccffffffffccccccccccccccccccccccccccffffffffff",
@@ -737,11 +759,11 @@
   "mmmmmmmmmmmffffmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmffffmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffffmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfmmmmmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
-  "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmmmfmmmmmmmmmmmmfmmmmmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmfffffmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmfffffmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmfffffmmmmmmfffffffffmmmmmmmmmmmmmmmmm",
+  "mmmmmmmmmmmmmmmmmmmfffffmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
  ],
@@ -755,6 +777,9 @@
   "sunk_ward"
  ],
  "draft_markers": {
+  "npc_chandler": "a candle-maker's shop on the main street (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_lodging": "a lodging house off the back alley (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_wayside_shrine": "a wayside shrine on the drain run (a side-quest giver or lore NPC; Design binds the character)",
   "spawn": "arrival from the world map (the bridge landing from the Grate)",
   "exit_bridge": "exit `world_map`: the bridge east, World map: the Seventh Ward",
   "exit_north": "exit (optional): the road north toward the Kiln, World map",

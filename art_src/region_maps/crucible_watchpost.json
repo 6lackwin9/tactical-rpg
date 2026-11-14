@@ -6,12 +6,12 @@
   "####################################..##########",
   "####################################..##########",
   "#########...............................########",
-  "#########.#####.........................########",
-  "###....##.#####.........................########",
-  "###....##.#####...............#.........########",
-  "###....##...............................########",
-  "###..####...............................########",
-  "###..####...............................########",
+  "#########.#####..............#######....########",
+  "###....##.#####..............#.....#....########",
+  "###....##.#####...........#..#.....#....########",
+  "###....##....................#.....#....########",
+  "###..####....................#.....#....########",
+  "###..####....................###.###....########",
   "###..####...............................########",
   "###..####...............................########",
   "###..####...............................########",
@@ -20,10 +20,10 @@
   "###..##################..#######################",
   "###..##################..#######################",
   "###..###................................########",
-  "###..###................................########",
-  "###..###..........................##....########",
-  "###...............................##....########",
-  "###.....................................########",
+  "###..###................................#.....##",
+  "###..###..........................##....#.....##",
+  "###...............................##..........##",
+  "###.....................................#.....##",
   "########................................########",
   "########................................########",
   "########.........##...........##........########",
@@ -49,11 +49,11 @@
   "------------------------------------yy----------",
   "---------yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
   "---------yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
-  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
-  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
-  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
-  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
-  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyqqqqqyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyqqqqqyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyqqqqqyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyqqqqqyyyyy--------",
+  "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyqyyyyyyy--------",
   "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
   "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
   "---bbbbb-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy--------",
@@ -62,10 +62,10 @@
   "---bbbbb---------------yy-----------------------",
   "---bbbbb---------------yy-----------------------",
   "---bbbbbdddddddddddddddddddddddddddddddd--------",
-  "---bbbbbdddddddddddddddddddddddddddddddd--------",
-  "---bbbbbdddddddddddddddddddddddddddddddd--------",
-  "---bbbbbdddddddddddddddddddddddddddddddd--------",
-  "---bbbbbdddddddddddddddddddddddddddddddd--------",
+  "---bbbbbdddddddddddddddddddddddddddddddd-ppppp--",
+  "---bbbbbdddddddddddddddddddddddddddddddd-ppppp--",
+  "---bbbbbddddddddddddddddddddddddddddddddpppppp--",
+  "---bbbbbdddddddddddddddddddddddddddddddd-ppppp--",
   "--------dddddddddddddddddddddddddddddddd--------",
   "--------dddddddddddddddddddddddddddddddd--------",
   "--------dddddddddddddddddddddddddddddddd--------",
@@ -106,9 +106,29 @@
    "id": "sentry_hut",
    "kind": "safe",
    "indoor": true
+  },
+  "p": {
+   "id": "condemned_shrine",
+   "kind": "safe",
+   "indoor": true
+  },
+  "q": {
+   "id": "guardroom",
+   "kind": "danger",
+   "indoor": true
   }
  },
  "anchors": [
+  {
+   "id": "npc_condemned_shrine",
+   "x": 43,
+   "y": 20
+  },
+  {
+   "id": "npc_guardroom",
+   "x": 32,
+   "y": 7
+  },
   {
    "id": "spawn",
    "x": 23,
@@ -472,7 +492,7 @@
   {
    "id": "brazier",
    "art": "brazier",
-   "x": 30,
+   "x": 26,
    "y": 6,
    "w": 1,
    "h": 1,
@@ -536,17 +556,6 @@
    "flip": false
   },
   {
-   "id": "cliff_1",
-   "art": "cliff_face",
-   "x": 41,
-   "y": 18,
-   "w": 4,
-   "h": 1,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "cliff_2",
    "art": "cliff_face",
    "x": 41,
@@ -580,7 +589,7 @@
    "flip": false
   },
   {
-   "id": "roof_sentry_hut",
+   "id": "roof_h",
    "art": "sentry_hut",
    "x": 40,
    "y": 24,
@@ -590,6 +599,30 @@
    "variant": -1,
    "flip": false,
    "roof_of": "h"
+  },
+  {
+   "id": "roof_p",
+   "art": "ward_shrine",
+   "x": 40,
+   "y": 17,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "p"
+  },
+  {
+   "id": "roof_q",
+   "art": "guardroom",
+   "x": 29,
+   "y": 4,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "q"
   }
  ],
  "ground": [
@@ -611,10 +644,10 @@
   "mmmssmmmmmmmmmmmmmmmmmmffmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmssmmmmmmmmmmmmmmmmmmffmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmsssssmmmcccccccccccccccmmmmmmmmmmmmmmmmmmmmmm",
-  "mmmsssssmmmccccccccccccccmmmmmmmmmmmmmmmmmmmmmmm",
+  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmfffffmm",
+  "mmmssmmmmmmmmmmmmmmmmmccccmmmmmmmmmmmmmmmfffffmm",
+  "mmmsssssmmmcccccccccccccccmmmmmmmmmmmmmmffffffmm",
+  "mmmsssssmmmccccccccccccccmmmmmmmmmmmmmmmmfffffmm",
   "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
   "mmmmmmmmmmmccccmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
@@ -644,6 +677,8 @@
   "sunk_ward"
  ],
  "draft_markers": {
+  "npc_condemned_shrine": "a shrine for the condemned in the east cliff (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_guardroom": "the Watch guardroom in the yard (its log, a prisoner) (a side-quest giver or lore NPC; Design binds the character)",
   "spawn": "arrival from the world map (the gorge mouth)",
   "exit_road": "exit `world_map` (was `east`): the road south, World map: the Crucible",
   "postern": "exit (optional): the postern up the high gorge to the Slag Gate, World map",

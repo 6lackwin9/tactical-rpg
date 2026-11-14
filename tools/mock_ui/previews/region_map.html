@@ -106,8 +106,25 @@ const KCOL = { arrive: '#7fcf8a', exit: '#f2b437', npc: '#3fc9e0', point: '#e4dc
 function draw() {
   const m = DATA.maps[cur], cv = $('cv'), g = cv.getContext('2d');
   const W = m.rows[0].length, H = m.rows.length, bright = $('opt-bright').checked ? 1.9 : 1;
-  cv.width = W * T; cv.height = H * T;
+  // with the screen frame on, the canvas grows to at least one 1x screen (and the camera's 1-cell margin): a map
+  // smaller than the screen is centred in it and the rest is the location's boundary art (REGIONVIEW1)
+  const scr = $('opt-screen').checked;
+  const padX = scr ? Math.max(1, Math.ceil((40 - W) / 2)) : 0, padY = scr ? Math.max(1, Math.ceil((21.25 - H) / 2)) : 0;
+  cv.width = (W + 2 * padX) * T; cv.height = (H + 2 * padY) * T;
   g.imageSmoothingEnabled = false;
+  if (padX || padY) {
+    g.fillStyle = '#121218'; g.fillRect(0, 0, cv.width, cv.height);
+    g.strokeStyle = 'rgba(120,110,100,.16)'; g.lineWidth = 1;
+    for (let y = 0; y < cv.height; y += T / 2) {               // a quiet brick hatch: the border is flat boundary art
+      g.beginPath(); g.moveTo(0, y + .5); g.lineTo(cv.width, y + .5); g.stroke();
+      for (let x = ((y / (T / 2)) % 2) * T / 2; x < cv.width; x += T) { g.beginPath(); g.moveTo(x + .5, y); g.lineTo(x + .5, y + T / 2); g.stroke(); }
+    }
+    if (W < 40 || H < 21) {
+      g.font = '700 12px Inter, system-ui, sans-serif'; g.fillStyle = 'rgba(228,220,203,.55)';
+      g.fillText('boundary tiles (the location\'s boundary art)', 8, 14);
+    }
+    g.translate(padX * T, padY * T);
+  }
   g.font = '600 11px Inter, system-ui, sans-serif'; g.textBaseline = 'middle';
   // ground and water
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {

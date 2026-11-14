@@ -25,17 +25,17 @@
   "#~~~..######.....................................#######",
   "#~~~..################....###########............#######",
   "#~~~..################....################.#############",
-  "#~~~..################....############.........#########",
-  "#~~~..################....############.........#########",
-  "#~~~..################....############.........#########",
-  "#~~~..################....############.........#########",
+  "#~~~..##########.....#....#.....######.........#########",
+  "#~~~..##########................######.........#########",
+  "#~~~..##########.....#....#.....######.........#########",
+  "#~~~..##########.....#....#.....######.........#########",
   "#~~~..################....##############################",
   "#~~~..################....##############################",
   "#~~~..###########................#######################",
-  "#~~~..###########................#######################",
-  "#~~~.............................#######################",
-  "#~~~.............................#######################",
-  "#~~~..###########................#######################",
+  "#~~~..###########................#####.....#############",
+  "#~~~.......................................#############",
+  "#~~~.............................#####.....#############",
+  "#~~~..###########................#####.....#############",
   "#~~~..##################..##############################",
   "########################..##############################"
  ],
@@ -63,17 +63,17 @@
   "----bb------yyyyyyyyyyyyyyyyyyyyyyybbbbbbbbbbbbbb-------",
   "----bb----------------dddd---------bbbbbbbbbbbbbb-------",
   "----bb----------------dddd----------------o-------------",
-  "----bb----------------dddd------------ooooooooo---------",
-  "----bb----------------dddd------------ooooooooo---------",
-  "----bb----------------dddd------------ooooooooo---------",
-  "----bb----------------dddd------------ooooooooo---------",
+  "----bb----------qqqqq-dddd-ppppp------ooooooooo---------",
+  "----bb----------qqqqqqddddpppppp------ooooooooo---------",
+  "----bb----------qqqqq-dddd-ppppp------ooooooooo---------",
+  "----bb----------qqqqq-dddd-ppppp------ooooooooo---------",
   "----bb----------------dddd------------------------------",
   "----bb----------------dddd------------------------------",
   "----bb-----------ssssssssssssssss-----------------------",
-  "----bb-----------ssssssssssssssss-----------------------",
-  "----bbbbbbbbbbbbbssssssssssssssss-----------------------",
-  "----bbbbbbbbbbbbbssssssssssssssss-----------------------",
-  "----bb-----------ssssssssssssssss-----------------------",
+  "----bb-----------ssssssssssssssss-----rrrrr-------------",
+  "----bbbbbbbbbbbbbssssssssssssssssssssrrrrrr-------------",
+  "----bbbbbbbbbbbbbssssssssssssssss-----rrrrr-------------",
+  "----bb-----------ssssssssssssssss-----rrrrr-------------",
   "----bb------------------ss------------------------------",
   "------------------------ss------------------------------"
  ],
@@ -107,9 +107,39 @@
    "id": "guild_store",
    "kind": "safe",
    "indoor": true
+  },
+  "p": {
+   "id": "tallow_chandler",
+   "kind": "safe",
+   "indoor": true
+  },
+  "q": {
+   "id": "dredgers_bunkhouse",
+   "kind": "safe",
+   "indoor": true
+  },
+  "r": {
+   "id": "vats_shrine",
+   "kind": "safe",
+   "indoor": true
   }
  },
  "anchors": [
+  {
+   "id": "npc_tallow_chandler",
+   "x": 29,
+   "y": 25
+  },
+  {
+   "id": "npc_dredgers_bunkhouse",
+   "x": 18,
+   "y": 25
+  },
+  {
+   "id": "npc_vats_shrine",
+   "x": 40,
+   "y": 32
+  },
   {
    "id": "spawn",
    "x": 24,
@@ -558,17 +588,6 @@
    "flip": false
   },
   {
-   "id": "row_6_21_2",
-   "art": "tenement_row",
-   "x": 12,
-   "y": 21,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "row_6_21_3",
    "art": "tenement_row",
    "x": 6,
@@ -580,87 +599,10 @@
    "flip": false
   },
   {
-   "id": "row_6_21_4",
-   "art": "tenement_row",
-   "x": 12,
-   "y": 24,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_26_21_1",
-   "art": "tenement_row",
-   "x": 26,
-   "y": 21,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_26_21_2",
-   "art": "tenement_row",
-   "x": 26,
-   "y": 24,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_37_28_1",
-   "art": "tenement_row",
-   "x": 37,
-   "y": 28,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_37_28_2",
-   "art": "tenement_row",
-   "x": 43,
-   "y": 28,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
    "id": "row_37_28_3",
    "art": "tenement_row",
    "x": 49,
    "y": 28,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_37_28_4",
-   "art": "tenement_row",
-   "x": 37,
-   "y": 31,
-   "w": 6,
-   "h": 3,
-   "layer": "sort",
-   "variant": -1,
-   "flip": false
-  },
-  {
-   "id": "row_37_28_5",
-   "art": "tenement_row",
-   "x": 43,
-   "y": 31,
    "w": 6,
    "h": 3,
    "layer": "sort",
@@ -778,7 +720,7 @@
    "flip": false
   },
   {
-   "id": "roof_still_room",
+   "id": "roof_h",
    "art": "still_room",
    "x": 37,
    "y": 2,
@@ -790,7 +732,7 @@
    "roof_of": "h"
   },
   {
-   "id": "roof_guild_store",
+   "id": "roof_o",
    "art": "guild_store",
    "x": 37,
    "y": 22,
@@ -800,6 +742,42 @@
    "variant": -1,
    "flip": false,
    "roof_of": "o"
+  },
+  {
+   "id": "roof_p",
+   "art": "ward_shop",
+   "x": 26,
+   "y": 22,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "p"
+  },
+  {
+   "id": "roof_q",
+   "art": "ward_house",
+   "x": 15,
+   "y": 22,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "q"
+  },
+  {
+   "id": "roof_r",
+   "art": "ward_shrine",
+   "x": 37,
+   "y": 29,
+   "w": 7,
+   "h": 6,
+   "layer": "roof",
+   "variant": -1,
+   "flip": false,
+   "roof_of": "r"
   }
  ],
  "ground": [
@@ -826,17 +804,17 @@
   "twwwccttttttiiiiiiiiiiiiiiiiiiiiiiissssssssssssssttttttt",
   "twwwccttttttttttttttttcccctttttttttssssssssssssssttttttt",
   "twwwccttttttttttttttttccccttttttttttttttttfttttttttttttt",
-  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
-  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
-  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
-  "twwwccttttttttttttttttccccttttttttttttfffffffffttttttttt",
+  "twwwccttttttttttffffftcccctfffffttttttfffffffffttttttttt",
+  "twwwccttttttttttffffffccccffffffttttttfffffffffttttttttt",
+  "twwwccttttttttttffffftcccctfffffttttttfffffffffttttttttt",
+  "twwwccttttttttttffffftcccctfffffttttttfffffffffttttttttt",
   "twwwccttttttttttttttttcccctttttttttttttttttttttttttttttt",
   "twwwccttttttttttttttttcccctttttttttttttttttttttttttttttt",
   "twwwcctttttttttttccccccccccccccccttttttttttttttttttttttt",
-  "twwwcctttttttttttccccccccccccccccttttttttttttttttttttttt",
-  "twwwcccccccccccccccccccccccccccccttttttttttttttttttttttt",
-  "twwwcccccccccccccccccccccccccccccttttttttttttttttttttttt",
-  "twwwcctttttttttttccccccccccccccccttttttttttttttttttttttt",
+  "twwwcctttttttttttcccccccccccccccctttttfffffttttttttttttt",
+  "twwwcccccccccccccccccccccccccccccccccffffffttttttttttttt",
+  "twwwccccccccccccccccccccccccccccctttttfffffttttttttttttt",
+  "twwwcctttttttttttcccccccccccccccctttttfffffttttttttttttt",
   "twwwccttttttttttttttttttfftttttttttttttttttttttttttttttt",
   "ttttttttttttttttttttttttfftttttttttttttttttttttttttttttt"
  ],
@@ -852,6 +830,9 @@
   "sunk_ward"
  ],
  "draft_markers": {
+  "npc_tallow_chandler": "a tallow chandler's on the vats lane (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_dredgers_bunkhouse": "the Tallow Dredgers' bunkhouse on the vats lane (a side-quest giver or lore NPC; Design binds the character)",
+  "npc_vats_shrine": "a shrine at the end of the gate yard's alley (a side-quest giver or lore NPC; Design binds the character)",
   "spawn": "arrival from the world map (the gate yard, the alley from the Crossroads)",
   "exit_alley": "exit `world_map` (was `east`): the alley south, World map: the Tallow Vats",
   "siphon": "exit: the siphon culvert, World map (the Grate's shortcut; requires sunk_ward.lock_ciphers_done)",
