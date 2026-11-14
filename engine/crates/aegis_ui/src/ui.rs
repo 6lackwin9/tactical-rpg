@@ -499,6 +499,13 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.drag.as_ref().map(|d| d.key.as_str())
     }
 
+    /// PR5-48: a free-form drag handle (a layout editor's marker or point): a press starts a pointer drag the screen follows
+    /// itself (`Screen::pointer`: down, moves, up), with no ghost and no drop targets; `action` is what a click by id does
+    /// (the agent's `click`, a screen that keeps the default `pointer`).
+    pub fn handle(&mut self, id: &str, r: Rect, text: &str, action: Option<A>, t: Tip) {
+        self.push(id, "handle", text, r, true, false, action, t);
+    }
+
     /// Records a widget; an info row (a hover card but no action) gets a hover outline, so hovering shows it responds.
     #[allow(clippy::too_many_arguments)]
     pub fn push(&mut self, id: impl Into<String>, kind: &'static str, text: impl Into<String>, rect: Rect, enabled: bool, active: bool, action: Option<A>, tip: Tip) {

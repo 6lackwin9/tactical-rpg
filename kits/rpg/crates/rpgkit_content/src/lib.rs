@@ -7,3 +7,4 @@ pub mod check;
 pub mod ground;
 pub mod source;
 pub mod store;
+pub mod world_map;

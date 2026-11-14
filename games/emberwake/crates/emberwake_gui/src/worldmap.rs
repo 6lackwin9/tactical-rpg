@@ -35,6 +35,10 @@ use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s};
 use emberwake_world::{explore, progression, travel};
+use emberwake_content::world_map::{self, Owner};
+use aegis_ui::layout_editor::{LayoutAct, LayoutEdit, LayoutEditor, Marker, MarkerBox, Polyline, Viewport};
+use aegis_ui::screen::PointerPhase;
+use std::rc::Rc;
 use serde_json::{json, Value};
 
 /// MAP-HOOKS1: the map viewport, as Art/UI's signed-off preview draws it (`world_diamond.py`: 496 x 328 at (4, 24),
@@ -70,6 +74,10 @@ pub enum WAct {
     LegendOpen,
     /// A panel that takes the clicks over it and does nothing with them (the Legend's body).
     Nothing,
+    /// PR5-48: the debug layout editing switched on or off (F7, the side panel's Edit layout).
+    LayoutEdit,
+    /// PR5-48: an action of the layout editor while editing.
+    Layout(LayoutAct),
 }
 
 /// The world map's controls (the Help button's hover card and popup).
@@ -589,6 +597,8 @@ pub struct WorldMap {
     shown: Vec<(String, RouteStyle)>,
     /// MAP-HOOKS1: the clock the badge pulse and the flicker run on.
     born: Option<Instant>,
+    /// PR5-48: the layout being edited in place (a debug build with the dev tools, `crate::DEV_KEYS`).
+    edit: Option<LayoutEditing>,
 }
 
 impl WorldMap {
@@ -699,7 +709,36 @@ impl WorldMap {
             WAct::LegendMin => self.legend.minimize(),
             WAct::LegendOpen => self.legend.restore(MAP, self.legend_size),
             WAct::Nothing => {}
+            WAct::LayoutEdit => self.toggle_edit(cx),
+            WAct::Layout(a) => {
+                if let Some(e) = self.edit.as_mut() {
+                    e.act(cx, a);
+                }
+            }
         }
+    }
+
+    /// PR5-48: switches the in-place layout editing on (a debug build with the dev tools only, `crate::DEV_KEYS`) or off.
+    /// It edits the sidecar the map reads (the first of `map_names` with one, else the current region's or world's
+    /// name): the map draws by the editor's layout with its real labels, badges and Legend, the editor's handles over
+    /// it and its controls in the side panel. Switched off, what was not saved is dropped (the log says so).
+    fn toggle_edit(&mut self, cx: &mut Cx) {
+        if let Some(e) = self.edit.take() {
+            if e.editor.dirty() {
+                cx.log(format!("Layout edits to {} not saved were dropped.", e.name));
+            }
+            return;
+        }
+        if !crate::DEV_KEYS {
+            return;
+        }
+        let names = map_names(&cx.data, cx.gs());
+        let Some(name) = names.iter().find(|n| cx.art.has(&emberwake_content::art::world_map_layout(n))).or(names.first()).cloned() else { return };
+        let mut e = LayoutEditing::open(cx, &name, false);
+        e.editor.backdrop = false;
+        e.editor.grid = false;
+        e.editor.labels = false;
+        self.edit = Some(e);
     }
 
     /// CAMPAIGN1-TM: picks the world's next travel mode (data order, round) and logs it.
@@ -751,6 +790,86 @@ impl WorldMap {
         } else {
             self.selected.clear();
             self.pick = 0;
+        }
+    }
+
+    /// The side panel: the time, the travel mode, the pick and its ways, Enter, Make camp and the log (above the debug
+    /// layout button's row when the build has one).
+    #[allow(clippy::too_many_arguments)]
+    fn side_panel(&mut self, ui: &mut Ui<WAct>, cx: &mut Cx, d: &emberwake_world::Data, gs: &emberwake_world::GameState, here: &str, ways: &[travel::TravelPath], peek: Option<usize>) {
+        let sx = 504;
+        let mut y = 28;
+        ui.p.text(sx as f32, y as f32, "World map", BODY, th().info);
+        ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
+        y += 14;
+        // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
+        let mode = emberwake_world::campaign::purse::travel_mode(&d, &gs);
+        if let Some(m) = &mode {
+            let many = emberwake_world::campaign::purse::travel_modes(&d, &gs.world_id).modes.len() > 1;
+            ui.button_tip("world_map.mode", Rect::new(sx, y, 130, 16), &format!("Travel: {}", m.name), WAct::Mode, many, tip("Travel mode", &mode_tip(m, many)));
+            y += 20;
+        }
+        if !self.selected.is_empty() {
+            let name = cx.location_name(&gs.world_id, &self.selected);
+            match ways.get(self.pick) {
+                Some(way) => {
+                    // CAMPAIGN1 W5: the arrival day and the days left in a campaign world; MAP-HOOKS1: of the chosen way
+                    let mut text = format!("{}. Roads can be ambushed.", cost_text(cx, &gs, way.days, way.supplies));
+                    if let Some(m) = &mode {
+                        text = format!("{}: {text}", m.name);
+                    }
+                    if let Some(at) = arrival(&gs, way.days) {
+                        text = format!("{text} {at}");
+                    }
+                    ui.button_tip("world_map.travel", Rect::new(sx, y, 130, 16), &format!("Travel to {name}"), WAct::Travel, true, tip("Travel", &text));
+                    y += 19;
+                    if ways.len() > 1 {
+                        ui.p.text(sx as f32, y as f32, "Pick a way:", SMALL, th().dim);
+                        y += 8;
+                    }
+                    // each way by what sets it apart, with its days and upkeep; hover previews it, a click picks it
+                    let line = ui.p.line_h(SMALL).ceil() as i32;
+                    for (i, w) in ways.iter().enumerate() {
+                        let r = Rect::new(sx, y, 130, 2 * line + 3);
+                        let on = i == self.pick;
+                        let hot = peek == Some(i) || ui.hover(r);
+                        ui.p.panel(r, if on { rgba(44, 34, 30, 180) } else { rgba(10, 11, 16, 120) }, if on { rgb(217, 119, 6) } else if hot { rgb(180, 83, 9) } else { th().edge }, 0.0);
+                        ui.p.text_fit(sx as f32 + 3.0, y as f32 + 1.0, &w.label, SMALL, 124.0, if on { th().gold } else if hot { rgb(253, 230, 138) } else { th().text });
+                        ui.p.text_fit(sx as f32 + 3.0, (y + line + 1) as f32, &cost_text(cx, &gs, w.days, w.supplies), SMALL, 124.0, th().dim);
+                        let t = tip(&w.label, &format!("{}. Click to take this way.", cost_text(cx, &gs, w.days, w.supplies)));
+                        ui.push(format!("world_map.way.{i}"), "row", w.label.clone(), r, true, on, Some(WAct::Way(i)), t);
+                        y += r.h + 2;
+                    }
+                    y += 2;
+                }
+                None => {
+                    ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
+                    y += 20;
+                }
+            }
+        }
+        ui.button("world_map.enter", Rect::new(sx, y, 130, 16), &format!("Enter {}", cx.location_name(&gs.world_id, &here)), WAct::Enter, !travel::current_node(&d, &gs).is_empty());
+        y += 20;
+        // CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name ("Make camp (3 supplies)" in the Ashlands) and its days
+        let camp = progression::can_camp(&d, &gs);
+        let rule = emberwake_world::campaign::purse::rest_rule(&d, &gs.world_id);
+        let camp_label = format!("Make camp ({} {})", rule.cost, purse_word(cx, PurseWord::Upkeep));
+        let camp_tip = match (camp.is_empty(), rule.days) {
+            (false, _) => camp.to_string(),
+            (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),
+            _ => "Rest every hero to full HP.".to_string(),
+        };
+        ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), &camp_label, WAct::Camp, camp.is_empty(), tip("Make camp", &camp_tip));
+        y += 24;
+        let lines: Vec<String> = cx.log.iter().rev().take(16).cloned().collect();
+        for l in lines.iter().rev() {
+            for part in ui.p.wrap(l, SMALL, 130.0) {
+                if y > if crate::DEV_KEYS { H - 30 } else { H - 10 } {
+                    break;
+                }
+                ui.p.text(sx as f32, y as f32, &part, SMALL, th().text);
+                y += 8;
+            }
         }
     }
 
@@ -846,7 +965,11 @@ impl Screen<GameCx> for WorldMap {
         // MAP-HOOKS1: the current location's region chain, then the world lineage child first
         let names = map_names(&d, &gs);
         let backgrounds: Vec<String> = names.iter().map(|n| emberwake_content::art::world_map_background(n)).collect();
-        let layout = self.layout_for(cx, &names);
+        // PR5-48: while editing, the map draws by the editor's layout
+        let layout = match self.edit.as_ref() {
+            Some(e) => Some(e.layout()),
+            None => self.layout_for(cx, &names),
+        };
         draw_background(&mut ui, cx, &backgrounds);
         let view = travel::view(&d, &gs);
         // WorldMapView.layout: a layout sidecar's landmark places the node (MAP-HOOKS1, not clamped), else a valid
@@ -1125,87 +1248,35 @@ impl Screen<GameCx> for WorldMap {
         let here_name = cx.location_name(&gs.world_id, &here);
         hud_bar(&mut ui, cx, back_w + 8, &here_name, ("world_map.menu", ""), "", &WORLD_HELP, WAct::Hud);
         ui.button("world_map.back", Rect::new(3, 3, back_w, 14), "Back", WAct::Back, true);
-        // -- Side panel: the time, actions and the log
-        let sx = 504;
-        let mut y = 28;
-        ui.p.text(sx as f32, y as f32, "World map", BODY, th().info);
-        ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
-        y += 14;
-        // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
-        let mode = emberwake_world::campaign::purse::travel_mode(&d, &gs);
-        if let Some(m) = &mode {
-            let many = emberwake_world::campaign::purse::travel_modes(&d, &gs.world_id).modes.len() > 1;
-            ui.button_tip("world_map.mode", Rect::new(sx, y, 130, 16), &format!("Travel: {}", m.name), WAct::Mode, many, tip("Travel mode", &mode_tip(m, many)));
-            y += 20;
-        }
-        if !self.selected.is_empty() {
-            let name = cx.location_name(&gs.world_id, &self.selected);
-            match ways.get(self.pick) {
-                Some(way) => {
-                    // CAMPAIGN1 W5: the arrival day and the days left in a campaign world; MAP-HOOKS1: of the chosen way
-                    let mut text = format!("{}. Roads can be ambushed.", cost_text(cx, &gs, way.days, way.supplies));
-                    if let Some(m) = &mode {
-                        text = format!("{}: {text}", m.name);
-                    }
-                    if let Some(at) = arrival(&gs, way.days) {
-                        text = format!("{text} {at}");
-                    }
-                    ui.button_tip("world_map.travel", Rect::new(sx, y, 130, 16), &format!("Travel to {name}"), WAct::Travel, true, tip("Travel", &text));
-                    y += 19;
-                    if ways.len() > 1 {
-                        ui.p.text(sx as f32, y as f32, "Pick a way:", SMALL, th().dim);
-                        y += 8;
-                    }
-                    // each way by what sets it apart, with its days and upkeep; hover previews it, a click picks it
-                    let line = ui.p.line_h(SMALL).ceil() as i32;
-                    for (i, w) in ways.iter().enumerate() {
-                        let r = Rect::new(sx, y, 130, 2 * line + 3);
-                        let on = i == self.pick;
-                        let hot = peek == Some(i) || ui.hover(r);
-                        ui.p.panel(r, if on { rgba(44, 34, 30, 180) } else { rgba(10, 11, 16, 120) }, if on { rgb(217, 119, 6) } else if hot { rgb(180, 83, 9) } else { th().edge }, 0.0);
-                        ui.p.text_fit(sx as f32 + 3.0, y as f32 + 1.0, &w.label, SMALL, 124.0, if on { th().gold } else if hot { rgb(253, 230, 138) } else { th().text });
-                        ui.p.text_fit(sx as f32 + 3.0, (y + line + 1) as f32, &cost_text(cx, &gs, w.days, w.supplies), SMALL, 124.0, th().dim);
-                        let t = tip(&w.label, &format!("{}. Click to take this way.", cost_text(cx, &gs, w.days, w.supplies)));
-                        ui.push(format!("world_map.way.{i}"), "row", w.label.clone(), r, true, on, Some(WAct::Way(i)), t);
-                        y += r.h + 2;
-                    }
-                    y += 2;
-                }
-                None => {
-                    ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No open road to {name}."), SMALL, 130.0, th().foe);
-                    y += 20;
-                }
+        // -- Side panel: the time, actions and the log; PR5-48: the layout editor's controls while editing (debug)
+        match self.edit.as_ref() {
+            Some(e) => {
+                let side = Rect::new(504, 24, 132, H - 50);
+                e.editor.draw_stage(&mut ui, &WAct::Layout);
+                e.editor.draw_controls(&mut ui, side, &WAct::Layout);
             }
+            None => self.side_panel(&mut ui, cx, &d, &gs, &here, &ways, peek),
         }
-        ui.button("world_map.enter", Rect::new(sx, y, 130, 16), &format!("Enter {}", cx.location_name(&gs.world_id, &here)), WAct::Enter, !travel::current_node(&d, &gs).is_empty());
-        y += 20;
-        // CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name ("Make camp (3 supplies)" in the Ashlands) and its days
-        let camp = progression::can_camp(&d, &gs);
-        let rule = emberwake_world::campaign::purse::rest_rule(&d, &gs.world_id);
-        let camp_label = format!("Make camp ({} {})", rule.cost, purse_word(cx, PurseWord::Upkeep));
-        let camp_tip = match (camp.is_empty(), rule.days) {
-            (false, _) => camp.to_string(),
-            (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),
-            _ => "Rest every hero to full HP.".to_string(),
-        };
-        ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), &camp_label, WAct::Camp, camp.is_empty(), tip("Make camp", &camp_tip));
-        y += 24;
-        let lines: Vec<String> = cx.log.iter().rev().take(16).cloned().collect();
-        for l in lines.iter().rev() {
-            for part in ui.p.wrap(l, SMALL, 130.0) {
-                if y > H - 10 {
-                    break;
-                }
-                ui.p.text(sx as f32, y as f32, &part, SMALL, th().text);
-                y += 8;
-            }
+        if crate::DEV_KEYS {
+            let (label, t) = if self.edit.is_some() { ("Done editing", tip("Done editing", "Back to the map (F7). Save first: what is not saved is dropped.")) } else { ("Edit layout", tip("Edit layout (debug)", "Edit the landmarks and the roads in place over the map (F7); Save writes the layout sidecar.")) };
+            ui.button_tip("world_map.layout_edit", Rect::new(504, H - 20, 130, 14), label, WAct::LayoutEdit, true, t);
         }
         self.w = ui.widgets;
         self.shown = shown;
     }
 
-    /// P, J, I and ? open the HUD bar's popups (PLAYUI1-H).
+    /// P, J, I and ? open the HUD bar's popups (PLAYUI1-H). PR5-48: F7 switches the debug layout editing (a debug build
+    /// with the dev tools; a release build takes the key and does nothing); while editing the editor takes its keys.
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        if k == Key::Fn(7) {
+            self.toggle_edit(cx);
+            return;
+        }
+        if let Some(e) = self.edit.as_mut() {
+            if e.key(cx, k) {
+                return;
+            }
+        }
         if crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice) {
             return;
         }
@@ -1222,8 +1293,40 @@ impl Screen<GameCx> for WorldMap {
         json!({
             "selected": self.selected, "pick": self.pick, "ways": ways, "roads": roads,
             "legend": {"pos": l.pos.map(|p| vec![p.0, p.1]), "locked": l.locked, "minimized": l.minimized},
-            "view": travel::view(&cx.data, cx.gs())
+            "view": travel::view(&cx.data, cx.gs()),
+            // PR5-48: the layout being edited in place and the editor's state
+            "layout_edit": self.edit.as_ref().map(|e| e.name.clone()),
+            aegis_ui::layout_editor::STATE_KEY: self.edit.as_ref().map(|e| e.editor.state()),
         })
+    }
+
+    /// PR5-48: while editing the arrows nudge (the editor's), not the focus.
+    fn arrow_focus(&self) -> bool {
+        self.edit.is_none()
+    }
+
+    /// PR5-48: Esc ends the layout editing first.
+    fn escape(&mut self, cx: &mut Cx) {
+        if self.edit.is_some() {
+            self.toggle_edit(cx);
+        } else {
+            self.back(cx);
+        }
+    }
+
+    /// PR5-48: a handle drag of the layout editor while editing; any other press clicks.
+    fn pointer(&mut self, cx: &mut Cx, id: &str, phase: PointerPhase, pos: (i32, i32)) {
+        if self.edit.as_mut().is_some_and(|e| e.editor.pointer(id, phase, pos)) {
+            return;
+        }
+        if phase == PointerPhase::Down {
+            self.click(cx, pos);
+        }
+    }
+
+    /// PR5-48: the layout editor's agent commands while editing (`layout_markers`, `layout`).
+    fn command(&mut self, _cx: &Cx, body: &Value) -> Option<Value> {
+        self.edit.as_mut()?.editor.command(body)
     }
 
     /// STORYUI1 W2, 5.3: a running sequence takes over and queued vignettes play (the map has nothing of its own open).
@@ -1244,6 +1347,269 @@ impl Screen<GameCx> for WorldMap {
 
     fn music(&self, cx: &Cx) -> Option<String> {
         music::game_track(cx, music::TRAVEL)
+    }
+
+    widget_plumbing!();
+}
+
+// ---- PR5-48 (MAP-LAYOUT-ED): the layout editor over a world map ------------------------------------------------
+
+/// A landmark image's side as the editor loads it (the 96 px cut, shown at `LANDMARK_PX` times its scale).
+const LANDMARK_IMG: i32 = 96;
+
+/// The names the Map Layout editor offers: each world map sidecar and background of the layers
+/// (`world_map::sidecar_names`, `world_map::background_names`), sorted.
+pub fn layout_names(layers: &aegis_core::assets::Layers) -> Vec<String> {
+    let mut out = world_map::sidecar_names(layers);
+    for n in world_map::background_names(layers) {
+        if !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Whether location `qid` sits in region `name` (its region or one up the region's `parent` chain).
+fn in_region(d: &emberwake_world::Data, world: &str, qid: &str, name: &str) -> bool {
+    let loc = d.resolve(world, "locations", qid);
+    let mut w = json::s_or(loc, "_world", world);
+    let mut region_ref = s(loc, "region");
+    let mut seen: Vec<String> = Vec::new();
+    while !region_ref.is_empty() {
+        let region = d.resolve(&w, "regions", &region_ref);
+        let id = s(region, "id");
+        if id.is_empty() || seen.contains(&id) {
+            return false;
+        }
+        if id == name {
+            return true;
+        }
+        seen.push(id);
+        w = json::s_or(region, "_world", &w);
+        region_ref = s(region, "parent");
+    }
+    false
+}
+
+/// The world and the places (qids, in the world map's node order) that layout `name` lays out: a world's nodes, or a
+/// region's world's nodes in that region; none for a pre-staged or unknown name (`world_map::owner`).
+pub fn layout_places(d: &emberwake_world::Data, layers: &aegis_core::assets::Layers, name: &str) -> (Option<String>, Vec<String>) {
+    match world_map::owner(&d.catalogs, layers, name) {
+        Owner::World(w) => {
+            let nodes = travel::nodes(d, &w);
+            (Some(w), nodes)
+        }
+        Owner::Region { world } => {
+            let nodes = travel::nodes(d, &world).into_iter().filter(|q| in_region(d, &world, q, name)).collect();
+            (Some(world), nodes)
+        }
+        _ => (None, Vec::new()),
+    }
+}
+
+/// A world map layout open in the layout editor (`aegis_ui::layout_editor`): the sidecar's name and the editor, whose
+/// markers are the layout's places at their sidecar landmark or `map_pos` (`place` in map fractions) and whose
+/// polylines are the places' routes with the sidecar's waypoints (none yet: empty), then any other route the sidecar
+/// holds (a pre-staged act's). The viewport is the world map's (`MAP`, `MAP_PAD`) and the markers are boxed by its
+/// landmark rule, so the editor shows the map as the player sees it. Save writes through the kit's writer.
+pub struct LayoutEditing {
+    pub name: String,
+    pub editor: LayoutEditor,
+    /// The painter scale the background was loaded for.
+    bg_scale: Option<f32>,
+}
+
+impl LayoutEditing {
+    /// Opens layout `name`; `images`: the landmark images on the markers (the Map Layout screen; the live map draws its
+    /// own).
+    pub fn open(cx: &mut Cx, name: &str, images: bool) -> Self {
+        let d = cx.data.clone();
+        let layers = cx.art.layers().clone();
+        let layout = read_layout(&layers, &[name.to_string()]);
+        let (world, places) = layout_places(&d, &layers, name);
+        let unit = (0.0, 0.0, 1.0, 1.0);
+        let mut markers = Vec::new();
+        for (i, q) in places.iter().enumerate() {
+            let loc = d.resolve(world.as_deref().unwrap_or_default(), "locations", q);
+            let ((x, y), scale) = place(layout.as_ref(), q, json::aget(loc, "map_pos"), i, places.len(), unit);
+            let local = local_id(q);
+            // the sidecar's key: the local id, unless the sidecar keys this place by its qid
+            let id = if layout.as_ref().is_some_and(|l| l.landmarks.contains_key(q.as_str())) { q.clone() } else { local.to_string() };
+            let mut m = Marker::new(&id, &json::s_or(loc, "name", local), [x, y], scale);
+            if images {
+                m.image = cx.art.image(&emberwake_content::art::landmark(q), LANDMARK_IMG, LANDMARK_IMG).cloned().map(Rc::new);
+            }
+            markers.push(m);
+        }
+        let mut lines: Vec<Polyline> = Vec::new();
+        if let Some(w) = &world {
+            for r in travel::graph(&d, w) {
+                let id = s(&r, "id");
+                if places.contains(&s(&r, "_from")) && places.contains(&s(&r, "_to")) && !lines.iter().any(|l| l.id == id) {
+                    let pts = layout.as_ref().and_then(|l| l.route(&id)).map(|p| p.iter().map(|(x, y)| [*x, *y]).collect()).unwrap_or_default();
+                    lines.push(Polyline::new(&id, pts));
+                }
+            }
+        }
+        for (id, pts) in layout.iter().flat_map(|l| l.routes.iter()) {
+            if !lines.iter().any(|l| &l.id == id) {
+                lines.push(Polyline::new(id, pts.iter().map(|(x, y)| [*x, *y]).collect()));
+            }
+        }
+        let mut editor = LayoutEditor::new(markers, lines);
+        editor.set_view(Viewport::new(MAP, (MAP_PAD.0 as f32, MAP_PAD.1 as f32)));
+        editor.marker_box = MarkerBox { side: LANDMARK_PX, foot: LANDMARK_FOOT };
+        Self { name: name.to_string(), editor, bg_scale: None }
+    }
+
+    /// The act background on the editor's stage, loaded once per painter scale `s` at the size it covers the map.
+    fn background(&mut self, cx: &mut Cx, scale: f32) {
+        if self.bg_scale == Some(scale) {
+            return;
+        }
+        self.bg_scale = Some(scale);
+        let rel = emberwake_content::art::world_map_background(&self.name);
+        self.editor.background = cx.art.size_of(&rel).and_then(|(iw, ih)| {
+            let r = cover_rect(iw, ih, MAP);
+            cx.art.image_fit(&rel, ((r.w as f32) * scale).round().max(1.0) as i32, ((r.h as f32) * scale).round().max(1.0) as i32).cloned().map(Rc::new)
+        });
+    }
+
+    /// The layout as the editor holds it now (the live map draws by it while editing).
+    pub fn layout(&self) -> MapLayout {
+        let mut out = MapLayout::default();
+        for m in self.editor.markers() {
+            out.landmarks.insert(m.id.clone(), Landmark { pos: (m.pos[0], m.pos[1]), scale: m.scale });
+        }
+        for l in self.editor.polylines() {
+            out.routes.insert(l.id.clone(), l.points.iter().map(|p| (p[0], p[1])).collect());
+        }
+        out
+    }
+
+    /// One of the pane's actions, then a Save it asked for (`settle`).
+    pub fn act(&mut self, cx: &mut Cx, a: LayoutAct) {
+        self.editor.act(a);
+        self.settle(cx);
+    }
+
+    /// A key for the pane (the arrows with Shift, + and -, Ctrl+Z, PageUp / PageDown); true when it took it.
+    pub fn key(&mut self, cx: &mut Cx, k: Key) -> bool {
+        let used = self.editor.key(k, cx.held.shift, cx.held.ctrl);
+        self.settle(cx);
+        used
+    }
+
+    /// The Save the editor asked for (`take_save`), written through the kit's writer (`world_map::write`: the edits
+    /// checked, the canonical sidecar written into the game's own asset layer), acknowledged (`mark_saved`) and the art
+    /// read afresh (a new `Art` generation), so every world map reads the new sidecar; a refusal shows its problems,
+    /// writes nothing and keeps the values unsaved.
+    pub fn settle(&mut self, cx: &mut Cx) {
+        let Some(edits) = self.editor.take_save() else { return };
+        let list = Value::Array(edits.iter().map(LayoutEdit::to_json).collect());
+        match world_map::write(&cx.data.catalogs, cx.art.layers(), &self.name, &list) {
+            Ok(w) => {
+                self.editor.mark_saved();
+                self.editor.note = format!("saved {} ({} changed)", emberwake_content::art::world_map_layout(&self.name), w.edits);
+                cx.art = aegis_ui::art::Art::layered(cx.art.layers().clone());
+                self.bg_scale = None;
+            }
+            Err(problems) => {
+                self.editor.note = "save refused: nothing written".into();
+                show_errors(cx, problems);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum LAct {
+    Edit(LayoutAct),
+    Pick(usize),
+    Back,
+}
+
+/// PR5-48: the Scene Runner's Map Layout (dev only): any act's world map (`layout_names`: Act 1's sidecar and the
+/// pre-staged backgrounds) in the layout editor, its stage on the world map's viewport with the act background and the
+/// landmark images, the controls in the side panel's place; Save writes the sidecar (a native debug build only).
+pub struct MapLayoutScreen {
+    names: Vec<String>,
+    at: usize,
+    edit: LayoutEditing,
+    w: Vec<Widget<LAct>>,
+}
+
+impl MapLayoutScreen {
+    /// Opens on `name` when it is one of `layout_names`, else the first name with a sidecar, else the first name.
+    pub fn new(cx: &mut Cx, name: Option<&str>) -> Self {
+        let layers = cx.art.layers().clone();
+        let names = layout_names(&layers);
+        let sidecars = world_map::sidecar_names(&layers);
+        let at = name.and_then(|n| names.iter().position(|x| x == n)).or_else(|| names.iter().position(|n| sidecars.contains(n))).unwrap_or(0);
+        let edit = LayoutEditing::open(cx, names.get(at).map(String::as_str).unwrap_or_default(), true);
+        Self { names, at, edit, w: Vec::new() }
+    }
+
+    fn act(&mut self, cx: &mut Cx, a: LAct) {
+        match a {
+            LAct::Edit(a) => self.edit.act(cx, a),
+            LAct::Pick(i) if i < self.names.len() && i != self.at => {
+                self.at = i;
+                self.edit = LayoutEditing::open(cx, &self.names[i], true);
+            }
+            LAct::Pick(_) => {}
+            LAct::Back => cx.nav.push(Nav::Pop),
+        }
+    }
+}
+
+impl Screen<GameCx> for MapLayoutScreen {
+    fn id(&self) -> &'static str {
+        "map_layout"
+    }
+
+    fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let mut ui: Ui<LAct> = Ui::new(g, mouse, live);
+        ui.p.fill(Rect::new(0, 0, W, H), th().tool_bg);
+        self.edit.background(cx, ui.p.v.s);
+        let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
+        ui.button("map_layout.back", Rect::new(3, 3, back_w, 14), "Back", LAct::Back, true);
+        ui.p.text((back_w + 10) as f32, 5.0, "MAP LAYOUT", BODY, th().gold);
+        let labels: Vec<String> = self.names.clone();
+        let t = tip("World map", "The act's world map to lay out: a sidecar, or a background whose act has no data yet (no places).");
+        ui.select("map_layout.name", Rect::new(back_w + 86, 3, 160, 14), &labels, self.at, LAct::Pick, labels.len() > 1, t);
+        let (_, places) = layout_places(&cx.data, cx.art.layers(), &self.edit.name);
+        let what = if places.is_empty() { "no places in the data yet".to_string() } else { format!("{} places, {} roads", self.edit.editor.markers().len(), self.edit.editor.polylines().len()) };
+        ui.p.text_fit((back_w + 252) as f32, 5.0, &what, SMALL, 230.0, th().dim);
+        self.edit.editor.draw_stage(&mut ui, &LAct::Edit);
+        self.edit.editor.draw_controls(&mut ui, Rect::new(504, 24, 132, H - 28), &LAct::Edit);
+        self.w = ui.widgets;
+    }
+
+    /// The arrows nudge the selection (Shift: more), + and - size the marker, Ctrl+Z undoes.
+    fn key(&mut self, cx: &mut Cx, k: Key) {
+        self.edit.key(cx, k);
+    }
+
+    fn arrow_focus(&self) -> bool {
+        false
+    }
+
+    /// A handle drag moves a marker or a point (`LayoutEditor::pointer`); any other press clicks.
+    fn pointer(&mut self, cx: &mut Cx, id: &str, phase: PointerPhase, pos: (i32, i32)) {
+        if !self.edit.editor.pointer(id, phase, pos) && phase == PointerPhase::Down {
+            self.click(cx, pos);
+        }
+    }
+
+    fn state(&self, _cx: &Cx) -> Value {
+        json!({"name": self.edit.name, "names": self.names, aegis_ui::layout_editor::STATE_KEY: self.edit.editor.state()})
+    }
+
+    /// The pane's agent commands (`layout_markers`, `layout {id, pos, scale}`, `layout {route, points}`).
+    fn command(&mut self, _cx: &Cx, body: &Value) -> Option<Value> {
+        self.edit.editor.command(body)
     }
 
     widget_plumbing!();
@@ -1894,6 +2260,209 @@ mod tests {
         let row = wm.widgets().into_iter().find(|w| w["id"].as_str().is_some_and(|i| i.starts_with("world_map.legend.quest.")) && w["text"] == json!(name)).expect("its row");
         wm.click_id(&mut cx, row["id"].as_str().unwrap()).expect("the row");
         assert_eq!(wm.state(&cx)["selected"], json!(node), "the row picks its place");
+    }
+
+    // ---- PR5-48 (MAP-LAYOUT-ED) -----------------------------------------------------------------------------------
+
+    fn game_layers() -> Layers {
+        Layers::for_game(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+    }
+
+    fn close(a: [f32; 2], b: (f32, f32)) -> bool {
+        (a[0] - b.0).abs() < 1e-4 && (a[1] - b.1).abs() < 1e-4
+    }
+
+    /// Map Layout offers every world map sidecar and background of the layers and opens each in the editor: a sidecar's
+    /// places as markers at the sidecar's landmarks (else `map_pos`), its routes as polylines with their waypoints, on the
+    /// world map's viewport and landmark box; a pre-staged act (a background, no data) opens with no places.
+    #[test]
+    fn map_layout_opens_each_world_map_with_its_places_and_roads() {
+        let mut cx = ward_hub(&[], &[], true);
+        let layers = game_layers();
+        let names = layout_names(&layers);
+        for n in world_map::sidecar_names(&layers).iter().chain(world_map::background_names(&layers).iter()) {
+            assert!(names.contains(n), "{n} is offered");
+        }
+        let mut g = gfx();
+        for name in &names {
+            let mut m = MapLayoutScreen::new(&mut cx, Some(name));
+            frame(&mut m, &mut cx, &mut g, 1.0);
+            assert_eq!(m.state(&cx)["name"], json!(name));
+            let (world, places) = layout_places(&cx.data, &layers, name);
+            let e = &m.edit.editor;
+            assert_eq!(e.markers().len(), places.len(), "{name}: one marker per place");
+            assert_eq!(e.view(), Viewport::new(MAP, (MAP_PAD.0 as f32, MAP_PAD.1 as f32)));
+            assert_eq!(e.marker_box, MarkerBox { side: LANDMARK_PX, foot: LANDMARK_FOOT });
+            for mk in e.markers() {
+                assert!(m.widget_rect(&format!("layout.marker.{}", mk.id)).is_some(), "{name}: {} has a handle", mk.id);
+            }
+            match world_map::owner(&cx.data.catalogs, &layers, name) {
+                Owner::PreStaged => assert!(places.is_empty() && world.is_none(), "{name}: a pre-staged act has no places"),
+                Owner::Unknown => panic!("{name} is offered but is nothing"),
+                _ => assert!(!places.is_empty(), "{name}: a world or region with places"),
+            }
+            let Some(layout) = read_layout(&layers, std::slice::from_ref(name)) else { continue };
+            for (id, mark) in &layout.landmarks {
+                let mk = e.marker(id).unwrap_or_else(|| panic!("{name}: the sidecar's {id} is a marker"));
+                assert!(close(mk.pos, mark.pos) && (mk.scale - mark.scale).abs() < 1e-4, "{name}: {id} at its sidecar place");
+            }
+            for (id, pts) in &layout.routes {
+                let l = e.polyline(id).unwrap_or_else(|| panic!("{name}: the sidecar's route {id} is a polyline"));
+                assert_eq!(l.points.len(), pts.len(), "{name}: {id}");
+                assert!(l.points.iter().zip(pts).all(|(a, b)| close(*a, *b)), "{name}: {id}'s waypoints");
+            }
+            assert!(!e.dirty(), "{name}: opening changes nothing");
+        }
+        assert!(names.iter().any(|n| read_layout(&layers, std::slice::from_ref(n)).is_some()), "a world map with a sidecar (Act 1)");
+    }
+
+    /// The live map's layout editing is a debug tool: its button and F7 exist only in a debug build with the dev tools
+    /// (`crate::DEV_KEYS`); there it edits the sidecar the map reads in place (the editor's handles over the real marks,
+    /// no backdrop, the arrows nudging, its state on the agent link), the map drawing by the editor's layout, and Esc ends
+    /// it.
+    #[test]
+    fn the_live_map_layout_toggle_is_debug_only() {
+        let mut cx = ward_hub(&[], &[], true);
+        let mut g = gfx();
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!(widget(&wm, "world_map.layout_edit").is_some(), crate::DEV_KEYS, "the button only in a debug build");
+        wm.key(&mut cx, Key::Fn(7));
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let st = wm.state(&cx);
+        if !crate::DEV_KEYS {
+            assert!(st["layout_edit"].is_null() && wm.arrow_focus(), "a release build takes F7 and does nothing");
+            return;
+        }
+        let name = st["layout_edit"].as_str().expect("editing").to_string();
+        assert!(map_names(&cx.data, cx.gs()).contains(&name) && cx.art.has(&emberwake_content::art::world_map_layout(&name)), "the sidecar the map reads");
+        assert!(!wm.arrow_focus());
+        let e = &wm.edit.as_ref().unwrap().editor;
+        assert!(!e.backdrop && !e.labels, "over the real map and its real names");
+        // the party's place, picked by rule: its marker's handle over its mark; a move through the agent link moves the mark
+        let here = cx.gs().location_id.clone();
+        let id = local_id(&here).to_string();
+        assert!(widget(&wm, &format!("layout.marker.{id}")).is_some() && widget(&wm, &node_id(&here)).is_some());
+        let reply = wm.command(&cx, &json!({"cmd": "layout", "id": id, "pos": [0.25, 0.5]})).expect("the editor's op");
+        assert_eq!(reply["ok"], json!(true), "{reply}");
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let (x, y, w, h) = anchor_rect();
+        let (r, _) = wm.widget_rect(&node_id(&here)).unwrap();
+        let landmark = cx.art.has(&emberwake_content::art::landmark(&here));
+        let scale = wm.edit.as_ref().unwrap().editor.marker(&id).unwrap().scale;
+        let want = if landmark { landmark_box(x + 0.25 * w, y + 0.5 * h, scale) } else { pin_box(x + 0.25 * w, y + 0.5 * h) };
+        assert_eq!(r, want, "the mark follows the editor");
+        assert_eq!(wm.state(&cx)[aegis_ui::layout_editor::STATE_KEY]["dirty"], json!(true));
+        wm.escape(&mut cx);
+        assert!(wm.edit.is_none() && cx.nav.is_empty(), "Esc ends the editing, the map stays");
+        assert!(cx.log.iter().any(|l| l.contains("not saved were dropped")), "the unsaved edit is dropped and said");
+    }
+
+    /// A scratch asset layer holding the game's world map sidecars (the backgrounds as stand-in files).
+    fn scratch_layer(s: &Scratch) -> std::path::PathBuf {
+        let root = s.path().join("assets");
+        let to = root.join(world_map::DIR);
+        std::fs::create_dir_all(&to).unwrap();
+        for e in std::fs::read_dir(game_layers().roots[0].join(world_map::DIR)).unwrap() {
+            let p = e.unwrap().path();
+            match p.extension().and_then(|x| x.to_str()) {
+                Some("json") => {
+                    std::fs::copy(&p, to.join(p.file_name().unwrap())).unwrap();
+                }
+                Some("png") => std::fs::write(to.join(p.file_name().unwrap()), "png").unwrap(),
+                _ => {}
+            }
+        }
+        root
+    }
+
+    /// Save in the editor writes through the kit's writer into the game's asset layer (a scratch copy here, never the
+    /// shipped files), acknowledges the values and reads the art afresh, so the world map draws the saved place; a sidecar
+    /// the writer refuses is kept as it was, the values stay unsaved and the problems show. A build that may not write
+    /// (`writes_allowed`) saves nothing.
+    #[test]
+    fn a_save_writes_the_sidecar_through_the_kit_writer_and_the_map_reads_it() {
+        let s = Scratch::new("pr548_save");
+        let root = scratch_layer(&s);
+        let mut cx = ward_hub(&[], &[], false);
+        cx.art = aegis_ui::art::Art::layered(Layers::of(vec![root.clone()]));
+        let name = map_names(&cx.data, cx.gs()).into_iter().find(|n| root.join(emberwake_content::art::world_map_layout(n)).exists()).expect("the hub's map has a sidecar");
+        let path = root.join(emberwake_content::art::world_map_layout(&name));
+        let shipped = std::fs::read_to_string(&path).unwrap();
+        let here = cx.gs().location_id.clone();
+        let id = local_id(&here).to_string();
+        let mut m = MapLayoutScreen::new(&mut cx, Some(&name));
+        let mut g = gfx();
+        frame(&mut m, &mut cx, &mut g, 1.0);
+        assert_eq!(m.command(&cx, &json!({"cmd": "layout", "id": id, "pos": [0.3125, 0.4375]})).unwrap()["ok"], json!(true));
+        let generation = cx.art.generation();
+        m.act(&mut cx, LAct::Edit(LayoutAct::Save));
+        if !aegis_ui::layout_editor::writes_allowed() {
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), shipped, "a release build writes nothing");
+            return;
+        }
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(saved["landmarks"][&id]["pos"], json!([0.3125, 0.4375]));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), world_map::text(&saved), "the writer's canonical text");
+        assert!(!m.edit.editor.dirty() && m.edit.editor.note.starts_with("saved "));
+        assert_ne!(cx.art.generation(), generation, "the art is read afresh");
+        // the world map reads the saved sidecar: the party's mark stands at the saved place
+        let mut wm = WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let (x, y, w, h) = anchor_rect();
+        assert_eq!(wm.widget_rect(&node_id(&here)).unwrap().0, pin_box(x + 0.3125 * w, y + 0.4375 * h), "no landmark image in the scratch layer: the pin");
+        // a sidecar the writer refuses (a landmark no place of the world has): nothing written, still unsaved, said
+        let mut broken = saved.clone();
+        broken["landmarks"]["no_such_place"] = json!({"pos": [0.5, 0.5], "scale": 1.0});
+        std::fs::write(&path, broken.to_string()).unwrap();
+        m.command(&cx, &json!({"cmd": "layout", "id": id, "pos": [0.5, 0.5]})).unwrap();
+        cx.nav.clear();
+        m.act(&mut cx, LAct::Edit(LayoutAct::Save));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), broken.to_string(), "nothing written");
+        assert!(m.edit.editor.dirty() && m.edit.editor.note.contains("refused"));
+        assert!(matches!(cx.nav.as_slice(), [Nav::Push(n)] if n.id() == "notice"), "the problems show");
+    }
+
+    /// PR5-48 review renders at 1280 x 720 with the game's art and theme, only with `AEGIS_REVIEW_DIR` set: Map Layout on
+    /// Act 1's sidecar (a landmark selected), on a pre-staged act, and the live map edited in place (a debug build).
+    #[test]
+    fn review_shots_of_the_map_layout_editor() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        std::fs::create_dir_all(&out).unwrap();
+        let shot = |screen: &mut dyn Screen<GameCx>, cx: &mut Cx, name: &str| {
+            let theme = aegis_ui::theme::load(cx.art.layers()).expect("the game's theme");
+            let mut g = gfx();
+            g.fonts.sync(&theme);
+            aegis_ui::theme::set_theme(theme);
+            g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+            g.view = aegis_ui::painter::View::fit(1280, 720);
+            for _ in 0..2 {
+                screen.draw(cx, &mut g, (-500, -500), true);
+            }
+            let file = std::fs::File::create(Path::new(&out).join(format!("{name}.png"))).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+            println!("{name}: {}", screen.state(cx)[aegis_ui::layout_editor::STATE_KEY]["note"]);
+        };
+        let mut cx = ward_hub(&[], &[], true);
+        let here = cx.gs().location_id.clone();
+        let mut m = MapLayoutScreen::new(&mut cx, Some("sunk_ward_quarter"));
+        let i = m.edit.editor.markers().iter().position(|mk| mk.id == local_id(&here)).unwrap_or(0);
+        m.act(&mut cx, LAct::Edit(LayoutAct::Select(Some(aegis_ui::layout_editor::Sel::Marker(i)))));
+        shot(&mut m, &mut cx, "1_map_layout_sunk_ward_quarter");
+        let staged = layout_names(cx.art.layers()).into_iter().find(|n| world_map::owner(&cx.data.catalogs, cx.art.layers(), n) == Owner::PreStaged);
+        if let Some(n) = staged {
+            let mut m = MapLayoutScreen::new(&mut cx, Some(&n));
+            shot(&mut m, &mut cx, &format!("2_map_layout_{n}"));
+        }
+        if crate::DEV_KEYS {
+            let mut wm = WorldMap::new();
+            frame(&mut wm, &mut cx, &mut gfx(), 1.0);
+            wm.key(&mut cx, Key::Fn(7));
+            shot(&mut wm, &mut cx, "3_live_world_map_editing");
+        }
     }
 
     /// Review renders of the world map on the shipped Sunk Ward at 1280 x 720 with the game's art and theme: only with
