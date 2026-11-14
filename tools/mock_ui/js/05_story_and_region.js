@@ -3396,19 +3396,17 @@ function h_cureWound(id) {
 // SCREEN 5: WORLD MAP (`worldmap.rs` — 500x316 Left Map + Right Side Panel)
 // ============================================================================
 function renderWorldMap() {
-  const selNode = WORLD_NODES.find(n => n.id === STATE.worldNodeId) || WORLD_NODES[2];
+  const selNode = WORLD_NODES.find(n => n.id === STATE.worldNodeId) || WORLD_NODES[0];
   const travelCost = STATE.travelMode === 'Stealth' ? selNode.days + 1 : selNode.days;
 
-  // SVG route lines between nodes
+  // Focus-only routes along the painted roads: only the selected place's routes draw, as a lantern-dot trail
   let linesSvg = '';
-  WORLD_NODES.forEach(n => {
-    n.edges.forEach(targetId => {
-      const t = WORLD_NODES.find(x => x.id === targetId);
-      if (t && n.id < t.id) {
-        const isHot = (n.id === selNode.id || t.id === selNode.id);
-        linesSvg += `<line x1="${n.x}" y1="${n.y}" x2="${t.x}" y2="${t.y}" stroke="${isHot ? '#fbbf24' : '#6b7280'}" stroke-width="${isHot ? '2' : '1.2'}" stroke-dasharray="3,2" />`;
-      }
-    });
+  WORLD_ROUTES.forEach(([a, b, via]) => {
+    if (a !== selNode.id && b !== selNode.id) return;
+    const A = WORLD_NODES.find(n => n.id === a), B = WORLD_NODES.find(n => n.id === b);
+    const pts = [[A.x, A.y], ...via, [B.x, B.y]].map(p => p.join(',')).join(' ');
+    linesSvg += `<polyline points="${pts}" fill="none" stroke="#0a0b10" stroke-opacity="0.55" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" />`
+             + `<polyline points="${pts}" fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="0.1,4.2" stroke-linejoin="round" stroke-linecap="round" />`;
   });
 
   return `
@@ -3417,38 +3415,32 @@ function renderWorldMap() {
 
       <!-- Left Map Viewport (MAP = Rect(0, 22, 500, 316)) -->
       <div style="position:absolute;left:4px;top:24px;width:496px;height:328px;border:1px solid #374151;overflow:hidden;">
-        <img src="${ASSETS.bg.sunk_ward}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(0.82) contrast(1.08);">
-        <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%, rgba(10,11,16,0.05) 40%, rgba(10,11,16,0.75) 100%);"></div>
+        <img src="${ASSETS.bg.sunk_ward_map}" class="pixel" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
 
         <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
           ${linesSvg}
         </svg>
 
-        ${WORLD_NODES.map(n => {
+        ${[...WORLD_NODES].sort((a, b) => a.y - b.y).map(n => {
           const isSel = n.id === selNode.id;
           const isHere = n.id === 'n_sluice';
+          const side = 48 * n.scale, lm = ASSETS.landmarks && ASSETS.landmarks[n.loc];
           return `
-            <div onclick="STATE.worldNodeId='${n.id}';render();"
-                 style="position:absolute;left:${n.x - 14}px;top:${n.y - 14}px;width:28px;height:28px;cursor:pointer;display:flex;flex-direction:column;align-items:center;z-index:10;">
-              <div style="width:20px;height:20px;border-radius:50%;background:${isSel ? 'rgba(217,119,6,0.35)' : 'rgba(10,11,16,0.85)'};border:1.5px solid ${isSel ? '#fbbf24' : '#9ca3af'};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px #000;">
-                <img src="${ASSETS.ui[n.pin] || ASSETS.ui.pin_town}" class="pixel" style="width:12px;height:12px;">
-              </div>
-              ${n.quest ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:0;top:-2px;width:10px;height:10px;">` : ''}
-              ${isHere ? `<img src="${ASSETS.ui.pin_here}" class="pixel" style="position:absolute;left:-2px;top:-2px;width:10px;height:10px;">` : ''}
-              <div style="font-size:6px;color:${isSel ? 'var(--gold)' : 'var(--text)'};background:rgba(10,11,16,0.92);padding:0.5px 3px;border:0.5px solid ${isSel ? '#d97706' : '#374151'};white-space:nowrap;margin-top:1px;">
+            <div onclick="STATE.worldNodeId='${n.id}';render();" title="${n.name}"
+                 style="position:absolute;left:${n.x - side / 2}px;top:${n.y + 8 - side}px;width:${side}px;height:${side}px;cursor:pointer;z-index:${10 + Math.round(n.y)};">
+              ${lm
+                ? `<img src="${lm}" class="pixel" style="width:100%;height:100%;display:block;filter:${isSel ? 'drop-shadow(0 0 1.5px #fbbf24) drop-shadow(0 0 1.5px #fbbf24)' : 'drop-shadow(0 1px 2px rgba(0,0,0,.7))'};">`
+                : `<img src="${ASSETS.ui[n.pin] || ASSETS.ui.pin_town}" class="pixel" style="position:absolute;left:50%;bottom:4px;width:14px;height:14px;margin-left:-7px;">`}
+              ${n.quest ? `<img src="${ASSETS.ui.badge_quest}" class="pixel" style="position:absolute;right:2px;top:2px;width:10px;height:10px;">` : ''}
+              ${isHere ? `<div style="position:absolute;left:50%;bottom:2px;width:16px;height:8px;margin-left:-8px;border:1.5px solid #3fc9e0;border-radius:50%;box-shadow:0 0 4px #3fc9e0;"></div>` : ''}
+              <div style="position:absolute;left:50%;top:0;transform:translate(-50%,-100%);font-size:6px;white-space:nowrap;padding:0.5px 3px;${isSel
+                ? 'color:var(--gold);background:rgba(10,11,16,0.92);border:0.5px solid #d97706;'
+                : 'color:rgba(228,220,203,0.78);background:rgba(10,11,16,0.28);text-shadow:0 0 2px #000;'}">
                 ${n.name}
               </div>
             </div>
           `;
         }).join('')}
-
-        <!-- Map Legend Overlay -->
-        <div class="rust-panel" style="position:absolute;left:6px;bottom:6px;padding:3px 6px;font-size:6px;color:var(--dim);display:flex;gap:8px;">
-          <span><b style="color:var(--gold);">Decision A4 Hybrid Arrival:</b></span>
-          <span>Parley Nodes → Street RegionMap</span>
-          <span>·</span>
-          <span>Raid Nodes → Direct BattleScreen</span>
-        </div>
       </div>
 
       <!-- Right Side Panel (worldmap.rs: x=504..636 — Reduced Corner Frame + X Close Button) -->
@@ -3470,8 +3462,8 @@ function renderWorldMap() {
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <button class="rust-btn primary" style="width:100%;height:18px;" onclick="WORLD_NODES.find(n=>n.id==='${selNode.id}').onEnter()">
-            ${selNode.days === 0 ? 'Enter Sanctuary Hub ▸' : 'Travel & Enter Node ▸'}
+          <button class="rust-btn primary" style="width:100%;height:18px;${selNode.onEnter ? '' : 'opacity:0.45;cursor:default;'}" ${selNode.onEnter ? `onclick="WORLD_NODES.find(n=>n.id==='${selNode.id}').onEnter()"` : 'disabled title="No scene for this place in the mock yet"'}>
+            ${selNode.days === 0 ? 'Enter the Hideout ▸' : selNode.onEnter ? 'Travel & Enter ▸' : 'Not in this mock yet'}
           </button>
           <button class="rust-btn" style="width:100%;" onclick="STATE.travelMode = STATE.travelMode==='Stealth'?'Fast':'Stealth';render();">
             Mode: ${STATE.travelMode} (${STATE.travelMode==='Stealth'?'Low Alert':'Fast -1d'})

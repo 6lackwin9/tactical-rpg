@@ -76,6 +76,20 @@ def load_scaled_uri(
     return img_to_data_uri(im, fmt)
 
 
+def world_map_uri(name: str) -> str:
+    """An act map background cropped as the 496 x 328 map viewport shows it (cover, centred), at 2x."""
+    im = Image.open(find_asset(f"backgrounds/world_map/{name}.png")).convert("RGB")
+    w = round(im.height * 496 / 328)
+    x = (im.width - w) // 2
+    return img_to_data_uri(im.crop((x, 0, x + w, im.height)).resize((992, 656), Image.Resampling.LANCZOS), "JPEG")
+
+
+def landmark_uris(name: str) -> dict[str, str]:
+    """The landmark cuts of the act map sidecar `backgrounds/world_map/<name>.json`, by location id."""
+    side = json.loads(find_asset(f"backgrounds/world_map/{name}.json").read_text(encoding="utf-8"))
+    return {lid: load_scaled_uri(f"map/landmarks/{lid}.png") for lid in side["landmarks"]}
+
+
 def font_to_data_uri(rel: str) -> str:
     p = find_asset(rel)
     raw = p.read_bytes()
@@ -404,6 +418,7 @@ def build_asset_bundle() -> dict[str, Any]:
     ui_dict.update(extract_ornate_full_pieces())
 
     assets: dict[str, Any] = {
+        "landmarks": landmark_uris("sunk_ward_quarter"),
         "fonts": {
             "display": font_to_data_uri("fonts/AlegreyaSC-Bold.ttf"),
             "body": font_to_data_uri("fonts/OpenSans-SemiBold.ttf"),
@@ -416,6 +431,7 @@ def build_asset_bundle() -> dict[str, Any]:
             "vn_bridge_stage": load_scaled_uri("backgrounds/story/vn_bridge_stage.png", (1280, 720), fmt="JPEG"),
             "vn_hearth_stage": load_scaled_uri("backgrounds/story/vn_hearth_stage.png", (1280, 720), fmt="JPEG"),
             "sunk_ward": load_scaled_uri("backgrounds/title/sunk_ward.png", (500, 316), fmt="JPEG"),
+            "sunk_ward_map": world_map_uri("sunk_ward_quarter"),
             "intro_1": load_scaled_uri("backgrounds/story/intro_1.png", (640, 360), fmt="JPEG"),
             "intro_2": load_scaled_uri("backgrounds/story/intro_2.png", (640, 360), fmt="JPEG"),
             "hearth": load_scaled_uri("backgrounds/story/hearth.png", (640, 360), fmt="JPEG"),

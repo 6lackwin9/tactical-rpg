@@ -1280,54 +1280,88 @@ const REGIONS = {
 };
 
 // ============================================================================
-// WORLD MAP NODES (`worldmap.rs` — Sunk Ward District Map)
+// WORLD MAP NODES (`worldmap.rs` — Sunk Ward District Map, the Act 1 two-tier diamond; AI-09, 2026-11-15)
+// Positions, scales and route waypoints are the shipped sidecar `backgrounds/world_map/sunk_ward_quarter.json`
+// (Tushar's final Act 1 layout), in px of the 496 x 328 map viewport. No node numbers or mission codes in names.
+// `onEnter: null` marks a place the mock has no scene for yet.
 // ============================================================================
 const WORLD_NODES = [
   {
-    id: 'n_sluice', name: '00 · The Sluice Undercroft', kind: 'town', pin: 'pin_town',
-    x: 115, y: 225, days: 0, mode: 'Hub',
-    desc: 'Flooded vaulted sanctuary beneath the Seventh Sluice. Houses the Tallow Hearth, Chirurgeon Sabina\'s Slab, Berek\'s Tinker\'s Hearth, Talia\'s Cipher Board, and The Dry Hollows (6 Bunks).',
-    edges: ['n_grate', 'n_corvo'],
+    id: 'n_sluice', loc: 'sluice_undercroft', name: 'The Sluice Undercroft', pin: 'pin_town',
+    x: 289.5, y: 298.0, scale: 1.0, days: 0, mode: 'Your hideout',
+    desc: 'A flooded storm-drain vault under the Sunk Ward: the Water-Lock Basin, Sabina\'s Slab, Berek\'s Hearth and six kiln bunks round the brazier.',
+    edges: ['n_grate'],
     onEnter: () => { STATE.screen = 'region'; STATE.regionId = 'sluice_undercroft'; STATE.talkNpcId = 'sabina'; STATE.talkNodeId = 'root'; render(); }
   },
   {
-    id: 'n_grate', name: '01 · Drowned Runoff Grate', kind: 'ruin', pin: 'pin_ruin',
-    x: 195, y: 265, days: 1, mode: 'Raid (Direct Battle)',
-    desc: 'Sunken drainage basin choked with feral Render-Beasts and Ash-Crawlers. Pure combat raid node (launches BattleScreen directly per Decision A4).',
-    edges: ['n_sluice', 'n_corvo'],
-    quest: true,
+    id: 'n_grate', loc: 'drowned_runoff_grate', name: 'Drowned Runoff Grate', pin: 'pin_gate',
+    x: 249.7, y: 236.7, scale: 1.1, days: 1, mode: 'Checkpoint', quest: true,
+    desc: 'Where the drains meet the streets. Flood-lock tablets stand under the silt; every road into the Ward starts here.',
+    edges: ['n_corvo', 'n_cross', 'n_junction', 'n_sluice', 'n_vats'],
     onEnter: () => launchEncounter('enc_0c')
   },
   {
-    id: 'n_corvo', name: '02 · Third Ward Gate (Corvo\'s Toll)', kind: 'gate', pin: 'pin_gate',
-    x: 245, y: 170, days: 1, mode: 'Parley RegionMap + Battle',
-    desc: 'Fortified toll portcullis held by Bailiff Corvo. Entering opens the Ash-Crawl street RegionMap for parley, stat-check forgery, or combat (Decision A4).',
-    edges: ['n_sluice', 'n_grate', 'n_cross', 'n_kiln'],
-    quest: true,
+    id: 'n_junction', loc: 'alleyway_junction_7', name: 'Alleyway Junction 7', pin: 'pin_ruin',
+    x: 102.1, y: 206.3, scale: 1.2, days: 2, mode: 'Main quest', quest: true,
+    desc: 'A street crossing in the Seventh Ward where Captain Vane has sealed the grates and sweeps the tenements.',
+    edges: ['n_grate', 'n_kiln'],
+    onEnter: null
+  },
+  {
+    id: 'n_cross', loc: 'ash_crawl_crossroads', name: 'Ash-Crawl Crossroads', pin: 'pin_camp',
+    x: 396.5, y: 214.0, scale: 1.2, days: 2, mode: 'Main quest', quest: true,
+    desc: 'An open-air culling station where the slum alleys meet. Proctor Quell\'s cages stand beside the Toll-Pen.',
+    edges: ['n_grate', 'n_vats'],
+    onEnter: () => launchEncounter('enc_m2')
+  },
+  {
+    id: 'n_corvo', loc: 'corvos_gate', name: 'Corvo\'s Gate', pin: 'pin_gate',
+    x: 355.9, y: 264.8, scale: 1.0, days: 2, mode: 'Side job', quest: true,
+    desc: 'The Third Ward gate, where Bailiff Corvo keeps a bribable post behind a striped barrier.',
+    edges: ['n_grate'],
     onEnter: () => { STATE.screen = 'region'; STATE.regionId = 'corvos_gate'; STATE.playerTile = { x: 4, y: 5 }; STATE.talkNpcId = 'corvo'; STATE.talkNodeId = 'root'; render(); }
   },
   {
-    id: 'n_cross', name: '03 · Ash-Crawl Crossroads', kind: 'camp', pin: 'pin_camp',
-    x: 310, y: 115, days: 1, mode: 'Parley / Camp Node',
-    desc: 'Soot-choked tenement crossroads where smugglers and Tallow Guild lookouts trade rations and watch the Bone-Mill chimneys.',
-    edges: ['n_corvo', 'n_kiln', 'n_crucible'],
-    onEnter: () => { STATE.screen = 'region'; STATE.regionId = 'corvos_gate'; STATE.talkNpcId = 'corvo'; STATE.talkNodeId = 'root'; render(); }
-  },
-  {
-    id: 'n_kiln', name: '04 · The Fourth Kiln (Bone-Mill)', kind: 'fortress', pin: 'pin_fortress',
-    x: 375, y: 195, days: 2, mode: 'Raid (M3 Slag Vents)',
-    desc: 'Industrial rendering furnace overseen by Overseer Grendel. Rhythmic Slag Vents erupt every even round across the foundry floor.',
-    edges: ['n_corvo', 'n_cross', 'n_crucible'],
-    quest: true,
+    id: 'n_kiln', loc: 'fourth_kiln', name: 'The Fourth Kiln', pin: 'pin_fortress',
+    x: 113.2, y: 130.5, scale: 1.2, days: 3, mode: 'Main quest', quest: true,
+    desc: 'The bone-mill under Overseer Grendel. Slag vents erupt across the mill floor on every even round.',
+    edges: ['n_crucible', 'n_junction'],
     onEnter: () => launchEncounter('enc_m3')
   },
   {
-    id: 'n_crucible', name: '06 · Crucible Watchpost (Climax)', kind: 'fortress', pin: 'pin_fortress',
-    x: 435, y: 95, days: 2, mode: 'Act I Boss Climax (M5)',
-    desc: 'Inquisitor-Prelate Nemeth\'s bastion above the Great Sluice Winch. Seize the Winch tile (6,4) or break Prelate Nemeth in Phase 2 Consecration.',
-    edges: ['n_cross', 'n_kiln'],
-    quest: true,
+    id: 'n_vats', loc: 'tallow_vats', name: 'The Tallow Vats', pin: 'pin_fortress',
+    x: 370.8, y: 144.7, scale: 1.2, days: 3, mode: 'Main quest', quest: true,
+    desc: 'The Guild\'s rendering vats and still-rooms, where Guild-Master Orlov\'s Dredgers boil the district\'s dead.',
+    edges: ['n_cross', 'n_crucible', 'n_grate'],
+    onEnter: null
+  },
+  {
+    id: 'n_crucible', loc: 'crucible_watchpost', name: 'Crucible Watchpost', pin: 'pin_fortress',
+    x: 242.4, y: 122.3, scale: 1.2, days: 4, mode: 'Main quest · the climax', quest: true,
+    desc: 'Inquisitor-Prelate Nemeth\'s post above the Slag Gate, with the winch that lifts it. One of you holds the winch.',
+    edges: ['n_kiln', 'n_slag', 'n_vats'],
     onEnter: () => launchEncounter('enc_m5')
+  },
+  {
+    id: 'n_slag', loc: 'slag_gate', name: 'The Slag Gate', pin: 'pin_gate',
+    x: 242.9, y: 59.5, scale: 1.2, days: 5, mode: 'The way out',
+    desc: 'The gate out of the Sunk Ward, beneath the Crucible. Beyond it lies Upper Cinderreach.',
+    edges: ['n_crucible'],
+    onEnter: null
   }
+];
+
+// Routes along the painted roads: [from, to, waypoints]; drawn only for the selected place (focus-only).
+const WORLD_ROUTES = [
+  ['n_sluice', 'n_grate', [[284.4, 271.9], [265.1, 249.2]]],
+  ['n_grate', 'n_cross', [[254.4, 213.7], [278.0, 212.3], [295.1, 217.4], [312.2, 223.6], [333.6, 237.8], [348.6, 247.8], [372.1, 232.2]]],
+  ['n_junction', 'n_kiln', [[123.9, 195.2], [146.1, 182.5], [145.3, 161.2], [144.4, 142.7]]],
+  ['n_kiln', 'n_crucible', [[147.4, 137.0], [166.7, 127.1], [181.7, 118.6], [193.2, 108.6], [211.6, 104.4], [228.7, 115.7]]],
+  ['n_cross', 'n_vats', [[393.5, 192.4], [385.0, 169.7], [376.4, 155.5]]],
+  ['n_grate', 'n_junction', [[248.0, 212.3], [213.8, 214.6], [194.5, 196.7], [171.8, 186.7], [146.1, 185.3], [123.9, 195.2]]],
+  ['n_vats', 'n_crucible', [[342.2, 147.0], [316.5, 144.1], [298.5, 142.7], [290.8, 131.3], [284.4, 124.8], [265.1, 122.0]]],
+  ['n_crucible', 'n_slag', [[248.0, 107.2], [250.1, 84.5]]],
+  ['n_grate', 'n_corvo', [[254.4, 213.7], [278.0, 212.3], [295.1, 217.4], [312.2, 223.6], [333.6, 237.8], [348.6, 249.2]]],
+  ['n_grate', 'n_vats', [[254.4, 213.7], [286.5, 212.8], [304.9, 200.9], [325.0, 192.4], [337.9, 175.4], [346.4, 155.5]]],
 ];
 
