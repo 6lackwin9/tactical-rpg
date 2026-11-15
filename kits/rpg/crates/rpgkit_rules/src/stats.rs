@@ -151,32 +151,23 @@ impl StatModifier {
 pub const PROF_MAX_LEVEL: i32 = 3;
 pub const DEFAULT_SCALING: f64 = 1.5;
 pub const PASSIVE_ONLY_SCALING: f64 = 1.25;
-/// U3.2-S3 (U3 "Fixed vs parameter", FB-33): the default of the ruleset number `untrained_power_mult`, the factor on an
-/// untrained item's weapon power and armour (proficiency 0 in its gear type).
-pub const UNTRAINED_POWER_MULT: f64 = 0.75;
-/// U3.2-S3: the default of `untrained_burden_add`, the burden an untrained item adds.
-pub const UNTRAINED_BURDEN_ADD: i32 = 1;
 /// U3.2-S3: the default of `req_discount_per_level`, the stat requirement discount per proficiency level.
 pub const REQ_DISCOUNT_PER_LEVEL: i32 = 2;
-/// GEAR-REWORK1 (U3.3 1): the factor on a weapon's power and a worn item's flat mitigation at proficiency 0-3 under the
-/// strict gear rule (`Proficiency::strict`): 0.80 / 1.00 / 1.25 at 1 / 2 / 3. Index 0 is a hard equip lock (`gear::wear_lock`)
-/// and reads 1.0: gear worn while locked (a unit row's own loadout, which no build path refuses) keeps the soft wield
-/// penalty instead (`gear::Equipment::wield_penalty`). PR5-51b moved it from the data crate into the rules' `LOCKED` table.
+/// GEAR-REWORK1 (U3.3 1, PR5-57): the factor on a weapon's power and a worn item's flat mitigation at proficiency 0-3
+/// under the strict gear rule (`Proficiency::strict`): 0.80 / 1.00 / 1.25 at 1 / 2 / 3. Index 0 is a hard equip lock
+/// (`gear::wear_lock`) enforced across unit builds and content checks (and reads 1.0 when unrestricted/role-less).
 pub const PROF_GEAR_MULT: [f64; 4] = [1.0, 0.80, 1.00, 1.25];
 
-/// U3.2-S3 (FB-33, FB-34): the wield terms of the battle's ruleset (its row-only numbers `untrained_power_mult`,
-/// `untrained_burden_add`, `req_discount_per_level`; `Numbers::wield`). `Default` is the spec's defaults, so a unit
-/// built outside a battle (the party screen, the content check) reads them.
+/// U3.2-S3 (FB-33, PR5-57): the wield terms of the battle's ruleset (`req_discount_per_level`; `Numbers::wield`).
+/// `Default` is the spec's default, so a unit built outside a battle (the party screen, the content check) reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WieldRule {
-    pub untrained_power_mult: f64,
-    pub untrained_burden_add: i32,
     pub req_discount_per_level: i32,
 }
 
 impl Default for WieldRule {
     fn default() -> Self {
-        Self { untrained_power_mult: UNTRAINED_POWER_MULT, untrained_burden_add: UNTRAINED_BURDEN_ADD, req_discount_per_level: REQ_DISCOUNT_PER_LEVEL }
+        Self { req_discount_per_level: REQ_DISCOUNT_PER_LEVEL }
     }
 }
 

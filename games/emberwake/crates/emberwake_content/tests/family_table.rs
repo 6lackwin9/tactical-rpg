@@ -137,6 +137,13 @@ fn shipped_gear_keeps_its_behaviour() {
     for row in dicts(&src.catalog["skills"]) {
         assert!(row.contains_key(SKILL_SPELL_SOURCE), "the loader marks every skill");
         let new = SkillDef::from_obj(&row);
+        // PR5-57 added `spell_source` to the reworked `sprayer` family (`LEGACY_FAMILY_RULES` pre-dates `sprayer`).
+        if new.weapon_types.iter().any(|w| w == "sprayer") {
+            if new.kind == "ATTACK" {
+                assert!(skill_in_group(&new, "spell"), "{}: sprayer attacks count in group spell", new.id);
+            }
+            continue;
+        }
         let mut old = row.clone();
         old.shift_remove(SKILL_SPELL_SOURCE);
         assert_eq!(skill_in_group(&new, "spell"), skill_in_group(&SkillDef::from_obj(&old), "spell"), "{}: the group spell", new.id);

@@ -57,10 +57,6 @@ pub struct AttackPower {
     pub total_w_power: i32,
     pub pen_ratio: f64,
     pub def_amount: i32,
-    /// U3.2-S3 (FB-33): the weapon is worn untrained (proficiency 0): its power takes the wield terms'
-    /// `untrained_power_mult` (`untrained_mult`), stacking with the deficit ratio.
-    pub untrained: bool,
-    pub untrained_mult: f64,
     /// PK2-S5b: the swung weapon instance is dulled (0 durability): its weapon power took `gear::DULLED_POWER_MULT`.
     pub dulled: bool,
     /// GEAR-REWORK1 (PR5-51a): the strict rule's proficiency factor on the weapon power (`Proficiency::gear_mult`:
@@ -135,8 +131,7 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                 let pen = w.wield_penalty(&u.stats);
                 (res.base_w_power, res.tier_boost, res.training_pwr, res.total_w_power) = (w.item.base_power, tier, training, total);
                 if pen.penalized {
-                    (res.pen_ratio, res.def_amount, res.untrained) = (pen.ratio, pen.deficit, pen.untrained);
-                    res.untrained_mult = if pen.untrained { pen.untrained_mult } else { 0.0 };
+                    (res.pen_ratio, res.def_amount) = (pen.ratio, pen.deficit);
                 }
                 res.weapon_power = if pen.penalized { total as f64 * pen.factor() } else { total as f64 };
                 // GEAR-REWORK1 (PR5-51a): the strict rule's proficiency factor (none without it: today's numbers)

@@ -506,12 +506,15 @@ pub fn off_hand_ammo(res: &mut Resolver, w: &mut World, i: usize) {
             w.meters.gauges[g].gained = true;
         }
         move_to(res, w, g, max, &h, &format!("{meter} {}, reloaded", delta_text(max - value)), true, block, &mut fired);
+        res.scheduled[i].command.reloaded = true;
     } else if !e.throw_skill.is_empty() && s.id == e.throw_skill {
         // PR5-51a pass 3: the Throw spends its cost (`unpaid` refused it at less) and is not empowered
         move_to(res, w, g, (value - e.cost).max(0), &h, &format!("{meter} {}, thrown", delta_text(-e.cost)), true, block, &mut fired);
+        res.scheduled[i].command.knife_thrown = true;
     } else if crate::offhand::empowers(w, c, &s) && value >= e.cost {
         move_to(res, w, g, value - e.cost, &h, &format!("{meter} {}, empowered", delta_text(-e.cost)), true, block, &mut fired);
         res.scheduled[i].command.scale_power(e.power_mult);
+        res.scheduled[i].command.ammo_empowered = true;
     }
     if !fired.lines.is_empty() || !fired.moves.is_empty() {
         res.triggers.fired.push(fired);

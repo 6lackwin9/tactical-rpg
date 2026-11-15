@@ -1781,9 +1781,6 @@ pub(crate) fn wield_badge(unit: Option<&Unit>, item: &emberwake_data::ItemDef) -
         return None;
     }
     let mut why = Vec::new();
-    if pen.untrained {
-        why.push(format!("untrained in {} (x{}, +{} burden)", item.weapon_type.replace('_', " "), pen.untrained_mult, pen.burden_add));
-    }
     if pen.deficit > 0 {
         why.push(format!("{} stat point{} short (-{}%)", pen.deficit, if pen.deficit == 1 { "" } else { "s" }, (pen.ratio * 100.0).round()));
     }
@@ -1944,10 +1941,12 @@ mod tests {
         let err = drop_move(&d, "", &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).expect_err("the strict lock refuses it");
         assert!(err.contains("untrained"), "{err}");
         assert_eq!(m.equipment.get("main_hand").cloned(), held, "the slot keeps what it held");
-        let mut built = progression::build_with(&d, &m, "", false).unwrap();
-        built.unit.stats.proficiency.strict = false;
-        let (badge, note) = wield_badge(Some(&built.unit), &d.cat.items[&item]).expect("a penalty badge");
-        assert!(badge.starts_with('x') && note.contains("untrained"), "{badge} {note}");
+        let built = progression::build_with(&d, &m, "", false).unwrap();
+        let mut unfit = d.cat.items[&item].clone();
+        unfit.weapon_type.clear();
+        unfit.required_stats.insert("STR".into(), 999);
+        let (badge, note) = wield_badge(Some(&built.unit), &unfit).expect("a penalty badge");
+        assert!(badge.starts_with('x') && note.contains("short"), "{badge} {note}");
     }
 
     /// PR5-26 (audit B2, B6): a member whose grant `forbid_hands` refuses two-handed items (a scratch passive here) can't

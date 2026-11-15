@@ -354,7 +354,7 @@
 				{
 					"kind": "requirement",
 					"stat": "DEX",
-					"value": 10
+					"value": 9
 				}
 			],
 			"tiers": []
@@ -400,7 +400,7 @@
 				{
 					"kind": "requirement",
 					"stat": "DEX",
-					"value": 10
+					"value": 9
 				}
 			],
 			"tiers": []
@@ -850,7 +850,7 @@
 			"rarity": "UNCOMMON",
 			"weight": 0.8,
 			"value": 60,
-			"description": "A glass sphere held in the off hand. Sharpens spells and lets them reach one tile further.",
+			"description": "A glass sphere held in the off hand. Channels arcane power and lets spells reach one tile further.",
 			"damage_type": "magic",
 			"icon_id": "",
 			"starter_stash": false,
@@ -863,14 +863,6 @@
 					"kind": "requirement",
 					"stat": "INT",
 					"value": 12
-				},
-				{
-					"kind": "effect",
-					"effect": {
-						"type": "skill_potency",
-						"group": "spell",
-						"value": 0.1
-					}
 				},
 				{
 					"kind": "effect",

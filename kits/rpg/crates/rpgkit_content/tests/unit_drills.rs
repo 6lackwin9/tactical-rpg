@@ -130,3 +130,51 @@ fn a_start_party_unit_with_untrained_gear_may_stand_there() {
         assert!(!world::manifest_errors(&v, "w").iter().any(|e| e.contains("Start party")), "{start}: {:?}", world::manifest_errors(&v, "w"));
     }
 }
+
+#[test]
+fn strict_class_unit_resolves_drill_passives_against_wear_lock() {
+    use aegis_core::scratch::Scratch;
+    use rpgkit_content::store;
+    let t = Scratch::vacant("rpgkit_unit_drills_strict");
+    let data = t.join("data");
+    std::fs::create_dir_all(data.join("catalog")).unwrap();
+    std::fs::create_dir_all(data.join("worlds")).unwrap();
+    let w = |kind: &str, version: i64, entries: Value| {
+        std::fs::write(data.join(format!("catalog/{kind}.json")), json!({"kind": kind, "version": version, "entries": entries}).to_string()).unwrap();
+    };
+    let stats = json!({"STR": 12, "DEX": 12, "INT": 8, "CONS": 13, "PERC": 9, "KNOW": 10});
+    w("skills", 1, json!([
+        {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 2, "description": "Strike.", "basic": true},
+        {"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "description": "Guard.", "basic": true},
+        {"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "description": "Move.", "system": true, "basic": true},
+        {"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "description": "Rest.", "system": true, "basic": true},
+        {"id": "switch_target", "name": "Switch", "kind": "TARGET", "level": 1, "blocks": 1, "description": "Switch.", "system": true, "basic": true},
+        {"id": "offhand_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "description": "Jab.", "weapon_hand": "off", "basic": true}
+    ]));
+    w("item_families", 1, json!([
+        {"id": "sword", "name": "Sword", "item_type": "WEAPON", "hands": ["main_1h"], "default_hand": "main_1h", "scaling_stats": ["STR"], "damage_type": "slash",
+         "base": {"main_1h": {"power": 10, "range": 1, "burden": 0, "mitigation": 0}}},
+        {"id": "polearm", "name": "Polearm", "item_type": "WEAPON", "hands": ["main_1h"], "default_hand": "main_1h", "scaling_stats": ["STR"], "damage_type": "pierce",
+         "base": {"main_1h": {"power": 12, "range": 1, "burden": 0, "mitigation": 0}}}
+    ]));
+    w("items", 2, json!([
+        {"id": "blade", "name": "Blade", "family": "sword", "hand": "main_1h", "scaling_stat": "STR"},
+        {"id": "pike", "name": "Pike", "family": "polearm", "hand": "main_1h", "scaling_stat": "STR"}
+    ]));
+    w("passives", 1, json!([
+        {"id": "pike_drill", "name": "Pike Drill", "slot": "", "effects": [{"type": "proficiency", "gear": "polearm", "levels": 2}]}
+    ]));
+    w("classes", 1, json!([
+        {"id": "fighter", "name": "Fighter", "base_stats": stats, "growth": stats, "skill_path": {}, "main_hand": "blade",
+         "proficiency": {"sword": {"level": 3, "role": "main"}}}
+    ]));
+    let unit = |passives: Value| json!({
+        "id": "foe", "name": "Foe", "side": "enemy", "class_id": "fighter", "level": 1, "main_hand": "pike", "passives": passives
+    });
+    w("units", 1, json!([unit(json!([]))]));
+    let v = store::view(&data);
+    let bad = check::validate_entry(&v, "units", &aegis_core::json::dict(&unit(json!([]))).clone(), "foe");
+    assert!(bad.iter().any(|e| e.contains("polearm") || e.contains("Pike")), "untrained polearm fails without drill: {bad:?}");
+    let good = check::validate_entry(&v, "units", &aegis_core::json::dict(&unit(json!(["pike_drill"]))).clone(), "foe");
+    assert!(good.is_empty(), "unit-level drill resolves wear_lock cleanly: {good:?}");
+}

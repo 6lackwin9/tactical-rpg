@@ -2068,6 +2068,9 @@
 			"pouch": [
 				"none"
 			],
+			"passives": [
+				"censer_drill"
+			],
 			"loot": [
 				{
 					"item": "calcified_bone_shard",
@@ -2133,6 +2136,9 @@
 			"accessory_2": "",
 			"pouch": [
 				"none"
+			],
+			"passives": [
+				"medium_drill"
 			],
 			"loot": [
 				{
@@ -2204,6 +2210,10 @@
 			"accessory_2": "",
 			"pouch": [
 				"none"
+			],
+			"passives": [
+				"bone_saw_drill",
+				"medium_drill"
 			],
 			"loot": [
 				{
@@ -2679,6 +2689,9 @@
 			"pouch": [
 				"none"
 			],
+			"passives": [
+				"scourge_drill"
+			],
 			"loot": [
 				{
 					"item": "sulfur_poultice",
@@ -2892,6 +2905,9 @@
 			"pouch": [
 				"none"
 			],
+			"passives": [
+				"bone_saw_drill"
+			],
 			"loot": [
 				{
 					"item": "brimstone_draught",
@@ -3100,6 +3116,92 @@
 				"none"
 			],
 			"loot": []
+		},
+		{
+			"id": "dojo_rogue",
+			"name": "Rogue",
+			"side": "party",
+			"description": "Gear Dojo rogue: level 2 Rogue, vitals derived from stats and gear.",
+			"class_id": "rogue",
+			"level": 2,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [],
+			"deck": {},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "wpn_stiletto",
+			"off_hand": "ash_cloak",
+			"head": "",
+			"body": "arm_leather",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"con_heal_potion"
+			],
+			"loot": [],
+			"dojo": "hero"
+		},
+		{
+			"id": "dojo_mage",
+			"name": "Mage",
+			"side": "party",
+			"description": "Gear Dojo mage: level 2 Mage, vitals derived from stats and gear.",
+			"class_id": "mage",
+			"level": 2,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "",
+			"palette": "",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [],
+			"loadout": [],
+			"deck": {},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "brass_vitriol_sprayer",
+			"off_hand": "wpn_orb",
+			"head": "",
+			"body": "arm_mage_robe",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"con_focus_elixir"
+			],
+			"loot": [],
+			"dojo": "hero"
 		}
 	]
 }

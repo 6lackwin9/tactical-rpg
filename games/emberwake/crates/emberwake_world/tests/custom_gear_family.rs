@@ -85,7 +85,7 @@ fn a_new_weapon_family_validates_and_fights_without_kit_code() {
     assert!(s.trained_for(&worn), "the class's training covers the new family");
     let main = s.hero().inventory.main_weapon().expect("a main weapon").clone();
     assert_eq!(main.item.id, ITEM);
-    assert!(!main.wield_penalty(&s.hero().stats).untrained, "worn trained");
+    assert!(emberwake_rules::gear::wear_lock(&s.hero().stats, &main.item).is_none() && !main.wield_penalty(&s.hero().stats).penalized, "worn trained");
     s.strike("main");
     assert!(s.dummy.hp < DUMMY_MAX_HP, "the strike lands");
     let _ = std::fs::remove_dir_all(&t);

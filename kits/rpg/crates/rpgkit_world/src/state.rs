@@ -291,10 +291,23 @@ impl UnitState {
         class.is_none_or(|c| trained_for(&self.proficiency(d, c), def))
     }
 
-    /// PK2-S3: the member's proficiency out of battle: its class's, its drill passives' (`with_drills`) and its trained
-    /// levels (`trained`), as a build reads them.
+    /// PK2-S3 (PR5-57): the member's proficiency out of battle: its class's, its base row + drill passives'
+    /// (`with_drills`, deduplicated) and its trained levels (`trained`), as a build reads them.
     pub fn proficiency(&self, d: &Data, class: &rpgkit_data::ClassDef) -> rpgkit_rules::stats::Proficiency {
-        let mut p = rpgkit_rules::stats::Proficiency::from_class(class).with_drills(&d.cat, &progression::member_passives(d, self));
+        let mut seen = Vec::new();
+        if let Some(base) = d.cat.units.get(&self.base_unit) {
+            for id in &base.passives {
+                if !seen.contains(id) {
+                    seen.push(id.clone());
+                }
+            }
+        }
+        for id in progression::member_passives(d, self) {
+            if !seen.contains(&id) {
+                seen.push(id);
+            }
+        }
+        let mut p = rpgkit_rules::stats::Proficiency::from_class(class).with_drills(&d.cat, &seen);
         for (gear, levels) in &self.trained {
             p.add_bonus(gear, (*levels).clamp(0, i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL)) as i32);
         }

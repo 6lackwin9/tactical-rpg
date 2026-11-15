@@ -420,6 +420,31 @@ fn character_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         slots.retain(|(s, _)| *s != slot);
         slots.push((slot, r));
     }
+    // PR5-57 (FB-267(2) Option A): strict `wear_lock` across base-unit slots + named-item overrides (with gathered character drills)
+    let base_id = json::s(e, "base_unit");
+    if let Some(base_unit) = v.typed.units.get(&base_id) {
+        let passives = unit::character_passives(&v.worlds, e, w);
+        if let Some(stats) = rpgkit_rules::unit::unit_stats(&v.typed, base_unit, &passives) {
+            let mut gear: Vec<(rpgkit_rules::gear::Slot, String, &rpgkit_data::ItemDef)> = Vec::new();
+            for slot_key in super::LOADOUT_SLOTS {
+                let Some(slot) = rpgkit_rules::gear::Slot::parse(slot_key) else { continue };
+                let Some(id) = rpgkit_rules::unit::row_slot_item(&v.typed, base_unit, slot_key) else { continue };
+                if let Some(item) = v.typed.items.get(&id).filter(|i| i.is_equipment()) {
+                    gear.push((slot, item.name.clone(), item));
+                }
+            }
+            for r in json::sget(e, "named_items") {
+                let named = v.worlds.resolve(w, "items", &r);
+                let Some(item) = v.typed.items.get(&json::s(named, "base_item")).filter(|i| i.is_equipment()) else { continue };
+                let slot = rpgkit_rules::gear::Slot::parse(&item.slot).unwrap_or(rpgkit_rules::gear::Slot::MainHand);
+                let name = json::s_or(named, "name", &item.name);
+                gear.retain(|(s, _, _)| *s != slot);
+                gear.push((slot, name, item));
+            }
+            let refs: Vec<(&str, &rpgkit_data::ItemDef)> = gear.iter().map(|(_, n, i)| (n.as_str(), *i)).collect();
+            errors.extend(unit::strict_item_errors(&json::s_or(e, "name", &json::s(e, "id")), &stats, &refs));
+        }
+    }
     // ROSTER1 KS2, 11.3: a party character's keepsake; RK1: a member id is never a roster read word
     let keepsake = json::s(e, "keepsake");
     if !keepsake.is_empty() {

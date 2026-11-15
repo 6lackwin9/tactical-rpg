@@ -254,6 +254,14 @@ pub struct Command {
     pub dodged: Option<UnitId>,
     /// PR5-32: what the line in `log` did, in fields (`event::EventKind`; None = no screen reacts to it), set with `log`.
     pub cue: Option<crate::event::EventKind>,
+    /// PR5-57 (`FB-268(d)` `counts=on` telemetry): off-hand ammo empowered this attack (`meter::off_hand_ammo`).
+    pub ammo_empowered: bool,
+    /// PR5-57 (`FB-268(d)` `counts=on` telemetry): off-hand reload refilled the ammo meter (`meter::off_hand_ammo`).
+    pub reloaded: bool,
+    /// PR5-57 (`FB-268(d)` `counts=on` telemetry): off-hand knife Throw spent ammo (`meter::off_hand_ammo`).
+    pub knife_thrown: bool,
+    /// PR5-57 (`FB-268(d)` `counts=on` telemetry): off-hand `power_stat_override` supplied the attack's scaling stat (`land`).
+    pub orb_override: bool,
 }
 
 impl Command {
@@ -318,6 +326,10 @@ impl Command {
             locked: None,
             dodged: None,
             cue: None,
+            ammo_empowered: false,
+            reloaded: false,
+            knife_thrown: false,
+            orb_override: false,
         }
     }
 
@@ -1040,6 +1052,7 @@ impl Command {
     /// damage dealt to that unit.
     #[allow(clippy::too_many_arguments)]
     fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
+        self.orb_override |= damage::attack_power(&w.units[src], ranged, offhand).stat_override;
         // PK2-S1: a member grant `pierce_melee` pierces with every melee hit
         let pierce = self.pierces_by_skill(w) || pierces_melee(w, src, ranged);
         let claim = match self.ally.as_mut() {

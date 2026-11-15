@@ -1,9 +1,8 @@
-//! UNITDRILL1 world side on fixture rows (no shipped data), U3.2-S3 (FB-34, FB-63 (2)): `can_wear`, which the party
-//! screen's equip paths and the state validation read, checks the slot only (training is no gate: an untrained item is
-//! worn under the wield penalty); `trains` says whether the member wears an item trained, from the class's training or
-//! its drill passives as a build re-gathers them (`progression::member_passives`: the character's sources now, then the
-//! saved ids), as is deck passive ownership; a built unit's proficiency agrees with the gear rule; `wears_untrained` is
-//! retired (read by nothing).
+//! UNITDRILL1 world side on fixture rows (no shipped data), U3.2-S3 (FB-34, FB-63 (2)): on a role-less fixture class,
+//! `can_wear`, which the party screen's equip paths and the state validation read, checks the slot only; `trains` says
+//! whether the member wears an item trained, from the class's training or its drill passives as a build re-gathers them
+//! (`progression::member_passives`: the character's sources now, then the saved ids), as is deck passive ownership; a
+//! built unit's proficiency agrees with the gear rule; `wears_untrained` and the soft untrained penalty are retired.
 
 use rpgkit_rules::stats::Proficiency;
 use rpgkit_world::new_game::hero_from_character;
@@ -54,15 +53,16 @@ fn the_class_trains_and_nothing_else_does_without_a_drill() {
 }
 
 #[test]
-fn untrained_gear_is_worn_and_valid() {
+fn untrained_gear_is_worn_on_non_strict_class_with_no_untrained_penalty() {
     let d = data();
     let mut m = member("plain", &[]);
-    assert!(m.can_wear(&d, "pike", "main_hand").is_ok(), "training is no gate");
+    assert!(m.can_wear(&d, "pike", "main_hand").is_ok(), "non-strict fixture class has no training gate");
     m.equipment.insert("main_hand".into(), "pike".into());
     assert_eq!(m.validate(&d), Vec::<String>::new());
     let built = build_with(&d, &m, "w", true).expect("it builds");
     let pike = built.unit.inventory.main_weapon().expect("the pike is worn");
-    assert!(pike.wield_penalty(&built.unit.stats).untrained, "worn untrained");
+    assert_eq!(built.unit.stats.proficiency.level_of("pike"), 0);
+    assert!(!pike.wield_penalty(&built.unit.stats).penalized, "soft untrained penalty retired");
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn wears_untrained_is_read_by_nothing() {
     let built = build_with(&d, &m, "w", true).expect("it builds");
     assert_eq!(built.unit.stats.proficiency.level_of("hide"), 0);
     let apron = built.unit.inventory.get(rpgkit_rules::gear::Slot::Body).expect("the apron is worn");
-    assert!(apron.wield_penalty(&built.unit.stats).untrained, "worn under the penalty like any untrained item");
+    assert!(!apron.wield_penalty(&built.unit.stats).penalized, "soft untrained penalty retired");
 }
 
 #[test]
@@ -142,10 +142,11 @@ fn a_member_that_loses_its_drill_wears_the_gear_untrained() {
     m.equipment.insert("main_hand".into(), "pike".into());
     assert_eq!(m.validate(&d), Vec::<String>::new());
     let trained = build_with(&d, &m, "w", true).expect("it builds");
-    assert!(!trained.unit.inventory.main_weapon().unwrap().wield_penalty(&trained.unit.stats).untrained);
+    assert_eq!(trained.unit.stats.proficiency.level_of("pike"), 2);
+    assert!(!trained.unit.inventory.main_weapon().unwrap().wield_penalty(&trained.unit.stats).penalized);
     m.passives.clear();
-    assert_eq!(m.validate(&d), Vec::<String>::new(), "no longer refused");
+    assert_eq!(m.validate(&d), Vec::<String>::new(), "no longer refused on non-strict fixture class");
     let built = build_with(&d, &m, "w", true).expect("it builds");
     assert_eq!(built.unit.stats.proficiency.level_of("pike"), 0);
-    assert!(built.unit.inventory.main_weapon().unwrap().wield_penalty(&built.unit.stats).untrained);
+    assert!(!built.unit.inventory.main_weapon().unwrap().wield_penalty(&built.unit.stats).penalized);
 }

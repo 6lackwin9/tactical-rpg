@@ -653,11 +653,6 @@ pub struct Numbers {
     /// U1.2-S5 (`unit_pools`, U1 "Adding a derived value without a logic change"): the unit meter rows every unit holds
     /// in this ruleset's battles (rule unit_meters), beside the ones passives give; empty (the default) = none.
     pub unit_pools: Vec<String>,
-    /// U3.2-S3 (`untrained_power_mult`, U3 "Fixed vs parameter"): the factor on an untrained item's weapon power and
-    /// armour.
-    pub untrained_power_mult: f64,
-    /// U3.2-S3 (`untrained_burden_add`): the burden an untrained item adds.
-    pub untrained_burden_add: i32,
     /// U3.2-S3 (`req_discount_per_level`): the stat requirement discount per proficiency level.
     pub req_discount_per_level: i32,
     /// S1.2-S4 (`guard_common_mitigation`, S1 section 3): the guard fraction of a 1-round Guard skill that authors none.
@@ -740,8 +735,6 @@ impl Default for Numbers {
             max_pip_loss_per_hit: 3,
             know_potency: 0.0,
             unit_pools: Vec::new(),
-            untrained_power_mult: crate::stats::UNTRAINED_POWER_MULT,
-            untrained_burden_add: crate::stats::UNTRAINED_BURDEN_ADD,
             req_discount_per_level: crate::stats::REQ_DISCOUNT_PER_LEVEL,
             guard_common_mitigation: status::GUARD_COMMON_MITIGATION,
             guard_multi_round_mitigation: status::GUARD_MULTI_ROUND_MITIGATION,
@@ -834,8 +827,6 @@ impl Numbers {
             max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
             know_potency: value::float(o, "know_potency", d.know_potency),
             unit_pools: value::strings(o, "unit_pools"),
-            untrained_power_mult: value::float(o, "untrained_power_mult", d.untrained_power_mult),
-            untrained_burden_add: value::int(o, "untrained_burden_add", d.untrained_burden_add),
             req_discount_per_level: value::int(o, "req_discount_per_level", d.req_discount_per_level),
             guard_common_mitigation: value::float(o, "guard_common_mitigation", d.guard_common_mitigation),
             guard_multi_round_mitigation: value::float(o, "guard_multi_round_mitigation", d.guard_multi_round_mitigation),
@@ -866,9 +857,9 @@ impl Numbers {
         }
     }
 
-    /// U3.2-S3: the wield terms units are built under in this ruleset's battles (`UnitBuild::wield`).
+    /// U3.2-S3 (PR5-57): the wield term units are built under in this ruleset's battles (`UnitBuild::wield`).
     pub fn wield(&self) -> crate::stats::WieldRule {
-        crate::stats::WieldRule { untrained_power_mult: self.untrained_power_mult, untrained_burden_add: self.untrained_burden_add, req_discount_per_level: self.req_discount_per_level }
+        crate::stats::WieldRule { req_discount_per_level: self.req_discount_per_level }
     }
 
     /// RULESET1-G2 (`sim feel tune=`): sets one tuning number by its row key (the `stagger_*`, `flank_*`,
@@ -1119,7 +1110,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 
 /// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
 /// rules.
-pub const FIELD_RULES: [FieldRule; 44] = [
+pub const FIELD_RULES: [FieldRule; 42] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
     field_rule("modes.flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
@@ -1154,9 +1145,7 @@ pub const FIELD_RULES: [FieldRule; 44] = [
     FieldRule { range: Some((0.0, 3.0)), ..field_rule("know_potency", &[]) },
     // U1.2-S5: the unit meters every unit holds, row-only like the status numbers; read only under unit_meters
     field_rule("unit_pools", &[UNIT_METERS]),
-    // U3.2-S3 (U3 "Fixed vs parameter"): the wield terms, row-only like the status numbers; read whatever the rules
-    FieldRule { range: Some((0.25, 1.0)), ..field_rule("untrained_power_mult", &[]) },
-    FieldRule { range: Some((0.0, 4.0)), ..field_rule("untrained_burden_add", &[]) },
+    // U3.2-S3 (U3 "Fixed vs parameter", PR5-57): the requirement discount term, row-only like the status numbers; read whatever the rules
     FieldRule { range: Some((0.0, 4.0)), ..field_rule("req_discount_per_level", &[]) },
     // S1.2-S4 (S1 section 3): the guard fractions a Guard skill that authors none takes, row-only like the status
     // numbers; read whatever the rules
@@ -1369,15 +1358,13 @@ pub const LOCKED: [Locked; 49] = [
 ];
 
 /// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
-pub const PROMOTED: [(&str, &str); 18] = [
+pub const PROMOTED: [(&str, &str); 16] = [
     ("FIXED_AP", "flank_protected_ap"),
     ("MOVE_AFTER_BLOCKS", "move_after_blocks"),
     ("BLEED_PCT", "bleed_pct"),
     ("COUNTER_MULT", "counter_mult"),
     ("DEBT_STAGGER", "debt_stagger"),
     ("DEBT_STUN", "debt_stun"),
-    ("UNTRAINED_POWER_MULT", "untrained_power_mult"),
-    ("UNTRAINED_BURDEN_ADD", "untrained_burden_add"),
     ("REQ_DISCOUNT_PER_LEVEL", "req_discount_per_level"),
     ("GUARD_COMMON_MITIGATION", "guard_common_mitigation"),
     ("GUARD_MULTI_ROUND_MITIGATION", "guard_multi_round_mitigation"),
@@ -1433,8 +1420,6 @@ impl Numbers {
             "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
             "know_potency" => self.know_potency.to_string(),
             "unit_pools" => self.unit_pools.join(","),
-            "untrained_power_mult" => self.untrained_power_mult.to_string(),
-            "untrained_burden_add" => self.untrained_burden_add.to_string(),
             "req_discount_per_level" => self.req_discount_per_level.to_string(),
             "guard_common_mitigation" => self.guard_common_mitigation.to_string(),
             "guard_multi_round_mitigation" => self.guard_multi_round_mitigation.to_string(),

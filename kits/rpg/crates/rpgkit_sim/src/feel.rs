@@ -60,6 +60,11 @@ pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
     // PR5-26 (FB-191 (f)): the Channel rule's actions that landed: channeled versions, and Vents (`is_vent`)
     ("channeled_actions", "channeled actions", |_, a| (a.landed && a.command.channeled) as i64),
     ("vents", "Vents", |w, a| (a.landed && is_vent(w, a)) as i64),
+    // PR5-57 (FB-268(d)): GEAR-REWORK1 off-hand ammo / throw / orb hybrid stat counters
+    ("ammo_empower", "ammo empowers", |_, a| a.command.ammo_empowered as i64),
+    ("reload", "reloads", |_, a| a.command.reloaded as i64),
+    ("knife_throw", "knife throws", |_, a| a.command.knife_thrown as i64),
+    ("orb_override", "orb stat overrides", |_, a| a.command.orb_override as i64),
 ];
 
 /// WORLD-SIM1 (PR5-42): reads one unit's hook count for the fight from the battle metrics (HOOKS1 4.2), by its display

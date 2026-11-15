@@ -486,3 +486,104 @@ fn the_key_the_table_and_the_help() {
     assert!(help.iter().any(|l| l.contains("counts=on|off")), "sim help names the key");
     assert!(!rpgkit_sim::args::usage(&game()).iter().any(|l| l.contains("counts=")), "usage stays as sim_golden holds it");
 }
+
+#[test]
+fn gear_rework_counters_count_ammo_reload_throw_and_orb() {
+    use rpgkit_battle::grid::V2;
+    use rpgkit_battle::session::{EncounterDef, Roster, Session};
+    use rpgkit_data::{Catalog, UnitDef};
+    use rpgkit_rules::gear::{Equipment, Slot};
+    use rpgkit_rules::ruleset::{Ruleset, TIMELINE, UNIT_METERS};
+    use rpgkit_rules::Overrides;
+    use std::sync::Arc;
+
+    struct CatRoster;
+    impl Roster for CatRoster {
+        fn entry(&self, cat: &Catalog, id: &str) -> Option<UnitDef> {
+            cat.units.get(id).cloned()
+        }
+        fn overrides(&self, _cat: &Catalog, _id: &str) -> Overrides {
+            Overrides::default()
+        }
+    }
+
+    let stats = json!({"STR": 10, "DEX": 12, "INT": 18, "CONS": 13, "PERC": 9, "KNOW": 10});
+    let cat = Arc::new(Catalog::from_value(&json!({
+        "classes": [{"id": "c", "name": "C", "base_stats": stats, "growth": {}, "skill_path": {"t_shot": 1}}],
+        "units": [
+            {"id": "h", "name": "Hero", "class_id": "c", "level": 3, "side": "party", "skill_cap": 5},
+            {"id": "e", "name": "Foe", "class_id": "c", "level": 3, "side": "enemy", "skill_cap": 5}
+        ],
+        "skills": [
+            {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "ap_cost": 1, "target_mode": "ENEMY"},
+            {"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2},
+            {"id": "switch_target", "name": "Switch", "kind": "TARGET", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "staggered", "name": "Staggered", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
+            {"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
+            {"id": "t_shot", "name": "Shot", "kind": "ATTACK", "level": 1, "blocks": 1, "ap_cost": 1, "target_mode": "ENEMY"},
+            {"id": "t_throw", "name": "Throw", "kind": "ATTACK", "level": 1, "blocks": 1, "ap_cost": 1, "target_mode": "ENEMY", "learned_only": true, "reach_min": 2, "reach_max": 3},
+            {"id": "t_reload", "name": "Reload", "kind": "SUPPORT", "level": 1, "blocks": 1, "ap_cost": 1, "target_mode": "SELF", "heal_base": 1, "learned_only": true}
+        ],
+        "unit_meters": [{"id": "t_ammo", "name": "Ammo", "short": "Am", "min": 0, "max": 1, "start": 0, "start_full": true, "show": "pips"}],
+        "items": [
+            {"id": "bow", "name": "Bow", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "bow", "base_power": 12, "base_range": 4, "two_handed": true, "scaling_stat": "DEX", "family_slot_rule": "2h_rig", "family_pairs_with": ["ammo"], "family_rules": ["always_ranged"]},
+            {"id": "quiver", "name": "Quiver", "item_type": "WEAPON", "slot": "OFF_HAND", "weapon_type": "ammo", "off_hand_category": "ammo", "base_power": 0, "family_slot_rule": "off_only", "family_off_hand_skill": "t_reload", "family_empower_next": {"meter": "t_ammo", "cost": 1, "power_mult": 1.5, "throw_skill": "t_throw"}},
+            {"id": "knife", "name": "Knife", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "knife", "base_power": 10, "family_slot_rule": "1h_light"},
+            {"id": "sword", "name": "Sword", "item_type": "WEAPON", "slot": "MAIN_HAND", "weapon_type": "sword", "base_power": 12, "scaling_stat": "STR"},
+            {"id": "orb", "name": "Orb", "item_type": "WEAPON", "slot": "OFF_HAND", "weapon_type": "orb", "off_hand_category": "orb", "base_power": 0, "family_slot_rule": "off_only", "family_power_stat_override": "INT"}
+        ]
+    })));
+    let start = |main: &str, off: &str, gap: i32| {
+        let mut def = EncounterDef::from_obj(json!({"id": "t_gear", "name": "Gear", "party": ["h"], "enemies": ["e"], "total_blocks": 1, "unit_ap": 10, "ap_regen": 0, "max_rounds": 6, "rng_seed": 5}).as_object().unwrap());
+        def.ruleset = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [UNIT_METERS]}).as_object().unwrap());
+        let mut s = Session::start(cat.clone(), def, &CatRoster);
+        s.w.grid.positions[0] = Some(V2::new(3, 3));
+        s.w.grid.positions[1] = Some(V2::new(3 + gap, 3));
+        s.w.units[0].inventory.equip(Equipment::new(&cat.items[main]), Slot::MainHand);
+        s.w.units[0].inventory.equip(Equipment::new(&cat.items[off]), Slot::OffHand);
+        s.w.units[0].sync_from_stats_and_gear(&cat);
+        rpgkit_battle::meter::restart_unit(&mut s.w, 0);
+        s
+    };
+    let use_skill = |s: &mut Session, sk: &str, tgt: UnitId| {
+        let id = sid(&s.w, sk);
+        let step = if tgt == 0 { rpgkit_battle::plan::PlanStep::self_skill(id) } else { rpgkit_battle::plan::PlanStep::engage(id, tgt) };
+        assert_eq!(s.plan.add_step(&s.w, 0, step, true), "", "{sk}");
+    };
+
+    // 1. Bow + quiver: shot empowers & spends ammo (1 -> 0); then reload refills it.
+    let mut s = start("bow", "quiver", 2);
+    drop_enemy_plans(&mut s);
+    use_skill(&mut s, "t_shot", 1);
+    confirm(&mut s);
+    play_out(&mut s);
+    let c1 = observed(&s);
+    assert_eq!(c1.party.rule_count("ammo_empower"), 1, "empowered shot counted");
+
+    s.advance_round();
+    drop_enemy_plans(&mut s);
+    use_skill(&mut s, "t_reload", 0);
+    confirm(&mut s);
+    play_out(&mut s);
+    let c2 = observed(&s);
+    assert_eq!(c2.party.rule_count("reload"), 1, "reload counted");
+
+    // 2. Light knife + quiver: Throw spends ammo and counts `knife_throw`.
+    let mut s = start("knife", "quiver", 2);
+    drop_enemy_plans(&mut s);
+    use_skill(&mut s, "t_throw", 1);
+    confirm(&mut s);
+    play_out(&mut s);
+    let c3 = observed(&s);
+    assert_eq!(c3.party.rule_count("knife_throw"), 1, "knife throw counted");
+
+    // 3. STR sword + INT orb (`INT 18 > STR 10`): swing counts `orb_override`.
+    let mut s = start("sword", "orb", 1);
+    drop_enemy_plans(&mut s);
+    use_skill(&mut s, "strike", 1);
+    confirm(&mut s);
+    play_out(&mut s);
+    let c4 = observed(&s);
+    assert_eq!(c4.party.rule_count("orb_override"), 1, "orb override counted");
+}

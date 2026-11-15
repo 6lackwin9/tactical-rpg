@@ -285,6 +285,8 @@ pub struct UnitDef {
     pub default_intent: String,
     /// HOOKS1 AT2 (rule ai_tactics): the unit's AI tactics (TACTICS ids, in order).
     pub tactics: Vec<String>,
+    /// PR5-57 (UNITDRILL1 / FB-267(2)): always-on passives held by this unit row directly (e.g. gear drills).
+    pub passives: Vec<String>,
     /// LAYER-DOWN-2: the unit's part in the gear Dojo (`UNIT_DOJO_KEY`: `UNIT_DOJO_HERO`, `UNIT_DOJO_DUMMY`, "" = none).
     pub dojo: String,
 }
@@ -383,6 +385,7 @@ impl UnitDef {
             poise: int(o, "poise", -1),
             default_intent: string(o, "default_intent", ""),
             tactics: strings(o, "tactics"),
+            passives: strings(o, "passives"),
             dojo: string(o, UNIT_DOJO_KEY, ""),
         }
     }

@@ -183,3 +183,32 @@ fn a_light_off_hand_weapons_button_is_the_jab_and_the_menu_draws_it() {
     let drawn = b.w.iter().find(|x| x.id == format!("popup.{k}")).expect("the button's widget");
     assert!(drawn.text.starts_with(&r.label), "{}", drawn.text);
 }
+
+#[test]
+fn wpn_orb_exposes_catalyst_pulse_in_off_hand_button() {
+    let (mut cx, mut g, mut b) = arena();
+    let h = {
+        let w = &mut b.host.session.as_mut().unwrap().w;
+        let h = w.allies.iter().copied().find(|&u| w.units[u].stats.proficiency.entries.contains_key("orb")).unwrap_or(w.allies[0]);
+        let cat = std::sync::Arc::clone(&w.cat);
+        let orb = cat.items.get("wpn_orb").expect("shipped wpn_orb");
+        let u = &mut w.units[h];
+        u.inventory.unequip(GearSlot::OffHand);
+        u.inventory.equip(Equipment::new(orb), GearSlot::OffHand);
+        u.sync_from_stats_and_gear(&cat);
+        meter::restart_unit(w, h);
+        h
+    };
+    b.selected = Some(h);
+    let f = foe(&b);
+    let pulse = sid(&b, "catalyst_pulse");
+    let r = button(&rows(&b, h, RoundTarget::Unit(f))).cloned().expect("Catalyst Pulse button");
+    assert!(picks_skill(&r, pulse), "picks catalyst_pulse");
+    assert_eq!(r.label, s(&b).w.cat.skills[pulse].name);
+    b.act(&mut cx, Action::UnitClick(f));
+    let p = b.popup.clone().expect("menu on foe");
+    let k = p.rows.iter().position(|row| row.slot == Some(Slot::Neutral(OFF_HAND))).expect("button in menu");
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    let drawn = b.w.iter().find(|x| x.id == format!("popup.{k}")).expect("button widget");
+    assert!(drawn.text.starts_with(&r.label), "{}", drawn.text);
+}

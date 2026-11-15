@@ -455,6 +455,7 @@
 			],
 			"default_hand": "off",
 			"slot_rule": "off_only",
+			"off_hand_skill": "catalyst_pulse",
 			"power_stat_override": "INT",
 			"off_hand_category": "orb",
 			"scaling_stats": [
@@ -1183,7 +1184,8 @@
 			"max_modifiers": 8,
 			"max_tiers": 3,
 			"engine_rules": [
-				"always_ranged"
+				"always_ranged",
+				"spell_source"
 			],
 			"damage_type": "fire",
 			"level2_bonus": {
