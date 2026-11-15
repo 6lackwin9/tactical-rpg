@@ -29,19 +29,6 @@
 			"slot": ""
 		},
 		{
-			"id": "axe_training",
-			"name": "Axe Training",
-			"description": "Trained with axes: +1 axe proficiency.",
-			"effects": [
-				{
-					"type": "proficiency",
-					"gear": "axe",
-					"levels": 1
-				}
-			],
-			"slot": ""
-		},
-		{
 			"id": "hardy",
 			"name": "Hardy",
 			"description": "Tough constitution: +2 CONS.",
@@ -1193,6 +1180,45 @@
 				},
 				{
 					"type": "pierce_melee"
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "heavy_drill",
+			"name": "Heavy Harness Drill",
+			"description": "Drilled in heavy harness: +2 heavy armour proficiency.",
+			"effects": [
+				{
+					"type": "proficiency",
+					"gear": "heavy",
+					"levels": 2
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "medium_drill",
+			"name": "Hide Harness Drill",
+			"description": "Drilled in hides and brigandines: +2 medium armour proficiency.",
+			"effects": [
+				{
+					"type": "proficiency",
+					"gear": "medium",
+					"levels": 2
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "light_drill",
+			"name": "Light Habit Drill",
+			"description": "Drilled in light vestments: +2 light armour proficiency.",
+			"effects": [
+				{
+					"type": "proficiency",
+					"gear": "light",
+					"levels": 2
 				}
 			],
 			"slot": ""

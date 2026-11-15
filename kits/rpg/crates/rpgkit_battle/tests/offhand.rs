@@ -250,6 +250,10 @@ fn without_unit_meters_ammo_neither_spends_nor_empowers() {
     assert!((mult(&res.scheduled[i].command) - plain).abs() < 1e-9);
     let reload = s.w.cat.skills[sid(&s.w, "t_reload")].clone();
     assert_eq!(offhand::reload_problem(&s.w, HERO, &reload), Some(RELOAD_NO_METER));
+    // PR5-51b: the gear fact a classic fight reads as the rule's opt-in data (`Unit::has_off_hand_ammo`)
+    assert!(s.w.units[HERO].has_off_hand_ammo(), "an ammunition off-hand item");
+    arm(&mut s.w, "bow", None);
+    assert!(!s.w.units[HERO].has_off_hand_ammo(), "an empty off hand");
 }
 
 #[test]

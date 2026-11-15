@@ -498,6 +498,13 @@ impl Unit {
         self.attack_range <= 1 && self.inventory.main_weapon().is_some_and(|w| w.has_reach())
     }
 
+    /// GEAR-REWORK1 (PR5-51b, U3.3 4 `ammo`): whether the unit's off-hand item carries an ammunition meter rule
+    /// (`ItemDef::empower_next`). A gear fact: the battle reads it only under the rule `unit_meters`
+    /// (`rpgkit_battle::meter::off_hand_ammo`), so it is that extension's opt-in data in a classic fight.
+    pub fn has_off_hand_ammo(&self) -> bool {
+        self.inventory.get(crate::gear::Slot::OffHand).is_some_and(|e| e.item.empower_next.is_some())
+    }
+
     /// PR5-28 (U3 FB-36c): the melee reach of the unit's ready weapon under the rule `reach`: its family's
     /// `range_band.max`, else `REACH_WEAPON_REACH` (also without a ready weapon; read only when `has_reach_weapon`).
     pub fn weapon_reach(&self) -> i32 {

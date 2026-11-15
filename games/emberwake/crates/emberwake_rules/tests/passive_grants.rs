@@ -198,6 +198,12 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
             // PK2-S1: the member grants (`rpgkit_data::MEMBER_GRANTS`), passives only
             "forbid_hands" if !gear => u.forbid_hands = u.forbid_hands.max(value::int(e, "hands", 2)),
             "pierce_melee" if !gear => u.pierce_melee = true,
+            // ACT1-HOOKS2 (FB-244 (4)): a skill's block delta, summed per skill (worn items and passives); the frozen
+            // catalog holds an item with one since the PR5-51b re-freeze (`hollis_lever_winch`)
+            "skill_block_cost" => {
+                let held = if gear { &mut u.gear_block_cost } else { &mut u.block_cost };
+                *held.entry(value::string(e, "skill", "")).or_insert(0) += value::int(e, "delta", 0);
+            }
             _ => {}
         }
     }

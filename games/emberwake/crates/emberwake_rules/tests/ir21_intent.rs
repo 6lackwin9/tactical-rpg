@@ -104,7 +104,7 @@ fn the_fb101_split_ships_with_its_shapes_and_no_sweep_remains() {
 #[test]
 fn shipped_data_gives_28_dual_and_the_intent_totals() {
     let rows = rows();
-    assert_eq!(rows.len(), 148, "IR21 covers all 148 skills (129 + brace, W2-4 slice 4 / FB-119, + 3 class basics, CLASS-BASICS, + 5 PK1-S3 Channel test skills, + 9 PR5-19 PK2-S6 graft and technique skills, + thurible_smite, PR5-34 SUNKWARD-FIX1)");
+    assert_eq!(rows.len(), 152, "IR21 covers all 152 skills (129 + brace, W2-4 slice 4 / FB-119, + 3 class basics, CLASS-BASICS, + 5 PK1-S3 Channel test skills, + 9 PR5-19 PK2-S6 graft and technique skills, + thurible_smite, PR5-34 SUNKWARD-FIX1, + 4 PR5-51b GEAR-REWORK1 off-hand skills)");
     let brace = rows.iter().find(|r| id(r) == "brace").expect("brace shipped");
     assert_eq!(derive(brace), [STAND], "brace (DEFEND, guard) is single-intent Stand: the dual counts stay");
     // CLASS-BASICS (FB-133): each new class basic derives by its shape, one per intent list
@@ -131,15 +131,22 @@ fn shipped_data_gives_28_dual_and_the_intent_totals() {
     assert_eq!(smite.get("kind").and_then(Value::as_str), Some("ATTACK"), "thurible_smite is an ATTACK");
     assert_eq!(area(smite), "", "thurible_smite is single target");
     assert_eq!(derive(smite), [ASSAULT], "thurible_smite: IR21 by its row");
+    // PR5-51b (GEAR-REWORK1, U3.3 4): the off-hand skills derive single-intent by their rows: the self FOCUS Reload
+    // Stands (as vent does), the DISENGAGE Fade-Step is Maneuver, the ally-reaching SUPPORT Cite Passage (not
+    // self-targetable) is Support, the knife Throw (ATTACK, reach 2-3) is Assault; the dual counts stay
+    for (i, want) in [("reload", STAND), ("fade_step", MANEUVER), ("cite_passage", SUPPORT), ("knife_throw", ASSAULT)] {
+        let r = rows.iter().find(|r| id(r) == i).unwrap_or_else(|| panic!("{i} shipped"));
+        assert_eq!(derive(r), [want], "{i}: IR21 by its row");
+    }
     let ss = ids_with(&rows, &[SUPPORT, STAND]).len();
     let fa = ids_with(&rows, &[FIELD, ASSAULT]).len();
     let dual = rows.iter().filter(|r| derive(r).len() == 2).count();
     assert_eq!((dual, ss, fa), (29, 10, 19), "29 = 10 Support,Stand + 19 Field,Assault");
     let totals: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| primary(&rows, i)).collect();
-    assert_eq!(totals, [71, 24, 19, 14, 15, 5], "FB-101 totals by primary intent (+ brace in Stand, + the 3 class basics in Field, Support, Maneuver, + the 5 PK1-S3 skills: 3 in Assault, 2 in Stand, + the 9 PK2-S6 skills: 8 in Assault, 1 in Support, + PR5-34 thurible_smite in Assault): Assault, Field, Stand, Support, Maneuver, Neutral");
+    assert_eq!(totals, [72, 24, 20, 15, 16, 5], "FB-101 totals by primary intent (+ brace in Stand, + the 3 class basics in Field, Support, Maneuver, + the 5 PK1-S3 skills: 3 in Assault, 2 in Stand, + the 9 PK2-S6 skills: 8 in Assault, 1 in Support, + PR5-34 thurible_smite in Assault, + the 4 PR5-51b skills: 1 each in Assault, Stand, Support, Maneuver): Assault, Field, Stand, Support, Maneuver, Neutral");
     assert_eq!(totals.iter().sum::<usize>(), rows.len(), "every skill has exactly one primary");
     let listed: Vec<usize> = [ASSAULT, FIELD, STAND, SUPPORT, MANEUVER, NEUTRAL].iter().map(|i| listing(&rows, i)).collect();
-    assert_eq!(listed, [90, 24, 29, 14, 15, 5], "a dual row lists under both intents: 19 Field,Assault add to Assault, 10 Support,Stand to Stand (PR5-34 thurible_smite: Assault 89 -> 90)");
+    assert_eq!(listed, [91, 24, 30, 15, 16, 5], "a dual row lists under both intents: 19 Field,Assault add to Assault, 10 Support,Stand to Stand (PR5-34 thurible_smite: Assault 89 -> 90; PR5-51b: +1 each in Assault, Stand, Support, Maneuver)");
     assert_eq!(listed.iter().sum::<usize>(), rows.len() + dual, "each dual row counts twice");
 }
 

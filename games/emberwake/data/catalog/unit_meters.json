@@ -343,6 +343,21 @@
 					]
 				}
 			]
+		},
+		{
+			"id": "ammo_pips",
+			"name": "Ammo",
+			"short": "Ammo",
+			"description": "",
+			"min": 0,
+			"max": 3,
+			"start": 0,
+			"start_full": true,
+			"show": "pips",
+			"decay": [],
+			"bands": [],
+			"rules": [],
+			"skills": []
 		}
 	]
 }

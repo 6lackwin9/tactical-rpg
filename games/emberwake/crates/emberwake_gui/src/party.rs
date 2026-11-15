@@ -1928,20 +1928,24 @@ mod tests {
         assert_eq!(m.pouch.len(), POUCH_MAX - 1);
     }
 
-    /// U3.2-S3 (FB-34): a class without training in a weapon type wears it (clicks, drops and Confirm), under the
-    /// wield penalty, which the slot's badge shows.
+    /// GEAR-REWORK1 (PR5-51b, U3.3 1): every shipped class is under the strict gear rule, so a weapon the member has
+    /// no training in is refused (the lock's text, `gear::WearLock`) and its slot keeps what it held. U3.2-S3 (FB-34):
+    /// the slot's badge still shows the soft wield penalty for a class without roles (the same unit, not strict).
     #[test]
-    fn a_class_without_training_wears_the_weapon_under_the_penalty() {
+    fn an_untrained_weapon_is_refused_and_the_badge_reads_the_soft_penalty() {
         let (d, mut m, mut st) = setup();
         let class = d.cat.classes.get(&m.class_id(&d)).unwrap().clone();
         let prof = emberwake_rules::stats::Proficiency::from_class(&class);
+        assert!(prof.is_strict(), "a shipped class with roles");
         let mut untrained: Vec<&String> = d.cat.items.iter().filter(|(_, i)| fits(i, "main_hand") && !prof.can_use(&i.weapon_type)).map(|(id, _)| id).collect();
         untrained.sort();
         let item = untrained.into_iter().find(|id| !m.trains(&d, id)).expect("a weapon this member has no training in").to_string();
-        drop_move(&d, "", &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).unwrap();
-        assert_eq!(m.equipment.get("main_hand"), Some(&item));
-        assert!(m.validate(&d).is_empty(), "Confirm takes it: {:?}", m.validate(&d));
-        let built = progression::build_with(&d, &m, "", false).unwrap();
+        let held = m.equipment.get("main_hand").cloned();
+        let err = drop_move(&d, "", &mut m, &mut st, &format!("stash.{item}"), "slot.main_hand", false).expect_err("the strict lock refuses it");
+        assert!(err.contains("untrained"), "{err}");
+        assert_eq!(m.equipment.get("main_hand").cloned(), held, "the slot keeps what it held");
+        let mut built = progression::build_with(&d, &m, "", false).unwrap();
+        built.unit.stats.proficiency.strict = false;
         let (badge, note) = wield_badge(Some(&built.unit), &d.cat.items[&item]).expect("a penalty badge");
         assert!(badge.starts_with('x') && note.contains("untrained"), "{badge} {note}");
     }
@@ -1974,7 +1978,29 @@ mod tests {
         assert_eq!(m.equipment.get("main_hand").cloned(), left, "empty exactly when the default is a two-hander");
         assert_eq!(st[&one], before[&one], "the worn item went back");
         // review F1: a worn item moved into an emptied slot gives nothing back, and the slot it leaves is empty exactly
-        // when its default is a two-hander
+        // when its default is a two-hander. GEAR-REWORK1 (PR5-51b): a hand item goes where its family's hand category
+        // says, so the item moved is one the member may wear in either hand (a `1h_light` weapon): when its class trains
+        // none, the member trains one such family (a PK2-S3 training, `UnitState::trained`), found by rule
+        let both = |m: &UnitState| -> Option<String> {
+            let mut ids: Vec<&String> = d.cat.items.iter().filter(|(id, i)| fits(i, "main_hand") && fits(i, "off_hand") && m.can_wear(&d, id, "main_hand").is_ok()).map(|(id, _)| id).collect();
+            ids.sort();
+            ids.first().map(|s| s.to_string())
+        };
+        let one = match both(&m) {
+            Some(one) => one,
+            None => {
+                let mut light: Vec<&emberwake_data::ItemDef> = d.cat.items.values().filter(|i| fits(i, "main_hand") && fits(i, "off_hand")).collect();
+                light.sort_by(|a, b| a.id.cmp(&b.id));
+                let found = light.iter().find_map(|i| {
+                    let mut t = m.clone();
+                    t.trained.insert(i.weapon_type.clone(), 1);
+                    both(&t).map(|one| (t, one))
+                });
+                let (t, one) = found.expect("a weapon for either hand the member may wear once trained");
+                m = t;
+                one
+            }
+        };
         drop_move(&d, "", &mut m, &mut st, &format!("stash.{one}"), "slot.main_hand", false).unwrap();
         m.equipment.insert("off_hand".into(), NO_ITEM.into());
         let before = st.clone();

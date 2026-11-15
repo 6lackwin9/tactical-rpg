@@ -80,6 +80,10 @@ const SUNKFIX1_SEED: &str = "sunkfix1.json";
 /// flees; after the SUNKWARD-FIX1 seed; no ruleset row changes). A later seed's row supersedes an earlier seed's.
 const ACT1FIX1_SEED: &str = "act1fix1.json";
 
+/// PR5-51b (GEAR-REWORK1-DATA): the gear migration seeds, in their order (the founders' off-hand items and loadouts,
+/// then the fix seed's Dojo / test unit loadouts; after the ACT1-DATA1 seed; no ruleset row changes).
+const GEARREWORK1_SEEDS: [&str; 3] = ["gearrework1.json", "gearrework1_after.json", "gearrework1_fix.json"];
+
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
 
@@ -222,9 +226,16 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for u in &reordered {
         store::upsert(&tmp, None, "units", u, None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));
     }
-    // R2-W2b CLASS-BASICS: the class-basics seed, in its order, gives the shipped rows and units back
+    // R2-W2b CLASS-BASICS: the class-basics seed, in its order, gives the shipped rows and units back. GEAR-REWORK1
+    // (PR5-51b): its class rows name gear tokens the reworked family table retired (axe, mace, plate, leather, ...), so
+    // each class step is replayed with the shipped class's proficiency (the ruleset rows read no class proficiency)
     for (kind, e) in &class_basics {
-        store::upsert(&tmp, None, kind, e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(e, "id")));
+        let mut e = e.clone();
+        if kind == "classes" {
+            let shipped = shipped_units.get("classes", &json::s(&e, "id"));
+            e.insert("proficiency".into(), shipped.get("proficiency").cloned().unwrap_or(Value::Null));
+        }
+        store::upsert(&tmp, None, kind, &e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(&e, "id")));
     }
     assert_eq!(rows(&tmp), pre_pk1s3, "the CLASS-BASICS seed over it gives the rows before PK1-S3");
     // R4-1 slice 2: the template seed's units (their stat template; no ruleset row changes)
@@ -259,13 +270,24 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("ACT1-DATA1 unit '{}': {err:?}", json::s(e, "id")));
     }
     assert_eq!(rows(&tmp), before, "the ACT1-DATA1 units steps leave the shipped ruleset rows");
+    // PR5-51b (GEAR-REWORK1-DATA): the gear seeds' units steps, in order, over ACT1-DATA1's
+    let mut gear = Vec::new();
+    for seed in GEARREWORK1_SEEDS {
+        assert!(seed_entries(seed).is_empty(), "the {seed} seed changes no ruleset row");
+        for e in seed_rows(seed, "units") {
+            store::upsert(&tmp, None, "units", &e, None).unwrap_or_else(|err| panic!("{seed} unit '{}': {err:?}", json::s(&e, "id")));
+            gear.push(json::s(&e, "id"));
+        }
+    }
+    assert_eq!(rows(&tmp), before, "the GEAR-REWORK1 units steps leave the shipped ruleset rows");
     let seeded = store::view(&tmp);
     let units = reordered
         .iter()
         .map(|u| json::s(u, "id"))
         .chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")))
         .chain(sunkfix1.iter().map(|e| json::s(e, "id")))
-        .chain(act1fix1.iter().map(|e| json::s(e, "id")));
+        .chain(act1fix1.iter().map(|e| json::s(e, "id")))
+        .chain(gear);
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }

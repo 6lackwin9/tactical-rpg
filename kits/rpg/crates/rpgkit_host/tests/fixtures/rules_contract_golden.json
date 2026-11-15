@@ -118,6 +118,7 @@
     "locked stats.rs::PROF_MAX_LEVEL stats",
     "locked stats.rs::DEFAULT_SCALING stats",
     "locked stats.rs::PASSIVE_ONLY_SCALING stats",
+    "locked stats.rs::PROF_GEAR_MULT gear",
     "locked unit.rs::BASE_AP timing",
     "locked unit.rs::GEAR_REACH_CAP positioning",
     "locked unit.rs::FORESIGHT_RANGE_MAX tells",

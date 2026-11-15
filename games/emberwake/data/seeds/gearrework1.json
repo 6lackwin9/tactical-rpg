@@ -1,0 +1,5790 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "greatsword",
+    "name": "Greatsword",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 26,
+      "range": 1,
+      "burden": 2,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 18,
+       "max": 34
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_poise_ward",
+    "durability": 40,
+    "art": "",
+    "fx": "cleave",
+    "slot_rule": "2h_solo"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "gauntlet",
+    "name": "Gauntlet",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 13,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "durability": 40,
+    "art": "gauntlet",
+    "fx": "fists",
+    "attack_clips": [
+     "jab"
+    ],
+    "area_clips": [
+     "sweep_kick",
+     "kick",
+     "jab"
+    ],
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "knife",
+    "name": "Knife",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 14,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 20
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_agile_step",
+    "durability": 40,
+    "art": "knife",
+    "fx": "stab",
+    "slot_rule": "1h_light",
+    "range_band": {
+     "min": 1,
+     "max": 2
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "buckler",
+    "name": "Buckler",
+    "description": "",
+    "item_type": "SHIELD",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "",
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 4
+     }
+    },
+    "bands": {
+     "off": {
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 8
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [],
+    "damage_type": "",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_agile_step",
+    "art": "buckler",
+    "slot_rule": "off_only"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "braces",
+    "name": "Braces",
+    "description": "",
+    "item_type": "SHIELD",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "",
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 3
+     }
+    },
+    "bands": {
+     "off": {
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 10
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [],
+    "damage_type": "",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_poise_ward",
+    "art": "braces",
+    "slot_rule": "off_only"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "heavy",
+    "name": "Heavy",
+    "description": "",
+    "item_type": "ARMOR",
+    "off_hand_category": "",
+    "slots": [
+     "HEAD",
+     "BODY"
+    ],
+    "base": {
+     "none": {
+      "power": 0,
+      "range": 1,
+      "burden": 3,
+      "mitigation": 8
+     }
+    },
+    "bands": {
+     "none": {
+      "burden": {
+       "min": 2,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 6,
+       "max": 10
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 0
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [],
+    "damage_type": "",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_poise_ward",
+    "art": "",
+    "armor_weight": "heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "medium",
+    "name": "Medium",
+    "description": "",
+    "item_type": "ARMOR",
+    "off_hand_category": "",
+    "slots": [
+     "HEAD",
+     "BODY"
+    ],
+    "base": {
+     "none": {
+      "power": 0,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 4
+     }
+    },
+    "bands": {
+     "none": {
+      "burden": {
+       "min": 0,
+       "max": 2
+      },
+      "mitigation": {
+       "min": 3,
+       "max": 5
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 0
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [],
+    "damage_type": "",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_agile_step",
+    "art": "",
+    "armor_weight": "medium"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "light",
+    "name": "Light",
+    "description": "",
+    "item_type": "ARMOR",
+    "off_hand_category": "",
+    "slots": [
+     "HEAD",
+     "BODY"
+    ],
+    "base": {
+     "none": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 2
+     }
+    },
+    "bands": {
+     "none": {
+      "burden": {
+       "min": 0,
+       "max": 0
+      },
+      "mitigation": {
+       "min": 1,
+       "max": 4
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 5
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [],
+    "damage_type": "",
+    "level2_bonus": {
+     "crit": 1
+    },
+    "level3_passive": "mastery_woven_ward",
+    "art": "",
+    "armor_weight": "light"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "heavy_drill",
+    "name": "Heavy Harness Drill",
+    "description": "Drilled in heavy harness: +2 heavy armour proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "heavy",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "medium_drill",
+    "name": "Hide Harness Drill",
+    "description": "Drilled in hides and brigandines: +2 medium armour proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "medium",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "passives",
+   "entry": {
+    "id": "light_drill",
+    "name": "Light Habit Drill",
+    "description": "Drilled in light vestments: +2 light armour proficiency.",
+    "effects": [
+     {
+      "type": "proficiency",
+      "gear": "light",
+      "levels": 2
+     }
+    ],
+    "slot": ""
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "unit_meters",
+   "entry": {
+    "id": "ammo_pips",
+    "name": "Ammo",
+    "short": "Ammo",
+    "description": "",
+    "min": 0,
+    "max": 3,
+    "start": 0,
+    "start_full": true,
+    "show": "pips",
+    "decay": [],
+    "bands": [],
+    "rules": [],
+    "skills": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "reload",
+    "name": "Reload",
+    "kind": "FOCUS",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "Off-hand, Snap: reload the quiver or canister to full ammo. Only when empty.",
+    "learned_only": true,
+    "round_intent": "support",
+    "target_mode": "SELF"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "fade_step",
+    "name": "Fade-Step",
+    "kind": "DISENGAGE",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "Off-hand: slip one tile away from the nearest enemy to break melee contact.",
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "jump_tiles": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "cite_passage",
+    "name": "Cite Passage",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 1,
+    "blocks": 1,
+    "description": "Off-hand, Snap: read a ward over an ally within {range} or yourself: fortify for {rounds}.",
+    "learned_only": true,
+    "round_intent": "support",
+    "reach_min": 0,
+    "reach_max": 2,
+    "target_mode": "ALLY",
+    "grant_status": "fortify",
+    "status_rounds": 2,
+    "status_magnitude": 3
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "knife_throw",
+    "name": "Throw",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "ap_cost": 1,
+    "target_mode": "ENEMY",
+    "description": "{name}: throw the knife for {power} power at a foe within {range}. Costs an ammo pip and {ap} AP.",
+    "learned_only": true,
+    "reach_min": 2,
+    "reach_max": 3,
+    "weapon_types": [
+     "knife"
+    ],
+    "min_proficiency": 1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "firebomb",
+    "name": "Firebomb",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power. Burst area, hits allies too. Needs {weapons} training {proficiency}. Hits a 3x3 area around a tile {reach:n} away.",
+    "weapon_types": [
+     "staff",
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 2,
+    "area": "BURST",
+    "power_mult": 0.6,
+    "fx": "fire_lob",
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 0.75
+     },
+     {
+      "level": 5,
+      "power_mult": 0.9
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "sunder",
+    "name": "Sunder",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}. Armor-breaking chop.",
+    "weapon_types": [
+     "greatsword",
+     "sword",
+     "censer",
+     "hammer"
+    ],
+    "min_proficiency": 2,
+    "power_mult": 1.2,
+    "status_effect": "stagger",
+    "status_potency": 50,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.5,
+      "status_potency": 55
+     },
+     {
+      "level": 4,
+      "power_mult": 1.8,
+      "status_potency": 60
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "reckless_swing",
+    "name": "Reckless Swing",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "All-in swing: {power} power. Needs {weapons} training {proficiency}.",
+    "weapon_types": [
+     "greatsword",
+     "sword",
+     "hammer"
+    ],
+    "min_proficiency": 2,
+    "power_mult": 1.7
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "arcane_bolt",
+    "name": "Arcane Bolt",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "description": "{name}: {power} power. Needs {weapons} training {proficiency}. A bolt of raw force.",
+    "weapon_types": [
+     "staff",
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 1.1,
+    "fx": "arcane_orb",
+    "ranks": [
+     {
+      "level": 2,
+      "power_mult": 1.4
+     },
+     {
+      "level": 3,
+      "power_mult": 1.65
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hex",
+    "name": "Hex",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+    "weapon_types": [
+     "censer",
+     "staff",
+     "sprayer"
+    ],
+    "min_proficiency": 2,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 0.6,
+    "status_effect": "stagger",
+    "status_potency": 90,
+    "fx": "curse_orb",
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 0.75,
+      "status_potency": 95
+     },
+     {
+      "level": 4,
+      "power_mult": 0.9,
+      "status_potency": 95
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "haymaker",
+    "name": "Haymaker",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {potency} to Stun for {rounds}. Needs {weapons} training {proficiency}.",
+    "weapon_types": [
+     "fist",
+     "gauntlet",
+     "censer",
+     "hammer",
+     "unarmed"
+    ],
+    "min_proficiency": 2,
+    "power_mult": 2.0,
+    "status_effect": "stun",
+    "status_potency": 50,
+    "fx": "heavy_blow",
+    "clip": "haymaker",
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 2.5,
+      "status_potency": 55
+     },
+     {
+      "level": 5,
+      "power_mult": 3.0,
+      "status_potency": 60
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "body_blow",
+    "name": "Body Blow",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+    "weapon_types": [
+     "fist",
+     "gauntlet",
+     "censer",
+     "unarmed"
+    ],
+    "min_proficiency": 1,
+    "status_effect": "stagger",
+    "status_potency": 50,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.25,
+      "status_potency": 55
+     },
+     {
+      "level": 4,
+      "power_mult": 1.5,
+      "status_potency": 60
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "quick_stab",
+    "name": "Quick Stab",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 1,
+    "description": "{name}: {power} power. Needs {weapons} training {proficiency}. A fast thrust.",
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 0.6,
+    "ranks": [
+     {
+      "level": 2,
+      "power_mult": 0.75
+     },
+     {
+      "level": 3,
+      "power_mult": 0.9
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "pounce",
+    "name": "Pounce",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power. Dashes up to {dash}. Needs {weapons} training {proficiency}. Gap-close: the dash is your move for the round.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.8,
+    "dash_tiles": 3,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.0
+     },
+     {
+      "level": 4,
+      "power_mult": 1.2,
+      "dash_tiles": 4
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "smite",
+    "name": "Smite",
+    "kind": "ATTACK",
+    "level": 1,
+    "blocks": 2,
+    "description": "{name}: {power} power. Needs {weapons} training {proficiency}. Holy force from a distance.",
+    "learned_only": true,
+    "weapon_types": [
+     "censer",
+     "staff"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 0.8,
+    "fx": "falling_orb",
+    "ranks": [
+     {
+      "level": 2,
+      "power_mult": 1.0
+     },
+     {
+      "level": 3,
+      "power_mult": 1.2
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "judgement",
+    "name": "Judgement",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {potency} to Stagger for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "grade": "advanced",
+    "requires": [
+     "smite"
+    ],
+    "weapon_types": [
+     "censer",
+     "staff"
+    ],
+    "min_proficiency": 2,
+    "reach_min": 2,
+    "reach_max": 3,
+    "power_mult": 1.2,
+    "status_effect": "stagger",
+    "status_potency": 40,
+    "fx": "falling_orb",
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 1.5,
+      "status_potency": 45
+     },
+     {
+      "level": 5,
+      "power_mult": 1.8,
+      "status_potency": 50
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "lacerate",
+    "name": "Lacerate",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 2,
+    "description": "{name}: {power} power, {potency} to Bleed for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "grade": "advanced",
+    "requires": [
+     "bleeding_cut"
+    ],
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 2,
+    "power_mult": 1.2,
+    "status_effect": "bleed",
+    "status_potency": 90,
+    "status_rounds": 2,
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 1.5,
+      "status_potency": 95
+     },
+     {
+      "level": 5,
+      "power_mult": 1.8,
+      "status_potency": 100
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "assassinate",
+    "name": "Assassinate",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "grade": "advanced",
+    "requires": [
+     "quick_stab"
+    ],
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 3,
+    "power_mult": 2.0,
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 2.5
+     },
+     {
+      "level": 5,
+      "power_mult": 3.0
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "arc_lance",
+    "name": "Arc Lance",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power. Line area, hits allies too. Needs {weapons} training {proficiency}. Aim at an adjacent tile; hits the 3 tiles in a line.",
+    "learned_only": true,
+    "weapon_types": [
+     "staff",
+     "sprayer"
+    ],
+    "min_proficiency": 1,
+    "area": "LINE",
+    "power_mult": 0.9,
+    "fx": "beam",
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.1
+     },
+     {
+      "level": 4,
+      "power_mult": 1.35
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "inferno",
+    "name": "Inferno",
+    "kind": "ATTACK",
+    "level": 4,
+    "blocks": 3,
+    "description": "{name}: {power} power, {potency} to Bleed for {rounds} on every enemy hit. Burst area, hits allies too. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "grade": "advanced",
+    "weapon_types": [
+     "staff",
+     "sprayer"
+    ],
+    "min_proficiency": 2,
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 0.8,
+    "status_effect": "bleed",
+    "status_potency": 50,
+    "status_rounds": 2,
+    "fx": "fire_lob",
+    "ranks": [
+     {
+      "level": 5,
+      "power_mult": 1.0,
+      "status_potency": 60
+     },
+     {
+      "level": 5,
+      "power_mult": 1.2,
+      "status_potency": 70
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "glacial_burst",
+    "name": "Glacial Burst",
+    "kind": "ATTACK",
+    "level": 3,
+    "blocks": 3,
+    "description": "{name}: {power} power, {potency} to Root for {rounds} on every enemy hit. Burst area, hits allies too. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "grade": "advanced",
+    "weapon_types": [
+     "staff",
+     "sprayer"
+    ],
+    "min_proficiency": 2,
+    "reach_min": 2,
+    "reach_max": 3,
+    "area": "BURST",
+    "power_mult": 0.6,
+    "status_effect": "root",
+    "status_potency": 60,
+    "fx": "frost_lob",
+    "ranks": [
+     {
+      "level": 4,
+      "power_mult": 0.75,
+      "status_potency": 70
+     },
+     {
+      "level": 5,
+      "power_mult": 0.9,
+      "status_potency": 80
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "rend_armor",
+    "name": "Rend Armor",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {potency} to Expose (-{magnitude}) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "sword",
+     "greatsword",
+     "censer",
+     "hammer"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 0.8,
+    "status_effect": "expose",
+    "status_potency": 70,
+    "status_magnitude": 6,
+    "status_rounds": 2,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.0,
+      "status_potency": 75,
+      "status_magnitude": 8
+     },
+     {
+      "level": 4,
+      "power_mult": 1.2,
+      "status_potency": 80,
+      "status_magnitude": 10,
+      "status_rounds": 3
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "envenom",
+    "name": "Envenom",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {potency} to Poison ({magnitude} per round, stacks) for {rounds}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 0.6,
+    "status_effect": "poison",
+    "status_potency": 80,
+    "status_magnitude": 4,
+    "status_rounds": 3,
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 0.75,
+      "status_potency": 85,
+      "status_magnitude": 5
+     },
+     {
+      "level": 4,
+      "power_mult": 0.9,
+      "status_potency": 90,
+      "status_magnitude": 6
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "feint",
+    "name": "Feint",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {flow}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 0.7,
+    "ends_in_stance": "DEFENSIVE",
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 0.9
+     },
+     {
+      "level": 4,
+      "power_mult": 1.05
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "crushing_blow",
+    "name": "Crushing Blow",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 2,
+    "description": "{name}: {power} power, {disrupt}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "unarmed",
+     "fist",
+     "gauntlet"
+    ],
+    "min_proficiency": 1,
+    "disrupt": "STANCE_BREAK",
+    "fx": "heavy_blow",
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.25
+     },
+     {
+      "level": 4,
+      "power_mult": 1.5
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "opportunist",
+    "name": "Opportunist",
+    "kind": "ATTACK",
+    "level": 2,
+    "blocks": 1,
+    "description": "{name}: {power} power, {exploit}. Needs {weapons} training {proficiency}.",
+    "learned_only": true,
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "power_mult": 0.8,
+    "exploit": [
+     {
+      "status": "expose",
+      "power_mult": 1.3
+     },
+     {
+      "status": "slow",
+      "power_mult": 1.2
+     }
+    ],
+    "ranks": [
+     {
+      "level": 3,
+      "power_mult": 1.0
+     },
+     {
+      "level": 4,
+      "power_mult": 1.2
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "hamstring_sever",
+    "name": "Hamstring Sever",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "Maneuver, Snap: dash up to {dash} tiles and cut the leg, {power} power; slows the target; hits harder on a flanked foe.",
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.65,
+    "dash_tiles": 3,
+    "status_effect": "slow",
+    "status_potency": 75,
+    "status_rounds": 2,
+    "exploit": [
+     {
+      "status": "flanked",
+      "power_mult": 1.3
+     }
+    ],
+    "stagger": 6
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "throat_carver",
+    "name": "Throat-Carver",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 4,
+    "blocks": 2,
+    "description": "Assault, Standard: Throat-Carver's Art, {power} power; strikes harder at a staggered, pinned or nearly dead foe.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.2,
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.5
+     },
+     {
+      "status": "root",
+      "power_mult": 1.5
+     },
+     {
+      "hp_below": 35,
+      "power_mult": 2
+     }
+    ],
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "orlovs_retribution",
+    "name": "Retribution",
+    "kind": "ATTACK",
+    "level": 2,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "Maneuver, Standard: Orlov's Retribution, {power} power; dash {dash} tiles after the strike; harder on a staggered or pinned foe.",
+    "learned_only": true,
+    "round_intent": "maneuver",
+    "weapon_types": [
+     "dagger",
+     "knife"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 2.0,
+    "dash_tiles": 2,
+    "exploit": [
+     {
+      "status": "stagger",
+      "power_mult": 1.5
+     },
+     {
+      "status": "root",
+      "power_mult": 1.5
+     }
+    ],
+    "stagger": 8
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "shackle_pummel_slam",
+    "name": "Shackle Slam",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 2,
+    "blocks": 1,
+    "description": "Assault, Snap: Shackle-Pummel Slam, {power} power, {stagger} stagger; shoves the foe 1 tile and breaks it against a wall or a unit.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "fist",
+     "gauntlet",
+     "unarmed"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 0.95,
+    "stagger": 18,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 1,
+     "collide_mult": 0.95,
+     "collide_break": true
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "slag_slam_throw",
+    "name": "Slag Slam",
+    "kind": "ATTACK",
+    "level": 1,
+    "ap_cost": 3,
+    "blocks": 2,
+    "description": "Assault, Standard: Slag Slam and Throw, {power} power, {stagger} stagger; throws the foe 2 tiles into whatever stands behind it.",
+    "learned_only": true,
+    "round_intent": "assault",
+    "weapon_types": [
+     "fist",
+     "gauntlet",
+     "unarmed"
+    ],
+    "min_proficiency": 1,
+    "reach_min": 1,
+    "reach_max": 1,
+    "power_mult": 1.2,
+    "stagger": 12,
+    "forced_move": {
+     "kind": "push",
+     "tiles": 2,
+     "collide_mult": 1.2,
+     "collide_stagger": 12
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "polearm",
+    "name": "Polearm",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h",
+     "main_1h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 26,
+      "range": 1,
+      "burden": 2,
+      "mitigation": 0
+     },
+     "main_1h": {
+      "power": 13,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 18,
+       "max": 30
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     },
+     "main_1h": {
+      "power": {
+       "min": 9,
+       "max": 22
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "range_band": {
+     "min": 1,
+     "max": 2
+    },
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "techniques": [
+     {
+      "skill": "tq_polearm_hook",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "slash"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "sprayer",
+    "name": "Chemical Sprayer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h",
+     "main_1h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 18,
+      "range": 3,
+      "burden": 1,
+      "mitigation": 0
+     },
+     "main_1h": {
+      "power": 15,
+      "range": 3,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 14,
+       "max": 24
+      },
+      "range": {
+       "min": 2,
+       "max": 4
+      },
+      "burden": {
+       "min": 0,
+       "max": 3
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     },
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 24
+      },
+      "range": {
+       "min": 2,
+       "max": 4
+      },
+      "burden": {
+       "min": 0,
+       "max": 3
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged"
+    ],
+    "damage_type": "fire",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "techniques": [
+     {
+      "skill": "tq_sprayer_jet",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "sprayer",
+    "fx": "arrow"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "ammo",
+    "name": "Ammunition",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "off": {
+      "power": {
+       "min": 0,
+       "max": 10
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 1
+    },
+    "level3_passive": "mastery_bow",
+    "art": "ammo",
+    "fx": "slash",
+    "slot_rule": "off_only",
+    "off_hand_skill": "reload",
+    "empower_next": {
+     "meter": "ammo_pips",
+     "cost": 1,
+     "power_mult": 1.25,
+     "throw_skill": "knife_throw"
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "cloak",
+    "name": "Cloak",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "off": {
+      "power": {
+       "min": 0,
+       "max": 10
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "",
+    "level2_bonus": {
+     "crit": 1
+    },
+    "level3_passive": "mastery_agile_step",
+    "art": "cloak",
+    "fx": "slash",
+    "slot_rule": "off_only",
+    "off_hand_skill": "fade_step"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_claymore",
+    "name": "Iron Claymore",
+    "family": "greatsword",
+    "rarity": "UNCOMMON",
+    "weight": 4.5,
+    "value": 65,
+    "description": "A heavy double-edged greatsword. Gains +{tier1.power} Power when wielded with {tier1.value}+ STR.",
+    "damage_type": "slash",
+    "icon_id": "greatsword",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": [
+     {
+      "label": "Sunder Guard",
+      "when": {
+       "type": "stat_at_least",
+       "stat": "STR",
+       "value": 18
+      },
+      "bonus": {
+       "power": 4
+      },
+      "desc": ""
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "arm_plate",
+    "name": "Steel Plate Cuirass",
+    "family": "heavy",
+    "rarity": "UNCOMMON",
+    "weight": 8.5,
+    "value": 80,
+    "description": "Interlocking steel plates providing {mitigation} mitigation with {burden} burden.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "arm_leather",
+    "name": "Leather Brigandine",
+    "family": "medium",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 40,
+    "description": "Riveted hardened leather protecting vital organs while keeping mobility.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_hand_axe",
+    "name": "Hatchet",
+    "family": "sword",
+    "rarity": "COMMON",
+    "weight": 2.0,
+    "value": 46,
+    "description": "A balanced one-handed axe.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_battle_axe",
+    "name": "Battle Axe",
+    "family": "greatsword",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 57,
+    "description": "Two-handed axe that bites deep. Heavy.",
+    "damage_type": "slash",
+    "icon_id": "battle_axe",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 15
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_flanged_mace",
+    "name": "Flanged Mace",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 47,
+    "description": "A one-handed mace for cracking guards.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "adjust",
+      "field": "burden",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 11
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "arm_robe",
+    "name": "Plain Robe",
+    "family": "light",
+    "rarity": "COMMON",
+    "weight": 1.0,
+    "value": 20,
+    "description": "Simple cloth robe. Light as air, barely any protection.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "arm_cleric_vestment",
+    "name": "Cleric Vestment",
+    "family": "light",
+    "rarity": "UNCOMMON",
+    "weight": 1.5,
+    "value": 55,
+    "description": "Blessed cloth vestments that sharpen the wearer's devotion.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 1
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "arm_mage_robe",
+    "name": "Mage Robe",
+    "family": "light",
+    "rarity": "UNCOMMON",
+    "weight": 1.5,
+    "value": 60,
+    "description": "Embroidered robe that focuses arcane power.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "INT",
+      "value": 2
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_wand",
+    "name": "Ash Wand",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 0.5,
+    "value": 45,
+    "description": "A slender one-handed wand that bolts arcane energy up to 3 tiles.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 11
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_cleric_mace",
+    "name": "Cleric Mace",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 50,
+    "description": "A consecrated mace for those who fight to protect. Grants a touch of insight.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 10
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "KNOW",
+      "value": 1
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_glass_wand",
+    "name": "Glass Wand",
+    "family": "sprayer",
+    "rarity": "RARE",
+    "weight": 0.3,
+    "value": 140,
+    "description": "A brittle crystal wand that hums with raw power.",
+    "damage_type": "magic",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Glass cannon: very high ranged power (30 at range 3, needs INT 14) and no protection at all; best for a mage kept behind a tank.",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 15
+     },
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 14
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "tl_billhook",
+    "name": "Notched Billhook (test)",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A hooked polearm for the timeline test kit.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "notched_billhook",
+    "name": "Notched Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A garrison billhook, its hook notched by use: a two-handed pole-arm for holding a narrow corridor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "castellan_breastplate",
+    "name": "Dented Cuirass",
+    "family": "heavy",
+    "rarity": "COMMON",
+    "weight": 8.0,
+    "value": 60,
+    "description": "A Castellan Watch cuirass, dented and hammered back into shape.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "soot_leathers",
+    "name": "Soot Leathers",
+    "family": "medium",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 30,
+    "description": "Hard leathers blackened by kiln soot, stiff but light enough to run in.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "embalmers_habit",
+    "name": "Embalmer's Habit",
+    "family": "light",
+    "rarity": "COMMON",
+    "weight": 1.2,
+    "value": 40,
+    "description": "A stained embalmer's habit, cut loose for working over the dead.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "group": "heal",
+       "value": 0.1
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "bleed",
+       "value": 15
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "poachers_brigandine",
+    "name": "Poacher's Coat",
+    "family": "medium",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 40,
+    "description": "A poacher's riveted leather coat, patched along every seam.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 1
+     },
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penal_shackles",
+    "name": "Penal Shackles",
+    "family": "gauntlet",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 20,
+    "description": "Riveted penal shackles worn as cestuses: the chain cut away, the iron kept for the knuckles.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "penal_foundry_apron",
+    "name": "Foundry Apron",
+    "family": "heavy",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 35,
+    "description": "A heavy foundry apron of scorched hide, worn by kiln stokers.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 2
+     },
+     {
+      "kind": "adjust",
+      "field": "burden",
+      "delta": 1
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "brass_vitriol_sprayer",
+    "name": "Brass Sprayer",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 3.5,
+    "value": 50,
+    "description": "A brass pressure tank and hose with a pole nozzle, charged with caustic vitriol.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "tanners_rubbered_coat",
+    "name": "Rubbered Coat",
+    "family": "light",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 30,
+    "description": "A tanner's rubbered coat, tacky and chemical-stained, made to shed spills and sprays.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "poison",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_hookbill",
+    "name": "Watch Hookbill",
+    "family": "sword",
+    "rarity": "COMMON",
+    "weight": 2.0,
+    "value": 30,
+    "description": "A Watch hookbill: a long-hafted axe-hook for pulling men off walls.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_cuirass",
+    "name": "Watch Cuirass",
+    "family": "heavy",
+    "rarity": "COMMON",
+    "weight": 8.0,
+    "value": 50,
+    "description": "A Castellan Watch cuirass of riveted plate, issued to the grate-guards.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 12
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "watch_gambeson",
+    "name": "Watch Gambeson",
+    "family": "medium",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 25,
+    "description": "A quilted Watch gambeson, padded thick against crossbow and blade.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "pyre_nozzle",
+    "name": "Pyre Nozzle",
+    "family": "sprayer",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 45,
+    "description": "A pole nozzle that sprays burning oil in a long stream.",
+    "damage_type": "fire",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "INT",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "warded_apron",
+    "name": "Warded Apron",
+    "family": "medium",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A leather apron stamped with warding marks, worn at the vats.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "boning_knife",
+    "name": "Boning Knife",
+    "family": "knife",
+    "rarity": "COMMON",
+    "weight": 0.8,
+    "value": 20,
+    "description": "A narrow boning knife from a rendering floor.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "skinners_apron",
+    "name": "Skinner's Apron",
+    "family": "medium",
+    "rarity": "COMMON",
+    "weight": 2.5,
+    "value": 20,
+    "description": "A skinner's apron, stiff with old grease and cut from many hides.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "bone_club",
+    "name": "Bone Club",
+    "family": "censer",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 0,
+    "description": "A calcified bone gripped at the narrow end and swung wide.",
+    "damage_type": "blunt",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "vanes_bill",
+    "name": "Executioner Bill",
+    "family": "polearm",
+    "rarity": "UNCOMMON",
+    "weight": 5.0,
+    "value": 90,
+    "description": "Captain Vane's executioner's bill: a long billhook with a gilded haft.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "flensing_hooks",
+    "name": "Flensing Hooks",
+    "family": "bone_saw",
+    "rarity": "COMMON",
+    "weight": 3.0,
+    "value": 60,
+    "description": "A pair of flensing hooks from a rendering floor, swung on short hafts.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 2
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "prelates_blade",
+    "name": "Prelate's Blade",
+    "family": "greatsword",
+    "rarity": "RARE",
+    "theme": "inquisitor",
+    "weight": 4.5,
+    "value": 120,
+    "description": "A prelate's sword, narrow and plain, kept clean for ceremony.",
+    "damage_type": "slash",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_2h",
+    "scaling_stat": "STR",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 4
+     },
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 14
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "slag_plating",
+    "name": "Slag Plating",
+    "family": "heavy",
+    "rarity": "UNCOMMON",
+    "weight": 9.0,
+    "value": 90,
+    "description": "Kiln-quenched plate, heavy with slag and still faintly warm to the touch.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "slot": "BODY",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "mitigation",
+      "delta": 2
+     },
+     {
+      "kind": "requirement",
+      "stat": "CONS",
+      "value": 13
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "burn",
+       "value": 15
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "wpn_iron_billhook",
+    "name": "Iron Billhook",
+    "family": "polearm",
+    "rarity": "COMMON",
+    "weight": 4.0,
+    "value": 40,
+    "description": "A plain hooked polearm: reach and a steady pierce.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "main_1h",
+    "scaling_stat": "STR",
+    "modifiers": [],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "orlovs_flensing_talon",
+    "name": "Flensing Talon",
+    "family": "knife",
+    "rarity": "RARE",
+    "weight": 0.9,
+    "value": 0,
+    "description": "Guild-Master Orlov's flensing talon: a curved rendering blade, hooked to open what it catches.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "throat_carver",
+       "value": 0.2
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "orlovs_retribution",
+       "value": 0.2
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_kaelen",
+    "name": "Kaelen's Gouged Sigil",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A Watch sigil with its Castellan device gouged out. Kaelen's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_kaelen",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "CONS",
+      "value": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "stagger",
+       "value": 20
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "keepsake_vesper",
+    "name": "Vesper's Runner Whistle",
+    "family": "accessory",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A runner's whistle on a cord. Vesper's keepsake.",
+    "damage_type": "",
+    "icon_id": "keepsake_vesper",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "Keepsake: never sold.",
+    "slot": "ACCESSORY_1",
+    "modifiers": [
+     {
+      "kind": "stat_bonus",
+      "stat": "DEX",
+      "value": 2
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "resist",
+       "status": "slow",
+       "value": 25
+      }
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "claymore_backup",
+    "name": "Phalanx",
+    "description": "1H Iron Billhook with a Kite Shield, Plate Cuirass, Ring of the Bear",
+    "gear": {
+     "main_hand": "wpn_iron_billhook",
+     "off_hand": "shd_kite",
+     "body": "arm_plate",
+     "accessory_1": "acc_bear_ring"
+    },
+    "pouch": [
+     "con_heal_potion"
+    ],
+    "passives": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "dual_wield",
+    "name": "Dual Dagger",
+    "description": "Shadow Dagger + Stiletto off-hand (1H Light pair), Brigandine, Ring of the Bear",
+    "gear": {
+     "main_hand": "wpn_dagger",
+     "off_hand": "wpn_stiletto",
+     "body": "arm_leather",
+     "accessory_1": "acc_bear_ring"
+    },
+    "pouch": [
+     "con_heal_potion"
+    ],
+    "passives": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "archer",
+    "name": "Archer",
+    "description": "2H Oak Shortbow (a 2H bow pairs only with ammo or a cloak), Brigandine, Swiftness Amulet",
+    "gear": {
+     "main_hand": "wpn_shortbow",
+     "body": "arm_leather",
+     "accessory_2": "acc_swift_amulet"
+    },
+    "pouch": [
+     "con_focus_elixir",
+     "con_heal_potion"
+    ],
+    "passives": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "arcanist",
+    "name": "Arcanist",
+    "description": "1H Brass Wand (sprayer family) with a Mystic Tome off-hand (a tome needs a one-handed main hand; the 2H staff leaves the off hand empty)",
+    "gear": {
+     "main_hand": "wpn_wand",
+     "off_hand": "wpn_tome"
+    },
+    "pouch": [
+     "con_focus_elixir"
+    ],
+    "passives": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "sword",
+    "name": "Sword",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 14,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 23
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_poise_ward",
+    "durability": 40,
+    "art": "",
+    "fx": "slash",
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "hammer",
+    "name": "Hammer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 34,
+      "range": 1,
+      "burden": 3,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 25,
+       "max": 43
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "durability": 40,
+    "art": "",
+    "fx": "bludgeon",
+    "slot_rule": "2h_solo"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "staff",
+    "name": "Staff",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 24,
+      "range": 2,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 16,
+       "max": 32
+      },
+      "range": {
+       "min": 1,
+       "max": 3
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "spell_source"
+    ],
+    "damage_type": "magic",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_arcane_focus",
+    "durability": 40,
+    "art": "",
+    "fx": "bludgeon",
+    "fx_far": "arcane_orb",
+    "slot_rule": "2h_solo"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "crossbow",
+    "name": "Crossbow",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 20,
+      "range": 3,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 15,
+       "max": 25
+      },
+      "range": {
+       "min": 2,
+       "max": 5
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged"
+    ],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_crossbow",
+    "techniques": [
+     {
+      "skill": "tq_crossbow_volley",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "bolt",
+    "slot_rule": "2h_rig",
+    "pairs_with": [
+     "ammo",
+     "cloak"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "bow",
+    "name": "Bow",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_2h"
+    ],
+    "default_hand": "main_2h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_2h": {
+      "power": 20,
+      "range": 3,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_2h": {
+      "power": {
+       "min": 15,
+       "max": 25
+      },
+      "range": {
+       "min": 2,
+       "max": 4
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged"
+    ],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_bow",
+    "durability": 40,
+    "art": "",
+    "fx": "arrow",
+    "slot_rule": "2h_rig",
+    "pairs_with": [
+     "ammo",
+     "cloak"
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "polearm",
+    "name": "Polearm",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 13,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 9,
+       "max": 22
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "range_band": {
+     "min": 1,
+     "max": 2
+    },
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_heavy_impact",
+    "techniques": [
+     {
+      "skill": "tq_polearm_hook",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "slash",
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "sprayer",
+    "name": "Chemical Sprayer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 15,
+      "range": 3,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 24
+      },
+      "range": {
+       "min": 2,
+       "max": 4
+      },
+      "burden": {
+       "min": 0,
+       "max": 3
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "always_ranged"
+    ],
+    "damage_type": "fire",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "techniques": [
+     {
+      "skill": "tq_sprayer_jet",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "sprayer",
+    "fx": "arrow",
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "censer",
+    "name": "Censer",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "INT",
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 11,
+      "range": 1,
+      "burden": 1,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 8,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 1
+      },
+      "burden": {
+       "min": 0,
+       "max": 3
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_sacred_censer",
+    "techniques": [
+     {
+      "skill": "tq_censer_swing",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "censer",
+    "fx": "slash",
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "bone_saw",
+    "name": "Bone-Saw",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX",
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 14,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 10,
+       "max": 20
+      },
+      "range": {
+       "min": 1,
+       "max": 1
+      },
+      "burden": {
+       "min": 0,
+       "max": 2
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "durability": 40,
+    "art": "bone_saw",
+    "fx": "slash",
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "scourge",
+    "name": "Scourge",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX",
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 12,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 8,
+       "max": 18
+      },
+      "range": {
+       "min": 1,
+       "max": 1
+      },
+      "burden": {
+       "min": 0,
+       "max": 2
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "reach"
+    ],
+    "range_band": {
+     "min": 1,
+     "max": 2
+    },
+    "damage_type": "slash",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_bleed_edge",
+    "durability": 40,
+    "art": "scourge",
+    "fx": "slash",
+    "slot_rule": "1h_heavy"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "dagger",
+    "name": "Dagger",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "DEX"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 15,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 11,
+       "max": 20
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "pierce",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_agile_step",
+    "techniques": [
+     {
+      "skill": "tq_dagger_flurry",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "stab",
+    "slot_rule": "1h_light"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "fist",
+    "name": "Fist",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "main_1h"
+    ],
+    "default_hand": "main_1h",
+    "off_hand_category": "",
+    "scaling_stats": [
+     "STR"
+    ],
+    "base": {
+     "main_1h": {
+      "power": 12,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "main_1h": {
+      "power": {
+       "min": 9,
+       "max": 15
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 4
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [],
+    "damage_type": "blunt",
+    "level2_bonus": {
+     "crit": 2
+    },
+    "level3_passive": "mastery_fist",
+    "techniques": [
+     {
+      "skill": "tq_fist_breaker",
+      "grip": ""
+     }
+    ],
+    "durability": 40,
+    "art": "",
+    "fx": "fists",
+    "attack_clips": [
+     "jab"
+    ],
+    "area_clips": [
+     "sweep_kick",
+     "kick",
+     "jab"
+    ],
+    "slot_rule": "1h_light"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "shield",
+    "name": "Shield",
+    "description": "",
+    "item_type": "SHIELD",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "shield",
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 2,
+      "mitigation": 6
+     }
+    },
+    "bands": {
+     "off": {
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 3,
+       "max": 20
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [
+     "shield"
+    ],
+    "damage_type": "",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_bulwark_stance",
+    "art": "",
+    "slot_rule": "off_only"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "orb",
+    "name": "Orb",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "orb",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "off": {
+      "power": {
+       "min": 0,
+       "max": 10
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "focus"
+    ],
+    "damage_type": "magic",
+    "level2_bonus": {
+     "crit": 1
+    },
+    "level3_passive": "mastery_arcane_focus",
+    "art": "",
+    "fx": "slash",
+    "fx_far": "arcane_orb",
+    "slot_rule": "off_only",
+    "power_stat_override": "INT"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "tome",
+    "name": "Tome",
+    "description": "",
+    "item_type": "WEAPON",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "off_hand_category": "tome",
+    "scaling_stats": [
+     "INT"
+    ],
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 0
+     }
+    },
+    "bands": {
+     "off": {
+      "power": {
+       "min": 0,
+       "max": 10
+      },
+      "range": {
+       "min": 1,
+       "max": 2
+      },
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 0
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "power",
+     "range",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 8,
+    "max_tiers": 3,
+    "engine_rules": [
+     "focus"
+    ],
+    "damage_type": "magic",
+    "level2_bonus": {
+     "crit": 1
+    },
+    "level3_passive": "mastery_arcane_focus",
+    "art": "",
+    "fx": "slash",
+    "fx_far": "arcane_orb",
+    "slot_rule": "off_only",
+    "off_hand_skill": "cite_passage"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_kaelen",
+    "name": "Kaelen",
+    "side": "party",
+    "description": "Founder base unit: Kaelen, a level 1 warrior.",
+    "class_id": "warrior",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "warrior/2h_axe",
+    "palette": "kaelen",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "pommel_strike",
+     "intercepting_hook",
+     "billhook_sunder",
+     "seventh_ward_bulwark"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "pommel_strike",
+      "intercepting_hook"
+     ],
+     "order": {
+      "assault": [
+       "pommel_strike",
+       "strike"
+      ],
+      "guard": [
+       "intercepting_hook",
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "braced_poise",
+      "kinetic_leverage"
+     ],
+     "keystone": [
+      "unbroken_phalanx"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "notched_billhook",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "castellan_breastplate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_elyse",
+    "name": "Elyse",
+    "side": "party",
+    "description": "Founder base unit: Elyse, a level 1 mage.",
+    "class_id": "mage",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "ranger/wenn_tallow",
+    "palette": "elyse",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "phosphorus_pot",
+     "magnesium_flash_bomb",
+     "choke_gas"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "phosphorus_pot",
+      "magnesium_flash_bomb"
+     ],
+     "order": {
+      "assault": [
+       "magnesium_flash_bomb",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "field": [
+       "phosphorus_pot"
+      ]
+     },
+     "passive": [
+      "combustion_formula",
+      "catalytic_munitions"
+     ],
+     "keystone": [
+      "master_alchemist"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "brass_vitriol_sprayer",
+    "off_hand": "wpn_orb",
+    "head": "",
+    "body": "tanners_rubbered_coat",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "pitch_fire_bomb",
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "kaelen",
+    "name": "Kaelen",
+    "title": "",
+    "role": "party",
+    "base_unit": "founder_kaelen",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "temperament": "castellans_penance",
+    "default_intent": "guard",
+    "named_items": [],
+    "keepsake": "keepsake_kaelen",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "maren",
+    "name": "Maren",
+    "title": "",
+    "role": "party",
+    "base_unit": "founder_maren",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "temperament": "copyist_of_st_lyras",
+    "default_intent": "support",
+    "named_items": [],
+    "keepsake": "keepsake_maren",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "elyse",
+    "name": "Elyse",
+    "title": "",
+    "role": "party",
+    "base_unit": "founder_elyse",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [],
+    "temperament": "volatile_reaction_catalyst",
+    "default_intent": "assault",
+    "named_items": [],
+    "keepsake": "keepsake_elyse",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "captain_vane",
+    "name": "Captain Vane",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "captain_vane",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [
+     "traitors_discipline"
+    ],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "inquisitorial_purifier",
+    "name": "Purifier",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "inquisitorial_purifier",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [
+     "heat_tempered_carapace"
+    ],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "overseer_grendel",
+    "name": "Overseer Grendel",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "overseer_grendel",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [
+     "medium_drill",
+     "molten_slag_tempering"
+    ],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "guild_master_orlov",
+    "name": "Guild-Master Orlov",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "guild_master_orlov",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [
+     "bone_saw_drill",
+     "medium_drill",
+     "vat_masters_grease"
+    ],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {
+     "hp_pct": 20
+    },
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "characters",
+   "entry": {
+    "id": "calcified_husk",
+    "name": "Calcified Husk",
+    "title": "",
+    "role": "enemy",
+    "base_unit": "calcified_husk",
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "background": "",
+    "personality": "",
+    "faction": "",
+    "home": "",
+    "disciplines": [],
+    "passives": [
+     "censer_drill",
+     "calcified_frame"
+    ],
+    "named_items": [],
+    "keepsake": "",
+    "tuning": {},
+    "dialogue": "",
+    "gone_flags": [],
+    "tags": []
+   },
+   "world": "sunk_ward"
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "warrior",
+    "name": "Warrior",
+    "description": "Vanguard: huge constitution, polearm and plate; a wall that holds the line and hooks foes at reach.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.112903225806452,
+     "INT": 0.0967741935483871,
+     "CONS": 0.274193548387097,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "CONS": 0.4,
+     "STR": 0.4,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "polearm": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "greatsword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "sword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "shield": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "buckler": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "heavy": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "medium": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "taunt_shout": 1,
+     "shield_bash": 3,
+     "riposte": 3,
+     "intimidate": 4,
+     "sunder": 5,
+     "shield_wall": 5,
+     "rend_armor": 6
+    },
+    "basics": [
+     "brace"
+    ],
+    "main_hand": "wpn_iron_billhook",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "brawler",
+    "name": "Brawler",
+    "description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
+    "art": "brawler",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.225806451612903,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.241935483870968,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "gauntlet": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "fist": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "hammer": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "greatsword": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "braces": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "shield": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "heavy": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "light": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "body_blow": 1,
+     "lunge": 3,
+     "hamstring": 4,
+     "haymaker": 5,
+     "charge_in": 5,
+     "cyclone_kick": 5,
+     "crushing_blow": 6
+    },
+    "basics": [
+     "sweep_kick"
+    ],
+    "main_hand": "wpn_knuckles",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "ranger",
+    "name": "Ranger",
+    "description": "Ranged skirmisher: dexterity and perception, bows and light armor.",
+    "art": "ranger",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.129032258064516,
+     "DEX": 0.241935483870968,
+     "INT": 0.145161290322581,
+     "CONS": 0.145161290322581,
+     "PERC": 0.225806451612903,
+     "KNOW": 0.112903225806452
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "crossbow": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "knife": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "sword": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "ammo": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "cloak": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "medium": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "heavy": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "aimed_shot": 1,
+     "pinning_shot": 3,
+     "leap_back": 3,
+     "barbed_arrow": 5,
+     "volley": 5,
+     "deadeye": 5,
+     "focus": 5,
+     "crippling_shot": 6
+    },
+    "basics": [
+     "disengage_step"
+    ],
+    "main_hand": "stirrup_arbalest",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "rogue",
+    "name": "Rogue",
+    "description": "Fast skirmisher: daggers and speed; dashes in, cuts and slips away.",
+    "art": "rogue",
+    "ai_role": "SKIRMISHER",
+    "base_shares": {
+     "STR": 0.145161290322581,
+     "DEX": 0.258064516129032,
+     "INT": 0.145161290322581,
+     "CONS": 0.129032258064516,
+     "PERC": 0.193548387096774,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "dagger": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "knife": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "fist": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "cloak": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "braces": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "medium": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "light": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "quick_stab": 1,
+     "pounce": 3,
+     "bleeding_cut": 3,
+     "backflip": 4,
+     "hamstring": 5,
+     "lacerate": 5,
+     "assassinate": 7,
+     "envenom": 6,
+     "feint": 6,
+     "opportunist": 7
+    },
+    "basics": [
+     "flank_cut"
+    ],
+    "main_hand": "wpn_stiletto",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "priest",
+    "name": "Priest",
+    "description": "Support: heals and rallies allies; knowledge, maces and cloth.",
+    "art": "priest",
+    "ai_role": "SUPPORT",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.129032258064516,
+     "INT": 0.17741935483871,
+     "CONS": 0.193548387096774,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.241935483870968
+    },
+    "growth_shares": {
+     "KNOW": 0.4,
+     "CONS": 0.2,
+     "INT": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "censer": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "bone_saw": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "scourge": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "staff": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "tome": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "orb": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "light": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "heavy": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "smite": 1,
+     "rally": 1,
+     "mend": 3,
+     "purify": 3,
+     "hex": 5,
+     "greater_mend": 5,
+     "renewal": 5,
+     "judgement": 7,
+     "aegis": 6,
+     "rejuvenate": 6
+    },
+    "basics": [
+     "tend_wounds"
+    ],
+    "main_hand": "bronze_censer",
+    "off_hand": "wpn_tome",
+    "head": "",
+    "body": "arm_cleric_vestment",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "mage",
+    "name": "Mage",
+    "description": "Glass caster: intelligence and area damage from range.",
+    "art": "mage",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.145161290322581,
+     "INT": 0.274193548387097,
+     "CONS": 0.129032258064516,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.193548387096774
+    },
+    "growth_shares": {
+     "INT": 0.4,
+     "CONS": 0.2,
+     "KNOW": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "sprayer": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "staff": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "bone_saw": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "scourge": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "orb": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "ammo": {
+      "level": 1,
+      "scaling": 1.25
+     },
+     "light": {
+      "level": 3,
+      "scaling": 1.5
+     },
+     "medium": {
+      "level": 1,
+      "scaling": 1.25
+     }
+    },
+    "skill_path": {
+     "arcane_bolt": 1,
+     "arc_lance": 3,
+     "hex": 3,
+     "focus": 4,
+     "firebomb": 5,
+     "glacial_burst": 5,
+     "inferno": 7
+    },
+    "basics": [
+     "cinder_spark"
+    ],
+    "main_hand": "brass_vitriol_sprayer",
+    "off_hand": "wpn_orb",
+    "head": "",
+    "body": "arm_mage_robe",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "tl_drill",
+    "name": "Drill (test)",
+    "description": "Test class for the timeline test kit.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.209677419354839,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "sword": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "censer": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "dagger": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "polearm": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "shield": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "heavy": {
+      "level": 2,
+      "scaling": 1.5
+     },
+     "medium": {
+      "level": 2,
+      "scaling": 1.5
+     }
+    },
+    "skill_path": {
+     "tl_thrust": 1
+    },
+    "basics": [
+     "flank_cut"
+    ],
+    "main_hand": "",
+    "off_hand": "",
+    "head": "",
+    "body": "",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "remove",
+   "kind": "passives",
+   "id": "axe_training",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "item_families",
+   "id": "axe",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "item_families",
+   "id": "mace",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "item_families",
+   "id": "wand",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "item_families",
+   "id": "plate",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "item_families",
+   "id": "leather",
+   "if_exists": true
+  },
+  {
+   "op": "remove",
+   "kind": "item_families",
+   "id": "cloth",
+   "if_exists": true
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "warrior",
+    "name": "Warrior",
+    "description": "Vanguard: huge constitution, polearm and plate; a wall that holds the line and hooks foes at reach.",
+    "art": "warrior",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.209677419354839,
+     "DEX": 0.112903225806452,
+     "INT": 0.0967741935483871,
+     "CONS": 0.274193548387097,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.161290322580645
+    },
+    "growth_shares": {
+     "CONS": 0.4,
+     "STR": 0.4,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "polearm": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "greatsword": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "sword": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "hammer": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "shield": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "buckler": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "heavy": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "medium": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "taunt_shout": 1,
+     "shield_bash": 3,
+     "riposte": 3,
+     "intimidate": 4,
+     "sunder": 5,
+     "shield_wall": 5,
+     "rend_armor": 6
+    },
+    "basics": [
+     "brace"
+    ],
+    "main_hand": "wpn_iron_billhook",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "brawler",
+    "name": "Brawler",
+    "description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
+    "art": "brawler",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.225806451612903,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.241935483870968,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "gauntlet": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "fist": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "hammer": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "greatsword": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "braces": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "shield": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "heavy": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "light": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "body_blow": 1,
+     "lunge": 3,
+     "hamstring": 4,
+     "haymaker": 5,
+     "charge_in": 5,
+     "cyclone_kick": 5,
+     "crushing_blow": 6
+    },
+    "basics": [
+     "sweep_kick"
+    ],
+    "main_hand": "wpn_knuckles",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "ranger",
+    "name": "Ranger",
+    "description": "Ranged skirmisher: dexterity and perception, bows and light armor.",
+    "art": "ranger",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.129032258064516,
+     "DEX": 0.241935483870968,
+     "INT": 0.145161290322581,
+     "CONS": 0.145161290322581,
+     "PERC": 0.225806451612903,
+     "KNOW": 0.112903225806452
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "crossbow": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "knife": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "sword": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "ammo": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "cloak": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "medium": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "heavy": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "aimed_shot": 1,
+     "pinning_shot": 3,
+     "leap_back": 3,
+     "barbed_arrow": 5,
+     "volley": 5,
+     "deadeye": 5,
+     "focus": 5,
+     "crippling_shot": 6
+    },
+    "basics": [
+     "disengage_step"
+    ],
+    "main_hand": "stirrup_arbalest",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "rogue",
+    "name": "Rogue",
+    "description": "Fast skirmisher: daggers and speed; dashes in, cuts and slips away.",
+    "art": "rogue",
+    "ai_role": "SKIRMISHER",
+    "base_shares": {
+     "STR": 0.145161290322581,
+     "DEX": 0.258064516129032,
+     "INT": 0.145161290322581,
+     "CONS": 0.129032258064516,
+     "PERC": 0.193548387096774,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "dagger": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "knife": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "fist": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "cloak": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "braces": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "medium": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "light": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "quick_stab": 1,
+     "pounce": 3,
+     "bleeding_cut": 3,
+     "backflip": 4,
+     "hamstring": 5,
+     "lacerate": 5,
+     "assassinate": 7,
+     "envenom": 6,
+     "feint": 6,
+     "opportunist": 7
+    },
+    "basics": [
+     "flank_cut"
+    ],
+    "main_hand": "wpn_stiletto",
+    "off_hand": "",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "priest",
+    "name": "Priest",
+    "description": "Support: heals and rallies allies; knowledge, maces and cloth.",
+    "art": "priest",
+    "ai_role": "SUPPORT",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.129032258064516,
+     "INT": 0.17741935483871,
+     "CONS": 0.193548387096774,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.241935483870968
+    },
+    "growth_shares": {
+     "KNOW": 0.4,
+     "CONS": 0.2,
+     "INT": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "censer": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "bone_saw": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "scourge": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "staff": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "tome": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "orb": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "light": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "heavy": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "smite": 1,
+     "rally": 1,
+     "mend": 3,
+     "purify": 3,
+     "hex": 5,
+     "greater_mend": 5,
+     "renewal": 5,
+     "judgement": 7,
+     "aegis": 6,
+     "rejuvenate": 6
+    },
+    "basics": [
+     "tend_wounds"
+    ],
+    "main_hand": "bronze_censer",
+    "off_hand": "wpn_tome",
+    "head": "",
+    "body": "arm_cleric_vestment",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "mage",
+    "name": "Mage",
+    "description": "Glass caster: intelligence and area damage from range.",
+    "art": "mage",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.0967741935483871,
+     "DEX": 0.145161290322581,
+     "INT": 0.274193548387097,
+     "CONS": 0.129032258064516,
+     "PERC": 0.161290322580645,
+     "KNOW": 0.193548387096774
+    },
+    "growth_shares": {
+     "INT": 0.4,
+     "CONS": 0.2,
+     "KNOW": 0.2,
+     "PERC": 0.2
+    },
+    "proficiency": {
+     "sprayer": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "staff": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "bone_saw": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "scourge": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "orb": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "ammo": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "light": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "medium": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "arcane_bolt": 1,
+     "arc_lance": 3,
+     "hex": 3,
+     "focus": 4,
+     "firebomb": 5,
+     "glacial_burst": 5,
+     "inferno": 7
+    },
+    "basics": [
+     "cinder_spark"
+    ],
+    "main_hand": "brass_vitriol_sprayer",
+    "off_hand": "wpn_orb",
+    "head": "",
+    "body": "arm_mage_robe",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  }
+ ]
+}

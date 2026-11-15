@@ -133,16 +133,26 @@ fn every_warrior_look_is_baked() {
     }
 }
 
-/// The shipped shields split by the burden rule: at least one buckler and one heavier shield, each resolving to a
-/// baked body.
+/// The shipped shields: every SHIELD item draws the look its family rule and burden give (`Grip::of`: a `shield`-rule
+/// item a buckler at burden at most `BUCKLER_MAX_BURDEN`, else the kite shield; an item without the rule no shield),
+/// at least one draws the heavier shield, and each resolves to a baked body. GEAR-REWORK1 (PR5-51b, seed
+/// `gearrework1_fix.json`): the off-hand family `buckler` carries the `shield` engine rule (its burden 0 item draws the
+/// buckler look), while `braces` (`forearm_braces`) carries none and draws no shield; the expectation per item is read
+/// from its rule and burden, not from these ids.
 #[test]
-fn the_shipped_shields_have_both_looks() {
+fn the_shipped_shields_draw_their_family_look() {
     let cat = Catalog::from_value(&source::load(&game_dir().join("data")).catalog);
     let layers = Layers::for_game(&game_dir());
     let sword = cat.items.values().find(|i| i.weapon_type == "sword" && !i.two_handed).expect("a one-hand sword");
     let shields: Vec<&ItemDef> = cat.items.values().filter(|i| i.item_type == "SHIELD").collect();
+    let want = |s: &ItemDef| match (s.has_rule(emberwake_data::SHIELD_RULE), s.burden <= BUCKLER_MAX_BURDEN) {
+        (false, _) => OffHand::Other,
+        (true, true) => OffHand::Buckler,
+        (true, false) => OffHand::Shield,
+    };
     let looks: Vec<OffHand> = shields.iter().map(|s| Grip::of(Some(sword), Some(s)).off_hand).collect();
-    assert!(looks.contains(&OffHand::Buckler) && looks.contains(&OffHand::Shield), "shields {:?} -> {looks:?}", shields.iter().map(|s| (&s.id, s.burden)).collect::<Vec<_>>());
+    assert_eq!(looks, shields.iter().map(|s| want(s)).collect::<Vec<_>>(), "shields {:?}", shields.iter().map(|s| (&s.id, s.burden)).collect::<Vec<_>>());
+    assert!(looks.contains(&OffHand::Shield), "a heavier shield ships: {looks:?}");
     for s in shields {
         assert!(resolved(&layers, art::gear_body_chain("warrior", &Grip::of(Some(sword), Some(s)))).is_some(), "{}", s.id);
     }

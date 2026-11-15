@@ -5,15 +5,15 @@
 //!
 //! - proficiency 0 and raw `required_stats` above the unscaled stat plus the requirement discount are a hard equip lock
 //!   (`gear::wear_lock`); accessories need no proficiency (their requirements still lock);
-//! - proficiency 1 / 2 / 3 scale weapon power and flat mitigation by `rpgkit_data::PROF_GEAR_MULT` (0.80 / 1.00 / 1.25).
+//! - proficiency 1 / 2 / 3 scale weapon power and flat mitigation by `rpgkit_rules::stats::PROF_GEAR_MULT` (0.80 / 1.00 / 1.25).
 //!
 //! The two classes are identical but for the roles, so every strict number is derived from the soft unit's.
 
 use indexmap::IndexMap;
-use rpgkit_data::{Catalog, PROF_GEAR_MULT};
+use rpgkit_data::Catalog;
 use rpgkit_rules::damage::attack_power;
 use rpgkit_rules::gear::{wear_lock, Equipment, Slot, WearLock};
-use rpgkit_rules::stats::{CharacterStats, Proficiency};
+use rpgkit_rules::stats::{CharacterStats, Proficiency, PROF_GEAR_MULT};
 use rpgkit_rules::{build_unit, Unit};
 use serde_json::{json, Value};
 

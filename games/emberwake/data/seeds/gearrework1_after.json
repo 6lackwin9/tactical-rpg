@@ -1,0 +1,650 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "hip_quiver",
+    "name": "Hip Quiver",
+    "family": "ammo",
+    "rarity": "COMMON",
+    "weight": 0.6,
+    "value": 25,
+    "description": "A boiled-leather quiver of ash-fletched shafts, worn at the hip. Three pips of ammo; the shot that spends one hits harder.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "fuel_canister",
+    "name": "Pressurized Fuel Canister",
+    "family": "ammo",
+    "rarity": "COMMON",
+    "weight": 1.2,
+    "value": 35,
+    "description": "A brass canister of pressurized vitriol on a belt clip. Three pips of ammo; the jet that spends one hits harder.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "INT",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "ash_cloak",
+    "name": "Ash-Cloak",
+    "family": "cloak",
+    "rarity": "COMMON",
+    "weight": 0.8,
+    "value": 40,
+    "description": "A soot-grey cloak that sheds light. Slip away from a melee with Fade-Step.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     },
+     {
+      "kind": "stat_bonus",
+      "stat": "PERC",
+      "value": 1
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "forearm_braces",
+    "name": "Forearm Braces",
+    "family": "braces",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 30,
+    "description": "Riveted forearm guards that take the recoil off a brawler's blows.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "STR",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "shd_buckler",
+    "name": "Duelist Buckler",
+    "family": "buckler",
+    "rarity": "COMMON",
+    "weight": 1.5,
+    "value": 30,
+    "description": "Light metal fist-shield providing {mitigation} mitigation without slowing down.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": true,
+    "special": false,
+    "special_note": "",
+    "hand": "off",
+    "modifiers": [
+     {
+      "kind": "requirement",
+      "stat": "DEX",
+      "value": 10
+     }
+    ],
+    "tiers": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "ranger",
+    "name": "Ranger",
+    "description": "Ranged skirmisher: dexterity and perception, bows and light armor.",
+    "art": "ranger",
+    "ai_role": "SNIPER",
+    "base_shares": {
+     "STR": 0.129032258064516,
+     "DEX": 0.241935483870968,
+     "INT": 0.145161290322581,
+     "CONS": 0.145161290322581,
+     "PERC": 0.225806451612903,
+     "KNOW": 0.112903225806452
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "crossbow": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "knife": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "sword": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "ammo": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "cloak": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "medium": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "heavy": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "aimed_shot": 1,
+     "pinning_shot": 3,
+     "leap_back": 3,
+     "barbed_arrow": 5,
+     "volley": 5,
+     "deadeye": 5,
+     "focus": 5,
+     "crippling_shot": 6
+    },
+    "basics": [
+     "disengage_step"
+    ],
+    "main_hand": "stirrup_arbalest",
+    "off_hand": "hip_quiver",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_dunstan",
+    "name": "Dunstan",
+    "side": "party",
+    "description": "Founder base unit: Dunstan, a level 1 brawler.",
+    "class_id": "brawler",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "brawler/base",
+    "palette": "dunstan",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "shackle_pummel_slam",
+     "slag_slam_throw",
+     "foundry_shatter"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "shackle_pummel_slam",
+      "slag_slam_throw"
+     ],
+     "order": {
+      "assault": [
+       "slag_slam_throw",
+       "shackle_pummel_slam",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     },
+     "passive": [
+      "hypertrophy",
+      "anvil_posture"
+     ],
+     "keystone": [
+      "unbroken_iron"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "penal_shackles",
+    "off_hand": "forearm_braces",
+    "head": "",
+    "body": "penal_foundry_apron",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_hollis",
+    "name": "Hollis",
+    "side": "party",
+    "description": "Founder base unit: Hollis, a level 1 ranger.",
+    "class_id": "ranger",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "ranger/base",
+    "palette": "hollis",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "poachers_quarrel",
+     "tripwire_snare",
+     "heavy_winch_sunder"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "poachers_quarrel",
+      "tripwire_snare"
+     ],
+     "order": {
+      "assault": [
+       "poachers_quarrel",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "maneuver": [
+       "disengage_step"
+      ],
+      "field": [
+       "tripwire_snare"
+      ]
+     },
+     "passive": [
+      "high_ground_traverse",
+      "cover_breaker"
+     ],
+     "keystone": [
+      "dead_eye_discipline"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "winch_arbalest",
+    "off_hand": "hip_quiver",
+    "head": "",
+    "body": "poachers_brigandine",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "founder_vesper",
+    "name": "Vesper",
+    "side": "party",
+    "description": "Founder base unit: Vesper, a level 1 rogue.",
+    "class_id": "rogue",
+    "level": 1,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "rogue/base",
+    "palette": "vesper",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "hamstring_sever",
+     "ash_cloud_fade",
+     "throat_carver"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "hamstring_sever",
+      "ash_cloud_fade"
+     ],
+     "order": {
+      "assault": [
+       "strike"
+      ],
+      "guard": [
+       "ash_cloud_fade",
+       "active_guard"
+      ],
+      "maneuver": [
+       "hamstring_sever",
+       "flank_cut"
+      ]
+     },
+     "passive": [
+      "prowlers_cadence",
+      "anatomical_flaw"
+     ],
+     "keystone": [
+      "ghost_of_the_undercroft"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "curfew_bodkin",
+    "off_hand": "ash_cloak",
+    "head": "",
+    "body": "soot_leathers",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "sulfur_poultice",
+     "pitch_fire_bomb"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "archer",
+    "name": "Archer",
+    "description": "2H Oak Shortbow with a Hip Quiver off-hand (ammo pips), Brigandine, Swiftness Amulet",
+    "gear": {
+     "main_hand": "wpn_shortbow",
+     "off_hand": "hip_quiver",
+     "body": "arm_leather",
+     "accessory_2": "acc_swift_amulet"
+    },
+    "pouch": [
+     "con_focus_elixir",
+     "con_heal_potion"
+    ],
+    "passives": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "brawler",
+    "name": "Brawler",
+    "description": "Bruiser: bare fists and a thick hide; leaps into a crowd and fights several foes at once.",
+    "art": "brawler",
+    "ai_role": "AGGRESSOR",
+    "base_shares": {
+     "STR": 0.225806451612903,
+     "DEX": 0.161290322580645,
+     "INT": 0.0967741935483871,
+     "CONS": 0.241935483870968,
+     "PERC": 0.145161290322581,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "STR": 0.4,
+     "CONS": 0.4,
+     "DEX": 0.2
+    },
+    "proficiency": {
+     "gauntlet": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "fist": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "hammer": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "greatsword": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "braces": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "shield": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "heavy": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "light": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "body_blow": 1,
+     "lunge": 3,
+     "hamstring": 4,
+     "haymaker": 5,
+     "charge_in": 5,
+     "cyclone_kick": 5,
+     "crushing_blow": 6
+    },
+    "basics": [
+     "sweep_kick"
+    ],
+    "main_hand": "wpn_knuckles",
+    "off_hand": "forearm_braces",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "classes",
+   "entry": {
+    "id": "rogue",
+    "name": "Rogue",
+    "description": "Fast skirmisher: daggers and speed; dashes in, cuts and slips away.",
+    "art": "rogue",
+    "ai_role": "SKIRMISHER",
+    "base_shares": {
+     "STR": 0.145161290322581,
+     "DEX": 0.258064516129032,
+     "INT": 0.145161290322581,
+     "CONS": 0.129032258064516,
+     "PERC": 0.193548387096774,
+     "KNOW": 0.129032258064516
+    },
+    "growth_shares": {
+     "DEX": 0.4,
+     "PERC": 0.2,
+     "STR": 0.2,
+     "CONS": 0.2
+    },
+    "proficiency": {
+     "dagger": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "knife": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "secondary"
+     },
+     "bow": {
+      "level": 2,
+      "scaling": 1.5,
+      "role": "third"
+     },
+     "fist": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "cloak": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "braces": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     },
+     "medium": {
+      "level": 3,
+      "scaling": 1.5,
+      "role": "main"
+     },
+     "light": {
+      "level": 1,
+      "scaling": 1.25,
+      "role": "minor"
+     }
+    },
+    "skill_path": {
+     "quick_stab": 1,
+     "pounce": 3,
+     "bleeding_cut": 3,
+     "backflip": 4,
+     "hamstring": 5,
+     "lacerate": 5,
+     "assassinate": 7,
+     "envenom": 6,
+     "feint": 6,
+     "opportunist": 7
+    },
+    "basics": [
+     "flank_cut"
+    ],
+    "main_hand": "wpn_stiletto",
+    "off_hand": "ash_cloak",
+    "head": "",
+    "body": "arm_leather",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": []
+   }
+  }
+ ]
+}

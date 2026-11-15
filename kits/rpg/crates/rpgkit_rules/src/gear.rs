@@ -379,7 +379,7 @@ impl WearLock {
 }
 
 /// GEAR-REWORK1 (PR5-51a, U3.3 1): the strict rule's hard equip lock (None: the item may be worn; always None when
-/// `stats.proficiency` is not strict, `Proficiency::is_strict`, so today's catalog keeps the soft wield penalty). Under
+/// `stats.proficiency` is not strict, `Proficiency::is_strict`: a class without roles keeps the soft wield penalty). Under
 /// it, a non-accessory with a gear type at proficiency 0 is refused (`Untrained`), and any item (accessories included,
 /// U3.3 5) whose raw `required_stats` exceed the wearer's unscaled stat (`requirement_base`, no gear bonuses) plus the
 /// proficiency discount (`requirement_discount`) is refused (`Unfit`, the largest shortfall first in row order).

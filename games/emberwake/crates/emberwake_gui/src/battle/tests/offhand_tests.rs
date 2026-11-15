@@ -97,18 +97,24 @@ fn sid(b: &BattleScreen, id: &str) -> usize {
     s(b).w.book().find(id).unwrap_or_else(|| panic!("skill {id}"))
 }
 
-/// Today's data: no hero's menu has the button (no shipped item carries the hand fields yet).
+/// The shipped data (GEAR-REWORK1, PR5-51b: the off-hand families carry the hand fields): a hero's menu has the button
+/// only when its off hand gives an action (`offhand::action`), on some target when it does, and some hero has one.
 #[test]
-fn with_todays_gear_no_hero_has_an_off_hand_button() {
+fn a_hero_has_the_off_hand_button_when_its_off_hand_gives_an_action() {
     let (_cx, _g, b) = arena();
     let f = foe(&b);
     let w = &s(&b).w;
+    let mut with = 0;
     for h in w.allies.iter().copied().filter(|&a| w.units[a].is_active() && w.has(a)) {
-        assert!(emberwake_battle::offhand::action(w, h).is_none(), "{}", w.units[h].name);
-        for at in [RoundTarget::Myself, RoundTarget::Unit(f)] {
-            assert!(button(&rows(&b, h, at)).is_none(), "{} on {at:?}", w.units[h].name);
+        let shown: Vec<bool> = [RoundTarget::Myself, RoundTarget::Unit(f)].into_iter().map(|at| button(&rows(&b, h, at)).is_some()).collect();
+        if emberwake_battle::offhand::action(w, h).is_some() {
+            assert!(shown.contains(&true), "{}: the button on some target", w.units[h].name);
+            with += 1;
+        } else {
+            assert!(!shown.contains(&true), "{}: no off-hand action, no button", w.units[h].name);
         }
     }
+    assert!(with > 0, "a shipped hero holds an off-hand item with an action");
 }
 
 /// A cloak's Fade-Step is the button (named so, its card naming the item), its cell leaves the intent rows, and the

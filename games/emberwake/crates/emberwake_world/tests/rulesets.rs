@@ -7,7 +7,7 @@
 use emberwake_battle::dojo::DojoSession;
 use emberwake_battle::session::{EncounterDef, Phase, Session};
 use emberwake_battle::skill;
-use emberwake_rules::ruleset::{Ruleset, CLASSIC, REACH, REGISTER, ROUND_INTENT, TIMELINE};
+use emberwake_rules::ruleset::{Ruleset, CLASSIC, REACH, REGISTER, ROUND_INTENT, TIMELINE, UNIT_METERS};
 use emberwake_rules::Stance;
 use emberwake_world::Data;
 use indexmap::IndexMap;
@@ -100,9 +100,14 @@ fn round_intent_leaves_the_classic_stances_inert_in_battle() {
 
 /// FB-188 Option A: an extension is inert without its opt-in data (RULESET1 3.2), so a fight that already holds that
 /// data at battle start opts in and is left out of the check for that extension only. One row per extension whose
-/// opt-in data can ship in a classic fight (add a row when another extension's data does); only `reach` today: a unit
-/// with a reach weapon at the start (the kit query `Unit::has_reach_weapon`).
-const OPT_IN_AT_START: &[(&str, fn(&Session) -> bool)] = &[(REACH, holds_reach_weapon)];
+/// opt-in data can ship in a classic fight (add a row when another extension's data does): `reach`, a unit with a reach
+/// weapon at the start (the kit query `Unit::has_reach_weapon`); `unit_meters` (GEAR-REWORK1, PR5-51b), a unit with an
+/// ammunition off-hand item, whose meter, empowered shots and Reload run under that rule (`Unit::has_off_hand_ammo`).
+const OPT_IN_AT_START: &[(&str, fn(&Session) -> bool)] = &[(REACH, holds_reach_weapon), (UNIT_METERS, holds_off_hand_ammo)];
+
+fn holds_off_hand_ammo(s: &Session) -> bool {
+    s.w.units.iter().any(|u| u.has_off_hand_ammo())
+}
 
 fn holds_reach_weapon(s: &Session) -> bool {
     s.w.units.iter().any(|u| u.has_reach_weapon())

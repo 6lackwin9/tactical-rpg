@@ -827,7 +827,7 @@ fn classic_keeps_its_old_flow() {
 }
 
 /// The party cards at every text size: no two texts overlap, none passes the card or is cut, a long name included; the
-/// Normal size keeps the card's height.
+/// Normal size keeps the card's height (plus a meter row for a member showing a meter).
 #[test]
 fn the_card_numbers_fit_at_every_text_size() {
     for scale in [1.0, 1.15, 1.3] {
@@ -842,7 +842,10 @@ fn the_card_numbers_fit_at_every_text_size() {
         for a in s(&b).w.allies.clone() {
             let card = widget_rect(&b, &format!("party.{a}"));
             if scale == 1.0 {
-                assert_eq!(card.h, 30, "Normal keeps its height");
+                // HOOKS1-UI slice 3 (UM7): a member showing a meter (GEAR-REWORK1, PR5-51b: an ammunition off-hand's pips)
+                // has a meter row 4 px high under the card's rows
+                let meter_row = if emberwake_battle::meter::shown(&s(&b).w, a).is_empty() { 0 } else { 4 };
+                assert_eq!(card.h, 30 + meter_row, "Normal keeps its height");
             }
             let inside: Vec<_> = recs.iter().filter(|t| t.x >= card.x as f32 && t.x < (card.x + card.w) as f32 && t.y + t.h / 2.0 >= card.y as f32 && t.y + t.h / 2.0 < (card.y + card.h) as f32).cloned().collect();
             assert!(inside.len() >= 4, "{scale}: the name and three numbers: {}", inside.len());

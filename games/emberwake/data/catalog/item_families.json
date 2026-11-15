@@ -8,21 +8,15 @@
 			"description": "",
 			"item_type": "WEAPON",
 			"hands": [
-				"main_1h",
-				"main_2h"
+				"main_1h"
 			],
 			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"STR"
 			],
 			"base": {
-				"main_2h": {
-					"power": 24,
-					"range": 1,
-					"burden": 1,
-					"mitigation": 0
-				},
 				"main_1h": {
 					"power": 14,
 					"range": 1,
@@ -31,28 +25,6 @@
 				}
 			},
 			"bands": {
-				"main_2h": {
-					"power": {
-						"min": 18,
-						"max": 30
-					},
-					"range": {
-						"min": 1,
-						"max": 2
-					},
-					"burden": {
-						"min": 0,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 0,
-						"max": 0
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 4
-					}
-				},
 				"main_1h": {
 					"power": {
 						"min": 10,
@@ -100,172 +72,6 @@
 			"fx": "slash"
 		},
 		{
-			"id": "axe",
-			"name": "Axe",
-			"description": "",
-			"item_type": "WEAPON",
-			"hands": [
-				"main_1h",
-				"main_2h"
-			],
-			"default_hand": "main_1h",
-			"off_hand_category": "",
-			"scaling_stats": [
-				"STR"
-			],
-			"base": {
-				"main_1h": {
-					"power": 16,
-					"range": 1,
-					"burden": 0,
-					"mitigation": 0
-				},
-				"main_2h": {
-					"power": 27,
-					"range": 1,
-					"burden": 2,
-					"mitigation": 0
-				}
-			},
-			"bands": {
-				"main_1h": {
-					"power": {
-						"min": 12,
-						"max": 20
-					},
-					"range": {
-						"min": 1,
-						"max": 2
-					},
-					"burden": {
-						"min": 0,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 0,
-						"max": 0
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 4
-					}
-				},
-				"main_2h": {
-					"power": {
-						"min": 20,
-						"max": 34
-					},
-					"range": {
-						"min": 1,
-						"max": 2
-					},
-					"burden": {
-						"min": 0,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 0,
-						"max": 0
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 4
-					}
-				}
-			},
-			"adjustable": [
-				"power",
-				"range",
-				"burden"
-			],
-			"modifier_kinds": [
-				"adjust",
-				"stat_bonus",
-				"requirement",
-				"effect"
-			],
-			"max_modifiers": 8,
-			"max_tiers": 3,
-			"engine_rules": [],
-			"damage_type": "slash",
-			"level2_bonus": {
-				"burden": 1
-			},
-			"level3_passive": "mastery_bleed_edge",
-			"durability": 40,
-			"art": "",
-			"fx": "cleave"
-		},
-		{
-			"id": "mace",
-			"name": "Mace",
-			"description": "",
-			"item_type": "WEAPON",
-			"hands": [
-				"main_1h"
-			],
-			"default_hand": "main_1h",
-			"off_hand_category": "",
-			"scaling_stats": [
-				"STR",
-				"INT"
-			],
-			"base": {
-				"main_1h": {
-					"power": 13,
-					"range": 1,
-					"burden": 0,
-					"mitigation": 0
-				}
-			},
-			"bands": {
-				"main_1h": {
-					"power": {
-						"min": 9,
-						"max": 22
-					},
-					"range": {
-						"min": 1,
-						"max": 2
-					},
-					"burden": {
-						"min": 0,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 0,
-						"max": 0
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 4
-					}
-				}
-			},
-			"adjustable": [
-				"power",
-				"range",
-				"burden"
-			],
-			"modifier_kinds": [
-				"adjust",
-				"stat_bonus",
-				"requirement",
-				"effect"
-			],
-			"max_modifiers": 8,
-			"max_tiers": 3,
-			"engine_rules": [],
-			"damage_type": "blunt",
-			"level2_bonus": {
-				"crit": 2
-			},
-			"level3_passive": "mastery_heavy_impact",
-			"durability": 40,
-			"art": "",
-			"fx": "bludgeon"
-		},
-		{
 			"id": "hammer",
 			"name": "Hammer",
 			"description": "",
@@ -274,6 +80,7 @@
 				"main_2h"
 			],
 			"default_hand": "main_2h",
+			"slot_rule": "2h_solo",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"STR"
@@ -342,6 +149,7 @@
 				"main_1h"
 			],
 			"default_hand": "main_1h",
+			"slot_rule": "1h_light",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"STR"
@@ -424,6 +232,7 @@
 				"main_1h"
 			],
 			"default_hand": "main_1h",
+			"slot_rule": "1h_light",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"DEX"
@@ -498,6 +307,11 @@
 				"main_2h"
 			],
 			"default_hand": "main_2h",
+			"slot_rule": "2h_rig",
+			"pairs_with": [
+				"ammo",
+				"cloak"
+			],
 			"off_hand_category": "",
 			"scaling_stats": [
 				"DEX"
@@ -518,7 +332,7 @@
 					},
 					"range": {
 						"min": 2,
-						"max": 6
+						"max": 4
 					},
 					"burden": {
 						"min": 0,
@@ -565,23 +379,17 @@
 			"description": "",
 			"item_type": "WEAPON",
 			"hands": [
-				"main_2h",
-				"main_1h"
+				"main_2h"
 			],
 			"default_hand": "main_2h",
+			"slot_rule": "2h_solo",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"INT"
 			],
 			"base": {
 				"main_2h": {
-					"power": 22,
-					"range": 2,
-					"burden": 0,
-					"mitigation": 0
-				},
-				"main_1h": {
-					"power": 22,
+					"power": 24,
 					"range": 2,
 					"burden": 0,
 					"mitigation": 0
@@ -589,28 +397,6 @@
 			},
 			"bands": {
 				"main_2h": {
-					"power": {
-						"min": 16,
-						"max": 32
-					},
-					"range": {
-						"min": 1,
-						"max": 3
-					},
-					"burden": {
-						"min": 0,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 0,
-						"max": 0
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 4
-					}
-				},
-				"main_1h": {
 					"power": {
 						"min": 16,
 						"max": 32
@@ -660,77 +446,6 @@
 			"fx_far": "arcane_orb"
 		},
 		{
-			"id": "wand",
-			"name": "Wand",
-			"description": "",
-			"item_type": "WEAPON",
-			"hands": [
-				"main_1h"
-			],
-			"default_hand": "main_1h",
-			"off_hand_category": "",
-			"scaling_stats": [
-				"INT"
-			],
-			"base": {
-				"main_1h": {
-					"power": 15,
-					"range": 3,
-					"burden": 0,
-					"mitigation": 0
-				}
-			},
-			"bands": {
-				"main_1h": {
-					"power": {
-						"min": 11,
-						"max": 38
-					},
-					"range": {
-						"min": 2,
-						"max": 4
-					},
-					"burden": {
-						"min": 0,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 0,
-						"max": 0
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 4
-					}
-				}
-			},
-			"adjustable": [
-				"power",
-				"range",
-				"burden"
-			],
-			"modifier_kinds": [
-				"adjust",
-				"stat_bonus",
-				"requirement",
-				"effect"
-			],
-			"max_modifiers": 8,
-			"max_tiers": 3,
-			"engine_rules": [
-				"spell_source"
-			],
-			"damage_type": "magic",
-			"level2_bonus": {
-				"crit": 2
-			},
-			"level3_passive": "mastery_arcane_focus",
-			"durability": 40,
-			"art": "",
-			"fx": "slash",
-			"fx_far": "arcane_orb"
-		},
-		{
 			"id": "orb",
 			"name": "Orb",
 			"description": "",
@@ -739,6 +454,8 @@
 				"off"
 			],
 			"default_hand": "off",
+			"slot_rule": "off_only",
+			"power_stat_override": "INT",
 			"off_hand_category": "orb",
 			"scaling_stats": [
 				"INT"
@@ -809,6 +526,8 @@
 				"off"
 			],
 			"default_hand": "off",
+			"slot_rule": "off_only",
+			"off_hand_skill": "cite_passage",
 			"off_hand_category": "tome",
 			"scaling_stats": [
 				"INT"
@@ -879,6 +598,7 @@
 				"off"
 			],
 			"default_hand": "off",
+			"slot_rule": "off_only",
 			"off_hand_category": "shield",
 			"base": {
 				"off": {
@@ -927,168 +647,6 @@
 			"art": ""
 		},
 		{
-			"id": "plate",
-			"name": "Plate",
-			"description": "",
-			"item_type": "ARMOR",
-			"off_hand_category": "",
-			"slots": [
-				"HEAD",
-				"BODY"
-			],
-			"base": {
-				"none": {
-					"power": 0,
-					"range": 1,
-					"burden": 3,
-					"mitigation": 8
-				}
-			},
-			"bands": {
-				"none": {
-					"burden": {
-						"min": 2,
-						"max": 4
-					},
-					"mitigation": {
-						"min": 6,
-						"max": 10
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 0
-					}
-				}
-			},
-			"adjustable": [
-				"mitigation",
-				"burden"
-			],
-			"modifier_kinds": [
-				"adjust",
-				"stat_bonus",
-				"requirement",
-				"effect"
-			],
-			"max_modifiers": 6,
-			"max_tiers": 2,
-			"engine_rules": [],
-			"damage_type": "",
-			"level2_bonus": {
-				"burden": 1
-			},
-			"level3_passive": "mastery_poise_ward",
-			"art": ""
-		},
-		{
-			"id": "leather",
-			"name": "Leather",
-			"description": "",
-			"item_type": "ARMOR",
-			"off_hand_category": "",
-			"slots": [
-				"HEAD",
-				"BODY"
-			],
-			"base": {
-				"none": {
-					"power": 0,
-					"range": 1,
-					"burden": 1,
-					"mitigation": 4
-				}
-			},
-			"bands": {
-				"none": {
-					"burden": {
-						"min": 0,
-						"max": 2
-					},
-					"mitigation": {
-						"min": 3,
-						"max": 5
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 0
-					}
-				}
-			},
-			"adjustable": [
-				"mitigation",
-				"burden"
-			],
-			"modifier_kinds": [
-				"adjust",
-				"stat_bonus",
-				"requirement",
-				"effect"
-			],
-			"max_modifiers": 6,
-			"max_tiers": 2,
-			"engine_rules": [],
-			"damage_type": "",
-			"level2_bonus": {
-				"burden": 1
-			},
-			"level3_passive": "mastery_agile_step",
-			"art": ""
-		},
-		{
-			"id": "cloth",
-			"name": "Cloth",
-			"description": "",
-			"item_type": "ARMOR",
-			"off_hand_category": "",
-			"slots": [
-				"HEAD",
-				"BODY"
-			],
-			"base": {
-				"none": {
-					"power": 0,
-					"range": 1,
-					"burden": 0,
-					"mitigation": 2
-				}
-			},
-			"bands": {
-				"none": {
-					"burden": {
-						"min": 0,
-						"max": 0
-					},
-					"mitigation": {
-						"min": 1,
-						"max": 4
-					},
-					"bonus_value": {
-						"min": 0,
-						"max": 5
-					}
-				}
-			},
-			"adjustable": [
-				"mitigation",
-				"burden"
-			],
-			"modifier_kinds": [
-				"adjust",
-				"stat_bonus",
-				"requirement",
-				"effect"
-			],
-			"max_modifiers": 6,
-			"max_tiers": 2,
-			"engine_rules": [],
-			"damage_type": "",
-			"level2_bonus": {
-				"crit": 1
-			},
-			"level3_passive": "mastery_woven_ward",
-			"art": ""
-		},
-		{
 			"id": "crossbow",
 			"name": "Crossbow",
 			"description": "",
@@ -1097,6 +655,11 @@
 				"main_2h"
 			],
 			"default_hand": "main_2h",
+			"slot_rule": "2h_rig",
+			"pairs_with": [
+				"ammo",
+				"cloak"
+			],
 			"off_hand_category": "",
 			"scaling_stats": [
 				"DEX"
@@ -1117,7 +680,7 @@
 					},
 					"range": {
 						"min": 2,
-						"max": 6
+						"max": 5
 					},
 					"burden": {
 						"min": 0,
@@ -1266,26 +829,27 @@
 			"description": "",
 			"item_type": "WEAPON",
 			"hands": [
-				"main_2h"
+				"main_1h"
 			],
-			"default_hand": "main_2h",
+			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"STR"
 			],
 			"base": {
-				"main_2h": {
-					"power": 26,
+				"main_1h": {
+					"power": 13,
 					"range": 1,
-					"burden": 2,
+					"burden": 1,
 					"mitigation": 0
 				}
 			},
 			"bands": {
-				"main_2h": {
+				"main_1h": {
 					"power": {
-						"min": 18,
-						"max": 30
+						"min": 9,
+						"max": 22
 					},
 					"range": {
 						"min": 1,
@@ -1349,6 +913,7 @@
 				"main_1h"
 			],
 			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"DEX",
@@ -1423,6 +988,7 @@
 				"main_1h"
 			],
 			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"INT",
@@ -1497,6 +1063,7 @@
 				"main_1h"
 			],
 			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"DEX",
@@ -1562,25 +1129,26 @@
 			"description": "",
 			"item_type": "WEAPON",
 			"hands": [
-				"main_2h"
+				"main_1h"
 			],
-			"default_hand": "main_2h",
+			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
 			"off_hand_category": "",
 			"scaling_stats": [
 				"INT"
 			],
 			"base": {
-				"main_2h": {
-					"power": 18,
+				"main_1h": {
+					"power": 15,
 					"range": 3,
 					"burden": 1,
 					"mitigation": 0
 				}
 			},
 			"bands": {
-				"main_2h": {
+				"main_1h": {
 					"power": {
-						"min": 14,
+						"min": 10,
 						"max": 24
 					},
 					"range": {
@@ -1647,6 +1215,648 @@
 			"engine_rules": [],
 			"damage_type": "",
 			"art": ""
+		},
+		{
+			"id": "greatsword",
+			"name": "Greatsword",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"slot_rule": "2h_solo",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_2h": {
+					"power": 26,
+					"range": 1,
+					"burden": 2,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 18,
+						"max": 34
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "slash",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_poise_ward",
+			"durability": 40,
+			"art": "",
+			"fx": "cleave"
+		},
+		{
+			"id": "gauntlet",
+			"name": "Gauntlet",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"slot_rule": "1h_heavy",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_1h": {
+					"power": 13,
+					"range": 1,
+					"burden": 1,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 10,
+						"max": 18
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "blunt",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_heavy_impact",
+			"durability": 40,
+			"art": "gauntlet",
+			"fx": "fists",
+			"attack_clips": [
+				"jab"
+			],
+			"area_clips": [
+				"sweep_kick",
+				"kick",
+				"jab"
+			]
+		},
+		{
+			"id": "knife",
+			"name": "Knife",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"slot_rule": "1h_light",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"DEX"
+			],
+			"base": {
+				"main_1h": {
+					"power": 14,
+					"range": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 10,
+						"max": 20
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"reach"
+			],
+			"range_band": {
+				"min": 1,
+				"max": 2
+			},
+			"damage_type": "pierce",
+			"level2_bonus": {
+				"crit": 2
+			},
+			"level3_passive": "mastery_agile_step",
+			"durability": 40,
+			"art": "knife",
+			"fx": "stab"
+		},
+		{
+			"id": "buckler",
+			"name": "Buckler",
+			"description": "",
+			"item_type": "SHIELD",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"slot_rule": "off_only",
+			"off_hand_category": "buckler",
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"burden": 0,
+					"mitigation": 4
+				}
+			},
+			"bands": {
+				"off": {
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 8
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [
+				"shield"
+			],
+			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_agile_step",
+			"art": "buckler"
+		},
+		{
+			"id": "braces",
+			"name": "Braces",
+			"description": "",
+			"item_type": "SHIELD",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"slot_rule": "off_only",
+			"off_hand_category": "braces",
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"burden": 1,
+					"mitigation": 3
+				}
+			},
+			"bands": {
+				"off": {
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 10
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_poise_ward",
+			"art": "braces"
+		},
+		{
+			"id": "heavy",
+			"name": "Heavy",
+			"description": "",
+			"item_type": "ARMOR",
+			"off_hand_category": "",
+			"slots": [
+				"HEAD",
+				"BODY"
+			],
+			"armor_weight": "heavy",
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"burden": 3,
+					"mitigation": 8
+				}
+			},
+			"bands": {
+				"none": {
+					"burden": {
+						"min": 2,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 6,
+						"max": 10
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 0
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_poise_ward",
+			"art": ""
+		},
+		{
+			"id": "medium",
+			"name": "Medium",
+			"description": "",
+			"item_type": "ARMOR",
+			"off_hand_category": "",
+			"slots": [
+				"HEAD",
+				"BODY"
+			],
+			"armor_weight": "medium",
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"burden": 1,
+					"mitigation": 4
+				}
+			},
+			"bands": {
+				"none": {
+					"burden": {
+						"min": 0,
+						"max": 2
+					},
+					"mitigation": {
+						"min": 3,
+						"max": 5
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 0
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"level2_bonus": {
+				"burden": 1
+			},
+			"level3_passive": "mastery_agile_step",
+			"art": ""
+		},
+		{
+			"id": "light",
+			"name": "Light",
+			"description": "",
+			"item_type": "ARMOR",
+			"off_hand_category": "",
+			"slots": [
+				"HEAD",
+				"BODY"
+			],
+			"armor_weight": "light",
+			"base": {
+				"none": {
+					"power": 0,
+					"range": 1,
+					"burden": 0,
+					"mitigation": 2
+				}
+			},
+			"bands": {
+				"none": {
+					"burden": {
+						"min": 0,
+						"max": 0
+					},
+					"mitigation": {
+						"min": 1,
+						"max": 4
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 5
+					}
+				}
+			},
+			"adjustable": [
+				"mitigation",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 6,
+			"max_tiers": 2,
+			"engine_rules": [],
+			"damage_type": "",
+			"level2_bonus": {
+				"crit": 1
+			},
+			"level3_passive": "mastery_woven_ward",
+			"art": ""
+		},
+		{
+			"id": "ammo",
+			"name": "Ammunition",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"slot_rule": "off_only",
+			"off_hand_skill": "reload",
+			"empower_next": {
+				"meter": "ammo_pips",
+				"cost": 1,
+				"power_mult": 1.25,
+				"throw_skill": "knife_throw"
+			},
+			"off_hand_category": "ammo",
+			"scaling_stats": [
+				"DEX"
+			],
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"off": {
+					"power": {
+						"min": 0,
+						"max": 10
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "pierce",
+			"level2_bonus": {
+				"crit": 1
+			},
+			"level3_passive": "mastery_bow",
+			"art": "ammo",
+			"fx": "slash"
+		},
+		{
+			"id": "cloak",
+			"name": "Cloak",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"off"
+			],
+			"default_hand": "off",
+			"slot_rule": "off_only",
+			"off_hand_skill": "fade_step",
+			"off_hand_category": "cloak",
+			"scaling_stats": [
+				"DEX"
+			],
+			"base": {
+				"off": {
+					"power": 0,
+					"range": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"off": {
+					"power": {
+						"min": 0,
+						"max": 10
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 6
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "",
+			"level2_bonus": {
+				"crit": 1
+			},
+			"level3_passive": "mastery_agile_step",
+			"art": "cloak",
+			"fx": "slash"
 		}
 	]
 }

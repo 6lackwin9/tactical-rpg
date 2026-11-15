@@ -16,9 +16,7 @@
 			"faction": "",
 			"home": "",
 			"disciplines": [],
-			"passives": [
-				"polearm_drill"
-			],
+			"passives": [],
 			"temperament": "castellans_penance",
 			"default_intent": "guard",
 			"named_items": [],
@@ -42,9 +40,7 @@
 			"faction": "",
 			"home": "",
 			"disciplines": [],
-			"passives": [
-				"censer_drill"
-			],
+			"passives": [],
 			"temperament": "copyist_of_st_lyras",
 			"default_intent": "support",
 			"named_items": [],
@@ -68,9 +64,7 @@
 			"faction": "",
 			"home": "",
 			"disciplines": [],
-			"passives": [
-				"sprayer_drill"
-			],
+			"passives": [],
 			"temperament": "volatile_reaction_catalyst",
 			"default_intent": "assault",
 			"named_items": [],
@@ -120,7 +114,6 @@
 			"home": "",
 			"disciplines": [],
 			"passives": [
-				"sprayer_drill",
 				"heat_tempered_carapace"
 			],
 			"named_items": [],
@@ -145,7 +138,6 @@
 			"home": "",
 			"disciplines": [],
 			"passives": [
-				"polearm_drill",
 				"traitors_discipline"
 			],
 			"named_items": [],
@@ -311,6 +303,7 @@
 			"home": "",
 			"disciplines": [],
 			"passives": [
+				"medium_drill",
 				"molten_slag_tempering"
 			],
 			"named_items": [],
@@ -335,6 +328,8 @@
 			"home": "",
 			"disciplines": [],
 			"passives": [
+				"bone_saw_drill",
+				"medium_drill",
 				"vat_masters_grease"
 			],
 			"named_items": [],
@@ -435,6 +430,7 @@
 			"home": "",
 			"disciplines": [],
 			"passives": [
+				"censer_drill",
 				"calcified_frame"
 			],
 			"named_items": [],

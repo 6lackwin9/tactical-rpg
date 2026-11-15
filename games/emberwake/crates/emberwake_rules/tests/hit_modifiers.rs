@@ -182,7 +182,9 @@ fn every_passive_and_item_reaches_a_hit_with_the_accumulators_numbers_and_its_so
 #[test]
 fn each_hit_time_target_names_its_sources_in_order() {
     let cat = frozen();
-    let base = units(&cat).remove(0);
+    // a unit with no hit-time records of its own, so only the hand-built rows name sources (PR5-51b: the frozen
+    // warrior's polearm at proficiency 3 brings its family's mastery passive, a forced-move record)
+    let base = cat.units.values().map(|e| build_unit(&cat, e, 0)).find(|u| u.hit_sources.is_empty() && u.gear_hit_sources.is_empty()).expect("a unit with no hit-time records");
     let skill = cat.skills.iter().find(|s| s.kind == "ATTACK").expect("an attack").clone();
     let fam = skill.family_id().to_string();
     let mut u = base.clone();

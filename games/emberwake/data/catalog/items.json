@@ -5,7 +5,7 @@
 		{
 			"id": "wpn_claymore",
 			"name": "Iron Claymore",
-			"family": "sword",
+			"family": "greatsword",
 			"rarity": "UNCOMMON",
 			"weight": 4.5,
 			"value": 65,
@@ -339,7 +339,7 @@
 		{
 			"id": "shd_buckler",
 			"name": "Duelist Buckler",
-			"family": "shield",
+			"family": "buckler",
 			"rarity": "COMMON",
 			"weight": 1.5,
 			"value": 30,
@@ -352,16 +352,6 @@
 			"hand": "off",
 			"modifiers": [
 				{
-					"kind": "adjust",
-					"field": "burden",
-					"delta": -2
-				},
-				{
-					"kind": "adjust",
-					"field": "mitigation",
-					"delta": -2
-				},
-				{
 					"kind": "requirement",
 					"stat": "DEX",
 					"value": 10
@@ -372,7 +362,7 @@
 		{
 			"id": "arm_plate",
 			"name": "Steel Plate Cuirass",
-			"family": "plate",
+			"family": "heavy",
 			"rarity": "UNCOMMON",
 			"weight": 8.5,
 			"value": 80,
@@ -395,7 +385,7 @@
 		{
 			"id": "arm_leather",
 			"name": "Leather Brigandine",
-			"family": "leather",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 40,
@@ -533,7 +523,7 @@
 		{
 			"id": "wpn_hand_axe",
 			"name": "Hatchet",
-			"family": "axe",
+			"family": "sword",
 			"rarity": "COMMON",
 			"weight": 2.0,
 			"value": 46,
@@ -557,7 +547,7 @@
 		{
 			"id": "wpn_battle_axe",
 			"name": "Battle Axe",
-			"family": "axe",
+			"family": "greatsword",
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 57,
@@ -581,7 +571,7 @@
 		{
 			"id": "wpn_flanged_mace",
 			"name": "Flanged Mace",
-			"family": "mace",
+			"family": "censer",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 47,
@@ -639,7 +629,7 @@
 		{
 			"id": "arm_robe",
 			"name": "Plain Robe",
-			"family": "cloth",
+			"family": "light",
 			"rarity": "COMMON",
 			"weight": 1.0,
 			"value": 20,
@@ -656,7 +646,7 @@
 		{
 			"id": "arm_cleric_vestment",
 			"name": "Cleric Vestment",
-			"family": "cloth",
+			"family": "light",
 			"rarity": "UNCOMMON",
 			"weight": 1.5,
 			"value": 55,
@@ -684,7 +674,7 @@
 		{
 			"id": "arm_mage_robe",
 			"name": "Mage Robe",
-			"family": "cloth",
+			"family": "light",
 			"rarity": "UNCOMMON",
 			"weight": 1.5,
 			"value": 60,
@@ -740,7 +730,7 @@
 		{
 			"id": "wpn_wand",
 			"name": "Ash Wand",
-			"family": "wand",
+			"family": "sprayer",
 			"rarity": "COMMON",
 			"weight": 0.5,
 			"value": 45,
@@ -798,7 +788,7 @@
 		{
 			"id": "wpn_cleric_mace",
 			"name": "Cleric Mace",
-			"family": "mace",
+			"family": "censer",
 			"rarity": "COMMON",
 			"weight": 2.5,
 			"value": 50,
@@ -827,7 +817,7 @@
 		{
 			"id": "wpn_glass_wand",
 			"name": "Glass Wand",
-			"family": "wand",
+			"family": "sprayer",
 			"rarity": "RARE",
 			"weight": 0.3,
 			"value": 140,
@@ -906,7 +896,7 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"hand": "main_2h",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
 			"modifiers": [],
 			"tiers": []
@@ -924,7 +914,7 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"hand": "main_2h",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
 			"modifiers": [
 				{
@@ -938,7 +928,7 @@
 		{
 			"id": "castellan_breastplate",
 			"name": "Dented Cuirass",
-			"family": "plate",
+			"family": "heavy",
 			"rarity": "COMMON",
 			"weight": 8.0,
 			"value": 60,
@@ -990,7 +980,7 @@
 		{
 			"id": "soot_leathers",
 			"name": "Soot Leathers",
-			"family": "leather",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 2.5,
 			"value": 30,
@@ -1078,7 +1068,7 @@
 		{
 			"id": "embalmers_habit",
 			"name": "Embalmer's Habit",
-			"family": "cloth",
+			"family": "light",
 			"rarity": "COMMON",
 			"weight": 1.2,
 			"value": 40,
@@ -1141,7 +1131,7 @@
 		{
 			"id": "poachers_brigandine",
 			"name": "Poacher's Coat",
-			"family": "leather",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 40,
@@ -1169,7 +1159,7 @@
 		{
 			"id": "penal_shackles",
 			"name": "Penal Shackles",
-			"family": "fist",
+			"family": "gauntlet",
 			"rarity": "COMMON",
 			"weight": 1.5,
 			"value": 20,
@@ -1198,7 +1188,7 @@
 		{
 			"id": "penal_foundry_apron",
 			"name": "Foundry Apron",
-			"family": "leather",
+			"family": "heavy",
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 35,
@@ -1244,7 +1234,7 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"hand": "main_2h",
+			"hand": "main_1h",
 			"scaling_stat": "INT",
 			"modifiers": [
 				{
@@ -1258,7 +1248,7 @@
 		{
 			"id": "tanners_rubbered_coat",
 			"name": "Rubbered Coat",
-			"family": "cloth",
+			"family": "light",
 			"rarity": "COMMON",
 			"weight": 1.5,
 			"value": 30,
@@ -1284,7 +1274,7 @@
 		{
 			"id": "watch_hookbill",
 			"name": "Watch Hookbill",
-			"family": "axe",
+			"family": "sword",
 			"rarity": "COMMON",
 			"weight": 2.0,
 			"value": 30,
@@ -1336,7 +1326,7 @@
 		{
 			"id": "watch_cuirass",
 			"name": "Watch Cuirass",
-			"family": "plate",
+			"family": "heavy",
 			"rarity": "COMMON",
 			"weight": 8.0,
 			"value": 50,
@@ -1359,7 +1349,7 @@
 		{
 			"id": "watch_gambeson",
 			"name": "Watch Gambeson",
-			"family": "leather",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 25,
@@ -1452,7 +1442,7 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"hand": "main_2h",
+			"hand": "main_1h",
 			"scaling_stat": "INT",
 			"modifiers": [],
 			"tiers": []
@@ -1460,7 +1450,7 @@
 		{
 			"id": "warded_apron",
 			"name": "Warded Apron",
-			"family": "leather",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 4.0,
 			"value": 40,
@@ -1491,7 +1481,7 @@
 		{
 			"id": "boning_knife",
 			"name": "Boning Knife",
-			"family": "dagger",
+			"family": "knife",
 			"rarity": "COMMON",
 			"weight": 0.8,
 			"value": 20,
@@ -1509,7 +1499,7 @@
 		{
 			"id": "skinners_apron",
 			"name": "Skinner's Apron",
-			"family": "leather",
+			"family": "medium",
 			"rarity": "COMMON",
 			"weight": 2.5,
 			"value": 20,
@@ -1526,7 +1516,7 @@
 		{
 			"id": "bone_club",
 			"name": "Bone Club",
-			"family": "mace",
+			"family": "censer",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 0,
@@ -1554,7 +1544,7 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"hand": "main_2h",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
 			"modifiers": [
 				{
@@ -1622,7 +1612,7 @@
 		{
 			"id": "flensing_hooks",
 			"name": "Flensing Hooks",
-			"family": "axe",
+			"family": "bone_saw",
 			"rarity": "COMMON",
 			"weight": 3.0,
 			"value": 60,
@@ -1646,7 +1636,7 @@
 		{
 			"id": "prelates_blade",
 			"name": "Prelate's Blade",
-			"family": "sword",
+			"family": "greatsword",
 			"rarity": "RARE",
 			"theme": "inquisitor",
 			"weight": 4.5,
@@ -1676,7 +1666,7 @@
 		{
 			"id": "slag_plating",
 			"name": "Slag Plating",
-			"family": "plate",
+			"family": "heavy",
 			"rarity": "UNCOMMON",
 			"weight": 9.0,
 			"value": 90,
@@ -1987,14 +1977,6 @@
 						"status": "stagger",
 						"value": 20
 					}
-				},
-				{
-					"kind": "effect",
-					"effect": {
-						"type": "resist",
-						"status": "stun",
-						"value": 20
-					}
 				}
 			],
 			"tiers": []
@@ -2024,14 +2006,6 @@
 					"effect": {
 						"type": "resist",
 						"status": "slow",
-						"value": 25
-					}
-				},
-				{
-					"kind": "effect",
-					"effect": {
-						"type": "resist",
-						"status": "root",
 						"value": 25
 					}
 				}
@@ -2242,7 +2216,7 @@
 			"starter_stash": false,
 			"special": false,
 			"special_note": "",
-			"hand": "main_2h",
+			"hand": "main_1h",
 			"scaling_stat": "STR",
 			"modifiers": [],
 			"tiers": []
@@ -2524,7 +2498,7 @@
 		{
 			"id": "orlovs_flensing_talon",
 			"name": "Flensing Talon",
-			"family": "dagger",
+			"family": "knife",
 			"rarity": "RARE",
 			"weight": 0.9,
 			"value": 0,
@@ -2674,6 +2648,106 @@
 			"hazard": {},
 			"armor_piercing": true,
 			"max_stack": 5
+		},
+		{
+			"id": "hip_quiver",
+			"name": "Hip Quiver",
+			"family": "ammo",
+			"rarity": "COMMON",
+			"weight": 0.6,
+			"value": 25,
+			"description": "A boiled-leather quiver of ash-fletched shafts, worn at the hip. Three pips of ammo; the shot that spends one hits harder.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "off",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "fuel_canister",
+			"name": "Pressurized Fuel Canister",
+			"family": "ammo",
+			"rarity": "COMMON",
+			"weight": 1.2,
+			"value": 35,
+			"description": "A brass canister of pressurized vitriol on a belt clip. Three pips of ammo; the jet that spends one hits harder.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "off",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "ash_cloak",
+			"name": "Ash-Cloak",
+			"family": "cloak",
+			"rarity": "COMMON",
+			"weight": 0.8,
+			"value": 40,
+			"description": "A soot-grey cloak that sheds light. Slip away from a melee with Fade-Step.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "off",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 10
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "PERC",
+					"value": 1
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "forearm_braces",
+			"name": "Forearm Braces",
+			"family": "braces",
+			"rarity": "COMMON",
+			"weight": 1.5,
+			"value": 30,
+			"description": "Riveted forearm guards that take the recoil off a brawler's blows.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
 		}
 	]
 }

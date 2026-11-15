@@ -158,6 +158,11 @@ pub const UNTRAINED_POWER_MULT: f64 = 0.75;
 pub const UNTRAINED_BURDEN_ADD: i32 = 1;
 /// U3.2-S3: the default of `req_discount_per_level`, the stat requirement discount per proficiency level.
 pub const REQ_DISCOUNT_PER_LEVEL: i32 = 2;
+/// GEAR-REWORK1 (U3.3 1): the factor on a weapon's power and a worn item's flat mitigation at proficiency 0-3 under the
+/// strict gear rule (`Proficiency::strict`): 0.80 / 1.00 / 1.25 at 1 / 2 / 3. Index 0 is a hard equip lock (`gear::wear_lock`)
+/// and reads 1.0: gear worn while locked (a unit row's own loadout, which no build path refuses) keeps the soft wield
+/// penalty instead (`gear::Equipment::wield_penalty`). PR5-51b moved it from the data crate into the rules' `LOCKED` table.
+pub const PROF_GEAR_MULT: [f64; 4] = [1.0, 0.80, 1.00, 1.25];
 
 /// U3.2-S3 (FB-33, FB-34): the wield terms of the battle's ruleset (its row-only numbers `untrained_power_mult`,
 /// `untrained_burden_add`, `req_discount_per_level`; `Numbers::wield`). `Default` is the spec's defaults, so a unit
@@ -185,9 +190,9 @@ pub struct Proficiency {
     /// class's stats (`build_catalog_unit`'s fallback), wears everything trained, like a class with no proficiency list.
     pub unrestricted: bool,
     /// GEAR-REWORK1 (PR5-51a, U3.3 1): the strict gear rule, on for a class that tags its proficiency entries with
-    /// roles (`ClassDef::proficiency_roles`, seeded by PR5-51b): proficiency 0 and unmet raw `required_stats` are a hard
-    /// equip lock (`gear::wear_lock`) and proficiency 1 / 2 / 3 scale weapon power and flat mitigation by
-    /// `rpgkit_data::PROF_GEAR_MULT`. Off (a class without roles, today's catalog): the soft U3.2 wield penalty, unchanged.
+    /// roles (`ClassDef::proficiency_roles`; every playable class since PR5-51b): proficiency 0 and unmet raw
+    /// `required_stats` are a hard equip lock (`gear::wear_lock`) and proficiency 1 / 2 / 3 scale weapon power and flat
+    /// mitigation by `PROF_GEAR_MULT`. Off (a class without roles: a test or fixture class): the soft U3.2 wield penalty.
     pub strict: bool,
 }
 
@@ -208,12 +213,12 @@ impl Proficiency {
     }
 
     /// GEAR-REWORK1: the factor on the power of a weapon and the flat mitigation of a worn item of gear type `gear`
-    /// (`rpgkit_data::PROF_GEAR_MULT` at its level under the strict rule; 1.0 for no gear type or without the rule).
+    /// (`PROF_GEAR_MULT` at its level under the strict rule; 1.0 for no gear type or without the rule).
     pub fn gear_mult(&self, gear: &str) -> f64 {
         if gear.is_empty() || !self.is_strict() {
             return 1.0;
         }
-        rpgkit_data::PROF_GEAR_MULT[self.level_of(gear).clamp(0, PROF_MAX_LEVEL) as usize]
+        PROF_GEAR_MULT[self.level_of(gear).clamp(0, PROF_MAX_LEVEL) as usize]
     }
 
     pub fn add_bonus(&mut self, gear: &str, levels: i32) {

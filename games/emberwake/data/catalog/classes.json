@@ -22,37 +22,45 @@
 				"PERC": 0.2
 			},
 			"proficiency": {
+				"polearm": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"greatsword": {
+					"level": 2,
+					"scaling": 1.5,
+					"role": "secondary"
+				},
 				"sword": {
 					"level": 2,
-					"scaling": 1.5
-				},
-				"mace": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"axe": {
-					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "third"
 				},
 				"hammer": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
 				},
 				"shield": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
-				"plate": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"leather": {
+				"buckler": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
 				},
-				"polearm": {
+				"heavy": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"medium": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
 				}
 			},
 			"skill_path": {
@@ -68,7 +76,7 @@
 				"brace"
 			],
 			"main_hand": "wpn_iron_billhook",
-			"off_hand": "",
+			"off_hand": "shd_kite",
 			"head": "",
 			"body": "arm_plate",
 			"accessory_1": "",
@@ -96,29 +104,45 @@
 				"CONS": 0.2
 			},
 			"proficiency": {
-				"bow": {
-					"level": 2,
-					"scaling": 1.5
-				},
 				"crossbow": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
-				"dagger": {
-					"level": 1,
-					"scaling": 1.25
+				"bow": {
+					"level": 2,
+					"scaling": 1.5,
+					"role": "secondary"
+				},
+				"knife": {
+					"level": 2,
+					"scaling": 1.5,
+					"role": "third"
 				},
 				"sword": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"leather": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"cloth": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"ammo": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"cloak": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"medium": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"heavy": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
 				}
 			},
 			"skill_path": {
@@ -135,7 +159,7 @@
 				"disengage_step"
 			],
 			"main_hand": "stirrup_arbalest",
-			"off_hand": "",
+			"off_hand": "hip_quiver",
 			"head": "",
 			"body": "arm_leather",
 			"accessory_1": "",
@@ -162,37 +186,45 @@
 				"DEX": 0.2
 			},
 			"proficiency": {
-				"fist": {
+				"gauntlet": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
-				"mace": {
+				"fist": {
 					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "secondary"
 				},
 				"hammer": {
 					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "third"
 				},
-				"leather": {
+				"greatsword": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"braces": {
 					"level": 3,
-					"scaling": 1.5
-				},
-				"axe": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"plate": {
-					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.5,
+					"role": "main"
 				},
 				"shield": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
 				},
-				"sword": {
+				"heavy": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"light": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
 				}
 			},
 			"skill_path": {
@@ -208,9 +240,9 @@
 				"sweep_kick"
 			],
 			"main_hand": "wpn_knuckles",
-			"off_hand": "",
+			"off_hand": "forearm_braces",
 			"head": "",
-			"body": "arm_leather",
+			"body": "arm_plate",
 			"accessory_1": "",
 			"accessory_2": "",
 			"pouch": []
@@ -236,45 +268,45 @@
 				"PERC": 0.2
 			},
 			"proficiency": {
-				"mace": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"staff": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"dagger": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"cloth": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"leather": {
-					"level": 1,
-					"scaling": 1.25
-				},
-				"tome": {
-					"level": 3,
-					"scaling": 1.5
-				},
-				"orb": {
-					"level": 2,
-					"scaling": 1.25
-				},
 				"censer": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
 				"bone_saw": {
 					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "secondary"
 				},
 				"scourge": {
 					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "third"
+				},
+				"staff": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"tome": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"orb": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"light": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"heavy": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
 				}
 			},
 			"skill_path": {
@@ -323,27 +355,43 @@
 			"proficiency": {
 				"dagger": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
-				"leather": {
-					"level": 3,
-					"scaling": 1.5
+				"knife": {
+					"level": 2,
+					"scaling": 1.5,
+					"role": "secondary"
 				},
 				"bow": {
 					"level": 2,
-					"scaling": 1.5
-				},
-				"cloth": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"sword": {
-					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "third"
 				},
 				"fist": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"cloak": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"braces": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
+				},
+				"medium": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
+				"light": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
 				}
 			},
 			"skill_path": {
@@ -362,7 +410,7 @@
 				"flank_cut"
 			],
 			"main_hand": "wpn_stiletto",
-			"off_hand": "",
+			"off_hand": "ash_cloak",
 			"head": "",
 			"body": "arm_leather",
 			"accessory_1": "",
@@ -390,33 +438,45 @@
 				"PERC": 0.2
 			},
 			"proficiency": {
+				"sprayer": {
+					"level": 3,
+					"scaling": 1.5,
+					"role": "main"
+				},
 				"staff": {
 					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "secondary"
 				},
-				"wand": {
+				"bone_saw": {
 					"level": 2,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "third"
+				},
+				"scourge": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
 				},
 				"orb": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
-				"tome": {
-					"level": 2,
-					"scaling": 1.5
-				},
-				"dagger": {
+				"ammo": {
 					"level": 1,
-					"scaling": 1.25
+					"scaling": 1.25,
+					"role": "minor"
 				},
-				"cloth": {
+				"light": {
 					"level": 3,
-					"scaling": 1.5
+					"scaling": 1.5,
+					"role": "main"
 				},
-				"sprayer": {
-					"level": 3,
-					"scaling": 1.5
+				"medium": {
+					"level": 1,
+					"scaling": 1.25,
+					"role": "minor"
 				}
 			},
 			"skill_path": {
@@ -432,7 +492,7 @@
 				"cinder_spark"
 			],
 			"main_hand": "brass_vitriol_sprayer",
-			"off_hand": "",
+			"off_hand": "wpn_orb",
 			"head": "",
 			"body": "arm_mage_robe",
 			"accessory_1": "",
@@ -463,7 +523,7 @@
 					"level": 2,
 					"scaling": 1.5
 				},
-				"mace": {
+				"censer": {
 					"level": 2,
 					"scaling": 1.5
 				},
@@ -479,11 +539,11 @@
 					"level": 2,
 					"scaling": 1.5
 				},
-				"plate": {
+				"heavy": {
 					"level": 2,
 					"scaling": 1.5
 				},
-				"leather": {
+				"medium": {
 					"level": 2,
 					"scaling": 1.5
 				}

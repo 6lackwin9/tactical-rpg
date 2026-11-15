@@ -149,3 +149,41 @@ fn under_the_strict_rule_an_accessory_carries_two_bonuses_or_one_hook() {
         }
     }
 }
+
+/// PR5-51b ("dynamic OFF_CATEGORIES", spec 2 / 6.1): the item field `off_hand_category` reads its options from the
+/// family table like the family field (`options_from` `off_families`): "", then every off-hand family id; so an item of
+/// a new off_only family (whose id the loader makes its category) saves. Without a family table the field's own list
+/// (the flat pre-family catalog) stays the options.
+#[test]
+fn an_item_of_a_new_off_hand_family_saves_and_its_category_is_an_option() {
+    let (_t, data) = scratch("off_families", false, "heavy");
+    let off = |id: &str, t: &str| {
+        let adjustable = if t == "SHIELD" { json!(["mitigation", "burden"]) } else { json!(["power", "range", "burden"]) };
+        json!({"id": id, "name": id, "item_type": t, "hands": ["off"], "default_hand": "off", "slot_rule": "off_only", "scaling_stats": ["DEX"], "damage_type": "pierce",
+               "base": {"off": {"power": 0, "range": 1, "burden": 0, "mitigation": 0}}, "adjustable": adjustable})
+    };
+    store::upsert(&data, None, "item_families", &dict(off("t_quiver", "WEAPON")), None).expect("an off-hand weapon family");
+    store::upsert(&data, None, "item_families", &dict(off("t_braces", "SHIELD")), None).expect("an off-hand shield family");
+    for (id, family) in [("i_quiver", "t_quiver"), ("i_braces", "t_braces")] {
+        store::upsert(&data, None, "items", &dict(json!({"id": id, "name": id, "family": family})), None).unwrap_or_else(|e| panic!("{id}: {e:?}"));
+    }
+    let cat = Catalog::from_value(&source::load(&data).catalog);
+    assert_eq!(cat.items["i_quiver"].off_hand_category, "t_quiver");
+    assert_eq!(cat.items["i_braces"].off_hand_category, "t_braces");
+
+    // both schema fields name the family table's off-hand families
+    let schema: Value = serde_json::from_str(&fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema.json")).unwrap()).unwrap();
+    let field = |kind: &str| schema["content"][kind].as_array().unwrap().iter().find(|f| f["key"] == "off_hand_category").cloned().unwrap();
+    let v = store::view(&data);
+    for kind in ["items", "item_families"] {
+        let f = field(kind);
+        assert_eq!(f["options_from"], "off_families", "{kind}");
+        assert_eq!(check::options_of(&v, json::dict(&f)), ["", "t_quiver", "t_braces"], "{kind}");
+    }
+
+    // no family table: the item field's own list
+    write(&data, "item_families", 1, json!([]));
+    let f = field("items");
+    let own: Vec<String> = f["options"].as_array().unwrap().iter().map(|o| o.as_str().unwrap().to_string()).collect();
+    assert_eq!(check::options_of(&store::view(&data), json::dict(&f)), own);
+}

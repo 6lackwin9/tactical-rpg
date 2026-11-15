@@ -72,22 +72,25 @@ fn every_shipped_look_and_clip_value_names_a_known_key() {
     }
 }
 
+/// GEAR-REWORK1 (PR5-51b, `docs/sessions/U3_GEAR_REWORK.md` 2-4): the WEAPON-type families the rework added (a look
+/// row each, checked above) and the ones it retired.
+const NEW_FAMILIES: [&str; 5] = ["greatsword", "knife", "gauntlet", "ammo", "cloak"];
+const RETIRED_FAMILIES: [&str; 3] = ["axe", "mace", "wand"];
+
 /// The looks the id tables gave before PR5-33, now from the shipped data.
 #[test]
 fn the_shipped_data_gives_the_old_tables_looks() {
     let d = shipped();
     let cat = &d.cat;
-    // family id -> (strike adjacent, strike 3 cells away); ranged by the family's engine rule
-    let families: [(&str, Style, Style); 17] = [
+    // family id -> (strike adjacent, strike 3 cells away); ranged by the family's engine rule. GEAR-REWORK1 (PR5-51b):
+    // the retired families (axe, mace, wand) left the table; the new ones (`NEW_FAMILIES`) were never in the id tables
+    let families: [(&str, Style, Style); 14] = [
         ("sword", SLASH, REACH_BOLT),
-        ("axe", CLEAVE, REACH_BOLT),
-        ("mace", BLUDGEON, REACH_BOLT),
         ("hammer", BLUDGEON, REACH_BOLT),
         ("fist", FISTS, REACH_BOLT),
         ("dagger", STAB, REACH_BOLT),
         ("bow", ARROW, ARROW),
         ("staff", BLUDGEON, ARCANE_BOLT),
-        ("wand", SLASH, ARCANE_BOLT),
         ("orb", SLASH, ARCANE_BOLT),
         ("tome", SLASH, ARCANE_BOLT),
         ("crossbow", BOLT, BOLT),
@@ -98,7 +101,12 @@ fn the_shipped_data_gives_the_old_tables_looks() {
         ("sprayer", ARROW, ARROW),
     ];
     let ranged: Vec<(String, bool)> = weapon_families(&d);
-    assert_eq!(ranged.len(), families.len(), "every weapon family is pinned");
+    for (id, _) in &ranged {
+        assert!(families.iter().any(|(f, _, _)| f == id) || NEW_FAMILIES.contains(&id.as_str()), "weapon family {id} is pinned or new in PR5-51b");
+    }
+    for id in RETIRED_FAMILIES {
+        assert!(!ranged.iter().any(|(f, _)| f == id), "{id} is retired");
+    }
     for (id, close, far) in families {
         let r = ranged.iter().find(|(f, _)| f == id).unwrap_or_else(|| panic!("{id} ships")).1;
         let fl = family_look(cat, id);

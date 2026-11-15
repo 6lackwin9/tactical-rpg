@@ -772,13 +772,6 @@ pub fn canonical_role(role: &str) -> Option<&'static str> {
 /// the class check warns on an entry whose level differs.
 pub const PROF_ROLE_LEVELS: [(&str, i32); 4] = [("main", 3), ("secondary", 2), ("third", 2), ("minor", 1)];
 
-/// GEAR-REWORK1 (PR5-51a, U3.3 1): the factor on a weapon's power and a worn item's flat mitigation at proficiency 0-3
-/// under the strict gear rule (`rpgkit_rules::stats::Proficiency::strict`): 0.80 / 1.00 / 1.25 at 1 / 2 / 3; index 0 (a
-/// hard equip lock there) is 1.0, so gear worn while locked keeps only the soft wield penalty. Kept in the data crate
-/// beside the role tables (like `DULLED_POWER_MULT`), so the rules' `LOCKED` table and the rules contract stay as they
-/// were until PR5-51b re-records its goldens.
-pub const PROF_GEAR_MULT: [f64; 4] = [1.0, 0.80, 1.00, 1.25];
-
 /// GEAR-REWORK1 (U3.3 5): an ARMOR family's optional weight key (`heavy`, `medium` or `light`; "" = none, a
 /// compatibility row from before the rework), and the key the loader writes it under on the family's resolved item
 /// rows (`ItemDef::armor_weight`; the writer leaves it out of the stored form).

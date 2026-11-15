@@ -1123,7 +1123,7 @@ const BOUND_WHY: &str = "a schema field's bound";
 
 /// What stays code, and why (BASERULES1 4.1). A test scans `src` and fails on a numeric `pub const` neither here nor in
 /// `PROMOTED`, so the table cannot go stale.
-pub const LOCKED: [Locked; 48] = [
+pub const LOCKED: [Locked; 49] = [
     locked("W_POWER", "budget.rs", "gear", BUDGET_WHY),
     locked("W_MITIGATION", "budget.rs", "gear", BUDGET_WHY),
     locked("W_STAT_POINT", "budget.rs", "gear", BUDGET_WHY),
@@ -1167,6 +1167,7 @@ pub const LOCKED: [Locked; 48] = [
     locked("PROF_MAX_LEVEL", "stats.rs", "stats", STATS_WHY),
     locked("DEFAULT_SCALING", "stats.rs", "stats", STATS_WHY),
     locked("PASSIVE_ONLY_SCALING", "stats.rs", "stats", STATS_WHY),
+    locked("PROF_GEAR_MULT", "stats.rs", "gear", "the strict gear rule's proficiency factors, kept as designed (GEAR-REWORK1, U3.3 1)"),
     locked("BASE_AP", "unit.rs", "timing", "the AP pool every timing rule counts in"),
     locked("GEAR_REACH_CAP", "unit.rs", "positioning", "the most reach gear adds"),
     locked("FORESIGHT_RANGE_MAX", "unit.rs", "tells", BOUND_WHY),

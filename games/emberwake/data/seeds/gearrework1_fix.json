@@ -1,0 +1,193 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "dojo_warrior",
+    "name": "Warrior",
+    "side": "party",
+    "description": "Gear Dojo warrior: level 2 Warrior, vitals derived from stats and gear.",
+    "class_id": "warrior",
+    "level": 2,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [],
+    "loadout": [],
+    "deck": {},
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_broadsword",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "acc_bear_ring",
+    "accessory_2": "",
+    "pouch": [
+     "con_heal_potion",
+     "con_fire_bomb"
+    ],
+    "loot": [],
+    "dojo": "hero"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "id": "inoculated_hero",
+    "name": "Inoculated (test)",
+    "side": "party",
+    "description": "Test hero for the Channel duel: Strain carrier with two Channel-only skills.",
+    "class_id": "warrior",
+    "level": 2,
+    "tier": "hero",
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "art": "",
+    "palette": "",
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "extra_skills": [
+     "tl_hook_thrust"
+    ],
+    "loadout": [],
+    "deck": {
+     "active": [
+      "taunt_shout",
+      "tl_hook_thrust"
+     ],
+     "channeled": [
+      "tl_hook_thrust"
+     ],
+     "passive": [
+      "inoculated_test"
+     ]
+    },
+    "default_intent": "",
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "prefer_level": 0,
+    "status_resist": {},
+    "reckless": false,
+    "heal_below": 0.7,
+    "tactics": [],
+    "main_hand": "wpn_broadsword",
+    "off_hand": "shd_kite",
+    "head": "",
+    "body": "arm_plate",
+    "accessory_1": "",
+    "accessory_2": "",
+    "pouch": [
+     "con_heal_potion",
+     "con_quenched_salt"
+    ],
+    "loot": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "item_families",
+   "entry": {
+    "id": "buckler",
+    "name": "Buckler",
+    "description": "",
+    "item_type": "SHIELD",
+    "hands": [
+     "off"
+    ],
+    "default_hand": "off",
+    "slot_rule": "off_only",
+    "off_hand_category": "shield",
+    "base": {
+     "off": {
+      "power": 0,
+      "range": 1,
+      "burden": 0,
+      "mitigation": 4
+     }
+    },
+    "bands": {
+     "off": {
+      "burden": {
+       "min": 0,
+       "max": 4
+      },
+      "mitigation": {
+       "min": 0,
+       "max": 8
+      },
+      "bonus_value": {
+       "min": 0,
+       "max": 6
+      }
+     }
+    },
+    "adjustable": [
+     "mitigation",
+     "burden"
+    ],
+    "modifier_kinds": [
+     "adjust",
+     "stat_bonus",
+     "requirement",
+     "effect"
+    ],
+    "max_modifiers": 6,
+    "max_tiers": 2,
+    "engine_rules": [
+     "shield"
+    ],
+    "damage_type": "",
+    "level2_bonus": {
+     "burden": 1
+    },
+    "level3_passive": "mastery_agile_step",
+    "art": "buckler"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "dojo_presets",
+   "entry": {
+    "id": "sword_board",
+    "name": "Sword & Board",
+    "description": "1H Broadsword, Kite Shield, Steel Plate Cuirass, Ring of the Bear",
+    "gear": {
+     "main_hand": "wpn_broadsword",
+     "off_hand": "shd_kite",
+     "body": "arm_plate",
+     "accessory_1": "acc_bear_ring"
+    },
+    "pouch": [
+     "con_heal_potion",
+     "con_fire_bomb"
+    ],
+    "passives": []
+   }
+  }
+ ]
+}

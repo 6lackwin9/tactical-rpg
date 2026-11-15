@@ -112,7 +112,7 @@ pub fn json_arg(raw: &str) -> Result<Value> {
 }
 
 /// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?}, {"op": "remove", "kind", "id",
-/// "world"?}, {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1) or {"op": <a sidecar op of the
+/// "world"?, "if_exists"? (true: a missing entry is a no-op, PR5-51b)}, {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1) or {"op": <a sidecar op of the
 /// game>, "name", "edits"?} (PR5-48, `Hooks::sidecar`).
 pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
     let s = |k: &str| step.get(k).and_then(|v| v.as_str()).map(String::from);
@@ -134,6 +134,10 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
     let (verb, outcome) = match s("op").as_deref().unwrap_or("upsert") {
         "remove" => {
             let id = s("id").ok_or_else(|| vec!["remove needs an id".to_string()])?;
+            // PR5-51b: `"if_exists": true` makes a re-run seed idempotent (a missing entry is a no-op, reported absent)
+            if step.get("if_exists").and_then(Value::as_bool).unwrap_or(false) && !store::contains(hooks, dir, world.as_deref(), &kind, &id) {
+                return Ok(format!("absent {kind} '{id}' in {} (nothing removed)", hooks.file_of(dir, world.as_deref(), &kind).display()));
+            }
             ("removed", store::remove(hooks, dir, world.as_deref(), &kind, &id)?)
         }
         "upsert" => {
@@ -154,7 +158,7 @@ pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result
 /// hooks), never by hand.
 ///   check                                              the game's warnings, then every problem (exit 1 when any)
 ///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
-///   remove <kind> <id> [world=<id>]                    remove one entry
+///   remove <kind> <id> [world=<id>] [if_exists]        remove one entry (if_exists: a missing one is a no-op)
 ///   world <id> [<json | @file>] [full]                 show a world manifest, or create / update it (data/worlds/<id>/
 ///                                                      world.json; fields merged, checked, kept when the data loads)
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
@@ -200,8 +204,8 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             }
         }
         Some("remove") => {
-            let (Some(kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content remove <kind> <id> [world=<id>]") };
-            let mut step = json!({"op": "remove", "kind": kind, "id": id});
+            let (Some(kind), Some(id)) = (args.pos(2), args.pos(3)) else { bail!("usage: aegis content remove <kind> <id> [world=<id>] [if_exists]") };
+            let mut step = json!({"op": "remove", "kind": kind, "id": id, "if_exists": args.flag("if_exists")});
             if let Some(w) = args.keys.get("world") {
                 step["world"] = json!(w);
             }

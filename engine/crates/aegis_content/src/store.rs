@@ -118,6 +118,12 @@ pub fn upsert(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
     Ok(outcome)
 }
 
+/// True when the stored file of `kind` (in `world`, or the base catalog) holds an entry `id` (PR5-51b: a seed's
+/// `"if_exists": true` remove step is a no-op when it does not).
+pub fn contains(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> bool {
+    raw_entries(&hooks.file_of(data_dir, world, kind)).iter().any(|e| sget(e, "id", "") == id)
+}
+
 /// Removes the entry `id` of `kind` (kept only when it adds no blocking problem).
 pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Result<Outcome, Vec<String>> {
     let file = hooks.file_of(data_dir, world, kind);
