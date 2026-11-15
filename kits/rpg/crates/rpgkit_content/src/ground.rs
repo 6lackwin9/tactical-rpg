@@ -27,6 +27,8 @@ pub struct GroundPlan {
     pub cols: i32,
     pub rows: i32,
     pub layers: Vec<GroundDef>,
+    /// REGIONVIEW2: non-layer grounds referenced via `GroundDef::under` on patchy layers.
+    pub under: Vec<GroundDef>,
     pub cells: Vec<u8>,
     pub blocked: Vec<bool>,
     pub placed: Vec<PlacedGroundPatch>,
@@ -91,5 +93,13 @@ pub fn plan(template: &Dict, grounds: &IndexMap<String, GroundDef>) -> Option<Gr
         Some(Value::Array(list)) => list.iter().map(|p| placed_patch(p, cols as i64, rows as i64)).collect::<Option<_>>()?,
         Some(_) => return None,
     };
-    Some(GroundPlan { cols: cols as i32, rows: rows as i32, layers, cells: cells?, blocked, placed, seed: seed_of(&json::s(template, "id")) })
+    let mut under = Vec::new();
+    for l in &layers {
+        if l.patchy > 0.0 && !l.under.is_empty() && !layers.iter().any(|x| x.id == l.under) && !under.iter().any(|x: &GroundDef| x.id == l.under) {
+            if let Some(u) = grounds.get(&l.under) {
+                under.push(u.clone());
+            }
+        }
+    }
+    Some(GroundPlan { cols: cols as i32, rows: rows as i32, layers, under, cells: cells?, blocked, placed, seed: seed_of(&json::s(template, "id")) })
 }

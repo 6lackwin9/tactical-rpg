@@ -1523,6 +1523,11 @@ fn patch_and_mark_inputs_are_bounded_and_in_the_key() {
         ("blocked", key(&job(&flat, &[true, false, false, false], &[]))),
         ("placed", key(&job(&flat, &flags, &[p]))),
         ("placed's strength", key(&job(&flat, &flags, &[PlacedPatch { strength: 0.2, ..p }]))),
+        ("patchy", key(&job(&[GroundLayer { patchy: 0.5, ..GroundLayer::flat(0, YARD) }], &flags, &[]))),
+        ("under tex", key(&job(&[GroundLayer { patchy: 0.5, under_tex: Some(&dot), ..GroundLayer::flat(0, YARD) }], &flags, &[]))),
+        ("under colour", key(&job(&[GroundLayer { patchy: 0.5, under_colour: INK, ..GroundLayer::flat(0, YARD) }], &flags, &[]))),
+        ("clamp water", key(&job(&[GroundLayer { clamp_water: true, ..GroundLayer::flat(0, YARD) }], &flags, &[]))),
+        ("stone rim", key(&job(&[GroundLayer { stone_rim: true, ..GroundLayer::flat(0, YARD) }], &flags, &[]))),
     ];
     let mut all: Vec<u64> = hashes.iter().map(|h| h.1).chain([base]).collect();
     all.sort_unstable();
@@ -1593,4 +1598,125 @@ fn the_job_file_takes_patches_and_marks() {
         assert!(format!("{e:#}").contains(says), "{e:#}");
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn water_clamp_keeps_water_cells_rectangular_while_land_wanders() {
+    // 10x6 grid: top-left 4x3 water (0), remaining cells land LOW (1) on x<7 and UP (2) on x>=7.
+    let (cols, rows) = (10i32, 6i32);
+    let cells: Vec<u8> = (0..rows)
+        .flat_map(|y| (0..cols).map(move |x| if x < 4 && y < 3 { 0 } else if x < 7 { 1 } else { 2 }))
+        .collect();
+    let blocked = vec![false; cells.len()];
+    let water = [24, 48, 84, 255];
+    let layers = [
+        GroundLayer { clamp_water: true, ..GroundLayer::flat(0, water) },
+        GroundLayer::flat(10, LOW),
+        GroundLayer::flat(20, UP),
+    ];
+    for (name, cell) in [("square", SQUARE), ("tilted", TILTED_CELL)] {
+        let img = ground::compose(&GroundJob { seed: 42, cols, rows, cell, cells: &cells, blocked: &blocked, layers: &layers, placed: &[] });
+        let mut land_wandered = false;
+        for ay in 0..img.h {
+            let cy = ay / cell.1;
+            for ax in 0..img.w {
+                let cx = ax / cell.0;
+                let px = at(&img, ax, ay);
+                let is_water_cell = cx < 4 && cy < 3;
+                if is_water_cell {
+                    assert_eq!(px, rgb3(water), "{name}: water cell ({ax}, {ay}) must not wobble");
+                } else {
+                    assert_ne!(px, rgb3(water), "{name}: land cell ({ax}, {ay}) must not show water");
+                    if cx == 6 && px == rgb3(UP) {
+                        land_wandered = true;
+                    }
+                }
+            }
+        }
+        assert!(land_wandered, "{name}: land-over-land border still wanders");
+    }
+    // Even with stone_rim active, water pixels never spill across cell lines and land never enters water cells.
+    let rimmed = [
+        GroundLayer { sunken: true, clamp_water: true, stone_rim: true, ..GroundLayer::flat(0, water) },
+        GroundLayer::flat(10, LOW),
+    ];
+    let img = ground::compose(&GroundJob { seed: 42, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &rimmed, placed: &[] });
+    assert_eq!(at(&img, 10, 10), rgb3(water), "interior water unchanged");
+    assert_ne!(at(&img, SQUARE.0 * 4 + 3, SQUARE.1 + 3), rgb3(water), "land stays land near water edge");
+}
+
+#[test]
+fn stone_rim_marks_water_lip_and_land_edge_without_altering_walls() {
+    // 4x3 grid: water (0) at center-left (1, 1); '#' blocked wall at (0, 1) west; open land LOW (1) on N/S/E.
+    let (cols, rows) = (4i32, 3i32);
+    let cells: Vec<u8> = (0..rows)
+        .flat_map(|y| (0..cols).map(move |x| if x == 1 && y == 1 { 0 } else { 1 }))
+        .collect();
+    let mut blocked = vec![false; cells.len()];
+    blocked[(1 * cols + 0) as usize] = true;
+    let water = [24, 48, 84, 255];
+    let land = [120, 140, 110, 255];
+    let layers = [
+        GroundLayer { sunken: true, clamp_water: true, stone_rim: true, ..GroundLayer::flat(0, water) },
+        GroundLayer::flat(10, land),
+    ];
+    let img = ground::compose(&GroundJob { seed: 7, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &layers, placed: &[] });
+    let cw = SQUARE.0;
+    let lip = [96u8, 98, 108];
+    // Open land east/north/south borders get the stone lip inside water and darkened land edge outside.
+    assert_eq!(at(&img, cw + 5, cw), lip, "north water edge bordering open land gets stone lip");
+    assert_eq!(at(&img, cw * 2 - 1, cw + 5), lip, "east water edge bordering open land gets stone lip");
+    let east_land = at(&img, cw * 2, cw + 5);
+    assert!(east_land[0] < land[0] && east_land[1] < land[1], "open land border darkens");
+    // Blocked '#' cell west gets neither stone lip nor land darken.
+    assert_eq!(at(&img, cw, cw + 5), rgb3(water), "water edge bordering '#' wall gets no stone lip");
+    assert_eq!(at(&img, cw - 1, cw + 5), rgb3(land), "blocked land cell is untouched by rim");
+}
+
+#[test]
+fn patchy_layer_blends_organic_islands_over_under_layer_within_fraction() {
+    let (cols, rows) = (12i32, 8i32);
+    let cells = vec![0u8; (cols * rows) as usize];
+    let blocked = vec![false; cells.len()];
+    let top = [30, 30, 34, 255];
+    let under_col = [150, 148, 140, 255];
+    let solid = [GroundLayer::flat(10, top)];
+    let solid_img = ground::compose(&GroundJob { seed: 9, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &solid, placed: &[] });
+
+    let patchy = [GroundLayer { patchy: 0.52, under_colour: under_col, ..GroundLayer::flat(10, top) }];
+    let img = ground::compose(&GroundJob { seed: 9, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &patchy, placed: &[] });
+    let (mut top_px, mut under_px, mut fringe_px) = (0usize, 0usize, 0usize);
+    let total = (img.w * img.h) as usize;
+    for y in 0..img.h {
+        for x in 0..img.w {
+            let p = at(&img, x, y);
+            if p == rgb3(top) {
+                top_px += 1;
+            } else if p == rgb3(under_col) {
+                under_px += 1;
+            } else {
+                fringe_px += 1;
+            }
+        }
+    }
+    let frac = (top_px as f64 + 0.5 * fringe_px as f64) / total as f64;
+    assert!((0.44..=0.60).contains(&frac), "patchy target fraction near 0.52 (got {frac:.3})");
+    assert!(top_px > 0 && under_px > 0 && fringe_px > 0, "has top, under and 50% fringe pixels");
+    assert_ne!(img, solid_img);
+
+    // Patchy 0.0 leaves flat colour untouched; under texture overrides flat under_colour.
+    let zero = [GroundLayer { patchy: 0.0, under_colour: under_col, ..GroundLayer::flat(10, top) }];
+    assert!(ground::compose(&GroundJob { seed: 9, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &zero, placed: &[] }) == solid_img);
+    let utex = ground::two_tone(64, 64, [200, 100, 50, 255], [200, 100, 50, 255], 1);
+    let textured = [GroundLayer { patchy: 0.52, under_tex: Some(&utex), ..GroundLayer::flat(10, top) }];
+    let t_img = ground::compose(&GroundJob { seed: 9, cols, rows, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &textured, placed: &[] });
+    let mut saw_tex_under = false;
+    for y in 0..t_img.h {
+        for x in 0..t_img.w {
+            if at(&t_img, x, y) == [200, 100, 50] {
+                saw_tex_under = true;
+            }
+        }
+    }
+    assert!(saw_tex_under, "under_tex supplies under pixels when present");
 }

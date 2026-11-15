@@ -83,8 +83,8 @@ fn grounds() -> IndexMap<String, GroundDef> {
 fn the_schema_holds_the_table_with_its_defaults() {
     let fields = aegis_content::schema::fields(source::schema(), "content", GROUNDS_KIND);
     let keys: Vec<String> = fields.iter().map(|f| json::s(json::dict(f), "key")).collect();
-    // REVEAL1 2.1: `indoor` (false, left out at its default) before `origin`
-    assert_eq!(keys, strs(&["id", "name", "order", "kind", "colour", "wear", "strays", "tone", "patches", "marks", "marks_per_100", "indoor", "origin"]));
+    // REVEAL1 2.1 + REGIONVIEW2: `indoor`, `patchy`, `under` (left out at their defaults) before `origin`
+    assert_eq!(keys, strs(&["id", "name", "order", "kind", "colour", "wear", "strays", "tone", "patches", "marks", "marks_per_100", "indoor", "patchy", "under", "origin"]));
     let default_of = |k: &str| fields.iter().find(|f| f["key"] == k).unwrap()["default"].clone();
     assert_eq!(default_of("kind"), "land");
     assert_eq!(default_of("wear"), 0.1);
@@ -92,7 +92,15 @@ fn the_schema_holds_the_table_with_its_defaults() {
     assert_eq!(default_of("strays"), false);
     assert_eq!(default_of("marks"), json!([]));
     assert_eq!(default_of("marks_per_100"), 0);
+    assert_eq!(default_of("patchy"), 0.0);
+    assert_eq!(default_of("under"), "");
     assert_eq!(default_of("origin"), "system");
+    let locs = aegis_content::schema::fields(source::schema(), "world", "locations");
+    for (k, d) in [("dim_ambience", json!(false)), ("wall_face_tiles", json!(0))] {
+        let f = locs.iter().find(|f| f["key"] == k).unwrap();
+        assert_eq!(f["default"], d, "locations.{k}");
+        assert!(json::b(json::dict(f), "omit_default", false), "locations.{k} omit_default");
+    }
     let zones = aegis_content::schema::fields(source::schema(), "content", rpgkit_data::ZONES_KIND);
     assert_eq!(fields.iter().find(|f| f["key"] == "origin"), zones.iter().find(|f| f["key"] == "origin"), "the same field as the other Forge kinds");
     assert_eq!(source::GROUNDS_KIND, GROUNDS_KIND);
@@ -760,4 +768,83 @@ fn a20_a_boundary_without_art_warns() {
     png(&root.join("tilesets/ward/boundary/cliffs/wall_face/v0.png"), 128, 48);
     assert_eq!(assets::ground_warnings(&view(), "test_world"), Vec::<String>::new());
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn regionview2_patchy_under_and_map_flags_round_trip_and_validate() {
+    let v = view_of(json!([]), json!({}), None);
+    let check = |extra: Value, id: &str| {
+        let mut e = dict(row(id, 500, extra.get("kind").and_then(Value::as_str).unwrap_or("land")));
+        for (k, x) in extra.as_object().unwrap() {
+            e.insert(k.clone(), x.clone());
+        }
+        check::validate_entry(&v, GROUNDS_KIND, &e, "")
+    };
+    assert_eq!(check(json!({"patchy": 0.52, "under": "dust"}), "ash_yard"), Vec::<String>::new());
+    assert_eq!(check(json!({"patchy": 1.01}), "ash_yard"), ["Patchy must be 0-1."]);
+    assert_eq!(check(json!({"patchy": -0.05}), "ash_yard"), ["Patchy must be 0-1."]);
+    assert_eq!(check(json!({"kind": "water", "patchy": 0.3}), "murk"), ["Water grounds cannot be patchy."]);
+    assert_eq!(check(json!({"patchy": 0.4, "under": "Bad-Id"}), "ash_yard"), ["Under floor 'Bad-Id' must be 2-24 characters of a-z, 0-9 and _."]);
+    assert_eq!(check(json!({"patchy": 0.4, "under": "ash_yard"}), "ash_yard"), ["Ground 'ash_yard' cannot use itself as its under floor."]);
+    assert_eq!(check(json!({"under": "dust"}), "ash_yard"), ["Under floor 'dust' needs patchy above 0."]);
+    assert_eq!(check(json!({"patchy": 0.4, "under": "nowhere"}), "ash_yard"), ["Under floor 'nowhere' is unknown."]);
+    assert_eq!(check(json!({"patchy": 0.4, "under": "pool"}), "ash_yard"), ["Under floor 'pool' cannot be water."]);
+
+    // GroundPlan includes `under` grounds referenced by a patchy layer even if no map cell directly selects them
+    let cat = Catalog::from_value(&json!({GROUNDS_KIND: [
+        {"id": "stone_under", "name": "Stone", "order": 1, "kind": "land", "colour": "#303238"},
+        {"id": "soot_top", "name": "Soot", "order": 20, "kind": "land", "colour": "#181a1d", "patchy": 0.52, "under": "stone_under"},
+        {"id": "pool", "name": "Pool", "order": 5, "kind": "water", "colour": "#223344"}
+    ]}));
+    let t = template(json!(ground_rows()), json!({"a": "soot_top", "w": "pool"}), json!([]));
+    let p = plan(&t, &cat.grounds).expect("plan");
+    assert_eq!(p.layers.iter().map(|l| l.id.as_str()).collect::<Vec<_>>(), ["pool", "soot_top"]);
+    assert_eq!(p.under.iter().map(|u| u.id.as_str()).collect::<Vec<_>>(), ["stone_under"]);
+    assert!((p.layers[1].patchy - 0.52).abs() < 1e-6);
+    assert_eq!(p.layers[1].under, "stone_under");
+
+    // Map-level dim_ambience & wall_face_tiles checks + omit_default byte-stability across grounds, maps and locations
+    let mut bad_dim = template(json!([]), json!({}), json!([]));
+    bad_dim.insert("dim_ambience".into(), json!("yes"));
+    assert_eq!(errors_of(&bad_dim), ["Dim ambience must be true or false."]);
+    let mut bad_wft = template(json!([]), json!({}), json!([]));
+    bad_wft.insert("wall_face_tiles".into(), json!(3));
+    assert_eq!(errors_of(&bad_wft), ["Wall face tiles must be 0, 1 or 2."]);
+
+    let plain_map = json!({"id": "plain", "name": "Plain", "rows": MAP, "zones": [], "zone_legend": {}, "anchors": [], "paths": {}, "props": [], "tags": []});
+    let data = data_with("rv2", json!([
+        {"id": "stone_under", "name": "Stone", "order": 1, "colour": "#303238"},
+        {"id": "soot_top", "name": "Soot", "order": 20, "colour": "#181a1d", "patchy": 0.52, "under": "stone_under"}
+    ]), json!([plain_map]));
+    let dir = data.join("worlds/w");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("world.json"), json!({"id": "w", "name": "W"}).to_string()).unwrap();
+
+    // Unflagged map omits dim_ambience / wall_face_tiles; unflagged ground omits patchy / under
+    let map_before = store::resave_text(&data, None, "maps").unwrap();
+    assert!(!map_before.contains("\"dim_ambience\"") && !map_before.contains("\"wall_face_tiles\""));
+    let g_text = store::resave_text(&data, None, GROUNDS_KIND).unwrap();
+    let g_doc: Value = serde_json::from_str(&g_text).unwrap();
+    assert!(g_doc["entries"][0].get("patchy").is_none() && g_doc["entries"][0].get("under").is_none());
+    assert_eq!(g_doc["entries"][1]["patchy"], 0.52);
+    assert_eq!(g_doc["entries"][1]["under"], "stone_under");
+
+    let mut flagged_map = dict(json!({"id": "flagged", "name": "Flagged", "rows": MAP, "anchors": [], "paths": {}, "dim_ambience": true, "wall_face_tiles": 2, "tags": []}));
+    flagged_map.insert("ground".into(), json!([]));
+    store::upsert(&data, None, "maps", &flagged_map, None).expect("flagged map");
+    let maps_doc: Value = serde_json::from_str(&fs::read_to_string(store::file_of(&data, None, "maps")).unwrap()).unwrap();
+    assert_eq!(maps_doc["entries"][1]["dim_ambience"], true);
+    assert_eq!(maps_doc["entries"][1]["wall_face_tiles"], 2);
+    assert_eq!(store::resave_text(&data, None, "maps").unwrap(), fs::read_to_string(store::file_of(&data, None, "maps")).unwrap());
+
+    // Location dim_ambience & wall_face_tiles stay out at defaults and persist when set
+    store::upsert(&data, Some("w"), "locations", &dict(json!({"id": "day", "name": "Day"})), None).expect("day loc");
+    store::upsert(&data, Some("w"), "locations", &dict(json!({"id": "night", "name": "Night", "dim_ambience": true, "wall_face_tiles": 2})), None).expect("night loc");
+    let locs_raw = fs::read_to_string(store::file_of(&data, Some("w"), "locations")).unwrap();
+    let locs_doc: Value = serde_json::from_str(&locs_raw).unwrap();
+    assert!(locs_doc["entries"][0].get("dim_ambience").is_none() && locs_doc["entries"][0].get("wall_face_tiles").is_none());
+    assert_eq!(locs_doc["entries"][1]["dim_ambience"], true);
+    assert_eq!(locs_doc["entries"][1]["wall_face_tiles"], 2);
+    assert_eq!(store::resave_text(&data, Some("w"), "locations").unwrap(), locs_raw);
+    drop_scratch(&data);
 }

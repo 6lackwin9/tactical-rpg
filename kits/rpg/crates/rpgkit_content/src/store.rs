@@ -308,7 +308,7 @@ pub fn file_of(data_dir: &Path, world: Option<&str>, kind: &str) -> PathBuf {
 /// "kind", the stored fields (to_storage keeps exactly these) and the normalize.
 type GameKind = (&'static str, &'static str, &'static str, &'static [&'static str]);
 pub const GAME_KINDS: [GameKind; 3] = [
-    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", source::MAP_BOUNDARY, "tags"]),
+    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", source::MAP_BOUNDARY, source::MAP_DIM_AMBIENCE, source::MAP_WALL_FACE_TILES, "tags"]),
     ("quests", "quests/quests.json", "quest_templates", &["id", "name", "description", "objectives", "rewards", "tags"]),
     ("services", "dialogue/services.json", "dialogue_services", &["id", "text"]),
 ];
@@ -338,7 +338,8 @@ fn game_storage(kind: &str, entry: &Dict) -> Dict {
     if kind == "maps" {
         source::map_without_reveal_defaults(&mut full);
     }
-    game_kind(kind).map(|g| g.3).unwrap_or(&[]).iter().filter(|k| full.contains_key(**k) || **k != source::MAP_BOUNDARY).map(|k| (k.to_string(), json::get(&full, k).clone())).collect()
+    let omit_map = |k: &str| k == source::MAP_BOUNDARY || k == source::MAP_DIM_AMBIENCE || k == source::MAP_WALL_FACE_TILES;
+    game_kind(kind).map(|g| g.3).unwrap_or(&[]).iter().filter(|k| full.contains_key(**k) || !omit_map(k)).map(|k| (k.to_string(), json::get(&full, k).clone())).collect()
 }
 
 fn derived_families(data_dir: &Path) -> Vec<Dict> {

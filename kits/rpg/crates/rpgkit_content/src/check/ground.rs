@@ -76,6 +76,14 @@ pub fn check_rows(rows: &[Dict]) -> Vec<Vec<String>> {
         if let Some(other) = rows[..i].iter().find(|r| json::i(r, "order", -1) == order && (0..=ORDER_MAX).contains(&order)) {
             found.push(format!("Order {order} is already used by ground '{}'.", json::s(other, "id")));
         }
+        let under = json::s(&rows[i], "under");
+        if !under.is_empty() && id_ok(&under) && under != id {
+            match rows.iter().find(|r| json::s(r, "id") == under) {
+                None => found.push(format!("Under floor '{under}' is unknown.")),
+                Some(target) if is_water(target) => found.push(format!("Under floor '{under}' cannot be water.")),
+                Some(_) => {}
+            }
+        }
     }
     out
 }
@@ -131,6 +139,23 @@ pub fn row_errors(e: &Dict) -> Vec<String> {
     if !(0..=MARKS_PER_100_MAX).contains(&per) {
         out.push(format!("Marks per 100 cells must be a whole number 0-{MARKS_PER_100_MAX}."));
     }
+    let patchy = json::f(e, "patchy", 0.0);
+    if !within(patchy, 0.0, 1.0) {
+        out.push("Patchy must be 0-1.".into());
+    } else if patchy > 0.0 && is_water(e) {
+        out.push("Water grounds cannot be patchy.".into());
+    }
+    let under = json::s(e, "under");
+    if !under.is_empty() {
+        if !id_ok(&under) {
+            out.push(format!("Under floor '{under}' must be {ID_MIN}-{ID_MAX} characters of a-z, 0-9 and _."));
+        } else if under == id {
+            out.push(format!("Ground '{id}' cannot use itself as its under floor."));
+        }
+        if patchy <= 0.0 {
+            out.push(format!("Under floor '{under}' needs patchy above 0."));
+        }
+    }
     let origin = json::s(e, "origin");
     let origins: Vec<String> = fields("content", KIND).iter().map(json::dict).find(|f| json::s(f, "key") == "origin").map(|f| json::aget(f, "options").iter().map(gstr).collect()).unwrap_or_default();
     if !origins.contains(&origin) {
@@ -168,6 +193,16 @@ fn size_error(list: &[Value], map: &[Vec<char>]) -> Option<String> {
 pub fn map_errors(v: &View, t: &Dict) -> Vec<String> {
     let mut errors = ground_errors(v, t);
     errors.extend(wall_storey_errors(t));
+    if let Some(raw) = t.get(crate::source::MAP_DIM_AMBIENCE).filter(|v| !v.is_null()) {
+        if !raw.is_boolean() {
+            errors.push("Dim ambience must be true or false.".into());
+        }
+    }
+    if let Some(raw) = t.get(crate::source::MAP_WALL_FACE_TILES).filter(|v| !v.is_null()) {
+        if !json::is_int(raw) || !(0..=2).contains(&json::to_int(raw)) {
+            errors.push("Wall face tiles must be 0, 1 or 2.".into());
+        }
+    }
     errors
 }
 
