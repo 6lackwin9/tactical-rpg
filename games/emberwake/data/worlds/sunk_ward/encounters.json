@@ -1667,6 +1667,447 @@
 				"main",
 				"checkpoint"
 			]
+		},
+		{
+			"id": "enc_roam_watch",
+			"name": "Watch Pair",
+			"description": "A Watch pair on the main street.",
+			"intro": "A Watch pair turns on you: a footman and a crossbow.",
+			"location": "alleyway_junction_7",
+			"zone": "alley",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"footman_patrol",
+				"watch_crossbowman"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 6,
+				"gold_max": 10,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_roam_wardens",
+			"name": "Proctor Wardens",
+			"description": "Wardens on the slum lane.",
+			"intro": "Two of the Proctor's wardens block the lane.",
+			"location": "ash_crawl_crossroads",
+			"zone": "alley",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"castellan_footman",
+				"bailiff_enforcer"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 6,
+				"gold_max": 10,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_roam_haulers",
+			"name": "Kiln Haulers",
+			"description": "Bone-cart haulers and a kiln guard.",
+			"intro": "The haulers drop their shafts and close in.",
+			"location": "fourth_kiln",
+			"zone": "foundry",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"bailiff_enforcer",
+				"calcified_husk"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 5,
+				"gold_max": 9,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_roam_dredgers",
+			"name": "Tallow Dredgers",
+			"description": "Dredgers on the catwalk ring.",
+			"intro": "Two Tallow Dredgers step off the catwalk.",
+			"location": "tallow_vats",
+			"zone": "tallow_vats",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"tallow_dredger",
+				"tallow_dredger"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 5,
+				"gold_max": 9,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_roam_bruisers",
+			"name": "Guild Bruisers",
+			"description": "Guild bruisers at the vats gate.",
+			"intro": "Guild bruisers bar the lane.",
+			"location": "tallow_vats",
+			"zone": "tallow_vats",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"bailiff_enforcer",
+				"bailiff_enforcer"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 5,
+				"gold_max": 9,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_roam_sentries",
+			"name": "Watch Sentries",
+			"description": "Sentries on the switchback road.",
+			"intro": "A sentry and a crossbowman hold the switchback.",
+			"location": "crucible_watchpost",
+			"zone": "watchpost",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"castellan_footman",
+				"watch_crossbowman"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 6,
+				"gold_max": 10,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_scav_alley",
+			"name": "Alley Scavengers",
+			"description": "Ash-crawlers working the alleys.",
+			"intro": "Ash-crawlers scrabble out of the rubble.",
+			"location": "alleyway_junction_7",
+			"zone": "alley",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"ash_crawler",
+				"ash_crawler"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 2,
+				"gold_max": 5,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
 		}
 	]
 }

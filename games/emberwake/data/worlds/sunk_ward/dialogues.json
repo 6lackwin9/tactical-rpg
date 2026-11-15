@@ -1379,6 +1379,524 @@
 			"tags": [
 				"scene"
 			]
+		},
+		{
+			"id": "dlg_cit_chandler",
+			"name": "Candle-Maker (chandler) [PROVISIONAL]",
+			"speaker": "cit_chandler",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "The candle-maker keeps one eye on the window. \"Tallow's dear. Warded tallow is dearer. I sell the plain kind and tell nobody it's plain.\" The wicks hang in rows like pale ribs.",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"The Watch buy by the dozen, never by the pound. Ask yourself why.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_lodging",
+			"name": "Lodging Keeper (lodging) [PROVISIONAL]",
+			"speaker": "cit_lodging",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A lodging-keeper counts coins into a tin without looking at them. \"Beds by the night, none by the week. Nobody who sleeps here is here in the morning.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Quiet house. Keep it quiet.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_wayside_shrine",
+			"name": "Shrine Tender (wayside shrine) [PROVISIONAL]",
+			"speaker": "cit_wayside_shrine",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A bent figure sweeps ash from a drain-run shrine. \"They leave the old ones here when the cremation salt runs out. I say the names. Somebody should.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Don't thank me. Thank the salt, when there is any.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_pawnbroker",
+			"name": "Pawnbroker (pawnbroker) [PROVISIONAL]",
+			"speaker": "cit_pawnbroker",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "The pawnbroker weighs a tin spoon on a brass scale. \"Spoons, shoes, a good tooth. Nothing from the cages; that's the Proctor's trade, not mine.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Nobody pawns a name. They'd get more for it.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_cipher_den",
+			"name": "Den Squatter (cipher den) [PROVISIONAL]",
+			"speaker": "cit_cipher_den",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Chalk marks cover the walls of the abandoned den, some scratched out. A squatter hunches among them. \"Runners used this room. Then the Proctor's sweeps came. Don't read the numbers aloud.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"The ones still chalked are the ones still alive. Maybe.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_ash_shrine",
+			"name": "Ash-Shrine Keeper (ash shrine) [PROVISIONAL]",
+			"speaker": "cit_ash_shrine",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Soot drifts through the choked shrine. The keeper wipes a small stone saint with her sleeve. \"Ash doesn't fall here, it settles. It settles on everything. Even on prayer.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"A candle costs more than the prayer. Say it anyway.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_haulers_lodging",
+			"name": "Hauler (haulers lodging) [PROVISIONAL]",
+			"speaker": "cit_haulers_lodging",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A hauler hangs his gloves by the stove, grey to the wrist. \"Cart's due by third bell. Bone dust gets in the lungs. Don't breathe deep on the track.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Twelve years on the cart. My knees went before my mind. Lucky.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_bone_chandler",
+			"name": "Bone Chandler (bone chandler) [PROVISIONAL]",
+			"speaker": "cit_bone_chandler",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "The bone chandler rolls pale wax in his palms. \"Mortar's cheap, candles are cheaper. Burn them near a Spent and they sleep sound. That's what the Guild likes.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Everything on this shelf was somebody. Don't ask who.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_spent_shrine",
+			"name": "Shrine Sweeper (spent shrine) [PROVISIONAL]",
+			"speaker": "cit_spent_shrine",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "Rows of unlit stubs line the shrine for the uncremated Spent. A sweeper pauses. \"The salt ration is short again this month. We keep them company until it isn't.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"They harden slow, the old ones. We sit with them.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_tallow_chandler",
+			"name": "Tallow Chandler (tallow chandler) [PROVISIONAL]",
+			"speaker": "cit_tallow_chandler",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "The chandler skims a pot of grey tallow. \"Guild-warded, stamped, taxed. Mine's unwarded, so I sell it quiet and cheap. Don't tell the vats.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Warded tallow burns clean. It also costs a body. That's the arithmetic.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_dredgers_bunkhouse",
+			"name": "Off-Shift Dredger (dredgers bunkhouse) [PROVISIONAL]",
+			"speaker": "cit_dredgers_bunkhouse",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A dredger lies on a bunk with his boots on. \"Sixteen hours on the catwalk. The vats hum all night; you stop hearing it, then you hear nothing else.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Orlov pays on the third bell. Mostly.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_vats_shrine",
+			"name": "Alley Shrine Keeper (vats shrine) [PROVISIONAL]",
+			"speaker": "cit_vats_shrine",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A cracked saint stands in an alcove at the end of the alley. A woman lights a dip-candle in front of it. \"For the ones who went into the vats. Guild says they were rendered with honour.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Honour weighs less than salt.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_condemned_shrine",
+			"name": "Condemned Man (condemned shrine) [PROVISIONAL]",
+			"speaker": "cit_condemned_shrine",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A man sits cross-legged in the cliff shrine, wrists still marked by cuffs. \"Last prayers before the Crucible. It's a small shrine for a long queue.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"They'll come for me at third bell. Or the next. Sit a while.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
+		},
+		{
+			"id": "dlg_cit_guardroom",
+			"name": "Guardroom Clerk (guardroom) [PROVISIONAL]",
+			"speaker": "cit_guardroom",
+			"start": "n0",
+			"nodes": [
+				{
+					"id": "n0",
+					"text": "A clerk copies a Watch log with a shaking hand. \"Names in, names out. Some of the names don't come out. I just write the ledger.\"",
+					"choices": [
+						{
+							"text": "Ask for more.",
+							"to": "more"
+						},
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				},
+				{
+					"id": "more",
+					"text": "\"Don't read the cell sheet. It's not for readers.\"",
+					"choices": [
+						{
+							"text": "Leave.",
+							"to": ""
+						}
+					]
+				}
+			],
+			"services": false,
+			"tags": [
+				"provisional",
+				"ambient"
+			]
 		}
 	]
 }

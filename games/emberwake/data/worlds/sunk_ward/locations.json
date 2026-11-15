@@ -15,7 +15,8 @@
 				}
 			],
 			"encounters": [],
-			"map": "walled_town",
+			"map": "sunk_ward_undercroft",
+			"boundary": "drain_brick",
 			"zone_bindings": {},
 			"markers": [
 				{
@@ -27,7 +28,7 @@
 					"sets_flags": [],
 					"to": "drowned_runoff_grate",
 					"label": "Down the sluice gate",
-					"to_anchor": "west_in"
+					"to_anchor": "sluice_in"
 				},
 				{
 					"id": "road",
@@ -103,15 +104,21 @@
 			"description": "Node 01: the egress and checkpoint where the drains meet the streets. Flood-lock tablets stand under the silt.",
 			"kind": "gate",
 			"region": "sunk_ward_quarter",
-			"exits": [],
+			"exits": [
+				{
+					"to": "sluice_undercroft",
+					"label": "the sluice tunnel"
+				}
+			],
 			"encounters": [],
-			"map": "gorge_ruins",
+			"map": "sunk_ward_runoff_grate",
+			"boundary": "drain_brick",
 			"zone_bindings": {},
 			"markers": [
 				{
-					"id": "world_map",
+					"id": "streets_w",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "streets_w",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -121,7 +128,7 @@
 				{
 					"id": "lock_tablet",
 					"kind": "point",
-					"anchor": "altar",
+					"anchor": "tablet",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [
@@ -132,6 +139,42 @@
 					],
 					"label": "A forgotten flood-lock tablet",
 					"note": "Vesper wipes the silt off a bronze lock-plate and reads the old sluice routes aloud. The drains answer."
+				},
+				{
+					"id": "streets_e",
+					"kind": "exit",
+					"anchor": "streets_e",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the drains (east)"
+				},
+				{
+					"id": "sluice",
+					"kind": "exit",
+					"anchor": "sluice",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "sluice_undercroft",
+					"label": "Up the sluice tunnel",
+					"to_anchor": "gate_in"
+				},
+				{
+					"id": "culvert",
+					"kind": "exit",
+					"anchor": "culvert",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.lock_ciphers_done",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the siphon culvert"
 				}
 			],
 			"map_pos": [
@@ -151,13 +194,38 @@
 			"encounters": [
 				"enc_evt_02"
 			],
-			"map": "gorge_ruins",
-			"zone_bindings": {},
+			"map": "sunk_ward_crossroads",
+			"zone_bindings": {
+				"slum_lane": {
+					"encounters": [
+						[
+							"enc_roam_wardens",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"back_alleys": {
+					"encounters": [
+						[
+							"enc_scav_alley",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "world_map",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "exit_alley",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -167,7 +235,7 @@
 				{
 					"id": "cages",
 					"kind": "encounter",
-					"anchor": "site_b",
+					"anchor": "cages",
 					"requires_flags": [],
 					"unless_flags": [
 						{
@@ -184,7 +252,7 @@
 				{
 					"id": "toll_pen",
 					"kind": "point",
-					"anchor": "altar",
+					"anchor": "toll_pen",
 					"requires_flags": [],
 					"unless_flags": [
 						{
@@ -208,7 +276,7 @@
 				{
 					"id": "rubbings",
 					"kind": "point",
-					"anchor": "ruin_lore",
+					"anchor": "rubbings",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.m2_done",
@@ -229,6 +297,54 @@
 					],
 					"label": "The cage-seal rubbings",
 					"note": "Maren spreads grey linen over the open cage seals and rubs. The Clerisy's cipher rises in white lines. St. Lyra's name is in it."
+				},
+				{
+					"id": "warden_patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "enc_roam_wardens",
+					"path": "warden_patrol",
+					"radius": 1,
+					"once": true
+				},
+				{
+					"id": "exit_north",
+					"kind": "exit",
+					"anchor": "exit_north",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the alley north"
+				},
+				{
+					"id": "npc_pawnbroker",
+					"kind": "npc",
+					"anchor": "npc_pawnbroker",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_pawnbroker"
+				},
+				{
+					"id": "npc_cipher_den",
+					"kind": "npc",
+					"anchor": "npc_cipher_den",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_cipher_den"
+				},
+				{
+					"id": "npc_ash_shrine",
+					"kind": "npc",
+					"anchor": "npc_ash_shrine",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_ash_shrine"
 				}
 			],
 			"map_pos": [
@@ -248,13 +364,38 @@
 			"encounters": [
 				"enc_evt_03"
 			],
-			"map": "gorge_ruins",
-			"zone_bindings": {},
+			"map": "sunk_ward_fourth_kiln",
+			"zone_bindings": {
+				"cart_track": {
+					"encounters": [
+						[
+							"enc_roam_haulers",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"ash_yards": {
+					"encounters": [
+						[
+							"enc_scav_alley",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "world_map",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "exit_road",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -264,7 +405,7 @@
 				{
 					"id": "bone_mill",
 					"kind": "encounter",
-					"anchor": "site_b",
+					"anchor": "mill",
 					"requires_flags": [],
 					"unless_flags": [
 						{
@@ -281,7 +422,7 @@
 				{
 					"id": "skerrit",
 					"kind": "npc",
-					"anchor": "camp_npc",
+					"anchor": "skerrit",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.m3_done",
@@ -295,7 +436,7 @@
 				{
 					"id": "wedge_pile",
 					"kind": "point",
-					"anchor": "altar",
+					"anchor": "wedges",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.dunstan_joined",
@@ -316,6 +457,54 @@
 					],
 					"label": "A pile of black-iron wedges",
 					"note": "Dunstan lifts the splitting wedges from the ruined mill one at a time, like a man picking his own name out of a ledger."
+				},
+				{
+					"id": "hauler_patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "enc_roam_haulers",
+					"path": "hauler_patrol",
+					"radius": 1,
+					"once": true
+				},
+				{
+					"id": "exit_climb",
+					"kind": "exit",
+					"anchor": "exit_climb",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the climb east"
+				},
+				{
+					"id": "npc_haulers_lodging",
+					"kind": "npc",
+					"anchor": "npc_haulers_lodging",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_haulers_lodging"
+				},
+				{
+					"id": "npc_bone_chandler",
+					"kind": "npc",
+					"anchor": "npc_bone_chandler",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_bone_chandler"
+				},
+				{
+					"id": "npc_spent_shrine",
+					"kind": "npc",
+					"anchor": "npc_spent_shrine",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_spent_shrine"
 				}
 			],
 			"map_pos": [
@@ -336,13 +525,38 @@
 				"enc_evt_06",
 				"enc_evt_06_overlook"
 			],
-			"map": "gorge_ruins",
-			"zone_bindings": {},
+			"map": "sunk_ward_crucible",
+			"zone_bindings": {
+				"gorge_road": {
+					"encounters": [
+						[
+							"enc_roam_sentries",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"overlook_path": {
+					"encounters": [
+						[
+							"enc_scav_alley",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "world_map",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "exit_road",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -352,7 +566,7 @@
 				{
 					"id": "crucible",
 					"kind": "encounter",
-					"anchor": "site_b",
+					"anchor": "crucible",
 					"requires_flags": [],
 					"unless_flags": [
 						{
@@ -373,7 +587,7 @@
 				{
 					"id": "crucible_overlook",
 					"kind": "encounter",
-					"anchor": "site_a",
+					"anchor": "crucible_overlook",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.hollis_overlook",
@@ -395,7 +609,7 @@
 				{
 					"id": "overlook",
 					"kind": "point",
-					"anchor": "altar",
+					"anchor": "overlook",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.interlude_done",
@@ -416,6 +630,45 @@
 					],
 					"label": "The Crag-Sight Overlook",
 					"note": "Hollis climbs the chimney stack and drops the outer counterweight from the gutter. The gate's reinforcements will have to take the long way round."
+				},
+				{
+					"id": "sentry_patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "enc_roam_sentries",
+					"path": "sentry_patrol",
+					"radius": 1,
+					"once": true
+				},
+				{
+					"id": "postern",
+					"kind": "exit",
+					"anchor": "postern",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the high gorge"
+				},
+				{
+					"id": "npc_condemned_shrine",
+					"kind": "npc",
+					"anchor": "npc_condemned_shrine",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_condemned_shrine"
+				},
+				{
+					"id": "npc_guardroom",
+					"kind": "npc",
+					"anchor": "npc_guardroom",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_guardroom"
 				}
 			],
 			"map_pos": [
@@ -435,13 +688,38 @@
 			"encounters": [
 				"enc_evt_01"
 			],
-			"map": "gorge_ruins",
-			"zone_bindings": {},
+			"map": "sunk_ward_junction_7",
+			"zone_bindings": {
+				"main_street": {
+					"encounters": [
+						[
+							"enc_roam_watch",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"back_alleys": {
+					"encounters": [
+						[
+							"enc_scav_alley",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "world_map",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "exit_bridge",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -451,7 +729,7 @@
 				{
 					"id": "sweep",
 					"kind": "encounter",
-					"anchor": "site_b",
+					"anchor": "sweep",
 					"requires_flags": [],
 					"unless_flags": [
 						{
@@ -468,7 +746,7 @@
 				{
 					"id": "bellows_cache",
 					"kind": "point",
-					"anchor": "altar",
+					"anchor": "cache",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.m1_done",
@@ -484,6 +762,54 @@
 					],
 					"label": "The old Watch armory cache",
 					"note": "Behind a loose course of bricks: Kaelen's old Watch cache, a soot-black bellows and a heavy plate for Berek to rework."
+				},
+				{
+					"id": "watch_patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "enc_roam_watch",
+					"path": "watch_patrol",
+					"radius": 1,
+					"once": true
+				},
+				{
+					"id": "exit_north",
+					"kind": "exit",
+					"anchor": "exit_north",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the road north"
+				},
+				{
+					"id": "npc_chandler",
+					"kind": "npc",
+					"anchor": "npc_chandler",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_chandler"
+				},
+				{
+					"id": "npc_lodging",
+					"kind": "npc",
+					"anchor": "npc_lodging",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_lodging"
+				},
+				{
+					"id": "npc_wayside_shrine",
+					"kind": "npc",
+					"anchor": "npc_wayside_shrine",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_wayside_shrine"
 				}
 			],
 			"map_pos": [
@@ -503,13 +829,38 @@
 			"encounters": [
 				"enc_evt_04"
 			],
-			"map": "gorge_ruins",
-			"zone_bindings": {},
+			"map": "sunk_ward_tallow_vats",
+			"zone_bindings": {
+				"vats_lane": {
+					"encounters": [
+						[
+							"enc_roam_bruisers",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"towpath_and_yard": {
+					"encounters": [
+						[
+							"enc_roam_dredgers",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "world_map",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "exit_alley",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -519,7 +870,7 @@
 				{
 					"id": "vats",
 					"kind": "encounter",
-					"anchor": "site_b",
+					"anchor": "vats",
 					"requires_flags": [],
 					"unless_flags": [
 						{
@@ -536,7 +887,7 @@
 				{
 					"id": "orlov_stores",
 					"kind": "chest",
-					"anchor": "ruin_chest",
+					"anchor": "stores",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.m4_done",
@@ -557,7 +908,7 @@
 				{
 					"id": "counter_still",
 					"kind": "point",
-					"anchor": "altar",
+					"anchor": "still",
 					"requires_flags": [
 						{
 							"key": "sunk_ward.elyse_joined",
@@ -578,6 +929,59 @@
 					],
 					"label": "Elyse's counter-still",
 					"note": "A coil of copper pipe and a leaking alum drum in the corner of a tenement block. Elyse tips a measure of clean tallow into a flask and corks it with her thumb."
+				},
+				{
+					"id": "dredger_patrol",
+					"kind": "roamer",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"encounter": "enc_roam_dredgers",
+					"path": "dredger_patrol",
+					"radius": 1,
+					"once": true
+				},
+				{
+					"id": "siphon",
+					"kind": "exit",
+					"anchor": "siphon",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.lock_ciphers_done",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the siphon culvert"
+				},
+				{
+					"id": "npc_tallow_chandler",
+					"kind": "npc",
+					"anchor": "npc_tallow_chandler",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_tallow_chandler"
+				},
+				{
+					"id": "npc_dredgers_bunkhouse",
+					"kind": "npc",
+					"anchor": "npc_dredgers_bunkhouse",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_dredgers_bunkhouse"
+				},
+				{
+					"id": "npc_vats_shrine",
+					"kind": "npc",
+					"anchor": "npc_vats_shrine",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"character": "cit_vats_shrine"
 				}
 			],
 			"map_pos": [
@@ -600,9 +1004,36 @@
 				}
 			],
 			"encounters": [],
-			"map": "",
+			"map": "sunk_ward_slag_gate",
+			"boundary": "gorge_rock",
 			"zone_bindings": {},
-			"markers": [],
+			"markers": [
+				{
+					"id": "exit_gorge",
+					"kind": "exit",
+					"anchor": "exit_gorge",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "world_map",
+					"label": "World map: the high gorge"
+				},
+				{
+					"id": "portcullis",
+					"kind": "point",
+					"anchor": "portcullis",
+					"requires_flags": [
+						{
+							"key": "sunk_ward.m5_done",
+							"value": true
+						}
+					],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "The raised portcullis",
+					"note": "The winch has lifted it. Beyond the chain-teeth, a road climbs toward Upper Cinderreach."
+				}
+			],
 			"map_pos": [
 				0.488,
 				0.132
@@ -620,13 +1051,14 @@
 			"encounters": [
 				"enc_job_corvo_gate"
 			],
-			"map": "gorge_ruins",
+			"map": "sunk_ward_corvos_gate",
+			"boundary": "blind_tenements",
 			"zone_bindings": {},
 			"markers": [
 				{
 					"id": "world_map",
 					"kind": "exit",
-					"anchor": "east",
+					"anchor": "exit_road",
 					"requires_flags": [],
 					"unless_flags": [],
 					"sets_flags": [],
@@ -636,7 +1068,7 @@
 				{
 					"id": "corvo",
 					"kind": "npc",
-					"anchor": "camp_npc",
+					"anchor": "corvo",
 					"requires_flags": [],
 					"unless_flags": [
 						{
