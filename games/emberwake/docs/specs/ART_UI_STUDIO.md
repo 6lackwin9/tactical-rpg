@@ -96,3 +96,27 @@ To let Tushar iterate on **Artwork, Character Sprite Animations, VN Stage Choreo
   - `art_src/region_maps/sluice_undercroft.json` synced (`npc_c` at `(16, 6)`), `kits/rpg/assets/tilesets/common/ground/floorboards/v0.png` (`256x256`) and `tilesets/sunk_ward/boundary/{blind_tenements,drain_brick,gorge_rock}/` landed (`[GENERATED]`).
   - `games/emberwake/assets/tilesets/interior_{plaster,stone}/{wall (128x96), wall_face (128x48)}/v0.png` processed seamlessly from `art_src/sunk_ward/tiles/walls_interior_*.png` (`[GENERATED]`, zero edge seams).
   - Remaining `9` missing vertical N–S `<art>_side` props (`crypt_bars_side 64x128`, `iron_ladder_side 48x96`, `culvert_gate_side 48x96`, `barred_gate_side 48x96`, `door_side 48x96`, `goods_shelf_side 48x96`, `weapon_rack_side 48x96`, `mission_board_side 48x96`, `pen_fence_side 32x112`) placed in `games/emberwake/assets/props/sunk_ward/<art>_side/v0.png` (`[PLACEHOLDER]` deterministic Sunk Ward pixel art matching the existing `7` `_side` pieces, 1px dark outline, zero cast floor shadows).
+
+## 7. Phase 4 Provisional Skill, Item & Graft Placeholders (2026-11-15, `PR5-62b` / `PR5-62c`)
+
+- **`U2_*` Missing Icons (`110` `[PLACEHOLDER]` PNGs, `0` pre-existing files modified)**: Deterministically rendered in 16-bit Sunk Ward style (`64x64` RGBA rounded dark-slate tiles for skills; `96x96` RGBA octagonal dark-slate tiles for items/grafts; zero paid API calls). Pending replacement with Flow sheets in a post-`PR5-62c` Art/UI pass:
+  - **Off-Hand (`5` in `games/emberwake/assets/skills/*.png`)**: `brace`, `reload`, `fade_step`, `catalyst_pulse`, `cite_passage`.
+  - **Class Deck Actives & Basics (`14` in `skills/*.png`)**: `hold_line`, `intercept_guard`, `brawler_clinch`, `slag_charge`, `disengage_step`, `mark_quarry`, `snare_wire`, `focus`, `flank_cut`, `backflip`, `soot_feint`, `tend_wounds`, `cinder_spark`, `choke_cloud`.
+  - **Weapon Mastery `1–3` / Masterwork `4th` / Cold Steel Keystones (`52` in `skills/*.png`)**:
+    - `polearm`: `hook_drag`, `pike_skew`, `check_advance`, `halberd_sweep`, `polearm_cordon`
+    - `greatsword`: `wide_cleave`, `rending_arc`, `gallow_sweep`, `gsword_sever`
+    - `sword`: `pommel_check`, `bind_parry`, `hookbill_draw`, `sword_duelist`
+    - `hammer`: `earth_shaker`, `skull_ring`, `slag_driver`, `hammer_shatter`
+    - `gauntlet`: `knuckle_jolt`, `foundry_drive`, `gauntlet_breaker`
+    - `fist`: `palm_check`, `liver_hook`, `rapid_combo`, `fist_tempest`
+    - `crossbow`: `bodkin_punch`, `crossbow_siege`
+    - `bow`: `wing_shot`, `bow_rain`
+    - `knife`: `hamstring_cut`, `gut_hook`, `knife_sever`
+    - `dagger`: `bodkin_twist`, `dagger_shadow`
+    - `censer`: `chime_swing`, `anoint_flare`, `censer_pyre`
+    - `bone_saw`: `amputate_cut`, `nerve_nick`, `rib_spread`, `vivisect`, `saw_dissect`
+    - `scourge`: `snap_lash`, `hook_snatch`, `flay_arc`, `penance_bite`, `scourge_flay`
+    - `sprayer`: `caustic_spritz`, `pitch_cone`, `pressure_stream`, `flash_nozzle`, `sprayer_deluge`
+    - `staff`: `staff_cataclysm`
+  - **`PK1`/`PK2` Slab Graft Actives (`18` in `skills/*.png`)**: `marrow_lash`, `marrow_snare`, `marrow_shriek`, `marrow_spray`, `marrow_bolt`, `marrow_rend`, `marrow_bulwark`, `marrow_pummel`, `marrow_sight`, `marrow_step`, `marrow_litany`, `marrow_caustic`, `ks_iron_marrow`, `ks_bone_eruption`, `ks_marrow_needle`, `ks_nerve_sever`, `purge_marrow`, `ks_geode_nova`.
+  - **Items, Materials & Graft Pins (`21` in `games/emberwake/assets/items/<folder>/<id>.png`)**: `gauntlet/riveted_gauntlets`, `material/sinew_braid`, `material/ossified_bellows`, and `18` `graft/*` pins (`graft_optic`, `graft_sinew`, `graft_bellows`, `graft_bezoar`, `graft_valve`, `graft_core`, `graft_war_ritual`, `graft_bra_ritual`, `graft_rng_ritual`, `graft_rog_ritual`, `graft_litany`, `graft_mag_ritual`, `graft_ks_war`, `graft_ks_bra`, `graft_ks_rng`, `graft_ks_rog`, `graft_purge`, `graft_ks_mag`).
