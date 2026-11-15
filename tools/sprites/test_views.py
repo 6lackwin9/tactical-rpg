@@ -27,7 +27,10 @@ R2 = ("brawler", "ranger", "rogue", "priest", "mage", "warrior/2h_axe", "warrior
 # DIR4-R3: the goblin and named variants and the 1H + buckler look (DIR4-R1F's buckler part)
 R3 = ("brawler/goblin", "brawler/goblin_berserker", "rogue/goblin", "rogue/goblin_scout", "ranger/goblin", "priest/goblin",
       "brawler/ash_warchief", "warrior/grakka_ashmaw", "warrior/brask_toller", "warrior/hest_the_quartermaster",
-      "warrior/orsa_tallow", "ranger/wenn_tallow", "warrior/1h_buckler")
+      "warrior/orsa_tallow", "ranger/wenn_tallow", "warrior/1h_buckler",
+      # PR5-60 RIG-GEAR1: native greatsword, polearms, brawler gauntlet/braces, mage sprayer/orb, rogue 1h knife
+      "warrior/1h_polearm", "warrior/2h_polearm", "warrior/2h_greatsword",
+      "brawler/gauntlet", "brawler/braces", "mage/1h_sprayer", "mage/orb", "rogue/1h_knife")
 VIEW_BODIES = PILOT + R2 + R3
 VIEW_IDS = ['idle_down', 'idle_up', 'walk_down', 'walk_up', 'attack_down', 'attack_up', 'dash_down', 'dash_up']   # DASH1
 # WINDUP1 K6, K7: the pilot bodies' wind-up, stagger and dazed view rows come after today's view rows
@@ -603,6 +606,21 @@ class Classes(Registry):
                 for n, im in enumerate(views.clips(cls, u)[0][vid]):
                     low = [p for p in pixels(im, u['pal']['leather_lo']) if p[1] > pelvis + 1]
                     self.assertEqual(low, [], (key, vid, n))
+
+    def test_pr5_60_native_looks_and_no_kite_shield_leak(self):
+        # Native greatsword & polearm differ from kit sword/axe placeholders; 1h_polearm never emits kite P['shield']
+        gs = quiet(export_units.body, 'warrior/2h_greatsword', 'all')[3].tobytes()
+        sw = quiet(export_units.body, 'warrior/2h_sword', 'all')[3].tobytes()
+        self.assertNotEqual(gs, sw)
+        p2 = quiet(export_units.body, 'warrior/2h_polearm', 'all')[3].tobytes()
+        ax = quiet(export_units.body, 'warrior/2h_axe', 'all')[3].tobytes()
+        self.assertNotEqual(p2, ax)
+        _, _, p1_rows, p1_sheet, _ = quiet(export_units.body, 'warrior/1h_polearm', 'all')
+        kite = tuple(classes.UNITS['warrior']['pal']['shield'][:3])
+        self.assertEqual(pixels(p1_sheet, kite), [], 'warrior/1h_polearm must not emit kite shield slot RGB')
+        self.assertIn('shield_bash', p1_rows)
+        self.assertEqual(variants.layer('warrior/2h_greatsword'), 'game')
+        self.assertEqual(variants.layer('warrior/1h_polearm'), 'kit')
 
 
 if __name__ == "__main__":

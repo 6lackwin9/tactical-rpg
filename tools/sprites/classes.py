@@ -249,7 +249,7 @@ def warrior_2h(u):
                     p(bob=2.2, lean=4.0, dx=3.0, wa=152, hand_f=(8, 5.5), fb=(-7, 0), ff=(6.5, 0)),                   # hold
                     p(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(6, 4.5), fb=(-5.5, 0), ff=(5, 0)),
                     pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
-    if u['weapon'] == 'greatsword':
+    if u['weapon'] in ('greatsword', 'greatsword_ew'):
         # DIR4-R1 pilot review (user 2026-10-28): the greatsword cuts level at chest height instead of the chop: raised
         # to the shoulder, cocked back over it, a level sweep, the blade straight out at chest height with the tip
         # spark (the same frame count, ms and impact frame 3 as the chop, for FX1); the axe and hammer keep the chop
@@ -280,7 +280,7 @@ def warrior_2h(u):
                           p(fx=sb(0.8), **dict(gd, dx=-1.8, bob=2.8, lean=1.0, hand_f=(7.5, 2.4), fb=(-7, 0))),
                           p(fx=sb(0.8), **gd)], [60, 100, 110, 140]))
     put('hurt', hurt(u, **ready)); put('death', death(u, drop=(31, 44, 95)))
-    cocked = W2_CUT_COCKED if u['weapon'] == 'greatsword' else W2_CHOP_COCKED
+    cocked = W2_CUT_COCKED if u['weapon'] in ('greatsword', 'greatsword_ew') else W2_CHOP_COCKED
     W, WT = rig.windup_rows(lambda kw: pose(u, **dict(kw, grip2=g2)), rig.idle_keys(**ready)[0], dict(W2_HOLDS, windup=cocked),
                             W2_STAGGER, W2_DAZED)
     A.update(W); T.update(WT)
@@ -348,6 +348,8 @@ DASH_CARRY = {
     'priest': dict(hand_f=(-2.5, 7.0), hand_b=(3.0, 6.5), wa=250),
     'rogue': dict(hand_f=(-3.0, 6.5), hand_b=(-5.0, 7.0), wa=250, wb=250),
     'mage': dict(hand_f=(-2.5, 7.0), hand_b=(3.0, 6.5), wa=250),
+    'mage/sprayer': dict(hand_f=(2.5, 6.0), hand_b=(2.5, 6.0), wa=68),
+    'mage/orb': dict(hand_f=(-2.5, 7.0), hand_b=(5.5, 3.5), wa=250),
 }
 
 
@@ -355,7 +357,10 @@ def with_dash(name, u, clip_set):
     """`clip_set` (frames, ms) with the side `dash` row just before its wind-up rows (DASH1; they stay last, WINDUP1 K7); a
     class without a carry: unchanged."""
     A, T = clip_set
-    carry = DASH_CARRY.get('%s/%s' % (name, u['grip']) if u.get('grip') else name)
+    carry = (DASH_CARRY.get('%s/%s' % (name, u['grip']) if u.get('grip') else '')
+             or DASH_CARRY.get('%s/%s' % (name, u.get('weapon')))
+             or DASH_CARRY.get('%s/%s' % (name, u.get('offhand')))
+             or DASH_CARRY.get(name))
     if carry:
         A['dash'], T['dash'] = rig.dash(u, **carry)
         for n in rig.WINDUP_ROWS:
@@ -380,11 +385,12 @@ def clips(name, variant='', unit=None):
         put('idle', idle(u, **ready)); put('walk', walk(u, wa=30, hand_b=(3.0, 5.5), swing=0.4))
         # attack: a thrust from behind the raised shield; the shield never drops
         sh_up = dict(hand_b=(7.5, 0.5))
+        th_f = (8.0, 4.0) if u['weapon'] == 'billhook' else (10.5, 4)
         put('attack', ([wp(bob=1.0, lean=0.5, wa=60, hand_f=(3, 5), hand_b=(6, 2), fb=(-5, 0), ff=(4, 0)),
                         wp(**W1_DRAWN),                                                                                         # draw back
-                        strike(impact(wp(bob=1.6, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up,
+                        strike(impact(wp(bob=1.6, lean=3.5, dx=2.5, wa=92, hand_f=th_f, fb=(-7, 0), ff=(6.5, 0), **sh_up,
                                          fx=[(45, 24.5, 1.6, (255, 255, 255)), (44, 22.5, 0.6, (230, 236, 245)), (44, 26.5, 0.6, (230, 236, 245))]))),  # thrust
-                        wp(bob=1.8, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up),                 # hold
+                        wp(bob=1.8, lean=3.5, dx=2.5, wa=92, hand_f=th_f, fb=(-7, 0), ff=(6.5, 0), **sh_up),                 # hold
                         wp(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(5, 5), fb=(-5.5, 0), ff=(5, 0), **sh_up),
                         wp(bob=0.3, **ready)], [110, 160, 45, 140, 110, 110]))
         # shield bash: sword pulled back low, drive the shield forward with the whole body
@@ -456,9 +462,38 @@ def clips(name, variant='', unit=None):
                         pose(u, bob=1.0, lean=2.5, dx=1.5, wa=110, wb=110, hand_f=(6, 4.5), hand_b=(3, 5.5), fb=(-5, 0), ff=(4.5, 0)),
                         pose(u, bob=0.8, lean=1.5, **rd)], [120, 50, 70, 120, 120]))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(29, 44, 88), drop_b=(15, 44, 95)))
+    elif name == 'mage' and u['weapon'] == 'sprayer':  # pressurized brass vitriol lance
+        rd = dict(wa=78, hand_f=(4.5, 5.5), hand_b=(2.5, 6.0))
+        put('idle', idle(u, **rd)); put('walk', walk(u, wa=80, hand_f=(4.5, 5.5), hand_b=(2.5, 6.0), swing=0.4))
+        mc, mlo = u['pal']['magic'], u['pal']['magic_lo']
+        jet = lambda x: [(x, 22, 2.0, mc), (x - 3.0, 22, 1.3, mlo), (x + 1.5, 20.5, 0.9, mlo), (x + 1.5, 23.5, 0.9, mlo), (x - 0.5, 22, 0.8, (255, 255, 255))]
+        charged = dict(bob=1.0, lean=-1.4, wa=56, hand_f=(2.0, 3.5), hand_b=(1.5, 4.5), glow=1.0)
+        put('attack', ([pose(u, bob=0.4, wa=68, hand_f=(3.0, 4.5), hand_b=(2.0, 5.0)),
+                        pose(u, bob=0.8, lean=-1.0, wa=60, hand_f=(2.0, 3.8), hand_b=(1.5, 4.2), glow=0.4),
+                        pose(u, **charged),
+                        strike(impact(pose(u, bob=0.8, lean=1.5, dx=-0.5, wa=88, hand_f=(6.5, 3.5), hand_b=(4.0, 4.5), fb=(-6, 0), ff=(5, 0), glow=0.8, fx=jet(40)))),
+                        pose(u, bob=0.6, lean=1.0, dx=-0.3, wa=88, hand_f=(6.0, 3.8), hand_b=(3.8, 4.8), fb=(-6, 0), ff=(5, 0), fx=jet(43)),
+                        pose(u, bob=0.3, **rd)], [120, 140, 220, 60, 120, 140]))
+        fr = []
+        for i in range(8):
+            t = i / 8 * 2 * math.pi; b = 0.5 + 0.5 * math.sin(t)
+            fr.append(pose(u, bob=0.5 + b * 0.5, glow=0.3 + 0.5 * b, **rd,
+                           fx=[(20 + 9 * math.cos(t + j * 1.57), 43.5 + 1.2 * math.sin(t + j * 1.57), 0.6, mc if j % 2 else mlo) for j in range(4)]))
+        put('idle_focus', (fr, [150] * 8))
+        put('hurt', hurt(u, **rd)); put('death', death(u, drop=(26, 44, 95)))
+        defensive_set(u, dict(wa=54, hand_f=(5.0, 4.5), hand_b=(4.0, 5.5), glow=0.3), A, T)
+        sh = {
+            'windup': charged,
+            'windup_heavy': dict(bob=2.2, lean=-2.4, dx=-0.5, wa=46, hand_f=(1.0, 0.5), hand_b=(0.5, 2.5), glow=0.6, fb=(-6.0, 0), ff=(4.5, 0)),
+            'windup_buff': dict(bob=0.6, lean=0.0, wa=12, hand_f=(5.0, 2.0), hand_b=(4.0, 5.0), glow=0.3, fb=(-4.0, 0), ff=(4.0, 0)),
+            'windup_debuff': dict(bob=1.0, lean=1.5, dx=0.5, wa=90, hand_f=(7.5, 1.5), hand_b=(4.5, 3.5), glow=0.5, fb=(-5.5, 0), ff=(4.5, 0)),
+        }
+        W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**rd)[0], sh, M_STAGGER, M_DAZED, motes='tip', steps=M_STEPS)
+        A.update(W); T.update(WT)
+        return with_dash(name, u, (A, T))
     elif name == 'mage':  # raise staff, charge the gem, thrust, bolt flies
-        rd = dict(wa=5, hand_f=(4.5, 4))
-        put('idle', idle(u, **rd)); put('walk', walk(u, wa=12, hand_f=(4.5, 4), swing=0.5))
+        rd = dict(wa=5, hand_f=(4.5, 4), **({'hand_b': (6.0, 3.0)} if u.get('offhand') == 'orb' else {}))
+        put('idle', idle(u, **rd)); put('walk', walk(u, wa=12, hand_f=(4.5, 4), swing=0.5, **({'hand_b': (6.0, 3.0)} if u.get('offhand') == 'orb' else {})))
         bolt = lambda x: [(x, 20, 2.0, (150, 220, 255)), (x - 2.5, 20, 1.3, (80, 140, 230)), (x - 4.5, 20, 0.8, (80, 140, 230)), (x + 0.5, 19.5, 0.8, (255, 255, 255))]
         put('attack', ([pose(u, bob=0.4, wa=0, hand_f=(4.5, 2.5), hand_b=(4, 4)),
                         pose(u, bob=0.8, lean=-1.2, wa=-8, hand_f=(3, -0.5), hand_b=(4, 2), glow=0.4),
@@ -469,7 +504,7 @@ def clips(name, variant='', unit=None):
         fr = []
         for i in range(8):  # stance: focused/charged idle, gem glows and runes circle the feet
             t = i / 8 * 2 * math.pi; b = 0.5 + 0.5 * math.sin(t)
-            fr.append(pose(u, bob=0.5 + b * 0.5, wa=5, hand_f=(4.5, 4), glow=0.3 + 0.5 * b,
+            fr.append(pose(u, bob=0.5 + b * 0.5, glow=0.3 + 0.5 * b, **rd,
                            fx=[(20 + 9 * math.cos(t + j * 1.57), 43.5 + 1.2 * math.sin(t + j * 1.57), 0.6, (150, 220, 255) if j % 2 else (80, 140, 230)) for j in range(4)]))
         put('idle_focus', (fr, [150] * 8))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(26, 44, 95)))
@@ -543,6 +578,8 @@ def clips(name, variant='', unit=None):
     if name in GUARDS: defensive_set(u, GUARDS[name], A, T)
     if name in CLASS_WINDUPS:  # WINDUP1-R2: the wind-up rows after today's rows (K7)
         rd, holds, stagger_keys, dazed_keys, opts = CLASS_WINDUPS[name]
+        if name == 'mage' and u.get('offhand') == 'orb':
+            rd = dict(rd, hand_b=(6.0, 3.0))
         W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**rd)[0], holds, stagger_keys, dazed_keys, **opts)
         A.update(W); T.update(WT)
     if name == 'warrior' and variant == '':

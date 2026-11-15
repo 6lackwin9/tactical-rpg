@@ -47,8 +47,20 @@ def goblin(cls, hat, pal, scale=0.84, **kw):
 # and a buckler) and `2h_<family>`; the base's own sheet is its 1H + kite shield look. Every look of a body shares the
 # body's palette slots and palette files (DIR4 L3). The game picks the look from the equipped gear
 # (rpgkit_content::art::gear_body_chain). A new family on the 2H grip: one drawer in rig.DRAWERS, one entry here.
-TWO_HANDED = {'sword': 'greatsword', 'axe': 'battle_axe', 'hammer': 'warhammer'}
-LOOKS = {'warrior': ('1h_buckler', '2h_sword', '2h_axe', '2h_hammer')}
+TWO_HANDED = {
+    'sword': 'greatsword',
+    'greatsword': 'greatsword_ew',
+    'axe': 'battle_axe',
+    'hammer': 'warhammer',
+    'polearm': 'billhook',
+}
+LOOKS = {
+    'warrior': ('1h_buckler', '1h_polearm', '2h_sword', '2h_axe', '2h_hammer', '2h_polearm', '2h_greatsword'),
+    'brawler': ('gauntlet', 'braces'),
+    'mage': ('1h_sprayer', 'orb'),
+    'rogue': ('1h_knife',),
+}
+LOOK_LAYERS = {'warrior/2h_greatsword': 'game'}
 
 
 def two_handed(u, family, drawing=None):
@@ -67,10 +79,29 @@ def with_buckler(u, weapon=None):
     return u
 
 
+def with_gear(u, **updates):
+    """Unit `u` copied with equipped gear drawer updates applied."""
+    u = copy.deepcopy(u)
+    u.update(updates)
+    return u
+
+
 def look_unit(u, look):
     """Unit `u` wearing look `look` (a LOOKS id)."""
     if look == '1h_buckler':
         return with_buckler(u)
+    if look == '1h_polearm':
+        return with_gear(u, weapon='billhook', offhand='pavise')
+    if look == 'gauntlet':
+        return with_gear(u, weapon='cestus')
+    if look == 'braces':
+        return with_gear(u, offhand='braces')
+    if look == '1h_sprayer':
+        return with_gear(u, weapon='sprayer', back='tank')
+    if look == 'orb':
+        return with_gear(u, offhand='orb')
+    if look == '1h_knife':
+        return with_gear(u, weapon='knife', offhand=None)
     return two_handed(u, look[len('2h_'):])
 
 
@@ -316,7 +347,7 @@ def clips(key):
 
 def layer(key):
     if key in looks():
-        return 'kit'  # a class base's looks live with the class base, in the kit
+        return LOOK_LAYERS.get(key, 'kit')  # class base looks live in the kit unless game-pinned
     return (BODIES.get(key) or PROPS.get(key) or CREATURES[key])[0]
 
 
