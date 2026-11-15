@@ -25,7 +25,7 @@ pub mod unit_budget;
 pub mod unit_template;
 pub mod unit_track;
 pub use body_slot::{BodySlotDef, GraftSpec, BODY_ROLES, BODY_ROLE_CLASS, BODY_ROLE_MONSTER, BODY_EFFECTS_KEY, BODY_SLOTS_KIND, BODY_SLOTS_MAX, GRAFT, GRAFT_TIERS, GRAFT_TOP_TIER_NEEDS};
-pub use looks::{FamilyLook, TerrainLook};
+pub use looks::{FamilyLook, FxPreset, TerrainLook, FX_PRESETS_KIND};
 pub use mastery::{MasteryBook, Technique, MASTERY_BOOK};
 pub use recipe::{RecipeCost, RecipeDef, PROF_ROLES, RECIPES_KIND, RECIPE_SERVICE, RECIPE_TARGETS};
 pub use dojo_preset::{DojoPresetDef, DOJO_PASSIVES_MAX, DOJO_POUCH_MAX, DOJO_PRESETS_KIND};
@@ -1168,6 +1168,9 @@ pub struct Catalog {
     /// rows of the value `from_value` reads, or `set_family_looks` (the world data passes its families, which the
     /// resolved catalog leaves out). No row = the game's default look.
     pub family_looks: IndexMap<String, FamilyLook>,
+    /// PR5-53 (VFX-DATA1): the effect presets (kind `fx_presets`; presentation only, no rule reads them), keyed by look
+    /// key in file order. No row for a key = the game's own look of that key.
+    pub fx_presets: IndexMap<String, FxPreset>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -1230,6 +1233,7 @@ impl Catalog {
             cat.dojo_presets.entry(p.id.clone()).or_insert(p);
         }
         cat.set_family_looks(rows("item_families").iter());
+        cat.fx_presets = rows(FX_PRESETS_KIND).iter().map(FxPreset::from_obj).map(|p| (p.id.clone(), p)).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat

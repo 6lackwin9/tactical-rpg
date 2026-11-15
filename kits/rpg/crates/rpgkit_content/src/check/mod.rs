@@ -11,6 +11,7 @@ pub mod body_slot;
 pub mod dojo_preset;
 pub mod recipe;
 pub mod expression_fx;
+pub mod fx_preset;
 pub mod dialogue;
 pub mod encounter;
 pub mod ground;
@@ -280,6 +281,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if kind == expression_fx::KIND {
         // PORTRAITFX1-EX: the row checks the loader applies (the expression, tint, mark, shake; unique ids)
         return expression_fx::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == fx_preset::KIND {
+        // PR5-53 (VFX-DATA1): the row checks the loader applies (the look key, role, delivery, parameter objects; unique ids)
+        return fx_preset::entry_errors(v, &content(kind, entry), current_id);
     }
     if crate::source::HOOK_KINDS.contains(&kind) {
         // HOOKS1-S: the row checks the loader applies (hazards, unit meters, zones; unique ids)
@@ -556,6 +561,11 @@ pub fn warnings_all(v: &View) -> Report {
         if !found.is_empty() {
             out.insert(format!("{}:{}", portrait::KIND, json::s(e, "id")), found);
         }
+    }
+    // PR5-53 (VFX-DATA1): look keys no effect preset draws, once the table has rows (`skills:<id>`, `item_families:<id>`,
+    // `statuses:<id>`)
+    for (label, msg) in fx_preset::fx_warnings(v) {
+        out.entry(label).or_default().push(msg);
     }
     // PORTRAITFX1-EX: the expression-effect rows' warnings (`portrait_expressions:<id>`)
     for e in v.entries(expression_fx::KIND) {

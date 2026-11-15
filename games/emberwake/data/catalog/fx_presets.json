@@ -1,0 +1,760 @@
+{
+	"kind": "fx_presets",
+	"version": 1,
+	"entries": [
+		{
+			"id": "slash",
+			"role": "blow",
+			"delivery": "melee",
+			"trail": {
+				"radius": 13,
+				"from": -60,
+				"to": 50,
+				"width": 2,
+				"color": "#9ca3af"
+			},
+			"sparks": {
+				"count": 6,
+				"color": "#9ca3af",
+				"color2": "#d9cbb4",
+				"spread": 90,
+				"speed": 70
+			}
+		},
+		{
+			"id": "cleave",
+			"role": "blow",
+			"delivery": "melee",
+			"trail": {
+				"radius": 13,
+				"from": -70,
+				"to": 60,
+				"width": 2,
+				"color": "#9ca3af"
+			},
+			"sparks": {
+				"count": 7,
+				"color": "#9ca3af",
+				"color2": "#d97706",
+				"spread": 90,
+				"speed": 70
+			}
+		},
+		{
+			"id": "stab",
+			"role": "blow",
+			"delivery": "melee",
+			"trail": {
+				"radius": 9,
+				"from": -30,
+				"to": 30,
+				"width": 1,
+				"color": "#9ca3af"
+			},
+			"sparks": {
+				"count": 4,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af",
+				"spread": 60,
+				"speed": 60
+			}
+		},
+		{
+			"id": "bludgeon",
+			"role": "blow",
+			"delivery": "melee",
+			"trail": {
+				"radius": 12,
+				"from": -80,
+				"to": 40,
+				"width": 3,
+				"color": "#6b7280"
+			},
+			"ring": {
+				"r0": 3,
+				"r1": 9,
+				"color": "#d9cbb4c8",
+				"ms": 180
+			},
+			"sparks": {
+				"count": 8,
+				"color": "#6b7280",
+				"color2": "#d9cbb4",
+				"spread": 140,
+				"speed": 50,
+				"gravity": 160,
+				"size": 2
+			}
+		},
+		{
+			"id": "fists",
+			"role": "blow",
+			"delivery": "melee",
+			"ring": {
+				"r0": 2,
+				"r1": 7,
+				"color": "#d9cbb4c8",
+				"ms": 150
+			},
+			"sparks": {
+				"count": 5,
+				"color": "#d9cbb4",
+				"spread": 120,
+				"speed": 50
+			}
+		},
+		{
+			"id": "arrow",
+			"role": "shot",
+			"delivery": "shot",
+			"speed": 560.0,
+			"arc": 6.0,
+			"shot": {
+				"look": "arrow",
+				"size": 7,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af"
+			},
+			"sparks": {
+				"count": 4,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af",
+				"spread": 70,
+				"speed": 60
+			}
+		},
+		{
+			"id": "bolt",
+			"role": "shot",
+			"delivery": "shot",
+			"speed": 720.0,
+			"arc": 2.0,
+			"shot": {
+				"look": "bolt",
+				"size": 5,
+				"color": "#9ca3af",
+				"color2": "#d9cbb4"
+			},
+			"sparks": {
+				"count": 4,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af",
+				"spread": 70,
+				"speed": 60
+			}
+		},
+		{
+			"id": "stone",
+			"role": "shot",
+			"delivery": "shot",
+			"speed": 480.0,
+			"arc": 8.0,
+			"shot": {
+				"look": "stone",
+				"size": 2,
+				"color": "#6b7280",
+				"color2": "#d9cbb4"
+			},
+			"sparks": {
+				"count": 4,
+				"color": "#6b7280",
+				"color2": "#d9cbb4",
+				"spread": 120,
+				"speed": 40
+			}
+		},
+		{
+			"id": "flask",
+			"role": "shot",
+			"delivery": "shot",
+			"speed": 420.0,
+			"arc": 10.0,
+			"shot": {
+				"look": "stone",
+				"size": 2,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af"
+			}
+		},
+		{
+			"id": "arcane_orb",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 420.0,
+			"shot": {
+				"look": "orb",
+				"size": 2.5,
+				"color": "#d9cbb4",
+				"color2": "#c084fc",
+				"tail": 3
+			},
+			"flash": {
+				"rx": 5,
+				"ry": 4,
+				"color": "#c084fc96",
+				"ms": 120
+			},
+			"sparks": {
+				"count": 6,
+				"color": "#c084fc",
+				"color2": "#d9cbb4",
+				"spread": 360,
+				"speed": 50
+			}
+		},
+		{
+			"id": "bash_ring",
+			"role": "strike",
+			"delivery": "melee",
+			"ring": {
+				"r0": 3,
+				"r1": 10,
+				"color": "#9ca3afdc",
+				"ms": 180
+			},
+			"sparks": {
+				"count": 8,
+				"color": "#9ca3af",
+				"color2": "#fbbf24",
+				"spread": 120,
+				"speed": 70
+			}
+		},
+		{
+			"id": "curse_orb",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 360.0,
+			"arc": 4.0,
+			"shot": {
+				"look": "orb",
+				"size": 2,
+				"color": "#c084fc",
+				"tail": 2
+			},
+			"ring": {
+				"r0": 2,
+				"r1": 8,
+				"color": "#c084fcdc",
+				"ms": 200
+			}
+		},
+		{
+			"id": "beam",
+			"role": "strike",
+			"delivery": "beam",
+			"sparks": {
+				"count": 4,
+				"color": "#c084fc",
+				"color2": "#d9cbb4",
+				"spread": 360,
+				"speed": 50
+			},
+			"beam": {
+				"width": 2,
+				"core": "#d9cbb4",
+				"glow": "#c084fc",
+				"ms": 160
+			}
+		},
+		{
+			"id": "fire_lob",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 380.0,
+			"arc": 16.0,
+			"shot": {
+				"look": "orb",
+				"size": 3,
+				"color": "#fbbf24",
+				"color2": "#d97706",
+				"tail": 3
+			},
+			"sparks": {
+				"count": 10,
+				"color": "#d97706",
+				"color2": "#fbbf24",
+				"dir": -90,
+				"spread": 160,
+				"speed": 70,
+				"gravity": -20
+			},
+			"aim_ring": {
+				"r0": 4,
+				"r1": 19.2,
+				"color": "#d97706e6",
+				"ms": 260
+			},
+			"aim_flash": {
+				"rx": 10,
+				"ry": 7,
+				"color": "#d977068c",
+				"ms": 160
+			}
+		},
+		{
+			"id": "frost_lob",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 380.0,
+			"arc": 16.0,
+			"shot": {
+				"look": "orb",
+				"size": 3,
+				"color": "#d9cbb4",
+				"color2": "#06b6d4",
+				"tail": 3
+			},
+			"sparks": {
+				"count": 8,
+				"color": "#06b6d4",
+				"color2": "#d9cbb4",
+				"dir": -90,
+				"spread": 160,
+				"speed": 70,
+				"gravity": 80
+			},
+			"aim_ring": {
+				"r0": 4,
+				"r1": 19.2,
+				"color": "#06b6d4e6",
+				"ms": 260
+			}
+		},
+		{
+			"id": "falling_orb",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 600.0,
+			"shot": {
+				"look": "orb",
+				"size": 2,
+				"color": "#d9cbb4",
+				"color2": "#fbbf24",
+				"tail": 2
+			},
+			"flash": {
+				"rx": 8,
+				"ry": 6,
+				"color": "#fbbf24a0",
+				"ms": 140
+			},
+			"sparks": {
+				"count": 6,
+				"color": "#fbbf24",
+				"color2": "#d9cbb4",
+				"dir": -90,
+				"spread": 200,
+				"speed": 60
+			},
+			"drop": 48.0
+		},
+		{
+			"id": "arrow_volley",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 560.0,
+			"arc": 6.0,
+			"shot": {
+				"look": "arrow",
+				"size": 7,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af"
+			},
+			"sparks": {
+				"count": 4,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af",
+				"spread": 70,
+				"speed": 60
+			},
+			"volley": 5
+		},
+		{
+			"id": "ground_wave",
+			"role": "strike",
+			"delivery": "melee",
+			"sparks": {
+				"count": 5,
+				"color": "#6b7280",
+				"spread": 120,
+				"speed": 50,
+				"gravity": 160
+			},
+			"wave": {
+				"r0": 3,
+				"r1": 12,
+				"color": "#6b7280c8",
+				"ms": 200
+			}
+		},
+		{
+			"id": "sweep",
+			"role": "strike",
+			"delivery": "melee",
+			"trail": {
+				"radius": 14,
+				"from": -150,
+				"to": 150,
+				"width": 2,
+				"color": "#d9cbb4"
+			},
+			"ring": {
+				"r0": 2,
+				"r1": 7,
+				"color": "#d9cbb4c8",
+				"ms": 150
+			},
+			"sparks": {
+				"count": 5,
+				"color": "#d9cbb4",
+				"spread": 120,
+				"speed": 50
+			}
+		},
+		{
+			"id": "heavy_blow",
+			"role": "strike",
+			"delivery": "melee",
+			"trail": {
+				"radius": 10,
+				"from": -40,
+				"to": 60,
+				"width": 2,
+				"color": "#d9cbb4"
+			},
+			"ring": {
+				"r0": 2,
+				"r1": 9,
+				"color": "#d9cbb4dc",
+				"ms": 180
+			},
+			"sparks": {
+				"count": 7,
+				"color": "#d9cbb4",
+				"color2": "#6b7280",
+				"spread": 90,
+				"speed": 70
+			}
+		},
+		{
+			"id": "reach_bolt",
+			"role": "strike",
+			"delivery": "shot",
+			"speed": 480.0,
+			"shot": {
+				"look": "orb",
+				"size": 1.5,
+				"color": "#d9cbb4",
+				"color2": "#9ca3af",
+				"tail": 2
+			},
+			"flash": {
+				"rx": 4,
+				"ry": 3,
+				"color": "#d9cbb478",
+				"ms": 100
+			}
+		},
+		{
+			"id": "heal_motes",
+			"role": "support",
+			"delivery": "cast",
+			"flash": {
+				"rx": 7,
+				"ry": 5,
+				"color": "#fbbf2450",
+				"ms": 300
+			},
+			"sparks": {
+				"count": 8,
+				"color": "#fbbf24",
+				"color2": "#d9cbb4",
+				"dir": -90,
+				"spread": 50,
+				"speed": 30,
+				"gravity": -30,
+				"ms": 500,
+				"foot": true
+			}
+		},
+		{
+			"id": "cleanse_motes",
+			"role": "support",
+			"delivery": "cast",
+			"flash": {
+				"rx": 7,
+				"ry": 5,
+				"color": "#06b6d450",
+				"ms": 300
+			},
+			"sparks": {
+				"count": 8,
+				"color": "#06b6d4",
+				"color2": "#d9cbb4",
+				"dir": -90,
+				"spread": 50,
+				"speed": 30,
+				"gravity": -30,
+				"ms": 500,
+				"foot": true
+			}
+		},
+		{
+			"id": "ward_ring",
+			"role": "support",
+			"delivery": "cast",
+			"ring": {
+				"r0": 4,
+				"r1": 12,
+				"color": "#06b6d4dc",
+				"ms": 260
+			},
+			"flash": {
+				"rx": 7,
+				"ry": 5,
+				"color": "#06b6d45a",
+				"ms": 300
+			}
+		},
+		{
+			"id": "rally_ring",
+			"role": "support",
+			"delivery": "cast",
+			"ring": {
+				"r0": 4,
+				"r1": 20,
+				"color": "#d9cbb4c8",
+				"ms": 300
+			},
+			"on_actor": true
+		},
+		{
+			"id": "star_orbit",
+			"role": "status",
+			"slot": "head",
+			"period": 900,
+			"orbit": {
+				"rx": 7,
+				"ry": 2.5,
+				"ms": 900,
+				"count": 3,
+				"size": 2,
+				"color": "#fbbf24",
+				"color2": "#d9cbb4",
+				"star": true
+			}
+		},
+		{
+			"id": "crimson_hoop",
+			"role": "status",
+			"ring": {
+				"r0": 2,
+				"r1": 7,
+				"color": "#991b1bc8",
+				"ms": 700
+			},
+			"slot": "head",
+			"period": 1100
+		},
+		{
+			"id": "rising_embers",
+			"role": "status",
+			"sparks": {
+				"count": 7,
+				"color": "#d97706",
+				"color2": "#fbbf24",
+				"dir": -90,
+				"spread": 70,
+				"speed": 25,
+				"gravity": -20,
+				"size": 2,
+				"ms": 500
+			},
+			"slot": "body",
+			"dy": 4.0,
+			"period": 600
+		},
+		{
+			"id": "toxic_bubbles",
+			"role": "status",
+			"sparks": {
+				"count": 5,
+				"color": "#9333ea",
+				"color2": "#c084fc",
+				"dir": -90,
+				"spread": 50,
+				"speed": 12,
+				"gravity": -15,
+				"size": 2,
+				"ms": 800
+			},
+			"slot": "body",
+			"period": 1000
+		},
+		{
+			"id": "dripping_blood",
+			"role": "status",
+			"sparks": {
+				"count": 4,
+				"color": "#e11d48",
+				"color2": "#991b1b",
+				"dir": 90,
+				"spread": 20,
+				"speed": 15,
+				"gravity": 90,
+				"size": 2,
+				"ms": 600
+			},
+			"slot": "body",
+			"period": 900
+		},
+		{
+			"id": "closing_ring",
+			"role": "status",
+			"ring": {
+				"r0": 9,
+				"r1": 4,
+				"color": "#991b1b",
+				"ms": 900
+			},
+			"slot": "body",
+			"period": 1300
+		},
+		{
+			"id": "parry_arc",
+			"role": "status",
+			"trail": {
+				"radius": 9,
+				"from": -40,
+				"to": 40,
+				"width": 1,
+				"color": "#9ca3af",
+				"ms": 300
+			},
+			"slot": "body",
+			"period": 1500
+		},
+		{
+			"id": "iron_orbit",
+			"role": "status",
+			"slot": "feet",
+			"period": 4000,
+			"orbit": {
+				"rx": 8,
+				"ry": 3,
+				"ms": 4000,
+				"count": 8,
+				"color": "#4b5563",
+				"color2": "#9ca3af"
+			}
+		},
+		{
+			"id": "ash_ring",
+			"role": "status",
+			"ring": {
+				"r0": 4,
+				"r1": 9,
+				"color": "#6b7280",
+				"ms": 1400
+			},
+			"slot": "feet",
+			"period": 1400
+		},
+		{
+			"id": "gold_ground",
+			"role": "status",
+			"flash": {
+				"rx": 9,
+				"ry": 3,
+				"color": "#fbbf24a0",
+				"ms": 1200
+			},
+			"slot": "feet",
+			"period": 1200
+		},
+		{
+			"id": "speed_sparks",
+			"role": "status",
+			"sparks": {
+				"count": 5,
+				"color": "#06b6d4",
+				"color2": "#d9cbb4",
+				"dir": -90,
+				"spread": 30,
+				"speed": 70,
+				"gravity": 0,
+				"size": 2,
+				"ms": 220
+			},
+			"slot": "feet",
+			"period": 600
+		},
+		{
+			"id": "gold_motes",
+			"role": "status",
+			"sparks": {
+				"count": 4,
+				"color": "#fbbf24",
+				"color2": "#d9cbb4",
+				"dir": -90,
+				"spread": 40,
+				"speed": 18,
+				"gravity": -10,
+				"size": 2,
+				"ms": 900
+			},
+			"slot": "feet",
+			"period": 1100
+		},
+		{
+			"id": "ash_tint",
+			"role": "status",
+			"slot": "tint",
+			"period": 1600,
+			"tint": {
+				"color": "#6b7280",
+				"lo": 40,
+				"hi": 70
+			}
+		},
+		{
+			"id": "amber_tint",
+			"role": "status",
+			"slot": "tint",
+			"period": 900,
+			"tint": {
+				"color": "#d97706",
+				"lo": 30,
+				"hi": 70
+			}
+		},
+		{
+			"id": "cyan_tint",
+			"role": "status",
+			"slot": "tint",
+			"period": 1600,
+			"tint": {
+				"color": "#06b6d4",
+				"lo": 25,
+				"hi": 50
+			}
+		},
+		{
+			"id": "steel_tint",
+			"role": "status",
+			"slot": "tint",
+			"period": 1600,
+			"tint": {
+				"color": "#9ca3af",
+				"lo": 25,
+				"hi": 50
+			}
+		},
+		{
+			"id": "fade",
+			"role": "status",
+			"slot": "alpha"
+		}
+	]
+}

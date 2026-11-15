@@ -1,0 +1,955 @@
+{
+  "entries": [
+    {
+      "id": "slash",
+      "role": "blow",
+      "delivery": "melee",
+      "trail": {
+        "radius": 13,
+        "from": -60,
+        "to": 50,
+        "width": 2,
+        "color": "#9ca3af"
+      },
+      "sparks": {
+        "count": 6,
+        "color": "#9ca3af",
+        "color2": "#d9cbb4",
+        "spread": 90,
+        "speed": 70
+      }
+    },
+    {
+      "id": "cleave",
+      "role": "blow",
+      "delivery": "melee",
+      "trail": {
+        "radius": 13,
+        "from": -70,
+        "to": 60,
+        "width": 2,
+        "color": "#9ca3af"
+      },
+      "sparks": {
+        "count": 7,
+        "color": "#9ca3af",
+        "color2": "#d97706",
+        "spread": 90,
+        "speed": 70
+      }
+    },
+    {
+      "id": "stab",
+      "role": "blow",
+      "delivery": "melee",
+      "trail": {
+        "radius": 9,
+        "from": -30,
+        "to": 30,
+        "width": 1,
+        "color": "#9ca3af"
+      },
+      "sparks": {
+        "count": 4,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af",
+        "spread": 60,
+        "speed": 60
+      }
+    },
+    {
+      "id": "bludgeon",
+      "role": "blow",
+      "delivery": "melee",
+      "trail": {
+        "radius": 12,
+        "from": -80,
+        "to": 40,
+        "width": 3,
+        "color": "#6b7280"
+      },
+      "ring": {
+        "r0": 3,
+        "r1": 9,
+        "color": "#d9cbb4c8",
+        "ms": 180
+      },
+      "sparks": {
+        "count": 8,
+        "color": "#6b7280",
+        "color2": "#d9cbb4",
+        "spread": 140,
+        "speed": 50,
+        "gravity": 160,
+        "size": 2
+      }
+    },
+    {
+      "id": "fists",
+      "role": "blow",
+      "delivery": "melee",
+      "ring": {
+        "r0": 2,
+        "r1": 7,
+        "color": "#d9cbb4c8",
+        "ms": 150
+      },
+      "sparks": {
+        "count": 5,
+        "color": "#d9cbb4",
+        "spread": 120,
+        "speed": 50
+      }
+    },
+    {
+      "id": "arrow",
+      "role": "shot",
+      "delivery": "shot",
+      "speed": 560.0,
+      "arc": 6.0,
+      "shot": {
+        "look": "arrow",
+        "size": 7,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af"
+      },
+      "sparks": {
+        "count": 4,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af",
+        "spread": 70,
+        "speed": 60
+      }
+    },
+    {
+      "id": "bolt",
+      "role": "shot",
+      "delivery": "shot",
+      "speed": 720.0,
+      "arc": 2.0,
+      "shot": {
+        "look": "bolt",
+        "size": 5,
+        "color": "#9ca3af",
+        "color2": "#d9cbb4"
+      },
+      "sparks": {
+        "count": 4,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af",
+        "spread": 70,
+        "speed": 60
+      }
+    },
+    {
+      "id": "stone",
+      "role": "shot",
+      "delivery": "shot",
+      "speed": 480.0,
+      "arc": 8.0,
+      "shot": {
+        "look": "stone",
+        "size": 2,
+        "color": "#6b7280",
+        "color2": "#d9cbb4"
+      },
+      "sparks": {
+        "count": 4,
+        "color": "#6b7280",
+        "color2": "#d9cbb4",
+        "spread": 120,
+        "speed": 40
+      }
+    },
+    {
+      "id": "flask",
+      "role": "shot",
+      "delivery": "shot",
+      "speed": 420.0,
+      "arc": 10.0,
+      "shot": {
+        "look": "stone",
+        "size": 2,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af"
+      }
+    },
+    {
+      "id": "arcane_orb",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 420.0,
+      "shot": {
+        "look": "orb",
+        "size": 2.5,
+        "color": "#d9cbb4",
+        "color2": "#c084fc",
+        "tail": 3
+      },
+      "flash": {
+        "rx": 5,
+        "ry": 4,
+        "color": "#c084fc96",
+        "ms": 120
+      },
+      "sparks": {
+        "count": 6,
+        "color": "#c084fc",
+        "color2": "#d9cbb4",
+        "spread": 360,
+        "speed": 50
+      }
+    },
+    {
+      "id": "bash_ring",
+      "role": "strike",
+      "delivery": "melee",
+      "ring": {
+        "r0": 3,
+        "r1": 10,
+        "color": "#9ca3afdc",
+        "ms": 180
+      },
+      "sparks": {
+        "count": 8,
+        "color": "#9ca3af",
+        "color2": "#fbbf24",
+        "spread": 120,
+        "speed": 70
+      }
+    },
+    {
+      "id": "curse_orb",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 360.0,
+      "arc": 4.0,
+      "shot": {
+        "look": "orb",
+        "size": 2,
+        "color": "#c084fc",
+        "tail": 2
+      },
+      "ring": {
+        "r0": 2,
+        "r1": 8,
+        "color": "#c084fcdc",
+        "ms": 200
+      }
+    },
+    {
+      "id": "beam",
+      "role": "strike",
+      "delivery": "beam",
+      "sparks": {
+        "count": 4,
+        "color": "#c084fc",
+        "color2": "#d9cbb4",
+        "spread": 360,
+        "speed": 50
+      },
+      "beam": {
+        "width": 2,
+        "core": "#d9cbb4",
+        "glow": "#c084fc",
+        "ms": 160
+      }
+    },
+    {
+      "id": "fire_lob",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 380.0,
+      "arc": 16.0,
+      "shot": {
+        "look": "orb",
+        "size": 3,
+        "color": "#fbbf24",
+        "color2": "#d97706",
+        "tail": 3
+      },
+      "sparks": {
+        "count": 10,
+        "color": "#d97706",
+        "color2": "#fbbf24",
+        "dir": -90,
+        "spread": 160,
+        "speed": 70,
+        "gravity": -20
+      },
+      "aim_ring": {
+        "r0": 4,
+        "r1": 19.2,
+        "color": "#d97706e6",
+        "ms": 260
+      },
+      "aim_flash": {
+        "rx": 10,
+        "ry": 7,
+        "color": "#d977068c",
+        "ms": 160
+      }
+    },
+    {
+      "id": "frost_lob",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 380.0,
+      "arc": 16.0,
+      "shot": {
+        "look": "orb",
+        "size": 3,
+        "color": "#d9cbb4",
+        "color2": "#06b6d4",
+        "tail": 3
+      },
+      "sparks": {
+        "count": 8,
+        "color": "#06b6d4",
+        "color2": "#d9cbb4",
+        "dir": -90,
+        "spread": 160,
+        "speed": 70,
+        "gravity": 80
+      },
+      "aim_ring": {
+        "r0": 4,
+        "r1": 19.2,
+        "color": "#06b6d4e6",
+        "ms": 260
+      }
+    },
+    {
+      "id": "falling_orb",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 600.0,
+      "shot": {
+        "look": "orb",
+        "size": 2,
+        "color": "#d9cbb4",
+        "color2": "#fbbf24",
+        "tail": 2
+      },
+      "flash": {
+        "rx": 8,
+        "ry": 6,
+        "color": "#fbbf24a0",
+        "ms": 140
+      },
+      "sparks": {
+        "count": 6,
+        "color": "#fbbf24",
+        "color2": "#d9cbb4",
+        "dir": -90,
+        "spread": 200,
+        "speed": 60
+      },
+      "drop": 48.0
+    },
+    {
+      "id": "arrow_volley",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 560.0,
+      "arc": 6.0,
+      "shot": {
+        "look": "arrow",
+        "size": 7,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af"
+      },
+      "sparks": {
+        "count": 4,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af",
+        "spread": 70,
+        "speed": 60
+      },
+      "volley": 5
+    },
+    {
+      "id": "ground_wave",
+      "role": "strike",
+      "delivery": "melee",
+      "sparks": {
+        "count": 5,
+        "color": "#6b7280",
+        "spread": 120,
+        "speed": 50,
+        "gravity": 160
+      },
+      "wave": {
+        "r0": 3,
+        "r1": 12,
+        "color": "#6b7280c8",
+        "ms": 200
+      }
+    },
+    {
+      "id": "sweep",
+      "role": "strike",
+      "delivery": "melee",
+      "trail": {
+        "radius": 14,
+        "from": -150,
+        "to": 150,
+        "width": 2,
+        "color": "#d9cbb4"
+      },
+      "ring": {
+        "r0": 2,
+        "r1": 7,
+        "color": "#d9cbb4c8",
+        "ms": 150
+      },
+      "sparks": {
+        "count": 5,
+        "color": "#d9cbb4",
+        "spread": 120,
+        "speed": 50
+      }
+    },
+    {
+      "id": "heavy_blow",
+      "role": "strike",
+      "delivery": "melee",
+      "trail": {
+        "radius": 10,
+        "from": -40,
+        "to": 60,
+        "width": 2,
+        "color": "#d9cbb4"
+      },
+      "ring": {
+        "r0": 2,
+        "r1": 9,
+        "color": "#d9cbb4dc",
+        "ms": 180
+      },
+      "sparks": {
+        "count": 7,
+        "color": "#d9cbb4",
+        "color2": "#6b7280",
+        "spread": 90,
+        "speed": 70
+      }
+    },
+    {
+      "id": "reach_bolt",
+      "role": "strike",
+      "delivery": "shot",
+      "speed": 480.0,
+      "shot": {
+        "look": "orb",
+        "size": 1.5,
+        "color": "#d9cbb4",
+        "color2": "#9ca3af",
+        "tail": 2
+      },
+      "flash": {
+        "rx": 4,
+        "ry": 3,
+        "color": "#d9cbb478",
+        "ms": 100
+      }
+    },
+    {
+      "id": "heal_motes",
+      "role": "support",
+      "delivery": "cast",
+      "flash": {
+        "rx": 7,
+        "ry": 5,
+        "color": "#fbbf2450",
+        "ms": 300
+      },
+      "sparks": {
+        "count": 8,
+        "color": "#fbbf24",
+        "color2": "#d9cbb4",
+        "dir": -90,
+        "spread": 50,
+        "speed": 30,
+        "gravity": -30,
+        "ms": 500,
+        "foot": true
+      }
+    },
+    {
+      "id": "cleanse_motes",
+      "role": "support",
+      "delivery": "cast",
+      "flash": {
+        "rx": 7,
+        "ry": 5,
+        "color": "#06b6d450",
+        "ms": 300
+      },
+      "sparks": {
+        "count": 8,
+        "color": "#06b6d4",
+        "color2": "#d9cbb4",
+        "dir": -90,
+        "spread": 50,
+        "speed": 30,
+        "gravity": -30,
+        "ms": 500,
+        "foot": true
+      }
+    },
+    {
+      "id": "ward_ring",
+      "role": "support",
+      "delivery": "cast",
+      "ring": {
+        "r0": 4,
+        "r1": 12,
+        "color": "#06b6d4dc",
+        "ms": 260
+      },
+      "flash": {
+        "rx": 7,
+        "ry": 5,
+        "color": "#06b6d45a",
+        "ms": 300
+      }
+    },
+    {
+      "id": "rally_ring",
+      "role": "support",
+      "delivery": "cast",
+      "ring": {
+        "r0": 4,
+        "r1": 20,
+        "color": "#d9cbb4c8",
+        "ms": 300
+      },
+      "on_actor": true
+    },
+    {
+      "id": "star_orbit",
+      "role": "status",
+      "slot": "head",
+      "period": 900,
+      "orbit": {
+        "rx": 7,
+        "ry": 2.5,
+        "ms": 900,
+        "count": 3,
+        "size": 2,
+        "color": "#fbbf24",
+        "color2": "#d9cbb4",
+        "star": true
+      }
+    },
+    {
+      "id": "crimson_hoop",
+      "role": "status",
+      "ring": {
+        "r0": 2,
+        "r1": 7,
+        "color": "#991b1bc8",
+        "ms": 700
+      },
+      "slot": "head",
+      "period": 1100
+    },
+    {
+      "id": "rising_embers",
+      "role": "status",
+      "sparks": {
+        "count": 7,
+        "color": "#d97706",
+        "color2": "#fbbf24",
+        "dir": -90,
+        "spread": 70,
+        "speed": 25,
+        "gravity": -20,
+        "size": 2,
+        "ms": 500
+      },
+      "slot": "body",
+      "dy": 4.0,
+      "period": 600
+    },
+    {
+      "id": "toxic_bubbles",
+      "role": "status",
+      "sparks": {
+        "count": 5,
+        "color": "#9333ea",
+        "color2": "#c084fc",
+        "dir": -90,
+        "spread": 50,
+        "speed": 12,
+        "gravity": -15,
+        "size": 2,
+        "ms": 800
+      },
+      "slot": "body",
+      "period": 1000
+    },
+    {
+      "id": "dripping_blood",
+      "role": "status",
+      "sparks": {
+        "count": 4,
+        "color": "#e11d48",
+        "color2": "#991b1b",
+        "dir": 90,
+        "spread": 20,
+        "speed": 15,
+        "gravity": 90,
+        "size": 2,
+        "ms": 600
+      },
+      "slot": "body",
+      "period": 900
+    },
+    {
+      "id": "closing_ring",
+      "role": "status",
+      "ring": {
+        "r0": 9,
+        "r1": 4,
+        "color": "#991b1b",
+        "ms": 900
+      },
+      "slot": "body",
+      "period": 1300
+    },
+    {
+      "id": "parry_arc",
+      "role": "status",
+      "trail": {
+        "radius": 9,
+        "from": -40,
+        "to": 40,
+        "width": 1,
+        "color": "#9ca3af",
+        "ms": 300
+      },
+      "slot": "body",
+      "period": 1500
+    },
+    {
+      "id": "iron_orbit",
+      "role": "status",
+      "slot": "feet",
+      "period": 4000,
+      "orbit": {
+        "rx": 8,
+        "ry": 3,
+        "ms": 4000,
+        "count": 8,
+        "color": "#4b5563",
+        "color2": "#9ca3af"
+      }
+    },
+    {
+      "id": "ash_ring",
+      "role": "status",
+      "ring": {
+        "r0": 4,
+        "r1": 9,
+        "color": "#6b7280",
+        "ms": 1400
+      },
+      "slot": "feet",
+      "period": 1400
+    },
+    {
+      "id": "gold_ground",
+      "role": "status",
+      "flash": {
+        "rx": 9,
+        "ry": 3,
+        "color": "#fbbf24a0",
+        "ms": 1200
+      },
+      "slot": "feet",
+      "period": 1200
+    },
+    {
+      "id": "speed_sparks",
+      "role": "status",
+      "sparks": {
+        "count": 5,
+        "color": "#06b6d4",
+        "color2": "#d9cbb4",
+        "dir": -90,
+        "spread": 30,
+        "speed": 70,
+        "gravity": 0,
+        "size": 2,
+        "ms": 220
+      },
+      "slot": "feet",
+      "period": 600
+    },
+    {
+      "id": "gold_motes",
+      "role": "status",
+      "sparks": {
+        "count": 4,
+        "color": "#fbbf24",
+        "color2": "#d9cbb4",
+        "dir": -90,
+        "spread": 40,
+        "speed": 18,
+        "gravity": -10,
+        "size": 2,
+        "ms": 900
+      },
+      "slot": "feet",
+      "period": 1100
+    },
+    {
+      "id": "ash_tint",
+      "role": "status",
+      "slot": "tint",
+      "period": 1600,
+      "tint": {
+        "color": "#6b7280",
+        "lo": 40,
+        "hi": 70
+      }
+    },
+    {
+      "id": "amber_tint",
+      "role": "status",
+      "slot": "tint",
+      "period": 900,
+      "tint": {
+        "color": "#d97706",
+        "lo": 30,
+        "hi": 70
+      }
+    },
+    {
+      "id": "cyan_tint",
+      "role": "status",
+      "slot": "tint",
+      "period": 1600,
+      "tint": {
+        "color": "#06b6d4",
+        "lo": 25,
+        "hi": 50
+      }
+    },
+    {
+      "id": "steel_tint",
+      "role": "status",
+      "slot": "tint",
+      "period": 1600,
+      "tint": {
+        "color": "#9ca3af",
+        "lo": 25,
+        "hi": 50
+      }
+    },
+    {
+      "id": "fade",
+      "role": "status",
+      "slot": "alpha"
+    }
+  ],
+  "looks": [
+    {
+      "role": "blow",
+      "key": "slash",
+      "look": "Style { delivery: Melee, swing: Some(Swing { radius: 13.0, from_deg: -60.0, to_deg: 50.0, width: 2, col: [156, 163, 175, 255] }), shot: None, hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 6, cols: [[156, 163, 175, 255], [217, 203, 180, 255]], dir: None, spread: 90.0, speed: 70.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "blow",
+      "key": "cleave",
+      "look": "Style { delivery: Melee, swing: Some(Swing { radius: 13.0, from_deg: -70.0, to_deg: 60.0, width: 2, col: [156, 163, 175, 255] }), shot: None, hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 7, cols: [[156, 163, 175, 255], [217, 119, 6, 255]], dir: None, spread: 90.0, speed: 70.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "blow",
+      "key": "stab",
+      "look": "Style { delivery: Melee, swing: Some(Swing { radius: 9.0, from_deg: -30.0, to_deg: 30.0, width: 1, col: [156, 163, 175, 255] }), shot: None, hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 4, cols: [[217, 203, 180, 255], [156, 163, 175, 255]], dir: None, spread: 60.0, speed: 60.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "blow",
+      "key": "bludgeon",
+      "look": "Style { delivery: Melee, swing: Some(Swing { radius: 12.0, from_deg: -80.0, to_deg: 40.0, width: 3, col: [107, 114, 128, 255] }), shot: None, hit: Hit { ring: Some(Bloom { r0: 3.0, r1: 9.0, col: [217, 203, 180, 200], ms: 180 }), flash: None, sparks: Some(Burst { count: 8, cols: [[107, 114, 128, 255], [217, 203, 180, 255]], dir: None, spread: 140.0, speed: 50.0, gravity: 160.0, size: 2, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "blow",
+      "key": "fists",
+      "look": "Style { delivery: Melee, swing: None, shot: None, hit: Hit { ring: Some(Bloom { r0: 2.0, r1: 7.0, col: [217, 203, 180, 200], ms: 150 }), flash: None, sparks: Some(Burst { count: 5, cols: [[217, 203, 180, 255], [217, 203, 180, 255]], dir: None, spread: 120.0, speed: 50.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "shot",
+      "key": "arrow",
+      "look": "Style { delivery: Shot { speed: 560.0, arc: 6.0 }, swing: None, shot: Some(Arrow { len: 7.0, shaft: [217, 203, 180, 255], head: [156, 163, 175, 255] }), hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 4, cols: [[217, 203, 180, 255], [156, 163, 175, 255]], dir: None, spread: 70.0, speed: 60.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "shot",
+      "key": "bolt",
+      "look": "Style { delivery: Shot { speed: 720.0, arc: 2.0 }, swing: None, shot: Some(Bolt { len: 5.0, shaft: [156, 163, 175, 255], head: [217, 203, 180, 255] }), hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 4, cols: [[217, 203, 180, 255], [156, 163, 175, 255]], dir: None, spread: 70.0, speed: 60.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "shot",
+      "key": "stone",
+      "look": "Style { delivery: Shot { speed: 480.0, arc: 8.0 }, swing: None, shot: Some(Stone { size: 2.0, col: [107, 114, 128, 255], hi: [217, 203, 180, 255] }), hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 4, cols: [[107, 114, 128, 255], [217, 203, 180, 255]], dir: None, spread: 120.0, speed: 40.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "shot",
+      "key": "flask",
+      "look": "Style { delivery: Shot { speed: 420.0, arc: 10.0 }, swing: None, shot: Some(Stone { size: 2.0, col: [217, 203, 180, 255], hi: [156, 163, 175, 255] }), hit: Hit { ring: None, flash: None, sparks: None }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "arcane_orb",
+      "look": "Style { delivery: Shot { speed: 420.0, arc: 0.0 }, swing: None, shot: Some(Orb { r: 2.5, core: [217, 203, 180, 255], glow: [192, 132, 252, 255], tail: 3 }), hit: Hit { ring: None, flash: Some(Bloom { r0: 5.0, r1: 4.0, col: [192, 132, 252, 150], ms: 120 }), sparks: Some(Burst { count: 6, cols: [[192, 132, 252, 255], [217, 203, 180, 255]], dir: None, spread: 360.0, speed: 50.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "bash_ring",
+      "look": "Style { delivery: Melee, swing: None, shot: None, hit: Hit { ring: Some(Bloom { r0: 3.0, r1: 10.0, col: [156, 163, 175, 220], ms: 180 }), flash: None, sparks: Some(Burst { count: 8, cols: [[156, 163, 175, 255], [251, 191, 36, 255]], dir: None, spread: 120.0, speed: 70.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "curse_orb",
+      "look": "Style { delivery: Shot { speed: 360.0, arc: 4.0 }, swing: None, shot: Some(Orb { r: 2.0, core: [192, 132, 252, 255], glow: [192, 132, 252, 255], tail: 2 }), hit: Hit { ring: Some(Bloom { r0: 2.0, r1: 8.0, col: [192, 132, 252, 220], ms: 200 }), flash: None, sparks: None }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "beam",
+      "look": "Style { delivery: Beam, swing: None, shot: None, hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 4, cols: [[192, 132, 252, 255], [217, 203, 180, 255]], dir: None, spread: 360.0, speed: 50.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: Some(Ray { width: 2, core: [217, 203, 180, 255], glow: [192, 132, 252, 255], ms: 160 }), wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "fire_lob",
+      "look": "Style { delivery: Shot { speed: 380.0, arc: 16.0 }, swing: None, shot: Some(Orb { r: 3.0, core: [251, 191, 36, 255], glow: [217, 119, 6, 255], tail: 3 }), hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 10, cols: [[217, 119, 6, 255], [251, 191, 36, 255]], dir: Some(-90.0), spread: 160.0, speed: 70.0, gravity: -20.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: Some(Aim { ring: Bloom { r0: 4.0, r1: 19.2, col: [217, 119, 6, 230], ms: 260 }, flash: Some(Bloom { r0: 10.0, r1: 7.0, col: [217, 119, 6, 140], ms: 160 }) }), on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "frost_lob",
+      "look": "Style { delivery: Shot { speed: 380.0, arc: 16.0 }, swing: None, shot: Some(Orb { r: 3.0, core: [217, 203, 180, 255], glow: [6, 182, 212, 255], tail: 3 }), hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 8, cols: [[6, 182, 212, 255], [217, 203, 180, 255]], dir: Some(-90.0), spread: 160.0, speed: 70.0, gravity: 80.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: Some(Aim { ring: Bloom { r0: 4.0, r1: 19.2, col: [6, 182, 212, 230], ms: 260 }, flash: None }), on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "falling_orb",
+      "look": "Style { delivery: Shot { speed: 600.0, arc: 0.0 }, swing: None, shot: Some(Orb { r: 2.0, core: [217, 203, 180, 255], glow: [251, 191, 36, 255], tail: 2 }), hit: Hit { ring: None, flash: Some(Bloom { r0: 8.0, r1: 6.0, col: [251, 191, 36, 160], ms: 140 }), sparks: Some(Burst { count: 6, cols: [[251, 191, 36, 255], [217, 203, 180, 255]], dir: Some(-90.0), spread: 200.0, speed: 60.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 48.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "arrow_volley",
+      "look": "Style { delivery: Shot { speed: 560.0, arc: 6.0 }, swing: None, shot: Some(Arrow { len: 7.0, shaft: [217, 203, 180, 255], head: [156, 163, 175, 255] }), hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 4, cols: [[217, 203, 180, 255], [156, 163, 175, 255]], dir: None, spread: 70.0, speed: 60.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 5, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "ground_wave",
+      "look": "Style { delivery: Melee, swing: None, shot: None, hit: Hit { ring: None, flash: None, sparks: Some(Burst { count: 5, cols: [[107, 114, 128, 255], [107, 114, 128, 255]], dir: None, spread: 120.0, speed: 50.0, gravity: 160.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: Some(Bloom { r0: 3.0, r1: 12.0, col: [107, 114, 128, 200], ms: 200 }), volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "sweep",
+      "look": "Style { delivery: Melee, swing: Some(Swing { radius: 14.0, from_deg: -150.0, to_deg: 150.0, width: 2, col: [217, 203, 180, 255] }), shot: None, hit: Hit { ring: Some(Bloom { r0: 2.0, r1: 7.0, col: [217, 203, 180, 200], ms: 150 }), flash: None, sparks: Some(Burst { count: 5, cols: [[217, 203, 180, 255], [217, 203, 180, 255]], dir: None, spread: 120.0, speed: 50.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "heavy_blow",
+      "look": "Style { delivery: Melee, swing: Some(Swing { radius: 10.0, from_deg: -40.0, to_deg: 60.0, width: 2, col: [217, 203, 180, 255] }), shot: None, hit: Hit { ring: Some(Bloom { r0: 2.0, r1: 9.0, col: [217, 203, 180, 220], ms: 180 }), flash: None, sparks: Some(Burst { count: 7, cols: [[217, 203, 180, 255], [107, 114, 128, 255]], dir: None, spread: 90.0, speed: 70.0, gravity: 120.0, size: 1, ms: 0, foot: false }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "strike",
+      "key": "reach_bolt",
+      "look": "Style { delivery: Shot { speed: 480.0, arc: 0.0 }, swing: None, shot: Some(Orb { r: 1.5, core: [217, 203, 180, 255], glow: [156, 163, 175, 255], tail: 2 }), hit: Hit { ring: None, flash: Some(Bloom { r0: 4.0, r1: 3.0, col: [217, 203, 180, 120], ms: 100 }), sparks: None }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "support",
+      "key": "heal_motes",
+      "look": "Style { delivery: Cast, swing: None, shot: None, hit: Hit { ring: None, flash: Some(Bloom { r0: 7.0, r1: 5.0, col: [251, 191, 36, 80], ms: 300 }), sparks: Some(Burst { count: 8, cols: [[251, 191, 36, 255], [217, 203, 180, 255]], dir: Some(-90.0), spread: 50.0, speed: 30.0, gravity: -30.0, size: 1, ms: 500, foot: true }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "support",
+      "key": "cleanse_motes",
+      "look": "Style { delivery: Cast, swing: None, shot: None, hit: Hit { ring: None, flash: Some(Bloom { r0: 7.0, r1: 5.0, col: [6, 182, 212, 80], ms: 300 }), sparks: Some(Burst { count: 8, cols: [[6, 182, 212, 255], [217, 203, 180, 255]], dir: Some(-90.0), spread: 50.0, speed: 30.0, gravity: -30.0, size: 1, ms: 500, foot: true }) }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "support",
+      "key": "ward_ring",
+      "look": "Style { delivery: Cast, swing: None, shot: None, hit: Hit { ring: Some(Bloom { r0: 4.0, r1: 12.0, col: [6, 182, 212, 220], ms: 260 }), flash: Some(Bloom { r0: 7.0, r1: 5.0, col: [6, 182, 212, 90], ms: 300 }), sparks: None }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: false }"
+    },
+    {
+      "role": "support",
+      "key": "rally_ring",
+      "look": "Style { delivery: Cast, swing: None, shot: None, hit: Hit { ring: Some(Bloom { r0: 4.0, r1: 20.0, col: [217, 203, 180, 200], ms: 300 }), flash: None, sparks: None }, beam: None, wave: None, volley: 0, drop: 0.0, aim: None, on_actor: true }"
+    }
+  ],
+  "status": [
+    {
+      "key": "star_orbit",
+      "look": "(Head, Loop { prim: Orbit(Orbit { at: (0.0, 0.0), rx: 7.0, ry: 2.5, ms: 900, count: 3, size: 2, cols: [[251, 191, 36, 255], [217, 203, 180, 255]], phase_deg: 0.0, star: true }), dy: 0.0, period: 900 })"
+    },
+    {
+      "key": "crimson_hoop",
+      "look": "(Head, Loop { prim: Ring(Ring { at: (0.0, 0.0), r0: 2.0, r1: 7.0, ms: 700, col: [153, 27, 27, 200], squash: 1.0 }), dy: 0.0, period: 1100 })"
+    },
+    {
+      "key": "rising_embers",
+      "look": "(Body, Loop { prim: Sparks(Sparks { at: (0.0, 0.0), ms: 500, count: 7, dir_deg: -90.0, spread_deg: 70.0, speed: 25.0, gravity: -20.0, size: 2, cols: [[217, 119, 6, 255], [251, 191, 36, 255]] }), dy: 4.0, period: 600 })"
+    },
+    {
+      "key": "toxic_bubbles",
+      "look": "(Body, Loop { prim: Sparks(Sparks { at: (0.0, 0.0), ms: 800, count: 5, dir_deg: -90.0, spread_deg: 50.0, speed: 12.0, gravity: -15.0, size: 2, cols: [[147, 51, 234, 255], [192, 132, 252, 255]] }), dy: 0.0, period: 1000 })"
+    },
+    {
+      "key": "dripping_blood",
+      "look": "(Body, Loop { prim: Sparks(Sparks { at: (0.0, 0.0), ms: 600, count: 4, dir_deg: 90.0, spread_deg: 20.0, speed: 15.0, gravity: 90.0, size: 2, cols: [[225, 29, 72, 255], [153, 27, 27, 255]] }), dy: 0.0, period: 900 })"
+    },
+    {
+      "key": "closing_ring",
+      "look": "(Body, Loop { prim: Ring(Ring { at: (0.0, 0.0), r0: 9.0, r1: 4.0, ms: 900, col: [153, 27, 27, 255], squash: 1.0 }), dy: 0.0, period: 1300 })"
+    },
+    {
+      "key": "parry_arc",
+      "look": "(Body, Loop { prim: Trail(Trail { at: (0.0, 0.0), radius: 9.0, from_deg: -40.0, to_deg: 40.0, ms: 300, width: 1, col: [156, 163, 175, 255], mirror: false, squash: 1.0 }), dy: 0.0, period: 1500 })"
+    },
+    {
+      "key": "iron_orbit",
+      "look": "(Feet, Loop { prim: Orbit(Orbit { at: (0.0, 0.0), rx: 8.0, ry: 3.0, ms: 4000, count: 8, size: 1, cols: [[75, 85, 99, 255], [156, 163, 175, 255]], phase_deg: 0.0, star: false }), dy: 0.0, period: 4000 })"
+    },
+    {
+      "key": "ash_ring",
+      "look": "(Feet, Loop { prim: Ring(Ring { at: (0.0, 0.0), r0: 4.0, r1: 9.0, ms: 1400, col: [107, 114, 128, 255], squash: 1.0 }), dy: 0.0, period: 1400 })"
+    },
+    {
+      "key": "gold_ground",
+      "look": "(Feet, Loop { prim: Flash(Flash { at: (0.0, 0.0), rx: 9.0, ry: 3.0, ms: 1200, col: [251, 191, 36, 160] }), dy: 0.0, period: 1200 })"
+    },
+    {
+      "key": "speed_sparks",
+      "look": "(Feet, Loop { prim: Sparks(Sparks { at: (0.0, 0.0), ms: 220, count: 5, dir_deg: -90.0, spread_deg: 30.0, speed: 70.0, gravity: 0.0, size: 2, cols: [[6, 182, 212, 255], [217, 203, 180, 255]] }), dy: 0.0, period: 600 })"
+    },
+    {
+      "key": "gold_motes",
+      "look": "(Feet, Loop { prim: Sparks(Sparks { at: (0.0, 0.0), ms: 900, count: 4, dir_deg: -90.0, spread_deg: 40.0, speed: 18.0, gravity: -10.0, size: 2, cols: [[251, 191, 36, 255], [217, 203, 180, 255]] }), dy: 0.0, period: 1100 })"
+    },
+    {
+      "key": "ash_tint",
+      "look": "(Tint, Tint { col: [107, 114, 128, 255], lo: 40, hi: 70, period: 1600 })"
+    },
+    {
+      "key": "amber_tint",
+      "look": "(Tint, Tint { col: [217, 119, 6, 255], lo: 30, hi: 70, period: 900 })"
+    },
+    {
+      "key": "cyan_tint",
+      "look": "(Tint, Tint { col: [6, 182, 212, 255], lo: 25, hi: 50, period: 1600 })"
+    },
+    {
+      "key": "steel_tint",
+      "look": "(Tint, Tint { col: [156, 163, 175, 255], lo: 25, hi: 50, period: 1600 })"
+    },
+    {
+      "key": "fade",
+      "look": "(Alpha, Fade)"
+    }
+  ]
+}

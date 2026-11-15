@@ -64,7 +64,7 @@ fn poison_on(u: usize, at: usize) -> impl FnMut(&mut BattleScreen, usize) {
 }
 
 fn burst(e: &aegis_ui::fx::Effect) -> bool {
-    matches!(e.prim, Prim::Ring(r) if r.col == [fx::VIOLET[0], fx::VIOLET[1], fx::VIOLET[2], 200] && r.ms == fx::BURST_MS)
+    matches!(e.prim, Prim::Ring(r) if r.col == [0x93, 0x33, 0xea, 200] && r.ms == fx::BURST_MS)
 }
 
 /// 4 (S4, S5): a status an action puts on bursts at that action's impact, not at its pop, and shows (pending) from

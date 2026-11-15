@@ -9,12 +9,15 @@
 //! a swing up or down turned toward its target, and the impact budget under the live list's cap. Engine-only: Godot
 //! had token tweens in `scripts/ui/combat/fx_presets.gd` (its hit shake is ported here without the bug that kept it
 //! on one side; its miss sidestep smaller). Presentation only: nothing here reads or changes the battle.
-//! STATUSFX1-L (spec STATUSFX1.md sections 3-4): the status looks on the tokens (`STATUS_LOOKS`: looped effects at the
+//! STATUSFX1-L (spec STATUSFX1.md sections 3-4): the status looks on the tokens (`status_looks`: looped effects at the
 //! head, body and feet, tints, stealth's alpha), one per slot cycling (`status_frame`), pending at half alpha, the
 //! apply burst at the impact.
 //! PR5-33 (LAYER-UP-DATA): no table here names a skill, weapon family or status id: the data picks the looks by key (a
-//! skill's and a weapon family's `fx`, a family's `fx_far`, a status row's `fx`; `emberwake_data::looks`) from the
-//! libraries below (`strike_look`, `support_look`, `blow_look`, `shot_look`, `STATUS_LOOKS`).
+//! skill's and a weapon family's `fx`, a family's `fx_far`, a status row's `fx`; `emberwake_data::looks`).
+//! PR5-53 (VFX-DATA1): every look key's parameters are the data's effect presets (kind `fx_presets`,
+//! `emberwake_data::looks::FxPreset`): an action's look from the catalog the `Act` carries (`style_of`), the status
+//! looks from the table `install_status_looks` sets (`status_table`). No per-look table is left here: a key without a
+//! row of its role draws that role's neutral look (`neutral`, `NEUTRAL_STATUS`), and the content check warns of it.
 
 use crate::stage::{Geom, View};
 use crate::tuning::Tuning;
@@ -22,7 +25,8 @@ use aegis_ui::canvas::Rgba;
 use aegis_ui::fx::{Beam, Effect, Flash, Layer, Look, Looped, Orbit, Prim, Projectile, Pt, Ring, Shake, ShakeTable, Sparks, Trail, MAX_LIVE};
 use emberwake_battle::event::EventKind;
 use emberwake_battle::grid::V2;
-use emberwake_data::looks::FamilyLook;
+use emberwake_data::looks::{FamilyLook, FxDelivery, FxPreset, FxRole, FxShotLook, FxSlot};
+use indexmap::IndexMap;
 
 /// How an action's effect reaches its target (4.3; its timing, 4.2 step 2).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45,7 +49,7 @@ pub enum Delivery {
 /// skill's look key (PR5-33: its `fx`, "" none), the look of the actor's main weapon family (its item family row's,
 /// `family_look`; None: no row), whether that weapon is ranged (`Equipment::is_ranged_weapon`) or deals magic damage,
 /// and the grid distance to the target or aim; for an item, whether it is used on its user and whether it deals
-/// damage (a damage consumable).
+/// damage (a damage consumable). PR5-53: the catalog's effect presets the looks read (None: every look neutral).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Act<'a> {
     pub kind: &'a str,
@@ -56,26 +60,31 @@ pub struct Act<'a> {
     pub dist: i32,
     pub on_self: bool,
     pub harms: bool,
+    pub presets: Option<&'a Presets>,
 }
+
+/// PR5-53: the effect presets by look key (`Catalog::fx_presets`).
+pub type Presets = IndexMap<String, FxPreset>;
 
 impl<'a> Act<'a> {
     /// An action of `kind` with the skill look key `fx` ("" = none) by a wielder of a weapon whose family looks
     /// `family` (`ranged` when it is a ranged weapon) `dist` cells from its aim; not magic, not on the actor, not
     /// harmful (the flags `popped` reads from the command).
     pub fn new(kind: &'a str, fx: &'a str, family: Option<&'a FamilyLook>, ranged: bool, dist: i32) -> Self {
-        Act { kind, fx, family, ranged, magic: false, dist, on_self: false, harms: false }
+        Act { kind, fx, family, ranged, magic: false, dist, on_self: false, harms: false, presets: None }
     }
 
     /// PR4-2 (AUDIT-10): the `Act` of popped command `cmd` by unit `unit` with skill row `skill` (None = none) and its
     /// main weapon `weapon`, `dist` cells from its aim, on catalog `cat` (`BattleScreen::popped_impact` and the FX
     /// tests read it): the kind is `act_kind`'s, the look key the skill's `fx`, the family look and range the
     /// weapon's (`family_look`), magic a `magic` weapon damage type, and an item use lands on the actor when it
-    /// targets itself and harms when the item deals damage.
+    /// targets itself and harms when the item deals damage; the looks read the catalog's effect presets (PR5-53).
     pub fn popped(cmd: &emberwake_battle::command::CmdKind, unit: usize, skill: Option<&'a emberwake_data::SkillDef>, weapon: Option<&'a emberwake_rules::gear::Equipment>, dist: i32, cat: &'a emberwake_data::Catalog) -> Self {
         let family = family_look(cat, weapon.map_or("", |w| w.weapon_type()));
         let ranged = weapon.is_some_and(|w| w.is_ranged_weapon());
         let mut act = Act::new(act_kind(cmd), skill.map_or("", |s| s.fx.as_str()), family, ranged, dist);
         act.magic = weapon.is_some_and(|w| aegis_core::json::s(&w.item.raw, "damage_type") == "magic");
+        act.presets = Some(&cat.fx_presets);
         if let emberwake_battle::command::CmdKind::Item { target, item, .. } = cmd {
             (act.on_self, act.harms) = (*target == unit, item.damage > 0);
         }
@@ -281,15 +290,12 @@ pub fn unit_dir(a: Pt, b: Pt) -> Pt {
 
 // ---- The looks (FX1 4.3, 4.4.1-4.4.2 and the L1 rows of 4.4.3; FX1_TASKS section 8) ------------------------------
 
-/// The art bible's effect hues (FX1_TASKS 8): Polished Steel, Linen, Ash, Amber, Candle Gold, Resonant Orchid (FQ8)
-/// and the crit hue Arterial Red.
+/// The art bible's effect hues (FX1_TASKS 8) the code's own effects use: Polished Steel (a hit for 0, the neutral
+/// looks), Linen (the neutral looks, the fall dust), Ash (the fall dust) and the crit hue Arterial Red. PR5-53: every
+/// other hue is the data's (the effect presets' colours).
 pub const STEEL: Rgba = [0x9c, 0xa3, 0xaf, 255];
 pub const LINEN: Rgba = [0xd9, 0xcb, 0xb4, 255];
 pub const ASH: Rgba = [0x6b, 0x72, 0x80, 255];
-pub const AMBER: Rgba = [0xd9, 0x77, 0x06, 255];
-pub const GOLD: Rgba = [0xfb, 0xbf, 0x24, 255];
-pub const ORCHID: Rgba = [0xc0, 0x84, 0xfc, 255];
-pub const CYAN: Rgba = [0x06, 0xb6, 0xd4, 255];
 pub const CRIT: Rgba = [0xe1, 0x1d, 0x48, 255];
 
 const fn alpha(c: Rgba, a: u8) -> Rgba {
@@ -384,258 +390,140 @@ const fn bloom(r0: f32, r1: f32, col: Rgba, a: u8, ms: u32) -> Option<Bloom> {
     Some(Bloom { r0, r1, col: alpha(col, a), ms })
 }
 
-const fn swing(radius: f32, from_deg: f32, to_deg: f32, width: u8, col: Rgba) -> Option<Swing> {
-    Some(Swing { radius, from_deg, to_deg, width, col })
-}
-
-const fn blow(swing: Option<Swing>, ring: Option<Bloom>, sparks: Burst) -> Style {
-    Style { delivery: Delivery::Melee, swing, hit: Hit { ring, flash: None, sparks: Some(sparks) }, ..NONE }
-}
-
-/// 4.4.1 (the axe's row): a wide steel swing, steel and amber sparks.
-pub const CLEAVE: Style = blow(swing(13.0, -70.0, 60.0, 2, STEEL), None, burst(7, [STEEL, AMBER], 90.0, 70.0));
-/// 4.4.1 (the dagger's row): a short thin swing, linen and steel sparks.
-pub const STAB: Style = blow(swing(9.0, -30.0, 30.0, 1, STEEL), None, burst(4, [LINEN, STEEL], 60.0, 60.0));
-/// 4.4.1 (the mace's, hammer's and staff's row): a heavy ash swing, a ring and heavy ash sparks.
-pub const BLUDGEON: Style = blow(
-    swing(12.0, -80.0, 40.0, 3, ASH),
-    Some(Bloom { r0: 3.0, r1: 9.0, col: alpha(LINEN, 200), ms: 180 }),
-    Burst { gravity: 160.0, size: 2, ..burst(8, [ASH, LINEN], 140.0, 50.0) },
-);
-/// 4.4.1 (the fist's row, and no weapon): no trail, a small ring and linen sparks.
-pub const FISTS: Style = blow(None, Some(Bloom { r0: 2.0, r1: 7.0, col: alpha(LINEN, 200), ms: 150 }), burst(5, [LINEN, LINEN], 120.0, 50.0));
-/// 4.4.1 (the sword's row, and any blow without a look of its own).
-pub const SLASH: Style = blow(swing(13.0, -60.0, 50.0, 2, STEEL), None, burst(6, [STEEL, LINEN], 90.0, 70.0));
-
-/// PR5-33: 4.4.1's blows by look key (a melee weapon family's `fx`).
-pub const BLOWS: [(&str, Style); 5] = [("slash", SLASH), ("cleave", CLEAVE), ("stab", STAB), ("bludgeon", BLUDGEON), ("fists", FISTS)];
-
-/// The blow of look key `key` (`BLOWS`; an unknown key or "" is the slash).
-pub fn blow_look(key: &str) -> Style {
-    keyed(&BLOWS, key).unwrap_or(SLASH)
-}
-
-/// The look of `key` in a look table (None: not there).
-fn keyed(table: &[(&str, Style)], key: &str) -> Option<Style> {
-    table.iter().find(|(k, _)| *k == key).map(|(_, s)| *s)
-}
-
-const fn shot(speed: f32, arc: f32, look: Look, sparks: Burst) -> Style {
-    Style { delivery: Delivery::Shot { speed, arc }, shot: Some(look), hit: Hit { ring: None, flash: None, sparks: Some(sparks) }, ..NONE }
-}
-
-const BOW_SPARKS: Burst = burst(4, [LINEN, STEEL], 70.0, 60.0);
-/// 4.4.2 (the bow's row, and any shot without a look of its own): an arrow.
-pub const ARROW: Style = shot(560.0, 6.0, Look::Arrow { len: 7.0, shaft: LINEN, head: STEEL }, BOW_SPARKS);
-/// 4.4.2 (the crossbow's row): a fast flat bolt.
-pub const BOLT: Style = shot(720.0, 2.0, Look::Bolt { len: 5.0, shaft: STEEL, head: LINEN }, BOW_SPARKS);
-/// 4.4.2 (the sling's row): a slow lobbed stone.
-pub const STONE: Style = shot(480.0, 8.0, Look::Stone { size: 2.0, col: ASH, hi: LINEN }, burst(4, [ASH, LINEN], 120.0, 40.0));
-
-/// PR5-33: 4.4.2's shots by look key (a ranged weapon family's `fx`).
-pub const SHOTS: [(&str, Style); 3] = [("arrow", ARROW), ("bolt", BOLT), ("stone", STONE)];
-
-/// The shot of look key `key` (`SHOTS`; an unknown key or "" is the arrow).
-pub fn shot_look(key: &str) -> Style {
-    keyed(&SHOTS, key).unwrap_or(ARROW)
-}
-
-/// 4.4.2's last row: the generic reach bolt (a strike at 2 or more cells with no other look).
-pub const REACH_BOLT: Style = Style {
-    delivery: Delivery::Shot { speed: 480.0, arc: 0.0 },
-    shot: Some(Look::Orb { r: 1.5, core: LINEN, glow: STEEL, tail: 2 }),
-    hit: Hit { ring: None, flash: bloom(4.0, 3.0, LINEN, 120, 100), sparks: None },
-    ..NONE
-};
-
-/// 4.4.3 `arcane_bolt` (and 4.3 rule 2): an Orchid orb, a flash and sparks all round.
-pub const ARCANE_BOLT: Style = Style {
-    delivery: Delivery::Shot { speed: 420.0, arc: 0.0 },
-    shot: Some(Look::Orb { r: 2.5, core: LINEN, glow: ORCHID, tail: 3 }),
-    hit: Hit { ring: None, flash: bloom(5.0, 4.0, ORCHID, 150, 120), sparks: Some(burst(6, [ORCHID, LINEN], 360.0, 50.0)) },
-    ..NONE
-};
-
-/// 4.4.3 `shield_bash`: no trail; a Steel ring and Steel and Gold sparks.
-pub const SHIELD_BASH: Style = Style {
-    delivery: Delivery::Melee,
-    hit: Hit { ring: bloom(3.0, 10.0, STEEL, 220, 180), flash: None, sparks: Some(burst(8, [STEEL, GOLD], 120.0, 70.0)) },
-    ..NONE
-};
-
-/// 4.4.3 `hex`: an Orchid orb on a small arc, an Orchid ring.
-pub const HEX: Style = Style {
-    delivery: Delivery::Shot { speed: 360.0, arc: 4.0 },
-    shot: Some(Look::Orb { r: 2.0, core: ORCHID, glow: ORCHID, tail: 2 }),
-    hit: Hit { ring: bloom(2.0, 8.0, ORCHID, 220, 200), flash: None, sparks: None },
-    ..NONE
-};
-
-/// 4.4.3 `arc_lance` (LINE): a beam to the line's last cell, Orchid sparks on each struck unit (all round, as the
-/// arcane bolt's: the row gives no spread or speed).
-pub const ARC_LANCE: Style = Style {
-    delivery: Delivery::Beam,
-    beam: Some(Ray { width: 2, core: LINEN, glow: ORCHID, ms: 160 }),
-    hit: Hit { ring: None, flash: None, sparks: Some(burst(4, [ORCHID, LINEN], 360.0, 50.0)) },
-    ..NONE
-};
-
-/// The BURST aim (4.4.3 `firebomb`): a ring of 4 px growing to 32 x 0.6 px per cell of the area's radius.
-pub const AIM_RING_PX_PER_CELL: f32 = 32.0 * 0.6;
-
-/// 4.4.3 `firebomb`, `inferno` (BURST): a gold and amber orb lobbed to the aim; an amber ring and flash on the aim;
-/// rising embers on each struck unit.
-pub const FIREBOMB: Style = Style {
-    delivery: Delivery::Shot { speed: 380.0, arc: 16.0 },
-    shot: Some(Look::Orb { r: 3.0, core: GOLD, glow: AMBER, tail: 3 }),
-    hit: Hit { ring: None, flash: None, sparks: Some(Burst { dir: Some(-90.0), gravity: -20.0, ..burst(10, [AMBER, GOLD], 160.0, 70.0) }) },
-    aim: Some(Aim { ring: Bloom { r0: 4.0, r1: AIM_RING_PX_PER_CELL, col: alpha(AMBER, 230), ms: 260 }, flash: bloom(10.0, 7.0, AMBER, 140, 160) }),
-    ..NONE
-};
-
-/// 4.4.3 `glacial_burst` (BURST): as the firebomb in Cyan (no flash), heavier sparks.
-pub const GLACIAL_BURST: Style = Style {
-    delivery: Delivery::Shot { speed: 380.0, arc: 16.0 },
-    shot: Some(Look::Orb { r: 3.0, core: LINEN, glow: CYAN, tail: 3 }),
-    hit: Hit { ring: None, flash: None, sparks: Some(Burst { dir: Some(-90.0), gravity: 80.0, ..burst(8, [CYAN, LINEN], 160.0, 70.0) }) },
-    aim: Some(Aim { ring: Bloom { r0: 4.0, r1: AIM_RING_PX_PER_CELL, col: alpha(CYAN, 230), ms: 260 }, flash: None }),
-    ..NONE
-};
-
-/// How far above the target's chest the `smite` orb starts.
-pub const SMITE_DROP_PX: f32 = 48.0;
-
-/// 4.4.3 `smite`, `judgement`: a gold orb falling onto the target; a gold flash and sparks upward (the row gives no
-/// speed or tail: the bow's 60 and 2).
-pub const SMITE: Style = Style {
-    delivery: Delivery::Shot { speed: 600.0, arc: 0.0 },
-    shot: Some(Look::Orb { r: 2.0, core: LINEN, glow: GOLD, tail: 2 }),
-    drop: SMITE_DROP_PX,
-    hit: Hit { ring: None, flash: bloom(8.0, 6.0, GOLD, 160, 140), sparks: Some(Burst { dir: Some(-90.0), ..burst(6, [GOLD, LINEN], 200.0, 60.0) }) },
-    ..NONE
-};
-
 /// A volley's arrows launch this far apart (clock ms).
 pub const VOLLEY_GAP_MS: u64 = 30;
 /// A shockwave's rings start this far apart, cell by cell from the actor out (clock ms).
 pub const WAVE_GAP_MS: u64 = 40;
 
-/// 4.4.3 `shockwave` (LINE): Ash rings along the line (ground layer; the row gives no life: 200 ms) at the clip's
-/// impact frame, Ash sparks on each struck unit (the row gives no spread or speed: the fist's 120 and 50).
-pub const SHOCKWAVE: Style = Style {
-    delivery: Delivery::Melee,
-    wave: bloom(3.0, 12.0, ASH, 200, 200),
-    hit: Hit { ring: None, flash: None, sparks: Some(Burst { gravity: 160.0, ..burst(5, [ASH, ASH], 120.0, 50.0) }) },
+// ---- PR5-53 (VFX-DATA1): the looks from the data's effect presets ---------------------------------------------------
+
+/// The look keys the code picks by itself (FX1 4.3-4.4): the blow, shot and support of an action without a look key of
+/// its own (4.4.1's sword row, 4.4.2's bow row, 4.4.4's mend motes), the strike at 2 or more cells with no other look
+/// (4.4.2's reach bolt), magic damage at range (the arcane bolt), a damage item's impact (the firebomb) and the flask an
+/// item flies in. Their parameters are the data's (kind `fx_presets`), like every other key's.
+pub const DEFAULT_BLOW: &str = "slash";
+pub const DEFAULT_SHOT: &str = "arrow";
+pub const DEFAULT_SUPPORT: &str = "heal_motes";
+pub const REACH_KEY: &str = "reach_bolt";
+pub const MAGIC_KEY: &str = "arcane_orb";
+pub const BOMB_KEY: &str = "fire_lob";
+pub const FLASK_KEY: &str = "flask";
+
+/// PR5-53 pass 2: the neutral look of each role, drawn where the data has no preset row of that role for a key (the
+/// content check warns of such a key, `fx_warnings`): a blow a few Linen and Steel sparks (no trail), a shot or strike
+/// a small Linen orb at 480 px/s with a few sparks, a support a soft Linen flash.
+pub const NEUTRAL_BLOW: Style = Style { delivery: Delivery::Melee, hit: Hit { ring: None, flash: None, sparks: Some(burst(4, [LINEN, STEEL], 90.0, 60.0)) }, ..NONE };
+pub const NEUTRAL_SHOT: Style = Style {
+    delivery: Delivery::Shot { speed: 480.0, arc: 0.0 },
+    shot: Some(Look::Orb { r: 1.5, core: LINEN, glow: STEEL, tail: 2 }),
+    hit: Hit { ring: None, flash: None, sparks: Some(burst(3, [LINEN, STEEL], 90.0, 50.0)) },
     ..NONE
 };
+pub const NEUTRAL_STRIKE: Style = NEUTRAL_SHOT;
+pub const NEUTRAL_SUPPORT: Style = Style { delivery: Delivery::Cast, hit: Hit { ring: None, flash: bloom(6.0, 4.0, LINEN, 90, 250), sparks: None }, ..NONE };
 
-/// 4.4.3 `haymaker`, `crushing_blow`: a short Linen swing, a ring and Linen and Ash sparks (the sword's spread and
-/// speed).
-pub const HAYMAKER: Style = Style {
-    delivery: Delivery::Melee,
-    swing: swing(10.0, -40.0, 60.0, 2, LINEN),
-    hit: Hit { ring: bloom(2.0, 9.0, LINEN, 220, 180), flash: None, sparks: Some(burst(7, [LINEN, ASH], 90.0, 70.0)) },
-    ..NONE
-};
-
-/// 4.4.4: the heal motes (`mend` and any support without its own row) in `col` and Linen: sparks rising from the
-/// target's foot point for 500 ms and a soft flash at its chest.
-const fn motes(col: Rgba) -> Style {
-    Style {
-        delivery: Delivery::Cast,
-        hit: Hit {
-            ring: None,
-            flash: bloom(7.0, 5.0, col, 80, 300),
-            sparks: Some(Burst { count: 8, cols: [col, LINEN], dir: Some(-90.0), spread: 50.0, speed: 30.0, gravity: -30.0, size: 1, ms: 500, foot: true }),
-        },
-        ..NONE
+/// The neutral look of role `role` (status looks: `NEUTRAL_STATUS`; here none).
+pub fn neutral(role: FxRole) -> Style {
+    match role {
+        FxRole::Blow => NEUTRAL_BLOW,
+        FxRole::Shot => NEUTRAL_SHOT,
+        FxRole::Strike => NEUTRAL_STRIKE,
+        FxRole::Support => NEUTRAL_SUPPORT,
+        FxRole::Status => NONE,
     }
 }
 
-pub const MEND: Style = motes(GOLD);
-pub const PURIFY: Style = motes(CYAN);
+/// The look of key `key` in role `role`: its preset row's (`style_of`; None: no row, or a row of another role).
+pub fn look_in(presets: Option<&Presets>, role: FxRole, key: &str) -> Option<Style> {
+    presets.and_then(|p| p.get(key)).filter(|p| p.role == role).map(style_of)
+}
 
-/// 4.4.4 `aegis`: a Cyan ring and flash at the target's chest (the row gives the flash no life: the motes' 300 ms).
-pub const AEGIS: Style = Style { delivery: Delivery::Cast, hit: Hit { ring: bloom(4.0, 12.0, CYAN, 220, 260), flash: bloom(7.0, 5.0, CYAN, 90, 300), sparks: None }, ..NONE };
+/// The look of key `key` in role `role` ("" none: the code's `default` key), its role's neutral look without a row.
+fn look_or(presets: Option<&Presets>, role: FxRole, key: &str, default: &str) -> Style {
+    let key = if key.is_empty() { default } else { key };
+    look_in(presets, role, key).unwrap_or(neutral(role))
+}
 
-/// 4.4.4 `rally`, `taunt_shout`: a wide Linen ring at the actor's chest.
-pub const RALLY: Style = Style { delivery: Delivery::Cast, hit: Hit { ring: bloom(4.0, 20.0, LINEN, 200, 300), flash: None, sparks: None }, on_actor: true, ..NONE };
-
-/// 4.4.4: the flask an item flies in when used on another unit.
-pub const FLASK: Look = Look::Stone { size: 2.0, col: LINEN, hi: STEEL };
-
-/// 4.4.4, an item: a damage consumable the firebomb's impact on its target, else the mend motes; thrown in a flask
-/// (420 px/s, arc 10) when used on another unit, cast at once on its user.
-pub fn item_style(on_self: bool, harms: bool) -> Style {
-    let case = if harms { Style { delivery: Delivery::Cast, shot: None, ..FIREBOMB } } else { MEND };
+/// 4.4.4, an item: a damage consumable the firebomb's impact on its target (look key `BOMB_KEY`'s strike), else the
+/// mend motes (`DEFAULT_SUPPORT`'s support); thrown in a flask (`FLASK_KEY`'s shot: its delivery and projectile) when
+/// used on another unit, cast at once on its user. PR5-53: each from effect presets `presets` (a missing row: its
+/// role's neutral look).
+pub fn item_style_in(presets: Option<&Presets>, on_self: bool, harms: bool) -> Style {
+    let case = if harms { Style { delivery: Delivery::Cast, shot: None, ..look_or(presets, FxRole::Strike, BOMB_KEY, BOMB_KEY) } } else { look_or(presets, FxRole::Support, "", DEFAULT_SUPPORT) };
     if on_self {
         case
     } else {
-        Style { delivery: Delivery::Shot { speed: 420.0, arc: 10.0 }, shot: Some(FLASK), ..case }
+        let flask = look_or(presets, FxRole::Shot, FLASK_KEY, FLASK_KEY);
+        Style { delivery: flask.delivery, shot: flask.shot, ..case }
     }
 }
 
-/// 4.4.3 (`volley`): one bow arrow per area cell, at most 5.
-pub const ARROW_VOLLEY: Style = Style { volley: 5, ..ARROW };
-
-/// 4.4.3 (`sweep_kick`, `cyclone_kick`): a wide Linen sweep at the actor with the fists' impact.
-pub const SWEEP: Style = Style { swing: swing(14.0, -150.0, 150.0, 2, LINEN), ..FISTS };
-
-/// PR5-33: 4.4.3's skill rows by look key (a skill's `fx`, a weapon family's `fx_far`).
-pub const STRIKES: [(&str, Style); 11] = [
-    ("arcane_orb", ARCANE_BOLT),
-    ("bash_ring", SHIELD_BASH),
-    ("curse_orb", HEX),
-    ("beam", ARC_LANCE),
-    ("fire_lob", FIREBOMB),
-    ("frost_lob", GLACIAL_BURST),
-    ("falling_orb", SMITE),
-    ("arrow_volley", ARROW_VOLLEY),
-    ("ground_wave", SHOCKWAVE),
-    ("sweep", SWEEP),
-    ("heavy_blow", HAYMAKER),
-];
-
-/// The skill row of look key `key` (`STRIKES`; None: no row, as the dash skills, which take their family's blow).
-pub fn strike_look(key: &str) -> Option<Style> {
-    keyed(&STRIKES, key)
-}
-
-/// PR5-33: 4.4.4's support looks by look key (a support skill's `fx`).
-pub const SUPPORTS: [(&str, Style); 4] = [("heal_motes", MEND), ("cleanse_motes", PURIFY), ("ward_ring", AEGIS), ("rally_ring", RALLY)];
-
-/// The support look of look key `key` (`SUPPORTS`; an unknown key or "" is the mend motes).
-pub fn support_look(key: &str) -> Style {
-    keyed(&SUPPORTS, key).unwrap_or(MEND)
+/// The action look of preset row `p` (any role but status): its delivery (a shot at its speed and arc), the trail as
+/// the swing (the swing's length stays the tuning's `trail_ms`), the projectile, the ring, flash and sparks on each unit
+/// it lands on, the beam, the wave, the volley, the drop, the aim's ring and flash and whether it plays on the actor.
+pub fn style_of(p: &FxPreset) -> Style {
+    let ring = |r: &emberwake_data::looks::FxRing| Bloom { r0: r.r0, r1: r.r1, col: r.color, ms: r.ms };
+    let flash = |f: &emberwake_data::looks::FxFlash| Bloom { r0: f.rx, r1: f.ry, col: f.color, ms: f.ms };
+    Style {
+        delivery: match p.delivery {
+            FxDelivery::None => Delivery::None,
+            FxDelivery::Melee => Delivery::Melee,
+            FxDelivery::Shot => Delivery::Shot { speed: p.speed, arc: p.arc },
+            FxDelivery::Beam => Delivery::Beam,
+            FxDelivery::Cast => Delivery::Cast,
+        },
+        swing: p.trail.map(|t| Swing { radius: t.radius, from_deg: t.from, to_deg: t.to, width: t.width, col: t.color }),
+        shot: p.shot.map(|s| match s.look {
+            FxShotLook::Arrow => Look::Arrow { len: s.size, shaft: s.color, head: s.color2 },
+            FxShotLook::Bolt => Look::Bolt { len: s.size, shaft: s.color, head: s.color2 },
+            FxShotLook::Stone => Look::Stone { size: s.size, col: s.color, hi: s.color2 },
+            FxShotLook::Orb => Look::Orb { r: s.size, core: s.color, glow: s.color2, tail: s.tail },
+        }),
+        hit: Hit {
+            ring: p.ring.as_ref().map(ring),
+            flash: p.flash.as_ref().map(flash),
+            sparks: p.sparks.map(|b| Burst { count: b.count, cols: b.colors, dir: b.dir, spread: b.spread, speed: b.speed, gravity: b.gravity, size: b.size, ms: b.ms, foot: b.foot }),
+        },
+        beam: p.beam.map(|b| Ray { width: b.width, core: b.core, glow: b.glow, ms: b.ms }),
+        wave: p.wave.as_ref().map(ring),
+        volley: p.volley,
+        drop: p.drop,
+        aim: p.aim_ring.as_ref().map(|r| Aim { ring: ring(r), flash: p.aim_flash.as_ref().map(flash) }),
+        on_actor: p.on_actor,
+    }
 }
 
 /// 4.3, first match: the skill's strike look (4.4.3), a strike at 2 or more cells with the family's look at range or
 /// magic damage (the arcane bolt), a ranged weapon's shot, any other strike at 2 or more cells (the reach bolt), an
 /// adjacent strike by the family's blow; support and items by 4.4.4; anything else has no effect.
+/// PR5-53: each look is the `Act`'s effect presets' (`look_in`); a skill's or family's strike key without a strike row
+/// goes on down the list (as a dash skill's, which takes its family's blow), any other key without a row of its role
+/// draws that role's neutral look (`neutral`), and without presets every look is neutral.
 pub fn style(a: Act) -> Style {
+    let p = a.presets;
     let hits = a.kind == "attack" || a.kind == "area";
-    if let Some(s) = strike_look(a.fx) {
+    if let Some(s) = look_in(p, FxRole::Strike, a.fx) {
         return s;
     }
     let fx = a.family.map_or("", |f| f.fx.as_str());
     if hits && a.dist >= 2 {
-        if let Some(s) = a.family.and_then(|f| strike_look(&f.fx_far)) {
+        if let Some(s) = a.family.and_then(|f| look_in(p, FxRole::Strike, &f.fx_far)) {
             return s;
         }
         if a.magic {
-            return ARCANE_BOLT;
+            return look_or(p, FxRole::Strike, MAGIC_KEY, MAGIC_KEY);
         }
     }
     if hits && a.ranged {
-        return shot_look(fx);
+        return look_or(p, FxRole::Shot, fx, DEFAULT_SHOT);
     }
     if hits && a.dist >= 2 {
-        return REACH_BOLT;
+        return look_or(p, FxRole::Strike, REACH_KEY, REACH_KEY);
     }
     match a.kind {
-        "attack" | "area" => blow_look(fx),
-        "support" => support_look(a.fx),
-        "item" => item_style(a.on_self, a.harms),
+        "attack" | "area" => look_or(p, FxRole::Blow, fx, DEFAULT_BLOW),
+        "support" => look_or(p, FxRole::Support, a.fx, DEFAULT_SUPPORT),
+        "item" => item_style_in(p, a.on_self, a.harms),
         _ => NONE,
     }
 }
@@ -928,12 +816,6 @@ pub fn strongest<'a>(presets: impl IntoIterator<Item = &'a str>, table: &ShakeTa
 
 // ---- Status looks (STATUSFX1-L, spec STATUSFX1.md sections 3-4) ---------------------------------------------------
 
-/// The status hues not above (art bible): Arterial (the crit hue), Crimson, Iron and Blight Violet (SQ1).
-pub const ARTERIAL: Rgba = CRIT;
-pub const CRIMSON: Rgba = [0x99, 0x1b, 0x1b, 255];
-pub const IRON: Rgba = [0x4b, 0x55, 0x63, 255];
-pub const VIOLET: Rgba = [0x93, 0x33, 0xea, 255];
-
 /// Where a status look sits on a token (S2: one look per slot and stealth's alpha).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
@@ -974,81 +856,111 @@ pub const BURST_GAP_MS: u64 = 40;
 
 const O: Pt = (0.0, 0.0);
 
-const fn on(key: &'static str, slot: Slot, prim: Prim, dy: f32, period: u64) -> StatusLook {
-    StatusLook { key, slot, shape: Shape::Loop { prim, dy, period } }
+/// PR5-53 pass 2: the neutral status look, drawn for a status whose look key (its status row's `fx`, not "") has no
+/// status preset row (the content check warns of such a key, `fx_warnings`): a faint Linen ring at the body, the key
+/// "" (no row's).
+pub const NEUTRAL_STATUS: StatusLook =
+    StatusLook { key: "", slot: Slot::Body, shape: Shape::Loop { prim: Prim::Ring(Ring { at: O, r0: 3.0, r1: 8.0, ms: 900, col: alpha(LINEN, 160), squash: 1.0 }), dy: 0.0, period: 1200 } };
+
+/// PR5-53 (VFX-DATA1): the status look table the tokens draw (section 3's looks, in the order a slot cycles in, S2): the
+/// data's (`status_table`) once `install_status_looks` set it, empty before. Kept global (not threaded through the
+/// token and board calls): every status look reader (`status_look`, `marks_of`, `status_seed`) is a free function the
+/// board, the tokens and the playback call without the catalog at hand.
+static STATUS_TABLE: std::sync::RwLock<&'static [StatusLook]> = std::sync::RwLock::new(&[]);
+
+/// The status look table in use (its order is the order a slot cycles in and `marks_of` lists).
+pub fn status_looks() -> &'static [StatusLook] {
+    *STATUS_TABLE.read().unwrap_or_else(|e| e.into_inner())
 }
 
-const fn drift(count: u8, dir_deg: f32, spread_deg: f32, speed: f32, gravity: f32, ms: u32, cols: [Rgba; 2]) -> Prim {
-    Prim::Sparks(Sparks { at: O, ms, count, dir_deg, spread_deg, speed, gravity, size: 2, cols })
+/// PR5-53: the status look table of effect presets `presets`: their status rows in file order (`status_shape`; a row
+/// that draws nothing is left out).
+pub fn status_table(presets: &Presets) -> Vec<(String, Slot, Shape)> {
+    presets.values().filter(|p| p.role == FxRole::Status).filter_map(|p| status_shape(p).map(|(slot, shape)| (p.id.clone(), slot, shape))).collect()
 }
 
-const fn hoop(r0: f32, r1: f32, a: u8, ms: u32, col: Rgba) -> Prim {
-    Prim::Ring(Ring { at: O, r0, r1, ms, col: alpha(col, a), squash: 1.0 })
+/// Sets the status look table to effect presets `presets`' (`status_table`; the battle screen calls it with its game's
+/// catalog). The same table again changes nothing (a key the table in use holds keeps its string).
+pub fn install_status_looks(presets: &Presets) {
+    let rows = status_table(presets);
+    let same = |cur: &[StatusLook]| cur.len() == rows.len() && cur.iter().zip(&rows).all(|(l, (k, slot, shape))| l.key == k && l.slot == *slot && l.shape == *shape);
+    let mut table = STATUS_TABLE.write().unwrap_or_else(|e| e.into_inner());
+    if same(*table) {
+        return;
+    }
+    let cur: &'static [StatusLook] = *table;
+    let key = |k: String| -> &'static str { cur.iter().find(|l| l.key == k).map_or_else(|| &*Box::leak(k.into_boxed_str()), |l| l.key) };
+    let looks: Vec<StatusLook> = rows.into_iter().map(|(k, slot, shape)| StatusLook { key: key(k), slot, shape }).collect();
+    *table = Box::leak(looks.into_boxed_slice());
 }
 
-const fn tint(key: &'static str, col: Rgba, lo: u8, hi: u8, period: u64) -> StatusLook {
-    StatusLook { key, slot: Slot::Tint, shape: Shape::Tint { col, lo, hi, period } }
+/// The slot and shape of status preset `p` (None: no slot, or a loop or tint slot without its shape): a head, body or
+/// feet loop of its orbit, ring, flash, sparks or trail (the first it has, in that order) lowered `dy` every `period`;
+/// a tint; the alpha slot's fade.
+pub fn status_shape(p: &FxPreset) -> Option<(Slot, Shape)> {
+    let slot = match p.slot {
+        FxSlot::None => return None,
+        FxSlot::Head => Slot::Head,
+        FxSlot::Body => Slot::Body,
+        FxSlot::Feet => Slot::Feet,
+        FxSlot::Tint => Slot::Tint,
+        FxSlot::Alpha => Slot::Alpha,
+    };
+    let period = p.period as u64;
+    let shape = match slot {
+        Slot::Tint => p.tint.map(|t| Shape::Tint { col: t.color, lo: t.lo, hi: t.hi, period })?,
+        Slot::Alpha => Shape::Fade,
+        _ => Shape::Loop { prim: loop_prim(p)?, dy: p.dy, period },
+    };
+    Some((slot, shape))
 }
 
-/// Section 3's table in its order (the order a slot cycles in, S2), by look key (PR5-33: the kit status table's `fx`
-/// picks a row; the comment after each row is the status section 3 drew it for); `stagger` has none (WINDUP1's `dazed`
-/// loop). As built (user 2026-10-29, the review board): the drifting sparks are 2 px and about twice as many, slow's
-/// and expose's rings at full alpha, steadfast's flash at 160. S1.2-S4: `guard` (a multi-round guard's later rounds) a
-/// steel tint, a placeholder until the board picks its look.
-pub const STATUS_LOOKS: [StatusLook; 17] = [
-    // stun
-    on("star_orbit", Slot::Head, Prim::Orbit(Orbit { at: O, rx: 7.0, ry: 2.5, ms: 900, count: 3, size: 2, cols: [GOLD, LINEN], phase_deg: 0.0, star: true }), 0.0, 900),
-    // taunt
-    on("crimson_hoop", Slot::Head, hoop(2.0, 7.0, 200, 700, CRIMSON), 0.0, 1100),
-    // burn
-    on("rising_embers", Slot::Body, drift(7, -90.0, 70.0, 25.0, -20.0, 500, [AMBER, GOLD]), 4.0, 600),
-    // poison
-    on("toxic_bubbles", Slot::Body, drift(5, -90.0, 50.0, 12.0, -15.0, 800, [VIOLET, ORCHID]), 0.0, 1000),
-    // bleed
-    on("dripping_blood", Slot::Body, drift(4, 90.0, 20.0, 15.0, 90.0, 600, [ARTERIAL, CRIMSON]), 0.0, 900),
-    // expose
-    on("closing_ring", Slot::Body, hoop(9.0, 4.0, 255, 900, CRIMSON), 0.0, 1300),
-    // riposte
-    on("parry_arc", Slot::Body, Prim::Trail(Trail { at: O, radius: 9.0, from_deg: -40.0, to_deg: 40.0, ms: 300, width: 1, col: STEEL, mirror: false, squash: 1.0 }), 0.0, 1500),
-    // root
-    on("iron_orbit", Slot::Feet, Prim::Orbit(Orbit { at: O, rx: 8.0, ry: 3.0, ms: 4000, count: 8, size: 1, cols: [IRON, STEEL], phase_deg: 0.0, star: false }), 0.0, 4000),
-    // slow
-    on("ash_ring", Slot::Feet, hoop(4.0, 9.0, 255, 1400, ASH), 0.0, 1400),
-    // steadfast
-    on("gold_ground", Slot::Feet, Prim::Flash(Flash { at: O, rx: 9.0, ry: 3.0, ms: 1200, col: alpha(GOLD, 160) }), 0.0, 1200),
-    // haste
-    on("speed_sparks", Slot::Feet, drift(5, -90.0, 30.0, 70.0, 0.0, 220, [CYAN, LINEN]), 0.0, 600),
-    // regen
-    on("gold_motes", Slot::Feet, drift(4, -90.0, 40.0, 18.0, -10.0, 900, [GOLD, LINEN]), 0.0, 1100),
-    // weaken, empower, fortify, guard
-    tint("ash_tint", ASH, 40, 70, 1600),
-    tint("amber_tint", AMBER, 30, 70, 900),
-    tint("cyan_tint", CYAN, 25, 50, 1600),
-    tint("steel_tint", STEEL, 25, 50, 1600),
-    // stealth
-    StatusLook { key: "fade", slot: Slot::Alpha, shape: Shape::Fade },
-];
-
-/// PR5-33: the look of look key `key` (None: no row; "" never has one).
-pub fn look_of_key(key: &str) -> Option<&'static StatusLook> {
-    STATUS_LOOKS.iter().find(|l| !key.is_empty() && l.key == key)
+/// The looped primitive of status preset `p` at (0, 0) (`status_loop` places it): rings and trails unsquashed, a trail
+/// unmirrored, sparks without a direction straight right (the check asks status sparks for one).
+fn loop_prim(p: &FxPreset) -> Option<Prim> {
+    if let Some(o) = p.orbit {
+        return Some(Prim::Orbit(Orbit { at: O, rx: o.rx, ry: o.ry, ms: o.ms, count: o.count, size: o.size, cols: o.colors, phase_deg: o.phase, star: o.star }));
+    }
+    if let Some(r) = p.ring {
+        return Some(Prim::Ring(Ring { at: O, r0: r.r0, r1: r.r1, ms: r.ms, col: r.color, squash: 1.0 }));
+    }
+    if let Some(f) = p.flash {
+        return Some(Prim::Flash(Flash { at: O, rx: f.rx, ry: f.ry, ms: f.ms, col: f.color }));
+    }
+    if let Some(b) = p.sparks {
+        return Some(Prim::Sparks(Sparks { at: O, ms: b.ms, count: b.count, dir_deg: b.dir.unwrap_or(0.0), spread_deg: b.spread, speed: b.speed, gravity: b.gravity, size: b.size, cols: b.colors }));
+    }
+    p.trail.map(|t| Prim::Trail(Trail { at: O, radius: t.radius, from_deg: t.from, to_deg: t.to, ms: t.ms, width: t.width, col: t.color, mirror: false, squash: 1.0 }))
 }
 
-/// The look of status `id`: the row its status row's `fx` names (None: no status row, or no look, as `stagger`).
+/// The look of status `id`: the row its status row's `fx` names (PR5-33; None: no status row, or no look, as
+/// `stagger`), the neutral look (`NEUTRAL_STATUS`) for a key without a row.
 pub fn status_look(id: &str) -> Option<&'static StatusLook> {
-    emberwake_rules::status::row_of(id).and_then(|r| look_of_key(r.fx))
+    status_look_in(status_looks(), id)
+}
+
+/// `status_look` over look table `table`.
+pub fn status_look_in(table: &'static [StatusLook], id: &str) -> Option<&'static StatusLook> {
+    emberwake_rules::status::row_of(id).filter(|r| !r.fx.is_empty()).map(|r| table.iter().find(|l| l.key == r.fx).unwrap_or(&NEUTRAL_STATUS))
 }
 
 /// A status a unit shows: its id and whether it is only pending (it acts next round, S3).
 pub type Mark = (&'static str, bool);
 
 /// S1: a unit's statuses with a look, active or pending, in look table order (statuses sharing a look in status table
-/// order; pending only: `true`).
+/// order; pending only: `true`); PR5-53: then the statuses drawing the neutral look (a key without a row), in status
+/// table order.
 pub fn marks_of(st: &emberwake_rules::unit::StatusState) -> Vec<Mark> {
+    marks_in(status_looks(), st)
+}
+
+/// `marks_of` over look table `table`.
+pub fn marks_in(table: &[StatusLook], st: &emberwake_rules::unit::StatusState) -> Vec<Mark> {
     let rows = &*emberwake_rules::status::ROWS;
-    STATUS_LOOKS
+    table
         .iter()
         .flat_map(|l| rows.iter().filter(move |r| r.fx == l.key))
+        .chain(rows.iter().filter(|r| !r.fx.is_empty() && !table.iter().any(|l| l.key == r.fx)))
         .filter_map(|r| {
             if st.active.contains(r.id) {
                 Some((r.id, false))
@@ -1105,7 +1017,7 @@ fn placed(p: Prim, at: Pt, k: f32, squash: f32, left: bool, fade: f32) -> Prim {
 
 /// The seed of unit `unit`'s loop of status `id` (sparks vary per cycle from it, `Looped`).
 pub fn status_seed(unit: usize, id: &str) -> u64 {
-    let k = status_look(id).and_then(|look| STATUS_LOOKS.iter().position(|l| l.key == look.key)).unwrap_or(0) as u64;
+    let k = status_look(id).and_then(|look| status_looks().iter().position(|l| l.key == look.key)).unwrap_or(0) as u64;
     (unit as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (k << 8) ^ 0x57A7
 }
 
@@ -1248,14 +1160,89 @@ pub fn apply_burst(look: &StatusLook, geo: &Geom, t: &Tuning, foot: Pt, at: u64)
     Some(Effect::new(ring, at))
 }
 
+/// PR5-53 pass 2: the frozen effect library, the FX tests' looks (test fixture `tests/fixtures/fx_library.json`): the
+/// preset rows the seed `vfxdata1` wrote (`entries`) and the looks the code's tables drew before pass 2 removed them
+/// (`looks`, `status`: their `Debug` text, recorded from those tables), so the tests read the old looks and the parity
+/// test pins the game data to them.
+#[cfg(test)]
+pub(crate) mod library {
+    use super::*;
+    use std::sync::OnceLock;
+
+    pub fn doc() -> &'static serde_json::Value {
+        static DOC: OnceLock<serde_json::Value> = OnceLock::new();
+        DOC.get_or_init(|| {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fx_library.json");
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("the frozen library fixture")).expect("valid JSON")
+        })
+    }
+
+    /// The fixture's preset rows (in file order).
+    pub fn presets() -> &'static Presets {
+        static P: OnceLock<Presets> = OnceLock::new();
+        P.get_or_init(|| emberwake_data::Catalog::from_value(&serde_json::json!({ "fx_presets": doc()["entries"] })).fx_presets)
+    }
+
+    /// The look of the fixture's row `key` (any role but status).
+    pub fn look(key: &str) -> Style {
+        style_of(presets().get(key).unwrap_or_else(|| panic!("the frozen library has {key}")))
+    }
+
+    /// Sets the status look table to the fixture's (the battle screens set the shipped data's, the same rows).
+    pub fn install() {
+        install_status_looks(presets());
+    }
+
+    fn role(r: &str) -> FxRole {
+        match r {
+            "blow" => FxRole::Blow,
+            "shot" => FxRole::Shot,
+            "strike" => FxRole::Strike,
+            "support" => FxRole::Support,
+            _ => panic!("no action role {r}"),
+        }
+    }
+
+    /// The frozen action looks in the old tables' order (blows, shots, the flask, strikes, the reach bolt, supports):
+    /// role, key and the look's `Debug` text.
+    pub fn looks() -> Vec<(FxRole, &'static str, &'static str)> {
+        doc()["looks"].as_array().expect("looks").iter().map(|l| (role(l["role"].as_str().unwrap()), l["key"].as_str().unwrap(), l["look"].as_str().unwrap())).collect()
+    }
+
+    /// The frozen status looks in the old table's order: key and the `Debug` text of its slot and shape.
+    pub fn status() -> Vec<(&'static str, &'static str)> {
+        doc()["status"].as_array().expect("status").iter().map(|l| (l["key"].as_str().unwrap(), l["look"].as_str().unwrap())).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use aegis_ui::tuning::Tuned;
     use serde_json::json;
 
+    // PR5-53 pass 2: the hues the old tables named (the frozen library's colours) and two of their sizes
+    const GOLD: Rgba = [0xfb, 0xbf, 0x24, 255];
+    const ORCHID: Rgba = [0xc0, 0x84, 0xfc, 255];
+    const CYAN: Rgba = [0x06, 0xb6, 0xd4, 255];
+    const VIOLET: Rgba = [0x93, 0x33, 0xea, 255];
+    const AIM_RING_PX_PER_CELL: f32 = 32.0 * 0.6;
+    const SMITE_DROP_PX: f32 = 48.0;
+
+    /// The frozen library's look of key `key` (`library::look`).
+    fn lk(key: &str) -> Style {
+        library::look(key)
+    }
+
+    /// `super::status_look` over the frozen library's status table.
+    fn status_look(id: &str) -> Option<&'static StatusLook> {
+        library::install();
+        super::status_look(id)
+    }
+
+    /// An `Act` over the frozen library's presets.
     fn act<'a>(kind: &'a str, fx: &'a str, family: Option<&'a FamilyLook>, ranged: bool, dist: i32) -> Act<'a> {
-        Act::new(kind, fx, family, ranged, dist)
+        Act { presets: Some(library::presets()), ..Act::new(kind, fx, family, ranged, dist) }
     }
 
     /// A weapon family's look (PR5-33: the item family row's `fx` and `fx_far`).
@@ -1278,24 +1265,24 @@ mod tests {
         assert_eq!(sword.swing, Some(Swing { radius: 13.0, from_deg: -60.0, to_deg: 50.0, width: 2, col: STEEL }));
         assert_eq!(sword.hit.sparks.map(|b| (b.count, b.cols)), Some((6, [STEEL, LINEN])));
         assert_eq!(style(act("attack", "", None, false, 1)), sword, "no family row: the slash");
-        assert_eq!(style(act("attack", "", fam("no_such_look", ""), false, 1)), sword, "an unknown key: the slash");
+        assert_eq!(style(act("attack", "", fam("no_such_look", ""), false, 1)), NEUTRAL_BLOW, "an unknown key: the neutral blow (PR5-53 pass 2)");
         let bow = style(act("attack", "", fam("arrow", ""), true, 4));
         assert_eq!(bow.shot, Some(Look::Arrow { len: 7.0, shaft: LINEN, head: STEEL }));
         assert!(bow.swing.is_none());
         assert_eq!(style(act("attack", "", None, true, 4)), bow, "a ranged weapon without a row: the arrow");
         assert_eq!(style(act("attack", "", fam("bolt", ""), true, 4)).shot, Some(Look::Bolt { len: 5.0, shaft: STEEL, head: LINEN }));
         assert_eq!(style(act("attack", "", fam("stone", ""), true, 4)).shot, Some(Look::Stone { size: 2.0, col: ASH, hi: LINEN }));
-        assert_eq!(style(act("attack", "", fam("slash", "arcane_orb"), false, 3)), ARCANE_BOLT);
-        assert_eq!(style(act("attack", "arcane_orb", fam("slash", ""), false, 1)), ARCANE_BOLT, "the skill row first");
+        assert_eq!(style(act("attack", "", fam("slash", "arcane_orb"), false, 3)), lk("arcane_orb"));
+        assert_eq!(style(act("attack", "arcane_orb", fam("slash", ""), false, 1)), lk("arcane_orb"), "the skill row first");
         let fist = style(act("attack", "", fam("fists", ""), false, 1));
         assert_eq!((fist.delivery, fist.swing, fist.hit.ring.map(|r| (r.r0, r.r1))), (Delivery::Melee, None, Some((2.0, 7.0))));
-        assert_eq!(style(act("attack", "", fam("bludgeon", ""), false, 3)), REACH_BOLT);
-        assert_eq!(style(act("attack", "", fam("bludgeon", "arcane_orb"), false, 1)), BLUDGEON, "an adjacent staff is a blunt blow");
-        assert_eq!(style(act("attack", "bash_ring", fam("slash", ""), false, 1)), SHIELD_BASH);
+        assert_eq!(style(act("attack", "", fam("bludgeon", ""), false, 3)), lk("reach_bolt"));
+        assert_eq!(style(act("attack", "", fam("bludgeon", "arcane_orb"), false, 1)), lk("bludgeon"), "an adjacent staff is a blunt blow");
+        assert_eq!(style(act("attack", "bash_ring", fam("slash", ""), false, 1)), lk("bash_ring"));
         assert_eq!(style(act("support", "", None, false, 1)).delivery, Delivery::Cast);
         assert_eq!(style(act("", "", fam("slash", ""), false, 0)), NONE);
-        assert_eq!(style(act("support", "bash_ring", None, false, 1)), SHIELD_BASH, "a strike look wins on any kind");
-        assert_eq!(style(act("attack", "ward_ring", fam("stab", ""), false, 1)), STAB, "a support look only on a support");
+        assert_eq!(style(act("support", "bash_ring", None, false, 1)), lk("bash_ring"), "a strike look wins on any kind");
+        assert_eq!(style(act("attack", "ward_ring", fam("stab", ""), false, 1)), lk("stab"), "a support look only on a support");
     }
 
     /// PR5-33: a weapon's family look is its item family row's (the catalog's `family_looks`); no weapon ("" or the
@@ -1309,6 +1296,7 @@ mod tests {
                 {"id": "pike", "item_type": "WEAPON", "fx": "stab", "fx_far": "arcane_orb"},
             ],
             "skills": [{"id": "lob", "name": "Lob", "kind": "ATTACK", "fx": "fire_lob", "clip": "throw"}],
+            "fx_presets": library::doc()["entries"].clone(),
         }));
         let fist = cat.family_looks.get(emberwake_rules::damage::FIST);
         assert!(fist.is_some());
@@ -1320,8 +1308,8 @@ mod tests {
         let cmd = emberwake_battle::command::CmdKind::Support { target: 1, skill: 0, last_heal: 0, last_status: String::new(), last_cleansed: Vec::new() };
         let a = Act::popped(&cmd, 0, lob, None, 1, &cat);
         assert_eq!((a.kind, a.fx, a.family), ("support", "fire_lob", fist), "no weapon: the fist family");
-        assert_eq!(style(a), FIREBOMB, "the skill's strike look first");
-        assert_eq!(style(Act::popped(&cmd, 0, None, None, 1, &cat)), MEND, "no skill: the support's mend motes");
+        assert_eq!(style(a), lk("fire_lob"), "the skill's strike look first");
+        assert_eq!(style(Act::popped(&cmd, 0, None, None, 1, &cat)), lk("heal_motes"), "no skill: the support's mend motes");
     }
 
     fn sparks_of(es: &[Effect]) -> Vec<Sparks> {
@@ -1338,7 +1326,7 @@ mod tests {
         let miss = Mods::of(&[EventKind::Miss], false);
         let plain = Mods::of(&[EventKind::Hit { crit: false, zero: false }], true);
         assert_eq!((crit.crit, zero.zero, miss.miss, plain), (true, true, true, Mods::default()));
-        let mace = BLUDGEON;
+        let mace = lk("bludgeon");
         let base = mace.hit.sparks.unwrap();
         let pl = Place { from: (100.0, 100.0), to: (132.0, 100.0), squash: 1.0, vertical: false };
         let spot = |p: Pt| Spot { chest: p, foot: (p.0, p.1 + 10.0) };
@@ -1362,17 +1350,17 @@ mod tests {
         let t = tuning();
         let pl = Place { from: (100.0, 100.0), to: (60.0, 100.0), squash: 0.75, vertical: false };
         let none = Mods::default();
-        let sword = SLASH;
+        let sword = lk("slash");
         let e = delivery_effects(&sword, pl, &[], none, 1000, 1000 + 270, 3, &t);
         let aegis_ui::fx::Prim::Trail(tr) = e[0].prim else { panic!("a trail") };
         assert_eq!((e.len(), e[0].start, tr.ms as u64, tr.mirror, tr.squash), (1, 1270 - t.trail_ms * 6 / 10, t.trail_ms, true, 0.75), "a target on the left mirrors it");
         assert_eq!(delivery_effects(&sword, pl, &[], none, 1000, 1000 + 20, 3, &t)[0].start, 1000, "never before t0");
-        let bow = ARROW;
+        let bow = lk("arrow");
         let e = delivery_effects(&bow, pl, &[], none, 1000, 1500, 3, &t);
         let aegis_ui::fx::Prim::Projectile(p) = e[0].prim else { panic!("a projectile") };
         assert_eq!((p.from, p.to, e[0].end()), ((94.0, 100.0), pl.to, 1500));
         assert_eq!(p.travel_ms as u64, travel_ms(34.0, 560.0, &t));
-        assert!(delivery_effects(&FISTS, pl, &[], none, 1000, 1100, 3, &t).is_empty(), "a fist has no trail");
+        assert!(delivery_effects(&lk("fists"), pl, &[], none, 1000, 1100, 3, &t).is_empty(), "a fist has no trail");
     }
 
     /// L9's rules (4.5): a skill of 3 or more blocks that lowered HP shakes `heavy`, a 2-block one does not, nor a
@@ -1467,7 +1455,7 @@ mod tests {
         let r = flat.token_rect(c, 0, 0);
         assert_eq!(anchor(&flat, c), ((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32 - 2.0));
         let (a, b) = (anchor(&flat, c), anchor(&flat, V2::new(7, 4)));
-        assert_eq!(flight_px(&ARROW, Place { from: a, to: b, squash: 1.0, vertical: false }), (b.0 - a.0) - 6.0);
+        assert_eq!(flight_px(&lk("arrow"), Place { from: a, to: b, squash: 1.0, vertical: false }), (b.0 - a.0) - 6.0);
     }
 
     // ---- FX1-L2 (M1-M7 and the FX1-L1 follow-ups) -----------------------------------------------------------------
@@ -1556,7 +1544,7 @@ mod tests {
     #[test]
     fn glacial_burst_is_the_firebomb_in_cyan() {
         let s = skill("frost_lob");
-        assert_eq!((s.delivery, s.shot), (FIREBOMB.delivery, Some(Look::Orb { r: 3.0, core: LINEN, glow: CYAN, tail: 3 })));
+        assert_eq!((s.delivery, s.shot), (lk("fire_lob").delivery, Some(Look::Orb { r: 3.0, core: LINEN, glow: CYAN, tail: 3 })));
         let a = aim_effects(&s, true, (0.0, 0.0), 1, false, 0.75, 10, 1);
         let Prim::Ring(r) = a[0].prim else { panic!() };
         assert_eq!((kinds(&a), r.col), (vec!["ring"], alpha(CYAN, 230)));
@@ -1604,7 +1592,7 @@ mod tests {
         assert_eq!(p[4].1 + p[4].0.travel_ms as u64, at, "it lands at the impact");
         let seven: Vec<Pt> = (0..7).map(|k| (200.0 + 32.0 * k as f32, 113.0)).collect();
         assert_eq!(volley_targets(&s, &seven, seven[3]).len(), 5, "at most 5");
-        assert_eq!(s.hit.sparks, ARROW.hit.sparks);
+        assert_eq!(s.hit.sparks, lk("arrow").hit.sparks);
     }
 
     /// M1 `shockwave` (LINE, 4.4.3): Ash rings on each line cell on the ground layer, 40 ms apart from the actor out,
@@ -1631,23 +1619,23 @@ mod tests {
     #[test]
     fn sweeps_haymakers_and_dashes_take_their_rows() {
         let sweep = skill("sweep");
-        assert_eq!((sweep.delivery, sweep.swing, sweep.hit), (Delivery::Melee, Some(Swing { radius: 14.0, from_deg: -150.0, to_deg: 150.0, width: 2, col: LINEN }), FISTS.hit));
+        assert_eq!((sweep.delivery, sweep.swing, sweep.hit), (Delivery::Melee, Some(Swing { radius: 14.0, from_deg: -150.0, to_deg: 150.0, width: 2, col: LINEN }), lk("fists").hit));
         let hay = skill("heavy_blow");
         assert_eq!(hay.swing, Some(Swing { radius: 10.0, from_deg: -40.0, to_deg: 60.0, width: 2, col: LINEN }));
         assert_eq!((hay.hit.ring.map(|r| (r.r0, r.r1, r.col)), hay.hit.sparks.map(|b| (b.count, b.cols))), (Some((2.0, 9.0, alpha(LINEN, 220))), Some((7, [LINEN, ASH]))));
         for dash in ["", "no_such_look"] {
-            assert_eq!(style(act("attack", dash, fam("stab", ""), false, 1)), STAB, "{dash:?}");
+            assert_eq!(style(act("attack", dash, fam("stab", ""), false, 1)), lk("stab"), "{dash:?}");
         }
     }
 
-    /// M4 (4.4.4): `mend` (and any support without a row) rises gold motes from the target's foot point for 500 ms with a
+    /// M4 (4.4.4): `mend` (and any support without a key) rises gold motes from the target's foot point for 500 ms with a
     /// soft flash at its chest; `purify` in Cyan; `aegis` a Cyan ring at the chest; `rally` a ring at the actor's chest.
     #[test]
     fn support_shows_motes_rings_or_a_ring_on_the_actor() {
         let t = tuning();
         let mend = style(act("support", "", None, false, 2));
         assert_eq!(mend.delivery, Delivery::Cast);
-        assert_eq!(style(act("support", "no_such_look", None, false, 2)), mend, "any other support");
+        assert_eq!(style(act("support", "no_such_look", None, false, 2)), NEUTRAL_SUPPORT, "a key without a row: the neutral support (PR5-53 pass 2)");
         let target = spot((196.0, 100.0));
         let i = impact_effects(&mend, NO_MODS, place((100.0, 100.0), target.chest), &[target], 70, 1, &t);
         let Prim::Sparks(m) = i[1].prim else { panic!("motes") };
@@ -1668,16 +1656,16 @@ mod tests {
     fn an_item_on_another_unit_throws_a_flask_first() {
         let t = tuning();
         let other = style(act("item", "", None, false, 2));
-        assert_eq!((other.delivery, other.shot), (Delivery::Shot { speed: 420.0, arc: 10.0 }, Some(FLASK)));
-        assert_eq!(other.hit, MEND.hit, "a heal: the motes");
+        assert_eq!((other.delivery, other.shot), (Delivery::Shot { speed: 420.0, arc: 10.0 }, Some(lk("flask").shot.unwrap())));
+        assert_eq!(other.hit, lk("heal_motes").hit, "a heal: the motes");
         let pl = place((100.0, 100.0), (164.0, 100.0));
         let d = delivery_effects(&other, pl, &[], NO_MODS, 0, 300, 1, &t);
-        assert_eq!(projectiles(&d)[0].0.look, FLASK);
+        assert_eq!(projectiles(&d)[0].0.look, lk("flask").shot.unwrap());
         let own = style(Act { on_self: true, ..act("item", "", None, false, 0) });
-        assert_eq!((own.delivery, own.shot, own.hit), (Delivery::Cast, None, MEND.hit));
+        assert_eq!((own.delivery, own.shot, own.hit), (Delivery::Cast, None, lk("heal_motes").hit));
         assert!(delivery_effects(&own, pl, &[], NO_MODS, 0, 70, 1, &t).is_empty(), "on self: no flask");
         let bomb = style(Act { harms: true, ..act("item", "", None, false, 2) });
-        assert_eq!((bomb.shot, bomb.hit, bomb.aim), (Some(FLASK), FIREBOMB.hit, FIREBOMB.aim), "a damage consumable");
+        assert_eq!((bomb.shot, bomb.hit, bomb.aim), (Some(lk("flask").shot.unwrap()), lk("fire_lob").hit, lk("fire_lob").aim), "a damage consumable");
     }
 
     /// M6 (4.4.4): a fall puts an Ash dust ring (3 to 10 px, 300 ms) and dust at the unit's foot point, both on the
@@ -1699,7 +1687,7 @@ mod tests {
     #[test]
     fn a_miss_overshoots_and_the_target_steps_aside_and_back() {
         let t = tuning();
-        let bow = ARROW;
+        let bow = lk("arrow");
         let pl = place((100.0, 100.0), (200.0, 100.0));
         let miss = Mods { miss: true, ..NO_MODS };
         let hit = projectiles(&delivery_effects(&bow, pl, &[], NO_MODS, 0, 500, 1, &t))[0];
@@ -1719,7 +1707,7 @@ mod tests {
     #[test]
     fn a_swing_up_or_down_turns_toward_its_target() {
         let t = tuning();
-        let sword = SLASH;
+        let sword = lk("slash");
         let trail = |pl: Place| match delivery_effects(&sword, pl, &[], NO_MODS, 0, 200, 1, &t)[0].prim {
             Prim::Trail(tr) => (tr.from_deg, tr.to_deg, tr.mirror),
             _ => panic!("a trail"),
@@ -1736,7 +1724,7 @@ mod tests {
     #[test]
     fn a_wide_area_hit_keeps_within_the_budget_sparks_first() {
         let t = tuning();
-        let s = Style { hit: Hit { flash: bloom(4.0, 3.0, LINEN, 120, 100), ..BLUDGEON.hit }, ..NONE };
+        let s = Style { hit: Hit { flash: bloom(4.0, 3.0, LINEN, 120, 100), ..lk("bludgeon").hit }, ..NONE };
         let pl = place((100.0, 100.0), (200.0, 100.0));
         let units: Vec<Spot> = (0..12).map(|k| spot((150.0 + 10.0 * k as f32, 120.0))).collect();
         let mut all = aim_effects(&s, true, pl.to, 1, false, pl.squash, 500, 1);
@@ -1763,6 +1751,7 @@ mod tests {
     // ---- STATUSFX1-L (spec section 4 acceptance) ---------------------------------------------------------------------
 
     fn marks(ids: &[&'static str]) -> Vec<MarkOn> {
+        library::install();
         ids.iter().map(|&id| (id, false, 0)).collect()
     }
 
@@ -1792,11 +1781,13 @@ mod tests {
             assert_eq!(status_look(r.id).is_some(), r.id != "stagger", "{}: a look unless it is stagger", r.id);
             assert_eq!(r.fx.is_empty(), status_look(r.id).is_none(), "{}: its fx `{}` is a look key", r.id, r.fx);
         }
-        assert!(STATUS_LOOKS.iter().all(|l| rows.iter().any(|r| r.fx == l.key)), "no look without a status row");
-        assert!(STATUS_LOOKS.iter().enumerate().all(|(i, l)| STATUS_LOOKS.iter().position(|m| m.key == l.key) == Some(i)), "each key once");
-        assert_eq!(STATUS_LOOKS.len(), rows.len() - 1, "one look per row");
+        let table = status_looks();
+        assert!(table.iter().all(|l| rows.iter().any(|r| r.fx == l.key)), "no look without a status row");
+        assert!(table.iter().enumerate().all(|(i, l)| table.iter().position(|m| m.key == l.key) == Some(i)), "each key once");
+        assert_eq!(table.len(), rows.len() - 1, "one look per row");
+        assert!(rows.iter().all(|r| super::status_look(r.id) != Some(&NEUTRAL_STATUS)), "no status draws the neutral look");
         assert_eq!(status_look("stealth").map(|l| (l.slot, l.shape)), Some((Slot::Alpha, Shape::Fade)));
-        assert_eq!(look_of_key(""), None, "an empty key has no look");
+        assert!(status_looks().iter().all(|l| !l.key.is_empty()), "no look has an empty key");
     }
 
     /// 2 (S2): stun and burn draw both (head and body); burn, poison and bleed share the body: burn, poison at 1500 ms,
@@ -1871,6 +1862,7 @@ mod tests {
     /// `flat_token_px / token_px` (at least 1 px) and rings and orbits squash 0.75 on the Stage only.
     #[test]
     fn looks_sit_at_their_slot_anchors_on_their_layers_in_both_views() {
+        library::install();
         let t = tuning();
         let foot = (200.0, 150.0);
         let stage = Geom::new(View::Stage, &t);
@@ -1889,7 +1881,7 @@ mod tests {
         assert_eq!(slot_anchor(&flat, foot, Slot::Feet), (200.0, 150.0 + 0.4 * ft));
         for geo in [stage, flat] {
             let (k, squash) = status_scale(&geo, &t);
-            for l in STATUS_LOOKS.iter() {
+            for l in status_looks().iter() {
                 let Some(lp) = status_loop(l, &geo, &t, foot, false, 0, 1, false) else { continue };
                 assert_eq!(lp.layer(), if l.slot == Slot::Feet { Layer::Ground } else { Layer::Air }, "{}", l.key);
                 let dy = if Some(l.key) == status_look("burn").map(|b| b.key) { 4.0 * k } else { 0.0 };
@@ -1978,5 +1970,192 @@ mod tests {
             s.advance_round();
         }
         assert!(effects > 0 && others > 0, "the fight popped both kinds ({effects} effects, {others} others)");
+    }
+
+    // ---- PR5-53 (VFX-DATA1): the effect presets and their parity with the frozen library ---------------------------
+
+    fn presets_of(rows: &[serde_json::Value]) -> Presets {
+        emberwake_data::Catalog::from_value(&json!({ "fx_presets": rows })).fx_presets
+    }
+
+    /// The effect presets of the game data, by source: the shipped catalog file and the seed `vfxdata1` (until the
+    /// cleanup takes it out of the seeds folder); at least one is there.
+    fn data_presets() -> Vec<(String, Presets)> {
+        let game = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data");
+        let read = |p: &std::path::Path| std::fs::read_to_string(p).ok().map(|t| serde_json::from_str::<serde_json::Value>(&t).expect("valid JSON"));
+        let mut out = Vec::new();
+        let shipped = game.join("catalog/fx_presets.json");
+        if let Some(doc) = read(&shipped) {
+            out.push((shipped.display().to_string(), presets_of(doc["entries"].as_array().expect("entries"))));
+        }
+        let seed = game.join("seeds/vfxdata1.json");
+        if let Some(doc) = read(&seed) {
+            let rows: Vec<serde_json::Value> = doc["steps"].as_array().expect("steps").iter().filter(|s| s["kind"] == "fx_presets").map(|s| s["entry"].clone()).collect();
+            out.push((seed.display().to_string(), presets_of(&rows)));
+        }
+        assert!(!out.is_empty(), "the shipped fx_presets.json or the seed vfxdata1.json");
+        out
+    }
+
+    /// Every action an `Act` can describe over the frozen keys: each kind, skill key ("" and every key), family look
+    /// (none, every blow and shot key, a reach look at range, an unknown key), range, distance, magic and item flags.
+    fn every_act<'a>(keys: &'a [&'static str], fams: &'a [Option<&'static FamilyLook>]) -> Vec<Act<'a>> {
+        let mut out = Vec::new();
+        for kind in ["attack", "area", "support", "item", ""] {
+            for fx in std::iter::once("").chain(keys.iter().copied()) {
+                for family in fams {
+                    for (ranged, dist) in [(false, 1), (false, 3), (true, 1), (true, 4)] {
+                        for (magic, on_self, harms) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true), (false, true, true)] {
+                            out.push(Act { magic, on_self, harms, ..act(kind, fx, *family, ranged, dist) });
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// PR5-53 pass 2, the parity proof: the looks the code's tables drew before pass 2 removed them are frozen in the
+    /// fixture (`library`: their `Debug` text, recorded from the tables), and the fixture's rows, the shipped
+    /// `fx_presets.json` and the seed `vfxdata1` (while it ships) draw exactly them: one action row per old table key in
+    /// the old order and role, each row's look (`style_of`: delivery, speed and arc, trail, projectile, ring, flash,
+    /// sparks, beam, wave, volley, drop, aim, on the actor; every colour, count, life and size) equal to the frozen
+    /// text, the same effects pushed at the delivery, impact and aim under every modifier, the same status table (key,
+    /// slot and shape, in the old order) and every `Act` the same look over the data as over the fixture.
+    #[test]
+    fn the_data_draws_every_frozen_library_look_exactly() {
+        let t = tuning();
+        let frozen = library::looks();
+        let status = library::status();
+        assert_eq!((frozen.len(), status.len()), (25, 17), "the old tables: 5 blows, 3 shots and the flask, 11 strikes and the reach bolt, 4 supports; 17 status looks");
+        let mut sources: Vec<(String, Presets)> = vec![("the frozen library's rows".into(), library::presets().clone())];
+        sources.extend(data_presets());
+        let keys: Vec<&'static str> = frozen.iter().map(|(_, k, _)| *k).collect();
+        let fams: Vec<Option<&'static FamilyLook>> = std::iter::once(None)
+            .chain(frozen.iter().filter(|(r, _, _)| matches!(r, FxRole::Blow | FxRole::Shot)).map(|(_, k, _)| fam(k, "")))
+            .chain([fam("bludgeon", "arcane_orb"), fam("slash", "no_such_look"), fam("no_such_look", "")])
+            .collect();
+        let pl = place((100.0, 100.0), (164.0, 132.0));
+        let cells = [(132.0, 100.0), (164.0, 132.0), (196.0, 132.0)];
+        let hits = [spot((164.0, 132.0)), spot((196.0, 132.0))];
+        for (source, p) in &sources {
+            let actions: Vec<(FxRole, &str)> = p.values().filter(|r| r.role != FxRole::Status).map(|r| (r.role, r.id.as_str())).collect();
+            assert_eq!(actions, frozen.iter().map(|(r, k, _)| (*r, *k)).collect::<Vec<_>>(), "{source}: one action row per old table key, in the old order");
+            for (_, key, want) in &frozen {
+                let got = style_of(&p[*key]);
+                assert_eq!(format!("{got:?}"), *want, "{source}: {key}");
+                let base = lk(key);
+                for m in [NO_MODS, Mods { crit: true, ..NO_MODS }, Mods { miss: true, ..NO_MODS }, Mods { zero: true, ..NO_MODS }] {
+                    assert_eq!(delivery_effects(&got, pl, &cells, m, 0, 300, 7, &t), delivery_effects(&base, pl, &cells, m, 0, 300, 7, &t), "{source}: {key} delivery");
+                    assert_eq!(impact_effects(&got, m, pl, &hits, 300, 7, &t), impact_effects(&base, m, pl, &hits, 300, 7, &t), "{source}: {key} impact");
+                }
+                assert_eq!(aim_effects(&got, true, (164.0, 132.0), 2, false, 0.75, 300, 7), aim_effects(&base, true, (164.0, 132.0), 2, false, 0.75, 300, 7), "{source}: {key} aim");
+            }
+            let table: Vec<(String, String)> = status_table(p).into_iter().map(|(k, slot, shape)| (k, format!("{:?}", (slot, shape)))).collect();
+            assert_eq!(table, status.iter().map(|(k, l)| (k.to_string(), l.to_string())).collect::<Vec<_>>(), "{source}: the status looks, in the old order");
+            let rows: Vec<&str> = p.values().filter(|r| r.role == FxRole::Status).map(|r| r.id.as_str()).collect();
+            assert_eq!(rows, status.iter().map(|(k, _)| *k).collect::<Vec<_>>(), "{source}: one status row per old look, every row drawing");
+            for a in every_act(&keys, &fams) {
+                assert_eq!(style(Act { presets: Some(p), ..a }), style(a), "{source}: {a:?}");
+            }
+        }
+    }
+
+    /// PR5-53 pass 2: a key without a preset row of its role draws that role's neutral look (an unknown family or
+    /// support key, a row of another role, the code's own keys without their rows); no key at all the role's default
+    /// key's row (the sword's slash, the bow's arrow, the mend motes); a skill's strike key without a row goes on to the
+    /// weapon's look; without presets every look is neutral. Each neutral look is one constant per role that draws.
+    #[test]
+    fn a_key_without_a_row_draws_its_roles_neutral_look() {
+        assert_eq!(style(act("attack", "", fam("no_such_look", ""), false, 1)), NEUTRAL_BLOW, "an unknown blow key");
+        assert_eq!(style(act("attack", "", fam("no_such_look", ""), true, 4)), NEUTRAL_SHOT, "an unknown shot key");
+        assert_eq!(style(act("support", "no_such_look", None, false, 1)), NEUTRAL_SUPPORT, "an unknown support key");
+        assert_eq!(style(act("attack", "", fam("arrow", ""), false, 1)), NEUTRAL_BLOW, "a shot row is no blow");
+        assert_eq!(style(act("attack", "", fam("", ""), false, 1)), lk("slash"), "no key: the default key's row");
+        assert_eq!(style(act("attack", "", None, false, 1)), lk("slash"));
+        assert_eq!(style(act("attack", "", None, true, 4)), lk("arrow"));
+        assert_eq!(style(act("support", "", None, false, 1)), lk("heal_motes"));
+        assert_eq!(style(act("attack", "no_such_look", fam("stab", ""), false, 1)), lk("stab"), "a strike key without a row: the weapon's look");
+        assert_eq!(style(act("attack", "", fam("stab", "no_such_look"), false, 3)), lk("reach_bolt"), "an fx_far without a row: on down the list");
+        let bare = |a: Act| style(Act { presets: None, ..a });
+        assert_eq!(bare(act("attack", "", fam("slash", ""), false, 1)), NEUTRAL_BLOW, "no presets");
+        assert_eq!(bare(act("attack", "", fam("arrow", ""), true, 4)), NEUTRAL_SHOT);
+        assert_eq!(bare(act("attack", "", fam("slash", ""), false, 3)), NEUTRAL_STRIKE, "the reach bolt's key without its row");
+        assert_eq!(bare(Act { magic: true, ..act("attack", "", fam("slash", ""), false, 3) }), NEUTRAL_STRIKE, "the arcane bolt's key without its row");
+        assert_eq!(bare(act("support", "heal_motes", None, false, 1)), NEUTRAL_SUPPORT);
+        let bomb = bare(Act { harms: true, ..act("item", "", None, false, 2) });
+        assert_eq!((bomb.delivery, bomb.shot, bomb.hit), (NEUTRAL_SHOT.delivery, NEUTRAL_SHOT.shot, NEUTRAL_STRIKE.hit), "an item: the neutral flask and strike");
+        assert_eq!(bare(Act { on_self: true, ..act("item", "", None, false, 0) }), NEUTRAL_SUPPORT, "a heal on its user: the neutral support");
+        assert_eq!(bare(act("", "", None, false, 1)).delivery, Delivery::None, "no effect stays none");
+        for role in [FxRole::Blow, FxRole::Shot, FxRole::Strike, FxRole::Support] {
+            let n = neutral(role);
+            assert_ne!(n.delivery, Delivery::None, "{role:?} delivers");
+            assert!(n.hit.sparks.is_some() || n.hit.flash.is_some(), "{role:?} shows on its target");
+        }
+    }
+
+    /// PR5-53 pass 2: a status whose look key has no row in the table draws the neutral status look, listed after the
+    /// table's looks; an empty key (`stagger`'s) none.
+    #[test]
+    fn a_status_key_without_a_row_draws_the_neutral_status_look() {
+        let full: &'static [StatusLook] = Box::leak(status_table(library::presets()).into_iter().map(|(k, slot, shape)| StatusLook { key: Box::leak(k.into_boxed_str()), slot, shape }).collect::<Vec<_>>().into_boxed_slice());
+        let burn_key = super::status_look_in(full, "burn").expect("burn has a look").key;
+        let without: &'static [StatusLook] = Box::leak(full.iter().filter(|l| l.key != burn_key).copied().collect::<Vec<_>>().into_boxed_slice());
+        assert_eq!(super::status_look_in(without, "burn"), Some(&NEUTRAL_STATUS));
+        assert_eq!(super::status_look_in(&[], "burn"), Some(&NEUTRAL_STATUS), "an empty table: every look neutral");
+        assert_eq!(super::status_look_in(full, "stagger"), None, "no key, no look");
+        assert_eq!(super::status_look_in(full, "no_such_status"), None);
+        let mut st = emberwake_rules::unit::StatusState::default();
+        st.active.insert("burn".into());
+        st.active.insert("stun".into());
+        assert_eq!(marks_in(full, &st), [("stun", false), ("burn", false)], "the table's order");
+        assert_eq!(marks_in(without, &st), [("stun", false), ("burn", false)], "burn after the table's looks");
+        assert!(matches!(NEUTRAL_STATUS.shape, Shape::Loop { .. }) && first_col(&NEUTRAL_STATUS).is_some(), "it loops and bursts");
+    }
+
+    /// PR5-53: a preset row draws its own parameters (only its parts), a new key draws its row, and a row of another
+    /// role does not count (the key's role draws its neutral look, or the strike goes on to the weapon's look).
+    #[test]
+    fn a_preset_row_draws_its_own_parameters_and_a_row_of_another_role_does_not() {
+        let red = presets_of(&[json!({"id": "slash", "role": "blow", "delivery": "melee", "trail": {"radius": 20, "from": -10, "to": 10, "width": 3, "color": "#ff0000"}}),
+            json!({"id": "heavy_blow", "role": "status", "slot": "alpha"}),
+            json!({"id": "new_bolt", "role": "strike", "delivery": "shot", "speed": 300.0, "shot": {"look": "bolt", "size": 4, "color": "#00ff00"}})]);
+        let blow = style(Act { presets: Some(&red), ..act("attack", "", fam("slash", ""), false, 1) });
+        assert_eq!(blow.swing, Some(Swing { radius: 20.0, from_deg: -10.0, to_deg: 10.0, width: 3, col: [255, 0, 0, 255] }));
+        assert_eq!(blow.hit.sparks, None, "the row's parts only");
+        assert_eq!(style(Act { presets: Some(&red), ..act("attack", "", None, false, 1) }), blow, "no key: the default key's row");
+        assert_eq!(style(Act { presets: Some(&red), ..act("attack", "", fam("no_such_look", ""), false, 1) }), NEUTRAL_BLOW, "an unknown key: the neutral blow");
+        assert_eq!(style(Act { presets: Some(&red), ..act("attack", "heavy_blow", None, false, 1) }), blow, "a status row draws no strike: the weapon's blow");
+        let new = style(Act { presets: Some(&red), ..act("attack", "new_bolt", None, false, 1) });
+        assert_eq!((new.delivery, new.shot), (Delivery::Shot { speed: 300.0, arc: 0.0 }, Some(Look::Bolt { len: 4.0, shaft: [0, 255, 0, 255], head: [0, 255, 0, 255] })), "a new key");
+        let empty = Presets::new();
+        assert_eq!(style(Act { presets: Some(&empty), ..act("attack", "", fam("stab", ""), false, 1) }), NEUTRAL_BLOW, "an empty table: neutral");
+    }
+
+    /// PR5-53: the status table is the presets' status rows in file order (a new key included; a row that draws
+    /// nothing and a row of another role left out). The table in use stays while the same rows come again (no new
+    /// table): the frozen library's and the shipped data's are the same.
+    #[test]
+    fn the_status_table_is_the_status_rows_in_file_order() {
+        let p = presets_of(&[json!({"id": "rising_embers", "role": "status", "slot": "body", "period": 700, "ring": {"r0": 1, "r1": 5, "color": "#112233", "ms": 400}}),
+            json!({"id": "frost_rime", "role": "status", "slot": "tint", "period": 800, "tint": {"color": "#a0c0ff", "lo": 10, "hi": 60}}),
+            json!({"id": "broken", "role": "status", "slot": "head"}),
+            json!({"id": "ash_ring", "role": "blow", "delivery": "melee"}),
+            json!({"id": "fade", "role": "status", "slot": "alpha"})]);
+        let table = status_table(&p);
+        let keys: Vec<&str> = table.iter().map(|r| r.0.as_str()).collect();
+        assert_eq!(keys, ["rising_embers", "frost_rime", "fade"], "the drawing status rows, in file order");
+        assert_eq!(table[0].1, Slot::Body);
+        assert_eq!(table[0].2, Shape::Loop { prim: Prim::Ring(Ring { at: (0.0, 0.0), r0: 1.0, r1: 5.0, ms: 400, col: [0x11, 0x22, 0x33, 255], squash: 1.0 }), dy: 0.0, period: 700 });
+        assert_eq!((table[1].1, table[1].2), (Slot::Tint, Shape::Tint { col: [0xa0, 0xc0, 0xff, 255], lo: 10, hi: 60, period: 800 }));
+        assert_eq!((table[2].1, table[2].2), (Slot::Alpha, Shape::Fade));
+        library::install();
+        let before = status_looks().as_ptr();
+        assert_eq!(status_looks().iter().map(|l| l.key).collect::<Vec<_>>(), library::status().iter().map(|(k, _)| *k).collect::<Vec<_>>(), "the frozen order");
+        library::install();
+        for (_, data) in data_presets() {
+            install_status_looks(&data);
+        }
+        assert!(std::ptr::eq(status_looks().as_ptr(), before), "the same rows again (the data's are the library's): unchanged, nothing new made");
     }
 }

@@ -420,6 +420,8 @@ impl BattleScreen {
     }
 
     fn blank(cx: &Cx, mode: Mode) -> Self {
+        // PR5-53 (VFX-DATA1): the tokens' status looks from the game's effect presets
+        crate::fx::install_status_looks(&cx.data.cat.fx_presets);
         Self {
             host: Host::new(Battle::with_data(cx.data.clone())),
             w: Vec::new(),

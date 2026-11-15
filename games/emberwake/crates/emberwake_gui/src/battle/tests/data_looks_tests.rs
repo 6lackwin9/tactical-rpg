@@ -1,10 +1,12 @@
-//! PR5-33 (LAYER-UP-DATA) over the SHIPPED catalog: the data's look and clip values resolve in the screens' libraries
-//! (a typo would fall back silently), and the looks the GUI's id tables gave before PR5-33 are pinned (weapon families
-//! by their blow, shot and look at range; the skills the tables named by their look and clip), with the rank rows
-//! inheriting their skill's look (the intended change: the tables matched rank 1 ids only).
+//! PR5-33 (LAYER-UP-DATA) over the SHIPPED catalog: the data's look and clip values resolve (PR5-53: a look key to an
+//! effect preset row of its role; a typo would draw the neutral look), and the looks the GUI's id tables gave before
+//! PR5-33 are pinned (weapon families by their blow, shot and look at range; the skills the tables named by their look
+//! and clip; PR5-53 pass 2: each look the frozen library's, `fx::library`), with the rank rows inheriting their skill's
+//! look (the intended change: the tables matched rank 1 ids only).
 
 use crate::battle::tokens::action_clips;
 use crate::fx::*;
+use emberwake_data::looks::FxRole;
 use emberwake_world::Data;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -33,8 +35,19 @@ fn rig_clips() -> BTreeSet<String> {
     out
 }
 
-fn known(table: &[(&str, Style)], key: &str) -> bool {
-    table.iter().any(|(k, _)| *k == key)
+/// PR5-53: whether the data's effect presets hold a row of role `role` for look key `key`.
+fn known(d: &Data, role: FxRole, key: &str) -> bool {
+    d.cat.fx_presets.get(key).is_some_and(|p| p.role == role)
+}
+
+/// PR5-53 pass 2: the frozen library's look of key `key` (the look the old tables drew, `fx::library`).
+fn lk(key: &str) -> Style {
+    library::look(key)
+}
+
+/// An `Act` over the shipped catalog's effect presets.
+fn act<'a>(d: &'a emberwake_data::Catalog, kind: &'a str, fx: &'a str, family: Option<&'a emberwake_data::looks::FamilyLook>, ranged: bool, dist: i32) -> Act<'a> {
+    Act { presets: Some(&d.fx_presets), ..Act::new(kind, fx, family, ranged, dist) }
 }
 
 /// The weapon families of the shipped data with whether their engine rules make them always ranged.
@@ -56,16 +69,16 @@ fn every_shipped_look_and_clip_value_names_a_known_key() {
     let clips = rig_clips();
     assert!(clips.contains("attack") && clips.contains("jab"), "the rigs were read ({} clips)", clips.len());
     for s in &d.cat.skills {
-        assert!(s.fx.is_empty() || known(&STRIKES, &s.fx) || known(&SUPPORTS, &s.fx), "skill {}: fx '{}' is no strike or support look", s.id, s.fx);
+        assert!(s.fx.is_empty() || known(&d, FxRole::Strike, &s.fx) || known(&d, FxRole::Support, &s.fx), "skill {}: fx '{}' is no strike or support look", s.id, s.fx);
         assert!(s.clip.is_empty() || clips.contains(&s.clip), "skill {}: clip '{}' is no rig clip", s.id, s.clip);
     }
     let families = weapon_families(&d);
     assert!(!families.is_empty());
     for (id, ranged) in &families {
         let f = d.cat.family_looks.get(id).unwrap_or_else(|| panic!("family {id} has its look row"));
-        let table: &[(&str, Style)] = if *ranged { &SHOTS } else { &BLOWS };
-        assert!(f.fx.is_empty() || known(table, &f.fx), "family {id}: fx '{}' is no {} look", f.fx, if *ranged { "shot" } else { "blow" });
-        assert!(f.fx_far.is_empty() || known(&STRIKES, &f.fx_far), "family {id}: fx_far '{}' is no strike look", f.fx_far);
+        let role = if *ranged { FxRole::Shot } else { FxRole::Blow };
+        assert!(f.fx.is_empty() || known(&d, role, &f.fx), "family {id}: fx '{}' is no {} look", f.fx, if *ranged { "shot" } else { "blow" });
+        assert!(f.fx_far.is_empty() || known(&d, FxRole::Strike, &f.fx_far), "family {id}: fx_far '{}' is no strike look", f.fx_far);
         for c in f.attack_clips.iter().chain(&f.area_clips) {
             assert!(clips.contains(c), "family {id}: clip '{c}' is no rig clip");
         }
@@ -85,20 +98,20 @@ fn the_shipped_data_gives_the_old_tables_looks() {
     // family id -> (strike adjacent, strike 3 cells away); ranged by the family's engine rule. GEAR-REWORK1 (PR5-51b):
     // the retired families (axe, mace, wand) left the table; the new ones (`NEW_FAMILIES`) were never in the id tables
     let families: [(&str, Style, Style); 14] = [
-        ("sword", SLASH, REACH_BOLT),
-        ("hammer", BLUDGEON, REACH_BOLT),
-        ("fist", FISTS, REACH_BOLT),
-        ("dagger", STAB, REACH_BOLT),
-        ("bow", ARROW, ARROW),
-        ("staff", BLUDGEON, ARCANE_BOLT),
-        ("orb", SLASH, ARCANE_BOLT),
-        ("tome", SLASH, ARCANE_BOLT),
-        ("crossbow", BOLT, BOLT),
-        ("polearm", SLASH, REACH_BOLT),
-        ("scourge", SLASH, REACH_BOLT),
-        ("censer", SLASH, REACH_BOLT),
-        ("bone_saw", SLASH, REACH_BOLT),
-        ("sprayer", ARROW, ARROW),
+        ("sword", lk("slash"), lk("reach_bolt")),
+        ("hammer", lk("bludgeon"), lk("reach_bolt")),
+        ("fist", lk("fists"), lk("reach_bolt")),
+        ("dagger", lk("stab"), lk("reach_bolt")),
+        ("bow", lk("arrow"), lk("arrow")),
+        ("staff", lk("bludgeon"), lk("arcane_orb")),
+        ("orb", lk("slash"), lk("arcane_orb")),
+        ("tome", lk("slash"), lk("arcane_orb")),
+        ("crossbow", lk("bolt"), lk("bolt")),
+        ("polearm", lk("slash"), lk("reach_bolt")),
+        ("scourge", lk("slash"), lk("reach_bolt")),
+        ("censer", lk("slash"), lk("reach_bolt")),
+        ("bone_saw", lk("slash"), lk("reach_bolt")),
+        ("sprayer", lk("arrow"), lk("arrow")),
     ];
     let ranged: Vec<(String, bool)> = weapon_families(&d);
     for (id, _) in &ranged {
@@ -110,49 +123,49 @@ fn the_shipped_data_gives_the_old_tables_looks() {
     for (id, close, far) in families {
         let r = ranged.iter().find(|(f, _)| f == id).unwrap_or_else(|| panic!("{id} ships")).1;
         let fl = family_look(cat, id);
-        assert_eq!(style(Act::new("attack", "", fl, r, 1)), close, "{id} adjacent");
-        assert_eq!(style(Act::new("attack", "", fl, r, 3)), far, "{id} at 3 cells");
+        assert_eq!(style(act(cat, "attack", "", fl, r, 1)), close, "{id} adjacent");
+        assert_eq!(style(act(cat, "attack", "", fl, r, 3)), far, "{id} at 3 cells");
     }
     let bare = family_look(cat, "");
-    assert_eq!(style(Act::new("attack", "", bare, false, 1)), FISTS, "no weapon: the fists");
+    assert_eq!(style(act(cat, "attack", "", bare, false, 1)), lk("fists"), "no weapon: the fists");
     assert_eq!(action_clips("", "attack", bare), ["jab", "attack"], "no weapon jabs");
     assert_eq!(action_clips("", "area", bare), ["sweep_kick", "kick", "jab", "attack"], "and sweeps an area");
     assert_eq!(action_clips("", "attack", family_look(cat, "sword")), ["attack"]);
     // skill id -> (command kind, look, clips by a sword)
     let skills: [(&str, &str, Style, &[&str]); 21] = [
-        ("arcane_bolt", "attack", ARCANE_BOLT, &["attack"]),
-        ("shield_bash", "attack", SHIELD_BASH, &["shield_bash", "attack"]),
-        ("hex", "attack", HEX, &["attack"]),
-        ("arc_lance", "area", ARC_LANCE, &["attack"]),
-        ("firebomb", "area", FIREBOMB, &["attack"]),
-        ("inferno", "area", FIREBOMB, &["attack"]),
-        ("glacial_burst", "area", GLACIAL_BURST, &["attack"]),
-        ("smite", "attack", SMITE, &["attack"]),
-        ("judgement", "attack", SMITE, &["attack"]),
-        ("volley", "area", ARROW_VOLLEY, &["attack"]),
-        ("shockwave", "area", SHOCKWAVE, &["attack"]),
-        ("sweep_kick", "area", SWEEP, &["sweep_kick", "attack"]),
-        ("cyclone_kick", "area", SWEEP, &["sweep_kick", "attack"]),
-        ("haymaker", "attack", HAYMAKER, &["haymaker", "attack"]),
-        ("crushing_blow", "attack", HAYMAKER, &["attack"]),
-        ("purify", "support", PURIFY, &["cast"]),
-        ("aegis", "support", AEGIS, &["cast"]),
-        ("rally", "support", RALLY, &["cast"]),
-        ("taunt_shout", "support", RALLY, &["cast"]),
-        ("offhand_jab", "attack", SLASH, &["jab", "attack"]),
-        ("caustic_vomit", "attack", SLASH, &["spit", "attack"]),
+        ("arcane_bolt", "attack", lk("arcane_orb"), &["attack"]),
+        ("shield_bash", "attack", lk("bash_ring"), &["shield_bash", "attack"]),
+        ("hex", "attack", lk("curse_orb"), &["attack"]),
+        ("arc_lance", "area", lk("beam"), &["attack"]),
+        ("firebomb", "area", lk("fire_lob"), &["attack"]),
+        ("inferno", "area", lk("fire_lob"), &["attack"]),
+        ("glacial_burst", "area", lk("frost_lob"), &["attack"]),
+        ("smite", "attack", lk("falling_orb"), &["attack"]),
+        ("judgement", "attack", lk("falling_orb"), &["attack"]),
+        ("volley", "area", lk("arrow_volley"), &["attack"]),
+        ("shockwave", "area", lk("ground_wave"), &["attack"]),
+        ("sweep_kick", "area", lk("sweep"), &["sweep_kick", "attack"]),
+        ("cyclone_kick", "area", lk("sweep"), &["sweep_kick", "attack"]),
+        ("haymaker", "attack", lk("heavy_blow"), &["haymaker", "attack"]),
+        ("crushing_blow", "attack", lk("heavy_blow"), &["attack"]),
+        ("purify", "support", lk("cleanse_motes"), &["cast"]),
+        ("aegis", "support", lk("ward_ring"), &["cast"]),
+        ("rally", "support", lk("rally_ring"), &["cast"]),
+        ("taunt_shout", "support", lk("rally_ring"), &["cast"]),
+        ("offhand_jab", "attack", lk("slash"), &["jab", "attack"]),
+        ("caustic_vomit", "attack", lk("slash"), &["spit", "attack"]),
     ];
     let sword = family_look(cat, "sword");
     let skill = |id: &str| cat.skills.iter().find(|s| s.id == id).unwrap_or_else(|| panic!("skill {id} ships"));
     for (id, kind, look, clips) in skills {
         let s = skill(id);
-        assert_eq!(style(Act::new(kind, &s.fx, sword, false, 1)), look, "{id}");
+        assert_eq!(style(act(cat, kind, &s.fx, sword, false, 1)), look, "{id}");
         assert_eq!(action_clips(&s.clip, kind, sword), clips, "{id} clips");
     }
-    assert_eq!(style(Act::new("support", &skill("mend").fx, None, false, 1)), MEND, "any other support: the mend motes");
+    assert_eq!(style(act(cat, "support", &skill("mend").fx, None, false, 1)), lk("heal_motes"), "any other support: the mend motes");
     // PR5-33's intended change: a rank row inherits its skill's look and clip (the tables matched rank 1 ids only)
     let second = skill("shield_bash_2");
     assert_eq!((second.family.as_str(), second.name.as_str()), ("shield_bash", "Shield Bash II"));
-    assert_eq!(style(Act::new("attack", &second.fx, sword, false, 1)), SHIELD_BASH);
+    assert_eq!(style(act(cat, "attack", &second.fx, sword, false, 1)), lk("bash_ring"));
     assert_eq!(action_clips(&second.clip, "attack", sword), ["shield_bash", "attack"]);
 }

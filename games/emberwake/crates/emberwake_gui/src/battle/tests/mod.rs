@@ -1183,7 +1183,7 @@ fn mend_motes_rise_at_the_targets_foot_and_its_float_waits_for_the_impact() {
     let mut i = b.impacts.remove(0);
     let target = i.struck[0];
     let cell = b.host.session.as_ref().unwrap().w.grid.pos(target).unwrap();
-    (i.style, i.area, i.to, i.struck, i.floats) = (fx::MEND, false, cell, Vec::new(), vec![(target, "+5".into(), cx.tuning.value.heal_color)]);
+    (i.style, i.area, i.to, i.struck, i.floats) = (fx::library::look(fx::DEFAULT_SUPPORT), false, cell, Vec::new(), vec![(target, "+5".into(), cx.tuning.value.heal_color)]);
     let at = i.at.unwrap();
     b.floats.clear();
     b.impacts.push(i);
@@ -1197,7 +1197,7 @@ fn mend_motes_rise_at_the_targets_foot_and_its_float_waits_for_the_impact() {
         aegis_ui::fx::Prim::Sparks(s) if e.start == at => Some(s),
         _ => None,
     });
-    assert_eq!(motes.map(|s| (s.at, s.cols[0], s.ms)), Some((foot, fx::GOLD, 500)), "the gold motes at its foot");
+    assert_eq!(motes.map(|s| (s.at, s.cols[0], s.ms)), Some((foot, [0xfb, 0xbf, 0x24, 255], 500)), "the gold motes at its foot");
 }
 
 /// FX1-L2 M7 (4.3): a missed attack's target steps 3 px away from its attacker and back at the impact; not under
