@@ -83,8 +83,8 @@ const GOBLIN: UnitId = 6;
 fn ruleset(diag: MeleeDiagonal, cost: FlankCost, flank: bool) -> Ruleset {
     let rules: Vec<&str> = if flank { vec![ROUND_INTENT, AP_COST, FLANK] } else { vec![ROUND_INTENT, AP_COST] };
     let mut r = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": rules, "basics": BASICS}).as_object().unwrap());
-    r.numbers.melee_diagonal = diag;
-    r.numbers.flank_protected = cost;
+    r.numbers.modes.melee_diagonal = diag;
+    r.numbers.modes.flank_protected = cost;
     r
 }
 

@@ -1,8 +1,10 @@
 //! Rulesets (RULESET1 3, docs/specs/RULESET1.md; engine-only, no Godot original): every ruleset is a row of the catalog
 //! kind `rulesets` (its rules from the register below and its numbers; CLN-44: the ids are open, `classic` included,
 //! decision "INPUT1-M rule choices and the classic ruleset"). `classic` is the default id (the legacy rules: no rule on,
-//! `melee_diagonal` none); a game without its row plays the built-in classic values (`Ruleset::classic`) with a load
-//! note. A world names its ruleset in its manifest (`ruleset`, "" = the nearest parent's, else classic); a battle gets
+//! `melee_diagonal` none); PR5-52 (RULESET-MODES1, FB-223, `P-ARCH-02`): it is the kit's built-in preset
+//! (`Ruleset::classic`, `PRESETS`), which a game resolves without a row (a game ships one ruleset row; a `classic` row,
+//! if a game keeps one, still wins). The mutually exclusive rule switches are a row's `modes` (`MODES`, `Modes`; the
+//! old flat keys load as aliases). A world names its ruleset in its manifest (`ruleset`, "" = the nearest parent's, else classic); a battle gets
 //! it from its caller (`EncounterDef.ruleset`: the world bridge, the Combat Arena, the Dojo, the sim, the host). Every
 //! extension reads its flag here first, so classic battles never change. CLN-45: the legacy-vs-new behaviours the round
 //! intent rule used to switch as a bundle (Rest AP timing, the chase, root stopping it, the Switch Target step, the
@@ -20,6 +22,9 @@ pub const CLASSIC: &str = "classic";
 pub const TIMELINE: &str = "timeline";
 /// The ruleset a world without its own plays by (CLN-46: screens dim a chip at it, with no switches).
 pub const DEFAULT: &str = CLASSIC;
+/// PR5-52 (RULESET-MODES1, `P-ARCH-02`): the kit's built-in ruleset presets (`Ruleset::preset`), resolved without a
+/// catalog row: a game ships one ruleset row (its own), and kit tests and worlds may still name `classic`.
+pub const PRESETS: [&str; 1] = [CLASSIC];
 /// The catalog kind of the ruleset rows (data/catalog/rulesets.json).
 pub const KIND: &str = "rulesets";
 
@@ -342,16 +347,184 @@ impl PoiseMode {
 /// CLN-45: the values of an on/off ruleset field (`root_stops_chase`, `switch_target_step`, `stances`; beside "" = by
 /// the rules).
 pub const SWITCH_IDS: [&str; 2] = ["on", "off"];
-/// CLN-45: the row fields whose empty value ("" or absent) reads as the round intent rule's choice when the row lists
-/// `round_intent`, else the legacy (classic) one (`Numbers::by_rules`).
-pub const BY_RULES_FIELDS: [&str; 5] = ["rest_ap", "chase", "root_stops_chase", "switch_target_step", "stances"];
+/// CLN-45: the flat row fields whose empty value ("" or absent) reads as the round intent rule's choice when the row
+/// lists `round_intent`, else the legacy (classic) one (`Numbers::by_rules`). PR5-52 (RULESET-MODES1): `rest_ap` and
+/// `chase` moved under `modes` (`MODES`, `ModeField::by_rules`).
+pub const BY_RULES_FIELDS: [&str; 3] = ["root_stops_chase", "switch_target_step", "stances"];
 
-/// The values a field of `BY_RULES_FIELDS` may take (beside "").
+/// The values a field of `BY_RULES_FIELDS` may take (beside ""); PR5-52: a by-rules mode's (`rest_ap`, `chase`) too.
 pub fn by_rules_values(key: &str) -> &'static [&'static str] {
-    match key {
-        "rest_ap" => &RestAp::IDS,
-        "chase" => &Chase::IDS,
-        _ => &SWITCH_IDS,
+    match mode_field(key) {
+        Some(m) => m.values,
+        None => &SWITCH_IDS,
+    }
+}
+
+/// PR5-52 (RULESET-MODES1, FB-223, `P-ARCH-02`): the row key of the mutually exclusive rule switches, an object of mode
+/// to value (`MODES`).
+pub const MODES_KEY: &str = "modes";
+
+/// PR5-52: one mutually exclusive rule switch of a row's `modes`: its key there, the flat row key it had before (a load
+/// alias: a row that still sets it reads it, and the writer stores it under `modes`), its values (one at a time), the
+/// value a loaded row takes when it sets none (`fill`; "" = none: absent reads by the rules or as the code default) and
+/// whether an empty value reads by the rules (`round_intent`'s choice, else the legacy one).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModeField {
+    pub key: &'static str,
+    pub alias: &'static str,
+    pub values: &'static [&'static str],
+    pub fill: &'static str,
+    pub by_rules: bool,
+}
+
+/// PR5-52: the modes, in their stored order (the order the flat keys had in a row).
+pub const MODES: [ModeField; 6] = [
+    ModeField { key: "melee_diagonal", alias: "melee_diagonal", values: &MeleeDiagonal::IDS, fill: "maneuver", by_rules: false },
+    ModeField { key: "flank_protected_cost", alias: "flank_protected_cost", values: &FlankCost::IDS, fill: "full", by_rules: false },
+    ModeField { key: "rest_ap", alias: "rest_ap", values: &RestAp::IDS, fill: "", by_rules: true },
+    ModeField { key: "chase", alias: "chase", values: &Chase::IDS, fill: "", by_rules: true },
+    ModeField { key: "attack_lock", alias: "attack_lock", values: &AttackLock::IDS, fill: "none", by_rules: false },
+    ModeField { key: "poise", alias: "poise_mode", values: &PoiseMode::IDS, fill: "", by_rules: false },
+];
+
+/// PR5-52: the mode `key` (its `modes` key, its old flat key, or its token form `modes.<key>`).
+pub fn mode_field(key: &str) -> Option<&'static ModeField> {
+    let key = key.strip_prefix("modes.").unwrap_or(key);
+    MODES.iter().find(|m| m.key == key || m.alias == key)
+}
+
+/// PR5-52: the value row `o` gives mode `m`: its `modes` entry, else its old flat key (the load alias); None when it
+/// gives neither.
+pub fn mode_given<'a>(o: &'a Obj, m: &ModeField) -> Option<&'a serde_json::Value> {
+    o.get(MODES_KEY).and_then(serde_json::Value::as_object).and_then(|x| x.get(m.key)).or_else(|| o.get(m.alias))
+}
+
+/// PR5-52: the value of mode `m` in row `o` as a string ("" when it gives none or not a string).
+pub fn mode_str(o: &Obj, m: &ModeField) -> String {
+    mode_given(o, m).and_then(serde_json::Value::as_str).unwrap_or_default().to_string()
+}
+
+/// PR5-52: row `o` with its modes in their stored form: each old flat key moved under `modes` (dropped when `modes`
+/// already gives the same value; kept beside it when the two disagree, which the row check refuses), an empty by-rules
+/// value left out (it reads the same), the modes in `MODES` order (then any unknown key, which the check refuses), and,
+/// with `fill` (a loaded row), each mode with a `fill` value that the row leaves unset given it. A `modes` that is not
+/// an object leaves the row as it is (the check refuses it). The loader and the writer both apply it, so a stored row
+/// keeps one form.
+pub fn with_modes(o: &Obj, fill: bool) -> Obj {
+    let mut given = match o.get(MODES_KEY) {
+        None => Obj::new(),
+        Some(serde_json::Value::Object(m)) => m.clone(),
+        Some(_) => return o.clone(),
+    };
+    let mut out = o.clone();
+    for m in MODES.iter() {
+        let Some(old) = o.get(m.alias) else { continue };
+        match given.get(m.key) {
+            None => {
+                given.insert(m.key.to_string(), old.clone());
+                out.shift_remove(m.alias);
+            }
+            Some(v) if v == old => {
+                out.shift_remove(m.alias);
+            }
+            Some(_) => {}
+        }
+    }
+    let mut modes = Obj::new();
+    for m in MODES.iter() {
+        match given.shift_remove(m.key) {
+            Some(v) if m.by_rules && v.as_str() == Some("") => {}
+            Some(v) => {
+                modes.insert(m.key.to_string(), v);
+            }
+            None if fill && !m.fill.is_empty() => {
+                modes.insert(m.key.to_string(), serde_json::Value::String(m.fill.to_string()));
+            }
+            None => {}
+        }
+    }
+    modes.extend(given);
+    if !modes.is_empty() || o.contains_key(MODES_KEY) {
+        out.insert(MODES_KEY.to_string(), serde_json::Value::Object(modes));
+    }
+    out
+}
+
+/// PR5-52: the problems of row `o`'s modes: `modes` not an object, a key that is not a mode, a value that is not one of
+/// its mode's (one value: the values are mutually exclusive, so a list is refused; "" only for a by-rules mode), and a
+/// mode set under `modes` and under its old flat key with two values.
+pub fn mode_errors(o: &Obj) -> Vec<String> {
+    let mut out = Vec::new();
+    let keys: Vec<&str> = MODES.iter().map(|m| m.key).collect();
+    match o.get(MODES_KEY) {
+        None => {}
+        Some(serde_json::Value::Object(m)) => {
+            for k in m.keys().filter(|k| !keys.contains(&k.as_str())) {
+                out.push(format!("Modes: '{k}' is not one of {}.", keys.join(", ")));
+            }
+        }
+        Some(_) => {
+            out.push("Modes must be an object of mode to value.".into());
+            return out;
+        }
+    }
+    for m in MODES.iter() {
+        let new = o.get(MODES_KEY).and_then(serde_json::Value::as_object).and_then(|x| x.get(m.key));
+        let old = o.get(m.alias);
+        if let (Some(n), Some(a)) = (new, old) {
+            if n != a {
+                out.push(format!("modes.{0} {n} and its old key {1} {a} disagree: the values are mutually exclusive, set modes.{0} only.", m.key, m.alias));
+            }
+        }
+        let Some(v) = new.or(old) else { continue };
+        let empty_ok = if m.by_rules { " (or empty: by the rules)" } else { "" };
+        match v.as_str() {
+            None if v.is_array() => out.push(format!("modes.{} takes one value, not a list: {} are mutually exclusive.", m.key, m.values.join(", "))),
+            None => out.push(format!("modes.{}: {v} is not one of {}{empty_ok}.", m.key, m.values.join(", "))),
+            Some("") if m.by_rules => {}
+            Some(s) if !m.values.contains(&s) => out.push(format!("modes.{}: '{s}' is not one of {}{empty_ok}.", m.key, m.values.join(", "))),
+            Some(_) => {}
+        }
+    }
+    out
+}
+
+/// PR5-52: a ruleset's mutually exclusive rule switches, typed (`modes` in a row; `Default` is the code defaults, the
+/// built-in classic preset's but `melee_diagonal`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Modes {
+    /// S2.2-S2 (`modes.poise`, was `poise_mode`): how a hit lowers poise (default `bar`).
+    pub poise: PoiseMode,
+    /// INPUT1 MR10 (`modes.melee_diagonal`; row default `maneuver`, classic `none`; CLN-45: read as it is, whatever the
+    /// rules).
+    pub melee_diagonal: MeleeDiagonal,
+    /// INPUT1 MR9 (`modes.flank_protected_cost` with the flat `flank_protected_ap`; default `full`).
+    pub flank_protected: FlankCost,
+    /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up (`modes.attack_lock`; default none).
+    pub attack_lock: AttackLock,
+    /// CLN-45: when Rest returns its AP (`modes.rest_ap`).
+    pub rest_ap: RestAp,
+    /// CLN-45: which skills chase (`modes.chase`).
+    pub chase: Chase,
+}
+
+impl Default for Modes {
+    fn default() -> Self {
+        Self { poise: PoiseMode::Bar, melee_diagonal: MeleeDiagonal::Maneuver, flank_protected: FlankCost::Full, attack_lock: AttackLock::None, rest_ap: RestAp::OnUse, chase: Chase::Classic }
+    }
+}
+
+impl Modes {
+    /// The value id of mode `key` (as `mode_field` takes it), None for another key.
+    pub fn id(&self, key: &str) -> Option<&'static str> {
+        Some(match mode_field(key)?.key {
+            "poise" => self.poise.id(),
+            "melee_diagonal" => self.melee_diagonal.id(),
+            "flank_protected_cost" => self.flank_protected.id(),
+            "attack_lock" => self.attack_lock.id(),
+            "rest_ap" => self.rest_ap.id(),
+            _ => self.chase.id(),
+        })
     }
 }
 
@@ -446,17 +619,11 @@ pub struct Numbers {
     pub rest_ap_cap: i32,
     pub rest_poise_per_block: i32,
     pub deck_slots: DeckSlots,
-    /// INPUT1 MR10 (`melee_diagonal`; row default `maneuver`, classic `none`; CLN-45: read as it is, whatever the
-    /// rules).
-    pub melee_diagonal: MeleeDiagonal,
-    /// INPUT1 MR9 (`flank_protected_cost`, `flank_protected_ap`; default `full`).
-    pub flank_protected: FlankCost,
+    /// PR5-52 (RULESET-MODES1): the mutually exclusive rule switches (`modes`: poise, diagonal melee, protected flank
+    /// cost, attack lock, Rest AP timing, chase).
+    pub modes: Modes,
     /// VISCLAR1-D (`move_after_blocks`): the most move blocks of a Move after a skill; a Move as the opener keeps its two.
     pub move_after_blocks: i32,
-    /// CLN-45: when Rest returns its AP (`rest_ap`).
-    pub rest_ap: RestAp,
-    /// CLN-45: which skills chase (`chase`).
-    pub chase: Chase,
     /// CLN-45 (INPUT1 MR16): whether root stops a chase (`root_stops_chase`).
     pub root_stops_chase: bool,
     /// CLN-45 (RULESET1_INTENT TG3): whether an attack on another unit than the locked one inserts a Switch Target step
@@ -464,8 +631,6 @@ pub struct Numbers {
     pub switch_target_step: bool,
     /// CLN-45 (RULESET1_INTENT IN3): whether the classic stance machinery runs (`stances`).
     pub stances: bool,
-    /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up (`attack_lock`; default none).
-    pub attack_lock: AttackLock,
     /// S1.2-S3 (`bleed_pct`, S1 section 3): the fraction of max HP a bleed tick deals.
     pub bleed_pct: f64,
     /// S1.2-S3 (`counter_mult`, S1 section 3): riposte's counter damage multiplier.
@@ -478,12 +643,10 @@ pub struct Numbers {
     pub debt_stagger_status: String,
     /// F2.2-S1 (`debt_stun_status`, FB-58b): the status a `debt_stun` debt puts in `st.active` (default `stun`).
     pub debt_stun_status: String,
-    /// S2.2-S1 (`poise_pips`, S2 section 3): the pips of a full bar under `poise_mode` pips.
+    /// S2.2-S1 (`poise_pips`, S2 section 3): the pips of a full bar under `modes.poise` pips.
     pub poise_pips: i32,
-    /// S2.2-S1 (`max_pip_loss_per_hit`, S2 section 3): the most pips one hit removes under `poise_mode` pips.
+    /// S2.2-S1 (`max_pip_loss_per_hit`, S2 section 3): the most pips one hit removes under `modes.poise` pips.
     pub max_pip_loss_per_hit: i32,
-    /// S2.2-S2 (`poise_mode`): how a hit lowers poise (default `bar`).
-    pub poise_mode: PoiseMode,
     /// U1.2-S3b (`know_potency`, U1 "status potency from KNOW", S1 section 2 `attacker_know_potency`): the potency a
     /// point of the attacker's KNOW adds to a skill's status roll; 0 (the default) is the spec's "potency off".
     pub know_potency: f64,
@@ -562,15 +725,11 @@ impl Default for Numbers {
             rest_ap_cap: 2,
             rest_poise_per_block: 5,
             deck_slots: DeckSlots::default(),
-            melee_diagonal: MeleeDiagonal::Maneuver,
-            flank_protected: FlankCost::Full,
+            modes: Modes::default(),
             move_after_blocks: MOVE_AFTER_BLOCKS,
-            rest_ap: RestAp::OnUse,
-            chase: Chase::Classic,
             root_stops_chase: false,
             switch_target_step: true,
             stances: true,
-            attack_lock: AttackLock::None,
             bleed_pct: status::BLEED_PCT,
             counter_mult: status::COUNTER_MULT,
             debt_stagger: status::DEBT_STAGGER,
@@ -579,7 +738,6 @@ impl Default for Numbers {
             debt_stun_status: status::DEBT_STUN_STATUS.to_string(),
             poise_pips: 5,
             max_pip_loss_per_hit: 3,
-            poise_mode: PoiseMode::Bar,
             know_potency: 0.0,
             unit_pools: Vec::new(),
             untrained_power_mult: crate::stats::UNTRAINED_POWER_MULT,
@@ -614,14 +772,31 @@ impl Numbers {
         if !round_intent {
             return d;
         }
-        Self { rest_ap: RestAp::RoundEnd, chase: Chase::EverySkill, root_stops_chase: true, switch_target_step: false, stances: false, ..d }
+        Self { modes: Modes { rest_ap: RestAp::RoundEnd, chase: Chase::EverySkill, ..d.modes }, root_stops_chase: true, switch_target_step: false, stances: false, ..d }
+    }
+
+    /// PR5-52: a row's modes (each from `modes`, else its old flat key; an unset or unknown value takes the default, a
+    /// by-rules mode's by `by_rules`; a raw row without `melee_diagonal` reads `maneuver` or `none` by the rules, a
+    /// loaded row has the schema's `maneuver`).
+    pub fn modes_of(o: &Obj, round_intent: bool) -> Modes {
+        let d = Self::by_rules(round_intent).modes;
+        let get = |key: &str| mode_field(key).map(|m| mode_str(o, m)).unwrap_or_default();
+        let diagonal_given = mode_field("melee_diagonal").and_then(|m| mode_given(o, m)).is_some();
+        let raw_diagonal = if diagonal_given { Modes::default().melee_diagonal } else if round_intent { MeleeDiagonal::Maneuver } else { MeleeDiagonal::None };
+        Modes {
+            poise: PoiseMode::parse(&get("poise")).unwrap_or(d.poise),
+            melee_diagonal: MeleeDiagonal::parse(&get("melee_diagonal")).unwrap_or(raw_diagonal),
+            flank_protected: FlankCost::from_ids(&get("flank_protected_cost"), value::int(o, "flank_protected_ap", FlankCost::FIXED_AP)),
+            attack_lock: AttackLock::parse(&get("attack_lock")).unwrap_or(d.attack_lock),
+            rest_ap: RestAp::parse(&get("rest_ap")).unwrap_or(d.rest_ap),
+            chase: Chase::parse(&get("chase")).unwrap_or(d.chase),
+        }
     }
 
     /// From a ruleset row (missing keys take the defaults; CLN-45: the switches' by `by_rules`).
     pub fn from_row(o: &Obj) -> Self {
         let round_intent = value::strings(o, "rules").iter().any(|r| r == ROUND_INTENT);
         let d = Self::by_rules(round_intent);
-        let raw_diagonal = if o.contains_key("melee_diagonal") { Self::default().melee_diagonal } else if round_intent { MeleeDiagonal::Maneuver } else { MeleeDiagonal::None };
         let switch = |k: &str, by_rules: bool| match value::string(o, k, "").as_str() {
             "on" => true,
             "off" => false,
@@ -644,15 +819,11 @@ impl Numbers {
             rest_ap_cap: value::int(o, "rest_ap_cap", d.rest_ap_cap),
             rest_poise_per_block: value::int(o, "rest_poise_per_block", d.rest_poise_per_block),
             deck_slots: DeckSlots { active: slot("active"), passive: slot("passive"), keystone: slot("keystone") },
-            melee_diagonal: MeleeDiagonal::parse(&value::string(o, "melee_diagonal", "")).unwrap_or(raw_diagonal),
+            modes: Self::modes_of(o, round_intent),
             move_after_blocks: value::int(o, "move_after_blocks", MOVE_AFTER_BLOCKS),
-            flank_protected: FlankCost::from_ids(&value::string(o, "flank_protected_cost", ""), value::int(o, "flank_protected_ap", FlankCost::FIXED_AP)),
-            rest_ap: RestAp::parse(&value::string(o, "rest_ap", "")).unwrap_or(d.rest_ap),
-            chase: Chase::parse(&value::string(o, "chase", "")).unwrap_or(d.chase),
             root_stops_chase: switch("root_stops_chase", d.root_stops_chase),
             switch_target_step: switch("switch_target_step", d.switch_target_step),
             stances: switch("stances", d.stances),
-            attack_lock: AttackLock::parse(&value::string(o, "attack_lock", "")).unwrap_or(d.attack_lock),
             bleed_pct: value::float(o, "bleed_pct", d.bleed_pct),
             counter_mult: value::float(o, "counter_mult", d.counter_mult),
             debt_stagger: value::int(o, "debt_stagger", d.debt_stagger),
@@ -661,7 +832,6 @@ impl Numbers {
             debt_stun_status: Some(value::string(o, "debt_stun_status", "")).filter(|v| !v.is_empty()).unwrap_or(d.debt_stun_status),
             poise_pips: value::int(o, "poise_pips", d.poise_pips),
             max_pip_loss_per_hit: value::int(o, "max_pip_loss_per_hit", d.max_pip_loss_per_hit),
-            poise_mode: PoiseMode::parse(&value::string(o, "poise_mode", "")).unwrap_or(d.poise_mode),
             know_potency: value::float(o, "know_potency", d.know_potency),
             unit_pools: value::strings(o, "unit_pools"),
             untrained_power_mult: value::float(o, "untrained_power_mult", d.untrained_power_mult),
@@ -756,11 +926,34 @@ impl Default for Ruleset {
 }
 
 impl Ruleset {
-    /// The built-in classic values: no rule on, the default numbers (no rule reads them), no diagonal melee, the legacy
-    /// switches (CLN-45: Rest pays on use, the classic chase, Switch Target steps, stances on). CLN-44:
-    /// only the fallback of a game without its `classic` row, and tests; battles read the row (`of`).
+    /// The built-in classic preset: no rule on, the default numbers (no rule reads them), no diagonal melee, the legacy
+    /// switches (CLN-45: Rest pays on use, the classic chase, Switch Target steps, stances on). PR5-52 (RULESET-MODES1,
+    /// `P-ARCH-02`): the kit's built-in preset, which `of` resolves for `classic` when the game ships no `classic` row
+    /// (a game ships one ruleset row); equal to the row the game shipped before (`rpgkit_content/tests/ruleset_modes.rs`,
+    /// `classic_is_a_built_in_preset`).
     pub fn classic() -> Self {
-        Self { id: CLASSIC.into(), name: "Classic".into(), rules: Vec::new(), numbers: Numbers { melee_diagonal: MeleeDiagonal::None, ..Numbers::default() } }
+        Self { id: CLASSIC.into(), name: "Classic".into(), rules: Vec::new(), numbers: Numbers { modes: Modes { melee_diagonal: MeleeDiagonal::None, ..Modes::default() }, ..Numbers::default() } }
+    }
+
+    /// PR5-52: the kit's built-in preset `id` (`PRESETS`), if it is one.
+    pub fn preset(id: &str) -> Option<Self> {
+        match id {
+            CLASSIC => Some(Self::classic()),
+            _ => None,
+        }
+    }
+
+    /// PR5-52: the ids a world's `ruleset` (and a row's `rulesets` list) may name: the catalog's rows in file order, then
+    /// each built-in preset without a row.
+    pub fn known_ids(cat: &Catalog) -> Vec<String> {
+        let mut out = Self::ids(cat);
+        out.extend(PRESETS.iter().filter(|p| !cat.rulesets.contains_key(**p)).map(|p| p.to_string()));
+        out
+    }
+
+    /// PR5-52: the typed modes (`modes`).
+    pub fn modes(&self) -> &Modes {
+        &self.numbers.modes
     }
 
     /// From a (checked) ruleset row: the register's rules it lists, its numbers.
@@ -774,16 +967,16 @@ impl Ruleset {
         }
     }
 
-    /// The ruleset `id` of the catalog ("" is classic): its row in `rulesets`. CLN-44: a missing `classic` row falls back
-    /// to the built-in classic values with a load note (`fallback_note`); any other id without its row is refused.
+    /// The ruleset `id` of the catalog ("" is classic): its row in `rulesets`. PR5-52: an id without its row that is a
+    /// kit built-in preset (`classic`) is the preset, with no note (CLN-44's load note retired: a game ships one row);
+    /// any other id without its row is refused.
     pub fn of(cat: &Catalog, id: &str) -> Result<Self, String> {
         let id = if id.is_empty() { CLASSIC } else { id };
         if let Some(row) = cat.rulesets.get(id) {
             return Ok(Self::from_row(row));
         }
-        if id == CLASSIC {
-            note_fallback(id);
-            return Ok(Self::classic());
+        if let Some(preset) = Self::preset(id) {
+            return Ok(preset);
         }
         let known: Vec<&str> = cat.rulesets.keys().map(String::as_str).collect();
         Err(format!("ruleset '{id}' has no row in {KIND} (data/catalog/{KIND}.json; rows: {})", if known.is_empty() { "none".to_string() } else { known.join(", ") }))
@@ -806,22 +999,22 @@ impl Ruleset {
     /// INPUT1 MR10: the diagonal melee in effect: the row's value (CLN-45: no longer read as `none` without
     /// `round_intent`; the classic row sets `none`).
     pub fn melee_diagonal(&self) -> MeleeDiagonal {
-        self.numbers.melee_diagonal
+        self.numbers.modes.melee_diagonal
     }
 
     /// CLN-45 (RULESET1_INTENT RS2): when Rest returns its AP.
     pub fn rest_ap(&self) -> RestAp {
-        self.numbers.rest_ap
+        self.numbers.modes.rest_ap
     }
 
     /// CLN-45: whether a landed Rest block pays its AP at the round's end (`rest_ap` round_end).
     pub fn rest_at_round_end(&self) -> bool {
-        self.numbers.rest_ap == RestAp::RoundEnd
+        self.numbers.modes.rest_ap == RestAp::RoundEnd
     }
 
     /// CLN-45 (AS1, INPUT1 MR16): which planned skills chase.
     pub fn chase(&self) -> Chase {
-        self.numbers.chase
+        self.numbers.modes.chase
     }
 
     /// CLN-45 (INPUT1 MR16): whether root stops a chase.
@@ -836,7 +1029,7 @@ impl Ruleset {
 
     /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up.
     pub fn attack_lock(&self) -> AttackLock {
-        self.numbers.attack_lock
+        self.numbers.modes.attack_lock
     }
 
     pub fn is_classic(&self) -> bool {
@@ -928,7 +1121,7 @@ const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldR
 /// rules.
 pub const FIELD_RULES: [FieldRule; 44] = [
     FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
-    field_rule("flank_protected_cost", &[ROUND_INTENT]),
+    field_rule("modes.flank_protected_cost", &[ROUND_INTENT]),
     field_rule("flank_protected_ap", &[ROUND_INTENT]),
     field_rule("move_after_blocks", &[ROUND_INTENT]),
     field_rule("stagger_windup_mult", &[POISE]),
@@ -938,10 +1131,10 @@ pub const FIELD_RULES: [FieldRule; 44] = [
     field_rule("flank_power_mult", &[FLANK]),
     field_rule("break_chance_scale", &[POISE]),
     field_rule("break_chance_cap", &[POISE]),
-    field_rule("rest_ap_per_block", &["rest_ap=round_end"]),
-    field_rule("rest_ap_cap", &["rest_ap=round_end"]),
+    field_rule("rest_ap_per_block", &["modes.rest_ap=round_end"]),
+    field_rule("rest_ap_cap", &["modes.rest_ap=round_end"]),
     field_rule("rest_poise_per_block", &[POISE]),
-    FieldRule { untested_with: &["chase=classic"], ..field_rule("attack_lock", &[]) },
+    FieldRule { untested_with: &["modes.chase=classic"], ..field_rule("modes.attack_lock", &[]) },
     // S1.2-S3 (S1 section 3; the debt ranges S2 section 3): the status numbers, row-only until a schema entry with a
     // data re-save (as move_after_blocks got in P2.2-S1); read whatever the rules
     FieldRule { range: Some((0.01, 0.25)), ..field_rule("bleed_pct", &[]) },
@@ -953,10 +1146,10 @@ pub const FIELD_RULES: [FieldRule; 44] = [
     field_rule("debt_stagger_status", &[]),
     field_rule("debt_stun_status", &[]),
     // S2.2-S1/S2 (S2 section 3): the poise pip numbers and the bar-or-pips switch, row-only like the status numbers; the
-    // pip numbers are read only under poise_mode pips
-    FieldRule { values: &PoiseMode::IDS, ..field_rule("poise_mode", &[POISE]) },
-    FieldRule { range: Some((3.0, 8.0)), ..field_rule("poise_pips", &[POISE, "poise_mode=pips"]) },
-    FieldRule { range: Some((1.0, 5.0)), ..field_rule("max_pip_loss_per_hit", &[POISE, "poise_mode=pips"]) },
+    // pip numbers are read only under modes.poise pips (PR5-52: the switch is the mode `modes.poise`, was `poise_mode`)
+    field_rule("modes.poise", &[POISE]),
+    FieldRule { range: Some((3.0, 8.0)), ..field_rule("poise_pips", &[POISE, "modes.poise=pips"]) },
+    FieldRule { range: Some((1.0, 5.0)), ..field_rule("max_pip_loss_per_hit", &[POISE, "modes.poise=pips"]) },
     // U1.2-S3b (U1 parameter table "potency weight (KNOW)"): row-only like the status numbers; read whatever the rules
     FieldRule { range: Some((0.0, 3.0)), ..field_rule("know_potency", &[]) },
     // U1.2-S5: the unit meters every unit holds, row-only like the status numbers; read only under unit_meters
@@ -1022,19 +1215,19 @@ pub const BUNDLES: [Bundle; 7] = [
         id: "legacy_core",
         kind: BundleKind::MustShip,
         anchor: &["!round_intent"],
-        holds: &["stances=on", "chase=classic", "rest_ap=on_use", "switch_target_step=on", "root_stops_chase=off"],
-        note: "the classic row; melee_diagonal reads as set",
+        holds: &["stances=on", "modes.chase=classic", "modes.rest_ap=on_use", "switch_target_step=on", "root_stops_chase=off"],
+        note: "the classic preset; modes.melee_diagonal reads as set",
     },
     Bundle {
         id: "intent_core",
         kind: BundleKind::MustShip,
         anchor: &[ROUND_INTENT],
-        holds: &["rest_ap=round_end", "chase=every_skill", "root_stops_chase=on"],
+        holds: &["modes.rest_ap=round_end", "modes.chase=every_skill", "root_stops_chase=on"],
         note: "the by-rules choices; stances and the Switch Target step are round_intent's conflicts",
     },
     Bundle { id: "build", kind: BundleKind::MustShip, anchor: &[DECK], holds: &["basics", "deck_slots"], note: "the row checks refuse it split" },
     Bundle { id: "windup", kind: BundleKind::WorksWell, anchor: &[], holds: &[ENEMY_MOVES, AP_COST, POISE, "poise_stat"], note: "" },
-    Bundle { id: "positioning", kind: BundleKind::WorksWell, anchor: &[], holds: &[FLANK, REACH, "melee_diagonal=maneuver", "attack_lock=melee"], note: "flank needs round_intent" },
+    Bundle { id: "positioning", kind: BundleKind::WorksWell, anchor: &[], holds: &[FLANK, REACH, "modes.melee_diagonal=maneuver", "modes.attack_lock=melee"], note: "flank needs round_intent" },
     Bundle { id: "tells", kind: BundleKind::WorksWell, anchor: &[], holds: &[PLAN_BADGES, ROUND_INTENT], note: "" },
     Bundle {
         id: "hooks",
@@ -1202,6 +1395,10 @@ impl Numbers {
     /// slots `active/passive/keystone`); None for a key that is not a ruleset field.
     pub fn field(&self, key: &str) -> Option<String> {
         let switch = |on: bool| if on { "on" } else { "off" }.to_string();
+        // PR5-52: a mode by `modes.<key>`, its `modes` key or its old flat key
+        if let Some(id) = self.modes.id(key) {
+            return Some(id.to_string());
+        }
         Some(match key {
             "intents" => self.intents.join(","),
             "basics" => self.basics.join(","),
@@ -1217,20 +1414,15 @@ impl Numbers {
             "rest_ap_cap" => self.rest_ap_cap.to_string(),
             "rest_poise_per_block" => self.rest_poise_per_block.to_string(),
             "deck_slots" => format!("{}/{}/{}", self.deck_slots.active, self.deck_slots.passive, self.deck_slots.keystone),
-            "melee_diagonal" => self.melee_diagonal.id().to_string(),
-            "flank_protected_cost" => self.flank_protected.id().to_string(),
-            "flank_protected_ap" => match self.flank_protected {
+            "flank_protected_ap" => match self.modes.flank_protected {
                 FlankCost::Fixed(ap) => ap,
                 _ => FlankCost::FIXED_AP,
             }
             .to_string(),
             "move_after_blocks" => self.move_after_blocks.to_string(),
-            "rest_ap" => self.rest_ap.id().to_string(),
-            "chase" => self.chase.id().to_string(),
             "root_stops_chase" => switch(self.root_stops_chase),
             "switch_target_step" => switch(self.switch_target_step),
             "stances" => switch(self.stances),
-            "attack_lock" => self.attack_lock.id().to_string(),
             "bleed_pct" => self.bleed_pct.to_string(),
             "counter_mult" => self.counter_mult.to_string(),
             "debt_stagger" => self.debt_stagger.to_string(),
@@ -1239,7 +1431,6 @@ impl Numbers {
             "debt_stun_status" => self.debt_stun_status.clone(),
             "poise_pips" => self.poise_pips.to_string(),
             "max_pip_loss_per_hit" => self.max_pip_loss_per_hit.to_string(),
-            "poise_mode" => self.poise_mode.id().to_string(),
             "know_potency" => self.know_potency.to_string(),
             "unit_pools" => self.unit_pools.join(","),
             "untrained_power_mult" => self.untrained_power_mult.to_string(),

@@ -2,8 +2,9 @@
 //! report a game's CLI prints as `aegis rules`, generated from the ruleset rows' schema fields (the kit's
 //! `schema.json`), the rule register's metadata (`rpgkit_rules::ruleset`: `REGISTER`, `FIELD_RULES`, `BUNDLES`,
 //! `TESTED_SETS`) and the `LOCKED` table, plus the game's own rows and their notes; `aegis rules --contract` prints only
-//! the stable surface (every ruleset field as tunable with its default, range and needs; every rule with its
-//! requirements; every locked constant), one line each, which a golden holds.
+//! the stable surface (every ruleset field as tunable with its default, range and needs; PR5-52: each mode of `modes`
+//! with its values and old flat key; every rule with its requirements; every locked constant), one line each, which a
+//! golden holds.
 
 use rpgkit_rules::ruleset::{self, BundleKind, RuleKind, Ruleset, BUNDLES, FIELD_RULES, LOCKED, PROMOTED, REGISTER, TESTED_SETS};
 use serde_json::Value;
@@ -62,8 +63,12 @@ fn tunables(fields: &[Value]) -> Vec<String> {
             line.push_str(&meta(m));
         }
         out.push(line);
+        // PR5-52 (RULESET-MODES1): each mode of `modes`, with its values, its old flat key (a load alias) and its needs
+        if key == ruleset::MODES_KEY {
+            out.extend(mode_lines());
+        }
     }
-    for m in FIELD_RULES.iter().filter(|m| !seen.contains(&m.key)) {
+    for m in FIELD_RULES.iter().filter(|m| !seen.contains(&m.key) && ruleset::mode_field(m.key).is_none()) {
         let default = ruleset::Numbers::default().field(m.key).unwrap_or_default();
         // a whole-number field (its default has no point) shows a whole range, as the schema's int fields do
         let whole = !default.contains('.');
@@ -76,6 +81,21 @@ fn tunables(fields: &[Value]) -> Vec<String> {
         out.push(format!("tunable {} row-only default={default}{range}{} (no schema entry)", m.key, meta(m)));
     }
     out
+}
+
+/// PR5-52: one line per mode (`ruleset::MODES`): `modes.<key>`, its values (one at a time), the value a row that sets
+/// none reads (`by_rules`: round_intent's choice, else the legacy one), its old flat key and the metadata's needs.
+fn mode_lines() -> Vec<String> {
+    let d = ruleset::Numbers::default();
+    ruleset::MODES
+        .iter()
+        .map(|m| {
+            let default = if m.by_rules { "by_rules".to_string() } else { d.modes.id(m.key).unwrap_or_default().to_string() };
+            let token = format!("{}.{}", ruleset::MODES_KEY, m.key);
+            let meta = ruleset::field_rule_of(&token).map(meta).unwrap_or_default();
+            format!("tunable {token} mode default={default} values={} alias={}{meta}", m.values.join("|"), m.alias)
+        })
+        .collect()
 }
 
 fn meta(m: &ruleset::FieldRule) -> String {

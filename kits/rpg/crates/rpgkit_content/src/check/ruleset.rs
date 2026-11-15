@@ -1,6 +1,6 @@
 //! Ruleset rows (RULESET1-R, docs/specs/RULESET1_TASKS.md 1.2; engine-only, no Godot original): the checks of one row
 //! of the kind `rulesets` (a snake_case id, open since CLN-44, name, rules from the register, intents, basics, the
-//! poise stat, deck slots, the switches' values (CLN-45), origin) and across rows (unique ids). The numbers' ranges are
+//! poise stat, deck slots, the switches' values (CLN-45), the modes (PR5-52), origin) and across rows (unique ids). The numbers' ranges are
 //! the schema's min and max, which normalizing a row applies (as for every kind). The loader keeps the rows that pass.
 
 use super::View;
@@ -142,6 +142,9 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
     deck_slot_errors(json::get(e, "deck_slots"), has(DECK), &mut out);
     // BASERULES1-M: a listed rule the register says would be silently inert (`flank` without `round_intent`)
     out.extend(ruleset::Ruleset::from_row(e).notes().errors);
+    // PR5-52 (RULESET-MODES1): `modes` is an object of known modes, each one of its values (one at a time; an old flat
+    // key that disagrees with `modes` is refused)
+    out.extend(ruleset::mode_errors(e));
     // CLN-45: each switch is "" (by the rules) or one of its values
     for key in ruleset::BY_RULES_FIELDS {
         let v = json::s(e, key);
@@ -150,7 +153,7 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
             out.push(format!("{key}: '{v}' is not one of {} (or empty: by the rules).", values.join(", ")));
         }
     }
-    // S2.2-S2: a row-only value field (`poise_mode`) is absent or one of its ids (else it would read as its default)
+    // S2.2-S2: a row-only value field (the item switches) is absent or one of its ids (else it would read as its default)
     for f in ruleset::FIELD_RULES.iter().filter(|f| !f.values.is_empty()) {
         let v = json::s(e, f.key);
         if e.contains_key(f.key) && !f.values.contains(&v.as_str()) {
@@ -218,13 +221,24 @@ pub fn list_errors(e: &Dict) -> Vec<String> {
     out
 }
 
-/// CLN-44: the ids of a row's `rulesets` list that name no loaded ruleset row.
+/// CLN-44: the ids of a row's `rulesets` list that name no loaded ruleset row (PR5-52: nor a kit built-in preset).
 pub fn missing_rows(v: &View, e: &Dict) -> Vec<String> {
     json::sget(e, "rulesets")
         .into_iter()
-        .filter(|r| is_id(r) && !v.has(KIND, r))
+        .filter(|r| is_id(r) && !known(v, r))
         .map(|r| format!("Rulesets: '{r}' has no row in {KIND} (data/catalog/{KIND}.json)."))
         .collect()
+}
+
+/// PR5-52 (RULESET-MODES1): whether ruleset `id` resolves: a loaded row, else a kit built-in preset (`classic`).
+pub fn known(v: &View, id: &str) -> bool {
+    v.has(KIND, id) || ruleset::PRESETS.contains(&id)
+}
+
+/// PR5-52: the ruleset ids a field may name (`options_from` rulesets): the loaded rows, then each built-in preset
+/// without a row (`Ruleset::known_ids` over the view's typed catalog, built from the same rows).
+pub fn known_ids(v: &View) -> Vec<String> {
+    ruleset::Ruleset::known_ids(&v.typed)
 }
 
 /// U1.2-S5: the ids of a ruleset row's `unit_pools` that name no loaded unit meter row.
@@ -256,7 +270,8 @@ pub fn channel_refs(v: &View, e: &Dict) -> Vec<String> {
 pub fn warnings(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     let ap = e.get("flank_protected_ap").map(|v| json::to_int(v));
-    if ap.is_some_and(|ap| ap != i64::from(ruleset::FlankCost::FIXED_AP)) && json::s(e, "flank_protected_cost") != "fixed" {
+    let cost = ruleset::mode_field("flank_protected_cost").map(|m| ruleset::mode_str(e, m)).unwrap_or_default();
+    if ap.is_some_and(|ap| ap != i64::from(ruleset::FlankCost::FIXED_AP)) && cost != "fixed" {
         out.push("flank_protected_ap is read only with fixed".into());
     }
     // BASERULES1-M: the register metadata's warnings (a set field nothing reads, a conflict, a split bundle, an

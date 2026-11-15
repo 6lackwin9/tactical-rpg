@@ -13,7 +13,9 @@
 //! appended to the `timeline` rules with `channel_meter` strain and `channel_rest` feed), then the `rulesets` step of
 //! `pk2s6.json` (PR5-19 PK2-S6: the extension rule `durability` added to the `timeline` rules), then the unit steps
 //! of `sunkfix1.json` (PR5-34 SUNKWARD-FIX1: `founder_maren` gains `thurible_smite` in her extra skills, active deck
-//! and `assault` order) last.
+//! and `assault` order), then the units steps of the GEAR-REWORK1 seeds, then `rulesetmodes1.json` (PR5-52
+//! RULESET-MODES1: the `classic` row leaves the catalog for the kit's built-in preset, the `timeline` row is re-saved
+//! with its switches under `modes`) last.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
@@ -116,13 +118,24 @@ fn the_shipped_rows_play_as_before() {
         let want = if r.has(ROUND_INTENT) { intent_choices } else { switches(&Ruleset::classic()) };
         assert_eq!(switches(r), want, "ruleset '{id}'");
     }
-    let classic = shipped.iter().find(|(id, _)| id == CLASSIC).map(|(_, r)| r).expect("the classic row");
-    assert_eq!(classic, &Ruleset::classic(), "classic battles unchanged");
+    // PR5-52 (RULESET-MODES1): classic is no shipped row; it resolves to the kit's built-in preset, as the row read
+    assert!(shipped.iter().all(|(id, _)| id != CLASSIC), "one shipped ruleset");
+    let cat = emberwake_data::Catalog::from_value(&source::load(&data_dir()).catalog);
+    assert_eq!(Ruleset::of(&cat, CLASSIC), Ok(Ruleset::classic()), "classic battles unchanged");
 }
+
+/// PR5-52 (RULESET-MODES1): the seed that removed the `classic` row (the kit's built-in preset since) and re-saved the
+/// `timeline` row with its mode switches under `modes` (no value changes).
+const RULESETMODES1_SEED: &str = "rulesetmodes1.json";
 
 #[test]
 fn the_seed_sets_the_values_the_rows_read_now() {
-    let before = rows(&data_dir());
+    // PR5-52: the shipped rows (timeline only); before RULESET-MODES1 the catalog also held the classic row, which read
+    // as the built-in classic preset
+    let shipped = rows(&data_dir());
+    assert!(shipped.iter().all(|(id, _)| id != CLASSIC), "classic is no shipped row (the kit's preset)");
+    let mut before = shipped.clone();
+    before.push((CLASSIC.to_string(), Ruleset::classic()));
     let entries = seed_entries("cln45.json");
     assert_eq!(entries.len(), before.len(), "one upsert per shipped row");
     for e in &entries {
@@ -182,7 +195,7 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         // W2-4 slice 1 (FB-106): the seed w24s1 added field_intent later
         r.rules = kept.iter().filter(|x| **x != ruleset::FIELD_INTENT).cloned().collect();
         // S2.2-S3: the seed s22s3 set poise_mode pips later
-        r.numbers.poise_mode = PoiseMode::Bar;
+        r.numbers.modes.poise = PoiseMode::Bar;
         // R1-BAL H6 (FB-98): the seed r1bal set stagger_windup_mult 2.0 -> 1.0 later
         r.numbers.stagger_windup_mult = 2.0;
         // A1.2-S1 (FB-55): the seed a12s1 set item_ap 0 later
@@ -192,7 +205,7 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         r.numbers.thrown_miss_spends = false;
         r.numbers.pouch_stacks = false;
         // ATTACKLOCK1-O (W2-5 slice 2, FB-58a): the seed w25lock set attack_lock none -> melee later
-        r.numbers.attack_lock = AttackLock::None;
+        r.numbers.modes.attack_lock = AttackLock::None;
     }
     assert_eq!(rows(&tmp), want, "every row reads as before, bar the rules HOOKS1 appended later");
     let file = store::file_of(&tmp, None, ruleset::KIND);
@@ -280,6 +293,19 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         }
     }
     assert_eq!(rows(&tmp), before, "the GEAR-REWORK1 units steps leave the shipped ruleset rows");
+    // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
+    let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
+    let seed: Value = serde_json::from_str(&text).expect("seed JSON");
+    for step in json::arr(&seed["steps"]).iter().map(json::dict) {
+        let kind = json::s(step, "kind");
+        match json::s(step, "op").as_str() {
+            "remove" => store::remove(&tmp, None, &kind, &json::s(step, "id")).map(|_| ()).unwrap_or_else(|err| panic!("RULESET-MODES1 remove: {err:?}")),
+            _ => store::upsert(&tmp, None, &kind, json::dget(step, "entry"), None).map(|_| ()).unwrap_or_else(|err| panic!("RULESET-MODES1 upsert: {err:?}")),
+        }
+    }
+    assert_eq!(rows(&tmp), shipped, "the RULESET-MODES1 seed gives the shipped rows");
+    let file = store::file_of(&tmp, None, ruleset::KIND);
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), std::fs::read_to_string(store::file_of(&data_dir(), None, ruleset::KIND)).unwrap(), "byte for byte the shipped file");
     let seeded = store::view(&tmp);
     let units = reordered
         .iter()

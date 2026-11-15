@@ -112,15 +112,15 @@ fn a_rule_without_what_it_requires_is_an_error() {
 #[test]
 fn a_split_bundle_a_stray_field_and_an_untested_set_warn() {
     let n = row(json!({"rules": [ROUND_INTENT], "chase": "classic"})).notes();
-    assert_eq!(n.warnings, ["Bundle intent_core ships together: it needs chase=every_skill."]);
+    assert_eq!(n.warnings, ["Bundle intent_core ships together: it needs modes.chase=every_skill."]);
     let n = row(json!({"rules": [], "rest_ap": "round_end"})).notes();
-    assert_eq!(n.warnings, ["Bundle legacy_core ships together: it needs rest_ap=on_use."]);
+    assert_eq!(n.warnings, ["Bundle legacy_core ships together: it needs modes.rest_ap=on_use."]);
     let n = row(json!({"rules": [], "break_chance_scale": 0.5, "rest_ap_cap": 3})).notes();
-    assert_eq!(n.warnings, ["break_chance_scale is set but read only with poise.", "rest_ap_cap is set but read only with rest_ap=round_end."]);
+    assert_eq!(n.warnings, ["break_chance_scale is set but read only with poise.", "rest_ap_cap is set but read only with modes.rest_ap=round_end."]);
     let n = row(json!({"rules": [POISE], "break_chance_scale": 0.5})).notes();
     assert!(n.warnings.is_empty(), "{n:?}");
     let n = row(json!({"rules": [], "attack_lock": "melee"})).notes();
-    assert_eq!(n.warnings, ["attack_lock melee is untested with chase=classic."]);
+    assert_eq!(n.warnings, ["modes.attack_lock melee is untested with modes.chase=classic."]);
     let n = row(json!({"rules": [PLAN_BADGES]})).notes();
     assert_eq!(n.warnings, ["Rules untested together: plan_badges (no kit test fights this set; aegis rules lists the tested sets)."]);
     let n = row(json!({"rules": [DECK], "basics": ["strike"], "deck_slots": {"active": 3}})).notes();

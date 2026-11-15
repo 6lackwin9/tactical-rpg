@@ -113,11 +113,11 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
     }
     // INPUT1 MR11: the diagonal melee to compare (the row's value when absent or "")
     if let Some(id) = req.get("melee_diagonal").and_then(Value::as_str).filter(|s| !s.is_empty()) {
-        r.numbers.melee_diagonal = MeleeDiagonal::parse(id).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{id}')", MeleeDiagonal::IDS.join(", ")))?;
+        r.numbers.modes.melee_diagonal = MeleeDiagonal::parse(id).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{id}')", MeleeDiagonal::IDS.join(", ")))?;
     }
     // ATTACKLOCK1: the lock to compare (the row's value when absent or "")
     if let Some(id) = req.get("attack_lock").and_then(Value::as_str).filter(|s| !s.is_empty()) {
-        r.numbers.attack_lock = AttackLock::parse(id).ok_or_else(|| format!("attack_lock must be one of {} (got '{id}')", AttackLock::IDS.join(", ")))?;
+        r.numbers.modes.attack_lock = AttackLock::parse(id).ok_or_else(|| format!("attack_lock must be one of {} (got '{id}')", AttackLock::IDS.join(", ")))?;
     }
     Ok(r)
 }

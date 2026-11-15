@@ -1,7 +1,8 @@
-//! CLN-44: the classic ruleset is a row of the game's `rulesets` (decision "Godot parity retired and cleanup pass 3
-//! answers" Q-B1). The seed `data/seeds/cln44.json` authors it with the built-in classic values exactly (no rules,
-//! `melee_diagonal` none, the default numbers), so classic battles do not change when the row lands; once the shipped
-//! catalog has the row, it reads as those values too.
+//! CLN-44: the classic ruleset was a row of the game's `rulesets` (decision "Godot parity retired and cleanup pass 3
+//! answers" Q-B1). The seed `data/seeds/cln44.json` authored it with the built-in classic values exactly (no rules,
+//! `melee_diagonal` none, the default numbers), so classic battles did not change when the row landed. PR5-52
+//! (RULESET-MODES1, FB-223, `P-ARCH-02`): the game ships one ruleset row (`timeline`); `classic` is the kit's built-in
+//! preset, which the worlds that name no ruleset (the Ashlands, the Iron Reaches, the Tidewrack) resolve as before.
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::{source, store};
@@ -30,11 +31,27 @@ fn the_seed_row_reads_as_the_built_in_classic_values() {
     assert_eq!(emberwake_content::check::ruleset::warnings(&row), Vec::<String>::new());
 }
 
+/// PR5-52: the shipped catalog holds the timeline row only; classic resolves to the kit's built-in preset (as the
+/// shipped row read), and each shipped world resolves its ruleset: a world naming none plays classic, with no error.
 #[test]
-fn a_shipped_classic_row_reads_as_the_built_in_classic_values() {
+fn the_game_ships_one_ruleset_and_classic_is_the_kit_preset() {
     let v = store::view(&data_dir());
-    let row = v.entries(ruleset::KIND).iter().find(|e| json::s(e, "id") == CLASSIC).expect("the shipped classic row (seed cln44.json)");
-    assert_eq!(Ruleset::from_row(row), Ruleset::classic(), "classic battles unchanged");
+    let ids: Vec<String> = v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id")).collect();
+    assert_eq!(ids, [ruleset::TIMELINE], "one shipped ruleset");
+    let cat = emberwake_data::Catalog::from_value(&source::load(&data_dir()).catalog);
+    assert_eq!(Ruleset::of(&cat, CLASSIC), Ok(Ruleset::classic()), "classic: the preset");
+    assert!(Ruleset::of(&cat, ruleset::TIMELINE).is_ok_and(|r| r.has(ruleset::ROUND_INTENT)), "timeline: the row");
+    let mut classic_worlds = Vec::new();
+    for e in std::fs::read_dir(data_dir().join("worlds")).unwrap() {
+        let dir = e.unwrap().path();
+        let manifest: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("world.json")).unwrap()).unwrap();
+        let id = ruleset::world_ruleset([json::dict(&manifest)]);
+        let r = Ruleset::of(&cat, &id).unwrap_or_else(|err| panic!("{}: {err}", dir.display()));
+        if r.is_classic() {
+            classic_worlds.push(json::s(json::dict(&manifest), "id"));
+        }
+    }
+    assert!(classic_worlds.iter().any(|w| w == "ashlands"), "the Ashlands name no ruleset and play classic: {classic_worlds:?}");
 }
 
 /// BASERULES1-M: the register's metadata is additive: every shipped ruleset row still loads, and the default rows

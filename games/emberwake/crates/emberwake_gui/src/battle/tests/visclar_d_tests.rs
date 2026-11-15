@@ -449,7 +449,7 @@ fn the_card_draws_the_poise_pips() {
     let (mut cx, mut g, mut b) = arena();
     b.tick(&mut cx);
     let a = b.selected.unwrap();
-    b.host.session.as_mut().unwrap().w.ruleset.numbers.poise_mode = PoiseMode::Bar;
+    b.host.session.as_mut().unwrap().w.ruleset.numbers.modes.poise = PoiseMode::Bar;
     let st = emberwake_battle::poise::state(&s(&b).w, a).copied().expect("the timeline ruleset has poise");
     let value = st.max / 2;
     b.host.session.as_mut().unwrap().w.poise.get_mut(&a).unwrap().value = value;
@@ -472,7 +472,7 @@ fn the_card_draws_the_poise_pips() {
 /// a bonus above `poise_pips` shows the gold tip, none once broken; the card's number is pips of `poise_pips`.
 #[test]
 fn pips_mode_draws_the_bar_s_own_pips() {
-    let mut n = emberwake_rules::ruleset::Numbers { poise_mode: PoiseMode::Pips, ..Default::default() };
+    let mut n = emberwake_rules::ruleset::Numbers { modes: emberwake_rules::ruleset::Modes { poise: PoiseMode::Pips, ..Default::default() }, ..Default::default() };
     let full = n.poise_pips;
     let st = |pips: i32, broken: bool| emberwake_battle::poise::PoiseState { max: 60, value: 60, pips, broken, ..Default::default() };
     assert_eq!(pip_view(&n, &st(2, false)), PipView { lit: 2, total: full, bonus: false, pips: true }, "the value says full, the pips say 2");
@@ -489,7 +489,7 @@ fn pips_mode_draws_the_bar_s_own_pips() {
     b.tick(&mut cx);
     let a = b.selected.unwrap();
     let sess = b.host.session.as_mut().unwrap();
-    sess.w.ruleset.numbers.poise_mode = PoiseMode::Pips;
+    sess.w.ruleset.numbers.modes.poise = PoiseMode::Pips;
     let full = sess.w.ruleset.numbers.poise_pips;
     let bar_now = sess.w.poise.get_mut(&a).unwrap();
     (bar_now.pips, bar_now.broken) = (2, false);

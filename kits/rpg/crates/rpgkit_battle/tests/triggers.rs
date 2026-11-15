@@ -235,7 +235,7 @@ fn a_dodge_raises_evaded() {
     for (lock, fires) in [(rpgkit_rules::ruleset::AttackLock::Melee, 1), (rpgkit_rules::ruleset::AttackLock::None, 0)] {
         let s = session(timeline(&[TRIGGERS, ROUND_INTENT]));
         let mut w = s.w.clone();
-        w.ruleset.numbers.attack_lock = lock;
+        w.ruleset.numbers.modes.attack_lock = lock;
         count(&mut w, FOE, "evaded", "round");
         let mut cmd = Command::new(HERO, 0, 2, CmdKind::Attack { target: Some(FOE), skill_mult: 0.5, use_offhand: false, follow_tiles: 0, dash_tiles: 0, status_rounds: 0, min_range: 0, max_range: 0, last_damage: 0, last_crit: false, last_target: None });
         cmd.name = "Jab".into();

@@ -264,6 +264,11 @@ pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
     if kind == "terrain" {
         return normalize(fields("content", kind), &terrain_fallbacks(entry), false);
     }
+    if kind == RULESET_KIND {
+        // PR5-52 (RULESET-MODES1): a row's old flat mode keys load as aliases of its `modes`, which take the fill
+        // values the row leaves unset, so the loader and the writer see one form
+        return rpgkit_rules::ruleset::with_modes(&normalize(fields("content", kind), entry, false), true);
+    }
     normalize(fields("content", kind), entry, false)
 }
 

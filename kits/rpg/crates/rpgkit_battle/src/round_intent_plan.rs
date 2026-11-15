@@ -401,13 +401,13 @@ pub fn preview(w: &World, plan: &Plan, c: UnitId, intent: RoundIntent, kind: Opt
 
 /// RULESET1_INTENT UI2 ("Rest: 1 AP, 10 poise"): what the Rest blocks of `c`'s plan would give: the AP at round end
 /// (RS2) and the poise their landing restores (RS3, rule `poise`; before the Max Poise cap). S2.2-S3 (FB-71): under
-/// `poise_mode` pips the pips instead (a pip per 2 Rest blocks, before the `poise_pips` cap; `poise` 0 there).
+/// `modes.poise` pips the pips instead (a pip per 2 Rest blocks, before the `poise_pips` cap; `poise` 0 there).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RestGain {
     pub blocks: i32,
     pub ap: i32,
     pub poise: i32,
-    /// S2.2-S3: the pips the Rest blocks restore under `poise_mode` pips (0 under `bar`).
+    /// S2.2-S3: the pips the Rest blocks restore under `modes.poise` pips (0 under `bar`).
     pub pips: i32,
 }
 
@@ -421,7 +421,7 @@ pub fn rest_preview(w: &World, plan: &Plan, c: UnitId) -> RestGain {
 pub fn rest_of(w: &World, blocks: i32) -> RestGain {
     let n = &w.ruleset.numbers;
     let on = w.ruleset.has(rpgkit_rules::ruleset::POISE);
-    // S2.2-S3 (FB-71): by pips under poise_mode pips (from a round with no Rest landed, below the cap)
+    // S2.2-S3 (FB-71): by pips under modes.poise pips (from a round with no Rest landed, below the cap)
     let pips_mode = crate::poise::pips_mode(n);
     let poise = if on && !pips_mode { n.rest_poise_per_block * blocks } else { 0 };
     let pips = if on { crate::poise::rest_pip_gain(n, 0, 0, blocks) } else { 0 };

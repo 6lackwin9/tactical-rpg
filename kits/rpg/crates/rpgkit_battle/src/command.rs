@@ -183,7 +183,7 @@ pub struct Command {
     pub impact: crate::poise::Impact,
     /// RULESET1 P11: the windup poise this action added at its start (taken off when it lands or is cancelled).
     pub poise_bonus: i32,
-    /// S2.2-S3 (FB-71): the windup bonus pips this action added at its start under `poise_mode` pips (taken off with
+    /// S2.2-S3 (FB-71): the windup bonus pips this action added at its start under `modes.poise` pips (taken off with
     /// `poise_bonus`; 0 under `bar`).
     pub poise_bonus_pips: i32,
     /// RULESET1 P4: the units the last execution damaged, in hit order, each with whether the hit was a flank (MV3).
@@ -400,7 +400,7 @@ impl Command {
                         // INPUT1 MR8 c, MR9: a miss at its impact; the ruleset's cost decides what of its AP stays paid
                         self.missed = true;
                         let paid = self.ap_cost + self.stance_switch_cost;
-                        let pays = if w.pays_ap(src) { w.ruleset.numbers.flank_protected.pays(paid) } else { 0 };
+                        let pays = if w.pays_ap(src) { w.ruleset.numbers.modes.flank_protected.pays(paid) } else { 0 };
                         if w.pays_ap(src) {
                             w.units[src].ap += paid - pays;
                         }

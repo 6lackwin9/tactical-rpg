@@ -123,10 +123,10 @@ impl SceneRunner {
 
     /// The Combat Arena's rules (RULESET1-R, CLN-46): the encounter's own (its world's; classic for a catalog encounter),
     /// or a ruleset picked for the run.
-    /// The picker: "World" (the encounter's world's own), then a row per ruleset of the catalog
-    /// (id, name).
+    /// The picker: "World" (the encounter's world's own), then a row per ruleset of the catalog (PR5-52: then the kit's
+    /// built-in presets without a row) (id, name).
     fn rulesets(cx: &Cx) -> Vec<(Option<String>, String)> {
-        let rows = Ruleset::ids(&cx.data.cat).into_iter().map(|id| {
+        let rows = Ruleset::known_ids(&cx.data.cat).into_iter().map(|id| {
             let name = Ruleset::of_or_classic(&cx.data.cat, &id).name;
             (Some(id), name)
         });
@@ -546,16 +546,14 @@ mod tests {
 
     /// The picker index of the catalog's ruleset row `id` (0 is World).
     fn row_of(cx: &Cx, id: &str) -> usize {
-        1 + Ruleset::ids(&cx.data.cat).iter().position(|r| r == id).expect("the ruleset row")
+        1 + Ruleset::known_ids(&cx.data.cat).iter().position(|r| r == id).expect("the ruleset row")
     }
 
-    /// Adds a scratch ruleset row `plain`: the classic row's numbers, no rules, `rest_ap: on_use`.
+    /// Adds a scratch ruleset row `plain`: the classic preset's numbers, no rules, `rest_ap: on_use` (PR5-52: the game
+    /// ships no classic row).
     fn with_third_row(cx: &mut Cx) {
         let d = std::sync::Arc::make_mut(&mut cx.data);
-        let mut row = d.cat.rulesets.get("classic").cloned().expect("the classic row");
-        row.insert("id".into(), json!("plain"));
-        row.insert("name".into(), json!("Plain"));
-        row.insert("rest_ap".into(), json!("on_use"));
+        let row = json!({"id": "plain", "name": "Plain", "rules": [], "modes": {"melee_diagonal": "none", "rest_ap": "on_use"}}).as_object().cloned().unwrap();
         std::sync::Arc::make_mut(&mut d.cat).rulesets.insert("plain".into(), row);
     }
 
@@ -567,7 +565,7 @@ mod tests {
         with_third_row(&mut cx);
         let mut r = SceneRunner::new();
         let rows = SceneRunner::rulesets(&cx);
-        assert_eq!(rows.len(), 1 + Ruleset::ids(&cx.data.cat).len());
+        assert_eq!(rows.len(), 1 + Ruleset::known_ids(&cx.data.cat).len());
         assert!(rows.iter().any(|x| x.1 == "Plain") && rows[0].1 == "World");
         let at = row_of(&cx, "plain");
         r.act(&mut cx, SAct::PickRuleset(at));

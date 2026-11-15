@@ -197,7 +197,7 @@ pub struct PlanView {
     /// RS2, RS3: the AP and poise the Rest blocks would give.
     pub rest_ap: i32,
     pub rest_poise: i32,
-    /// S2.2-S3 (FB-71): the pips the Rest blocks would restore under `poise_mode` pips (0 under `bar`).
+    /// S2.2-S3 (FB-71): the pips the Rest blocks would restore under `modes.poise` pips (0 under `bar`).
     pub rest_pips: i32,
 }
 
@@ -917,7 +917,7 @@ impl DojoSession {
             return Some(format!("{} = {taken} (already broken this round)", terms.join(" x ")));
         }
         let before = bar.value;
-        // S2.2-S2: the one stagger rule (by pips under poise_mode pips); the Dojo holds no one up (no P12)
+        // S2.2-S2: the one stagger rule (by pips under modes.poise pips); the Dojo holds no one up (no P12)
         let settled = poise::settle(&n, &bar, taken, poise::Terms { windup, held: false, sure: imp.sure_break.then_some(BreakCause::Sure), chance: true });
         let after = settled.after;
         let mut line = format!("{} = {taken} -> poise {before} -> {after}", terms.join(" x "));
@@ -1077,7 +1077,7 @@ impl DojoSession {
                     bar.value = (bar.value + self.ruleset.numbers.rest_poise_per_block * blocks).min(bar.max);
                     self.hero_poise[self.active] = bar;
                 }
-                // S2.2-S2: a pip per 2 Rest blocks under poise_mode pips instead (S2.2-S3: the value mirrors them)
+                // S2.2-S2: a pip per 2 Rest blocks under modes.poise pips instead (S2.2-S3: the value mirrors them)
                 if self.poise_on() && poise::pips_mode(&self.ruleset.numbers) && bar.max > 0 && !bar.broken {
                     poise::rest_pips(&self.ruleset.numbers, &mut bar, blocks);
                     self.hero_poise[self.active] = bar;

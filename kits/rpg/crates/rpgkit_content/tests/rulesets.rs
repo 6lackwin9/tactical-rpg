@@ -100,15 +100,17 @@ fn the_schema_lists_what_the_code_owns() {
 #[test]
 fn the_attack_lock_option_reads_from_the_row() {
     use rpgkit_rules::ruleset::AttackLock;
-    assert_eq!(options("content", ruleset::KIND, "attack_lock"), strs(&AttackLock::IDS));
+    // PR5-52: a mode of `modes` (the schema field is `modes`; the values are the kit's)
+    assert_eq!(ruleset::mode_field("attack_lock").map(|m| m.values), Some(&AttackLock::IDS[..]));
     let row = |extra: Value| {
         let mut r = dict(good_row());
         for (k, v) in extra.as_object().unwrap() {
             r.insert(k.clone(), v.clone());
         }
-        normalize(fields(source::schema(), "content", ruleset::KIND), &r, false)
+        // PR5-52: as the loader reads it (its modes folded and filled)
+        ruleset::with_modes(&normalize(fields(source::schema(), "content", ruleset::KIND), &r, false), true)
     };
-    assert_eq!(json::s(&row(json!({})), "attack_lock"), "none", "the schema's default");
+    assert_eq!(json::s(json::dget(&row(json!({})), ruleset::MODES_KEY), "attack_lock"), "none", "the loaded row's fill");
     assert_eq!(Ruleset::from_row(&row(json!({}))).attack_lock(), AttackLock::None);
     assert_eq!(Ruleset::classic().attack_lock(), AttackLock::None);
     for id in AttackLock::IDS {
@@ -127,22 +129,24 @@ fn the_attack_lock_option_reads_from_the_row() {
 #[test]
 fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
     use rpgkit_rules::ruleset::{FlankCost, MeleeDiagonal};
-    assert_eq!(options("content", ruleset::KIND, "melee_diagonal"), strs(&MeleeDiagonal::IDS));
-    assert_eq!(options("content", ruleset::KIND, "flank_protected_cost"), strs(&FlankCost::IDS));
+    // PR5-52: modes of `modes` (the values are the kit's)
+    assert_eq!(ruleset::mode_field("melee_diagonal").map(|m| m.values), Some(&MeleeDiagonal::IDS[..]));
+    assert_eq!(ruleset::mode_field("flank_protected_cost").map(|m| m.values), Some(&FlankCost::IDS[..]));
     let row = |extra: Value| {
         let mut r = dict(good_row());
         for (k, v) in extra.as_object().unwrap() {
             r.insert(k.clone(), v.clone());
         }
-        normalize(fields(source::schema(), "content", ruleset::KIND), &r, false)
+        // PR5-52: as the loader reads it (its modes folded and filled)
+        ruleset::with_modes(&normalize(fields(source::schema(), "content", ruleset::KIND), &r, false), true)
     };
     let r = Ruleset::from_row(&row(json!({})));
-    assert_eq!((r.numbers.melee_diagonal, r.numbers.flank_protected), (MeleeDiagonal::Maneuver, FlankCost::Full), "the defaults");
+    assert_eq!((r.numbers.modes.melee_diagonal, r.numbers.modes.flank_protected), (MeleeDiagonal::Maneuver, FlankCost::Full), "the defaults");
     assert_eq!(r.melee_diagonal(), MeleeDiagonal::Maneuver);
     let c = Ruleset::classic();
-    assert_eq!((c.melee_diagonal(), c.numbers.flank_protected), (MeleeDiagonal::None, FlankCost::Full), "the built-in classic values");
+    assert_eq!((c.melee_diagonal(), c.numbers.modes.flank_protected), (MeleeDiagonal::None, FlankCost::Full), "the built-in classic values");
     let r = Ruleset::from_row(&row(json!({"melee_diagonal": "all", "flank_protected_cost": "fixed", "flank_protected_ap": 2})));
-    assert_eq!((r.melee_diagonal(), r.numbers.flank_protected), (MeleeDiagonal::All, FlankCost::Fixed(2)));
+    assert_eq!((r.melee_diagonal(), r.numbers.modes.flank_protected), (MeleeDiagonal::All, FlankCost::Fixed(2)));
     let no_intent = Ruleset::from_row(&row(json!({"rules": ["poise"]})));
     assert_eq!(no_intent.melee_diagonal(), MeleeDiagonal::Maneuver, "CLN-45: maneuver without round_intent reads as set");
     let pays: Vec<i32> = [FlankCost::Full, FlankCost::Half, FlankCost::Fixed(FlankCost::FIXED_AP), FlankCost::None].iter().map(|f| f.pays(4)).collect();
@@ -155,7 +159,8 @@ fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
 
 #[test]
 fn a_row_without_numbers_reads_the_schema_defaults() {
-    let row = normalize(fields(source::schema(), "content", ruleset::KIND), &dict(json!({"id": "timeline"})), false);
+    // PR5-52: as the loader reads it (the modes take their fills)
+    let row = ruleset::with_modes(&normalize(fields(source::schema(), "content", ruleset::KIND), &dict(json!({"id": "timeline"})), false), true);
     let r = Ruleset::from_row(&row);
     assert_eq!(r.numbers, Numbers::default(), "Numbers::default() is the schema's defaults");
     assert_eq!((r.id.as_str(), r.name.as_str(), r.rules.len()), ("timeline", "Timeline", 0));
@@ -341,8 +346,8 @@ fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
     let need = "Ruleset 'timeline' needs its row in rulesets (data/catalog/rulesets.json).";
     assert_eq!(world_problems(&data, "vale"), [need], "a timeline world without the row");
     assert_eq!(world_problems(&data, "glen"), Vec::<String>::new(), "the world that inherits is fixed with its parent");
-    // CLN-44: classic is a row too (the content check against the rows; battles fall back with a load note)
-    assert_eq!(world_problems(&data, "fen"), ["Ruleset 'classic' needs its row in rulesets (data/catalog/rulesets.json)."], "classic without its row; a dotted flag key");
+    // PR5-52 (RULESET-MODES1): classic is the kit's built-in preset, so a world naming it needs no row
+    assert_eq!(world_problems(&data, "fen"), Vec::<String>::new(), "classic without its row: the preset; a dotted flag key");
     assert_eq!(
         world_problems(&data, "moor"),
         ["Ruleset 'chess' needs its row in rulesets (data/catalog/rulesets.json).", "Plan reveal flag 'Moor Spies' must be a flag key (a-z, 0-9, _ and .)."]
@@ -353,18 +358,17 @@ fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
     drop_scratch(&data);
 }
 
-/// CLN-44: classic is a row like any other: without it the content check warns (its battles play the built-in classic
-/// values); a row with classic's values reads as them; a derived stat or portrait cue naming a ruleset without its row is
-/// a content error, and with the row it is clean.
+/// CLN-44: a row with classic's values reads as them; a derived stat or portrait cue naming a ruleset without its row is
+/// a content error, and with the row it is clean. PR5-52 (RULESET-MODES1): classic is the kit's built-in preset: without
+/// its row the content check says nothing (CLN-44's `rulesets:missing` warning retired) and a list may name it.
 #[test]
 fn classic_is_a_row_and_the_rulesets_lists_name_rows() {
     let (_scratch, data) = scratch("classic_row");
     base_catalog(&data);
     write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
-    write_kind(&data, "derived_stats", 1, json!([{"id": "max_poise", "name": "Max Poise", "formula": "CONS * 2", "rulesets": ["timeline", "hardcore"]}]));
+    write_kind(&data, "derived_stats", 1, json!([{"id": "max_poise", "name": "Max Poise", "formula": "CONS * 2", "rulesets": ["timeline", "classic", "hardcore"]}]));
     let v = store::view(&data);
-    let missing = check::warnings_all(&v).get("rulesets:missing").cloned().unwrap_or_default();
-    assert_eq!(missing, [ruleset::fallback_note(ruleset::CLASSIC)], "no classic row: a warning");
+    assert!(!check::warnings_all(&v).contains_key("rulesets:missing"), "no classic row: the preset, no warning");
     let problems = check::validate_all(&v).get("derived_stats:max_poise").cloned().unwrap_or_default();
     assert_eq!(problems, ["Rulesets: 'hardcore' has no row in rulesets (data/catalog/rulesets.json)."]);
     let classic = json!({"id": "classic", "name": "Classic", "rules": [], "melee_diagonal": "none"});
@@ -395,6 +399,8 @@ fn the_switches_read_by_the_rules_or_as_set() {
         want.extend(strs(by_rules_values(key)));
         assert_eq!(options("content", ruleset::KIND, key), want, "{key}");
     }
+    // PR5-52: rest_ap and chase are modes (`modes`), set here by their old flat keys (the load aliases)
+    const SWITCHES: [&str; 5] = ["rest_ap", "chase", "root_stops_chase", "switch_target_step", "stances"];
     let read = |v: Value| Ruleset::from_row(&normalize(fields(source::schema(), "content", ruleset::KIND), &dict(v), false));
     let switches = |r: &Ruleset| (r.rest_ap(), r.chase(), r.root_stops_chase(), r.switch_target_step(), r.stances());
     let intent_choices = (RestAp::RoundEnd, Chase::EverySkill, true, false, false);
@@ -405,7 +411,7 @@ fn the_switches_read_by_the_rules_or_as_set() {
     assert_eq!(switches(&Ruleset::classic()), legacy, "the built-in classic values");
     assert_eq!(switches(&Ruleset::from_row(&dict(json!({"rules": ["round_intent"]})))), intent_choices, "a raw row without the keys");
     let set = |mut row: Value, values: [&str; 5]| {
-        for (k, v) in BY_RULES_FIELDS.iter().zip(values) {
+        for (k, v) in SWITCHES.iter().zip(values) {
             row[*k] = json!(v);
         }
         row
@@ -419,22 +425,26 @@ fn the_switches_read_by_the_rules_or_as_set() {
 
     let (_scratch, data) = scratch("switches");
     base_catalog(&data);
-    for key in BY_RULES_FIELDS {
+    for key in SWITCHES {
         let mut row = good_row();
         row[key] = json!("maybe");
         write_kind(&data, ruleset::KIND, 1, json!([row]));
         let errors = ruleset_errors(&source::load(&data));
         assert_eq!(errors.len(), 1, "{key}: {errors:?}");
-        assert!(errors[0].ends_with(&format!("{key}: 'maybe' is not one of {} (or empty: by the rules).", by_rules_values(key).join(", "))), "{errors:?}");
+        let label = if BY_RULES_FIELDS.contains(&key) { key.to_string() } else { format!("modes.{key}") };
+        assert!(errors[0].ends_with(&format!("{label}: 'maybe' is not one of {} (or empty: by the rules).", by_rules_values(key).join(", "))), "{errors:?}");
     }
     let _ = fs::remove_file(data.join("catalog").join("rulesets.json"));
     let file = data.join("catalog").join("rulesets.json");
     let stored = || -> Value { serde_json::from_str::<Value>(&fs::read_to_string(&file).unwrap()).unwrap()["entries"][0].clone() };
     store::upsert(&data, None, ruleset::KIND, &dict(good_row()), None).unwrap();
-    assert!(BY_RULES_FIELDS.iter().all(|k| stored().get(*k).is_none()), "empty switches are left out: {}", stored());
+    let in_modes = |row: &Value, k: &str| row[ruleset::MODES_KEY].get(k).cloned();
+    assert!(SWITCHES.iter().all(|k| stored().get(*k).is_none() && in_modes(&stored(), k).is_none()), "empty switches are left out: {}", stored());
     store::upsert(&data, None, ruleset::KIND, &dict(set(good_row(), ["round_end", "every_skill", "on", "off", "off"])), None).unwrap();
     let row = stored();
-    assert_eq!(BY_RULES_FIELDS.map(|k| row[k].clone()), [json!("round_end"), json!("every_skill"), json!("on"), json!("off"), json!("off")], "set switches are stored");
+    assert_eq!(BY_RULES_FIELDS.map(|k| row[k].clone()), [json!("on"), json!("off"), json!("off")], "set switches are stored");
+    assert_eq!((in_modes(&row, "rest_ap"), in_modes(&row, "chase")), (Some(json!("round_end")), Some(json!("every_skill"))), "set modes are stored under modes");
+    assert!(row.get("rest_ap").is_none() && row.get("chase").is_none(), "not under their old keys: {row}");
     let text = fs::read_to_string(&file).unwrap();
     assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "a re-save without changes is byte-identical");
     drop_scratch(&data);
@@ -466,11 +476,11 @@ fn the_register_metadata_refuses_an_inert_rule_and_warns_on_the_rest() {
     let plain = norm(json!({"id": "plain", "name": "Plain", "rules": [], "stagger_windup_mult": 3.0}));
     assert_eq!(check::ruleset::warnings(&plain), ["stagger_windup_mult is set but read only with poise."]);
     let split = norm(json!({"id": "split", "name": "Split", "rules": ["round_intent"], "chase": "classic", "flank_protected_ap": 3}));
-    assert_eq!(check::ruleset::warnings(&split), ["flank_protected_ap is read only with fixed", "Bundle intent_core ships together: it needs chase=every_skill."]);
+    assert_eq!(check::ruleset::warnings(&split), ["flank_protected_ap is read only with fixed", "Bundle intent_core ships together: it needs modes.chase=every_skill."]);
 }
 
 /// S2.2-S2: the row-only `poise_mode` loads as set (`pips`), absent reads `bar`, and another id is one error naming its
-/// values.
+/// values. PR5-52: `poise_mode` is the old flat key (a load alias) of `modes.poise`.
 #[test]
 fn the_row_only_poise_mode_loads_and_refuses_an_unknown_id() {
     let (_scratch, data) = scratch("poise_mode");
@@ -487,11 +497,11 @@ fn the_row_only_poise_mode_loads_and_refuses_an_unknown_id() {
             Some(m) => {
                 assert_eq!(errors, Vec::<String>::new(), "{mode:?}");
                 let loaded = src.catalog[ruleset::KIND][0].as_object().expect("the row loads");
-                assert_eq!(Ruleset::from_row(loaded).numbers.poise_mode, m, "{mode:?}");
+                assert_eq!(Ruleset::from_row(loaded).numbers.modes.poise, m, "{mode:?}");
             }
             None => {
                 assert_eq!(errors.len(), 1, "{errors:?}");
-                assert!(errors[0].ends_with("poise_mode: 'pip' is not one of bar, pips."), "{errors:?}");
+                assert!(errors[0].ends_with("modes.poise: 'pip' is not one of bar, pips."), "{errors:?}");
             }
         }
     }

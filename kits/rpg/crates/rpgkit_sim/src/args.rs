@@ -317,10 +317,10 @@ impl SimArgs {
                 // the switches were checked at parse; their errors depend on the ids only
                 let _ = r.adjust(&self.rules);
                 if let Some(m) = self.melee_diagonal {
-                    r.numbers.melee_diagonal = m;
+                    r.numbers.modes.melee_diagonal = m;
                 }
                 if let Some(l) = self.attack_lock {
-                    r.numbers.attack_lock = l;
+                    r.numbers.modes.attack_lock = l;
                 }
                 r
             }
@@ -450,10 +450,10 @@ impl SimArgs {
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
         if let Some(m) = a.melee_diagonal {
-            a.ruleset.numbers.melee_diagonal = m;
+            a.ruleset.numbers.modes.melee_diagonal = m;
         }
         if let Some(l) = a.attack_lock {
-            a.ruleset.numbers.attack_lock = l;
+            a.ruleset.numbers.modes.attack_lock = l;
         }
         // BASERULES1-M2 (FB-40): the notes of the rules the command line picked. `ruleset=` plays every fight by that row;
         // `rules=` alone switches classic for catalog and generated fights but each world's own row for world fights

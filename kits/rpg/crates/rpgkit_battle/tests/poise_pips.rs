@@ -16,7 +16,7 @@ use rpgkit_battle::resolver::{Resolver, ScheduledAction};
 use rpgkit_battle::session::{EncounterDef, Session};
 use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::Catalog;
-use rpgkit_rules::ruleset::{self, Numbers, PoiseMode, Ruleset, ARENA_HAZARDS, POISE, TIMELINE};
+use rpgkit_rules::ruleset::{self, Modes, Numbers, PoiseMode, Ruleset, ARENA_HAZARDS, POISE, TIMELINE};
 use rpgkit_rules::stats::roundi;
 use rpgkit_rules::status;
 use serde_json::{json, Value};
@@ -135,7 +135,7 @@ fn running(res: &mut Resolver, c: UnitId, command: Command, start: i32, end: i32
 }
 
 fn pips_numbers() -> Numbers {
-    Numbers { poise_mode: PoiseMode::Pips, ..Numbers::default() }
+    Numbers { modes: Modes { poise: PoiseMode::Pips, ..Modes::default() }, ..Numbers::default() }
 }
 
 /// A full bar of Max Poise `max` under `n`.
@@ -150,23 +150,25 @@ fn full(n: &Numbers, max: i32) -> PoiseState {
 #[test]
 fn the_ruleset_reads_the_pip_numbers_and_defaults_to_bar() {
     let d = Numbers::default();
-    assert_eq!((d.poise_mode, d.poise_pips, d.max_pip_loss_per_hit), (PoiseMode::Bar, 5, 3), "S2 section 3 defaults");
-    assert_eq!(Ruleset::classic().numbers.poise_mode, PoiseMode::Bar, "the frozen kit's classic");
-    assert_eq!(timeline(json!({})).numbers.poise_mode, PoiseMode::Bar, "a row without the key");
+    assert_eq!((d.modes.poise, d.poise_pips, d.max_pip_loss_per_hit), (PoiseMode::Bar, 5, 3), "S2 section 3 defaults");
+    assert_eq!(Ruleset::classic().numbers.modes.poise, PoiseMode::Bar, "the frozen kit's classic");
+    assert_eq!(timeline(json!({})).numbers.modes.poise, PoiseMode::Bar, "a row without the key");
     let r = timeline(json!({"poise_mode": "pips", "poise_pips": 6, "max_pip_loss_per_hit": 2}));
     let f = |k: &str| r.numbers.field(k).unwrap();
-    assert_eq!((f("poise_mode"), f("poise_pips"), f("max_pip_loss_per_hit")), ("pips".to_string(), "6".to_string(), "2".to_string()));
-    assert_eq!(timeline(json!({"poise_mode": "pip"})).numbers.poise_mode, PoiseMode::Bar, "an unknown id reads as bar (the content check refuses it)");
-    assert_eq!(ruleset::field_rule_of("poise_mode").unwrap().values, &PoiseMode::IDS);
+    assert_eq!((f("poise_mode"), f("modes.poise"), f("poise_pips"), f("max_pip_loss_per_hit")), ("pips".to_string(), "pips".to_string(), "6".to_string(), "2".to_string()));
+    assert_eq!(timeline(json!({"poise_mode": "pip"})).numbers.modes.poise, PoiseMode::Bar, "an unknown id reads as bar (the content check refuses it)");
+    // PR5-52: the mode `modes.poise` (old flat key `poise_mode`, a load alias)
+    assert_eq!(ruleset::mode_field("poise_mode").map(|m| (m.key, m.values)), Some(("poise", &PoiseMode::IDS[..])));
+    assert!(ruleset::field_rule_of("modes.poise").is_some_and(|f| f.needs == [POISE]));
     for (k, v, lo, hi) in [("poise_pips", 9, 3, 8), ("poise_pips", 2, 3, 8), ("max_pip_loss_per_hit", 0, 1, 5), ("max_pip_loss_per_hit", 6, 1, 5)] {
         let n = timeline(json!({"poise_mode": "pips", k: v})).notes();
         assert!(n.errors.contains(&format!("{k} {v} is outside {lo}..{hi}.")), "{k} {v}: {:?}", n.errors);
     }
     assert!(timeline(json!({"poise_mode": "pips", "poise_pips": 8, "max_pip_loss_per_hit": 5})).notes().errors.is_empty(), "the range ends are in");
     let off = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [], "poise_mode": "pips"}).as_object().unwrap());
-    assert!(off.notes().warnings.contains(&"poise_mode is set but read only with poise.".to_string()), "{:?}", off.notes().warnings);
+    assert!(off.notes().warnings.contains(&"modes.poise is set but read only with poise.".to_string()), "{:?}", off.notes().warnings);
     let unread = timeline(json!({"poise_pips": 6})).notes();
-    assert!(unread.warnings.contains(&"poise_pips is set but read only with poise_mode=pips.".to_string()), "{:?}", unread.warnings);
+    assert!(unread.warnings.contains(&"poise_pips is set but read only with modes.poise=pips.".to_string()), "{:?}", unread.warnings);
 }
 
 /// S2 section 1: `T = max(1, roundi(max_poise / poise_pips))` and `clamp(floor(D / T), 0, max_pip_loss_per_hit)`.
@@ -371,7 +373,7 @@ fn the_break_chance_is_pips_lost_over_pips_before() {
         assert_eq!(poise::settle(&n, &st, d, terms).verdict, want, "D {d}");
     }
     assert_eq!(poise::break_chance(&n, 2, 5), 40, "2 of 5 pips at scale 1");
-    let b = Numbers { poise_mode: PoiseMode::Bar, ..n.clone() };
+    let b = Numbers { modes: Modes { poise: PoiseMode::Bar, ..n.modes }, ..n.clone() };
     let bst = full(&b, TANK);
     assert_eq!(poise::settle(&b, &bst, 24, terms).verdict, Verdict::Chance(poise::break_chance(&b, 24, TANK)), "bar: taken over poise");
 
@@ -726,10 +728,10 @@ fn a_sure_break_settles_and_forecasts_at_zero_poise_and_pips() {
         let st = full(&n, TANK);
         let sure = Terms { windup: true, held: false, sure: Some(BreakCause::Sure), chance: true };
         let s = poise::settle(&n, &st, 1, sure);
-        assert_eq!((s.verdict, s.after, s.pips), (Verdict::Breaks(BreakCause::Sure), 0, 0), "{:?}", n.poise_mode);
+        assert_eq!((s.verdict, s.after, s.pips), (Verdict::Breaks(BreakCause::Sure), 0, 0), "{:?}", n.modes.poise);
         let out = poise::settle(&n, &st, 1, Terms { windup: false, ..sure });
         assert_eq!(out.verdict, Verdict::Holds, "out of a windup it only staggers");
-        assert!(out.after > 0, "{:?}", n.poise_mode);
+        assert!(out.after > 0, "{:?}", n.modes.poise);
     }
     for rules in [timeline(json!({})), pips_rules()] {
         let s = session(rules);

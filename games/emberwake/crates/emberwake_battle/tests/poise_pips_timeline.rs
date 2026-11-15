@@ -27,7 +27,10 @@ fn data() -> Data {
 /// The shipped timeline row with the seed's one change (`poise_mode: pips`).
 fn pips_timeline(d: &Data) -> Ruleset {
     let mut row = d.cat.rulesets.get(TIMELINE).expect("the shipped timeline row").clone();
-    row.insert("poise_mode".into(), json!("pips"));
+    // PR5-52: the mode `modes.poise` (was the flat `poise_mode`)
+    let mut modes = row.get("modes").and_then(|m| m.as_object()).cloned().unwrap_or_default();
+    modes.insert("poise".into(), json!("pips"));
+    row.insert("modes".into(), json!(modes));
     Ruleset::from_row(&row)
 }
 
@@ -70,10 +73,10 @@ fn the_seeded_timeline_row_reads_pips() {
     let d = data();
     let shipped = Ruleset::of(&d.cat, TIMELINE).expect("timeline");
     let pips = pips_timeline(&d);
-    assert_eq!(pips.numbers.poise_mode, PoiseMode::Pips);
+    assert_eq!(pips.numbers.modes.poise, PoiseMode::Pips);
     assert!(poise::pips_mode(&pips.numbers));
     let mut want = shipped.numbers.clone();
-    want.poise_mode = PoiseMode::Pips;
+    want.modes.poise = PoiseMode::Pips;
     assert_eq!(pips.numbers, want, "the seed changes poise_mode only");
     let notes = pips.notes();
     assert!(notes.errors.iter().chain(&notes.warnings).all(|n| !n.contains("poise") && !n.contains("pip")), "the register has nothing to say on poise: {notes:?}");
@@ -83,7 +86,7 @@ fn the_seeded_timeline_row_reads_pips() {
 #[test]
 fn the_shipped_timeline_row_reads_pips() {
     let d = data();
-    assert_eq!(Ruleset::of(&d.cat, TIMELINE).expect("timeline").numbers.poise_mode, PoiseMode::Pips);
+    assert_eq!(Ruleset::of(&d.cat, TIMELINE).expect("timeline").numbers.modes.poise, PoiseMode::Pips);
 }
 
 /// S2 section 5 test 1 on a timeline battle: five D = 10 hits on the tank (T 12) remove no pip and the value stays the

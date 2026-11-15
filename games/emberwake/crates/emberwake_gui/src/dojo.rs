@@ -255,8 +255,8 @@ impl Dojo {
             DAct::Stance => s.shift_stance(),
             DAct::Ruleset(i) => {
                 use emberwake_rules::ruleset::Ruleset;
-                // CLN-46: a pick over the catalog's rows
-                if let Some(id) = Ruleset::ids(&s.cat).get(i) {
+                // CLN-46: a pick over the catalog's rows (PR5-52: then the kit's built-in presets without a row)
+                if let Some(id) = Ruleset::known_ids(&s.cat).get(i) {
                     match Ruleset::of(&s.cat, id) {
                         Ok(r) => s.set_ruleset(r),
                         Err(e) => s.log_action("EVENT", "Ruleset", &e, 0, "FAILED", "", "", false),
@@ -630,8 +630,9 @@ impl Dojo {
         let at = self.s.attack_skills().iter().position(|k| k.id == self.s.dummy_skill).unwrap_or(0);
         ui.select("dojo.dummy_skill", Rect::new(b.x + 2, y, b.w - 4, 11), &attacks, at, DAct::DummySkill, true, tip("Dummy skill", "What the dummy strikes back with."));
         y += 14;
-        // CLN-46: the ruleset, a pick over the catalog's rows (a ruleset with round intents opens the Planner and Deck windows)
-        let ids = emberwake_rules::ruleset::Ruleset::ids(&self.s.cat);
+        // CLN-46: the ruleset, a pick over the catalog's rows (a ruleset with round intents opens the Planner and Deck windows);
+        // PR5-52: then the kit's built-in presets without a row (classic, the Dojo's start)
+        let ids = emberwake_rules::ruleset::Ruleset::known_ids(&self.s.cat);
         let names: Vec<String> = ids.iter().map(|id| format!("Rules: {}", emberwake_rules::ruleset::Ruleset::of_or_classic(&self.s.cat, id).name)).collect();
         let at = ids.iter().position(|id| *id == self.s.ruleset.id).unwrap_or(0);
         ui.select("dojo.ruleset", Rect::new(b.x + 2, y, b.w - 4, 11), &names, at, DAct::Ruleset, !ids.is_empty(), tip("Ruleset", "The rules the Dojo plays by (the catalog's rows). Without stances there is no switch AP and no stance change; a deck rule rebuilds the heroes with their decks; round intents bring up the Planner and Deck windows."));
@@ -1174,9 +1175,9 @@ mod tests {
     use emberwake_rules::ruleset::{CLASSIC, TIMELINE};
     use std::sync::Arc;
 
-    /// Picks the catalog's ruleset row `id` in the Dojo's picker.
+    /// Picks the catalog's ruleset row (or kit preset) `id` in the Dojo's picker.
     fn pick(cx: &mut Cx, dojo: &mut Dojo, id: &str) {
-        let at = emberwake_rules::ruleset::Ruleset::ids(&cx.data.cat).iter().position(|r| r == id).expect("the row");
+        let at = emberwake_rules::ruleset::Ruleset::known_ids(&cx.data.cat).iter().position(|r| r == id).expect("the row");
         dojo.act(cx, DAct::Ruleset(at));
     }
 
@@ -1434,10 +1435,8 @@ mod tests {
         let mut cx = crate::hud::hud_tests::game_cx();
         {
             let d = Arc::make_mut(&mut cx.data);
-            let mut row = d.cat.rulesets.get(CLASSIC).cloned().expect("the classic row");
-            row.insert("id".into(), json!("plain"));
-            row.insert("name".into(), json!("Plain"));
-            row.insert("rest_ap".into(), json!("on_use"));
+            // PR5-52: the classic preset's values as a row (the game ships no classic row)
+            let row = json!({"id": "plain", "name": "Plain", "rules": [], "modes": {"melee_diagonal": "none", "rest_ap": "on_use"}}).as_object().cloned().unwrap();
             Arc::make_mut(&mut d.cat).rulesets.insert("plain".into(), row);
         }
         let mut dojo = Dojo::new(&cx);

@@ -152,8 +152,9 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
     match json::s(f, "options_from").as_str() {
         "zones" => zone_ids(v),
         // CLN-44: the ruleset rows (a world's `ruleset` may also be "" = inherited)
-        "rulesets" => v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id")).collect(),
-        "rulesets_inherit" => std::iter::once(String::new()).chain(v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id"))).collect(),
+        // PR5-52: the rows, then the kit's built-in presets without a row (`classic`)
+        "rulesets" => ruleset::known_ids(v),
+        "rulesets_inherit" => std::iter::once(String::new()).chain(ruleset::known_ids(v)).collect(),
         "body" => bodies(false),
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
@@ -534,10 +535,8 @@ pub fn warnings_all(v: &View) -> Report {
             out.insert("terrain:missing".into(), missing);
         }
     }
-    // CLN-44: without the default `classic` row its battles play the built-in classic values
-    if !v.has(ruleset::KIND, rpgkit_rules::ruleset::CLASSIC) {
-        out.insert(format!("{}:missing", ruleset::KIND), vec![rpgkit_rules::ruleset::fallback_note(rpgkit_rules::ruleset::CLASSIC)]);
-    }
+    // PR5-52 (RULESET-MODES1): CLN-44's `rulesets:missing` warning retired: `classic` is the kit's built-in preset, so a
+    // game without its row (every game ships one ruleset row) plays it with nothing to report
     // PR5-50 (FB-212 (d)): the recipe rows' warnings (`recipes:<id>`)
     for e in v.entries(recipe::KIND) {
         let found = recipe::warnings(v, e);

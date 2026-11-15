@@ -41,6 +41,21 @@ fn the_report_lists_the_sections_and_each_rows_notes() {
     assert!(rules::report(&fields(), &[]).iter().any(|l| l.contains("built-in classic values")), "no rows");
 }
 
+/// PR5-52 (RULESET-MODES1): the contract lists the `modes` field and one line per mode (`ruleset::MODES`) with its
+/// values, its default (`by_rules` for a mode read by the rules) and its old flat key; no old flat key is a tunable.
+#[test]
+fn the_contract_lists_the_modes() {
+    let out = rules::contract(&fields());
+    assert!(out.iter().any(|l| l.starts_with("tunable modes json default={}")), "{out:#?}");
+    for m in rpgkit_rules::ruleset::MODES.iter() {
+        let line = out.iter().find(|l| l.starts_with(&format!("tunable modes.{} mode ", m.key))).unwrap_or_else(|| panic!("mode {}: {out:#?}", m.key));
+        assert!(line.contains(&format!(" values={} alias={}", m.values.join("|"), m.alias)), "{line}");
+        assert!(!out.iter().any(|l| l.starts_with(&format!("tunable {} ", m.alias))), "{} is no flat tunable", m.alias);
+    }
+    assert!(out.contains(&"tunable modes.poise mode default=bar values=bar|pips alias=poise_mode needs=poise".to_string()), "{out:#?}");
+    assert!(out.contains(&"tunable modes.rest_ap mode default=by_rules values=on_use|round_end alias=rest_ap".to_string()), "{out:#?}");
+}
+
 #[test]
 fn the_contract_lists_every_field_rule_and_locked_constant_and_holds_its_golden() {
     let out = rules::contract(&fields());

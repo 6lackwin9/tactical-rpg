@@ -66,7 +66,9 @@ fn class_storage(full: &Dict) -> Dict {
 /// same value when read), so a row written before the switches were fields re-saves byte for byte. P1.2-S2 (FB-109):
 /// `move_after_blocks` is always written (P2.2-S1's given-only rule retired: every shipped row carries it). PK1-S2a: the
 /// Channel numbers (`RULESET_CHANNEL_FIELDS`) are stored only when they differ from their schema defaults, so a row
-/// written before they existed re-saves byte for byte.
+/// written before they existed re-saves byte for byte. PR5-52 (RULESET-MODES1): `full` (`source::content`) holds its
+/// modes in their stored form (`ruleset::with_modes`): the mutually exclusive switches under `modes` in `MODES` order,
+/// an old flat key written there instead, an empty by-rules mode (`rest_ap`, `chase`) left out.
 fn ruleset_storage(full: &Dict) -> Dict {
     let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
     let channel_default = |key: &str, v: &Value| {

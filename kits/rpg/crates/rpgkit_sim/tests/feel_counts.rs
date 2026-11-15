@@ -73,8 +73,8 @@ const FOE_B: UnitId = 6;
 
 fn ruleset(diag: MeleeDiagonal) -> Ruleset {
     let mut r = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [ROUND_INTENT, AP_COST, FLANK], "basics": BASICS}).as_object().unwrap());
-    r.numbers.melee_diagonal = diag;
-    r.numbers.flank_protected = FlankCost::Full;
+    r.numbers.modes.melee_diagonal = diag;
+    r.numbers.modes.flank_protected = FlankCost::Full;
     r
 }
 
@@ -154,7 +154,7 @@ fn observed(s: &Session) -> Counts {
 #[test]
 fn a_dodge_counts_for_the_swinger_and_not_as_lost() {
     let mut s = session(MeleeDiagonal::Maneuver);
-    s.w.ruleset.numbers.attack_lock = rpgkit_rules::ruleset::AttackLock::Melee;
+    s.w.ruleset.numbers.modes.attack_lock = rpgkit_rules::ruleset::AttackLock::Melee;
     place(&mut s.w, BLADE, V2::new(5, 4));
     place(&mut s.w, FOE, V2::new(6, 4));
     assault(&mut s, BLADE, "strike", FOE);

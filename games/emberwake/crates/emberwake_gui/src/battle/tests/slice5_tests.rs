@@ -233,7 +233,7 @@ fn a_break_forecast_under_pips_names_the_queued_stagger() {
     let (mut sess, d, _) = scratch_session(false);
     let mut fcs = hit_forecasts(&sess, d);
     let h = fcs.iter_mut().flatten().find(|h| h.lines(&sess.w).len() > 2).expect("a planned hit with a verdict");
-    sess.w.ruleset.numbers.poise_mode = emberwake_rules::ruleset::PoiseMode::Pips;
+    sess.w.ruleset.numbers.modes.poise = emberwake_rules::ruleset::PoiseMode::Pips;
     let note = poise::break_stagger_note(&sess.w.ruleset.numbers, &sess.w.units[h.target]).expect("pips: a note");
     assert!(note.starts_with("queues Stagger next round"), "{note}");
     let shows = |s: &Session, h: &HitForecast| {
@@ -252,7 +252,7 @@ fn a_break_forecast_under_pips_names_the_queued_stagger() {
     let mut steady = sess.w.clone();
     emberwake_rules::status::grant_now(&mut steady.units[h.target], poise::STEADFAST, 1, 0, "test");
     assert!(!h.lines(&steady).iter().any(|l| l.0 == note), "steadfast");
-    sess.w.ruleset.numbers.poise_mode = emberwake_rules::ruleset::PoiseMode::Bar;
+    sess.w.ruleset.numbers.modes.poise = emberwake_rules::ruleset::PoiseMode::Bar;
     assert!(!h.lines(&sess.w).iter().any(|l| l.0 == note), "bar");
 }
 

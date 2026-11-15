@@ -497,7 +497,7 @@ pub(crate) fn collision_stagger(res: &mut Resolver, w: &mut World, v: UnitId, c:
     if st.broken {
         return Some(hit);
     }
-    // S2.2-S2: P7, P12 and P14 (no P13 roll) through the one stagger rule, by pips under poise_mode pips
+    // S2.2-S2: P7, P12 and P14 (no P13 roll) through the one stagger rule, by pips under modes.poise pips
     let held = poise::unbreakable(w, &res.scheduled, v, block);
     let terms = poise::Terms { windup, held, sure: sure.then_some(BreakCause::Collision), chance: false };
     let s = poise::settle(&w.ruleset.numbers, &st, taken, terms);
