@@ -255,8 +255,12 @@ fn skill_storage(entry: &Dict) -> Dict {
         out.insert(key, value);
     }
     for (k, v) in first {
-        // U3.2-S2: the loader's spell-source mark is derived from the family table, never stored
-        if !out.contains_key(k) && !has_field(source::schema(), "content", "skills", k) && k != rpgkit_data::SKILL_SPELL_SOURCE {
+        // U3.2-S2 / PR5-62a: the loader's spell-source & always-ranged marks are derived from the family table, never stored
+        if !out.contains_key(k)
+            && !has_field(source::schema(), "content", "skills", k)
+            && k != rpgkit_data::SKILL_SPELL_SOURCE
+            && k != rpgkit_data::SKILL_ALWAYS_RANGED
+        {
             out.insert(k.clone(), v.clone());
         }
     }

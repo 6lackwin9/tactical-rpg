@@ -102,7 +102,23 @@ pub fn missing_terrain(rows: &[Dict]) -> Vec<&'static str> {
 
 /// Passives.EFFECT_TYPES; RULESET1-S adds `stagger_taken` (rule poise, P6), HOOKS1-S `forced_move`, `trigger` and `meter`
 /// (`check::hooks`); PR5-50 (FB-204) lists `skill_reach` where `spell_reach` stood (the alias still checks, unlisted).
-const TYPES: [&str; 14] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", rpgkit_data::SKILL_REACH, "unlock", "foresight", "stagger_taken", "forced_move", "trigger", "meter"];
+const TYPES: [&str; 15] = [
+    "stat",
+    "proficiency",
+    "resist",
+    "ap_regen",
+    "skill",
+    "skill_potency",
+    "status_potency",
+    rpgkit_data::SKILL_REACH,
+    "unlock",
+    "foresight",
+    "stagger_taken",
+    "forced_move",
+    "trigger",
+    "meter",
+    "crit",
+];
 /// RULESET1-S: a `stagger_taken` effect's multiplier and the longest action (blocks) it matches (0 = any).
 const STAGGER_MULT_MAX: f64 = 2.0;
 const STAGGER_MAX_BLOCKS: i64 = 6;
@@ -116,7 +132,7 @@ pub(crate) const ITEM_TYPES: [&str; 8] = ["skill_potency", "status_potency", rpg
 /// its `intent` filter values (the round intents IR21 derives; `rpgkit_rules::unit::skill_reach_matches`).
 pub const SKILL_REACH_KINDS: [&str; 6] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", rpgkit_data::SKILL_REACH_SPELL];
 pub const SKILL_REACH_INTENTS: [&str; 5] = [intent::ASSAULT, intent::STAND, intent::SUPPORT, intent::MANEUVER, intent::FIELD];
-const GROUPS: [&str; 2] = ["spell", "heal"];
+const GROUPS: [&str; 3] = ["spell", "heal", "channel"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 
 /// A whole number in `lo..=hi` (JSON numbers parse as floats).
@@ -146,6 +162,13 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
         if items_only && (TYPES.contains(&t.as_str()) || member) && !ITEM_TYPES.contains(&t.as_str()) {
             errors.push(format!("{at}: '{t}' is not allowed on items (use stat_bonuses / passives)."));
             continue;
+        }
+        if !matches!(t.as_str(), "trigger" | "meter")
+            && (TYPES.contains(&t.as_str()) || t == rpgkit_data::SKILL_BLOCK_COST || t == rpgkit_data::SPELL_REACH_ALIAS)
+        {
+            if let Some(w) = e.get("when") {
+                errors.extend(super::hooks::when_errors(w, hooks, &at, None));
+            }
         }
         let target_problem = |errors: &mut Vec<String>| {
             let fam = e.get("family").is_some_and(|v| !json::gstr(v).is_empty());
@@ -245,8 +268,11 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 if let Some(k) = e.get("kind").filter(|k| !k.as_str().is_some_and(|s| s.is_empty() || SKILL_REACH_KINDS.contains(&s))) {
                     errors.push(format!("{at}: skill_reach kind '{}' is not one of {}.", json::gstr(k), SKILL_REACH_KINDS.join(", ")));
                 }
-                for k in e.keys().filter(|k| !rpgkit_data::SKILL_REACH_KEYS.contains(&k.as_str())) {
-                    errors.push(format!("{at}: skill_reach takes only reach, intent and kind (not '{k}')."));
+                if e.get("ranged").is_some_and(|v| !v.is_boolean()) {
+                    errors.push(format!("{at}: skill_reach ranged must be true or false."));
+                }
+                for k in e.keys().filter(|k| *k != "when" && !rpgkit_data::SKILL_REACH_KEYS.contains(&k.as_str())) {
+                    errors.push(format!("{at}: skill_reach takes only reach, intent, kind and ranged (not '{k}')."));
                 }
             }
             "foresight" => {
@@ -289,8 +315,14 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                 if !e.get("delta").is_some_and(|d| whole_in(d, lo, hi)) || json::i(e, "delta", 0) == 0 {
                     errors.push(format!("{at}: skill_block_cost delta must be a whole number {lo}..{hi}, not 0."));
                 }
-                for k in e.keys().filter(|k| !rpgkit_data::SKILL_BLOCK_COST_KEYS.contains(&k.as_str())) {
+                for k in e.keys().filter(|k| *k != "when" && !rpgkit_data::SKILL_BLOCK_COST_KEYS.contains(&k.as_str())) {
                     errors.push(format!("{at}: skill_block_cost takes only skill and delta (not '{k}')."));
+                }
+            }
+            "crit" => {
+                let valid = e.get("value").and_then(Value::as_f64).is_some_and(|cv| cv.abs() >= 0.00001 && (-100.0..=100.0).contains(&cv));
+                if !valid {
+                    errors.push(format!("{at}: crit bonus must be non-zero, {} to {} (percentage points).", fixed(-100.0, 1), fixed(100.0, 1)));
                 }
             }
             _ => errors.push(format!("{at}: unknown effect type '{t}' (use {}).", if items_only { ITEM_TYPES.join(", ") } else { TYPES.join(", ") })),

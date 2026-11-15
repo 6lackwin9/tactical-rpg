@@ -342,6 +342,7 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
     }
     errors.extend(path_errors(v, json::get(e, "skill_path")));
     errors.extend(class_basics_errors(v, e));
+    errors.extend(class_passives_errors(v, e));
     let class = ClassDef::from_obj(e);
     errors.extend(loadout_errors(v, e));
     errors.extend(strict_class_loadout_errors(v, e, &class));
@@ -349,14 +350,33 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
     errors
 }
 
-/// PK2-FOLLOWUP (PR5-36, FB-214 (e)): the skills a unit owns come from its class path, its `extra_skills` and the
-/// techniques (and keystone) of its class's masterable families (`masterable_families`); a skill family owned through
-/// two of them is refused (a technique is standard-round only and grip-greyed, so the same skill on the path would
-/// read two ways). A class row checks its path against its techniques (`extra` None); a derived unit row checks its
-/// `extra_skills` against both (the class's own clash is the class row's; a fixed unit owns no path). One message per
-/// family and pair.
+/// CLASSPASS1 (`PR5-62a`): reachable `off_hand_skill` ids for `class` (every family at proficiency >= 1 plus
+/// the class's default `off_hand` item's family, deduplicated).
+fn off_hand_skills(v: &View, class: &ClassDef) -> Vec<String> {
+    let mut fams: Vec<String> = class.proficiency.iter().filter(|(_, p)| p.level >= 1).map(|(f, _)| f.clone()).collect();
+    if let Some(off) = class.loadout.get("off_hand").filter(|s| !s.is_empty()) {
+        let fam = json::s(v.get("items", off), "family");
+        if !fam.is_empty() && !fams.contains(&fam) {
+            fams.push(fam);
+        }
+    }
+    let mut out = Vec::new();
+    for fam in fams {
+        let sk = json::s(v.get("item_families", &fam), rpgkit_data::FAMILY_OFF_HAND_SKILL);
+        if !sk.is_empty() && !out.contains(&sk) {
+            out.push(sk);
+        }
+    }
+    out
+}
+
+/// PK2-FOLLOWUP (PR5-36, FB-214 (e)), CLASSPASS1 (`PR5-62a`): the skills a unit owns come from its class path, its
+/// `extra_skills`, its `class.basics`, its reachable `off_hand_skill`s and the techniques (and keystone) of its
+/// class's masterable families (`masterable_families`); a skill family owned through two of them is refused.
 pub(crate) fn duplicate_skill_errors(v: &View, class: &ClassDef, extra: Option<&[String]>) -> Vec<String> {
     let path: Vec<String> = class.path_steps().into_iter().map(|(_, s)| s).collect();
+    let basics: Vec<String> = class.basics.clone();
+    let offhand = off_hand_skills(v, class);
     let techniques: Vec<String> = masterable_families(v, class)
         .iter()
         .flat_map(|f| {
@@ -368,8 +388,20 @@ pub(crate) fn duplicate_skill_errors(v: &View, class: &ClassDef, extra: Option<&
         .filter(|id| !id.is_empty())
         .collect();
     let pairs: Vec<(&str, &[String], &str, &[String])> = match extra {
-        None => vec![("the class path", &path, "a technique", &techniques)],
-        Some(extra) => vec![("the extra skills", extra, "the class path", &path), ("the extra skills", extra, "a technique", &techniques)],
+        None => vec![
+            ("the class path", &path, "a technique", &techniques),
+            ("the class basics", &basics, "the class path", &path),
+            ("the class basics", &basics, "a technique", &techniques),
+            ("an off-hand skill", &offhand, "the class path", &path),
+            ("an off-hand skill", &offhand, "a technique", &techniques),
+            ("the class basics", &basics, "an off-hand skill", &offhand),
+        ],
+        Some(extra) => vec![
+            ("the extra skills", extra, "the class path", &path),
+            ("the extra skills", extra, "a technique", &techniques),
+            ("the extra skills", extra, "the class basics", &basics),
+            ("the extra skills", extra, "an off-hand skill", &offhand),
+        ],
     };
     let mut out = Vec::new();
     for (a_label, a, b_label, b) in pairs {
@@ -384,6 +416,24 @@ pub(crate) fn duplicate_skill_errors(v: &View, class: &ClassDef, extra: Option<&
         }
     }
     out
+}
+
+/// CLASSPASS1 (`PR5-62a`): each `class.passives` id must be an always-on passive (`slot` empty; unknown ids and
+/// duplicates are checked by the schema's refs/list checks).
+fn class_passives_errors(v: &View, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for id in json::sget(e, "passives") {
+        let Some(p) = v.typed.passives.get(&id) else { continue };
+        if seen.contains(&id) {
+            continue;
+        }
+        seen.push(id.clone());
+        if !p.slot.is_empty() {
+            errors.push(format!("Class passives: '{id}' has slot '{}' (must be always-on with slot empty).", p.slot));
+        }
+    }
+    errors
 }
 
 /// PK2-S4: the class's masterable families (main-hand weapon families of the item family table at proficiency 2 or

@@ -87,9 +87,9 @@ pub enum Target {
     ApRegen,
     SkillPotency(SkillSet),
     StatusPotency,
-    /// PR5-50 (FB-204): the reach bonus of the skills that match the filters ("" = any; `rpgkit_data::SkillReach`; the
-    /// retired `spell_reach` reads as kind `SPELL`).
-    SkillReach { intent: String, kind: String },
+    /// PR5-50 (FB-204), CLASSPASS1 (`PR5-62a`): the reach bonus of the skills that match the filters ("" / None =
+    /// any; `rpgkit_data::SkillReach`; the retired `spell_reach` reads as kind `SPELL`, ranged None).
+    SkillReach { intent: String, kind: String, ranged: Option<bool> },
     /// The reveal range (capped at the read).
     Foresight,
     /// The multiplier for stagger from an action of at most `max_blocks` blocks (0 = any).
@@ -249,8 +249,13 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
         "skill_potency" => vec![modifier(Target::SkillPotency(skill_set(e)), value::float(e, "value", 0.0))],
         "status_potency" => vec![modifier(Target::StatusPotency, int("value", 0))],
         rpgkit_data::SKILL_REACH | rpgkit_data::SPELL_REACH_ALIAS => {
-            let r = rpgkit_data::SkillReach::from_effect(e).unwrap_or(rpgkit_data::SkillReach { reach: 0, intent: String::new(), kind: String::new() });
-            vec![modifier(Target::SkillReach { intent: r.intent, kind: r.kind }, f64::from(r.reach))]
+            let r = rpgkit_data::SkillReach::from_effect(e).unwrap_or(rpgkit_data::SkillReach {
+                reach: 0,
+                intent: String::new(),
+                kind: String::new(),
+                ranged: None,
+            });
+            vec![modifier(Target::SkillReach { intent: r.intent, kind: r.kind, ranged: r.ranged }, f64::from(r.reach))]
         }
         "unlock" => vec![Grant::GrantSkill(SkillGrant::Unlock { set: skill_set(e), levels: value::int(e, "levels", 0).clamp(0, UNLOCK_LEVELS_MAX) })],
         "foresight" => vec![modifier(Target::Foresight, f64::from(value::int(e, "range", 0).clamp(0, FORESIGHT_RANGE_MAX)))],
@@ -284,4 +289,21 @@ pub fn read_one(e: &Obj) -> Vec<Grant> {
 /// The typed view of an effect list, in row order (a non-object entry gives nothing).
 pub fn read(effects: &[Value]) -> Vec<Grant> {
     effects.iter().filter_map(Value::as_object).flat_map(read_one).collect()
+}
+
+/// CLASSPASS1 (`PR5-62a`): splits an effect list into unconditional grants and rows carrying a non-empty `when`
+/// object (excluding `trigger` and `meter`, which own their own reactive hooks).
+pub fn read_with_when(effects: &[Value]) -> (Vec<Grant>, Vec<(Obj, Vec<Grant>)>) {
+    let mut always = Vec::new();
+    let mut cond = Vec::new();
+    for o in effects.iter().filter_map(Value::as_object) {
+        let grants = read_one(o);
+        let t = value::string(o, "type", "");
+        let when = (!matches!(t.as_str(), "trigger" | "meter")).then(|| value::obj(o, "when")).flatten().filter(|w| !w.is_empty());
+        match when {
+            Some(w) if !grants.is_empty() => cond.push((w.clone(), grants)),
+            _ => always.extend(grants),
+        }
+    }
+    (always, cond)
 }

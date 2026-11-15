@@ -10,7 +10,7 @@ use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::grid::{GRID_H, GRID_W};
 use rpgkit_data::{
     ALLY_EVENTS, ARENA_DIRS, ARENA_EFFECT_KEYS, ARENA_HAZARD_KEYS, CLASS_OVERLAY_KEYS, DECK_EFFECT, EFFECT_TO, FORCED_FROM, FORCED_IMMUNE, FORCED_KINDS, FORCED_MOVE_KEYS, FORCED_WHEN, GRANT_UNTIL,
-    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RATING_SET, RATING_SET_RANGES, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
+    HAZARD_AT, HAZARD_METER_KEYS, HAZARD_PLACE_KEYS, HAZARD_SHAPES, HIT_EVENTS, MARK, METER_SET, METER_SET_KEYS, RATING_SET, RATING_SET_RANGES, RIDER_KEYS, ROLL_ROW_KEYS, ROLL_TABLE, ROLL_WEIGHT, SLOT_RULES, STRIKE_NEAREST, TACTICS, TRIGGER_EFFECTS,
     TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
 };
 use rpgkit_rules::ruleset;
@@ -547,6 +547,7 @@ pub fn when_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>) -> Vec
         }
     }
     enum_key(o, "intent", &ruleset::INTENTS, false, &at, &mut out);
+    enum_key(o, "dual_wield", &SLOT_RULES, false, &at, &mut out);
     if let Some(m) = o.get("meter") {
         match m.as_object() {
             Some(m) => {

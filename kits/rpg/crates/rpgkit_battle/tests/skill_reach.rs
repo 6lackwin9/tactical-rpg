@@ -111,7 +111,7 @@ fn an_intent_filter_reaches_the_skills_offered_in_that_intent() {
     for s in SKILLS {
         let def = cat.skill(s).unwrap();
         let derived = rpgkit_rules::intent::derive(&rpgkit_rules::intent::IntentInput::of_def(def));
-        let r = SkillReach { reach: 1, intent: "field".into(), kind: String::new() };
+        let r = SkillReach { reach: 1, intent: "field".into(), kind: String::new(), ranged: None };
         assert_eq!(skill_reach_matches(&r, def), derived.contains(&"field"), "{s}: the field filter follows IR21");
     }
 }

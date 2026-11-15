@@ -668,7 +668,7 @@
 {"base":"|passives|sword_training","set":{"name":""},"errors":["Name is required."],"warnings":[]},
 {"base":"|passives|sword_training","set":{"description":""},"errors":[],"warnings":[]},
 {"base":"|passives|sword_training","set":{"effects":[]},"errors":["A passive needs at least one effect."],"warnings":[]},
-{"base":"|passives|sword_training","set":{"effects":[{"zz":1}]},"errors":["Effect 1: unknown effect type '' (use stat, proficiency, resist, ap_regen, skill, skill_potency, status_potency, skill_reach, unlock, foresight, stagger_taken, forced_move, trigger, meter)."],"warnings":[]},
+{"base":"|passives|sword_training","set":{"effects":[{"zz":1}]},"errors":["Effect 1: unknown effect type '' (use stat, proficiency, resist, ap_regen, skill, skill_potency, status_potency, skill_reach, unlock, foresight, stagger_taken, forced_move, trigger, meter, crit)."],"warnings":[]},
 {"base":"|passives|sword_training","set":{"origin":"BOGUS"},"errors":["Origin: 'BOGUS' is not one of system, user."],"warnings":[]},
 {"base":"|classes|warrior","set":{"id":""},"errors":["ID is required."],"warnings":["The path lists 7 families; only the first 5 (by unlock level, then position) are active by default."]},
 {"base":"|classes|warrior","set":{"id":"Bad Id!"},"errors":["ID 'Bad Id!' must be lowercase snake_case (a-z, 0-9, _)."],"warnings":["The path lists 7 families; only the first 5 (by unlock level, then position) are active by default."]},

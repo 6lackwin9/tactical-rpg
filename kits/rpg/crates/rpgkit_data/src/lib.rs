@@ -134,6 +134,9 @@ pub struct ClassDef {
     /// CLASS-BASICS (user 2026-11-08): the class's role basics, skill ids open to every unit of the class without a deck
     /// slot under the rule `deck` (after the ruleset's basics; `DeckRule::with_class`). Empty = none.
     pub basics: Vec<String>,
+    /// CLASSPASS1 (`PR5-62a`, `docs/sessions/U2_CLASS_DECKS.md`): always-on innate passives (`slot == ""`) granted to
+    /// derived units of the class under the rule `deck` without spending a deck slot. Empty = none.
+    pub passives: Vec<String>,
     /// Slot key (`main_hand` ...) -> item id; empty slots left out.
     pub loadout: IndexMap<String, String>,
     pub pouch: Vec<String>,
@@ -188,6 +191,7 @@ impl ClassDef {
             proficiency,
             skill_path: int_map(o, "skill_path"),
             basics: strings(o, "basics"),
+            passives: strings(o, "passives"),
             loadout,
             pouch: strings(o, "pouch"),
             remains: string(o, REMAINS_KEY, ""),
@@ -409,6 +413,9 @@ pub struct SkillDef {
     /// U3.2-S2: one of `weapon_types` is a family with the engine rule `spell_source` (the resolved row's
     /// `SKILL_SPELL_SOURCE` key; a row without it reads `LEGACY_FAMILY_RULES`).
     pub spell_source: bool,
+    /// CLASSPASS1 (`PR5-62a`): every weapon family in `weapon_types` is a family with the engine rule `always_ranged`
+    /// (resolved `SKILL_ALWAYS_RANGED` key, else `LEGACY_FAMILY_RULES`). Empty `weapon_types` stays false.
+    pub always_ranged: bool,
     pub min_proficiency: i32,
     pub reach_min: i32,
     pub reach_max: i32,
@@ -523,6 +530,13 @@ impl SkillDef {
             spell_source: match o.get(SKILL_SPELL_SOURCE) {
                 Some(v) => v.as_bool().unwrap_or(false),
                 None => strings(o, "weapon_types").iter().any(|w| legacy_rules_of(w).any(|r| r == SPELL_SOURCE_RULE)),
+            },
+            always_ranged: match o.get(SKILL_ALWAYS_RANGED) {
+                Some(v) => v.as_bool().unwrap_or(false),
+                None => {
+                    let wtypes = strings(o, "weapon_types");
+                    !wtypes.is_empty() && wtypes.iter().all(|w| legacy_rules_of(w).any(|r| r == ALWAYS_RANGED_RULE))
+                }
             },
             min_proficiency: int(o, "min_proficiency", 0),
             reach_min: int(o, "reach_min", 0),
@@ -822,6 +836,7 @@ pub const DURABILITY_MAX: i64 = 999;
 /// PK2-S5b (`docs/sessions/PK2_GRAFTS.md` 7): a dulled weapon (its instance at 0 durability) swings at this share of its
 /// weapon power (default 0.5: -50%; no brackets in between; `rpgkit_rules::damage::attack_power`).
 pub const DULLED_POWER_MULT: f64 = 0.5;
+pub const STAT_OVERRIDE_FACTOR: f64 = 0.75;
 
 /// U3.2-S4 (U3 "Level 2 (Adept)": "+crit or -burden from the family row"): a family's Level-2 bonus, `{"crit": n}` or
 /// `{"burden": n}` (`{}` = none, the default). `crit` adds crit chance points while an item of the family is worn at
@@ -846,6 +861,9 @@ impl FamilyBonus {
 /// U3.2-S2: the resolved skill row's key that says whether one of its `weapon_types` is a family with the engine rule
 /// `spell_source` (written by the loader on every skill row when the catalog has a family table).
 pub const SKILL_SPELL_SOURCE: &str = "spell_source";
+/// CLASSPASS1 (`PR5-62a`): the resolved skill row's key that says whether every weapon family in `weapon_types` has
+/// the engine rule `always_ranged` (non-empty `weapon_types`; written by the loader beside `SKILL_SPELL_SOURCE`).
+pub const SKILL_ALWAYS_RANGED: &str = "always_ranged";
 /// RULESET1 K1: the family engine rule that gives a melee weapon its reach.
 pub const REACH_ENGINE_RULE: &str = "reach";
 /// U3.2-S2: the family engine rule that makes a weapon ranged whatever its base range.
@@ -2187,7 +2205,19 @@ pub const TRIGGER_LIMITS: [&str; 3] = ["round", "battle", "none"];
 pub const TRIGGER_KEYS: [&str; 4] = ["on", "when", "effects", "limit"];
 pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
 /// 8.2: the condition keys of a trigger's or rider's `when`.
-pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", "other_hp_below", "other_broken", "other_status", "intent", "meter"];
+pub const WHEN_KEYS: [&str; 11] = [
+    "pct",
+    "range",
+    "ranged",
+    "melee",
+    "skills",
+    "other_hp_below",
+    "other_broken",
+    "other_status",
+    "intent",
+    "meter",
+    "dual_wield",
+];
 /// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it). ROLLTABLE1:
 /// `roll_table` picks one of its `rows` by weight on the battle RNG and runs that row's effects. PK1-S1: `ap` takes
 /// `set` (with `rounds`) instead of `value`, `damage` takes `pct_of_hit` instead of `value`, and `strike_nearest` and
@@ -2242,7 +2272,7 @@ pub const SKILL_BLOCK_COST_DELTA: (i64, i64) = (-3, 3);
 /// Its keys, the range of one `reach`, and the `kind` filter value that names the spell group (an ATTACK with a
 /// spell source, `rpgkit_rules::unit::skill_in_group` "spell").
 pub const SKILL_REACH: &str = "skill_reach";
-pub const SKILL_REACH_KEYS: [&str; 4] = ["type", "reach", "intent", "kind"];
+pub const SKILL_REACH_KEYS: [&str; 5] = ["type", "reach", "intent", "kind", "ranged"];
 pub const SKILL_REACH_RANGE: (i64, i64) = (1, 2);
 pub const SKILL_REACH_SPELL: &str = "SPELL";
 /// PR5-50: the retired spell-only form `{type: spell_reach, value}`, still read as `skill_reach {reach: value, kind:
@@ -2256,6 +2286,7 @@ pub struct SkillReach {
     pub reach: i32,
     pub intent: String,
     pub kind: String,
+    pub ranged: Option<bool>,
 }
 
 impl SkillReach {
@@ -2263,8 +2294,18 @@ impl SkillReach {
     /// `{reach: value, kind: SPELL}`.
     pub fn from_effect(e: &Obj) -> Option<SkillReach> {
         match string(e, "type", "").as_str() {
-            SKILL_REACH => Some(SkillReach { reach: int(e, "reach", 0), intent: string(e, "intent", ""), kind: string(e, "kind", "") }),
-            SPELL_REACH_ALIAS => Some(SkillReach { reach: int(e, "value", 0), intent: String::new(), kind: SKILL_REACH_SPELL.into() }),
+            SKILL_REACH => Some(SkillReach {
+                reach: int(e, "reach", 0),
+                intent: string(e, "intent", ""),
+                kind: string(e, "kind", ""),
+                ranged: e.get("ranged").and_then(Value::as_bool),
+            }),
+            SPELL_REACH_ALIAS => Some(SkillReach {
+                reach: int(e, "value", 0),
+                intent: String::new(),
+                kind: SKILL_REACH_SPELL.into(),
+                ranged: None,
+            }),
             _ => None,
         }
     }

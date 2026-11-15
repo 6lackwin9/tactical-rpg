@@ -749,7 +749,7 @@ pub fn regen_ap(c: &Unit, ap: i32, ap_regen: i32) -> i32 {
     if ap_regen < 0 {
         c.max_ap
     } else {
-        c.max_ap.min(ap + ap_regen + c.ap_regen_bonus)
+        c.max_ap.min(ap + ap_regen + c.total_ap_regen_bonus())
     }
 }
 

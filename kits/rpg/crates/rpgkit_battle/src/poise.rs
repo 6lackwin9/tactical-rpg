@@ -318,7 +318,7 @@ pub fn factors(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32, bloc
         guard: pick(crate::trigger::guarding(w, sched, t, block), n.stagger_guard_mult),
         repeat: pick(w.poise.get(&t).is_some_and(|s| s.broken_last), n.stagger_repeat_mult),
         flank: pick(flank, n.flank_stagger_mult),
-        passive: w.units[t].stagger_taken.iter().filter(|e| e.matches(blocks)).map(|e| e.mult).product(),
+        passive: w.units[t].stagger_taken_mult(blocks),
         hook: 1.0,
     }
 }

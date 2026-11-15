@@ -138,3 +138,36 @@ fn a_world_class_overlay_path_repeating_a_world_units_extra_skill_is_refused() {
     let no_world = dict(json!({"classes": {"c_clean": {"name": "Clean", "skill_path": {"x_free": 2}}}}));
     assert!(check::hooks::classes_errors(&v, &no_world).into_iter().all(|e| !e.contains("unit 'u_")), "a manifest without a world id checks no units");
 }
+
+#[test]
+fn class_basics_and_reachable_off_hand_skills_reject_duplicates() {
+    let (_t, data) = scratch("basics_offhand");
+    write(&data, "skills", 2, json!([
+        attack("p_one"), attack("x_free"), attack("t_main"), attack("t_key"),
+        attack("b_one"), attack("oh_pulse"), attack("oh_unreach")
+    ]));
+    write(&data, "item_families", 1, json!([
+        weapon_family("f_main", json!({"techniques": [{"skill": "t_main"}], "keystone": "t_key"})),
+        {"id": "f_orb", "name": "Orb", "item_type": "WEAPON", "hands": ["off"], "default_hand": "off", "scaling_stats": ["INT"], "slot_rule": "off_only",
+         "off_hand_skill": "oh_pulse", "base": {"off": {"power": 0, "range": 1, "burden": 0, "mitigation": 0}}},
+        {"id": "f_tome", "name": "Tome", "item_type": "WEAPON", "hands": ["off"], "default_hand": "off", "scaling_stats": ["INT"], "slot_rule": "off_only",
+         "off_hand_skill": "oh_unreach", "base": {"off": {"power": 0, "range": 1, "burden": 0, "mitigation": 0}}}
+    ]));
+    write(&data, "items", 2, json!([
+        {"id": "i_orb", "name": "Orb", "item_type": "WEAPON", "slot": "OFF_HAND", "family": "f_orb", "hand": "off"}
+    ]));
+    let stats = json!({"STR": 12, "DEX": 10, "INT": 8, "CONS": 13, "PERC": 9, "KNOW": 10});
+    let mk_class = |id: &str, basics: Value, path: Value, off_hand: &str| {
+        json!({"id": id, "name": id, "base_stats": stats, "growth": stats, "basics": basics, "skill_path": path, "off_hand": off_hand,
+               "proficiency": {"f_main": {"level": 3}, "f_orb": {"level": 1}}})
+    };
+    write(&data, "classes", 1, json!([mk_class("c_ok", json!(["b_one"]), json!({"p_one": 1}), "i_orb")]));
+
+    assert!(dup_errors(&data, "classes", mk_class("c_b_path", json!(["b_one"]), json!({"b_one": 1}), "")).iter().any(|e| e.contains("class basics") && e.contains("class path")));
+    assert!(dup_errors(&data, "classes", mk_class("c_b_tech", json!(["t_main"]), json!({"p_one": 1}), "")).iter().any(|e| e.contains("class basics") && e.contains("technique")));
+    assert!(dup_errors(&data, "classes", mk_class("c_oh_path", json!(["b_one"]), json!({"oh_pulse": 1}), "")).iter().any(|e| e.contains("off-hand skill") && e.contains("class path")));
+    assert!(dup_errors(&data, "classes", mk_class("c_oh_b", json!(["oh_pulse"]), json!({"p_one": 1}), "i_orb")).iter().any(|e| e.contains("class basics") && e.contains("off-hand skill")));
+    assert!(dup_errors(&data, "classes", mk_class("c_unreach", json!(["oh_unreach"]), json!({"p_one": 1}), "")).is_empty(), "unreachable off-hand family does not clash");
+    assert!(dup_errors(&data, "units", json!({"id": "u_dup_b", "name": "DupB", "side": "party", "class_id": "c_ok", "level": 1, "extra_skills": ["b_one"]})).iter().any(|e| e.contains("class basics")));
+    assert!(dup_errors(&data, "units", json!({"id": "u_dup_oh", "name": "DupOh", "side": "party", "class_id": "c_ok", "level": 1, "extra_skills": ["oh_pulse"]})).iter().any(|e| e.contains("off-hand skill")));
+}

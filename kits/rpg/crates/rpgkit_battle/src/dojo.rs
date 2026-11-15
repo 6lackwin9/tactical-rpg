@@ -903,7 +903,7 @@ impl DojoSession {
             guard: pick(guarding, n.stagger_guard_mult),
             repeat: pick(bar.broken_last, n.stagger_repeat_mult),
             // ACT1-HOOKS2: the action's length is its user's own blocks of the skill (`Unit::skill_blocks`)
-            passive: target.stagger_taken.iter().filter(|e| e.matches(if on_dummy { self.hero() } else { &self.dummy }.skill_blocks(s))).map(|e| e.mult).product(),
+            passive: target.stagger_taken_mult(if on_dummy { self.hero() } else { &self.dummy }.skill_blocks(s)),
             ..Factors::default()
         };
         let taken = poise::stagger_taken(imp.stagger, &f);

@@ -63,8 +63,11 @@ pub struct AttackPower {
     /// 0.80 / 1.00 / 1.25); 0.0 when no factor applied (no strict rule, no fitting weapon, or exactly 1.0).
     pub prof_mult: f64,
     /// GEAR-REWORK1 (PR5-51a pass 2): `stat_name` is the off-hand item's power stat (`ItemDef::power_stat_override`),
-    /// higher than the weapon's own scaling stat.
+    /// higher than the weapon's own scaling stat after applying `STAT_OVERRIDE_FACTOR`.
     pub stat_override: bool,
+    /// CLASSPASS1 (`PR5-62a`): scale on `stat_val * scaling` when `stat_override` applies (`STAT_OVERRIDE_FACTOR`,
+    /// else 1.0 in `attack_power`).
+    pub stat_override_factor: f64,
     pub stat_name: String,
     pub stat_val: i32,
     pub unit_scaling: f64,
@@ -77,7 +80,7 @@ pub struct AttackPower {
 }
 
 pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
-    let mut res = AttackPower::default();
+    let mut res = AttackPower { stat_override_factor: 1.0, ..AttackPower::default() };
     if u.power_override > 0 {
         res.authored = true;
         res.weapon = weapon_for(u, offhand).map(|w| w.item.name.clone()).unwrap_or_default();
@@ -149,20 +152,21 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
             }
             let mut stat_name = stat_name;
             let mut stat_val = u.stats.stat(stat_name, ctx);
-            // GEAR-REWORK1 (PR5-51a pass 2, U3.3 4 `orb`): an off-hand item's power stat replaces the main-hand weapon's
-            // scaling stat when the wearer's value of it is higher (a fitting main-hand swing only; no key on today's
-            // rows, nothing changes)
+            // GEAR-REWORK1 (PR5-51a pass 2, U3.3 4 `orb`), CLASSPASS1 (`PR5-62a`): an off-hand item's power stat
+            // replaces the main-hand weapon's scaling stat when `over_val * factor > stat_val` (a fitting main-hand
+            // swing only), and scales the overridden unit power by `STAT_OVERRIDE_FACTOR`.
             if fits && !offhand {
                 if let Some(over) = u.inventory.get(crate::gear::Slot::OffHand).map(|o| o.item.power_stat_override.as_str()).filter(|s| !s.is_empty() && *s != stat_name) {
                     let v = u.stats.stat(over, ctx);
-                    if v > stat_val {
-                        (stat_name, stat_val, res.stat_override) = (over, v, true);
+                    let factor = rpgkit_data::STAT_OVERRIDE_FACTOR;
+                    if (v as f64 * factor) > stat_val as f64 {
+                        (stat_name, stat_val, res.stat_override, res.stat_override_factor) = (over, v, true, factor);
                     }
                 }
             }
             res.stat_name = stat_name.to_string();
             res.stat_val = stat_val;
-            res.unit_power = res.stat_val as f64 * scaling;
+            res.unit_power = res.stat_val as f64 * scaling * res.stat_override_factor;
         }
     }
     (res.tier_mult, res.tier_scaled) = (u.tier_mult, u.tier_scaled);
@@ -235,6 +239,13 @@ pub fn crit_chance(u: &Unit) -> f64 {
     // HOOKS1 8.2: the trigger effect `crit` (rule triggers; 0 otherwise, so nothing changes)
     if u.trigger_crit != 0.0 {
         chance += u.trigger_crit;
+    }
+    // CLASSPASS1 (`PR5-62a`): non-gear passive `crit` (`Unit::passive_crit` + `cond.crit`; 0 otherwise)
+    if u.passive_crit != 0.0 {
+        chance += u.passive_crit;
+    }
+    if u.cond.crit != 0.0 {
+        chance += u.cond.crit;
     }
     chance
 }

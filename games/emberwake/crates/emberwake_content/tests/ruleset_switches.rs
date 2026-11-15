@@ -253,6 +253,13 @@ fn the_seed_sets_the_values_the_rows_read_now() {
                 }
             }
         }
+        // CLASSPASS1-KIT (PR5-62a): duplicate_skill_errors now enforces extra_skills vs class.basics; frozen
+        // classbasics.json keeps 'brace' on founder_kaelen until R42_SEED removes it right below.
+        if kind == "units" && json::s(&e, "id") == "founder_kaelen" {
+            if let Some(Value::Array(extra)) = e.get_mut("extra_skills") {
+                extra.retain(|s| s.as_str() != Some("brace"));
+            }
+        }
         store::upsert(&tmp, None, kind, &e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(&e, "id")));
     }
     assert_eq!(rows(&tmp), pre_pk1s3, "the CLASS-BASICS seed over it gives the rows before PK1-S3");

@@ -382,6 +382,10 @@ fn matches(w: &World, ev: &Event, when: &Obj) -> bool {
     if !intent.is_empty() && crate::round_intent::intent_of(w, ev.holder).map(|i| i.id()) != Some(intent.as_str()) {
         return false;
     }
+    let dw = value::string(when, "dual_wield", "");
+    if !dw.is_empty() && !w.units[ev.holder].has_dual_wield(&dw) {
+        return false;
+    }
     match when.get("meter") {
         None => true,
         Some(m) => m.as_object().is_some_and(|m| crate::meter::value(w, ev.holder, &value::string(m, "id", "")).is_some_and(|v| v >= value::int(m, "at_least", 0))),

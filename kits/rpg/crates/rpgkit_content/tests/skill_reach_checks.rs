@@ -81,7 +81,7 @@ fn each_skill_reach_mistake_is_one_error() {
     one(reach(json!({})), "Effect 1: skill_reach reach must be a whole number 1-2 (tiles).");
     one(reach(json!({"reach": 1, "intent": "channel"})), &format!("Effect 1: skill_reach intent 'channel' is not one of {}.", SKILL_REACH_INTENTS.join(", ")));
     one(reach(json!({"reach": 1, "kind": "MOVE"})), &format!("Effect 1: skill_reach kind 'MOVE' is not one of {}.", SKILL_REACH_KINDS.join(", ")));
-    one(reach(json!({"reach": 1, "value": 1})), "Effect 1: skill_reach takes only reach, intent and kind (not 'value').");
+    one(reach(json!({"reach": 1, "value": 1})), "Effect 1: skill_reach takes only reach, intent, kind and ranged (not 'value').");
     let (p, i) = errors(json!({"type": "zz"}));
     assert!(p[0].contains(SKILL_REACH) && !p[0].contains(SPELL_REACH_ALIAS), "the passive list names skill_reach: {p:?}");
     assert!(i[0].contains(SKILL_REACH) && !i[0].contains(SPELL_REACH_ALIAS), "the item list names skill_reach: {i:?}");

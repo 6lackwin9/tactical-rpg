@@ -705,9 +705,13 @@ pub(crate) fn mark_spell_sources(rows: &mut [Dict], families: &[Dict]) {
         return;
     }
     let sources = families_with_rule(families, rpgkit_data::SPELL_SOURCE_RULE);
+    let ranged_fams = families_with_rule(families, rpgkit_data::ALWAYS_RANGED_RULE);
     for row in rows {
-        let spell = json::strings(json::get(row, "weapon_types")).iter().any(|w| sources.contains(w));
+        let wtypes = json::strings(json::get(row, "weapon_types"));
+        let spell = wtypes.iter().any(|w| sources.contains(w));
+        let always_ranged = !wtypes.is_empty() && wtypes.iter().all(|w| ranged_fams.contains(w));
         row.insert(rpgkit_data::SKILL_SPELL_SOURCE.into(), Value::Bool(spell));
+        row.insert(rpgkit_data::SKILL_ALWAYS_RANGED.into(), Value::Bool(always_ranged));
     }
 }
 

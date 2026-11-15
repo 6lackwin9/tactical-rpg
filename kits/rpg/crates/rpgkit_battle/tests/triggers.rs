@@ -517,3 +517,49 @@ fn the_session_logs_triggers_and_off_changes_nothing() {
         assert_eq!(w.units[HERO].held_guard, None);
     }
 }
+
+/// CLASSPASS1-KIT: `when.dual_wield` fires only when main-hand (1h) and off-hand weapon share `slot_rule`.
+#[test]
+fn dual_wield_when_gates_battle_triggers() {
+    use rpgkit_data::ItemDef;
+    use rpgkit_rules::gear::{Equipment, Slot};
+
+    let make_weapon = |id: &str, item_type: &str, slot_rule: &str, two_handed: bool| {
+        let row = json!({
+            "id": id,
+            "name": id,
+            "item_type": item_type,
+            "two_handed": two_handed
+        });
+        let mut item = ItemDef::from_obj(row.as_object().unwrap());
+        item.slot_rule = slot_rule.into();
+        item
+    };
+    let light_main = make_weapon("dw_m", "WEAPON", "1h_light", false);
+    let light_off = make_weapon("dw_o", "WEAPON", "1h_light", false);
+    let heavy_off = make_weapon("dw_h", "WEAPON", "1h_heavy", false);
+    let shield_off = make_weapon("dw_s", "SHIELD", "1h_light", false);
+    let two_hand = make_weapon("dw_2h", "WEAPON", "1h_light", true);
+
+    let s = session(rules());
+    for (main, off, want, label) in [
+        (&light_main, Some(&light_off), 1usize, "matching 1h_light pair"),
+        (&light_main, Some(&heavy_off), 0, "mismatched slot_rule"),
+        (&light_main, Some(&shield_off), 0, "off-hand shield"),
+        (&two_hand, Some(&light_off), 0, "two-handed main weapon"),
+        (&light_main, None, 0, "empty off-hand"),
+    ] {
+        let mut w = s.w.clone();
+        w.units[HERO].inventory.unequip(Slot::MainHand);
+        w.units[HERO].inventory.unequip(Slot::OffHand);
+        w.units[HERO].inventory.equip(Equipment::new(main), Slot::MainHand);
+        if let Some(o) = off {
+            w.units[HERO].inventory.equip(Equipment::new(o), Slot::OffHand);
+        }
+        give(&mut w, HERO, "dw_check", "hit_dealt", json!({"dual_wield": "1h_light"}), json!([{"type": "crit", "value": 1}]), "round");
+        let mut res = Resolver::new(BLOCKS, 1);
+        book(&mut res, HERO, hit(&w, HERO, FOE, "t_jab"), 1);
+        run(&mut w, &mut res, 1, 1);
+        assert_eq!(fired(&res, HERO, "hit_dealt"), want, "{label}: {:?}", res.log);
+    }
+}

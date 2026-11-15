@@ -10,7 +10,7 @@ use serde_json::Value;
 
 pub const BASE_AP: i32 = 10;
 pub const GEAR_REACH_CAP: i32 = 1;
-pub const GROUPS: [&str; 2] = ["spell", "heal"];
+pub const GROUPS: [&str; 3] = ["spell", "heal", "channel"];
 /// RULESET1 V4 (tasks 1.4): the widest foresight reveal range in tiles.
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
 /// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
@@ -59,6 +59,36 @@ pub struct HitSource {
     pub source: String,
     pub target: Target,
     pub value: f64,
+}
+
+/// CLASSPASS1 (`PR5-62a`): an effect row's `when`-gated grants, stored on the unit and re-evaluated on every sync.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConditionalGrant {
+    pub source: String,
+    pub gear: bool,
+    pub when: serde_json::Map<String, Value>,
+    pub grants: Vec<Grant>,
+}
+
+/// CLASSPASS1 (`PR5-62a`): active conditional accumulators rebuilt on every `refresh_conditional_grants`.
+#[derive(Debug, Clone, Default)]
+pub struct CondGrants {
+    pub potency_family: IndexMap<String, f64>,
+    pub potency_group: IndexMap<String, f64>,
+    pub status_resist: IndexMap<String, i32>,
+    pub ap_regen_bonus: i32,
+    pub status_potency: i32,
+    pub passive_skill_reach: Vec<SkillReach>,
+    pub gear_skill_reach: Vec<SkillReach>,
+    pub passive_skills: Vec<String>,
+    pub gear_skills: Vec<String>,
+    pub unlock_family: IndexMap<String, i32>,
+    pub unlock_group: IndexMap<String, i32>,
+    pub stagger_taken: Vec<StaggerTaken>,
+    pub forced: ForcedTraits,
+    pub hit_sources: Vec<HitSource>,
+    pub block_cost: IndexMap<String, i32>,
+    pub crit: f64,
 }
 
 /// HOOKS1 FM5 (rule `forced_move`; engine-only): what a unit's passive and worn-item `forced_move` effects add up to:
@@ -304,6 +334,14 @@ pub struct Unit {
     /// U3.2-S4 (U3 Level 2): crit chance points the worn gear's families give at proficiency 2 or more (their
     /// `level2_bonus` crit, each family once), rebuilt on every sync.
     pub gear_crit: f64,
+    /// CLASSPASS1 (`PR5-62a`): crit chance points from non-gear passive `crit` effects (`damage::crit_chance`).
+    pub passive_crit: f64,
+    /// CLASSPASS1 (`PR5-62a`): always-on passive ids from a derived unit's `ClassDef::passives`, applied under
+    /// `deck_rule` before the deck's slotted passives.
+    pub class_passives: Vec<String>,
+    /// CLASSPASS1 (`PR5-62a`): `when`-gated passive/gear grants and their active accumulators.
+    pub conditional_grants: Vec<ConditionalGrant>,
+    pub cond: CondGrants,
     /// HOOKS1 8.3: the held guard a trigger set this round (None in classic and without the rule).
     pub held_guard: Option<HeldGuard>,
     /// HOOKS1 8.2: crit chance points the trigger effect `crit` added for the battle (0 in classic).
@@ -442,6 +480,10 @@ impl Unit {
             block_cost: IndexMap::new(),
             gear_block_cost: IndexMap::new(),
             gear_crit: 0.0,
+            passive_crit: 0.0,
+            class_passives: Vec::new(),
+            conditional_grants: Vec::new(),
+            cond: CondGrants::default(),
             held_guard: None,
             trigger_crit: 0.0,
             band_heal_taken: 0,
@@ -511,10 +553,31 @@ impl Unit {
         self.inventory.main_weapon().map_or(REACH_WEAPON_REACH, |w| w.reach_max())
     }
 
-    /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the
-    /// rule forced_move).
+    /// HOOKS1 FM5: the unit's passive, worn-item and conditional `forced_move` effects together (a battle reads them
+    /// only under the rule forced_move).
     pub fn forced_traits(&self) -> ForcedTraits {
-        self.passive_forced.with(self.gear_forced)
+        self.passive_forced.with(self.gear_forced).with(self.cond.forced)
+    }
+
+    /// CLASSPASS1 (`PR5-62a`): whether main and off hands both hold weapons whose `slot_rule` equals `slot_rule`
+    /// (excluding two-handed main weapons and non-weapon off-hands).
+    pub fn has_dual_wield(&self, slot_rule: &str) -> bool {
+        if slot_rule.is_empty() {
+            return false;
+        }
+        let main = self.inventory.main_weapon().is_some_and(|m| !m.item.two_handed && m.item.slot_rule == slot_rule);
+        let off = self.inventory.offhand_weapon().is_some_and(|o| o.item.slot_rule == slot_rule);
+        main && off
+    }
+
+    /// CLASSPASS1 (`PR5-62a`): AP regen bonus combining unconditional and active conditional passives.
+    pub fn total_ap_regen_bonus(&self) -> i32 {
+        self.ap_regen_bonus + self.cond.ap_regen_bonus
+    }
+
+    /// CLASSPASS1 (`PR5-62a`): combined `stagger_taken` multiplier for an action of `blocks`.
+    pub fn stagger_taken_mult(&self, blocks: i32) -> f64 {
+        self.stagger_taken.iter().chain(&self.cond.stagger_taken).filter(|e| e.matches(blocks)).map(|e| e.mult).product()
     }
 
     /// HOOKS1 8.1: the triggers the unit holds, passives first then worn items, each in apply order (a battle reads them
@@ -648,6 +711,7 @@ impl Unit {
         self.gear_skills.clear();
         self.gear_block_cost.clear();
         self.gear_crit = 0.0;
+        self.conditional_grants.retain(|c| !c.gear);
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
         for (src, fx) in item_fx {
             self.apply_effects(cat, &fx, &src, true);
@@ -661,6 +725,12 @@ impl Unit {
             self.apply_effects(cat, &fx, &src, true);
         }
         self.apply_family_bonuses(cat);
+        let (base_rng, ctx) = match self.inventory.main_weapon() {
+            Some(w) => (w.item.base_range, Some(w.weapon_type().to_string())),
+            None => (1, None),
+        };
+        self.attack_range = self.stats.effective_range(base_rng, ctx.as_deref());
+        self.refresh_conditional_grants(cat);
         // GEAR-REWORK1 (PR5-51a pass 2, U3.3 4): the Off-Hand button's skill (the off-hand item's family skill, or the
         // off-hand jab of a `1h_light` weapon, open whatever the deck's basics say) is held like a worn item's skill: open
         // without a slot while worn (no key on today's rows, nothing added)
@@ -820,9 +890,123 @@ impl Unit {
     }
 
     /// Passives.apply_effects (item effects and passives share the grammar): the typed grant view of `effects`
-    /// (U4.2-S1, `grants::read`), applied by `apply_grants`.
+    /// (U4.2-S1, `grants::read_with_when`), applied unconditionally when un-gated or stored in `conditional_grants`
+    /// when carrying a `when` object (`refresh_conditional_grants`).
     pub fn apply_effects(&mut self, cat: &Catalog, effects: &[Value], source: &str, gear: bool) {
-        self.apply_grants(cat, &grants::read(effects), source, gear);
+        let (always, cond) = grants::read_with_when(effects);
+        self.apply_grants(cat, &always, source, gear);
+        if !cond.is_empty() {
+            for (when, grants) in cond {
+                self.conditional_grants.push(ConditionalGrant { source: source.to_string(), gear, when, grants });
+            }
+            if !gear {
+                self.refresh_conditional_grants(cat);
+            }
+        }
+    }
+
+    fn matches_grant_when(&self, when: &serde_json::Map<String, Value>) -> bool {
+        for (k, v) in when {
+            match k.as_str() {
+                "dual_wield" => {
+                    if !v.as_str().is_some_and(|rule| self.has_dual_wield(rule)) {
+                        return false;
+                    }
+                }
+                "ranged" => {
+                    if v.as_bool() == Some(true) && self.attack_range <= 1 {
+                        return false;
+                    }
+                }
+                "melee" => {
+                    if v.as_bool() == Some(true) && self.attack_range > 1 {
+                        return false;
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    /// CLASSPASS1 (`PR5-62a`): clears and re-evaluates all stored `when`-gated grants against current gear and state.
+    pub fn refresh_conditional_grants(&mut self, cat: &Catalog) {
+        self.stats.modifiers.retain(|m| !m.source.starts_with("cond:"));
+        self.cond = CondGrants::default();
+        let active: Vec<ConditionalGrant> = self.conditional_grants.iter().filter(|cg| self.matches_grant_when(&cg.when)).cloned().collect();
+        for (cg_idx, cg) in active.iter().enumerate() {
+            let id = cg.source.trim_start_matches("passive:").to_string();
+            for g in cg.grants.iter().filter(|g| !cg.gear || g.gear_ok()) {
+                match g {
+                    Grant::Modifier(m) => self.apply_cond_modifier(cat, m, &id, cg.gear, cg_idx),
+                    Grant::GrantSkill(SkillGrant::Learn(skill)) if cg.gear => {
+                        if !self.cond.gear_skills.contains(skill) {
+                            self.cond.gear_skills.push(skill.clone());
+                        }
+                    }
+                    Grant::GrantSkill(SkillGrant::Learn(skill)) => {
+                        if !self.cond.passive_skills.contains(skill) {
+                            self.cond.passive_skills.push(skill.clone());
+                        }
+                    }
+                    Grant::GrantSkill(SkillGrant::Unlock { set, levels }) => {
+                        let (map, key) = match set {
+                            SkillSet::Family(f) => (&mut self.cond.unlock_family, f),
+                            SkillSet::Group(g) => (&mut self.cond.unlock_group, g),
+                        };
+                        let cur = map.get(key).copied().unwrap_or(0);
+                        map.insert(key.clone(), SkillGrant::UNLOCK_COMBINE.fold_i(cur, *levels));
+                    }
+                    Grant::SkillBlockCost { skill, delta } => {
+                        *self.cond.block_cost.entry(skill.clone()).or_insert(0) += *delta;
+                    }
+                    Grant::Proficiency { .. } | Grant::GrantPool { .. } | Grant::Trigger(_) | Grant::ForbidHands { .. } | Grant::PierceMelee => {}
+                }
+            }
+        }
+        if !self.cond.unlock_family.is_empty() || !self.cond.unlock_group.is_empty() {
+            self.refresh_path_skills(cat);
+        }
+    }
+
+    fn apply_cond_modifier(&mut self, cat: &Catalog, m: &Modifier, id: &str, gear: bool, cg_idx: usize) {
+        let c: Combine = m.target.combine();
+        let src_name = if gear { id.to_string() } else { format!("passive:{id}") };
+        if matches!(m.target, Target::SkillPotency(_) | Target::StaggerTaken { .. } | Target::ForcedTiles) {
+            self.cond.hit_sources.push(HitSource { source: src_name.clone(), target: m.target.clone(), value: m.value });
+        }
+        let int = m.value as i32;
+        match &m.target {
+            Target::Stat { stat, tag, percent } => {
+                let mut sm = StatModifier::permanent(stat, int, &format!("cond:{src_name}#{cg_idx}"), tag);
+                if cat.derived_stats.contains_key(stat) {
+                    sm.percent = *percent;
+                }
+                self.stats.modifiers.push(sm);
+            }
+            Target::Resist { status } => {
+                let cur = self.cond.status_resist.get(status).copied().unwrap_or(0);
+                self.cond.status_resist.insert(status.clone(), c.fold_i(cur, int));
+            }
+            Target::ApRegen => self.cond.ap_regen_bonus = c.fold_i(self.cond.ap_regen_bonus, int),
+            Target::SkillPotency(set) => {
+                let (held, key) = match set {
+                    SkillSet::Group(g) => (&mut self.cond.potency_group, g),
+                    SkillSet::Family(f) => (&mut self.cond.potency_family, f),
+                };
+                let slot = held.entry(key.clone()).or_insert(0.0);
+                *slot = c.fold_f(*slot, m.value);
+            }
+            Target::StatusPotency => self.cond.status_potency = c.fold_i(self.cond.status_potency, int),
+            Target::SkillReach { intent, kind, ranged } => {
+                let held = if gear { &mut self.cond.gear_skill_reach } else { &mut self.cond.passive_skill_reach };
+                held.push(SkillReach { reach: int, intent: intent.clone(), kind: kind.clone(), ranged: *ranged });
+            }
+            Target::StaggerTaken { max_blocks } => self.cond.stagger_taken.push(StaggerTaken { mult: m.value, max_blocks: *max_blocks }),
+            Target::ForcedTiles | Target::ForcedImmune(_) => self.cond.forced.add(m),
+            Target::Crit => self.cond.crit = c.fold_f(self.cond.crit, m.value),
+            Target::Foresight | Target::HealTaken => {}
+        }
     }
 
     /// U4.2-S1: applies typed grants under `source` (`passive:<id>`, `gear:<item>` or `gear:<item>:tier<n>`; `gear`
@@ -920,9 +1104,9 @@ impl Unit {
                 *held = c.fold_i(*held, int);
             }
             // PR5-50: one held row per source (`Combine::Sum` over the rows a skill matches, `skill_reach_bonus`)
-            Target::SkillReach { intent, kind } => {
+            Target::SkillReach { intent, kind, ranged } => {
                 let held = if gear { &mut self.gear_skill_reach } else { &mut self.passive_skill_reach };
-                held.push(SkillReach { reach: int, intent: intent.clone(), kind: kind.clone() });
+                held.push(SkillReach { reach: int, intent: intent.clone(), kind: kind.clone(), ranged: *ranged });
             }
             Target::Foresight => {
                 if self.foresight_source.is_empty() {
@@ -940,9 +1124,10 @@ impl Unit {
                     self.passive_forced.add(m);
                 }
             }
-            // HOOKS1 UM4: a band's crit, read by `apply_band` only; U3.2-S4: a worn family's Level-2 crit
+            // HOOKS1 UM4: a band's crit (`apply_band`); U3.2-S4: a worn family's Level-2 crit (`gear`); CLASSPASS1
+            // (`PR5-62a`): non-gear passive `crit` (`passive_crit`).
             Target::Crit if gear => self.gear_crit = c.fold_f(self.gear_crit, m.value),
-            Target::Crit => {}
+            Target::Crit => self.passive_crit = c.fold_f(self.passive_crit, m.value),
             // PK1-S1 (3.1): a band's, read by `apply_band` only
             Target::HealTaken => {}
         }
@@ -1023,7 +1208,7 @@ impl Unit {
     /// U3.2-S4 (OFFHAND1, FB-35): whether a worn item grants `skill_id` now (owned, unlocked and open without a slot
     /// while worn, like a meter skill; gone when the item comes off).
     pub fn gear_skill(&self, skill_id: &str) -> bool {
-        self.gear_skills.iter().any(|s| s == skill_id)
+        self.gear_skills.iter().any(|s| s == skill_id) || self.cond.gear_skills.iter().any(|s| s == skill_id)
     }
 
     /// ACT1-HOOKS2 (FB-244 (1)): whether the encounter granted `skill_id` to this unit for this battle (owned, unlocked
@@ -1079,14 +1264,31 @@ impl Unit {
         list.contains(&passive.id)
     }
 
-    /// RULESET1 9 D4: a catalog unit owns the slottable passives its deck names; applies those that are slotted (D3)
-    /// and returns how many it applied. Nothing without the deck rule.
+    /// CLASSPASS1 (`PR5-62a`): applies a derived unit's slotless `class.passives` once under the deck rule.
+    pub fn apply_class_passives(&mut self, cat: &Catalog) -> usize {
+        if self.deck_rule.is_none() || self.class_passives.is_empty() {
+            return 0;
+        }
+        let ids = self.class_passives.clone();
+        let mut applied = 0;
+        for id in ids {
+            let Some(p) = cat.passives.get(&id) else { continue };
+            if p.slot.is_empty() && !self.passives.contains(&p.id) {
+                self.apply_passive(cat, p);
+                applied += 1;
+            }
+        }
+        applied
+    }
+
+    /// RULESET1 9 D4: a catalog unit owns its class passives (`slot` empty) and the slottable passives its deck names;
+    /// applies those that are slotted (D3) and returns how many it applied. Nothing without the deck rule.
     pub fn apply_deck_passives(&mut self, cat: &Catalog) -> usize {
         if self.deck_rule.is_none() {
             return 0;
         }
+        let mut applied = self.apply_class_passives(cat);
         let named: Vec<String> = self.deck.passive.iter().chain(&self.deck.keystone).cloned().collect();
-        let mut applied = 0;
         for id in named {
             let Some(p) = cat.passives.get(&id) else { continue };
             if !p.slot.is_empty() && !self.passives.contains(&p.id) && self.slotted(p) {
@@ -1134,7 +1336,11 @@ impl Unit {
         if let Some(open) = self.deck_basic(cat, skill_id) {
             return open;
         }
-        if self.known_skills.iter().any(|s| s == skill_id) || self.granted_skills.iter().any(|s| s == skill_id) || cat.is_system(skill_id) {
+        if self.known_skills.iter().any(|s| s == skill_id)
+            || self.granted_skills.iter().any(|s| s == skill_id)
+            || self.cond.passive_skills.iter().any(|s| s == skill_id)
+            || cat.is_system(skill_id)
+        {
             return true;
         }
         if !self.path_levels.is_empty() {
@@ -1156,7 +1362,7 @@ impl Unit {
 
     pub fn owned_families(&self, cat: &Catalog) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        for id in self.known_skills.iter().chain(&self.granted_skills) {
+        for id in self.known_skills.iter().chain(&self.granted_skills).chain(&self.cond.passive_skills) {
             let fam = cat.family_of(id).to_string();
             if !out.contains(&fam) && !cat.is_always_active(id) {
                 out.push(fam);
@@ -1213,10 +1419,12 @@ impl Unit {
         if !self.path_unlock.contains_key(family) {
             return 0;
         }
-        let mut passive_r = self.unlock_bonus_family.get(family).copied().unwrap_or(0);
+        let mut passive_r = self.unlock_bonus_family.get(family).copied().unwrap_or(0).max(self.cond.unlock_family.get(family).copied().unwrap_or(0));
         for g in GROUPS {
             if skill_in_group(t1, g) {
-                passive_r = passive_r.max(self.unlock_bonus_group.get(g).copied().unwrap_or(0));
+                passive_r = passive_r
+                    .max(self.unlock_bonus_group.get(g).copied().unwrap_or(0))
+                    .max(self.cond.unlock_group.get(g).copied().unwrap_or(0));
             }
         }
         let know_r = if t1.grade != "novice" { stats::know_unlock_reduction(self.unlock_know()) } else { 0 };
@@ -1325,19 +1533,31 @@ pub fn rank_numeral(rank: i32) -> &'static str {
 }
 
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a spell-source weapon (U3.2-S2: a family
-/// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal (HEALPCT1: `heal_pct` too).
+/// with the engine rule `spell_source`, `SkillDef::spell_source`); "heal" = a support heal (HEALPCT1: `heal_pct` too);
+/// "channel" = a channel-only skill (`SkillDef::channel.only`, CLASSPASS1 `PR5-62a`).
 pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     match group {
         "spell" => s.kind == "ATTACK" && s.spell_source,
         "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0 || s.heal_pct > 0),
+        "channel" => s.channel.only,
         _ => false,
     }
 }
 
-/// PR5-50 (FB-204): whether skill `s` takes reach bonus `r`: every filter given matches. `kind`: the skill's kind, or
-/// `SKILL_REACH_SPELL` for the spell group (`skill_in_group` "spell"); `intent`: one of the intents IR21 derives for the
-/// skill (`intent::derive`) or its single legacy intent (its `round_intent`, else its kind's), so the filter reads the
-/// same in every ruleset.
+/// CLASSPASS1 (`PR5-62a`): whether skill `s` is inherently ranged (neither a single-target positioned dash-attack
+/// nor a user-centred area shape like LINE/RING/ARC/CONE, and either its own `reach_max > 1` or `reach_max == 0` with
+/// every `weapon_types` entry an `always_ranged` weapon family).
+pub fn skill_is_ranged(s: &rpgkit_data::SkillDef) -> bool {
+    let from_user_area = matches!(s.area.as_str(), "LINE" | "RING" | "ARC" | "CONE");
+    let has_area = (!s.area.is_empty() && s.area != "NONE") || (s.hazard.is_some() && s.power_mult == 0.0);
+    let positioned_attack = s.position.is_some() && s.kind == "ATTACK" && !has_area;
+    !positioned_attack && !from_user_area && (s.reach_max > 1 || (s.reach_max == 0 && s.always_ranged))
+}
+
+/// PR5-50 (FB-204), CLASSPASS1 (`PR5-62a`): whether skill `s` takes reach bonus `r`: every filter given matches.
+/// `kind`: the skill's kind, or `SKILL_REACH_SPELL` for the spell group (`skill_in_group` "spell"); `intent`: one of
+/// the intents IR21 derives for the skill (`intent::derive`) or its single legacy intent (its `round_intent`, else its
+/// kind's), so the filter reads the same in every ruleset; `ranged`: `Some(b)` requires `skill_is_ranged(s) == b`.
 pub fn skill_reach_matches(r: &SkillReach, s: &rpgkit_data::SkillDef) -> bool {
     let kind_ok = match r.kind.as_str() {
         "" => true,
@@ -1348,7 +1568,8 @@ pub fn skill_reach_matches(r: &SkillReach, s: &rpgkit_data::SkillDef) -> bool {
         let legacy = if s.round_intent.is_empty() { crate::ruleset::kind_intent(&s.kind) } else { s.round_intent.as_str() };
         legacy == r.intent || crate::intent::derive(&crate::intent::IntentInput::of_def(s)).contains(&r.intent.as_str())
     };
-    kind_ok && intent_ok
+    let ranged_ok = r.ranged.is_none_or(|want| skill_is_ranged(s) == want);
+    kind_ok && intent_ok && ranged_ok
 }
 
 /// The side whose units are the player's (heroes and allies): never templated.
@@ -1578,6 +1799,9 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
             u.keystone_skills.push(u.mastery_keystone.clone());
         }
     }
+    if b.growth.is_some() {
+        u.apply_class_passives(cat);
+    }
     for id in &b.over.passives {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);
@@ -1770,6 +1994,7 @@ fn build_catalog_unit(
     equip(cat, &mut u, e, arch, lock_stats);
     if derived {
         let arch = arch.unwrap();
+        u.class_passives = arch.passives.clone();
         u.tier = e.tier.clone();
         u.tier_mult = stats::tier_row(&u.tier).mult;
         u.sync_from_stats_and_gear(cat);
@@ -2001,14 +2226,19 @@ impl Unit {
     }
 
     pub fn potency_for(&self, family: &str) -> f64 {
-        1.0 + self.potency_bonus.get(family).copied().unwrap_or(0.0) + self.gear_potency_family.get(family).copied().unwrap_or(0.0)
+        1.0
+            + self.potency_bonus.get(family).copied().unwrap_or(0.0)
+            + self.gear_potency_family.get(family).copied().unwrap_or(0.0)
+            + self.cond.potency_family.get(family).copied().unwrap_or(0.0)
     }
 
     pub fn potency_for_skill(&self, skill: &rpgkit_data::SkillDef) -> f64 {
         let mut total = self.potency_for(skill.family_id());
         for g in GROUPS {
             if skill_in_group(skill, g) {
-                total += self.potency_group.get(g).copied().unwrap_or(0.0) + self.gear_potency_group.get(g).copied().unwrap_or(0.0);
+                total += self.potency_group.get(g).copied().unwrap_or(0.0)
+                    + self.gear_potency_group.get(g).copied().unwrap_or(0.0)
+                    + self.cond.potency_group.get(g).copied().unwrap_or(0.0);
             }
         }
         total
@@ -2029,10 +2259,12 @@ impl Unit {
         let family = |x: &SkillSet| matches!(x, SkillSet::Family(f) if f == fam);
         let mut out = of(&self.hit_sources, &family);
         out.extend(of(&self.gear_hit_sources, &family));
+        out.extend(of(&self.cond.hit_sources, &family));
         for g in groups {
             let group = |x: &SkillSet| matches!(x, SkillSet::Group(y) if y == g);
             out.extend(of(&self.hit_sources, &group));
             out.extend(of(&self.gear_hit_sources, &group));
+            out.extend(of(&self.cond.hit_sources, &group));
         }
         out
     }
@@ -2048,10 +2280,11 @@ impl Unit {
     /// mult-stage modifier `passive`: their product (FB-26, as `poise::factors` reads it), the parts its sources.
     pub fn stagger_taken_modifier(&self, blocks: i32) -> crate::pipeline::Modifier {
         use crate::pipeline::{Modifier as Stage1, Op, Part, Stage};
-        let product: f64 = self.stagger_taken.iter().filter(|e| e.matches(blocks)).map(|e| e.mult).product();
+        let product = self.stagger_taken_mult(blocks);
         let parts = self
             .hit_sources
             .iter()
+            .chain(&self.cond.hit_sources)
             .filter(|h| matches!(h.target, Target::StaggerTaken { max_blocks } if StaggerTaken { mult: h.value, max_blocks }.matches(blocks)))
             .map(|h| Part { source: h.source.clone().into(), value: h.value })
             .collect();
@@ -2064,6 +2297,7 @@ impl Unit {
         self.hit_sources
             .iter()
             .chain(&self.gear_hit_sources)
+            .chain(&self.cond.hit_sources)
             .filter(|h| h.target == Target::ForcedTiles && h.value != 0.0)
             .map(|h| crate::pipeline::Part { source: h.source.clone().into(), value: h.value })
             .collect()
@@ -2074,7 +2308,9 @@ impl Unit {
     /// deltas the unit's passives and worn items hold for it (summed), clamped to 1 at least; the skill's own `blocks`
     /// unchanged while no delta applies. The planner, the AI, the previews and the battle read this.
     pub fn skill_blocks(&self, skill: &rpgkit_data::SkillDef) -> i32 {
-        let delta = self.block_cost.get(&skill.id).copied().unwrap_or(0) + self.gear_block_cost.get(&skill.id).copied().unwrap_or(0);
+        let delta = self.block_cost.get(&skill.id).copied().unwrap_or(0)
+            + self.gear_block_cost.get(&skill.id).copied().unwrap_or(0)
+            + self.cond.block_cost.get(&skill.id).copied().unwrap_or(0);
         if delta == 0 {
             skill.blocks
         } else {
@@ -2087,7 +2323,7 @@ impl Unit {
     }
 
     pub fn status_potency_bonus(&self) -> i32 {
-        self.gear_status_potency + self.passive_status_potency
+        self.gear_status_potency + self.passive_status_potency + self.cond.status_potency
     }
 
     /// PR5-50 (FB-204): the reach the unit's `skill_reach` bonuses add to skill `s` (`skill_reach_matches`): the worn
@@ -2095,11 +2331,16 @@ impl Unit {
     /// retired spell reach bonus exactly.
     pub fn skill_reach_bonus(&self, s: &rpgkit_data::SkillDef) -> i32 {
         let sum = |held: &[SkillReach]| held.iter().filter(|r| skill_reach_matches(r, s)).map(|r| r.reach).sum::<i32>();
-        sum(&self.gear_skill_reach).min(GEAR_REACH_CAP) + sum(&self.passive_skill_reach)
+        (sum(&self.gear_skill_reach) + sum(&self.cond.gear_skill_reach)).min(GEAR_REACH_CAP)
+            + sum(&self.passive_skill_reach)
+            + sum(&self.cond.passive_skill_reach)
     }
 
     pub fn resist_for(&self, status: &str) -> i32 {
-        (self.status_resist.get(status).copied().unwrap_or(0) + self.gear_status_resist.get(status).copied().unwrap_or(0)).min(100)
+        (self.status_resist.get(status).copied().unwrap_or(0)
+            + self.gear_status_resist.get(status).copied().unwrap_or(0)
+            + self.cond.status_resist.get(status).copied().unwrap_or(0))
+        .min(100)
     }
 
     /// The weapon type that counts for skill gating in `hand` ("main", "off"): "unarmed" when that hand is empty.

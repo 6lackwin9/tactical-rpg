@@ -84,7 +84,7 @@ fn class_basics_name_known_tier_one_skills_once() {
     let (_t, data) = scratch("rpgkit_class_basics_check");
     store::upsert(&data, None, "classes", &class("plain", json!({})), None).unwrap();
     let v = store::view(&data);
-    let errors = |basics: Value| check::validate_entry(&v, "classes", &class("drill", json!({"basics": basics})), "drill");
+    let errors = |basics: Value| check::validate_entry(&v, "classes", &class("drill", json!({"skill_path": {"flank_cut": 1}, "basics": basics})), "drill");
     let base = errors(json!([]));
     let added = |basics: Value| errors(basics).into_iter().filter(|e| !base.contains(e)).collect::<Vec<_>>();
     assert!(added(json!(["brace", "strike"])).is_empty(), "a skill and a catalog basic are fine");
