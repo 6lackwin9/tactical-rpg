@@ -1,0 +1,1 @@
+{"steps": [{"op": "upsert", "kind": "grounds", "entry": {"id": "floorboards", "name": "Floorboards", "order": 72, "kind": "land", "colour": "#3a2c22", "wear": 0.06, "strays": false, "tone": 0.08, "patches": 0.0, "marks": [], "marks_per_100": 0, "indoor": true}}]}

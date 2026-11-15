@@ -70,6 +70,50 @@ pub fn zone_at(t: &Dict, x: i64, y: i64) -> String {
     }
 }
 
+/// REVEAL1 1.1: the legend entry of zone `zone_id` (None: no entry names it).
+fn zone_entry<'a>(t: &'a Dict, zone_id: &str) -> Option<&'a Dict> {
+    if zone_id.is_empty() {
+        return None;
+    }
+    legend(t).values().filter_map(Value::as_object).find(|z| json::s(z, "id") == zone_id)
+}
+
+/// REVEAL1 1.1: whether zone `zone_id` is indoor (its legend entry has `indoor: true`; false by default).
+pub fn zone_indoor(t: &Dict, zone_id: &str) -> bool {
+    zone_entry(t, zone_id).is_some_and(|z| json::b(z, "indoor", false))
+}
+
+/// REVEAL1 1.1: the interior wall set of an indoor zone (`wall_set`); "" for none or an outdoor zone.
+pub fn zone_wall_set(t: &Dict, zone_id: &str) -> String {
+    zone_entry(t, zone_id).filter(|z| json::b(z, "indoor", false)).map(|z| json::s(z, "wall_set")).unwrap_or_default()
+}
+
+/// REVEAL1 1.2: the indoor zone under (x, y) (a doorway cell tagged with the zone counts); "" outdoors or off the map.
+pub fn indoor_zone_at(t: &Dict, x: i64, y: i64) -> String {
+    let zone = zone_at(t, x, y);
+    if zone_indoor(t, &zone) {
+        zone
+    } else {
+        String::new()
+    }
+}
+
+/// REVEAL1 1.1: the interior wall set the wall tile (x, y) draws with: the `wall_set` of the first indoor zone beside it
+/// (the four sides in `DIRS` order, then the corners) that names one; "" for a tile that is not a wall or borders none.
+pub fn wall_set_at(t: &Dict, x: i64, y: i64) -> String {
+    if tile(t, x, y) != Some('#') {
+        return String::new();
+    }
+    const CORNERS: [Pos; 4] = [(1, -1), (1, 1), (-1, 1), (-1, -1)];
+    DIRS.iter().chain(CORNERS.iter()).map(|(dx, dy)| zone_wall_set(t, &zone_at(t, x + dx, y + dy))).find(|set| !set.is_empty()).unwrap_or_default()
+}
+
+/// REVEAL1 1.2: the indoor zone a prop roofs (`layer` "roof" with a `roof_of`); None for any other prop.
+pub fn roof_zone(p: &Dict) -> Option<String> {
+    let zone = json::s(p, "roof_of");
+    (json::s(p, "layer") == "roof" && !zone.is_empty()).then_some(zone)
+}
+
 pub fn anchor_pos(t: &Dict, anchor: &str) -> Pos {
     for a in json::aget(t, "anchors") {
         let a = json::dict(a);

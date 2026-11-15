@@ -92,7 +92,7 @@ fn each_check_gives_exactly_its_message() {
     let pair = json!([{"id": "wall_a", "art": "rubble", "x": 0, "y": 3, "w": 3}, {"id": "wall_b", "art": "rubble", "x": 2, "y": 3, "w": 3}]);
     assert_eq!(errors(pair), ["Props 'wall_a' and 'wall_b' stand on the same tile (2, 3)."]);
     // P11
-    assert_eq!(one(json!({"layer": "over"})), ["Prop 'post': layer must be sort or ground."]);
+    assert_eq!(one(json!({"layer": "over"})), ["Prop 'post': layer must be sort, ground or roof."]);
     // P12
     let p12 = "Prop 'post': variant is -1 (by position) or 0-15; flip is true or false.";
     assert_eq!(one(json!({"variant": 16})), [p12]);

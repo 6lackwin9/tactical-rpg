@@ -322,7 +322,7 @@ pub fn file_of(data_dir: &Path, world: Option<&str>, kind: &str) -> PathBuf {
 /// "kind", the stored fields (to_storage keeps exactly these) and the normalize.
 type GameKind = (&'static str, &'static str, &'static str, &'static [&'static str]);
 pub const GAME_KINDS: [GameKind; 3] = [
-    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", "tags"]),
+    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", source::MAP_BOUNDARY, "tags"]),
     ("quests", "quests/quests.json", "quest_templates", &["id", "name", "description", "objectives", "rewards", "tags"]),
     ("services", "dialogue/services.json", "dialogue_services", &["id", "text"]),
 ];
@@ -340,14 +340,19 @@ fn game_kind(kind: &str) -> Option<GameKind> {
     GAME_KINDS.iter().copied().find(|g| g.0 == kind)
 }
 
-/// MapCatalog / QuestCatalog / ServiceCatalog.to_storage: the normalized entry's stored fields, in that order.
+/// MapCatalog / QuestCatalog / ServiceCatalog.to_storage: the normalized entry's stored fields, in that order. REVEAL1:
+/// a map's `boundary`, a zone's `indoor` and `wall_set` and a prop's `roof_of` are left out at their defaults
+/// (`source::map_without_reveal_defaults`), so a map without them re-saves byte for byte.
 fn game_storage(kind: &str, entry: &Dict) -> Dict {
-    let full = match kind {
+    let mut full = match kind {
         "maps" => source::map_template(entry),
         "quests" => source::quest_template(entry),
         _ => source::service(entry),
     };
-    game_kind(kind).map(|g| g.3).unwrap_or(&[]).iter().map(|k| (k.to_string(), json::get(&full, k).clone())).collect()
+    if kind == "maps" {
+        source::map_without_reveal_defaults(&mut full);
+    }
+    game_kind(kind).map(|g| g.3).unwrap_or(&[]).iter().filter(|k| full.contains_key(**k) || **k != source::MAP_BOUNDARY).map(|k| (k.to_string(), json::get(&full, k).clone())).collect()
 }
 
 fn derived_families(data_dir: &Path) -> Vec<Dict> {

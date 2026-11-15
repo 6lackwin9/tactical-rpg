@@ -1574,10 +1574,10 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
 /// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`);
 /// REGIONGROUND1 KT 1.2 and SC: `ground`, `ground_legend`, `ground_patches` (each patch with its default strength,
 /// `ground_patch_full`) and `wall_storeys` (after `props`). `rows` alone decide walking: nothing in the world or battle
-/// crates reads these four.
+/// crates reads these four. REVEAL1: `boundary` (after `wall_storeys`, "" by default: the location's boundary rules).
 pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
-    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d.clone()), ("props", a.clone()), ("ground", a.clone()), ("ground_legend", d), ("ground_patches", a.clone()), ("wall_storeys", a.clone()), ("tags", a)]);
+    let mut t = template(e, &[("id", s.clone()), ("name", s.clone()), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d.clone()), ("props", a.clone()), ("ground", a.clone()), ("ground_legend", d), ("ground_patches", a.clone()), ("wall_storeys", a.clone()), (MAP_BOUNDARY, s), ("tags", a)]);
     if let Some(Value::Array(list)) = t.get("props") {
         let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(prop_full(o)))).collect();
         t.insert("props".into(), Value::Array(full));
@@ -1620,6 +1620,43 @@ pub fn ground_patch_full(p: &Dict) -> Dict {
 
 /// A map prop's keys in stored order (PROPS1 1).
 pub const PROP_KEYS: [&str; 9] = ["id", "art", "x", "y", "w", "h", "layer", "variant", "flip"];
+/// REVEAL1 1.2: a roof prop's indoor zone (`layer` "roof"); stored after `PROP_KEYS` only when set (`omit_default`).
+pub const PROP_ROOF_OF: &str = "roof_of";
+/// REVEAL1 1.1: a zone legend entry's optional keys beside `id` and `kind`, with their defaults, stored only when set.
+pub const ZONE_INDOOR: &str = "indoor";
+pub const ZONE_WALL_SET: &str = "wall_set";
+/// REVEAL1 2.2: a map's own boundary set ("" by default, stored only when set).
+pub const MAP_BOUNDARY: &str = "boundary";
+
+/// REVEAL1: the stored form of a normalized map template's REVEAL1 keys: `boundary` "" left out, a zone legend entry's
+/// `indoor` false and `wall_set` "" left out, a prop's `roof_of` "" left out; everything else untouched, so a map that
+/// sets none of them re-saves byte for byte.
+pub fn map_without_reveal_defaults(t: &mut Dict) {
+    if t.get(MAP_BOUNDARY).is_some_and(|v| v.as_str() == Some("")) {
+        t.shift_remove(MAP_BOUNDARY);
+    }
+    if let Some(Value::Object(legend)) = t.get_mut("zone_legend") {
+        for entry in legend.values_mut() {
+            if let Value::Object(z) = entry {
+                if z.get(ZONE_INDOOR) == Some(&Value::Bool(false)) {
+                    z.shift_remove(ZONE_INDOOR);
+                }
+                if z.get(ZONE_WALL_SET).is_some_and(|v| v.as_str() == Some("")) {
+                    z.shift_remove(ZONE_WALL_SET);
+                }
+            }
+        }
+    }
+    if let Some(Value::Array(props)) = t.get_mut("props") {
+        for p in props.iter_mut() {
+            if let Value::Object(o) = p {
+                if o.get(PROP_ROOF_OF).is_some_and(|v| v.as_str() == Some("")) {
+                    o.shift_remove(PROP_ROOF_OF);
+                }
+            }
+        }
+    }
+}
 
 /// A map prop with its defaults (`w` 1, `h` 1, `layer` sort, `variant` -1, `flip` false) in `PROP_KEYS` order; the
 /// required keys (`id`, `art`, `x`, `y`) stay missing when missing and unknown keys follow (the checks name both).

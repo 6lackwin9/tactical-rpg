@@ -462,16 +462,17 @@ pub fn validate_all(v: &View) -> Report {
             let id = json::s(e, "id");
             let errors = validate_entry(v, kind, e, &id);
             if !errors.is_empty() {
-                problems.insert(format!("{kind}:{id}"), errors);
+                problems.entry(format!("{kind}:{id}")).or_default().extend(errors);
             }
         }
     }
     // PROPS1 2, REGIONGROUND1 KT 1.3: the map templates' prop and ground checks (engine-only; Godot's MapCatalog had neither)
     for t in v.entries("maps") {
         let mut errors = map::prop_errors(t);
+        errors.extend(map::reveal_errors(t));
         errors.extend(ground::map_errors(v, t));
         if !errors.is_empty() {
-            problems.insert(format!("maps:{}", json::s(t, "id")), errors);
+            problems.entry(format!("maps:{}", json::s(t, "id"))).or_default().extend(errors);
         }
     }
     let mut add = |key: &str, list: Vec<String>| {
@@ -524,20 +525,27 @@ pub fn warnings_all(v: &View) -> Report {
         for e in v.entries(kind) {
             let found = warnings_for(v, kind, e);
             if !found.is_empty() {
-                out.insert(format!("{kind}:{}", json::s(e, "id")), found);
+                out.entry(format!("{kind}:{}", json::s(e, "id"))).or_default().extend(found);
             }
         }
     }
     for ranked in skill::collapse(v.entries("skills")).0 {
         let found = warnings_for(v, "skills", &ranked);
         if !found.is_empty() {
-            out.insert(format!("skills:{}", json::s(&ranked, "id")), found);
+            out.entry(format!("skills:{}", json::s(&ranked, "id"))).or_default().extend(found);
         }
     }
     if !v.terrain_file {
         let missing: Vec<String> = simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}': the code defaults apply.")).collect();
         if !missing.is_empty() {
-            out.insert("terrain:missing".into(), missing);
+            out.entry("terrain:missing".into()).or_default().extend(missing);
+        }
+    }
+    // REVEAL1 R2: an indoor zone's cells under its roof props (`maps:<id>`)
+    for t in v.entries("maps") {
+        let found = map::roof_warnings(t);
+        if !found.is_empty() {
+            out.entry(format!("maps:{}", json::s(t, "id"))).or_default().extend(found);
         }
     }
     // PR5-52 (RULESET-MODES1): CLN-44's `rulesets:missing` warning retired: `classic` is the kit's built-in preset, so a
@@ -546,20 +554,20 @@ pub fn warnings_all(v: &View) -> Report {
     for e in v.entries(recipe::KIND) {
         let found = recipe::warnings(v, e);
         if !found.is_empty() {
-            out.insert(format!("{}:{}", recipe::KIND, json::s(e, "id")), found);
+            out.entry(format!("{}:{}", recipe::KIND, json::s(e, "id"))).or_default().extend(found);
         }
     }
     // INPUT1 1.7: the ruleset rows' warnings (`rulesets:<id>`)
     for e in v.entries(ruleset::KIND) {
         let found = ruleset::warnings(e);
         if !found.is_empty() {
-            out.insert(format!("{}:{}", ruleset::KIND, json::s(e, "id")), found);
+            out.entry(format!("{}:{}", ruleset::KIND, json::s(e, "id"))).or_default().extend(found);
         }
     }
     for e in v.entries(portrait::KIND) {
         let found = portrait::warnings(e);
         if !found.is_empty() {
-            out.insert(format!("{}:{}", portrait::KIND, json::s(e, "id")), found);
+            out.entry(format!("{}:{}", portrait::KIND, json::s(e, "id"))).or_default().extend(found);
         }
     }
     // PR5-53 (VFX-DATA1): look keys no effect preset draws, once the table has rows (`skills:<id>`, `item_families:<id>`,
@@ -571,28 +579,28 @@ pub fn warnings_all(v: &View) -> Report {
     for e in v.entries(expression_fx::KIND) {
         let found = expression_fx::warnings(e);
         if !found.is_empty() {
-            out.insert(format!("{}:{}", expression_fx::KIND, json::s(e, "id")), found);
+            out.entry(format!("{}:{}", expression_fx::KIND, json::s(e, "id"))).or_default().extend(found);
         }
     }
     // REGIONGROUND1 KT 1.3: a legend entry no cell uses
     for t in v.entries("maps") {
         let found = ground::legend_warnings(t);
         if !found.is_empty() {
-            out.insert(format!("maps:{}", json::s(t, "id")), found);
+            out.entry(format!("maps:{}", json::s(t, "id"))).or_default().extend(found);
         }
     }
     let faces = v.faces();
     for root in &v.assets.roots {
         let found = assets::portrait_file_warnings(root, &v.assets, &faces);
         if !found.is_empty() {
-            out.insert(format!("assets:{}", assets::layer_name(root)), found);
+            out.entry(format!("assets:{}", assets::layer_name(root))).or_default().extend(found);
         }
     }
     // PR5-48 (MAP-LAYOUT-ED): a sidecar landmark with no landmark image (the map draws its pin)
     if !v.assets.roots.is_empty() {
         for (name, found) in crate::world_map::check_all(&v.worlds, &v.assets) {
             if !found.warnings.is_empty() {
-                out.insert(format!("world_map:{name}"), found.warnings);
+                out.entry(format!("world_map:{name}")).or_default().extend(found.warnings);
             }
         }
     }

@@ -478,11 +478,13 @@ pub fn ground_warnings(v: &View, w: &str) -> Vec<String> {
                 push(format!("Map '{map_id}' marker anchor '{anchor}' stands behind a wall; it draws its outline."));
             }
         }
-        let boundary = json::s(e, "boundary");
+        // REVEAL1 2.2: the location's boundary, else its map's; its edge dressing counts as its art
+        let boundary = art::boundary_of(e, t);
         if art::set_id_ok(&boundary) {
             let tileset = json::s(e, "tileset");
             let sets = art::region_sets(&lineage, if art::set_id_ok(&tileset) { &tileset } else { "" });
-            let found = ["wall", "wall_face"].iter().any(|tile| art::boundary_dirs(&sets, &boundary, tile).iter().any(|d| v.assets.has(&format!("{d}/v0.png"))));
+            let walls = ["wall", "wall_face"].iter().any(|tile| art::boundary_dirs(&sets, &boundary, tile).iter().any(|d| v.assets.has(&format!("{d}/v0.png"))));
+            let found = walls || art::boundary_dressing_dirs(&lineage, &boundary).iter().any(|d| v.assets.has(&format!("{d}/v0.png")));
             if !found {
                 push(format!("Location '{}' boundary '{boundary}': no art along its tile sets; it draws the set's own walls.", json::s(e, "id")));
             }

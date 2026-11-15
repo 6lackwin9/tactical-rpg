@@ -3,7 +3,11 @@
 //! party (`aegis_ui::depth::DepthList`), and whether a standing prop hides the party (its outline then draws over the
 //! props). Pure placement and order; `region.rs` draws. Props never change walking (the template `rows` do).
 //! EXPLOREVIEW1: `layout` takes the view's cell size, and the tilted view's wall blocks join the sorted pass.
+//! REVEAL1 1.3: a `roof` prop (an enterable building's picture) stays out of both passes: it draws over everything at the
+//! opacity `RoofFade` keeps per indoor zone (gone while the party stands in its zone, a 180 ms fade, instant under
+//! reduce motion).
 
+use aegis_core::clock::Instant;
 use aegis_core::json::{self, Dict};
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::depth::DepthList;
@@ -47,6 +51,8 @@ pub struct PropDraw {
     pub flip: bool,
     /// Flat, under every character (`layer` "ground"); else standing, sorted by its feet.
     pub ground: bool,
+    /// REVEAL1 1.2: the indoor zone this roof prop covers (`layer` "roof"); it draws over everything, faded by zone.
+    pub roof: Option<String>,
     /// The footprint's bottom edge (logical px), the sort key of a standing prop (4.4).
     pub foot_y: i32,
 }
@@ -110,6 +116,7 @@ pub fn layout(t: &Dict, lineage: &[String], origin: (i32, i32), cell: (i32, i32)
             file: file.map(|(f, _)| f),
             flip: json::b(p, "flip", false),
             ground: json::s(p, "layer") == "ground",
+            roof: emberwake_world::explore::roof_zone(p),
             foot_y: foot.y + foot.h,
         });
     }
@@ -121,12 +128,12 @@ fn scaled(px: i32, cw: i32) -> i32 {
     (px * cw + ART_TILE / 2) / ART_TILE
 }
 
-/// The sorted pass (4.4): the standing props of `props`, the wall `blocks` (tilted; none in the square view), the
+/// The sorted pass (4.4): the standing props of `props` (REVEAL1: roofs draw after it), the wall `blocks` (tilted; none in the square view), the
 /// `markers` (their tile rects) and the party (its drawn rect), back to front by feet, then group (block, prop,
 /// marker, party), then left edge, then push order.
 pub fn sorted(props: &[PropDraw], blocks: &[Block], markers: &[Rect], party: Rect) -> Vec<Item> {
     let mut list = DepthList::new();
-    for (i, p) in props.iter().enumerate().filter(|(_, p)| !p.ground) {
+    for (i, p) in props.iter().enumerate().filter(|(_, p)| !p.ground && p.roof.is_none()) {
         list.push(p.foot_y as f32, GROUP_PROP, p.rect.x as f32, Item::Prop(i));
     }
     for (i, b) in blocks.iter().enumerate() {
@@ -152,6 +159,85 @@ pub fn party_hidden(props: &[PropDraw], blocks: &[Block], order: &[Item], party:
         Item::Block(n) => meets(blocks[*n].rect),
         _ => false,
     })
+}
+
+/// REVEAL1 1.3: the time a roof takes from opaque to gone (and back), ms.
+pub const ROOF_FADE_MS: f64 = 180.0;
+/// A roof without art (REVEAL1 1.3): a muted block over its rect, a darker eaves band along its bottom and a rim.
+pub const ROOF_FILL: Rgba = rgb(78, 62, 54);
+pub const ROOF_EAVES: Rgba = rgb(50, 40, 36);
+pub const ROOF_RIM: Rgba = rgb(118, 96, 80);
+/// From this opacity up a roof over the party hides it (its outline then draws, PROPS1 4.5).
+pub const ROOF_HIDES_FROM: f64 = 0.5;
+
+/// REVEAL1 1.3: one step of a roof's shown amount (1 opaque, 0 gone) toward `target` after `dt_ms`: at `ROOF_FADE_MS`
+/// for the whole way, at once under reduce motion.
+pub fn fade_step(shown: f64, target: f64, dt_ms: f64, reduce: bool) -> f64 {
+    if reduce {
+        return target;
+    }
+    let reach = (dt_ms.max(0.0) / ROOF_FADE_MS).min(1.0);
+    if shown < target {
+        (shown + reach).min(target)
+    } else {
+        (shown - reach).max(target)
+    }
+}
+
+/// The drawn opacity of a shown amount: smooth at both ends (smoothstep), exactly 0 and 1 at the ends.
+pub fn eased(shown: f64) -> f64 {
+    let t = shown.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// REVEAL1 1.3: each roofed indoor zone's shown amount over frames. A zone seen for the first time, or a new location,
+/// starts at its target (a party that arrives inside sees no fade).
+#[derive(Debug, Default, Clone)]
+pub struct RoofFade {
+    shown: Vec<(String, f64)>,
+    loc: String,
+    at: Option<Instant>,
+}
+
+impl RoofFade {
+    /// The frame at `now` (None: no time has passed) in location `loc`: the roofs of `zones` step toward gone for the zone
+    /// the party stands in (`inside`, "" outdoors) and toward opaque for every other.
+    pub fn update(&mut self, loc: &str, zones: &[String], inside: &str, now: Option<Instant>, reduce: bool) {
+        let fresh = self.loc != loc;
+        if fresh {
+            self.shown.clear();
+            self.loc = loc.to_string();
+        }
+        let dt = match (self.at, now) {
+            (Some(at), Some(now)) if !fresh => now.saturating_duration_since(at).as_secs_f64() * 1000.0,
+            _ => 0.0,
+        };
+        if now.is_some() {
+            self.at = now;
+        }
+        for zone in zones {
+            let target = if zone == inside { 0.0 } else { 1.0 };
+            match self.shown.iter_mut().find(|(z, _)| z == zone) {
+                Some((_, shown)) => *shown = fade_step(*shown, target, dt, reduce),
+                None => self.shown.push((zone.clone(), target)),
+            }
+        }
+    }
+
+    /// The shown amount of zone `zone`'s roofs (1 for a zone not seen yet).
+    pub fn shown(&self, zone: &str) -> f64 {
+        self.shown.iter().find(|(z, _)| z == zone).map_or(1.0, |(_, s)| *s)
+    }
+
+    /// The drawn opacity of zone `zone`'s roofs, 0-1 (eased).
+    pub fn alpha(&self, zone: &str) -> f64 {
+        eased(self.shown(zone))
+    }
+
+    /// The agent link's view: {zone: opacity} (rounded to 3 places).
+    pub fn state(&self) -> serde_json::Value {
+        serde_json::Value::Object(self.shown.iter().map(|(z, s)| (z.clone(), serde_json::json!((eased(*s) * 1000.0).round() / 1000.0))).collect())
+    }
 }
 
 /// PROPS1 section 8 (L2): placement, culling, sort order and the party outline over a test template (not the shipped
@@ -303,5 +389,47 @@ mod tests {
         assert!(!hidden(&south, party_at(5, 6)), "the party in front is not hidden");
         assert!(!hidden(&south, party_at(5, 3)), "two rows north the cap ends short of the sprite");
         assert!(!hidden(&south, party_at(8, 4)), "another column");
+    }
+
+    /// REVEAL1 1.2: a roof prop keeps its zone and stays out of the sorted pass (it draws over it, faded by zone).
+    #[test]
+    fn a_roof_prop_names_its_zone_and_is_not_sorted() {
+        let roof = json!({"id": "den_roof", "art": "zz_roof", "x": 4, "y": 3, "w": 10, "h": 6, "layer": "roof", "variant": -1, "flip": false, "roof_of": "zz_den"});
+        let drawn = layout(&template(json!([hall(false, -1), roof])), &[], O, (TS, TS), everywhere(), with_art(320, 256));
+        assert_eq!((drawn[0].roof.clone(), drawn[1].roof.clone()), (None, Some("zz_den".to_string())));
+        assert!(!drawn[1].ground);
+        assert_eq!(sorted(&drawn, &[], &[], tile(8, 9)), vec![Item::Prop(0), Item::Party], "the roof is not in the pass");
+    }
+
+    /// REVEAL1 1.3: 1.0 -> 0.0 in `ROOF_FADE_MS` and back, eased at both ends; reduce motion snaps; a zone first seen
+    /// starts at its target; a new location starts over.
+    #[test]
+    fn a_roof_fades_in_180_ms_and_snaps_under_reduce_motion() {
+        assert_eq!(fade_step(1.0, 0.0, ROOF_FADE_MS / 2.0, false), 0.5);
+        assert_eq!(fade_step(0.5, 0.0, ROOF_FADE_MS, false), 0.0, "never past the target");
+        assert_eq!(fade_step(0.0, 1.0, ROOF_FADE_MS / 4.0, false), 0.25);
+        assert_eq!(fade_step(1.0, 0.0, 1.0, true), 0.0, "reduce motion");
+        assert_eq!(fade_step(0.0, 1.0, 0.0, true), 1.0);
+        assert_eq!((eased(0.0), eased(0.5), eased(1.0)), (0.0, 0.5, 1.0));
+        assert!(eased(0.1) < 0.1 && eased(0.9) > 0.9, "smooth at both ends");
+        let zones = vec!["zz_den".to_string(), "zz_shop".to_string()];
+        let t0 = Instant::now();
+        let ms = |n: u64| Some(t0 + std::time::Duration::from_millis(n));
+        let mut f = RoofFade::default();
+        assert_eq!(f.alpha("zz_den"), 1.0, "unseen: opaque");
+        f.update("loc", &zones, "", ms(0), false);
+        f.update("loc", &zones, "zz_den", ms(90), false);
+        assert_eq!((f.shown("zz_den"), f.shown("zz_shop")), (0.5, 1.0), "only the party's zone fades");
+        f.update("loc", &zones, "zz_den", ms(180), false);
+        assert_eq!(f.alpha("zz_den"), 0.0);
+        f.update("loc", &zones, "zz_den", None, false);
+        assert_eq!(f.alpha("zz_den"), 0.0, "no time: no change");
+        f.update("loc", &zones, "", ms(225), false);
+        assert_eq!(f.shown("zz_den"), 0.25);
+        f.update("loc", &zones, "zz_shop", ms(226), true);
+        assert_eq!((f.alpha("zz_den"), f.alpha("zz_shop")), (1.0, 0.0), "reduce motion snaps both ways");
+        f.update("other", &zones, "zz_den", ms(1000), false);
+        assert_eq!((f.alpha("zz_den"), f.alpha("zz_shop")), (0.0, 1.0), "a new location starts at the targets");
+        assert_eq!(f.state(), json!({"zz_den": 0.0, "zz_shop": 1.0}));
     }
 }

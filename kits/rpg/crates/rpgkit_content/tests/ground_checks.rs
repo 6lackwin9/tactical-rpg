@@ -83,7 +83,8 @@ fn grounds() -> IndexMap<String, GroundDef> {
 fn the_schema_holds_the_table_with_its_defaults() {
     let fields = aegis_content::schema::fields(source::schema(), "content", GROUNDS_KIND);
     let keys: Vec<String> = fields.iter().map(|f| json::s(json::dict(f), "key")).collect();
-    assert_eq!(keys, strs(&["id", "name", "order", "kind", "colour", "wear", "strays", "tone", "patches", "marks", "marks_per_100", "origin"]));
+    // REVEAL1 2.1: `indoor` (false, left out at its default) before `origin`
+    assert_eq!(keys, strs(&["id", "name", "order", "kind", "colour", "wear", "strays", "tone", "patches", "marks", "marks_per_100", "indoor", "origin"]));
     let default_of = |k: &str| fields.iter().find(|f| f["key"] == k).unwrap()["default"].clone();
     assert_eq!(default_of("kind"), "land");
     assert_eq!(default_of("wear"), 0.1);

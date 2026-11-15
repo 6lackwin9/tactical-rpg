@@ -21,6 +21,11 @@
 //! REGIONVIEW1: the party's drawn position glides between tiles and the camera follows it in whole physical px, stopped
 //! by the map's edges with a small margin; pans and the talk camera ease (`mapview.rs`). The map's outer wall ring and what
 //! lies past it are the border: flat, under everything, in the location's boundary art when it has one.
+//! REVEAL1: a `roof` prop draws over the party and the walls and fades (180 ms, instant under reduce motion) while the
+//! party stands in its indoor zone (`props::RoofFade`); the walls beside an indoor zone draw its `wall_set` first; past
+//! the map, the boundary's edge dressing (`props/<set>/boundary_<boundary>/`) repeats over the border, never over the map.
+//! Which zone the party is in, which walls and props belong to it and which boundary applies are the kit's
+//! (`explore::indoor_zone_at`, `explore::wall_set_at`, `explore::roof_zone`, `art::boundary_of`); this file draws.
 //! SERVICES1 (SILOS1 T2): the conversation, the shop, the board, the turn-in picker and the rest ask are `talk::Services`,
 //! held here and drawn over the map; the map only stops its walk when one of them starts a fight.
 
@@ -137,6 +142,8 @@ pub struct RegionMap {
     cam: CamShot,
     cam_trail: VecDeque<(f64, CamShot)>,
     opened_at: Instant,
+    /// REVEAL1 1.3: each indoor zone's roof opacity over frames.
+    roofs: crate::props::RoofFade,
 }
 
 /// One frame's camera as the agent link reports it.
@@ -266,6 +273,7 @@ impl RegionMap {
             cam: CamShot::default(),
             cam_trail: VecDeque::new(),
             opened_at: Instant::now(),
+            roofs: crate::props::RoofFade::default(),
         }
     }
 
@@ -721,7 +729,20 @@ impl Screen<GameCx> for RegionMap {
             // render only: off the map is the wall (`#`), nothing walkable
             let ch_at = |x: i32, y: i32| explore::tile(t, x as i64, y as i64).unwrap_or('#');
             let border_at = |x: i32, y: i32| on_border(t, (map_w, map_h), x as i64, y as i64);
-            let walls = WallArt::of(&sets, &s(loc, "boundary"));
+            // REVEAL1 2.2: the location's boundary, else the map's own
+            let boundary = emberwake_content::art::boundary_of(loc, t);
+            let walls = WallArt::of(&sets, &boundary);
+            // REVEAL1 1.1: the tile sets of each indoor zone's wall set (its own first, then the region sets); none on a map
+            // without one, so no wall looks for a zone
+            let interior: Vec<(String, Vec<String>)> = interior_sets(t, &sets);
+            let interior_walls: Vec<(&str, WallArt)> = interior.iter().map(|(set, names)| (set.as_str(), WallArt::of(names, &boundary))).collect();
+            let wall_art_at = |x: i32, y: i32| -> &WallArt {
+                if interior_walls.is_empty() {
+                    return &walls;
+                }
+                let set = explore::wall_set_at(t, x as i64, y as i64);
+                interior_walls.iter().find(|(s, _)| !set.is_empty() && *s == set).map_or(&walls, |(_, w)| w)
+            };
             for y in y0..=y1 {
                 for x in x0..=x1 {
                     let r = geo.cell(x, y);
@@ -734,7 +755,9 @@ impl Screen<GameCx> for RegionMap {
                         continue;
                     }
                     let tile = emberwake_content::art::region_tile(ch);
-                    match tile.and_then(|t| cx.art.tile_in(&set_refs, t, x, y, art_size)) {
+                    // REVEAL1 1.1: a wall beside an indoor zone draws its wall set first
+                    let tile_sets = if ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
+                    match tile.and_then(|t| cx.art.tile_in(tile_sets, t, x, y, art_size)) {
                         Some(img) => ui.p.image(img, r),
                         None => ui.p.fill(r, match ch {
                             '.' => rgb(70, 90, 64),
@@ -757,6 +780,10 @@ impl Screen<GameCx> for RegionMap {
                         draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && ch_at(x, y + 1) != '#');
                     }
                 }
+            }
+            // REVEAL1 2.2: the boundary's edge dressing over the cells past the map (art only: no widget)
+            if !boundary.is_empty() {
+                draw_dressing(&mut ui, cx, &lineage, &boundary, &geo, (map_w, map_h), (x0, x1), (y0, y1));
             }
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
@@ -900,7 +927,7 @@ impl Screen<GameCx> for RegionMap {
             for item in &order {
                 match *item {
                     Item::Prop(i) => draw_prop(&mut ui, cx, &props[i], map_rect, q),
-                    Item::Block(i) => draw_block(&mut ui, cx, &blocks[i], &walls, &ch_at, &border_at),
+                    Item::Block(i) => draw_block(&mut ui, cx, &blocks[i], wall_art_at(blocks[i].x, blocks[i].y), &ch_at, &border_at),
                     Item::Marker(i) => {
                         if let Some(sp) = draw_marker(&mut ui, cx, &marks[i], ts, &idle, now) {
                             sprites.push(sp.info(&format!("marker.{}", marks[i].id)));
@@ -923,9 +950,23 @@ impl Screen<GameCx> for RegionMap {
                     }
                 }
             }
+            // REVEAL1 1.3: the roofs over everything drawn so far, at their zone's opacity: gone while the party stands in
+            // their indoor zone (a doorway cell tagged with it counts)
+            // (every roof of the map, on screen or not, so one coming into view shows its zone's opacity)
+            let roof_zones: Vec<String> = json::aget(t, "props").iter().filter_map(|p| p.as_object().and_then(explore::roof_zone)).collect();
+            let inside = explore::indoor_zone_at(t, gs.position.0, gs.position.1);
+            self.roofs.update(&gs.location_id, &roof_zones, &inside, self.frame_at, cx.settings.reduce_motion());
+            let mut under_roof = false;
+            for p in &props {
+                let Some(zone) = &p.roof else { continue };
+                let alpha = self.roofs.alpha(zone);
+                draw_roof(&mut ui, cx, p, map_rect, q, (alpha * 255.0).round() as u8);
+                let meets = p.rect.intersect(drawn_party);
+                under_roof |= alpha >= crate::props::ROOF_HIDES_FROM && meets.w > 0 && meets.h > 0;
+            }
             // 4.5: a standing prop or a wall block drawn over the party: its outline over them (the sprite's silhouette
-            // outline)
-            if crate::props::party_hidden(&props, &blocks, &order, drawn_party) {
+            // outline); REVEAL1: a roof showing over them too
+            if under_roof || crate::props::party_hidden(&props, &blocks, &order, drawn_party) {
                 ui.p.v = party_view;
                 match party_frame.as_ref().and_then(|sp| cx.art.body_outline(&sp.body, &leader_palette, &sp.clip, sp.frame, sp.px, crate::props::PARTY, sp.flip)) {
                     Some(o) => ui.p.image(o, Rect::new(drawn_party.x - 1, drawn_party.y - 1, drawn_party.w + 2, drawn_party.h + 2)),
@@ -1124,7 +1165,9 @@ impl Screen<GameCx> for RegionMap {
                 "trail": (!self.cam_trail.is_empty()).then(|| self.cam_trail.iter().map(|(t, c)| json!([(t * 100000.0).round() / 100.0, c.px.0, c.px.1, c.party.0, c.party.1])).collect::<Vec<_>>())},
             "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "ground": self.ground.state(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
-            "portraits": svc["portraits"]})
+            "portraits": svc["portraits"],
+            // REVEAL1 1.3: each roofed indoor zone's roof opacity (0 gone, 1 opaque)
+            "roofs": self.roofs.state()})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -1598,6 +1641,86 @@ fn draw_prop_art(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, q: i32) {
     let e = (q / 4).max(1);
     for edge in [Rect::new(r.x, r.y, r.w, e), Rect::new(r.x, r.y + r.h - e, r.w, e), Rect::new(r.x, r.y, e, r.h), Rect::new(r.x + r.w - e, r.y, e, r.h)] {
         ui.p.fill(edge, BOX_EDGE);
+    }
+}
+
+/// REVEAL1 1.3: a roof prop at opacity `alpha` (0 draws nothing), cut at the map's rect as every prop: its art, else a
+/// muted block with a darker eaves band along its bottom and a rim.
+fn draw_roof(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, map: Rect, q: i32, alpha: u8) {
+    if alpha == 0 {
+        return;
+    }
+    let kept = ui.p.c.clip;
+    if p.rect.intersect(map) != p.rect {
+        let inside = ui.p.v.rect(map);
+        ui.p.c.clip = Some(kept.map_or(inside, |c| c.intersect(inside)));
+    }
+    let (w, h) = ((p.rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (p.rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
+    let img = match &p.file {
+        Some(f) if p.flip => cx.art.image_mirrored(f, w, h),
+        Some(f) => cx.art.image(f, w, h),
+        None => None,
+    };
+    match img {
+        Some(img) => ui.p.image_alpha(img, p.rect, alpha),
+        None => {
+            let with = |c: Rgba| rgba(c[0], c[1], c[2], alpha);
+            let r = p.rect;
+            ui.p.fill(r, with(crate::props::ROOF_FILL));
+            let eaves = (r.h / 4).clamp(1, BOX_FACE_H * q / 4);
+            ui.p.fill(Rect::new(r.x, r.y + r.h - eaves, r.w, eaves), with(crate::props::ROOF_EAVES));
+            let e = (q / 4).max(1);
+            for edge in [Rect::new(r.x, r.y, r.w, e), Rect::new(r.x, r.y, e, r.h - eaves), Rect::new(r.x + r.w - e, r.y, e, r.h - eaves)] {
+                ui.p.fill(edge, with(crate::props::ROOF_RIM));
+            }
+        }
+    }
+    ui.p.c.clip = kept;
+}
+
+/// REVEAL1 1.1: each wall set an indoor zone of template `t` names, once, with the tile sets its walls draw from
+/// (`art::interior_wall_sets`: its own, then the region `sets`).
+fn interior_sets(t: &Dict, sets: &[String]) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+    for z in json::dget(t, "zone_legend").values().filter_map(Value::as_object) {
+        let set = explore::zone_wall_set(t, &s(z, "id"));
+        if !set.is_empty() && !out.iter().any(|(s, _)| *s == set) {
+            let names = emberwake_content::art::interior_wall_sets(sets, &set);
+            out.push((set, names));
+        }
+    }
+    out
+}
+
+/// REVEAL1 2.2: the boundary's edge dressing past the map (cells `x0..=x1`, `y0..=y1` of the frame): its pieces
+/// (`props/<set>/boundary_<boundary>/v<n>.png` over the world lineage, then `common`) repeat on a lattice of the first
+/// piece's size in cells, each picked by its cell, and a piece is drawn only where all its cells lie past the map, so
+/// nothing covers the map. Without art it draws nothing (the border's own art or wall tile stays).
+#[allow(clippy::too_many_arguments)]
+fn draw_dressing(ui: &mut Ui<RAct>, cx: &mut Cx, lineage: &[String], boundary: &str, geo: &MapGeom, (mw, mh): Pos, (x0, x1): (i32, i32), (y0, y1): (i32, i32)) {
+    let dirs = emberwake_content::art::boundary_dressing_dirs(lineage, boundary);
+    let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+    let Some(first) = cx.art.pick(&dirs, Some(0), 0, 0) else { return };
+    let Some((pw, ph)) = cx.art.size_of(&first) else { return };
+    let (cw, ch) = geo.cell_size();
+    // the lattice in cells (32 px of art a cell), at least one
+    let (lw, lh) = (((pw + ART_TILE - 1) / ART_TILE).max(1), ((ph + ART_TILE - 1) / ART_TILE).max(1));
+    let (mw, mh) = (mw as i32, mh as i32);
+    let past = |x: i32, y: i32| x + lw <= 0 || y + lh <= 0 || x >= mw || y >= mh;
+    for y in (y0 - lh + 1)..=y1 {
+        for x in (x0 - lw + 1)..=x1 {
+            if x.rem_euclid(lw) != 0 || y.rem_euclid(lh) != 0 || !past(x, y) {
+                continue;
+            }
+            let Some(rel) = cx.art.pick(&dirs, None, x, y) else { continue };
+            let Some((aw, ah)) = cx.art.size_of(&rel) else { continue };
+            let cell = geo.cell(x, y);
+            let r = Rect::new(cell.x, cell.y, (aw * cw + ART_TILE / 2) / ART_TILE, (ah * ch + ART_TILE / 2) / ART_TILE);
+            let (w, h) = ((r.w as f32 * ui.p.v.s).round().max(1.0) as i32, (r.h as f32 * ui.p.v.s).round().max(1.0) as i32);
+            if let Some(img) = cx.art.image(&rel, w, h) {
+                ui.p.image(img, r);
+            }
+        }
     }
 }
 
@@ -3700,7 +3823,7 @@ mod view_tests {
     fn a_prop_without_art_draws_the_raised_box() {
         let (mut cx, mut g) = (game_cx(), gfx());
         let foot = Rect::new(100, 100, 160, 72);
-        let p = |rect: Rect| PropDraw { id: "x".into(), rect, foot, file: None, flip: false, ground: false, foot_y: foot.y + foot.h };
+        let p = |rect: Rect| PropDraw { id: "x".into(), rect, foot, file: None, flip: false, ground: false, roof: None, foot_y: foot.y + foot.h };
         let mut ui: Ui<RAct> = Ui::new(&mut g, (0, 0), true);
         draw_prop_art(&mut ui, &mut cx, &p(Rect::new(foot.x, foot.y - mapview::BLOCK_LIFT, foot.w, foot.h + mapview::BLOCK_LIFT)), 4);
         drop(ui);
@@ -5493,6 +5616,262 @@ mod ground_tests {
             assert_eq!(p.0, side.0, "along the left edge");
             assert!((p.1 - side.1).abs() >= ARROW as f32);
             assert_eq!(beside_arrows(a, at, &[(300.0, at.1)], &[]), at, "nothing in the way: it stays");
+        }
+    }
+
+    /// REVEAL1 (PR5-54): an indoor zone's roof, its wall set and the boundary's edge dressing over the yard fixture with a
+    /// 7 x 6 building (a wall ring at x 24-30, y 24-29, its door at (27, 29)): the zone `zz_den` holds the floor inside and
+    /// the door; the roof prop covers the whole building.
+    mod reveal_tests {
+        use super::*;
+
+        const ROOF: [u8; 3] = [140, 30, 160];
+        const PLASTER: [u8; 3] = [230, 200, 150];
+        const BRICK: [u8; 3] = [150, 40, 30];
+        const DEN: &str = "zz_den";
+        const INSIDE: Pos = (27, 27);
+        const PROBE: Pos = (27, 26);
+        const RING: Pos = (24, 26);
+
+        fn building(x: i64, y: i64) -> Option<char> {
+            let ring = (24..=30).contains(&x) && (24..=29).contains(&y);
+            let floor = (25..=29).contains(&x) && (25..=28).contains(&y);
+            match () {
+                _ if (x, y) == (27, 29) => Some('.'),
+                _ if floor => Some('.'),
+                _ if ring => Some('#'),
+                _ => None,
+            }
+        }
+
+        /// The fixture's map with the building, its indoor zone (`wall_set` zz_plaster) and its roof prop; `roof` false
+        /// leaves the roof out.
+        fn den(f: Fixture, roof: bool) -> impl FnOnce(&mut Value) {
+            move |m: &mut Value| {
+                let rows: Vec<String> = (0..f.rows).map(|y| (0..f.cols).map(|x| building(x, y).unwrap_or_else(|| f.tile(x, y))).collect()).collect();
+                let zones: Vec<String> = (0..f.rows).map(|y| (0..f.cols).map(|x| if building(x, y) == Some('.') { 'h' } else { '-' }).collect()).collect();
+                m["rows"] = json!(rows);
+                m["zones"] = json!(zones);
+                m["zone_legend"] = json!({"h": {"id": DEN, "kind": "safe", "indoor": true, "wall_set": "zz_plaster"}});
+                if roof {
+                    m["props"].as_array_mut().expect("props").push(json!({"id": "den_roof", "art": "zz_roof", "x": 24, "y": 24, "w": 7, "h": 6, "layer": "roof", "variant": -1, "flip": false, "roof_of": DEN}));
+                }
+            }
+        }
+
+        fn at(map: &RegionMap, g: &Gfx, cell: Pos) -> [u8; 3] {
+            let p = mid(map, cell);
+            px(g, p.0, p.1)
+        }
+
+        fn roof_of(map: &RegionMap, cx: &Cx) -> f64 {
+            map.state(cx)["roofs"][DEN].as_f64().expect("the zone's roof")
+        }
+
+        /// The kit's rules the frame reads: the zone under the party, the wall set of the ring, the roof prop's zone.
+        #[test]
+        fn the_kit_says_which_zone_walls_and_roof_belong_to_the_building() {
+            let d = PLAIN.data(den(PLAIN, true));
+            let t = d.map("zz_yard").clone();
+            assert!(!t.is_empty(), "the map");
+            assert_eq!(explore::indoor_zone_at(&t, INSIDE.0, INSIDE.1), DEN);
+            assert_eq!(explore::indoor_zone_at(&t, 27, 29), DEN, "the door is the zone's");
+            assert_eq!(explore::indoor_zone_at(&t, 27, 31), "", "outdoors");
+            assert_eq!(explore::wall_set_at(&t, RING.0, RING.1), "zz_plaster");
+            assert_eq!(explore::wall_set_at(&t, 24, 24), "zz_plaster", "a corner borders the zone diagonally");
+            assert_eq!(explore::wall_set_at(&t, 9, PLAIN.rows - 8), "", "a wall away from the building");
+            let roofs: Vec<Option<String>> = json::aget(&t, "props").iter().map(|p| explore::roof_zone(json::dict(p))).collect();
+            assert_eq!(roofs, vec![None, None, Some(DEN.to_string())]);
+        }
+
+        /// 1.3: outside, the roof hides the room (art, else the muted block); inside, it fades out over 180 ms and back in,
+        /// both views; under reduce motion it snaps.
+        #[test]
+        fn the_roof_fades_while_the_party_is_inside_and_snaps_under_reduce_motion() {
+            for view in views() {
+                for with_art in [true, false] {
+                    let root = scratch(&format!("roof_{view}_{with_art}"));
+                    if with_art {
+                        solid(&root, "props/common/zz_roof/v0.png", 7 * 32, 6 * 32, ROOF);
+                    }
+                    let (mut cx, mut g) = (PLAIN.cx_on(PLAIN.data(den(PLAIN, true)), view), gfx());
+                    cx.art = art_of(&root);
+                    let mut map = RegionMap::new(&mut cx);
+                    let outside = (27, 33);
+                    let shown = if with_art { ROOF } else { [crate::props::ROOF_FILL[0], crate::props::ROOF_FILL[1], crate::props::ROOF_FILL[2]] };
+                    let t0 = Instant::now();
+                    let shot = |map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, pos: Pos, ms: u64| {
+                        cx.gs_mut().position = pos;
+                        map.tick_at(cx, t0 + Duration::from_millis(ms));
+                        frame(map, cx, g, 1.0);
+                    };
+                    shot(&mut map, &mut cx, &mut g, outside, 0);
+                    assert_eq!(roof_of(&map, &cx), 1.0, "{view} {with_art}: outside");
+                    assert_eq!(at(&map, &g, PROBE), shown, "{view} {with_art}: the roof over the room");
+                    shot(&mut map, &mut cx, &mut g, INSIDE, 90);
+                    assert_eq!(roof_of(&map, &cx), 0.5, "{view} {with_art}: half way after 90 ms");
+                    let half = at(&map, &g, PROBE);
+                    assert_ne!(half, shown, "{view} {with_art}: the room shows through");
+                    shot(&mut map, &mut cx, &mut g, INSIDE, 180);
+                    assert_eq!(roof_of(&map, &cx), 0.0, "{view} {with_art}: gone after 180 ms");
+                    let room = at(&map, &g, PROBE);
+                    assert_ne!(room, shown, "{view} {with_art}: the room");
+                    assert_ne!(room, half, "{view} {with_art}: the room, no roof left");
+                    shot(&mut map, &mut cx, &mut g, (27, 29), 400);
+                    assert_eq!(roof_of(&map, &cx), 0.0, "{view} {with_art}: the door is inside");
+                    shot(&mut map, &mut cx, &mut g, outside, 490);
+                    assert_eq!(roof_of(&map, &cx), 0.5, "{view} {with_art}: coming back");
+                    shot(&mut map, &mut cx, &mut g, outside, 580);
+                    assert_eq!(roof_of(&map, &cx), 1.0, "{view} {with_art}: whole again");
+                    assert_eq!(at(&map, &g, PROBE), shown, "{view} {with_art}: the roof again");
+                    // reduce motion: one frame in, gone; one frame out, back
+                    cx.settings.v["reduce_motion"] = json!(true);
+                    shot(&mut map, &mut cx, &mut g, INSIDE, 590);
+                    assert_eq!(roof_of(&map, &cx), 0.0, "{view} {with_art}: reduce motion snaps out");
+                    assert_eq!(at(&map, &g, PROBE), room, "{view} {with_art}: the room at once");
+                    shot(&mut map, &mut cx, &mut g, outside, 600);
+                    assert_eq!(roof_of(&map, &cx), 1.0, "{view} {with_art}: reduce motion snaps back");
+                    let _ = std::fs::remove_dir_all(&root);
+                }
+            }
+        }
+
+        /// 1.3: a party that arrives inside sees no fade (the first frame of a zone starts at its target), and a map without
+        /// a roof prop keeps no roof state.
+        #[test]
+        fn arriving_inside_starts_faded_and_a_map_without_roofs_has_none() {
+            let (mut cx, mut g) = (PLAIN.cx_on(PLAIN.data(den(PLAIN, true)), "square"), gfx());
+            let mut map = RegionMap::new(&mut cx);
+            cx.gs_mut().position = INSIDE;
+            map.tick_at(&mut cx, Instant::now());
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(roof_of(&map, &cx), 0.0);
+            let (mut cx, mut g) = (PLAIN.cx_on(PLAIN.data(den(PLAIN, false)), "square"), gfx());
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(map.state(&cx)["roofs"], json!({}));
+        }
+
+        /// 1.1: the building's ring walls draw the zone's wall set; other walls the region's; a wall set without art draws
+        /// the region's walls too.
+        #[test]
+        fn an_indoor_zones_walls_draw_its_wall_set_else_todays_walls() {
+            for with_set in [true, false] {
+                let root = scratch(&format!("walls_{with_set}"));
+                solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+                if with_set {
+                    solid(&root, "tilesets/zz_plaster/wall/v0.png", 32, 32, PLASTER);
+                }
+                let (mut cx, mut g) = (PLAIN.cx_on(PLAIN.data(den(PLAIN, true)), "square"), gfx());
+                cx.art = art_of(&root);
+                cx.settings.v["reduce_motion"] = json!(true);
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = INSIDE;
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let ring = if with_set { PLASTER } else { WALL };
+                for cell in [RING, (24, 24), (30, 27), (26, 29)] {
+                    assert_eq!(at(&map, &g, cell), ring, "{with_set}: ring wall {cell:?}");
+                }
+                assert_eq!(at(&map, &g, (9, PLAIN.rows - 8)), WALL, "{with_set}: a wall away from the building");
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+
+        /// A map smaller than the screen, a map `boundary` `zz_brick` and a location boundary set by `loc`.
+        fn small(loc: &'static str, view: &str) -> (Cx, Fixture) {
+            let f = Fixture { cols: 24, rows: 14, boundary: loc, ..PLAIN };
+            let data = f.data(|m| {
+                m["boundary"] = json!("zz_brick");
+                m["anchors"] = json!([{"id": "spawn", "x": 12, "y": 10}, {"id": "job", "x": 3, "y": 3}, {"id": "far", "x": 20, "y": 3}]);
+                m["props"] = json!([]);
+            });
+            (f.cx_on(data, view), f)
+        }
+
+        /// 2.2: past a small map the boundary's dressing repeats on every cell and never on the map; the map's own
+        /// boundary serves a location without one; a location's boundary wins; without dressing art the border keeps the
+        /// wall tile.
+        #[test]
+        fn a_small_maps_margin_repeats_the_boundary_dressing_and_falls_back_to_the_wall() {
+            for view in views() {
+                let root = scratch(&format!("dressing_{view}"));
+                solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+                solid(&root, "tilesets/common/wall_face/v0.png", 128, 48, FACE);
+                let probe = |loc: &'static str| {
+                    let (mut cx, f) = small(loc, view);
+                    let mut g = gfx();
+                    cx.art = art_of(&root);
+                    let mut map = RegionMap::new(&mut cx);
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    // clear of the legend's fold button (top right) and the ticker (bottom)
+                    let inner = Rect::new(24, HUD_H + 24, W - 120, H - HUD_H - 72);
+                    let cells: Vec<(Pos, [u8; 3])> = (-8..f.rows + 8)
+                        .flat_map(|y| (-16..f.cols + 16).map(move |x| (x, y)))
+                        .filter(|c| {
+                            let p = mid(&map, *c);
+                            p.0 >= inner.x && p.1 >= inner.y && p.0 < inner.x + inner.w && p.1 < inner.y + inner.h
+                        })
+                        .map(|c| (c, at(&map, &g, c)))
+                        .collect();
+                    (cells, f)
+                };
+                let past = |f: &Fixture, c: Pos| c.0 < 0 || c.1 < 0 || c.0 >= f.cols || c.1 >= f.rows;
+                // no dressing art: the margin is the wall tile (square) and nothing is brick
+                let (cells, f) = probe("");
+                let margin: Vec<&(Pos, [u8; 3])> = cells.iter().filter(|(c, _)| past(&f, *c)).collect();
+                assert!(margin.len() > 100, "{view}: the margin shows ({} cells)", margin.len());
+                assert!(cells.iter().all(|(_, px)| *px != BRICK), "{view}: no art, no dressing");
+                if view == "square" {
+                    assert!(margin.iter().all(|(_, px)| *px == WALL), "{view}: the wall tile past the map");
+                }
+                solid(&root, "props/common/boundary_zz_brick/v0.png", 32, 32, BRICK);
+                let (cells, f) = probe("");
+                for (c, px) in &cells {
+                    assert_eq!(*px == BRICK, past(&f, *c), "{view}: {c:?} brick only past the map");
+                }
+                // the location's own boundary wins (it has no dressing): no brick
+                let (cells, _) = probe("zz_other");
+                assert!(cells.iter().all(|(_, px)| *px != BRICK), "{view}: the location's boundary first");
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+
+        /// The proof shots (only with `AEGIS_REVIEW_DIR` set): the building with the party outside (the roof drawn) and
+        /// inside (the roof faded, the plaster ring and the floor showing), square view, placeholder roof block.
+        #[test]
+        fn review_shots_of_the_roof_outside_and_inside() {
+            let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+            let root = scratch("review");
+            solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+            solid(&root, "tilesets/zz_plaster/wall/v0.png", 32, 32, PLASTER);
+            for (name, pos) in [("reveal_outside", (27, 33)), ("reveal_inside", INSIDE)] {
+                let (mut cx, mut g) = (LAYER.cx_on(LAYER.data(den(LAYER, true)), "square"), gfx());
+                cx.art = art_of(&root);
+                cx.settings.v["reduce_motion"] = json!(true);
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = pos;
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let file = std::fs::File::create(Path::new(&out).join(format!("{name}.png"))).unwrap();
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(file), g.canvas.w as u32, g.canvas.h as u32);
+                enc.set_color(png::ColorType::Rgba);
+                enc.set_depth(png::BitDepth::Eight);
+                enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+            }
+            // the boundary's dressing round a small map, both views
+            solid(&root, "props/common/boundary_zz_brick/v0.png", 32, 32, BRICK);
+            for view in views() {
+                let (mut cx, _) = small("", view);
+                let mut g = gfx();
+                cx.art = art_of(&root);
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let file = std::fs::File::create(Path::new(&out).join(format!("reveal_boundary_{view}.png"))).unwrap();
+                let mut enc = png::Encoder::new(std::io::BufWriter::new(file), g.canvas.w as u32, g.canvas.h as u32);
+                enc.set_color(png::ColorType::Rgba);
+                enc.set_depth(png::BitDepth::Eight);
+                enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+            }
+            let _ = std::fs::remove_dir_all(&root);
         }
     }
 }

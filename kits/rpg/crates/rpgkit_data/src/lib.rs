@@ -2645,6 +2645,8 @@ pub struct GroundDef {
     pub patches: f64,
     pub marks: Vec<String>,
     pub marks_per_100: i32,
+    /// REVEAL1 2.1: a floor laid inside buildings, under an indoor zone's roof (false by default, stored only when set).
+    pub indoor: bool,
 }
 
 impl GroundDef {
@@ -2661,6 +2663,7 @@ impl GroundDef {
             patches: float(o, "patches", 0.0),
             marks: strings(o, "marks"),
             marks_per_100: int(o, "marks_per_100", 0),
+            indoor: boolean(o, "indoor", false),
         }
     }
 

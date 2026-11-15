@@ -1,11 +1,13 @@
 //! Map rules of the world checks (MapRules): a location's map position, zone bindings and markers against its map
 //! template, the [encounter, weight] pair lists (also used by routes) and the soft location warnings. PROPS1: the
-//! map template's own prop checks P1-P12 (`prop_errors`, engine-only: Godot's MapCatalog had no props).
+//! map template's own prop checks P1-P12 (`prop_errors`, engine-only: Godot's MapCatalog had no props). REVEAL1: the
+//! `roof` layer and its zone (R1, in `prop_errors`), a zone legend entry's `indoor` and `wall_set` and the map's own
+//! `boundary` (`reveal_errors`), and a roof over every indoor cell (R2, `roof_warnings`).
 
 use super::quest::flag_list_errors;
 use super::world::{qid, ref_errors};
 use super::View;
-use crate::source::{prop_full, PROP_KEYS};
+use crate::source::{prop_full, MAP_BOUNDARY, PROP_KEYS, PROP_ROOF_OF, ZONE_INDOOR, ZONE_WALL_SET};
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -34,7 +36,10 @@ const FACES: [&str; 4] = ["down", "up", "left", "right"];
 pub const PROPS_MAX: usize = 128;
 pub const PROP_SIDE_MAX: i64 = 16;
 pub const PROP_VARIANT_MAX: i64 = 15;
-const PROP_LAYERS: [&str; 2] = ["sort", "ground"];
+const PROP_LAYERS: [&str; 3] = ["sort", "ground", ROOF_LAYER];
+/// REVEAL1 1.2: the layer of an enterable building's picture, drawn over everything and faded while the party is in its
+/// indoor zone (`roof_of`).
+pub const ROOF_LAYER: &str = "roof";
 pub(crate) const PROP_ID_MAX: usize = 24;
 pub(crate) const PROP_ART_MAX: usize = 32;
 
@@ -500,7 +505,7 @@ pub fn prop_errors(t: &Dict) -> Vec<String> {
     for (i, raw) in list.iter().enumerate() {
         let p = prop_full(json::dict(raw));
         let id = json::s(&p, "id");
-        for k in p.keys().filter(|k| !PROP_KEYS.contains(&k.as_str())) {
+        for k in p.keys().filter(|k| !PROP_KEYS.contains(&k.as_str()) && k.as_str() != PROP_ROOF_OF) {
             errors.push(format!("Prop '{id}': unknown field '{k}'."));
         }
         if !prop_name_ok(p.get("id"), PROP_ID_MAX) {
@@ -547,12 +552,102 @@ pub fn prop_errors(t: &Dict) -> Vec<String> {
             }
         }
         if !PROP_LAYERS.contains(&layer) {
-            errors.push(format!("Prop '{id}': layer must be sort or ground."));
+            errors.push(format!("Prop '{id}': layer must be sort, ground or roof."));
         }
+        errors.extend(roof_of_errors(t, &id, layer, &p));
         let variant_ok = p.get("variant").is_some_and(|v| json::is_int(v) && (-1..=PROP_VARIANT_MAX).contains(&json::to_int(v)));
         if !variant_ok || !p.get("flip").is_some_and(Value::is_boolean) {
             errors.push(format!("Prop '{id}': variant is -1 (by position) or 0-{PROP_VARIANT_MAX}; flip is true or false."));
         }
     }
     errors
+}
+
+/// The zone legend's indoor zone ids (REVEAL1 1.1: an entry with `indoor: true`), each once, in legend order.
+pub fn indoor_zone_ids(t: &Dict) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for z in legend(t) {
+        let id = json::s(z, "id");
+        if z.get(ZONE_INDOOR) == Some(&Value::Bool(true)) && !id.is_empty() && !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// R1 (REVEAL1 1.2) of one prop: a `roof` prop names an indoor zone of the map in `roof_of`; any other layer takes no
+/// `roof_of`.
+fn roof_of_errors(t: &Dict, id: &str, layer: &str, p: &Dict) -> Vec<String> {
+    let raw = p.get(PROP_ROOF_OF);
+    let Some(zone) = raw.map_or(Some(""), Value::as_str) else {
+        return vec![format!("Prop '{id}': roof_of must be text (a zone id).")];
+    };
+    if layer != ROOF_LAYER {
+        return if zone.is_empty() { Vec::new() } else { vec![format!("Prop '{id}': only a roof prop takes roof_of.")] };
+    }
+    if zone.is_empty() {
+        vec![format!("Prop '{id}': a roof prop names its indoor zone in roof_of.")]
+    } else if !indoor_zone_ids(t).iter().any(|z| z == zone) {
+        vec![format!("Prop '{id}': roof_of '{zone}' is not an indoor zone of this map (a zone_legend entry with indoor: true).")]
+    } else {
+        Vec::new()
+    }
+}
+
+/// REVEAL1 1.1 and 2.2: each zone legend entry's `indoor` (true or false) and `wall_set` ("" or a tile set id), and the
+/// map's own `boundary` ("" or a set id).
+pub fn reveal_errors(t: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (key, z) in json::dget(t, "zone_legend") {
+        let Some(z) = z.as_object() else { continue };
+        if z.get(ZONE_INDOOR).is_some_and(|v| !v.is_boolean()) {
+            errors.push(format!("Zone '{key}': indoor must be true or false."));
+        }
+        match z.get(ZONE_WALL_SET) {
+            None => {}
+            Some(Value::String(set)) if set.is_empty() || crate::art::set_id_ok(set) => {}
+            Some(other) => errors.push(format!("Zone '{key}': wall_set '{}' must be empty or 2-32 characters of a-z, 0-9 and _.", gstr(other))),
+        }
+    }
+    match t.get(MAP_BOUNDARY) {
+        None => {}
+        Some(Value::String(b)) if b.is_empty() || crate::art::set_id_ok(b) => {}
+        Some(other) => errors.push(format!("Boundary '{}' must be empty or 2-32 characters of a-z, 0-9 and _.", gstr(other))),
+    }
+    errors
+}
+
+/// R2 (REVEAL1 1.2), never blocking: every cell of an indoor zone lies under the footprint of a `roof` prop whose
+/// `roof_of` is that zone (else its interior shows from outside), one line per zone; and a `wall_set` on a zone that is
+/// not indoor draws nothing.
+pub fn roof_warnings(t: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let legend_map = json::dget(t, "zone_legend");
+    let zones: Vec<Vec<char>> = json::aget(t, "zones").iter().map(|r| gstr(r).chars().collect()).collect();
+    for zone in indoor_zone_ids(t) {
+        let keys: Vec<char> = legend_map.iter().filter(|(_, z)| z.as_object().is_some_and(|z| json::s(z, "id") == zone)).filter_map(|(k, _)| k.chars().next()).collect();
+        let cells: Vec<(i64, i64)> = zones.iter().enumerate().flat_map(|(y, row)| row.iter().enumerate().filter(|(_, c)| keys.contains(c)).map(move |(x, _)| (x as i64, y as i64))).collect();
+        let roofs: Vec<(i64, i64, i64, i64)> = json::aget(t, "props")
+            .iter()
+            .filter_map(Value::as_object)
+            .filter(|p| json::s(p, "layer") == ROOF_LAYER && json::s(p, PROP_ROOF_OF) == zone)
+            .map(|p| (json::i(p, "x", 0), json::i(p, "y", 0), json::i(p, "w", 1), json::i(p, "h", 1)))
+            .collect();
+        if roofs.is_empty() {
+            out.push(format!("Indoor zone '{zone}' has no roof prop (layer roof, roof_of '{zone}'): its interior shows from outside."));
+            continue;
+        }
+        let covered = |&(cx, cy): &(i64, i64)| roofs.iter().any(|&(x, y, w, h)| cx >= x && cy >= y && cx < x + w && cy < y + h);
+        let open: Vec<&(i64, i64)> = cells.iter().filter(|&c| !covered(c)).collect();
+        if let Some((x, y)) = open.first() {
+            out.push(format!("Indoor zone '{zone}': {} cells lie under no roof prop of the zone, the first at ({x}, {y}).", open.len()));
+        }
+    }
+    for (key, z) in legend_map {
+        let Some(z) = z.as_object() else { continue };
+        if !json::s(z, ZONE_WALL_SET).is_empty() && z.get(ZONE_INDOOR) != Some(&Value::Bool(true)) {
+            out.push(format!("Zone '{key}': wall_set '{}' draws only on an indoor zone (indoor: true).", json::s(z, ZONE_WALL_SET)));
+        }
+    }
+    out
 }

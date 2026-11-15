@@ -294,6 +294,40 @@ pub fn boundary_dirs(sets: &[String], boundary: &str, tile: &str) -> Vec<String>
     sets.iter().map(|set| format!("tilesets/{set}/boundary/{boundary}/{tile}")).collect()
 }
 
+/// REVEAL1 2.2: the boundary a location's map draws with: the location's `boundary`, else its map template's own
+/// (`boundary`, "" when neither sets one).
+pub fn boundary_of(location: &Dict, template: &Dict) -> String {
+    let own = json::s(location, "boundary");
+    if own.is_empty() {
+        json::s(template, "boundary")
+    } else {
+        own
+    }
+}
+
+/// REVEAL1 2.2: the prop art id of a boundary's edge dressing, `boundary_<boundary>` (`props/<set>/boundary_<boundary>/v<n>.png`
+/// over the region sets, `boundary_dressing_dirs`).
+pub fn boundary_dressing_art(boundary: &str) -> String {
+    format!("boundary_{boundary}")
+}
+
+/// REVEAL1 2.2: the folders of a boundary's edge dressing (`props/<set>/boundary_<boundary>`, the world lineage child
+/// first, then `common`), repeated past a map smaller than the screen.
+pub fn boundary_dressing_dirs(lineage_child_first: &[String], boundary: &str) -> Vec<String> {
+    prop_dirs(lineage_child_first, &boundary_dressing_art(boundary))
+}
+
+/// REVEAL1 1.1: the tile sets an indoor zone's ring walls draw from: its `wall_set` (`tilesets/<wall_set>/wall` and
+/// `wall_face`) first, then the region sets as every other wall, so a set without art yet draws today's walls.
+pub fn interior_wall_sets(sets: &[String], wall_set: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if !wall_set.is_empty() {
+        out.push(wall_set.to_string());
+    }
+    out.extend(sets.iter().filter(|s| s.as_str() != wall_set).cloned());
+    out
+}
+
 /// The folders of a map prop's art (PROPS1 3.1): `props/<set>/<art>` over the region sets (the world lineage child
 /// first, then `common`); the first holding `v0.png` in any layer gives the prop.
 pub fn prop_dirs(lineage_child_first: &[String], art: &str) -> Vec<String> {
