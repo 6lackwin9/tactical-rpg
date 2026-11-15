@@ -81,7 +81,7 @@ Marks (slice D2; `marks_per_100` 2): `ash`, `packed_dirt` take `footprints`, `sc
 `scuff`, `rut_short`; `soot_yard`, `mud`, `cobble_road` take `footprints`, `drag_mark`. Moss is the Sunk Ward's green:
 no ground there is grass.
 
-**Pipeline update (`2026-11-14`, user ruling `AO-04` / `P-UI-06`)**: All remaining ground, interior-wall (`interior_plaster`, `interior_stone`), and boundary (`drain_brick`, `blind_tenements`, `gorge_rock`) texture generation (`A1..A3`, `floorboards`) moves to **Google Flow** (same workflow as act maps and landmarks) rather than paid Gemini API batches; generic material sets promote to `kits/rpg/assets/tilesets/` under `docs/specs/ASSETORG4.md`.
+**Pipeline update (`2026-11-14`, user ruling `AO-04` / `P-UI-06`)**: All remaining ground, interior-wall (`interior_plaster`, `interior_stone`), and boundary (`drain_brick`, `blind_tenements`, `gorge_rock`) texture generation (`A1..A3`, `floorboards`) moves to **Google Flow** (same workflow as act maps and landmarks) rather than paid Gemini API batches; generic material sets promote to `kits/rpg/assets/tilesets/` under `docs/specs/ASSETORG4.md`. `PR5-54` seeded `floorboards` (`order: 72`, `indoor: true`, `#3a2c22`) with a copied `packed_dirt` placeholder at `kits/rpg/assets/tilesets/common/ground/floorboards/v0.png` (`PR5-56` moved it from the game layer), queued for Flow replacement in `AI-13`; `PR5-59` (`REGIONVIEW2`) applies `AO-09`/`AO-10` visual upgrades (wandering borders, `PATCHY` ash/moss, stone water rim, wall/prop polish, opt-in `dim_ambience`).
 
 ## 4. Textures
 

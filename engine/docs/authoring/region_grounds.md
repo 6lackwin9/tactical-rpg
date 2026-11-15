@@ -64,10 +64,10 @@ Files follow the lookup chain: the location's `tileset`, then the world lineage,
 
 | File | Size | Notes |
 | --- | --- | --- |
-| `tilesets/<set>/ground/<ground>/v0.png` | 256 x 256 | one seamless texture; only `v0` is read, because a variant per cell brings the grid back |
+| `tilesets/<set>/ground/<ground>/v0.png` | 256 x 256 | one seamless texture; only `v0` is read, because a variant per cell brings the grid back (generic commons such as `floorboards` live in `kits/rpg/assets/tilesets/common/ground/`, `REVEAL1` / `ASSETORG4`) |
 | `props/<set>/<mark>/v<n>.png` | at most 64 x 64 | transparent, straight down |
-| `tilesets/<set>/wall_face/v<n>.png` | 128 x 48 | one storey, 4 cells wide, wrapping on all four sides |
-| `tilesets/<set>/boundary/<name>/{wall,wall_face}/v<n>.png` | as `wall` and `wall_face` | the map's outer walls |
+| `tilesets/<set>/wall_face/v<n>.png` | 128 x 48 | one storey, 4 cells wide, wrapping on all four sides (interior zone `wall_set` uses `tilesets/<wall_set>/{wall,wall_face}`) |
+| `tilesets/<set>/boundary/<name>/{wall,wall_face}/v<n>.png` | as `wall` and `wall_face` | the map's outer walls (`location.boundary` falls back to `map.boundary`) |
 
 A texture carries fine grain only: no broad light and dark, no direction, no shape lined up with the grid, and no one-off
 marks. Those come from the composer's tone and the mark layer, which never loop.

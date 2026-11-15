@@ -11,8 +11,8 @@ Let large multi-screen exploration maps (`48-64 x 30-40`, e.g. Junction 7, Cross
 ## 1. Indoor Zones & Roof-Layer Props
 
 1. **`zone_legend` Indoor Metadata (`maps.json`)**:
-   - Extend `zone_legend.<char>` entries to accept either the existing string zone ID (shorthand, `indoor: false`, `wall_set: ""`) or an object `{id: string, indoor?: bool, wall_set?: string}` (normalized cleanly on load; omitting default keys on write so existing maps resave byte-identical).
-   - When `indoor: true`, `wall_set` optionally names an interior wall art set (e.g. `interior_plaster` or `interior_stone`) used to render wall tiles bordering or enclosing that zone while the roof is faded.
+   - Extend `zone_legend.<char>` entries using object form `{id: string, indoor?: bool, wall_set?: string}` only (since `maps.json` `zone_legend` already uses object form; `omit_default` keeps existing maps byte-identical, `FB-271`).
+   - When `indoor: true`, `wall_set` optionally names an interior wall art set (resolved at `tilesets/<wall_set>/wall|wall_face`, `FB-271`) used to render wall tiles bordering or enclosing that zone while the roof is faded (`wall_set` on an outdoor zone emits an `R2` warning).
 2. **Prop `layer: "roof"` & `roof_of` (`PROPS1` extension)**:
    - Extend prop `layer` options from `["sort", "ground"]` to `["sort", "ground", "roof"]`, and add optional string key `roof_of` (`""` default, `omit_default`, valid only when `layer == "roof"`).
    - **Placement rules (`check::map` P9/P11 + R1-R3)**:
@@ -26,10 +26,10 @@ Let large multi-screen exploration maps (`48-64 x 30-40`, e.g. Junction 7, Cross
 ## 2. `floorboards` Ground Row & Location `boundary` Art
 
 1. **`floorboards` Ground (`grounds.json`)**:
-   - Seed `floorboards` (`name: "Floorboards"`, `order: 72`, `kind: "land"`, `colour: "#3a2c22"`, `wear: 0.06`, `strays: false`, `tone: 0.08`, `patches: 0.0`, class `built`, gain `0.45`) via `aegis content` so indoor homes, shops, and workshops render warm timber floors immediately via flat colour and compose seamlessly once texture art lands.
-2. **Location `boundary` Field (`worlds/<id>/locations.json`)**:
-   - Add optional `boundary` (`string`, default `""`, `omit_default` in `kits/rpg/schema.json`) on world locations (`drain_brick`, `blind_tenements`, `gorge_rock` for Sunk Ward).
-   - In `emberwake_gui/src/region.rs`, when the camera centres a map smaller than the viewport (or draws the margin beyond map edges), resolve `tilesets/<boundary>/` (falling back to the location's `tileset`, world lineage, then today's wall margin) across `game -> kit` layers; `aegis content check` emits a non-blocking asset warning when a named `boundary` set has no art yet.
+   - Seed `floorboards` (`name: "Floorboards"`, `order: 72`, `kind: "land"`, `indoor: true`, `colour: "#3a2c22"`, `wear: 0.06`, `strays: false`, `tone: 0.08`, `patches: 0.0`, class `built`, gain `0.45`) via `aegis content` so indoor homes, shops, and workshops render warm timber floors (`tilesets/<set>/ground/<id>/v0.png`; `PR5-54` placed a `packed_dirt` copy placeholder moved to `kits/rpg/assets/tilesets/common/ground/floorboards/v0.png` in `PR5-56`, queued for Flow art in `AI-13`, `FB-271`).
+2. **Location & Map `boundary` Field (`worlds/<id>/locations.json`, `maps.json`)**:
+   - Use optional `boundary` (`string`, default `""`, `omit_default` in `kits/rpg/schema.json`) on maps and world locations (`drain_brick`, `blind_tenements`, `gorge_rock` for Sunk Ward; location `boundary` already existed prior to `REVEAL1` and falls back to the map's `boundary`, `FB-271`).
+   - In `emberwake_gui/src/region.rs`, when the camera centres a map smaller than the viewport (or draws the margin beyond map edges), resolve `tilesets/<boundary>/` and `props/<set>/boundary_<b>/` dressing (falling back to the location's `tileset`, world lineage, then today's wall margin) across `game -> kit` layers; `aegis content check` emits a non-blocking asset warning when a named `boundary` set has no art yet.
 
 ## 3. Acceptance Criteria
 
