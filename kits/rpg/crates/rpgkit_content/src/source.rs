@@ -1601,7 +1601,7 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
 /// crates reads these four. REVEAL1: `boundary` (after `wall_storeys`, "" by default: the location's boundary rules).
 pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
-    let mut t = template(e, &[("id", s.clone()), ("name", s.clone()), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d.clone()), ("props", a.clone()), ("ground", a.clone()), ("ground_legend", d), ("ground_patches", a.clone()), ("wall_storeys", a.clone()), (MAP_BOUNDARY, s), ("tags", a)]);
+    let mut t = template(e, &[("id", s.clone()), ("name", s.clone()), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d.clone()), ("props", a.clone()), ("ground", a.clone()), ("ground_legend", d), ("ground_patches", a.clone()), ("wall_storeys", a.clone()), (MAP_BOUNDARY, s), (MAP_DIM_AMBIENCE, Value::Bool(false)), (MAP_WALL_FACE_TILES, int(0)), ("tags", a)]);
     if let Some(Value::Array(list)) = t.get("props") {
         let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(prop_full(o)))).collect();
         t.insert("props".into(), Value::Array(full));
@@ -1651,13 +1651,23 @@ pub const ZONE_INDOOR: &str = "indoor";
 pub const ZONE_WALL_SET: &str = "wall_set";
 /// REVEAL1 2.2: a map's own boundary set ("" by default, stored only when set).
 pub const MAP_BOUNDARY: &str = "boundary";
+/// REGIONVIEW2: opt-in dim ambience & light pools (false by default, stored only when set).
+pub const MAP_DIM_AMBIENCE: &str = "dim_ambience";
+/// REGIONVIEW2: opt-in wall depth face rows (0 by default = 1-tile classic, 1 or 2 = multi-tile wall depth; stored only when set).
+pub const MAP_WALL_FACE_TILES: &str = "wall_face_tiles";
 
-/// REVEAL1: the stored form of a normalized map template's REVEAL1 keys: `boundary` "" left out, a zone legend entry's
-/// `indoor` false and `wall_set` "" left out, a prop's `roof_of` "" left out; everything else untouched, so a map that
-/// sets none of them re-saves byte for byte.
+/// REVEAL1 / REGIONVIEW2: the stored form of a normalized map template's optional keys: `boundary` "", `dim_ambience`
+/// false, `wall_face_tiles` 0, a zone legend entry's `indoor` false and `wall_set` "" and a prop's `roof_of` "" left
+/// out; everything else untouched, so a map that sets none of them re-saves byte for byte.
 pub fn map_without_reveal_defaults(t: &mut Dict) {
     if t.get(MAP_BOUNDARY).is_some_and(|v| v.as_str() == Some("")) {
         t.shift_remove(MAP_BOUNDARY);
+    }
+    if t.get(MAP_DIM_AMBIENCE) == Some(&Value::Bool(false)) {
+        t.shift_remove(MAP_DIM_AMBIENCE);
+    }
+    if t.get(MAP_WALL_FACE_TILES).is_some_and(|v| json::is_int(v) && json::to_int(v) == 0) {
+        t.shift_remove(MAP_WALL_FACE_TILES);
     }
     if let Some(Value::Object(legend)) = t.get_mut("zone_legend") {
         for entry in legend.values_mut() {

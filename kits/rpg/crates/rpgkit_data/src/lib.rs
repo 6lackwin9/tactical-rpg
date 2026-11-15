@@ -2643,6 +2643,10 @@ pub struct GroundDef {
     pub marks_per_100: i32,
     /// REVEAL1 2.1: a floor laid inside buildings, under an indoor zone's roof (false by default, stored only when set).
     pub indoor: bool,
+    /// REGIONVIEW2: sparse island fraction in `0.0..=1.0` over `under` (0.0 = solid layer, stored only when set).
+    pub patchy: f64,
+    /// REGIONVIEW2: optional ground id drawn beneath patchy islands (empty = lower layer or flat colour, stored only when set).
+    pub under: String,
 }
 
 impl GroundDef {
@@ -2660,6 +2664,8 @@ impl GroundDef {
             marks: strings(o, "marks"),
             marks_per_100: int(o, "marks_per_100", 0),
             indoor: boolean(o, "indoor", false),
+            patchy: float(o, "patchy", 0.0),
+            under: string(o, "under", ""),
         }
     }
 

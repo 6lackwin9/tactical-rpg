@@ -86,12 +86,38 @@ pub struct GroundLayer<'a> {
     pub marks: Vec<GroundMark<'a>>,
     /// Tries per 100 cells of this ground, 0-`MARKS_PER_100_MAX`.
     pub marks_per_100: i32,
+    /// 0.0-1.0: sparse blob cover share over `under_tex` / `under_colour`; 0 = solid cover.
+    pub patchy: f32,
+    /// Optional under-ground texture revealed between patchy blobs.
+    pub under_tex: Option<&'a Image>,
+    /// Optional flat under-colour when `under_tex` is None (`[0, 0, 0, 0]` inherits lower land).
+    pub under_colour: Rgba,
+    /// Clamps boundaries involving this layer to exact cell edges (`G7` water clamp).
+    pub clamp_water: bool,
+    /// Stone land-water rim along cardinal borders with unblocked non-sunken land.
+    pub stone_rim: bool,
 }
 
 impl<'a> GroundLayer<'a> {
     /// A flat layer with every effect off.
     pub fn flat(order: i32, colour: Rgba) -> Self {
-        Self { order, tex: None, colour, wear: 0.0, strays: false, tone: 0.0, patches: 0.0, sunken: false, marks: Vec::new(), marks_per_100: 0 }
+        Self {
+            order,
+            tex: None,
+            colour,
+            wear: 0.0,
+            strays: false,
+            tone: 0.0,
+            patches: 0.0,
+            sunken: false,
+            marks: Vec::new(),
+            marks_per_100: 0,
+            patchy: 0.0,
+            under_tex: None,
+            under_colour: [0, 0, 0, 0],
+            clamp_water: false,
+            stone_rim: false,
+        }
     }
 }
 
@@ -151,10 +177,12 @@ impl GroundKey {
             h.i32(l.order);
             h.picture(l.tex);
             h.bytes(&l.colour);
-            for v in [l.wear, l.tone, l.patches] {
+            for v in [l.wear, l.tone, l.patches, l.patchy] {
                 h.u64(v.to_bits() as u64);
             }
-            h.bytes(&[l.strays as u8, l.sunken as u8]);
+            h.bytes(&[l.strays as u8, l.sunken as u8, l.clamp_water as u8, l.stone_rim as u8]);
+            h.picture(l.under_tex);
+            h.bytes(&l.under_colour);
             h.i32(l.marks_per_100);
             for m in &l.marks {
                 h.picture(Some(m.img));
@@ -538,62 +566,158 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let blur_at = |k: usize, ax: i32, ay: i32| fields.get(k).and_then(|f| f.as_ref()).and_then(|f| f.at(ax, ay)).unwrap_or(0.0);
     let own = |k: usize, ax: i32, ay: i32| blur_at(k, ax, ay) - blur_at(k + 1, ax, ay);
 
+    let clamped: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].clamp_water).collect();
+    let any_clamped = clamped.iter().any(|c| *c);
+    let patchies: Vec<f32> = by_rank
+        .iter()
+        .map(|i| {
+            let p = job.layers[*i].patchy;
+            if p.is_finite() && p > 0.0 && p <= 1.0 { p } else { 0.0 }
+        })
+        .collect();
+    let any_patchy = patchies.iter().any(|p| *p > 0.0 && *p < 1.0);
+    let mut blobs = Vec::new();
+    let mut cuts = vec![0.0f32; ranks];
+    let mut under_paints: Vec<Option<Paint>> = (0..ranks).map(|_| None).collect();
+    let fallback_under = (0..ranks)
+        .find(|r| !job.layers[by_rank[*r]].sunken && patchies[*r] == 0.0)
+        .map(|r| (job.layers[by_rank[r]].tex, job.layers[by_rank[r]].colour, job.layers[by_rank[r]].tone))
+        .unwrap_or((None, [55, 54, 54, 255], 0.08));
+    if any_patchy {
+        blobs = field();
+        add_noise(&mut blobs, w, h, seed, 10, steps(26, cell), 1.0);
+        add_noise(&mut blobs, w, h, seed, 11, steps(11, cell), 0.6);
+        add_noise(&mut blobs, w, h, seed, 12, steps(5, cell), 0.25);
+        let (lo, hi) = blobs.iter().fold((f32::INFINITY, f32::NEG_INFINITY), |(a, b), &v| (a.min(v), b.max(v)));
+        let span = hi - lo;
+        for v in &mut blobs {
+            *v = if span > 1e-6 { ((*v - lo) / span).clamp(0.0, 1.0) } else { 0.5 };
+        }
+        const BINS: usize = 1024;
+        let mut hist = [0u32; BINS];
+        for &v in &blobs {
+            let bin = ((v * (BINS - 1) as f32) as usize).min(BINS - 1);
+            hist[bin] += 1;
+        }
+        for (r, &p) in patchies.iter().enumerate() {
+            if p > 0.0 && p < 1.0 {
+                let target = ((blobs.len() as f32) * (1.0 - p)).round() as u32;
+                let mut acc = 0u32;
+                let mut cut = 1.0f32;
+                for (bin, &count) in hist.iter().enumerate() {
+                    acc += count;
+                    if acc >= target {
+                        cut = bin as f32 / (BINS - 1) as f32;
+                        break;
+                    }
+                }
+                cuts[r] = cut;
+                let layer = &job.layers[by_rank[r]];
+                let (utex, ucol, utone) = if layer.under_tex.is_some() || layer.under_colour[3] > 0 {
+                    (layer.under_tex, layer.under_colour, layer.tone)
+                } else {
+                    fallback_under
+                };
+                let synthetic = GroundLayer { tex: utex, tone: utone, ..GroundLayer::flat(layer.order, ucol) };
+                under_paints[r] = Some(Paint::new(&synthetic, by_rank[r] + LAYERS_MAX, seed, w, h));
+            }
+        }
+    }
+
     let mut px = vec![0u8; uw * uh * 4];
     let mut top = vec![0u8; uw * uh];
     for ay in 0..h {
         let row = ay as usize * uw;
+        let cy = (ay / ch) as usize;
         for ax in 0..w {
             let i = row + ax as usize;
             let t = if any_tone { tone[i] - 0.5 } else { 0.0 };
+            let own_rank = cell_rank[cy * job.cols as usize + (ax / cw) as usize] as usize;
             let (mut g, mut vg) = (0usize, 0.0f32);
             let (mut wear, mut stray) = (0.0f32, None);
             let push = if any_upper { (edge[i] - 0.5) * 0.62 } else { 0.0 };
-            for k in (1..ranks).rev() {
-                let Some(bl) = fields[k].as_ref().and_then(|f| f.at(ax, ay)) else { continue };
-                let v = bl + push;
-                if v > 0.5 {
-                    (g, vg) = (k, v);
-                    break;
-                }
-                if wears[k] > wear && own(k, ax, ay) + push > 0.34 {
-                    wear = wears[k];
-                }
-                if stray.is_none() && strays[k] && stray_noise[i] > 0.82 {
-                    let mine = own(k, ax, ay);
-                    if mine > 0.16 && mine < 0.42 {
-                        stray = Some(k);
+            if any_clamped && clamped[own_rank] {
+                (g, vg) = (own_rank, 1.0);
+            } else {
+                for k in (1..ranks).rev() {
+                    if any_clamped && clamped[k] {
+                        continue;
                     }
+                    let Some(bl) = fields[k].as_ref().and_then(|f| f.at(ax, ay)) else { continue };
+                    let v = bl + push;
+                    if v > 0.5 {
+                        (g, vg) = (k, v);
+                        break;
+                    }
+                    if wears[k] > wear && own(k, ax, ay) + push > 0.34 {
+                        wear = wears[k];
+                    }
+                    if stray.is_none() && strays[k] && stray_noise[i] > 0.82 {
+                        let mine = own(k, ax, ay);
+                        if mine > 0.16 && mine < 0.42 {
+                            stray = Some(k);
+                        }
+                    }
+                }
+                if any_clamped && clamped[g] {
+                    (g, vg) = (own_rank, 1.0);
                 }
             }
             top[i] = g as u8;
             let (ux, uy) = (ax as usize, ay as usize);
             let mut c = times(paints[g].at(ux, uy, t), 1.0 - wear);
+            if stray.is_none() {
+                if let Some(up) = under_paints[g].as_ref() {
+                    let b = blobs[i];
+                    let cut = cuts[g];
+                    if b < cut {
+                        let uc = times(up.at(ux, uy, t), 1.0 - wear);
+                        c = if b >= cut - 0.08 {
+                            [(uc[0] + c[0]) * 0.5, (uc[1] + c[1]) * 0.5, (uc[2] + c[2]) * 0.5]
+                        } else {
+                            uc
+                        };
+                    }
+                }
+            }
             if let Some(k) = stray {
                 c = times(paints[k].at(ux, uy, t), 0.92);
             }
             if g > 0 && vg < 0.56 && bite[i] > 0.7 {
-                let mut under = (0usize, 1.0 - blur_at(1, ax, ay));
+                let mut under = if any_clamped && clamped[0] { (own_rank, 0.0) } else { (0usize, 1.0 - blur_at(1, ax, ay)) };
                 for k in 1..g {
+                    if any_clamped && clamped[k] {
+                        continue;
+                    }
                     let mine = own(k, ax, ay);
                     if mine > under.1 {
                         under = (k, mine);
                     }
                 }
-                c = times(paints[under.0].at(ux, uy, t), 0.95);
+                if !any_clamped || !clamped[under.0] {
+                    let uc = under_paints[under.0]
+                        .as_ref()
+                        .filter(|_| blobs[i] < cuts[under.0])
+                        .map_or_else(|| paints[under.0].at(ux, uy, t), |up| up.at(ux, uy, t));
+                    c = times(uc, 0.95);
+                }
             }
             put(&mut px, i, c);
         }
     }
 
-    // The sunken rims: a pixel of a sunken ground takes its colour darkened on the side of a neighbour.
+    // The sunken rims & stone land-water rims: when `stone_rim` is on, water edges bordering unblocked non-sunken
+    // land take a pale stone lip on the water side and a subtle dark line on the land side; legacy `sunken` layers
+    // without `stone_rim` keep the sunken darkening untouched.
     let sunken: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].sunken).collect();
-    if sunken.iter().any(|s| *s) {
+    let stone_rim: Vec<bool> = by_rank.iter().map(|i| job.layers[*i].stone_rim).collect();
+    if sunken.iter().zip(&stone_rim).any(|(s, r)| *s && !*r) {
         let other = |ax: i32, ay: i32, g: u8| ax >= 0 && ay >= 0 && ax < w && ay < h && top[(ay * w + ax) as usize] != g;
         for ay in 0..h {
             for ax in 0..w {
                 let i = (ay * w + ax) as usize;
                 let g = top[i];
-                if !sunken[g as usize] {
+                if !sunken[g as usize] || stone_rim[g as usize] {
                     continue;
                 }
                 let k = if other(ax, ay - 1, g) {
@@ -605,6 +729,51 @@ fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
                 };
                 let t = if any_tone { tone[i] - 0.5 } else { 0.0 };
                 put(&mut px, i, times(paints[g as usize].at(ax as usize, ay as usize, t), k));
+            }
+        }
+    }
+    if stone_rim.iter().any(|r| *r) {
+        let lx = (cw / 8).max(2).min(cw);
+        let ly = (ch / 8).max(2).min(ch);
+        let mut land_dim = vec![false; uw * uh];
+        for cy in 0..job.rows {
+            for cx in 0..job.cols {
+                let cr = cell_rank[(cy * job.cols + cx) as usize] as usize;
+                if !stone_rim[cr] {
+                    continue;
+                }
+                let (x0, y0) = (cx * cw, cy * ch);
+                for (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)] {
+                    let (nx, ny) = (cx + dx, cy + dy);
+                    if nx < 0 || ny < 0 || nx >= job.cols || ny >= job.rows {
+                        continue;
+                    }
+                    let ni = (ny * job.cols + nx) as usize;
+                    if job.blocked[ni] || sunken[cell_rank[ni] as usize] {
+                        continue;
+                    }
+                    let (wx0, wx1, wy0, wy1, sx0, sx1, sy0, sy1) = match (dx, dy) {
+                        (0, -1) => (x0, x0 + cw, y0, y0 + ly, x0, x0 + cw, y0 - ly, y0),
+                        (0, 1) => (x0, x0 + cw, y0 + ch - ly, y0 + ch, x0, x0 + cw, y0 + ch, y0 + ch + ly),
+                        (-1, 0) => (x0, x0 + lx, y0, y0 + ch, x0 - lx, x0, y0, y0 + ch),
+                        _ => (x0 + cw - lx, x0 + cw, y0, y0 + ch, x0 + cw, x0 + cw + lx, y0, y0 + ch),
+                    };
+                    for ay in wy0..wy1 {
+                        for ax in wx0..wx1 {
+                            put(&mut px, (ay * w + ax) as usize, [96.0, 98.0, 108.0]);
+                        }
+                    }
+                    for ay in sy0.max(0)..sy1.min(h) {
+                        for ax in sx0.max(0)..sx1.min(w) {
+                            land_dim[(ay * w + ax) as usize] = true;
+                        }
+                    }
+                }
+            }
+        }
+        for (i, &mark) in land_dim.iter().enumerate() {
+            if mark {
+                dim(&mut px, i, 1.0 - 80.0 / 255.0);
             }
         }
     }
@@ -1149,6 +1318,11 @@ struct LoadedLayer {
     sunken: bool,
     marks: Vec<Image>,
     marks_per_100: i32,
+    patchy: f32,
+    under_tex: Option<Image>,
+    under_colour: Rgba,
+    clamp_water: bool,
+    stone_rim: bool,
 }
 
 fn compose_loaded(job: &LoadedJob) -> Image {
@@ -1166,6 +1340,11 @@ fn compose_loaded(job: &LoadedJob) -> Image {
             sunken: l.sunken,
             marks: l.marks.iter().map(|img| GroundMark { img }).collect(),
             marks_per_100: l.marks_per_100,
+            patchy: l.patchy,
+            under_tex: l.under_tex.as_ref(),
+            under_colour: l.under_colour,
+            clamp_water: l.clamp_water,
+            stone_rim: l.stone_rim,
         })
         .collect();
     compose(&GroundJob { seed: job.seed, cols: job.cols, rows: job.rows, cell: job.cell, cells: &job.cells, blocked: &job.blocked, layers: &layers, placed: &job.placed })
@@ -1247,12 +1426,20 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
     let mut layers = Vec::new();
     for (i, (k, v)) in legend.iter().enumerate() {
         let o = v.as_object().ok_or_else(|| anyhow!("legend {k} must be an object"))?;
-        known_keys(o, &["order", "tex", "colour", "wear", "strays", "tone", "patches", "sunken", "marks", "marks_per_100"], &format!("legend {k}"))?;
+        known_keys(o, &["order", "tex", "colour", "wear", "strays", "tone", "patches", "sunken", "marks", "marks_per_100", "patchy", "under_tex", "under_colour", "clamp_water", "stone_rim"], &format!("legend {k}"))?;
         let f = |name: &str| -> Result<f32> { o.get(name).map_or(Ok(0.0), |v| number(v, name).map(|n| n as f32)) };
         let flag = |name: &str| -> Result<bool> { o.get(name).map_or(Ok(false), |v| v.as_bool().ok_or_else(|| anyhow!("{name} must be true or false"))) };
         let tex = match o.get("tex") {
             Some(v) => {
                 let img = load(v.as_str().ok_or_else(|| anyhow!("legend {k}: tex must be a path"))?)?;
+                let want = (TEX_CELLS * cell.0, TEX_CELLS * cell.1);
+                Some(if (img.w, img.h) == want { img } else { img.downsample(want.0, want.1) })
+            }
+            None => None,
+        };
+        let under_tex = match o.get("under_tex") {
+            Some(v) => {
+                let img = load(v.as_str().ok_or_else(|| anyhow!("legend {k}: under_tex must be a path"))?)?;
                 let want = (TEX_CELLS * cell.0, TEX_CELLS * cell.1);
                 Some(if (img.w, img.h) == want { img } else { img.downsample(want.0, want.1) })
             }
@@ -1266,6 +1453,14 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
             }
             None if tex.is_some() => [0, 0, 0, 255],
             None => bail!("legend {k}: needs tex or colour"),
+        };
+        let under_colour = match o.get("under_colour") {
+            Some(v) => {
+                let a = v.as_array().filter(|a| a.len() == 3).ok_or_else(|| anyhow!("legend {k}: under_colour must be [r, g, b]"))?;
+                let part = |i: usize| whole(&a[i], "under_colour", 0, 255).map(|n| n as u8);
+                [part(0)?, part(1)?, part(2)?, 255]
+            }
+            None => [0, 0, 0, 0],
         };
         let mut marks = Vec::new();
         if let Some(v) = o.get("marks") {
@@ -1295,6 +1490,14 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
             sunken: flag("sunken")?,
             marks,
             marks_per_100: o.get("marks_per_100").map_or(Ok(0), |v| whole(v, "marks_per_100", 0, 10))?,
+            patchy: match f("patchy")? {
+                n if (0.0..=1.0).contains(&n) => n,
+                n => bail!("legend {k}: patchy must be 0 to 1, not {n}"),
+            },
+            under_tex,
+            under_colour,
+            clamp_water: flag("clamp_water")?,
+            stone_rim: flag("stone_rim")?,
         });
     }
     let mut orders: Vec<i32> = layers.iter().map(|l| l.order).collect();

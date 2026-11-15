@@ -743,30 +743,54 @@ impl Screen<GameCx> for RegionMap {
                 let set = explore::wall_set_at(t, x as i64, y as i64);
                 interior_walls.iter().find(|(s, _)| !set.is_empty() && *s == set).map_or(&walls, |(_, w)| w)
             };
+            let wall_face_tiles = map_wall_face_tiles(loc, t);
+            let dim_ambience = map_dim_ambience(loc, t);
+            let freestanding = freestanding_prop_cells(t, (map_w, map_h), &ch_at);
+            let is_wall = |x: i32, y: i32| ch_at(x, y) == '#' && !freestanding.contains(&(x, y));
+            let mw_i = map_w as i32;
+            let mh_i = map_h as i32;
             for y in y0..=y1 {
                 for x in x0..=x1 {
                     let r = geo.cell(x, y);
                     let ch = ch_at(x, y);
+                    let vis_ch = if ch == '#' && freestanding.contains(&(x, y)) { '.' } else { ch };
                     // the border draws after this pass; tilted, a wall is a block in the sorted pass below
-                    if border_at(x, y) || (tilted && ch == '#') {
+                    if border_at(x, y) || (tilted && vis_ch == '#') {
                         continue;
                     }
-                    if has_ground && matches!(ch, '.' | '~') {
+                    if has_ground && matches!(vis_ch, '.' | '~') {
                         continue;
                     }
-                    let tile = emberwake_content::art::region_tile(ch);
+                    if !tilted && wall_face_tiles > 0 && vis_ch == '#' {
+                        let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                        let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                        let wa = wall_art_at(x, y);
+                        if depth > 0 {
+                            let up_face = is_face(x, y - 1);
+                            draw_wall_face_at(&mut ui, cx, wa, false, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                        } else {
+                            let tile = emberwake_content::art::region_tile('#').unwrap_or("wall");
+                            match cx.art.tile_in(&wa.sets, tile, x, y, art_size) {
+                                Some(img) => ui.p.image(img, r),
+                                None => ui.p.fill(r, WALL_FILL),
+                            }
+                            draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                        }
+                        continue;
+                    }
+                    let tile = emberwake_content::art::region_tile(vis_ch);
                     // REVEAL1 1.1: a wall beside an indoor zone draws its wall set first
-                    let tile_sets = if ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
+                    let tile_sets = if vis_ch == '#' { &wall_art_at(x, y).sets } else { &set_refs };
                     match tile.and_then(|t| cx.art.tile_in(tile_sets, t, x, y, art_size)) {
                         Some(img) => ui.p.image(img, r),
-                        None => ui.p.fill(r, match ch {
+                        None => ui.p.fill(r, match vis_ch {
                             '.' => rgb(70, 90, 64),
                             '#' => WALL_FILL,
                             '~' => rgb(40, 90, 100),
                             _ => rgb(20, 20, 24),
                         }),
                     }
-                    if tilted && ch == '~' {
+                    if tilted && vis_ch == '~' && wall_face_tiles == 0 {
                         draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
                     }
                 }
@@ -777,13 +801,29 @@ impl Screen<GameCx> for RegionMap {
             for y in (if tilted { y0 - 1 } else { y0 })..=y1 {
                 for x in x0..=x1 {
                     if border_at(x, y) {
-                        draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && ch_at(x, y + 1) != '#');
+                        if wall_face_tiles > 0 && x >= 0 && y >= 0 && x < mw_i && y < mh_i {
+                            let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                            let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, wall_face_tiles, (mw_i, mh_i), &is_wall) > 0;
+                            let r = geo.cell(x, y);
+                            if depth > 0 {
+                                let up_face = is_face(x, y - 1);
+                                draw_wall_face_at(&mut ui, cx, &walls, true, x, y, r, r.h, depth == 1 && up_face, !up_face, !is_face(x + 1, y), !is_face(x - 1, y));
+                            } else {
+                                draw_border(&mut ui, cx, &walls, x, y, r, art_size, false);
+                                draw_wall_cap_edges(&mut ui, r, r.h, !is_wall(x, y - 1), !is_wall(x - 1, y) || is_face(x - 1, y), !is_wall(x + 1, y) || is_face(x + 1, y));
+                            }
+                        } else {
+                            draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && !is_wall(x, y + 1));
+                        }
                     }
                 }
             }
             // REVEAL1 2.2: the boundary's edge dressing over the cells past the map (art only: no widget)
             if !boundary.is_empty() {
                 draw_dressing(&mut ui, cx, &lineage, &boundary, &geo, (map_w, map_h), (x0, x1), (y0, y1));
+            }
+            if wall_face_tiles > 0 {
+                draw_depth_floor_shadows_and_water(&mut ui, &geo, (mw_i, mh_i), (x0, x1), (y0, y1), has_ground, &ch_at, &is_wall);
             }
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
@@ -795,11 +835,12 @@ impl Screen<GameCx> for RegionMap {
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
             });
+            let prop_arts = collect_prop_arts(t);
             // REGIONVIEW1: past the map is boundary art only: a prop's art that overhangs it is cut there (a footprint
             // cannot leave the map: check P8)
             let map_rect = Rect::new(geo.ox, geo.oy, map_w as i32 * geo.cell_size().0, map_h as i32 * geo.cell_size().1);
             for p in props.iter().filter(|p| p.ground) {
-                draw_prop(&mut ui, cx, p, map_rect, q);
+                draw_prop(&mut ui, cx, p, None, false, map_rect, q);
             }
             let steps = gs.explore_int("loc_steps");
             // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at
@@ -885,13 +926,14 @@ impl Screen<GameCx> for RegionMap {
             if tilted {
                 for y in (y0 - 1)..=y1 {
                     for x in x0..=x1 {
-                        if ch_at(x, y) != '#' || border_at(x, y) {
+                        if !is_wall(x, y) || border_at(x, y) {
                             continue;
                         }
                         let cell = geo.cell(x, y);
-                        let face = ch_at(x, y + 1) != '#';
+                        let depth = wall_depth_at(x, y, wall_face_tiles, (mw_i, mh_i), &is_wall);
+                        let face = if wall_face_tiles > 0 { depth > 0 } else { !is_wall(x, y + 1) };
                         let rect = mapview::block_rect(cell, face);
-                        let seen = Rect::new(rect.x, rect.y, rect.w, rect.h + if face { mapview::shade_of(cell.h) } else { 0 }).intersect(paint_area);
+                        let seen = Rect::new(rect.x, rect.y, rect.w, rect.h + if wall_face_tiles == 0 && face { mapview::shade_of(cell.h) } else { 0 }).intersect(paint_area);
                         if seen.w > 0 && seen.h > 0 {
                             blocks.push(Block { x, y, cell, rect, face });
                         }
@@ -926,8 +968,19 @@ impl Screen<GameCx> for RegionMap {
             let mut party_frame = None;
             for item in &order {
                 match *item {
-                    Item::Prop(i) => draw_prop(&mut ui, cx, &props[i], map_rect, q),
-                    Item::Block(i) => draw_block(&mut ui, cx, &blocks[i], wall_art_at(blocks[i].x, blocks[i].y), &ch_at, &border_at),
+                    Item::Prop(i) => {
+                        let p = &props[i];
+                        let (fit, mounted) = prop_mounted_fit(prop_art_of(&prop_arts, &geo, p), p, &geo, &is_wall, wall_face_tiles);
+                        draw_prop(&mut ui, cx, p, fit, mounted, map_rect, q);
+                    }
+                    Item::Block(i) => {
+                        let b = &blocks[i];
+                        if wall_face_tiles > 0 {
+                            draw_block_depth(&mut ui, cx, b, wall_art_at(b.x, b.y), wall_face_tiles, (mw_i, mh_i), &is_wall, &border_at);
+                        } else {
+                            draw_block(&mut ui, cx, b, wall_art_at(b.x, b.y), &ch_at, &border_at);
+                        }
+                    }
                     Item::Marker(i) => {
                         if let Some(sp) = draw_marker(&mut ui, cx, &marks[i], ts, &idle, now) {
                             sprites.push(sp.info(&format!("marker.{}", marks[i].id)));
@@ -957,12 +1010,19 @@ impl Screen<GameCx> for RegionMap {
             let inside = explore::indoor_zone_at(t, gs.position.0, gs.position.1);
             self.roofs.update(&gs.location_id, &roof_zones, &inside, self.frame_at, cx.settings.reduce_motion());
             let mut under_roof = false;
+            let mut opaque_roofs: Vec<Rect> = Vec::new();
             for p in &props {
                 let Some(zone) = &p.roof else { continue };
                 let alpha = self.roofs.alpha(zone);
                 draw_roof(&mut ui, cx, p, map_rect, q, (alpha * 255.0).round() as u8);
                 let meets = p.rect.intersect(drawn_party);
                 under_roof |= alpha >= crate::props::ROOF_HIDES_FROM && meets.w > 0 && meets.h > 0;
+                if alpha > crate::props::ROOF_HIDES_FROM {
+                    opaque_roofs.push(p.rect);
+                }
+            }
+            if dim_ambience {
+                apply_dim_ambience(&mut ui, &geo, &props, &prop_arts, &opaque_roofs, &is_wall, wall_face_tiles);
             }
             // 4.5: a standing prop or a wall block drawn over the party: its outline over them (the sprite's silhouette
             // outline); REVEAL1: a roof showing over them too
@@ -978,6 +1038,12 @@ impl Screen<GameCx> for RegionMap {
             // overlays, never covered by a prop: the service badges (over a sprite's head), then the names
             for m in &marks {
                 let Some(first) = m.badge else { continue };
+                if opaque_roofs.iter().any(|rr| {
+                    let hit = m.r.intersect(*rr);
+                    hit.w > 0 && hit.h > 0
+                }) {
+                    continue;
+                }
                 let (side, over) = (9 * q / 4, 5 * q / 4);
                 let br = Rect::new(m.r.x + ts - over, m.top - over, side, side);
                 let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
@@ -1604,37 +1670,562 @@ fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &Cli
 /// The foot shadow's alpha under a sprite.
 const FOOT_ALPHA: u8 = 150;
 
+fn map_wall_face_tiles(loc: &Dict, t: &Dict) -> i32 {
+    let v = if loc.contains_key("wall_face_tiles") {
+        json::i(loc, "wall_face_tiles", 0)
+    } else {
+        json::i(t, "wall_face_tiles", 0)
+    };
+    v.clamp(0, 2) as i32
+}
+
+fn map_dim_ambience(loc: &Dict, t: &Dict) -> bool {
+    if loc.contains_key("dim_ambience") {
+        json::b(loc, "dim_ambience", false)
+    } else {
+        json::b(t, "dim_ambience", false)
+    }
+}
+
+fn prop_fit(art: &str) -> Option<(i32, i32)> {
+    Some(match art {
+        "portcullis" => (72, 84),
+        "kiln_bunk" => (64, 56),
+        "iron_ladder" => (40, 56),
+        "crypt_bars" => (48, 52),
+        _ => return None,
+    })
+}
+
+fn light_pool(art: &str) -> Option<(i32, [u8; 3])> {
+    Some(match art {
+        "brazier" => (150, [255, 170, 80]),
+        "tinker_hearth" => (140, [255, 140, 60]),
+        "furnace_mouth" => (170, [255, 120, 40]),
+        "lantern_pole" => (95, [255, 190, 110]),
+        "watch_torch" => (95, [255, 130, 60]),
+        "violet_lamp_post" => (100, [150, 130, 255]),
+        "apothecary_slab" => (85, [255, 200, 130]),
+        "retort_shelf" => (60, [255, 200, 130]),
+        "kiln_bunk" => (45, [255, 190, 120]),
+        "hearth_stove" => (70, [255, 150, 80]),
+        "candle_stand" => (70, [255, 200, 120]),
+        "shrine_altar" => (80, [255, 200, 120]),
+        _ => return None,
+    })
+}
+
+fn collect_prop_arts(t: &Dict) -> Vec<(String, i32, i32, String)> {
+    json::aget(t, "props")
+        .iter()
+        .filter_map(|raw| raw.as_object())
+        .map(|p| (s(p, "id"), json::i(p, "x", 0) as i32, json::i(p, "y", 0) as i32, s(p, "art")))
+        .collect()
+}
+
+fn prop_art_of<'a>(arts: &'a [(String, i32, i32, String)], geo: &MapGeom, p: &PropDraw) -> Option<&'a str> {
+    let (cw, ch) = geo.cell_size();
+    let (px, py) = ((p.foot.x - geo.ox) / cw.max(1), (p.foot.y - geo.oy) / ch.max(1));
+    arts.iter()
+        .find(|(id, x, y, _)| *x == px && *y == py && (id == &p.id || p.id.is_empty()))
+        .or_else(|| arts.iter().find(|(_, x, y, _)| *x == px && *y == py))
+        .map(|(_, _, _, art)| art.as_str())
+}
+
+/// REGIONVIEW2: `#` cells under free-standing `sort` props (adjacent to >=1 non-`#`, off the outer map ring, and
+/// excluding wall-mounted `prop_fit` props) render floor beneath them without altering `rows` collision.
+fn freestanding_prop_cells(t: &Dict, (mw, mh): Pos, ch_at: &impl Fn(i32, i32) -> char) -> std::collections::HashSet<(i32, i32)> {
+    let mut out = std::collections::HashSet::new();
+    let (mw, mh) = (mw as i32, mh as i32);
+    for raw in json::aget(t, "props") {
+        let Some(p) = raw.as_object() else { continue };
+        let layer = s(p, "layer");
+        if layer == "ground" || layer == "roof" || explore::roof_zone(p).is_some() {
+            continue;
+        }
+        let (px, py) = (json::i(p, "x", 0) as i32, json::i(p, "y", 0) as i32);
+        let (pw, ph) = (json::i(p, "w", 1).max(1) as i32, json::i(p, "h", 1).max(1) as i32);
+        let art = s(p, "art");
+        let mut on_border = false;
+        let mut has_open_neighbor = false;
+        let mut has_wall = false;
+        for dy in 0..ph {
+            for dx in 0..pw {
+                let (tx, ty) = (px + dx, py + dy);
+                if tx <= 0 || ty <= 0 || tx >= mw - 1 || ty >= mh - 1 {
+                    on_border = true;
+                    break;
+                }
+                if ch_at(tx, ty) == '#' {
+                    has_wall = true;
+                }
+                for (nx, ny) in [(tx - 1, ty), (tx + 1, ty), (tx, ty - 1), (tx, ty + 1)] {
+                    if nx >= 0 && ny >= 0 && nx < mw && ny < mh && ch_at(nx, ny) != '#' {
+                        has_open_neighbor = true;
+                    }
+                }
+            }
+            if on_border {
+                break;
+            }
+        }
+        if on_border || !has_wall || !has_open_neighbor || prop_fit(&art).is_some() {
+            continue;
+        }
+        for dy in 0..ph {
+            for dx in 0..pw {
+                let (tx, ty) = (px + dx, py + dy);
+                if ch_at(tx, ty) == '#' {
+                    out.insert((tx, ty));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn prop_mounted_fit(art: Option<&str>, p: &PropDraw, geo: &MapGeom, is_wall: &impl Fn(i32, i32) -> bool, wall_face_tiles: i32) -> (Option<Rect>, bool) {
+    if wall_face_tiles <= 0 || p.ground || p.roof.is_some() {
+        return (None, false);
+    }
+    let Some(art) = art else { return (None, false) };
+    let Some((fw, fh)) = prop_fit(art) else { return (None, false) };
+    let (cw, ch) = geo.cell_size();
+    let (tx0, ty0) = ((p.foot.x - geo.ox) / cw.max(1), (p.foot.y - geo.oy) / ch.max(1));
+    let (tw, th) = ((p.foot.w / cw.max(1)).max(1), (p.foot.h / ch.max(1)).max(1));
+    let on_wall = (0..th).any(|dy| (0..tw).any(|dx| is_wall(tx0 + dx, ty0 + dy)));
+    if !on_wall {
+        return (None, false);
+    }
+    let dw = (fw * cw + ART_TILE / 2) / ART_TILE;
+    let dh = (fh * cw + ART_TILE / 2) / ART_TILE;
+    (Some(Rect::new(p.foot.x + (p.foot.w - dw) / 2, p.foot.y + p.foot.h - dh, dw, dh)), true)
+}
+
+fn wall_depth_at(x: i32, y: i32, face_h: i32, (mw, mh): (i32, i32), is_wall: &impl Fn(i32, i32) -> bool) -> i32 {
+    if face_h <= 0 || x < 0 || y < 0 || x >= mw || y >= mh || !is_wall(x, y) {
+        return 0;
+    }
+    let dd = (1..=face_h).find(|&k| !is_wall(x, y + k)).unwrap_or(0);
+    if dd == 2 && !is_wall(x, y - 1) {
+        0
+    } else {
+        dd
+    }
+}
+
+fn draw_wall_cap_edges(ui: &mut Ui<RAct>, cap: Rect, cell_h: i32, north_open: bool, west_open: bool, east_open: bool) {
+    let line = mapview::line_of(cell_h);
+    if north_open {
+        ui.p.fill(Rect::new(cap.x, cap.y, cap.w, line), rgb(70, 70, 78));
+    }
+    if west_open {
+        ui.p.fill(Rect::new(cap.x, cap.y, line, cap.h), rgb(70, 70, 78));
+    }
+    if east_open {
+        ui.p.fill(Rect::new(cap.x + cap.w - line, cap.y, line, cap.h), rgb(14, 14, 18));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_wall_face_at(
+    ui: &mut Ui<RAct>,
+    cx: &mut Cx,
+    walls: &WallArt,
+    border: bool,
+    x: i32,
+    y: i32,
+    face: Rect,
+    cell_h: i32,
+    darken_lower: bool,
+    top_cap_line: bool,
+    east_seam: bool,
+    west_seam: bool,
+) {
+    let wall = emberwake_content::art::region_tile('#').unwrap_or("wall");
+    let dirs = walls.face_dirs(border);
+    let dir_refs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+    let pw = (face.w as f32 * ui.p.v.s).round().max(1.0) as i32;
+    let ph = (face.h as f32 * ui.p.v.s).round().max(1.0) as i32;
+    let scale_rgb = |img: &aegis_ui::canvas::Image, factor: f32| {
+        let mut out = img.clone();
+        for (k, v) in out.px.iter_mut().enumerate() {
+            if k % 4 != 3 {
+                *v = (*v as f32 * factor).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+        out
+    };
+    if let Some(img) = cx.art.varied(&dir_refs, None, x, y, pw, ph) {
+        if darken_lower {
+            ui.p.image(&scale_rgb(img, 0.72), face);
+        } else {
+            ui.p.image(img, face);
+        }
+    } else {
+        let wall_dirs: Vec<String> = walls.sets.iter().map(|set| format!("tilesets/{set}/{wall}")).collect();
+        let wall_refs: Vec<&str> = wall_dirs.iter().map(String::as_str).collect();
+        if let Some(img) = cx.art.varied(&wall_refs, None, x, y, pw, ph.max(cell_h)) {
+            let cropped = img.crop(0, 0, img.w, ph.min(img.h));
+            ui.p.image(&scale_rgb(&cropped, if darken_lower { 0.75 * 0.72 } else { 0.75 }), face);
+        } else {
+            ui.p.fill(face, if darken_lower { rgb(22, 32, 27) } else { rgb(30, 45, 38) });
+        }
+    }
+    if top_cap_line {
+        let cap_h = (cell_h / 8).max(2).min(face.h);
+        ui.p.fill(Rect::new(face.x, face.y, face.w, cap_h), rgb(132, 130, 140));
+    }
+    let line = mapview::line_of(cell_h);
+    if west_seam {
+        ui.p.fill(Rect::new(face.x, face.y, line, face.h), rgb(70, 70, 78));
+    }
+    if east_seam {
+        ui.p.fill(Rect::new(face.x + face.w - line, face.y, line, face.h), rgb(14, 14, 18));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_block_depth(
+    ui: &mut Ui<RAct>,
+    cx: &mut Cx,
+    b: &Block,
+    walls: &WallArt,
+    face_tiles: i32,
+    size: (i32, i32),
+    is_wall: &impl Fn(i32, i32) -> bool,
+    border_at: &impl Fn(i32, i32) -> bool,
+) {
+    let depth = wall_depth_at(b.x, b.y, face_tiles, size, is_wall);
+    let is_face = |nx: i32, ny: i32| wall_depth_at(nx, ny, face_tiles, size, is_wall) > 0;
+    let sets = walls.sets.as_slice();
+    let wall = emberwake_content::art::region_tile('#').unwrap_or("wall");
+    let art_px = ART_TILE * b.cell.w / mapview::CELL_W;
+    if depth == 0 {
+        let cap = mapview::cap_rect(b.cell);
+        if border_at(b.x, b.y + 1) {
+            match cx.art.tile_in(sets, wall, b.x, b.y, art_px) {
+                Some(img) => ui.p.image(img, b.cell),
+                None => ui.p.fill(b.cell, WALL_FILL),
+            }
+        }
+        match cx.art.tile_in(sets, wall, b.x, b.y, art_px) {
+            Some(img) => ui.p.image(img, cap),
+            None => ui.p.fill(cap, WALL_FILL),
+        }
+        draw_wall_cap_edges(ui, cap, b.cell.h, !is_wall(b.x, b.y - 1), !is_wall(b.x - 1, b.y) || is_face(b.x - 1, b.y), !is_wall(b.x + 1, b.y) || is_face(b.x + 1, b.y));
+        return;
+    }
+    if !is_wall(b.x, b.y - 1) {
+        let cap = mapview::cap_rect(b.cell);
+        match cx.art.tile_in(sets, wall, b.x, b.y, art_px) {
+            Some(img) => ui.p.image(img, cap),
+            None => ui.p.fill(cap, WALL_FILL),
+        }
+        draw_wall_cap_edges(ui, cap, b.cell.h, true, !is_wall(b.x - 1, b.y), !is_wall(b.x + 1, b.y));
+        let face = mapview::face_rect(b.cell);
+        draw_wall_face_at(ui, cx, walls, false, b.x, b.y, face, b.cell.h, false, true, !is_face(b.x + 1, b.y), !is_face(b.x - 1, b.y));
+    } else {
+        let up_depth = wall_depth_at(b.x, b.y - 1, face_tiles, size, is_wall);
+        let y_top = if up_depth == 0 && !border_at(b.x, b.y - 1) { b.cell.y - mapview::lift_of(b.cell.h) } else { b.cell.y };
+        let face = Rect::new(b.cell.x, y_top, b.cell.w, b.cell.y + b.cell.h - y_top);
+        draw_wall_face_at(ui, cx, walls, false, b.x, b.y, face, b.cell.h, depth == 1 && up_depth > 0, up_depth == 0, !is_face(b.x + 1, b.y), !is_face(b.x - 1, b.y));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_depth_floor_shadows_and_water(
+    ui: &mut Ui<RAct>,
+    geo: &MapGeom,
+    (mw, mh): (i32, i32),
+    (x0, x1): (i32, i32),
+    (y0, y1): (i32, i32),
+    has_ground: bool,
+    ch_at: &impl Fn(i32, i32) -> char,
+    is_wall: &impl Fn(i32, i32) -> bool,
+) {
+    for y in y0.max(0)..=y1.min(mh - 1) {
+        for x in x0.max(0)..=x1.min(mw - 1) {
+            let r = geo.cell(x, y);
+            if !is_wall(x, y) {
+                if is_wall(x, y - 1) {
+                    let sh_h = (r.h * 7 / 16).max(2);
+                    for k in 0..sh_h {
+                        let a = (120.0 * (1.0 - k as f32 / sh_h as f32).powf(1.5)).round() as u8;
+                        if a > 0 {
+                            ui.p.fill(Rect::new(r.x, r.y + k, r.w, 1), rgba(0, 0, 0, a));
+                        }
+                    }
+                }
+                if is_wall(x - 1, y) {
+                    let sh_w = (r.w * 5 / 16).max(2);
+                    for k in 0..sh_w {
+                        let a = (95.0 * (1.0 - k as f32 / sh_w as f32).powf(1.5)).round() as u8;
+                        if a > 0 {
+                            ui.p.fill(Rect::new(r.x + k, r.y, 1, r.h), rgba(0, 0, 0, a));
+                        }
+                    }
+                }
+            }
+            if ch_at(x, y) == '~' {
+                let lip = (r.w / 8).max(2);
+                if ch_at(x, y - 1) != '~' {
+                    let off = if has_ground && ch_at(x, y - 1) != '#' { lip } else { 0 };
+                    let n_h = (r.h * 9 / 32).max(2).min(r.h - off);
+                    for k in 0..n_h {
+                        let a = (130.0 * (1.0 - k as f32 / n_h as f32)).round() as u8;
+                        if a > 0 {
+                            ui.p.fill(Rect::new(r.x, r.y + off + k, r.w, 1), rgba(0, 0, 0, a));
+                        }
+                    }
+                }
+                if ch_at(x - 1, y) != '~' {
+                    let off = if has_ground && ch_at(x - 1, y) != '#' { lip } else { 0 };
+                    let w_w = (r.w * 7 / 32).max(2).min(r.w - off);
+                    for k in 0..w_w {
+                        let a = (110.0 * (1.0 - k as f32 / w_w as f32)).round() as u8;
+                        if a > 0 {
+                            ui.p.fill(Rect::new(r.x + off + k, r.y, 1, r.h), rgba(0, 0, 0, a));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn canvas_visible_rect(c: &aegis_ui::canvas::Canvas, r: Rect) -> Option<Rect> {
+    let mut out = r.intersect(Rect::new(0, 0, c.w, c.h));
+    if let Some(clip) = c.clip {
+        out = out.intersect(clip);
+    }
+    if let Some(bounds) = c.bounds {
+        out = out.intersect(bounds);
+    }
+    (out.w > 0 && out.h > 0).then_some(out)
+}
+
+/// Pulls wall-mounted masonry tones (`max - min < 40 && max < 150`) 75% toward the sampled underlying wall face.
+fn into_wall_tone(c: &aegis_ui::canvas::Canvas, dest: Rect, img: &aegis_ui::canvas::Image) -> aegis_ui::canvas::Image {
+    let sample_rect = Rect::new(dest.x, dest.y, dest.w, (dest.h * 3 / 4).max(1));
+    let Some(vis) = canvas_visible_rect(c, sample_rect) else { return img.clone() };
+    let (mut sr, mut sg, mut sb, mut sc) = (0u64, 0u64, 0u64, 0u64);
+    for py in vis.y..(vis.y + vis.h) {
+        let row = (py * c.w) as usize;
+        for px in vis.x..(vis.x + vis.w) {
+            let i = (row + px as usize) * 4;
+            sr += c.px[i] as u64;
+            sg += c.px[i + 1] as u64;
+            sb += c.px[i + 2] as u64;
+            sc += 1;
+        }
+    }
+    if sc == 0 {
+        return img.clone();
+    }
+    let face_mean = [sr as f32 / sc as f32, sg as f32 / sc as f32, sb as f32 / sc as f32];
+    let is_masonry = |r: u8, g: u8, b: u8, a: u8| {
+        if a < 128 {
+            return false;
+        }
+        let hi = r.max(g).max(b);
+        let lo = r.min(g).min(b);
+        hi - lo < 40 && hi < 150
+    };
+    let (mut pr, mut pg, mut pb, mut pc) = (0u64, 0u64, 0u64, 0u64);
+    for ch in img.px.chunks_exact(4) {
+        if is_masonry(ch[0], ch[1], ch[2], ch[3]) {
+            pr += ch[0] as u64;
+            pg += ch[1] as u64;
+            pb += ch[2] as u64;
+            pc += 1;
+        }
+    }
+    if pc == 0 {
+        return img.clone();
+    }
+    let shift = [
+        (face_mean[0] - pr as f32 / pc as f32) * 0.75,
+        (face_mean[1] - pg as f32 / pc as f32) * 0.75,
+        (face_mean[2] - pb as f32 / pc as f32) * 0.75,
+    ];
+    let mut out = img.clone();
+    for ch in out.px.chunks_exact_mut(4) {
+        if is_masonry(ch[0], ch[1], ch[2], ch[3]) {
+            for k in 0..3 {
+                ch[k] = (ch[k] as f32 + shift[k]).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    out
+}
+
+/// REGIONVIEW2: opt-in evening ambience darkened over `map_area` and warmed cleanly by per-art light pools.
+fn apply_dim_ambience(
+    ui: &mut Ui<RAct>,
+    geo: &MapGeom,
+    props: &[PropDraw],
+    prop_arts: &[(String, i32, i32, String)],
+    opaque_roofs: &[Rect],
+    is_wall: &impl Fn(i32, i32) -> bool,
+    wall_face_tiles: i32,
+) {
+    let Some(area) = canvas_visible_rect(ui.p.c, Rect::new(0, 0, ui.p.c.w, ui.p.c.h)) else { return };
+    struct Light {
+        lx: f32,
+        ly: f32,
+        inv_rx2: f32,
+        inv_ry2: f32,
+        bx0: i32,
+        by0: i32,
+        bx1: i32,
+        by1: i32,
+        col: [f32; 3],
+    }
+    let (cw, ch) = geo.cell_size();
+    let mut lights = Vec::new();
+    for p in props {
+        if p.roof.is_some() {
+            continue;
+        }
+        if opaque_roofs.iter().any(|rr| {
+            let hit = p.foot.intersect(*rr);
+            hit.w > 0 && hit.h > 0
+        }) {
+            continue;
+        }
+        let Some(art) = prop_art_of(prop_arts, geo, p) else { continue };
+        let Some((rad, col)) = light_pool(art) else { continue };
+        let (fit, _) = prop_mounted_fit(Some(art), p, geo, is_wall, wall_face_tiles);
+        let dr = fit.unwrap_or(p.rect);
+        let lx = ui.p.v.x(dr.x as f32 + dr.w as f32 * 0.5) as f32;
+        let ly = ui.p.v.y((dr.y + dr.h) as f32 - 14.0 * ch as f32 / ART_TILE as f32) as f32;
+        let rx = (rad as f32 * cw as f32 / ART_TILE as f32) * ui.p.v.s;
+        let ry = (rad as f32 * ch as f32 / ART_TILE as f32) * ui.p.v.s;
+        if rx < 1.0 || ry < 1.0 {
+            continue;
+        }
+        let bx0 = (lx - rx).floor().max(area.x as f32) as i32;
+        let by0 = (ly - ry).floor().max(area.y as f32) as i32;
+        let bx1 = (lx + rx).ceil().min((area.x + area.w) as f32) as i32;
+        let by1 = (ly + ry).ceil().min((area.y + area.h) as f32) as i32;
+        if bx1 > bx0 && by1 > by0 {
+            lights.push(Light {
+                lx,
+                ly,
+                inv_rx2: 1.0 / (rx * rx),
+                inv_ry2: 1.0 / (ry * ry),
+                bx0,
+                by0,
+                bx1,
+                by1,
+                col: [col[0] as f32, col[1] as f32, col[2] as f32],
+            });
+        }
+    }
+    let w = ui.p.c.w;
+    for py in area.y..(area.y + area.h) {
+        let fy = py as f32 + 0.5;
+        let row = (py * w) as usize;
+        for px in area.x..(area.x + area.w) {
+            let fx = px as f32 + 0.5;
+            let mut min_dark = 96.0_f32;
+            let (mut gr, mut gg, mut gb, mut gw) = (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32);
+            for l in &lights {
+                if px < l.bx0 || px >= l.bx1 || py < l.by0 || py >= l.by1 {
+                    continue;
+                }
+                let dx = fx - l.lx;
+                let dy = fy - l.ly;
+                let d2 = dx * dx * l.inv_rx2 + dy * dy * l.inv_ry2;
+                if d2 < 1.0 {
+                    let d = d2.sqrt();
+                    min_dark = min_dark.min(96.0 * d.powf(1.6));
+                    let wt = (1.0 - d).powf(1.3) * 0.28;
+                    gr += l.col[0] * wt;
+                    gg += l.col[1] * wt;
+                    gb += l.col[2] * wt;
+                    gw += wt;
+                }
+            }
+            let i = (row + px as usize) * 4;
+            let da = min_dark / 255.0;
+            let inv = 1.0 - da;
+            let mut r = ui.p.c.px[i] as f32 * inv + 6.0 * da;
+            let mut g = ui.p.c.px[i + 1] as f32 * inv + 8.0 * da;
+            let mut b = ui.p.c.px[i + 2] as f32 * inv + 16.0 * da;
+            if gw > 0.0 {
+                let ga = gw.min(0.32);
+                let ig = 1.0 - ga;
+                r = r * ig + (gr / gw) * ga;
+                g = g * ig + (gg / gw) * ga;
+                b = b * ig + (gb / gw) * ga;
+            }
+            ui.p.c.px[i] = r.round().clamp(0.0, 255.0) as u8;
+            ui.p.c.px[i + 1] = g.round().clamp(0.0, 255.0) as u8;
+            ui.p.c.px[i + 2] = b.round().clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
 /// A prop, cut at the map's rect (REGIONVIEW1: only boundary art past the map). The clip is physical px under the
 /// frame's view, so the cut moves with the map.
-fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, map: Rect, q: i32) {
-    let leaves = p.rect.intersect(map) != p.rect;
+fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, fit: Option<Rect>, mounted: bool, map: Rect, q: i32) {
+    let draw_rect = fit.unwrap_or(p.rect);
+    let leaves = draw_rect.intersect(map) != draw_rect;
     let kept = ui.p.c.clip;
     if leaves {
         let inside = ui.p.v.rect(map);
         ui.p.c.clip = Some(kept.map_or(inside, |c| c.intersect(inside)));
     }
-    draw_prop_art(ui, cx, p, q);
+    draw_prop_art_at(ui, cx, p, draw_rect, mounted, map, q);
     ui.p.c.clip = kept;
 }
 
-/// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
-/// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge; tilted,
-/// raised over the footprint with a face its lift tall, EXPLOREVIEW1 3.4) and a ground prop is nothing. `q`: the zoom.
+/// Legacy test entrypoint: draws prop art in `p.rect`.
+#[cfg(test)]
 fn draw_prop_art(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, q: i32) {
-    let (w, h) = ((p.rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (p.rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
+    draw_prop_art_at(ui, cx, p, p.rect, false, Rect::new(-1_000_000, -1_000_000, 2_000_000, 2_000_000), q);
+}
+
+/// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
+/// standing props draw ONLY a subtle thin dark base contact line at feet (NO cast oval floor shadows). Without art a
+/// standing prop is a plain block over its footprint (`q`: the zoom).
+fn draw_prop_art_at(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, draw_rect: Rect, mounted: bool, map: Rect, q: i32) {
+    let (w, h) = ((draw_rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (draw_rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
     let img = match &p.file {
         Some(f) if p.flip => cx.art.image_mirrored(f, w, h),
         Some(f) => cx.art.image(f, w, h),
         None => None,
     };
     if let Some(img) = img {
-        ui.p.image(img, p.rect);
+        if !p.ground && p.roof.is_none() && !mounted {
+            if let Some(b) = img.opaque_bounds(1) {
+                let lx = draw_rect.x + (b.x * draw_rect.w) / img.w + 1;
+                let rx = draw_rect.x + ((b.x + b.w) * draw_rect.w + img.w - 1) / img.w - 1;
+                if rx > lx {
+                    let by = draw_rect.y + ((b.y + b.h) * draw_rect.h + img.h / 2) / img.h;
+                    let thin = (q / 4).max(1);
+                    let contact = Rect::new(lx, by - thin, rx - lx, thin + 1).intersect(map);
+                    if contact.w > 0 && contact.h > 0 {
+                        ui.p.fill(contact, rgba(0, 0, 0, 95));
+                    }
+                }
+            }
+        }
+        if mounted {
+            let dest = ui.p.v.rect(draw_rect);
+            let pulled = into_wall_tone(ui.p.c, dest, img);
+            ui.p.image(&pulled, draw_rect);
+        } else {
+            ui.p.image(img, draw_rect);
+        }
         return;
     }
     if p.ground {
         return;
     }
-    let r = p.rect;
+    let r = draw_rect;
     ui.p.fill(r, BOX_FILL);
     let face = if p.file.is_none() && r.y < p.foot.y { p.foot.y - r.y } else { (r.h / 4).clamp(1, BOX_FACE_H * q / 4) };
     ui.p.fill(Rect::new(r.x, r.y + r.h - face, r.w, face), BOX_FACE);
@@ -5871,6 +6462,433 @@ mod ground_tests {
                 enc.set_depth(png::BitDepth::Eight);
                 enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
             }
+            let _ = std::fs::remove_dir_all(&root);
+        }
+    }
+
+    /// REGIONVIEW2 (PR5-59): wandering water-clamped grounds, patchy/under layers, free-standing `sort` prop floors,
+    /// 2-tile wall faces with pale caps + SE shadows + inner water rims, thin prop base contact lines (no cast oval
+    /// shadows), `into_wall` masonry pull, opt-in `dim_ambience` + light pools, and `FB-271(b)` NPC badges under roofs.
+    mod regionview2_tests {
+        use super::*;
+
+        fn rgba_png(root: &Path, rel: &str, w: i32, h: i32, mut f: impl FnMut(i32, i32) -> [u8; 4]) {
+            let file = root.join(rel);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            let mut buf = Vec::with_capacity((w * h * 4) as usize);
+            for y in 0..h {
+                for x in 0..w {
+                    buf.extend_from_slice(&f(x, y));
+                }
+            }
+            let out = std::fs::File::create(&file).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(out), w as u32, h as u32);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&buf).unwrap();
+        }
+
+        fn patch_loc(data: &mut emberwake_world::Data, world_id: &str, loc_id: &str, f: impl FnOnce(&mut Dict)) {
+            if let Some(w) = data.catalogs.worlds.get_mut(world_id) {
+                if let Some(locs) = w.own.get_mut("locations") {
+                    if let Some(loc) = locs.iter_mut().find(|l| s(l, "id") == loc_id || s(l, "_qid") == loc_id) {
+                        f(loc);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn unflagged_maps_render_byte_identically_when_new_flags_omitted() {
+            for view in views() {
+                let d_omitted = PLAIN.data(|_| {});
+                let d_explicit = PLAIN.data(|m| {
+                    m["dim_ambience"] = json!(false);
+                    m["wall_face_tiles"] = json!(0);
+                });
+                let (mut cx_a, mut g_a) = (PLAIN.cx_on(d_omitted, view), gfx());
+                let (mut cx_b, mut g_b) = (PLAIN.cx_on(d_explicit, view), gfx());
+                let mut m_a = RegionMap::new(&mut cx_a);
+                let mut m_b = RegionMap::new(&mut cx_b);
+                frame(&mut m_a, &mut cx_a, &mut g_a, 1.0);
+                frame(&mut m_b, &mut cx_b, &mut g_b, 1.0);
+                assert_eq!(g_a.canvas.px, g_b.canvas.px, "{view}: unflagged maps byte-identical");
+            }
+        }
+
+        #[test]
+        fn ground_water_clamp_stone_rim_and_patchy_under_compose_through_region_map() {
+            let mut data = PLAIN.data(|m| {
+                let mut g_rows: Vec<String> = Vec::new();
+                for y in 0..PLAIN.rows {
+                    let mut row = String::new();
+                    for x in 0..PLAIN.cols {
+                        row.push(if (15..=21).contains(&x) && (12..=18).contains(&y) { 'w' } else { 'p' });
+                    }
+                    g_rows.push(row);
+                }
+                let mut r_rows = m["rows"].as_array().unwrap().clone();
+                for y in 12..=18 {
+                    let mut chars: Vec<char> = r_rows[y as usize].as_str().unwrap().chars().collect();
+                    for x in 15..=21 {
+                        chars[x as usize] = '~';
+                    }
+                    r_rows[y as usize] = Value::String(chars.into_iter().collect());
+                }
+                m["rows"] = Value::Array(r_rows);
+                m["ground"] = json!(g_rows);
+                m["ground_legend"] = json!({"p": "zz_patch", "w": "zz_water"});
+            });
+            data.edit_cat(|cat| {
+                cat.grounds.insert(
+                    "zz_under".into(),
+                    emberwake_data::GroundDef::from_obj(
+                        json!({"id": "zz_under", "name": "Under", "order": 1, "kind": "land", "colour": "#305070", "wear": 0.0, "tone": 0.0})
+                            .as_object()
+                            .unwrap(),
+                    ),
+                );
+                cat.grounds.insert(
+                    "zz_patch".into(),
+                    emberwake_data::GroundDef::from_obj(
+                        json!({"id": "zz_patch", "name": "Patch", "order": 5, "kind": "land", "colour": "#a03020", "wear": 0.0, "tone": 0.0, "patchy": 0.5, "under": "zz_under"})
+                            .as_object()
+                            .unwrap(),
+                    ),
+                );
+                cat.grounds.insert(
+                    "zz_water".into(),
+                    emberwake_data::GroundDef::from_obj(
+                        json!({"id": "zz_water", "name": "Water", "order": 10, "kind": "water", "colour": "#143248", "wear": 0.0, "tone": 0.0})
+                            .as_object()
+                            .unwrap(),
+                    ),
+                );
+            });
+            let (mut cx, mut g) = (PLAIN.cx_on(data, "square"), gfx());
+            cx.gs_mut().position = (12, 15);
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            // Water center stays exact clamped water colour; water lip next to land shows stone rim (96, 98, 108).
+            let wc = mid(&map, (18, 15));
+            assert_eq!(px(&g, wc.0, wc.1), [0x14, 0x32, 0x48]);
+            let water_cell = map.geo.cell(15, 15);
+            let lip_px = px(&g, water_cell.x, water_cell.y + water_cell.h / 2);
+            assert_eq!(lip_px, [96, 98, 108], "stone rim on water border next to land");
+            // Patchy land over unseen `zz_under` renders both patchy top and under colours.
+            let (mut saw_top, mut saw_under) = (false, false);
+            for cy in 8..16 {
+                for cx_i in 6..13 {
+                    let r = map.geo.cell(cx_i, cy);
+                    for py in r.y..(r.y + r.h) {
+                        for px_i in r.x..(r.x + r.w) {
+                            let c = px(&g, px_i, py);
+                            if c == [0xa0, 0x30, 0x20] {
+                                saw_top = true;
+                            }
+                            if c == [0x30, 0x50, 0x70] {
+                                saw_under = true;
+                            }
+                        }
+                    }
+                }
+            }
+            assert!(saw_top && saw_under, "patchy top={saw_top} and under={saw_under} both appear");
+        }
+
+        #[test]
+        fn freestanding_sort_prop_renders_floor_under_wall_cells_without_changing_collision() {
+            let floor = [72, 130, 88];
+            for view in views() {
+                let root = scratch(&format!("freestand_{view}"));
+                solid(&root, "tilesets/common/floor/v0.png", 32, 32, floor);
+                solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+                solid(&root, "tilesets/common/wall_face/v0.png", 32, 16, FACE);
+                // Transparent cutout prop so underlying floor shines through at its edges.
+                rgba_png(&root, "props/common/zz_brazier_tile/v0.png", 32, 32, |x, y| {
+                    if (12..20).contains(&x) && (10..22).contains(&y) {
+                        [210, 90, 40, 255]
+                    } else {
+                        [0, 0, 0, 0]
+                    }
+                });
+                let data = PLAIN.data(|m| {
+                    let mut rows: Vec<String> = m["rows"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+                    let set = |rows: &mut Vec<String>, x: usize, y: usize, ch: char| {
+                        let mut c: Vec<char> = rows[y].chars().collect();
+                        c[x] = ch;
+                        rows[y] = c.into_iter().collect();
+                    };
+                    set(&mut rows, 18, 16, '#');
+                    // Buried 3x3 `#` pocket whose center (25, 16) is completely enclosed by `#`
+                    for dy in 15..=17 {
+                        for dx in 24..=26 {
+                            set(&mut rows, dx, dy, '#');
+                        }
+                    }
+                    m["rows"] = json!(rows);
+                    m["props"] = json!([
+                        {"id": "p_free", "art": "zz_brazier_tile", "x": 18, "y": 16, "w": 1, "h": 1, "layer": "sort", "variant": 0, "flip": false},
+                        {"id": "p_border", "art": "zz_brazier_tile", "x": 0, "y": 16, "w": 1, "h": 1, "layer": "sort", "variant": 0, "flip": false},
+                        {"id": "p_buried", "art": "zz_brazier_tile", "x": 25, "y": 16, "w": 1, "h": 1, "layer": "sort", "variant": 0, "flip": false}
+                    ]);
+                });
+                let (mut cx, mut g) = (PLAIN.cx_on(data.clone(), view), gfx());
+                cx.art = art_of(&root);
+                cx.gs_mut().position = (19, 16);
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                // Collision in `rows` remains blocked (`#`), while visual corner pixel of (18, 16) shows floor.
+                let t = explore::template_of(&data, explore::location(&data, cx.gs()));
+                assert_eq!(explore::tile(t, 18, 16), Some('#'));
+                let cell = map.geo.cell(18, 16);
+                assert_eq!(px(&g, cell.x + 1, cell.y + 1), floor, "{view}: free-standing sort prop gets floor under #");
+                // Buried center (25, 16) has no cardinal open neighbor -> keeps wall!
+                let buried = map.geo.cell(25, 16);
+                assert_eq!(px(&g, buried.x + 1, buried.y + 1), WALL, "{view}: enclosed pocket stays wall");
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+
+        #[test]
+        fn wall_face_tiles_depth_pale_cap_shadows_water_rim_and_wall_set_work_across_views() {
+            let floor = [150, 160, 150];
+            let face_base = [160, 160, 160];
+            let face_stone = [120, 140, 180];
+            for view in views() {
+                let root = scratch(&format!("depth_{view}"));
+                solid(&root, "tilesets/common/floor/v0.png", 32, 32, floor);
+                solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+                solid(&root, "tilesets/common/wall_face/v0.png", 32, 16, face_base);
+                solid(&root, "tilesets/common/water/v0.png", 32, 32, [40, 110, 160]);
+                solid(&root, "tilesets/zz_stone/wall/v0.png", 32, 32, [70, 75, 90]);
+                solid(&root, "tilesets/zz_stone/wall_face/v0.png", 32, 16, face_stone);
+                // Portcullis with grey masonry pixels (max-min < 40, max < 150)
+                solid(&root, "props/common/portcullis/v0.png", 72, 84, [60, 60, 60]);
+                let mut data = PLAIN.data(|m| {
+                    let mut rows: Vec<String> = vec![".".repeat(PLAIN.cols as usize); PLAIN.rows as usize];
+                    for y in 0..PLAIN.rows as usize {
+                        let mut c: Vec<char> = rows[y].chars().collect();
+                        c[0] = '#';
+                        c[PLAIN.cols as usize - 1] = '#';
+                        rows[y] = c.into_iter().collect();
+                    }
+                    rows[0] = "#".repeat(PLAIN.cols as usize);
+                    rows[PLAIN.rows as usize - 1] = "#".repeat(PLAIN.cols as usize);
+                    // 3-row thick interior wall spanning x=4..18, y=8..=10, open at y=11, plus a vertical east-shadow wall at x=18,y=11..=13
+                    let set = |rows: &mut Vec<String>, x: usize, y: usize, ch: char| {
+                        let mut c: Vec<char> = rows[y].chars().collect();
+                        c[x] = ch;
+                        rows[y] = c.into_iter().collect();
+                    };
+                    for y in 8..=10 {
+                        for x in 4..18 {
+                            set(&mut rows, x, y, '#');
+                        }
+                    }
+                    for y in 11..=13 {
+                        set(&mut rows, 18, y, '#');
+                    }
+                    for y in 14..=16 {
+                        for x in 10..=14 {
+                            set(&mut rows, x, y, '~');
+                        }
+                    }
+                    let mut zones = vec!["-".repeat(PLAIN.cols as usize); PLAIN.rows as usize];
+                    set(&mut zones, 12, 11, 's');
+                    m["rows"] = json!(rows);
+                    m["zones"] = json!(zones);
+                    m["zone_legend"] = json!({"s": {"id": "zz_hall", "kind": "safe", "indoor": true, "wall_set": "zz_stone"}});
+                    m["wall_face_tiles"] = json!(2);
+                    m["props"] = json!([
+                        {"id": "p_gate", "art": "portcullis", "x": 6, "y": 9, "w": 2, "h": 2, "layer": "sort", "variant": 0, "flip": false}
+                    ]);
+                });
+                let (mut cx, mut g) = (PLAIN.cx_on(data.clone(), view), gfx());
+                cx.art = art_of(&root);
+                cx.gs_mut().position = (14, 12);
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                // Upper face row (9) has base face color and pale top cap line (132, 130, 140); lower face row (10) is darker (* 0.72).
+                let upper = mid(&map, (9, 9));
+                let lower = mid(&map, (9, 10));
+                assert_eq!(px(&g, upper.0, upper.1), face_base, "{view}: depth=2 upper face");
+                assert_eq!(px(&g, lower.0, lower.1), [115, 115, 115], "{view}: depth=1 lower face darkened 0.72");
+                let r9 = map.geo.cell(9, 9);
+                let top_y = if view == "tilted" { r9.y - mapview::lift_of(r9.h) } else { r9.y };
+                assert_eq!(px(&g, r9.x + r9.w / 2, top_y), [132, 130, 140], "{view}: pale top cap line");
+                // Indoor zone `wall_set` `zz_stone` renders on (12, 10) adjacent to zone 's' at (12, 11).
+                let zone_face = mid(&map, (12, 10));
+                assert_eq!(px(&g, zone_face.0, zone_face.1), [86, 101, 130], "{view}: zone wall_set darkened face");
+                // South wall floor shadow on top of (9, 11) and east shadow on left of (19, 12) are darker than clean open floor (9, 12).
+                let open_floor = mid(&map, (9, 12));
+                assert_eq!(px(&g, open_floor.0, open_floor.1), floor);
+                let r11 = map.geo.cell(9, 11);
+                assert!(px(&g, r11.x + r11.w / 2, r11.y)[0] < floor[0], "{view}: south wall floor shadow");
+                let r19 = map.geo.cell(19, 12);
+                assert!(px(&g, r19.x, r19.y + r19.h / 2)[0] < floor[0], "{view}: east wall floor shadow");
+                // Dark inner N/W water rim on (10, 14) is darker than open water midpoint (12, 15).
+                let w_mid = mid(&map, (12, 15));
+                let w_nw = map.geo.cell(10, 14);
+                assert!(px(&g, w_nw.x + 1, w_nw.y + 1)[2] < px(&g, w_mid.0, w_mid.1)[2], "{view}: dark inner water rim");
+                // Portcullis at (6, 9..10) keeps walls intact behind and pulls dark grey masonry (60) upward toward wall face tone.
+                let gate = mid(&map, (6, 9));
+                assert!(px(&g, gate.0, gate.1)[0] > 75, "{view}: into_wall pulls masonry toward lighter face");
+                let _ = &mut data;
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+
+        #[test]
+        fn standing_prop_draws_only_thin_base_contact_line_and_no_cast_oval_shadow() {
+            let floor = [192, 192, 192];
+            let root = scratch("contact_only");
+            solid(&root, "tilesets/common/floor/v0.png", 32, 32, floor);
+            solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+            // Opaque narrow pedestal centered at x=10..22, y=6..24, transparent outer bottom corners and rows below y=24
+            rgba_png(&root, "props/common/zz_pedestal/v0.png", 32, 32, |x, y| {
+                if (10..22).contains(&x) && (6..24).contains(&y) {
+                    [210, 160, 80, 255]
+                } else {
+                    [0, 0, 0, 0]
+                }
+            });
+            let data = PLAIN.data(|m| {
+                m["props"] = json!([
+                    {"id": "p_ped", "art": "zz_pedestal", "x": 16, "y": 14, "w": 1, "h": 1, "layer": "sort", "variant": 0, "flip": false}
+                ]);
+            });
+            let (mut cx, mut g) = (PLAIN.cx_on(data, "square"), gfx());
+            cx.art = art_of(&root);
+            cx.gs_mut().position = (10, 10);
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let cell = map.geo.cell(16, 14);
+            // opaque_bounds bottom in 16x16 cell is y=12 (24/2); contact line draws at y=12 within center x=6..10
+            let contact_px = px(&g, cell.x + cell.w / 2, cell.y + 12);
+            assert!(contact_px[0] < floor[0], "thin contact line at prop feet: {contact_px:?}");
+            // Outer edges left/right of pedestal (where an oval shadow would extend) and below y=13 remain exact floor
+            assert_eq!(px(&g, cell.x + 1, cell.y + 12), floor, "no wide oval shadow to left");
+            assert_eq!(px(&g, cell.x + cell.w - 2, cell.y + 12), floor, "no wide oval shadow to right");
+            assert_eq!(px(&g, cell.x + cell.w / 2, cell.y + 15), floor, "no cast oval shadow extending below feet");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+
+        #[test]
+        fn dim_ambience_defaults_off_and_illuminates_light_pools_when_enabled() {
+            let floor = [140, 150, 160];
+            let root = scratch("dim_pools");
+            solid(&root, "tilesets/common/floor/v0.png", 32, 32, floor);
+            solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+            solid(&root, "props/common/brazier/v0.png", 32, 32, [220, 120, 40]);
+            let make = |dim: bool| {
+                PLAIN.data(|m| {
+                    if dim {
+                        m["dim_ambience"] = json!(true);
+                    }
+                    m["props"] = json!([
+                        {"id": "p_fire", "art": "brazier", "x": 14, "y": 14, "w": 1, "h": 1, "layer": "sort", "variant": 0, "flip": false}
+                    ]);
+                })
+            };
+            let (mut cx_day, mut g_day) = (PLAIN.cx_on(make(false), "square"), gfx());
+            cx_day.art = art_of(&root);
+            cx_day.gs_mut().position = (18, 14);
+            let mut m_day = RegionMap::new(&mut cx_day);
+            frame(&mut m_day, &mut cx_day, &mut g_day, 1.0);
+            let far_day = mid(&m_day, (26, 14));
+            assert_eq!(px(&g_day, far_day.0, far_day.1), floor, "daylight map unaffected when dim_ambience omitted");
+
+            let (mut cx_dim, mut g_dim) = (PLAIN.cx_on(make(true), "square"), gfx());
+            cx_dim.art = art_of(&root);
+            cx_dim.gs_mut().position = (18, 14);
+            let mut m_dim = RegionMap::new(&mut cx_dim);
+            frame(&mut m_dim, &mut cx_dim, &mut g_dim, 1.0);
+            let far_dim_pt = mid(&m_dim, (26, 14));
+            let far_dim = px(&g_dim, far_dim_pt.0, far_dim_pt.1);
+            let near_pt = mid(&m_dim, (15, 14));
+            let near_dim = px(&g_dim, near_pt.0, near_pt.1);
+            assert!(far_dim[0] < floor[0] - 20, "far floor darkened under dim_ambience: {far_dim:?}");
+            assert!(near_dim[0] > far_dim[0] + 35, "brazier light pool illuminates nearby floor: near={near_dim:?} far={far_dim:?}");
+            assert!(near_dim[0] > near_dim[2], "warm amber light tint raises red above blue: {near_dim:?}");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+
+        #[test]
+        fn fb271b_hides_npc_badge_under_opaque_roof_and_shows_when_faded() {
+            let badge_col = [255, 20, 220];
+            let root = scratch("fb271b_badge");
+            solid(&root, "tilesets/common/floor/v0.png", 32, 32, [60, 70, 60]);
+            solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+            solid(&root, "props/common/zz_roof/v0.png", 7 * 32, 6 * 32, [30, 30, 45]);
+            solid(&root, "ui/services/shop.png", 16, 16, badge_col);
+            let mut data = PLAIN.data(|m| {
+                let mut rows: Vec<String> = (0..PLAIN.rows)
+                    .map(|y| (0..PLAIN.cols).map(|x| {
+                        let ring = (24..=30).contains(&x) && (24..=29).contains(&y);
+                        let floor = (25..=29).contains(&x) && (25..=28).contains(&y);
+                        if (x, y) == (27, 29) || floor { '.' } else if ring { '#' } else { PLAIN.tile(x, y) }
+                    }).collect())
+                    .collect();
+                m["rows"] = json!(rows);
+                m["zones"] = json!((0..PLAIN.rows).map(|y| (0..PLAIN.cols).map(|x| {
+                    let floor = (25..=29).contains(&x) && (25..=28).contains(&y);
+                    if (x, y) == (27, 29) || floor { 'h' } else { '-' }
+                }).collect::<String>()).collect::<Vec<_>>());
+                m["zone_legend"] = json!({"h": {"id": "zz_den", "kind": "safe", "indoor": true, "wall_set": "zz_plaster"}});
+                m["props"].as_array_mut().unwrap().push(json!({
+                    "id": "den_roof", "art": "zz_roof", "x": 24, "y": 24, "w": 7, "h": 6,
+                    "layer": "roof", "variant": 0, "flip": false, "roof_of": "zz_den"
+                }));
+                let anchors = m["anchors"].as_array_mut().unwrap();
+                anchors.push(json!({"id": "in_npc", "x": 26, "y": 26}));
+                anchors.push(json!({"id": "out_npc", "x": 22, "y": 31}));
+                let _ = &mut rows;
+            });
+            let (mut cx, mut g) = (PLAIN.cx_on(data.clone(), "square"), gfx());
+            let world_id = cx.gs().world_id.clone();
+            let loc_id = cx.gs().location_id.clone();
+            if let Some(w) = data.catalogs.worlds.get_mut(&world_id) {
+                w.own.entry("characters".into()).or_default().push(
+                    json!({"id": "zz_keeper", "_world": world_id, "_qid": format!("{world_id}:zz_keeper"), "name": "Keeper"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                );
+                w.own.entry("shops".into()).or_default().push(
+                    json!({"id": "zz_shop", "_world": world_id, "_qid": format!("{world_id}:zz_shop"), "keeper": "zz_keeper"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                );
+            }
+            patch_loc(&mut data, &world_id, &loc_id, |loc| {
+                loc.insert(
+                    "markers".into(),
+                    json!([
+                        {"id": "m_in", "kind": "npc", "character": "zz_keeper", "anchor": "in_npc", "state": "present"},
+                        {"id": "m_out", "kind": "npc", "character": "zz_keeper", "anchor": "out_npc", "state": "present"}
+                    ]),
+                );
+            });
+            cx.app.data = std::sync::Arc::new(data);
+            cx.art = art_of(&root);
+            cx.settings.v["reduce_motion"] = json!(true);
+            let mut map = RegionMap::new(&mut cx);
+
+            let has_badge_near = |map: &RegionMap, g: &Gfx, tile: Pos| {
+                let r = map.geo.cell(tile.0 as i32, tile.1 as i32);
+                (r.y - 12..r.y + r.h).any(|py| (r.x - 4..r.x + r.w + 16).any(|px_i| px(g, px_i, py) == badge_col))
+            };
+            // Party outside: roof is opaque -> indoor NPC badge suppressed, outdoor NPC badge visible
+            cx.gs_mut().position = (27, 33);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert!(!has_badge_near(&map, &g, (26, 26)), "indoor NPC badge suppressed under opaque roof");
+            assert!(has_badge_near(&map, &g, (22, 31)), "outdoor NPC badge stays visible");
+            // Party inside: roof faded -> indoor NPC badge reappears
+            cx.gs_mut().position = (27, 27);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert!(has_badge_near(&map, &g, (26, 26)), "indoor NPC badge visible when roof is faded");
             let _ = std::fs::remove_dir_all(&root);
         }
     }

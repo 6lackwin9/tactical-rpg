@@ -46,23 +46,32 @@ struct Picture {
     plan: GroundPlan,
     textures: Vec<Option<Image>>,
     colours: Vec<Rgba>,
+    under_textures: Vec<Option<Image>>,
+    under_colours: Vec<Option<Rgba>>,
     placed: Vec<PlacedPatch>,
     cell: (i32, i32),
 }
 
 impl Picture {
     fn layers(&self) -> Vec<GroundLayer<'_>> {
-        let parts = self.plan.layers.iter().zip(&self.textures).zip(&self.colours);
-        parts
-            .map(|((def, tex), colour)| GroundLayer {
+        self.plan
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(i, def)| GroundLayer {
                 order: def.order,
-                tex: tex.as_ref(),
-                colour: *colour,
+                tex: self.textures[i].as_ref(),
+                colour: self.colours[i],
                 wear: def.wear as f32,
                 strays: def.strays,
                 tone: def.tone as f32,
                 patches: def.patches as f32,
                 sunken: def.is_water(),
+                patchy: def.patchy as f32,
+                under_tex: self.under_textures[i].as_ref(),
+                under_colour: self.under_colours[i].unwrap_or([0, 0, 0, 0]),
+                clamp_water: def.is_water(),
+                stone_rim: def.is_water(),
                 marks: Vec::new(),
                 marks_per_100: 0,
             })
@@ -101,19 +110,26 @@ fn picture(cx: &mut Cx, t: &Dict, sets: &[String], view: View, q: i32) -> Option
     }
     let colours: Vec<Rgba> = plan.layers.iter().map(|l| flat_colour(&l.colour)).collect::<Option<_>>()?;
     let (tw, th) = (TEX_CELLS * cell.0, TEX_CELLS * cell.1);
-    let textures = plan
-        .layers
-        .iter()
-        .map(|l| {
-            let dirs = emberwake_content::art::ground_dirs(sets, &l.id);
-            let refs: Vec<&str> = dirs.iter().map(String::as_str).collect();
-            // only `v0` is read: a ground has one texture
-            let rel = cx.art.pick(&refs, Some(0), 0, 0)?;
-            cx.art.image(&rel, tw, th).cloned()
-        })
-        .collect();
+    let mut load_tex = |id: &str| -> Option<Image> {
+        let dirs = emberwake_content::art::ground_dirs(sets, id);
+        let refs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+        // only `v0` is read: a ground has one texture
+        let rel = cx.art.pick(&refs, Some(0), 0, 0)?;
+        cx.art.image(&rel, tw, th).cloned()
+    };
+    let textures = plan.layers.iter().map(|l| load_tex(&l.id)).collect();
+    let (mut under_textures, mut under_colours) = (Vec::with_capacity(plan.layers.len()), Vec::with_capacity(plan.layers.len()));
+    for l in &plan.layers {
+        let u = if l.patchy > 0.0 && !l.under.is_empty() {
+            plan.layers.iter().chain(plan.under.iter()).find(|x| x.id == l.under).or_else(|| d.cat.grounds.get(&l.under))
+        } else {
+            None
+        };
+        under_textures.push(u.and_then(|x| load_tex(&x.id)));
+        under_colours.push(u.and_then(|x| flat_colour(&x.colour)));
+    }
     let placed = plan.placed.iter().map(|p| PlacedPatch { x: p.x, y: p.y, w: p.w, h: p.h, strength: p.strength }).collect();
-    Some(Picture { plan, textures, colours, placed, cell })
+    Some(Picture { plan, textures, colours, under_textures, under_colours, placed, cell })
 }
 
 /// A region map screen's ground: the kept job and key.
@@ -306,6 +322,31 @@ mod tests {
         assert!(close(layers[1].wear, 0.1) && close(layers[1].tone, 0.08) && close(layers[1].patches, 0.2), "the row's numbers");
         assert!(close(layers[0].wear, 0.0) && close(layers[0].tone, 0.04), "the water's");
         assert_eq!(layers[0].colour, [0x10, 0x20, 0x30, 255], "opaque");
+        assert!(layers[0].clamp_water && layers[0].stone_rim && !layers[1].clamp_water && !layers[1].stone_rim);
+        assert!(close(layers[1].patchy, 0.0) && layers[1].under_tex.is_none() && layers[1].under_colour[3] == 0);
+    }
+
+    #[test]
+    fn patchy_and_under_reach_composer_even_when_under_is_not_placed_on_cells() {
+        let mut cx = game_cx();
+        let under = emberwake_data::GroundDef::from_obj(json!({"id": "zz_under", "name": "Under", "order": 1, "kind": "land", "colour": "#304050"}).as_object().unwrap());
+        let top = emberwake_data::GroundDef::from_obj(json!({"id": "zz_top", "name": "Top", "order": 20, "kind": "land", "colour": "#101214", "patchy": 0.52, "under": "zz_under"}).as_object().unwrap());
+        let mut data = (*cx.app.data).clone();
+        data.edit_cat(|cat| {
+            cat.grounds.insert(under.id.clone(), under);
+            cat.grounds.insert(top.id.clone(), top);
+        });
+        cx.app.data = Arc::new(data);
+        let mut t = template(2, 1);
+        t.insert("rows".into(), json!([".."]));
+        t.insert("ground".into(), json!(["tt"]));
+        t.insert("ground_legend".into(), json!({"t": "zz_top"}));
+        let p = picture(&mut cx, &t, &[], View::Square, 4).expect("a picture");
+        let layers = p.layers();
+        assert_eq!(layers.len(), 1);
+        assert!((layers[0].patchy - 0.52).abs() < 1e-6);
+        assert_eq!(layers[0].under_colour, [0x30, 0x40, 0x50, 255]);
+        assert!(layers[0].under_tex.is_none());
     }
 
     /// A row the checks would refuse, and a map past the composer's limit, keep the map's tiles; a limit-size map plans.
