@@ -281,10 +281,10 @@ fn a_two_handed_main_hand_stows_what_the_off_hand_cant_hold_and_refuses_it_after
     assert_eq!((st["sword"], st["shield"]), (2, 2), "the sword and the shield back in the stash");
     assert!(drop_move(&d, "w", &mut m, &mut st, "stash.shield", "slot.off_hand", false).unwrap_err().contains("needs both hands"));
     assert!(equip(&d, "w", &mut m, &mut st, "focus", Some("off_hand")).unwrap_err().contains("needs both hands"), "a focus too");
-    // a one-handed weapon may stay with a two-hander (off_hand_ok)
-    assert!(off_hand_ok(Some(maul), &d.cat.items["dagger"]));
-    equip(&d, "w", &mut m, &mut st, "dagger", Some("off_hand")).unwrap();
-    assert_eq!(worn(&m, "off_hand").as_deref(), Some("dagger"));
+    // GEAR-REWORK1 (PR5-51a): no weapon switch, so no one-handed backup weapon beside a two-hander either
+    assert!(!off_hand_ok(Some(maul), &d.cat.items["dagger"]));
+    assert!(equip(&d, "w", &mut m, &mut st, "dagger", Some("off_hand")).unwrap_err().contains("needs both hands"), "a dagger too");
+    assert_eq!(worn(&m, "off_hand"), None);
     assert!(equip(&d, "w", &mut m, &mut st, "maul", Some("off_hand")).unwrap_err().contains("doesn't go in the off hand slot"), "a two-hander is no off-hand item");
 }
 

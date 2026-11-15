@@ -2,7 +2,7 @@
 //! heroes and training dummy (LAYER-DOWN-2: the units the catalog marks, `cast_of`), a shared stash, and the battle's own rules applied one action at a time. Strike with a
 //! hand, use any catalog skill (AP, stance switch, guard, focus, rest, statuses), let the dummy strike back, roll rounds,
 //! shift stances, use the battle pouch, benchmark a skill, equip from the stash (class training, slot fit and the
-//! two-handed rule as everywhere), apply loadout presets, switch the ready weapon and spend attribute points. Every
+//! two-handed rule as everywhere), apply loadout presets and spend attribute points (GEAR-REWORK1: no weapon switch). Every
 //! action is logged with a step-by-step damage breakdown (markup `[color=#rrggbb]`, `[b]`); stage effects queue for the
 //! screen. Crit rolls are seeded, so benchmarks repeat.
 
@@ -18,7 +18,7 @@ use rpgkit_data::{Catalog, Deck, DojoPresetDef, ItemDef, SkillDef, UnitDef, STAT
 use rpgkit_rules::{build_from, Overrides, UnitBuild};
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
-use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for, Equipment, Slot};
+use rpgkit_rules::gear::{item_fits_slot, off_hand_ok, trained_for, wear_lock, Equipment, Slot};
 use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::stats::Proficiency;
 use rpgkit_rules::status;
@@ -588,16 +588,15 @@ impl DojoSession {
 
     // ---- Strikes ------------------------------------------------------------------------------------------------
 
-    /// get_action_availability: main strike, ranged volley, off-hand strike, dual strike and weapon switch.
+    /// get_action_availability: main strike, ranged volley, off-hand strike and dual strike. GEAR-REWORK1 (PR5-51a, U3.3 1):
+    /// no weapon switch (the main and off hand are always live together).
     pub fn availability(&self) -> IndexMap<&'static str, Avail> {
         let inv = &self.hero().inventory;
         let (main, off, shield) = (inv.main_weapon(), inv.offhand_weapon(), inv.shield());
-        let (switch_needed, off_active) = (inv.needs_weapon_switch(), inv.is_offhand_active());
         let off_offensive = off.is_some_and(|o| o.item.base_power > 0);
         let name = |e: Option<&Equipment>| e.map(|e| e.item.name.clone()).unwrap_or_else(|| "Unarmed".into());
         let a = |enabled: bool, tip: String| Avail { enabled, tip };
         let mut out = IndexMap::new();
-        let busy = format!("{} is active - Switch Weapon (1 block) to draw {}", name(off), name(main));
         match main {
             None => {
                 out.insert("main", a(true, "Unarmed melee strike against the Dummy".into()));
@@ -605,21 +604,17 @@ impl DojoSession {
             }
             Some(m) if m.is_ranged_weapon() => {
                 out.insert("main", a(false, format!("Cannot melee with ranged weapon ({})", m.item.name)));
-                out.insert("ranged", a(!off_active, if off_active { busy.clone() } else { format!("Ranged volley with {}", m.item.name) }));
+                out.insert("ranged", a(true, format!("Ranged volley with {}", m.item.name)));
             }
             Some(m) => {
-                out.insert("main", a(!off_active, if off_active { busy.clone() } else { format!("Main-hand strike with {}", m.item.name) }));
+                out.insert("main", a(true, format!("Main-hand strike with {}", m.item.name)));
                 out.insert("ranged", a(false, format!("Cannot fire a volley with melee weapon ({})", m.item.name)));
             }
         }
         out.insert(
             "offhand",
             if off_offensive {
-                if switch_needed && !off_active {
-                    a(false, format!("2H {} is active - Switch Weapon (1 block) to ready {}", name(main), name(off)))
-                } else {
-                    a(true, format!("Off-hand strike with {} (scales with {})", name(off), off.map(|o| o.item.scaling_stat.clone()).unwrap_or_default()))
-                }
+                a(true, format!("Off-hand strike with {} (scales with {})", name(off), off.map(|o| o.item.scaling_stat.clone()).unwrap_or_default()))
             } else if let Some(s) = shield {
                 a(false, format!("{} is a shield (mitigation only)", s.item.name))
             } else {
@@ -628,32 +623,20 @@ impl DojoSession {
         );
         let can_dual = main.is_some_and(|m| m.is_melee_weapon() && !m.item.two_handed) && off_offensive;
         out.insert("dual", if can_dual { a(true, format!("Combo: strike with {} and {} in one action", name(main), name(off))) } else { a(false, "Needs a 1H melee main weapon and an offensive off-hand weapon".into()) });
-        out.insert(
-            "switch",
-            if switch_needed {
-                a(true, format!("1 block: ready {} (2H main + off-hand weapons share one active slot)", if off_active { name(main) } else { name(off) }))
-            } else {
-                a(false, "No switch needed: 1H weapons attack with both hands freely. Pair a 2H weapon with an off-hand weapon to use this.".into())
-            },
-        );
         out
     }
 
     /// DojoSession.perform_strike: "main", "offhand", "ranged" or "dual".
     pub fn strike(&mut self, kind: &str) {
-        let (main, off, off_active, switch_needed) = {
+        let (main, off) = {
             let inv = &self.hero().inventory;
-            (inv.main_weapon().cloned(), inv.offhand_weapon().cloned(), inv.is_offhand_active(), inv.needs_weapon_switch())
+            (inv.main_weapon().cloned(), inv.offhand_weapon().cloned())
         };
         let name = |e: &Option<Equipment>| e.as_ref().map(|e| e.item.name.clone()).unwrap_or_else(|| "Unarmed".into());
-        let busy = format!("{} is active - Switch Weapon (1 block) to draw {}", name(&off), name(&main));
         let (title, ranged, offhand) = match kind {
             "main" => {
                 if let Some(m) = main.as_ref().filter(|m| m.is_ranged_weapon()) {
                     return self.fail("Main Strike", &format!("Cannot melee while wielding ranged weapon ({})", m.item.name));
-                }
-                if off_active {
-                    return self.fail("Main Strike", &busy);
                 }
                 ("Main Strike", false, false)
             }
@@ -662,17 +645,11 @@ impl DojoSession {
                 if o.item.base_power == 0 {
                     return self.fail("Off-Hand Strike", &format!("{} is a shield (mitigation only, not offensive)", o.item.name));
                 }
-                if switch_needed && !off_active {
-                    return self.fail("Off-Hand Strike", &format!("2H {} is active - Switch Weapon (1 block) to ready {}", name(&main), o.item.name));
-                }
                 ("Off-Hand Strike", false, true)
             }
             "ranged" => {
                 if !main.as_ref().is_some_and(|m| m.is_ranged_weapon()) {
                     return self.fail("Ranged Volley", &format!("Requires a ranged weapon (wielding: {})", name(&main)));
-                }
-                if off_active {
-                    return self.fail("Ranged Volley", &busy);
                 }
                 ("Ranged Volley", true, false)
             }
@@ -1352,7 +1329,7 @@ impl DojoSession {
         self.log_action("ATTACK", &title, &detail, expected.round() as i32, "SIM", &breakdown, &name, false);
     }
 
-    // ---- Gear (stash, equip, presets, pouch, weapon switch) ------------------------------------------------------
+    // ---- Gear (stash, equip, presets, pouch) ------------------------------------------------------------------
 
     /// U3.2-S3 (FB-34): whether the active hero wears `item` trained (its class's proficiency; `gear::trained_for`). No
     /// longer a gate: an untrained piece equips and fights under the wield penalty.
@@ -1360,8 +1337,8 @@ impl DojoSession {
         self.cat.classes.get(&self.classes[self.active]).is_none_or(|c| trained_for(&Proficiency::from_class(c), item))
     }
 
-    /// The stash items the active hero can put in `slot` (fit and the two-handed rule; U3.2-S3: trained or not), one per
-    /// id.
+    /// The stash items the active hero can put in `slot` (fit and the two-handed rule; U3.2-S3: trained or not, unless
+    /// the strict rule locks it, GEAR-REWORK1), one per id.
     pub fn eligible(&self, slot: &str) -> Vec<String> {
         let main = self.hero().inventory.main_weapon().map(|e| e.item.clone());
         let mut out: Vec<String> = Vec::new();
@@ -1369,6 +1346,10 @@ impl DojoSession {
             let Some(item) = self.cat.items.get(id) else { continue };
             // PR5-26 (audit B6): not an item the hero's `forbid_hands` refuses
             if out.contains(id) || !item_fits_slot(item, slot) || self.hero().forbids(item) {
+                continue;
+            }
+            // GEAR-REWORK1 (PR5-51a): nor one the strict rule locks (`gear::wear_lock`)
+            if wear_lock(&self.hero().stats, item).is_some() {
                 continue;
             }
             if slot == "off_hand" && !off_hand_ok(main.as_ref(), item) {
@@ -1419,17 +1400,20 @@ impl DojoSession {
             }
             return false;
         }
+        // GEAR-REWORK1 (PR5-51a): the strict rule's hard lock (a class with proficiency roles; `gear::wear_lock`)
+        if let Some(lock) = wear_lock(&self.hero().stats, &item) {
+            if announce {
+                self.fail("Equip", &lock.text(&self.hero().name, &item.name));
+            }
+            return false;
+        }
         if slot == Slot::OffHand {
             let main = self.hero().inventory.main_weapon().map(|e| e.item.clone());
             if !off_hand_ok(main.as_ref(), &item) {
                 if announce {
+                    // GEAR-REWORK1 (PR5-51a): a two-handed main weapon leaves the off hand empty (no weapon switch)
                     let m = main.map(|m| m.name).unwrap_or_default();
-                    if item.item_type == "WEAPON" {
-                        // A focus (orb, tome): Equipment.conflicts_with_main.
-                        self.fail("Equip", &format!("{} needs a one-handed main hand: 2H {m} leaves the off hand empty", item.name));
-                    } else {
-                        self.fail("Equip", &format!("2H {m} cannot be paired with {} - only an off-hand weapon (swap with Switch Weapon)", item.name));
-                    }
+                    self.fail("Equip", &format!("{} needs a one-handed main hand: 2H {m} leaves the off hand empty", item.name));
                 }
                 return false;
             }
@@ -1554,20 +1538,6 @@ impl DojoSession {
         self.stash.push(item.id.clone());
         self.changed();
         self.log_event("EVENT", "Unload Pouch", &format!("{} returned to stash", item.name), 0, "STASHED");
-    }
-
-    /// Switch Weapon (1 block): readies the other weapon of a 2H main + off-hand weapon pair.
-    pub fn switch_weapon(&mut self) {
-        if !self.hero_mut().inventory.toggle_active_weapon() {
-            return self.fail("Switch Weapon", "Nothing to switch: pair a 2H weapon with an off-hand weapon (1H weapons attack with both hands freely)");
-        }
-        // AUDIT-01: the ready weapon's effects and family bonuses count, the stowed one's not (a resync)
-        self.changed();
-        let ready = self.hero().inventory.active_weapon().map(|e| e.item.name.clone()).unwrap_or_default();
-        let breakdown = format!("[color=#38bdf8][b]Switch Weapon[/b][/color]  costs 1 block.\nActive weapon is now [b]{ready}[/b]; the other weapon is sheathed until you switch back.");
-        let target = self.hero().name.clone();
-        self.log_action("EVENT", "Switch Weapon", &format!("1 block • {ready} now active"), 1, "SWITCHED", &breakdown, &target, false);
-        self.fx("text", true, &ready, Tone::Info);
     }
 
     // ---- Attribute points ---------------------------------------------------------------------------------------

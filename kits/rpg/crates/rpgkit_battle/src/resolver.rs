@@ -259,6 +259,8 @@ impl Resolver {
             self.pay_hp_cost(w, i);
             // HOOKS1 UM2: then the meter changes (rule unit_meters; nothing in classic)
             crate::meter::pay(self, w, i);
+            // GEAR-REWORK1 (PR5-51a pass 2): an off-hand ammunition item's empowered shot or Reload (nothing without one)
+            crate::meter::off_hand_ammo(self, w, i);
             if lock_on && opening.is_none() && self.scheduled[i].command.dashes_at_start() {
                 opening = Some(w.grid.positions.clone());
             }

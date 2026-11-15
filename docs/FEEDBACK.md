@@ -16,8 +16,9 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | PR5-36 to PR5-48 | done (FB-235 to FB-259, answered through @35c365b9) | `develop` | full rows in `docs/archive/FEEDBACK_CLOSED.md` |
 | PR5-49 `MAP-POLISH1` | done (FB-260; FB-261 questions): region `map_reveal` with grey locked places, sidecar beside the drawn background, location `art`, saved Legend, Act 1 `map_pos` = sidecar, editor end anchors and pins; 0 golden diffs | `develop` | - |
 | PR5-50 `KIT-HOOKS-CLEANUP` | done (FB-262; FB-263 questions): `skill_reach`, `friendly` / `hostile` sides, preset and training checks; `checks_golden` re-recorded (3 lines) | `develop` | - |
-| PR5-51a `GEAR-REWORK1-KIT` | next | - | - |
-| PR5-51b to PR5-56 | queued, in order (user 2026-11-14) | - | - |
+| PR5-51a `GEAR-REWORK1-KIT` | done (FB-264; FB-265 questions and notes for 51b): Switch Weapon retired, role-gated strict gear rule, slot rules, off-hand mechanics and button, knife Throw; 0 golden diffs | `develop` | - |
+| PR5-51b `GEAR-REWORK1-DATA` | next | - | - |
+| PR5-52 to PR5-56 | queued, in order (user 2026-11-14) | - | - |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -40,6 +41,22 @@ FB-01 to FB-261 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
 - **Status**: open
 - **Finding**: (a) The row asks for a warning when a `train_proficiency` targets "a family that 0 classes hold at minor proficiency (1)"; the effect names a class role, not a family (`{role, to}`), so the warning is per role at level `to - 1` and covers every role, and since no shipped class sets a proficiency `role` yet it raises 3 warnings (`train_secondary`, `train_third`, `train_minor`) until PR5-51b adds the roles. (b) `kind: SPELL` is not a skill kind in code; it reads as the old spell group (ATTACK with a spell source), which is what reproduces `spell_reach`. (c) The constant `W_SPELL_REACH` keeps its name (it now weighs every `skill_reach` tile) so `rules_contract_golden` stays unchanged.
 - **Recommendation**: (a) keep every role (recommended; PR5-51b's roles clear the warnings) or limit to `minor`; (c) rename to `W_SKILL_REACH` with a named 1-line `rules_contract_golden` re-record in a later row if wanted; (d) aliasing the unit-row `side` field to `friendly` / `hostile` too is a larger change (many `== "party"` checks) left out.
+
+### FB-264: PR5-51a `GEAR-REWORK1-KIT` landed
+
+- **Spec**: READY Section 1 row PR5-51a; `docs/sessions/U3_GEAR_REWORK.md` §1-6 (the `PR5-51a` squash commit on `develop`, 2026-11-15)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: Kit / schema / GUI mechanics (FEEDBACK kit README line). Every new rule needs metadata only PR5-51b seeds (class proficiency `role`; family `slot_rule`, `pairs_with`, `off_hand_skill`, `empower_next`, `power_stat_override`, `armor_weight`), so today's data keeps today's numbers: **0 golden diffs**. The one ungated change: a 2H main beside an off-hand weapon is refused (Switch Weapon retired); only two shipped Dojo presets held such a pair (`claymore_backup`, the shortbow + dagger preset), and they now apply with the off hand empty. GUI: an "Off-Hand" button in the battle planner's neutral row (the worn off-hand's action: jab, Reload, Fade-Step, Cite Passage; greyed with the kit's reason) and an off-hand chip on the Gear tab's Off Hand row. Tests: `rpgkit_rules` `strict_gear.rs` (6), `slot_rules.rs` (5); `rpgkit_world` `strict_wear.rs` (3); `rpgkit_battle` `offhand.rs` (8); `rpgkit_content` `gear_rework_checks.rs` (5), `hand_rule_checks.rs` (5); `rpgkit_host` `switch_retired.rs` (1); GUI `battle/tests/offhand_tests.rs` (4) and a Gear-tab test; switch-era tests rewritten (`weapon_switch.rs`, `item_grants.rs`, `unit_templates.rs`, `party_ops.rs`, `family_rules.rs`, `recipe_checks.rs`, `emberwake_world/tests/dojo.rs`). Gate: 3379 passed, 0 failed.
+- **Recommendation**: engine/docs/PORT_NOTES.md (line ~108): `needs_weapon_switch` / `toggle_active_weapon` -> retired by GEAR-REWORK1 (PR5-51a). GAME_BRIEF (gear, line ~226 `Inventory::ready_gear` / `active_weapon`): replace with "Off hand (GEAR-REWORK1): family `slot_rule` fixes the hands; a `2h_rig` main shares the off hand with its `pairs_with` families; a `1h_light` off-hand jab reaches the weapon's band; ammo `empower_next` empowers ranged shots, Reload only at 0, and gives a light main a pip-costed Throw; orb lends INT when higher; strict classes (with roles) lock Prof 0 and unmet raw requirements and scale power / mitigation 0.80 / 1.00 / 1.25." STRUCTURE: `rpgkit_battle/src/offhand.rs` and the test files above. HISTORY: "U3.2 Switch Weapon, the stowed backup weapon and the 2H + off-hand weapon pair retired by GEAR-REWORK1 (PR5-51a); the soft untrained penalty remains for classes without roles until PR5-51b."
+
+### FB-265: PR5-51a questions and notes for PR5-51b
+
+- **Spec**: READY rows PR5-51a / PR5-51b (@ the `PR5-51a` squash commit)
+- **Kind**: suggestion
+- **Status**: open
+- **Finding**: (a) Reload is open only at 0 ammo (the row's "Reload basic when 0"), checked against the current meter, so "shoot, then Reload" in one round at 1 pip is refused at planning time; the AI never chooses to Reload early. (b) The planner's damage preview shows the un-empowered number (the empower applies when the attack starts). (c) The Throw goes to any `1h_light` main (knife, dagger, fist) beside ammo; data can make it knife-only (`weapon_types: ["knife"]` with `min_proficiency >= 1` on the throw skill). (d) §1's retirement of the soft `untrained_penalty` / `unfit_penalty` is not done yet: `PROF_GEAR_MULT[0] = 1.0` keeps the soft penalty for gear worn while locked (e.g. enemy loadouts). (e) For 51b: the strict lock is enforced in party / save paths and the Dojo, not in battle builds or the content loadout check, so strict-class units or templates could wear locked gear under the old soft penalty; `keepsake_kaelen` / `keepsake_vesper` (3 bonuses each) will fail the accessory limit once roles exist; the two Dojo presets above need new pairs. (f) Not built (not in the clause text): retiring `+level` training power under the strict rule.
+- **Recommendation**: (a) keep (recommended) or "any time below max", plus plan-aware meter checks (`SimState::meter`) in a later kit row; (b) add the empowered number to the preview later if wanted; (c) knife-only through data in 51b (recommended); (d)-(e) 51b: a strict-mode loadout content check and `*_drill` passives for enemies, retire the soft penalty with the data, trim the two keepsakes, fix the presets; (f) decide with the 51b numbers.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

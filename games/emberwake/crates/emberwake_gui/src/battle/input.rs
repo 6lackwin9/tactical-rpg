@@ -594,6 +594,8 @@ impl BattleScreen {
             if let Some(row) = channel_row(w, h) {
                 rows.push(row);
             }
+            // GEAR-REWORK1 (PR5-51a pass 2): the Off-Hand button, only for a hero with an off-hand action
+            off_hand_row(w, h, &mut rows);
         }
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
@@ -1029,6 +1031,46 @@ fn channel_row(w: &World, h: usize) -> Option<Row> {
     }
     Some(Row { label: name, detail, valid: true, act: RowAct::Channel(!on), tip, warn: false, ap_short: None, slot: Some(Slot::Neutral(super::skill_menu::CHANNEL)), icon: Vec::new(), at: None, count: None })
 }
+
+/// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): `h`'s off-hand action (the kit's
+/// `offhand::action`: a `1h_light` weapon's jab, a Reload, Fade-Step, Cite Passage) moves from its intent row to the
+/// neutral row's Off-Hand button: every cell of its skill leaves the rows and the first live one (else the first) is the
+/// button, greyed with the kit's reason as any cell; without a cell a greyed button says why. Its card names the item
+/// and what the action does. Nothing for a hero without an off-hand action (an empty off hand, or gear from before the
+/// rework).
+fn off_hand_row(w: &World, h: usize, rows: &mut Vec<Row>) {
+    use emberwake_rules::gear::OffHandUse;
+    let Some(a) = emberwake_battle::offhand::action(w, h) else { return };
+    let is_cell = |r: &Row| matches!(&r.act, RowAct::Pick(p) if matches!(p[..], [rip::Pick::Skill { skill, .. }] if skill == a.skill));
+    let cells: Vec<Row> = rows.iter().filter(|r| is_cell(r)).cloned().collect();
+    rows.retain(|r| !is_cell(r));
+    let name = w.cat.skills[a.skill].name.clone();
+    let mut row = cells.iter().find(|r| r.valid).or(cells.first()).cloned().unwrap_or_else(|| {
+        let why = a.problem.clone().unwrap_or_else(|| OFF_HAND_UNOFFERED.to_string());
+        Row { label: name.clone(), detail: why.clone(), valid: false, act: RowAct::Pick(vec![rip::Pick::Skill { skill: a.skill, kind: None }]), tip: vec![(why, th().foe)], warn: false, ap_short: None, slot: None, icon: Vec::new(), at: None, count: None }
+    });
+    if let Some(p) = a.problem.as_ref().filter(|_| row.valid) {
+        row.valid = false;
+        row.detail = p.clone();
+        row.tip.push((p.clone(), th().foe));
+    }
+    row.slot = Some(Slot::Neutral(super::skill_menu::OFF_HAND));
+    row.label = name.clone();
+    let what = match &a.used {
+        OffHandUse::Jab { reach } => format!("A quick off-hand jab with {}, reach 1-{reach}.", a.item),
+        OffHandUse::Skill { reload: true, .. } => match a.ammo {
+            Some((v, m)) => format!("{}: refills the ammo ({v}/{m}); only at 0. Each ranged shot spends ammo to hit harder while it lasts.", a.item),
+            None => format!("{}: refills the ammo; only at 0.", a.item),
+        },
+        OffHandUse::Skill { .. } => format!("{}'s off-hand skill.", a.item),
+    };
+    row.tip.insert(0, (format!("Off-Hand: {name}"), th().gold));
+    row.tip.insert(1, (what, th().text));
+    rows.push(row);
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2): the Off-Hand button's reason when the menu offers no cell of its skill.
+pub(super) const OFF_HAND_UNOFFERED: &str = "Not offered on this target";
 
 /// PK1-S2c-2 (FB-180 (b)): the name of a round that is not a Channel round: the game term `standard_mark` (its
 /// `terms` row, else "Cold Steel").

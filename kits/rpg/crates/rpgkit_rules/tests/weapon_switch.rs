@@ -1,13 +1,9 @@
-//! AUDIT-08 and AUDIT-09 (READY.md R1.1-1, FB-91) on a scratch catalog built here (no shipped data; the item numbers
-//! are test-only). In a two-handed main + off-hand weapon pair (`Inventory::needs_weapon_switch`) only the ready weapon
-//! counts after a sync:
+//! GEAR-REWORK1 (PR5-51a, `docs/sessions/U3_GEAR_REWORK.md` 1) on a scratch catalog built here (no shipped data; the
+//! item numbers are test-only): `Switch Weapon` and the AUDIT-01/08/09 stowed backup weapon are retired. A two-handed
+//! main weapon leaves the off hand empty (`gear::off_hand_ok`, a build drops what the off hand held), every worn item
+//! counts (stat and tier bonuses, armour, burden), and a main-hand hit always swings the main hand.
 //!
-//! - AUDIT-08: the stowed weapon adds no flat `stat_bonuses`, no tier `stat_bonuses` and no armour
-//!   (`Inventory::total_flat_mitigation`); its burden still counts;
-//! - AUDIT-09: the weapon type (`Unit::weapon_context`, `Unit::wielded_type("main")`), the attack range and the reach
-//!   gear fact (`Unit::has_reach_weapon`) are the ready weapon's, so switching to the backup uses its type and range.
-//!
-//! Expectations are derived from units that wear only the ready weapon (no hard-coded derived numbers).
+//! Expectations are derived from units that wear one weapon at a time (no hard-coded derived numbers).
 
 use rpgkit_data::{Catalog, ItemDef};
 use rpgkit_rules::gear::{Equipment, Slot};
@@ -63,18 +59,6 @@ fn mitigation(u: &Unit) -> i32 {
     u.inventory.total_flat_mitigation(Some(&u.stats))
 }
 
-/// The pair `u` counts exactly what `solo` (wearing only the ready weapon) counts, plus the stowed weapon's burden.
-fn assert_counts_only(u: &Unit, solo: &Unit, stowed: &Unit, label: &str) {
-    assert_eq!(stat_line(u), stat_line(solo), "{label}: flat and tier stat bonuses are the ready weapon's");
-    assert_eq!(mitigation(u), mitigation(solo), "{label}: armour is the ready weapon's");
-    assert_eq!(u.weapon_context(), solo.weapon_context(), "{label}: weapon context");
-    assert_eq!(u.wielded_type("main"), solo.wielded_type("main"), "{label}: wielded type");
-    assert_eq!(u.wielded_type("off"), "unarmed", "{label}: a 2H pair shares one ready slot");
-    assert_eq!(u.attack_range, solo.attack_range, "{label}: range");
-    assert_eq!(u.has_reach_weapon(), solo.has_reach_weapon(), "{label}: reach");
-    assert_eq!(u.worn_burden(), solo.worn_burden() + stowed.worn_burden(), "{label}: the stowed weapon's burden still counts");
-}
-
 /// The scratch items do add what the test checks for (so the pair assertions are not vacuous).
 #[test]
 fn each_weapon_alone_adds_its_bonuses_type_range_and_reach() {
@@ -90,51 +74,44 @@ fn each_weapon_alone_adds_its_bonuses_type_range_and_reach() {
     assert!(!sling.has_reach_weapon() && sling.attack_range > 1 && sling.wielded_type("main") == "sling");
 }
 
-/// AUDIT-08/09: the stowed weapon of a 2H pair grants no stat bonus, tier stat bonus or armour and lends no type,
-/// range or reach; the switch (and a resync) moves all of it to the other hand and back; without a pair the off-hand
-/// weapon counts as worn.
+/// GEAR-REWORK1: under a two-handed main weapon the off hand holds nothing: the hand rule refuses the sling there and a
+/// build that names both drops the sling; a one-handed main weapon pairs freely.
 #[test]
-fn a_stowed_backup_weapon_adds_only_its_burden_and_the_switch_moves_type_range_and_reach() {
+fn a_two_handed_main_weapon_leaves_the_off_hand_empty() {
+    use rpgkit_rules::gear::off_hand_ok;
+    use rpgkit_rules::{build_from, Growth, UnitBuild};
     let cat = catalog();
-    let pike = wearing(&cat, &[("pike", Slot::MainHand)]);
-    let sling = wearing(&cat, &[("sling", Slot::MainHand)]);
-    let mut u = wearing(&cat, &[("pike", Slot::MainHand), ("sling", Slot::OffHand)]);
-    assert!(u.inventory.needs_weapon_switch() && !u.inventory.is_offhand_active());
-    assert_counts_only(&u, &pike, &sling, "pike ready");
-    assert!(u.inventory.toggle_active_weapon());
-    u.sync_from_stats_and_gear(&cat);
-    assert!(u.inventory.is_offhand_active());
-    assert_counts_only(&u, &sling, &pike, "sling ready");
-    assert!(u.inventory.toggle_active_weapon());
-    u.sync_from_stats_and_gear(&cat);
-    assert_counts_only(&u, &pike, &sling, "switched back");
-    u.inventory.unequip(Slot::MainHand);
-    u.sync_from_stats_and_gear(&cat);
-    let off_only = wearing(&cat, &[("sling", Slot::OffHand)]);
-    assert!(!u.inventory.needs_weapon_switch());
-    assert_eq!(stat_line(&u), stat_line(&sling), "no pair: the off-hand sling's bonuses count");
-    assert_eq!(mitigation(&u), mitigation(&sling));
-    assert_eq!((stat_line(&u), mitigation(&u), u.worn_burden()), (stat_line(&off_only), mitigation(&off_only), off_only.worn_burden()));
+    let (pike, sling) = (&cat.items["pike"], &cat.items["sling"]);
+    assert!(!off_hand_ok(Some(pike), sling), "no off-hand weapon under a 2H main");
+    assert!(off_hand_ok(Some(sling), pike) && off_hand_ok(None, sling), "a 1H main or none pairs freely");
+    let growth = Growth { equipment: vec![(Slot::MainHand, pike.clone()), (Slot::OffHand, sling.clone())], ..Growth::default() };
+    let built = build_from(&cat, UnitBuild { growth: Some(growth), ..UnitBuild::row(&cat.units["ranger"], 0, None) }).unit;
+    let solo = wearing(&cat, &[("pike", Slot::MainHand)]);
+    assert!(built.inventory.get(Slot::OffHand).is_none(), "the build drops the sling");
+    assert_eq!((stat_line(&built), mitigation(&built), built.worn_burden()), (stat_line(&solo), mitigation(&solo), solo.worn_burden()));
 }
 
-/// PR5-26 (audit B7): a main-hand hit swings the ready weapon (`damage::weapon_for(u, false)` is
-/// `Inventory::active_weapon`): with the sling switched to in a pike + sling pair the hit's weapon and attack power are
-/// the sling-only unit's, switched back the pike-only unit's; an off-hand hit reads the off hand as before.
+/// GEAR-REWORK1: no stowed weapon: an off-hand weapon counts as worn in full (its bonuses, tier bonuses, armour and
+/// burden are the sling-in-the-main-hand unit's), and nothing lends the main hand its type, range or reach.
 #[test]
-fn a_main_hand_hit_swings_the_ready_weapon_of_the_pair() {
-    use rpgkit_rules::damage::{power_of, weapon_for};
+fn a_worn_off_hand_weapon_counts_in_full() {
     let cat = catalog();
-    let pike = wearing(&cat, &[("pike", Slot::MainHand)]);
     let sling = wearing(&cat, &[("sling", Slot::MainHand)]);
-    let mut u = wearing(&cat, &[("pike", Slot::MainHand), ("sling", Slot::OffHand)]);
+    let none = bare(&cat);
+    let u = wearing(&cat, &[("sling", Slot::OffHand)]);
+    assert_eq!((stat_line(&u), mitigation(&u), u.worn_burden()), (stat_line(&sling), mitigation(&sling), sling.worn_burden()));
+    assert_eq!((u.weapon_context(), u.attack_range, u.wielded_type("main")), (none.weapon_context(), none.attack_range, none.wielded_type("main")));
+    assert_eq!(u.wielded_type("off"), "sling");
+}
+
+/// PR5-26 (audit B7), GEAR-REWORK1: a main-hand hit swings the main hand's weapon (`damage::weapon_for(u, false)`), an
+/// off-hand hit the off hand's; nothing switches.
+#[test]
+fn a_main_hand_hit_swings_the_main_hand() {
+    use rpgkit_rules::damage::weapon_for;
+    let cat = catalog();
+    let u = wearing(&cat, &[("sling", Slot::MainHand), ("pike", Slot::OffHand)]);
     let id = |u: &Unit, off: bool| weapon_for(u, off).map(|e| e.item.id.clone());
-    assert_eq!((id(&u, false).as_deref(), id(&u, true).as_deref()), (Some("pike"), Some("sling")));
-    assert_eq!(power_of(&u, u.attack_range > 1, false), power_of(&pike, pike.attack_range > 1, false), "pike ready");
-    assert!(u.inventory.toggle_active_weapon());
-    u.sync_from_stats_and_gear(&cat);
-    assert_eq!(id(&u, false).as_deref(), Some("sling"), "the switched-to weapon");
-    assert_eq!(power_of(&u, u.attack_range > 1, false), power_of(&sling, sling.attack_range > 1, false), "sling ready");
-    assert!(u.inventory.toggle_active_weapon());
-    u.sync_from_stats_and_gear(&cat);
-    assert_eq!(id(&u, false).as_deref(), Some("pike"), "switched back");
+    assert_eq!((id(&u, false).as_deref(), id(&u, true).as_deref()), (Some("sling"), Some("pike")));
+    assert_eq!(u.wielded_type("main"), "sling");
 }

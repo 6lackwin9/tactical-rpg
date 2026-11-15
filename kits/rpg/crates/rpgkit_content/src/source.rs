@@ -1385,6 +1385,27 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if durability > 0 {
         row.insert(rpgkit_data::ITEM_FAMILY_DURABILITY.into(), Value::from(durability));
     }
+    // GEAR-REWORK1 (U3.3 5): the ARMOR family's weight rides on the row the same way (no key while the family has none)
+    let weight = sget(family, rpgkit_data::FAMILY_ARMOR_WEIGHT, "");
+    if !weight.is_empty() {
+        row.insert(rpgkit_data::ITEM_FAMILY_ARMOR_WEIGHT.into(), Value::from(weight));
+    }
+    // GEAR-REWORK1 (PR5-51a pass 2, U3.3 2-4): the family's hand category, `pairs_with`, off-hand skill, ammunition rule
+    // and power stat ride on the row the same way (no key while the family has none, so today's rows read as before)
+    for (family_key, row_key) in [(rpgkit_data::FAMILY_SLOT_RULE, rpgkit_data::ITEM_FAMILY_SLOT_RULE), (rpgkit_data::FAMILY_OFF_HAND_SKILL, rpgkit_data::ITEM_FAMILY_OFF_HAND_SKILL), (rpgkit_data::FAMILY_POWER_STAT, rpgkit_data::ITEM_FAMILY_POWER_STAT)] {
+        let v = sget(family, family_key, "");
+        if !v.is_empty() {
+            row.insert(row_key.into(), Value::from(v));
+        }
+    }
+    let pairs = json::strings(json::get(family, rpgkit_data::FAMILY_PAIRS_WITH));
+    if !pairs.is_empty() {
+        row.insert(rpgkit_data::ITEM_FAMILY_PAIRS_WITH.into(), Value::Array(pairs.into_iter().map(Value::from).collect()));
+    }
+    let empower = json::dget(family, rpgkit_data::FAMILY_EMPOWER_NEXT);
+    if !empower.is_empty() {
+        row.insert(rpgkit_data::ITEM_FAMILY_EMPOWER_NEXT.into(), Value::Object(empower.clone()));
+    }
     row
 }
 

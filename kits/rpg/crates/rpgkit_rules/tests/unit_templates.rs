@@ -211,7 +211,7 @@ fn a_class_change_never_moves_a_templated_unit() {
 
 /// The blade every `armed_*` unit wears, and its requirement discount for the unit.
 fn blade(u: &Unit) -> (&Equipment, i32) {
-    let w = u.inventory.active_weapon().expect("the blade");
+    let w = u.inventory.main_weapon().expect("the blade");
     (w, u.stats.proficiency.requirement_discount(&w.item.weapon_type))
 }
 

@@ -167,48 +167,24 @@ fn the_hand_rule_decides_which_worn_skills_hold() {
     assert!(both.inventory.get(Slot::OffHand).is_none() && !both.gear_skill("orb_bolt"), "the orb is not held under the staff");
     let alone = build_from(&cat, UnitBuild { growth: Some(growth(vec![(Slot::OffHand, orb)])), ..UnitBuild::row(&cat.units["adept"], 0, None) }).unit;
     assert!(alone.gear_skill("orb_bolt"), "held, it grants its skill");
-    // AUDIT-01: an off-hand weapon held beside a two-handed main (the weapon switch) grants its skill only while ready
-    let mut u = unit(&cat, "adept");
-    u.inventory.equip(Equipment::new(&staff), Slot::MainHand);
-    wear(&cat, &mut u, &cat.items["parry_dagger"].clone(), Slot::OffHand);
-    assert!(u.inventory.needs_weapon_switch() && !u.gear_skill("parry_jab"), "stowed behind the ready staff");
-    u.inventory.toggle_active_weapon();
-    u.sync_from_stats_and_gear(&cat);
-    assert!(u.gear_skill("parry_jab"), "ready");
+    // GEAR-REWORK1 (PR5-51a): no weapon switch: a build holds no off-hand weapon under a two-handed main either
+    let pair = build_from(&cat, UnitBuild { growth: Some(growth(vec![(Slot::MainHand, staff), (Slot::OffHand, cat.items["parry_dagger"].clone())])), ..UnitBuild::row(&cat.units["adept"], 0, None) }).unit;
+    assert!(pair.inventory.get(Slot::OffHand).is_none() && !pair.gear_skill("parry_jab"), "the dagger is not held under the staff");
 }
 
-/// AUDIT-01: in a 2H main + off-hand weapon pair only the ready weapon counts: the stowed one grants no item effect, no
-/// Level-2 crit and no Level-3 passive until the switch readies it (and the other hand's stop counting then); without
-/// a pair (the 1H weapon alone in the off hand) it counts as worn.
+/// GEAR-REWORK1 (PR5-51a, U3.3 1): with `Switch Weapon` retired there is no stowed backup weapon: an off-hand weapon
+/// worn beside a one-handed main hand (or none) grants its item effect, Level-2 crit and Level-3 passive like any worn
+/// item.
 #[test]
-fn a_stowed_backup_weapon_grants_nothing_until_it_is_ready() {
+fn a_worn_off_hand_weapon_always_counts() {
     let cat = catalog();
     let sword = with_family(&cat, "show_sword", json!({"crit": CRIT}), "sword_mastery");
-    let mut staff_raw = cat.items["great_staff"].raw.clone();
-    staff_raw.insert("effects".into(), json!([{"type": "skill", "skill": "orb_bolt"}]));
-    let staff = ItemDef::from_obj(&staff_raw);
     let dex = |u: &Unit| u.stats.stat("DEX", None);
-    let mut plain = unit(&cat, "master");
-    wear(&cat, &mut plain, &staff, Slot::MainHand);
-    let base_dex = dex(&plain);
+    let base_dex = dex(&unit(&cat, "master"));
     let mut u = unit(&cat, "master");
-    wear(&cat, &mut u, &staff, Slot::MainHand);
     wear(&cat, &mut u, &sword, Slot::OffHand);
-    assert!(u.inventory.needs_weapon_switch() && !u.inventory.is_offhand_active());
-    assert!(u.gear_skill("orb_bolt"), "the ready staff's effect counts");
-    assert!(!u.gear_skill("flourish"), "the stowed sword's item effect and mastery skill do not");
-    assert_eq!(u.gear_crit, 0.0, "no stowed Level-2 crit");
-    assert_eq!(dex(&u), base_dex, "no stowed Level-3 passive stat");
-    u.inventory.toggle_active_weapon();
-    u.sync_from_stats_and_gear(&cat);
-    assert!(u.gear_skill("flourish") && !u.gear_skill("orb_bolt"), "the switch readies the sword and stows the staff");
-    assert_eq!(u.gear_crit, CRIT);
-    assert!(dex(&u) > base_dex, "the ready sword's Level-3 passive applies");
-    u.inventory.toggle_active_weapon();
-    u.sync_from_stats_and_gear(&cat);
-    assert!(u.gear_skill("orb_bolt") && !u.gear_skill("flourish") && u.gear_crit == 0.0 && dex(&u) == base_dex, "switched back");
-    take_off(&cat, &mut u, Slot::MainHand);
-    assert!(!u.inventory.needs_weapon_switch() && u.gear_skill("flourish") && u.gear_crit == CRIT, "no pair: the off-hand sword counts");
+    assert!(u.gear_skill("flourish") && u.gear_crit == CRIT, "the off-hand sword's effect and Level-2 crit count");
+    assert!(dex(&u) > base_dex, "its Level-3 passive applies");
 }
 
 #[test]

@@ -304,11 +304,24 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
     if s.reach_max > 0 {
         return (s.reach_min, s.reach_max + extra);
     }
+    // GEAR-REWORK1 (PR5-51a pass 2, U3.3 2): the off-hand jab of a `1h_light` off-hand weapon reaches as the weapon does
+    // (`gear::light_reach`: a thrown knife 1-2); any other off-hand jab stays at (1, 1)
+    if is_off_hand(s) && !from_user(a) {
+        if let Some(r) = light_off_reach(c) {
+            return (1, r);
+        }
+    }
     if is_off_hand(s) || from_user(a) {
         return (1, 1);
     }
     let (lo, hi) = plain_band(c, melee);
     (lo, hi + extra)
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2): how far `c`'s off-hand jab reaches with a `1h_light` weapon in the off hand (None:
+/// no such weapon, the jab stays at distance 1).
+pub fn light_off_reach(c: &Unit) -> Option<i32> {
+    c.inventory.get(rpgkit_rules::gear::Slot::OffHand).and_then(|e| rpgkit_rules::gear::light_reach(&e.item))
 }
 
 /// The shapes drawn from the user's own tile (LINE, A3.2-S1's RING and ARC, A3.2-K2's CONE): no skill reach
@@ -671,9 +684,11 @@ impl<'a> Book<'a> {
             .collect()
     }
 
-    /// Single-target attacks (no areas; the off-hand jab only for ranged units).
+    /// Single-target attacks (no areas; the off-hand jab only for ranged units, GEAR-REWORK1: or a unit with a `1h_light`
+    /// weapon in the off hand, `light_off_reach`).
     pub fn single_attacks(&self, c: &Unit, cap: i32) -> Vec<SkillId> {
-        self.available(Kind::Attack, cap, Some(c)).into_iter().filter(|&i| !(is_area(self.get(i)) || (is_off_hand(self.get(i)) && c.attack_range <= 1))).collect()
+        let jab_ok = c.attack_range > 1 || light_off_reach(c).is_some();
+        self.available(Kind::Attack, cap, Some(c)).into_iter().filter(|&i| !(is_area(self.get(i)) || (is_off_hand(self.get(i)) && !jab_ok))).collect()
     }
 
     pub fn area_attacks(&self, cap: i32, c: Option<&Unit>) -> Vec<SkillId> {

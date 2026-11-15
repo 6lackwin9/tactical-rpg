@@ -34,10 +34,11 @@ const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delt
 /// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
 /// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
 const DERIVED_BONUS_MAX: i64 = 50;
-const DERIVED_KEYS: [&str; 19] = [
+const DERIVED_KEYS: [&str; 25] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_FAMILY_RULES,
     rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX, rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES,
-    rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE, rpgkit_data::ITEM_FAMILY_DURABILITY,
+    rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE, rpgkit_data::ITEM_FAMILY_DURABILITY, rpgkit_data::ITEM_FAMILY_ARMOR_WEIGHT,
+    rpgkit_data::ITEM_FAMILY_SLOT_RULE, rpgkit_data::ITEM_FAMILY_PAIRS_WITH, rpgkit_data::ITEM_FAMILY_OFF_HAND_SKILL, rpgkit_data::ITEM_FAMILY_EMPOWER_NEXT, rpgkit_data::ITEM_FAMILY_POWER_STAT,
 ];
 const FLAT_MARKERS: [&str; 8] = ["base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 14] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
@@ -385,6 +386,11 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     if !theme.is_empty() && !json::id_ok(&theme) {
         out.push(format!("Theme '{theme}' must be an id (lowercase a-z, 0-9 and _)."));
     }
+    // GEAR-REWORK1 (PR5-51a, U3.3 5): under the strict gear rule an accessory is a small proficiency-free bonus
+    let accessory = if inherit { !family.is_empty() && item_type_of(family) == "ACCESSORY" } else { json::s(e, "item_type") == "ACCESSORY" };
+    if accessory && super::unit::strict_gear(v) {
+        out.extend(accessory_problems(e));
+    }
     if !inherit {
         out.extend(legacy_errors(v, e));
         return out;
@@ -542,6 +548,43 @@ fn technique_problems(v: &View, f: &Dict) -> Vec<String> {
             out.push(format!("Technique {}: '{skill}' is listed twice.", i + 1));
         }
         seen.push(skill);
+    }
+    out
+}
+
+/// GEAR-REWORK1 (PR5-51a, `docs/sessions/U3_GEAR_REWORK.md` 5): an accessory carries at most
+/// `ACCESSORY_MAX_MODIFIERS` bonus modifiers (stat bonuses, adjusts and effects that are no hook) or exactly one passive
+/// hook (`ACCESSORY_MAX_HOOKS`: an effect modifier whose effect is a `trigger`) and no bonus beside it; requirements
+/// (`required_stats`) never count. Read from the row's `modifiers`, or from a flat row's `stat_bonuses` and `effects`.
+fn accessory_problems(e: &Dict) -> Vec<String> {
+    use rpgkit_data::{ACCESSORY_MAX_HOOKS, ACCESSORY_MAX_MODIFIERS};
+    let is_hook = |fx: &Value| json::s(json::dict(fx), "type") == "trigger";
+    let (mut hooks, mut bonuses) = (0usize, 0usize);
+    if e.contains_key("modifiers") {
+        for m in modifiers_of(e) {
+            match json::s(&m, "kind").as_str() {
+                "requirement" => {}
+                "effect" if is_hook(json::get(&m, "effect")) => hooks += 1,
+                _ => bonuses += 1,
+            }
+        }
+    } else {
+        bonuses += json::dget(e, "stat_bonuses").len();
+        for fx in json::aget(e, "effects") {
+            if is_hook(fx) {
+                hooks += 1;
+            } else {
+                bonuses += 1;
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if hooks > ACCESSORY_MAX_HOOKS {
+        out.push(format!("An accessory holds at most {ACCESSORY_MAX_HOOKS} passive hook (a trigger effect); this one has {hooks}."));
+    } else if hooks > 0 && bonuses > 0 {
+        out.push(format!("An accessory with a passive hook carries no other bonus (requirements aside); this one has {bonuses} more."));
+    } else if bonuses > ACCESSORY_MAX_MODIFIERS {
+        out.push(format!("An accessory carries at most {ACCESSORY_MAX_MODIFIERS} bonus modifiers (requirements aside) or 1 passive hook; this one has {bonuses}."));
     }
     out
 }
@@ -1216,7 +1259,9 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
         if t == "SHIELD" && cat != "off" {
             out.push("Shields are off-hand only (hands = off).".into());
         }
-        if cat == "off" && !OFF_CATEGORIES.contains(&id.as_str()) {
+        // GEAR-REWORK1 (PR5-51a pass 2, U3.3 2, "dynamic OFF_CATEGORIES"): a family that names its hand category
+        // `off_only` is an off-hand family whatever its id; the closed list holds only for the rows without one
+        if cat == "off" && !OFF_CATEGORIES.contains(&id.as_str()) && json::s(f, rpgkit_data::FAMILY_SLOT_RULE) != rpgkit_data::SLOT_OFF_ONLY {
             out.push(format!("Off-hand families are {} (their id is the off-hand category).", OFF_CATEGORIES.join(", ")));
         }
     }
@@ -1239,6 +1284,8 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
             out.push(format!("Slot '{s}' is not a {t} slot ({}).", allowed.join(", ")));
         }
     }
+    out.extend(armor_weight_problems(v, f, &t, &id));
+    out.extend(hand_rule_problems(v, f, &t));
     out.extend(base_problems(f, &t));
     let numbers = number_fields_for(&t);
     for a in json::sget(f, "adjustable").iter().filter(|a| !numbers.contains(&a.as_str())) {
@@ -1457,6 +1504,118 @@ fn base_problems(f: &Dict, t: &str) -> Vec<String> {
     out
 }
 
+/// GEAR-REWORK1 (PR5-51a, `docs/sessions/U3_GEAR_REWORK.md` 5): an armour family's `armor_weight` is "" or one of
+/// `ARMOR_WEIGHTS` (heavy, medium, light; the schema's enum refuses another), only on an ARMOR family, which then lists both HEAD and BODY (one proficiency
+/// key per weight) and is the only family of its weight. Under the strict gear rule (`unit::strict_gear`) every ARMOR
+/// family with a HEAD or BODY slot names its weight; before it (today's plate / leather / cloth rows) none needs one.
+fn armor_weight_problems(v: &View, f: &Dict, t: &str, id: &str) -> Vec<String> {
+    use rpgkit_data::{ARMOR_WEIGHTS, FAMILY_ARMOR_WEIGHT};
+    let mut out = Vec::new();
+    let weight = json::s(f, FAMILY_ARMOR_WEIGHT);
+    let slots = json::sget(f, "slots");
+    let worn = slots.iter().any(|s| s == "HEAD" || s == "BODY");
+    if weight.is_empty() {
+        if t == "ARMOR" && worn && super::unit::strict_gear(v) {
+            out.push(format!("A HEAD or BODY armour family names its armour weight ({}) under the strict gear rule.", ARMOR_WEIGHTS.join(", ")));
+        }
+        return out;
+    }
+    // an unknown weight is the schema's enum error
+    if !ARMOR_WEIGHTS.contains(&weight.as_str()) {
+        return out;
+    }
+    if t != "ARMOR" {
+        out.push(format!("Only an ARMOR family has an armour weight (this is a {t} family)."));
+        return out;
+    }
+    if !(slots.iter().any(|s| s == "HEAD") && slots.iter().any(|s| s == "BODY")) {
+        out.push(format!("A {weight} armour family covers both HEAD and BODY (one proficiency key per weight)."));
+    }
+    if let Some(other) = v.entries("item_families").iter().find(|o| json::s(o, "id") != id && json::s(o, FAMILY_ARMOR_WEIGHT) == weight) {
+        out.push(format!("Armour weight '{weight}' is already family '{}'s (one family per weight).", json::s(other, "id")));
+    }
+    out
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2, U3.3 2-4): the hand category and off-hand fields of family `f` (item type `t`). A
+/// `slot_rule` belongs to a WEAPON or SHIELD family and fixes its hands (`2h_solo` / `2h_rig`: main_2h; `1h_heavy` /
+/// `1h_light`: main_1h; `off_only`: off); `pairs_with` belongs to a `2h_rig` family and names off-hand families of the
+/// table; `off_hand_skill`, `empower_next` and `power_stat_override` belong to an off-hand family; `empower_next` is
+/// `{meter, cost, power_mult, throw_skill?}` with a unit meter row, a cost of 1 or more, a factor above 0 and a Throw
+/// that is an ATTACK skill row with its own reach (PR5-51a pass 3), and its family names its Reload (`off_hand_skill`). Nothing for a family without these fields (today's rows).
+fn hand_rule_problems(v: &View, f: &Dict, t: &str) -> Vec<String> {
+    use rpgkit_data::{EmpowerNext, FAMILY_EMPOWER_NEXT, FAMILY_OFF_HAND_SKILL, FAMILY_PAIRS_WITH, FAMILY_POWER_STAT, FAMILY_SLOT_RULE, SLOT_RULES};
+    let mut out = Vec::new();
+    let rule = json::s(f, FAMILY_SLOT_RULE);
+    let off = category(f) == "off";
+    if !rule.is_empty() && SLOT_RULES.contains(&rule.as_str()) {
+        if !HAND_TYPES.contains(&t) {
+            out.push(format!("Only a WEAPON or SHIELD family has a hand category (slot_rule '{rule}' on a {t} family)."));
+        } else {
+            let want = match rule.as_str() {
+                rpgkit_data::SLOT_2H_SOLO | rpgkit_data::SLOT_2H_RIG => "main_2h",
+                rpgkit_data::SLOT_OFF_ONLY => "off",
+                _ => "main_1h",
+            };
+            if hands_of(f) != [want.to_string()] {
+                out.push(format!("Hand category {rule} takes exactly the hand {want} (hands = [{want}])."));
+            }
+        }
+    }
+    let pairs = json::sget(f, FAMILY_PAIRS_WITH);
+    if !pairs.is_empty() && rule != rpgkit_data::SLOT_2H_RIG {
+        out.push(format!("Only a {} family lists pairs_with (the off-hand families its two-handed weapons leave room for).", rpgkit_data::SLOT_2H_RIG));
+    }
+    let families = v.entries("item_families");
+    for p in &pairs {
+        if !families.iter().any(|o| json::s(o, "id") == *p && category(o) == "off") {
+            out.push(format!("pairs_with '{p}' is not an off-hand family of the table (hands = off)."));
+        }
+    }
+    let skill = json::s(f, FAMILY_OFF_HAND_SKILL);
+    let empower = json::dget(f, FAMILY_EMPOWER_NEXT);
+    let stat = json::s(f, FAMILY_POWER_STAT);
+    for (key, set) in [(FAMILY_OFF_HAND_SKILL, !skill.is_empty()), (FAMILY_EMPOWER_NEXT, !empower.is_empty()), (FAMILY_POWER_STAT, !stat.is_empty())] {
+        if set && !off {
+            out.push(format!("Only an off-hand family (hands = off) has {key}."));
+        }
+    }
+    if !empower.is_empty() {
+        for k in empower.keys().filter(|k| !EmpowerNext::KEYS.contains(&k.as_str())) {
+            out.push(format!("empower_next has no key '{k}' ({}).", EmpowerNext::KEYS.join(", ")));
+        }
+        match EmpowerNext::from_obj(empower) {
+            None => out.push("empower_next names its unit meter (meter).".into()),
+            Some(e) => {
+                if !v.entries("unit_meters").iter().any(|m| json::s(m, "id") == e.meter) {
+                    out.push(format!("empower_next meter '{}' is not a unit meter row.", e.meter));
+                }
+                if e.cost < 1 {
+                    out.push(format!("empower_next cost {} is below 1.", e.cost));
+                }
+                if e.power_mult <= 0.0 {
+                    out.push(format!("empower_next power_mult {} is not above 0.", fixed(e.power_mult, 2)));
+                }
+                // PR5-51a pass 3: the Throw is an ATTACK skill row reaching its own band (reach_max above 0)
+                if !e.throw_skill.is_empty() {
+                    let row = v.entries("skills").iter().find(|s| json::s(s, "id") == e.throw_skill);
+                    match row {
+                        None => out.push(format!("empower_next throw_skill '{}' is not a skill row.", e.throw_skill)),
+                        Some(r) if json::s(r, "kind") != "ATTACK" || json::i(r, "reach_max", 0) <= 0 => {
+                            out.push(format!("empower_next throw_skill '{}' needs an ATTACK skill with its own reach (reach_max above 0).", e.throw_skill))
+                        }
+                        Some(_) => {}
+                    }
+                }
+            }
+        }
+        if skill.is_empty() {
+            out.push(format!("An empower_next family names its Reload ({FAMILY_OFF_HAND_SKILL}: the skill that refills the meter at 0)."));
+        }
+    }
+    out
+}
+
 /// ItemValidator.family_warnings: base numbers outside the family's own bands, a 2H base power below the 1H one, a
 /// focus power band above 10.
 pub fn family_warnings(f: &Dict) -> Vec<String> {
@@ -1484,6 +1643,13 @@ pub fn family_warnings(f: &Dict) -> Vec<String> {
         let two = base_value(&base_of(f, "main_2h"), "power");
         if two < one {
             out.push(format!("The main_2h base power {two} is below the main_1h base power {one}."));
+        }
+    }
+    // GEAR-REWORK1 (U3.3 5): light armour weighs nothing
+    if json::s(f, rpgkit_data::FAMILY_ARMOR_WEIGHT) == "light" {
+        let burden = base_value(&base_of(f, NO_HAND_KEY), "burden");
+        if burden > 0 {
+            out.push(format!("Light armour carries 0 burden; this family's base burden is {burden}."));
         }
     }
     if json::sget(f, "engine_rules").iter().any(|r| r == "focus") {

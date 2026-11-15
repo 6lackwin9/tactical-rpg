@@ -25,13 +25,13 @@ pub const TRAINED_FIST_MIN_LEVEL: i32 = 2;
 pub const GUARD_CAP: f64 = 0.9;
 pub const FIST: &str = "fist";
 
-/// The weapon a hit swings: the off hand's for an off-hand hit, else the ready one (PR5-26, audit B7: the switched-to
-/// off-hand weapon of a two-handed pair, `Inventory::active_weapon`; the main hand otherwise).
+/// The weapon a hit swings: the off hand's for an off-hand hit, else the main hand's (GEAR-REWORK1, PR5-51a: no weapon
+/// switch).
 pub fn weapon_for(u: &Unit, offhand: bool) -> Option<&Equipment> {
     if offhand {
         u.inventory.offhand_weapon()
     } else {
-        u.inventory.active_weapon()
+        u.inventory.main_weapon()
     }
 }
 
@@ -63,6 +63,12 @@ pub struct AttackPower {
     pub untrained_mult: f64,
     /// PK2-S5b: the swung weapon instance is dulled (0 durability): its weapon power took `gear::DULLED_POWER_MULT`.
     pub dulled: bool,
+    /// GEAR-REWORK1 (PR5-51a): the strict rule's proficiency factor on the weapon power (`Proficiency::gear_mult`:
+    /// 0.80 / 1.00 / 1.25); 0.0 when no factor applied (no strict rule, no fitting weapon, or exactly 1.0).
+    pub prof_mult: f64,
+    /// GEAR-REWORK1 (PR5-51a pass 2): `stat_name` is the off-hand item's power stat (`ItemDef::power_stat_override`),
+    /// higher than the weapon's own scaling stat.
+    pub stat_override: bool,
     pub stat_name: String,
     pub stat_val: i32,
     pub unit_scaling: f64,
@@ -102,6 +108,12 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                 res.training_pwr = training;
                 res.total_w_power = UNARMED_BASE_POWER + training;
                 res.weapon_power = (UNARMED_BASE_POWER + training) as f64;
+                // GEAR-REWORK1: the fist family's proficiency factor under the strict rule
+                let mult = u.stats.proficiency.gear_mult(FIST);
+                if mult != 1.0 {
+                    res.prof_mult = mult;
+                    res.weapon_power *= mult;
+                }
             }
         }
         Some(w) => {
@@ -127,6 +139,12 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                     res.untrained_mult = if pen.untrained { pen.untrained_mult } else { 0.0 };
                 }
                 res.weapon_power = if pen.penalized { total as f64 * pen.factor() } else { total as f64 };
+                // GEAR-REWORK1 (PR5-51a): the strict rule's proficiency factor (none without it: today's numbers)
+                let mult = w.prof_mult(&u.stats);
+                if mult != 1.0 {
+                    res.prof_mult = mult;
+                    res.weapon_power *= mult;
+                }
                 // PK2-S5b: a dulled weapon instance swings at `DULLED_POWER_MULT` of its weapon power (`Unit::wear`;
                 // nothing tracked, nothing changes)
                 if !u.wear.is_empty() && u.swung_slot(offhand).is_some_and(|s| u.dulled(s)) {
@@ -134,8 +152,21 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
                     res.weapon_power *= crate::gear::DULLED_POWER_MULT;
                 }
             }
+            let mut stat_name = stat_name;
+            let mut stat_val = u.stats.stat(stat_name, ctx);
+            // GEAR-REWORK1 (PR5-51a pass 2, U3.3 4 `orb`): an off-hand item's power stat replaces the main-hand weapon's
+            // scaling stat when the wearer's value of it is higher (a fitting main-hand swing only; no key on today's
+            // rows, nothing changes)
+            if fits && !offhand {
+                if let Some(over) = u.inventory.get(crate::gear::Slot::OffHand).map(|o| o.item.power_stat_override.as_str()).filter(|s| !s.is_empty() && *s != stat_name) {
+                    let v = u.stats.stat(over, ctx);
+                    if v > stat_val {
+                        (stat_name, stat_val, res.stat_override) = (over, v, true);
+                    }
+                }
+            }
             res.stat_name = stat_name.to_string();
-            res.stat_val = u.stats.stat(stat_name, ctx);
+            res.stat_val = stat_val;
             res.unit_power = res.stat_val as f64 * scaling;
         }
     }

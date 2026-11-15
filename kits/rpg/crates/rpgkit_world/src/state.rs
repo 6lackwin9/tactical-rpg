@@ -234,8 +234,10 @@ impl UnitState {
     }
 
     /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept). U3.2-S3
-    /// (FB-34): training is no longer a gate (any unit may wear any item; an untrained one fights under the wield
-    /// penalty, `trains`), so `wears_untrained` is retired.
+    /// (FB-34): training is no gate for a class without proficiency roles (an untrained item fights under the wield
+    /// penalty, `trains`). GEAR-REWORK1 (PR5-51a): a class with roles is under the strict rule, whose hard lock refuses
+    /// proficiency 0 and unmet raw `required_stats` (`wear_lock`); a saved item it refuses moves to the stash at load
+    /// (`sanitize_loadout`).
     pub fn can_wear(&self, d: &Data, item: &str, slot: &str) -> Result<(), String> {
         let def = d.cat.items.get(item).ok_or_else(|| format!("unknown item '{item}'."))?;
         if !item_fits_slot(def, slot) {
@@ -245,7 +247,25 @@ impl UnitState {
         if rpgkit_rules::unit::forbids_hands(progression::forbid_hands(d, self), def) {
             return Err(format!("{} is two-handed: {} can't wield two-handed items now.", def.name, progression::display_name(d, self)));
         }
+        if let Some(lock) = self.wear_lock(d, def) {
+            return Err(lock.text(&progression::display_name(d, self), &def.name));
+        }
         Ok(())
+    }
+
+    /// GEAR-REWORK1 (PR5-51a, U3.3 1): the strict rule's hard lock on `item` for this member (`gear::wear_lock`): read
+    /// on its class's stats at its level plus its spend (unscaled, no gear bonuses) and its proficiency (`proficiency`:
+    /// class, drills and trained levels). None without a class or without the strict rule (a class with no roles).
+    pub fn wear_lock(&self, d: &Data, item: &rpgkit_data::ItemDef) -> Option<rpgkit_rules::gear::WearLock> {
+        let class = d.cat.classes.get(&self.class_id(d))?;
+        let prof = self.proficiency(d, class);
+        if !prof.is_strict() {
+            return None;
+        }
+        let spend: IndexMap<String, i32> = self.spend.iter().map(|(k, v)| (k.clone(), (*v).clamp(0, i64::from(i32::MAX)) as i32)).collect();
+        let mut stats = rpgkit_rules::stats::CharacterStats::new(class, self.level(d) as i32, &spend);
+        stats.proficiency = prof;
+        rpgkit_rules::gear::wear_lock(&stats, item)
     }
 
     /// PR5-26 (audit B2): the item slot `slot` gives the member without its own gear: its base unit's row in world

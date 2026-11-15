@@ -164,29 +164,44 @@ fn gear_moves_between_the_stash_and_the_hero_and_follows_the_two_handed_rule() {
     assert_eq!(s.stash.len(), total + added + made, "nothing is lost or invented");
 }
 
+/// GEAR-REWORK1 (PR5-51a, U3.3 1): `Switch Weapon` is retired: the Dojo offers no switch, and a preset pairing a
+/// two-handed main weapon with an off-hand piece (a U3.2 backup pair, until PR5-51b migrates the presets) ends with the
+/// main weapon worn and the off hand empty (the piece skipped or stowed), the main hand live. Found by rule, not by id.
 #[test]
-fn the_ready_weapon_returns_to_the_main_hand_when_the_pair_changes() {
+fn there_is_no_weapon_switch_and_a_two_handed_preset_leaves_the_off_hand_empty() {
     let mut s = session();
-    s.apply_preset("claymore_backup");
-    s.switch_weapon();
-    assert!(s.hero().inventory.is_offhand_active());
-    s.apply_preset("claymore_backup");
-    assert!(!s.hero().inventory.is_offhand_active(), "a fresh pair starts on the main hand");
-    s.switch_weapon();
-    s.unequip("off_hand");
-    assert!(!s.hero().inventory.off_active, "no pair: the main hand is ready (_normalize_active_weapon)");
+    assert!(!s.availability().contains_key("switch"), "no switch action");
+    let two = |s: &DojoSession, id: &str| s.cat.items.get(id).is_some_and(|i| i.two_handed);
+    let pair = s.presets().into_iter().find(|p| p.gear.iter().any(|(slot, i)| slot == "main_hand" && two(&s, i)) && p.gear.iter().any(|(slot, _)| slot == "off_hand"));
+    let Some(p) = pair else { return };
+    s.apply_preset(&p.id);
+    let main = p.gear.iter().find(|(slot, _)| slot == "main_hand").map(|(_, i)| i.clone()).unwrap();
+    assert_eq!(s.hero().inventory.main_weapon().map(|m| m.id().to_string()), Some(main), "the 2H weapon is worn");
+    assert!(s.hero().inventory.get(Slot::OffHand).is_none(), "the off hand stays empty");
+    s.strike(if s.hero().inventory.main_weapon().unwrap().is_ranged_weapon() { "ranged" } else { "main" });
+    assert_ne!(s.log.last().unwrap().outcome, "FAILED", "the main hand strikes, nothing to switch first");
 }
 
-/// U3.2-S3 (FB-34): a preset piece the hero has no training for is worn (soft wield), under the wield penalty.
+/// U3.2-S3 (FB-34): a preset piece the hero has no training for is worn (soft wield, a class without proficiency
+/// roles), under the wield penalty. GEAR-REWORK1: a preset's off-hand piece under its two-handed main is not worn (no
+/// weapon switch), so only the pieces the hand rule keeps are read.
 #[test]
 fn a_preset_piece_the_hero_has_no_training_for_is_worn_untrained() {
     let mut s = session();
-    let preset = s.presets().into_iter().find(|p| p.gear.iter().any(|(_, i)| !s.trained_for(&s.cat.items[i]))).expect("a preset with a piece the warrior has no training for");
-    s.apply_preset(&preset.id);
-    for (_, item) in preset.gear.iter().filter(|(_, i)| !s.trained_for(&s.cat.items[i])) {
-        let worn = s.hero().inventory.gear().find(|e| e.id() == item.as_str()).unwrap_or_else(|| panic!("{item} is worn"));
-        assert!(worn.wield_penalty(&s.hero().stats).untrained, "{item} is worn untrained");
+    let mut seen = 0;
+    for preset in s.presets() {
+        let untrained: Vec<String> = preset.gear.iter().filter(|(_, i)| !s.trained_for(&s.cat.items[i])).map(|(_, i)| i.clone()).collect();
+        if untrained.is_empty() {
+            continue;
+        }
+        s.apply_preset(&preset.id);
+        for item in &untrained {
+            let Some(worn) = s.hero().inventory.gear().find(|e| e.id() == item.as_str()) else { continue };
+            assert!(worn.wield_penalty(&s.hero().stats).untrained, "{item} is worn untrained");
+            seen += 1;
+        }
     }
+    assert!(seen > 0, "a preset wears a piece the warrior has no training for");
 }
 
 #[test]
@@ -206,26 +221,6 @@ fn the_pouch_loads_from_the_stash_heals_and_bombs() {
     s.use_pouch(0);
     assert!(s.dummy.hp < DUMMY_MAX_HP);
     assert!(s.hero().inventory.pouch.is_empty());
-}
-
-#[test]
-fn a_2h_weapon_with_an_off_hand_weapon_switches_and_gates_the_strikes() {
-    let mut s = session();
-    s.apply_preset("claymore_backup");
-    assert!(s.hero().inventory.needs_weapon_switch(), "claymore + shortsword needs the switch");
-    {
-        assert!(s.availability()["switch"].enabled);
-        assert!(!s.availability()["offhand"].enabled, "the off hand waits for the switch");
-        s.switch_weapon();
-        assert!(s.hero().inventory.is_offhand_active());
-        let hp = s.dummy.hp;
-        s.strike("main");
-        assert_eq!(s.dummy.hp, hp, "the main hand is sheathed");
-        assert_eq!(s.log.last().unwrap().outcome, "FAILED");
-    }
-    s.apply_preset("sword_board");
-    s.switch_weapon();
-    assert_eq!(s.log.last().unwrap().outcome, "FAILED", "nothing to switch with a 1H pair");
 }
 
 #[test]

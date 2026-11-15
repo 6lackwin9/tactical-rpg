@@ -190,11 +190,13 @@ pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
 
 /// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule,
 /// U3.2-S2 the family's engine rules, U3.2-S4 its Level-2 bonus and Level-3 passive, PR5-28 its `range_band.max`, PK2-S4
-/// its techniques and keystone, PK2-S5a its weapon durability).
-const ITEM_DERIVED: [&str; 20] = [
+/// its techniques and keystone, PK2-S5a its weapon durability, GEAR-REWORK1 its armour weight, hand category,
+/// `pairs_with`, off-hand skill, ammunition rule and power stat).
+const ITEM_DERIVED: [&str; 26] = [
     "item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers", rpgkit_data::ITEM_REACH_RULE,
     rpgkit_data::ITEM_FAMILY_RULES, rpgkit_data::ITEM_FAMILY_LEVEL2, rpgkit_data::ITEM_FAMILY_LEVEL3, rpgkit_data::ITEM_FAMILY_REACH_MAX,
-    rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES, rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE, rpgkit_data::ITEM_FAMILY_DURABILITY,
+    rpgkit_data::mastery::ITEM_FAMILY_TECHNIQUES, rpgkit_data::mastery::ITEM_FAMILY_KEYSTONE, rpgkit_data::ITEM_FAMILY_DURABILITY, rpgkit_data::ITEM_FAMILY_ARMOR_WEIGHT,
+    rpgkit_data::ITEM_FAMILY_SLOT_RULE, rpgkit_data::ITEM_FAMILY_PAIRS_WITH, rpgkit_data::ITEM_FAMILY_OFF_HAND_SKILL, rpgkit_data::ITEM_FAMILY_EMPOWER_NEXT, rpgkit_data::ITEM_FAMILY_POWER_STAT,
 ];
 
 /// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections (one

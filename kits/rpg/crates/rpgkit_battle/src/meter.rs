@@ -153,7 +153,10 @@ fn unit_start(w: &mut World, c: UnitId) {
     let pools = w.ruleset.numbers.unit_pools.clone();
     // U1.2-S5: the ruleset's pools after the passives' meters (start -1: the row's start)
     let held = w.units[c].passive_meters.clone().into_iter().map(|h| (h.meter, h.start, h.floor));
-    for (meter, start, floor) in held.chain(pools.iter().map(|m| (m.clone(), -1, None))) {
+    // GEAR-REWORK1 (PR5-51a pass 2, U3.3 4): then the off-hand ammunition item's meter (`ItemDef::empower_next`; the
+    // row's start, none on today's rows)
+    let ammo = w.units[c].inventory.get(rpgkit_rules::gear::Slot::OffHand).and_then(|e| e.item.empower_next.as_ref()).map(|e| (e.meter.clone(), -1, None));
+    for (meter, start, floor) in held.chain(ammo).chain(pools.iter().map(|m| (m.clone(), -1, None))) {
         let Some(def) = cat.unit_meters.get(&meter) else { continue };
         let max = max_of(w, c, def);
         let floor = floor.unwrap_or(def.min).clamp(def.min, max);
@@ -477,17 +480,61 @@ pub fn pay(res: &mut Resolver, w: &mut World, i: usize) {
     }
 }
 
+/// GEAR-REWORK1 (PR5-51a pass 2, U3.3 4 `ammo`): the action `i` starts (after `pay`; rule unit_meters) with an
+/// ammunition item in its unit's off hand (`ItemDef::empower_next`) whose meter the unit holds: the item's Reload
+/// (`off_hand_skill`) refills the meter to its max; a shot it empowers (`offhand::empowers`) started while the meter
+/// covers the cost spends it and its power takes `power_mult` (`Command::scale_power`); at less it fires plain. Pass 3:
+/// the rule's Throw (`throw_skill`) spends the cost and keeps its power (logged `..., thrown`).
+/// Logged `[Meter] <unit>'s <skill>: <meter> -1, empowered (3 -> 2)`. Nothing without the item's rule.
+pub fn off_hand_ammo(res: &mut Resolver, w: &mut World, i: usize) {
+    if !on(w) {
+        return;
+    }
+    let (c, skill_id, name, block) = {
+        let a = &res.scheduled[i];
+        (a.unit, a.command.skill.clone(), a.command.name.clone(), a.start)
+    };
+    let Some(off) = w.units[c].inventory.get(rpgkit_rules::gear::Slot::OffHand).map(|e| e.item.clone()) else { return };
+    let Some(e) = off.empower_next.as_ref() else { return };
+    let (Some(g), Some(s)) = (find(w, c, &e.meter), w.cat.skill(&skill_id).cloned()) else { return };
+    let meter = w.cat.unit_meters.get(&e.meter).map_or_else(|| e.meter.clone(), |m| m.name.clone());
+    let (value, max) = (w.meters.gauges[g].value, w.meters.gauges[g].max);
+    let h = holder(c, &name, &name);
+    let mut fired = Fired::new(c, "meter", None, &name);
+    if s.id == off.off_hand_skill {
+        if max > value {
+            w.meters.gauges[g].gained = true;
+        }
+        move_to(res, w, g, max, &h, &format!("{meter} {}, reloaded", delta_text(max - value)), true, block, &mut fired);
+    } else if !e.throw_skill.is_empty() && s.id == e.throw_skill {
+        // PR5-51a pass 3: the Throw spends its cost (`unpaid` refused it at less) and is not empowered
+        move_to(res, w, g, (value - e.cost).max(0), &h, &format!("{meter} {}, thrown", delta_text(-e.cost)), true, block, &mut fired);
+    } else if crate::offhand::empowers(w, c, &s) && value >= e.cost {
+        move_to(res, w, g, value - e.cost, &h, &format!("{meter} {}, empowered", delta_text(-e.cost)), true, block, &mut fired);
+        res.scheduled[i].command.scale_power(e.power_mult);
+    }
+    if !fired.lines.is_empty() || !fired.moves.is_empty() {
+        res.triggers.fired.push(fired);
+    }
+}
+
 /// UM2: the action `i` is about to start: when its unit cannot pay its meter cost now it fails unpaid (no AP, HP or
-/// meter is paid; the action is cancelled and logged). Returns whether it failed.
+/// meter is paid; the action is cancelled and logged). Returns whether it failed. PR5-51a pass 3: so does an off-hand
+/// ammunition item's Throw whose meter no longer covers the cost (`offhand::throw_problem`, an earlier action spent it).
 pub fn unpaid(res: &mut Resolver, w: &World, i: usize) -> bool {
     let a = &res.scheduled[i];
-    if (a.command.meters.is_empty() && a.command.gate.is_none()) || !on(w) {
+    if !on(w) {
         return false;
     }
     let c = a.unit;
+    let throw = crate::offhand::throw_rule(w, c, &a.command.skill).and_then(|_| w.cat.skill(&a.command.skill)).and_then(|s| crate::offhand::throw_problem(w, c, s));
+    if a.command.meters.is_empty() && a.command.gate.is_none() && throw.is_none() {
+        return false;
+    }
     // PK1-S2a: a meter gate (`requires_meter`) is tested first, at the start, before any cost
     let gate = gate_problem(w, a.command.gate.as_ref(), |m| value(w, c, m));
     let why = if gate.is_empty() { cost_problem(w, &a.command.meters, |m| value(w, c, m)) } else { gate };
+    let why = if why.is_empty() { throw.map(String::from).unwrap_or_default() } else { why };
     if why.is_empty() {
         return false;
     }

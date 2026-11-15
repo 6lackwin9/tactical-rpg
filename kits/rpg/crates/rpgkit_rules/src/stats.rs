@@ -184,6 +184,11 @@ pub struct Proficiency {
     /// U3.2-S3 (FB-33): no gear restriction although `entries` is set: a unit with no class, which borrows the first
     /// class's stats (`build_catalog_unit`'s fallback), wears everything trained, like a class with no proficiency list.
     pub unrestricted: bool,
+    /// GEAR-REWORK1 (PR5-51a, U3.3 1): the strict gear rule, on for a class that tags its proficiency entries with
+    /// roles (`ClassDef::proficiency_roles`, seeded by PR5-51b): proficiency 0 and unmet raw `required_stats` are a hard
+    /// equip lock (`gear::wear_lock`) and proficiency 1 / 2 / 3 scale weapon power and flat mitigation by
+    /// `rpgkit_data::PROF_GEAR_MULT`. Off (a class without roles, today's catalog): the soft U3.2 wield penalty, unchanged.
+    pub strict: bool,
 }
 
 impl Proficiency {
@@ -193,7 +198,22 @@ impl Proficiency {
             .iter()
             .map(|(k, e)| (k.to_lowercase(), ProfEntry { level: e.level.clamp(0, PROF_MAX_LEVEL), scaling: e.scaling.clamp(1.0, 2.0) }))
             .collect();
-        Self { entries, bonus_levels: IndexMap::new(), wield: WieldRule::default(), unrestricted: false }
+        Self { entries, bonus_levels: IndexMap::new(), wield: WieldRule::default(), unrestricted: false, strict: !class.proficiency_roles.is_empty() }
+    }
+
+    /// GEAR-REWORK1: whether the strict gear rule reads this proficiency (`strict`, and neither unrestricted nor empty:
+    /// a classless or hand-built unit stays unrestricted).
+    pub fn is_strict(&self) -> bool {
+        self.strict && !self.unrestricted && !self.entries.is_empty()
+    }
+
+    /// GEAR-REWORK1: the factor on the power of a weapon and the flat mitigation of a worn item of gear type `gear`
+    /// (`rpgkit_data::PROF_GEAR_MULT` at its level under the strict rule; 1.0 for no gear type or without the rule).
+    pub fn gear_mult(&self, gear: &str) -> f64 {
+        if gear.is_empty() || !self.is_strict() {
+            return 1.0;
+        }
+        rpgkit_data::PROF_GEAR_MULT[self.level_of(gear).clamp(0, PROF_MAX_LEVEL) as usize]
     }
 
     pub fn add_bonus(&mut self, gear: &str, levels: i32) {

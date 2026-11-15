@@ -44,11 +44,19 @@ pub(crate) const CHANNEL_TINT: Rgba = rgb(170, 90, 230);
 /// How strongly the placeholder tint lies over a unit's sprite.
 pub(super) const CHANNEL_TINT_ALPHA: u8 = 110;
 
-/// The neutral buttons of a menu in their order: Fill, Move, Rest, the Channel toggle when `channel`, Select.
-fn neutral_order(channel: bool) -> Vec<&'static str> {
+/// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): the Off-Hand button's place (only on a menu whose
+/// hero has an off-hand action, `offhand::action`); the button shows the action's name (Reload, Fade-Step, a jab).
+pub(super) const OFF_HAND: &str = "Off-Hand";
+
+/// The neutral buttons of a menu in their order: Fill, Move, Rest, the Channel toggle when `channel`, the Off-Hand
+/// button when `off_hand`, Select.
+fn neutral_order(channel: bool, off_hand: bool) -> Vec<&'static str> {
     let mut out = vec![NEUTRAL[0], NEUTRAL[1], NEUTRAL[2]];
     if channel {
         out.push(CHANNEL);
+    }
+    if off_hand {
+        out.push(OFF_HAND);
     }
     out.push(NEUTRAL[3]);
     out
@@ -91,6 +99,8 @@ pub(super) struct MenuGrid {
     /// button's text when it names another skill (Feed in a Channel round; measured with the buttons).
     pub(super) buttons: Vec<&'static str>,
     pub(super) rest_name: String,
+    /// GEAR-REWORK1 (PR5-51a pass 2): the Off-Hand button's text (its action's name; measured with the buttons).
+    pub(super) off_name: String,
 }
 
 impl MenuGrid {
@@ -101,7 +111,7 @@ impl MenuGrid {
         let mut places = vec![(0, 0); rows.len()];
         let mut cols = 0;
         let mut depth = 1;
-        let buttons = neutral_order(rows.iter().any(|r| r.slot == Some(Slot::Neutral(CHANNEL))));
+        let buttons = neutral_order(rows.iter().any(|r| r.slot == Some(Slot::Neutral(CHANNEL))), rows.iter().any(|r| r.slot == Some(Slot::Neutral(OFF_HAND))));
         for (k, row) in rows.iter().enumerate() {
             if let Some(Slot::Neutral(text)) = row.slot {
                 places[k] = (0, buttons.iter().position(|n| *n == text).unwrap_or(0) as i32);
@@ -118,13 +128,14 @@ impl MenuGrid {
             depth += 1;
         }
         let rest_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral("Rest"))).map(|r| r.label.clone()).filter(|l| l != "Rest").unwrap_or_default();
-        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, button_w: ICON + 7, buttons, rest_name }
+        let off_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral(OFF_HAND))).map(|r| r.label.clone()).unwrap_or_default();
+        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, button_w: ICON + 7, buttons, rest_name, off_name }
     }
 
     /// Measures the name column and the neutral buttons for the text size.
     pub(super) fn fit(&mut self, p: &mut Painter) {
         let label = self.lines.iter().map(|l| p.text_w(&l.0, BODY)).fold(0.0, f32::max);
-        let button = self.buttons.iter().copied().chain(std::iter::once(self.rest_name.as_str())).map(|n| p.text_w(n, SMALL)).fold(0.0, f32::max);
+        let button = self.buttons.iter().copied().chain([self.rest_name.as_str(), self.off_name.as_str()]).map(|n| p.text_w(n, SMALL)).fold(0.0, f32::max);
         self.label_w = label.ceil() as i32 + 2;
         self.button_w = (button.ceil() as i32 + 6).max(ICON);
     }
@@ -198,7 +209,8 @@ pub(super) fn draw_menu(ui: &mut Ui<Action>, art: &mut Art, pop: &Popup, grid: &
                 ui.p.panel(rr, with_alpha(fill, shows), with_alpha(edge, shows), 1.5);
                 let y = rr.y as f32 + (rr.h as f32 - ui.p.line_h(SMALL)) / 2.0;
                 // PK1-S2c (PK1 4.3 item 5): the Rest button names what a Rest block plans (Feed in a Channel round)
-                let shown = if text == "Rest" && !row.label.is_empty() { row.label.as_str() } else { text };
+                // GEAR-REWORK1 (PR5-51a pass 2): the Off-Hand button names its action (Reload, Fade-Step, a jab)
+                let shown = if (text == "Rest" || text == OFF_HAND) && !row.label.is_empty() { row.label.as_str() } else { text };
                 ui.p.text_center(rr.x as f32 + rr.w as f32 / 2.0, y, shown, SMALL, with_alpha(th().text, shows.max(110)));
             }
             _ => {

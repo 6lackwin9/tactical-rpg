@@ -75,11 +75,13 @@ fn a_data_only_family_gets_each_engine_rule() {
     assert!(eq("t_launcher").is_ranged_weapon() && !eq("t_launcher").is_melee_weapon());
     assert!(eq("t_club").is_melee_weapon() && !eq("t_club").is_ranged_weapon());
 
-    // focus: not held under a two-handed main weapon; a plain off-hand weapon is; under a one-handed main both are
+    // focus: not held under a two-handed main weapon; GEAR-REWORK1 (PR5-51a, no weapon switch): nor is any other
+    // off-hand piece; under a one-handed main both are
     let (cleaver, club) = (item(&cat, "t_cleaver"), item(&cat, "t_club"));
     assert!(cleaver.two_handed && !club.two_handed, "the fixture's hands");
     assert!(!off_hand_ok(Some(cleaver), item(&cat, "t_lens")), "a focus under a 2H main");
-    assert!(off_hand_ok(Some(cleaver), item(&cat, "t_parry")), "a non-focus off-hand weapon under a 2H main");
+    assert!(!off_hand_ok(Some(cleaver), item(&cat, "t_parry")), "a non-focus off-hand weapon under a 2H main");
+    assert!(off_hand_ok(Some(club), item(&cat, "t_parry")), "under a 1H main it is held");
     assert!(off_hand_ok(Some(club), item(&cat, "t_lens")) && off_hand_ok(None, item(&cat, "t_lens")));
 
     // shield: the rule makes the shield; another off-hand item is not one

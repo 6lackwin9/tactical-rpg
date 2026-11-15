@@ -1556,6 +1556,25 @@ impl Character {
         let preview = self.gear_preview(ui, d, cx.gs(), &work, &stash);
         let now = sheet(d, &cx.gs().world_id, &ruleset, &wields);
         let then = preview.as_ref().map(|p| sheet(d, &cx.gs().world_id, &ruleset, p));
+        // GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): the Off-Hand button as the draft (or the
+        // hovered or dragged change) would fight with it: the kit's `Unit::off_hand_button`, greyed with its reason;
+        // hidden for an off hand without an action
+        // (a chip after the off-hand slot's label)
+        let fights = preview.as_ref().and_then(|p| progression::build_with(d, p, &cx.gs().world_id, false)).or(built);
+        let slot_row = ui.widgets.iter().find(|w| w.id == "gear.slot.off_hand").map(|w| (w.rect, w.text.clone()));
+        if let (Some(b), Some((rr, text))) = (fights.as_ref().and_then(|b| b.unit.off_hand_button(&d.cat)), slot_row) {
+            let (label, card) = off_hand_preview(&b);
+            let x = rr.x + 4 + ui.p.text_w(&text, BODY).ceil() as i32 + OFF_HAND_CHIP_GAP;
+            let w = (ui.p.text_w(&b.name, SMALL).ceil() as i32 + 8).min(rr.x + rr.w - 2 - x);
+            if w > OFF_HAND_CHIP_MIN {
+                let r = Rect::new(x, rr.y + 1, w, rr.h - 2);
+                let live = b.problem.is_none();
+                ui.p.panel(r, th().card, if live { th().gold } else { th().edge }, 1.0);
+                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - ui.p.line_h(SMALL)) / 2.0, &b.name, SMALL, (w - 8) as f32, if live { th().gold } else { th().dim });
+                let hover = ui.hover(r);
+                ui.push("gear.offhand", "button", label, r, live, hover, None, card);
+            }
+        }
         let (lx, lw) = (25, 210);
         ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, th().info);
         // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
@@ -1649,6 +1668,31 @@ impl Character {
         };
         ok.then(|| wielding(d, gs, &w, &st))
     }
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2): the gap between the off-hand slot's label and its Off-Hand chip, and the narrowest
+/// chip drawn (a narrower one would hold no text).
+const OFF_HAND_CHIP_GAP: i32 = 6;
+const OFF_HAND_CHIP_MIN: i32 = 12;
+
+/// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): the Gear tab's Off-Hand chip text and card for
+/// button `b`: the action's name (with the kit's reason when the hero cannot use it) and what it does.
+fn off_hand_preview(b: &emberwake_rules::unit::OffHandButton) -> (String, aegis_ui::ui::Tip) {
+    use emberwake_rules::gear::OffHandUse;
+    let what = match &b.used {
+        OffHandUse::Jab { reach } => format!("A quick off-hand jab with {}, reach 1-{reach}.", b.item),
+        OffHandUse::Skill { reload: true, .. } => format!("{}: refills the ammo (only at 0); each ranged shot spends ammo to hit harder while it lasts.", b.item),
+        OffHandUse::Skill { .. } => format!("{}'s off-hand skill.", b.item),
+    };
+    let label = match &b.problem {
+        Some(p) => format!("Off-Hand: {} ({p})", b.name),
+        None => format!("Off-Hand: {}", b.name),
+    };
+    let mut card = tip(&format!("Off-Hand: {}", b.name), &format!("{what} In battle the skill menu's Off-Hand button picks it."));
+    if let Some(p) = &b.problem {
+        card.push((p.clone(), th().foe));
+    }
+    (label, card)
 }
 
 /// A deck as the agent link reads it (every key, empty ones too).
@@ -2283,6 +2327,89 @@ mod tests {
     fn opens_own_cut(cx: &Cx, member: &str) -> bool {
         let m = cx.gs().party.member(member).unwrap();
         progression::build(&cx.data, m).expect("a build").unit.techniques.iter().any(|t| t.skill == "own_cut")
+    }
+
+    /// GEAR-REWORK1 (PR5-51a pass 2) fixture: a scratch world (no shipped data) whose hero wields a 1h_heavy saber, with a
+    /// cloak (off-hand skill Fade-Step), a 1h_light dirk (the off-hand jab) and a focus from before the rework (no hand
+    /// fields) in the stash; resolved item rows carry their family's keys as the loader writes them.
+    fn offhand_cx() -> (Cx, String) {
+        let with_ids = |rows: Value| -> Value {
+            Value::Array(rows.as_array().unwrap().iter().map(|r| {
+                let mut r = r.as_object().unwrap().clone();
+                let id = r["id"].as_str().unwrap().to_string();
+                r.insert("_world".into(), json!("ward"));
+                r.insert("_qid".into(), json!(format!("ward:{id}")));
+                Value::Object(r)
+            }).collect())
+        };
+        let item = |id: &str, family: &str, slot: &str, extra: Value| {
+            let mut row = json!({"id": id, "name": id, "item_type": "WEAPON", "slot": slot, "weapon_type": family, "base_power": 10, "value": 10});
+            row.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            row
+        };
+        let catalog = json!({
+            "classes": [{"id": "scout", "name": "Scout", "skill_path": {}}],
+            "skills": [{"id": "t_jab", "name": "Jab", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "power_mult": 0.5, "weapon_hand": "off", "target_mode": "ENEMY"},
+                {"id": "t_fade", "name": "Fade-Step", "kind": "SUPPORT", "level": 1, "blocks": 1, "target_mode": "SELF", "heal_base": 1, "learned_only": true}],
+            "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "scout", "level": 1}],
+            "items": [item("saber", "sword", "MAIN_HAND", json!({"family_slot_rule": "1h_heavy"})),
+                item("mantle", "cloak", "OFF_HAND", json!({"family_slot_rule": "off_only", "off_hand_category": "cloak", "family_off_hand_skill": "t_fade"})),
+                item("dirk", "knife", "MAIN_HAND", json!({"family_slot_rule": "1h_light", "family_reach_max": 2})),
+                item("focus", "orb", "OFF_HAND", json!({"off_hand_category": "orb"}))]
+        });
+        let worlds = json!({"ward": {"manifest": {"id": "ward", "name": "Ward", "start_location": "hub", "start_party": ["hero"], "campaign": {"start_act": 1}}, "own": {
+            "locations": with_ids(json!([{"id": "hub", "name": "Hub"}])),
+            "characters": with_ids(json!([{"id": "hero", "name": "Hero", "role": "party", "base_unit": "hero"}]))
+        }}});
+        let d = Data::from_values(&catalog, &worlds, &json!({}));
+        let mut cx = crate::story::tests::story_cx(d.clone());
+        let mut gs = emberwake_world::new_game::create_for_world(&d, "ward", 1).expect("a new game");
+        gs.party.members[0].equipment.insert("main_hand".into(), "saber".into());
+        for id in ["mantle", "dirk", "focus"] {
+            gs.party.add_to_stash(id, 1);
+        }
+        crate::screens::enter_game(&mut cx, gs, -1, Vec::new());
+        cx.nav.clear();
+        let member = cx.gs().party.members[0].id.clone();
+        (cx, member)
+    }
+
+    /// GEAR-REWORK1 (PR5-51a pass 2, `docs/sessions/U3_GEAR_REWORK.md` 4): the Gear tab shows the Off-Hand button the draft
+    /// would fight with (the kit's `Unit::off_hand_button`): none for an empty off hand or a focus from before the rework,
+    /// the cloak's Fade-Step, the light dirk's jab; its card names the item. With `AEGIS_REVIEW_DIR` set it writes the tab
+    /// at 1280 x 720 as `gear_offhand.png` there.
+    #[test]
+    fn the_gear_tab_previews_the_off_hand_button_of_the_draft() {
+        let (mut cx, member) = offhand_cx();
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "gear");
+        crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(slot_widget(&c, "gear.offhand").is_none(), "an empty off hand: no button");
+        let shown = |c: &mut Character, cx: &mut Cx, g: &mut Gfx, id: &str| -> Option<String> {
+            let d = cx.data.clone();
+            let (w, st) = c.gear.as_mut().expect("a gear draft");
+            equip(&d, "ward", w, st, id, Some("off_hand")).expect("fits the off hand");
+            assert_eq!(draft_of(c).0.equipment.get("off_hand").map(String::as_str), Some(id), "worn in the off hand");
+            crate::hud::hud_tests::frame(c, cx, g, 1.0);
+            slot_widget(c, "gear.offhand").map(|w| w.text.clone())
+        };
+        assert_eq!(shown(&mut c, &mut cx, &mut g, "focus"), None, "gear from before the rework: no button");
+        assert_eq!(shown(&mut c, &mut cx, &mut g, "dirk").as_deref(), Some("Off-Hand: Jab"), "a light weapon's jab");
+        assert_eq!(shown(&mut c, &mut cx, &mut g, "mantle").as_deref(), Some("Off-Hand: Fade-Step"), "the cloak's skill");
+        let card = &slot_widget(&c, "gear.offhand").unwrap().tip;
+        assert!(card.iter().any(|(t, _)| t.contains("mantle")), "the card names the item: {card:?}");
+        let (chip, row) = (slot_widget(&c, "gear.offhand").unwrap().rect, slot_widget(&c, "gear.slot.off_hand").unwrap().rect);
+        assert!(row.contains(chip.x, chip.y) && row.contains(chip.x + chip.w - 1, chip.y + chip.h - 1), "a chip inside the off-hand slot's row: {chip:?} in {row:?}");
+        if let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") {
+            g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+            g.view = aegis_ui::painter::View::fit(1280, 720);
+            c.draw(&mut cx, &mut g, (-500, -500), true);
+            let file = std::fs::File::create(std::path::Path::new(&out).join("gear_offhand.png")).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        }
     }
 
     #[test]

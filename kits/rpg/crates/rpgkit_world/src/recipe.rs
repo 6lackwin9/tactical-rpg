@@ -144,8 +144,10 @@ fn breakable(d: &Data, id: &str) -> bool {
     d.cat.items.get(id).is_some_and(|i| i.item_type != "QUEST")
 }
 
-/// The families of member `m`'s class with role `role` (class proficiency order).
+/// The families of member `m`'s class with role `role` (class proficiency order; GEAR-REWORK1: an alias, `primary`, reads
+/// as its role, `rpgkit_data::canonical_role`).
 pub fn role_families(d: &Data, m: &UnitState, role: &str) -> Vec<String> {
+    let role = rpgkit_data::canonical_role(role).unwrap_or(role);
     d.cat.classes.get(&m.class_id(d)).map(|c| c.proficiency_roles.iter().filter(|(_, r)| *r == role).map(|(f, _)| f.clone()).collect()).unwrap_or_default()
 }
 

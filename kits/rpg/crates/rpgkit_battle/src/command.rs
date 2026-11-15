@@ -1129,6 +1129,18 @@ impl Command {
         t.filter(|t| *t != self.source)
     }
 
+    /// GEAR-REWORK1 (PR5-51a pass 2, U3.3 4 `ammo`): an attack's power factor times `f` (an empowered shot); nothing for
+    /// any other kind. Returns whether it changed.
+    pub fn scale_power(&mut self, f: f64) -> bool {
+        match &mut self.kind {
+            CmdKind::Attack { skill_mult, .. } | CmdKind::Area { skill_mult, .. } => {
+                *skill_mult *= f;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// RULESET1_INTENT TG4: the command becomes Rest blocks (no AP, no stance, no move); its blocks stay booked.
     pub fn into_rest(&mut self) {
         self.kind = CmdKind::Rest { recover_ap: 0 };

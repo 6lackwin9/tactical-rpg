@@ -134,6 +134,11 @@ fn fits_slot(item: &ItemDef, slot: &str) -> bool {
         return false;
     }
     let target = slot.to_uppercase();
+    // GEAR-REWORK1 (PR5-51a pass 2, U3.3 2): a hand item whose family names its hand category goes where it says
+    // (`gear::hands_of_rule`: a `1h_light` weapon in either hand)
+    if !item.slot_rule.is_empty() && (target == "MAIN_HAND" || target == "OFF_HAND") {
+        return rpgkit_rules::gear::hands_of_rule(&item.slot_rule).contains(&target.as_str());
+    }
     // U3.2-S2: a shield is an item whose family has the engine rule `shield` (`Equipment::is_shield`)
     if item.has_rule(rpgkit_data::SHIELD_RULE) {
         return target == "OFF_HAND";
@@ -179,8 +184,9 @@ pub fn character_passives(worlds: &Catalogs, character: &Dict, w: &str) -> Vec<S
     out
 }
 
-/// ClassUnitValidator._loadout_errors: every item fits its slot; no two-handed weapon with an off-hand item; no
-/// accessory twice. U3.2-S3 (FB-34): training is not checked (an untrained item is worn under the wield penalty).
+/// ClassUnitValidator._loadout_errors: every item fits its slot; no two-handed weapon with an off-hand item (GEAR-REWORK1:
+/// but the off-hand families its family pairs with); no accessory twice. U3.2-S3 (FB-34): training is not checked (an
+/// untrained item is worn under the wield penalty).
 fn loadout_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     for slot in LOADOUT_SLOTS {
@@ -199,7 +205,9 @@ fn loadout_errors(v: &View, e: &Dict) -> Vec<String> {
     }
     let main = v.get("items", &json::s(e, "main_hand"));
     let off = v.get("items", &json::s(e, "off_hand"));
-    if json::b(main, "two_handed", false) && !off.is_empty() {
+    // GEAR-REWORK1 (PR5-51a pass 2, U3.3 2): unless the main weapon's family pairs with the off-hand item's
+    // (`gear::off_hand_ok`: a `2h_rig` bow and its ammo)
+    if json::b(main, "two_handed", false) && !off.is_empty() && !rpgkit_rules::gear::off_hand_ok(Some(&ItemDef::from_obj(main)), &ItemDef::from_obj(off)) {
         errors.push("A two-handed weapon can't be paired with an off-hand item.".into());
     }
     let (a1, a2) = (json::s(e, "accessory_1"), json::s(e, "accessory_2"));
@@ -286,10 +294,11 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
                 if !(MIN_SCALING..=MAX_SCALING).contains(&scaling) {
                     errors.push(format!("Proficiency {gear}: scaling must be {}-{}.", fixed(MIN_SCALING, 1), fixed(MAX_SCALING, 1)));
                 }
-                // PK2-S3: an entry's optional role in the class (prices a proficiency training recipe)
+                // PK2-S3: an entry's optional role in the class (prices a proficiency training recipe); GEAR-REWORK1
+                // (PR5-51a): an alias (`primary` for main) is accepted, and any role turns the strict gear rule on
                 if let Some(role) = entry.get(rpgkit_data::PROF_ROLE_KEY) {
-                    if !role.as_str().is_some_and(|r| rpgkit_data::PROF_ROLES.contains(&r)) {
-                        errors.push(format!("Proficiency {gear}: role '{}' is not one of {}.", json::gstr(role), rpgkit_data::PROF_ROLES.join(", ")));
+                    if !role.as_str().is_some_and(|r| rpgkit_data::canonical_role(r).is_some()) {
+                        errors.push(format!("Proficiency {gear}: role '{}' is not one of {} (or {}).", json::gstr(role), rpgkit_data::PROF_ROLES.join(", "), role_aliases()));
                     }
                 }
                 if weapon_types.contains(gear) {
@@ -759,6 +768,32 @@ pub fn basics_in_path_warnings(e: &Dict, path: &Dict) -> Vec<String> {
         .collect()
 }
 
+/// GEAR-REWORK1: the role aliases as "alias = role" (for the messages).
+fn role_aliases() -> String {
+    rpgkit_data::PROF_ROLE_ALIASES.iter().map(|(a, r)| format!("{a} = {r}")).collect::<Vec<_>>().join(", ")
+}
+
+/// GEAR-REWORK1 (PR5-51a, `docs/sessions/U3_GEAR_REWORK.md` 1, 5): whether the catalog is under the strict gear rule:
+/// some class tags a proficiency entry with a role (`ClassDef::proficiency_roles`, seeded by PR5-51b). The content
+/// checks of the rework (accessory limits, armour weights on every HEAD and BODY family) read it, so a catalog from
+/// before the rework checks as it did.
+pub fn strict_gear(v: &View) -> bool {
+    v.entries("classes").iter().any(|c| json::dget(c, "proficiency").values().any(|e| !json::s(json::dict(e), rpgkit_data::PROF_ROLE_KEY).is_empty()))
+}
+
+/// GEAR-REWORK1 (U3.3 1): a role whose entry's level is not the role's seeded level (`PROF_ROLE_LEVELS`: main 3,
+/// secondary and third 2, minor 1) is a warning (the role's mastery and multiplier read the level, not the role).
+pub fn role_level_warnings(class: &ClassDef) -> Vec<String> {
+    let mut out = Vec::new();
+    for (gear, role) in &class.proficiency_roles {
+        let (Some((_, want)), Some(entry)) = (rpgkit_data::PROF_ROLE_LEVELS.iter().find(|(r, _)| r == role), class.proficiency.get(gear)) else { continue };
+        if entry.level != *want {
+            out.push(format!("Proficiency {gear}: role {role} is seeded at level {want}; this entry is level {}.", entry.level));
+        }
+    }
+    out
+}
+
 pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     let class = ClassDef::from_obj(e);
     let mut out = rpgkit_rules::budget::check_class(&class, &v.typed.items);
@@ -789,6 +824,7 @@ pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     }
     out.extend(role_warnings(v, &json::s(e, "ai_role"), path_has_support(v, &families), &json::s(e, "main_hand"), false));
     out.extend(masterable_warnings(v, &class));
+    out.extend(role_level_warnings(&class));
     out
 }
 

@@ -161,6 +161,9 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
         // LAYER-DOWN-2: an item's gear type (items `weapon_type`): "", then the family table's gear tokens in their listed order
         "gear_types" => std::iter::once(String::new()).chain(skill::listed_gear_tokens(v.entries("item_families"))).collect(),
         "weapon_types" => skill::gear_tokens(v.entries("item_families")).into_iter().chain(std::iter::once("unarmed".to_string())).collect(),
+        // GEAR-REWORK1 (PR5-51a pass 2, "dynamic OFF_CATEGORIES"): a family's derived off-hand category: "", then the ids
+        // of the table's off-hand families (hands = off) in their listed order
+        "off_families" => std::iter::once(String::new()).chain(v.entries("item_families").iter().filter(|f| crate::source::category(f) == "off").map(|f| json::s(f, "id"))).collect(),
         "debuffs_or_all" => rpgkit_rules::status::debuffs().into_iter().map(String::from).chain(std::iter::once("all".to_string())).collect(),
         _ => json::aget(f, "options").iter().map(gstr).collect(),
     }

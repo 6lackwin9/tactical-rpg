@@ -27,6 +27,7 @@ mod strip_block_tests;
 mod channel_tests;
 mod music_tests;
 mod cue_tests;
+mod offhand_tests;
 
 use crate::battle::flow::{boss_fight, sound_of};
 use crate::battle::{Action, BattleScreen};

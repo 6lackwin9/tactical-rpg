@@ -230,7 +230,7 @@ fn a_class_proficiency_role_and_an_item_theme() {
     let class = |role: &str| json!({"id": "adept", "name": "Adept", "base_stats": stats, "growth": stats, "skill_path": {}, "proficiency": {"sword": {"level": 2, "role": role}}});
     let errors = |role: &str| check::validate_entry(&v, "classes", &dict(class(role)), "adept");
     assert!(!errors("secondary").iter().any(|e| e.contains("role")), "{:?}", errors("secondary"));
-    assert!(errors("spare").contains(&"Proficiency sword: role 'spare' is not one of main, secondary, third, minor.".to_string()), "{:?}", errors("spare"));
+    assert!(errors("spare").contains(&"Proficiency sword: role 'spare' is not one of main, secondary, third, minor (or primary = main).".to_string()), "{:?}", errors("spare"));
     let roles = rpgkit_data::ClassDef::from_obj(json::dict(&class("third"))).proficiency_roles;
     assert_eq!(roles.get("sword").map(String::as_str), Some("third"));
     let blade = json!({"id": "t_blade", "name": "Blade", "family": "t_mat", "theme": "order"});

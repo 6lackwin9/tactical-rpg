@@ -1,6 +1,7 @@
 //! Gear moves on a draft (gear_model.gd equip / unequip / pouch, GEARUI1 drag and drop): a member's equipment and pouch
-//! against the party stash, every move refused with its reason or applied whole. The two-handed rule stows a shield or
-//! focus the new main hand can't hold (the Godot dojo's "stowed: ... is 2-Handed") and clears it when a two-handed
+//! against the party stash, every move refused with its reason or applied whole. The two-handed rule stows what the off
+//! hand holds under a new two-handed main hand (the Godot dojo's "stowed: ... is 2-Handed"; GEAR-REWORK1, PR5-51a: any
+//! off-hand piece, the weapon switch is retired) and clears it when a two-handed
 //! class default comes back; under `pouch_stacks` the pouch holds stack slots with packed targets (INTENT2-U). Clicks,
 //! drops and a screen's stat preview share these. PR5-31 moved them from the game's party screen with no rule change.
 
@@ -42,7 +43,7 @@ pub fn equip(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, ite
     work.can_wear(d, item, slot)?;
     if slot == "off_hand" {
         if let Some(main) = main_weapon(d, world, work).filter(|m| !off_hand_ok(Some(m), def)) {
-            return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
+            return Err(format!("{} needs both hands: the off hand stays empty with it.", main.name));
         }
     }
     // PR5-26 (audit B2): an emptied slot (`NO_ITEM`) gives nothing back
@@ -51,7 +52,7 @@ pub fn equip(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash, ite
     }
     take_one(stash, item);
     if slot == "main_hand" && def.two_handed {
-        // A shield or focus goes back to the stash (the Godot dojo's "stowed: ... is 2-Handed").
+        // The off-hand piece goes back to the stash (the Godot dojo's "stowed: ... is 2-Handed").
         if let Some(off) = work.equipment.get("off_hand").cloned().filter(|o| d.cat.items.get(o).is_some_and(|o| !off_hand_ok(Some(def), o))) {
             work.equipment.shift_remove("off_hand");
             give_one(stash, off);
@@ -115,7 +116,7 @@ pub fn move_slot(d: &Data, world: &str, work: &mut UnitState, stash: &mut Stash,
         let mut rest = work.clone();
         rest.equipment.shift_remove(from);
         if let Some(main) = main_weapon(d, world, &rest).filter(|m| !off_hand_ok(Some(m), def)) {
-            return Err(format!("{} needs both hands: the off hand can hold only a weapon with it.", main.name));
+            return Err(format!("{} needs both hands: the off hand stays empty with it.", main.name));
         }
     }
     work.equipment.shift_remove(from);

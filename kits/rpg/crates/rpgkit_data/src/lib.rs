@@ -142,6 +142,8 @@ pub struct ClassDef {
     pub remains: String,
     /// PK2-S3 (`docs/sessions/PK2_GRAFTS.md` 5): gear type -> its role in the class (`PROF_ROLES`: main, secondary, third,
     /// minor; a proficiency entry's optional `role`), which prices a `train_proficiency` recipe. No entry = no role.
+    /// GEAR-REWORK1 (PR5-51a): an alias is stored as its role (`canonical_role`), and a class with any role is under the
+    /// strict gear rule (`rpgkit_rules::stats::Proficiency::strict`).
     pub proficiency_roles: IndexMap<String, String>,
 }
 
@@ -189,8 +191,15 @@ impl ClassDef {
             loadout,
             pouch: strings(o, "pouch"),
             remains: string(o, REMAINS_KEY, ""),
+            // GEAR-REWORK1: an alias (`primary`) is read as its role (`canonical_role`); an unknown name is kept for the check
             proficiency_roles: obj(o, "proficiency")
-                .map(|m| m.iter().filter_map(|(k, v)| v.as_object().map(|e| (k.clone(), string(e, PROF_ROLE_KEY, "")))).filter(|(_, r)| !r.is_empty()).collect())
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(k, v)| v.as_object().map(|e| (k.clone(), string(e, PROF_ROLE_KEY, ""))))
+                        .filter(|(_, r)| !r.is_empty())
+                        .map(|(k, r)| (k, canonical_role(&r).map_or(r, str::to_string)))
+                        .collect()
+                })
                 .unwrap_or_default(),
         }
     }
@@ -666,11 +675,122 @@ pub struct ItemDef {
     /// (`ITEM_FAMILY_DURABILITY`; 0 = none); `max_durability` reads them.
     pub durability: i32,
     pub family_durability: i32,
+    /// GEAR-REWORK1 (U3.3 5): its ARMOR family's weight (`ITEM_FAMILY_ARMOR_WEIGHT`: heavy, medium or light; "" = none).
+    pub armor_weight: String,
+    /// GEAR-REWORK1 (PR5-51a pass 2, U3.3 2): its family's hand category (`ITEM_FAMILY_SLOT_RULE`, one of `SLOT_RULES`;
+    /// "" = none, a row from before the rework: the pre-rework hand rules hold).
+    pub slot_rule: String,
+    /// GEAR-REWORK1 (U3.3 2): the off-hand families a two-handed weapon of its family leaves room for
+    /// (`ITEM_FAMILY_PAIRS_WITH`; empty = none: a two-handed main keeps the off hand empty).
+    pub pairs_with: Vec<String>,
+    /// GEAR-REWORK1 (U3.3 4): the skill its family's item grants while worn in the off hand, the Off-Hand button's
+    /// action (`ITEM_FAMILY_OFF_HAND_SKILL`; "" = none).
+    pub off_hand_skill: String,
+    /// GEAR-REWORK1 (U3.3 4): its family's ammunition rule while worn in the off hand (`ITEM_FAMILY_EMPOWER_NEXT`; None =
+    /// none).
+    pub empower_next: Option<EmpowerNext>,
+    /// GEAR-REWORK1 (U3.3 4): the stat its family's item, worn in the off hand, lends a main-hand weapon's attack power
+    /// when higher than the weapon's own scaling stat (`ITEM_FAMILY_POWER_STAT`; "" = none).
+    pub power_stat_override: String,
     pub raw: Obj,
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2, U3.3 2): an item family's hand category key (`slot_rule`) and the resolved item row's
+/// key carrying it (left out of the stored form, like every `ITEM_FAMILY_*` key).
+pub const FAMILY_SLOT_RULE: &str = "slot_rule";
+pub const ITEM_FAMILY_SLOT_RULE: &str = "family_slot_rule";
+/// GEAR-REWORK1 (U3.3 2): a two-handed weapon that leaves the off hand empty.
+pub const SLOT_2H_SOLO: &str = "2h_solo";
+/// ... a two-handed weapon whose family's `pairs_with` off-hand families may share the off hand (a bow and its ammo).
+pub const SLOT_2H_RIG: &str = "2h_rig";
+/// ... a one-handed weapon held in the main hand only.
+pub const SLOT_1H_HEAVY: &str = "1h_heavy";
+/// ... a one-handed weapon held in either hand (its off-hand jab reaches as the weapon does).
+pub const SLOT_1H_LIGHT: &str = "1h_light";
+/// ... an off-hand item, held in the off hand only.
+pub const SLOT_OFF_ONLY: &str = "off_only";
+/// GEAR-REWORK1 (U3.3 2): the hand categories, in the spec's order.
+pub const SLOT_RULES: [&str; 5] = [SLOT_2H_SOLO, SLOT_2H_RIG, SLOT_1H_HEAVY, SLOT_1H_LIGHT, SLOT_OFF_ONLY];
+/// GEAR-REWORK1 (U3.3 2): a family's `pairs_with` key and the resolved row's.
+pub const FAMILY_PAIRS_WITH: &str = "pairs_with";
+pub const ITEM_FAMILY_PAIRS_WITH: &str = "family_pairs_with";
+/// GEAR-REWORK1 (U3.3 4): a family's `off_hand_skill` key and the resolved row's.
+pub const FAMILY_OFF_HAND_SKILL: &str = "off_hand_skill";
+pub const ITEM_FAMILY_OFF_HAND_SKILL: &str = "family_off_hand_skill";
+/// GEAR-REWORK1 (U3.3 4): a family's `empower_next` key and the resolved row's.
+pub const FAMILY_EMPOWER_NEXT: &str = "empower_next";
+pub const ITEM_FAMILY_EMPOWER_NEXT: &str = "family_empower_next";
+/// GEAR-REWORK1 (U3.3 4): a family's `power_stat_override` key and the resolved row's.
+pub const FAMILY_POWER_STAT: &str = "power_stat_override";
+pub const ITEM_FAMILY_POWER_STAT: &str = "family_power_stat_override";
+
+/// GEAR-REWORK1 (PR5-51a pass 2, U3.3 4 `ammo`): an off-hand family's ammunition rule, `{meter, cost, power_mult}`.
+/// While an item of the family is worn in the off hand (rule `unit_meters`), its wearer holds the unit meter `meter`
+/// (the row's own start; `start_full` starts it full); each ranged main-hand weapon attack started while the meter
+/// holds `cost` or more spends `cost` and hits at `power_mult` times its power (at less the attack fires plain). The
+/// family's `off_hand_skill` is its Reload: open only at 0, it refills the meter to its max. PR5-51a pass 3 (U3.3 2 / 4
+/// "unlocks ranged 2-3 Throw"): an optional `throw_skill` names an ATTACK skill (reaching its own `reach_min` /
+/// `reach_max` band) granted while a `1h_light` main-hand weapon is held beside the item; it is open only while the
+/// meter holds `cost` (the pip is what unlocks it), spends `cost` at its start and is not itself empowered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmpowerNext {
+    pub meter: String,
+    pub cost: i32,
+    pub power_mult: f64,
+    /// The Throw skill a `1h_light` main-hand weapon gains beside the item ("" = none).
+    pub throw_skill: String,
+}
+
+impl EmpowerNext {
+    /// The object's keys.
+    pub const KEYS: [&'static str; 4] = ["meter", "cost", "power_mult", "throw_skill"];
+    /// The defaults of `cost` and `power_mult`.
+    pub const DEFAULT_COST: i32 = 1;
+    pub const DEFAULT_POWER_MULT: f64 = 1.25;
+
+    /// None for an empty object or one without a meter id.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(Self { meter: string(o, "meter", ""), cost: int(o, "cost", Self::DEFAULT_COST), power_mult: float(o, "power_mult", Self::DEFAULT_POWER_MULT), throw_skill: string(o, "throw_skill", "") })
+            .filter(|e| !e.meter.is_empty())
+    }
 }
 
 /// PK2-S3: a class proficiency entry's role key (`ClassDef::proficiency_roles`).
 pub const PROF_ROLE_KEY: &str = "role";
+
+/// GEAR-REWORK1 (PR5-51a, `docs/sessions/U3_GEAR_REWORK.md` 1): the role names read as another (`canonical_role`):
+/// `primary` (PR5-51a's row word) is `main`.
+pub const PROF_ROLE_ALIASES: [(&str, &str); 1] = [("primary", "main")];
+
+/// GEAR-REWORK1: the role a role name stands for: one of `PROF_ROLES`, an alias's role (`PROF_ROLE_ALIASES`), or None
+/// (unknown).
+pub fn canonical_role(role: &str) -> Option<&'static str> {
+    PROF_ROLES.iter().find(|r| **r == role).copied().or_else(|| PROF_ROLE_ALIASES.iter().find(|(a, _)| *a == role).map(|(_, r)| *r))
+}
+
+/// GEAR-REWORK1 (U3.3 1): the proficiency level a class seeds each role at (main 3, secondary and third 2, minor 1);
+/// the class check warns on an entry whose level differs.
+pub const PROF_ROLE_LEVELS: [(&str, i32); 4] = [("main", 3), ("secondary", 2), ("third", 2), ("minor", 1)];
+
+/// GEAR-REWORK1 (PR5-51a, U3.3 1): the factor on a weapon's power and a worn item's flat mitigation at proficiency 0-3
+/// under the strict gear rule (`rpgkit_rules::stats::Proficiency::strict`): 0.80 / 1.00 / 1.25 at 1 / 2 / 3; index 0 (a
+/// hard equip lock there) is 1.0, so gear worn while locked keeps only the soft wield penalty. Kept in the data crate
+/// beside the role tables (like `DULLED_POWER_MULT`), so the rules' `LOCKED` table and the rules contract stay as they
+/// were until PR5-51b re-records its goldens.
+pub const PROF_GEAR_MULT: [f64; 4] = [1.0, 0.80, 1.00, 1.25];
+
+/// GEAR-REWORK1 (U3.3 5): an ARMOR family's optional weight key (`heavy`, `medium` or `light`; "" = none, a
+/// compatibility row from before the rework), and the key the loader writes it under on the family's resolved item
+/// rows (`ItemDef::armor_weight`; the writer leaves it out of the stored form).
+pub const FAMILY_ARMOR_WEIGHT: &str = "armor_weight";
+pub const ITEM_FAMILY_ARMOR_WEIGHT: &str = "family_armor_weight";
+/// GEAR-REWORK1 (U3.3 5): the armour weights, heaviest first; one family per weight, covering both HEAD and BODY.
+pub const ARMOR_WEIGHTS: [&str; 3] = ["heavy", "medium", "light"];
+/// GEAR-REWORK1 (U3.3 5): a proficiency-free accessory carries at most this many bonus modifiers (stat bonuses, adjusts
+/// and non-hook effects; requirements do not count) ...
+pub const ACCESSORY_MAX_MODIFIERS: usize = 2;
+/// ... or this many passive hooks (an effect modifier with a `trigger` effect) and nothing else but requirements.
+pub const ACCESSORY_MAX_HOOKS: usize = 1;
 
 /// PK2-S2: the class and character key naming the item a fallen member leaves (`ClassDef::remains`).
 pub const REMAINS_KEY: &str = "remains";
@@ -829,6 +949,12 @@ impl ItemDef {
             technique: Technique::one(o, mastery::TECHNIQUE_KEY),
             durability: int(o, ITEM_DURABILITY, 0).max(0),
             family_durability: int(o, ITEM_FAMILY_DURABILITY, 0).max(0),
+            armor_weight: string(o, ITEM_FAMILY_ARMOR_WEIGHT, ""),
+            slot_rule: string(o, ITEM_FAMILY_SLOT_RULE, ""),
+            pairs_with: strings(o, ITEM_FAMILY_PAIRS_WITH),
+            off_hand_skill: string(o, ITEM_FAMILY_OFF_HAND_SKILL, ""),
+            empower_next: obj(o, ITEM_FAMILY_EMPOWER_NEXT).and_then(EmpowerNext::from_obj),
+            power_stat_override: string(o, ITEM_FAMILY_POWER_STAT, ""),
             raw: o.clone(),
         }
     }

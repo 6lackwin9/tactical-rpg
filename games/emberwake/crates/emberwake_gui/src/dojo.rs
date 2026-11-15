@@ -48,7 +48,6 @@ pub enum DAct {
     Ruleset(usize),
     DummyGuard,
     Bench(usize),
-    Switch,
     Preset(usize),
     ClearGear,
     Unequip(&'static str),
@@ -298,7 +297,6 @@ impl Dojo {
             DAct::FollowClear(op) => self.deck_edit(|t, d| t.follow_clear(d, &op)),
             DAct::DummyGuard => s.toggle_dummy_defense(),
             DAct::Bench(n) => s.run_benchmark(n),
-            DAct::Switch => s.switch_weapon(),
             // PK1-KITFIX (c): the built-in presets with the catalog's dojo_presets rows over them
             DAct::Preset(i) => {
                 if let Some(p) = s.presets().get(i) {
@@ -612,7 +610,7 @@ impl Dojo {
         let avail = self.s.availability();
         let mut x = b.x + 2;
         let mut y = b.y + 2;
-        for (key, label, act) in [("main", "Main", DAct::Strike("main")), ("offhand", "Off-hand", DAct::Strike("offhand")), ("ranged", "Volley", DAct::Strike("ranged")), ("dual", "Dual", DAct::Strike("dual")), ("switch", "Switch", DAct::Switch)] {
+        for (key, label, act) in [("main", "Main", DAct::Strike("main")), ("offhand", "Off-hand", DAct::Strike("offhand")), ("ranged", "Volley", DAct::Strike("ranged")), ("dual", "Dual", DAct::Strike("dual"))] {
             let a = &avail[key];
             let w = ui.p.text_w(label, SMALL).ceil() as i32 + 8;
             if x + w > b.x + b.w {

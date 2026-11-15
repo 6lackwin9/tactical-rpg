@@ -15,6 +15,7 @@ pub mod log;
 pub mod mark;
 pub mod meter;
 pub mod metrics;
+pub mod offhand;
 pub mod path;
 pub mod plan;
 pub mod poise;

@@ -477,10 +477,10 @@ impl Unit {
         }
     }
 
-    /// The ready weapon's type (the stat context of weapon-conditional modifiers); AUDIT-09: the off-hand backup's
-    /// while it is the ready one of a 2H pair (`Inventory::active_weapon`).
+    /// The main-hand weapon's type (the stat context of weapon-conditional modifiers; GEAR-REWORK1: no weapon switch,
+    /// so the main hand is always the ready one).
     pub fn weapon_context(&self) -> Option<String> {
-        self.inventory.active_weapon().map(|w| w.weapon_type().to_string())
+        self.inventory.main_weapon().map(|w| w.weapon_type().to_string())
     }
 
     pub fn min_attack_range(&self) -> i32 {
@@ -492,16 +492,16 @@ impl Unit {
     }
 
     /// RULESET1 K1, K2: whether the unit is melee (`attack_range` at most 1, which the rule leaves as it is) with a
-    /// ready weapon (AUDIT-09: `Inventory::active_weapon`) whose family has the engine rule `reach`. A gear fact: the
+    /// main-hand weapon whose family has the engine rule `reach`. A gear fact: the
     /// battle reads it only under the rule `reach` (`rpgkit_battle::skill::melee_reach`).
     pub fn has_reach_weapon(&self) -> bool {
-        self.attack_range <= 1 && self.inventory.active_weapon().is_some_and(|w| w.has_reach())
+        self.attack_range <= 1 && self.inventory.main_weapon().is_some_and(|w| w.has_reach())
     }
 
     /// PR5-28 (U3 FB-36c): the melee reach of the unit's ready weapon under the rule `reach`: its family's
     /// `range_band.max`, else `REACH_WEAPON_REACH` (also without a ready weapon; read only when `has_reach_weapon`).
     pub fn weapon_reach(&self) -> i32 {
-        self.inventory.active_weapon().map_or(REACH_WEAPON_REACH, |w| w.reach_max())
+        self.inventory.main_weapon().map_or(REACH_WEAPON_REACH, |w| w.reach_max())
     }
 
     /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the
@@ -584,14 +584,14 @@ impl Unit {
     }
 
     /// Gear stat bonuses -> tier stat bonuses (read without tier modifiers) -> gear effects -> derived numbers.
-    /// AUDIT-08/09: from the ready gear (`Inventory::ready_gear`; a stowed backup weapon adds only its burden) and the
-    /// ready weapon's range and type; call it again after `Inventory::toggle_active_weapon`.
+    /// From all worn gear and the main-hand weapon's range and type (GEAR-REWORK1, PR5-51a: no weapon switch, so no
+    /// stowed backup weapon; the AUDIT-08/09 ready-gear rule retired with it).
     pub fn sync_from_stats_and_gear(&mut self, cat: &Catalog) {
         self.stats.remove_modifier("gear");
         // U3.2-S4 (FB-35): what the worn items' effects added goes first (tier criteria never read it)
         self.stats.modifiers.retain(|m| !is_gear_effect_source(&m.source));
         let bonuses: Vec<(String, i32)> =
-            self.inventory.ready_gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
+            self.inventory.gear().flat_map(|e| e.item.stat_bonuses.iter().map(|(k, v)| (k.clone(), *v)).collect::<Vec<_>>()).collect();
         for (k, v) in bonuses {
             if v != 0 {
                 self.stats.modifiers.push(StatModifier::permanent(&k, v, "gear", "always"));
@@ -600,7 +600,7 @@ impl Unit {
         self.rebuild_gear_tier_stats();
         self.rebuild_gear_effects(cat);
         let burden = self.worn_burden();
-        let (base_rng, ctx) = match self.inventory.active_weapon() {
+        let (base_rng, ctx) = match self.inventory.main_weapon() {
             Some(w) => (w.item.base_range, Some(w.weapon_type().to_string())),
             None => (1, None),
         };
@@ -617,7 +617,7 @@ impl Unit {
     fn rebuild_gear_tier_stats(&mut self) {
         self.stats.remove_modifier(TIER_SOURCE);
         let mut totals: IndexMap<String, i32> = IndexMap::new();
-        for eq in self.inventory.ready_gear() {
+        for eq in self.inventory.gear() {
             for (k, v) in eq.tier_stat_bonuses(&self.stats) {
                 *totals.entry(k).or_insert(0) += v;
             }
@@ -641,20 +641,36 @@ impl Unit {
         self.gear_skills.clear();
         self.gear_block_cost.clear();
         self.gear_crit = 0.0;
-        // AUDIT-01: a 2H pair's stowed weapon grants nothing while it is not ready (`Inventory::ready_gear`)
-        let item_fx: Vec<(String, Vec<Value>)> = self.inventory.ready_gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
+        let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
         for (src, fx) in item_fx {
             self.apply_effects(cat, &fx, &src, true);
         }
         let tier_fx: Vec<(String, Vec<Value>)> = self
             .inventory
-            .ready_gear()
+            .gear()
             .flat_map(|e| e.active_tier_effects(&self.stats).into_iter().map(|(n, fx)| (format!("gear:{}:tier{}", e.id(), n), fx)).collect::<Vec<_>>())
             .collect();
         for (src, fx) in tier_fx {
             self.apply_effects(cat, &fx, &src, true);
         }
         self.apply_family_bonuses(cat);
+        // GEAR-REWORK1 (PR5-51a pass 2, U3.3 4): the Off-Hand button's skill (the off-hand item's family skill, or the
+        // off-hand jab of a `1h_light` weapon, open whatever the deck's basics say) is held like a worn item's skill: open
+        // without a slot while worn (no key on today's rows, nothing added)
+        let off_skill = match self.inventory.get(Slot::OffHand).and_then(|e| crate::gear::off_hand_use(&e.item)) {
+            Some(crate::gear::OffHandUse::Skill { skill, .. }) => cat.skill(&skill).map(|s| s.id.clone()),
+            Some(crate::gear::OffHandUse::Jab { .. }) => off_hand_jab(cat).map(|s| s.id.clone()),
+            None => None,
+        };
+        if let Some(skill) = off_skill.filter(|s| !self.gear_skills.contains(s)) {
+            self.gear_skills.push(skill);
+        }
+        // PR5-51a pass 3 (U3.3 2 / 4): a `1h_light` main-hand weapon beside an ammunition item with a `throw_skill` holds
+        // the Throw the same way (its pip gate and spend are the battle's, `rpgkit_battle::offhand::throw_problem`)
+        let throw = self.inventory.get(Slot::OffHand).and_then(|o| crate::gear::light_throw(self.inventory.main_weapon().map(|m| &m.item), &o.item)).and_then(|s| cat.skill(s)).map(|s| s.id.clone());
+        if let Some(skill) = throw.filter(|s| !self.gear_skills.contains(s)) {
+            self.gear_skills.push(skill);
+        }
         self.techniques = self.open_techniques();
     }
 
@@ -707,9 +723,9 @@ impl Unit {
     }
 
     /// PK2-S5b: the slot of the weapon a hit swings (`damage::weapon_for`): the off hand's weapon for an off-hand hit,
-    /// else the ready weapon's slot (the off hand while a 2H pair's off-hand weapon is ready). None: no weapon there.
+    /// else the main hand. None: no weapon there.
     pub fn swung_slot(&self, offhand: bool) -> Option<Slot> {
-        let slot = if offhand || self.inventory.is_offhand_active() { Slot::OffHand } else { Slot::MainHand };
+        let slot = if offhand { Slot::OffHand } else { Slot::MainHand };
         crate::damage::weapon_for(self, offhand).map(|_| slot)
     }
 
@@ -720,12 +736,11 @@ impl Unit {
 
     /// U3.2-S4 (U3 Level 2 and Level 3): each worn gear family once, at the unit's proficiency in it: from level 2 its
     /// `level2_bonus` crit (the burden part is `worn_burden`'s), at level 3 its `level3_passive`'s effects, applied as the
-    /// item's (`gear:<item>:mastery`; worn gear's grants only, rebuilt with them on every sync). AUDIT-01: a 2H pair's
-    /// stowed weapon counts no family while it is not ready (`Inventory::ready_gear`).
+    /// item's (`gear:<item>:mastery`; worn gear's grants only, rebuilt with them on every sync).
     fn apply_family_bonuses(&mut self, cat: &Catalog) {
         let mut seen: Vec<String> = Vec::new();
         let worn: Vec<(String, String, rpgkit_data::FamilyBonus, String)> =
-            self.inventory.ready_gear().map(|e| (e.id().to_string(), e.weapon_type().to_string(), e.item.level2_bonus, e.item.level3_passive.clone())).collect();
+            self.inventory.gear().map(|e| (e.id().to_string(), e.weapon_type().to_string(), e.item.level2_bonus, e.item.level3_passive.clone())).collect();
         for (item, family, level2, level3) in worn {
             if family.is_empty() || seen.contains(&family) {
                 continue;
@@ -1250,6 +1265,44 @@ impl Unit {
                 self.active_extra_families.push(fam);
             }
         }
+    }
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2): why the Off-Hand button's skill is closed when the unit cannot use it (not owned,
+/// locked or untrained in the hand's gear).
+pub const OFF_HAND_NOT_USABLE: &str = "Not usable with this gear";
+
+/// GEAR-REWORK1 (PR5-51a pass 2, U3.3 4): the Off-Hand button of a unit: the off-hand item's name, its use
+/// (`gear::off_hand_use`), the skill it picks (id and name) and why the unit cannot use it (None: it can; a battle adds
+/// its round's checks, `rpgkit_battle::offhand::action`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct OffHandButton {
+    pub item: String,
+    pub used: crate::gear::OffHandUse,
+    pub skill: String,
+    pub name: String,
+    pub problem: Option<String>,
+}
+
+/// GEAR-REWORK1 (PR5-51a pass 2): the catalog's off-hand jab: the first off-hand attack basic (the kit's required
+/// `offhand_jab` row in shipped data), else the first off-hand attack.
+pub fn off_hand_jab(cat: &Catalog) -> Option<&rpgkit_data::SkillDef> {
+    let off = |s: &&rpgkit_data::SkillDef| s.weapon_hand.eq_ignore_ascii_case("off") && s.kind == "ATTACK";
+    cat.skills.iter().filter(off).find(|s| s.basic).or_else(|| cat.skills.iter().find(off))
+}
+
+impl Unit {
+    /// GEAR-REWORK1 (PR5-51a pass 2, U3.3 4): the unit's Off-Hand button (None: an empty off hand, or an off-hand item
+    /// from before the rework: the button stays hidden): a `1h_light` weapon's jab, else the family's off-hand skill.
+    pub fn off_hand_button(&self, cat: &Catalog) -> Option<OffHandButton> {
+        let off = self.inventory.get(Slot::OffHand)?;
+        let used = crate::gear::off_hand_use(&off.item)?;
+        let s = match &used {
+            crate::gear::OffHandUse::Jab { .. } => off_hand_jab(cat)?,
+            crate::gear::OffHandUse::Skill { skill, .. } => cat.skill(skill)?,
+        };
+        let problem = (!self.can_use(cat, s)).then(|| OFF_HAND_NOT_USABLE.to_string());
+        Some(OffHandButton { item: off.item.name.clone(), used, skill: s.id.clone(), name: s.name.clone(), problem })
     }
 }
 
@@ -1996,8 +2049,8 @@ impl Unit {
     }
 
     /// The weapon type that counts for skill gating in `hand` ("main", "off"): "unarmed" when that hand is empty.
-    /// AUDIT-09: "main" is the ready weapon (`Inventory::active_weapon`: the off-hand backup while it is ready in a 2H
-    /// pair); a 2H pair shares one ready slot, so its "off" hand is empty either way.
+    /// Under a two-handed main weapon the "off" hand counts as empty (GEAR-REWORK1: the off hand of a 2H weapon holds no
+    /// weapon).
     pub fn wielded_type(&self, hand: &str) -> String {
         let main = self.inventory.main_weapon();
         let weapon = if hand == "off" {
@@ -2007,7 +2060,7 @@ impl Unit {
                 self.inventory.offhand_weapon()
             }
         } else {
-            self.inventory.active_weapon()
+            main
         };
         weapon.map(|w| w.weapon_type().to_string()).unwrap_or_else(|| "unarmed".into())
     }

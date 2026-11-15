@@ -211,7 +211,8 @@ fn effect_errors(name: &str, fx: &Dict, at: &str, loaded: &Dict) -> Vec<String> 
         }
         r::FX_TRAIN => {
             let role = json::s(fx, "role");
-            if !rpgkit_data::PROF_ROLES.contains(&role.as_str()) {
+            // GEAR-REWORK1 (PR5-51a): a role alias (`primary` for main) is accepted
+            if rpgkit_data::canonical_role(&role).is_none() {
                 out.push(format!("{at}: role '{role}' is not one of {}.", rpgkit_data::PROF_ROLES.join(", ")));
             }
             let top = i64::from(rpgkit_rules::stats::PROF_MAX_LEVEL);
@@ -323,9 +324,7 @@ pub fn warnings(v: &View, e: &Dict) -> Vec<String> {
             continue;
         }
         let (role, from) = (json::s(fx, "role"), json::i(fx, "to", 0) - 1);
-        if !rpgkit_data::PROF_ROLES.contains(&role.as_str()) || from < 0 {
-            continue;
-        }
+        let Some(role) = rpgkit_data::canonical_role(&role).filter(|_| from >= 0) else { continue };
         let held = classes.iter().any(|c| c.proficiency_roles.iter().any(|(fam, r)| *r == role && c.proficiency.get(fam).is_some_and(|p| i64::from(p.level) == from)));
         if !held {
             out.push(format!("Effect {} ({}): no class holds a {role} family at level {from} (the level this training starts from).", i + 1, r::FX_TRAIN));
