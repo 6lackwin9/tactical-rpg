@@ -512,9 +512,232 @@ def boss() -> np.ndarray:
     return tr.render(1.6)
 
 
+def bell(m: float, dur: float = 3.2) -> np.ndarray:
+    """Warm bronze handbell / cathedral chime tuned near fundamental m."""
+    n = int(max(dur, 1.5) * SR)
+    t = np.arange(n) / SR
+    f = hz(m)
+    sig = np.zeros(n)
+    for ratio, amp, dec in ((0.5, 0.35, 0.9), (1.0, 1.0, 1.25), (1.183, 0.4, 1.7),
+                            (1.5, 0.45, 2.0), (2.0, 0.55, 2.4), (2.76, 0.25, 3.8)):
+        if f * ratio < SR / 2.2:
+            sig += amp * np.sin(2 * np.pi * f * ratio * t) * np.exp(-t * dec)
+    return sig * np.minimum(1.0, t / 0.008) * 0.13
+
+
+def story_opening() -> np.ndarray:
+    """56 BPM (dotted-quarter, 6/8), 48 bars (~102.9s). Solemn D minor cradle hymn with bell, no drums."""
+    tr = Track(168, 6, 48, seed=211)
+    prog = [("D2", "m"), ("D2", "m"), ("G1", "m"), ("A1", "sus"),
+            ("D2", "m"), ("Bb1", "M"), ("G1", "m"), ("A1", "M")] * 2
+    phrase_a = [(0, "D3", 1.5), (1.5, "F3", 0.5), (2, "A3", 1), (3, "G3", 1.5), (4.5, "F3", 0.5), (5, "E3", 1)]
+    phrase_b = [(0, "D3", 1.5), (1.5, "F3", 0.5), (2, "Bb3", 1), (3, "A3", 1.5), (4.5, "G3", 0.5), (5, "E3", 1)]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root)
+        tones = chord_tones(r + 12, q)
+        tr.add(pad(tones, 18 * tr.beat, 1.0, 1.8, 5, 0.14), tr.at(3 * i), 0.0, 0.75, 0.55)
+        tr.add(bell(midi("D4") if i % 2 == 0 else midi("A3"), 4.2), tr.at(3 * i, 0), -0.35, 0.55, 0.75)
+        tr.add(bell(midi("D3"), 4.5), tr.at(3 * i + 2, 0), 0.35, 0.38, 0.8)
+        notes = phrase_a if i % 2 == 0 else phrase_b
+        second_pass = i >= 8
+        for bar_off in (0, 1):
+            mel = [(b, midi(n) + (12 if second_pass and bar_off else 0), d * 0.9) for b, n, d in notes]
+            melody(tr, mel, 3 * i + bar_off, lambda m, d: pad([m], d, 0.12, 0.35, 4, 0.08),
+                   0.1 if bar_off else -0.1, 1.45, 0.65)
+            tr.add(pluck(midi(notes[0][1]) + 12, 2.0 * tr.beat, 0.5, 2.2), tr.at(3 * i + bar_off, 0), -0.25, 0.3, 0.55)
+    drone(tr, [midi("D1"), midi("A1"), midi("D2")], 0.16, 4)
+    wash(tr, 140, 850, 3, 0.04)
+    return tr.render(3.6)
+
+
+def prologue_tension() -> np.ndarray:
+    """84 BPM, 4/4, 32 bars (~91.4s). Hunted D minor stealth: uneven bass pulse, broken dulcimer motif, iron shutter."""
+    tr = Track(84, 4, 32, seed=223)
+    prog = [("D1", "m"), ("D1", "m"), ("Bb0", "M"), ("A0", "sus"),
+            ("D1", "m"), ("G1", "m"), ("Bb0", "M"), ("A0", "M")] * 2
+    lullaby_frags = [[(0.5, "D5", 0.8), (1.5, "F5", 1.2)], [(1.0, "A4", 0.8), (2.25, "G4", 1.2)],
+                     [(0.5, "F4", 0.8), (2.0, "E4", 1.5)], [(1.5, "D4", 1.0), (3.0, "Bb4", 1.0)]]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        tr.add(pad(tones[:2], 8 * tr.beat, 0.9, 1.4, 4, 0.18), tr.at(2 * i), 0.0, 0.42, 0.65)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            for beat in (0, 1.5, 2.75):
+                tr.add(bass(r, 0.45 * tr.beat, 0.35), tr.at(b0, beat), -0.15, 0.38, 0.25)
+                tr.add(drum(50, 0.18, 0.45, tr.rng, 1.6), tr.at(b0, beat), 0.0, 0.36, 0.35)
+            tr.add(drum(46, 0.22, 0.3, tr.rng, 1.2), tr.at(b0, 3.5), 0.15, 0.25, 0.4)
+            if (b0 + i) % 2 == 0:
+                frag = lullaby_frags[(i + bar) % len(lullaby_frags)]
+                melody(tr, [(b, midi(n), d) for b, n, d in frag], b0,
+                       lambda m, d: pluck(m, d, 0.85, 2.0), 0.28, 0.72, 0.68)
+        if i % 2 == 1:
+            tr.add(anvil(midi("E5"), tr.rng), tr.at(2 * i + 1, 3.25), -0.45, 0.18, 0.82)
+    drone(tr, [midi("D1"), midi("A1")], 0.19, 3)
+    wash(tr, 180, 1400, 4, 0.07)
+    return tr.render(3.8)
+
+
+def story_escape() -> np.ndarray:
+    """132 BPM, 4/4, 56 bars (~101.8s). Breathless D minor flight: staccato strings, chains, double-time Lullaby."""
+    tr = Track(132, 4, 56, seed=233)
+    prog = [("D1", "m"), ("C1", "M"), ("Bb0", "M"), ("A0", "M"),
+            ("D1", "m"), ("F1", "M"), ("G1", "m"), ("A0", "M")] * 3 + [("D1", "m"), ("C1", "M"), ("Bb0", "M"), ("A0", "M")]
+    phrase = [(0, "D5", 0.5), (0.5, "F5", 0.5), (1.0, "A5", 1.0), (2.0, "G5", 0.5), (2.5, "F5", 0.5), (3.0, "E5", 1.0),
+              (4.0, "D5", 0.5), (4.5, "F5", 0.5), (5.0, "Bb5", 1.0), (6.0, "A5", 1.0), (7.0, "E5", 1.0)]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        tr.add(pad(tones, 8 * tr.beat, 0.15, 0.4, 7, 0.16), tr.at(2 * i), 0.0, 0.46, 0.3)
+        for b in range(16):
+            tr.add(bass(r + (12 if b % 4 == 3 else 0), 0.35 * tr.beat, 0.7), tr.at(2 * i, b * 0.5), -0.1, 0.52, 0.12)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            for beat in (0, 0.75, 1.5, 2.0, 3.0):
+                tr.add(drum(58, 0.18, 0.55, tr.rng, 2.8), tr.at(b0, beat), 0.0, 0.75, 0.15)
+            for beat in (1, 2.5, 3.5):
+                tr.add(snare(tr.rng), tr.at(b0, beat), 0.25, 0.65, 0.28)
+            tr.add(anvil(midi("D5") + (7 if bar else 0), tr.rng), tr.at(b0, 1.5), 0.45, 0.3, 0.45)
+        lead_notes = [(b, midi(n) - (12 if i < 14 else 0), d * 0.85) for b, n, d in phrase]
+        melody(tr, lead_notes, 2 * i, horn, 0.1, 1.1, 0.36)
+        melody(tr, lead_notes, 2 * i, lambda m, d: pluck(m, d, 1.3, 3.0), -0.15, 0.55, 0.4)
+        if i % 3 == 2:
+            tr.add(bell(midi("A4"), 2.2), tr.at(2 * i + 1, 2.75), -0.4, 0.4, 0.55)
+    return tr.render(2.0)
+
+
+def story_goodbye() -> np.ndarray:
+    """60 BPM (dotted-quarter, 6/8), 56 bars (~112.0s). Quiet D minor -> F major Lullaby on music box and low viola."""
+    tr = Track(180, 6, 56, seed=241)
+    prog = [("D2", "m"), ("Bb1", "M"), ("F1", "M"), ("C2", "M"),
+            ("D2", "m"), ("G1", "m"), ("Bb1", "M"), ("A1", "M")] * 3 + [("D2", "m"), ("Bb1", "M"), ("F1", "M"), ("A1", "M")]
+    theme = [(0, "D5", 1.5), (1.5, "F5", 0.5), (2, "A5", 1), (3, "G5", 1.5), (4.5, "F5", 0.5), (5, "E5", 1),
+             (6, "D5", 1.5), (7.5, "F5", 0.5), (8, "C5", 1), (9, "A4", 2.0), (11, "G4", 1.0)]
+    answer = [(0, "A3", 2.5), (3, "Bb3", 1.5), (4.5, "A3", 1.5), (6, "F3", 2.5), (9, "E3", 3.0)]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root)
+        tones = chord_tones(r + 12, q)
+        tr.add(pad(tones, 12 * tr.beat, 0.9, 1.4, 5, 0.1), tr.at(2 * i), 0.0, 0.58, 0.5)
+        melody(tr, [(b, midi(n), d) for b, n, d in theme], 2 * i,
+               lambda m, d: pluck(m, d, 1.25, 2.4), -0.18, 0.9, 0.48)
+        if i % 2 == 1:
+            melody(tr, [(b, midi(n), d) for b, n, d in answer], 2 * i, horn, 0.25, 0.95, 0.58)
+        if i >= 16:
+            melody(tr, [(b, midi(n), d) for b, n, d in theme], 2 * i,
+                   lambda m, d: whistle(m, d, tr.rng), 0.32, 0.55, 0.65)
+    drone(tr, [midi("D1"), midi("A1")], 0.12, 3)
+    return tr.render(3.2)
+
+
+def sunk_ward_danger() -> np.ndarray:
+    """72 BPM, 4/4, 16 bars (~53.3s). C Phrygian damp drains: deep wash, metallic pipe drips, muted heartbeat."""
+    tr = Track(72, 4, 16, seed=251)
+    prog = [("C1", "m"), ("Db1", "M"), ("F1", "m"), ("G0", "sus"),
+            ("C1", "m"), ("Ab0", "M"), ("F1", "m"), ("G0", "M")]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        tr.add(pad(tones[:3], 8 * tr.beat, 1.1, 1.4, 5, 0.2), tr.at(2 * i), 0.0, 0.5, 0.65)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            tr.add(drum(45, 0.35, 0.15, tr.rng, 1.0), tr.at(b0, 0), 0.0, 0.72, 0.28)
+            tr.add(drum(45, 0.28, 0.1, tr.rng, 0.9), tr.at(b0, 0.65), 0.0, 0.45, 0.28)
+            drip = tones[int(tr.rng.integers(0, len(tones)))] + 24
+            tr.add(bell(drip, 1.8), tr.at(b0, 2.25 if bar else 3.0), 0.45 - 0.9 * bar, 0.28, 0.85)
+        if i % 2 == 1:
+            tr.add(anvil(midi("G4"), tr.rng), tr.at(2 * i + 1, 3.25), -0.4, 0.22, 0.8)
+    drone(tr, [midi("C1"), midi("G1"), midi("Db2")], 0.18, 3)
+    wash(tr, 160, 1200, 4, 0.09)
+    return tr.render(4.2)
+
+
+def sunk_ward_boss() -> np.ndarray:
+    """136 BPM, 4/4, 32 bars (~56.5s). F minor Inquisition dread: organ chords, pounding drums, cathedral bell."""
+    tr = Track(136, 4, 32, seed=263)
+    prog = [("F1", "m"), ("Db1", "M"), ("Eb1", "M"), ("C1", "M")] * 4
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        second = i >= 8
+        tr.add(pad(tones + [tones[0] - 12], 8 * tr.beat, 0.25, 0.55, 8, 0.18), tr.at(2 * i), 0.0, 0.56, 0.42)
+        for b in range(16):
+            tr.add(bass(r + (7 if b % 8 == 6 else 0), 0.42 * tr.beat, 0.85), tr.at(2 * i, b * 0.5), 0.0, 0.58, 0.1)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            for beat in (0, 0.5, 2, 2.75):
+                tr.add(drum(48, 0.26, 0.55, tr.rng, 3.0), tr.at(b0, beat), 0.0, 0.88, 0.12)
+            for beat in (1, 3):
+                tr.add(snare(tr.rng), tr.at(b0, beat), 0.05, 0.8, 0.25)
+                tr.add(anvil(midi("F5"), tr.rng), tr.at(b0, beat), 0.42, 0.34, 0.35)
+            for e in range(8):
+                tr.add(hat(tr.rng, e == 7), tr.at(b0, e * 0.5), -0.3, 0.5, 0.12)
+        tr.add(bell(midi("F3"), 3.0), tr.at(2 * i, 0), -0.35, 0.65, 0.6)
+        call = [(0, tones[0], 1.5), (1.5, tones[1], 0.5), (2, tones[2], 2.0), (4, tones[0] + 12, 3.0)]
+        if second or i % 2 == 0:
+            melody(tr, [(b, m + (12 if second else 0), d) for b, m, d in call], 2 * i, horn, 0.1, 1.55, 0.38)
+    drone(tr, [midi("F0"), midi("C1")], 0.12, 6)
+    return tr.render(2.1)
+
+
+def sunk_ward_shop() -> np.ndarray:
+    """96 BPM, 3/4, 24 bars (~45.0s). Candlelit D minor chandler waltz: sparse lute, glass chimes, quiet whistle."""
+    tr = Track(96, 3, 24, seed=271)
+    prog = [("D1", "m"), ("G1", "m"), ("C1", "7"), ("F1", "M"),
+            ("Bb0", "M"), ("G1", "m"), ("A0", "7"), ("D1", "m")]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        for bar in range(3):
+            b0 = 3 * i + bar
+            tr.add(bass(r + (7 if bar == 1 else 0), 0.85 * tr.beat, 0.22), tr.at(b0, 0), -0.15, 0.45, 0.18)
+            for beat in (1, 2):
+                for k, m in enumerate(tones[:3]):
+                    tr.add(pluck(m + 12, 0.65 * tr.beat, 0.55, 3.2), tr.at(b0, beat), (k - 1) * 0.3, 0.14, 0.32)
+            tr.add(drum(135, 0.06, 0.8, tr.rng), tr.at(b0, 0), 0.2, 0.14, 0.22)
+            if bar == 2:
+                tr.add(bell(tones[-1] + 24, 1.4), tr.at(b0, 2.0), 0.38, 0.16, 0.6)
+    scale = [midi(n) for n in ("D4", "E4", "F4", "G4", "A4", "Bb4", "C5", "D5")]
+    walk_melody(tr, [(midi(r) + 12, q) for r, q in prog], 3, scale, lambda m, d: whistle(m, d, tr.rng),
+                [[(0, 2), (2, 1)], [(0, 1), (1, 1), (2, 1)], [(0, 3)]], 0.12, 0.72, 0.42, 3)
+    return tr.render(2.2)
+
+
+def sunk_ward_travel() -> np.ndarray:
+    """88 BPM, 4/4, 24 bars (~65.5s). Soot-haze D Dorian march: damp cobble pulse, low horn & whistle duet."""
+    tr = Track(88, 4, 24, seed=281)
+    prog = [("D1", "m"), ("C1", "M"), ("Bb0", "M"), ("A0", "m"),
+            ("D1", "m"), ("G1", "m"), ("Bb0", "M"), ("A0", "sus"),
+            ("D1", "m"), ("C1", "M"), ("G1", "m"), ("A0", "M")]
+    for i, (root, q) in enumerate(prog):
+        r = midi(root) + 12
+        tones = chord_tones(r + 24, q)
+        tr.add(pad(tones, 8 * tr.beat, 0.75, 1.1, 6, 0.12), tr.at(2 * i), 0.0, 0.52, 0.5)
+        for bar in (0, 1):
+            b0 = 2 * i + bar
+            for beat in (0, 1, 2, 3):
+                tr.add(bass(r + (7 if beat == 2 else 0), 0.75 * tr.beat, 0.3), tr.at(b0, beat), 0.0, 0.38, 0.18)
+            tr.add(drum(56, 0.24, 0.35, tr.rng, 1.4), tr.at(b0, 0), 0.0, 0.55, 0.22)
+            tr.add(drum(56, 0.22, 0.3, tr.rng, 1.3), tr.at(b0, 2), 0.0, 0.42, 0.22)
+            for beat in (1, 3, 3.5) if bar else (1, 3):
+                tr.add(snare(tr.rng), tr.at(b0, beat), 0.15, 0.26, 0.35)
+    scale = [midi(n) for n in ("D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5")]
+    walk_melody(tr, [(midi(r) + 12, q) for r, q in prog], 2, scale, horn,
+                [[(0, 1.5), (1.5, 0.5), (2, 2)], [(0, 2), (2, 1), (3, 1)], [(0, 1), (1, 1), (2, 2)]],
+                -0.18, 1.25, 0.45, 3, 4)
+    walk_melody(tr, [(midi(r) + 12, q) for r, q in prog], 2, [m + 12 for m in scale],
+                lambda m, d: whistle(m, d, tr.rng),
+                [[(0, 2), (2, 2)], [(1, 1), (2, 2)]], 0.28, 0.42, 0.55, 5, 3)
+    wash(tr, 180, 1100, 3, 0.05)
+    return tr.render(2.8)
+
+
 TRACKS = {"ashlands": ashlands, "iron_reaches": iron_reaches,
           "tidewrack": tidewrack, "combat": combat,
-          "town": town, "danger": danger, "shop": shop, "travel": travel, "boss": boss}
+          "town": town, "danger": danger, "shop": shop, "travel": travel, "boss": boss,
+          "story_opening": story_opening, "prologue_tension": prologue_tension,
+          "story_escape": story_escape, "story_goodbye": story_goodbye,
+          "sunk_ward_danger": sunk_ward_danger, "sunk_ward_boss": sunk_ward_boss,
+          "sunk_ward_shop": sunk_ward_shop, "sunk_ward_travel": sunk_ward_travel}
 # ASSETORG2 layers: the kit's mood loops; every other track is the game's
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
@@ -529,7 +752,18 @@ def track_path(root: str, name: str) -> str:
     return os.path.normpath(os.path.join(root, *LAYERS[layer_of(name)], "audio", "music", name + ".ogg"))
 
 
-def write_ogg(stereo: np.ndarray, path: str) -> None:
+def find_ffmpeg() -> str | None:
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def write_ogg(stereo: np.ndarray, path: str, ffmpeg_exe: str) -> None:
     pcm = (np.clip(stereo.T, -1, 1) * 32767).astype("<i2")
     with tempfile.TemporaryDirectory() as tmp:
         wav_path = os.path.join(tmp, "x.wav")
@@ -538,7 +772,7 @@ def write_ogg(stereo: np.ndarray, path: str) -> None:
             w.setsampwidth(2)
             w.setframerate(SR)
             w.writeframes(pcm.tobytes())
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav_path, "-c:a", "libvorbis",
+        subprocess.run([ffmpeg_exe, "-y", "-loglevel", "error", "-i", wav_path, "-c:a", "libvorbis",
                         "-q:a", "5", path], check=True)
 
 
@@ -559,14 +793,15 @@ def main() -> int:
         for name in names:
             print("%s %s %s" % (name, layer_of(name), track_path(args.root, name)))
         return 0
-    if shutil.which("ffmpeg") is None:
+    ffmpeg_exe = find_ffmpeg()
+    if ffmpeg_exe is None:
         print("§ ffmpeg not found")
         return 1
     for name in names:
         stereo = TRACKS[name]()
         path = track_path(args.root, name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        write_ogg(stereo, path)
+        write_ogg(stereo, path, ffmpeg_exe)
         print("§ wrote %s %.1fs" % (path, stereo.shape[1] / SR))
     return 0
 

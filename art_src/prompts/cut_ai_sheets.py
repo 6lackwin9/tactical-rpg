@@ -47,7 +47,7 @@ SHEETS = {
     },
     "families_1": {  # sunk_ward_icons.md: 3 item-family base icons and 2 status icons, on tiles like keepsakes_1
         "cells": ["polearm", "censer", "bone_saw", "steadfast", "stealth", "polearm", "censer", "bone_saw", "stealth"],
-        "path": lambda n: f"{GAME}/statuses/{n}.png" if n in ("steadfast", "stealth") else f"{GAME}/items/{n}/base.png",
+        "path": lambda n: f"{KIT}/statuses/{n}.png" if n in ("steadfast", "stealth") else f"{GAME}/items/{n}/base.png",
         "size": lambda n: 64 if n in ("steadfast", "stealth") else 96,
         "tile": True,
     },
@@ -56,14 +56,13 @@ SHEETS = {
         "path": lambda n: f"{GAME}/ui/hud/{n}.png",
         "size": lambda n: 14,
     },
-    "gear_1": {  # the gear rework's families without an icon, 4 x 4 (sunk_ward_icons.md); the helms wait for a path
+    "gear_1": {  # the gear rework's families without an icon, 4 x 4 (sunk_ward_icons.md)
         "grid": 4,
         "cells": ["greatsword", "gauntlet", "knife", "buckler", "braces", "ammo", "cloak", "graft",
                   "helm_heavy", "helm_medium", "helm_light", "ammo", "greatsword", "gauntlet", "knife", "graft"],
-        "path": lambda n: f"{GAME}/items/{n}/base.png",
+        "path": lambda n: f"{GAME}/items/{n.removeprefix('helm_')}/helm.png" if n.startswith("helm_") else f"{GAME}/items/{n}/base.png",
         "size": lambda n: 96,
         "tile": True,
-        "skip": ("helm_heavy", "helm_medium", "helm_light"),
     },
 }
 
