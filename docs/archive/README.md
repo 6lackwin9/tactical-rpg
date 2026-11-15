@@ -1,6 +1,6 @@
 # Archive
 
-Superseded drafts and specs of done tasks, kept for history. Agents should not read these when building; the current sources are `docs/GAME_BRIEF.md`, `docs/decisions/`, and the open specs in `docs/specs/`. Every archived file starts with an `Archived <date>, task done/superseded` line.
+Superseded drafts and specs of done tasks, kept for history. Full index: [ARCHIVE_INDEX.md](ARCHIVE_INDEX.md). Agents should not read these when building; the current sources are `games/emberwake/docs/GAME_BRIEF.md`, `docs/DECISIONS.md`, and open specs in `docs/specs/` / `docs/sessions/`. Every archived file starts with an `Archived <date>, task done/superseded` line.
 
 | File | Superseded by |
 | --- | --- |
@@ -20,8 +20,10 @@ Superseded drafts and specs of done tasks, kept for history. Agents should not r
 | `docs/metrics/` (folder, removed from the tree 2026-11-07; in git history) | October 2026 Godot token-efficiency trial logs and CSV reports (`TASK_LOG.md`, `usage/*`) |
 | specs/{CAMPAIGN1*,DERIVE1,ENCOUNTER2*,HOOKS1*,INPUT1*,INPUT2,KIT1_TASKS,RESCOPE1,ROSTER1*,RULESET1*,STORYUI1*}.md | Pre-Masterplan Tier 2 specs and `_TASKS.md` breakdowns folded into `docs/sessions/*.md` (archived 2026-11-07) |
 | specs/emberwake/*.md (79 files) | Completed/superseded Emberwake task specs (`S9..S14`, `BAL2..5`, `DLG1`, `EXP1`, `M4`, `REP1`, `TRAV1..2`, `UI1..3`, `FORGE1_*`, `FX1`, `STAGE1`, `SPRITE1`, `STATUSFX1`, `PLAYUI1`, etc., archived 2026-11-07) |
-| READY_DONE_ARCHIVE.md | Completed `READY.md` Section 1 slices (`R1..R4`, `PR4-1..9`, `PR5-1..56`, `105` rows through `a14c9d8e`, archived 2026-11-15) |
-| READY_ANSWERS_ARCHIVE.md | Closed `READY.md` Section 2 audits (`1..8`), Section 3 `PR4-1`/`PR4-2` pre-split notes, and Section 4 `FB-33..261` + `AO-01..06` answers (archived 2026-11-15) |
+| READY_DONE_ARCHIVE.md | Completed `READY.md` Section 1 slices (`U1..PR5-62c`, `113` rows through `PR5-62a` `6e662c53`, `PR5-62b` `a1b1efb1`, `PR5-62c` `48f24342`, archived 2026-11-15..2026-11-16) |
+| READY_ANSWERS_ARCHIVE.md | Closed `READY.md` Section 2 audits (`1..8`), Section 3 `PR4-1`/`PR4-2` pre-split notes, and Section 4 `FB-33..277` + `AO-01..10` answers (archived 2026-11-15..2026-11-16) |
+| ARCHIVE_INDEX.md | Master archive directory & Wave 1 completed session spec map (created 2026-11-16) |
+| sessions/{U3_GEAR_REWORK,U2_CLASSPASS_TECHNIQUES,U2_CLASS_DECKS,U2_WEAPON_TECHNIQUES,U2_GRAFTS_SKILLS}.md | Wave 1 completed gear rework, class decks, 75 weapon techniques & `PK1/PK2` graft specs (`PR5-51a..62c`, archived 2026-11-16) |
 | HISTORY_2026_10_11A.md | Pre-`PR5-40` `docs/HISTORY.md` rows and detailed lessons through `2026-11-12` (archived 2026-11-15) |
 | DESIGN_REVIEW_2026_11A.md | Settled `DESIGN_REVIEW.md` `2026-11-11..14` Open calls and `Reviewed` history table (archived 2026-11-15) |
 | CLEANUP_PASS2_2026_11.md | Closed Pass 1–3 and Later backlog cleanup tables from `docs/specs/CLEANUP.md` (archived 2026-11-15) |

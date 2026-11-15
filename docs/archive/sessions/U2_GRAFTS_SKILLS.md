@@ -1,5 +1,7 @@
 # `U2_GRAFTS_SKILLS` — `[PROVISIONAL]` Monster Growth Pins, Cranial Rituals & Inoculated Keystones (`PK1`/`PK2`)
 
+Archived 2026-11-16 (`CTX-CLEANUP1-FINAL`), implemented (`PR5-62a` `6e662c53`, `PR5-62c` `48f24342`): kept for history. Do not build from this file.
+
 - **Parent Index**: [U2_CLASSPASS_TECHNIQUES.md](U2_CLASSPASS_TECHNIQUES.md) (`[PROVISIONAL]` User Rule 5).
 - **Build Target**: `PR5-62a` (`crit`, `"channel"` potency group, `SkillReach.ranged`) -> `PR5-62c` (`TECHNIQUES-GRAFTS-DATA`).
 

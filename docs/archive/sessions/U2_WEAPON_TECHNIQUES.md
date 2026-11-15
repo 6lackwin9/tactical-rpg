@@ -1,5 +1,7 @@
 # `U2_WEAPON_TECHNIQUES` — `[PROVISIONAL]` 15 Main-Hand Weapon Families × 5 Skills (`75` Skills)
 
+Archived 2026-11-16 (`CTX-CLEANUP1-FINAL`), implemented (`PR5-62c` `48f24342`): kept for history. Do not build from this file.
+
 - **Parent Index**: [U2_CLASSPASS_TECHNIQUES.md](U2_CLASSPASS_TECHNIQUES.md) (`[PROVISIONAL]` User Rule 5).
 - **Build Target**: `PR5-62c` (`TECHNIQUES-GRAFTS-DATA`).
 

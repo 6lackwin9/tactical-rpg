@@ -1,6 +1,8 @@
 # Session U3.3: Asymmetric Gear, Strict Proficiency & Off-Hand Rework (`GEAR-REWORK1`)
 
-Status: **design closed / `[LOCKED]`** (interactive design walkthrough with user, 2026-11-14; supersedes the soft-untrained, weapon-switch, and `plate/leather/cloth` clauses of `docs/sessions/U3_GEAR.md`).
+Archived 2026-11-16 (`CTX-CLEANUP1-FINAL`), task done (`PR5-51a` `456b0ee1`, `PR5-51b` `30415b91`, `PR5-57` `3d9ca3cb`, `PR5-60` `a47d4042`): kept verbatim for history. Do not build from this file.
+
+Status: **design closed / `[LOCKED]`** (interactive design walkthrough with user, 2026-11-14; supersedes the soft-untrained, weapon-switch, and `plate/leather/cloth` clauses of [`docs/sessions/U3_GEAR.md`](../../sessions/U3_GEAR.md)).
 Layers: kit (`rpgkit_data`, `rpgkit_rules`, `rpgkit_battle`, `rpgkit_content`, `rpgkit_world`), game (`emberwake_gui` battle off-hand button & party screen), data (`item_families.json`, `classes.json`, `items.json`, `skills.json`, `passives.json`, `units.json`, `worlds/sunk_ward/*`).
 
 ## 1. Core Equipment & Proficiency Rules (`[LOCKED]`)

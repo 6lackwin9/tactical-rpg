@@ -1,5 +1,7 @@
 # `U2_CLASSPASS_TECHNIQUES` — `[PROVISIONAL]` Progression Spec Index, Off-Hand Signatures & Build Slices (`CLASSPASS1`)
 
+Archived 2026-11-16 (`CTX-CLEANUP1-FINAL`), implemented (`PR5-62a` `6e662c53`, `PR5-62b` `a1b1efb1`, `PR5-62c` `48f24342`; `[PROVISIONAL]` User Rule 5 items tracked in [DESIGN_REVIEW.md](../../DESIGN_REVIEW.md)): kept for history. Do not build from this file.
+
 - **Status**: **`[PROVISIONAL]`** — Ready for user playtest sign-off per User Rule 5.
 - **Baseline**: `origin/develop` (`a14c9d8e`) + `@design-triage` queued precursors `PR5-57..61` (`U3_GEAR_REWORK.md` §7).
 - **Domain Siblings** (split `< 25 KB / < 300 lines` each):

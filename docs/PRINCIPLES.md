@@ -71,7 +71,7 @@ Whenever an open choice arises in `.1` spec authoring, `FB-nn` / `UN-nn` Build f
 
 ## 3. Class Identity, Progression & Economy (`P-PROG`)
 
-- **`P-PROG-01` — Equal Stat Budgets, Distinct Shapes & Asymmetric Gear Roles** (`"Class balance"`, `U3_GEAR_REWORK.md`):
+- **`P-PROG-01` — Equal Stat Budgets, Distinct Shapes & Asymmetric Gear Roles** (`"Class balance"`, [U3_GEAR_REWORK.md](archive/sessions/U3_GEAR_REWORK.md)):
   - *Rule*: Every playable class shares the exact same level-1 stat sum (`62`) and per-level growth (`5`), `3` masterable main-hand weapon families (`main [3]`, `secondary [2]`, `third [2]`) + `1` non-masterable `minor [1]` across `15` weapon families (with `6` unique `main` weapons), asymmetric `Main [3] / Sub [1]` pairings across `7` dedicated off-hands, and `6` unique ordered `[3]/[1]` permutations across `heavy / medium / light` armor & helms (`Prof 0` and unmet `required_stats` hard-lock equip).
   - *Option test*: **Prefer** expressing class fantasy through stat distribution, asymmetric off-hand/armor pairings, class deck, and unique main-weapon techniques **over** raw stat budget inflation, soft equip mush, or overlapping signature weapons.
 - **`P-PROG-02` — Parallel Asymmetric Branches With Separate Substrates** (`PK2_GRAFTS`, `"Cold Steel weapon techniques"`):

@@ -4,7 +4,7 @@ Status: **`[LOCKED]` (`2026-11-10` Lore & Visual Hooks Session)** — equipment 
 
 Engine facts (`ITEM1`, `C1-L`, `ITEMUSE1`, `REWARD1`, `WEAPONROSTER1`): items live in `games/emberwake/data/catalog/items.json` on `item_families.json` (`rpgkit_data::ItemDef`); world named items resolve to a family; content is edited only through `aegis content`.
 
-## 1. Equipment slots, Slab implant slots & battle pouch (`[LOCKED]`, updated `2026-11-14` `U3_GEAR_REWORK.md`)
+## 1. Equipment slots, Slab implant slots & battle pouch (`[LOCKED]`, updated `2026-11-14` [U3_GEAR_REWORK.md](../../../../../docs/archive/sessions/U3_GEAR_REWORK.md))
 
 | Slot | Engine name | Holds |
 | --- | --- | --- |
@@ -16,9 +16,9 @@ Engine facts (`ITEM1`, `C1-L`, `ITEMUSE1`, `REWARD1`, `WEAPONROSTER1`): items li
 | **Pouch** | `UnitState.pouch` (`POUCH_MAX = 3`) | Tactile Soot-Gothic consumables (`con_heal_potion`/`con_focus_elixir`/`con_fire_bomb` are `ashlands`-only) |
 | **Slab Implants** | `4` Act 2+ `body` slots (`PK2`) | `Forearms`, `Thoracic`, `Visceral` (retort-refined ossuary bone-pins) + `Cranial` (class ritual) |
 
-Strict proficiency & burden (`U3_GEAR_REWORK.md`, `PR5-51a..b`): `Proficiency 0` and unmet `required_stats` **hard-lock equip** (unusable drops feed Hearth salvage); `Prof 1` (`minor`/`sub`) = `0.80x` power/mitigation (no Mastery XP); `Prof 2` (`secondary`/`third`) = `1.00x` + unlocks weapon Mastery XP; `Prof 3` (`main`) = `1.25x` + `1.5x` weapon Mastery XP. Burden lowers **Initiative** (`8 + DEX - burden`) while **Move Rate** (`2..4` tiles/move block) stays unburdened unless Initiative hits floor `1`.
+Strict proficiency & burden (`U3_GEAR_REWORK.md` — archived in `docs/archive/sessions/`, `PR5-51a..b`): `Proficiency 0` and unmet `required_stats` **hard-lock equip** (unusable drops feed Hearth salvage); `Prof 1` (`minor`/`sub`) = `0.80x` power/mitigation (no Mastery XP); `Prof 2` (`secondary`/`third`) = `1.00x` + unlocks weapon Mastery XP; `Prof 3` (`main`) = `1.25x` + `1.5x` weapon Mastery XP. Burden lowers **Initiative** (`8 + DEX - burden`) while **Move Rate** (`2..4` tiles/move block) stays unburdened unless Initiative hits floor `1`.
 
-## 2. Weapon & Off-Hand Lineup (`[LOCKED]`, `U3_GEAR_REWORK.md`)
+## 2. Weapon & Off-Hand Lineup (`[LOCKED]`, `U3_GEAR_REWORK.md` — archived)
 
 | Class & Founder | `main (3)` / `secondary (2)` / `third (2)` / `minor (1)` Weapons | Off-Hands (`Main [3] / Sub [1]`) | Armor (`Main [3] / Sub [1]`) & Founder Signature Gear |
 | --- | --- | --- | --- |

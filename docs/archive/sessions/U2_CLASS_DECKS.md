@@ -1,5 +1,7 @@
 # `U2_CLASS_DECKS` — `[PROVISIONAL]` 6 Class Skill Decks, Passives & Legacy Disposition (`CLASSPASS1`)
 
+Archived 2026-11-16 (`CTX-CLEANUP1-FINAL`), implemented (`PR5-62a` `6e662c53`, `PR5-62b` `a1b1efb1`): kept for history. Do not build from this file.
+
 - **Parent Index**: [U2_CLASSPASS_TECHNIQUES.md](U2_CLASSPASS_TECHNIQUES.md) (`[PROVISIONAL]` User Rule 5).
 - **Build Target**: `PR5-62a` (`CLASSPASS1-KIT`) -> `PR5-62b` (`CLASSPASS1-DATA`).
 
