@@ -83,3 +83,16 @@ To let Tushar iterate on **Artwork, Character Sprite Animations, VN Stage Choreo
 - **Sunk Ward Prop & Tile Cutters**: `art_src/prompts/cut_props.py`, `art_src/prompts/cut_ai_sheets.py`, `art_src/region_maps/render_map.py`, `tools/tiles/{cut,seam,flatten,groundcheck}.py`
 - **Docs Lint Gate**: `tools/fc.sh docs`
 - **Staging & Retired Probe Index**: [art_src/ARCHIVE_INDEX.md](../../../art_src/ARCHIVE_INDEX.md) (lists active sheets vs superseded first takes / probes kept cleanly on disk so script paths stay intact).
+
+## 6. Retired Inbox Completions Log (2026-11-15, Phase 2–3)
+
+- **`AI-03` (Story Music Tracks — retired)**: All 5 Flow Lyria context tracks landed in Phase 1–2 (`[GENERATED]`); the 4 story tracks (`story_opening`, `prologue_tension`, `story_escape`, `story_goodbye`) ship in `games/emberwake/assets/audio/music/` as `[PROVISIONAL synth placeholder]` loops generated via `tools/gen_music.py` (catalogued in `games/emberwake/assets/audio/music/README.md`).
+- **`AI-10` (M5 Slag Gate CG — retired)**: `games/emberwake/assets/backgrounds/story/vg_m5_gate.png` (`1120x472`) landed (`[GENERATED]`).
+- **`AI-12` (Icons & Sunk Ward NPC/Common Portraits — retired)**:
+  - `families_1`, `gear_1` (incl. `items/{heavy,medium,light}/helm.png`), `hud_chips_2`, `kits/rpg/assets/statuses/{steadfast,stealth}.png`, all `14` `cit_<zone>` citizen portraits, and `portraits/npcs/{bailiff_corvo,skerrit_bone_wright}.png` landed cleanly with zero duplicate placeholders (`[GENERATED]`).
+  - `art_src/prompts/cut_ai_sheets.py` updated with `skills_1..4` grid specs and rounded-corner outer-triangle alpha cleanup (`_slice_rounded_grid`); all `52` Sunk Ward skill icons cut to `games/emberwake/assets/skills/<id>.png` (`64x64` RGBA `[GENERATED]`).
+  - Missing common portraits placed at `games/emberwake/assets/portraits/common/{warrior_1h_buckler,ranger_wenn_tallow}.png` (`240x240` RGBA `[PLACEHOLDER]` composites from `kits/rpg/assets/portraits/common/warrior_base.png` and `games/emberwake/assets/portraits/npcs/wenn_tallow.png`), clearing Sunk Ward unit portrait fallback warnings.
+- **`AI-13` (Sunk Ward Map Art, Interior Walls & `_side` Props — retired)**:
+  - `art_src/region_maps/sluice_undercroft.json` synced (`npc_c` at `(16, 6)`), `kits/rpg/assets/tilesets/common/ground/floorboards/v0.png` (`256x256`) and `tilesets/sunk_ward/boundary/{blind_tenements,drain_brick,gorge_rock}/` landed (`[GENERATED]`).
+  - `games/emberwake/assets/tilesets/interior_{plaster,stone}/{wall (128x96), wall_face (128x48)}/v0.png` processed seamlessly from `art_src/sunk_ward/tiles/walls_interior_*.png` (`[GENERATED]`, zero edge seams).
+  - Remaining `9` missing vertical N–S `<art>_side` props (`crypt_bars_side 64x128`, `iron_ladder_side 48x96`, `culvert_gate_side 48x96`, `barred_gate_side 48x96`, `door_side 48x96`, `goods_shelf_side 48x96`, `weapon_rack_side 48x96`, `mission_board_side 48x96`, `pen_fence_side 32x112`) placed in `games/emberwake/assets/props/sunk_ward/<art>_side/v0.png` (`[PLACEHOLDER]` deterministic Sunk Ward pixel art matching the existing `7` `_side` pieces, 1px dark outline, zero cast floor shadows).

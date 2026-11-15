@@ -64,14 +64,112 @@ SHEETS = {
         "size": lambda n: 96,
         "tile": True,
     },
+    "skills_1": {  # Sunk Ward combat skill icons 1..16, 4 x 4 (sunk_ward_icons.md)
+        "grid": 4,
+        "inset": 5,
+        "corner_bg": "black",
+        "cells": [
+            "pommel_strike", "intercepting_hook", "billhook_sunder", "seventh_ward_bulwark",
+            "hamstring_sever", "ash_cloud_fade", "throat_carver", "orlovs_retribution",
+            "brimstone_cauterize", "tourniquet_tonic", "resilience_ward", "poachers_quarrel",
+            "tripwire_snare", "heavy_winch_sunder", "shackle_pummel_slam", "slag_slam_throw",
+        ],
+        "path": lambda n: f"{GAME}/skills/{n}.png",
+        "size": lambda n: 64,
+        "tile": True,
+    },
+    "skills_2": {  # Sunk Ward combat skill icons 17..32, 4 x 4 (sunk_ward_icons.md)
+        "grid": 4,
+        "inset": 5,
+        "corner_bg": "black",
+        "cells": [
+            "foundry_shatter", "phosphorus_pot", "magnesium_flash_bomb", "choke_gas",
+            "heavy_bill_thrust", "billhook_hook", "aimed_bolt", "crushing_judgment",
+            "iron_shackle_drag", "scourge_lash", "martyrs_rush", "pyre_nozzle_sweep",
+            "brand_of_the_heretic", "scalding_grease_pot", "boning_knife_flurry", "throat_clamp_pounce",
+        ],
+        "path": lambda n: f"{GAME}/skills/{n}.png",
+        "size": lambda n: 64,
+        "tile": True,
+    },
+    "skills_3": {  # Enemy, Inquisitor & boss skill icons 33..48, 4 x 4 (sunk_ward_icons.md)
+        "grid": 4,
+        "inset": 15,
+        "corner_bg": "white",
+        "cells": [
+            "burrow_ambush", "caustic_vomit", "bone_club_slam", "gilded_billhook_sunder",
+            "execution_wall", "traitors_parry", "sanctified_vivisection", "inquisitorial_parry",
+            "transfusion_pulse", "pneumatic_hammer_strike", "coal_shovel_jab", "bone_mill_pulverizer",
+            "pressurized_lard_spray", "flensing_hook_drag", "scalding_cataclysm", "ossified_spine_volley",
+        ],
+        "path": lambda n: f"{GAME}/skills/{n}.png",
+        "size": lambda n: 64,
+        "tile": True,
+    },
+    "skills_4": {  # Act bosses & corruption icons 49..52, 2 x 2 (sunk_ward_icons.md)
+        "grid": 2,
+        "inset": 15,
+        "corner_bg": "slate",
+        "cells": ["tendril_flail", "ossification_bloom", "sanctified_decapitation", "prelates_censure"],
+        "path": lambda n: f"{GAME}/skills/{n}.png",
+        "size": lambda n: 64,
+        "tile": True,
+    },
 }
+
+
+def _slice_rounded_grid(im, grid, inset, corner_bg):
+    """Slice a uniform grid sheet and clear rounded-tile corner triangles safely."""
+    from collections import deque
+
+    w, h = im.size
+    cw, ch = w // grid, h // grid
+    tiles = []
+    for r in range(grid):
+        for c in range(grid):
+            tile = im.crop((c * cw + inset, r * ch + inset, (c + 1) * cw - inset, (r + 1) * ch - inset)).convert("RGBA")
+            tw, th = tile.size
+            px = tile.load()
+            ref = px[0, 0][:3]
+            corner_r = max(24, tw // 8)
+
+            def is_bg(x, y):
+                if not ((x < corner_r or x >= tw - corner_r) and (y < corner_r or y >= th - corner_r)):
+                    return False
+                r0, g0, b0 = px[x, y][:3]
+                if corner_bg == "black":
+                    return max(r0, g0, b0) <= 20
+                if corner_bg == "white":
+                    return min(r0, g0, b0) >= 225 or (min(r0, g0, b0) >= 195 and max(r0, g0, b0) - min(r0, g0, b0) <= 12)
+                return max(abs(r0 - ref[0]), abs(g0 - ref[1]), abs(b0 - ref[2])) <= 24 or max(r0, g0, b0) <= 18
+
+            vis = set()
+            q = deque()
+            for x, y in ((0, 0), (tw - 1, 0), (0, th - 1), (tw - 1, th - 1)):
+                if is_bg(x, y):
+                    vis.add((x, y))
+                    q.append((x, y))
+            while q:
+                cx, cy = q.popleft()
+                px[cx, cy] = (0, 0, 0, 0)
+                for nx, ny in ((cx - 1, cy), (cx + 1, cy), (cx, cy - 1), (cx, cy + 1)):
+                    if 0 <= nx < tw and 0 <= ny < th and (nx, ny) not in vis and is_bg(nx, ny):
+                        vis.add((nx, ny))
+                        q.append((nx, ny))
+            tiles.append(tile)
+    return tiles
 
 
 def cut(sheet_id, sheet_path, picks, out_root):
     spec = SHEETS[sheet_id]
-    im = X.clear_corner(Image.open(sheet_path).convert("RGBA"))
-    boxes = S.cells_of(im, spec.get("grid", 3))
-    tiles = [im.crop(b) for b in boxes]
+    grid = spec.get("grid", 3)
+    raw = Image.open(sheet_path).convert("RGBA")
+    if spec.get("corner_bg"):
+        tiles = _slice_rounded_grid(raw, grid, spec.get("inset", 0), spec["corner_bg"])
+    else:
+        im = X.clear_corner(raw)
+        boxes = S.cells_of(im, grid)
+        tiles = [im.crop(b) for b in boxes]
     chosen = {}
     for i, name in enumerate(spec["cells"], 1):
         chosen.setdefault(name, i)
@@ -98,9 +196,10 @@ def cut(sheet_id, sheet_path, picks, out_root):
         icon.save(dest)
         written.append(f"{name} <- cell {cell}: {dest} {icon.size[0]}x{icon.size[1]}")
     cw = 120
-    board = Image.new("RGBA", (cw * 3 + 8, cw * 3 + 8), (18, 14, 18, 255))
+    rows = max(1, (len(tiles) + grid - 1) // grid)
+    board = Image.new("RGBA", (cw * grid + 8, cw * rows + 8), (18, 14, 18, 255))
     for i, t in enumerate(tiles):
-        board.paste(t.resize((cw - 8, cw - 8), Image.NEAREST), (8 + (i % 3) * cw, 8 + (i // 3) * cw))
+        board.paste(t.resize((cw - 8, cw - 8), Image.NEAREST), (8 + (i % grid) * cw, 8 + (i // grid) * cw))
     contact = pathlib.Path(sheet_path).with_name(pathlib.Path(sheet_path).stem + "_cells.png")
     board.save(contact)
     written.append(f"contact: {contact}")
@@ -252,7 +351,7 @@ def main(argv):
             print(line)
         return
     if len(argv) < 2 or argv[0] not in SHEETS:
-        sys.exit("usage: cut_ai_sheets.py keepsakes_1|services_hud_1 <sheet.png> [--pick name=cell,...] [--out DIR]"
+        sys.exit(f"usage: cut_ai_sheets.py {'|'.join(SHEETS)} <sheet.png> [--pick name=cell,...] [--out DIR]"
                  " | landmark <image.png> <location_id> [--tint ...] [--clear box] [--desmoke box] [--grade SAT:VAL] [--size N] [--out DIR]")
     sheet_id, path = argv[0], argv[1]
     picks, out = {}, ROOT
