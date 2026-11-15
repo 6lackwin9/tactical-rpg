@@ -39,12 +39,15 @@ fn chain(body: &str, main: Option<&ItemDef>, off: Option<&ItemDef>) -> Vec<Strin
 fn the_look_follows_the_main_hand_and_the_off_hand() {
     let (w2, w1, sh) = (weapon("hammer", true), weapon("axe", false), shield());
     assert_eq!(chain("warrior", Some(&w2), None), ["warrior/2h_hammer", "warrior/2h_sword", "warrior"], "a two-handed weapon");
-    assert_eq!(chain("warrior", Some(&w1), Some(&sh)), ["warrior"], "one hand and a shield: the class sheet");
-    assert_eq!(chain("warrior", Some(&w1), None), ["warrior/2h_axe", "warrior/2h_sword", "warrior"], "an empty off hand");
+    assert_eq!(chain("warrior", Some(&w1), Some(&sh)), ["warrior/1h_axe", "warrior"], "a non-sword 1H + shield tries 1h_<family> before base");
+    assert_eq!(chain("warrior", Some(&weapon("sword", false)), Some(&sh)), ["warrior"], "one-hand sword + shield: the class sheet");
+    assert_eq!(chain("warrior", Some(&weapon("polearm", false)), Some(&sh)), ["warrior/1h_polearm", "warrior"], "1H polearm + shield tries 1h_polearm");
+    assert_eq!(chain("warrior", Some(&w1), None), ["warrior/2h_axe", "warrior/1h_axe", "warrior/axe", "warrior/2h_sword", "warrior"], "an empty off hand");
     assert_eq!(chain("warrior", Some(&weapon("sword", true)), None), ["warrior/2h_sword", "warrior"], "the fallback is not tried twice");
     assert_eq!(chain("warrior", Some(&w2), Some(&weapon("dagger", false))), ["warrior/2h_hammer", "warrior/2h_sword", "warrior"], "a 2H weapon with a spare off-hand weapon");
-    assert_eq!(chain("warrior", Some(&w1), Some(&item("WEAPON", "orb", false, 0))), ["warrior/2h_axe", "warrior/2h_sword", "warrior"], "a focus is no shield");
-    assert_eq!(chain("warrior", Some(&weapon("mace", false)), None)[1], "warrior/2h_sword", "a family without its own look falls back to the greatsword");
+    assert_eq!(chain("warrior", Some(&w1), Some(&item("WEAPON", "orb", false, 0)))[0], "warrior/2h_axe", "a focus is no shield");
+    let mace_chain = chain("warrior", Some(&weapon("mace", false)), None);
+    assert_eq!(&mace_chain[mace_chain.len() - 2..], ["warrior/2h_sword", "warrior"], "a family without its own look falls back to the greatsword");
     assert_eq!(chain("warrior", None, Some(&sh)), ["warrior"], "no weapon");
     assert_eq!(chain("warrior", None, None), ["warrior"]);
     assert_eq!(chain("warrior/base", Some(&w2), None)[0], "warrior/2h_hammer", "the explicit base key is the class base");
@@ -77,11 +80,15 @@ fn the_grip_reads_the_equipped_gear() {
     inv.equip(Equipment::new(&weapon("axe", false)), Slot::MainHand);
     inv.equip(Equipment::new(&shield()), Slot::OffHand);
     assert_eq!(Grip::of_inventory(&inv), Grip { main_family: "axe".into(), two_handed: false, off_hand: OffHand::Shield });
+    assert_eq!(Grip::of_inventory(&inv).look().as_deref(), Some("1h_axe"));
+    inv.equip(Equipment::new(&weapon("sword", false)), Slot::MainHand);
     assert_eq!(Grip::of_inventory(&inv).look(), None);
+    inv.equip(Equipment::new(&weapon("polearm", false)), Slot::MainHand);
+    assert_eq!(Grip::of_inventory(&inv).look().as_deref(), Some("1h_polearm"));
     inv.equip(Equipment::new(&buckler()), Slot::OffHand);
     assert_eq!(Grip::of_inventory(&inv).look().as_deref(), Some(BUCKLER_LOOK));
     inv.unequip(Slot::OffHand);
-    assert_eq!(Grip::of_inventory(&inv).look().as_deref(), Some("2h_axe"));
+    assert_eq!(Grip::of_inventory(&inv).look().as_deref(), Some("2h_polearm"));
 }
 
 fn game_dir() -> PathBuf {
@@ -179,5 +186,45 @@ fn only_the_class_base_draws_the_kite_shield() {
     assert!(!looks.is_empty());
     for b in looks {
         assert!(!has(&b), "{b} draws the kite shield");
+    }
+}
+
+#[test]
+fn pr5_60_runtime_gear_looks_resolve_baked_bodies() {
+    let cat = Catalog::from_value(&source::load(&game_dir().join("data")).catalog);
+    let layers = Layers::for_game(&game_dir());
+    let resolve = |body: &str, main: Option<&str>, off: Option<&str>| {
+        resolved(&layers, chain(body, main.map(|id| &cat.items[id]), off.map(|id| &cat.items[id])))
+    };
+    assert_eq!(resolve("warrior", Some("notched_billhook"), Some("shd_kite")).as_deref(), Some("warrior/1h_polearm"));
+    assert_eq!(resolve("warrior", Some("notched_billhook"), None).as_deref(), Some("warrior/2h_polearm"));
+    assert_eq!(resolve("warrior", Some("wpn_broadsword"), Some("shd_kite")).as_deref(), Some("warrior"));
+    assert_eq!(resolve("warrior", Some("wpn_claymore"), None).as_deref(), Some("warrior/2h_greatsword"));
+    assert_eq!(resolve("mage", Some("brass_vitriol_sprayer"), None).as_deref(), Some("mage/1h_sprayer"));
+    assert_eq!(resolve("mage", Some("brass_vitriol_sprayer"), Some("wpn_orb")).as_deref(), Some("mage/1h_sprayer"));
+    assert_eq!(resolve("mage", None, Some("wpn_orb")).as_deref(), Some("mage/orb"));
+    let bone_saw = weapon("bone_saw", false);
+    assert_eq!(resolved(&layers, chain("mage", Some(&bone_saw), Some(&cat.items["wpn_orb"]))).as_deref(), Some("mage/orb"));
+    assert_eq!(resolve("brawler", Some("penal_shackles"), None).as_deref(), Some("brawler/gauntlet"));
+    assert_eq!(resolve("brawler", Some("penal_shackles"), Some("forearm_braces")).as_deref(), Some("brawler/gauntlet"));
+    assert_eq!(resolve("brawler", Some("wpn_knuckles"), Some("forearm_braces")).as_deref(), Some("brawler/braces"));
+    assert_eq!(resolve("brawler", None, Some("forearm_braces")).as_deref(), Some("brawler/braces"));
+    assert_eq!(resolve("brawler", Some("wpn_knuckles"), None).as_deref(), Some("brawler"));
+    assert_eq!(resolve("rogue", Some("boning_knife"), None).as_deref(), Some("rogue/1h_knife"));
+    assert_eq!(resolve("rogue", Some("boning_knife"), Some("ash_cloak")).as_deref(), Some("rogue/1h_knife"));
+    assert_eq!(resolve("rogue", Some("wpn_dagger"), None).as_deref(), Some("rogue"));
+
+    let game_units = game_dir().join("assets/units");
+    let kit_units = game_dir().join("../../kits/rpg/assets/units");
+    for look in ["warrior/2h_greatsword", "brawler/gauntlet", "brawler/braces", "mage/1h_sprayer", "rogue/1h_knife"] {
+        assert!(game_units.join(look).join("sheet.png").is_file(), "{look} belongs in game layer");
+        assert!(!kit_units.join(look).exists(), "{look} must not exist in kit layer");
+        let cls = art::split_body(look).0;
+        assert_eq!(clips(&layers, look).palette, clips(&layers, cls).palette, "{look} shares base palette slots");
+    }
+    for look in ["warrior/1h_polearm", "mage/orb"] {
+        assert!(kit_units.join(look).join("sheet.png").is_file(), "{look} belongs in kit layer");
+        let cls = art::split_body(look).0;
+        assert_eq!(clips(&layers, look).palette, clips(&layers, cls).palette, "{look} shares base palette slots");
     }
 }

@@ -620,7 +620,12 @@ class Classes(Registry):
         self.assertEqual(pixels(p1_sheet, kite), [], 'warrior/1h_polearm must not emit kite shield slot RGB')
         self.assertIn('shield_bash', p1_rows)
         self.assertEqual(variants.layer('warrior/2h_greatsword'), 'game')
+        self.assertEqual(variants.layer('brawler/gauntlet'), 'game')
+        self.assertEqual(variants.layer('brawler/braces'), 'game')
+        self.assertEqual(variants.layer('mage/1h_sprayer'), 'game')
+        self.assertEqual(variants.layer('rogue/1h_knife'), 'game')
         self.assertEqual(variants.layer('warrior/1h_polearm'), 'kit')
+        self.assertEqual(variants.layer('mage/orb'), 'kit')
 
 
 if __name__ == "__main__":

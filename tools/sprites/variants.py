@@ -60,7 +60,13 @@ LOOKS = {
     'mage': ('1h_sprayer', 'orb'),
     'rogue': ('1h_knife',),
 }
-LOOK_LAYERS = {'warrior/2h_greatsword': 'game'}
+LOOK_LAYERS = {
+    'warrior/2h_greatsword': 'game',
+    'brawler/gauntlet': 'game',
+    'brawler/braces': 'game',
+    'mage/1h_sprayer': 'game',
+    'rogue/1h_knife': 'game',
+}
 
 
 def two_handed(u, family, drawing=None):
