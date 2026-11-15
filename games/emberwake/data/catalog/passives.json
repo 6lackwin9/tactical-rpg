@@ -1222,6 +1222,324 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "vanguard_poise",
+			"name": "Braced Stand",
+			"description": "+15 max Poise; immune to forced movement while guarding.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 15
+				},
+				{
+					"type": "forced_move",
+					"immune": "guarding"
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "iron_counter",
+			"name": "Iron Counter",
+			"description": "Gains 1 AP when blocking a hit while guarding (once per round).",
+			"effects": [
+				{
+					"type": "trigger",
+					"on": "guarded_hit",
+					"limit": "round",
+					"effects": [
+						{
+							"type": "ap",
+							"value": 1,
+							"to": "self"
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "iron_shoulders",
+			"name": "Iron Shoulders",
+			"description": "+2 CONS; forced moves you deal push 1 extra tile.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "CONS",
+					"value": 2
+				},
+				{
+					"type": "forced_move",
+					"bonus_tiles": 1
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "kiln_poise",
+			"name": "Kiln Endurance",
+			"description": "Single-block hits deal no stagger; below 50% HP gains Empower (+10%) for 2 rounds (once per battle).",
+			"effects": [
+				{
+					"type": "stagger_taken",
+					"mult": 0,
+					"max_blocks": 1
+				},
+				{
+					"type": "trigger",
+					"on": "hp_below",
+					"when": {
+						"pct": 50
+					},
+					"effects": [
+						{
+							"type": "grant",
+							"status": "empower",
+							"magnitude": 10,
+							"rounds": 2,
+							"to": "self"
+						}
+					],
+					"limit": "battle"
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "keen_elevation",
+			"name": "Long Sight",
+			"description": "+2 PERC; +1 reach on ranged attacks.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "PERC",
+					"value": 2
+				},
+				{
+					"type": "skill_reach",
+					"kind": "ATTACK",
+					"reach": 1,
+					"ranged": true
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "patient_sight",
+			"name": "Patient Sight",
+			"description": "+15% status potency; ranged stance breaks return 1 AP (once per round).",
+			"effects": [
+				{
+					"type": "status_potency",
+					"value": 15
+				},
+				{
+					"type": "trigger",
+					"on": "break_dealt",
+					"when": {
+						"ranged": true
+					},
+					"limit": "round",
+					"effects": [
+						{
+							"type": "ap",
+							"value": 1,
+							"to": "self"
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "twin_light_tempo",
+			"name": "Twin-Blade Rhythm",
+			"description": "When dual-wielding light weapons: +8% crit, +50% off-hand jab power, and off-hand jabs grant 1 AP and inflict Bleed once per round.",
+			"effects": [
+				{
+					"type": "crit",
+					"value": 8,
+					"when": {
+						"dual_wield": "1h_light"
+					}
+				},
+				{
+					"type": "skill_potency",
+					"family": "offhand_jab",
+					"value": 0.5,
+					"when": {
+						"dual_wield": "1h_light"
+					}
+				},
+				{
+					"type": "trigger",
+					"on": "hit_dealt",
+					"when": {
+						"dual_wield": "1h_light",
+						"skills": [
+							"offhand_jab"
+						]
+					},
+					"limit": "round",
+					"effects": [
+						{
+							"type": "ap",
+							"value": 1,
+							"to": "self"
+						},
+						{
+							"type": "inflict",
+							"status": "bleed",
+							"potency": 70,
+							"rounds": 2,
+							"to": "other"
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "gutter_reflex",
+			"name": "Gutter Reflex",
+			"description": "40% resistance to Slow and Root; gains Haste for 1 round on evade (once per round).",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "slow",
+					"value": 40
+				},
+				{
+					"type": "resist",
+					"status": "root",
+					"value": 40
+				},
+				{
+					"type": "trigger",
+					"on": "evaded",
+					"limit": "round",
+					"effects": [
+						{
+							"type": "grant",
+							"status": "haste",
+							"rounds": 1,
+							"to": "self"
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "triage_discipline",
+			"name": "Triage Cadence",
+			"description": "+8 max Poise; healing an ally below 35% HP restores 1 AP (once per round).",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 8
+				},
+				{
+					"type": "trigger",
+					"on": "heal_given",
+					"when": {
+						"other_hp_below": 35
+					},
+					"limit": "round",
+					"effects": [
+						{
+							"type": "ap",
+							"value": 1,
+							"to": "self"
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "surgical_precision",
+			"name": "Surgical Hand",
+			"description": "+15% healing potency; +10% status potency.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"group": "heal",
+					"value": 0.15
+				},
+				{
+					"type": "status_potency",
+					"value": 10
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "reactive_reagents",
+			"name": "Reactive Reagents",
+			"description": "50% resistance to Burn and Poison; hits on burning foes inflict Expose (-3 armor).",
+			"effects": [
+				{
+					"type": "resist",
+					"status": "burn",
+					"value": 50
+				},
+				{
+					"type": "resist",
+					"status": "poison",
+					"value": 50
+				},
+				{
+					"type": "trigger",
+					"on": "hit_dealt",
+					"when": {
+						"other_status": "burn"
+					},
+					"limit": "round",
+					"effects": [
+						{
+							"type": "inflict",
+							"status": "expose",
+							"potency": 85,
+							"magnitude": 3,
+							"rounds": 2,
+							"to": "other"
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "catalytic_reserve",
+			"name": "Catalytic Reserve",
+			"description": "+1 INT; +10% power on Pitch Firebomb, Alum Frost-Pot, and Choke-Vapor Bomb.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "INT",
+					"value": 1
+				},
+				{
+					"type": "skill_potency",
+					"family": "firebomb",
+					"value": 0.1
+				},
+				{
+					"type": "skill_potency",
+					"family": "glacial_burst",
+					"value": 0.1
+				},
+				{
+					"type": "skill_potency",
+					"family": "choke_cloud",
+					"value": 0.1
+				}
+			],
+			"slot": ""
 		}
 	]
 }

@@ -7,7 +7,8 @@
 use emberwake_battle::dojo::DojoSession;
 use emberwake_battle::session::{EncounterDef, Phase, Session};
 use emberwake_battle::skill;
-use emberwake_rules::ruleset::{Ruleset, CLASSIC, REACH, REGISTER, ROUND_INTENT, TIMELINE, UNIT_METERS};
+use emberwake_data::Catalog;
+use emberwake_rules::ruleset::{Ruleset, AP_COST, CLASSIC, FORCED_MOVE, GROUND_HAZARDS, REACH, REGISTER, ROUND_INTENT, TIMELINE, TRIGGERS, UNIT_METERS};
 use emberwake_rules::Stance;
 use emberwake_world::Data;
 use indexmap::IndexMap;
@@ -101,23 +102,28 @@ fn round_intent_leaves_the_classic_stances_inert_in_battle() {
 /// FB-188 Option A: an extension is inert without its opt-in data (RULESET1 3.2), so a fight that already holds that
 /// data at battle start opts in and is left out of the check for that extension only. One row per extension whose
 /// opt-in data can ship in a classic fight (add a row when another extension's data does): `reach`, a unit with a reach
-/// weapon at the start (the kit query `Unit::has_reach_weapon`); `unit_meters` (GEAR-REWORK1, PR5-51b), a unit with an
-/// ammunition off-hand item, whose meter, empowered shots and Reload run under that rule (`Unit::has_off_hand_ammo`).
-const OPT_IN_AT_START: &[(&str, fn(&Session) -> bool)] = &[(REACH, holds_reach_weapon), (UNIT_METERS, holds_off_hand_ammo)];
+/// weapon (`Unit::has_reach_weapon`); `unit_meters`, off-hand ammo (`Unit::has_off_hand_ammo`) or `passive_meters`;
+/// `forced_move`, any skill with `forced_move`; `ap_cost`, any non-Move/Rest/Target/Status skill whose `ap_cost` differs
+/// from `level.clamp(1, 5)`; `ground_hazards`, any skill with `hazard`; `triggers`, `passive_triggers`, `gear_triggers`,
+/// or any skill `triggers`/`riders` (`PR5-62b` class paths ship these in classic encounters).
+const OPT_IN_AT_START: &[(&str, fn(&Catalog, &Session) -> bool)] = &[
+    (REACH, |_, s| s.w.units.iter().any(|u| u.has_reach_weapon())),
+    (UNIT_METERS, |_, s| s.w.units.iter().any(|u| u.has_off_hand_ammo() || !u.passive_meters.is_empty())),
+    (FORCED_MOVE, |cat, s| holds_skill(cat, s, |sk| sk.forced_move.is_some())),
+    (AP_COST, |cat, s| holds_skill(cat, s, |sk| sk.ap_cost >= 0 && sk.ap_cost != sk.level.clamp(1, 5) && !matches!(skill::kind(sk), skill::Kind::Move | skill::Kind::Rest | skill::Kind::Target | skill::Kind::Status))),
+    (GROUND_HAZARDS, |cat, s| holds_skill(cat, s, |sk| sk.hazard.is_some())),
+    (TRIGGERS, |cat, s| s.w.units.iter().any(|u| !u.passive_triggers.is_empty() || !u.gear_triggers.is_empty()) || holds_skill(cat, s, |sk| !sk.triggers.is_empty() || !sk.riders.is_empty())),
+];
 
-fn holds_off_hand_ammo(s: &Session) -> bool {
-    s.w.units.iter().any(|u| u.has_off_hand_ammo())
-}
-
-fn holds_reach_weapon(s: &Session) -> bool {
-    s.w.units.iter().any(|u| u.has_reach_weapon())
+fn holds_skill(cat: &Catalog, s: &Session, pred: impl Fn(&emberwake_data::SkillDef) -> bool) -> bool {
+    s.w.units.iter().any(|u| u.known_skills.iter().chain(&u.gear_skills).any(|id| cat.skill(id).is_some_and(&pred)))
 }
 
 #[test]
 fn extensions_change_nothing_in_a_classic_battle_yet() {
     let d = data();
     let start = Session::start(d.cat.clone(), encounter(&d), &IndexMap::new());
-    let excluded: Vec<&str> = OPT_IN_AT_START.iter().filter(|(_, holds)| holds(&start)).map(|(id, _)| *id).collect();
+    let excluded: Vec<&str> = OPT_IN_AT_START.iter().filter(|(_, holds)| holds(&d.cat, &start)).map(|(id, _)| *id).collect();
     eprintln!("extensions opted in at start (left out, FB-188 Option A): [{}]", excluded.join(", "));
     let extensions: Vec<&str> = REGISTER.iter().filter(|r| r.kind == emberwake_rules::ruleset::RuleKind::Extension).map(|r| r.id).collect();
     let on: Vec<String> = extensions.iter().filter(|x| !excluded.contains(x)).map(|x| format!("+{x}")).collect();

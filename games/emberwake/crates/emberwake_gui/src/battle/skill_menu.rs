@@ -48,18 +48,13 @@ pub(super) const CHANNEL_TINT_ALPHA: u8 = 110;
 /// hero has an off-hand action, `offhand::action`); the button shows the action's name (Reload, Fade-Step, a jab).
 pub(super) const OFF_HAND: &str = "Off-Hand";
 
-/// The neutral buttons of a menu in their order: Fill, Move, Rest, the Channel toggle when `channel`, the Off-Hand
-/// button when `off_hand`, Select.
-fn neutral_order(channel: bool, off_hand: bool) -> Vec<&'static str> {
-    let mut out = vec![NEUTRAL[0], NEUTRAL[1], NEUTRAL[2]];
-    if channel {
-        out.push(CHANNEL);
-    }
-    if off_hand {
-        out.push(OFF_HAND);
-    }
-    out.push(NEUTRAL[3]);
-    out
+/// The neutral buttons of a menu by sub-line: Fill, Move, Rest (plus Select on another ally) on line 0, and
+/// optional Channel / Off-Hand controls on a second neutral line so added off-hand names never widen line 0.
+fn neutral_lines(rows: &[Row]) -> Vec<Vec<&'static str>> {
+    let has = |t: &'static str| rows.iter().any(|r| r.slot == Some(Slot::Neutral(t)));
+    let line0: Vec<&'static str> = NEUTRAL.iter().copied().filter(|&t| has(t)).collect();
+    let line1: Vec<&'static str> = [CHANNEL, OFF_HAND].into_iter().filter(|&t| has(t)).collect();
+    if line1.is_empty() { vec![line0] } else { vec![line0, line1] }
 }
 
 /// Where a row of the menu goes.
@@ -94,10 +89,8 @@ pub(super) struct MenuGrid {
     pub(super) shown: Vec<RoundIntent>,
     /// The name column and a neutral button's width, measured for the text size (`fit`).
     pub(super) label_w: i32,
-    pub(super) button_w: i32,
-    /// PK1-S2c: the neutral buttons in their order (the Channel toggle only on a menu that has it), and the Rest
-    /// button's text when it names another skill (Feed in a Channel round; measured with the buttons).
-    pub(super) buttons: Vec<&'static str>,
+    pub(super) neutral: Vec<Vec<&'static str>>,
+    pub(super) neutral_ws: Vec<Vec<i32>>,
     pub(super) rest_name: String,
     /// GEAR-REWORK1 (PR5-51a pass 2): the Off-Hand button's text (its action's name; measured with the buttons).
     pub(super) off_name: String,
@@ -110,11 +103,14 @@ impl MenuGrid {
         let mut lines = vec![(NEUTRAL_LINE.to_string(), None, 0)];
         let mut places = vec![(0, 0); rows.len()];
         let mut cols = 0;
-        let mut depth = 1;
-        let buttons = neutral_order(rows.iter().any(|r| r.slot == Some(Slot::Neutral(CHANNEL))), rows.iter().any(|r| r.slot == Some(Slot::Neutral(OFF_HAND))));
+        let neutral = neutral_lines(rows);
+        let neutral_ws = neutral.iter().map(|line| vec![ICON + 7; line.len()]).collect();
+        let mut depth = neutral.len() as i32;
         for (k, row) in rows.iter().enumerate() {
             if let Some(Slot::Neutral(text)) = row.slot {
-                places[k] = (0, buttons.iter().position(|n| *n == text).unwrap_or(0) as i32);
+                if let Some((l, c)) = neutral.iter().enumerate().find_map(|(l, line)| line.iter().position(|n| *n == text).map(|c| (l as i32, c as i32))) {
+                    places[k] = (l, c);
+                }
             }
         }
         for (i, name) in intents {
@@ -129,20 +125,30 @@ impl MenuGrid {
         }
         let rest_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral("Rest"))).map(|r| r.label.clone()).filter(|l| l != "Rest").unwrap_or_default();
         let off_name = rows.iter().find(|r| r.slot == Some(Slot::Neutral(OFF_HAND))).map(|r| r.label.clone()).unwrap_or_default();
-        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, button_w: ICON + 7, buttons, rest_name, off_name }
+        MenuGrid { lines, places, depth, cols, fixed, shown, label_w: 40, neutral, neutral_ws, rest_name, off_name }
     }
 
-    /// Measures the name column and the neutral buttons for the text size.
+    /// Measures the name column and each neutral button individually for the text size.
     pub(super) fn fit(&mut self, p: &mut Painter) {
         let label = self.lines.iter().map(|l| p.text_w(&l.0, BODY)).fold(0.0, f32::max);
-        let button = self.buttons.iter().copied().chain([self.rest_name.as_str(), self.off_name.as_str()]).map(|n| p.text_w(n, SMALL)).fold(0.0, f32::max);
         self.label_w = label.ceil() as i32 + 2;
-        self.button_w = (button.ceil() as i32 + 6).max(ICON);
+        self.neutral_ws = self.neutral.iter().map(|line| {
+            line.iter().map(|&b| {
+                let text = if b == "Rest" && !self.rest_name.is_empty() {
+                    self.rest_name.as_str()
+                } else if b == OFF_HAND && !self.off_name.is_empty() {
+                    self.off_name.as_str()
+                } else {
+                    b
+                };
+                (p.text_w(text, SMALL).ceil() as i32 + 6).max(ICON)
+            }).collect()
+        }).collect();
     }
 
     /// The panel's size with a title row `row_h` high.
     pub(super) fn size(&self, row_h: i32) -> (i32, i32) {
-        let neutral = self.buttons.len() as i32 * (self.button_w + GAP);
+        let neutral = self.neutral_ws.iter().map(|line| line.iter().map(|&w| w + GAP).sum::<i32>()).max().unwrap_or(0);
         let cells = neutral.max(self.cols * (ICON + GAP));
         ((2 * PAD + self.label_w + GAP + cells - GAP).max(MENU_MIN_W), row_h + 2 + self.depth * (ICON + GAP) - GAP + PAD)
     }
@@ -152,8 +158,10 @@ impl MenuGrid {
         let (line, col) = self.places.get(k).copied().unwrap_or((0, 0));
         let left = x + PAD + self.label_w + GAP;
         let top = y + row_h + 2 + line * (ICON + GAP);
-        if line == 0 {
-            Rect::new(left + col * (self.button_w + GAP), top, self.button_w, ICON)
+        if let Some(ws) = usize::try_from(line).ok().and_then(|l| self.neutral_ws.get(l)) {
+            let off: i32 = ws.iter().take(col as usize).map(|&w| w + GAP).sum();
+            let bw = ws.get(col as usize).copied().unwrap_or(ICON + 7);
+            Rect::new(left + off, top, bw, ICON)
         } else {
             Rect::new(left + col * (ICON + GAP), top, ICON, ICON)
         }

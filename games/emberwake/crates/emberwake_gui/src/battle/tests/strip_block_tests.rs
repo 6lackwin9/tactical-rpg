@@ -125,6 +125,8 @@ fn a_fight_labels_its_spans() {
     assert!(start.iter().all(|l| l["look"] != json!("chosen")), "nothing is chosen yet: {start:?}");
     let h = b.selected.unwrap();
     let foe = s(&b).w.enemies.iter().copied().find(|&e| s(&b).w.units[e].is_active() && s(&b).w.has(e)).unwrap();
+    // PR5-62b: warrior's Assault class skill is 1-block Dread Roar, so use Strike to exercise a multi-block Assault span
+    b.host.session.as_mut().unwrap().w.units[h].deck.order.insert("assault".into(), vec!["strike".into()]);
     let r = b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": foe}));
     assert_eq!(r["ok"], json!(true), "{r}");
     let r = b.send(&cx, json!({"cmd": "accept_ghost", "unit": h}));

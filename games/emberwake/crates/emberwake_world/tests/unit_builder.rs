@@ -60,6 +60,7 @@ fn old_member(d: &Data, state: &UnitState, world: &str, deck: Option<&DeckRule>)
         // CLASS-BASICS (R2-W2b): the deck terms carry the class's role basics, as every build gives them since
         u.deck_rule = Some(rule.with_class(cat, &def.class_id));
     }
+    u.apply_class_passives(cat);
     for id in &saved_with_temperament(d, &work) {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);

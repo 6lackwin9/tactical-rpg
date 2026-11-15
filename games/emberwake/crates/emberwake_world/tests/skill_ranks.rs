@@ -19,7 +19,46 @@ const TOP_LEVEL: i64 = 12;
 
 fn data() -> Data {
     let dir = Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
-    Data::open(&dir).expect("data").0
+    let mut d = Data::open(&dir).expect("data").0;
+    // CLASSPASS1-DATA (PR5-62b): all shipped skills were flattened to 1 rank and priest/warrior paths reworked;
+    // synthesize multi-rank rows on mend/hex/shield_bash and attach mend/shield_bash to priest/warrior here so
+    // SKILLUI1's rank-rule tests remain covered on the kit.
+    let mend = d.cat.skill("mend").expect("mend ships").clone();
+    let hex = d.cat.skill("hex").expect("hex ships").clone();
+    let bash = d.cat.skill("shield_bash").expect("shield_bash ships").clone();
+    let mut extra = Vec::new();
+    for (tier, roman, level, heal_base) in [(2, "II", 3, mend.heal_base + 5), (3, "III", 6, mend.heal_base + 11)] {
+        let mut s = mend.clone();
+        s.id = format!("mend_{tier}");
+        s.family = "mend".into();
+        s.name = format!("Mend {roman}");
+        s.tier = tier;
+        s.level = level;
+        s.heal_base = heal_base;
+        extra.push(s);
+    }
+    let mut hex2 = hex.clone();
+    hex2.id = "hex_2".into();
+    hex2.family = "hex".into();
+    hex2.name = "Hex II".into();
+    hex2.tier = 2;
+    hex2.level = 4;
+    extra.push(hex2);
+    let mut bash2 = bash.clone();
+    bash2.id = "shield_bash_2".into();
+    bash2.family = "shield_bash".into();
+    bash2.name = "Shield Bash II".into();
+    bash2.tier = 2;
+    bash2.level = 3;
+    bash2.power_mult = bash.power_mult + 0.15;
+    bash2.status_potency = bash.status_potency + 10;
+    extra.push(bash2);
+    let cat = std::sync::Arc::make_mut(&mut d.cat);
+    cat.add_skills(extra);
+    cat.classes.get_mut("priest").expect("priest ships").skill_path.insert("mend".into(), 1);
+    cat.classes.get_mut("warrior").expect("warrior ships").skill_path.insert("shield_bash".into(), 1);
+    cat.units.get_mut("priest").expect("priest unit ships").loadout = vec!["mend".into(), "purify".into(), "rally".into(), "aegis".into()];
+    d
 }
 
 /// A priest member at `level` with Mend slotted (once the priest owns it) and `ranks` chosen.

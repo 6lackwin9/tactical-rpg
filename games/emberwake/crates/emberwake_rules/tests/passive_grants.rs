@@ -94,9 +94,21 @@ fn old_forced_add(f: &mut ForcedTraits, e: &Obj) {
 
 fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &str, gear: bool) {
     let id = source.trim_start_matches("passive:").to_string();
+    let mut has_cond = false;
     for raw in effects {
         let Some(e) = raw.as_object() else { continue };
-        match value::string(e, "type", "").as_str() {
+        let t = value::string(e, "type", "");
+        if !matches!(t.as_str(), "trigger" | "meter") {
+            if let Some(when) = value::obj(e, "when").filter(|w| !w.is_empty()) {
+                let grants = rpgkit_rules::grants::read_one(e);
+                if !grants.is_empty() {
+                    u.conditional_grants.push(rpgkit_rules::unit::ConditionalGrant { source: source.to_string(), gear, when: when.clone(), grants });
+                    has_cond = true;
+                    continue;
+                }
+            }
+        }
+        match t.as_str() {
             "stat" => {
                 let mut tag = "always".to_string();
                 if let Some(ctx) = value::obj(e, "context") {
@@ -204,8 +216,19 @@ fn old_apply_effects(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &st
                 let held = if gear { &mut u.gear_block_cost } else { &mut u.block_cost };
                 *held.entry(value::string(e, "skill", "")).or_insert(0) += value::int(e, "delta", 0);
             }
+            "crit" => {
+                let v = value::float(e, "value", 0.0);
+                if gear {
+                    u.gear_crit += v;
+                } else {
+                    u.passive_crit += v;
+                }
+            }
             _ => {}
         }
+    }
+    if has_cond && !gear {
+        u.refresh_conditional_grants(cat);
     }
 }
 
@@ -215,7 +238,16 @@ fn old_apply_band(u: &mut Unit, cat: &Catalog, effects: &[Value], source: &str) 
     let (potency, stagger) = (u.passive_status_potency, u.stagger_taken.len());
     let mut crit = 0.0;
     let kinds = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency"];
-    let passive: Vec<Value> = effects.iter().filter(|e| e.as_object().is_some_and(|o| kinds.contains(&value::string(o, "type", "").as_str()))).cloned().collect();
+    let passive: Vec<Value> = effects
+        .iter()
+        .filter_map(|e| {
+            let mut o = e.as_object()?.clone();
+            kinds.contains(&value::string(&o, "type", "").as_str()).then(|| {
+                o.remove("when");
+                Value::Object(o)
+            })
+        })
+        .collect();
     old_apply_effects(u, cat, &passive, source, false);
     for e in effects.iter().filter_map(Value::as_object).filter(|o| value::string(o, "type", "") == "crit") {
         crit += value::float(e, "value", 0.0);

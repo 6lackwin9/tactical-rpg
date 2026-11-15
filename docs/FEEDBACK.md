@@ -12,6 +12,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | R1 to PR5-56 (`FB-01`..`FB-273`, `UN-01`..`UN-12`) | released or done | `main` / `develop` | Archived in `docs/archive/FEEDBACK_CLOSED.md` (moved 2026-11-15) |
 | PR5-57 (`GEAR-REWORK1-FOLLOWUP`) | built (ready for verify) | `swarm-build-lead-71764ac0` | Retired `untrained_*`, enemy drills + strict `wear_lock`, `catalyst_pulse`, `counts=on` gear counters, `FB-268` sim balance, 5 named goldens re-recorded |
 | PR5-62a (`CLASSPASS1-KIT`) | built (ready for verify) | `swarm-build-lead-71764ac0` | `ClassDef::passives`, `when.dual_wield` + conditional grants, `"crit"` effect, `"channel"` group, `SkillReach::ranged` + `always_ranged`, `STAT_OVERRIDE_FACTOR=0.75`, `duplicate_skill_errors` (`basics` + `off_hand_skill`); 1-line `checks_golden.json` update (`crit`) |
+| PR5-62b (`CLASSPASS1-DATA`) | built (ready for verify) | `swarm-build-lead-71764ac0` | Seed `classpass1_data.json` (`102` steps): 6 flat decks, 24 skills, 12 passives, `riveted_gauntlets`, `wpn_orb` `0.75` `stat_override`, `twin_light_tempo` `1h_light`, `[PROVISIONAL]` Mage AoE `0.28/0.28/0.28/0.22`; re-froze `timeline_kit.json` + re-recorded `timeline`/`rules`/`sim`/`phasefold`/`checks` goldens |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -59,6 +60,20 @@ FB-01 to FB-273 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-
     - `games/emberwake/crates/emberwake_content/tests/ruleset_switches.rs` (`245-256`): filters legacy `"brace"` from `founder_kaelen.extra_skills` during the historical `CLASS-BASICS` replay step right before `r42.json` drops it (same pattern as `GEAR-REWORK1` class patching).
     - `kits/rpg/crates/rpgkit_content/tests/class_basics_checks.rs` (`87`): `drill` uses non-colliding `"skill_path": {"flank_cut": 1}` so line `92` continues testing higher-tier validation in isolation.
 - **Recommendation**: Design Session: record the 1-line `checks_golden.json` delta (`crit` added to `simple::TYPES`), note `check/unit.rs` module placement (if referenced in docs/structure), approve `PR5-62a` handoff, and unlock `PR5-62b` (`CLASSPASS1-DATA`).
+
+### FB-276 — `PR5-62b` (`CLASSPASS1-DATA`) Build Summary, Mage AoE / Dual-Wield Sims, and `HISTORY.md` Golden Delta
+
+- **Spec**: `PR5-62b` (`docs/sessions/U2_CLASSPASS_TECHNIQUES.md`, `docs/sessions/U2_CLASS_DECKS.md`)
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**:
+  - Applied `games/emberwake/data/seeds/classpass1_data.json` (`102` idempotent steps from `6e662c53`): `riveted_gauntlets` (`assets/items/gauntlet/riveted_gauntlets.png` present), `wpn_orb` (`stat_override: 0.75` `KNOW`->`INT`), 6 flat 3-skill class decks, 24 class skills, 12 `CLASS` passives including `twin_light_tempo` (`dual_wield: "1h_light"`), retired player `_2`/`_3` skill tiers and `mara_voss` skill overrides, synced `games/emberwake/sim.json` (`l7_swaps: []`); shipped `rogue` keeps `off_hand: "ash_cloak"`.
+  - `[PROVISIONAL]` Mage AoE scalars settled at `cinder_spark: 0.28`, `firebomb: 0.28` (`burn` mag `2`), `glacial_burst: 0.28`, `choke_cloud: 0.22` (`poison` mag `3`), `reactive_reagents` `expose` mag `3` `limit: "round"`:
+    - `sim sweep 5 10`: `mob 100 (>=90)`, `line 95 X (70-90; enemy warrior awaits PR5-62c polearm attacks)`, `wave 61`, `elite 61`, `boss 31`; `swap_delta` `warrior -2.0, ranger +4.6, priest -0.2, brawler -8.6 (top5_count 1 X), rogue +4.0, mage +2.2` (`0 METRIC FAIL`, `0 PLAN FAIL`, `2 PLAN SKIP` / `748` fights).
+    - `sim party 5 30`: `mob 100, line 87, wave 57, elite 70, boss 37` (`0` band fails, `0 METRIC FAIL`, `0 PLAN FAIL` / `150` fights); `sim party 5 10`: `mob 100, line 90, wave 50 X, elite 50, boss 40`; `sim campaign 5`: `0 METRIC FAIL`, `0 PLAN FAIL` / `236` fights; `sim feel world=sunk_ward enc=enc_evt_06 seeds=10 counts=on`: `won 0% (0/9/1)` Crucible intact, `0 PLAN FAIL`.
+  - Rogue `dual_wield` parity check (`wpn_dagger` off-hand vs `ash_cloak`, restored cleanly): `sim duel 5 10` `avg 51/53` vs `48/53`; `sim party 5 10 comp=warrior,ranger,priest,rogue` `boss 50%` (`523` dealt vs `486`), `mob 100 / line 100 / wave 60 / elite 60`.
+  - `HISTORY.md` delta & golden re-records: deleted & re-froze `timeline_kit.json`; re-recorded `timeline_golden`, `rules_golden`, `sim_golden`, `phasefold_golden` (`72/72` diverged on new/renamed class skills), and `checks_golden` (`skills 123/409`, `units 37/43`, `ashlands characters 22/26` vs re-frozen `timeline_kit.json`, cleared by coordinator). Also updated `(6, 4)` skill-menu sizing/flat-deck paths in `battle/skill_menu.rs`, `draw.rs`, `party.rs`, and `rpgkit_world::party_ops::deck.rs` (`0` warnings; `journey`, `rules_report`, `rules_contract`, `aegis_*`, `rpgkit_*`, `emberwake_*` all pass).
+- **Recommendation**: Design Session: ratify settled Mage AoE / `burn`/`poison`/`reactive_reagents` scalars, record `PR5-62b` in `HISTORY.md` (naming the 5 re-recorded goldens + `timeline_kit.json`), archive answered items, and unlock `PR5-62c`.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 

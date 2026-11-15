@@ -2861,7 +2861,8 @@ mod tests {
         let world = cx.gs().world_id.clone();
         let m = cx.gs().party.member(&member).unwrap().clone();
         let owned = m.owned_families_anywhere(&cx.data);
-        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the member does not own");
+        let base = progression::build_with(&cx.data, &m, &world, false).map(|b| b.unit);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string()) && !base.as_ref().is_some_and(|u| u.owns_skill(&cx.data.cat, &s.id))).map(|s| s.id.clone()).expect("a skill the member does not own");
         let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
         rings.sort();
         let ring = rings[0].clone();
@@ -2882,7 +2883,7 @@ mod tests {
         cx.gs_mut().party.member_mut(&member).unwrap().equipment.shift_remove("accessory_1");
         let mut c = Character::new(&cx, &member, "skills");
         c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
-        assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
+        assert!(!c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "gone with the item");
     }
 
     /// AUDIT-05 (OFFHAND1) on the classic Skills tab: a worn item's skill closes the owned list read-only (open while
@@ -2892,7 +2893,8 @@ mod tests {
         let (mut cx, member) = deck_cx(false);
         let m = cx.gs().party.member(&member).unwrap().clone();
         let owned = m.owned_families_anywhere(&cx.data);
-        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string())).map(|s| s.id.clone()).expect("a skill the member does not own");
+        let base = progression::build_with(&cx.data, &m, &cx.gs().world_id, false).map(|b| b.unit);
+        let skill = cx.data.cat.skills.iter().find(|s| s.tier == 1 && !s.basic && !s.system && !owned.contains(&s.family_id().to_string()) && !base.as_ref().is_some_and(|u| u.owns_skill(&cx.data.cat, &s.id))).map(|s| s.id.clone()).expect("a skill the member does not own");
         let mut rings: Vec<String> = cx.data.cat.items.iter().filter(|(_, i)| i.item_type == "ACCESSORY").map(|(id, _)| id.clone()).collect();
         rings.sort();
         let ring = rings[0].clone();
@@ -2913,7 +2915,7 @@ mod tests {
         let mut c = Character::new(&cx, &member, "skills");
         c.scroll = usize::MAX;
         c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
-        assert!(!c.w.iter().any(|w| w.id.starts_with("skills.worn.")), "gone with the item");
+        assert!(!c.w.iter().any(|w| w.id == format!("skills.worn.{skill}")), "gone with the item");
     }
 
     /// AUDIT-05: a derived-stat breakdown names a worn item's stat effect by its item (its tier, its family mastery),

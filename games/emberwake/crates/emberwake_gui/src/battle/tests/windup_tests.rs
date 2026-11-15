@@ -98,6 +98,27 @@ fn battle(ruleset: Option<&str>) -> Host {
 /// Plans on the aggressive preset and confirms; the first live action over one block that starts at block 1 with a
 /// wind-up pose (W1, W1a): (its index, its unit, its pose).
 fn confirmed(host: &mut Host) -> (usize, usize, Pose) {
+    // PR5-62b: strip 1-block/defensive class skills and ensure allies[0] starts in melee reach so aggressive AI winds up a multi-block attack on block 1
+    if let Some(s) = host.session.as_mut() {
+        for &h in &s.w.allies.clone() {
+            s.w.units[h].known_skills.retain(|id| {
+                !matches!(
+                    id.as_str(),
+                    "intimidate" | "mark_quarry" | "snare_wire" | "taunt_shout" | "focus" | "intercept_guard" | "hold_line"
+                )
+            });
+        }
+        if let (Some(&h), Some(&e)) = (s.w.allies.first(), s.w.enemies.first()) {
+            let ep = s.w.pos(e);
+            if let Some(adj) = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .into_iter()
+                .map(|(dx, dy)| emberwake_battle::grid::V2::new(ep.x + dx, ep.y + dy))
+                .find(|&p| s.w.grid.is_walkable(p) && !s.w.grid.is_exit(p) && s.w.occupant(p).is_none())
+            {
+                s.w.grid.positions[h] = Some(adj);
+            }
+        }
+    }
     assert_eq!(host.handle(&json!({"cmd": "preset", "preset": "aggressive"}))["ok"], json!(true));
     assert_eq!(host.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
     let s = host.session.as_ref().unwrap();
@@ -442,6 +463,11 @@ fn a_strike_from_the_pose_lands_its_strike_to_impact_ms_after_t0() {
 fn the_agent_link_tokens_match_the_drawn_clips() {
     let (mut cx, mut g, mut b, root) = windup_arena("state");
     b.learn_poses(&mut cx);
+    if let Some(s) = b.host.session.as_mut() {
+        for &h in &s.w.allies.clone() {
+            s.w.units[h].known_skills.retain(|id| !matches!(id.as_str(), "intimidate" | "mark_quarry" | "snare_wire" | "taunt_shout"));
+        }
+    }
     b.send(&cx, json!({"cmd": "preset", "preset": "aggressive"}));
     b.send(&cx, json!({"cmd": "confirm"}));
     b.draw(&mut cx, &mut g, (-500, -500), true);

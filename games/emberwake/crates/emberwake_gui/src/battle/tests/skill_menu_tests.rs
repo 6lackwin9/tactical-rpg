@@ -422,7 +422,37 @@ fn a_move_over_a_larger_block_leaves_rest_a_note_and_an_undo() {
     for h in allies {
         b.selected = Some(h);
         if b.host.session.as_ref().unwrap().w.units[h].is_active() {
-            opener_in_place(&mut cx, &mut b, h, foe);
+            // PR5-62b: open and auto-fill with a 2-block Assault skill (Strike) so the trailing ghost block spans >= 2 blocks
+            b.host.session.as_mut().unwrap().w.units[h].deck.order.insert("assault".into(), vec!["strike".into()]);
+            let p = s(&b).w.pos(foe);
+            let tile = free_tile_near(&b, p);
+            b.host.session.as_mut().unwrap().w.grid.positions[h] = Some(tile);
+            b.after_change(&mut cx);
+            b.act(&mut cx, Action::UnitClick(foe));
+            let open = popup(&b).clone();
+            let pick_row = |want_multi: bool| {
+                (0..open.rows.len()).find(|&k| {
+                    let row = &open.rows[k];
+                    let RowAct::Pick(x) = &row.act else { return false };
+                    row.valid
+                        && row.at == Some(RoundTarget::Unit(foe))
+                        && x.iter().any(|q| q.holds_target())
+                        && rip::preview_plan(&s(&b).w, &s(&b).plan, h, RoundTarget::Unit(foe), x).is_ok_and(|(w2, p2)| {
+                            rip::move_refusal(&w2, &p2, h).is_none()
+                                && (!want_multi
+                                    || p2.entries_for(&w2, h)
+                                        .iter()
+                                        .zip(rip::ghost_entries(&w2, &p2, h))
+                                        .rev()
+                                        .find(|(_, g)| *g)
+                                        .is_some_and(|(e, _)| {
+                                            e.end_block(&w2) - e.start_block + 1 >= 2 && w2.cat.skills[e.skill].kind != "REST"
+                                        }))
+                        })
+                })
+            };
+            let k = pick_row(true).or_else(|| pick_row(false)).expect("an opener that does not move");
+            b.act(&mut cx, Action::Choose(k));
             b.run(&mut cx, Action::ClosePopup);
             let before = plan_of(&b, h);
             let sess = s(&b);

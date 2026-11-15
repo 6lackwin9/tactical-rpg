@@ -69,6 +69,8 @@ fn blocks_are_one_solid_colour_and_a_ghost_only_fades() {
     }
     assert!(faded > 0, "the tactic's ghost has a span that is not Rest");
     let foe = foe_of(&b);
+    // PR5-62b: warrior's Assault class skill is 1-block Dread Roar, so use Strike to exercise a multi-block Assault span
+    b.host.session.as_mut().unwrap().w.units[h].deck.order.insert("assault".into(), vec!["strike".into()]);
     assert_eq!(b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": foe}))["ok"], json!(true));
     assert_eq!(b.send(&cx, json!({"cmd": "accept_ghost", "unit": h}))["ok"], json!(true));
     b.draw(&mut cx, &mut g, (-500, -500), true);

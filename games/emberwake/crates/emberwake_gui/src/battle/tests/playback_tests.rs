@@ -70,6 +70,13 @@ fn next_round(b: &mut BattleScreen, cx: &mut Cx) -> bool {
 fn a_landed_hit_puts_one_tracer_per_unit_and_a_self_command_none() {
     let (mut cx, _, mut b) = arena(Some(TIMELINE));
     cx.settings.v["skip_anim"] = json!(true);
+    // PR5-62b: hero Assault class skills default to 0-damage debuffs; use Strike so damaging attacks land
+    let foe = s(&b).w.enemies.iter().copied().find(|&e| s(&b).w.units[e].is_active() && s(&b).w.has(e)).unwrap();
+    let allies: Vec<usize> = s(&b).w.allies.iter().copied().filter(|&h| s(&b).w.units[h].is_active() && s(&b).w.has(h)).collect();
+    for h in allies {
+        b.host.session.as_mut().unwrap().w.units[h].deck.order.insert("assault".into(), vec!["strike".into()]);
+        b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": foe}));
+    }
     b.act(&mut cx, Action::Confirm);
     let (mut hits, mut selfs) = (0, 0);
     for _ in 0..600 {

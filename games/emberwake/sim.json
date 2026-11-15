@@ -56,19 +56,16 @@
 						"role": "tank",
 						"skills": [
 							"taunt_shout",
-							"shield_bash",
-							"intimidate",
-							"shield_wall"
+							"intercept_guard",
+							"intimidate"
 						]
 					},
 					{
 						"role": "support",
 						"skills": [
-							"taunt_shout",
 							"intimidate",
-							"shield_bash",
-							"sunder",
-							"riposte"
+							"taunt_shout",
+							"intercept_guard"
 						]
 					}
 				],
@@ -84,21 +81,17 @@
 					{
 						"role": "ranged",
 						"skills": [
-							"aimed_shot",
-							"pinning_shot",
-							"leap_back",
-							"barbed_arrow",
-							"deadeye"
+							"mark_quarry",
+							"snare_wire",
+							"focus"
 						]
 					},
 					{
 						"role": "aoe",
 						"skills": [
-							"aimed_shot",
-							"pinning_shot",
-							"leap_back",
-							"volley",
-							"deadeye"
+							"snare_wire",
+							"mark_quarry",
+							"focus"
 						]
 					}
 				],
@@ -114,31 +107,21 @@
 					{
 						"role": "support",
 						"skills": [
-							"rally",
-							"mend",
 							"purify",
-							"greater_mend",
-							"renewal"
+							"rally",
+							"aegis"
 						]
 					},
 					{
 						"role": "striker",
 						"skills": [
-							"smite",
+							"purify",
 							"rally",
-							"hex",
-							"mend",
-							"greater_mend"
+							"aegis"
 						]
 					}
 				],
-				"l7_swaps": [
-					{
-						"role": "striker",
-						"skill": "mend",
-						"with": "judgement"
-					}
-				]
+				"l7_swaps": []
 			},
 			{
 				"class": "brawler",
@@ -151,31 +134,25 @@
 					{
 						"role": "aoe",
 						"skills": [
-							"body_blow",
 							"lunge",
-							"sweep_kick",
-							"cyclone_kick",
-							"haymaker"
+							"brawler_clinch",
+							"slag_charge"
 						]
 					},
 					{
 						"role": "tank",
 						"skills": [
-							"body_blow",
 							"lunge",
-							"sweep_kick",
-							"cyclone_kick",
-							"haymaker"
+							"brawler_clinch",
+							"slag_charge"
 						]
 					},
 					{
 						"role": "striker",
 						"skills": [
-							"body_blow",
 							"lunge",
-							"charge_in",
-							"hamstring",
-							"haymaker"
+							"brawler_clinch",
+							"slag_charge"
 						]
 					}
 				],
@@ -189,21 +166,13 @@
 					{
 						"role": "striker",
 						"skills": [
-							"quick_stab",
-							"pounce",
-							"lacerate",
 							"backflip",
-							"hamstring"
+							"soot_feint",
+							"opportunist"
 						]
 					}
 				],
-				"l7_swaps": [
-					{
-						"role": "striker",
-						"skill": "hamstring",
-						"with": "assassinate"
-					}
-				]
+				"l7_swaps": []
 			},
 			{
 				"class": "mage",
@@ -215,31 +184,21 @@
 					{
 						"role": "aoe",
 						"skills": [
-							"arcane_bolt",
-							"arc_lance",
 							"firebomb",
 							"glacial_burst",
-							"focus"
+							"choke_cloud"
 						]
 					},
 					{
 						"role": "ranged",
 						"skills": [
-							"arcane_bolt",
-							"arc_lance",
-							"hex",
-							"focus",
-							"firebomb"
+							"firebomb",
+							"choke_cloud",
+							"glacial_burst"
 						]
 					}
 				],
-				"l7_swaps": [
-					{
-						"role": "aoe",
-						"skill": "focus",
-						"with": "inferno"
-					}
-				]
+				"l7_swaps": []
 			}
 		],
 		"generated": [

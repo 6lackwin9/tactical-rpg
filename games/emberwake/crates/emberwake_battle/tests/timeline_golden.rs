@@ -26,7 +26,7 @@ use emberwake_battle::metrics::BattleMetrics;
 use emberwake_battle::session::{EncounterDef, Phase, Session};
 use emberwake_battle::sim::{fight, json_close, metrics_trace, FightSpec};
 use emberwake_data::{Catalog, UnitDef};
-use emberwake_rules::ruleset::{Ruleset, RuleKind, REACH, REGISTER, TIMELINE, UNIT_METERS};
+use emberwake_rules::ruleset::{Ruleset, RuleKind, AP_COST, FORCED_MOVE, GROUND_HAZARDS, REACH, REGISTER, TIMELINE, TRIGGERS, UNIT_METERS};
 use emberwake_world::battle::WorldRoster;
 use emberwake_world::Data;
 use indexmap::IndexMap;
@@ -248,21 +248,26 @@ fn world_start(d: &Data, id: &str, seed: i64, ruleset: &Ruleset) -> Session {
 /// FB-188 Option A: an extension is inert without its opt-in data (RULESET1 3.2), so a fight that already holds that
 /// data at battle start opts in and is left out of the check for that extension only. One row per extension whose
 /// opt-in data can ship in a classic fight (add a row when another extension's data does): `reach`, a unit with a reach
-/// weapon at the start (the kit query `Unit::has_reach_weapon`); `unit_meters` (GEAR-REWORK1, PR5-51b), a unit with an
-/// ammunition off-hand item, whose meter, empowered shots and Reload run under that rule (`Unit::has_off_hand_ammo`).
-const OPT_IN_AT_START: &[(&str, fn(&Session) -> bool)] = &[(REACH, holds_reach_weapon), (UNIT_METERS, holds_off_hand_ammo)];
+/// weapon (`Unit::has_reach_weapon`); `unit_meters`, off-hand ammo (`Unit::has_off_hand_ammo`) or `passive_meters`;
+/// `forced_move`, any skill with `forced_move`; `ap_cost`, any non-Move/Rest/Target/Status skill whose `ap_cost` differs
+/// from `level.clamp(1, 5)`; `ground_hazards`, any skill with `hazard`; `triggers`, `passive_triggers`, `gear_triggers`,
+/// or any skill `triggers`/`riders` (`PR5-62b` class paths ship these in classic encounters).
+const OPT_IN_AT_START: &[(&str, fn(&Catalog, &Session) -> bool)] = &[
+    (REACH, |_, s| s.w.units.iter().any(|u| u.has_reach_weapon())),
+    (UNIT_METERS, |_, s| s.w.units.iter().any(|u| u.has_off_hand_ammo() || !u.passive_meters.is_empty())),
+    (FORCED_MOVE, |cat, s| holds_skill(cat, s, |sk| sk.forced_move.is_some())),
+    (AP_COST, |cat, s| holds_skill(cat, s, |sk| sk.ap_cost >= 0 && sk.ap_cost != sk.level.clamp(1, 5) && !matches!(emberwake_battle::skill::kind(sk), emberwake_battle::skill::Kind::Move | emberwake_battle::skill::Kind::Rest | emberwake_battle::skill::Kind::Target | emberwake_battle::skill::Kind::Status))),
+    (GROUND_HAZARDS, |cat, s| holds_skill(cat, s, |sk| sk.hazard.is_some())),
+    (TRIGGERS, |cat, s| s.w.units.iter().any(|u| !u.passive_triggers.is_empty() || !u.gear_triggers.is_empty()) || holds_skill(cat, s, |sk| !sk.triggers.is_empty() || !sk.riders.is_empty())),
+];
 
-fn holds_reach_weapon(s: &Session) -> bool {
-    s.w.units.iter().any(|u| u.has_reach_weapon())
-}
-
-fn holds_off_hand_ammo(s: &Session) -> bool {
-    s.w.units.iter().any(|u| u.has_off_hand_ammo())
+fn holds_skill(cat: &Catalog, s: &Session, pred: impl Fn(&emberwake_data::SkillDef) -> bool) -> bool {
+    s.w.units.iter().any(|u| u.known_skills.iter().chain(&u.gear_skills).any(|id| cat.skill(id).is_some_and(&pred)))
 }
 
 /// The extensions whose opt-in data the fight holds at battle start (`OPT_IN_AT_START`).
-fn opted_in_at_start(s: &Session) -> Vec<&'static str> {
-    OPT_IN_AT_START.iter().filter(|(_, holds)| holds(s)).map(|(id, _)| *id).collect()
+fn opted_in_at_start(cat: &Catalog, s: &Session) -> Vec<&'static str> {
+    OPT_IN_AT_START.iter().filter(|(_, holds)| holds(cat, s)).map(|(id, _)| *id).collect()
 }
 
 /// One world fight as world_traces plays it, under `ruleset`, with the RNG draws after every step.
@@ -372,7 +377,7 @@ fn every_extension_is_inert_on_the_ashlands_fights() {
     for id in &ids {
         for seed in INERT_SEEDS {
             // FB-188 Option A: every extension on except those the fight's start data opts into
-            let excluded = opted_in_at_start(&world_start(&d, id, seed, &Ruleset::classic()));
+            let excluded = opted_in_at_start(&d.cat, &world_start(&d, id, seed, &Ruleset::classic()));
             let mut on = Ruleset::classic();
             on.adjust(&extensions.iter().filter(|x| !excluded.contains(x)).map(|x| format!("+{x}")).collect::<Vec<_>>().join(",")).expect("extensions switch on over classic");
             if !excluded.is_empty() {

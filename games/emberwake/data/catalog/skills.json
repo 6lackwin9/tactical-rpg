@@ -27,27 +27,24 @@
 			"id": "shield_bash",
 			"name": "Shield Bash",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power, {potency} to Stagger for {rounds}.",
-			"stance": "DEFENSIVE",
-			"power_mult": 0.8,
+			"description": "{name}: {power} power, {stagger} stagger, {potency} to Stagger for {rounds}, and pushes the target back.",
+			"learned_only": true,
+			"reach_max": 1,
+			"power_mult": 0.75,
 			"status_effect": "stagger",
-			"status_potency": 70,
+			"status_potency": 75,
+			"stagger": 16,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 1,
+				"collide_mult": 0.5,
+				"collide_stagger": 8
+			},
 			"fx": "bash_ring",
-			"clip": "shield_bash",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0,
-					"status_potency": 75
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2,
-					"status_potency": 80
-				}
-			]
+			"clip": "shield_bash"
 		},
 		{
 			"id": "hamstring",
@@ -58,20 +55,7 @@
 			"description": "{name}: {power} power, {potency} to Root for {rounds}.",
 			"power_mult": 0.8,
 			"status_effect": "root",
-			"status_potency": 80,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0,
-					"status_potency": 85
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2,
-					"status_potency": 90,
-					"status_rounds": 2
-				}
-			]
+			"status_potency": 80
 		},
 		{
 			"id": "shockwave",
@@ -100,45 +84,32 @@
 			"reach_max": 3,
 			"area": "PLUS",
 			"power_mult": 0.7,
-			"fx": "arrow_volley",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 0.9
-				},
-				{
-					"level": 4,
-					"power_mult": 1.05
-				}
-			]
+			"fx": "arrow_volley"
 		},
 		{
 			"id": "firebomb",
-			"name": "Firebomb",
+			"name": "Pitch Firebomb",
 			"kind": "ATTACK",
-			"level": 3,
-			"blocks": 3,
-			"description": "{name}: {power} power. Burst area, hits allies too. Needs {weapons} training {proficiency}. Hits a 3x3 area around a tile {reach:n} away.",
-			"weapon_types": [
-				"staff",
-				"sprayer"
-			],
-			"min_proficiency": 1,
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: burst at {range} for {power} power, {potency} to Burn ({magnitude}) for {rounds}, and leaves pitch fire.",
+			"learned_only": true,
 			"reach_min": 2,
-			"reach_max": 2,
+			"reach_max": 4,
 			"area": "BURST",
-			"power_mult": 0.6,
-			"fx": "fire_lob",
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 0.75
-				},
-				{
-					"level": 5,
-					"power_mult": 0.9
-				}
-			]
+			"power_mult": 0.28,
+			"status_effect": "burn",
+			"status_potency": 70,
+			"status_magnitude": 2,
+			"status_rounds": 2,
+			"hazard": {
+				"id": "pitch_fire",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"fx": "fire_lob"
 		},
 		{
 			"id": "guard",
@@ -152,22 +123,13 @@
 		},
 		{
 			"id": "focus",
-			"name": "Focus",
+			"name": "Steady Aim",
 			"kind": "FOCUS",
-			"level": 2,
+			"level": 4,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: +50% attack for {rounds}.",
-			"ranks": [
-				{
-					"level": 3,
-					"boost_rounds": 3
-				},
-				{
-					"level": 4,
-					"blocks": 1,
-					"boost_rounds": 3
-				}
-			]
+			"description": "{name}: +{boost} power on your next attack within {rounds}.",
+			"learned_only": true
 		},
 		{
 			"id": "move",
@@ -233,19 +195,7 @@
 			"min_proficiency": 2,
 			"power_mult": 1.2,
 			"status_effect": "stagger",
-			"status_potency": 50,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.5,
-					"status_potency": 55
-				},
-				{
-					"level": 4,
-					"power_mult": 1.8,
-					"status_potency": 60
-				}
-			]
+			"status_potency": 50
 		},
 		{
 			"id": "reckless_swing",
@@ -274,17 +224,7 @@
 				"crossbow"
 			],
 			"min_proficiency": 2,
-			"power_mult": 1.4,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.75
-				},
-				{
-					"level": 4,
-					"power_mult": 2.1
-				}
-			]
+			"power_mult": 1.4
 		},
 		{
 			"id": "pinning_shot",
@@ -300,20 +240,7 @@
 			"min_proficiency": 1,
 			"power_mult": 0.8,
 			"status_effect": "root",
-			"status_potency": 80,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0,
-					"status_potency": 85
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2,
-					"status_potency": 90,
-					"status_rounds": 2
-				}
-			]
+			"status_potency": 80
 		},
 		{
 			"id": "arcane_bolt",
@@ -328,17 +255,7 @@
 			],
 			"min_proficiency": 1,
 			"power_mult": 1.1,
-			"fx": "arcane_orb",
-			"ranks": [
-				{
-					"level": 2,
-					"power_mult": 1.4
-				},
-				{
-					"level": 3,
-					"power_mult": 1.65
-				}
-			]
+			"fx": "arcane_orb"
 		},
 		{
 			"id": "hex",
@@ -358,19 +275,7 @@
 			"power_mult": 0.6,
 			"status_effect": "stagger",
 			"status_potency": 90,
-			"fx": "curse_orb",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 0.75,
-					"status_potency": 95
-				},
-				{
-					"level": 4,
-					"power_mult": 0.9,
-					"status_potency": 95
-				}
-			]
+			"fx": "curse_orb"
 		},
 		{
 			"id": "haymaker",
@@ -391,19 +296,7 @@
 			"status_effect": "stun",
 			"status_potency": 50,
 			"fx": "heavy_blow",
-			"clip": "haymaker",
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 2.5,
-					"status_potency": 55
-				},
-				{
-					"level": 5,
-					"power_mult": 3.0,
-					"status_potency": 60
-				}
-			]
+			"clip": "haymaker"
 		},
 		{
 			"id": "body_blow",
@@ -420,19 +313,7 @@
 			],
 			"min_proficiency": 1,
 			"status_effect": "stagger",
-			"status_potency": 50,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.25,
-					"status_potency": 55
-				},
-				{
-					"level": 4,
-					"power_mult": 1.5,
-					"status_potency": 60
-				}
-			]
+			"status_potency": 50
 		},
 		{
 			"id": "quick_stab",
@@ -446,17 +327,7 @@
 				"knife"
 			],
 			"min_proficiency": 1,
-			"power_mult": 0.6,
-			"ranks": [
-				{
-					"level": 2,
-					"power_mult": 0.75
-				},
-				{
-					"level": 3,
-					"power_mult": 0.9
-				}
-			]
+			"power_mult": 0.6
 		},
 		{
 			"id": "mend",
@@ -468,90 +339,70 @@
 			"learned_only": true,
 			"heal_stat": "KNOW",
 			"heal_base": 8,
-			"heal_mult": 1.5,
-			"ranks": [
-				{
-					"level": 3,
-					"heal_base": 10,
-					"heal_mult": 1.8
-				},
-				{
-					"level": 4,
-					"heal_base": 12,
-					"heal_mult": 2.1
-				}
-			]
+			"heal_mult": 1.5
 		},
 		{
 			"id": "rally",
-			"name": "Rally",
+			"name": "Urgent Triage",
 			"kind": "SUPPORT",
-			"level": 1,
-			"blocks": 1,
-			"description": "{name}: grants haste for {rounds} starting next round. +1 tile per move block.",
+			"level": 2,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: heals an ally ({heal}) within {range} and grants haste for {rounds}; guards broken allies.",
 			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 3,
 			"target_mode": "ALLY",
+			"heal_stat": "KNOW",
+			"heal_base": 14,
+			"heal_mult": 1.4,
 			"grant_status": "haste",
-			"fx": "rally_ring",
-			"ranks": [
+			"riders": [
 				{
-					"level": 2,
-					"status_rounds": 2
-				},
-				{
-					"level": 3,
-					"reach_min": 1,
-					"reach_max": 4,
-					"status_rounds": 2
+					"when": {
+						"other_broken": true
+					},
+					"effects": [
+						{
+							"type": "guard",
+							"mitigation": 0.4,
+							"blocks": 2,
+							"to": "other"
+						}
+					]
 				}
-			]
+			],
+			"fx": "rally_ring"
 		},
 		{
 			"id": "taunt_shout",
 			"name": "Taunt Shout",
 			"kind": "SUPPORT",
 			"level": 1,
+			"ap_cost": 1,
 			"blocks": 1,
 			"description": "{name}: grants taunt for {rounds} starting next round. Foes that can reach you must target you.",
 			"learned_only": true,
 			"status_rounds": 2,
 			"target_mode": "SELF",
 			"grant_status": "taunt",
-			"fx": "rally_ring",
-			"ranks": [
-				{
-					"level": 2,
-					"status_rounds": 3
-				},
-				{
-					"level": 3,
-					"status_rounds": 3
-				}
-			]
+			"windup_poise": 10,
+			"fx": "rally_ring"
 		},
 		{
 			"id": "lunge",
-			"name": "Lunge",
+			"name": "Reckless Lunge",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power. Dashes up to {dash}. Gap-close: the dash is your move for the round.",
+			"description": "{name}: {power} power, {stagger} stagger. Dashes up to {dash} to close.",
 			"learned_only": true,
 			"reach_min": 1,
 			"reach_max": 1,
-			"power_mult": 1.2,
+			"power_mult": 1.15,
 			"dash_tiles": 3,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.5
-				},
-				{
-					"level": 4,
-					"power_mult": 1.8,
-					"dash_tiles": 4
-				}
-			]
+			"stagger": 10
 		},
 		{
 			"id": "bleeding_cut",
@@ -564,116 +415,68 @@
 			"power_mult": 0.8,
 			"status_effect": "bleed",
 			"status_potency": 70,
-			"status_rounds": 2,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0,
-					"status_potency": 75
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2,
-					"status_potency": 80
-				}
-			]
+			"status_rounds": 2
 		},
 		{
 			"id": "riposte",
-			"name": "Riposte",
+			"name": "Counter-Guard",
 			"kind": "DEFEND",
-			"level": 3,
-			"blocks": 2,
-			"description": "{name}: -{mitigation} damage; grants riposte for {rounds}. Adjacent melee attackers you survive are countered for 50% of your attack power (once per attacker per round). Any stance change ends it; moving does not.",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: -{mitigation} damage; grants riposte for {rounds} to counter adjacent melee attacks you survive.",
 			"learned_only": true,
 			"status_rounds": 2,
 			"grant_status": "riposte",
-			"mitigation": 0.15,
-			"ranks": [
-				{
-					"level": 2,
-					"unlock_offset": 0,
-					"status_rounds": 3,
-					"mitigation": 0.05
-				},
-				{
-					"level": 1,
-					"unlock_offset": 0,
-					"status_rounds": 3,
-					"mitigation": 0.0
-				}
-			]
+			"mitigation": 0.3,
+			"fx": "ward_ring"
 		},
 		{
 			"id": "purify",
-			"name": "Purify",
+			"name": "Cauterize",
 			"kind": "SUPPORT",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 1,
 			"blocks": 1,
-			"description": "Purify: cleanses stun. Active or pending debuffs on a friendly unit within 3 tiles, or yourself. Buffs stay.",
+			"description": "{name}: heals {heal} and cleanses {cleanse} within {range}.",
 			"learned_only": true,
+			"reach_max": 3,
+			"heal_stat": "KNOW",
+			"heal_base": 8,
+			"heal_mult": 0.8,
 			"cleanse_statuses": [
+				"bleed",
+				"poison",
+				"burn",
 				"stun"
 			],
-			"fx": "cleanse_motes",
-			"ranks": [
-				{
-					"level": 3,
-					"cleanse_statuses": [
-						"stun",
-						"bleed"
-					],
-					"description": "Purify II: cleanses stun, bleed. Active or pending debuffs on a friendly unit within 3 tiles, or yourself. Buffs stay."
-				},
-				{
-					"level": 4,
-					"cleanse_statuses": [
-						"all"
-					],
-					"description": "Purify III: cleanses all. Active or pending debuffs on a friendly unit within 3 tiles, or yourself. Buffs stay."
-				}
-			]
+			"fx": "cleanse_motes"
 		},
 		{
 			"id": "backflip",
 			"name": "Backflip",
 			"kind": "DISENGAGE",
-			"level": 2,
+			"level": 1,
+			"ap_cost": 1,
 			"blocks": 1,
-			"description": "{name}: jump up to {jump} away from the nearest enemy (or a chosen one) to break melee contact. Your move for the round: it comes first, leaps over units but not walls, and a rooted unit can't.",
+			"description": "{name}: leap up to {jump} away from melee contact over intervening units.",
 			"learned_only": true,
-			"jump_tiles": 3,
-			"ranks": [
-				{
-					"level": 3
-				},
-				{
-					"level": 4
-				}
-			]
+			"jump_tiles": 3
 		},
 		{
 			"id": "sweep_kick",
 			"name": "Sweep Kick",
 			"kind": "ATTACK",
 			"level": 1,
+			"ap_cost": 1,
 			"blocks": 2,
-			"description": "{name}: {power} power. Ring area around you. Bare hands or feet.",
+			"description": "{name}: {power} power, {stagger} stagger in a ring around you.",
 			"learned_only": true,
 			"area": "RING",
-			"power_mult": 0.8,
+			"power_mult": 0.75,
+			"stagger": 10,
 			"fx": "sweep",
-			"clip": "sweep_kick",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0
-				},
-				{
-					"level": 4,
-					"power_mult": 1.15
-				}
-			]
+			"clip": "sweep_kick"
 		},
 		{
 			"id": "barbed_arrow",
@@ -691,19 +494,7 @@
 			"power_mult": 0.7,
 			"status_effect": "bleed",
 			"status_potency": 60,
-			"status_rounds": 2,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 0.9,
-					"status_potency": 65
-				},
-				{
-					"level": 4,
-					"power_mult": 1.05,
-					"status_potency": 70
-				}
-			]
+			"status_rounds": 2
 		},
 		{
 			"id": "pounce",
@@ -721,18 +512,7 @@
 			"reach_min": 1,
 			"reach_max": 1,
 			"power_mult": 0.8,
-			"dash_tiles": 3,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2,
-					"dash_tiles": 4
-				}
-			]
+			"dash_tiles": 3
 		},
 		{
 			"id": "smite",
@@ -750,17 +530,7 @@
 			"reach_min": 2,
 			"reach_max": 3,
 			"power_mult": 0.8,
-			"fx": "falling_orb",
-			"ranks": [
-				{
-					"level": 2,
-					"power_mult": 1.0
-				},
-				{
-					"level": 3,
-					"power_mult": 1.2
-				}
-			]
+			"fx": "falling_orb"
 		},
 		{
 			"id": "deadeye",
@@ -781,19 +551,7 @@
 			"min_proficiency": 3,
 			"power_mult": 2.0,
 			"status_effect": "stagger",
-			"status_potency": 50,
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 2.5,
-					"status_potency": 55
-				},
-				{
-					"level": 5,
-					"power_mult": 3.0,
-					"status_potency": 60
-				}
-			]
+			"status_potency": 50
 		},
 		{
 			"id": "judgement",
@@ -817,19 +575,7 @@
 			"power_mult": 1.2,
 			"status_effect": "stagger",
 			"status_potency": 40,
-			"fx": "falling_orb",
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 1.5,
-					"status_potency": 45
-				},
-				{
-					"level": 5,
-					"power_mult": 1.8,
-					"status_potency": 50
-				}
-			]
+			"fx": "falling_orb"
 		},
 		{
 			"id": "charge_in",
@@ -848,19 +594,7 @@
 			"power_mult": 1.4,
 			"dash_tiles": 4,
 			"status_effect": "stagger",
-			"status_potency": 60,
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 1.75,
-					"status_potency": 65
-				},
-				{
-					"level": 5,
-					"power_mult": 2.1,
-					"status_potency": 70
-				}
-			]
+			"status_potency": 60
 		},
 		{
 			"id": "lacerate",
@@ -882,19 +616,7 @@
 			"power_mult": 1.2,
 			"status_effect": "bleed",
 			"status_potency": 90,
-			"status_rounds": 2,
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 1.5,
-					"status_potency": 95
-				},
-				{
-					"level": 5,
-					"power_mult": 1.8,
-					"status_potency": 100
-				}
-			]
+			"status_rounds": 2
 		},
 		{
 			"id": "assassinate",
@@ -913,17 +635,7 @@
 				"knife"
 			],
 			"min_proficiency": 3,
-			"power_mult": 2.0,
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 2.5
-				},
-				{
-					"level": 5,
-					"power_mult": 3.0
-				}
-			]
+			"power_mult": 2.0
 		},
 		{
 			"id": "greater_mend",
@@ -942,27 +654,6 @@
 			"heal_mult": 1.8,
 			"cleanse_statuses": [
 				"stun"
-			],
-			"ranks": [
-				{
-					"level": 4,
-					"heal_base": 14,
-					"heal_mult": 2.0,
-					"cleanse_statuses": [
-						"all"
-					],
-					"description": "Greater Mend II: heals 14 + 2.0 x KNOW; cleanses all. Within 3 tiles, or yourself."
-				},
-				{
-					"level": 5,
-					"heal_base": 18,
-					"heal_mult": 2.2,
-					"grant_status": "haste",
-					"cleanse_statuses": [
-						"all"
-					],
-					"description": "Greater Mend III: heals 18 + 2.2 x KNOW; grants haste for 1 round starting next round; cleanses all. Within 3 tiles, or yourself."
-				}
 			]
 		},
 		{
@@ -978,20 +669,7 @@
 			"heal_stat": "KNOW",
 			"heal_base": 6,
 			"heal_mult": 1.0,
-			"grant_status": "haste",
-			"ranks": [
-				{
-					"level": 4,
-					"heal_base": 8,
-					"heal_mult": 1.2
-				},
-				{
-					"level": 5,
-					"status_rounds": 2,
-					"heal_base": 10,
-					"heal_mult": 1.4
-				}
-			]
+			"grant_status": "haste"
 		},
 		{
 			"id": "leap_back",
@@ -1001,17 +679,7 @@
 			"blocks": 1,
 			"description": "{name}: jump up to {jump} away from the nearest enemy (or a chosen one) to break melee contact. Your move for the round: it comes first, leaps over units but not walls, and a rooted unit can't.",
 			"learned_only": true,
-			"jump_tiles": 2,
-			"ranks": [
-				{
-					"level": 3,
-					"jump_tiles": 3
-				},
-				{
-					"level": 4,
-					"jump_tiles": 3
-				}
-			]
+			"jump_tiles": 2
 		},
 		{
 			"id": "arc_lance",
@@ -1028,48 +696,25 @@
 			"min_proficiency": 1,
 			"area": "LINE",
 			"power_mult": 0.9,
-			"fx": "beam",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.1
-				},
-				{
-					"level": 4,
-					"power_mult": 1.35
-				}
-			]
+			"fx": "beam"
 		},
 		{
 			"id": "intimidate",
-			"name": "Intimidate",
+			"name": "Dread Roar",
 			"kind": "ATTACK",
-			"level": 1,
+			"level": 2,
+			"ap_cost": 1,
 			"blocks": 1,
-			"description": "{name}: no damage, {potency} to Weaken (-{magnitude} outgoing power) for {rounds}. Roar at a foe.",
+			"description": "{name}: {stagger} stagger, {potency} to Weaken (-{magnitude} outgoing power) for {rounds} within {range}.",
 			"learned_only": true,
-			"stance": "DEFENSIVE",
 			"reach_min": 1,
 			"reach_max": 2,
 			"power_mult": 0.0,
 			"status_effect": "weaken",
-			"status_potency": 70,
-			"status_magnitude": 15,
+			"status_potency": 80,
+			"status_magnitude": 20,
 			"status_rounds": 2,
-			"ranks": [
-				{
-					"level": 2,
-					"status_potency": 75,
-					"status_magnitude": 20
-				},
-				{
-					"level": 3,
-					"reach_max": 3,
-					"status_potency": 80,
-					"status_magnitude": 25,
-					"status_rounds": 3
-				}
-			]
+			"stagger": 8
 		},
 		{
 			"id": "cyclone_kick",
@@ -1085,19 +730,7 @@
 			"status_effect": "stagger",
 			"status_potency": 50,
 			"fx": "sweep",
-			"clip": "sweep_kick",
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 1.1,
-					"status_potency": 55
-				},
-				{
-					"level": 5,
-					"power_mult": 1.3,
-					"status_potency": 60
-				}
-			]
+			"clip": "sweep_kick"
 		},
 		{
 			"id": "inferno",
@@ -1120,53 +753,25 @@
 			"status_effect": "bleed",
 			"status_potency": 50,
 			"status_rounds": 2,
-			"fx": "fire_lob",
-			"ranks": [
-				{
-					"level": 5,
-					"power_mult": 1.0,
-					"status_potency": 60
-				},
-				{
-					"level": 5,
-					"power_mult": 1.2,
-					"status_potency": 70
-				}
-			]
+			"fx": "fire_lob"
 		},
 		{
 			"id": "glacial_burst",
-			"name": "Glacial Burst",
+			"name": "Alum Frost-Pot",
 			"kind": "ATTACK",
-			"level": 3,
-			"blocks": 3,
-			"description": "{name}: {power} power, {potency} to Root for {rounds} on every enemy hit. Burst area, hits allies too. Needs {weapons} training {proficiency}.",
+			"level": 2,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: burst at {range} for {power} power, {stagger} stagger, and {potency} to Root for {rounds}.",
 			"learned_only": true,
-			"grade": "advanced",
-			"weapon_types": [
-				"staff",
-				"sprayer"
-			],
-			"min_proficiency": 2,
 			"reach_min": 2,
 			"reach_max": 3,
 			"area": "BURST",
-			"power_mult": 0.6,
+			"power_mult": 0.28,
 			"status_effect": "root",
-			"status_potency": 60,
-			"fx": "frost_lob",
-			"ranks": [
-				{
-					"level": 4,
-					"power_mult": 0.75,
-					"status_potency": 70
-				},
-				{
-					"level": 5,
-					"power_mult": 0.9,
-					"status_potency": 80
-				}
-			]
+			"status_potency": 75,
+			"stagger": 8,
+			"fx": "frost_lob"
 		},
 		{
 			"id": "shield_wall",
@@ -1185,33 +790,7 @@
 					"magnitude": 4
 				}
 			],
-			"mitigation": 0.35,
-			"ranks": [
-				{
-					"level": 4,
-					"status_rounds": 2,
-					"extra_grants": [
-						{
-							"status": "fortify",
-							"rounds": 2,
-							"magnitude": 6
-						}
-					],
-					"mitigation": 0.45
-				},
-				{
-					"level": 5,
-					"status_rounds": 3,
-					"extra_grants": [
-						{
-							"status": "fortify",
-							"rounds": 3,
-							"magnitude": 8
-						}
-					],
-					"mitigation": 0.55
-				}
-			]
+			"mitigation": 0.35
 		},
 		{
 			"id": "crippling_shot",
@@ -1229,20 +808,7 @@
 			"power_mult": 0.7,
 			"status_effect": "slow",
 			"status_potency": 75,
-			"status_rounds": 2,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 0.9,
-					"status_potency": 80
-				},
-				{
-					"level": 4,
-					"power_mult": 1.05,
-					"status_potency": 85,
-					"status_rounds": 3
-				}
-			]
+			"status_rounds": 2
 		},
 		{
 			"id": "rend_armor",
@@ -1263,22 +829,7 @@
 			"status_effect": "expose",
 			"status_potency": 70,
 			"status_magnitude": 6,
-			"status_rounds": 2,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0,
-					"status_potency": 75,
-					"status_magnitude": 8
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2,
-					"status_potency": 80,
-					"status_magnitude": 10,
-					"status_rounds": 3
-				}
-			]
+			"status_rounds": 2
 		},
 		{
 			"id": "envenom",
@@ -1297,45 +848,29 @@
 			"status_effect": "poison",
 			"status_potency": 80,
 			"status_magnitude": 4,
-			"status_rounds": 3,
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 0.75,
-					"status_potency": 85,
-					"status_magnitude": 5
-				},
-				{
-					"level": 4,
-					"power_mult": 0.9,
-					"status_potency": 90,
-					"status_magnitude": 6
-				}
-			]
+			"status_rounds": 3
 		},
 		{
 			"id": "aegis",
-			"name": "Aegis",
+			"name": "Ward Litany",
 			"kind": "SUPPORT",
-			"level": 2,
-			"blocks": 1,
-			"description": "{name}: grants Fortify (+{magnitude}) for {rounds} starting next round.",
+			"level": 4,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: grants Fortify (+{magnitude}) for {rounds} and {extra} within {range}.",
 			"learned_only": true,
-			"status_magnitude": 6,
+			"reach_max": 3,
+			"status_magnitude": 8,
 			"status_rounds": 2,
 			"grant_status": "fortify",
-			"fx": "ward_ring",
-			"ranks": [
+			"extra_grants": [
 				{
-					"level": 3,
-					"status_magnitude": 8
-				},
-				{
-					"level": 4,
-					"status_magnitude": 10,
-					"status_rounds": 3
+					"status": "steadfast",
+					"rounds": 1,
+					"magnitude": 0
 				}
-			]
+			],
+			"fx": "ward_ring"
 		},
 		{
 			"id": "rejuvenate",
@@ -1348,19 +883,7 @@
 			"status_magnitude": 4,
 			"status_rounds": 2,
 			"target_mode": "ALLY",
-			"grant_status": "regen",
-			"ranks": [
-				{
-					"level": 3,
-					"status_magnitude": 5,
-					"status_rounds": 3
-				},
-				{
-					"level": 4,
-					"status_magnitude": 6,
-					"status_rounds": 3
-				}
-			]
+			"grant_status": "regen"
 		},
 		{
 			"id": "feint",
@@ -1376,17 +899,7 @@
 			],
 			"min_proficiency": 1,
 			"power_mult": 0.7,
-			"ends_in_stance": "DEFENSIVE",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 0.9
-				},
-				{
-					"level": 4,
-					"power_mult": 1.05
-				}
-			]
+			"ends_in_stance": "DEFENSIVE"
 		},
 		{
 			"id": "crushing_blow",
@@ -1403,50 +916,28 @@
 			],
 			"min_proficiency": 1,
 			"disrupt": "STANCE_BREAK",
-			"fx": "heavy_blow",
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.25
-				},
-				{
-					"level": 4,
-					"power_mult": 1.5
-				}
-			]
+			"fx": "heavy_blow"
 		},
 		{
 			"id": "opportunist",
-			"name": "Opportunist",
+			"name": "Exploit Opening",
 			"kind": "ATTACK",
-			"level": 2,
+			"level": 4,
+			"ap_cost": 2,
 			"blocks": 1,
-			"description": "{name}: {power} power, {exploit}. Needs {weapons} training {proficiency}.",
+			"description": "{name}: {power} power, {exploit}.",
 			"learned_only": true,
-			"weapon_types": [
-				"dagger",
-				"knife"
-			],
-			"min_proficiency": 1,
-			"power_mult": 0.8,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.9,
 			"exploit": [
 				{
-					"status": "expose",
+					"status": "slow",
 					"power_mult": 1.3
 				},
 				{
-					"status": "slow",
-					"power_mult": 1.2
-				}
-			],
-			"ranks": [
-				{
-					"level": 3,
-					"power_mult": 1.0
-				},
-				{
-					"level": 4,
-					"power_mult": 1.2
+					"status": "bleed",
+					"power_mult": 1.3
 				}
 			]
 		},
@@ -2847,16 +2338,18 @@
 		},
 		{
 			"id": "brace",
-			"name": "Brace",
+			"name": "Iron Brace",
 			"kind": "DEFEND",
 			"level": 1,
-			"ap_cost": 2,
-			"blocks": 3,
-			"description": "Stand, Heavy: brace for 2 rounds, -{mitigation} damage this round and next.",
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "Stand, Snap: -{mitigation} damage this round and Fortify (+{magnitude}) for {rounds}.",
 			"learned_only": true,
 			"round_intent": "guard",
-			"mitigation": 0.2,
-			"guard_rounds": 2
+			"status_magnitude": 6,
+			"grant_status": "fortify",
+			"mitigation": 0.45,
+			"fx": "ward_ring"
 		},
 		{
 			"id": "disengage_step",
@@ -2877,12 +2370,13 @@
 			"level": 1,
 			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: heals {heal}. A friendly unit within {range}, or yourself.",
+			"description": "{name}: heals {heal} on an ally within {range}, or yourself.",
 			"learned_only": true,
 			"reach_max": 2,
 			"heal_stat": "KNOW",
-			"heal_base": 15,
-			"heal_mult": 1.0
+			"heal_base": 12,
+			"heal_mult": 1.0,
+			"fx": "heal_motes"
 		},
 		{
 			"id": "cinder_spark",
@@ -2891,12 +2385,14 @@
 			"level": 1,
 			"ap_cost": 2,
 			"blocks": 2,
-			"description": "{name}: {power} power in a cross at {range}.",
+			"description": "{name}: {power} power, {stagger} stagger in a cross at {range}.",
 			"learned_only": true,
 			"reach_min": 2,
 			"reach_max": 3,
 			"area": "PLUS",
-			"power_mult": 0.5
+			"power_mult": 0.28,
+			"stagger": 4,
+			"fx": "fire_lob"
 		},
 		{
 			"id": "feed",
@@ -3156,14 +2652,15 @@
 		},
 		{
 			"id": "reload",
-			"name": "Reload",
+			"name": "Press-Reload",
 			"kind": "FOCUS",
 			"level": 1,
 			"ap_cost": 1,
 			"blocks": 1,
-			"description": "Off-hand, Snap: reload the quiver or canister to full ammo. Only when empty.",
+			"description": "Off-hand, Snap: reload ammo to full and gain +{boost} attack power within {rounds}; ends OFFENSIVE.",
 			"learned_only": true,
-			"round_intent": "support"
+			"boost": 1.35,
+			"ends_in_stance": "OFFENSIVE"
 		},
 		{
 			"id": "fade_step",
@@ -3172,26 +2669,36 @@
 			"level": 1,
 			"ap_cost": 1,
 			"blocks": 1,
-			"description": "Off-hand: slip one tile away from the nearest enemy to break melee contact.",
+			"description": "Off-hand: leap up to {jump} away from melee contact over intervening units.",
 			"learned_only": true,
 			"round_intent": "maneuver",
-			"jump_tiles": 1
+			"jump_tiles": 2
 		},
 		{
 			"id": "cite_passage",
 			"name": "Cite Passage",
 			"kind": "SUPPORT",
 			"level": 1,
-			"ap_cost": 1,
-			"blocks": 1,
-			"description": "Off-hand, Snap: read a ward over an ally within {range} or yourself: fortify for {rounds}.",
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "Off-hand: heals an ally ({heal}) within {range}, cleanses {cleanse}, and grants {status} (+{magnitude}) for {rounds}.",
 			"learned_only": true,
 			"round_intent": "support",
-			"reach_max": 2,
-			"status_magnitude": 3,
+			"reach_min": 1,
+			"reach_max": 3,
+			"status_magnitude": 6,
 			"status_rounds": 2,
 			"target_mode": "ALLY",
-			"grant_status": "fortify"
+			"heal_stat": "KNOW",
+			"heal_base": 10,
+			"heal_mult": 1.0,
+			"grant_status": "fortify",
+			"cleanse_statuses": [
+				"bleed",
+				"burn",
+				"poison"
+			],
+			"fx": "cleanse_motes"
 		},
 		{
 			"id": "knife_throw",
@@ -3212,23 +2719,194 @@
 		{
 			"id": "catalyst_pulse",
 			"name": "Catalyst Pulse",
+			"kind": "FOCUS",
+			"level": 1,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "Off-hand: +{boost} attack power within {rounds}; ends OFFENSIVE.",
+			"learned_only": true,
+			"boost": 1.25,
+			"ends_in_stance": "OFFENSIVE"
+		},
+		{
+			"id": "hold_line",
+			"name": "Hold Line",
+			"kind": "DEFEND",
+			"level": 1,
+			"ap_cost": 1,
+			"blocks": 2,
+			"description": "{name}: -{mitigation} damage this round; grants Fortify (+{magnitude}) for {rounds}.",
+			"learned_only": true,
+			"status_magnitude": 4,
+			"grant_status": "fortify",
+			"mitigation": 0.25,
+			"fx": "ward_ring"
+		},
+		{
+			"id": "intercept_guard",
+			"name": "Phalanx Cover",
+			"kind": "DEFEND",
+			"level": 4,
+			"ap_cost": 3,
+			"blocks": 2,
+			"description": "{name}: -{mitigation} damage and Steadfast for {rounds}; intercepts one adjacent melee hit on an ally and fortifies self.",
+			"learned_only": true,
+			"grant_status": "steadfast",
+			"mitigation": 0.35,
+			"triggers": [
+				{
+					"on": "ally_hit",
+					"when": {
+						"range": 1,
+						"melee": true
+					},
+					"limit": "round",
+					"effects": [
+						{
+							"type": "redirect",
+							"pct": 100
+						},
+						{
+							"type": "grant",
+							"status": "fortify",
+							"magnitude": 6,
+							"rounds": 2,
+							"to": "self"
+						}
+					]
+				}
+			],
+			"fx": "ward_ring"
+		},
+		{
+			"id": "brawler_clinch",
+			"name": "Collar Clinch",
+			"kind": "ATTACK",
+			"level": 2,
+			"ap_cost": 2,
+			"blocks": 2,
+			"description": "{name}: {power} power, {stagger} stagger, sure break; {potency} to Slow for {rounds}.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 0.7,
+			"status_effect": "slow",
+			"status_potency": 80,
+			"status_rounds": 2,
+			"stagger": 16,
+			"sure_break": true
+		},
+		{
+			"id": "slag_charge",
+			"name": "Ramming Charge",
+			"kind": "ATTACK",
+			"level": 4,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: dashes up to {dash} for {power} power, {stagger} stagger, and pushes the target back.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 1,
+			"power_mult": 1.35,
+			"dash_tiles": 4,
+			"stagger": 18,
+			"forced_move": {
+				"kind": "push",
+				"tiles": 1,
+				"collide_mult": 0.6,
+				"collide_stagger": 12
+			}
+		},
+		{
+			"id": "mark_quarry",
+			"name": "Spotter's Mark",
 			"kind": "ATTACK",
 			"level": 1,
 			"ap_cost": 1,
 			"blocks": 1,
-			"description": "[PROVISIONAL] {name}: {power} arcane power, 8 stagger, {potency} to Expose for {rounds} at range {range}.",
+			"description": "{name}: {stagger} stagger, {potency} to Expose (-{magnitude} armor) for {rounds} at {range}, and reveals enemy intent.",
 			"learned_only": true,
-			"round_intent": "assault",
-			"reach_min": 1,
-			"reach_max": 2,
-			"power_mult": 0.6,
-			"weapon_hand": "off",
+			"reach_min": 2,
+			"reach_max": 5,
+			"power_mult": 0.0,
 			"status_effect": "expose",
-			"status_potency": 80,
-			"status_magnitude": 4,
+			"status_potency": 90,
+			"status_magnitude": 6,
 			"status_rounds": 2,
-			"stagger": 8,
-			"fx": "arcane_orb"
+			"stagger": 4,
+			"riders": [
+				{
+					"when": {},
+					"effects": [
+						{
+							"type": "reveal",
+							"rounds": 1
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "snare_wire",
+			"name": "Snare Wire",
+			"kind": "ATTACK",
+			"level": 2,
+			"ap_cost": 2,
+			"blocks": 1,
+			"description": "{name}: places a hidden tripwire at {range} that roots advancing foes.",
+			"learned_only": true,
+			"reach_min": 1,
+			"reach_max": 3,
+			"power_mult": 0.0,
+			"hazard": {
+				"id": "tripwire",
+				"shape": "NONE",
+				"at": "target",
+				"rounds": 3
+			}
+		},
+		{
+			"id": "soot_feint",
+			"name": "Slip & Feint",
+			"kind": "ATTACK",
+			"level": 2,
+			"ap_cost": 1,
+			"blocks": 1,
+			"description": "{name}: slips up to {range} {position} for {power} power, {potency} to Slow for {rounds}; ends DEFENSIVE.",
+			"learned_only": true,
+			"round_intent": "maneuver",
+			"reach_max": 2,
+			"position": "behind",
+			"power_mult": 0.65,
+			"status_effect": "slow",
+			"status_potency": 75,
+			"status_rounds": 2,
+			"ends_in_stance": "DEFENSIVE"
+		},
+		{
+			"id": "choke_cloud",
+			"name": "Choke-Vapor Bomb",
+			"kind": "ATTACK",
+			"level": 4,
+			"ap_cost": 3,
+			"blocks": 3,
+			"description": "{name}: burst at {range} for {power} power, {potency} to Poison ({magnitude}) for {rounds}, and leaves choke-gas.",
+			"learned_only": true,
+			"reach_min": 2,
+			"reach_max": 4,
+			"area": "BURST",
+			"power_mult": 0.22,
+			"status_effect": "poison",
+			"status_potency": 80,
+			"status_magnitude": 3,
+			"status_rounds": 2,
+			"hazard": {
+				"id": "choke_gas",
+				"shape": "SKILL",
+				"at": "target",
+				"rounds": 2
+			},
+			"fx": "curse_orb"
 		}
 	]
 }

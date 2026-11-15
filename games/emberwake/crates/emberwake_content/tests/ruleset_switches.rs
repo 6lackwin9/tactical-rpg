@@ -86,6 +86,10 @@ const ACT1FIX1_SEED: &str = "act1fix1.json";
 /// then the fix seed's Dojo / test unit loadouts; after the ACT1-DATA1 seed; no ruleset row changes).
 const GEARREWORK1_SEEDS: [&str; 3] = ["gearrework1.json", "gearrework1_after.json", "gearrework1_fix.json"];
 
+/// PR5-62b (CLASSPASS1-DATA): the seed that updated the 7 class-archetype unit loadouts after the class rework
+/// (after the GEAR-REWORK1 seeds; no ruleset row changes).
+const CLASSPASS1_SEED: &str = "classpass1_data.json";
+
 /// What the class-basics seed dropped from the `timeline` basics (now the Rogue's class basic).
 const CLASS_BASICS_DROPPED: &str = "flank_cut";
 
@@ -240,13 +244,17 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         store::upsert(&tmp, None, "units", u, None).unwrap_or_else(|err| panic!("W2-4 slice 6a unit '{}': {err:?}", json::s(u, "id")));
     }
     // R2-W2b CLASS-BASICS: the class-basics seed, in its order, gives the shipped rows and units back. GEAR-REWORK1
-    // (PR5-51b): its class rows name gear tokens the reworked family table retired (axe, mace, plate, leather, ...), so
-    // each class step is replayed with the shipped class's proficiency (the ruleset rows read no class proficiency)
+    // (PR5-51b) & CLASSPASS1-DATA (PR5-62b): its class rows name gear tokens / skill_paths superseded by the shipped
+    // classes (while the shipped units already hold CLASSPASS1 loadouts), so each class step keeps the shipped
+    // proficiency, gear slots, and skill_path during historical ruleset replay.
     for (kind, e) in &class_basics {
         let mut e = e.clone();
         if kind == "classes" {
             let shipped = shipped_units.get("classes", &json::s(&e, "id"));
             e.insert("proficiency".into(), shipped.get("proficiency").cloned().unwrap_or(Value::Null));
+            if let Some(sp) = shipped.get("skill_path") {
+                e.insert("skill_path".into(), sp.clone());
+            }
             for slot in ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2", "pouch"] {
                 if let Some(v) = shipped.get(slot) {
                     e.insert(slot.into(), v.clone());
@@ -259,6 +267,11 @@ fn the_seed_sets_the_values_the_rows_read_now() {
             if let Some(Value::Array(extra)) = e.get_mut("extra_skills") {
                 extra.retain(|s| s.as_str() != Some("brace"));
             }
+        }
+        // CLASSPASS1-DATA (PR5-62b): shipped classes:brawler drops body_blow/hamstring/haymaker for the rework path;
+        // clear the frozen classbasics.json loadout until CLASSPASS1_SEED replays right after GEARREWORK1_SEEDS.
+        if kind == "units" && json::s(&e, "id") == "brawler" {
+            e.insert("loadout".into(), Value::Array(Vec::new()));
         }
         store::upsert(&tmp, None, kind, &e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(&e, "id")));
     }
@@ -305,6 +318,13 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         }
     }
     assert_eq!(rows(&tmp), before, "the GEAR-REWORK1 units steps leave the shipped ruleset rows");
+    // PR5-62b (CLASSPASS1-DATA): the seed's units steps, in order, over GEAR-REWORK1's (class rework archetype loadouts)
+    let classpass1 = seed_rows(CLASSPASS1_SEED, "units");
+    assert!(seed_entries(CLASSPASS1_SEED).is_empty(), "the CLASSPASS1-DATA seed changes no ruleset row");
+    for e in &classpass1 {
+        store::upsert(&tmp, None, "units", e, None).unwrap_or_else(|err| panic!("CLASSPASS1 unit '{}': {err:?}", json::s(e, "id")));
+    }
+    assert_eq!(rows(&tmp), before, "the CLASSPASS1-DATA units steps leave the shipped ruleset rows");
     // PR5-52 (RULESET-MODES1): the seed removes the classic row and re-saves timeline under modes: the shipped rows
     let text = std::fs::read_to_string(data_dir().join("seeds").join(RULESETMODES1_SEED)).expect("the RULESET-MODES1 seed");
     let seed: Value = serde_json::from_str(&text).expect("seed JSON");
@@ -325,7 +345,8 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         .chain(class_basics.iter().filter(|(k, _)| k == "units").map(|(_, e)| json::s(e, "id")))
         .chain(sunkfix1.iter().map(|e| json::s(e, "id")))
         .chain(act1fix1.iter().map(|e| json::s(e, "id")))
-        .chain(gear);
+        .chain(gear)
+        .chain(classpass1.iter().map(|e| json::s(e, "id")));
     for id in units {
         assert_eq!(seeded.get("units", &id), shipped_units.get("units", &id), "unit '{id}' as shipped");
     }

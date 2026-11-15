@@ -782,20 +782,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if y > 206 {
             break;
         }
-        // TEXTFIT1: the Next line wraps to a second line when it does not fit (the card grows).
+        // TEXTFIT1: the Next line wraps across as many lines as needed when it does not fit (the card grows).
         let tell = tells.iter().find(|t| t.unit == e);
         // RULESET1-U slice 4 (UI5): under the round intent the line leads with the intent ("Assault: Wolf; Cut B1")
         let next = tell.map(|t| intent_text::round_card_line(w, t)).unwrap_or_else(|| format!("Next: {}", next_action(s, e)));
         let next_w = if tell.is_some_and(|t| t.revealed) { 98.0 } else { 110.0 };
         let next_lines = if u.is_active() { ui.p.wrap(&next, SMALL, next_w) } else { Vec::new() };
-        let two = next_lines.len() > 1;
+        let extra_lines = next_lines.len().saturating_sub(1) as i32;
         // V1: the impact badges on a row of the round's blocks under the line (rule plan_badges, while planning)
         let badges = tell.filter(|_| u.is_active() && emberwake_battle::intent::badges_on(w) && layers.badges);
         let row_h = if badges.is_some() { 6 } else { 0 };
         // HOOKS1-UI slice 3: a meter row grows the card by 5 (UM7)
         let ms = meters_of(w, e, &layers);
         let meter_h = if ms.is_empty() { 0 } else { 5 };
-        let r = Rect::new(right.x + 4, y, 116, if two { 22 + ui.p.line_h(SMALL).ceil() as i32 } else { 22 } + row_h + meter_h);
+        let r = Rect::new(right.x + 4, y, 116, 22 + extra_lines * ui.p.line_h(SMALL).ceil() as i32 + row_h + meter_h);
         let on_board = match view {
             View::Stage => board_hover == Some(e),
             View::Flat => w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))),
@@ -821,13 +821,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { th().good } else { th().dim });
         if u.is_active() {
-            if two {
-                ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, &next_lines[0], SMALL, th().gold);
-                // the rest of the line as written (a word `wrap` broke mid-word stays whole)
-                let rest = next.get(next_lines[0].len()..).unwrap_or("").trim_start();
-                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5 + ui.p.line_h(SMALL), rest, SMALL, next_w, th().gold);
-            } else {
-                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, next_w, th().gold);
+            let lh = ui.p.line_h(SMALL);
+            for (k, line) in next_lines.iter().enumerate() {
+                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5 + k as f32 * lh, line, SMALL, next_w, th().gold);
             }
             if tell.is_some_and(|t| t.revealed) {
                 if let Some(img) = cx.art.image(&emberwake_content::art::badge("foresight"), 9, 9) {

@@ -109,7 +109,8 @@ fn every_row_is_one_line_with_items_after_the_skills() {
         }
     }
     let rows: Vec<i32> = grid.lines.iter().filter(|l| l.1.is_some()).map(|l| l.2).collect();
-    assert_eq!(rows, (1..=rows.len() as i32).collect::<Vec<_>>(), "one line per row, none wraps");
+    let first = rows[0];
+    assert!(first >= 1 && rows == (first..first + rows.len() as i32).collect::<Vec<_>>(), "one line per row, none wraps: {rows:?}");
     // no block count on the cells: the only text on an item cell is its `xN` badge
     let k = item_cells(&b, &id)[0].0;
     let left = s(&b).plan.items_left(&s(&b).w, b.selected.unwrap(), &id, -1);

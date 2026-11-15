@@ -163,9 +163,26 @@ fn the_shipped_data_gives_the_old_tables_looks() {
         assert_eq!(action_clips(&s.clip, kind, sword), clips, "{id} clips");
     }
     assert_eq!(style(act(cat, "support", &skill("mend").fx, None, false, 1)), lk("heal_motes"), "any other support: the mend motes");
-    // PR5-33's intended change: a rank row inherits its skill's look and clip (the tables matched rank 1 ids only)
-    let second = skill("shield_bash_2");
+    // PR5-33's intended change: a rank row inherits its skill's look and clip (CLASSPASS1-DATA flattened all shipped
+    // ranks, so verify inheritance through source expansion on a scratch copy of shield_bash with a synthetic rank 2).
+    let tmp = std::env::temp_dir().join("emberwake_data_looks_rank");
+    let _ = std::fs::remove_dir_all(&tmp);
+    fn copy_dir(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let p = e.unwrap().path();
+            let dst = to.join(p.file_name().unwrap());
+            if p.is_dir() { copy_dir(&p, &dst); } else { std::fs::copy(&p, &dst).unwrap(); }
+        }
+    }
+    copy_dir(&Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder"), &tmp);
+    let mut sb = emberwake_content::store::view(&tmp).get("skills", "shield_bash").clone();
+    sb.insert("ranks".into(), serde_json::json!([{"power_mult": 0.9}]));
+    emberwake_content::store::upsert(&tmp, None, "skills", &sb, None).expect("upsert synthetic rank");
+    let ranked_cat = emberwake_data::Catalog::from_value(&emberwake_content::source::load(&tmp).catalog);
+    let _ = std::fs::remove_dir_all(&tmp);
+    let second = ranked_cat.skill("shield_bash_2").expect("synthetic shield_bash_2 expanded");
     assert_eq!((second.family.as_str(), second.name.as_str()), ("shield_bash", "Shield Bash II"));
-    assert_eq!(style(act(cat, "attack", &second.fx, sword, false, 1)), lk("bash_ring"));
+    assert_eq!(style(act(&ranked_cat, "attack", &second.fx, sword, false, 1)), lk("bash_ring"));
     assert_eq!(action_clips(&second.clip, "attack", sword), ["shield_bash", "attack"]);
 }

@@ -600,6 +600,7 @@
 			],
 			"default_hand": "off",
 			"slot_rule": "off_only",
+			"off_hand_skill": "shield_bash",
 			"off_hand_category": "shield",
 			"base": {
 				"off": {
@@ -1140,7 +1141,7 @@
 			],
 			"base": {
 				"main_1h": {
-					"power": 15,
+					"power": 12,
 					"range": 3,
 					"burden": 1,
 					"mitigation": 0
@@ -1449,6 +1450,7 @@
 			],
 			"default_hand": "off",
 			"slot_rule": "off_only",
+			"off_hand_skill": "riposte",
 			"off_hand_category": "buckler",
 			"base": {
 				"off": {
@@ -1506,6 +1508,7 @@
 			],
 			"default_hand": "off",
 			"slot_rule": "off_only",
+			"off_hand_skill": "brace",
 			"off_hand_category": "braces",
 			"base": {
 				"off": {

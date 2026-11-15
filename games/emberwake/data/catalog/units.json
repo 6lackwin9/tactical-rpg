@@ -23,10 +23,8 @@
 			"extra_skills": [],
 			"loadout": [
 				"taunt_shout",
-				"shield_bash",
-				"riposte",
 				"intimidate",
-				"shield_wall"
+				"intercept_guard"
 			],
 			"deck": {},
 			"default_intent": "",
@@ -68,11 +66,9 @@
 			"skill_cap": 0,
 			"extra_skills": [],
 			"loadout": [
-				"aimed_shot",
-				"pinning_shot",
-				"leap_back",
-				"barbed_arrow",
-				"deadeye"
+				"mark_quarry",
+				"snare_wire",
+				"focus"
 			],
 			"deck": {},
 			"default_intent": "",
@@ -672,11 +668,9 @@
 			"skill_cap": 0,
 			"extra_skills": [],
 			"loadout": [
-				"quick_stab",
-				"pounce",
-				"lacerate",
 				"backflip",
-				"hamstring"
+				"soot_feint",
+				"opportunist"
 			],
 			"deck": {},
 			"default_intent": "",
@@ -718,11 +712,9 @@
 			"skill_cap": 0,
 			"extra_skills": [],
 			"loadout": [
-				"arcane_bolt",
-				"arc_lance",
 				"firebomb",
 				"glacial_burst",
-				"focus"
+				"choke_cloud"
 			],
 			"deck": {},
 			"default_intent": "",
@@ -820,11 +812,9 @@
 			"skill_cap": 0,
 			"extra_skills": [],
 			"loadout": [
-				"smite",
-				"rally",
-				"mend",
 				"purify",
-				"greater_mend"
+				"rally",
+				"aegis"
 			],
 			"deck": {},
 			"default_intent": "",
@@ -866,10 +856,9 @@
 			"skill_cap": 0,
 			"extra_skills": [],
 			"loadout": [
-				"body_blow",
 				"lunge",
-				"hamstring",
-				"haymaker"
+				"brawler_clinch",
+				"slag_charge"
 			],
 			"deck": {},
 			"default_intent": "",
@@ -3050,10 +3039,8 @@
 			"extra_skills": [],
 			"loadout": [
 				"taunt_shout",
-				"shield_bash",
-				"riposte",
 				"intimidate",
-				"shield_wall"
+				"intercept_guard"
 			],
 			"deck": {},
 			"default_intent": "",

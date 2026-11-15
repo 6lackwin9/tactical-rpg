@@ -135,7 +135,9 @@ impl DeckTerms {
         let mut actives: Vec<String> = Vec::new();
         for s in cat.skills.iter().filter(|s| !s.system && !s.basic && !rpgkit_battle::skill::is_item(s)) {
             let f = s.family_id().to_string();
-            if !actives.contains(&f) && !rule.basics.contains(&f) && !cat.is_basic_family(&f) && !cat.is_system(&f) && cat.tier_one(&f).is_some() && u.owns_skill(cat, &s.id) {
+            // Mirror Unit::build's active loadout eligibility: slot-free skills (gear, keystone, technique, meter, battle) never take an active deck slot.
+            let slot_free = u.gear_skill(&s.id) || u.keystone_skill(&s.id) || u.technique_skill(&s.id) || u.meter_skill(&s.id) || u.battle_skill(&s.id);
+            if !actives.contains(&f) && !rule.basics.contains(&f) && !cat.is_basic_family(&f) && !cat.is_system(&f) && cat.tier_one(&f).is_some() && u.owns_skill(cat, &s.id) && !slot_free {
                 actives.push(f);
             }
         }

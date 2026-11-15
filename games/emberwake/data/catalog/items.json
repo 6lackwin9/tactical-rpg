@@ -850,7 +850,7 @@
 			"rarity": "UNCOMMON",
 			"weight": 0.8,
 			"value": 60,
-			"description": "A glass sphere held in the off hand. Channels arcane power and lets spells reach one tile further.",
+			"description": "A glass sphere held in the off hand. Channels Catalyst Pulse and lets field skills reach one tile further.",
 			"damage_type": "magic",
 			"icon_id": "",
 			"starter_stash": false,
@@ -869,7 +869,7 @@
 					"effect": {
 						"type": "skill_reach",
 						"reach": 1,
-						"kind": "SPELL"
+						"intent": "field"
 					}
 				}
 			],
@@ -2732,6 +2732,30 @@
 			"special": false,
 			"special_note": "",
 			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "riveted_gauntlets",
+			"name": "Riveted Gauntlets",
+			"family": "gauntlet",
+			"rarity": "COMMON",
+			"weight": 2.5,
+			"value": 40,
+			"description": "Iron-riveted leather and plate gauntlets built to break a shield wall.",
+			"damage_type": "blunt",
+			"icon_id": "riveted_gauntlets",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "STR",
 			"modifiers": [
 				{
 					"kind": "requirement",

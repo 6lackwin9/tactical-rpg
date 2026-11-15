@@ -49,21 +49,18 @@ fn orb_exposes_and_executes_catalyst_pulse_on_the_shipped_mage() {
     assert_eq!(act.problem, None);
     let skill = &s.w.cat.skills[act.skill];
     assert_eq!(skill.id, "catalyst_pulse");
-    assert_eq!((skill.ap_cost, skill.blocks, skill.reach_min, skill.reach_max), (1, 1, 1, 2));
-    assert_eq!(skill.stagger, 8);
-    assert_eq!(skill.status_effect, "expose");
+    assert_eq!((skill.kind.as_str(), skill.ap_cost, skill.blocks, skill.boost, skill.boost_rounds, skill.ends_in_stance.as_str()), ("FOCUS", 2, 1, 1.25, 2, "OFFENSIVE"));
     assert!(s.w.cat.skills.iter().filter(|sk| sk.weapon_types.iter().any(|w| w == "sprayer")).all(|sk| sk.spell_source), "all sprayer skills resolve spell_source");
 
     let ap_before = s.w.units[mage].ap;
-    let foe_hp_before = s.w.units[foe].hp;
     round_intent_plan::set_autofill(&mut s.w, &mut s.plan, false);
-    let (picked, later) = round_intent_plan::pick(&mut s.w, &mut s.plan, mage, RoundTarget::Unit(foe), &[Pick::Skill { skill: act.skill, kind: None }]);
+    let (picked, later) = round_intent_plan::pick(&mut s.w, &mut s.plan, mage, RoundTarget::Myself, &[Pick::Skill { skill: act.skill, kind: None }]);
     assert_eq!(picked, Ok(()));
     assert!(later.is_empty());
 
     let entries = s.plan.entries_for(&s.w, mage);
     assert_eq!(entries[0].skill, act.skill);
-    assert_eq!(entries[0].total_ap(), 1);
+    assert_eq!(entries[0].total_ap(), 2);
     assert_eq!(entries[0].last_block(&s.w) - entries[0].start_block + 1, 1);
 
     assert!(s.confirm_plan());
@@ -73,7 +70,7 @@ fn orb_exposes_and_executes_catalyst_pulse_on_the_shipped_mage() {
         }
         s.step_next();
     }
-    assert_eq!(s.w.pos(mage), a_cell, "range 1-2 casts without chasing");
-    assert_eq!(s.w.units[mage].ap, ap_before - 1);
-    assert!(s.w.units[foe].hp < foe_hp_before, "catalyst_pulse dealt damage");
+    assert_eq!(s.w.pos(mage), a_cell, "self focus casts without moving");
+    assert_eq!(s.w.units[mage].ap, ap_before - 2);
+    assert!(s.w.units[mage].attack_boost_rounds >= 1 && (s.w.units[mage].attack_boost - 1.25).abs() < 1e-6, "catalyst_pulse applies 1.25x attack boost");
 }

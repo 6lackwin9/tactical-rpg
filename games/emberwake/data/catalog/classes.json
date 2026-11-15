@@ -65,15 +65,15 @@
 			},
 			"skill_path": {
 				"taunt_shout": 1,
-				"shield_bash": 3,
-				"riposte": 3,
-				"intimidate": 4,
-				"sunder": 5,
-				"shield_wall": 5,
-				"rend_armor": 6
+				"intimidate": 2,
+				"intercept_guard": 4
 			},
 			"basics": [
-				"brace"
+				"hold_line"
+			],
+			"passives": [
+				"vanguard_poise",
+				"iron_counter"
 			],
 			"main_hand": "wpn_iron_billhook",
 			"off_hand": "shd_kite",
@@ -146,17 +146,16 @@
 				}
 			},
 			"skill_path": {
-				"aimed_shot": 1,
-				"pinning_shot": 3,
-				"leap_back": 3,
-				"barbed_arrow": 5,
-				"volley": 5,
-				"deadeye": 5,
-				"focus": 5,
-				"crippling_shot": 6
+				"mark_quarry": 1,
+				"snare_wire": 2,
+				"focus": 4
 			},
 			"basics": [
 				"disengage_step"
+			],
+			"passives": [
+				"keen_elevation",
+				"patient_sight"
 			],
 			"main_hand": "stirrup_arbalest",
 			"off_hand": "hip_quiver",
@@ -228,18 +227,18 @@
 				}
 			},
 			"skill_path": {
-				"body_blow": 1,
-				"lunge": 3,
-				"hamstring": 4,
-				"haymaker": 5,
-				"charge_in": 5,
-				"cyclone_kick": 5,
-				"crushing_blow": 6
+				"lunge": 1,
+				"brawler_clinch": 2,
+				"slag_charge": 4
 			},
 			"basics": [
 				"sweep_kick"
 			],
-			"main_hand": "wpn_knuckles",
+			"passives": [
+				"iron_shoulders",
+				"kiln_poise"
+			],
+			"main_hand": "riveted_gauntlets",
 			"off_hand": "forearm_braces",
 			"head": "",
 			"body": "arm_plate",
@@ -310,19 +309,16 @@
 				}
 			},
 			"skill_path": {
-				"smite": 1,
-				"rally": 1,
-				"mend": 3,
-				"purify": 3,
-				"hex": 5,
-				"greater_mend": 5,
-				"renewal": 5,
-				"judgement": 7,
-				"aegis": 6,
-				"rejuvenate": 6
+				"purify": 1,
+				"rally": 2,
+				"aegis": 4
 			},
 			"basics": [
 				"tend_wounds"
+			],
+			"passives": [
+				"triage_discipline",
+				"surgical_precision"
 			],
 			"main_hand": "bronze_censer",
 			"off_hand": "wpn_tome",
@@ -395,19 +391,16 @@
 				}
 			},
 			"skill_path": {
-				"quick_stab": 1,
-				"pounce": 3,
-				"bleeding_cut": 3,
-				"backflip": 4,
-				"hamstring": 5,
-				"lacerate": 5,
-				"assassinate": 7,
-				"envenom": 6,
-				"feint": 6,
-				"opportunist": 7
+				"backflip": 1,
+				"soot_feint": 2,
+				"opportunist": 4
 			},
 			"basics": [
 				"flank_cut"
+			],
+			"passives": [
+				"twin_light_tempo",
+				"gutter_reflex"
 			],
 			"main_hand": "wpn_stiletto",
 			"off_hand": "ash_cloak",
@@ -480,16 +473,16 @@
 				}
 			},
 			"skill_path": {
-				"arcane_bolt": 1,
-				"arc_lance": 3,
-				"hex": 3,
-				"focus": 4,
-				"firebomb": 5,
-				"glacial_burst": 5,
-				"inferno": 7
+				"firebomb": 1,
+				"glacial_burst": 2,
+				"choke_cloud": 4
 			},
 			"basics": [
 				"cinder_spark"
+			],
+			"passives": [
+				"reactive_reagents",
+				"catalytic_reserve"
 			],
 			"main_hand": "brass_vitriol_sprayer",
 			"off_hand": "wpn_orb",
