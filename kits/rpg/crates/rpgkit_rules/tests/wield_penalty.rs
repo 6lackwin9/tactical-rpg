@@ -4,7 +4,7 @@
 //! - the stat-deficit ramp, kept as built and extended to armour: `WIELD_DEFICIT_STEP` of the item's weapon power and
 //!   armour per missing requirement point (the largest, after the requirement discount `level x req_discount_per_level`),
 //!   capped at `WIELD_DEFICIT_CAP`;
-//! - proficiency 0 in the item's gear type: weapon power and armour x `untrained_power_mult`, plus `untrained_burden_add`
+//! - proficiency 0 on a role-less class: no soft untrained power/burden penalty (retired in PR5-57), +0 training power
 //!   burden (which lowers initiative like any burden);
 //! - the two stack multiplicatively; trained levels keep their +level weapon power;
 //! - accessories, gear with no type, a class with no proficiency list and a unit with no class wear free; unarmed power is
@@ -16,7 +16,7 @@ use rpgkit_data::Catalog;
 use rpgkit_rules::damage::{self, UNARMED_BASE_POWER};
 use rpgkit_rules::gear::{trained_for, Equipment, Slot, WieldRule, WIELD_DEFICIT_CAP, WIELD_DEFICIT_STEP};
 use rpgkit_rules::ruleset::{self, Numbers};
-use rpgkit_rules::stats::{roundi, REQ_DISCOUNT_PER_LEVEL, UNTRAINED_BURDEN_ADD, UNTRAINED_POWER_MULT};
+use rpgkit_rules::stats::{roundi, REQ_DISCOUNT_PER_LEVEL};
 use rpgkit_rules::{build_from, build_unit, Unit, UnitBuild};
 use serde_json::json;
 
@@ -84,16 +84,16 @@ fn default() -> WieldRule {
 #[test]
 fn the_defaults_are_the_spec_table_and_the_ruleset_reads_them() {
     let w = default();
-    assert_eq!((w.untrained_power_mult, w.untrained_burden_add, w.req_discount_per_level), (0.75, 1, 2), "U3 'Fixed vs parameter'");
-    assert_eq!((UNTRAINED_POWER_MULT, UNTRAINED_BURDEN_ADD, REQ_DISCOUNT_PER_LEVEL), (0.75, 1, 2));
+    assert_eq!(w.req_discount_per_level, 2, "U3 'Fixed vs parameter'");
+    assert_eq!(REQ_DISCOUNT_PER_LEVEL, 2);
     assert_eq!((WIELD_DEFICIT_STEP, WIELD_DEFICIT_CAP), (0.15, 0.60), "FB-33: the ramp kept as built");
     assert_eq!(Numbers::default().wield(), w);
     assert_eq!(ruleset::Ruleset::classic().numbers.wield(), w);
-    let row = json!({"id": "t", "rules": [], "untrained_power_mult": 0.5, "untrained_burden_add": 2, "req_discount_per_level": 0});
+    let row = json!({"id": "t", "rules": [], "req_discount_per_level": 0});
     let n = Numbers::from_row(row.as_object().unwrap());
-    assert_eq!(n.wield(), WieldRule { untrained_power_mult: 0.5, untrained_burden_add: 2, req_discount_per_level: 0 });
-    assert_eq!([n.field("untrained_power_mult"), n.field("untrained_burden_add"), n.field("req_discount_per_level")], [Some("0.5".into()), Some("2".into()), Some("0".into())]);
-    for (key, range) in [("untrained_power_mult", (0.25, 1.0)), ("untrained_burden_add", (0.0, 4.0)), ("req_discount_per_level", (0.0, 4.0))] {
+    assert_eq!(n.wield(), WieldRule { req_discount_per_level: 0 });
+    assert_eq!(n.field("req_discount_per_level"), Some("0".into()));
+    for (key, range) in [("req_discount_per_level", (0.0, 4.0))] {
         let rule = ruleset::field_rule_of(key).unwrap_or_else(|| panic!("{key}: a field rule"));
         assert_eq!((rule.range, rule.needs.is_empty()), (Some(range), true), "{key}: row-only, read whatever the rules");
         assert!(ruleset::PROMOTED.iter().any(|(_, k)| *k == key), "{key}: promoted");
@@ -122,7 +122,7 @@ fn the_stat_deficit_ramp_is_kept_on_power_and_reaches_armour() {
         let u = wearing(&cat, "probe", default(), &[("sword", Slot::MainHand, Some(("STR", over))), ("jerkin", Slot::Body, Some(("CONS", over)))]);
         let ratio = (over as f64 * WIELD_DEFICIT_STEP).min(WIELD_DEFICIT_CAP);
         let p = worn(&u, Slot::MainHand).wield_penalty(&u.stats);
-        assert_eq!((p.deficit, p.ratio, p.untrained), (over, ratio, false), "over {over}");
+        assert_eq!((p.deficit, p.ratio), (over, ratio), "over {over}");
         assert_eq!(weapon_power(&u), (POWER + 1) as f64 * (1.0 - ratio), "over {over}");
         assert_eq!(armour(&u, Slot::Body), roundi(MITIGATION as f64 * (1.0 - ratio)), "over {over}");
         assert_eq!(u.worn_burden(), 1, "a stat deficit adds no burden (over {over})");
@@ -130,49 +130,48 @@ fn the_stat_deficit_ramp_is_kept_on_power_and_reaches_armour() {
 }
 
 #[test]
-fn proficiency_0_multiplies_power_and_armour_and_adds_burden_that_lowers_initiative() {
+fn proficiency_0_on_non_strict_class_has_no_untrained_penalty_or_added_burden() {
     let cat = catalog();
     let w = default();
     let u = wearing(&cat, "probe", w, &[("axe", Slot::MainHand, None), ("plate", Slot::Body, None)]);
     for slot in [Slot::MainHand, Slot::Body] {
         let p = worn(&u, slot).wield_penalty(&u.stats);
-        assert!(p.penalized && p.untrained && p.deficit == 0, "{slot:?}: {p:?}");
-        assert_eq!((p.untrained_mult, p.burden_add, p.factor()), (w.untrained_power_mult, w.untrained_burden_add, w.untrained_power_mult));
+        assert!(!p.penalized && p.deficit == 0 && p.factor() == 1.0, "{slot:?}: {p:?}");
     }
     assert_eq!(u.stats.proficiency.power_bonus("axe"), 0, "no training power at level 0");
-    assert_eq!(weapon_power(&u), POWER as f64 * w.untrained_power_mult);
-    assert_eq!(armour(&u, Slot::Body), roundi(MITIGATION as f64 * w.untrained_power_mult));
+    assert_eq!(weapon_power(&u), POWER as f64);
+    assert_eq!(armour(&u, Slot::Body), MITIGATION);
     // the same pieces trained (the axeman's axe; the jerkin is the plate's twin in a trained type)
     let trained = wearing(&cat, "probe", w, &[("sword", Slot::MainHand, None), ("jerkin", Slot::Body, None)]);
-    assert_eq!(u.worn_burden(), trained.worn_burden() + 2 * w.untrained_burden_add, "+1 burden per untrained item");
-    assert_eq!(u.initiative, trained.initiative - 2 * w.untrained_burden_add, "the burden lowers initiative first");
-    assert_eq!(u.move_rate, trained.move_rate, "the move rate only past initiative's floor");
+    assert_eq!(u.worn_burden(), trained.worn_burden(), "no extra untrained burden");
+    assert_eq!(u.initiative, trained.initiative, "initiative unchanged");
+    assert_eq!(u.move_rate, trained.move_rate);
 }
 
 #[test]
-fn the_deficit_and_proficiency_0_stack_multiplicatively() {
+fn the_deficit_applies_without_an_untrained_multiplier() {
     let cat = catalog();
     let w = default();
     for over in [1, 2, 5] {
         let u = wearing(&cat, "probe", w, &[("axe", Slot::MainHand, Some(("STR", over))), ("plate", Slot::Body, Some(("CONS", over)))]);
         let ratio = (over as f64 * WIELD_DEFICIT_STEP).min(WIELD_DEFICIT_CAP);
         let p = worn(&u, Slot::MainHand).wield_penalty(&u.stats);
-        assert!(p.untrained && p.deficit == over, "{p:?}");
-        assert_eq!(p.factor(), (1.0 - ratio) * w.untrained_power_mult);
-        assert_eq!(weapon_power(&u), POWER as f64 * ((1.0 - ratio) * w.untrained_power_mult), "over {over}");
-        assert_eq!(armour(&u, Slot::Body), roundi(MITIGATION as f64 * ((1.0 - ratio) * w.untrained_power_mult)), "over {over}");
+        assert!(p.penalized && p.deficit == over, "{p:?}");
+        assert_eq!(p.factor(), 1.0 - ratio);
+        assert_eq!(weapon_power(&u), POWER as f64 * (1.0 - ratio), "over {over}");
+        assert_eq!(armour(&u, Slot::Body), roundi(MITIGATION as f64 * (1.0 - ratio)), "over {over}");
     }
 }
 
 #[test]
 fn the_ruleset_numbers_set_the_terms() {
     let cat = catalog();
-    let w = WieldRule { untrained_power_mult: 0.5, untrained_burden_add: 2, req_discount_per_level: 0 };
+    let w = WieldRule { req_discount_per_level: 0 };
     let u = wearing(&cat, "probe", w, &[("axe", Slot::MainHand, None), ("plate", Slot::Body, None)]);
     assert_eq!(u.stats.proficiency.wield, w, "the build carries the terms");
-    assert_eq!(weapon_power(&u), POWER as f64 * 0.5);
-    assert_eq!(armour(&u, Slot::Body), roundi(MITIGATION as f64 * 0.5));
-    assert_eq!(u.worn_burden(), 1 + 2 + 2, "the plate's burden plus 2 per untrained item");
+    assert_eq!(weapon_power(&u), POWER as f64);
+    assert_eq!(armour(&u, Slot::Body), MITIGATION);
+    assert_eq!(u.worn_burden(), 1, "the plate's burden alone");
     // no requirement discount: a sword needing STR + 1 over the bare stat is 1 short (2 under the default terms is none)
     let mut sword = cat.items["sword"].clone();
     let need = u.stats.stat("STR", Some("sword")) + 1;
@@ -192,12 +191,12 @@ fn accessories_untyped_gear_classes_without_a_list_and_classless_units_wear_free
     assert!(!worn(&u, Slot::Accessory1).wield_penalty(&u.stats).penalized && !worn(&u, Slot::MainHand).wield_penalty(&u.stats).penalized);
     let loose = wearing(&cat, "loose", default(), &[("axe", Slot::MainHand, None), ("plate", Slot::Body, None)]);
     assert!(loose.stats.proficiency.entries.is_empty());
-    assert!(!worn(&loose, Slot::MainHand).wield_penalty(&loose.stats).untrained && !worn(&loose, Slot::Body).wield_penalty(&loose.stats).untrained, "no proficiency list, no restriction");
+    assert!(!worn(&loose, Slot::MainHand).wield_penalty(&loose.stats).penalized && !worn(&loose, Slot::Body).wield_penalty(&loose.stats).penalized, "no proficiency list, no restriction");
     // a unit with no class borrows the first class's stats, not its training rule
     let nobody = build_unit(&cat, &cat.units["nobody"], 0);
     assert!(nobody.stats.proficiency.unrestricted);
     for slot in [Slot::MainHand, Slot::Body] {
-        assert!(!worn(&nobody, slot).wield_penalty(&nobody.stats).untrained, "{slot:?}");
+        assert!(!worn(&nobody, slot).wield_penalty(&nobody.stats).penalized, "{slot:?}");
     }
 }
 

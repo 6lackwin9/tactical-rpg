@@ -37,11 +37,24 @@ pub struct Def {
     /// from the authored level, so an explicit `spend` gets the extra points (with both keys the stage grows the
     /// elevel-shifted level). False: the level is written as is (party units, plain catalog refs).
     pub raise: bool,
+    /// Unit-level stat/HP tuning deltas (sim-only overrides merged after character overrides).
+    pub tuning: rpgkit_rules::Tuning,
 }
 
 impl Def {
     pub fn new(class_id: &str, level: i32, tier: &str, party: bool) -> Self {
-        Self { class_id: class_id.into(), level, tier: tier.into(), party, loadout: Vec::new(), plain: false, copy_of: String::new(), character: None, raise: false }
+        Self {
+            class_id: class_id.into(),
+            level,
+            tier: tier.into(),
+            party,
+            loadout: Vec::new(),
+            plain: false,
+            copy_of: String::new(),
+            character: None,
+            raise: false,
+            tuning: rpgkit_rules::Tuning::default(),
+        }
     }
 }
 
@@ -108,6 +121,7 @@ struct SimRoster<'a> {
     d: &'a Data,
     units: &'a IndexMap<String, UnitDef>,
     characters: IndexMap<String, (String, String)>,
+    tunings: IndexMap<String, rpgkit_rules::Tuning>,
 }
 
 impl Roster for SimRoster<'_> {
@@ -117,16 +131,25 @@ impl Roster for SimRoster<'_> {
 
     /// U2.2-S2: a story character's overrides (its passives, named items and tuning), built from the sandbox catalog.
     fn overrides(&self, _cat: &Catalog, r: &str) -> rpgkit_rules::Overrides {
-        sim_overrides(self.d, self.characters.get(r))
+        sim_overrides(self.d, self.characters.get(r), self.tunings.get(r))
     }
 }
 
-/// A sim unit's overrides: the story character's it plays (`character_overrides`, as a world battle builds it), else none.
-fn sim_overrides(d: &Data, character: Option<&(String, String)>) -> rpgkit_rules::Overrides {
-    match character {
+/// A sim unit's overrides: the story character's it plays (`character_overrides`, as a world battle builds it), else none,
+/// with any sandbox `Def::tuning` deltas summed on top.
+fn sim_overrides(d: &Data, character: Option<&(String, String)>, tuning: Option<&rpgkit_rules::Tuning>) -> rpgkit_rules::Overrides {
+    let mut ov = match character {
         Some((w, c)) => rpgkit_world::battle::character_overrides(d, d.resolve(w, "characters", c), w),
         None => rpgkit_rules::Overrides::default(),
+    };
+    if let Some(t) = tuning {
+        ov.tuning.hp_pct += t.hp_pct;
+        ov.tuning.power += t.power;
+        ov.tuning.armor += t.armor;
+        ov.tuning.initiative += t.initiative;
+        ov.tuning.ap += t.ap;
     }
+    ov
 }
 
 /// The AP of a unit built for the stats table (ContentFactory.unit's default; the table shows no AP).
@@ -294,8 +317,10 @@ impl<'a> Runner<'a> {
             return None;
         }
         let row = self.units.get(id).cloned().or_else(|| self.d.cat.units.get(id).cloned())?;
-        let character = self.defs.get(id).and_then(|d| d.character.as_ref());
-        Some((row, sim_overrides(self.d, character)))
+        let def = self.defs.get(id);
+        let character = def.and_then(|d| d.character.as_ref());
+        let tuning = def.map(|d| &d.tuning);
+        Some((row, sim_overrides(self.d, character, tuning)))
     }
 
     /// The unit of declared `id` for the current variant (stats mode).
@@ -338,7 +363,13 @@ impl<'a> Runner<'a> {
         entry.insert("rng_seed".into(), json!(seed));
         let characters: IndexMap<String, (String, String)> =
             left.iter().chain(right).chain(&waves).filter_map(|id| self.defs.get(id).and_then(|d| d.character.clone()).map(|c| (id.clone(), c))).collect();
-        let roster = SimRoster { d: self.d, units: &self.units, characters };
+        let tunings: IndexMap<String, rpgkit_rules::Tuning> = left
+            .iter()
+            .chain(right)
+            .chain(&waves)
+            .filter_map(|id| self.defs.get(id).map(|d| d.tuning).filter(|t| *t != rpgkit_rules::Tuning::default()).map(|t| (id.clone(), t)))
+            .collect();
+        let roster = SimRoster { d: self.d, units: &self.units, characters, tunings };
         let def = EncounterDef::from_obj_with(&entry, self.fight_ruleset());
         let s = Session::start(self.d.cat.clone(), def, &roster);
         self.play(s, round_limit, jitter.as_mut())

@@ -25,6 +25,13 @@ pub fn run_comp(r: &mut Runner, comp: &[String], enc_id: &str) -> FightSet {
         Some(e) => e,
         None => scenarios::encounter(r, enc_id, a.level, a.elevel, a.elevel_set, &a.elite_class, &a.boss_class, a.boss_phase),
     };
+    if !is_world && enc_id == "boss" && a.boss_phase {
+        if let Some(boss_id) = enc.enemies.first() {
+            if let Some(def) = r.defs.get_mut(boss_id) {
+                def.tuning.hp_pct += 40;
+            }
+        }
+    }
     r.objective_wins = is_world;
     r.rounds_override = enc.max_rounds;
     r.key_kills = enc.key_kills.clone();

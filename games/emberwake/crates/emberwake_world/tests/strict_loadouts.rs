@@ -6,13 +6,8 @@
 //! loadouts, the Dojo presets on a Dojo hero, and every catalog unit of a strict class. Expectations come from the rules,
 //! not from shipped ids or numbers.
 //!
-//! Catalog units carry no passives, so a catalog row a world character fights from may rely on that character's drill
-//! for a piece it wears; built bare such a row shows the lock. Those rows are listed (not failed) when the world
-//! characters built on them wear the same pieces legally (asserted).
-//!
-//! FB-267 (planner decision): heroes, start parties and class defaults are hard asserts; the enemy / NPC side (world
-//! characters, catalog units) and the Dojo presets no Dojo hero can wear keep pinned lists, so a new violation fails
-//! and a fixed one must leave its list.
+//! PR5-57 (GEAR-REWORK1 follow-up): all pinned lists are retired. World characters, catalog units (with their own
+//! unit-level drill `passives`), and all shipped Dojo presets on the Dojo heroes pass with zero violations.
 
 use aegis_core::json;
 use emberwake_battle::dojo::DojoSession;
@@ -83,11 +78,9 @@ fn strict(class: &ClassDef) -> bool {
 
 /// Every world character's gear: its row (raised to the world's stage) with its named items on top (the named item's
 /// base item: names and tuning do not touch the gear rules), worn with its class and its drill passives.
-/// Returns (violations as (character "world:id", line), catalog rows the characters stand on with the pieces they wear
-/// legally, characters seen).
-fn world_characters(d: &Data) -> (Vec<(String, String)>, Vec<(String, String)>, usize) {
+/// Returns (violations as (character "world:id", line), characters seen).
+fn world_characters(d: &Data) -> (Vec<(String, String)>, usize) {
     let mut out = Vec::new();
-    let mut legal_rows = Vec::new();
     let mut seen = 0;
     for w in d.world_ids() {
         let cat = d.cat_in(&w);
@@ -106,45 +99,20 @@ fn world_characters(d: &Data) -> (Vec<(String, String)>, Vec<(String, String)>, 
             }
             let stats = stats_of(cat, class, e.level, &e.spend, &d.character_passives(c, &w));
             let bad = violations(&format!("character {w}:{r} ({})", class.id), &gear, |i| wear_lock(&stats, i).map(|l| format!("{l:?}")));
-            if bad.is_empty() {
-                legal_rows.push((json::s(c, "base_unit"), format!("{w}:{r}")));
-            }
             out.extend(bad.into_iter().map(|b| (format!("{w}:{r}"), b)));
             seen += 1;
         }
     }
-    (out, legal_rows, seen)
+    (out, seen)
 }
-
-/// The violation lines of `found` ((key, line)) as a sorted set, asserted equal to the pinned list `pinned` (full lines:
-/// who, piece, slot and reason, so a second violation on an already pinned unit or preset fails too); the message
-/// lists every line found so a new violation (or one fixed, which must leave the pin) is named.
-fn assert_pinned(what: &str, found: &[(String, String)], pinned: &[&str]) {
-    let lines: BTreeSet<&str> = found.iter().map(|(_, l)| l.as_str()).collect();
-    let want: BTreeSet<&str> = pinned.iter().copied().collect();
-    let all: Vec<&str> = lines.iter().copied().collect();
-    assert_eq!(lines, want, "{what}: the violations differ from the pinned list (a new one fails; a fixed one leaves the pin):\n{}", all.join("\n"));
-}
-
-/// FB-267 (PR5-51b planner decision): the row's hard requirement is the starter / founder loadouts (heroes, start
-/// parties, class defaults: hard asserts below). Enemy and NPC world characters keep the soft-penalty fallback in battle
-/// (the build does not refuse their gear), so their known violations are pinned here for Design: warriors wearing a
-/// DEX 10 `requirement` piece (buckler, medium body) at DEX 9 with the proficiency discount. Any new violation fails;
-/// fixing one forces the list to shrink.
-const WORLD_CHARACTERS_PINNED: &[&str] = &[
-    r#"character ashlands:brask_toller (warrior): shd_buckler in off_hand: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-    r#"character ashlands:hest_the_quartermaster (warrior): shd_buckler in off_hand: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-    r#"character ashlands:mara_voss (warrior): arm_leather in body: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-    r#"character iron_reaches:orsa_tallow (warrior): shd_buckler in off_hand: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-    r#"character tidewrack:ilse_marrow (warrior): arm_leather in body: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-];
 
 #[test]
-fn world_character_gear_is_legal_but_for_the_pinned_list() {
+fn world_character_gear_is_legal() {
     let d = data();
-    let (bad, _, seen) = world_characters(&d);
+    let (bad, seen) = world_characters(&d);
     assert!(seen > 0, "the shipped worlds have characters of a strict class");
-    assert_pinned("world character gear", &bad, WORLD_CHARACTERS_PINNED);
+    let lines: Vec<&str> = bad.iter().map(|(_, l)| l.as_str()).collect();
+    assert!(lines.is_empty(), "illegal world character gear:\n{}", lines.join("\n"));
 }
 
 #[test]
@@ -209,29 +177,9 @@ fn every_class_default_loadout_is_legal_at_level_one() {
     assert!(bad.is_empty(), "illegal class default loadouts:\n{}", bad.join("\n"));
 }
 
-/// FB-267: presets no Dojo hero (warrior, ranger) can wear whole: they target a class the Dojo has no hero for, or
-/// stress a stat deficit that the strict rule now refuses; their pieces are skipped under the strict rule (a design
-/// question for Design). Pinned: a new one fails, a fixed one must leave the list.
-const PRESETS_PINNED: &[&str] = &[
-    r#"preset arcanist on Ranger: wpn_tome in off_hand: Untrained { gear: "tome" }"#,
-    r#"preset arcanist on Ranger: wpn_wand in main_hand: Untrained { gear: "sprayer" }"#,
-    r#"preset arcanist on Warrior: wpn_tome in off_hand: Untrained { gear: "tome" }"#,
-    r#"preset arcanist on Warrior: wpn_wand in main_hand: Untrained { gear: "sprayer" }"#,
-    r#"preset dual_wield on Ranger: wpn_dagger in main_hand: Untrained { gear: "dagger" }"#,
-    r#"preset dual_wield on Ranger: wpn_stiletto in off_hand: Untrained { gear: "dagger" }"#,
-    r#"preset dual_wield on Warrior: arm_leather in body: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-    r#"preset dual_wield on Warrior: wpn_dagger in main_hand: Untrained { gear: "dagger" }"#,
-    r#"preset dual_wield on Warrior: wpn_stiletto in off_hand: Untrained { gear: "dagger" }"#,
-    r#"preset duelist on Ranger: wpn_dagger in off_hand: Untrained { gear: "dagger" }"#,
-    r#"preset duelist on Warrior: arm_leather in body: Unfit { stat: "DEX", need: 10, have: 9 }"#,
-    r#"preset duelist on Warrior: wpn_dagger in off_hand: Untrained { gear: "dagger" }"#,
-    r#"preset titan_deficit on Ranger: wpn_warhammer in main_hand: Untrained { gear: "hammer" }"#,
-    r#"preset titan_deficit on Warrior: wpn_warhammer in main_hand: Unfit { stat: "STR", need: 22, have: 19 }"#,
-];
-
-/// Each preset is worn whole by a Dojo hero (its hero: one that may wear every piece), but for the pinned list.
+/// Each preset is worn whole by a Dojo hero (one that may wear every piece).
 #[test]
-fn every_dojo_preset_is_legal_on_its_hero_but_for_the_pinned_list() {
+fn every_dojo_preset_is_legal_on_its_hero() {
     let d = data();
     let s = DojoSession::new(d.cat.clone());
     assert!(!s.presets().is_empty(), "the game ships its presets");
@@ -248,53 +196,25 @@ fn every_dojo_preset_is_legal_on_its_hero_but_for_the_pinned_list() {
             })
             .collect();
         if tries.iter().all(|(_, v)| !v.is_empty()) {
-            bad.extend(tries.into_iter().flat_map(|(_, v)| v).map(|l| (p.id.clone(), l)));
+            bad.extend(tries.into_iter().flat_map(|(_, v)| v));
         }
     }
-    assert_pinned("Dojo presets no hero may wear whole", &bad, PRESETS_PINNED);
+    assert!(bad.is_empty(), "Dojo presets no hero may wear whole:\n{}", bad.join("\n"));
 }
 
-/// Catalog rows whose pieces only a world character's drill covers (catalog units carry no passives): proficiency 0
-/// built bare, legal as the world character on the row (asserted). FB-267: pinned.
-const DRILL_COVERED_PINNED: &[&str] = &[
-    r#"unit calcified_husk (warrior): bone_club in main_hand: Untrained { gear: "censer" } (legal as sunk_ward:calcified_husk)"#,
-    r#"unit guild_master_orlov (brawler): flensing_hooks in main_hand: Untrained { gear: "bone_saw" } (legal as sunk_ward:guild_master_orlov)"#,
-    r#"unit guild_master_orlov (brawler): skinners_apron in body: Untrained { gear: "medium" } (legal as sunk_ward:guild_master_orlov)"#,
-    r#"unit mortuary_flagellant (rogue): penitent_scourge in main_hand: Untrained { gear: "scourge" } (legal as sunk_ward:mortuary_flagellant)"#,
-    r#"unit overseer_grendel (brawler): skinners_apron in body: Untrained { gear: "medium" } (legal as sunk_ward:overseer_grendel)"#,
-    r#"unit proctor_quell (warrior): quells_bone_saws in main_hand: Untrained { gear: "bone_saw" } (legal as sunk_ward:proctor_quell)"#,
-];
-
-/// FB-267: catalog units with another violation (enemy / test rows keep the soft-penalty fallback): a warrior row
-/// wearing a DEX 10 `requirement` medium body at DEX 9. Pinned.
-const CATALOG_PINNED: &[&str] = &[r#"unit aberrant_test (warrior): arm_leather in body: Unfit { stat: "DEX", need: 10, have: 9 }"#];
-
-/// Catalog units of a strict class built bare (no passives): legal, but for the drill-covered and the pinned rows.
+/// Catalog units of a strict class built with their own passives (unit-level drills) are legal.
 #[test]
-fn strict_catalog_units_are_legal_or_pinned() {
+fn strict_catalog_units_are_legal() {
     let d = data();
-    let (_, legal_rows, _) = world_characters(&d);
     let mut bad = Vec::new();
-    let mut drill_covered = Vec::new();
     let mut seen = 0;
     for e in d.cat.units.values() {
         let Some(class) = d.cat.classes.get(&e.class_id).filter(|c| strict(c)) else { continue };
-        let stats = stats_of(&d.cat, class, e.level, &e.spend, &[]);
+        let stats = stats_of(&d.cat, class, e.level, &e.spend, &e.passives);
         let v = violations(&format!("unit {} ({})", e.id, class.id), &row_gear(&d.cat, e), |i| wear_lock(&stats, i).map(|l| format!("{l:?}")));
         seen += 1;
-        if v.is_empty() {
-            continue;
-        }
-        // only proficiency locks can be a drill's; a world character standing on the row must wear it legally
-        let chars: Vec<&String> = legal_rows.iter().filter(|(row, _)| *row == e.id).map(|(_, c)| c).collect();
-        if !chars.is_empty() && v.iter().all(|x| x.contains("Untrained")) {
-            let legal_as = chars.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ");
-            drill_covered.extend(v.into_iter().map(|l| (e.id.clone(), format!("{l} (legal as {legal_as})"))));
-        } else {
-            bad.extend(v.into_iter().map(|l| (e.id.clone(), l)));
-        }
+        bad.extend(v);
     }
     assert!(seen > 0, "the catalog has units of a strict class");
-    assert_pinned("catalog rows covered only by the world character's drill", &drill_covered, DRILL_COVERED_PINNED);
-    assert_pinned("catalog unit gear", &bad, CATALOG_PINNED);
+    assert!(bad.is_empty(), "illegal catalog unit gear:\n{}", bad.join("\n"));
 }

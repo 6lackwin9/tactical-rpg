@@ -75,26 +75,20 @@ pub struct Equipment {
     pub item: ItemDef,
 }
 
-/// U3.2-S3 (U3 soft wield, FB-33): what wearing an item costs its wearer. `ratio` and `deficit` are the stat-deficit
-/// ramp (`WIELD_DEFICIT_STEP` per missing point, capped at `WIELD_DEFICIT_CAP`); `untrained` is proficiency 0 in its gear
-/// type (`trained_for` false), which multiplies by `untrained_mult` and adds `burden_add`; `penalized` is either.
+/// U3.2-S3 (U3 soft wield, FB-33; updated PR5-57): what wearing an item below `required_stats` costs its wearer on
+/// non-strict paths or previews. `ratio` and `deficit` are the stat-deficit ramp (`WIELD_DEFICIT_STEP` per missing point,
+/// capped at `WIELD_DEFICIT_CAP`); `penalized` is `deficit > 0`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct WieldPenalty {
     pub penalized: bool,
     pub ratio: f64,
     pub deficit: i32,
-    pub untrained: bool,
-    /// The wield terms' `untrained_power_mult` while `untrained` (unused otherwise).
-    pub untrained_mult: f64,
-    /// The wield terms' `untrained_burden_add` while `untrained` (0 otherwise).
-    pub burden_add: i32,
 }
 
 impl WieldPenalty {
-    /// The factor on the item's weapon power and armour: `(1 - ratio) x untrained_mult`, the two stacking
-    /// multiplicatively; 1.0 without a penalty.
+    /// The factor on the item's weapon power and armour: `1 - ratio`; 1.0 without a penalty.
     pub fn factor(&self) -> f64 {
-        (1.0 - self.ratio) * if self.untrained { self.untrained_mult } else { 1.0 }
+        1.0 - self.ratio
     }
 }
 
@@ -159,8 +153,8 @@ impl Equipment {
         self.item.required_stats.iter().all(|(s, req)| stats.requirement_stat(s, Some(&self.item.weapon_type)) + discount >= *req)
     }
 
-    /// U3.2-S3 (FB-33): the stat-deficit ramp (the largest missing point count after the requirement discount) and the
-    /// proficiency 0 penalty of the wield terms (`stats.proficiency.wield`), stacking (`WieldPenalty::factor`).
+    /// U3.2-S3 (FB-33; updated PR5-57): the stat-deficit ramp (the largest missing point count after the requirement
+    /// discount); `untrained` soft fallback retired in PR5-57.
     pub fn wield_penalty(&self, stats: &CharacterStats) -> WieldPenalty {
         let mut pen = WieldPenalty::default();
         if !self.item.required_stats.is_empty() && !self.meets_requirements(stats) {
@@ -174,11 +168,7 @@ impl Equipment {
             }
             (pen.ratio, pen.deficit) = ((deficit as f64 * WIELD_DEFICIT_STEP).min(WIELD_DEFICIT_CAP), deficit);
         }
-        if !trained_for(&stats.proficiency, &self.item) {
-            let w = stats.proficiency.wield;
-            (pen.untrained, pen.untrained_mult, pen.burden_add) = (true, w.untrained_power_mult, w.untrained_burden_add);
-        }
-        pen.penalized = pen.deficit > 0 || pen.untrained;
+        pen.penalized = pen.deficit > 0;
         pen
     }
 

@@ -15,9 +15,9 @@ fn session() -> DojoSession {
 }
 
 #[test]
-fn a_new_dojo_has_two_heroes_at_battle_ap_a_fresh_dummy_and_the_starter_stash() {
+fn a_new_dojo_has_the_dojo_heroes_at_battle_ap_a_fresh_dummy_and_the_starter_stash() {
     let s = session();
-    assert_eq!(s.heroes.len(), 2);
+    assert_eq!(s.heroes.len(), 4);
     assert!(s.heroes.iter().all(|h| h.ap == HERO_AP && h.max_ap == HERO_AP));
     assert_eq!((s.dummy.hp, s.dummy.max_hp, s.dummy.guard), (DUMMY_MAX_HP, DUMMY_MAX_HP, 0.0));
     let starters = s.cat.items.values().filter(|i| i.raw.get("starter_stash").and_then(|v| v.as_bool()) == Some(true)).count();

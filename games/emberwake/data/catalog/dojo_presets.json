@@ -49,17 +49,6 @@
 			"passives": []
 		},
 		{
-			"id": "titan_deficit",
-			"name": "Titan Hammer (Deficit)",
-			"description": "2H Titan Warhammer with Plate - stresses deficit & burden penalties",
-			"gear": {
-				"main_hand": "wpn_warhammer",
-				"body": "arm_plate"
-			},
-			"pouch": [],
-			"passives": []
-		},
-		{
 			"id": "dual_wield",
 			"name": "Dual Dagger",
 			"description": "Shadow Dagger + Stiletto off-hand (1H Light pair), Brigandine, Ring of the Bear",
@@ -92,11 +81,11 @@
 		},
 		{
 			"id": "duelist",
-			"name": "Blade & Dagger",
-			"description": "1H Broadsword + Shadow Dagger off-hand (Dual Strike), Brigandine, Swiftness Amulet",
+			"name": "Blade & Knife",
+			"description": "1H Broadsword + Boning Knife off-hand (1H Light pair), Brigandine, Swiftness Amulet",
 			"gear": {
 				"main_hand": "wpn_broadsword",
-				"off_hand": "wpn_dagger",
+				"off_hand": "boning_knife",
 				"body": "arm_leather",
 				"accessory_2": "acc_swift_amulet"
 			},
@@ -108,13 +97,28 @@
 		{
 			"id": "arcanist",
 			"name": "Arcanist",
-			"description": "1H Brass Wand (sprayer family) with a Mystic Tome off-hand (a tome needs a one-handed main hand; the 2H staff leaves the off hand empty)",
+			"description": "1H Ash Wand (sprayer) + Focus Orb off-hand, Mage Robe",
 			"gear": {
 				"main_hand": "wpn_wand",
-				"off_hand": "wpn_tome"
+				"off_hand": "wpn_orb",
+				"body": "arm_mage_robe"
 			},
 			"pouch": [
 				"con_focus_elixir"
+			],
+			"passives": []
+		},
+		{
+			"id": "maul_bruiser",
+			"name": "Maul Bruiser",
+			"description": "2H Bailiff's Maul, Steel Plate Cuirass, Ring of the Bear",
+			"gear": {
+				"main_hand": "bailiff_maul",
+				"body": "arm_plate",
+				"accessory_1": "acc_bear_ring"
+			},
+			"pouch": [
+				"con_heal_potion"
 			],
 			"passives": []
 		}

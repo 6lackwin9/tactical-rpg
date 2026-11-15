@@ -139,17 +139,17 @@ fn proficiency_1_2_3_scale_flat_mitigation_by_the_table() {
     assert_eq!(ring.0.stats.stat("DEX", None), ring.1.stats.stat("DEX", None), "an accessory is proficiency-free");
 }
 
-/// With the gate off (a class without roles, today's catalog) the soft U3.2 wield penalty is unchanged: an untrained
-/// item is worn under it, and no proficiency factor applies.
+/// With the gate off (a class without roles, e.g. fixture `tl_drill`) the soft untrained penalty is retired (PR5-57):
+/// an untrained item is worn without an untrained penalty, and no proficiency power bonus or scaling applies.
 #[test]
-fn with_the_gate_off_the_soft_wield_penalty_is_unchanged() {
+fn with_the_gate_off_an_untrained_item_is_worn_without_soft_penalty() {
     let cat = catalog();
     let u = wearing(&cat, "soft", "axe", Slot::MainHand);
     let axe = u.inventory.main_weapon().unwrap();
     let pen = axe.wield_penalty(&u.stats);
-    assert!(pen.untrained && pen.factor() < 1.0, "worn under the soft penalty");
+    assert!(!pen.penalized && pen.factor() == 1.0, "soft untrained penalty retired");
     assert_eq!(axe.prof_mult(&u.stats), 1.0);
     let ap = attack_power(&u, false, false);
-    assert!(ap.untrained && ap.prof_mult == 0.0);
-    assert!((ap.weapon_power - ap.total_w_power as f64 * pen.factor()).abs() < 1e-9, "the soft factor alone");
+    assert_eq!(ap.prof_mult, 0.0);
+    assert!((ap.weapon_power - ap.total_w_power as f64).abs() < 1e-9, "no untrained reduction");
 }

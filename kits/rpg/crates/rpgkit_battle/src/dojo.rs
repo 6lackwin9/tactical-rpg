@@ -1650,10 +1650,6 @@ pub fn breakdown_strike(title: &str, attacker: &str, target: &Unit, res: &Hit, a
             if p.pen_ratio > 0.0 {
                 lines.push(format!("   [color=#f87171]Deficit -{}: {} x (1 - {}%) = {:.1}[/color]", p.def_amount, p.total_w_power, (p.pen_ratio * 100.0).round(), worn));
             }
-            // U3.2-S3 (FB-33): the proficiency 0 factor, after any deficit
-            if p.untrained {
-                lines.push(format!("   [color=#f87171]Untrained x{:.2} = {:.1}[/color]", p.untrained_mult, worn));
-            }
             // PK2-S5b: a dulled weapon instance's factor, last
             if p.dulled {
                 lines.push(format!("   [color=#f87171]Dulled x{:.2} = {:.1}[/color]", rpgkit_rules::gear::DULLED_POWER_MULT, p.weapon_power));

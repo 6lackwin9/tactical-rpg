@@ -574,7 +574,7 @@ impl Unit {
     /// The worn gear's burden after the training reduction; U3.2-S3 (FB-33): plus the wield terms'
     /// `untrained_burden_add` per item worn untrained (proficiency 0), which lowers initiative first like any burden.
     pub fn worn_burden(&self) -> i32 {
-        self.inventory.gear().map(|e| (e.item.burden - self.stats.proficiency.burden_reduction(e.weapon_type()) - self.level2_burden(e)).max(0) + e.wield_penalty(&self.stats).burden_add).sum()
+        self.inventory.gear().map(|e| (e.item.burden - self.stats.proficiency.burden_reduction(e.weapon_type()) - self.level2_burden(e)).max(0)).sum()
     }
 
     /// U3.2-S4 (U3 Level 2): the burden the item's family's `level2_bonus` takes off it at proficiency 2 or more.
@@ -1514,39 +1514,42 @@ pub struct BuiltUnit {
 }
 
 /// U2.2-S2 (FB-12): the one unit builder; every unit (hero, NPC, named enemy, Dojo and sim unit) is built here. The
-/// steps, in order: the row (`build_catalog_unit`); the deck (a static unit under the rule: its row deck's slotted
-/// passives, then the open basics and active slots; a growth unit: its own deck, filled at the end); the named items
-/// worn; the passives once each in gather order; a growth unit's learned skills, worn gear (the two-handed rule), pouch,
-/// vitals, stored loadout, deck fill and ranks (a static unit re-derives its vitals when named items geared a derived
-/// unit); the tuning last. `over.path_cat` replaces `cat` when set.
+/// steps, in order: the row (`build_catalog_unit`, enforcing `wear_lock` against row + character + trained drills);
+/// the deck (a static unit under the rule: its row deck's slotted passives, then the open basics and active slots; a
+/// growth unit: its own deck, filled at the end); the named items worn (checked against `wear_lock`); the passives once
+/// each in gather order; a growth unit's learned skills, worn gear (checked against `wear_lock` and the two-handed
+/// rule), pouch, vitals, stored loadout, deck fill and ranks (a static unit re-derives its vitals when named items
+/// geared a derived unit); the tuning last. `over.path_cat` replaces `cat` when set.
 pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
     let cat: &Catalog = b.over.path_cat.as_deref().unwrap_or(cat);
     let e = b.row;
-    let mut u = build_catalog_unit(cat, e, b.default_ap, b.wield);
-    u.deck = e.deck.clone();
+    let deck_rule = b.deck.map(|r| r.with_class(cat, &e.class_id));
+    let mut lock_stats = unit_stats(cat, e, &b.over.passives);
+    if let (Some(ls), Some(g)) = (&mut lock_stats, &b.growth) {
+        ls.proficiency.wield = b.wield;
+        for (gear, levels) in &g.trained {
+            ls.proficiency.add_bonus(gear, (*levels).clamp(0, i64::from(stats::PROF_MAX_LEVEL) as i32));
+        }
+    } else if let Some(ls) = &mut lock_stats {
+        ls.proficiency.wield = b.wield;
+    }
+    let mut u = build_catalog_unit(cat, e, b.default_ap, b.wield, deck_rule.as_ref(), lock_stats.as_ref(), b.growth.as_ref());
     match (&b.growth, b.deck) {
-        (None, Some(rule)) => {
-            // CLASS-BASICS: the class's role basics are open beside the ruleset's (no slot)
-            u.deck_rule = Some(rule.with_class(cat, &e.class_id));
+        (None, Some(_)) => {
             if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
                 u.sync_from_stats_and_gear(cat);
                 u.hp = u.max_hp;
             }
             u.apply_deck(cat);
         }
-        (Some(g), Some(rule)) => {
-            // RULESET1 9 D3-D5: the member's deck replaces its row's; the rule gates the passives below
-            if !g.deck.is_empty() {
-                u.deck = g.deck.clone();
-            }
-            u.deck_rule = Some(rule.with_class(cat, &e.class_id));
-        }
-        (_, None) => {}
+        (Some(_), Some(_)) | (_, None) => {}
     }
     let mut geared = false;
     for item in b.over.named_items.iter().filter(|i| i.is_equipment()) {
-        u.inventory.equip(Equipment::new(item), Slot::parse(&item.slot).unwrap_or(Slot::MainHand));
-        geared = true;
+        if lock_stats.as_ref().is_none_or(|ls| crate::gear::wear_lock(ls, item).is_none()) {
+            u.inventory.equip(Equipment::new(item), Slot::parse(&item.slot).unwrap_or(Slot::MainHand));
+            geared = true;
+        }
     }
     // PK2-S2: a member's body before its passives (a keystone graft takes a keystone slot from the slotted passives)
     let body: Vec<(String, Vec<Grant>)> = match &b.growth {
@@ -1600,8 +1603,10 @@ pub fn build_from(cat: &Catalog, b: UnitBuild) -> BuiltUnit {
                 u.learn_skill_checked(cat, sk, false);
             }
             for (slot, item) in g.equipment.iter().filter(|(_, i)| i.is_equipment()) {
-                u.inventory.unequip(*slot);
-                u.inventory.equip(Equipment::new(item), *slot);
+                if crate::gear::wear_lock(&u.stats, item).is_none() {
+                    u.inventory.unequip(*slot);
+                    u.inventory.equip(Equipment::new(item), *slot);
+                }
             }
             // The two-handed rule: a class default shield or focus is not held under a two-handed weapon.
             if let (Some(main), Some(off)) = (u.inventory.get(Slot::MainHand), u.inventory.get(Slot::OffHand)) {
@@ -1686,7 +1691,43 @@ pub fn auto_actives(cat: &Catalog, e: &UnitDef, rule: &DeckRule) -> Vec<String> 
     build_unit_in(cat, &auto, 1, Some(rule)).active_families()
 }
 
-fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32, wield: crate::stats::WieldRule) -> Unit {
+/// GEAR-REWORK1 (PR5-57): the unbuffed character stats + drills of catalog unit row `e` (with optional character or
+/// saved `extra_passives`), matching `build_catalog_unit` so strict `wear_lock` checks and battle builds share one rule.
+/// None when `e` has no known class (a classless unit stays unrestricted).
+pub fn unit_stats(cat: &Catalog, e: &UnitDef, extra_passives: &[String]) -> Option<CharacterStats> {
+    let arch = class_for(cat, e)?;
+    let mut cs = if e.stat_mode == "derived" {
+        let template = template_for(cat, e, arch);
+        let basis = template.map(|t| t.over(arch));
+        let src = basis.as_ref().unwrap_or(arch);
+        let spend = if e.spend.is_empty() { stats::auto_spend(&src.unit_shares().growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
+        let mut cs = CharacterStats::new(src, e.level, &spend);
+        if template.is_some() {
+            cs.scale_core(stats::tier_row(&e.tier).mult);
+        }
+        cs
+    } else {
+        CharacterStats::new(arch, e.level, &IndexMap::new())
+    };
+    let mut unique: Vec<&String> = Vec::new();
+    for id in e.passives.iter().chain(extra_passives) {
+        if !unique.contains(&id) {
+            unique.push(id);
+        }
+    }
+    cs.proficiency = stats::Proficiency::from_class(arch).with_drills(cat, unique);
+    Some(cs)
+}
+
+fn build_catalog_unit(
+    cat: &Catalog,
+    e: &UnitDef,
+    default_ap: i32,
+    wield: crate::stats::WieldRule,
+    deck_rule: Option<&DeckRule>,
+    lock_stats: Option<&CharacterStats>,
+    growth: Option<&Growth>,
+) -> Unit {
     let arch = class_for(cat, e);
     let derived = e.stat_mode == "derived" && arch.is_some();
     // KITIDS1: a unit without a class takes the stats of the catalog's first class at level 1 (a blank class when the
@@ -1718,20 +1759,26 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32, wield: crate:
     };
     // U3.2-S3: the gear is read under the battle's wield terms from the first sync on
     u.stats.proficiency.wield = wield;
-    equip(cat, &mut u, e, arch);
+    u.deck = growth.filter(|g| !g.deck.is_empty()).map(|g| g.deck.clone()).unwrap_or_else(|| e.deck.clone());
+    u.deck_rule = deck_rule.cloned();
+    // PR5-57 (FB-267(2)): apply the unit row's always-on passives (e.g. gear drills) before equipping and syncing.
+    for id in &e.passives {
+        if let Some(p) = cat.passives.get(id) {
+            u.apply_passive(cat, p);
+        }
+    }
+    equip(cat, &mut u, e, arch, lock_stats);
     if derived {
         let arch = arch.unwrap();
         u.tier = e.tier.clone();
         u.tier_mult = stats::tier_row(&u.tier).mult;
         u.sync_from_stats_and_gear(cat);
         u.hp = u.max_hp;
-        let mut extras: Vec<String> = Vec::new();
         for x in &e.extra_skills {
-            if !extras.contains(x) {
-                extras.push(x.clone());
+            if !u.known_skills.contains(x) {
+                u.known_skills.push(x.clone());
             }
         }
-        u.known_skills = extras;
         u.set_class_path(cat, arch.path_steps());
         for b in cat.basic_ids() {
             if !u.known_skills.contains(&b) {
@@ -1818,12 +1865,12 @@ pub fn row_slot_item(cat: &Catalog, e: &UnitDef, slot_key: &str) -> Option<Strin
     slot_default(e, class_for(cat, e), slot_key)
 }
 
-/// The class's default gear with the unit's per-slot overrides, then the pouch.
-fn equip(cat: &Catalog, u: &mut Unit, e: &UnitDef, arch: Option<&ClassDef>) {
+/// The class's default gear with the unit's per-slot overrides (enforcing strict `wear_lock`), then the pouch.
+fn equip(cat: &Catalog, u: &mut Unit, e: &UnitDef, arch: Option<&ClassDef>, lock_stats: Option<&CharacterStats>) {
     for slot_key in e.slots.keys() {
         let Some(id) = slot_default(e, arch, slot_key) else { continue };
         let Some(item) = cat.items.get(&id) else { continue };
-        if item.is_equipment() {
+        if item.is_equipment() && lock_stats.is_none_or(|ls| crate::gear::wear_lock(ls, item).is_none()) {
             u.inventory.equip(Equipment::new(item), Slot::parse(slot_key).unwrap_or(Slot::MainHand));
         }
     }

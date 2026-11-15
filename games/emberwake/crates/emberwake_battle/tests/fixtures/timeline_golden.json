@@ -16744,7 +16744,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     8,
                     5,
                     4,
@@ -16772,7 +16772,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     8,
                     5,
                     4,
@@ -16800,7 +16800,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     7,
                     5,
                     4,
@@ -16910,7 +16910,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     10,
                     5,
                     4,
@@ -16938,7 +16938,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     10,
                     5,
                     4,
@@ -16966,7 +16966,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     9,
                     5,
                     4,
@@ -16994,7 +16994,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     9,
                     5,
                     4,
@@ -17169,7 +17169,7 @@
               },
               "regen_done": 0,
               "best_hit": {
-                "amount": 149,
+                "amount": 172,
                 "skill": "Crushing Judgment",
                 "target": "Spiker (test)",
                 "round": 1,
@@ -17340,11 +17340,11 @@
             true,
             "Crushing Judgment",
             "Reach 1-1",
-            149,
-            149,
+            172,
+            172,
             "HIT",
-            "Dealt 149 | Skill x1.80 | Range 1 | Stagger 20 (poise 35 -> 21)",
-            "Target HP: 61/210"
+            "Dealt 172 | Skill x1.80 | Range 1 | Stagger 20 (poise 35 -> 21)",
+            "Target HP: 38/210"
           ],
           [
             1,
@@ -17420,10 +17420,10 @@
             true,
             "Crushing Judgment",
             "Reach 1-1",
-            97,
-            97,
+            112,
+            112,
             "DEFEATED",
-            "Dealt 97 | Skill x1.80 | Range 1",
+            "Dealt 112 | Skill x1.80 | Range 1",
             "Target HP: 0/210"
           ]
         ],
@@ -17710,7 +17710,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     8,
                     5,
                     4,
@@ -17738,7 +17738,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     8,
                     5,
                     4,
@@ -17766,7 +17766,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     7,
                     5,
                     4,
@@ -17876,7 +17876,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     10,
                     5,
                     4,
@@ -17904,7 +17904,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     10,
                     5,
                     4,
@@ -17932,7 +17932,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     9,
                     5,
                     4,
@@ -17960,7 +17960,7 @@
                 "units": [
                   [
                     "Spiker (test)",
-                    61,
+                    38,
                     9,
                     5,
                     4,
@@ -18135,7 +18135,7 @@
               },
               "regen_done": 0,
               "best_hit": {
-                "amount": 149,
+                "amount": 172,
                 "skill": "Crushing Judgment",
                 "target": "Spiker (test)",
                 "round": 1,
@@ -18306,11 +18306,11 @@
             true,
             "Crushing Judgment",
             "Reach 1-1",
-            149,
-            149,
+            172,
+            172,
             "HIT",
-            "Dealt 149 | Skill x1.80 | Range 1 | Stagger 20 (poise 35 -> 21)",
-            "Target HP: 61/210"
+            "Dealt 172 | Skill x1.80 | Range 1 | Stagger 20 (poise 35 -> 21)",
+            "Target HP: 38/210"
           ],
           [
             1,
@@ -18386,10 +18386,10 @@
             true,
             "Crushing Judgment",
             "Reach 1-1",
-            97,
-            97,
+            112,
+            112,
             "DEFEATED",
-            "Dealt 97 | Skill x1.80 | Range 1",
+            "Dealt 112 | Skill x1.80 | Range 1",
             "Target HP: 0/210"
           ]
         ],
@@ -19022,10 +19022,10 @@
             true,
             "Crushing Judgment",
             "Reach 1-1",
-            223,
-            223,
+            258,
+            258,
             "DEFEATED",
-            "Dealt 223 | Skill x1.80 | Range 1",
+            "Dealt 258 | Skill x1.80 | Range 1",
             "Target HP: 0/210"
           ],
           [

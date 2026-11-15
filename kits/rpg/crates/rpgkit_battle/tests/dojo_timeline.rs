@@ -284,7 +284,7 @@ fn a_pip_break_staggers_the_dummy_next_round() {
 #[test]
 fn the_dojo_builds_its_heroes_under_its_rulesets_wield_terms() {
     let mut raw = catalog_value();
-    raw["rulesets"] = json!([{"id": CLASSIC, "name": "Classic", "rules": [], "untrained_power_mult": 0.5, "untrained_burden_add": 3, "req_discount_per_level": 1}]);
+    raw["rulesets"] = json!([{"id": CLASSIC, "name": "Classic", "rules": [], "req_discount_per_level": 1}]);
     let cat = Catalog::from_value(&raw);
     let want = Ruleset::of_or_classic(&cat, CLASSIC).numbers.wield();
     assert_ne!(want, rpgkit_rules::stats::WieldRule::default(), "the fixture row sets its own terms");

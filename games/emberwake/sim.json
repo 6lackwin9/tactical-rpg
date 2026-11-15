@@ -310,11 +310,11 @@
 				"wave": [
 					[
 						"brawler",
-						"minion"
+						"standard"
 					],
 					[
 						"rogue",
-						"minion"
+						"standard"
 					],
 					[
 						"priest",
@@ -340,6 +340,10 @@
 					[
 						"warrior",
 						"standard"
+					],
+					[
+						"ranger",
+						"minion"
 					]
 				],
 				"wave": []

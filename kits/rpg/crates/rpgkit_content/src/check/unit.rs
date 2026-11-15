@@ -185,8 +185,7 @@ pub fn character_passives(worlds: &Catalogs, character: &Dict, w: &str) -> Vec<S
 }
 
 /// ClassUnitValidator._loadout_errors: every item fits its slot; no two-handed weapon with an off-hand item (GEAR-REWORK1:
-/// but the off-hand families its family pairs with); no accessory twice. U3.2-S3 (FB-34): training is not checked (an
-/// untrained item is worn under the wield penalty).
+/// but the off-hand families its family pairs with); no accessory twice.
 fn loadout_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     for slot in LOADOUT_SLOTS {
@@ -215,6 +214,37 @@ fn loadout_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(DUPLICATE_ACCESSORY_ERROR.into());
     }
     errors
+}
+
+/// PR5-57 (FB-267(2) Option A): under the strict gear rule (`Proficiency::is_strict`), every equipped piece must
+/// satisfy `gear::wear_lock` (proficiency >= 1 or accessory, and raw `required_stats` met by unscaled stats + discount).
+pub(crate) fn strict_item_errors(who: &str, stats: &rpgkit_rules::stats::CharacterStats, items: &[(&str, &ItemDef)]) -> Vec<String> {
+    if !stats.proficiency.is_strict() {
+        return Vec::new();
+    }
+    items.iter().filter_map(|(name, item)| rpgkit_rules::gear::wear_lock(stats, item).map(|lock| lock.text(who, name))).collect()
+}
+
+fn strict_class_loadout_errors(v: &View, e: &Dict, class: &ClassDef) -> Vec<String> {
+    let stats = rpgkit_rules::stats::CharacterStats::new(class, 1, &IndexMap::new());
+    let items: Vec<(&str, &ItemDef)> = LOADOUT_SLOTS
+        .iter()
+        .filter_map(|slot| v.typed.items.get(&json::s(e, slot)).filter(|i| i.is_equipment()))
+        .map(|i| (i.name.as_str(), i))
+        .collect();
+    strict_item_errors(&json::s_or(e, "name", &json::s(e, "id")), &stats, &items)
+}
+
+fn strict_unit_loadout_errors(v: &View, e: &Dict) -> Vec<String> {
+    let unit = rpgkit_data::UnitDef::from_obj(e);
+    let Some(stats) = rpgkit_rules::unit::unit_stats(&v.typed, &unit, &[]) else { return Vec::new() };
+    let items: Vec<(&str, &ItemDef)> = LOADOUT_SLOTS
+        .iter()
+        .filter_map(|slot| rpgkit_rules::unit::row_slot_item(&v.typed, &unit, slot))
+        .filter_map(|id| v.typed.items.get(&id).filter(|i| i.is_equipment()))
+        .map(|i| (i.name.as_str(), i))
+        .collect();
+    strict_item_errors(&json::s_or(e, "name", &json::s(e, "id")), &stats, &items)
 }
 
 /// ClassUnitValidator.path_errors: the class skill path {family head: unlock level}.
@@ -312,8 +342,10 @@ pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
     }
     errors.extend(path_errors(v, json::get(e, "skill_path")));
     errors.extend(class_basics_errors(v, e));
+    let class = ClassDef::from_obj(e);
     errors.extend(loadout_errors(v, e));
-    errors.extend(duplicate_skill_errors(v, &ClassDef::from_obj(e), None));
+    errors.extend(strict_class_loadout_errors(v, e, &class));
+    errors.extend(duplicate_skill_errors(v, &class, None));
     errors
 }
 
@@ -395,6 +427,7 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push("Fixed units don't spend points.".into());
     }
     errors.extend(loadout_errors(v, e));
+    errors.extend(strict_unit_loadout_errors(v, e));
     if let Some(a) = arch.filter(|_| !fixed_mode) {
         errors.extend(skill_loadout_errors(v, e, a));
     }

@@ -247,6 +247,11 @@ fn the_seed_sets_the_values_the_rows_read_now() {
         if kind == "classes" {
             let shipped = shipped_units.get("classes", &json::s(&e, "id"));
             e.insert("proficiency".into(), shipped.get("proficiency").cloned().unwrap_or(Value::Null));
+            for slot in ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2", "pouch"] {
+                if let Some(v) = shipped.get(slot) {
+                    e.insert(slot.into(), v.clone());
+                }
+            }
         }
         store::upsert(&tmp, None, kind, &e, None).unwrap_or_else(|err| panic!("CLASS-BASICS {kind} '{}': {err:?}", json::s(&e, "id")));
     }
