@@ -1,6 +1,6 @@
 # Worldbuilding Snapshot (2026-10-21, Pre-CANON Ashlands Draft)
 
-Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), superseded as Emberwake's active canon by [CANON.md](../games/emberwake/docs/lore/CANON.md) (Sunk Ward Act 1 + Act 2–3 Iron Reaches / High Bastion / Mantle Fissure). Preserved verbatim from [WORLDBUILDING.md](../games/emberwake/docs/WORLDBUILDING.md).
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), superseded as Emberwake's active canon by [CANON.md](../../games/emberwake/docs/lore/CANON.md) (Sunk Ward Act 1 + Act 2–3 Iron Reaches / High Bastion / Mantle Fissure). Preserved verbatim from [WORLDBUILDING.md](../../games/emberwake/docs/WORLDBUILDING.md).
 
 ## The story so far
 

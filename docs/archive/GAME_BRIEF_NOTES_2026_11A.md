@@ -1,6 +1,6 @@
 # Game Brief Historical System & Slice Notes (Pre-2026-11-15)
 
-Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), detailed per-slice and Godot-transition lookup notes moved verbatim from [GAME_BRIEF.md](../games/emberwake/docs/GAME_BRIEF.md).
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), detailed per-slice and Godot-transition lookup notes moved verbatim from [GAME_BRIEF.md](../../games/emberwake/docs/GAME_BRIEF.md).
 
 ## Where to look for X
 
