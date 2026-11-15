@@ -2108,6 +2108,384 @@
 			"party_min": 0,
 			"protect": [],
 			"tags": []
+		},
+		{
+			"id": "enc_scav_crossroads",
+			"name": "Ash-Crawl Scavengers",
+			"description": "Flagellants and ash-crawlers picking the alleyways behind the toll-pen.",
+			"intro": "Ash-crawlers swarm out of the cinder drifts behind a wild flagellant.",
+			"location": "ash_crawl_crossroads",
+			"zone": "alley",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"ash_crawler",
+				"mortuary_flagellant"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 3,
+				"gold_max": 6,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_scav_kiln",
+			"name": "Kiln Scrap-Crawlers",
+			"description": "Husk-scrapers and ash-crawlers rooting through the bone-meal yards.",
+			"intro": "A calcified husk drags its scraper across the slag pile.",
+			"location": "fourth_kiln",
+			"zone": "foundry",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"ash_crawler",
+				"calcified_husk"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 3,
+				"gold_max": 7,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_scav_vats",
+			"name": "Vats Prowlers",
+			"description": "Loose render-beasts and dredgers haunting the grease yards.",
+			"intro": "A render-beast lunges from behind the boiling vats.",
+			"location": "tallow_vats",
+			"zone": "tallow_vats",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"render_beast",
+				"tallow_dredger"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 4,
+				"gold_max": 8,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_scav_watchpost",
+			"name": "Overlook Picket",
+			"description": "Inquisitorial picket watching the gorge cliffs and Watchpost yard.",
+			"intro": "Watchpost pickets lower their crossbows across the stone yard.",
+			"location": "crucible_watchpost",
+			"zone": "watchpost",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"footman_patrol",
+				"watch_crossbowman"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 4,
+				"gold_max": 8,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_patrol_third_ward",
+			"name": "Third Ward Patrol",
+			"description": "Corvo's toll-road detachment sweeping the breach north of the gate.",
+			"intro": "A Bailiff detachment wheels round the broken brick to bar the road.",
+			"location": "corvos_gate",
+			"zone": "alley",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"castellan_footman",
+				"watch_crossbowman"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 4,
+				"gold_max": 8,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
+		},
+		{
+			"id": "enc_patrol_slag_gate",
+			"name": "Slag-Gate Garrison",
+			"description": "High gorge sentries guarding the chain-winch battlements.",
+			"intro": "Garrison halberds lock beneath the portcullis archway.",
+			"location": "slag_gate",
+			"zone": "watchpost",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"start_ap": 0,
+			"rng_seed": 1337,
+			"party": [
+				"kaelen",
+				"vesper",
+				"maren",
+				"hollis"
+			],
+			"enemies": [
+				"castellan_footman",
+				"watch_crossbowman"
+			],
+			"phases": [],
+			"script": [],
+			"pace": "auto",
+			"start_status": [],
+			"objective": "rout",
+			"objective_tiles": [],
+			"objective_rounds": 3,
+			"objective_unit": "",
+			"objective_count": 1,
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": true,
+			"morale_break": 50,
+			"morale_leader": "",
+			"morale_groups": [],
+			"morale_text": "",
+			"purse": {
+				"gold_min": 5,
+				"gold_max": 9,
+				"once": false
+			},
+			"key_loot": [],
+			"objective_reward": {},
+			"guests": [],
+			"party_min": 0,
+			"protect": [],
+			"tags": []
 		}
 	]
 }

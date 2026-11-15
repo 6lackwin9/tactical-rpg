@@ -89,6 +89,36 @@
 					"unless_flags": [],
 					"sets_flags": [],
 					"character": "ivo"
+				},
+				{
+					"id": "chest_a",
+					"kind": "point",
+					"anchor": "chest_a",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "Sabina's quarantine chest",
+					"note": "Lead-lined apothecary lockbox stamped with the old Siphon Ward wax seal."
+				},
+				{
+					"id": "rest",
+					"kind": "point",
+					"anchor": "rest",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "The hall coke-brazier",
+					"note": "Low anthracite embers in a cast pan, keeping the basin damp off the Hall slabs."
+				},
+				{
+					"id": "crypts",
+					"kind": "point",
+					"anchor": "crypts",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "The cold vaults",
+					"note": "Slate mortuary tables under iron bars. Nobody sleeps down in this wing."
 				}
 			],
 			"map_pos": [
@@ -188,7 +218,7 @@
 			"id": "ash_crawl_crossroads",
 			"name": "Ash-Crawl Crossroads",
 			"description": "Node 03: an open-air culling station where the slum alleys meet, with the Seventh Ward Toll-Pen beside the cages.",
-			"kind": "wild",
+			"kind": "ruin",
 			"region": "sunk_ward_quarter",
 			"exits": [],
 			"encounters": [
@@ -211,8 +241,24 @@
 				"back_alleys": {
 					"encounters": [
 						[
-							"enc_scav_alley",
+							"enc_scav_crossroads",
 							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"culling_plaza": {
+					"encounters": [
+						[
+							"enc_roam_wardens",
+							2
+						],
+						[
+							"enc_scav_crossroads",
+							2
 						]
 					],
 					"elites": [],
@@ -358,7 +404,7 @@
 			"id": "fourth_kiln",
 			"name": "The Fourth Kiln",
 			"description": "Node 04: the bone-mill that mortars the Inquisition's watch-posts out of uncremated Spent.",
-			"kind": "wild",
+			"kind": "ruin",
 			"region": "sunk_ward_quarter",
 			"exits": [],
 			"encounters": [
@@ -381,8 +427,24 @@
 				"ash_yards": {
 					"encounters": [
 						[
-							"enc_scav_alley",
+							"enc_scav_kiln",
 							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"mill_floor": {
+					"encounters": [
+						[
+							"enc_roam_haulers",
+							2
+						],
+						[
+							"enc_scav_kiln",
+							2
 						]
 					],
 					"elites": [],
@@ -518,7 +580,7 @@
 			"id": "crucible_watchpost",
 			"name": "Crucible Watchpost",
 			"description": "Node 06: the fortified post above the Slag Gate, with the winch that lifts it.",
-			"kind": "fortress",
+			"kind": "camp",
 			"region": "sunk_ward_quarter",
 			"exits": [],
 			"encounters": [
@@ -542,8 +604,40 @@
 				"overlook_path": {
 					"encounters": [
 						[
-							"enc_scav_alley",
+							"enc_scav_watchpost",
 							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"watchpost": {
+					"encounters": [
+						[
+							"enc_roam_sentries",
+							2
+						],
+						[
+							"enc_scav_watchpost",
+							1
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"guardroom": {
+					"encounters": [
+						[
+							"enc_scav_watchpost",
+							2
+						],
+						[
+							"enc_roam_sentries",
+							2
 						]
 					],
 					"elites": [],
@@ -669,6 +763,16 @@
 					"unless_flags": [],
 					"sets_flags": [],
 					"character": "cit_guardroom"
+				},
+				{
+					"id": "winch_post",
+					"kind": "point",
+					"anchor": "winch_post",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "The gorge winch drum",
+					"note": "Greased iron chain locked over the parapet, raising or dropping the Slag Gate below."
 				}
 			],
 			"map_pos": [
@@ -682,7 +786,7 @@
 			"id": "alleyway_junction_7",
 			"name": "Alleyway Junction 7",
 			"description": "Node 02: a street crossing in the Seventh Ward where Captain Vane has sealed the grates.",
-			"kind": "wild",
+			"kind": "ruin",
 			"region": "sunk_ward_quarter",
 			"exits": [],
 			"encounters": [
@@ -707,6 +811,22 @@
 						[
 							"enc_scav_alley",
 							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"yard": {
+					"encounters": [
+						[
+							"enc_roam_watch",
+							2
+						],
+						[
+							"enc_scav_alley",
+							2
 						]
 					],
 					"elites": [],
@@ -823,7 +943,7 @@
 			"id": "tallow_vats",
 			"name": "The Tallow Vats",
 			"description": "Node 05: the Guild's rendering vats and still-rooms, where Tallow Dredgers boil the district's dead.",
-			"kind": "wild",
+			"kind": "ruin",
 			"region": "sunk_ward_quarter",
 			"exits": [],
 			"encounters": [
@@ -848,6 +968,22 @@
 						[
 							"enc_roam_dredgers",
 							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				},
+				"rendering_yard": {
+					"encounters": [
+						[
+							"enc_roam_bruisers",
+							2
+						],
+						[
+							"enc_scav_vats",
+							2
 						]
 					],
 					"elites": [],
@@ -1006,7 +1142,20 @@
 			"encounters": [],
 			"map": "sunk_ward_slag_gate",
 			"boundary": "gorge_rock",
-			"zone_bindings": {},
+			"zone_bindings": {
+				"slag_gate": {
+					"encounters": [
+						[
+							"enc_patrol_slag_gate",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "exit_gorge",
@@ -1032,6 +1181,17 @@
 					"sets_flags": [],
 					"label": "The raised portcullis",
 					"note": "The winch has lifted it. Beyond the chain-teeth, a road climbs toward Upper Cinderreach."
+				},
+				{
+					"id": "crucible_watchpost",
+					"kind": "exit",
+					"anchor": "exit_crucible",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"to": "crucible_watchpost",
+					"label": "Back down to the Crucible",
+					"to_anchor": "postern_in"
 				}
 			],
 			"map_pos": [
@@ -1053,7 +1213,20 @@
 			],
 			"map": "sunk_ward_corvos_gate",
 			"boundary": "blind_tenements",
-			"zone_bindings": {},
+			"zone_bindings": {
+				"third_ward": {
+					"encounters": [
+						[
+							"enc_patrol_third_ward",
+							3
+						]
+					],
+					"elites": [],
+					"elite_pct": 0,
+					"steps_min": 12,
+					"steps_max": 20
+				}
+			},
 			"markers": [
 				{
 					"id": "world_map",
@@ -1078,6 +1251,16 @@
 					],
 					"sets_flags": [],
 					"character": "bailiff_corvo"
+				},
+				{
+					"id": "breach",
+					"kind": "point",
+					"anchor": "breach",
+					"requires_flags": [],
+					"unless_flags": [],
+					"sets_flags": [],
+					"label": "The Third Ward breach",
+					"note": "Sledged brick beside Corvo's toll-gate where runners slip north after curfew."
 				}
 			],
 			"map_pos": [

@@ -89,7 +89,7 @@
 		{
 			"id": "vg_bridge_cart",
 			"name": "The Mortuary Cart",
-			"music": "danger",
+			"music": "prologue_tension",
 			"frame": "#0a0b10",
 			"skippable": true,
 			"once": false,
