@@ -436,3 +436,131 @@ fn indoor_zones_are_entered_on_foot_and_fade_their_own_roofs() {
     }
     assert!(indoor > 0, "the Sunk Ward maps hold roofed indoor zones");
 }
+
+/// PR5-58 (1): the `38 x 24` 7-room `sluice_undercroft` hub carries indoor + wall_set room styles while keeping
+/// PR5-55's `npc_c` (`talia_rusk`) at `(16, 6)` and `lore_a` (`ivo`) reachable from both `spawn` and `gate_in`.
+#[test]
+fn hub_7_rooms_styles_talia_and_ivo_stay_reachable() {
+    let d = data();
+    let gs = game(&d);
+    let (loc, t) = location_and_map(&d, &gs, "sluice_undercroft");
+    assert_eq!(json::s(&loc, "map"), "sunk_ward_undercroft");
+    assert_eq!(explore::size_of(&t), (38, 24));
+    for (zone, want_set) in [
+        ("slab", "interior_plaster"),
+        ("hollows", "interior_plaster"),
+        ("basin", "interior_stone"),
+        ("hearth", "interior_stone"),
+        ("hall", "interior_stone"),
+        ("entry", "interior_stone"),
+        ("crypts", "interior_stone"),
+    ] {
+        assert!(explore::zone_indoor(&t, zone), "hub zone '{zone}' is indoor");
+        assert_eq!(explore::zone_wall_set(&t, zone), want_set, "hub zone '{zone}' wall_set");
+    }
+    assert_eq!(explore::anchor_pos(&t, "npc_c"), (16, 6), "PR5-55 Talia anchor preserved at (16, 6)");
+    assert_eq!(explore::anchor_pos(&t, "lore_a"), (14, 7), "Ivo pocket anchor preserved at (14, 7)");
+    let tgs = targets(&loc, &t);
+    for anchor in ["spawn", "gate_in"] {
+        for wanted in ["talia", "ivo", "chest_a", "rest", "crypts"] {
+            let tg = tgs.iter().find(|tg| tg.id == wanted).unwrap_or_else(|| panic!("sluice_undercroft has marker '{wanted}'"));
+            let why = reach_and_use(&d, "sluice_undercroft", anchor, &loc, &t, tg);
+            assert!(why.is_empty(), "sluice_undercroft '{wanted}' from '{anchor}': {why}");
+        }
+    }
+}
+
+/// PR5-58 (2)-(3) & FB-272(a-e): `slag_gate -> crucible_watchpost` exit lands at open `postern_in`, every danger zone
+/// resolves a bound encounter, district scavengers split from `enc_scav_alley`, `ground_legend` has no unused keys,
+/// every anchor is wired, `corvos_gate` `rubble` leaves `breach` open, and `_side` props match East/West walls.
+#[test]
+fn fb272_exits_danger_bindings_side_props_and_split_encounters() {
+    let d = data();
+    let gs = game(&d);
+
+    let (slag_loc, slag_map) = location_and_map(&d, &gs, "slag_gate");
+    let cw_exit = explore::markers_of(&slag_loc).into_iter().find(|m| json::s(m, "kind") == "exit" && json::s(m, "to") == "crucible_watchpost").expect("slag_gate has exit to crucible_watchpost");
+    assert_eq!(json::s(&cw_exit, "to_anchor"), "postern_in", "slag_gate exit targets crucible_watchpost postern_in");
+    let (cw_loc, cw_map) = location_and_map(&d, &gs, "crucible_watchpost");
+    let postern_in = explore::anchor_pos(&cw_map, "postern_in");
+    assert!(explore::is_open(&cw_map, postern_in.0, postern_in.1), "crucible_watchpost postern_in is open");
+    assert!(explore::markers_of(&cw_loc).iter().all(|m| explore::marker_pos(&cw_map, m, 0) != postern_in), "postern_in is free of markers");
+    let slag_spawn = explore::anchor_pos(&slag_map, explore::SPAWN);
+    let slag_exit_pos = explore::marker_pos(&slag_map, &cw_exit, 0);
+    assert!(route(&slag_map, slag_spawn, &avoided(&slag_loc, &slag_map, slag_exit_pos, false), |p| p == slag_exit_pos).is_some(), "slag_gate exit to crucible_watchpost reachable from spawn");
+
+    let (_, cg_map) = location_and_map(&d, &gs, "corvos_gate");
+    let rubble = json::aget(&cg_map, "props").iter().map(json::dict).find(|p| json::s(p, "id") == "rubble").expect("corvos_gate rubble prop");
+    let (rx, ry, rw, rh) = (json::i(rubble, "x", -1), json::i(rubble, "y", -1), json::i(rubble, "w", 0), json::i(rubble, "h", 0));
+    assert!(!(rx <= 5 && 5 < rx + rw && ry <= 10 && 10 < ry + rh), "rubble ({rx},{ry},{rw}x{rh}) must not overlap breach approach (5,10)");
+    assert!(explore::is_open(&cg_map, 5, 10), "corvos_gate breach approach (5, 10) is open");
+
+    let mut inbound_anchors: HashSet<(String, String)> = HashSet::new();
+    for id in LOCATIONS {
+        let loc = explore::resolve_location(&d, &gs, id);
+        for m in explore::markers_of(loc).iter().filter(|m| json::s(m, "kind") == "exit") {
+            let to = explore::resolve_location(&d, &gs, &json::s(m, "to"));
+            let to_id = json::s(to, "id");
+            let ta = json::s(m, "to_anchor");
+            if !to_id.is_empty() && !ta.is_empty() {
+                inbound_anchors.insert((to_id, ta));
+            }
+        }
+    }
+
+    let mut side_props = 0usize;
+    let mut non_alley_enc_scav_alley = Vec::new();
+    for id in LOCATIONS {
+        let (loc, t) = location_and_map(&d, &gs, id);
+        let bindings = json::dget(&loc, "zone_bindings");
+        for zv in json::dget(&t, "zone_legend").values().map(json::dict) {
+            if json::s(zv, "kind") == "danger" {
+                let zid = json::s(zv, "id");
+                let bound = bindings.get(&zid).and_then(|v| v.as_object()).unwrap_or_else(|| panic!("{id}: danger zone '{zid}' lacks zone_bindings"));
+                let encs = json::aget(bound, "encounters");
+                assert!(!encs.is_empty(), "{id}: danger zone '{zid}' has no encounters");
+                for row in encs {
+                    let eid = row.as_array().and_then(|a| a.first()).map(json::gstr).unwrap_or_default();
+                    assert!(!json::s(d.resolve(WORLD, "encounters", &eid), "_qid").is_empty(), "{id}.{zid}: missing encounter '{eid}'");
+                    if eid == "enc_scav_alley" && id != "alleyway_junction_7" {
+                        non_alley_enc_scav_alley.push(format!("{id}.{zid}"));
+                    }
+                }
+            }
+        }
+
+        let ground_tiles: String = json::aget(&t, "ground").iter().map(json::gstr).collect();
+        for key in json::dget(&t, "ground_legend").keys() {
+            assert!(ground_tiles.contains(key), "{id}: ground_legend key '{key}' is unused");
+        }
+
+        let used_marker_anchors: HashSet<String> = explore::markers_of(&loc).iter().map(|m| json::s(m, "anchor")).filter(|s| !s.is_empty()).collect();
+        for a in json::aget(&t, "anchors").iter().map(json::dict) {
+            let aid = json::s(a, "id");
+            let wired = aid == explore::SPAWN
+                || aid == "patrol_start"
+                || (id == "tallow_vats" && aid == "siphon_in")
+                || used_marker_anchors.contains(&aid)
+                || inbound_anchors.contains(&(id.to_string(), aid.clone()));
+            assert!(wired, "{id}: unused anchor '{aid}'");
+        }
+
+        let rows = explore::rows_of(&t);
+        for p in json::aget(&t, "props").iter().map(json::dict) {
+            if json::s(p, "art").ends_with("_side") {
+                side_props += 1;
+                let (x, y, w, h) = (json::i(p, "x", -1), json::i(p, "y", -1), json::i(p, "w", 0), json::i(p, "h", 0));
+                assert_eq!(w, 1, "{id} side prop '{}' has width 1", json::s(p, "id"));
+                let flip = json::b(p, "flip", false);
+                for dy in 0..h {
+                    let row = &rows[(y + dy) as usize];
+                    assert_eq!(row[x as usize], '#', "{id} side prop '{}' must stand on wall tile", json::s(p, "id"));
+                    let face_x = if flip { x - 1 } else { x + 1 };
+                    assert_eq!(row[face_x as usize], '.', "{id} side prop '{}' (flip={flip}) must face open tile at x={face_x}", json::s(p, "id"));
+                }
+            }
+        }
+    }
+    assert!(non_alley_enc_scav_alley.is_empty(), "FB-272(e): shared enc_scav_alley outside alleyway_junction_7: {non_alley_enc_scav_alley:?}");
+    assert!(side_props >= 20, "Sunk Ward maps bind side-profile props ({side_props})");
+}

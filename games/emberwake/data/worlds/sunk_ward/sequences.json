@@ -35,11 +35,12 @@
 					"kind": "fight",
 					"encounter": "enc_pro_0b",
 					"on_lost": "retry",
-					"music": "danger"
+					"music": "prologue_tension"
 				},
 				{
 					"kind": "vignette",
-					"vignette": "vg_bridge_cart"
+					"vignette": "vg_bridge_cart",
+					"music": "prologue_tension"
 				},
 				{
 					"kind": "effects",
@@ -58,7 +59,7 @@
 					"kind": "fight",
 					"encounter": "enc_pro_0c",
 					"on_lost": "retry",
-					"music": "danger"
+					"music": "prologue_tension"
 				},
 				{
 					"kind": "vignette",

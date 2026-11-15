@@ -1702,3 +1702,83 @@ fn the_alum_inhaler_is_the_snapped_alum_inhaler() {
     assert!(reward.contains(name), "q_hook_counter_still's reward names it: {reward}");
     assert!(!reward.contains("prototype Alum Inhaler"), "the old name is gone: {reward}");
 }
+
+/// PR5-61 (STORYMUSIC-WIRE1): `game.json` keeps both `prologue_approach` and `prologue_tension`, story
+/// vignettes/sequences bind their music cues, Sunk Ward locations bind hub/threat contexts matching shipped tracks,
+/// and all Sunk Ward + story `.ogg` tracks exist on disk.
+#[test]
+fn storymusic_cues_and_sunk_ward_contexts_are_wired() {
+    let dir = data_dir();
+    let d = data();
+    let game_raw = std::fs::read_to_string(dir.parent().expect("game dir").join("game.json")).expect("read game.json");
+    let game_json: Value = serde_json::from_str(&game_raw).expect("parse game.json");
+    let music_keys: Vec<String> = json::sget(json::dict(&game_json), "music_keys");
+    for k in [
+        "menu", "field", "travel", "town", "shop", "danger", "combat", "encounter", "boss",
+        "story_opening", "prologue_approach", "prologue_tension", "story_escape", "story_goodbye",
+    ] {
+        assert!(music_keys.iter().any(|x| x == k), "game.json music_keys missing '{k}'");
+    }
+
+    for (vid, want_music) in [
+        ("vg_open", "story_opening"),
+        ("vg_meat_market", "story_escape"),
+        ("vg_bridge_cart", "prologue_tension"),
+        ("vg_debate_1", "town"),
+        ("vg_int_surge", "danger"),
+        ("vg_debate_2", "town"),
+        ("vg_m5_gate", "story_goodbye"),
+        ("vg_debate_3", "story_goodbye"),
+    ] {
+        assert_eq!(json::s(entry(&d, "vignettes", vid), "music"), want_music, "vignette '{vid}' music");
+    }
+
+    let step_music = |seq_id: &str, kind: &str, target: &str| -> String {
+        json::aget(entry(&d, "sequences", seq_id), "steps")
+            .iter()
+            .map(json::dict)
+            .find(|s| json::s(s, kind) == target)
+            .map(|s| json::s(s, "music"))
+            .unwrap_or_else(|| panic!("{seq_id} has {kind} '{target}'"))
+    };
+    assert_eq!(step_music("new_game", "vignette", "vg_open"), "story_opening");
+    assert_eq!(step_music("new_game", "encounter", "enc_pro_0a"), "prologue_tension");
+    assert_eq!(step_music("new_game", "vignette", "vg_meat_market"), "story_escape");
+    assert_eq!(step_music("new_game", "encounter", "enc_pro_0b"), "prologue_tension");
+    assert_eq!(step_music("new_game", "vignette", "vg_bridge_cart"), "prologue_tension");
+    assert_eq!(step_music("new_game", "encounter", "enc_pro_0c"), "prologue_tension");
+    assert_eq!(step_music("new_game", "vignette", "vg_debate_1"), "town");
+    assert_eq!(step_music("seq_interlude", "vignette", "vg_int_surge"), "danger");
+    assert_eq!(step_music("seq_interlude", "encounter", "enc_evt_05"), "boss");
+    assert_eq!(step_music("seq_interlude", "vignette", "vg_debate_2"), "town");
+    assert_eq!(step_music("seq_after_m5", "vignette", "vg_m5_gate"), "story_goodbye");
+    assert_eq!(step_music("seq_after_m5", "vignette", "vg_debate_3"), "story_goodbye");
+
+    assert_eq!(json::s(entry(&d, "locations", "sluice_undercroft"), "kind"), "town");
+    for loc in ["ash_crawl_crossroads", "fourth_kiln", "alleyway_junction_7", "tallow_vats"] {
+        assert_eq!(json::s(entry(&d, "locations", loc), "kind"), "ruin", "{loc} plays danger music");
+    }
+    assert_eq!(json::s(entry(&d, "locations", "crucible_watchpost"), "kind"), "camp");
+
+    let has_boss = |eid: &str| {
+        json::aget(entry(&d, "encounters", eid), "enemies")
+            .iter()
+            .map(|e| e.as_str().map(str::to_string).unwrap_or_else(|| json::s(json::dict(e), "unit")))
+            .any(|uid| json::s(d.entry("units", &uid), "tier") == "boss")
+    };
+    for boss_enc in ["enc_evt_01", "enc_evt_02", "enc_evt_03", "enc_evt_04", "enc_evt_05", "enc_evt_06", "enc_evt_06_overlook"] {
+        assert!(has_boss(boss_enc), "{boss_enc} resolves BOSS music context via a boss unit");
+    }
+    for combat_enc in ["enc_pro_0a", "enc_pro_0b", "enc_pro_0c", "enc_scav_alley", "enc_scav_crossroads", "enc_scav_kiln", "enc_scav_vats", "enc_scav_watchpost", "enc_patrol_third_ward", "enc_patrol_slag_gate"] {
+        assert!(!has_boss(combat_enc), "{combat_enc} stays COMBAT context (non-boss)");
+    }
+
+    let music_dir = dir.parent().expect("game dir").join("assets/audio/music");
+    for stem in [
+        "story_opening", "prologue_tension", "story_escape", "story_goodbye",
+        "sunk_ward_town", "sunk_ward_danger", "sunk_ward_shop", "sunk_ward_travel",
+        "sunk_ward_boss", "sunk_ward_combat", "sunk_ward_combat_2", "sunk_ward_combat_3",
+    ] {
+        assert!(music_dir.join(format!("{stem}.ogg")).is_file(), "missing track assets/audio/music/{stem}.ogg");
+    }
+}
