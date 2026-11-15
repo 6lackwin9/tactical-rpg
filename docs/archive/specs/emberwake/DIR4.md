@@ -1,5 +1,7 @@
 # DIR4: Four facing directions on the sprite rig
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: approved (user 2026-10-23): scope A (front and back views of idle, walk and the main attack); a warrior-only
 pilot in both looks, then the user's review; weapon looks baked (W1); the named warriors bake only the 2H family
 they carry; a diagonal target keeps the side view; DIR4-R2 and R3 wait for STAGE1's camera pick; the region map

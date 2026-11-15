@@ -1,5 +1,7 @@
 # ART2: portrait prompts
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: for the user's image generation (2026-10-20). Attach Mara Voss's portrait as the style reference; save each result as `art_src/<id>.png`; `tools/portraits/pixelize.py` turns it into the game portrait. Where the game data does not say whether a character is a man or a woman, the prompt uses the planner's best guess (user 2026-10-20: "use your best guess"): Tev, Kit and the patrol warchief men, Sella, Alda, Hest, Nok and Vex women; change any of them.
 
 Every prompt starts with the same style block:

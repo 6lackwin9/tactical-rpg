@@ -1,5 +1,7 @@
 # PORTRAITFX1 expression sheets: prompts
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: PORTRAITFX1-XA batch 1 PLACED 2026-11-01 (synced `2026-11-11` to canonical `CANON.md` 3.2 Hub NPC IDs `talia_rusk`, `berek_dorn`, `sabina_kress` for `PR5-39` & `AI-05`; `berek_dorn` keeps his loupe rule `1:1`). Laid out like [ART3_PROMPTS.md](ART3_PROMPTS.md): the shared style block (the 2x2 template of
 `docs/specs/PORTRAITFX1_TASKS.md` 2.4.2, own-portrait wording, the four cells fixed), then one section per id with
 its character lines from ART3_PROMPTS.md; the sent prompt is the style block, a blank line, the id's block. Each

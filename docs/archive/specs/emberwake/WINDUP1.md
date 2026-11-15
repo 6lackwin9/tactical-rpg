@@ -1,5 +1,7 @@
 # WINDUP1: wind-up, intent stance and stagger animations
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status update (2026-10-28): approved; the open questions answered as recommended (user 2026-10-28, decision "WINDUP1 and STATUSFX1 spec answers" in combat.md).
 
 Status: spec (2026-10-28). Approved by the user 2026-10-28 (decisions "Attack timing on the board" B and "WINDUP1

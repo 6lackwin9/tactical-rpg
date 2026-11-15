@@ -1,5 +1,7 @@
 # ART3: Scarlet Lullaby portrait prompts
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: for the agreed image run (user 2026-10-25: "ok to generate monster and character art using API"; 11 portraits,
 2 candidates each, Gemini 3 Pro Image). Same route as [ART2](ART2.md): Mara Voss's portrait
 (`art_src/mara_voss.png`) goes along as the style reference, so the new portraits sit beside the ART2 ones;

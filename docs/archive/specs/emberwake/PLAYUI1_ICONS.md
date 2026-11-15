@@ -1,5 +1,7 @@
 # PLAYUI1: UI icon sheet
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: approved for one API image by the user (2026-10-22: "Generate via API (1 image)"). Task PLAYUI1-I, spec `PLAYUI1.md` section 6: 22 icons (32 x 32 PNG, transparent, at most 16 colours, readable at 12 to 16 px) plus 3 spare variants, as one 5 x 5 sheet on a flat magenta key. Generate with `tools/portraits/generate.py run <model> ui_1 --file games/emberwake/docs/specs/PLAYUI1_ICONS.md --no-ref`; cut with `tools/portraits/sheets.py ui art_src/ui_1.png ui_1`, which writes each icon to its layer path.
 
 ## Sheet ui_1 (`ui_1`)

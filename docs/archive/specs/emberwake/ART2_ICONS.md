@@ -1,5 +1,7 @@
 # ART2: icon sheets
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: approved for the API (user 2026-10-20: "go ahead with icons generation"). One image per sheet, sixteen icons each; `tools/portraits/sheets.py slice` cuts a sheet into icons. Tile tints by kind: attack deep dark red, support deep dark green, defend deep dark blue, move deep dark teal, focus deep dark gold-brown, status deep dark purple, rest dark slate grey, item dark slate grey.
 
 ## Sheet skills_1 (`skills_1`)

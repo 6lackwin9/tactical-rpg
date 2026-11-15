@@ -1,5 +1,7 @@
 # REVEAL1: Enterable Indoor Rooms, Roof Fade, Interior Walls & Map Boundaries
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: **approved** (user 2026-11-14 via `/art-ui-session` `AO-06`; ready for Build `PR5-54` ahead of `SUNKWARD-MAPS1` `PR5-55`).
 Depends on: `PROPS1-L1..L2` (built), `REGIONGROUND1-E1..L` (built).
 Layers: kit (`rpgkit_data`, `rpgkit_content` map/prop/zone checks & schema), game (`emberwake_gui/src/{region,props,ground}.rs`, `grounds.json`).
