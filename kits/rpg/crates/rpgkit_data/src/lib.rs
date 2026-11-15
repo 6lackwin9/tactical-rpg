@@ -1749,11 +1749,8 @@ pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
 /// 4.2: a card's style.
 pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
 /// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`; FX1 5.1: a
-/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks) was `ash`, still taken (`CARD_KEY_ALIASES`).
+/// card's camera `shake`; FB-206 (2b): `particles_rise` (falling specks); ASSETORG4 dropped its old-name alias.
 pub const CARD_KEYS: [&str; 16] = ["style", "image", "top", "bottom", "particles_rise", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake"];
-/// FB-206 (2b): the old card keys still taken, (old, key of `CARD_KEYS`): the kit's copy of the engine's
-/// `aegis_ui::vignette::CARD_KEY_ALIASES` (a GUI test keeps them equal); a card holding both names is refused.
-pub const CARD_KEY_ALIASES: [(&str, &str); 1] = [("ash", "particles_rise")];
 /// FX1 5.1: the camera shake presets a card's `shake` and a phase's shake effect may name: the kit's copy of the
 /// engine's `aegis_ui::fx::SHAKE_PRESETS` (the content crates do not depend on `aegis_ui`; a GUI test keeps them equal).
 pub const SHAKE_PRESETS: [&str; 5] = ["jolt", "heavy", "toll", "tremor", "quake"];
@@ -1931,8 +1928,7 @@ pub const PORTRAIT_EVENTS: [&str; 11] = ["hit", "crit", "guard_hit", "heal", "br
 /// PORTRAITFX2 5.3: the event whose rows read `min_level` (the skill's level).
 pub const PORTRAIT_SKILL_EVENT: &str = "skill";
 /// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
-/// crates do not depend on the UI, so a game test keeps the two equal). FB-206 (2b): a row's old overlay name
-/// (`aegis_core::assets::PRIMITIVE_ALIASES`: `veins`, `eye_glow`, `ash`, `smoke`) reads as its canonical one.
+/// crates do not depend on the UI, so a game test keeps the two equal). ASSETORG4: no other name is read.
 pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"];
 /// 5.1: the jolt presets (`aegis_ui::portrait_fx::PORTRAIT_JOLTS`).
 pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
@@ -2015,7 +2011,7 @@ impl PortraitCue {
             stat: string(o, "stat", ""),
             below: int(o, "below", 0),
             drop_pct: int(o, "drop_pct", 0),
-            effect: aegis_core::assets::canonical_primitive(&string(o, "effect", "flash")).to_string(),
+            effect: string(o, "effect", "flash"),
             intensity: float(o, "intensity", 1.0),
             ms: int(o, "ms", 0),
             preset: string(o, "preset", ""),

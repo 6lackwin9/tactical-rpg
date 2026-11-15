@@ -32,6 +32,8 @@ pub struct Source {
     pub start_worlds: Vec<String>,
     /// MAP-HOOKS1: the manifest's `world_map_lantern_flicker` (`lantern_flicker_of`; false without it).
     pub world_map_lantern_flicker: bool,
+    /// ASSETORG4: the manifest's `portrait_overlays` (`portrait_overlays_of`; false without it).
+    pub portrait_overlays: bool,
     pub errors: Vec<String>,
 }
 
@@ -103,9 +105,29 @@ pub const FROM_ACT_MAX: i64 = 9;
 /// roads a hovered place shows flicker like lantern light (never under the player's reduce-motion setting). Without it
 /// (or false) the roads hold still.
 pub const WORLD_MAP_LANTERN_FLICKER: &str = "world_map_lantern_flicker";
+/// ASSETORG4 (FB-227): the optional game manifest switch of the engine's opt-in portrait overlay layer
+/// (`aegis_ui::portrait_overlays`: glow, lines, point glow, particles rise, drift over the portraits of talk boxes,
+/// vignettes, party cards and timeline icons), `true` or `false`; the player's setting can still turn it off. Without it
+/// (or false) portraits draw their base life, states, reactions and expressions only, so a game opts in. The kit's
+/// copy of the engine's settings key `aegis_ui::portrait_overlays::SETTING` (a GUI test keeps them equal).
+pub const PORTRAIT_OVERLAYS: &str = "portrait_overlays";
 /// The game manifest keys the kit registers (E2.2-S2: checked by `aegis content manifest` and the data check), in the
 /// order a write keeps them.
-pub const MANIFEST_KEYS: [&str; 5] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS, DURABILITY, WORLD_MAP_LANTERN_FLICKER];
+pub const MANIFEST_KEYS: [&str; 6] = [PurseCaps::KEYS[0], PurseCaps::KEYS[1], MUSIC_KEYS, DURABILITY, WORLD_MAP_LANTERN_FLICKER, PORTRAIT_OVERLAYS];
+
+/// ASSETORG4: a game manifest object's `portrait_overlays` (false when missing or not a boolean, which
+/// `portrait_overlays_problems` reports).
+pub fn portrait_overlays_of(m: &Dict) -> bool {
+    m.get(PORTRAIT_OVERLAYS).and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// ASSETORG4: what keeps a manifest's `portrait_overlays` from being valid: present and not `true` or `false`.
+pub fn portrait_overlays_problems(m: &Dict) -> Vec<String> {
+    match m.get(PORTRAIT_OVERLAYS) {
+        Some(v) if !v.is_boolean() => vec![format!("game.json: {PORTRAIT_OVERLAYS} must be true or false.")],
+        _ => Vec::new(),
+    }
+}
 
 /// MAP-HOOKS1: a game manifest object's `world_map_lantern_flicker` (false when missing or not a boolean, which
 /// `lantern_flicker_problems` reports).
@@ -164,13 +186,14 @@ pub fn music_keys_problems(m: &Dict) -> Vec<String> {
     out
 }
 
-/// The kit's problems of a game manifest object: the purse caps', the music keys', (PK2-S4) the durability block's and
-/// (MAP-HOOKS1) the lantern flicker switch's.
+/// The kit's problems of a game manifest object: the purse caps', the music keys', (PK2-S4) the durability block's,
+/// (MAP-HOOKS1) the lantern flicker switch's and (ASSETORG4) the portrait overlay switch's.
 pub fn manifest_problems(m: &Dict) -> Vec<String> {
     let mut out = PurseCaps::problems(m);
     out.extend(music_keys_problems(m));
     out.extend(durability_problems(m));
     out.extend(lantern_flicker_problems(m));
+    out.extend(portrait_overlays_problems(m));
     out
 }
 
@@ -259,7 +282,8 @@ pub fn load(data_dir: &Path) -> Source {
     let from_act = manifest.as_ref().map_or(0, from_act_of);
     let start_worlds = manifest.as_ref().map(|m| json::sget(m, "start_worlds")).unwrap_or_default();
     let world_map_lantern_flicker = manifest.as_ref().is_some_and(lantern_flicker_of);
-    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, start_worlds, world_map_lantern_flicker, errors }
+    let portrait_overlays = manifest.as_ref().is_some_and(portrait_overlays_of);
+    Source { catalog: Value::Object(cat), worlds, game: Value::Object(game), purse: PurseCaps::beside(data_dir), music_keys, from_act, start_worlds, world_map_lantern_flicker, portrait_overlays, errors }
 }
 
 /// ContentSchema.normalize of a catalog entry of `kind`.

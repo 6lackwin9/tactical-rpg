@@ -164,23 +164,33 @@ class Face(unittest.TestCase):
         src = img(plain).convert("RGBA")
         self.assertEqual(sheet.getpixel((w * k + 20 * k, 20 * k)), src.getpixel((20, 20)), "no sidecar: the bare portrait")
 
-    def test_fb206_old_names_read_as_the_new_ones_and_set_writes_the_new_ones(self):
-        old = {"size": 48, "eyes": [[18, 20, 5, 3]], "veins": [[30, 30, 45, 10]],
-               "idle": [{"effect": "veins"}, {"effect": "eye_glow"}, {"effect": "ash"}, {"effect": "smoke"}]}
-        new = {"size": 48, "eyes": [[18, 20, 5, 3]], "lines": [[30, 30, 45, 10]],
-               "idle": [{"effect": "lines"}, {"effect": "point_glow"}, {"effect": "particles_rise"}, {"effect": "drift"}]}
-        self.assertEqual(face.parse_face(old), face.parse_face(new))
-        self.assertEqual(face.parse_face(dict(new, veins=[]))[1],
-                         ["the face sidecar holds both 'lines' and its old name 'veins' (keep 'lines')."])
+    def test_assetorg4_old_names_are_refused_and_set_writes_canonical_names(self):
+        old = {"size": 48, "eyes": [[18, 20, 5, 3]], "veins": [[30, 30, 45, 10]]}
+        self.assertEqual(face.parse_face(old)[1],
+                         [f"the face sidecar has no key 'veins' (keys: {', '.join(face.FACE_KEYS)})."])
+        for name in ["veins", "eye_glow", "ash", "smoke"]:
+            parsed, bad = face.parse_face({"size": 48, "idle": [{"effect": name}]})
+            self.assertEqual(bad, [])
+            self.assertEqual(face.face_problems(parsed, 0),
+                             [f"idle '{name}' is not an overlay (one of {', '.join(face.IDLE_OVERLAYS)})."])
         png = self.copy()
         face.face_file(png).write_text(json.dumps(old), encoding="utf-8")
-        code, _, _ = run("set", png, "--veins", "28,28,90,8")
+        self.assertNotEqual(run("set", png, "--lines", "28,28,90,8")[0], 0, "an old sidecar is refused, not migrated")
+        code, _, _ = run("set", png, "--fresh", "--eyes", "18,20,5,3", "--lines", "28,28,90,8",
+                         "--idle", "lines", "point_glow", "particles_rise", "drift")
         self.assertEqual(code, 0)
         side = json.loads(face.face_file(png).read_text(encoding="utf-8"))
         self.assertNotIn("veins", side)
-        self.assertEqual(side["lines"], [[28, 28, 90, 8]], "--veins is the old spelling of --lines")
+        self.assertEqual(side["lines"], [[28, 28, 90, 8]])
         self.assertEqual([o["effect"] for o in side["idle"]], ["lines", "point_glow", "particles_rise", "drift"])
 
+    def test_assetorg4_no_shipped_sidecar_holds_an_old_name(self):
+        for layer in face.LAYERS:
+            for f in sorted(layer.glob("**/*.face.json")):
+                raw = json.loads(f.read_text(encoding="utf-8"))
+                self.assertNotIn("veins", raw, f)
+                for e in raw.get("idle", []):
+                    self.assertNotIn(e.get("effect"), ["veins", "eye_glow", "ash", "smoke"], f)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

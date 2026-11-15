@@ -23,6 +23,7 @@ use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::fx::Clock;
 use aegis_ui::painter::Painter;
 use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, Motion, PortraitFx, PortraitOpts};
+use aegis_ui::portrait_overlays::Mount;
 use aegis_ui::screen::Settings;
 use aegis_ui::ui::{SMALL};
 use emberwake_battle::portrait::{self, Look};
@@ -322,9 +323,11 @@ impl Faces {
     }
 
     /// How portraits draw on this screen: the reduce-motion setting (or the page's own check), the rim key, anchors,
-    /// the screen's tier cap (`tier_cap`).
-    pub fn opts(&self, settings: &Settings) -> PortraitOpts {
-        PortraitOpts { reduce_motion: self.reduce.unwrap_or_else(|| settings.reduce_motion()), rim_default: Some(RIM), show_anchors: self.show_anchors, tier_cap: self.tier_cap }
+    /// the screen's tier cap (`tier_cap`); ASSETORG4: the engine's overlay layer mounted when the game's manifest
+    /// mounts it (`game_overlays`, `Data::portrait_overlays`) and the player's setting has not turned it off
+    /// (`Mount::resolve`).
+    pub fn opts(&self, settings: &Settings, game_overlays: bool) -> PortraitOpts {
+        PortraitOpts { reduce_motion: self.reduce.unwrap_or_else(|| settings.reduce_motion()), rim_default: Some(RIM), show_anchors: self.show_anchors, tier_cap: self.tier_cap, overlays: Mount::resolve(game_overlays, settings) }
     }
 
     /// Holds `cues` on `key` beside its look until the next `pin` (the Gallery's toggles).
@@ -348,7 +351,7 @@ impl Faces {
     /// when no file of its chain loads (the initial letter is drawn instead).
     pub fn draw(&mut self, p: &mut Painter, cx: &mut Cx, who: &Who, look: &Look, surface: &str, r: Rect) -> bool {
         let data = cx.data.clone();
-        let opts = self.opts(&cx.settings);
+        let opts = self.opts(&cx.settings, data.portrait_overlays);
         let rows = expression_fx_of(&data.cat.portrait_expressions);
         if self.expressions != rows {
             self.expressions = rows;
@@ -494,8 +497,6 @@ pub(crate) mod tests {
     #[test]
     fn the_kit_effect_names_are_the_engines() {
         assert_eq!(emberwake_data::PORTRAIT_EFFECTS, aegis_ui::portrait_fx::EFFECTS);
-        // FB-206 (2b): the kit's card key aliases are the engine's
-        assert_eq!(emberwake_data::CARD_KEY_ALIASES, aegis_ui::vignette::CARD_KEY_ALIASES);
         assert_eq!(emberwake_data::PORTRAIT_JOLTS, aegis_ui::portrait_fx::PORTRAIT_JOLTS);
         // PORTRAITFX1-EX: the marks and their boxes
         assert_eq!(emberwake_data::PORTRAIT_MARKS, aegis_ui::portrait_fx::MARKS);
@@ -609,11 +610,10 @@ pub(crate) mod tests {
         assert_eq!(portrait::holds(&rows, &look_of_member(&d, &gs, &m), "dialogue").len(), 1, "the member's carried HP matches below 100");
     }
 
-    /// G2: a portrait whose sidecar holds `point_glow` draws it with no cue rows at all (here under its old name
-    /// `eye_glow`, as the shipped sidecars hold it: FB-206 (2b)).
+    /// G2: a portrait whose sidecar holds `point_glow` draws it with no cue rows at all.
     #[test]
     fn a_sidecar_idle_overlay_draws_without_cue_rows() {
-        let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
+        let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]});
         let root = layer("idle", "portraits/npcs/ida.png", 96, [90, 70, 60], Some(face));
         let mut art = Art::layered(Layers::of(vec![root]));
         let mut g = gfx();
@@ -624,10 +624,49 @@ pub(crate) mod tests {
         for ms in [1000.0, aegis_ui::portrait_fx::EASE_MS as f64] {
             faces.clock.advance(ms, 1.0);
             faces.begin();
-            assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(10, 10, 96, 96), &PortraitOpts::default()));
+            // Emberwake mounts the overlay layer (game.json `portrait_overlays`)
+            assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(10, 10, 96, 96), &PortraitOpts::default().with_overlays(Mount::Mounted)));
         }
         let live = faces.get("ida").expect("kept").live(faces.now());
         assert!(live.contains(&"point_glow"), "{live:?}");
+    }
+
+    /// ASSETORG4 (FB-227): Emberwake's manifest mounts the engine's portrait overlay layer (`portrait_overlays`; the
+    /// kit's key is the engine's settings key), so its talk boxes, vignettes, party cards and timeline icons draw the
+    /// sidecars' overlays; the player's setting (on by default) turns them off, leaving the base portrait (its blink).
+    #[test]
+    fn emberwake_mounts_the_portrait_overlays_and_the_player_can_turn_them_off() {
+        assert_eq!(emberwake_content::source::PORTRAIT_OVERLAYS, aegis_ui::portrait_overlays::SETTING);
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        let (data, _) = Data::open(&dir).expect("data");
+        assert!(data.portrait_overlays, "Emberwake's game.json sets portrait_overlays: true");
+        let mut settings = Settings::load(std::env::temp_dir().join("emberwake_portrait_overlays_none.json"), Settings::defaults(crate::screens::default_settings()));
+        assert_eq!(settings.v[aegis_ui::portrait_overlays::SETTING], json!(true), "the player's switch is on by default");
+        let faces = Faces::default();
+        assert_eq!(faces.opts(&settings, data.portrait_overlays).overlays, Mount::Mounted);
+        assert_eq!(faces.opts(&settings, false).overlays, Mount::Unmounted, "a game that does not mount the layer draws none");
+        settings.v[aegis_ui::portrait_overlays::SETTING] = json!(false);
+        assert_eq!(faces.opts(&settings, data.portrait_overlays).overlays, Mount::Unmounted, "the player turned them off");
+        // the same sidecar drawn under each: the overlay only when mounted, the blink either way
+        let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "point_glow", "color": "#c084fc", "intensity": 0.8}]});
+        let root = layer("mount", "portraits/npcs/ida.png", 96, [90, 70, 60], Some(face));
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        for (game, on) in [(true, false), (true, true), (false, true)] {
+            settings.v[aegis_ui::portrait_overlays::SETTING] = json!(on);
+            let opts = Faces::default().opts(&settings, game);
+            let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
+            let mut g = gfx();
+            let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+            let mut faces = Faces::default();
+            for ms in [1000.0, aegis_ui::portrait_fx::EASE_MS as f64] {
+                faces.clock.advance(ms, 1.0);
+                faces.begin();
+                assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(10, 10, 96, 96), &opts));
+            }
+            let live = faces.get("ida").expect("kept").live(faces.now());
+            assert_eq!(live.contains(&"point_glow"), game && on, "game {game}, player {on}: {live:?}");
+            assert!(live.contains(&"blink"), "game {game}, player {on}: the base portrait lives: {live:?}");
+        }
     }
 
     /// G3: a character with no portrait file draws today's initial letter.
@@ -684,7 +723,7 @@ pub(crate) mod tests {
         let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
         let mut faces = Faces::default();
         let who = Who { key: "amber".into(), tier: "npc".into(), id: "amber".into(), name: "Amber".into(), ..Who::default() };
-        let opts = faces.opts(&Settings::load(std::env::temp_dir().join("emberwake_portraits_none.json"), crate::screens::default_settings()));
+        let opts = faces.opts(&Settings::load(std::env::temp_dir().join("emberwake_portraits_none.json"), crate::screens::default_settings()), true);
         assert_eq!(opts.rim_default, Some(RIM));
         let seed = aegis_ui::portrait_fx::seed_of("amber");
         // two clock times whose flicker factors differ

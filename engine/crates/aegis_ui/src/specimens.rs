@@ -32,6 +32,7 @@ use crate::screen::PointerPhase;
 use crate::ground::{self, GroundJob, GroundKey, GroundLayer};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
 use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
+use crate::portrait_overlays::Mount;
 use aegis_core::assets::{Face, Layers};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
@@ -383,7 +384,8 @@ impl PortraitDemo {
     }
 
     fn opts(&self) -> PortraitOpts {
-        PortraitOpts { reduce_motion: self.reduce, rim_default: None, show_anchors: self.anchors, tier_cap: None }
+        // the page shows every overlay toggle, so it mounts the opt-in overlay layer (ASSETORG4)
+        PortraitOpts { reduce_motion: self.reduce, rim_default: None, show_anchors: self.anchors, tier_cap: None, overlays: Mount::Mounted }
     }
 
     /// The portrait's agent state at the page's clock (`PortraitFx::state`).

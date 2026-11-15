@@ -49,6 +49,9 @@ pub struct Data {
     pub start_worlds: Vec<String>,
     /// MAP-HOOKS1: the game manifest's `world_map_lantern_flicker` (the world map's roads flicker; false from values).
     pub world_map_lantern_flicker: bool,
+    /// ASSETORG4: the game manifest's `portrait_overlays` (the game mounts the engine's portrait overlay layer; false
+    /// from values).
+    pub portrait_overlays: bool,
     /// HOOKS1 CN3: per world whose `classes` overlay replaces a class path, the catalog with those paths (built at load;
     /// other worlds build with `cat`).
     world_cats: IndexMap<String, Arc<Catalog>>,
@@ -82,6 +85,7 @@ impl Data {
         d.from_act = src.from_act;
         d.start_worlds = src.start_worlds;
         d.world_map_lantern_flicker = src.world_map_lantern_flicker;
+        d.portrait_overlays = src.portrait_overlays;
         Ok((d, src.errors))
     }
 
@@ -130,6 +134,7 @@ impl Data {
             from_act: 0,
             start_worlds: Vec::new(),
             world_map_lantern_flicker: false,
+            portrait_overlays: false,
             world_cats: IndexMap::new(),
         };
         d.refresh_world_cats();

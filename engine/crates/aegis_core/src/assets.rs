@@ -13,8 +13,9 @@
 //! at a frame, optionally holding it still after the intro.
 //! Face sidecars (PORTRAITFX1-E, spec 4.1): `<portrait>.face.json` beside a portrait PNG holds its anchors in image
 //! px (eye boxes, glow anchors, line roots, the rim key, idle overlays): `face_file`, `parse_face`, `face_problems`.
-//! FB-206 (2b): the overlay primitives have generic names (`lines`, `point_glow`, `particles_rise`, `drift`); a sidecar
-//! or cue written with the old names (`veins`, `eye_glow`, `ash`, `smoke`) still loads (`PRIMITIVE_ALIASES`).
+//! FB-206 (2b): the overlay primitives have generic names (`lines`, `point_glow`, `particles_rise`, `drift`); ASSETORG4
+//! (FB-225) dropped the read-time aliases of their old names, so a sidecar holding another key is refused and an idle
+//! effect outside `IDLE_OVERLAYS` is a `face_problems` problem.
 
 use crate::json::{self, Dict};
 use crate::vfs;
@@ -747,29 +748,17 @@ pub fn read_json(layers: &Layers, rel: &str) -> Option<Value> {
 
 // ---- Portrait face sidecars (PORTRAITFX1 4.1) ---------------------------------------------------------------------
 
-/// The keys a face sidecar may hold.
+/// The keys a face sidecar may hold (any other key is refused).
 pub const FACE_KEYS: [&str; 11] = ["size", "border", "eyes", "blink", "lid", "glow", "lines", "mouth", "face", "rim", "idle"];
-/// FB-206 (2b): the old sidecar keys a reader still takes, (old, key of `FACE_KEYS`); a sidecar holding both names of
-/// one key is refused.
-pub const FACE_KEY_ALIASES: [(&str, &str); 1] = [("veins", "lines")];
 /// PORTRAITFX1-EX: the face box a sidecar without its own `face` takes from its eye boxes, in units of the eyes' span
 /// (the union's width, at least `size / 5`) around the union's centre and top: x from -0.9 span, y from -0.6 span,
 /// 1.8 span wide, 1.9 span tall (clamped to the inner rect).
 pub const FACE_FROM_EYES: [f32; 4] = [0.9, 0.6, 1.8, 1.9];
 /// The keys of one `idle` entry.
 pub const IDLE_KEYS: [&str; 3] = ["effect", "color", "intensity"];
-/// The overlays a sidecar's `idle` may name.
+/// The overlays a sidecar's `idle` may name: a glow on the glow anchors, growing lines from roots, a glow on the eye
+/// boxes, falling specks, rising puffs (no other name is read: ASSETORG4 dropped the old aliases).
 pub const IDLE_OVERLAYS: [&str; 5] = ["glow", "lines", "point_glow", "particles_rise", "drift"];
-/// FB-206 (2b): the old names of the overlay primitives, (old, canonical): growing lines from roots, a glow on the eye
-/// boxes, falling specks, rising puffs. Readers of sidecars and cue rows map them (`canonical_primitive`); writers
-/// write the canonical name.
-pub const PRIMITIVE_ALIASES: [(&str, &str); 4] = [("veins", "lines"), ("eye_glow", "point_glow"), ("ash", "particles_rise"), ("smoke", "drift")];
-
-/// FB-206 (2b): the canonical name of an effect: an old primitive name's new one (`PRIMITIVE_ALIASES`), any other name
-/// unchanged.
-pub fn canonical_primitive(name: &str) -> &str {
-    PRIMITIVE_ALIASES.iter().find(|(old, _)| *old == name).map_or(name, |&(_, new)| new)
-}
 /// A sidecar's `size` range (image px).
 pub const FACE_SIZE_MIN: i32 = 16;
 pub const FACE_SIZE_MAX: i32 = 1024;
@@ -794,7 +783,7 @@ pub struct Face {
     /// The lid colour (None: sampled 1 px above each eye box).
     pub lid: Option<[u8; 3]>,
     pub glow: Vec<[i32; 3]>,
-    /// The `lines` overlay's roots (sidecar key `lines`, old name `veins`).
+    /// The `lines` overlay's roots (sidecar key `lines`).
     pub lines: Vec<[i32; 4]>,
     /// Reserved for layered puppets: parsed and checked, read by nothing.
     pub mouth: Option<[i32; 4]>,
@@ -902,22 +891,13 @@ fn tuples<const N: usize>(raw: Option<&Value>, label: &str, shape: &str, problem
 
 /// Reads a face sidecar (PORTRAITFX1 4.1): the keys and their types (unknown keys refused, `size` required, colours
 /// "" or `#rrggbb`, whole numbers for every anchor); the ranges and anchor rules are `face_problems`. Every problem is
-/// listed. FB-206 (2b): an old key (`FACE_KEY_ALIASES`) reads as its new one (both in one sidecar: refused), and an
-/// idle effect's old name as its canonical one (`canonical_primitive`), so the parsed face holds canonical names only.
+/// listed. Names are read as written (ASSETORG4: no old-name aliases).
 pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
     let mut p: Vec<String> = Vec::new();
     let Some(o) = v.as_object() else { return Err(vec!["a face sidecar must be an object {size, eyes, ...}.".into()]) };
-    let old_key = |k: &str| FACE_KEY_ALIASES.iter().any(|(old, _)| *old == k);
-    for k in o.keys().filter(|k| !FACE_KEYS.contains(&k.as_str()) && !old_key(k)) {
+    for k in o.keys().filter(|k| !FACE_KEYS.contains(&k.as_str())) {
         p.push(format!("the face sidecar has no key '{k}' (keys: {}).", FACE_KEYS.join(", ")));
     }
-    for (old, new) in FACE_KEY_ALIASES {
-        if o.contains_key(old) && o.contains_key(new) {
-            p.push(format!("the face sidecar holds both '{new}' and its old name '{old}' (keep '{new}')."));
-        }
-    }
-    // a key, or its old name when the sidecar was written before the rename
-    let key = |k: &str| o.get(k).or_else(|| FACE_KEY_ALIASES.iter().find(|(_, new)| *new == k).and_then(|(old, _)| o.get(*old)));
     let size = match o.get("size").map(whole) {
         Some(Some(s)) => s,
         Some(None) => {
@@ -948,7 +928,7 @@ pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
     };
     let lid = colour_or_empty(o.get("lid"), "lid", &mut p);
     let glow = tuples::<3>(o.get("glow"), "glow", "[x, y, r]", &mut p);
-    let lines = tuples::<4>(key("lines"), "lines", "[x, y, deg, len]", &mut p);
+    let lines = tuples::<4>(o.get("lines"), "lines", "[x, y, deg, len]", &mut p);
     let one_box = |key: &str, p: &mut Vec<String>| match o.get(key) {
         None => None,
         Some(Value::Array(a)) if a.is_empty() => None,
@@ -978,7 +958,7 @@ pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
                     p.push(format!("idle entry {n} has no key '{k}' (keys: {}).", IDLE_KEYS.join(", ")));
                 }
                 let effect = match e.get("effect") {
-                    Some(Value::String(s)) => canonical_primitive(s).to_string(),
+                    Some(Value::String(s)) => s.clone(),
                     _ => {
                         p.push(format!("idle entry {n}: effect must be a name."));
                         String::new()

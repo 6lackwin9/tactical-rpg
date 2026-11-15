@@ -43,6 +43,7 @@ pub mod panes;
 pub mod pips;
 pub mod playtest;
 pub mod portrait_fx;
+pub mod portrait_overlays;
 pub mod preview;
 pub mod recordings;
 pub mod screen;

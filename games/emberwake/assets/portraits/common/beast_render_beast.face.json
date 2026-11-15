@@ -5,8 +5,8 @@
   "blink": true,
   "lid": "",
   "glow": [],
-  "veins": [],
+  "lines": [],
   "mouth": [],
   "rim": "",
-  "idle": [{"effect": "eye_glow", "color": "#e11d48", "intensity": 0.7}]
+  "idle": [{"effect": "point_glow", "color": "#e11d48", "intensity": 0.7}]
 }

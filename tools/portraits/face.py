@@ -17,8 +17,8 @@
 # The rules mirror `parse_face` and `face_problems` (aegis_core/src/assets.rs) message for message; the fixtures in
 # fixtures/face/ with their expected_check.txt are asserted by both this tool's test (test_face.py) and the engine's
 # (aegis_core/tests/face_fixtures.rs), which keeps the two in step. FB-206 (2b): the overlay primitives have generic
-# names; a sidecar with the old ones (`veins`, `eye_glow`, `ash`, `smoke`) still reads (PRIMITIVE_ALIASES, the key
-# alias FACE_KEY_ALIASES), and `set` writes the new ones (`--veins` is an old spelling of `--lines`).
+# names (`lines`, `point_glow`, `particles_rise`, `drift`); ASSETORG4 (FB-225) dropped the old-name aliases, so a
+# sidecar holding an old key is refused and an old effect name is an "is not an overlay" problem, as in the engine.
 # Standard library and Pillow only, so the tool can be ported to Rust (decision "Art tools in Python, portable to Rust").
 import argparse
 import json
@@ -33,10 +33,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 LAYERS = [ROOT / "games" / "emberwake" / "assets", ROOT / "kits" / "rpg" / "assets"]
 
 FACE_KEYS = ["size", "border", "eyes", "blink", "lid", "glow", "lines", "mouth", "face", "rim", "idle"]
-FACE_KEY_ALIASES = [("veins", "lines")]
 IDLE_KEYS = ["effect", "color", "intensity"]
 IDLE_OVERLAYS = ["glow", "lines", "point_glow", "particles_rise", "drift"]
-PRIMITIVE_ALIASES = [("veins", "lines"), ("eye_glow", "point_glow"), ("ash", "particles_rise"), ("smoke", "drift")]
 FACE_SIZE_MIN, FACE_SIZE_MAX = 16, 1024
 SCALE = 4
 
@@ -139,27 +137,14 @@ def _one_box(v, key, p):
     return nums
 
 
-def canonical_primitive(name):
-    """An old primitive name's new one (PRIMITIVE_ALIASES), any other name unchanged."""
-    return dict(PRIMITIVE_ALIASES).get(name, name)
-
-
 def parse_face(v):
     """(face dict, []) or (None, problems): the keys and their types, as `parse_face` reads them."""
     p = []
     if not isinstance(v, dict):
         return None, ["a face sidecar must be an object {size, eyes, ...}."]
-    olds = dict(FACE_KEY_ALIASES)
     for k in v:
-        if k not in FACE_KEYS and k not in olds:
+        if k not in FACE_KEYS:
             p.append(f"the face sidecar has no key '{k}' (keys: {', '.join(FACE_KEYS)}).")
-    for old, new in FACE_KEY_ALIASES:
-        if old in v and new in v:
-            p.append(f"the face sidecar holds both '{new}' and its old name '{old}' (keep '{new}').")
-    v = dict(v)
-    for old, new in FACE_KEY_ALIASES:
-        if old in v and new not in v:
-            v[new] = v[old]
     if "size" in v:
         size = whole(v["size"])
         if size is None:
@@ -203,7 +188,6 @@ def parse_face(v):
                 if not isinstance(effect, str):
                     p.append(f"idle entry {n}: effect must be a name.")
                     effect = ""
-                effect = canonical_primitive(effect)
                 color = _colour_or_empty(e, "color", f"idle entry {n}: color", p)
                 intensity = 1.0
                 if "intensity" in e:
@@ -399,9 +383,6 @@ def set_face(png, a):
     raw = {}
     if side.exists() and not a.fresh:
         raw = json.loads(side.read_text(encoding="utf-8"))
-        for old, new in FACE_KEY_ALIASES:  # a sidecar written before the rename: its old key becomes the new one
-            if old in raw and new not in raw:
-                raw[new] = raw.pop(old)
     raw["size"] = width
     if a.border is not None:
         raw["border"] = a.border
@@ -552,7 +533,7 @@ def main(argv=None):
     s.add_argument("--blink", dest="blink", action="store_true")
     s.add_argument("--lid", metavar="#rrggbb")
     s.add_argument("--glow", nargs="*", metavar="x,y,r")
-    s.add_argument("--lines", "--veins", dest="lines", nargs="*", metavar="x,y,deg,len")
+    s.add_argument("--lines", dest="lines", nargs="*", metavar="x,y,deg,len")
     s.add_argument("--mouth", metavar="x,y,w,h")
     s.add_argument("--face", metavar="x,y,w,h", help="the face box of the expression effects (\"\": none, derived from the eyes)")
     s.add_argument("--rim", metavar="#rrggbb")

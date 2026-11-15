@@ -17,6 +17,7 @@ use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx::{Camera, Clock, ShakeLimits, ShakeTable};
 use crate::painter::Painter;
 use crate::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts};
+use crate::portrait_overlays::Mount;
 use crate::screen::{Context, Cx, Key, Screen, Settings};
 use crate::theme::th;
 use crate::ui::{tip, Gfx, Ui, Widget, BODY, RADIUS, SMALL, H, W};
@@ -50,8 +51,6 @@ pub const HINT: &str = "Click to continue";
 /// Particles (V11, the card key `particles_rise`): specks per card and their fall in logical px per second.
 pub const PARTICLE_SPECKS: u32 = 24;
 pub const PARTICLE_FALL: f32 = 6.0;
-/// FB-206 (2b): the card keys a reader still takes under their old name, (old, new).
-pub const CARD_KEY_ALIASES: [(&str, &str); 1] = [("ash", "particles_rise")];
 /// The frame and backdrop colour when a reel or card names none: the theme's `stage`.
 pub fn default_frame() -> Rgba {
     th().stage
@@ -242,7 +241,7 @@ fn ms_of(d: &json::Dict, key: &str, fallback: u32, max: u32) -> u32 {
 impl Card {
     /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, particles_rise, title,
     /// subtitle, text, fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake; PORTRAITFX1's expression); bad values fall
-    /// back to the defaults; an old key (`CARD_KEY_ALIASES`) reads as its new one when the new one is absent. `speaker`, `portrait`, `portrait_key` and `when` are the caller's to resolve.
+    /// back to the defaults; keys are read as written (ASSETORG4: no old-name aliases). `speaker`, `portrait`, `portrait_key` and `when` are the caller's to resolve.
     pub fn from_json(v: &Value) -> Card {
         let d = json::dict(v);
         let base = Card::default();
@@ -252,7 +251,7 @@ impl Card {
             image: json::s(d, "image"),
             top,
             bottom: hex(&json::s(d, "bottom")).unwrap_or(top),
-            particles_rise: json::b(d, "particles_rise", json::b(d, "ash", false)),
+            particles_rise: json::b(d, "particles_rise", false),
             title: json::s(d, "title"),
             subtitle: json::s(d, "subtitle"),
             text: json::s(d, "text"),
@@ -690,6 +689,10 @@ pub struct CardPortrait {
     pub clock: Clock,
     /// The rim key when a sidecar names none (the game's house rim light; None: no rim flicker).
     pub rim: Option<Rgba>,
+    /// ASSETORG4: whether the portrait draws its sidecar's `idle` overlays (`portrait_overlays`; the default
+    /// `Unmounted` draws the base portrait and the expression only). `VignetteScreen` sets it each frame from the
+    /// game's switch and the player's setting (`Mount::resolve`).
+    pub overlays: Mount,
     /// PORTRAITFX1-X: the sidecar files to try for a drawn portrait file, in order (the game's layout: an expression
     /// frame's own, then its base portrait's); None: the drawn file's own sidecar only.
     pub sidecars: Option<fn(&str) -> Vec<String>>,
@@ -750,7 +753,7 @@ impl CardPortrait {
         }
         fx.hold(&cues, now);
         fx.set_expressions(&self.expressions);
-        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false, tier_cap: None };
+        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false, tier_cap: None, overlays: self.overlays };
         self.budget.begin();
         fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
     }
@@ -894,6 +897,8 @@ pub struct VignetteScreen<G> {
     pub ask_first: bool,
     /// The line cards' animated portrait (PORTRAITFX1-D); its clock moves with the reel's frame time.
     pub portrait: CardPortrait,
+    /// ASSETORG4: the game mounts the portrait overlay layer (`portrait_overlays`; off unless `portrait_overlays`).
+    pub overlays: bool,
     on_done: Option<OnDone<G>>,
     last: Option<Instant>,
     w: Vec<Widget<VAct>>,
@@ -901,7 +906,14 @@ pub struct VignetteScreen<G> {
 
 impl<G: Context> VignetteScreen<G> {
     pub fn new(reel: Reel, speed: TextSpeed, on_done: impl FnOnce(&mut Cx<G>, Ended) + 'static) -> Self {
-        Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, portrait: CardPortrait::default(), on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
+        Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, portrait: CardPortrait::default(), overlays: false, on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
+    }
+
+    /// ASSETORG4: the game's switch of the line cards' portrait overlays (`portrait_overlays::Mount::resolve` with the
+    /// player's setting at each draw).
+    pub fn portrait_overlays(mut self, on: bool) -> Self {
+        self.overlays = on;
+        self
     }
 
     /// PORTRAITFX1-X: where the line cards' portraits take their anchors (`CardPortrait::sidecars`).
@@ -1005,6 +1017,7 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
     fn draw(&mut self, cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<VAct> = Ui::new(g, mouse, live);
         let still = reduce_motion(&cx.settings);
+        self.portrait.overlays = Mount::resolve(self.overlays, &cx.settings);
         draw_with(&mut ui, &mut cx.art, &self.player, &self.palette, still, &mut self.portrait);
         let done = self.player.done();
         ui.push("vignette.next", "stage", "", Rect::new(0, 0, W, H), !done, false, Some(VAct::Next), tip("Continue", "A click, Space or Enter moves the scene on."));

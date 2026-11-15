@@ -19,18 +19,21 @@
 //!   (cycle, lean, bob, entry, rest, settle, shiver, blink rule, flush) combined by one function (`Motion::eval`) into
 //!   a stretch and an offset of the inner rect; the anchored layers follow it; a face change blends over
 //!   `MOTION_BLEND_MS`. The default profile is the breath exactly; `set_base_motion` sets the plain face's.
+//! - Overlays (ASSETORG4, `portrait_overlays`): the overlay effects (glow, lines, point glow, particles rise, drift)
+//!   are an opt-in layer: a draw composes them only when `PortraitOpts::overlays` mounts it (`Mount::Mounted`); the
+//!   default draws the base portrait, states, reactions and expressions only.
 
 use crate::art::Art;
 use crate::canvas::{Image, Rect, Rgba};
 use crate::fx::{hash01, Axis, Camera, Envelope, Shake, ShakeLimits};
 use crate::painter::Painter;
-use aegis_core::assets::{canonical_primitive, Face, IdleOverlay, IDLE_OVERLAYS};
+use crate::portrait_overlays::{self, Mount};
+use aegis_core::assets::{Face, IdleOverlay, IDLE_OVERLAYS};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::f32::consts::PI;
 
-/// The cue vocabulary (spec 4.2), in this order. FB-206 (2b): the overlay primitives' old names (`veins`, `eye_glow`,
-/// `ash`, `smoke`; `aegis_core::assets::PRIMITIVE_ALIASES`) still parse as these (`Cue::parse`).
+/// The cue vocabulary (spec 4.2), in this order; no other name parses (ASSETORG4 dropped the old overlay aliases).
 pub const EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "lines", "point_glow", "particles_rise", "drift", "face"];
 /// The base life every portrait runs where its tier allows (not cues).
 pub const BASE_LIFE: [&str; 3] = ["breath", "rim", "blink"];
@@ -169,10 +172,8 @@ pub struct Cue {
 
 impl Cue {
     /// A cue of `effect` at intensity 1, ms 0, the default colour, priority 50, keyed by its effect; None for an
-    /// unknown effect, or a `jolt` whose `preset` is not in `PORTRAIT_JOLTS` (the caller drops it). An old primitive
-    /// name parses as its canonical one (FB-206 (2b): a cue row written before the rename).
+    /// unknown effect, or a `jolt` whose `preset` is not in `PORTRAIT_JOLTS` (the caller drops it).
     pub fn parse(effect: &str, preset: &str) -> Option<Cue> {
-        let effect = canonical_primitive(effect);
         let e = *EFFECTS.iter().find(|x| **x == effect)?;
         let preset = if e == "jolt" { *PORTRAIT_JOLTS.iter().find(|x| **x == preset)? } else { "" };
         Some(Cue { effect: e, intensity: 1.0, ms: 0, color: None, preset, expression: String::new(), priority: 50, key: e.to_string() })
@@ -181,8 +182,7 @@ impl Cue {
     /// A sidecar's idle overlay as a held cue (`idle.<effect>`); None when its effect is not one of
     /// `assets::IDLE_OVERLAYS` (a sidecar never holds a state such as `still` or `fade`, nor a reaction).
     pub fn idle(o: &IdleOverlay) -> Option<Cue> {
-        // `parse_face` writes canonical names; a face built in code may still hold an old one
-        let effect = canonical_primitive(&o.effect);
+        let effect = o.effect.as_str();
         if !IDLE_OVERLAYS.contains(&effect) {
             return None;
         }
@@ -759,13 +759,15 @@ impl Motion {
 
 /// How a portrait draws: reduce motion (the setting), the rim key when the sidecar names none, the anchors check, and
 /// the richest tier it may draw at (PORTRAITFX1-TL: a surface that is always small, such as a timeline row's icon,
-/// stays `Minimal` however large the window scales it; None: the side decides, 4.6).
+/// stays `Minimal` however large the window scales it; None: the side decides, 4.6); ASSETORG4: whether the overlay
+/// layer is mounted (`portrait_overlays`; the default `Unmounted` draws no overlay).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PortraitOpts {
     pub reduce_motion: bool,
     pub rim_default: Option<Rgba>,
     pub show_anchors: bool,
     pub tier_cap: Option<Tier>,
+    pub overlays: Mount,
 }
 
 impl PortraitOpts {
@@ -773,6 +775,11 @@ impl PortraitOpts {
     pub fn tier(&self, side: i32) -> Tier {
         let by_side = Tier::of(side);
         self.tier_cap.map_or(by_side, |cap| by_side.max(cap))
+    }
+
+    /// These options with the overlay layer mounted (`Mount::Mounted`) or not.
+    pub fn with_overlays(self, overlays: Mount) -> Self {
+        Self { overlays, ..self }
     }
 }
 
@@ -808,6 +815,8 @@ struct Key {
     tier: Tier,
     reduce: bool,
     anchors: bool,
+    /// ASSETORG4: the overlay layer is mounted.
+    overlays: bool,
     rim: Option<Rgba>,
     face: Option<Face>,
     /// The time read when something moves continuously (breath, rim, pulses, particles, drift).
@@ -856,6 +865,8 @@ struct Last {
     reduce: bool,
     rim: bool,
     blink: bool,
+    /// ASSETORG4: the overlay layer was mounted.
+    overlays: bool,
     /// The composed side (the motion's scale).
     s: i32,
 }
@@ -1043,10 +1054,8 @@ impl PortraitFx {
     }
 
     /// The strength of `effect` at `now`: the strongest of its held and fired cues (never summed), with that cue's
-    /// colour (ties: the first key in sort order); None when nothing gives it a strength above 0. An old primitive name
-    /// reads as its canonical one.
+    /// colour (ties: the first key in sort order); None when nothing gives it a strength above 0.
     pub fn level(&self, effect: &str, now: u64) -> Option<Level> {
-        let effect = canonical_primitive(effect);
         let held = self.holds.iter().filter(|(_, h)| h.cue.effect == effect).map(|(k, h)| (h.cue.intensity * h.ease(now), k.as_str(), &h.cue, h.since));
         let fired = self.timed.iter().filter(|(c, s)| c.effect == effect && now >= *s && now < s + c.ms as u64).map(|(c, s)| {
             let u = (now - s) as f32 / c.ms.max(1) as f32;
@@ -1158,11 +1167,13 @@ impl PortraitFx {
         let tier = opts.tier(side);
         let s = side.min(COMPOSE_MAX);
         let reduce = opts.reduce_motion;
+        let overlays = opts.overlays.is_mounted();
         // Every level (eases, fired cues) is read at the 30-a-second step too, so nothing recomposes more often.
         let now_q = tq(now);
         let mut levels: BTreeMap<&'static str, Level> = BTreeMap::new();
         for e in DRAWN {
-            if !tier.allows(e) || (reduce && matches!(e, "particles_rise" | "drift")) {
+            // ASSETORG4: an unmounted overlay layer gives its effects no level (held cues stay held)
+            if !tier.allows(e) || (reduce && matches!(e, "particles_rise" | "drift")) || (!overlays && portrait_overlays::is_overlay(e)) {
                 continue;
             }
             if let Some(l) = self.level(e, now_q) {
@@ -1208,14 +1219,14 @@ impl PortraitFx {
         });
         let rim_f = if rim_live { rim_factor(self.seed, t) } else { 1.0 };
         let blink = if blinking { blink_phase(self.seed, t) } else { 0 };
-        self.last = Some(Last { tier, reduce, rim: rim.is_some(), blink: can_blink, s });
+        self.last = Some(Last { tier, reduce, rim: rim.is_some(), blink: can_blink, overlays, s });
         let q = levels.iter().filter(|(e, _)| **e != "still").map(|(e, l)| (*e, (l.i * 32.0).round() as u32, l.color)).collect();
         let ex_key = expr.as_ref().map(|x| ExprKey {
             expression: x.row.expression.clone(),
             tint: x.tint.map(|(c, i)| (c, (i * 32.0).round() as u32)),
             mark: x.mark.map(|(m, c, w, a)| (m, c, w, (a * 32.0).round() as u32)),
         });
-        let key = Key { src: src.to_string(), s, tier, reduce, anchors: opts.show_anchors, rim: if rim_live { rim } else { None }, face: face.cloned(), t: animated.then_some(t), blink, still, levels: q, expr: ex_key, motion: (mo.stretch, mo.dx, mo.dy) };
+        let key = Key { src: src.to_string(), s, tier, reduce, anchors: opts.show_anchors, overlays, rim: if rim_live { rim } else { None }, face: face.cloned(), t: animated.then_some(t), blink, still, levels: q, expr: ex_key, motion: (mo.stretch, mo.dx, mo.dy) };
         Plan { key, t, rim_f, blinking, levels, expr }
     }
 
@@ -1268,7 +1279,7 @@ impl PortraitFx {
             let on = match e {
                 "jolt" => !l.reduce && l.tier != Tier::Minimal && self.jolt.active(now),
                 "face" => !self.expression(now).is_empty(),
-                _ => l.tier.allows(e) && !(l.reduce && matches!(e, "particles_rise" | "drift")) && self.level(e, now).is_some(),
+                _ => l.tier.allows(e) && !(l.reduce && matches!(e, "particles_rise" | "drift")) && (l.overlays || !portrait_overlays::is_overlay(e)) && self.level(e, now).is_some(),
             };
             if on {
                 out.push(e);
@@ -1319,7 +1330,7 @@ pub fn cycle(t: u64, period: f64) -> f32 {
 }
 
 /// `x` mod `w` for a drift of `px_per_s` px a second over `t` ms, in f64 first (as `cycle`).
-fn drift(t: u64, px_per_s: f32, w: f32) -> f32 {
+pub(crate) fn drift(t: u64, px_per_s: f32, w: f32) -> f32 {
     ((px_per_s as f64 * t as f64 / 1000.0) % w as f64) as f32
 }
 
@@ -1427,7 +1438,7 @@ fn put(img: &mut Image, x: i32, y: i32, c: Rgba) {
 }
 
 /// `c` over the pixel (x, y) when it lies in [lo, hi) on both axes.
-fn over(img: &mut Image, x: i32, y: i32, c: Rgba, lo: i32, hi: i32) {
+pub(crate) fn over(img: &mut Image, x: i32, y: i32, c: Rgba, lo: i32, hi: i32) {
     if x < lo || y < lo || x >= hi || y >= hi || c[3] == 0 {
         return;
     }
@@ -1441,12 +1452,12 @@ fn over(img: &mut Image, x: i32, y: i32, c: Rgba, lo: i32, hi: i32) {
     put(img, x, y, [ch(0), ch(1), ch(2), (oa * 255.0).round() as u8]);
 }
 
-fn alpha(c: Rgba, a: f32) -> Rgba {
+pub(crate) fn alpha(c: Rgba, a: f32) -> Rgba {
     [c[0], c[1], c[2], a.round().clamp(0.0, 255.0) as u8]
 }
 
 #[allow(clippy::too_many_arguments)]
-fn fill_ellipse(img: &mut Image, cx: f32, cy: f32, rx: f32, ry: f32, c: Rgba, lo: i32, hi: i32) {
+pub(crate) fn fill_ellipse(img: &mut Image, cx: f32, cy: f32, rx: f32, ry: f32, c: Rgba, lo: i32, hi: i32) {
     let (rx, ry) = (rx.max(0.5), ry.max(0.5));
     for y in (cy - ry).floor() as i32..=(cy + ry).ceil() as i32 {
         for x in (cx - rx).floor() as i32..=(cx + rx).ceil() as i32 {
@@ -1501,39 +1512,6 @@ pub fn tinted(c: Rgba, col: Rgba, i: f32) -> Rgba {
         (c[k] as f32 + (target - c[k] as f32) * 0.6 * i).round().clamp(0.0, 255.0) as u8
     };
     [ch(0), ch(1), ch(2), c[3]]
-}
-
-/// The pixels of a line from `a` to `b` (Bresenham).
-fn line_px(a: (i32, i32), b: (i32, i32), out: &mut BTreeSet<(i32, i32)>) {
-    let (dx, dy) = ((b.0 - a.0).abs(), -(b.1 - a.1).abs());
-    let (sx, sy) = (if a.0 < b.0 { 1 } else { -1 }, if a.1 < b.1 { 1 } else { -1 });
-    let (mut x, mut y, mut err) = (a.0, a.1, dx + dy);
-    loop {
-        out.insert((x, y));
-        if x == b.0 && y == b.1 {
-            return;
-        }
-        let e2 = 2 * err;
-        if e2 >= dy {
-            err += dy;
-            x += sx;
-        }
-        if e2 <= dx {
-            err += dx;
-            y += sy;
-        }
-    }
-}
-
-/// A `lines` polyline: `segs` segments of `step` px from `from`, segment j turned 25 (2 h(k0 + j) - 1) deg from `deg`.
-fn line_points(seed: u64, from: (f32, f32), deg: f32, step: f32, segs: usize, k0: u64) -> Vec<(f32, f32)> {
-    let mut pts = vec![from];
-    for j in 0..segs {
-        let a = (deg + 25.0 * (2.0 * hash01(seed, k0 + j as u64) - 1.0)).to_radians();
-        let p = pts[j];
-        pts.push((p.0 + step * a.cos(), p.1 + step * a.sin()));
-    }
-    pts
 }
 
 /// Composes the portrait (spec 4.3 steps 1-8, then the anchors check) at the plan's side.
@@ -1655,70 +1633,10 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         }
     }
 
-    // 5. overlays: glow, lines, point glow.
-    if let Some(l) = lv("glow") {
-        let pulse = if reduce { 0.8 } else { 0.6 + 0.4 * cycle(t, 1800.0).sin() };
-        let anchors: Vec<(f32, f32, f32)> = if face.glow.is_empty() {
-            vec![(lo as f32 + 0.5 * h_in as f32, lo as f32 + 0.7 * h_in as f32, 0.15 * s as f32)]
-        } else {
-            face.glow.iter().map(|g| (bx(g[0] as f32 * k), by(g[1] as f32 * k), g[2] as f32 * k)).collect()
-        };
-        for (cx, cy, r) in anchors {
-            for (f, a) in [(1.0, 40.0), (0.66, 60.0), (0.33, 90.0)] {
-                fill_ellipse(&mut img, cx, cy, r * f, r * f, alpha(l.color, a * l.i * pulse), lo, hi);
-            }
-        }
-    }
-    if let Some(l) = lv("lines") {
-        let pulse = if reduce { 0.8 } else { 0.6 + 0.4 * cycle(t, 2400.0).sin() };
-        let grown = if reduce { 1.0 } else { (t.saturating_sub(l.start) as f32 / LINE_GROW_MS as f32).clamp(0.0, 1.0) };
-        let wide = tier == Tier::Full && s > 192;
-        let step = (3.0 * k).max(1.0);
-        for (ri, v) in face.lines.iter().enumerate() {
-            let root = (bx(v[0] as f32 * k), by(v[1] as f32 * k));
-            let len = v[3] as f32 * k;
-            let segs = (v[3] as f32 / 3.0).ceil().max(1.0) as usize;
-            let k0 = 400 + ri as u64 * 1000;
-            let trunk = line_points(seed, root, v[2] as f32, step, segs, k0);
-            // Trunk first (the first 60 % of the growth), then the branches.
-            let mut strokes: Vec<(Vec<(f32, f32)>, usize)> = vec![(trunk.clone(), (segs as f32 * (grown / 0.6).min(1.0)).round() as usize)];
-            let bsegs = ((0.4 * v[3] as f32) / 3.0).ceil().max(1.0) as usize;
-            let bshow = (bsegs as f32 * ((grown - 0.6) / 0.4).clamp(0.0, 1.0)).round() as usize;
-            for (bi, (at, turn)) in [(0.4f32, 35.0f32), (0.7, -35.0)].into_iter().enumerate() {
-                let from = trunk[((segs as f32 * at).round() as usize).min(segs)];
-                strokes.push((line_points(seed, from, v[2] as f32 + turn, step, bsegs, k0 + 200 * (bi as u64 + 1)), bshow));
-            }
-            let mut px: BTreeSet<(i32, i32)> = BTreeSet::new();
-            for (pts, shown) in strokes {
-                for w in pts.windows(2).take(shown) {
-                    line_px((w[0].0.round() as i32, w[0].1.round() as i32), (w[1].0.round() as i32, w[1].1.round() as i32), &mut px);
-                }
-            }
-            if wide {
-                let base: Vec<(i32, i32)> = px.iter().copied().collect();
-                for (x, y) in base {
-                    px.extend([(x + 1, y), (x, y + 1), (x + 1, y + 1)]);
-                }
-            }
-            let col = alpha(l.color, 255.0 * l.i * pulse);
-            for (x, y) in px {
-                let (dx, dy) = (x as f32 + 0.5 - root.0, y as f32 + 0.5 - root.1);
-                if dx * dx + dy * dy <= len * len {
-                    over(&mut img, x, y, col, lo, hi);
-                }
-            }
-        }
-    }
-    if let Some(l) = lv("point_glow") {
-        let flare = if !reduce && tier != Tier::Minimal && flare_on(seed, t) { 1.4 } else { 1.0 };
-        for &(x0, y0, x1, y1) in &eyes {
-            let (w, h) = ((x1 - x0) as f32, (y1 - y0) as f32);
-            let (cx, cy) = ((x0 + x1) as f32 / 2.0, (y0 + y1) as f32 / 2.0);
-            if tier != Tier::Minimal {
-                fill_ellipse(&mut img, cx, cy, 0.9 * w, 1.1 * h, alpha(l.color, 70.0 * l.i * flare), lo, hi);
-            }
-            fill_ellipse(&mut img, cx, cy, w / 2.0, h / 2.0, alpha(l.color, 200.0 * l.i * flare), lo, hi);
-        }
+    // 5. overlays (ASSETORG4: the opt-in `portrait_overlays` layer, only when mounted): glow, lines, point glow.
+    let layer = portrait_overlays::Paint { face, k, s, lo, hi, h_in, a, mx, my, eyes: &eyes, t, reduce, tier, seed };
+    if key.overlays {
+        portrait_overlays::paint_anchored(&mut img, &layer, &plan.levels);
     }
 
     // 5b. PORTRAITFX1-EX: the expression's mark, centred on its anchor in the face or eye box (no box, no mark).
@@ -1728,26 +1646,9 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         }
     }
 
-    // 6. particles, then drift.
-    if let Some(l) = lv("particles_rise") {
-        let sz = (s / 96).max(1);
-        for (x, y) in particle_specks(seed, t, l.i, tier, s, lo, hi) {
-            for yy in y..y + sz {
-                for xx in x..x + sz {
-                    over(&mut img, xx, yy, alpha(l.color, 160.0 * l.i), lo, hi);
-                }
-            }
-        }
-    }
-    if let Some(l) = lv("drift") {
-        let w = h_in as f32;
-        for kk in 0..4u64 {
-            let r = (0.05 + 0.04 * hash01(seed, 800 + kk)) * s as f32;
-            let x = lo as f32 + hash01(seed, 820 + kk) * w;
-            let risen = (hash01(seed, 840 + kk) * w + drift(t, 0.04 * s as f32, w)).rem_euclid(w);
-            let a = 50.0 * l.i * (1.0 - risen / w);
-            fill_ellipse(&mut img, x, hi as f32 - risen, r, r, alpha(l.color, a), lo, hi);
-        }
+    // 6. particles, then drift (the overlay layer again).
+    if key.overlays {
+        portrait_overlays::paint_rising(&mut img, &layer, &plan.levels);
     }
 
     // 7. flash.

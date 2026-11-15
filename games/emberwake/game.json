@@ -33,5 +33,6 @@
 	],
 	"durability": {
 		"from_act": 2
-	}
+	},
+	"portrait_overlays": true
 }

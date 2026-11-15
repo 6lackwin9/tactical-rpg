@@ -401,31 +401,34 @@ fn a_node_and_a_line_card_take_an_expression() {
     drop_scratch(&data);
 }
 
-/// FB-206 (2b): a row written with an old overlay name (`veins`, `eye_glow`, `ash`, `smoke`) checks, loads and fires as
-/// its canonical name (`lines`, `point_glow`, `particles_rise`, `drift`) and is the same effect for the duplicate check;
-/// a stored row loads as it is, and a write of the file stores the canonical names (writers write the new name).
+/// ASSETORG4 (FB-225): a row naming an overlay by an old name (`veins`, `eye_glow`, `ash`, `smoke`) is no longer read
+/// as the canonical one: the check refuses it as an unknown effect, it is not the same effect as the canonical row,
+/// and the writer refuses it; the canonical names check, load and store as written.
 #[test]
-fn old_overlay_names_check_and_load_as_the_canonical_ones() {
-    for (old, new) in aegis_core::assets::PRIMITIVE_ALIASES {
+fn old_overlay_names_are_refused_and_canonical_ones_store_as_written() {
+    let canonical = ["lines", "point_glow", "particles_rise", "drift"];
+    for (old, new) in ["veins", "eye_glow", "ash", "smoke"].into_iter().zip(canonical) {
         let r = json!({"id": "glow_on", "trigger": "hp", "below": 30, "effect": old, "intensity": 0.5, "color": "#c084fc"});
-        assert_eq!(errors(&r), Vec::<String>::new(), "{old}: a colour is allowed as on {new}");
-        assert_eq!(PortraitCue::from_obj(&row(&r)).effect, new);
+        assert_eq!(errors(&r), [format!("Effect: '{old}' is not one of {}.", PORTRAIT_EFFECTS.join(", "))], "{old}");
+        assert_eq!(PortraitCue::from_obj(&row(&r)).effect, old, "no name is mapped to another");
+        let ok = json!({"id": "glow_on", "trigger": "hp", "below": 30, "effect": new, "intensity": 0.5, "color": "#c084fc"});
+        assert_eq!(errors(&ok), Vec::<String>::new(), "{new}");
         assert!(PORTRAIT_EFFECTS.contains(&new) && !PORTRAIT_EFFECTS.contains(&old));
     }
     let old_row = row(&json!({"id": "old_glow", "trigger": "hp", "below": 30, "effect": "eye_glow"}));
     let new_row = row(&json!({"id": "new_glow", "trigger": "hp", "below": 30, "effect": "point_glow"}));
     let found = portrait::check_rows(&[old_row, new_row], &portrait::Refs { derived: &[], faces: &faces() });
-    assert_eq!(found[1], ["Portrait cue 'old_glow' has the same trigger, match and effect."], "the old name is the same effect");
+    assert!(found.iter().flatten().all(|m| !m.contains("same trigger")), "an old name is another effect now: {found:?}");
     let data = catalog("aliases");
     let file = data.join("catalog").join("portrait_cues.json");
-    write_catalog(&data, portrait::KIND, json!([{"id": "embers", "trigger": "hp", "below": 30, "effect": "ash", "intensity": 0.4}]));
+    write_catalog(&data, portrait::KIND, json!([{"id": "embers", "trigger": "hp", "below": 30, "effect": "particles_rise", "intensity": 0.4}]));
     let src = source::load(&data);
     assert!(cue_errors(&src).is_empty(), "{:?}", cue_errors(&src));
-    assert!(store::check(&data).iter().all(|e| !e.contains("embers")), "{:?}", store::check(&data));
     let typed = rpgkit_data::Catalog::from_value(&src.catalog).portrait_cues;
     assert_eq!(typed.iter().map(|c| (c.id.as_str(), c.effect.as_str())).collect::<Vec<_>>(), [("embers", "particles_rise")]);
     let effect_of = |id: &str| json::s(aegis_content::file::raw_entries(&file).iter().find(|e| json::s(e, "id") == id).unwrap(), "effect");
-    store::upsert(&data, None, portrait::KIND, &dict(json!({"id": "haze", "trigger": "down", "effect": "smoke", "intensity": 0.5})), None).expect("an old name is taken");
-    assert_eq!((effect_of("haze"), effect_of("embers")), ("drift".to_string(), "particles_rise".to_string()), "the writer stores the canonical names");
+    assert!(store::upsert(&data, None, portrait::KIND, &dict(json!({"id": "haze", "trigger": "down", "effect": "smoke", "intensity": 0.5})), None).is_err(), "an old name is refused");
+    store::upsert(&data, None, portrait::KIND, &dict(json!({"id": "haze", "trigger": "down", "effect": "drift", "intensity": 0.5})), None).expect("a canonical name is taken");
+    assert_eq!((effect_of("haze"), effect_of("embers")), ("drift".to_string(), "particles_rise".to_string()), "the writer stores the names as written");
     drop_scratch(&data);
 }

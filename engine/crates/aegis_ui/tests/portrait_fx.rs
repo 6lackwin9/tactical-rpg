@@ -11,6 +11,7 @@ use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
 use aegis_ui::fx::{hash01, Axis, Envelope, Shake};
 use aegis_ui::painter::{Fonts, Painter, TextRec, View};
 use aegis_ui::portrait_fx::*;
+use aegis_ui::portrait_overlays::Mount;
 use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STATES};
 use aegis_ui::text_audit;
 use aegis_ui::ui::{by_id, Gfx, Kit, Ui, Widget, BG};
@@ -86,8 +87,14 @@ impl Rig {
     }
 }
 
+/// The options these checks draw with: the overlay layer mounted (ASSETORG4: `PortraitOpts::default()` leaves it out),
+/// so the overlay checks below read as they always did.
+fn mounted() -> PortraitOpts {
+    PortraitOpts { overlays: Mount::Mounted, ..PortraitOpts::default() }
+}
+
 fn reduce() -> PortraitOpts {
-    PortraitOpts { reduce_motion: true, ..PortraitOpts::default() }
+    PortraitOpts { reduce_motion: true, ..mounted() }
 }
 
 fn cue(effect: &str) -> Cue {
@@ -142,8 +149,8 @@ fn e2_first_rel_and_the_sidecar_of_the_pngs_own_layer() {
     let mut fx = PortraitFx::new("e2");
     let ok = {
         let mut p = Painter { c: &mut rig.c, v: View::fit(640, 360), fonts: &mut rig.fonts };
-        let missing = fx.draw(&mut p, &mut art, "portraits/npcs/nobody.png", None, Rect::new(0, 0, 40, 40), 0, &PortraitOpts::default(), &mut Budget::default());
-        let found = fx.draw(&mut p, &mut art, "portraits/common/base.png", None, Rect::new(0, 0, 40, 40), 0, &PortraitOpts::default(), &mut Budget::default());
+        let missing = fx.draw(&mut p, &mut art, "portraits/npcs/nobody.png", None, Rect::new(0, 0, 40, 40), 0, &mounted(), &mut Budget::default());
+        let found = fx.draw(&mut p, &mut art, "portraits/common/base.png", None, Rect::new(0, 0, 40, 40), 0, &mounted(), &mut Budget::default());
         (missing, found)
     };
     assert_eq!(ok, (false, true));
@@ -162,7 +169,7 @@ fn e3_the_same_key_and_time_give_the_same_pixels_and_the_seed_is_fnv1a() {
         .map(|_| {
             let mut fx = PortraitFx::new("innkeeper");
             fx.hold(&[cue("glow"), cue("particles_rise")], 0);
-            rig.compose(&mut fx, &img, Some(&face), 96, 4321, PortraitOpts::default())
+            rig.compose(&mut fx, &img, Some(&face), 96, 4321, mounted())
         })
         .collect();
     assert_eq!(draws[0], draws[1], "two portraits of one key at one time draw the same pixels");
@@ -180,7 +187,7 @@ fn e4_breath_lifts_the_inner_rect_from_its_bottom_edge_only_at_full_tier() {
     let src = rows(n);
     let mut fx = PortraitFx::new("breath");
     let half = (breath_period(fx.seed) / 2.0).round() as u64;
-    let out = rig.compose(&mut fx, &src, None, n, half, PortraitOpts::default());
+    let out = rig.compose(&mut fx, &src, None, n, half, mounted());
     let (b, amp) = (Face::plain(n).border, breath_amp(n));
     assert_eq!((b, amp), (8, 3), "round(240 / 30), max(1, round(0.012 x 240))");
     for x in [b, n / 2, n - b - 1] {
@@ -196,12 +203,12 @@ fn e4_breath_lifts_the_inner_rect_from_its_bottom_edge_only_at_full_tier() {
     }
     let mut still = PortraitFx::new("breath");
     still.hold(&[cue("still")], 0);
-    assert_eq!(rig.compose(&mut still, &src, None, n, half, PortraitOpts::default()), src, "none under still");
+    assert_eq!(rig.compose(&mut still, &src, None, n, half, mounted()), src, "none under still");
     assert_eq!(rig.compose(&mut PortraitFx::new("breath"), &src, None, n, half, reduce()), src, "none under reduce motion");
     let small = rows(64);
     let mut fx = PortraitFx::new("breath");
     let half = (breath_period(fx.seed) / 2.0).round() as u64;
-    assert_eq!(rig.compose(&mut fx, &small, None, 64, half, PortraitOpts::default()), small, "none at the reduced tier");
+    assert_eq!(rig.compose(&mut fx, &small, None, 64, half, mounted()), small, "none at the reduced tier");
 }
 
 #[test]
@@ -214,7 +221,7 @@ fn e5_rim_flickers_key_coloured_pixels_only() {
     let mut seen = std::collections::BTreeSet::new();
     let mut fx = PortraitFx::new("rim");
     for now in (0..6000).step_by(97) {
-        let out = rig.compose(&mut fx, &src, Some(&face), n, now, PortraitOpts::default());
+        let out = rig.compose(&mut fx, &src, Some(&face), n, now, mounted());
         let f = rim_factor(fx.seed, tq(now));
         assert!((0.88 - 1e-6..=1.12 + 1e-6).contains(&f), "f stays in 1 +- 0.12: {f}");
         let c = at(&out, 20, 40);
@@ -229,7 +236,7 @@ fn e5_rim_flickers_key_coloured_pixels_only() {
         assert_eq!(rig.compose(&mut steady, &src, Some(&face), n, now, reduce()), src, "steady under reduce motion");
     }
     let mut keyless = PortraitFx::new("rim");
-    assert_eq!(rig.compose(&mut keyless, &src, None, n, 1234, PortraitOpts::default()), src, "no key, no flicker");
+    assert_eq!(rig.compose(&mut keyless, &src, None, n, 1234, mounted()), src, "no key, no flicker");
 }
 
 /// A face with one 6 x 4 eye box at (40, 40) on skin.
@@ -309,9 +316,9 @@ fn e7_overlays_glow_lines_point_glow_and_particles() {
     // the portrait keys (so the seeds) these checks always used
     let mut lines = PortraitFx::new("veins");
     lines.hold(&[cue("lines")], 0);
-    assert_eq!(rig.compose(&mut lines, &flat, Some(&face), n, 0, PortraitOpts::default()), flat, "nothing at the start");
-    let half = reach(&rig.compose(&mut lines, &flat, Some(&face), n, 900, PortraitOpts::default()));
-    let full = reach(&rig.compose(&mut lines, &flat, Some(&face), n, LINE_GROW_MS, PortraitOpts::default()));
+    assert_eq!(rig.compose(&mut lines, &flat, Some(&face), n, 0, mounted()), flat, "nothing at the start");
+    let half = reach(&rig.compose(&mut lines, &flat, Some(&face), n, 900, mounted()));
+    let full = reach(&rig.compose(&mut lines, &flat, Some(&face), n, LINE_GROW_MS, mounted()));
     assert!((30.0 * 0.8..=30.0 + 2.0).contains(&full), "full length at 1800 ms, within len (+ the breath): {full}");
     assert!(half < full, "still growing half way: {half} < {full}");
     let mut steady = PortraitFx::new("veins");
@@ -336,7 +343,7 @@ fn e7_overlays_glow_lines_point_glow_and_particles() {
     assert_eq!(particle_specks(1, 500, 1.0, Tier::Reduced, 64, 2, 62).len(), 9);
     let mut falling = PortraitFx::new("ash");
     falling.hold(&[cue("particles_rise")], 0);
-    let out = rig.compose(&mut falling, &flat, None, n, 600, PortraitOpts::default());
+    let out = rig.compose(&mut falling, &flat, None, n, 600, mounted());
     let specks = particle_specks(falling.seed, tq(600), 1.0, Tier::Full, n, 3, 93);
     assert_eq!(specks.len(), 18);
     assert!(specks.iter().all(|&(x, y)| at(&out, x, y) != GREY), "every speck shows");
@@ -354,18 +361,18 @@ fn e8_states_follow_their_formulas_and_held_cues_ease() {
     let lum = 0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32;
     let mut fx = PortraitFx::new("states");
     fx.hold(&[cue("desaturate")], 0);
-    let out = rig.compose(&mut fx, &src, None, n, 300, PortraitOpts::default());
+    let out = rig.compose(&mut fx, &src, None, n, 300, mounted());
     let l = lum.round() as u8;
     assert_eq!(at(&out, 10, 12), [l, l, l, 255], "desaturate 1.0: the luminance");
     let mut tint = PortraitFx::new("states");
     tint.hold(&[cue("tint")], 0);
-    let out = rig.compose(&mut tint, &src, None, n, 300, PortraitOpts::default());
+    let out = rig.compose(&mut tint, &src, None, n, 300, mounted());
     let col = [0x06, 0xb6, 0xd4];
     let want: Vec<u8> = (0..3).map(|k| (c[k] as f32 + ((lum / 255.0 * col[k] as f32 * 1.25).min(255.0) - c[k] as f32) * 0.6).round() as u8).collect();
     assert_eq!(&at(&out, 10, 12)[..3], &want[..], "tint toward #06b6d4");
     let mut fade = PortraitFx::new("states");
     fade.hold(&[cue("fade")], 0);
-    let out = rig.compose(&mut fade, &src, None, n, 300, PortraitOpts::default());
+    let out = rig.compose(&mut fade, &src, None, n, 300, mounted());
     assert!(out.px.iter().skip(3).step_by(4).all(|a| *a == (255.0f32 * 0.3).round() as u8), "fade 1.0 leaves alpha 0.3, the border too");
 
     let mut eased = PortraitFx::new("ease");
@@ -385,16 +392,16 @@ fn e9_flash_and_jolt_run_once_and_jolts_keep_their_limits() {
     let src = rows(n);
     let mut fx = PortraitFx::new("flash");
     fx.fire(cue("flash"), 1000);
-    let out = rig.compose(&mut fx, &src, None, n, 1000, PortraitOpts::default());
+    let out = rig.compose(&mut fx, &src, None, n, 1000, mounted());
     let c = at(&src, 10, 12);
     let a = 200.0f32 / 255.0;
     let want: Vec<u8> = (0..3).map(|k| (255.0 * a + c[k] as f32 * (1.0 - a)).round() as u8).collect();
     assert_eq!(&at(&out, 10, 12)[..3], &want[..], "white at alpha 200 i at its start");
     assert_eq!(at(&out, 0, 0), EDGE, "the border stays");
-    assert_eq!(rig.compose(&mut fx, &src, None, n, 1000 + FLASH_MS as u64, PortraitOpts::default()), src, "gone at its ms");
+    assert_eq!(rig.compose(&mut fx, &src, None, n, 1000 + FLASH_MS as u64, mounted()), src, "gone at its ms");
 
     let mut hit = PortraitFx::new("jolt");
-    rig.compose(&mut hit, &src, None, 96, 0, PortraitOpts::default());
+    rig.compose(&mut hit, &src, None, 96, 0, mounted());
     hit.fire(Cue::parse("jolt", "hit").unwrap(), 0);
     let offs: Vec<(i32, i32)> = (0..400).map(|t| hit.jolt_offset(t)).collect();
     assert!(offs.iter().all(|o| o.0.abs() <= 2 && o.1 == 0), "hit: at most 2 px, x only");
@@ -407,7 +414,7 @@ fn e9_flash_and_jolt_run_once_and_jolts_keep_their_limits() {
     assert_eq!(crit.jolt_amplitude(10), strong);
 
     let mut big = PortraitFx::new("big");
-    rig.compose(&mut big, &src, None, 96, 0, PortraitOpts::default());
+    rig.compose(&mut big, &src, None, 96, 0, mounted());
     big.fire_jolt(Shake { px: 9.0, ms: 300, axis: Axis::Both, envelope: Envelope::Linear, step_ms: 30 }, 0);
     assert_eq!(big.jolt_amplitude(0), 4.0, "clamped to the 4 px ceiling");
     assert!((0..300).all(|t| big.jolt_offset(t).0.abs() <= 4 && big.jolt_offset(t).1.abs() <= 4));
@@ -453,7 +460,7 @@ fn e11_tiers_draw_exactly_their_effects() {
         fx.hold(&["glow", "lines", "point_glow", "particles_rise", "drift", "desaturate", "tint", "fade"].map(cue), 0);
         fx.fire(cue("flash").with_ms(1000), 300);
         fx.fire(Cue::parse("jolt", "crit").unwrap(), 300);
-        rig.compose(&mut fx, &src, Some(&face), side, 310, PortraitOpts::default());
+        rig.compose(&mut fx, &src, Some(&face), side, 310, mounted());
         let tier = Tier::of(side);
         let want: Vec<&str> = tier.effects().into_iter().filter(|e| !["still", "face"].contains(e)).collect();
         assert_eq!(fx.live(310), want, "side {side}");
@@ -473,14 +480,14 @@ fn e12_composition_is_cached_stepped_capped_and_budgeted() {
     let mut tiny = PortraitFx::new("tiny");
     let small = rows(40);
     for f in 0..100 {
-        rig.compose(&mut tiny, &small, None, 40, f * 16, PortraitOpts::default());
+        rig.compose(&mut tiny, &small, None, 40, f * 16, mounted());
     }
     assert_eq!(tiny.composes, 1, "the minimal tier with no reaction: composed once");
 
     let (img, face) = sample();
     let mut idle = PortraitFx::new("idle");
     for f in 0..144u64 {
-        rig.compose(&mut idle, &img, Some(&face), 96, f * 1000 / 144, PortraitOpts::default());
+        rig.compose(&mut idle, &img, Some(&face), 96, f * 1000 / 144, mounted());
     }
     assert!(idle.composes > 1 && idle.composes <= STEPS_PER_SECOND, "an idle portrait over 1000 ms at 144 frames: {}", idle.composes);
 
@@ -490,14 +497,14 @@ fn e12_composition_is_cached_stepped_capped_and_budgeted() {
     let mut easing = PortraitFx::new("easing");
     easing.hold(&[cue("desaturate")], 0);
     for f in 0..144u64 {
-        rig.compose(&mut flashing, &small, None, 40, f * 1000 / 144, PortraitOpts::default());
-        rig.compose(&mut easing, &small, None, 40, f * 1000 / 144, PortraitOpts::default());
+        rig.compose(&mut flashing, &small, None, 40, f * 1000 / 144, mounted());
+        rig.compose(&mut easing, &small, None, 40, f * 1000 / 144, mounted());
     }
     assert!(flashing.composes > 1 && flashing.composes <= STEPS_PER_SECOND, "a 1000 ms flash at 144 frames: {}", flashing.composes);
     assert!(easing.composes > 1 && easing.composes <= STEPS_PER_SECOND, "a 250 ms ease at 144 frames: {}", easing.composes);
 
     let mut big = PortraitFx::new("big");
-    rig.draw(&mut big, &rows(96), None, Rect::new(0, 0, 400, 400), 0, &PortraitOpts::default(), &mut Budget::default());
+    rig.draw(&mut big, &rows(96), None, Rect::new(0, 0, 400, 400), 0, &mounted(), &mut Budget::default());
     assert_eq!(big.composed().map(|i| i.w), Some(COMPOSE_MAX), "a 400 px rect composes at 256");
 
     let mut fxs: Vec<PortraitFx> = (0..9).map(|i| PortraitFx::new(&format!("p{i}"))).collect();
@@ -505,7 +512,7 @@ fn e12_composition_is_cached_stepped_capped_and_budgeted() {
     for now in [0u64, 500] {
         budget.begin();
         for (i, fx) in fxs.iter_mut().enumerate() {
-            rig.draw(fx, &img, Some(&face), Rect::new(i as i32 * 10, 0, 96, 96), now, &PortraitOpts::default(), &mut budget);
+            rig.draw(fx, &img, Some(&face), Rect::new(i as i32 * 10, 0, 96, 96), now, &mounted(), &mut budget);
         }
     }
     assert_eq!(fxs.iter().map(|f| f.composes).collect::<Vec<_>>(), [2, 2, 2, 2, 2, 2, 2, 2, 1], "the 9th animated portrait of a frame keeps its last image");
@@ -522,7 +529,7 @@ fn e13_the_border_moves_only_with_the_jolt_flash_covers_and_fade_multiplies() {
     let mut fx = PortraitFx::new("order");
     fx.hold(&all, 0);
     fx.fire(cue("flash").with_ms(5000), first);
-    let out = rig.compose(&mut fx, &img, Some(&face), n, first + 75, PortraitOpts::default());
+    let out = rig.compose(&mut fx, &img, Some(&face), n, first + 75, mounted());
     for y in 0..n {
         for x in 0..n {
             if in_border(n, face.border, x, y) {
@@ -578,7 +585,7 @@ fn a_sidecar_idle_list_holds_overlays_only() {
     let mut fx = PortraitFx::new("idle_still");
     fx.hold(&idle_cues(&face), 0);
     let mut rig = Rig::new();
-    rig.compose(&mut fx, &rows(96), Some(&face), 96, 300, PortraitOpts::default());
+    rig.compose(&mut fx, &rows(96), Some(&face), 96, 300, mounted());
     assert_eq!(fx.live(300), ["breath", "glow"], "breath runs, no still, no fade");
 }
 
@@ -803,7 +810,7 @@ fn ex2_the_mark_is_drawn_at_its_anchor() {
 
     // a pulse (reduced tier: no breath) grows the mark; reduce motion keeps it steady
     let pulsing = ExpressionFx { mark_pulse_ms: 900, mark_size: 0.2, ..vein.clone() };
-    let base = rig.compose(&mut PortraitFx::new("ex2_base"), &src, Some(&face), 64, 0, PortraitOpts::default());
+    let base = rig.compose(&mut PortraitFx::new("ex2_base"), &src, Some(&face), 64, 0, mounted());
     let widths = |opts: PortraitOpts, rig: &mut Rig| -> Vec<i32> {
         let mut fx = PortraitFx::new("ex2_pulse");
         fx.set_expressions(&[pulsing.clone()]);
@@ -812,7 +819,7 @@ fn ex2_the_mark_is_drawn_at_its_anchor() {
     };
     let want: Vec<i32> = [225u64, 675].iter().map(|&t| mark_width(Mark::Vein, 0.2, 64, mark_pulse(pulsing.pulse(tq(t))).0)).collect();
     assert_ne!(want[0], want[1], "the pulse's high and low differ");
-    assert_eq!(widths(PortraitOpts::default(), &mut rig), want, "the pulse grows the mark");
+    assert_eq!(widths(mounted(), &mut rig), want, "the pulse grows the mark");
     let steady = mark_width(Mark::Vein, 0.2, 64, 1.0);
     assert_eq!(widths(reduce(), &mut rig), [steady, steady], "reduce motion: no pulse");
 }
@@ -835,18 +842,18 @@ fn ex3_the_expression_shake_follows_its_row() {
         let offs = (1000..1400).map(|t| fx.expression_shake(t)).collect();
         (fx, offs)
     };
-    let (fx, full) = run(96, PortraitOpts::default(), &mut rig);
+    let (fx, full) = run(96, mounted(), &mut rig);
     let seed = fx.seed ^ 1000;
     assert_eq!(full, (0..400u64).map(|t| shake.offset(t, seed)).collect::<Vec<_>>(), "the row's shake from the start");
     assert!(full.iter().any(|o| o.0 != 0) && full[200..].iter().all(|o| *o == (0, 0)), "it moves, then rests after shake_ms");
     assert_eq!(fx.state(1010)["shake"], json!([full[10].0, full[10].1]));
     let half = Shake { px: 1.0, ..shake };
-    assert_eq!(run(64, PortraitOpts::default(), &mut rig).1, (0..400u64).map(|t| half.offset(t, seed)).collect::<Vec<_>>(), "halved at the reduced tier");
-    assert!(run(32, PortraitOpts::default(), &mut rig).1.iter().all(|o| *o == (0, 0)), "none at the minimal tier");
+    assert_eq!(run(64, mounted(), &mut rig).1, (0..400u64).map(|t| half.offset(t, seed)).collect::<Vec<_>>(), "halved at the reduced tier");
+    assert!(run(32, mounted(), &mut rig).1.iter().all(|o| *o == (0, 0)), "none at the minimal tier");
     assert!(run(96, reduce(), &mut rig).1.iter().all(|o| *o == (0, 0)), "none under reduce motion");
 
     // the jolt and the shake add up within the ceiling
-    let (mut fx, _) = run(96, PortraitOpts::default(), &mut rig);
+    let (mut fx, _) = run(96, mounted(), &mut rig);
     fx.fire(Cue::parse("jolt", "crit").unwrap(), 1000);
     let m = JOLT_LIMITS.max_px as i32;
     for t in 1000..1400 {
@@ -877,11 +884,11 @@ fn ex4_a_held_face_that_changes_starts_again() {
 #[test]
 fn tl_a_tier_cap_keeps_a_portrait_no_richer_than_it() {
     let sides = [FULL_SIDE + 40, FULL_SIDE, REDUCED_SIDE, REDUCED_SIDE - 1, 8];
-    let plain = PortraitOpts::default();
+    let plain = mounted();
     assert!(sides.iter().all(|&s| plain.tier(s) == Tier::of(s)), "no cap: the side decides");
-    let minimal = PortraitOpts { tier_cap: Some(Tier::Minimal), ..PortraitOpts::default() };
+    let minimal = PortraitOpts { tier_cap: Some(Tier::Minimal), ..mounted() };
     assert!(sides.iter().all(|&s| minimal.tier(s) == Tier::Minimal), "capped at minimal: minimal at every side");
-    let reduced = PortraitOpts { tier_cap: Some(Tier::Reduced), ..PortraitOpts::default() };
+    let reduced = PortraitOpts { tier_cap: Some(Tier::Reduced), ..mounted() };
     assert_eq!(sides.map(|s| reduced.tier(s)), [Tier::Reduced, Tier::Reduced, Tier::Reduced, Tier::Minimal, Tier::Minimal], "capped at reduced: never full");
 }
 
@@ -940,14 +947,14 @@ fn mo1_the_default_motion_is_the_breath_exactly() {
     let mut rig = Rig::new();
     let src = rows(240);
     for t in [0, 900, 1800, 2700, 4000] {
-        let plain = rig.compose(&mut PortraitFx::new("mo1"), &src, None, 240, t, PortraitOpts::default());
+        let plain = rig.compose(&mut PortraitFx::new("mo1"), &src, None, 240, t, mounted());
         let mut row = PortraitFx::new("mo1");
         row.set_expressions(&[ExpressionFx::new("hurt")]);
         row.hold(&[face_cue("hurt")], 0);
-        assert_eq!(rig.compose(&mut row, &src, None, 240, t, PortraitOpts::default()), plain, "a row at the default motion (t {t})");
+        assert_eq!(rig.compose(&mut row, &src, None, 240, t, mounted()), plain, "a row at the default motion (t {t})");
         let mut none = PortraitFx::new("mo1");
         none.hold(&[face_cue("smug")], 0);
-        assert_eq!(rig.compose(&mut none, &src, None, 240, t, PortraitOpts::default()), plain, "a face without a row takes the base motion (t {t})");
+        assert_eq!(rig.compose(&mut none, &src, None, 240, t, mounted()), plain, "a face without a row takes the base motion (t {t})");
     }
 }
 
@@ -1091,7 +1098,7 @@ fn mo5_the_border_never_moves_and_samples_past_the_edge_take_the_edge() {
         for t in [0u64, 100, 400, 900, 1700, 2600, 5000] {
             let mut fx = PortraitFx::new("mo5");
             fx.set_base_motion(Motion::sample(name).unwrap());
-            let out = rig.compose(&mut fx, &src, None, n, t, PortraitOpts::default());
+            let out = rig.compose(&mut fx, &src, None, n, t, mounted());
             for y in 0..n {
                 for x in 0..n {
                     if in_border(n, b, x, y) {
@@ -1104,7 +1111,7 @@ fn mo5_the_border_never_moves_and_samples_past_the_edge_take_the_edge() {
     let (lo, hi) = (b, n - b);
     let mut fx = PortraitFx::new("mo5");
     fx.set_base_motion(Motion { rest_dy: -3, ..steady() });
-    let out = rig.compose(&mut fx, &src, None, n, 500, PortraitOpts::default());
+    let out = rig.compose(&mut fx, &src, None, n, 500, mounted());
     for x in [lo, n / 2, hi - 1] {
         for y in hi - 3..hi {
             assert_eq!(at(&out, x, y), at(&src, x, hi - 1), "lifted 3 px: the bottom rows repeat the edge ({x}, {y})");
@@ -1113,7 +1120,7 @@ fn mo5_the_border_never_moves_and_samples_past_the_edge_take_the_edge() {
     }
     let mut fx = PortraitFx::new("mo5");
     fx.set_base_motion(Motion { enter_stretch: -3, enter_ms: 400, ..steady() });
-    let out = rig.compose(&mut fx, &src, None, n, 100, PortraitOpts::default());
+    let out = rig.compose(&mut fx, &src, None, n, 100, mounted());
     assert_eq!(fx.motion(100).stretch, -3);
     for x in [lo, n / 2] {
         assert_eq!(at(&out, x, lo), at(&src, x, lo), "squeezed: the top row repeats the edge");
@@ -1163,13 +1170,13 @@ fn mo7_the_flush_pulses_with_the_cycle() {
     fx.set_expressions(&[row]);
     fx.hold(&[face_cue("angry")], 0);
     for t in (300..4000u64).step_by(300) {
-        let out = rig.compose(&mut fx, &src, Some(&face), 96, t, PortraitOpts::default());
+        let out = rig.compose(&mut fx, &src, Some(&face), 96, t, mounted());
         let o = fx.motion(t);
         assert!((o.flush - (0.5 + 0.5 * o.b)).abs() < 1e-6, "t {t}");
         assert_eq!(at(&out, 48, 48), tinted(SKIN, RED, 0.5 * o.flush), "the face box centre at t {t}");
         let out = rig.compose(&mut fx, &src, Some(&face), 96, t, reduce());
         assert_eq!((fx.motion(t).flush, at(&out, 48, 48)), (1.0, tinted(SKIN, RED, 0.5)), "steady under reduce motion (t {t})");
-        rig.compose(&mut fx, &src, Some(&face), 32, t, PortraitOpts::default());
+        rig.compose(&mut fx, &src, Some(&face), 32, t, mounted());
         assert_eq!(fx.motion(t).flush, 1.0, "steady at the minimal tier (t {t})");
     }
 }
@@ -1216,7 +1223,7 @@ fn mo9_still_stops_the_motion_and_a_face_change_blends() {
         fx.set_base_motion(Motion::sample(name).unwrap());
         fx.hold(&[cue("still")], 0);
         for t in [300u64, 700, 1500, 2600] {
-            assert_eq!(rig.compose(&mut fx, &src, None, 240, t, PortraitOpts::default()), src, "{name}: still (t {t})");
+            assert_eq!(rig.compose(&mut fx, &src, None, 240, t, mounted()), src, "{name}: still (t {t})");
             assert_eq!(state_motion(&fx, t).0, (0, 0, 0));
         }
     }
@@ -1224,16 +1231,16 @@ fn mo9_still_stops_the_motion_and_a_face_change_blends() {
     let mut fx = PortraitFx::new("mo9");
     fx.set_expressions(&[moving("lifted", a), moving("sunk", b)]);
     fx.hold(&[face_cue("lifted")], 0);
-    rig.compose(&mut fx, &src, None, 240, 1000, PortraitOpts::default());
+    rig.compose(&mut fx, &src, None, 240, 1000, mounted());
     assert_eq!(state_motion(&fx, 1000).0, (0, 0, -3));
     fx.hold(&[face_cue("sunk")], 2000);
-    rig.compose(&mut fx, &src, None, 240, 2000, PortraitOpts::default());
+    rig.compose(&mut fx, &src, None, 240, 2000, mounted());
     assert_eq!(state_motion(&fx, 2000).0, (0, 0, -3), "the blend starts at the old face");
-    rig.compose(&mut fx, &src, None, 240, 2100, PortraitOpts::default());
+    rig.compose(&mut fx, &src, None, 240, 2100, mounted());
     let (m, parts) = state_motion(&fx, 2100);
     assert_eq!(m, (0, 0, ((-3.0f32 + 2.0) / 2.0).round() as i64), "the rounded midpoint at 100 ms");
     assert!(parts.contains(&"blend".to_string()), "{parts:?}");
-    rig.compose(&mut fx, &src, None, 240, 2300, PortraitOpts::default());
+    rig.compose(&mut fx, &src, None, 240, 2300, mounted());
     assert_eq!(state_motion(&fx, 2300).0, (0, 0, 2), "the new face after the blend");
 }
 
@@ -1251,8 +1258,8 @@ fn mo10_the_anchored_layers_follow_the_motion_and_ash_does_not() {
     let lid = |m: Motion, rig: &mut Rig| {
         let mut fx = PortraitFx::new("mo10");
         fx.set_base_motion(m);
-        let open = rig.compose(&mut fx, &img, Some(&face), 96, first - 40, PortraitOpts::default());
-        let closed = rig.compose(&mut fx, &img, Some(&face), 96, first + 75, PortraitOpts::default());
+        let open = rig.compose(&mut fx, &img, Some(&face), 96, first - 40, mounted());
+        let closed = rig.compose(&mut fx, &img, Some(&face), 96, first + 75, mounted());
         changed(&closed, &open)
     };
     let still_lid = lid(calm, &mut rig);
@@ -1267,7 +1274,7 @@ fn mo10_the_anchored_layers_follow_the_motion_and_ash_does_not() {
             let mut fx = PortraitFx::new("mo10");
             fx.set_expressions(&[ExpressionFx { motion: m, ..row.clone() }]);
             fx.hold(&[face_cue("angry")], 0);
-            changed(&rig.compose(&mut fx, &src, Some(&face), 96, 1000, PortraitOpts::default()), &src)
+            changed(&rig.compose(&mut fx, &src, Some(&face), 96, 1000, mounted()), &src)
         };
         let base = drawn(calm, &mut rig);
         assert!(base.is_some());
@@ -1278,7 +1285,7 @@ fn mo10_the_anchored_layers_follow_the_motion_and_ash_does_not() {
         let mut fx = PortraitFx::new("mo10");
         fx.set_base_motion(m);
         fx.hold(&[cue("particles_rise")], 0);
-        rig.compose(&mut fx, &src, None, 96, 1000, PortraitOpts::default())
+        rig.compose(&mut fx, &src, None, 96, 1000, mounted())
     };
     let still_ash = ash(calm, &mut rig);
     assert_ne!(still_ash, src, "the ash draws");
@@ -1309,7 +1316,7 @@ fn mo11_amplitudes_scale_and_the_budget_counts_moving_faces() {
         fx.set_base_motion(m);
         let mut budget = Budget::default();
         budget.begin();
-        rig.draw(&mut fx, &src, None, Rect::new(8, 8, 120, 120), t, &PortraitOpts::default(), &mut budget);
+        rig.draw(&mut fx, &src, None, Rect::new(8, 8, 120, 120), t, &mounted(), &mut budget);
         budget.used
     };
     let rest = Motion { rest_dy: -1, rest_ms: 400, ..steady() };
@@ -1340,37 +1347,23 @@ fn mo_the_kit_page_offers_the_motion_samples() {
     assert!(parts.contains(&"entry".to_string()), "{parts:?}");
 }
 
-/// FB-206 (2b): a cue or a sidecar written with the old overlay names (`veins`, `eye_glow`, `ash`, `smoke`) draws byte
-/// for byte what the canonical names draw, and reads as the canonical names everywhere (cue, key, level, live list).
+/// ASSETORG4 (FB-225): only the canonical overlay names parse; any other name is no cue (a cue row or a face built in
+/// code with another name draws nothing), and a held name outside `EFFECTS` has no level.
 #[test]
-fn old_overlay_names_draw_exactly_what_the_canonical_names_draw() {
-    for (old, new) in aegis_core::assets::PRIMITIVE_ALIASES {
-        let c = Cue::parse(old, "").expect("an old name parses");
-        assert_eq!((c.effect, c.key.as_str()), (new, new));
-        let idle = aegis_core::assets::IdleOverlay { effect: old.into(), color: None, intensity: 0.5 };
-        assert_eq!(Cue::idle(&idle).map(|c| (c.effect, c.key)), Some((new, format!("idle.{new}"))), "a face built in code with an old name");
+fn only_the_canonical_overlay_names_parse() {
+    for name in aegis_core::assets::IDLE_OVERLAYS {
+        let c = Cue::parse(name, "").expect("a canonical name parses");
+        assert_eq!((c.effect, c.key.as_str()), (name, name));
+        let idle = aegis_core::assets::IdleOverlay { effect: name.into(), color: None, intensity: 0.5 };
+        assert_eq!(Cue::idle(&idle).map(|c| (c.effect, c.key)), Some((name, format!("idle.{name}"))));
     }
-    let sidecar = |lines: &str, names: [&str; 4]| {
-        let v = json!({"size": 96, "eyes": [[40, 40, 6, 4]], "glow": [[48, 70, 10]], lines: [[50, 50, 90, 20]],
-            "idle": names.iter().zip([0.7, 0.5, 0.6, 0.4]).map(|(e, i)| json!({"effect": e, "intensity": i})).collect::<Vec<_>>()});
-        aegis_core::assets::parse_face(&v).unwrap()
-    };
-    let old_face = sidecar("veins", ["veins", "eye_glow", "ash", "smoke"]);
-    let new_face = sidecar("lines", ["lines", "point_glow", "particles_rise", "drift"]);
-    let mut rig = Rig::new();
-    let src = rows(96);
-    for side in [96, 64, 40] {
-        let draw = |face: &Face, held: &[&str], rig: &mut Rig| {
-            let mut fx = PortraitFx::new("aliases");
-            let mut cues = idle_cues(face);
-            cues.extend(held.iter().map(|e| Cue::parse(e, "").unwrap().with_key(&format!("cue.{e}"))));
-            fx.hold(&cues, 0);
-            let img = rig.compose(&mut fx, &src, Some(face), side, 2500, PortraitOpts::default());
-            (img, fx.live(2500), ["lines", "point_glow", "particles_rise", "drift"].map(|e| fx.level(e, 2500)))
-        };
-        let old = draw(&old_face, &["veins", "smoke"], &mut rig);
-        let new = draw(&new_face, &["lines", "drift"], &mut rig);
-        assert_eq!(old, new, "side {side}: same pixels, live list and levels");
-        assert!(new.1.iter().all(|e| !["veins", "eye_glow", "ash", "smoke"].contains(e)), "{:?}", new.1);
+    for other in ["sparks", "rise", "Glow", ""] {
+        assert!(Cue::parse(other, "").is_none(), "{other} is no cue");
+        let idle = aegis_core::assets::IdleOverlay { effect: other.into(), color: None, intensity: 0.5 };
+        assert!(Cue::idle(&idle).is_none(), "{other} is no idle overlay");
     }
+    let mut fx = PortraitFx::new("canonical");
+    fx.hold(&[Cue::parse("point_glow", "").unwrap()], 0);
+    assert!(fx.level("point_glow", EASE_MS).is_some());
+    assert!(fx.level("sparks", EASE_MS).is_none(), "no name reads as another");
 }

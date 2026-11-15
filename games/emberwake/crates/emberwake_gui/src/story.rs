@@ -60,13 +60,15 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
 /// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber), an expression frame without
 /// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`) and the data's expression effects
 /// drawn while a card's `expression` holds (PORTRAITFX1-EX). STORYMUSIC1: a reel's music key plays as its track
-/// (`music::reel_music`).
+/// (`music::reel_music`). ASSETORG4: the line cards' portrait overlays follow the manifest's `portrait_overlays` (and the
+/// player's setting).
 pub fn vignette_screen(cx: &Cx, mut reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     reel.music = crate::music::reel_music(cx, &reel.music);
     let t = &cx.tuning.value;
     VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(palette()).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
         .portrait_sidecars(emberwake_content::art::face_sidecars)
         .portrait_expressions(crate::portraits::expression_fx_of(&cx.data.cat.portrait_expressions))
+        .portrait_overlays(cx.data.portrait_overlays)
 }
 
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).

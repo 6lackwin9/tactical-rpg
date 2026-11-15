@@ -16,6 +16,7 @@ use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, H, W};
 use crate::screens::WINDOW_SIZES;
 use aegis_ui::screen::{Settings, WindowShow, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS};
 use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
+use aegis_ui::portrait_overlays;
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
 use emberwake_world::{new_game, progression, save};
@@ -982,6 +983,15 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.select("settings.text_speed", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick(TEXT_SPEED, i), true, t);
                 y += 22;
                 ui.checkbox("settings.reduce_motion", x + 3, y, "Reduce motion", d[REDUCE_MOTION].as_bool().unwrap_or(false), SetAct::Toggle(REDUCE_MOTION), true);
+                // ASSETORG4: the player's switch of the portrait overlays (engine key), beside reduce motion; only for
+                // a game whose manifest mounts them
+                if cx.data.portrait_overlays {
+                    let on = d[portrait_overlays::SETTING].as_bool().unwrap_or(true);
+                    ui.checkbox("settings.portrait_overlays", x + 125, y, "Portrait effects", on, SetAct::Toggle(portrait_overlays::SETTING), true);
+                    if let Some(wd) = ui.widgets.last_mut() {
+                        wd.tip = tip("Portrait effects", "The glows, growing lines, specks and haze over character portraits in talk boxes, scenes, party cards and the timeline. Off: plain portraits; blinks, breathing and expressions stay.");
+                    }
+                }
             }
             3 => {
                 // RULESET1-U slice 6 (preference "Battle overlays and the clarity pass", user 2026-10-30): every

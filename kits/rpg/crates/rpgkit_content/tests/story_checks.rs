@@ -238,9 +238,8 @@ fn each_bad_vignette_or_card_field_is_one_error() {
         ("a top not a colour", with(&g, &["cards", "0", "top"], json!("#12")), "Card 1: top '#12' must be #rrggbb."),
         ("a bottom not a colour", with(&g, &["cards", "0", "bottom"], json!("red")), "Card 1: bottom 'red' must be #rrggbb."),
         ("particles_rise not a bool", with(&g, &["cards", "0", "particles_rise"], json!("yes")), "particles_rise must be true or false."),
-        // FB-206 (2b): the old key `ash` is still read and checked; both names on one card are refused
-        ("ash not a bool", with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!("yes")), "Card 1: ash must be true or false."),
-        ("both names", with(&g, &["cards", "0", "ash"], json!(true)), "Card 1: both particles_rise and its old name ash (keep particles_rise)."),
+        // ASSETORG4 (FB-225): the old key `ash` is no longer read; it is an unknown key like any other
+        ("the old key ash", with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!(true)), "Card 1: unknown key 'ash'."),
         ("a title card without a title", with(&g, &["cards", "2", "title"], json!("")), "Card 3: a title card needs a title."),
         ("a title over 48", with(&g, &["cards", "2", "title"], json!(long(49))), "title is longer than 48 characters."),
         ("a subtitle over 80", with(&g, &["cards", "2", "subtitle"], json!(long(81))), "subtitle is longer than 80 characters."),
@@ -271,7 +270,6 @@ fn each_bad_vignette_or_card_field_is_one_error() {
     let full: Vec<Value> = (0..24).map(|_| json!({"style": "text", "text": "x"})).collect();
     assert!(added(&v, "vignettes", &g, &with(&g, &["cards"], json!(full))).is_empty());
     assert!(added(&v, "vignettes", &g, &with(&g, &["music"], json!("none"))).is_empty(), "none is silence");
-    assert!(added(&v, "vignettes", &g, &with(&without(&g, &["cards", "0", "particles_rise"]), &["cards", "0", "ash"], json!(true))).is_empty(), "the old key ash is taken");
     drop_scratch(&data);
 }
 

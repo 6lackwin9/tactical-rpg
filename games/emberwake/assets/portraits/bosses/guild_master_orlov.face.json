@@ -5,8 +5,8 @@
   "blink": true,
   "lid": "#a47a5f",
   "glow": [],
-  "veins": [],
+  "lines": [],
   "mouth": [],
   "rim": "",
-  "idle": [{"effect": "smoke", "color": "#6b7280", "intensity": 0.4}]
+  "idle": [{"effect": "drift", "color": "#6b7280", "intensity": 0.4}]
 }
