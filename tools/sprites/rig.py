@@ -7,6 +7,7 @@ from PIL import Image
 
 W = 48
 GY = 43.0
+SLOTS_MAX = 16
 OUT = (20, 17, 15)
 WHITE = (250, 244, 230)
 GOLDEN, GOLDEN_HI = (240, 200, 90), (255, 240, 180)  # effect colours (no palette slot): focus and buff motes
@@ -220,6 +221,17 @@ def draw_back_gear(f, u, P, R, sh, px, py, T, lx):
         for k in range(3): f.dot(*R((qx - 1 + k, qy - 1 - (k % 2))), WHITE if k != 1 else P['accent'])
     elif g == 'cape':
         f.poly([R((sh[0] - 2.5, sh[1])), R((sh[0] - 1, sh[1])), R((px - 3, py + 6)), R((px - 7.5, py + 5))], P['accent_lo'])
+    elif g == 'tank':
+        tx, ty = sh[0] - 4.2, sh[1] + 0.5
+        mc = P.get('magic', P.get('accent', P['trim']))
+        f.rect(*R((tx - 1.6, ty)), *R((tx + 1.8, py + 2.5)), P['wood'])
+        f.rect(*R((tx - 1.6, ty)), *R((tx - 0.5, py + 2.5)), P['wood_lo'])
+        f.disc(*R((tx + 0.1, ty)), 1.7, P['wood'])
+        f.limb(R((tx - 1.6, ty + 1.5)), R((tx + 1.8, ty + 1.5)), 0.55, P['trim'])
+        f.limb(R((tx - 1.6, py + 0.2)), R((tx + 1.8, py + 0.2)), 0.55, P['trim'])
+        f.limb(R((tx - 0.2, ty + 2.4)), R((tx - 0.2, py - 0.6)), 0.55, mc)
+        f.dot(*R((tx - 0.2, ty + 2.6)), WHITE)
+        f.dot(*R((tx + 0.5, ty - 1.4)), P['trim'])
 
 
 def draw_robe_skirt(f, u, P, R, px, py, kb, kf, fb, ff):
@@ -275,6 +287,31 @@ def draw_weapon(f, u, P, kind, hand, a_deg, two=False, glow=0.0):
         g.dot(cx - 2.6, cy - 2.0, P['metal_hi']); g.dot(cx - 3.2, cy - 0.8, P['metal_hi'])
         g.disc(cx, cy, 1.1, P['metal']); g.dot(cx - 0.4, cy - 0.5, P['metal_hi'])
         g.outline(); f.im.alpha_composite(g.im); f.px = f.im.load()
+    elif kind == 'pavise':  # squared notched iron-banded shield (uses shield_lo, never P['shield'])
+        g = F(); cx, cy = hx + 3.0, hy + 0.5
+        r = math.radians(a_deg); ca, sa = math.cos(r), math.sin(r)
+        rot = lambda p: (cx + p[0] * ca - p[1] * sa, cy + p[0] * sa + p[1] * ca)
+        face = [(-3.8, -7.8), (3.8, -7.8), (3.8, 7.6), (1.0, 8.6), (-1.0, 8.6), (-3.8, 7.6)]
+        g.poly([rot(p) for p in face], P.get('shield_lo', (44, 62, 108)))
+        g.poly([rot(p) for p in [(0.8, -7.2), (3.5, -7.2), (3.5, 7.2), (0.8, 8.0)]], P.get('metal_lo', (92, 102, 120)))
+        for i in range(len(face)):
+            g.limb(rot(face[i]), rot(face[(i + 1) % len(face)]), 0.5, P['metal_hi'] if i in (0, 5) else P['metal'])
+        g.limb(rot((0, -6.2)), rot((0, 6.8)), 0.55, P.get('trim', P['emblem']))
+        for ry in (-4.8, 4.8):
+            g.dot(*rot((-2.2, ry)), P.get('emblem', WHITE)); g.dot(*rot((2.2, ry)), P.get('emblem', WHITE))
+        g.outline(); f.im.alpha_composite(g.im); f.px = f.im.load()
+    elif kind == 'orb':  # brass-cradled alchemical/arcane resonance orb
+        cx, cy = hx + 1.0, hy - 1.2
+        mc = P.get('magic', P.get('accent', P['trim']))
+        mlo = P.get('magic_lo', P.get('accent_lo', P['wood_lo']))
+        if glow > 0:
+            f.disc(cx, cy, 2.8 + glow * 1.4, mlo)
+        f.limb((cx - 2.0, cy + 1.5), (cx + 2.0, cy + 1.5), 0.55, P['trim'])
+        f.dot(cx, cy + 2.0, P['trim'])
+        f.disc(cx, cy, 2.1, mlo); f.disc(cx - 0.3, cy - 0.3, 1.4, mc)
+        f.dot(cx - 0.8, cy - 0.8, WHITE)
+    elif kind == 'sprayer':
+        _sprayer(f, P, (hx, hy), (ux, uy), glow)
     elif kind in DRAWERS:
         DRAWERS[kind](f, P, (hx, hy), (ux, uy))
 
@@ -350,10 +387,137 @@ def _hand_axe(f, P, h, u):
     f.poly([_at(h, u, 7.2, n, -0.6), _at(h, u, 7.9, n, -1.9), _at(h, u, 8.6, n, -0.6)], P['metal_lo'])
 
 
-DRAWERS = {'greatsword': _greatsword, 'battle_axe': _battle_axe, 'warhammer': _warhammer, 'double_axe': _double_axe, 'hand_axe': _hand_axe}
+def _greatsword_ew(f, P, h, u):
+    """Emberwake native 2H claymore: broad fullered steel blade, flared crossguard, crimson ricasso wrap."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -5.8), _at(h, u, 0.5), 0.85, P['leather_lo'])
+    f.disc(*_at(h, u, -6.3), 1.25, P['trim'])
+    f.limb(_at(h, u, 1.0, n, -3.6), _at(h, u, 1.0, n, 3.6), 0.8, P['trim'])
+    f.limb(_at(h, u, 1.8, n, -1.5), _at(h, u, 1.8, n, 1.5), 0.55, P['accent'])
+    f.poly([_at(h, u, 1.8, n, -1.3), _at(h, u, 1.8, n, 1.3), _at(h, u, 13.8, n, 1.1), _at(h, u, 16.8), _at(h, u, 13.8, n, -1.1)], P['metal'])
+    f.limb(_at(h, u, 2.8), _at(h, u, 13.2), 0.45, P['metal_lo'])
+    f.limb(_at(h, u, 2.2, n, 0.85), _at(h, u, 15.2, n, 0.35), 0.45, P['metal_hi'])
+    f.limb(_at(h, u, 2.2, n, -0.85), _at(h, u, 15.2, n, -0.35), 0.45, WHITE)
+    f.dot(*_at(h, u, 16.8), WHITE)
+
+
+def _billhook(f, P, h, u):
+    """Emberwake iron billhook: ash/leather shaft, hooked forward cleaver beak, dorsal spike, spear point."""
+    n = (-u[1], u[0])
+    _haft(f, P, h, u, 5.0, 12.2)
+    f.limb(_at(h, u, 8.6), _at(h, u, 10.6), 0.95, P['metal_lo'])
+    f.poly([_at(h, u, 8.8, n, 0.5), _at(h, u, 9.8, n, 3.5), _at(h, u, 12.6, n, 4.4),
+            _at(h, u, 14.0, n, 2.4), _at(h, u, 12.6, n, 2.7), _at(h, u, 12.2, n, 0.5)], P['metal'])
+    f.limb(_at(h, u, 9.8, n, 3.5), _at(h, u, 12.6, n, 4.4), 0.45, P['metal_hi'])
+    f.limb(_at(h, u, 12.6, n, 4.4), _at(h, u, 14.0, n, 2.4), 0.45, WHITE)
+    f.poly([_at(h, u, 9.8, n, -0.6), _at(h, u, 10.8, n, -2.6), _at(h, u, 11.6, n, -0.6)], P['metal_lo'])
+    f.limb(_at(h, u, 12.0), _at(h, u, 14.0), 0.6, P['metal_hi'])
+    f.dot(*_at(h, u, 14.2), WHITE)
+
+
+def _bone_saw(f, P, h, u):
+    """Surgical bone saw: grip with knuckle bow, brass dorsal spine, serrated steel blade."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -2.5), _at(h, u, 0.8), 0.85, P['leather_lo'])
+    f.limb(_at(h, u, -2.2, n, 1.8), _at(h, u, 0.6, n, 2.0), 0.45, P['trim'])
+    f.limb(_at(h, u, 0.6), _at(h, u, 0.6, n, 2.0), 0.45, P['trim'])
+    f.limb(_at(h, u, 1.2, n, -1.5), _at(h, u, 11.6, n, -1.5), 0.55, P['trim'])
+    f.limb(_at(h, u, 11.4, n, -1.5), _at(h, u, 11.4, n, 1.5), 0.55, P['metal_lo'])
+    f.poly([_at(h, u, 1.6, n, -1.0), _at(h, u, 11.2, n, -1.0), _at(h, u, 11.2, n, 1.7), _at(h, u, 1.6, n, 1.7)], P['metal'])
+    for k, s in enumerate((2.4, 4.2, 6.0, 7.8, 9.6, 11.0)):
+        f.dot(*_at(h, u, s, n, 2.1), WHITE if k % 2 else P['metal_hi'])
+
+
+def _censer(f, P, h, u):
+    """Pastoral censer-staff: wood haft, bronze crook, short chain and glowing thurible."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -3.5), _at(h, u, 9.0), 0.8, P['wood'])
+    f.disc(*_at(h, u, -3.8), 0.8, P['trim'])
+    f.limb(_at(h, u, 9.0), _at(h, u, 11.0, n, 2.0), 0.7, P['trim'])
+    f.limb(_at(h, u, 11.0, n, 2.0), _at(h, u, 11.8, n, 3.2), 0.55, P['trim'])
+    f.limb(_at(h, u, 11.8, n, 3.2), _at(h, u, 9.6, n, 3.5), 0.4, P['metal_lo'])
+    f.disc(*_at(h, u, 8.8, n, 3.5), 1.6, P['trim'])
+    f.disc(*_at(h, u, 8.8, n, 3.5), 0.9, P['accent'])
+    f.dot(*_at(h, u, 8.6, n, 3.3), WHITE)
+
+
+def _cestus(f, P, h, u):
+    """Riveted brawler gauntlet block and broken shackle stud (brawler-safe palette slots)."""
+    n = (-u[1], u[0])
+    f.disc(h[0], h[1], 2.4, P['glove'])
+    f.limb(_at(h, u, -0.5, n, -2.0), _at(h, u, -0.5, n, 2.0), 0.65, P['accent'])
+    f.limb(_at(h, u, 1.4, n, -1.6), _at(h, u, 1.4, n, 1.6), 0.6, P.get('glove_hi', P['glove']))
+    for k in (-1.2, 0.0, 1.2):
+        f.dot(*_at(h, u, 2.1, n, k), P['accent'])
+
+
+def _scourge(f, P, h, u):
+    """Barbed iron scourge: grip, brass ferrule and three fanned knotted lashes."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -2.2), _at(h, u, 1.4), 0.85, P['leather_lo'])
+    f.disc(*_at(h, u, 1.8), 0.9, P['trim'])
+    for k, reach in ((-2.8, 10.6), (0.0, 12.6), (2.8, 11.2)):
+        mid = _at(h, u, 6.5, n, k * 0.55)
+        tip = _at(h, u, reach, n, k)
+        f.limb(_at(h, u, 2.0), mid, 0.45, P['metal_lo'])
+        f.limb(mid, tip, 0.45, P['leather'])
+        f.dot(*tip, P['accent'])
+
+
+def _arbalest(f, P, h, u):
+    """Heavy steel-prod arbalest: wood stock, steel bow arms, white string and bolt."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -3.0), _at(h, u, 10.5), 0.85, P['wood'])
+    f.limb(_at(h, u, 9.0, n, -4.6), _at(h, u, 9.0, n, 4.6), 0.7, P['metal'])
+    f.limb(_at(h, u, 8.6, n, -4.2), _at(h, u, 8.6, n, 4.2), 0.4, P['metal_hi'])
+    f.limb(_at(h, u, 9.0, n, -4.6), _at(h, u, 3.0), 0.35, WHITE)
+    f.limb(_at(h, u, 9.0, n, 4.6), _at(h, u, 3.0), 0.35, WHITE)
+    f.limb(_at(h, u, 3.0), _at(h, u, 11.6), 0.45, P['accent'])
+    f.dot(*_at(h, u, 12.0), P['metal_hi'])
+
+
+def _sprayer(f, P, h, u, glow=0.0):
+    """Brass vitriol sprayer lance with wood stock, underslung glowing flask and bell nozzle."""
+    n = (-u[1], u[0])
+    mc = P.get('magic', P.get('accent', P['trim']))
+    mlo = P.get('magic_lo', P.get('accent_lo', P['wood_lo']))
+    f.limb(_at(h, u, -3.5, n, 1.5), _at(h, u, -1.5, n, 2.2), 0.55, P['wood_lo'])
+    f.limb(_at(h, u, -1.5, n, 2.2), _at(h, u, 0.5), 0.55, P['wood_lo'])
+    f.limb(_at(h, u, -2.5), _at(h, u, 9.4), 0.95, P['trim'])
+    f.limb(_at(h, u, -2.0, n, 0.9), _at(h, u, 4.0, n, 0.9), 0.65, P['wood_lo'])
+    f.poly([_at(h, u, 3.0, n, 0.9), _at(h, u, 7.6, n, 0.9), _at(h, u, 7.6, n, 2.9), _at(h, u, 3.0, n, 2.9)], mlo)
+    f.limb(_at(h, u, 3.8, n, 1.9), _at(h, u, 6.8, n, 1.9), 0.55, mc)
+    f.dot(*_at(h, u, 5.2, n, 1.4), WHITE)
+    f.poly([_at(h, u, 9.0, n, -1.2), _at(h, u, 11.8, n, -2.2), _at(h, u, 11.8, n, 2.2), _at(h, u, 9.0, n, 1.2)], P['trim'])
+    f.limb(_at(h, u, 11.5, n, -1.4), _at(h, u, 11.5, n, 1.4), 0.5, WHITE)
+    if glow > 0:
+        mx, my = _at(h, u, 12.2)
+        f.disc(mx, my, 1.2 + glow * 1.4, mlo)
+        f.disc(mx, my, 0.7 + glow * 0.6, mc)
+
+
+def _knife(f, P, h, u):
+    """Curved single-edged boning knife: hooked belly edge and dark dorsal spine (rogue-safe slots)."""
+    n = (-u[1], u[0])
+    f.limb(_at(h, u, -2.0), _at(h, u, 0.5), 0.85, P['leather_lo'])
+    f.disc(*_at(h, u, -2.4), 0.85, P['trim'])
+    f.limb(_at(h, u, 0.9, n, -1.4), _at(h, u, 0.9, n, 1.4), 0.5, P['trim'])
+    f.poly([_at(h, u, 1.5, n, -0.7), _at(h, u, 1.5, n, 1.2), _at(h, u, 5.2, n, 1.6),
+            _at(h, u, 7.6, n, -0.2), _at(h, u, 6.2, n, -0.9)], P['metal_hi'])
+    f.limb(_at(h, u, 2.0, n, -0.7), _at(h, u, 6.0, n, -0.8), 0.4, P['metal_lo'])
+    f.limb(_at(h, u, 2.2, n, 1.2), _at(h, u, 7.2), 0.4, WHITE)
+    f.dot(*_at(h, u, 7.6, n, -0.2), WHITE)
+
+
+DRAWERS = {'greatsword': _greatsword, 'greatsword_ew': _greatsword_ew, 'billhook': _billhook,
+           'battle_axe': _battle_axe, 'warhammer': _warhammer, 'double_axe': _double_axe, 'hand_axe': _hand_axe,
+           'bone_saw': _bone_saw, 'censer': _censer, 'cestus': _cestus, 'scourge': _scourge,
+           'arbalest': _arbalest, 'sprayer': _sprayer, 'knife': _knife}
 # WINDUP1: how far each weapon reaches past the hand along its angle (px; the debuff wind-up's glint sits at its tip)
 WEAPON_TIP = {'sword': 12.0, 'sword2': 15.0, 'mace': 10.8, 'dagger': 6.8, 'staff': 11.8, 'greatsword': 16.8,
-              'battle_axe': 14.0, 'warhammer': 15.0, 'double_axe': 16.4, 'hand_axe': 9.5}
+              'greatsword_ew': 16.8, 'billhook': 14.0, 'battle_axe': 14.0, 'warhammer': 15.0,
+              'double_axe': 16.4, 'hand_axe': 9.5, 'bone_saw': 12.2, 'censer': 13.0, 'cestus': 3.2,
+              'scourge': 12.8, 'arbalest': 12.0, 'sprayer': 12.2, 'knife': 7.6}
 
 
 def draw_bow(f, P, hand, bow_a, pull_hand=None, nock=False):
@@ -424,7 +588,16 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     if wbk == 'dagger' and not loose_b: draw_weapon(f, u, P, 'dagger', R(hb), (wb if wb is not None else 160) + (math.degrees(ang) if fall else 0))
     if swap and not loose: draw_weapon(f, u, P, wf, R(hb), wa, two, glow)
     f.limb(R((sh[0] - 2, sh[1])), R(eb), 1.7, sleeve_lo); f.limb(R(eb), R(hb), 1.5, fore_lo)
-    f.disc(*R(hb), 1.9 if fist_b else 1.5, P.get('glove_lo', fore_lo))
+    if wbk == 'braces' and not loose_b:
+        ebr, hbr = R(eb), R(hb)
+        f.limb((ebr[0] + (hbr[0] - ebr[0]) * 0.35, ebr[1] + (hbr[1] - ebr[1]) * 0.35), hbr, 1.85, P['accent_lo'])
+        f.dot((ebr[0] + hbr[0]) * 0.5, (ebr[1] + hbr[1]) * 0.5, P.get('glove_hi', P['glove']))
+    if wf == 'cestus' and not loose:
+        hbx, hby = R(hb)
+        f.disc(hbx, hby, 2.3 if fist_b else 1.9, P.get('glove_lo', fore_lo))
+        f.dot(hbx + 0.8, hby - 0.8, P['accent_lo'])
+    else:
+        f.disc(*R(hb), 1.9 if fist_b else 1.5, P.get('glove_lo', fore_lo))
     # WAR2H1 grips ('2h', 'buckler'): a weapon pointing back (a wind-up, a low guard) goes behind the head and body
     back2 = u.get('grip') in ('2h', 'buckler') and not loose and wa < 0
     if back2:
@@ -442,12 +615,20 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     f.limb(R((px + 1, py)), R(kf), 2.4, P['leg']); f.limb(R(kf), R(ffp), 2.2, P['leg'], P['leg_lo'])
     f.rect(*R((ffp[0] - 1, ffp[1] - 1)), *R((ffp[0] + 3, ffp[1])), P['boot'])
     draw_robe_skirt(f, u, P, R, px, py, kb, kf, fbp, ffp)
-    if wbk == 'shield' and not loose_b and not swap:  # shield on the far arm, carried in front of the chest
-        draw_weapon(f, u, P, 'shield', R(hb), math.degrees(ang) if fall else 0)
+    if wbk in ('shield', 'pavise') and not loose_b and not swap:  # shield on the far arm, carried in front of the chest
+        draw_weapon(f, u, P, wbk, R(hb), math.degrees(ang) if fall else 0)
     elif wbk == 'buckler' and not loose_b and not swap:  # buckler strapped over the far fist, in front of the chest
         draw_weapon(f, u, P, 'buckler', R(hb), 0)
+    elif wbk == 'orb' and not loose_b and not swap:  # resonance orb hovered before the off hand
+        draw_weapon(f, u, P, 'orb', R(hb), 0, glow=glow)
     # front arm + weapon
     f.limb(R((sh[0] + 2, sh[1])), R(ef), 1.9, sleeve); f.limb(R(ef), R(hf), 1.7, fore)
+    if wbk == 'braces' and not loose_b:
+        efr, hfr = R(ef), R(hf)
+        f.limb((efr[0] + (hfr[0] - efr[0]) * 0.3, efr[1] + (hfr[1] - efr[1]) * 0.3), hfr, 2.0, P['accent'])
+        f.limb((efr[0] + (hfr[0] - efr[0]) * 0.35, efr[1] + (hfr[1] - efr[1]) * 0.35),
+               (efr[0] + (hfr[0] - efr[0]) * 0.85, efr[1] + (hfr[1] - efr[1]) * 0.85), 0.65, P['accent_lo'])
+        f.dot((efr[0] + hfr[0]) * 0.55, (efr[1] + hfr[1]) * 0.55 - 0.5, P.get('glove_hi', P['glove']))
     hfx, hfy = R(hf)
     if wf == 'bow':
         pull_hand = None
@@ -458,9 +639,17 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
             if pull_hand: f.disc(*pull_hand, 1.4, P.get('glove', P['leather_lo']))
     elif wf == 'fists':
         f.disc(hfx, hfy, 2.0 if fist_f else 1.6, P['glove']); f.dot(hfx + 0.8, hfy - 0.8, P.get('glove_hi', P['glove']))
+    elif wf == 'cestus':
+        ex, ey = R(ef); d = math.hypot(hfx - ex, hfy - ey) or 1.0
+        ux_f, uy_f = (hfx - ex) / d, (hfy - ey) / d
+        f.disc(hfx, hfy, 2.4 if fist_f else 2.0, P['glove'])
+        f.limb((hfx - ux_f * 1.4 - uy_f * 1.6, hfy - uy_f * 1.4 + ux_f * 1.6),
+               (hfx - ux_f * 1.4 + uy_f * 1.6, hfy - uy_f * 1.4 - ux_f * 1.6), 0.7, P['accent'])
+        f.dot(hfx + ux_f * 1.8, hfy + uy_f * 1.8, P['accent'])
+        f.dot(hfx + 0.8, hfy - 0.8, P.get('glove_hi', P['glove']))
     elif swap:
         f.disc(hfx, hfy, 1.6, P.get('glove', P['leather']))
-        if wbk == 'shield': draw_weapon(f, u, P, 'shield', (hfx, hfy), 0)
+        if wbk in ('shield', 'pavise'): draw_weapon(f, u, P, wbk, (hfx, hfy), 0)
     else:
         if loose: draw_weapon(f, u, P, wf, loose[:2], loose[2]); f.disc(hfx, hfy, 1.4, P['skin'])
         else:
@@ -499,13 +688,14 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
     # WINDUP1: where the main hand and the main weapon's tip are (image metadata, for the wind-up effects)
     f.im.info['hand'] = (hfx, hfy)
     f.im.info['off'] = R(hb)  # WINDUP1-R2: the off hand (a ranger's string hand, for the buff motes)
-    if wf in WEAPON_TIP and not loose and not swap:
+    if wf in WEAPON_TIP and not loose and not swap and wf != 'cestus':
         ux, uy = udir(wa); f.im.info['tip'] = (hfx + ux * WEAPON_TIP[wf], hfy + uy * WEAPON_TIP[wf])
     elif wf == 'bow' and nock and pull > 0 and not loose:  # the nocked arrow's head (draw_bow)
         f.im.info['tip'] = (hfx + 5.2, hfy)
-    elif wf == 'fists' and not loose:  # the near fist's knuckles, along the forearm
+    elif wf in ('fists', 'cestus') and not loose:  # the near fist's knuckles, along the forearm
         ex, ey = R(ef); d = math.hypot(hfx - ex, hfy - ey) or 1.0
-        f.im.info['tip'] = (hfx + (hfx - ex) / d * 2.0, hfy + (hfy - ey) / d * 2.0)
+        reach = 3.0 if wf == 'cestus' else 2.0
+        f.im.info['tip'] = (hfx + (hfx - ex) / d * reach, hfy + (hfy - ey) / d * reach)
     return f.im
 
 

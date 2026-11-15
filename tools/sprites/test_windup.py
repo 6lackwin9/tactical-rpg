@@ -41,7 +41,10 @@ PILOT = ('warrior', 'warrior/2h_sword', 'warrior/2h_axe', 'warrior/2h_hammer', '
          # DIR4-R3: the goblin and named variants and the 1H + buckler look
          'brawler/goblin', 'brawler/goblin_berserker', 'rogue/goblin', 'rogue/goblin_scout', 'ranger/goblin', 'priest/goblin',
          'brawler/ash_warchief', 'warrior/grakka_ashmaw', 'warrior/brask_toller', 'warrior/hest_the_quartermaster',
-         'warrior/orsa_tallow', 'ranger/wenn_tallow', 'warrior/1h_buckler')
+         'warrior/orsa_tallow', 'ranger/wenn_tallow', 'warrior/1h_buckler',
+         # PR5-60 RIG-GEAR1: 8 new gear looks with full DIR4 + WINDUP1 views
+         'warrior/1h_polearm', 'warrior/2h_polearm', 'warrior/2h_greatsword',
+         'brawler/gauntlet', 'brawler/braces', 'mage/1h_sprayer', 'mage/orb', 'rogue/1h_knife')
 
 
 def quiet(fn, *a):

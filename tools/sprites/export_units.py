@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image, ImageDraw  # noqa: E402
 
 import classes  # noqa: E402
+import forge_spec  # noqa: E402
 import rig  # noqa: E402
 import variants  # noqa: E402
 import views  # noqa: E402
@@ -53,7 +54,7 @@ import views  # noqa: E402
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
 LOOPING = {"idle", "walk", "idle_guarded", "dazed"} | set(rig.WINDUPS)
-SLOTS_MAX, MS_MIN, MS_MAX, FRAMES_MAX = 16, 16, 2000, 64
+SLOTS_MAX, MS_MIN, MS_MAX, FRAMES_MAX = rig.SLOTS_MAX, 16, 2000, 64
 STANDARD = {"idle", "walk", "hurt", "death", "defend", "idle_guarded", "hurt_guarded", "idle_focus"}
 # FX1-L1: the attack clips, each of which must mark its impact frame (rig.impact)
 ATTACKS = {"attack", "jab", "haymaker", "kick", "sweep_kick", "shield_bash", "spit"}
@@ -580,15 +581,45 @@ def windup_review(out: str, key: str, frames: dict, times: dict) -> list:
     return paths
 
 
+def chroma_review(
+    out: str,
+    key: str,
+    frames: dict,
+    palette: dict,
+    *,
+    mode: str = "auto",
+    clip: str = "attack",
+    scale: int = 4,
+) -> list[str]:
+    """Compose a chroma-keyed 4-frame strip and 8-pose review sheet matching SpriteForge options."""
+    os.makedirs(out, exist_ok=True)
+    name = key.replace("/", "_")
+    cell = (rig.W * scale, rig.W * scale) if scale and scale > 1 else None
+    strip_frames = frames.get(clip) or frames.get("jab") or frames.get("idle") or next(iter(frames.values()))
+    strip_im, _ = forge_spec.render_chroma_strip(strip_frames, palette=palette, mode=mode, cell_size=cell)
+    sheet_im, _ = forge_spec.render_chroma_sheet(frames, palette=palette, mode=mode, cell_size=cell)
+    strip_path = os.path.join(out, f"{name}_chroma_strip.png")
+    sheet_path = os.path.join(out, f"{name}_chroma_sheet.png")
+    strip_im.save(strip_path)
+    sheet_im.save(sheet_path)
+    return [strip_path, sheet_path]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("bodies", nargs="*", help="class ids or variant keys (default: every class and every variant)")
     ap.add_argument("--root", default=WORKSPACE, help="workspace root holding kits/rpg/assets and games/emberwake/assets")
     ap.add_argument("--clips", choices=["idle", "all"], default="all")
     ap.add_argument("--review", metavar="OUT", help="also write contact sheets and GIFs for the review page to OUT")
+    ap.add_argument("--chroma-strip", metavar="OUT", help="write chroma-keyed 4-frame strip and 8-pose review sheet to OUT")
+    ap.add_argument("--chroma-mode", choices=forge_spec.CHROMA_KEY_MODES, default="auto", help="chroma key color mode")
+    ap.add_argument("--chroma-clip", default="attack", help="clip row sampled for the 4-frame chroma strip")
+    ap.add_argument("--chroma-scale", type=int, default=4, help="integer nearest-neighbor scale for chroma sheets (1 = 48px)")
     args = ap.parse_args()
     if args.review:
         os.makedirs(args.review, exist_ok=True)
+    if args.chroma_strip:
+        os.makedirs(args.chroma_strip, exist_ok=True)
     for key in args.bodies or list(classes.UNITS) + variants.all_bodies():
         layer, folder, frames, sheet, clips = body(key, args.clips)
         base = os.path.join(args.root, *LAYERS[layer], "units", *folder.split("/"))
@@ -618,6 +649,9 @@ def main() -> None:
             _, _, fr, times, _, _ = source(key)
             for p in review(args.review, key, fr, times, pals) + turnaround(args.review, key, fr, times) + windup_review(args.review, key, fr, times):
                 print("review", p)
+        if args.chroma_strip:
+            for p in chroma_review(args.chroma_strip, key, frames, clips["palette"], mode=args.chroma_mode, clip=args.chroma_clip, scale=args.chroma_scale):
+                print("chroma", p)
     if args.review:
         p = model_sheet(args.review, args.bodies or list(classes.UNITS) + variants.all_bodies())
         if p:

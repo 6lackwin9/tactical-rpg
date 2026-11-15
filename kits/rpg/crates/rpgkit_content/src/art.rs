@@ -90,19 +90,19 @@ impl Grip {
         Grip::of(inv.get(Slot::MainHand).map(|e| &e.item), inv.get(Slot::OffHand).map(|e| &e.item))
     }
 
-    /// The look's variant (WAR2H1, user 2026-10-23): `2h_<family>` when the main hand holds a two-handed weapon, or
-    /// a weapon with no shield beside it (an empty off hand or one holding a weapon or a focus); `1h_buckler` with a
-    /// buckler; None = the body's own sheet (a heavier shield: 1H + kite shield; no weapon and no buckler).
+    /// The look's primary variant: `2h_<family>` when the main hand holds a two-handed weapon, or a weapon with no
+    /// shield beside it; `1h_buckler` with a buckler; `1h_<family>` with a non-fallback 1H weapon beside a heavier
+    /// shield; None when the base sheet matches (1H fallback sword + shield, empty main + shield, or empty + empty/other).
     pub fn look(&self) -> Option<String> {
-        let two = Some(format!("2h_{}", self.main_family));
-        if self.main_family.is_empty() && self.off_hand != OffHand::Buckler {
+        let fam = self.main_family.as_str();
+        if fam.is_empty() && self.off_hand != OffHand::Buckler {
             return None;
         }
         match self.off_hand {
-            _ if self.two_handed => two,
-            OffHand::Shield => None,
+            _ if self.two_handed => Some(format!("2h_{fam}")),
             OffHand::Buckler => Some(BUCKLER_LOOK.into()),
-            OffHand::Empty | OffHand::Other => two,
+            OffHand::Shield => (fam != LOOK_FALLBACK_FAMILY).then(|| format!("1h_{fam}")),
+            OffHand::Empty | OffHand::Other => Some(format!("2h_{fam}")),
         }
     }
 }
@@ -110,21 +110,59 @@ impl Grip {
 /// The 1H + buckler look's variant.
 pub const BUCKLER_LOOK: &str = "1h_buckler";
 
-/// The bodies to try for a unit wearing body `key` with gear `grip` (WAR2H1; the game's battle token calls this, then
-/// `Art::first_body`): a class base (`<class>`) whose grip has a look tries `<class>/<look>` (`1h_buckler` or
-/// `2h_<family>`), for a 2H look then the fallback family's `<class>/2h_sword`, then the class base itself (a class
-/// without looks shows its sheet; once another class gets a `2h_sword` look, a family without its own look, such as
-/// a bow, would show that greatsword: give the fallback per class then); any other body, a named or goblin variant, keeps its own art key: `body_chain(key)`.
-/// The looks share the base's palette slots and palette files (DIR4 L3), so the unit's palette applies unchanged.
+/// The bodies to try for a unit wearing body `key` with gear `grip` (WAR2H1, RIG-GEAR1; the game's battle token calls
+/// this, then `Art::first_body`): a class base (`<class>`) tries its grip candidates in order before falling back to
+/// `<class>`:
+/// - 2H weapons: `<class>/2h_<family>`, `<class>/2h_sword`, `<class>`;
+/// - bucklers: `<class>/1h_buckler`, `<class>`;
+/// - heavier shields: `<class>/1h_<family>` (for non-empty, non-fallback main weapons), `<class>`;
+/// - 1H / empty with empty or other off-hand (dual weapon, orb, braces): `<class>/2h_<family>`, `<class>/1h_<family>`,
+///   `<class>/<family>`, plus `<class>/orb` and `<class>/braces` when `OffHand::Other`, then `<class>/2h_sword` before
+///   `<class>` so classes with 2H empty-offhand looks drop shields while 1H-only/off-hand looks resolve their sheets.
+/// Named or variant bodies keep their own art key: `body_chain(key)`. The looks share the base's palette slots and
+/// palette files (DIR4 L3), so the unit's palette applies unchanged.
 pub fn gear_body_chain(key: &str, grip: &Grip) -> Vec<String> {
     let (class, variant) = split_body(key);
-    let Some(look) = grip.look().filter(|_| variant == "base") else { return body_chain(key) };
-    let mut out = vec![format!("{class}/{look}")];
-    let fallback = format!("{class}/2h_{LOOK_FALLBACK_FAMILY}");
-    if look.starts_with("2h_") && !out.contains(&fallback) {
-        out.push(fallback);
+    if variant != "base" {
+        return body_chain(key);
     }
-    out.push(class.to_string());
+    let fam = grip.main_family.as_str();
+    let mut out = Vec::new();
+    let mut push = |candidate: String| {
+        if !out.contains(&candidate) {
+            out.push(candidate);
+        }
+    };
+    if grip.two_handed && !fam.is_empty() {
+        push(format!("{class}/2h_{fam}"));
+        push(format!("{class}/2h_{LOOK_FALLBACK_FAMILY}"));
+    } else {
+        match grip.off_hand {
+            OffHand::Buckler => {
+                push(format!("{class}/{BUCKLER_LOOK}"));
+            }
+            OffHand::Shield => {
+                if !fam.is_empty() && fam != LOOK_FALLBACK_FAMILY {
+                    push(format!("{class}/1h_{fam}"));
+                }
+            }
+            OffHand::Empty | OffHand::Other => {
+                if !fam.is_empty() {
+                    push(format!("{class}/2h_{fam}"));
+                    push(format!("{class}/1h_{fam}"));
+                    push(format!("{class}/{fam}"));
+                }
+                if grip.off_hand == OffHand::Other {
+                    push(format!("{class}/orb"));
+                    push(format!("{class}/braces"));
+                }
+                if !fam.is_empty() {
+                    push(format!("{class}/2h_{LOOK_FALLBACK_FAMILY}"));
+                }
+            }
+        }
+    }
+    push(class.to_string());
     out
 }
 
@@ -524,5 +562,26 @@ mod tests {
         assert!(landmark_art_ok("") && landmark_art_ok("shared_gate2") && !landmark_art_ok("Gate") && !landmark_art_ok("a") && !landmark_art_ok("x/y"));
         assert_eq!(world_map_layout("quarter"), "backgrounds/world_map/quarter.json");
         assert_eq!(world_map_background("quarter"), "backgrounds/world_map/quarter.png");
+    }
+
+    #[test]
+    fn gear_body_chain_covers_shields_one_hand_and_offhand_looks() {
+        let g = |main_family: &str, two_handed, off_hand| Grip {
+            main_family: main_family.into(),
+            two_handed,
+            off_hand,
+        };
+        assert_eq!(gear_body_chain("bruiser", &g("polearm", false, OffHand::Shield)), ["bruiser/1h_polearm", "bruiser"]);
+        assert_eq!(gear_body_chain("bruiser", &g("sword", false, OffHand::Shield)), ["bruiser"]);
+        assert_eq!(gear_body_chain("bruiser", &g("", false, OffHand::Shield)), ["bruiser"]);
+        assert_eq!(gear_body_chain("seer", &g("sprayer", false, OffHand::Empty)),
+                   ["seer/2h_sprayer", "seer/1h_sprayer", "seer/sprayer", "seer/2h_sword", "seer"]);
+        assert_eq!(gear_body_chain("seer", &g("", false, OffHand::Other)), ["seer/orb", "seer/braces", "seer"]);
+        assert_eq!(gear_body_chain("bruiser", &g("fist", false, OffHand::Other)),
+                   ["bruiser/2h_fist", "bruiser/1h_fist", "bruiser/fist", "bruiser/orb", "bruiser/braces", "bruiser/2h_sword", "bruiser"]);
+        assert_eq!(gear_body_chain("bruiser", &g("hammer", true, OffHand::Other)),
+                   ["bruiser/2h_hammer", "bruiser/2h_sword", "bruiser"]);
+        assert_eq!(gear_body_chain("bruiser/goblin", &g("polearm", false, OffHand::Shield)),
+                   ["bruiser/goblin", "bruiser"]);
     }
 }

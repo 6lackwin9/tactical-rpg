@@ -1198,13 +1198,235 @@ def warhammer(f, c, layer):
     _regrip(f, c, layer, ('r', 'l'))
 
 
+def tank(f, c, layer):
+    """Alchemical pressurized backpack tank (rig draw_back_gear 'tank') using mage palette slots only."""
+    P, j = c.P, c.j; px, py = j['pelvis']; sy = j['neck'][1]
+    mc = P.get('magic', P.get('accent', P['trim']))
+    if c.view == 'down' and layer == BEHIND:
+        for side in ('r', 'l'):
+            sx, sy_ = j['sh_' + side]
+            ox = sx + _side(c, side) * 1.4
+            f.disc(ox, sy_ - 1.6, 1.3, P['wood'])
+            f.dot(ox, sy_ - 2.4, P['trim'])
+            f.dot(ox, sy_ - 0.8, mc)
+    elif c.view == 'up' and layer == FRONT:
+        f.rect(px - 3.2, sy + 0.5, px + 3.2, py - 1.5, P['wood'])
+        f.rect(px - 3.2, sy + 0.5, px - 1.2, py - 1.5, P['wood_lo'])
+        f.limb((px - 3.2, sy + 1.8), (px + 3.2, sy + 1.8), 0.55, P['trim'])
+        f.limb((px - 3.2, py - 3.0), (px + 3.2, py - 3.0), 0.55, P['trim'])
+        f.limb((px + 0.6, sy + 2.6), (px + 0.6, py - 3.6), 0.6, mc)
+        f.dot(px + 0.6, sy + 2.8, rig.WHITE)
+
+
+def cestus(f, c, layer):
+    """Riveted brawler gauntlet fists (rig 'cestus') using brawler palette slots only."""
+    P, j = c.P, c.j
+    for side, key in (('r', 'fr'), ('l', 'fl')):
+        r = c.e.get(key, 2.0)
+        if arm_layer(c, side, True) != layer or r <= 0:
+            continue
+        hx, hy = j['hand_' + side]
+        ex, ey = j['elbow_' + side]
+        d = math.hypot(hx - ex, hy - ey) or 1.0
+        ux_s, uy_s = (hx - ex) / d, (hy - ey) / d
+        f.disc(hx, hy, r + 0.4, P['glove'])
+        f.limb((hx - ux_s * 1.3 - uy_s * 1.5, hy - uy_s * 1.3 + ux_s * 1.5),
+               (hx - ux_s * 1.3 + uy_s * 1.5, hy - uy_s * 1.3 - ux_s * 1.5), 0.7, P['accent'])
+        f.dot(hx + _side(c, side) * 1.8, hy, P['accent'])
+        f.dot(hx + 0.6, hy - 0.8, P.get('glove_hi', P['glove']))
+    if c.tip is None:
+        (ex, ey), (hx, hy) = j['elbow_r'], j['hand_r']; d = math.hypot(hx - ex, hy - ey) or 1.0
+        c.tip = (hx + (hx - ex) / d * 3.0, hy + (hy - ey) / d * 3.0)
+
+
+def view_braces(f, c, layer):
+    """Strapped forearm vambraces (rig 'braces') over both forearms."""
+    P, j = c.P, c.j
+    for side in ('r', 'l'):
+        if arm_layer(c, side, True) != layer:
+            continue
+        ex, ey = j['elbow_' + side]; hx, hy = j['hand_' + side]
+        a = (ex + (hx - ex) * 0.3, ey + (hy - ey) * 0.3)
+        b = (ex + (hx - ex) * 0.88, ey + (hy - ey) * 0.88)
+        f.limb(a, b, 2.05, P['accent'])
+        f.dot((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5 - 0.4, P.get('glove_hi', P['glove']))
+
+
+def view_orb(f, c, layer):
+    """Brass-cradled resonance orb hovering beside the left hand using mage slots only."""
+    if layer != _wz(c, 'oz'):
+        return
+    P = c.P; hx, hy = c.j['hand_l']
+    mc = P.get('magic', P.get('accent', P['trim']))
+    mlo = P.get('magic_lo', P.get('accent_lo', P['wood_lo']))
+    cx, cy = hx - c.rs * 2.0, hy - 1.8
+    glow = c.e.get('glow', 0.0)
+    if glow > 0:
+        f.disc(cx, cy, 2.8 + glow * 1.4, mlo)
+    f.limb((cx - 2.0, cy + 1.5), (cx + 2.0, cy + 1.5), 0.55, P['trim'])
+    f.dot(cx, cy + 2.0, P['trim'])
+    f.disc(cx, cy, 2.1, mlo); f.disc(cx - 0.3, cy - 0.3, 1.4, mc)
+    f.dot(cx - 0.8, cy - 0.8, rig.WHITE)
+
+
+def view_sprayer(f, c, layer):
+    """Brass vitriol sprayer lance (rig _sprayer) using mage slots only."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    mc = P.get('magic', P.get('accent', P['trim']))
+    mlo = P.get('magic_lo', P.get('accent_lo', P['wood_lo']))
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-2.5), at(9.4), 0.95, P['trim'])
+    f.limb(at(-2.0, 0.9), at(4.0, 0.9), 0.65, P['wood_lo'])
+    f.poly([at(3.0, 0.9), at(7.6, 0.9), at(7.6, 2.9), at(3.0, 2.9)], mlo)
+    f.limb(at(3.8, 1.9), at(6.8, 1.9), 0.55, mc)
+    f.dot(*at(5.2, 1.4), rig.WHITE)
+    f.poly([at(9.0, -1.2), at(11.8, -2.2), at(11.8, 2.2), at(9.0, 1.2)], P['trim'])
+    f.limb(at(11.5, -1.4), at(11.5, 1.4), 0.5, rig.WHITE)
+    glow = c.e.get('glow', 0.0)
+    if glow > 0:
+        mx, my = at(12.2)
+        f.disc(mx, my, 1.2 + glow * 1.2, mlo); f.disc(mx, my, 0.7 + glow * 0.5, mc)
+    _regrip(f, c, layer, ('r', 'l') if c.e.get('grip2') else ('r',))
+
+
+def view_knife(f, c, layer):
+    """Curved boning knife (rig _knife) using rogue slots only."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 180.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-2.0), at(0.5), 0.85, P['leather_lo']); f.disc(*at(-2.4), 0.85, P['trim'])
+    f.limb(at(0.9, -1.4), at(0.9, 1.4), 0.5, P['trim'])
+    f.poly([at(1.5, -0.7), at(1.5, 1.2), at(5.2, 1.6), at(7.6, -0.2), at(6.2, -0.9)], P['metal_hi'])
+    f.limb(at(2.0, -0.7), at(6.0, -0.8), 0.4, P['metal_lo'])
+    f.limb(at(2.2, 1.2), at(7.2), 0.4, rig.WHITE)
+    f.dot(*at(7.6, -0.2), rig.WHITE)
+    _regrip(f, c, layer, ('r',))
+
+
+def greatsword_ew(f, c, layer):
+    """Emberwake native 2H claymore (rig _greatsword_ew)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = (-d[1], d[0])
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-5.8), at(0.5), 0.85, P['leather_lo']); f.disc(*at(-6.3), 1.25, P['trim'])
+    f.limb(at(1.0, -3.6), at(1.0, 3.6), 0.8, P['trim'])
+    f.limb(at(1.8, -1.5), at(1.8, 1.5), 0.55, P['accent'])
+    f.poly([at(1.8, -1.3), at(1.8, 1.3), at(13.8, 1.1), at(16.8), at(13.8, -1.1)], P['metal'])
+    f.limb(at(2.8), at(13.2), 0.45, P['metal_lo'])
+    f.limb(at(2.2, 0.85), at(15.2, 0.35), 0.45, P['metal_hi'])
+    f.limb(at(2.2, -0.85), at(15.2, -0.35), 0.45, rig.WHITE)
+    f.dot(*at(16.8), rig.WHITE)
+    _regrip(f, c, layer, ('r', 'l'))
+
+
+def billhook(f, c, layer):
+    """Emberwake iron billhook (rig _billhook): works 1H or 2H."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-5.0), at(12.2), 0.75, P['leather']); f.limb(at(-5.0), at(-1.0), 0.75, P['leather_lo'])
+    f.disc(*at(-5.4), 0.8, P['metal_lo']); f.limb(at(8.6), at(10.6), 0.95, P['metal_lo'])
+    f.poly([at(8.8, 0.5), at(9.8, 3.5), at(12.6, 4.4), at(14.0, 2.4), at(12.6, 2.7), at(12.2, 0.5)], P['metal'])
+    f.limb(at(9.8, 3.5), at(12.6, 4.4), 0.45, P['metal_hi'])
+    f.limb(at(12.6, 4.4), at(14.0, 2.4), 0.45, rig.WHITE)
+    f.poly([at(9.8, -0.6), at(10.8, -2.6), at(11.6, -0.6)], P['metal_lo'])
+    f.limb(at(12.0), at(14.0), 0.6, P['metal_hi']); f.dot(*at(14.2), rig.WHITE)
+    _regrip(f, c, layer, ('r', 'l') if c.e.get('grip2') else ('r',))
+
+
+def pavise(f, c, layer):
+    """Iron-banded notched shield (rig 'pavise') using shield_lo/metal/emblem only (never P['shield'])."""
+    if layer != _wz(c, 'oz'):
+        return
+    P = c.P; hx, hy = c.j['hand_l']
+    cx, cy = hx + c.rs * (1.0 if c.view == 'down' else -1.5), hy + 0.5
+    face = [(-3.8, -7.8), (3.8, -7.8), (3.8, 7.6), (1.0, 8.6), (-1.0, 8.6), (-3.8, 7.6)]
+    at = lambda p: (cx + p[0], cy + p[1])
+    g = F()
+    if c.view == 'down':
+        g.poly([at(p) for p in face], P.get('shield_lo', P['metal_lo']))
+        g.poly([at(p) for p in [(0.8, -7.2), (3.5, -7.2), (3.5, 7.2), (0.8, 8.0)]], P['metal_lo'])
+        for i in range(len(face)):
+            g.limb(at(face[i]), at(face[(i + 1) % len(face)]), 0.5, P['metal_hi'] if i in (0, 5) else P['metal'])
+        g.limb(at((0, -6.2)), at((0, 6.8)), 0.55, P['trim'])
+        for ry in (-4.8, 4.8):
+            g.dot(*at((-2.2, ry)), P['emblem']); g.dot(*at((2.2, ry)), P['emblem'])
+    else:
+        g.poly([at(p) for p in face], P.get('shield_lo', P['metal_lo']))
+        for i in range(len(face)):
+            g.limb(at(face[i]), at(face[(i + 1) % len(face)]), 0.45, P['metal'])
+        g.limb(at((-3.4, -4.0)), at((3.4, -4.0)), 0.6, P['leather']); g.limb(at((-3.0, 1.5)), at((3.0, 1.5)), 0.6, P['leather'])
+    g.outline(); f.im.alpha_composite(g.im); f.px = f.im.load()
+
+
+def bone_saw(f, c, layer):
+    """Surgical bone saw (rig _bone_saw)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-2.5), at(0.8), 0.85, P['leather_lo'])
+    f.limb(at(1.2, -1.5), at(11.6, -1.5), 0.55, P['trim'])
+    f.poly([at(1.6, -1.0), at(11.2, -1.0), at(11.2, 1.7), at(1.6, 1.7)], P['metal'])
+    for k, s in enumerate((2.4, 4.2, 6.0, 7.8, 9.6, 11.0)):
+        f.dot(*at(s, 2.1), rig.WHITE if k % 2 else P['metal_hi'])
+    _regrip(f, c, layer, ('r',))
+
+
+def censer(f, c, layer):
+    """Pastoral censer-staff (rig _censer)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-3.5), at(9.0), 0.8, P['wood']); f.disc(*at(-3.8), 0.8, P['trim'])
+    f.limb(at(9.0), at(11.8, 3.2), 0.65, P['trim'])
+    f.limb(at(11.8, 3.2), at(9.6, 3.5), 0.4, P['metal_lo'])
+    f.disc(*at(8.8, 3.5), 1.6, P['trim']); f.disc(*at(8.8, 3.5), 0.9, P['accent']); f.dot(*at(8.6, 3.3), rig.WHITE)
+    _regrip(f, c, layer, ('r',))
+
+
+def scourge(f, c, layer):
+    """Barbed iron scourge (rig _scourge)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-2.2), at(1.4), 0.85, P['leather_lo']); f.disc(*at(1.8), 0.9, P['trim'])
+    for k, reach in ((-2.8, 10.6), (0.0, 12.6), (2.8, 11.2)):
+        f.limb(at(2.0), at(reach, k), 0.45, P['metal_lo']); f.dot(*at(reach, k), P['accent'])
+    _regrip(f, c, layer, ('r',))
+
+
+def arbalest(f, c, layer):
+    """Steel-prod arbalest (rig _arbalest)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-3.0), at(10.5), 0.85, P['wood'])
+    f.limb(at(9.0, -4.6), at(9.0, 4.6), 0.7, P['metal']); f.limb(at(8.6, -4.2), at(8.6, 4.2), 0.4, P['metal_hi'])
+    f.limb(at(9.0, -4.6), at(3.0), 0.35, rig.WHITE); f.limb(at(9.0, 4.6), at(3.0), 0.35, rig.WHITE)
+    f.limb(at(3.0), at(11.6), 0.45, P['accent']); f.dot(*at(12.0), P['metal_hi'])
+    _regrip(f, c, layer, ('r',))
+
+
 PARTS['head'].update(headband=headband, hood=hood, cowl=cowl, hat=hat)
 PARTS['flag']['mask'] = mask
 PARTS['torso'].update(bare=bare, leather=leather, robe=robe)
 PARTS['legs']['robe'] = robe_skirt
-PARTS['back'].update(quiver=quiver, cape=cape)
-PARTS['weapon'].update(fists=fists, bow=bow, dagger=dagger, mace=mace, staff=staff, battle_axe=battle_axe, warhammer=warhammer)
-PARTS['offhand']['dagger'] = off_dagger
+PARTS['back'].update(quiver=quiver, cape=cape, tank=tank)
+PARTS['weapon'].update(fists=fists, bow=bow, dagger=dagger, mace=mace, staff=staff,
+                       battle_axe=battle_axe, warhammer=warhammer,
+                       cestus=cestus, sprayer=view_sprayer, knife=view_knife,
+                       greatsword_ew=greatsword_ew, billhook=billhook,
+                       bone_saw=bone_saw, censer=censer, scourge=scourge, arbalest=arbalest)
+PARTS['offhand'].update(dagger=off_dagger, braces=view_braces, orb=view_orb, pavise=pavise)
 
 
 # ------------------------------------------------------------------ the other classes' grips (DIR4-R2)
@@ -1497,6 +1719,52 @@ GRIPS['mage'] = dict(
             'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(0.5, 1.5), wa=35, wk=0.6, glow=0.5)}))
 
 
+def _jet(x, y, sign):
+    return [(x, y, 2.0, (150, 220, 255)), (x, y - sign * 2.5, 1.3, (80, 140, 230)),
+            (x - 1.5, y + sign * 1.0, 0.9, (80, 140, 230)), (x + 1.5, y + sign * 1.0, 0.9, (80, 140, 230)),
+            (x, y + sign * 0.4, 0.8, (255, 255, 255))]
+
+
+MS_READY = {'down': dict(hand_r=(-1.5, 4.5), wa=170, wk=0.55, hand_l=(0.5, 5.5)),
+            'up': dict(hand_r=(2.0, 3.5), wa=35, wk=0.75, hand_l=(-1.0, 5.5), fore_z={'r': RAISED_BACK})}
+
+
+def mage_sprayer_attack_keys(view):
+    if view == 'down':
+        return [dict(bob=0.4, hand_r=(-0.5, 3.8), wa=165, wk=0.6, hand_l=(0.5, 5.0)),
+                dict(bob=0.8, dy=-0.3, hand_r=(0.0, 2.2), wa=160, wk=0.6, glow=0.4, hand_l=(0.5, 4.5)),
+                dict(bob=1.0, dy=-0.5, hand_r=(0.5, 1.2), wa=155, wk=0.65, glow=1.0, hand_l=(0.5, 4.0)),
+                dict(bob=0.8, dy=0.8, hand_r=(-2.0, 3.0), wa=180, wk=0.45, glow=0.8, hand_l=(-0.5, 4.5), fx=_jet(22, 37, 1)),
+                dict(bob=0.6, dy=0.6, hand_r=(-2.0, 3.5), wa=180, wk=0.45, hand_l=(-0.5, 4.5), fx=_jet(22, 43, 1)),
+                dict(bob=0.3, **MS_READY['down'])]
+    return [dict(bob=0.4, hand_r=(1.5, 3.5), wa=35, wk=0.75, hand_l=(-1.0, 5.0), fore_z={'r': RAISED_BACK}),
+            dict(bob=0.8, dy=0.3, hand_r=(1.2, 2.0), wa=30, wk=0.75, glow=0.4, hand_l=(-1.0, 4.5), fore_z={'r': RAISED_BACK}),
+            dict(bob=1.0, dy=0.5, hand_r=(1.0, 1.0), wa=25, wk=0.8, glow=1.0, hand_l=(-1.0, 4.0), fore_z={'r': RAISED_BACK}),
+            dict(bob=0.8, dy=-0.8, hand_r=(1.5, 1.5), wa=15, wk=0.65, glow=0.8, hand_l=(-1.0, 4.5), fx=_jet(30, 6, -1)),
+            dict(bob=0.6, dy=-0.6, hand_r=(1.5, 1.8), wa=15, wk=0.65, hand_l=(-1.0, 4.5), fx=_jet(31, 2, -1)),
+            dict(bob=0.3, **MS_READY['up'])]
+
+
+GRIPS['mage']['weapons'] = {
+    'sprayer': dict(
+        idle=MS_READY, walk={v: dict(MS_READY[v], swing=0.4) for v in VIEWS},
+        attack=('attack', _attack(mage_sprayer_attack_keys, [120, 140, 220, 60, 120, 140])),
+        dash={v: dict(MS_READY[v]) for v in VIEWS},
+        windups=_windups(mage_sprayer_attack_keys, 3, {
+            'windup_heavy': dict(bob=2.2, dy=-0.5, hand_r=(1.0, -2.5), wa=335, wk=0.7, grip2=2.5, glow=0.6),
+            'windup_buff': dict(bob=0.6, hand_r=(-2.5, 1.5), wa=5, wk=0.8, glow=0.3),
+            'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(-2.0, 3.5), wa=195, wk=0.55, glow=0.5)},
+            [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(4.0, 1.0), wa=320),
+             dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(3.0, 3.5), wa=335),
+             dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.2, 8.0), wa=185, wk=0.6),
+             dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.2, 8.5), wa=182, wk=0.6)],
+            dict(bob=2.0, head_dy=1.5, hand_r=(1.2, 8.5), wa=186, wk=0.65),
+            dict(motes='tip', steps={'windup_heavy': {'glow': (0.6, 0.8, 1.0, 0.8)}}), up={
+                'windup_buff': dict(bob=0.6, hand_r=(1.0, 1.0), wa=10, wk=0.8, glow=0.3),
+                'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(1.5, 1.5), wa=25, wk=0.6, glow=0.5)}))
+}
+
+
 # Warrior 2H, battle axe and warhammer (WAR2H1; DIR4 7.1 L5, DIR4-R2): the greatsword's grip keys (idle, walk and the
 # held poses), with the side view's chop instead of the cut: raised over the right shoulder (the windup hold), swung
 # down in front, the head landing low before the feet (down) or past the right hip (up) with the impact spark.
@@ -1529,7 +1797,7 @@ def _chop(weapon):
                 windups=dict(W2_WINDUPS, attack=keys))
 
 
-GRIPS['warrior/2h']['weapons'] = {'battle_axe': _chop('battle_axe'), 'warhammer': _chop('warhammer')}
+GRIPS['warrior/2h']['weapons'] = {'battle_axe': _chop('battle_axe'), 'warhammer': _chop('warhammer'), 'billhook': _chop('billhook')}
 
 
 # ------------------------------------------------------------------ the variants' parts (DIR4-R3)
