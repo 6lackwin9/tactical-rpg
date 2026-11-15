@@ -41,7 +41,7 @@ All class skills set `"ranks": []`, `"learned_only": true` (except `basics`), `"
 | **Ranger** | `disengage_step` | Disengage Step | `DISENGAGE` -> `maneuver` | `1 / 1` | `jump 2` | `jump_tiles: 2` away from nearest threat. Unchanged basic. |
 | **Ranger** | `mark_quarry` | Spotter's Mark | `ATTACK` -> `assault` | `1 / 1` | `2–5` | `0.0x` dmg, `expose -6` (`pot 90, 2` rnds), `stagger 4`, `riders`: `[{"when": {}, "effects": [{"type": "reveal", "rounds": 1}]}]`. |
 | **Ranger** | `snare_wire` | Snare Wire | `ATTACK` -> `field` | `2 / 1` | `1–3` | `0.0x` dmg, `hazard: {id: "tripwire", shape: "NONE", at: "target", rounds: 3}`. |
-| **Ranger** | `focus` | Steady Aim | `FOCUS` -> `guard` | `2 / 2` | `self` | `boost: 0.5` (`+50%` next attack), `boost_rounds: 2`. Flattened. |
+| **Ranger** | `focus` | Steady Aim | `FOCUS` -> `guard` | `2 / 2` | `self` | `boost: 1.5` (`+50%` multiplier on next attack), `boost_rounds: 2`. Flattened. |
 | **Rogue** | `flank_cut` | Flank Cut | `ATTACK` -> `maneuver` | `2 / 1` | `reach_max: 2` / `flank` | `0.60x` dmg, `stagger 8`, `reach_min: 0, reach_max: 2, dash_tiles: 0, position: "flank"`. Unchanged basic. |
 | **Rogue** | `backflip` | Backflip | `DISENGAGE` -> `maneuver` | `1 / 1` | `jump 3` | `jump_tiles: 3` over units. Flattened. |
 | **Rogue** | `soot_feint` | Slip & Feint | `ATTACK` -> `maneuver` | `1 / 1` | `reach_max: 2` / `behind` | `0.65x` dmg, `slow` (`pot 75, 2` rnds), `reach_min: 0, reach_max: 2, dash_tiles: 0, position: "behind"`, `ends_in_stance: "DEFENSIVE"`. |

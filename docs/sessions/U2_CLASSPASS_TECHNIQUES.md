@@ -25,17 +25,17 @@
 
 Equipping an off-hand item grants its family's `off_hand_skill` (`Unit::gear_skills`) on the battle Off-Hand Button (`offhand_use`). `1h_light` off-hand weapons (`dagger`, `knife`, `fist`) instead unlock `offhand_jab`.
 
-| Family (`slot_rule: off_only`) | Skill ID & Name | Kind -> IR21 | AP / Blk | Reach | Exact Specs (`ranks: []`, `weapon_types: ["<family>"]`, `min_proficiency: 1`) |
+| Family (`slot_rule: off_only`) | Skill ID & Name | Kind -> IR21 | AP / Blk | Reach | Exact Specs (`ranks: []`, `weapon_types: []`, `min_proficiency: 0`, gated via `off_hand_skill`) |
 | --- | --- | --- | --- | --- | --- |
-| **`shield`** (`mit 6, bur 2`) | `shield_bash` (*Shield Bash*) | `ATTACK` -> `assault` | `2 / 2` | `1` | `0.75x` power (`weapon_hand: ""` scales STR main-hand), `stagger: 16`, `stagger` status (`pot 75, 1` rnd), `forced_move: {kind: "push", tiles: 1, collide_mult: 0.5, collide_stagger: 8}`. Removed from `warrior`. |
+| **`shield`** (`mit 6, bur 2`) | `shield_bash` (*Shield Bash*) | `ATTACK` -> `assault` | `2 / 2` | `1` | `0.75x` power (omit `weapon_hand`, schema default `"main"` scales STR main-hand), `stagger: 16`, `stagger` status (`pot 75, 1` rnd), `forced_move: {kind: "push", tiles: 1, collide_mult: 0.5, collide_stagger: 8}`. Removed from `warrior`. |
 | **`buckler`** (`mit 3, bur 0`) | `riposte` (*Counter-Guard*) | `DEFEND` -> `guard` | `2 / 1` | `self` | `mitigation: 0.30`, `guard_rounds: 1`, `grant_status: "riposte"`, `status_rounds: 2`, NO `ends_in_stance`, NO `windup_poise`. Removed from `warrior`. |
 | **`braces`** (`mit 4, bur 1`) | `brace` (*Iron Brace*) | `DEFEND` -> `guard` | `1 / 1` | `self` | `mitigation: 0.45`, `guard_rounds: 1`, `grant_status: "fortify"`, `status_magnitude: 6`, `status_rounds: 1` (NO `windup_poise`: disallowed on `DEFEND`). Removed from `warrior`. |
-| **`ammo`** | `reload` (*Press-Reload*) | `FOCUS` -> `guard` | `1 / 1` | `self` | `boost: 0.35`, `boost_rounds: 2`, `ends_in_stance: "OFFENSIVE"`; bolts/arrows stay `1 AP` free-flow reload + shot empower. |
+| **`ammo`** | `reload` (*Press-Reload*) | `FOCUS` -> `guard` | `1 / 1` | `self` | `boost: 1.35` (`+35%` multiplier), `boost_rounds: 2`, `ends_in_stance: "OFFENSIVE"`; bolts/arrows stay `1 AP` free-flow reload + shot empower. |
 | **`cloak`** | `fade_step` (*Fade-Step*) | `DISENGAGE` -> `maneuver` | `1 / 1` | `jump 2` | `jump_tiles: 2` away from nearest enemy (NO `ends_in_stance`: `DISENGAGE` lacks `flow`). Paired with `ash_cloak` `+1 PERC`. |
-| **`orb`** (`INT >= 12`) | **`catalyst_pulse`** (*Catalyst Pulse*) | `FOCUS` -> `guard` | `2 / 1` | `self` | `boost: 0.25` (`+25%` next attack/spell damage), `boost_rounds: 2`, `grant_status: "haste"`, `status_rounds: 1`. Replaces unconditional orb `+10%` passive damage. |
+| **`orb`** (`INT >= 12`) | **`catalyst_pulse`** (*Catalyst Pulse*) | `FOCUS` -> `guard` | `2 / 1` | `self` | `boost: 1.25` (`+25%` next attack/spell multiplier), `boost_rounds: 2`, `ends_in_stance: "OFFENSIVE"` (NO `grant_status`: `FOCUS` omits `grant`). Replaces unconditional orb `+10%` passive damage. |
 | **`tome`** (`KNOW >= 12`) | `cite_passage` (*Cite Passage*) | `SUPPORT` -> `support` | `2 / 2` | `1–3` | **`target_mode: "ALLY"`**, heals `10 + 1.0 * KNOW`, cleanses `["bleed", "burn", "poison"]`, `grant_status: "fortify"`, `status_magnitude: 6`, `status_rounds: 2`. |
 
-> **Validator Alignment**: Removing `windup_poise` from `brace`/`riposte` (`DEFEND` lacks `timing`) and `ends_in_stance` from `fade_step` (`DISENGAGE` lacks `flow`) passes `check/skill.rs:56, 59, 769-770` cleanly without widening engine validators. `cite_passage` explicitly sets `target_mode: "ALLY"` (single-intent `support` at range `1–3`).
+> **Validator Alignment**: Removing `windup_poise` from `brace`/`riposte` (`DEFEND` lacks `timing`), `ends_in_stance` from `fade_step` (`DISENGAGE` lacks `flow`), and `grant_status` from `catalyst_pulse` (`FOCUS` lacks `grant`) passes `check/skill.rs:56, 57, 59, 764-771` cleanly without widening validators. All 7 off-hand skills leave `weapon_types: []` and `min_proficiency: 0` (access gated by `item_families.off_hand_skill` so `unit.rs:2127` never locks main-hand `polearm`/`sprayer`/`crossbow`/`censer` wielders), and `cite_passage` explicitly sets `target_mode: "ALLY"` (single-intent `support`).
 
 ### 1.2 Root-Cause & 3-Part Fix for `FB-268(a)` (`mage` L5 Boss Spike)
 
