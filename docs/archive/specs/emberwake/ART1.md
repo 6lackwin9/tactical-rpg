@@ -1,5 +1,7 @@
 # ART1: Ashlands placeholder art (audit 2026-10-18)
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: approved (user 2026-10-18, decision "ART1 Ashlands placeholder art" in `games/emberwake/docs/decisions/content-forge.md`)
 
 Everything Ashlands shows on screen today that is a generated glyph, a coloured square or nothing. All new art is placeholder quality, made by a script (`tools/gen_art.py`) so it can be regenerated or swapped file by file later.

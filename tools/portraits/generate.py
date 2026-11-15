@@ -19,9 +19,9 @@
 import base64, datetime, json, os, pathlib, re, sys, time, urllib.error, urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-PROMPTS = ROOT / "games/emberwake/docs/specs/ART2_PROMPTS.md"
-ICONS = ROOT / "games/emberwake/docs/specs/ART2_ICONS.md"
-FACES = ROOT / "games/emberwake/docs/specs/PORTRAITFX1_FACES.md"
+PROMPTS = ROOT / "docs/archive/specs/emberwake/ART2_PROMPTS.md"
+ICONS = ROOT / "docs/archive/specs/emberwake/ART2_ICONS.md"
+FACES = ROOT / "docs/archive/specs/emberwake/PORTRAITFX1_FACES.md"
 SRC = ROOT / "art_src"
 REFERENCE = SRC / "mara_voss.png"
 API = "https://generativelanguage.googleapis.com/v1beta"

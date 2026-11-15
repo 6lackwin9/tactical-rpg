@@ -84,7 +84,7 @@ import generate  # noqa: E402  (record shape, prompts files, repo paths)
 
 ROOT = generate.ROOT
 SRC = generate.SRC
-ART3 = ROOT / "games/emberwake/docs/specs/ART3_PROMPTS.md"
+ART3 = ROOT / "docs/archive/specs/emberwake/ART3_PROMPTS.md"
 HOME = pathlib.Path(os.environ.get("LOCALGEN_HOME", r"C:\dev\localgen"))
 MODEL = HOME / "models" / "lcm_dreamshaper_v7_int8"
 CACHE = HOME / "cache"

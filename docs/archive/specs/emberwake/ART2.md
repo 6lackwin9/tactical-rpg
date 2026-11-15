@@ -1,5 +1,7 @@
 # ART2: art review of 2026-10-20 (the user's marks)
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: approved (user 2026-10-20: every asset marked Keep, Redo or Drop on the Emberwake Art Ledger, with notes)
 Depends on: SPRITE1 rig (`tools/sprites/`), ASSETORG2 (where the new files land); art tools in Python, portable to Rust (decision in `docs/decisions/workflow.md`)
 Lane: asset (art); the rig and icon generators are tools

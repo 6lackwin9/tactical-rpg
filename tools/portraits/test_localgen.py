@@ -208,7 +208,7 @@ class Record(unittest.TestCase):
                                          when="2026-10-26T00:00:00+00:00").read_text(encoding="utf-8"))
         self.assertEqual(list(rec)[:len(api)], list(api), "generate.py's keys first, in its order")
         self.assertEqual(rec["model"], "local:lcm_dreamshaper_v7_int8")
-        self.assertEqual(rec["prompts_file"], "games/emberwake/docs/specs/ART3_PROMPTS.md")
+        self.assertEqual(rec["prompts_file"], "docs/archive/specs/emberwake/ART3_PROMPTS.md")
         for k, v in dict(device="NPU", seed=3, steps=6, size=512, guidance=8.0, cut=["x"], seconds=2.5,
                          reference=None, negative=None, lora=None).items():
             self.assertEqual(rec[k], v, k)
@@ -381,7 +381,7 @@ class KleinPrompt(unittest.TestCase):
         self.assertEqual(localgen.klein_prompt(whole), localgen.klein_prompt(BLOCK, STYLE))
 
     def test_face_cells_are_the_portraitfx1_lines(self):
-        spec = (generate.ROOT / "docs/specs/PORTRAITFX1_TASKS.md").read_text(encoding="utf-8")
+        spec = (generate.ROOT / "docs/archive/specs/PORTRAITFX1_TASKS.md").read_text(encoding="utf-8")
         lines = dict(re.findall(r"^- [\w-]+: (Hurt|Angry|Afraid): (.*)\.$", spec, re.M))
         self.assertEqual({k.lower(): v for k, v in lines.items()}, localgen.CELLS)
         text = localgen.face_prompt("afraid")
@@ -408,7 +408,7 @@ class KleinRecord(unittest.TestCase):
         self.assertEqual((rec["model"], rec["reference"], rec["n"]), ("local:flux-2-klein-4b", None, 2))
         self.assertEqual((rec["steps"], rec["cfg"], rec["size"], rec["seed"]), (4, 1.0, 768, 3))
         self.assertEqual(rec["tokens_estimate"], localgen.estimate("the prompt"))
-        self.assertEqual(rec["prompts_file"], "games/emberwake/docs/specs/ART3_PROMPTS.md")
+        self.assertEqual(rec["prompts_file"], "docs/archive/specs/emberwake/ART3_PROMPTS.md")
         self.assertFalse(any("key" in k.lower() for k in rec), "never a key")
 
     def test_edit_and_face_records_name_the_source_as_reference(self):

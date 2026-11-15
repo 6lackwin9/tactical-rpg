@@ -20,3 +20,14 @@ Superseded drafts and specs of done tasks, kept for history. Agents should not r
 | `docs/metrics/` (folder, removed from the tree 2026-11-07; in git history) | October 2026 Godot token-efficiency trial logs and CSV reports (`TASK_LOG.md`, `usage/*`) |
 | specs/{CAMPAIGN1*,DERIVE1,ENCOUNTER2*,HOOKS1*,INPUT1*,INPUT2,KIT1_TASKS,RESCOPE1,ROSTER1*,RULESET1*,STORYUI1*}.md | Pre-Masterplan Tier 2 specs and `_TASKS.md` breakdowns folded into `docs/sessions/*.md` (archived 2026-11-07) |
 | specs/emberwake/*.md (79 files) | Completed/superseded Emberwake task specs (`S9..S14`, `BAL2..5`, `DLG1`, `EXP1`, `M4`, `REP1`, `TRAV1..2`, `UI1..3`, `FORGE1_*`, `FX1`, `STAGE1`, `SPRITE1`, `STATUSFX1`, `PLAYUI1`, etc., archived 2026-11-07) |
+| READY_DONE_ARCHIVE.md | Completed `READY.md` Section 1 slices (`R1..R4`, `PR4-1..9`, `PR5-1..56`, `105` rows through `a14c9d8e`, archived 2026-11-15) |
+| READY_ANSWERS_ARCHIVE.md | Closed `READY.md` Section 2 audits (`1..8`), Section 3 `PR4-1`/`PR4-2` pre-split notes, and Section 4 `FB-33..261` + `AO-01..06` answers (archived 2026-11-15) |
+| HISTORY_2026_10_11A.md | Pre-`PR5-40` `docs/HISTORY.md` rows and detailed lessons through `2026-11-12` (archived 2026-11-15) |
+| DESIGN_REVIEW_2026_11A.md | Settled `DESIGN_REVIEW.md` `2026-11-11..14` Open calls and `Reviewed` history table (archived 2026-11-15) |
+| CLEANUP_PASS2_2026_11.md | Closed Pass 1–3 and Later backlog cleanup tables from `docs/specs/CLEANUP.md` (archived 2026-11-15) |
+| BALANCE_REPORT_2026-11A.md | Pre-`U3_GEAR_REWORK` balance sweep logs (`PR5-27..BOSS1-B`) from `games/emberwake/docs/BALANCE_REPORT.md` (archived 2026-11-15) |
+| WORLDBUILDING_2026_10.md | Pre-`CANON.md` 2026-10-21 Ashlands / Iron Reaches / Tidewrack snapshot from `WORLDBUILDING.md` (archived 2026-11-15) |
+| GAME_BRIEF_NOTES_2026_11A.md | Pre-cleanup per-slice and Godot-transition lookup notes from `GAME_BRIEF.md` `L39-299` (archived 2026-11-15) |
+| STRUCTURE_NOTES_2026_11A.md | Verbose per-PR crate, module, and test file changelogs from `STRUCTURE.md` `L15-89` (archived 2026-11-15) |
+| specs/{PORTRAITFX1_TASKS,PORTRAITFX1_BUILD_NOTES,ASSETORG4,REVEAL1}.md | Completed/folded cross-cutting specs and `PORTRAITFX1` §§10–18 build notes (`REVEAL1` rules folded into `REGIONGROUND1.md`, archived 2026-11-15) |
+| specs/emberwake/{ART1,ART2,ART2_ICONS,ART2_PROMPTS,ART3_PROMPTS,PLAYUI1_ICONS,PORTRAITFX1_FACES,DIR4,WINDUP1,REGIONGROUND1_HISTORY,LOOK1_NOTES,PORTRAITFX2_NOTES}.md | Completed Art/Rig specs (`tools/portraits/` pointers updated) and archived note extracts from `REGIONGROUND1`, `LOOK1`, `PORTRAITFX2` (2026-11-15) |

@@ -1,5 +1,7 @@
 # PORTRAITFX1 tasks: checks, assets, rows, sequencing, docs delta
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: proposed (spec PORTRAITFX1, 2026-10-25). Companion of [PORTRAITFX1.md](PORTRAITFX1.md); section numbers in
 the Rule columns point there.
 

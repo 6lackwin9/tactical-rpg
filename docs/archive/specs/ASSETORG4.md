@@ -1,5 +1,7 @@
 # ASSETORG4: Generic Kit Asset Library & Modular Portrait Overlay FX
 
+Archived 2026-11-15 (CTX-CLEANUP1-DESIGN), task done/superseded: kept verbatim for history. Do not build from this file.
+
 Status: **approved** (user 2026-11-14, `AO-04(4)` & `FB-227`).
 Depends on: `ASSETORG2` (built), `PR5-29b` (`LAYER-ENG-FX`, built), `PR5-47` (`MAP-HOOKS1`, built).
 Layers: engine (`aegis_core`, `aegis_ui` modular portrait FX toggle), kit (`kits/rpg/assets/**`, `rpgkit_content`), game (`games/emberwake/assets/**`, `emberwake_gui/src/portraits.rs`, `.face.json` sidecars).
